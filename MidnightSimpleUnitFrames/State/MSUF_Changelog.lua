@@ -8,12 +8,79 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "C81247EC347FA612DEBADBC6518D63C09345CDBC38AEDAE933E8935A501DD429",
-    currentVersion = "6.5-beta11",
-    historyFromVersion = "6.5-beta8",
-    previousVersion = "6.5-beta10",
-    rangeLabel = "6.5-beta10 -> 6.5-beta11",
+    sourceSha256 = "0A78E7677086F39F24262D3322941A9B507312007249E3C7AA3263DD073A5D95",
+    currentVersion = "6.5-beta12",
+    historyFromVersion = "6.5-beta9",
+    previousVersion = "6.5-beta11",
+    rangeLabel = "6.5-beta11 -> 6.5-beta12",
     entries = {
+        {
+            version = "6.5-beta12",
+            date = "2026-10-01",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Customize Swing Timers on WoW Forever. Configure Main Hand, Off Hand and Ranged bars, their appearance and text, then preview and drag them to a saved profile position.",
+                            link = {
+                                pageKey = "swingtimers",
+                                query = "enable swing timer module",
+                                label = "Enable Swing Timer module",
+                                sectionId = "swing_module",
+                                controlId = "menu2.swingtimers.swing.enabled",
+                                settingKey = "swingTimers.enabled",
+                            },
+                        },
+                        {
+                            text = "Hide Player Power together with Class Resource outside combat. Enable the new option under Class Resource > Auto-Hide alongside Hide out of combat; Edit Mode keeps both visible for placement.",
+                            link = {
+                                pageKey = "classpower",
+                                query = "hide player power with class resource",
+                                label = "Hide player power with Class Resource",
+                                sectionId = "classpower_visibility",
+                                controlId = "menu2.classpower.advanced.visibility.sync.player.power.ooc",
+                                settingKey = "bars.classPowerSyncPlayerPowerOOC",
+                            },
+                        },
+                        {
+                            text = "Place the GCD bar independently on supported clients. Global > Castbars offers a separate GCD bar with its own size, position, opacity, time and spell display, plus idle-background and combat-only options.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "place gcd bar separately",
+                                label = "Place GCD bar separately",
+                                sectionId = "castbar_gcd",
+                                controlId = "menu2.opt.castbar.global.gcd.gcd.bar.detached",
+                                settingKey = "general.gcdBarDetached",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "WoW Forever group frames can mark missing class buffs, with optional glow and a Thorns-only-on-tanks rule. Icons hide during combat and other restricted states by default; Keep showing during combat retains known buff coverage where fresh aura data is unavailable.",
+                        "Forever Swing Timers support separate hand settings, an off-hand lane within the main-hand bar, queued-attack cues and custom labels, reach warnings, fill direction and elapsed or remaining time. Disabling the module restores Blizzard's previous swing-bar visibility.",
+                        "Class Resource extras include configurable Arcane window time in seconds, global cooldowns or both, warning timing and phase colors on supported clients.",
+                        "Menu navigation, section labels, control help and disabled-setting explanations are clearer. Search respects the active client and improves discovery of MSUF Suite settings when Suite is installed.",
+                        "Updated translations across the twelve supported locales.",
+                        "The in-game Assistant is retired and no longer included. Its saved chat data is removed once and excluded from profile transfers. After a manual update, delete the old MidnightSimpleUnitFrames_Assistant folder from Interface/AddOns.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Malformed profile imports no longer overwrite the active profile. Applying a profile only imports a Blizzard Edit Mode snapshot when that import option was selected.",
+                        "Unit frames recover after instance or housing visibility changes, resume their suspended event routes, and refresh stance text after being shown again. Portrait variants update without requiring a reload.",
+                        "Aura layouts refresh after profile switches, resets, imports and specialization changes. Aura icons allow clicks through to their unit frame; countdown bars share one driver that stops when idle.",
+                        "Resource marks handle secret power percentages and remain above resource pips. Castbar fill direction and countdown mode work together, and Classic Interrupt Ready has a cooldown fallback.",
+                        "Party target frames refresh when their compound unit tokens receive no native unit event. Healer mana text receives its font before its first update, and group sorting, previews and Edit Mode use consistent layout settings.",
+                        "Page resets work across supported clients and retain Undo. Edit Mode Cancel and Undo cannot write an earlier profile's edits into a newly selected profile.",
+                        "Menu text fields retain edits, resource movement stays inside Edit Mode, and Class Resource previews fit the available space. Preview animation, factory-profile decoding and search avoid repeated work.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta11",
             date = "2026-09-29",
@@ -147,59 +214,6 @@ local data = {
                     bullets = {
                         "WoW Forever's supplied factory profile has its own updated unit-frame defaults. Existing saved profiles remain unchanged.",
                         "The Pet frame includes Classic-specific aura and XP controls. Pet XP appears only when the client supplies pet XP data.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta8",
-            date = "2026-09-25",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Choose the new Midnight Dark menu appearance. It adds a darker palette to the existing menu layouts while keeping Classic Glass and Midnight available on every supported client.",
-                            link = {
-                                pageKey = "opt_misc",
-                                query = "menu appearance preset",
-                                label = "Menu appearance preset",
-                                sectionId = "misc_menu_behavior",
-                                controlId = "menu2.opt.misc.global.setting.menu.appearance.preset",
-                                settingKey = "general.menuAppearancePreset",
-                            },
-                        },
-                        {
-                            text = "Align Class Resource with the MSUF Suite Essential cooldown row. When you approve the Suite anchor while class power placement is still at its defaults, the resource bar follows the row and uses its width; you can adjust Width mode under Class Resource.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "width mode",
-                                label = "Width mode",
-                                sectionId = "classpower_display",
-                                controlId = "menu2.classpower.advanced.layout.width.mode",
-                                settingKey = "bars.classPowerWidthMode",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "WoW Forever starts fresh profiles and resets from its own factory layout. Existing saved profiles keep their settings; factory health fills use 80% opacity.",
-                        "Updated for WoW Forever beta build 1.60.1.70009: pet happiness uses Blizzard's three atlases when available, and group frames use secure initialization snippets after Blizzard's load-order repair.",
-                        "Rebuilt the WoW Forever SpellName aura-alias catalog from all eleven 70009 locale exports and revalidated the curated aura IDs.",
-                        "Classic Era, TBC and Mists aura filters match readable aura names when a spell rank or cast ID differs from the aura ID. Their generated alias catalogs are no longer loaded or packaged.",
-                        "MSUF Suite can join full-profile and module export/import, profile lifecycle changes, Undo/Redo history and the Essential cooldown anchor when installed.",
-                        "Added an opt-in all-healers incoming-heal prediction setting. The previous player-only prediction remains the default.",
-                        "Blizzard Micro Menu and Bags settings expose horizontal and vertical orientation where the client provides those controls.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "WoW Forever's Raid Manager remains visible while opened by gamepad and closes with the panel.",
-                        "Missing-health background coloring no longer shows a full reversed health bar at 100% health.",
-                        "Hiding Blizzard's TargetFrame also stops the Forever ComboFrame from updating its hidden display.",
                     },
                 },
             },
