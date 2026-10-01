@@ -1324,7 +1324,7 @@ end
 --- "Zeilen-Grid" building block): fixed cell metrics, cells flow left-to-right
 --- then top-to-bottom, optional per-row reset-to-default action. Uses the same
 --- row specs, constructors and binders as W.BuildCard, so converted sections
---- keep their control behavior and Assistant metadata unchanged.
+--- keep their control behavior and Search metadata unchanged.
 ---
 --- spec = {
 ---   x?, y?, width?, columns? (default 2), colGap?, rowGap?,
@@ -3426,7 +3426,7 @@ function W.AttachStickyPageHeader(section, opts)
 
     if section.EnableMouse then section:EnableMouse(true) end
     -- Fixed panels are physically reparented to the shared host but remain
-    -- logical children of their page for exact Search/Assistant routing.
+    -- logical children of their page for exact search routing.
     section._msuf2PageOwnerWrapper = opts.wrapper or (ctx and ctx.wrapper) or originalParent
     section._msuf2GuidedNoScroll = true
     local builder = opts.builder

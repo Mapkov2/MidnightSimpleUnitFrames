@@ -237,7 +237,8 @@ function Popup.Sync()
     frame._resetBtn:ClearAllPoints()
     frame._resetBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 284, BUTTONS_TOP - extra)
     frame:SetHeight(BASE_HEIGHT + extra)
-    SetButtonText(frame._settingsBtn, settingsLabel or ("Open " .. tostring(group or label) .. " settings"))
+    SetButtonText(frame._settingsBtn, settingsLabel or string.format(
+        Quick.Tr and Quick.Tr("Open %s settings") or "Open %s settings", tostring(group or label)))
     SetButtonEnabled(frame._settingsBtn, canSettings)
     SetButtonEnabled(frame._resetBtn, canReset)
     if frame._refreshUndoRedo then frame._refreshUndoRedo() end

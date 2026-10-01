@@ -34,7 +34,10 @@ local function Meta(path, classification, exact)
 end
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss arena"
-local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords "normal channel empowered"
+-- Empowered casts are an Evoker mechanic, Midnight only: the same client gate as
+-- the castbar page's Empowered Casts section (MSUF.Client.HasEmpoweredCasts).
+local CASTBAR_PREVIEW_EMPOWERED = not MSUF.Client or (MSUF.Client.HasEmpoweredCasts ~= false and MSUF.Client.IsClassic ~= true)
+local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords(CASTBAR_PREVIEW_EMPOWERED and "normal channel empowered" or "normal channel")
 local CASTBAR_PAGE_WORK_DELAY = 0.04
 local CASTBAR_PREVIEW_REFRESH_INTERVAL = 1 / 30
 local CASTBAR_PREVIEW_ANIMATION_INTERVAL = 1 / 20
@@ -209,6 +212,10 @@ local function PreviewPlayShake(self, strength, interrupted)
         if self.Refresh then self:Refresh() end
     end
 local function PreviewSetRowOffset(self, x)
+        -- OnUpdate asks every frame; re-anchor only when the shake moved the row.
+        x = x or 0
+        if self._rowOffset == x then return end
+        self._rowOffset = x
         local base = self.castRowBase
         self.castRow:ClearAllPoints()
         self.castRow:SetPoint("TOPLEFT", base.parent, "TOPLEFT", base.x + (x or 0), base.y)
@@ -770,6 +777,7 @@ local function BuildPreviewCastRow(box, preview, barW, mainX)
     castRow:SetPoint("TOPLEFT", box, "TOPLEFT", mainX, -8)
     preview.castRow = castRow
     preview.castRowBase = { parent = box, x = mainX, y = -8 }
+    preview._rowOffset = 0
     local icon = T.Panel(castRow, nil, { 0.030, 0.050, 0.100, 0.98 }, { 0.16, 0.22, 0.42, 0.75 })
     icon:SetSize(20, 20)
     icon:SetPoint("BOTTOMLEFT", castRow, "BOTTOMLEFT", 0, 0)
@@ -922,15 +930,13 @@ local function BuildCastbarPagePreview(ctx, b)
     local buttonW = compactControls
         and max(68, min(82, floor((sectionW - 132 - (buttonGap * 2)) / 3)))
         or 82
+    local typeValues = { { key = "normal", text = "Normal" }, { key = "channel", text = "Channel" } }
+    if CASTBAR_PREVIEW_EMPOWERED then typeValues[3] = { key = "empowered", text = "Empowered" } end
     local typeButtons = PreviewButtonGroup(section,
         compactControls and "TOPLEFT" or "TOPRIGHT",
         compactControls and "TOPLEFT" or "TOPRIGHT",
         compactControls and 8 or -(14 + interruptW + 10),
-        compactControls and -42 or -12, {
-        { key = "normal", text = "Normal" },
-        { key = "channel", text = "Channel" },
-        { key = "empowered", text = "Empowered" },
-    }, buttonW, buttonGap, M.SetCastbarPreviewType, "preview.cast_type")
+        compactControls and -42 or -12, typeValues, buttonW, buttonGap, M.SetCastbarPreviewType, "preview.cast_type")
     local interrupt = T.CenterButtonLabel(T.SkinDangerButton(T.Button(section, "Interrupt", interruptW, 24)))
     interrupt._msuf2AllowCombatClick = true
     interrupt._msuf2SkipHistoryCheckpoint = true

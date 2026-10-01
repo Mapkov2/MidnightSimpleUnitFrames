@@ -229,7 +229,7 @@ local STAGES = {
             "group/auras/spell/selected/frame/type",
             "group/auras/spell/frame/alpha",
         },
-        impact = "Skipping leaves Spell Icons unchanged; the Assistant can configure them later.",
+        impact = "Skipping leaves Spell Icons unchanged; you can find them later with Menu Search.",
     },
     {
         id = "group_copy_open", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Copy your Party setup",
@@ -277,7 +277,7 @@ local STAGES = {
     {
         id = "final_review", special = true, pageKey = "guided_setup", icon = "home",
         title = "Your setup is ready",
-        impact = "Finish the tour and use the Assistant for anything else.",
+        impact = "Finish the tour and use Menu Search to find other settings.",
     },
 }
 
@@ -693,7 +693,7 @@ local function StageCue(stage, position, touched)
     if stage.id == "classpower" then return Tr("Use the interactive preview for layouts and states; use Edit Mode for whole-frame placement.") end
     if stage.id == "profiles" then return Tr("Finish with a profile check and export a backup of your setup.") end
     if stage.id == "power_moves" then return Tr("MSUF POWER MOVES - Scan the highlights, then press Continue.") end
-    if stage.id == "final_review" then return Tr("MISSION COMPLETE - Press Finish to open the Assistant on your Dashboard.") end
+    if stage.id == "final_review" then return Tr("MISSION COMPLETE - Press Finish to return to the Dashboard.") end
     return Tr("Review the highlighted sections; previews update while your changes autosave.")
 end
 
@@ -1777,7 +1777,6 @@ local function SetStage(stage, resetCursor)
 end
 
 local function CompleteTour()
-    local completedMode = SelectedSetupMode()
     ClearSectionEmphasis()
     Invoke(Tour(), "Complete")
     Invoke(FirstLoad(), "Complete", "guided_tour")
@@ -1788,7 +1787,6 @@ local function CompleteTour()
     M.RefreshGuidedTourChrome("COMPLETE")
     if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
     if type(M.SelectPage) == "function" then M.SelectPage("home") end
-    if completedMode == "complete" and type(M.StartNewAssistantTask) == "function" then M.StartNewAssistantTask() end
     return true
 end
 
@@ -2482,7 +2480,7 @@ function M.RefreshGuidedTourChrome(reason)
     SetButtonText(chrome.skip, warning and "Confirm skip" or "Skip")
     local nextLabel = "Next setting"
     if manualAway then nextLabel = "Return"
-    elseif final then nextLabel = SelectedSetupMode() == "quick" and "Finish setup" or "Finish & open Assistant"
+    elseif final then nextLabel = "Finish setup"
     elseif waitingForEditModeMove then nextLabel = EditModeMovementComplete() and "Open size popup" or "Move Player first"
     elseif waitingForGroupMove then nextLabel = GroupEditModeMovementComplete() and "Open size popup" or "Move Party first"
     elseif touched then nextLabel = "Claim +10 XP"
@@ -3261,7 +3259,7 @@ local function BuildPowerMovesPage(ctx, T, W)
     InfoCard(b, T, "Spell Icons by spec", "Track presets or custom Spell IDs per spec, then choose icon or bar placement, cooldown behavior, and full-frame effects.", "gf_auras", 92)
     InfoCard(b, T, "Party combat intelligence", "Corner Indicators and External Defensives keep critical group information compact.", "gf_indicators", 92)
     InfoCard(b, T, "Cooldown-aware layouts", "Anchor Unitframes and Class Resources to Essential Cooldowns, or keep every frame independently placed.", "classpower", 86)
-    InfoCard(b, T, "Ask instead of hunting", "Describe the result you want. The Assistant finds the exact control, keeps safeguards in place, and leaves Undo available.", "home", 86)
+    InfoCard(b, T, "Find settings with Search", "Search Menu2 in everyday language to jump to the exact setting. Search only includes controls available in your active modules.", "home", 86)
     return math.abs(b.y) + 34
 end
 
@@ -3272,10 +3270,10 @@ local function BuildFinalReviewPage(ctx, T, W)
     local quick = SelectedSetupMode() == "quick"
     Header(b, format(Tr("%s, your setup is ready"), PlayerDisplayName()), quick
         and "Finish returns to the Dashboard. Smart Search stays ready for settings and questions."
-        or "Finish opens the Dashboard and puts the cursor straight into the Assistant.")
+        or "Finish opens the Dashboard, where you can search settings across the active modules.")
     InfoCard(b, T, quick and "You are ready to play" or "Anything else? Just ask", quick
         and "Use the Dashboard for common tasks, or type a setting or full question into Smart Search."
-        or "Try: 'make Party frames wider', 'set up Spell Icons for my spec', or 'move Class Resources'. The Assistant opens the exact place and helps you finish safely.", "home", 104)
+        or "Try searches such as 'Party frame width', 'Spell Icons', or 'Class Resources'. Search opens the matching setting in Menu2.", "home", 104)
     InfoCard(b, T, "You trained on real settings", format(Tr("%d guided settings were changed or deliberately kept. Nothing was copied into a separate wizard."), handled), "uf_player", 82)
 
     local restorePoint = select(2, Invoke(Tour(), "GetRestorePoint"))

@@ -9,8 +9,6 @@ local LABELS = { "Main Hand", "Off Hand", "Ranged" }
 local function Meta(path, key, classification)
     return AP.ControlMeta("swingtimers", "swing", path, classification or "setting", {
         settingKey = key,
-        assistantDisposition = "dynamic",
-        assistantDispositionReason = "Forever-only Swing Timer profile settings are owned by this module.",
     })
 end
 
@@ -26,10 +24,11 @@ end
 local COLORS = {
     { "color", "Bar color" }, { "backgroundColor", "Background color" },
     { "borderColor", "Border color" }, { "textColor", "Text color" },
+    { "reachColor", "Out-of-reach color" }, { "nextSwingColor", "Next-swing cue color" },
 }
 local function AttachColors(section, hand)
     W.AttachContextColorShortcut(section, {
-        title = "Swing Timer colors", historySource = "menu:swing-colors-" .. hand, maxTargets = 4,
+        title = "Swing Timer colors", historySource = "menu:swing-colors-" .. hand, maxTargets = 6,
         getTargets = function()
             local targets = {}
             for i = 1, #COLORS do
@@ -56,7 +55,7 @@ local function Build(ctx)
         local row = math.floor((index - 1) / columns)
         AP.MoveWidget(widget, section, 28 + column * (controlWidth + 36), -48 - row * 58)
     end
-    local module = b:CollapsibleSection("swing_module", "Swing Timers (Forever)", 250, true)
+    local module = b:CollapsibleSection("swing_module", "Swing Timers (Forever)", 286, true)
     local enabled = W.Toggle(module, "Enable Swing Timer module")
     M.BindBoolWidget(ctx, enabled, Swing.GetEnabled, function(value)
         Swing.SetEnabled(value)
@@ -74,6 +73,11 @@ local function Build(ctx)
     local preview = W.Toggle(module, "Preview and drag Swing Timers")
     M.BindBoolWidget(ctx, preview, Swing.GetPreview, Swing.SetPreview, Meta("preview", nil, "ephemeral"))
     AP.MoveWidget(preview, module, 28, -182)
+    local lane = W.Toggle(module, "Show the off-hand timer as a lane in the main-hand bar")
+    M.BindBoolWidget(ctx, lane, function() return Swing.Get("main", "offhandLane") end,
+        function(value) Swing.Set("main", "offhandLane", value) end,
+        Meta("main.offhandLane", "swingTimers.main.offhandLane"))
+    AP.MoveWidget(lane, module, 28, -222)
     if M.AddTooltip then
         M.AddTooltip(enabled, "Swing Timers (Forever)",
             "Replaces all Blizzard swing bars while enabled, even when only one hand is selected. Disabling restores Blizzard's previous visibility.")
@@ -108,6 +112,8 @@ local function Build(ctx)
             "AUTO", "Automatic", "LEFT", "Left", "CENTER", "Center", "RIGHT", "Right") end },
         { "textX", "number", "Timer text X offset", -300, 300 },
         { "textY", "number", "Timer text Y offset", -200, 200 },
+        { "reachCheck", "boolean", "Grey out while the target is out of reach" },
+        { "reachOpacity", "number", "Out-of-reach opacity (%)", 0, 100 },
     }
     for i = 1, #HANDS do
         local hand = HANDS[i]
@@ -142,6 +148,31 @@ local function Build(ctx)
                 M.AddTooltip(widget, label, "Use Preview and drag Swing Timers to see textures without attacking.")
             end
         end
+    end
+    local attacks = Swing.CueAttacks()
+    local cue = b:CollapsibleSection("swing_next", "Next-swing attacks", 150 + #attacks * 58, false)
+    local cueToggle = W.Toggle(cue, "Show the queued next-swing attack")
+    M.BindBoolWidget(ctx, cueToggle, function() return Swing.Get("main", "nextSwingCue") end,
+        function(value) Swing.Set("main", "nextSwingCue", value) end,
+        Meta("main.nextSwingCue", "swingTimers.main.nextSwingCue"))
+    AP.MoveWidget(cueToggle, cue, 28, -42)
+    local cueText = W.Toggle(cue, "Name the queued attack on the main-hand bar")
+    M.BindBoolWidget(ctx, cueText, function() return Swing.Get("main", "nextSwingText") end,
+        function(value) Swing.Set("main", "nextSwingText", value) end,
+        Meta("main.nextSwingText", "swingTimers.main.nextSwingText"))
+    AP.MoveWidget(cueText, cue, 28, -74)
+    -- One text per next-swing attack, labelled with the client's spell name.
+    for i, attack in ipairs(attacks) do
+        local key = attack.key
+        M.BindTextInputAt(ctx, cue, M.Format("Text for %s (empty: spell name)", attack.name or tostring(attack.id)), 28, -116 - (i - 1) * 58,
+            math.min(400, width - 80),
+            function() return Swing.Get("main", key) end,
+            function(value) Swing.Set("main", key, value) end,
+            true, Meta("main." .. key, "swingTimers.main." .. key))
+    end
+    if M.AddTooltip then
+        M.AddTooltip(cueText, "Name the queued attack on the main-hand bar",
+            "While an attack waits for your next swing, the main-hand bar's title shows its name in the cue color, or the text you set for that attack below.")
     end
     ctx:SetContentHeight(math.abs(b.y) + 32)
 end

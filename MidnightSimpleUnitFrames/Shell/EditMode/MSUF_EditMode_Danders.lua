@@ -391,7 +391,7 @@ local function Deactivate()
     ReleaseUnlock()
     active = false
     if next(registered) then API.UnregisterOwner(OWNER) end
-    registered = {}
+    for id in pairs(registered) do registered[id] = nil end
     return true
 end
 

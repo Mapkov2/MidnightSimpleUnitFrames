@@ -7,6 +7,7 @@ MSUF.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
+local Shared = M.UnitSectionsShared
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -33,6 +34,10 @@ SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
 OptionText = OptionText or M.OptionText
+-- Only Midnight has the Mythic Raid scope (MSUF.Client.SupportsGroupKind); the
+-- other clients get no "Hide groups 5–8" option and a shorter Group Layout section.
+local MYTHIC_RAID_SUPPORTED = not M.SupportsFrameScope or M.SupportsFrameScope("mythicraid")
+local GEOMETRY_SECTION_HEIGHT = MYTHIC_RAID_SUPPORTED and 540 or 504
 local function ScopeLabel()
     local scope = CurrentScope() or "party"
     for i = 1, #SCOPE_VALUES do
@@ -293,9 +298,7 @@ local function BuildGFGeneralSection(ctx, b)
     end
     if generalNoticeButton then
         RegisterControl(generalNoticeButton, ctx, "scope.use_msuf_now", "Use MSUF", "button", "setting", {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "This shortcut selects MSUF as the frame provider for the currently selected Group scope.",
-            assistantSettingKeys = {
+            searchSettingKeys = {
                 "gf_party.enabled", "gf_party.blizzardFallbackMode",
                 "gf_raid.enabled", "gf_raid.blizzardFallbackMode",
                 "gf_mythicraid.enabled", "gf_mythicraid.blizzardFallbackMode",
@@ -442,41 +445,93 @@ local function BuildGFTransparencySection(ctx, b)
 end
 
 local function BuildGFGeometrySection(ctx, b)
-    local advancedLayout = b:CollapsibleSection("layout_advanced", "Geometry", 448, false)
-    local advancedLayoutW = advancedLayout._msuf2Width or b.width or 720
-    local layoutGap = 16
-    local advancedLeftX = 20
-    local advancedInnerW = max(320, advancedLayoutW - 40)
-    local advancedLeftW = floor((advancedInnerW - layoutGap) * 0.52)
-    local advancedRightX = advancedLeftX + advancedLeftW + layoutGap
-    local advancedRightW = advancedInnerW - advancedLeftW - layoutGap
-    local layoutSliderW = max(180, min(360, advancedLeftW - 64))
-    local sizeCard = W.ControlCard(advancedLayout, "Size", nil, advancedLeftX, -38, advancedLeftW, 188)
-    local gridCard = W.ControlCard(advancedLayout, nil, nil, advancedLeftX, -244, advancedLeftW, 180)
-    local growthCard = W.ControlCard(advancedLayout, "Growth", nil, advancedRightX, -38, advancedRightW, 188)
-    local function LayoutSlider(parent, label, minValue, maxValue, step, key, defaultValue, y)
-        return AttachGroupFocus(ScopeSlider(ctx, parent, label, minValue, maxValue, step, layoutSliderW, key, defaultValue, "rebuild", 16, y, layoutSliderW, "LEFT"), "layout")
+    local section = b:CollapsibleSection("layout_advanced", "Group Layout", GEOMETRY_SECTION_HEIGHT, false)
+    local width = section._msuf2Width or b.width or 720
+    local inner = width - 40
+    local col = (inner - 16) / 2
+    local grid = W.ControlCard(section, "Grid", nil, 20, -38, col, 190)
+    local growth = W.ControlCard(section, "Growth", nil, col + 36, -38, col, 190)
+    BuildGrowthDirectionTiles(ctx, growth, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
+    AttachGroupFocus(ScopeSlider(ctx, grid, "Units per column", 1, 40, 1, col - 64, "unitsPerColumn", 5, "rebuild", 16, -40, col - 64, "LEFT"), "layout")
+    AttachGroupFocus(ScopeSlider(ctx, grid, "Max columns", 1, 8, 1, col - 64, "maxColumns", 8, "rebuild", 16, -100, col - 64, "LEFT"), "layout")
+    local preserve = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(grid, "Preserve raid groups", 16, -152, col - 32), "layout"), "preserveRaidGroups", false, "rebuild")
+    local visibilityRows = {
+        {"Collapse empty preserved raid groups", "collapseEmptyGroups"},
+        {"Center party frames while solo", "centerSolo"},
+        {"Use Party layout for raids up to 5 players", "smallRaidAsParty"},
+    }
+    if MYTHIC_RAID_SUPPORTED then
+        table.insert(visibilityRows, 2, {"Hide groups 5–8 in Mythic raids", "hideMythicGroupsFiveToEight"})
     end
-    LayoutSlider(sizeCard, "Width", 40, 300, 1, "width", 120, -66)
-    LayoutSlider(sizeCard, "Height", 16, 120, 1, "height", 40, -114)
-    LayoutSlider(sizeCard, "Spacing", 0, 60, 1, "spacing", 1, -162)
-    BuildGrowthDirectionTiles(ctx, growthCard, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
-    LayoutSlider(gridCard, "Units per column", 1, 40, 1, "unitsPerColumn", 5, -28)
-    LayoutSlider(gridCard, "Max columns", 1, 8, 1, "maxColumns", 8, -86)
-    local preserveRaidGroups = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(gridCard, "Preserve raid groups", 16, -144, advancedLeftW - 32), "layout"), "preserveRaidGroups", false, "rebuild")
-    local function RefreshRaidGroupLayoutState()
-        SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
-        SetSectionBadgesAndStatus(advancedLayout, {
-            { text = BadgeNumber(Num(CurrentScope(), "width", 120)) .. "x" .. BadgeNumber(Num(CurrentScope(), "height", 40)), kind = "info" },
+    local missingRows = 4 - #visibilityRows
+    local rules = W.ControlCard(section, "Group visibility", nil, 20, -246, inner, 262 - missingRows * 36)
+    local organization = {}
+    for i, entry in ipairs(visibilityRows) do
+        organization[entry[2]] = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(rules, entry[1], 16, -40 - (i - 1) * 36, inner - 32), "layout"), entry[2], false, "rebuild")
+    end
+    W.Text(rules, "Group visibility options apply only to their matching Party, Raid, or Mythic Raid scope. Empty groups collapse when Preserve raid groups is enabled.", 16, -188 + missingRows * 36, inner - 32, T.colors.muted)
+    TrackSectionRefresh(ctx, section, function()
+        local scope = CurrentScope()
+        SetOptionEnabled(preserve, scope ~= "party")
+        SetOptionEnabled(organization.collapseEmptyGroups, scope ~= "party" and Bool(scope, "preserveRaidGroups", false))
+        SetOptionEnabled(organization.hideMythicGroupsFiveToEight, scope == "mythicraid")
+        SetOptionEnabled(organization.centerSolo, scope == "party")
+        SetOptionEnabled(organization.smallRaidAsParty, scope == "party")
+        SetSectionBadgesAndStatus(section, {
             { text = OptionText(GROWTH_VALUES, Val(CurrentScope(), "growth", "DOWN"), "Down"), kind = "accent" },
-            { text = "Grid " .. BadgeNumber(Num(CurrentScope(), "unitsPerColumn", 5)) .. "/" .. BadgeNumber(Num(CurrentScope(), "maxColumns", 8)), kind = CurrentScope() == "party" and "muted" or "info" },
+            { text = "Grid " .. BadgeNumber(Num(CurrentScope(), "unitsPerColumn", 5)) .. "/" .. BadgeNumber(Num(CurrentScope(), "maxColumns", 8)), kind = "info" },
         })
+    end)
+end
+
+local function BuildClassPriorityRows(ctx, parent, width)
+    local tokens = "WARRIOR,PALADIN,HUNTER,ROGUE,PRIEST,DEATHKNIGHT,SHAMAN,MAGE,WARLOCK,MONK,DRUID,DEMONHUNTER,EVOKER"
+    -- Blizzard's CLASS_SORT_ORDER names exactly the classes this client has (9 on
+    -- Classic Era, TBC and WoW Forever, 11 on Mists); RAID_CLASS_COLORS also
+    -- carries Death Knight, Monk and Demon Hunter there. The rows keep MSUF's order.
+    local sortOrder, present = _G.CLASS_SORT_ORDER, nil
+    if type(sortOrder) == "table" and #sortOrder > 0 then
+        present = {}
+        for i = 1, #sortOrder do present[sortOrder[i]] = true end
     end
-    TrackSectionRefresh(ctx, advancedLayout, RefreshRaidGroupLayoutState)
+    local definitions, byKey = {}, {}
+    for token in tokens:gmatch("[^,]+") do
+        if present and present[token] or not present and RAID_CLASS_COLORS[token] then
+            definitions[#definitions + 1] = { key = token, label = LOCALIZED_CLASS_NAMES_MALE[token] or token }
+            byKey[token] = #definitions
+        end
+    end
+    local holder
+    local function Save()
+        local rows = {}
+        for i = 1, #holder.rows do rows[i] = holder.rows[i] end
+        table.sort(rows, function(a, b) return a.slotIndex < b.slotIndex end)
+        local order = {}
+        for i = 1, #rows do order[i] = rows[i].key end
+        Set(CurrentScope(), "classOrder", table.concat(order, ","), "rebuild")
+    end
+    holder = Shared.MakeDragSortRows(parent, definitions, {
+        x = 16, y = -68, width = width - 32, rowHeight = 22, gap = 4,
+        controlDomain = "group", controlPageKey = ctx.key, controlPath = "sorting.class_priority",
+        controlClassification = "setting", onReorder = function()
+            M.RunWithHistory("Class priority order", "group:classOrder:" .. CurrentScope(), Save)
+        end,
+    })
+    M.TrackRefresh(ctx, function()
+        local seen, slot = {}, 0
+        for token in (Conf(CurrentScope()).classOrder or tokens):gmatch("[^,%s]+") do
+            local index = byKey[token]
+            if index and not seen[index] then slot=slot+1; holder.rows[index].slotIndex=slot; seen[index]=true end
+        end
+        for i=1,#holder.rows do if not seen[i] then slot=slot+1;holder.rows[i].slotIndex=slot end end
+        holder:SnapRows()
+        holder:SetRowsEnabled(Conf(CurrentScope()).sortClassPriority == true)
+    end)
+    return #definitions
 end
 
 local function BuildGFSortingSection(ctx, b)
-    local sorting = b:CollapsibleSection("sorting", "Sorting", 280, false)
+    local sorting = b:CollapsibleSection("sorting", "Sorting", 722, false)
     local sortingW = sorting._msuf2Width or b.width or 720
     local sortingGap = 16
     local sortingLeftX = 20
@@ -588,72 +643,87 @@ local function BuildGFSortingSection(ctx, b)
         end
         SetSectionBadgesAndStatus(sorting, badges)
     end
+    local classCard = W.ControlCard(sorting, "Class priority", "Drag classes to reorder within the current group and role order.", 20, -280, sortingInnerW, 418)
+    BindScopeToggle(ctx, W.ToggleAt(classCard, "Use class priority", 16, -36, sortingInnerW - 32),
+        "sortClassPriority", false, "rebuild")
+    BuildClassPriorityRows(ctx, classCard, sortingInnerW)
     TrackSectionRefresh(ctx, sorting, refreshSortingControls)
 end
 
 local function BuildGFScalingSection(ctx, b)
-    local scale = b:CollapsibleSection("scaling", "Frame Scaling", 380, false)
-    local scaleW = scale._msuf2Width or b.width or 720
-    local scaleGap = 16
-    local scaleLeftX = 20
-    local scaleInnerW = max(320, scaleW - 40)
-    local scaleLeftW = floor((scaleInnerW - scaleGap) * 0.48)
-    local scaleRightX = scaleLeftX + scaleLeftW + scaleGap
-    local scaleRightW = scaleInnerW - scaleLeftW - scaleGap
-    local scaleModeCard = W.ControlCard(scale, "Mode", "Scales frame size, fonts, and icons proportionally.", scaleLeftX, -38, scaleLeftW, 128)
-    local manualCard = W.ControlCard(scale, "Manual Scale", "Buff/debuff positions stay relative to their anchors.", scaleLeftX, -184, scaleLeftW, 144)
-    local autoCard = W.ControlCard(scale, "Auto Breakpoints", "Automatically scale by group size.", scaleRightX, -38, scaleRightW, 290)
-    local RefreshScalingState = M.RefreshProxy()
-    M._msuf2LastGroupScaleMode = M._msuf2LastGroupScaleMode or {}
-    local scaleEnabled = W.SwitchAt(scaleModeCard, "Frame scaling", scaleLeftW - 62, -24, 0, "HIDDEN")
-    M.BindBoolWidget(ctx, scaleEnabled,
-        function() return Val(CurrentScope(), "frameScaleMode", "off") ~= "off" end,
-        function(v)
-            local scopeKey = CurrentScope()
-            if v then
-                Set(scopeKey, "frameScaleMode", M._msuf2LastGroupScaleMode[scopeKey] or "manual", "rebuild")
-            else
-                local mode = Val(scopeKey, "frameScaleMode", "off")
-                if mode == "manual" or mode == "auto" then M._msuf2LastGroupScaleMode[scopeKey] = mode end
-                Set(scopeKey, "frameScaleMode", "off", "rebuild")
-            end
-            RefreshScalingState()
-        end,
-        ControlMeta(ctx, "field.frameScaleEnabled"))
-    local scaleMode = W.Segment(scaleModeCard, "Scale Mode", VT("manual", "Manual", "auto", "Auto"), min(220, scaleLeftW - 32))
-    W.MoveWidget(scaleMode, scaleModeCard, 16, -72, min(220, scaleLeftW - 32))
-    M.BindSegment(ctx, scaleMode,
-        function()
-            local mode = Val(CurrentScope(), "frameScaleMode", "off")
-            return mode == "auto" and "auto" or "manual"
-        end,
-        function(v)
-            local scopeKey = CurrentScope()
-            local mode = (v == "auto") and "auto" or "manual"
-            M._msuf2LastGroupScaleMode[scopeKey] = mode
-            Set(scopeKey, "frameScaleMode", mode, "rebuild")
-            RefreshScalingState()
-        end,
-        ControlMeta(ctx, "field.frameScaleMode"))
-    local function BindScaleSlider(widget, key, default, labelFn)
-        M.BindNumberWidget(ctx, widget,
-            function() return Num(CurrentScope(), key, default) end,
-            function(v)
-                Set(CurrentScope(), key, floor((tonumber(v) or default or 0) + 0.5), "rebuild")
-            end,
-            default, (function()
-                local meta = ControlMeta(ctx, "field." .. tostring(key))
-                meta.step, meta.roundStep = 5, true
-                return meta
-            end)())
-        local function RefreshLabel()
-            if widget and widget._msuf2Title then widget._msuf2Title:SetText(labelFn(Num(CurrentScope(), key, default))) end
-        end
-        widget:HookScript("OnValueChanged", function(_, value)
-            if widget._msuf2Title then widget._msuf2Title:SetText(labelFn(floor((tonumber(value) or default or 0) + 0.5))) end
-        end)
-        M.TrackRefresh(ctx, RefreshLabel)
-        return widget
+    local scale = b:CollapsibleSection("scaling", "Size & Scaling", 720, false)
+    local width = scale._msuf2Width or b.width or 720
+    local inner = width - 40
+    local col = (inner - 16) / 2
+    local frames = {}
+    Shared.MakeTabFrames(scale, -64, width, frames, "general", "tier10", "tier20", "tier25", "tier40")
+    M.gfSizingTabSelection = M.gfSizingTabSelection or {}
+    local tabs, RefreshTabs, ReadTab, SetTab = W.SegmentTabs(ctx, scale, {
+        label = "", values = VT("general", "General", "tier10", "1–10", "tier20", "11–20", "tier25", "21–25", "tier40", "26+"),
+        width = min(580, inner), frames = frames, defaultTab = "general", x = 20, y = -12,
+        get = function() return M.gfSizingTabSelection[CurrentScope()] or "general" end,
+        set = function(value) M.gfSizingTabSelection[CurrentScope()] = value end,
+    })
+    if tabs._msuf2Title then tabs._msuf2Title:Hide() end
+    RegisterControl(tabs, ctx, "scaling.workspace_tab", "Size area", "segment", "ephemeral")
+    scale._msuf2GuidedSelectTab = function(tab)
+        if not frames[tab] then return false end
+        SetTab(tab)
+        return ReadTab() == tab
+    end
+    for key, frame in pairs(frames) do frame._msuf2GroupSizingTab = key end
+    local tabLabels = { general = "General", tier10 = "1–10 players", tier20 = "11–20 players", tier25 = "21–25 players", tier40 = "26+ players" }
+    for key, frame in pairs(frames) do frame._msuf2SearchTitle = M.Tr(tabLabels[key]) end
+    local function SizingMeta(key, tab)
+        local meta = ControlMeta(ctx, "field." .. key)
+        meta.searchPrepareKind, meta.searchPrepareValue = "groupSizingTab", tab
+        meta.keywords = "size scaling " .. tabLabels[tab]
+        meta.prepareExactSearchTarget = function() return scale._msuf2GuidedSelectTab(tab) end
+        return meta
+    end
+    local baseSlider, baseDropdown, baseToggle = ScopeSlider, ScopeDropdown, BindScopeToggle
+    local function ScopeSlider(ctx, parent, label, low, high, step, sliderWidth, key, default, mode, x, y, placeWidth, justify)
+        local tab = parent._msuf2GroupSizingTab or "general"
+        local meta = SizingMeta(key, tab)
+        local control = baseSlider(ctx, parent, label, low, high, step, sliderWidth, key, default, mode, x, y, placeWidth, justify, meta)
+        meta.label, meta.kind = label, "slider"
+        M.RegisterSearchWidget(control, meta)
+        return AttachGroupFocus(control, "layout")
+    end
+    local function ScopeDropdown(ctx, parent, label, values, sliderWidth, key, default, mode, x, y, placeWidth)
+        local meta = SizingMeta(key, "general")
+        local control = baseDropdown(ctx, parent, label, values, sliderWidth, key, default, mode, x, y, placeWidth, "LEFT", meta)
+        meta.label, meta.kind, meta.values = label, "dropdown", values
+        M.RegisterSearchWidget(control, meta)
+        return control
+    end
+    local function BindScopeToggle(ctx, widget, key, default, mode)
+        local meta = SizingMeta(key, "general")
+        local control = baseToggle(ctx, widget, key, default, mode, meta)
+        meta.kind = "toggle"
+        M.RegisterSearchWidget(control, meta)
+        return control
+    end
+    local general = frames.general
+    local sizeCard = W.ControlCard(general, "Base dimensions", "Used before scaling and raid size overrides.", 20, -4, col, 248)
+    local modeCard = W.ControlCard(general, "Scaling", "Changes base dimensions, spacing, and resource bar height.", col + 36, -4, col, 248)
+    ScopeSlider(ctx, sizeCard, "Width", 40, 300, 1, col - 64, "width", 120, "rebuild", 16, -84, col - 64, "LEFT")
+    ScopeSlider(ctx, sizeCard, "Height", 16, 120, 1, col - 64, "height", 40, "rebuild", 16, -142, col - 64, "LEFT")
+    ScopeSlider(ctx, sizeCard, "Spacing", 0, 60, 1, col - 64, "spacing", 1, "rebuild", 16, -200, col - 64, "LEFT")
+    local mode = ScopeDropdown(ctx, modeCard, "Scale Mode", VT("off", "Off", "manual", "Manual", "auto", "By group size"), col - 32,
+        "frameScaleMode", "off", "rebuild", 16, -80, col - 32)
+    local manual = ScopeSlider(ctx, modeCard, "Manual scale (%)", 50, 150, 5, col - 64, "frameScaleManual", 100, "rebuild", 16, -166, col - 64, "LEFT")
+    local rules = W.ControlCard(general, "Raid size overrides", nil, 20, -270, inner, 158)
+    local useTiers = BindScopeToggle(ctx, W.ToggleAt(rules, "Use raid size overrides", 16, -38, inner - 32), "layoutTiersEnabled", false, "rebuild")
+    local exclude = BindScopeToggle(ctx, W.ToggleAt(rules, "Exclude hidden groups from group size", 16, -76, inner - 32), "excludeHiddenGroups", false, "rebuild")
+    W.Text(rules, "Group size selects both the scaling percentage and raid overrides. Raid overrides are unavailable for Party frames.", 16, -112, inner - 32, T.colors.muted)
+    local appearance = W.ControlCard(general, "Resize appearance", nil, 20, -446, inner, 154)
+    for i, entry in ipairs({
+        {"Scale indicators with frame dimensions", "autoScaleIndicatorsOnResize"},
+        {"Scale auras with frame dimensions", "autoScaleAurasOnResize"},
+        {"Scale tracked buffs with frame dimensions", "autoScaleTrackedOnResize"},
+    }) do
+        BindScopeToggle(ctx, W.ToggleAt(appearance, entry[1], 16, -38 - (i - 1) * 36, inner - 32), entry[2], false, "rebuild")
     end
     local function BeginAutoScalePreview(slider, previewCount)
         if not (slider and previewCount and type(M.SetGFScalingBreakpointPreview) == "function") then return end
@@ -700,54 +770,44 @@ local function BuildGFScalingSection(ctx, b)
             button:HookScript("OnHide", End)
         end
     end
-    local function AddScaleSlider(parent, spec, width)
-        local label = spec.label
-        local slider = BindScaleSlider(W.Slider(parent, "", 50, spec.max or 100, 5, width), spec.key, spec.default,
-            function(v) return string.format("%s: %d%%", label, v) end)
-        W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
-        BindAutoScalePreview(slider, spec.previewCount)
-        return slider
+    local autoControls, tierControls = {}, {}
+    local entries = {
+        {prefix="tier10", key="scaleAt10", default=100, count=10},
+        {prefix="tier20", key="scaleAt20", default=85, count=20},
+        {prefix="tier25", key="scaleAt25", default=80, count=25},
+        {prefix="tier40", key="scaleOver25", default=70, count=30},
+    }
+    for _, entry in ipairs(entries) do
+        local tab = frames[entry.prefix]
+        local percentage = ScopeSlider(ctx, tab, "Group size scale (%)", 50, 100, 5, inner - 64, entry.key, entry.default, "rebuild", 36, -44, inner - 64, "LEFT")
+        BindAutoScalePreview(percentage, entry.count)
+        autoControls[#autoControls + 1] = percentage
+        W.Text(tab, "The percentage applies in By group size mode. Exact raid dimensions below replace scaled width or height; 0 keeps the scaled base. Spacing and resource bar height still use the scaling percentage.", 20, -104, inner, T.colors.muted)
+        local controls = M.GroupFrameAdditionalSections.SizingTier(ctx, tab, entry.prefix, width, SizingMeta)
+        for i = 1, #controls do tierControls[#tierControls + 1] = controls[i] end
     end
-    local manualScale = AddScaleSlider(manualCard, { key = "frameScaleManual", default = 100, max = 150, y = -64, label = "Manual Scale" }, scaleLeftW)
-    local autoLabel = autoCard and autoCard.title
-    local autoScaleControls = {}
-    for i, spec in ipairs({
-        { key = "scaleAt10", default = 100, y = -66, label = "1-10 players", previewCount = 10 },
-        { key = "scaleAt20", default = 85, y = -120, label = "11-20 players", previewCount = 20 },
-        { key = "scaleAt25", default = 80, y = -174, label = "21-25 players", previewCount = 25 },
-        { key = "scaleOver25", default = 70, y = -228, label = "26+ players", previewCount = 30 },
-    }) do autoScaleControls[i] = AddScaleSlider(autoCard, spec, scaleRightW) end
-    local scaleHint = manualCard and manualCard.subtitle
-    if scaleHint.SetWordWrap then scaleHint:SetWordWrap(true) end
-    RefreshScalingState = RefreshScalingState(function()
-        local mode = Val(CurrentScope(), "frameScaleMode", "off")
-        local scalingOn = mode ~= "off"
-        local manualOn = mode == "manual"
-        local autoOn = mode == "auto"
-        SetOptionEnabled(scaleEnabled, true)
-        SetOptionEnabled(scaleMode, scalingOn)
-        SetOptionEnabled(manualScale, manualOn)
-        SetOptionsEnabled(autoScaleControls, autoOn)
-        if autoLabel then
-            if autoOn then
-                autoLabel:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
-                autoLabel:SetAlpha(1)
-            else
-                autoLabel:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
-                autoLabel:SetAlpha(0.55)
-            end
+    TrackSectionRefresh(ctx, scale, function()
+        local scalingMode = Val(CurrentScope(), "frameScaleMode", "off")
+        local raid = CurrentScope() ~= "party"
+        SetOptionEnabled(manual, scalingMode == "manual")
+        SetOptionsEnabled(autoControls, scalingMode == "auto")
+        SetOptionEnabled(useTiers, raid)
+        SetOptionEnabled(exclude, raid)
+        local overrides = raid and Bool(CurrentScope(), "layoutTiersEnabled", false)
+        for i = 1, #tierControls do
+            local control = tierControls[i]
+            SetOptionEnabled(control, overrides and (not control._msuf2TierPositionKey or Bool(CurrentScope(), control._msuf2TierPositionKey, false)))
         end
-        if scaleHint then scaleHint:SetAlpha((manualOn or autoOn) and 1 or 0.55) end
+        RefreshTabs()
         SetSectionBadgesAndStatus(scale, {
-            OnOffBadge(scalingOn, "Scaling", "Off"),
-            { text = manualOn and ("Manual " .. BadgeNumber(Num(CurrentScope(), "frameScaleManual", 100)) .. "%") or (autoOn and "Auto breakpoints" or "Native size"), kind = scalingOn and "info" or "muted" },
+            { text = OptionText(VT("off", "Off", "manual", "Manual", "auto", "By group size"), scalingMode, "Off"), kind = scalingMode == "off" and "muted" or "info" },
+            OnOffBadge(raid and Bool(CurrentScope(), "layoutTiersEnabled", false), "Raid overrides", "Base dimensions"),
         })
     end)
-    TrackSectionRefresh(ctx, scale, RefreshScalingState)
 end
 
 local function BuildGFAnchorSection(ctx, b)
-    local anchor = b:CollapsibleSection("anchor", "Position", 220, false)
+    local anchor = b:CollapsibleSection("anchor", "Anchor", 220, false)
     local anchorW = anchor._msuf2Width or b.width or 720
     local anchorLeftX = 20
     local anchorGap = 24
@@ -804,8 +864,6 @@ local function BuildGFAnchorSection(ctx, b)
         controlDomain = "group",
         controlPageKey = ctx and ctx.key,
         controlPath = "anchor.custom",
-        assistantDisposition = "dynamic",
-        assistantDispositionReason = "Custom anchor editing targets the currently selected Group scope.",
     })
     RegisterControl(customAnchor.clear, ctx, "anchor.custom.clear", "Clear", "button", "action", {
         actionKey = "clear_group_custom_anchor", actionInputArg = "scope",
@@ -823,6 +881,8 @@ local function BuildGFAnchorSection(ctx, b)
     TrackSectionRefresh(ctx, anchor, RefreshAnchorHeader)
 end
 
+local AdditionalSections = M.GroupFrameAdditionalSections
+
 local GROUP_LAYOUT_SECTION_SPECS = {
     {
         sectionId = "general", title = "Basics", height = 520, build = BuildGFGeneralSection,
@@ -838,6 +898,8 @@ local GROUP_LAYOUT_SECTION_SPECS = {
             return RefreshProviderHeader
         end,
     },
+    { sectionId = "anchor", title = "Anchor", height = 220, build = BuildGFAnchorSection },
+    { sectionId = "scaling", title = "Size & Scaling", height = 720, build = BuildGFScalingSection },
     {
         sectionId = function(ctx)
             if ctx and ctx.entry and ctx.entry.hiddenBuild then
@@ -850,7 +912,7 @@ local GROUP_LAYOUT_SECTION_SPECS = {
             return "portrait"
         end,
         title = "Portrait", height = 616,
-        -- Resolve through GroupPage at build time. The desktop Assistant
+        -- Resolve through GroupPage at build time. The desktop Search
         -- collector loads page specs before exercising lazy section builders.
         build = function(ctx, builder) return GP.BuildPortrait(ctx, builder) end,
         prepareShell = function(...) return GP.PreparePortraitShell(...) end,
@@ -859,10 +921,18 @@ local GROUP_LAYOUT_SECTION_SPECS = {
     { sectionId = "power", title = "Resource Bar", autoHeight = true, build = BuildGFResourceBarSection, prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PreparePowerSwitch(ctx, sec) end },
     { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection, prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PrepareRangeSwitch(ctx, sec) end },
     { sectionId = "transparency", title = "Transparency", autoHeight = true, build = BuildGFTransparencySection },
-    { sectionId = "layout_advanced", title = "Geometry", height = 448, build = BuildGFGeometrySection },
-    { sectionId = "sorting", title = "Sorting", height = 236, build = BuildGFSortingSection },
-    { sectionId = "scaling", title = "Frame Scaling", height = 380, build = BuildGFScalingSection },
-    { sectionId = "anchor", title = "Position", height = 220, build = BuildGFAnchorSection },
+    { sectionId = "layout_advanced", title = "Group Layout", height = GEOMETRY_SECTION_HEIGHT, build = BuildGFGeometrySection },
+    { sectionId = "sorting", title = "Sorting", height = 722, build = BuildGFSortingSection },
+    -- clientCapability: the MSUF.Client fact that must be true for the section to
+    -- exist, the same capability names Search/MSUF_Menu2_Search_IndexQuery.lua
+    -- ties client-only static search rows to. frameScope: the unit or group scope
+    -- the section needs (M.SupportsFrameScope), e.g. boss units for allied bosses.
+    { sectionId = "buff_coverage", title = "Buff coverage (Forever)", height = 656, clientCapability = "IsForever", build = AdditionalSections.BuffCoverage },
+    { sectionId = "name_bar", title = "Name strip", height = 300, build = AdditionalSections.NameBar },
+    { sectionId = "party_targets", title = "Member targets", height = 456, build = AdditionalSections.Targets },
+    { sectionId = "group_pets", title = "Pet frames", height = 546, build = AdditionalSections.Pets },
+    { sectionId = "friendly_bosses", title = "Allied boss frames", height = 536, frameScope = "boss", build = AdditionalSections.FriendlyBosses },
+    { sectionId = "healer_mana", title = "Healer mana bars", height = 600, build = AdditionalSections.HealerMana },
 }
 
 local function BuildGFLayout(ctx)
@@ -870,11 +940,16 @@ local function BuildGFLayout(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
     local buildLazy = M.UnitPage and M.UnitPage.BuildSectionLazy
+    local client = MSUF.Client
     for i = 1, #GROUP_LAYOUT_SECTION_SPECS do
         local spec = GROUP_LAYOUT_SECTION_SPECS[i]
+        local capability, frameScope = spec.clientCapability, spec.frameScope
+        if type(spec.build) == "function" and (capability == nil or (client and client[capability] == true))
+            and (frameScope == nil or not M.SupportsFrameScope or M.SupportsFrameScope(frameScope)) then
         if type(buildLazy) == "function" then buildLazy(ctx, b, nil, spec)
         else spec.build(ctx, b) end
+        end
     end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 28 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 30 })

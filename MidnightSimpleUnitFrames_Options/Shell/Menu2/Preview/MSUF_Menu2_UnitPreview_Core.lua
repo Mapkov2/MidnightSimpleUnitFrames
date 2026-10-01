@@ -224,7 +224,14 @@ local function ApplyTrueOutlineFrameBorder(mock, overlay, border, thickness)
         and styles.EdgeSize(border.textureKey, thickness) or thickness
     local r, g, b, a = border.r, border.g, border.b, border.a
     if r == nil then r, g, b, a = Core.BaseEdgeColor() end
-    PixelLayoutRegion(overlay, "SetBackdrop", { edgeFile = texture, edgeSize = edgeSize })
+    -- Reuse the backdrop table while texture and size hold: Blizzard's
+    -- SetBackdrop skips a table it already holds (identity compare).
+    local backdrop = overlay._msufTrueOutlineBackdrop
+    if not backdrop or backdrop.edgeFile ~= texture or backdrop.edgeSize ~= edgeSize then
+        backdrop = { edgeFile = texture, edgeSize = edgeSize }
+        overlay._msufTrueOutlineBackdrop = backdrop
+    end
+    PixelLayoutRegion(overlay, "SetBackdrop", backdrop)
     overlay:SetBackdropBorderColor(r or 0, g or 0, b or 0, a == nil and 1 or a)
     if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(overlay, false, FRAME_BORDER_OPTS) end
     return true

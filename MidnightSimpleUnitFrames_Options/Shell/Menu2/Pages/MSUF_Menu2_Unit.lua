@@ -197,7 +197,7 @@ local function UnitControlMeta(ctx, semanticPath, classification)
         classification = classification or "setting",
     }
     -- Unit controls execute against the page/runtime scope. The semantic role
-    -- is a stable control identity, not a globally resolvable Assistant action.
+    -- is a stable control identity, not a globally resolvable Search action.
     return meta
 end
 local function UnitSettingMeta(ctx, semanticPath, unit, key)
@@ -206,11 +206,9 @@ local function UnitSettingMeta(ctx, semanticPath, unit, key)
     if unit ~= "" and key ~= "" then meta.settingKey = unit .. "." .. key end
     return meta
 end
-local function UnitReviewedMeta(ctx, semanticPath, classification, disposition, reason)
-    local meta = UnitControlMeta(ctx, semanticPath, classification)
-    meta.assistantDisposition = disposition
-    meta.assistantDispositionReason = reason
-    return meta
+-- Call sites keep Retail's disposition and reason arguments; nothing reads them.
+local function UnitReviewedMeta(ctx, semanticPath, classification)
+    return UnitControlMeta(ctx, semanticPath, classification)
 end
 local function RegisterUnitControl(widget, ctx, semanticPath, label, kind, classification, extra)
     if not widget then return widget end
@@ -233,7 +231,7 @@ local SEPARATORS = VTR [[
 ~=~
 :=:
 ]]
-local PORTRAIT_RENDER = VTP "2D=2D portrait|CLASS=Class portrait"
+local PORTRAIT_RENDER = VTP "2D=2D portrait|3D=3D portrait|CLASS=Class portrait"
 local PORTRAIT_SHAPES = VTP "SQUARE=Square|CIRCLE=Circle|ROUNDED=Rounded|DIAMOND=Diamond|BLIZZARD=Blizzard ring"
 local PORTRAIT_BORDERS = VTP "NONE=No border|SOLID=Solid|CLASS_COLOR=Class color|REACTION=Reaction color|CUSTOM=Custom color"
 local function GetConf(unit)
@@ -255,7 +253,7 @@ local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarInto
 --- intentionally absent: those live in MSUF_DB.general and are shared by all units.
 --- unit_copy_semantics_smoke extracts the bound keys from the Visuals page source and
 --- fails when a new portrait control is missing here.
-local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitClickable portraitBlizzardElite portraitBlizzardCorner portraitBlizzardStandaloneRing portraitShape portraitSizeMode portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitEdgeSoftness portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride]]
+local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitClickable portraitBlizzardElite portraitBlizzardCorner portraitBlizzardStandaloneRing portraitShape portraitSizeMode portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitEdgeSoftness portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride portraitFlip portraitInnerShadow portraitDragonScale portraitDragonX portraitDragonY portraitDragonFlip portraitDragonClassColor portraitDragonInInstances portraitDragonLayer portraitDragonLevel]]
 local COPY_TEXT_FIELDS = WL [[
     nameTextMouseover hpTextMouseover powerTextMouseover
     nameTextMouseoverFadeIn nameTextMouseoverFadeOut hpTextMouseoverFadeIn hpTextMouseoverFadeOut powerTextMouseoverFadeIn powerTextMouseoverFadeOut
@@ -348,10 +346,10 @@ local AURA_COPY_UNITS = DropUnsupportedUnits(KSW("player pet target focus boss a
 local AURA_COPY_FLAGS = { player = "showPlayer", pet = "showPet", target = "showTarget", focus = "showFocus", boss = "showBoss", arena = "showArena" }
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
 local AURA_ARENA_RUNTIME_UNITS = WL("arena1 arena2 arena3")
--- TBC and Mists field five arena opponents, Classic Era none
--- (MSUF.Client.MaxArenaOpponents, published as MSUF_MAX_ARENA_FRAMES).
--- Mainline keeps its three arena frames.
-local ARENA_SLOTS = IS_CLASSIC_FAMILY and tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3
+-- TBC and Mists field five arena opponents, Classic Era and WoW Forever none,
+-- Midnight three (MSUF.Client.MaxArenaOpponents, published as MSUF_MAX_ARENA_FRAMES).
+local ARENA_SLOTS = tonumber(MSUF.Client and MSUF.Client.MaxArenaOpponents)
+    or (IS_CLASSIC_FAMILY and tonumber(_G.MSUF_MAX_ARENA_FRAMES)) or 3
 for arenaIndex = 4, ARENA_SLOTS do AURA_ARENA_RUNTIME_UNITS[#AURA_ARENA_RUNTIME_UNITS + 1] = "arena" .. arenaIndex end
 local UF_COPY_CATEGORIES = {
     { key = "basics",       label = "Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },

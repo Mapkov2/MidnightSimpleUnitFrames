@@ -41,6 +41,7 @@ local NormalizePlayerPowerSource = M.NormalizePlayerPowerSource
 -- Portrait placement value lists. Kept in one table so the page stays well clear
 -- of the Lua 200-upvalue ceiling that already bites the Auras page.
 local PORTRAIT_PLACEMENT = {
+    dragonLayer = VT("BACKGROUND", "Background", "BORDER", "Border", "ARTWORK", "Artwork", "OVERLAY", "Overlay"),
     classificationPreview = VT("OFF", "Off", "elite", "Elite (gold)", "rare", "Rare (silver)",
         "rareelite", "Rare elite (silver)", "worldboss", "Boss (winged gold)"),
     modes = VT("ATTACHED", "Attached to bar", "DETACHED", "Detached", "OVERLAY", "Overlay on bar"),
@@ -104,16 +105,17 @@ end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 -- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
 -- both read them from here instead of repeating literals.
-local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 584, style = 220 }
+local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 584, style = 330, dragon = 540 }
 local PORTRAIT_TAB_HEIGHTS = {
     general = PORTRAIT_CARD_H.main + 116,
     geometry = PORTRAIT_CARD_H.geometry + 116,
     placement = PORTRAIT_CARD_H.placement + 116,
     border = PORTRAIT_CARD_H.border + 116,
     advanced = PORTRAIT_CARD_H.style + 116,
+    dragon = PORTRAIT_CARD_H.dragon + 116,
 }
 local function NormalizePortraitTabKey(key)
-    if key ~= "general" and key ~= "geometry" and key ~= "placement" and key ~= "border" and key ~= "advanced" then
+    if key ~= "general" and key ~= "geometry" and key ~= "placement" and key ~= "border" and key ~= "advanced" and key ~= "dragon" then
         key = "general"
     end
     return key
@@ -130,13 +132,14 @@ local function PortraitTabHeight(tab)
 end
 local function PortraitTabValues(sectionWidth)
     if (tonumber(sectionWidth) or 720) < 700 then
-        return VT("general", "General", "placement", "Place", "geometry", "Size", "border", "Border", "advanced", "More")
+        return VT("general", "General", "placement", "Place", "geometry", "Size", "border", "Border", "dragon", "Dragon", "advanced", "More")
     end
     return VT(
         "general", "General",
         "placement", "Placement",
         "geometry", "Size & Zoom",
         "border", "Shape & Border",
+        "dragon", "Dragon",
         "advanced", "More Options")
 end
 local function PortraitLayoutForWidth(sectionWidth, tab)
@@ -243,13 +246,14 @@ local function BuildPortrait(ctx, builder, unit)
         end
     end
     local tabFrames = {}
-    local generalTab, geometryTab, placementTab, borderTab, advancedTab =
-        UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "geometry", "placement", "border", "advanced")
+    local generalTab, geometryTab, placementTab, borderTab, advancedTab, dragonTab =
+        UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "geometry", "placement", "border", "advanced", "dragon")
     local mainCard = W.ControlCard(generalTab, "Visibility & Mode", nil, leftX, -4, leftW, PORTRAIT_CARD_H.main)
     local geometryCard = W.ControlCard(geometryTab, "Geometry", nil, rightX, -4, rightW, PORTRAIT_CARD_H.geometry)
     local placementCard = W.ControlCard(placementTab, "Placement", nil, leftX, -4, leftW, PORTRAIT_CARD_H.placement)
     local borderCard = W.ControlCard(borderTab, "Shape & Border", nil, leftX, -4, leftW, PORTRAIT_CARD_H.border)
     local styleCard = W.ControlCard(advancedTab, "Class & Background", nil, rightX, -4, rightW, PORTRAIT_CARD_H.style)
+    local dragonCard = W.ControlCard(dragonTab, "Dragon decoration", nil, leftX, -4, leftW, PORTRAIT_CARD_H.dragon)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(borderCard, { "portrait.border" }, {
             title = "Portrait Border Color",
@@ -349,7 +353,7 @@ local function BuildPortrait(ctx, builder, unit)
             portraitElement.SetClassificationPreview(nil)
         end
     end
-    dragonPreview:HookScript("OnHide", StopDragonPreview)
+    sec:HookScript("OnHide", StopDragonPreview)
     if M.AddTooltip then
         M.AddTooltip(dragonPreview, "Runtime Preview",
             "Shows the selected dragon on this unit's visible portrait. Off restores the real classification. Ends when this area closes or combat starts.",
@@ -376,7 +380,7 @@ local function BuildPortrait(ctx, builder, unit)
     local size = BindPortraitSlider(geometryCard, "Size override", 16, -116, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE")
     local widthOverride = BindPortraitSlider(geometryCard, "Width override", 16, -170, rightW - 58, 0, 256, 1, "portraitWidth", 0, "MSUF2_PORTRAIT_WIDTH")
     local heightOverride = BindPortraitSlider(geometryCard, "Height override", 16, -224, rightW - 58, 0, 256, 1, "portraitHeight", 0, "MSUF2_PORTRAIT_HEIGHT")
-    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -278, rightW - 58, 100, 200, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
+    local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -278, rightW - 58, 100, 300, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
     local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -332, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
     local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -386, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
     local placement = BindPortraitDropdown(placementCard, "Placement", PORTRAIT_PLACEMENT.modes, 16, -58, min(220, leftW - 32), "portraitPlacement", "ATTACHED", "MSUF2_PORTRAIT_PLACEMENT", nil, RefreshPortraitControls)
@@ -406,6 +410,42 @@ local function BuildPortrait(ctx, builder, unit)
     local castSpellIcon = BindPortraitToggle(styleCard, "Show cast spell icon in portrait", 16, -166, rightW - 32, "portraitCastSpellIcon", false, "MSUF2_PORTRAIT_CAST_ICON",
         CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
+    local flip = BindPortraitToggle(styleCard, "Flip portrait left to right", 16, -220, rightW - 32, "portraitFlip", false, "MSUF2_PORTRAIT_FLIP")
+    local shadow = BindPortraitSlider(styleCard, "Inset shadow strength", 16, -274, rightW - 58, 0, 100, 1, "portraitInnerShadow", 0, "MSUF2_PORTRAIT_SHADOW")
+    local dragonPreviewExtra = W.Dropdown(dragonCard, "Runtime Preview", PORTRAIT_PLACEMENT.classificationPreview, 220)
+    W.MoveWidget(dragonPreviewExtra, dragonCard, 16, -58, min(280, leftW - 32))
+    M.BindDropdownWidget(ctx, dragonPreviewExtra,
+        function() return portraitElement and portraitElement.GetClassificationPreview(unit) or "OFF" end,
+        function(value)
+            if portraitElement then portraitElement.SetClassificationPreview(unit, value) end
+            M.RequestRefresh(ctx, "portrait-dragon-preview")
+        end,
+        ReviewedMeta(ctx, "portrait.classification_preview_dragon", "ephemeral", "excluded",
+            "Temporary dragon preview while adjusting decoration geometry; no saved setting."))
+    BindExactPortraitTabTarget(dragonPreviewExtra, "dragon")
+    dragonPreview:HookScript("OnHide", StopDragonPreview)
+    dragonPreviewExtra:HookScript("OnHide", StopDragonPreview)
+    local dragonControls = {
+        BindPortraitSlider(dragonCard, "Dragon size", 16, -112, leftW - 58, 25, 300, 1, "portraitDragonScale", 100, "MSUF2_DRAGON_SCALE"),
+        BindPortraitSlider(dragonCard, "Dragon horizontal shift", 16, -166, leftW - 58, -200, 200, 1, "portraitDragonX", 0, "MSUF2_DRAGON_X"),
+        BindPortraitSlider(dragonCard, "Dragon vertical shift", 16, -220, leftW - 58, -200, 200, 1, "portraitDragonY", 0, "MSUF2_DRAGON_Y"),
+        BindPortraitDropdown(dragonCard, "Dragon draw order", PORTRAIT_PLACEMENT.dragonLayer, 16, -274, min(220, leftW - 32), "portraitDragonLayer", "OVERLAY", "MSUF2_DRAGON_LAYER"),
+        BindPortraitSlider(dragonCard, "Dragon level above portrait", 16, -328, leftW - 58, 0, 30, 1, "portraitDragonLevel", 1, "MSUF2_DRAGON_LEVEL"),
+        BindPortraitToggle(dragonCard, "Flip dragon left to right", 16, -382, leftW - 32, "portraitDragonFlip", false, "MSUF2_DRAGON_FLIP"),
+        BindPortraitToggle(dragonCard, "Color dragon by unit class", 16, -428, leftW - 32, "portraitDragonClassColor", false, "MSUF2_DRAGON_COLOR"),
+        BindPortraitToggle(dragonCard, "Keep enemy dragons in instances", 16, -474, leftW - 32, "portraitDragonInInstances", true, "MSUF2_DRAGON_INSTANCES"),
+    }
+    local dragonKeys = { "portraitDragonScale", "portraitDragonX", "portraitDragonY", "portraitDragonLayer", "portraitDragonLevel", "portraitDragonFlip", "portraitDragonClassColor", "portraitDragonInInstances" }
+    for i, control in ipairs(dragonControls) do
+        BindExactPortraitTabTarget(control, "dragon", tostring(unit) .. "." .. dragonKeys[i])
+    end
+    BindExactPortraitTabTarget(flip, "advanced", tostring(unit) .. ".portraitFlip")
+    BindExactPortraitTabTarget(shadow, "advanced", tostring(unit) .. ".portraitInnerShadow")
+    if M.AddTooltip then
+        M.AddTooltip(render, "Render", "3D shows the unit's live model in a rectangle. While the game keeps a unit's identity private, the regular 2D portrait stands in.", { hook = true })
+        M.AddTooltip(shadow, "Inset shadow strength", "Darkens the inner edges of square portraits, 3D models included.", { hook = true })
+        M.AddTooltip(dragonControls[4], "Dragon draw order", "Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring.", { hook = true })
+    end
     local portraitActiveControls = {
         render, clickable, shape, sizeMode, size, widthOverride, heightOverride, edgeSoftness, portraitBg, castSpellIcon,
         placement, levelOffset, portraitAlpha,
@@ -415,12 +455,12 @@ local function BuildPortrait(ctx, builder, unit)
         return PortraitActive() and ((conf.portraitPlacement or "ATTACHED") == mode)
     end
     local function PortraitIs2D(conf)
-        return PortraitActive() and ((conf.portraitRender or "2D") ~= "CLASS")
+        return PortraitActive() and ((conf.portraitRender or "2D") == "2D")
     end
     -- The Blizzard ring shape brings the stock gold ring with it, so every MSUF
     -- border control is inert while it is selected.
     local function PortraitShapeIsBlizzard(conf)
-        return (conf.portraitShape or "SQUARE") == "BLIZZARD"
+        return conf.portraitRender ~= "3D" and (conf.portraitShape or "SQUARE") == "BLIZZARD"
     end
     local function PortraitFillsBar(conf)
         return (conf.portraitPlacement or "ATTACHED") == "OVERLAY"
@@ -452,9 +492,14 @@ local function BuildPortrait(ctx, builder, unit)
                 and not PortraitFillsBar(conf)
                 and PortraitUsesSeparateSize(conf)
         end },
-        { controls = { zoom, panX, panY }, on = PortraitIs2D },
+        { controls = { panX, panY }, on = PortraitIs2D },
+        { controls = zoom, on = function(conf) return PortraitActive() and conf.portraitRender ~= "CLASS" end },
+        { controls = shape, on = function(conf) return PortraitActive() and conf.portraitRender ~= "3D" end },
+        { controls = flip, on = function(conf) return PortraitActive() and conf.portraitRender ~= "3D" end },
+        { controls = shadow, on = function(conf) return PortraitActive() and ((conf.portraitShape or "SQUARE") == "SQUARE" or conf.portraitRender == "3D") end },
+        { controls = dragonControls, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true end },
         { controls = { eliteDragon, blizzardCorner }, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) end },
-        { controls = dragonPreview, on = function(conf)
+        { controls = { dragonPreview, dragonPreviewExtra }, on = function(conf)
             local enabled = PortraitActive() and PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true
             if not enabled then StopDragonPreview() end
             return enabled
@@ -1411,7 +1456,7 @@ local function BuildCastbar(ctx, builder, unit)
             M.RequestRefresh(ctx, "portrait-cast-icon-mirror")
         end,
         ReviewedMeta(ctx, "castbar.portrait_cast_icon", "setting", "duplicate",
-            "Second surface for the Portrait section cast-icon toggle; that control owns the Assistant target for portraitCastSpellIcon."))
+            "Second surface for the Portrait section cast-icon toggle; that control owns the Search target for portraitCastSpellIcon."))
     portraitCastIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower castbar icon"
     local portraitCastIconNote = W.Text(portraitIconCard,
         "The same setting as Portrait > More Options. It swaps the portrait for the spell icon while the unit casts, so the portrait has to be enabled.",

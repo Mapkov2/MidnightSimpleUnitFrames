@@ -100,7 +100,7 @@ M.navPrimaryForKey = {
 }
 
 -- Canonical labels for pages reached through a visible primary page and then
--- a workspace tab. Assistant/search directions consume this same navigation
+-- a workspace tab. Search directions consume this same navigation
 -- model so menu moves do not require a second companion-addon breadcrumb map.
 M.navSubpageLabels = {
     uf_player = "Player",

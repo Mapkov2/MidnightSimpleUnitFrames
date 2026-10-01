@@ -88,10 +88,20 @@ local function RequestPreviewLayoutRefresh(box, reason)
 end
 local NormalizePreviewTextFocusKind = PreviewHelpers.NormalizeTextFocusKind
 local NormalizePreviewTextFocusSlot = PreviewHelpers.NormalizeTextFocusSlot
+-- Focus region lists live on the mock and the placement options on the box,
+-- so refitting the ring after an animation tick allocates nothing.
+local function FocusRegionList(mock, field, a, b, c, d)
+    local lists = mock._msufFocusRegionLists
+    if not lists then lists = {}; mock._msufFocusRegionLists = lists end
+    local list = lists[field]
+    if not list then list = {}; lists[field] = list end
+    list[1], list[2], list[3], list[4] = a, b, c, d
+    return list
+end
 local function PreviewTextFocusRegions(mock, kind, slot)
     if not mock then return nil end
     if kind == "name" then
-        return { mock.nameText, mock.totInlineSep, mock.totInlineText, mock.raidGroupNameText }
+        return FocusRegionList(mock, "name", mock.nameText, mock.totInlineSep, mock.totInlineText, mock.raidGroupNameText)
     elseif kind == "hp" then
         -- Under reverse order the configured left slot renders on the physical
         -- right FontString (and vice versa); ring the visible text.
@@ -99,30 +109,32 @@ local function PreviewTextFocusRegions(mock, kind, slot)
         if box and TextScopeGet(box.key, "hpTextReverse", false) == true then
             if slot == "left" then slot = "right" elseif slot == "right" then slot = "left" end
         end
-        if slot == "left" then return { mock.hpTextLeft } end
-        if slot == "center" then return { mock.hpTextCenter } end
-        if slot == "right" then return { mock.hpText } end
-        return { mock.hpTextLeft, mock.hpTextCenter, mock.hpText }
+        if slot == "left" then return FocusRegionList(mock, "hpLeft", mock.hpTextLeft) end
+        if slot == "center" then return FocusRegionList(mock, "hpCenter", mock.hpTextCenter) end
+        if slot == "right" then return FocusRegionList(mock, "hpRight", mock.hpText) end
+        return FocusRegionList(mock, "hp", mock.hpTextLeft, mock.hpTextCenter, mock.hpText)
     elseif kind == "power" then
-        if slot == "left" then return { mock.powerTextLeft } end
-        if slot == "center" then return { mock.powerTextCenter } end
-        if slot == "right" then return { mock.powerText } end
-        return { mock.powerTextLeft, mock.powerTextCenter, mock.powerText }
+        if slot == "left" then return FocusRegionList(mock, "powerLeft", mock.powerTextLeft) end
+        if slot == "center" then return FocusRegionList(mock, "powerCenter", mock.powerTextCenter) end
+        if slot == "right" then return FocusRegionList(mock, "powerRight", mock.powerText) end
+        return FocusRegionList(mock, "power", mock.powerTextLeft, mock.powerTextCenter, mock.powerText)
     end
     return nil
 end
 local function ApplyPreviewTextFocus(box, canvas, mock)
-    return PreviewHelpers.ApplyTextFocus(box, canvas, mock, {
-        Regions = PreviewTextFocusRegions,
-        Place = function(frame, parent, regions, pad)
-            local renderScale = tonumber(box and (box._mockEffectiveScale or box._mockScale or box._mockAutoScale)) or 1
-            return UnitPreviewText.PlaceHandleAroundRegions(frame, parent, regions, pad, {
-                coordinateScale = renderScale,
-                fitText = true,
-                useScaledRect = true,
-            })
-        end,
-    })
+    local opts = box and box._msufTextFocusOptions
+    if not opts then
+        local placeOpts = { fitText = true, useScaledRect = true }
+        opts = {
+            Regions = PreviewTextFocusRegions,
+            Place = function(frame, parent, regions, pad)
+                placeOpts.coordinateScale = tonumber(box and (box._mockEffectiveScale or box._mockScale or box._mockAutoScale)) or 1
+                return UnitPreviewText.PlaceHandleAroundRegions(frame, parent, regions, pad, placeOpts)
+            end,
+        }
+        if box then box._msufTextFocusOptions = opts end
+    end
+    return PreviewHelpers.ApplyTextFocus(box, canvas, mock, opts)
 end
 function Preview.FocusTextSlot(unitKey, kind, slot, active)
     local box = Preview.active
@@ -276,12 +288,18 @@ local function ReleaseUnitPreviewLiveState(box)
     driver:UnregisterAllEvents()
     driver._msufLiveArmed = false
 end
+--- One animation frame: the light tick advances fills, texts, cast progress
+--- and aura timers on the scene the last full refresh built. Only when there
+--- is no complete scene yet (first frame, unit switch) does a full refresh run.
 local function RefreshPreviewAnimationFrame(box)
-    local refresh = Preview and Preview.Refresh
-    if type(refresh) == "function" then
-        refresh(box, "UNIT_PREVIEW_ANIMATE")
-    else
-        RequestPreviewLayoutRefresh(box, "UNIT_PREVIEW_ANIMATE")
+    local animate = Preview and Preview.RefreshAnimation
+    if not (type(animate) == "function" and animate(box) == true) then
+        local refresh = Preview and Preview.Refresh
+        if type(refresh) == "function" then
+            refresh(box, "UNIT_PREVIEW_ANIMATE")
+        else
+            RequestPreviewLayoutRefresh(box, "UNIT_PREVIEW_ANIMATE")
+        end
     end
     -- The large menu preview owns this clock.  Feed the exact same elapsed
     -- value into already-built Edit Mode aura dummies so their timers/swipes
@@ -368,7 +386,7 @@ local function CreatePreviewAnimationButton(box)
         get = function() return PreviewAnimationActive(box) end,
         set = function(enabled)
             if enabled == true and PreviewAnimationInCombat() then return false end
-            SetPreviewAnimationEnabled(box, enabled == true, "UNIT_PREVIEW_ASSISTANT_ANIMATION")
+            SetPreviewAnimationEnabled(box, enabled == true, "UNIT_PREVIEW_SEARCH_ANIMATION")
             return PreviewAnimationActive(box) == (enabled == true)
         end,
     }

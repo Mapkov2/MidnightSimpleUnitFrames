@@ -127,13 +127,6 @@ end
 function Runtime:Resume(reason)
     self.active = true
     self.lastReason = tostring(reason or "menu-show")
-    local assistant = (MSUF and MSUF.Assistant) or M.Assistant
-    if assistant and type(assistant.SetMenuRuntimeActive) == "function" then
-        assistant.SetMenuRuntimeActive(true, self.lastReason)
-    elseif assistant then
-        assistant._menuRuntimeActive = true
-        assistant._menuRuntimeReason = self.lastReason
-    end
     return true
 end
 function Runtime:Quiesce(reason)
@@ -146,13 +139,6 @@ function Runtime:Quiesce(reason)
     if apply and type(apply.Quiesce) == "function" then apply.Quiesce(combat) end
     local search = M.SearchBridge
     if search and type(search.CancelSearchBackgroundIndex) == "function" then search.CancelSearchBackgroundIndex() end
-    local assistant = (MSUF and MSUF.Assistant) or M.Assistant
-    if assistant and type(assistant.SetMenuRuntimeActive) == "function" then
-        assistant.SetMenuRuntimeActive(false, reason)
-    elseif assistant then
-        assistant._menuRuntimeActive = false
-        assistant._menuRuntimeReason = reason
-    end
     local theme = M.Theme
     if theme and type(theme.StopAllMenuAnimations) == "function" then theme.StopAllMenuAnimations() end
     return true
@@ -374,12 +360,32 @@ function M.SetPreviewArrowBindings(box, enabled, spec)
     end
 end
 local STATIC_POPUP_DEFAULTS = { timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3 }
+-- StaticPopup_Show puts every dialog on DIALOG (StaticPopup_SetUpPosition), the
+-- menu's normal strata. In MSUF Edit Mode the window sits higher (Window
+-- priority), so a menu prompt would open behind it: lift it to the window's
+-- strata. The next StaticPopup_Show of that dialog frame resets it to DIALOG.
+local STRATA_RANK = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5,
+    FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
+local function RaisePopupOverMenuWindow(dialog)
+    local window = M.frame
+    if not (dialog and dialog.SetFrameStrata and dialog.GetFrameStrata and window and window.IsShown
+        and window:IsShown() and window.GetFrameStrata) then return end
+    local strata = window:GetFrameStrata()
+    if (STRATA_RANK[strata] or 0) <= (STRATA_RANK[dialog:GetFrameStrata()] or 0) then return end
+    dialog:SetFrameStrata(strata)
+    if dialog.Raise then dialog:Raise() end
+end
 function M.InstallStaticPopup(key, spec, defaults)
     if not (_G.StaticPopupDialogs and key and type(spec) == "table") then return nil end
     local existing = _G.StaticPopupDialogs[key]
     if existing then return existing end
     for field, value in pairs(defaults or STATIC_POPUP_DEFAULTS) do
         if spec[field] == nil then spec[field] = value end
+    end
+    local onShow = spec.OnShow
+    spec.OnShow = function(dialog, data)
+        RaisePopupOverMenuWindow(dialog)
+        if onShow then return onShow(dialog, data) end
     end
     _G.StaticPopupDialogs[key] = spec
     return spec
@@ -1295,7 +1301,7 @@ function M.TrackMethodRefresh(ctx, object, method)
 end
 local tips = {}
 for tip in ([[
-Bigger steps: Hold SHIFT while adjusting sliders to change values faster.|Fine tuning: Hold CTRL while adjusting sliders for smaller steps.|Quick reset: If something feels off, try /msuf reset for frame positions.|Factory reset: Use Menu > Advanced > Factory Reset or /msuf fullreset confirm + /reload.|Edit Mode: Use Toggle Edit Mode to move frames quickly, then fine-tune with the position popup.
+Bigger steps: Hold SHIFT while adjusting sliders to change values faster.|Fine tuning: Hold CTRL while adjusting sliders for smaller steps.|Quick reset: If something feels off, try /msuf reset for frame positions.|Factory reset: Use Dashboard > Display & recovery > MSUF Factory Reset or /msuf fullreset confirm + /reload.|Edit Mode: Use Toggle Edit Mode to move frames quickly, then fine-tune with the position popup.
 Profiles safety: Create a new profile before big experiments so you can switch back instantly.|Colors: The Colors tab lets you customize fonts, bars, castbars and highlights.|Gameplay: The Gameplay tab contains extra UI tools and warnings you can enable or disable.|Recommended: Sensei Resource Bar pairs well with MSUF for clean resource tracking.|UI scale tip: MSUF has its own UI scale, separate from Blizzard global UI scale.
 Troubleshoot: If visuals do not update, a quick /reload fixes most UI state issues.|Readability: Slightly larger fonts often help more than bigger frames.|During development of MSUF Unhalted, R41z0r and other addon developers helped out.|Danders is a strong Party/Raidframe addon and works well with MSUF.|Community: If you like MSUF, share it with a friend.
 ]]):gmatch("[^|]+") do
@@ -1356,19 +1362,16 @@ local function ShowGroupFrameReloadRequiredPopup()
     _G.StaticPopup_Show("MSUF2_GROUPFRAMES_RELOAD_REQUIRED")
 end
 ExportPublic("MSUF_ShowGroupFrameReloadRequiredPopup", ShowGroupFrameReloadRequiredPopup)
+-- One popup for every link: frames are never freed, and a new named frame,
+-- edit box and button per click used to leak a global each time.
 local copyLinkPopup
-local copyLinkPopupSerial = 0
 function M.HideMenuCopyLinkPopup()
     if copyLinkPopup and copyLinkPopup.Hide then copyLinkPopup:Hide() end
 end
 local function EnsureCopyLinkPopup()
+    if copyLinkPopup then return copyLinkPopup end
     if not _G.CreateFrame then return nil end
-    if copyLinkPopup then
-        copyLinkPopup:Hide()
-        copyLinkPopup = nil
-    end
-    copyLinkPopupSerial = copyLinkPopupSerial + 1
-    local frame = PixelLayoutRegion(_G.CreateFrame("Frame", "MSUF_CopyLinkPopup" .. tostring(copyLinkPopupSerial), _G.UIParent, "BackdropTemplate"))
+    local frame = PixelLayoutRegion(_G.CreateFrame("Frame", "MSUF_CopyLinkPopup", _G.UIParent, "BackdropTemplate"))
     frame:SetSize(420, 152)
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
@@ -1433,7 +1436,6 @@ local function EnsureCopyLinkPopup()
             self._msufEditBox:SetText("")
             self._msufEditBox:ClearFocus()
         end
-        if copyLinkPopup == self then copyLinkPopup = nil end
         self._msufTitle = nil
         self._msufUrl = nil
     end)
@@ -1444,6 +1446,8 @@ end
 local function ShowCopyLink(title, url)
     local frame = EnsureCopyLinkPopup()
     if not frame then return end
+    -- A shown popup is hidden first, so OnShow fills in the new link.
+    if frame.IsShown and frame:IsShown() then frame:Hide() end
     if frame.SetFrameStrata then frame:SetFrameStrata("FULLSCREEN_DIALOG") end
     if frame.SetFrameLevel then frame:SetFrameLevel(100) end
     frame._msufTitle = tostring(title or "Link")

@@ -37,6 +37,8 @@ local function ShortText(text, limit)
     text = TrimText(text)
     limit = tonumber(limit) or 54
     if #text <= limit then return text end
+    local shorten = M.Search and M.Search.ShortLabel
+    if shorten then return shorten(text, limit) end
     return text:sub(1, math.max(1, limit - 3)) .. "..."
 end
 
@@ -112,19 +114,6 @@ local function CreatePaletteController(parent, searchBox)
             local row = self.rows[i]
             SetRowBackground(row, row:IsShown() and i == self.selectedIndex, row._msuf2PaletteHovered)
         end
-    end
-
-    local function ClearSubmittedSearch(self)
-        local box = self.searchBox
-        if box then
-            box._msuf2SearchInternal = true
-            box:SetText("")
-            box._msuf2SearchInternal = nil
-            if box.ClearFocus then box:ClearFocus() end
-        end
-        local bridge = SearchBridge()
-        if type(bridge.BumpSearchInputSerial) == "function" then bridge.BumpSearchInputSerial() end
-        if type(bridge.RunSearchInputQuery) == "function" then bridge.RunSearchInputQuery("", false) end
     end
 
     function controller:OpenResult(rec, query)
@@ -254,17 +243,6 @@ local function CreatePaletteController(parent, searchBox)
             if type(bridge.RunSearchInputQuery) == "function" then bridge.RunSearchInputQuery(query, true) end
         end)
 
-        local ask = T.Button(palette, Tr("Ask MSUF"), 118, 24)
-        ask:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
-        ask:SetScript("OnClick", function()
-            local query = TrimText(searchBox:GetText() or "")
-            local bridge = SearchBridge()
-            if type(bridge.SubmitAssistantQuery) == "function" and bridge.SubmitAssistantQuery(query) then
-                self:Hide()
-                ClearSubmittedSearch(self)
-            end
-        end)
-
         -- Match the standard dropdown/search lifecycle: close on a global mouse-down
         -- only when the pointer is outside both the popup and its edit box.
         -- Result rows activate on mouse-up, so an inside click remains alive
@@ -279,14 +257,14 @@ local function CreatePaletteController(parent, searchBox)
         self.frame = palette
         self.status = status
         self.moreResults = moreResults
-        self.ask = ask
         self.clickOff = clickOff
         return palette
     end
 
     function controller:Refresh(query, pending)
         query = TrimText(query)
-        if not QueryReady(query) then
+        if (M.IsConfigCombatLocked and M.IsConfigCombatLocked())
+            or (M.frame and M.frame.IsShown and not M.frame:IsShown()) or not QueryReady(query) then
             self:Hide()
             return false
         end
@@ -325,26 +303,7 @@ local function CreatePaletteController(parent, searchBox)
             self.status:SetText(pending and Tr("Searching settings...") or Tr("No exact setting found."))
         end
 
-        local bridge = SearchBridge()
-        local canAsk = not pending and type(bridge.ShouldUseAssistantForQuery) == "function"
-            and bridge.ShouldUseAssistantForQuery(query, results)
-        local showMore = not pending
-        self.moreResults:SetShown(showMore)
-        self.ask:SetShown(canAsk)
-        if showMore then
-            self.moreResults:SetText(Tr("More"))
-            self.moreResults:ClearAllPoints()
-            self.moreResults:SetPoint("BOTTOMLEFT", palette, "BOTTOMLEFT", PANEL_PAD, 7)
-            if canAsk then
-                local buttonW = math.floor((PALETTE_W - PANEL_PAD * 3) / 2)
-                self.moreResults:SetWidth(buttonW)
-                self.ask:ClearAllPoints()
-                self.ask:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
-                self.ask:SetWidth(buttonW)
-            else
-                self.moreResults:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
-            end
-        end
+        self.moreResults:SetShown(not pending)
         palette:Show()
         RefreshRowVisuals(self)
         return true

@@ -90,13 +90,9 @@ local function GroupControlMeta(ctx, semanticPath, classification)
         controlPath = identity:gsub("%.", "/"),
         classification = classification or "setting",
     }
-    if meta.classification == "setting" or meta.classification == "action" then
-        meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "This control targets the currently selected Party, Raid, or Mythic Raid scope."
-    end
     -- The control identity describes the visible role. Its command resolves the
     -- currently selected Group scope at runtime, so it is not a static
-    -- Assistant Registry action.
+    -- Search Registry action.
     return meta
 end
 local function RegisterGroupControl(widget, ctx, semanticPath, label, kind, classification, extra)
@@ -105,9 +101,6 @@ local function RegisterGroupControl(widget, ctx, semanticPath, label, kind, clas
     meta.label, meta.kind = label, kind
     if type(extra) == "table" then
         for key, value in pairs(extra) do meta[key] = value end
-    end
-    if meta.settingKey or meta.actionKey then
-        meta.assistantDisposition, meta.assistantDispositionReason = nil, nil
     end
     if type(M.RegisterSearchWidget) == "function" then M.RegisterSearchWidget(widget, meta) end
     return widget
@@ -485,7 +478,7 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
     ciAggroColorR ciAggroColorG ciAggroColorB
 ]]
 local GF_COPY_CATEGORIES = {
-    { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
+    { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups collapseEmptyGroups hideMythicGroupsFiveToEight centerSolo tier10Width tier10Height tier10Position tier10X tier10Y tier10Growth tier20Width tier20Height tier20Position tier20X tier20Y tier20Growth tier25Width tier25Height tier25Position tier25X tier25Y tier25Growth tier40Width tier40Height tier40Position tier40X tier40Y tier40Growth targetsEnabled targetsWidth targetsHeight targetsX targetsY targetsTextSize targetsColumns petsEnabled petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled friendlyBossWidth friendlyBossHeight friendlyBossX friendlyBossY friendlyBossTextSize friendlyBossColumns healerManaEnabled healerManaWidth healerManaHeight healerManaX healerManaY healerManaTextSize targetsIncludePlayer friendlyBossHealerOnly healerManaShowValue healerManaTextR healerManaTextG healerManaTextB nameBarEnabled nameBarHeight nameBarR nameBarG nameBarB nameBarAlpha autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize smallRaidAsParty buffCoverageEnabled buffCoverageWild buffCoverageThorns buffCoverageIntellect buffCoverageBlessings buffCoverageStamina buffCoverageSpirit buffCoverageThornsTankOnly buffCoverageGlow buffCoverageCombat buffCoverageSize buffCoverageAnchor buffCoverageX buffCoverageY buffCoverageLayer]] },
     { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
     { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata]], prefix = WL [[dispelSymbol]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse healthTextDecimals hpTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY]] },
@@ -494,7 +487,7 @@ local GF_COPY_CATEGORIES = {
     { key = "indicators", label = "Status & Indicators", keys = GF_INDICATOR_COPY_FIELDS, prefix = WL [[si_ statusIcon indicator]] },
     --- No portrait category on purpose: party is the only group scope that owns portrait
     --- settings (CompilePortrait returns a disabled spec for every other kind, and the
-    --- Assistant only registers them for party). There is no second scope to copy them
+    --- Search only registers them for party). There is no second scope to copy them
     --- to, and pushing them into raid/mythicraid would plant exactly the stale imported
     --- keys the engine guards against.
     { key = "auras", label = "Aura Options", description = "Copies Group Aura visibility, layout, filters, exact/category blacklists, Strata and dispel options. Aura Style and the global Appearance theme remain unchanged.", tables = WL [[auras]] },
@@ -718,9 +711,15 @@ local function AttachGroupSectionUX(ctx)
         dispel = { prefixes = "dispelOverlay" },
         dispelSymbol = { prefixes = "dispelSymbol" },
         dstripe = { prefixes = "debuffStripe" },
-        layout_advanced = { fields = "width height spacing growth unitsPerColumn maxColumns", summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
-        sorting = { fields = "sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole autoTanks preserveRaidGroups", summary = function(c) return Word(c.sortMode, "GROUP") .. (c.playerFirstInRole and (" / " .. M.Tr("Player first")) or "") end },
-        scaling = { prefixes = "frameScale", fields = "scaleAt10 scaleAt20 scaleAt25 scaleOver25" },
+        layout_advanced = { fields = "growth unitsPerColumn maxColumns preserveRaidGroups collapseEmptyGroups hideMythicGroupsFiveToEight centerSolo smallRaidAsParty" },
+        party_targets = { prefixes = "targets" },
+        group_pets = { prefixes = "pets" },
+        friendly_bosses = { prefixes = "friendlyBoss" },
+        healer_mana = { prefixes = "healerMana" },
+        buff_coverage = { prefixes = "buffCoverage" },
+        name_bar = { prefixes = "nameBar" },
+        sorting = { fields = "sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder autoTanks preserveRaidGroups", summary = function(c) return Word(c.sortMode, "GROUP") .. (c.playerFirstInRole and (" / " .. M.Tr("Player first")) or "") end },
+        scaling = { prefixes = "frameScale tier10 tier20 tier25 tier40", fields = "width height spacing scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize" },
         anchor = { fields = "anchorToFrame anchorPoint x y", noCopy = true },
         auras = { summary = function(c)
             local a = c.auras or {}
@@ -735,8 +734,7 @@ local function AttachGroupSectionUX(ctx)
         -- The same switch ApplyScopeEnabledGate greys the scope's page with.
         targetOff = function(scope) return not Bool(scope, "enabled", false) end,
         defaults = function(scope)
-            local create = MSUF.MSUF_CreateFactoryDefaultProfile or _G.MSUF_CreateFactoryDefaultProfile
-            local profile = create and create()
+            local profile = Shared.FactoryProfile()
             local defaults = profile and profile["gf_" .. scope]
             if defaults then return defaults end
             local gf = GF()
@@ -885,8 +883,6 @@ local function ScopeSection(ctx, builder, opts)
         controlDomain = "group",
         controlPageKey = ctx and ctx.key,
         controlPath = "copy",
-        assistantDisposition = "dynamic",
-        assistantDispositionReason = "Copy actions depend on the selected Group source, destination, and category set.",
         width = 430,
         height = 334,
         categories = GF_COPY_CATEGORIES,
@@ -1023,9 +1019,6 @@ local function PreparePartyPortraitSwitch(ctx, sec)
     M._msuf2LastGroupPortraitSide = M._msuf2LastGroupPortraitSide or "LEFT"
     local portraitEnable = W.SectionSwitch(sec, "Portrait")
     local portraitEnableMeta = GroupControlMeta(ctx, "portrait.enabled")
-    portraitEnableMeta.assistantDisposition = "compound"
-    portraitEnableMeta.assistantDispositionReason =
-        "This boolean projection toggles the Party portrait enum between OFF and the remembered LEFT or RIGHT side."
     M.BindBoolWidget(ctx, portraitEnable,
         function() return Val(kind, "portraitMode", "OFF") ~= "OFF" end,
         function(value)
@@ -1104,16 +1097,11 @@ function GroupPage.BuildPortrait(ctx, builder)
     end
     local function PortraitMeta(path, key, extraKeys)
         local meta = GroupControlMeta(ctx, "portrait." .. tostring(path))
-        meta.assistantDisposition, meta.assistantDispositionReason = nil, nil
         if key then
-            meta.assistantDisposition = "dynamic"
-            meta.assistantDispositionReason = "This Party portrait control writes the declared fixed Party setting."
-            meta.assistantSettingKeys = { "gf_party." .. tostring(key) }
+            meta.searchSettingKeys = { "gf_party." .. tostring(key) }
         end
         if extraKeys then
-            meta.assistantDisposition = "dynamic"
-            meta.assistantDispositionReason = "This Party portrait RGB swatch writes three persisted color channels as one visible color."
-            meta.assistantSettingKeys = extraKeys
+            meta.searchSettingKeys = extraKeys
         end
         return meta
     end
@@ -1127,9 +1115,7 @@ function GroupPage.BuildPortrait(ctx, builder)
         local meta = GroupControlMeta(ctx, path, "setting")
         meta.kind = "textinput"
         meta.label = label
-        meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "The lazy Group Preview exact-offset field edits this fixed Party portrait coordinate."
-        meta.assistantSettingKeys = { "gf_party." .. tostring(key) }
+        meta.searchSettingKeys = { "gf_party." .. tostring(key) }
         meta.command = {
             kind = "textinput",
             historyMode = "single",
@@ -1312,7 +1298,8 @@ function GroupPage.BuildPortrait(ctx, builder)
     local size = BindNumber(geometryCard, "Size override", 16, -116, cardW - 58, 0, 128, 1, "portraitSizeOverride", 0)
     local width = BindNumber(geometryCard, "Width override", 16, -170, cardW - 58, 0, 256, 1, "portraitWidth", 0)
     local height = BindNumber(geometryCard, "Height override", 16, -224, cardW - 58, 0, 256, 1, "portraitHeight", 0)
-    local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -278, cardW - 58, 100, 200, 1, "portraitZoom", 100)
+    -- 100-300 %, the range the portrait runtime clamps to and the unit page offers.
+    local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -278, cardW - 58, 100, 300, 1, "portraitZoom", 100)
     local panX = BindNumber(geometryCard, "Zoom center X", 16, -332, cardW - 58, -100, 100, 1, "portraitPanX", 0)
     local panY = BindNumber(geometryCard, "Zoom center Y", 16, -386, cardW - 58, -100, 100, 1, "portraitPanY", 0)
     local placement = BindDropdown(placementCard, "Placement", placementValues.modes, 16, -58, min(220, cardW - 32), "portraitPlacement", "ATTACHED", nil, RefreshPortraitControls)
@@ -1586,9 +1573,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             RefreshGrowthTiles()
         end)
         RegisterGroupControl(btn, ctx, "field.growth.option." .. info.value, "Growth: " .. info.text, "button", "setting", {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "This tile edits the growth setting for the currently selected Group scope.",
-            assistantSettingKeys = { "gf_party.growth", "gf_raid.growth", "gf_mythicraid.growth" },
+            searchSettingKeys = { "gf_party.growth", "gf_raid.growth", "gf_mythicraid.growth" },
             command = {
                 kind = "dropdown", valueKind = "enum", values = GROWTH_VALUES,
                 get = function() return Val(CurrentScope(), "growth", "DOWN") end,
@@ -1704,9 +1689,7 @@ local function BuildRoleOrderRows(ctx, section, opts)
         controlPageKey = ctx and ctx.key,
         controlPath = "sorting.role_priority",
         controlClassification = "setting",
-        assistantDisposition = "dynamic",
-        assistantDispositionReason = "Role-priority rows reorder the selected Group scope as one ordered value.",
-        assistantSettingKeys = { "gf_party.roleOrder", "gf_raid.roleOrder", "gf_mythicraid.roleOrder" },
+        searchSettingKeys = { "gf_party.roleOrder", "gf_raid.roleOrder", "gf_mythicraid.roleOrder" },
         controlCommand = {
             kind = "dragrow",
             source = "group/sorting/role_priority",

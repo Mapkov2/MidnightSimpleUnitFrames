@@ -115,20 +115,40 @@ local function Conf(kind)
     if type(gp.Conf) == "function" then return gp.Conf(kind) end
     return {}
 end
+-- The preview spec is the compiled group spec with the preview role's power and
+-- status. It is refilled in place while the compiled spec keeps its identity
+-- and gets new tables only when the compiler hands out a new spec, so its own
+-- identity changes exactly when a live frame's would: Auras3 caches the preview
+-- lane config by that identity like a live frame's (sources and revisions too).
+local previewSpecSlots = {}
+local function RefillShallow(out, src)
+    for k in pairs(out) do out[k] = nil end
+    for k, v in pairs(src) do out[k] = v end
+    return out
+end
+local function PreviewSpecSlot(kind, base)
+    local slot = previewSpecSlots[kind]
+    if not slot or slot.base ~= base then
+        slot = { base = base, spec = {}, power = {}, status = {} }
+        previewSpecSlots[kind] = slot
+    end
+    return slot
+end
 local function CompiledSpec(kind)
     local gf = MSUF and MSUF.GF
     if gf and type(gf.CompileSpec) == "function" then
         kind = kind or CurrentScope()
         local base = gf.CompileSpec(kind, nil, nil)
         if type(base) ~= "table" then return base end
-        local spec = ShallowCopy(base) or {}
+        local slot = PreviewSpecSlot(kind, base)
+        local spec = RefillShallow(slot.spec, base)
         local conf = Conf(kind)
         local previewRole = PreviewRole(kind)
         spec.key = "gf_" .. tostring(kind)
         spec.groupKind = kind
         spec._msufMenu2PreviewRuntime = true
         if type(base.power) == "table" then
-            local power = ShallowCopy(base.power) or {}
+            local power = RefillShallow(slot.power, base.power)
             local powerHeight = tonumber(power.height) or 0
             if type(gf.GetEffectivePowerHeight) == "function" then
                 powerHeight = tonumber(gf.GetEffectivePowerHeight(kind, nil, previewRole, conf)) or 0
@@ -141,7 +161,7 @@ local function CompiledSpec(kind)
             spec.showPowerText = powerHeight > 0 and base.showPowerText == true
         end
         if type(base.status) == "table" then
-            local status = ShallowCopy(base.status) or {}
+            local status = RefillShallow(slot.status, base.status)
             status.roleValue = previewRole
             spec.status = status
         end
@@ -262,7 +282,10 @@ local function KillPreviewAnimationForCombat(box)
     box._msufGFMenuPreviewAuraStates = nil
     RefreshPreviewAnimationButton(box)
 end
+--- One animation frame: the light tick advances the last scene; only without
+--- one (first frame, scope switch, combat, text drag) the full refresh runs.
 local function RefreshPreviewAnimationFrame(box)
+    if box and type(box.RefreshAnimation) == "function" and box:RefreshAnimation() == true then return end
     if box and type(box.Refresh) == "function" then
         box:Refresh("GROUP_PREVIEW_ANIMATE")
     elseif box and type(box.RequestRefresh) == "function" then
@@ -348,7 +371,7 @@ local function CreatePreviewAnimationButton(box, registerControl)
         get = function() return PreviewAnimationActive(box) end,
         set = function(enabled)
             if enabled == true and PreviewAnimationInCombat() then return false end
-            SetPreviewAnimationEnabled(box, enabled == true, "GROUP_PREVIEW_ASSISTANT_ANIMATION")
+            SetPreviewAnimationEnabled(box, enabled == true, "GROUP_PREVIEW_SEARCH_ANIMATION")
             return PreviewAnimationActive(box) == (enabled == true)
         end,
     }
@@ -580,20 +603,25 @@ local function NormalizeHealthMode(mode)
     if mode == "custom" then return "unified" end
     return nil
 end
+-- One stops table, refilled on every call: the shared gradient evaluator
+-- caches its colour curve on the table and checks it against these values, so
+-- a repaint or an animation tick builds neither a table nor a curve.
+local previewGradientStops = {}
+local NO_GRADIENT_CONF = {}
 local function PreviewGradientHealth(conf, cache)
-    local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
-    conf = conf or {}
-    return {
-        gradientLowR = (cache and cache.healthGradientLowR) or conf.healthGradientLowR or general.healthGradientLowR or 1,
-        gradientLowG = (cache and cache.healthGradientLowG) or conf.healthGradientLowG or general.healthGradientLowG or 0,
-        gradientLowB = (cache and cache.healthGradientLowB) or conf.healthGradientLowB or general.healthGradientLowB or 0,
-        gradientMidR = (cache and cache.healthGradientMidR) or conf.healthGradientMidR or general.healthGradientMidR or 1,
-        gradientMidG = (cache and cache.healthGradientMidG) or conf.healthGradientMidG or general.healthGradientMidG or 1,
-        gradientMidB = (cache and cache.healthGradientMidB) or conf.healthGradientMidB or general.healthGradientMidB or 0,
-        gradientHighR = (cache and cache.healthGradientHighR) or conf.healthGradientHighR or general.healthGradientHighR or 0,
-        gradientHighG = (cache and cache.healthGradientHighG) or conf.healthGradientHighG or general.healthGradientHighG or 1,
-        gradientHighB = (cache and cache.healthGradientHighB) or conf.healthGradientHighB or general.healthGradientHighB or 0,
-    }
+    local general = _G.MSUF_DB and _G.MSUF_DB.general or NO_GRADIENT_CONF
+    conf = conf or NO_GRADIENT_CONF
+    local t = previewGradientStops
+    t.gradientLowR = (cache and cache.healthGradientLowR) or conf.healthGradientLowR or general.healthGradientLowR or 1
+    t.gradientLowG = (cache and cache.healthGradientLowG) or conf.healthGradientLowG or general.healthGradientLowG or 0
+    t.gradientLowB = (cache and cache.healthGradientLowB) or conf.healthGradientLowB or general.healthGradientLowB or 0
+    t.gradientMidR = (cache and cache.healthGradientMidR) or conf.healthGradientMidR or general.healthGradientMidR or 1
+    t.gradientMidG = (cache and cache.healthGradientMidG) or conf.healthGradientMidG or general.healthGradientMidG or 1
+    t.gradientMidB = (cache and cache.healthGradientMidB) or conf.healthGradientMidB or general.healthGradientMidB or 0
+    t.gradientHighR = (cache and cache.healthGradientHighR) or conf.healthGradientHighR or general.healthGradientHighR or 0
+    t.gradientHighG = (cache and cache.healthGradientHighG) or conf.healthGradientHighG or general.healthGradientHighG or 1
+    t.gradientHighB = (cache and cache.healthGradientHighB) or conf.healthGradientHighB or general.healthGradientHighB or 0
+    return t
 end
 local function PreviewGradientColor(conf, cache, pct)
     local health = PreviewGradientHealth(conf, cache)
@@ -973,7 +1001,7 @@ end
 --- live frame, but it owns a dedicated menu card instead of a slot in the
 --- Status Icons dropdown. Appending it here gives the preview a draggable
 --- handle (and the generic anchor/x/y write-back) without adding a duplicate
---- entry to that dropdown, the layer overview, or the Assistant ledgers.
+--- entry to that dropdown, the layer overview, or the Search ledgers.
 local PREVIEW_ONLY_STATUS_SPECS = {
     {
         value = "showGroupNumber", text = "Group Number", enabled = "showGroupNumber",
@@ -1477,7 +1505,7 @@ function NativeBuild.Stage(state)
         unlockReason = "GROUP_PREVIEW_ZOOM_UNLOCK",
     })
     box._msuf2ZoomCommand = box._msuf2ZoomCommand
-        or (PreviewHelpers.BuildZoomCommand and PreviewHelpers.BuildZoomCommand(box, GFZoomPan, "GROUP_PREVIEW_ASSISTANT_ZOOM"))
+        or (PreviewHelpers.BuildZoomCommand and PreviewHelpers.BuildZoomCommand(box, GFZoomPan, "GROUP_PREVIEW_SEARCH_ZOOM"))
     RegisterPreviewControl(box._zoomBar, "zoom.surface", "Group Preview Zoom", "slider", "ephemeral", {
         help = "Sets the Group preview zoom percentage; Fit and 1:1 remain available as exact actions.",
         command = box._msuf2ZoomCommand,
@@ -1657,7 +1685,7 @@ function NativeBuild.LayerRail(state)
                 enabled = enabled == true
                 M.gfPreviewSoloLayer = nil
                 layerVisibility[btn._layerKey] = enabled
-                if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_ASSISTANT_LAYER")
+                if box.RequestRefresh then box:RequestRefresh("GROUP_PREVIEW_SEARCH_LAYER")
                 elseif box.Refresh then box:Refresh() end
                 return (layerVisibility[btn._layerKey] ~= false) == enabled
             end,
@@ -1943,18 +1971,18 @@ function NativeBuild.Handles(state)
             selectionAPI.BindExactOffsetSearchTarget(selectionBar.editY, box, "portrait")
             registerControl(selectionBar.editX, "selection.portrait_offset_x", "Party Portrait X Offset",
                 "textinput", "setting", {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = "The shared Preview X field is pinned to the Party Portrait handle for this exact Assistant route.",
-                    assistantSettingKeys = { "gf_party.portraitOffsetX" },
+                    searchRouteDisposition = "dynamic",
+                    searchRouteDispositionReason = "The shared Preview X field is pinned to the Party Portrait handle for this exact Search route.",
+                    searchSettingKeys = { "gf_party.portraitOffsetX" },
                     command = selectionAPI.BuildExactOffsetCommand(box, "portrait", "x", {
                         previewSurface = "group", previewScope = "party",
                     }),
                 })
             registerControl(selectionBar.editY, "selection.portrait_offset_y", "Party Portrait Y Offset",
                 "textinput", "setting", {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = "The shared Preview Y field is pinned to the Party Portrait handle for this exact Assistant route.",
-                    assistantSettingKeys = { "gf_party.portraitOffsetY" },
+                    searchRouteDisposition = "dynamic",
+                    searchRouteDispositionReason = "The shared Preview Y field is pinned to the Party Portrait handle for this exact Search route.",
+                    searchSettingKeys = { "gf_party.portraitOffsetY" },
                     command = selectionAPI.BuildExactOffsetCommand(box, "portrait", "y", {
                         previewSurface = "group", previewScope = "party",
                     }),
@@ -2063,6 +2091,9 @@ function NativeBuild.Lifecycle(state)
         self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
         self._msufGFRefreshQueued = nil
         self._msufGFRefreshReason = nil
+        if M.GroupPreviewRender and M.GroupPreviewRender.HideAdditionalPreview then
+            M.GroupPreviewRender.HideAdditionalPreview(self)
+        end
         if self.SuspendSpellPreviewEffects then self:SuspendSpellPreviewEffects() end
         StopHandleDrag(self and self._selectedHandle)
         -- This is the one place the runtime preview is suspended - page switches,

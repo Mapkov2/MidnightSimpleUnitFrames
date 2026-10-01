@@ -22,8 +22,6 @@ local requiredFunctions = {
     "ReleasePinnedPreviews",
     "GuidedTourOnPageSelected",
     "OpenExactSettingControl",
-    "OpenExactColorSettingPicker",
-    "OpenExactCatalogControl",
     "ShowLocaleReloadRequired",
 }
 if type(menu) ~= "table" then

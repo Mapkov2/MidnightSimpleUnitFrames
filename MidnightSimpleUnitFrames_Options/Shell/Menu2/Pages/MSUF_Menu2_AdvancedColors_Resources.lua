@@ -51,6 +51,11 @@ end
 COLOR_DATA.CP_SLOT_TOKENS = COLOR_CP_SLOT_TOKENS
 COLOR_DATA.CP_SLOT_MODES = COLOR_CP_SLOT_MODES
 local function PowerDefaultRGB(token)
+    --- MSUF's own class-resource defaults (runes, soul shards) come first.
+    if token and type(_G.MSUF_GetDefaultPowerColor) == "function" then
+        local r, g, b = _G.MSUF_GetDefaultPowerColor(token)
+        if tonumber(r) and tonumber(g) and tonumber(b) then return tonumber(r), tonumber(g), tonumber(b) end
+    end
     local col = _G.PowerBarColor and token and _G.PowerBarColor[token]
     if type(col) == "table" then
         local r = tonumber(col.r or col[1])
@@ -183,6 +188,11 @@ local function GetClassPowerFullRGB(resourceToken)
     return GetClassPowerRGB(resourceToken)
 end
 local function BuildPowerAndClassPowerColors(ctx, b, CH)
+    if M.ResourceExtrasPage then M.ResourceExtrasPage.BuildColors(ctx,b,Bars,ColorValueAt,function()
+        local apply=CurrentApplyService()
+        if apply and apply.RequestClassPower then apply.RequestClassPower("MSUF2_RESOURCE_EXTRAS_COLORS",{full=true},{preview=true,applyAll=false})
+        elseif _G.MSUF_ClassPower_Refresh then _G.MSUF_ClassPower_Refresh() end
+    end) end
     local power = b:CollapsibleSection("colors_power", "Power Bar Colors", 150, false)
     ValueToggleAt(ctx, power, "Power bar color by class", 12, -94,
         function() return M.PowerBarColorByClass.Get() end,

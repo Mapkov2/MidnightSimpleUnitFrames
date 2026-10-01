@@ -76,15 +76,11 @@ local function StepMeta(ctx, path, step)
     meta.step, meta.roundStep = step, true
     if path == "spell.icon_zoom" or path == "spell.icon_scale" then
         local scope = CurrentScope()
-        meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = path == "spell.icon_scale"
-            and "Icon Scale targets Spell Indicator geometry in the selected Group scope."
-            or "Icon Zoom targets Spell Indicator icons in the selected Group scope."
         local setting = path == "spell.icon_scale" and "iconScale" or "iconZoom"
         if scope == "party" then
-            meta.assistantSettingKeys = { "gf_party.spellIndicators." .. setting }
+            meta.searchSettingKeys = { "gf_party.spellIndicators." .. setting }
         else
-            meta.assistantSettingKeys = {
+            meta.searchSettingKeys = {
                 "gf_raid.spellIndicators." .. setting,
                 "gf_mythicraid.spellIndicators." .. setting,
             }
@@ -1522,13 +1518,11 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         local suffix = path == "spell.icon_zoom" and "iconZoom"
             or (path == "spell.icon_scale" and "iconScale" or path:match("^spell%.style%.(.+)$"))
         if suffix then
-            meta.assistantDisposition = "dynamic"
-            meta.assistantDispositionReason = "This setting targets the dedicated Spell Icon Style in the selected Group scope."
             -- Scope changes refresh this page in place, so a key captured while
             -- building would become stale. The widget command resolves
             -- CurrentScope() at execution time, matching every other Group control.
-            meta.assistantSettingKeys = nil
-            meta.assistantSettingKeyPatterns = nil
+            meta.searchSettingKeys = nil
+            meta.searchSettingKeyPatterns = nil
         end
         return meta
     end

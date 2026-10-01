@@ -343,6 +343,15 @@ end
 function Util.UnitLabel(unit)
     return Util.UNIT_LABELS[unit] or tostring(unit or "")
 end
+--- Translated display label of a registered element. The seven detached power
+--- bars share one registry label, so theirs carries the unit.
+function Util.ElementLabel(key, cfg)
+    local tr = Util.Tr or tostring
+    if type(cfg) == "table" and cfg.popupType == "resource" and cfg.resourceUnit then
+        return tr(cfg.label or "Detached power bar") .. " (" .. tr(Util.UnitLabel(cfg.resourceUnit)) .. ")"
+    end
+    return tr(type(cfg) == "table" and cfg.label or key)
+end
 function Util.NormalizeUnitKey(unit)
     if not unit then return nil end
     if unit == "targettarget" or unit == "tot" then return "targettarget" end
@@ -625,6 +634,21 @@ end
 --- while Edit Mode is active, so Cancel All must also roll back settings made
 --- from that surface during the same Edit Mode session.
 local _snapshot = nil
+local _snapshotProfile = nil
+
+--- Profile identity stamps (MSUF.ProfileRuntime): a snapshot restores only
+--- into the profile it was taken from, never into one switched to, reset or
+--- imported since.
+local function ProfileIdentity()
+    local runtime = MSUF and MSUF.ProfileRuntime
+    return runtime and runtime.Identity and runtime.Identity() or nil
+end
+
+local function IsCurrentProfile(identity)
+    local runtime = MSUF and MSUF.ProfileRuntime
+    if not (runtime and runtime.IsCurrentIdentity) then return true end
+    return runtime.IsCurrentIdentity(identity) == true
+end
 
 local function GetDeepCopy()
     return _G.MSUF_DeepCopy
@@ -632,8 +656,9 @@ end
 
 local function SnapshotDB()
     local dc = GetDeepCopy()
-    local db = _G.MSUF_DB; if not db or not dc then _snapshot = nil; return end
+    local db = _G.MSUF_DB; if not db or not dc then _snapshot = nil; _snapshotProfile = nil; return end
     _snapshot = dc(db)
+    _snapshotProfile = ProfileIdentity()
 end
 
 local function RestoreSnapshotTable(dst, src, seen)
@@ -766,8 +791,12 @@ end
 local function RestoreDB()
     if type(_snapshot) ~= "table" then return false end
     local db = _G.MSUF_DB; if not db then return false end
+    if not IsCurrentProfile(_snapshotProfile) then
+        _snapshot, _snapshotProfile = nil, nil
+        return false
+    end
     RestoreSnapshotTable(db, _snapshot)
-    _snapshot = nil
+    _snapshot, _snapshotProfile = nil, nil
     return true
 end
 
@@ -805,7 +834,7 @@ function State.Enter(key, opts)
     if not EnsureDB() then return end
 
     -- Cancel All is a transactional guarantee. Capture the pre-entry database
-    -- before exposing the active state so an immediate Assistant command cannot
+    -- before exposing the active state so an immediate menu action cannot
     -- mutate settings ahead of the old deferred snapshot.
     SnapshotDB()
 
@@ -928,7 +957,10 @@ function State.Exit(source)
     local exitingProvider = provider
     enterGeneration = enterGeneration + 1
     local exitToken = enterGeneration
-    local combatLocked = (InCombatLockdown and InCombatLockdown()) and true or false
+    --- PLAYER_REGEN_DISABLED is delivered before InCombatLockdown() turns
+    --- true, so a combat exit takes the combat path on the source alone; the
+    --- deferred restore below would otherwise run one frame into combat.
+    local combatLocked = source == "combat" or ((InCombatLockdown and InCombatLockdown()) and true or false)
 
     --- Stop ticker FIRST (zero overhead from this point)
     if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
@@ -937,7 +969,7 @@ function State.Exit(source)
     --- timers before hiding widgets can fire OnHide commits. The shared
     --- history service retains the before-state and finalizes it only after
     --- combat, without taking a DB snapshot here.
-    if combatLocked and EM2.Undo and EM2.Undo.CancelChange then EM2.Undo.CancelChange() end
+    if combatLocked and EM2.Undo and EM2.Undo.CancelChange then EM2.Undo.CancelChange(true) end
 
     --- Hide movers + HUD + grid first (visual instant response)
     if EM2.Movers and EM2.Movers.Hide then EM2.Movers.Hide() end
@@ -975,6 +1007,12 @@ function State.Exit(source)
     else
         local function RestoreAfterExitFrame()
             if enterGeneration ~= exitToken or active then return end
+            --- Combat began before this frame ran: restore after combat.
+            if InCombatLockdown and InCombatLockdown() then
+                pendingCombatExitApply = true
+                if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
+                return
+            end
             ApplyAllSettingsSafe()
             RestoreRuntimeAfterEditModeExit()
         end
@@ -996,6 +1034,17 @@ function State.Exit(source)
         if api and type(api._EndSession) == "function" then api._EndSession("save") end
     end
     if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
+end
+
+--- Profile boundary (MSUF.ProfileRuntime.BeforeMutation): profile storage is
+--- about to switch, reset, rename, delete or import into the active profile.
+--- The session ends against the profile it edited, and pending undo work is
+--- dropped first so no deferred commit lands in the next profile.
+function State.ExitForProfileChange()
+    if not active then return false end
+    if EM2.Undo and EM2.Undo.CancelChange then EM2.Undo.CancelChange() end
+    State.Exit("profile")
+    return true
 end
 
 --- CANCEL ALL - restore DB to pre-edit-mode state, then exit
@@ -1373,7 +1422,7 @@ local function CaptureState(category, key)
     end
     local db = _G.MSUF_DB
     if not db then return nil end
-    local snap = { category = category, key = key }
+    local snap = { category = category, key = key, profile = ProfileIdentity() }
     if category == "unit" then
         snap.data = DeepCopy(db[key] or {})
     elseif category == "castbar" then
@@ -1476,6 +1525,10 @@ end
 -- not consume undo capacity or destroy the redo stack.
 function Undo.PrepareChange(category, key)
     if _G.MSUF__UndoRestoring then return nil end
+    --- A debounced unit nudge keeps the shared transaction open for half a
+    --- second. A castbar or resource nudge inside that window is a gesture of
+    --- its own: close the unit entry first, or this change folds into it.
+    CommitSharedDebounce()
     local history = SharedHistoryService()
     if history and type(history.PrepareHistoryChange) == "function" then
         local prepared = history.PrepareHistoryChange(
@@ -1598,8 +1651,9 @@ function Undo.CommitChange()
     return Undo.CommitPrepared(snap)
 end
 
-function Undo.CancelChange()
-    local combatLocked = (InCombatLockdown and InCombatLockdown()) and true or false
+function Undo.CancelChange(combatStarting)
+    --- combatStarting: called from PLAYER_REGEN_DISABLED, before lockdown.
+    local combatLocked = combatStarting == true or ((InCombatLockdown and InCombatLockdown()) and true or false)
     local history = SharedHistoryService()
     if sharedDebounceTimer and sharedDebounceTimer.Cancel then sharedDebounceTimer:Cancel() end
     sharedDebounceTimer = nil
@@ -1624,6 +1678,15 @@ function Undo.CancelChange()
         and history.CancelHistoryTransaction() or false
 end
 
+local function ClearLocalHistory()
+    for i = 1, #undoStack do undoStack[i] = nil end
+    for i = 1, #redoStack do redoStack[i] = nil end
+end
+
+local function IsForeignProfileSnap(snap)
+    return snap.category ~= "external" and not IsCurrentProfile(snap.profile)
+end
+
 function Undo.DoUndo()
     CommitSharedDebounce()
     if activeChangeUsesShared or activeFallbackPrepared then Undo.CommitChange() end
@@ -1632,6 +1695,7 @@ function Undo.DoUndo()
     if #undoStack == 0 then return end
     local snap = undoStack[#undoStack]
     undoStack[#undoStack] = nil
+    if IsForeignProfileSnap(snap) then ClearLocalHistory(); return end
     local current = CaptureState(snap.category, snap.key)
     if current then redoStack[#redoStack + 1] = current end
     RestoreState(snap)
@@ -1645,6 +1709,7 @@ function Undo.DoRedo()
     if #redoStack == 0 then return end
     local snap = redoStack[#redoStack]
     redoStack[#redoStack] = nil
+    if IsForeignProfileSnap(snap) then ClearLocalHistory(); return end
     local current = CaptureState(snap.category, snap.key)
     if current then undoStack[#undoStack + 1] = current end
     RestoreState(snap)
@@ -1684,6 +1749,7 @@ function Undo.RefreshControls()
     if EM2.CastPopup and EM2.CastPopup.RefreshHistory then EM2.CastPopup.RefreshHistory() end
     if EM2.AuraPopup and EM2.AuraPopup.RefreshHistory then EM2.AuraPopup.RefreshHistory() end
     if EM2.ResourcePopup and EM2.ResourcePopup.RefreshHistory then EM2.ResourcePopup.RefreshHistory() end
+    if EM2.ExternalPopup and EM2.ExternalPopup.RefreshHistory then EM2.ExternalPopup.RefreshHistory() end
     if type(_G.MSUF_EM2_RefreshGFHistoryControls) == "function" then
         _G.MSUF_EM2_RefreshGFHistoryControls()
     end
@@ -1697,6 +1763,11 @@ function EM2.RefreshAfterHistoryRestore(reason)
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
     if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
     if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
+    --- An open popup that keeps the undone values in its boxes writes them
+    --- back with the next edit (ApplyResource re-reads all four boxes).
+    if EM2.ResourcePopup and EM2.ResourcePopup.Sync then EM2.ResourcePopup.Sync() end
+    local external = EM2.ExternalPopup
+    if external and external.Sync and external.IsOpen and external.IsOpen() then external.Sync() end
     if type(_G.MSUF_EM2_SyncGFPopups) == "function" then _G.MSUF_EM2_SyncGFPopups() end
     Util.SyncMovers()
     Util.RefreshUFPreview(reason or "EM2_HISTORY_RESTORE")

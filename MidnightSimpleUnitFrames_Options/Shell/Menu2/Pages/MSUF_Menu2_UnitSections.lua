@@ -157,10 +157,11 @@ local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
     return false
 end
 local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "pettarget", "all" }
--- WoW Forever runs this Mainline page without arena units, so its Copy To
--- popup offers no target the client cannot produce (MSUF.Client.SupportsUnit).
-local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
-if IS_FOREVER and type(M.SupportsFrameScope) == "function" then
+-- The Copy To popup offers only frames the client can produce
+-- (MSUF.Client.SupportsUnit): WoW Forever has no arena, TBC no boss, and
+-- Classic Era no focus, focus target, boss or arena frames. Without client
+-- facts (Retail harnesses) every target stays.
+if MSUF.Client ~= nil and type(M.SupportsFrameScope) == "function" then
     local kept = {}
     for i = 1, #UF_COPY_TARGET_ORDER do
         local target = UF_COPY_TARGET_ORDER[i]
@@ -564,17 +565,6 @@ local function BuildPreview(ctx, builder, unit)
         end
         RefreshThisPreview("MSUF2_UNIT_PAGE")
     end
-    M._assistantUnitPreviewEnsurers = M._assistantUnitPreviewEnsurers or {}
-    M._assistantUnitPreviewEnsurers[ctx.key] = function()
-        previewQueueSerial = previewQueueSerial + 1
-        initialPreviewQueued = nil
-        RefreshThisPreview("MSUF2_ASSISTANT_UNIT_PREVIEW")
-        return box ~= nil and PreviewHostShown()
-    end
-    M.EnsureUnitPagePreviewForAssistant = function(pageKey)
-        local ensure = M._assistantUnitPreviewEnsurers and M._assistantUnitPreviewEnsurers[pageKey]
-        return type(ensure) == "function" and ensure() == true or false
-    end
     if sec.HookScript then
         sec:HookScript("OnShow", RefreshPreviewState)
         sec:HookScript("OnHide", function()
@@ -629,8 +619,7 @@ local function AttachUnitSectionUX(ctx, unit)
         sections = sections, targets = targets, scope = function() return unit end, conf = GetConf, label = UnitTopLabel,
         targetOff = function(key) return not UnitFrameEnabled(key) end,
         defaults = function(scope)
-            local create = MSUF.MSUF_CreateFactoryDefaultProfile or _G.MSUF_CreateFactoryDefaultProfile
-            local defaults = create and create()
+            local defaults = UnitSectionShared.FactoryProfile()
             -- Optional units can be absent from the factory snapshot. Clearing
             -- their overrides restores the same inherited defaults as page reset.
             return type(defaults) == "table" and (defaults[scope] or {}) or nil
@@ -710,8 +699,6 @@ local function BuildTopActions(ctx, builder, unit, label)
         controlDomain = "unit",
         controlPageKey = ctx and ctx.key,
         controlPath = "copy",
-        assistantDisposition = "compound",
-        assistantDispositionReason = "Copy actions apply a selected category set from this Unit page to a chosen destination.",
         width = 420,
         height = 304,
         categories = UF_COPY_CATEGORIES,
@@ -1089,7 +1076,7 @@ local function BuildBasics(ctx, builder, unit, label)
     M.TrackRefresh(ctx, RefreshBasicsEnabled)
 end
 local function BuildLayout(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("anchoring", "Position", 306, false)
+    local sec = builder:CollapsibleSection("anchoring", "Anchor", 306, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local anchorLeftX = 20
     local anchorGap = 24
@@ -1209,8 +1196,6 @@ local function BuildLayout(ctx, builder, unit)
         controlDomain = "unit",
         controlPageKey = ctx and ctx.key,
         controlPath = "anchoring.custom",
-        assistantDisposition = "compound",
-        assistantDispositionReason = "Custom anchor editing coordinates anchorFrameName with anchorToUnitframe.",
     })
     customAnchor.clear:SetScript("OnClick", function()
         local conf = GetConf(unit)
@@ -1825,7 +1810,7 @@ local function BuildUnitPage(info)
                 return refresh
             end,
         })
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Position", height = 220 })
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchor", height = 220 })
         if UNIT_AURAS_MENU_UNITS[info.unit] and type(M.BuildAuras3UnitSection) == "function" then
             -- This workspace owns nested Buff/Debuff/Custom sections and previews;
             -- the lazy one-section proxy would stack those sections into one body.

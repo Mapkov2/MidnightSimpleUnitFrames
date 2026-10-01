@@ -34,8 +34,6 @@ local ScheduleSearchInputQuery = SearchBridge.ScheduleSearchInputQuery
 local RunSearchInputQuery = SearchBridge.RunSearchInputQuery
 local OpenSearchTarget = SearchBridge.OpenSearchTarget
 local BumpSearchInputSerial = SearchBridge.BumpSearchInputSerial
-local ShouldUseAssistantForQuery = SearchBridge.ShouldUseAssistantForQuery
-local SubmitAssistantQuery = SearchBridge.SubmitAssistantQuery
 local function IsAdvancedNavHidden()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return true end
@@ -621,18 +619,18 @@ local function BuildNavRail(parent)
         intro:SetFrameLevel(search:GetFrameLevel() + 6)
         intro:EnableMouse(true)
         intro:Hide()
-        local title = T.Font(intro, "GameFontNormalSmall", "Search or ask MSUF", T.colors.text)
+        local title = T.Font(intro, "GameFontNormalSmall", "Search or ask a question", T.colors.text)
         T.StyleFontString(title, T.colors.text, NAV_TEXT_BUMP)
         title:SetPoint("TOPLEFT", intro, "TOPLEFT", 12, -12)
         title:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -28, -12)
         title:SetJustifyH("LEFT")
-        local body = T.Font(intro, "GameFontDisableSmall", "Try \"raid auras\" or ask \"can you make my text bigger?\"", T.colors.muted)
+        local body = T.Font(intro, "GameFontDisableSmall", "Try \"raid auras\" or \"how do I make text bigger?\"", T.colors.muted)
         T.StyleFontString(body, T.colors.muted, NAV_TEXT_BUMP)
         body:SetPoint("TOPLEFT", intro, "TOPLEFT", 12, -32)
         body:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -12, -32)
         body:SetWordWrap(true)
         body:SetJustifyH("LEFT")
-        local foot = T.Font(intro, "GameFontDisableSmall", "Matches appear while you type. Enter opens one or asks MSUF.", T.colors.dim)
+        local foot = T.Font(intro, "GameFontDisableSmall", "Matches appear while you type. Enter opens the selected result.", T.colors.dim)
         T.StyleFontString(foot, T.colors.dim, NAV_TEXT_BUMP)
         foot:SetPoint("BOTTOMLEFT", intro, "BOTTOMLEFT", 12, 12)
         foot:SetPoint("BOTTOMRIGHT", intro, "BOTTOMRIGHT", -12, 12)
@@ -718,13 +716,6 @@ local function BuildNavRail(parent)
                 OpenSearchTarget(first.key, query, first.anchorFallback or first.label or first.title,
                     first.anchor, first.route, first.exactTarget)
             end
-        elseif ShouldUseAssistantForQuery(query, results) and SubmitAssistantQuery(query) then
-            self._msuf2SearchInternal = true
-            self:SetText("")
-            self._msuf2SearchInternal = nil
-            RunSearchInputQuery("", false)
-            if searchPalette then searchPalette:Hide() end
-            self:ClearFocus()
         else
             if searchPalette then searchPalette:Hide() end
             RunSearchInputQuery(query, true)

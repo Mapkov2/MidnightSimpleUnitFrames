@@ -514,7 +514,7 @@ local function BuildCustomWhitelistTool(C)
         local auraNoun = auraType == "DEBUFF" and "debuff" or "buff"
         local auraPlural = auraNoun .. "s"
         -- Whole sentences per lane: inserting the noun with %s breaks declension in
-        -- German and Russian. `auraNoun` itself stays raw - it feeds Assistant action ids.
+        -- German and Russian. `auraNoun` itself stays raw - it feeds Search action ids.
         local isDebuff = auraType == "DEBUFF"
         local addLabel = isDebuff and Tr("Add debuff") or Tr("Add buff")
         local trackHint = isDebuff and Tr("Add a debuff - Spell ID, spell link or item link")
@@ -751,10 +751,7 @@ end
                 24, -92, 0, 180, 1, inner,
                 function() return min(180, max(0, tonumber(item.filters.maxDuration) or 0)) end,
                 WriteMaxDuration,
-                AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {
-                    assistantDisposition = "compound",
-                    assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-                })))
+                AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {})))
             M.TrackRefresh(ctx, function()
                 W.SetControlEnabled(hidePermanent, true)
                 W.SetControlEnabled(maxDuration, true)
@@ -808,10 +805,7 @@ end
             -76 - optionRows * 32, 0, 180, 1, w - 48,
             function() return min(180, max(0, tonumber(item.filters.maxDuration) or 0)) end,
             WriteMaxDuration,
-            AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {
-                assistantDisposition = "compound",
-                assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-            })))
+            AuraControlMeta(ctx, "custom-container.filters.max-duration", nil, {})))
         M.TrackRefresh(ctx, function()
             W.SetControlEnabled(master, true)
             W.SetControlEnabled(hidePermanent, true)
@@ -848,17 +842,15 @@ local function BuildCustomLayoutTool(C)
             local spec = values[i]
             local row = i <= 4 and 0 or 1
             local col = row == 0 and (i - 1) or (i - 5)
-            local assistantContract
+            local routeContract
             if spec[2] == "layer" then
                 local layerSettingKeys = {}
                 for customIndex = 1, 4 do
                     layerSettingKeys[#layerSettingKeys + 1] =
                         "auras3." .. tostring(unit) .. ".custom" .. tostring(customIndex) .. ".layer"
                 end
-                assistantContract = {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = "Layer targets the selected unit Custom Aura container.",
-                    assistantSettingKeys = layerSettingKeys,
+                routeContract = {
+                    searchSettingKeys = layerSettingKeys,
                 }
             end
             local control = BindSlider(ctx, section, spec[1], 24 + col * (col4 + gap4), row == 0 and -92 or -146, spec[3], spec[4], 1, col4,
@@ -867,7 +859,7 @@ local function BuildCustomLayoutTool(C)
                     if spec[2] == "layer" then item.layer = floor(tonumber(value) or spec[5]) else item.placed[spec[2]] = tonumber(value) or spec[5] end
                     Apply("AURAS3_CUSTOM_" .. spec[2]:upper())
                 end,
-                AuraControlMeta(ctx, "custom-container.layout." .. AuraCatalogToken(spec[2]), nil, assistantContract))
+                AuraControlMeta(ctx, "custom-container.layout." .. AuraCatalogToken(spec[2]), nil, routeContract))
             if spec[2] == "perRow" then perRowControl = control end
         end
         M.TrackRefresh(ctx, function()
@@ -922,7 +914,7 @@ local function BuildCustomAppearancePandemic(C, StyleGrid)
             AuraControlMeta(ctx, "custom-container.appearance.pandemic.blend"))
         -- The ::: shortcut is the section's only visible way into the color picker,
         -- so this swatch is never laid out. It still exists and stays bound: it is
-        -- the control the Assistant and menu search resolve for this setting, and
+        -- the control the Search and menu search resolve for this setting, and
         -- unlike the status text colors there is no Colors page surface carrying a
         -- per-custom-container pandemic color to fall back to.
         -- Attached before M.BindColor so the explicit shortcut owns the section:
@@ -994,7 +986,7 @@ local function BuildCustomAppearanceTool(C)
         -- Target, binds visual controls to this UnitFrame-owned record.
         local item = styleItem
         -- One accordion sub-section per topic, mirroring the Buff/Debuff lane
-        -- style sections. Assistant semantic paths keep the historical
+        -- style sections. Search semantic paths keep the historical
         -- "appearance" segment so the generated control schema stays stable.
         local function StyleGrid(section)
             local w = section._msuf2Width or b.width or 720

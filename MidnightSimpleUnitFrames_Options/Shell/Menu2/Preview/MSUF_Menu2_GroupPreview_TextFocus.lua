@@ -69,30 +69,41 @@ local function GFPreviewPlaceHandleAroundRegions(handle, parent, regions, pad, k
 end
 local GFPreviewNormalizeTextFocusKind = PreviewHelpers.NormalizeTextFocusKind
 local GFPreviewNormalizeTextFocusSlot = PreviewHelpers.NormalizeTextFocusSlot
+-- Focus region lists live on the mock and the focus options are one constant
+-- table, so a repaint or an animation tick refits the ring without allocating.
+local function FocusRegionList(mock, field, a, b, c)
+    local lists = mock._msufFocusRegionLists
+    if not lists then lists = {}; mock._msufFocusRegionLists = lists end
+    local list = lists[field]
+    if not list then list = {}; lists[field] = list end
+    list[1], list[2], list[3] = a, b, c
+    return list
+end
 local function GFPreviewTextFocusRegions(mock, kind, slot)
     if not mock then return nil end
     if kind == "name" then
-        return { mock._nameFS }
+        return FocusRegionList(mock, "name", mock._nameFS)
     elseif kind == "hp" then
         slot = GFPreviewMapHpSlot(kind, slot)
-        if slot == "left" then return { mock._hpLeftFS } end
-        if slot == "center" then return { mock._hpCenterFS } end
-        if slot == "right" then return { mock._hpRightFS } end
-        return { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }
+        if slot == "left" then return FocusRegionList(mock, "hpLeft", mock._hpLeftFS) end
+        if slot == "center" then return FocusRegionList(mock, "hpCenter", mock._hpCenterFS) end
+        if slot == "right" then return FocusRegionList(mock, "hpRight", mock._hpRightFS) end
+        return FocusRegionList(mock, "hp", mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS)
     elseif kind == "power" then
-        if slot == "left" then return { mock._powerLeftFS } end
-        if slot == "center" then return { mock._powerCenterFS } end
-        if slot == "right" then return { mock._powerRightFS } end
-        return { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }
+        if slot == "left" then return FocusRegionList(mock, "powerLeft", mock._powerLeftFS) end
+        if slot == "center" then return FocusRegionList(mock, "powerCenter", mock._powerCenterFS) end
+        if slot == "right" then return FocusRegionList(mock, "powerRight", mock._powerRightFS) end
+        return FocusRegionList(mock, "power", mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS)
     end
     return nil
 end
+local FOCUS_OPTIONS = {
+    Regions = GFPreviewTextFocusRegions,
+    Place = GFPreviewPlaceHandleAroundRegions,
+    colors = { hp = { 0.25, 0.90, 0.42 } },
+}
 local function GFPreviewApplyTextFocus(box, mock)
-    return PreviewHelpers.ApplyTextFocus(box, mock, mock, {
-        Regions = GFPreviewTextFocusRegions,
-        Place = GFPreviewPlaceHandleAroundRegions,
-        colors = { hp = { 0.25, 0.90, 0.42 } },
-    })
+    return PreviewHelpers.ApplyTextFocus(box, mock, mock, FOCUS_OPTIONS)
 end
     return {
         CurrentTextKind = GFPreviewCurrentTextKind,

@@ -75,7 +75,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         count = count + 1
     end
     box._msuf2ZoomCommand = box._msuf2ZoomCommand
-        or (PreviewHelpers.BuildZoomCommand and PreviewHelpers.BuildZoomCommand(box, PreviewZoomPan, "UNIT_PREVIEW_ASSISTANT_ZOOM"))
+        or (PreviewHelpers.BuildZoomCommand and PreviewHelpers.BuildZoomCommand(box, PreviewZoomPan, "UNIT_PREVIEW_SEARCH_ZOOM"))
     Register(box.zoomBar, "zoom.surface", "Unit Preview Zoom", "slider", "ephemeral", {
         help = "Sets the Unit preview zoom percentage; Fit and 1:1 remain available as exact actions.",
         command = box._msuf2ZoomCommand,
@@ -117,7 +117,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         local exposeHandle = handle and not (fields.classPower == true and previewUnitKey ~= "player")
         if exposeHandle and handle._msuf2CommandAction then handle._msuf2CommandAction.previewUnitKey = previewUnitKey end
         -- Drag handles are direct-manipulation surfaces, not deterministic
-        -- one-shot actions. Their underlying offsets remain Assistant-visible
+        -- one-shot actions. Their underlying offsets remain Search-visible
         -- through the bound sliders; the adjacent gear is navigation.
         if exposeHandle then Register(handle, "handle." .. tostring(key), handle._label or key, "button", "ephemeral") end
         local gear = exposeHandle and handle._msuf2SettingsGear
@@ -147,18 +147,18 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
             selectionAPI.BindExactOffsetSearchTarget(selectionBar.editY, box, "dispelSymbol")
             Register(selectionBar.editX, "selection.dispel_symbol_offset_x", "UnitFrame Dispel Symbol Offset X",
                 "textinput", "setting", {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = "The shared Preview X field is pinned to the Player-owned Dispel Symbol handle for this exact Assistant route.",
-                    assistantSettingKeys = { "player.unitDispelSymbolX" },
+                    searchRouteDisposition = "dynamic",
+                    searchRouteDispositionReason = "The shared Preview X field is pinned to the Player-owned Dispel Symbol handle for this exact Search route.",
+                    searchSettingKeys = { "player.unitDispelSymbolX" },
                     command = selectionAPI.BuildExactOffsetCommand(box, "dispelSymbol", "x", {
                         previewSurface = "unit", previewUnitKey = "player",
                     }),
                 })
             Register(selectionBar.editY, "selection.dispel_symbol_offset_y", "UnitFrame Dispel Symbol Offset Y",
                 "textinput", "setting", {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = "The shared Preview Y field is pinned to the Player-owned Dispel Symbol handle for this exact Assistant route.",
-                    assistantSettingKeys = { "player.unitDispelSymbolY" },
+                    searchRouteDisposition = "dynamic",
+                    searchRouteDispositionReason = "The shared Preview Y field is pinned to the Player-owned Dispel Symbol handle for this exact Search route.",
+                    searchSettingKeys = { "player.unitDispelSymbolY" },
                     command = selectionAPI.BuildExactOffsetCommand(box, "dispelSymbol", "y", {
                         previewSurface = "unit", previewUnitKey = "player",
                     }),

@@ -149,7 +149,7 @@ end
 
 --- Builds the command behind an exact X/Y field whose visible selection bar is
 --- shared by many preview handles. The command pins reads and writes to the
---- declared handle so Assistant routing never depends on whichever element the
+--- declared handle so Search routing never depends on whichever element the
 --- user happened to select last.
 function SB.BuildExactOffsetCommand(box, handleKey, axis, metadata)
     axis = axis == "y" and "y" or "x"
@@ -176,7 +176,7 @@ function SB.BuildExactOffsetCommand(box, handleKey, axis, metadata)
         local x, y = ReadOffsets(box, handle)
         if axis == "x" then x = Round(box, value) else y = Round(box, value) end
         Call(box, "SelectHandle", box, handle)
-        local ok = Call(box, "WriteOffsets", box, handle, x, y, "PREVIEW_ASSISTANT_EXACT_OFFSET")
+        local ok = Call(box, "WriteOffsets", box, handle, x, y, "PREVIEW_SEARCH_EXACT_OFFSET")
         Call(box, "UpdateHint", box, handle)
         SB.Refresh(box)
         return ok ~= false
@@ -185,7 +185,7 @@ function SB.BuildExactOffsetCommand(box, handleKey, axis, metadata)
 end
 
 --- Exact search highlighting should show the same handle that owns the shared
---- X/Y input. This hook is consumed only by the cold Search/Assistant route.
+--- X/Y input. This hook is consumed only by the cold exact search route.
 function SB.BindExactOffsetSearchTarget(widget, box, handleKey)
     if not widget then return widget end
     widget._msuf2PrepareExactSearchTarget = function()

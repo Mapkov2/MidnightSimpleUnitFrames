@@ -134,6 +134,7 @@ local function GetSpecMeta()
     end
     return out
 end
+M.GetProfileSpecializations = GetSpecMeta
 local function RefreshAfterProfileChange(ctx)
     if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
     if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-change") elseif M.Refresh then M.Refresh(ctx) end
@@ -709,7 +710,7 @@ end
         kind = "button", historyMode = "none", confirmRequired = true,
         set = function()
             if BlockCombatAction() then return false end
-            -- The Assistant already supplied the explicit destructive-action
+            -- The Search already supplied the explicit destructive-action
             -- confirmation. Execute the same reset/apply/reload path used by
             -- the menu popup instead of bypassing its post-reset work.
             if type(M.ResetPageToDefaults) == "function" then
@@ -1266,9 +1267,12 @@ function ProfilesPage.Build(ctx)
     ProfilesPage.ManagementLayout(state)
     ProfilesPage.ManagementControls(state)
     ProfilesPage.Specializations(state)
+    if M.ProfileVariantPage then M.ProfileVariantPage.Build(state,GetSpecMeta()) end
+    if M.ProfileSyncPage then M.ProfileSyncPage.Build(state) end
     ProfilesPage.ImportExport(state)
     ProfilesPage.ImportActions(state)
     ProfilesPage.UnitSelection(state)
+    if M.ProfileVariantPage then M.ProfileVariantPage.Transport(state) end
     ctx:SetContentHeight(math.abs(state.b.y) + 42)
 end
 local function BuildModules(ctx)

@@ -261,7 +261,7 @@ local function Deactivate()
     active, scalePending = false, false
     if eventFrame then eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED") end
     API.UnregisterOwner(OWNER)
-    registered = {}
+    for id in pairs(registered) do registered[id] = nil end
     return true
 end
 

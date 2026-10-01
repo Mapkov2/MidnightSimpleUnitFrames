@@ -1,6 +1,6 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Menu2 dashboard: builds dashboard panels, summaries, and launcher actions.
--- UI construction stays here; profile/runtime mutations route through shared Menu2 or Assistant helpers.
+-- UI construction stays here; profile/runtime mutations route through shared Menu2 helpers.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -34,7 +34,6 @@ local function DashboardMeta(semanticPath, classification, exact)
     end
     return meta
 end
-local DASHBOARD_DIRECT_BY_ID
 local function RegisterDashboardControl(widget, meta, label, kind, values)
     if not (widget and type(meta) == "table" and type(M.RegisterSearchWidget) == "function") then return widget end
     local payload = {}
@@ -42,32 +41,10 @@ local function RegisterDashboardControl(widget, meta, label, kind, values)
     payload.label = label or payload.label
     payload.kind = kind or payload.kind
     payload.values = values or payload.values
-    local direct = DASHBOARD_DIRECT_BY_ID and DASHBOARD_DIRECT_BY_ID[payload.controlId]
-    if direct then
-        payload.settingKey = payload.settingKey or (direct.meta and direct.meta.settingKey)
-        payload.actionKey = payload.actionKey or (direct.meta and direct.meta.actionKey)
-        payload.actionFixedArgs = payload.actionFixedArgs or (direct.meta and direct.meta.actionFixedArgs)
-        payload.actionInputArg = payload.actionInputArg or (direct.meta and direct.meta.actionInputArg)
-        payload.assistantDisposition = payload.assistantDisposition or (direct.meta and direct.meta.assistantDisposition)
-        payload.assistantDispositionReason = payload.assistantDispositionReason
-            or (direct.meta and direct.meta.assistantDispositionReason)
-        payload.confirmRequired = direct.confirmRequired == true or payload.confirmRequired == true
-        if not payload.help then payload.help = direct.help end
-        if not payload.blockCombat and direct.command then payload.blockCombat = direct.command.blockCombat end
-        if direct.useDirectCommandWithWidget == true then
-            payload.kind = direct.kind or payload.kind
-            payload.command = direct.command
-        end
-    end
     M.RegisterSearchWidget(widget, payload)
     return widget
 end
 
--- Dashboard disclosures deliberately avoid allocating their inner frames until
--- opened.  The Assistant must still be able to discover and execute the real
--- settings/actions, so keep a compact command-only counterpart for every
--- conditional scaling/recovery control.  RuntimeControlCatalog promotes these
--- records to the real widgets (same explicit IDs) when a disclosure is opened.
 local function DirectClamp(value, minValue, maxValue)
     value = tonumber(value) or minValue
     if value < minValue then return minValue end
@@ -94,92 +71,8 @@ local function MenuScaleStoredFromPercent(value)
     return (DirectSnapPercent(value, MENU_SCALE_MIN_PERCENT, MENU_SCALE_MAX_PERCENT, MENU_SCALE_STEP_PERCENT) / 100)
         * MENU_SCALE_REFERENCE
 end
-local function DirectGeneralDB()
-    if type(M.GetGeneralDB) ~= "function" then return nil end
-    local db = M.GetGeneralDB()
-    return type(db) == "table" and db or nil
-end
-local function DirectGlobalState()
-    local db = DirectGeneralDB()
-    if not db then return nil end
-    db.UIScale = type(db.UIScale) == "table" and db.UIScale or { Enabled = false, Scale = 1 }
-    db.UIScale.Enabled = db.UIScale.Enabled == true
-    db.UIScale.Scale = DirectClamp(db.UIScale.Scale, 0.3, 1.5)
-    return db, db.UIScale
-end
 local function DirectCombatLocked()
     return type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() == true
-end
-local function DirectRequestScaleApply(reason)
-    if type(M.RequestGeneralApply) == "function" then
-        M.RequestGeneralApply(reason, { preview = true, applyAll = false, notify = false })
-    end
-end
-local function DirectSetGlobalScale(enabled, value, preset)
-    local db, ui = DirectGlobalState()
-    if not db then return false end
-    ui.Enabled = enabled == true
-    ui.Scale = DirectClamp(value or ui.Scale, 0.3, 1.5)
-    db.globalUiScalePreset = preset or (ui.Enabled and "custom" or "auto")
-    db.globalUiScaleValue = ui.Enabled and ui.Scale or nil
-    if ui.Enabled and type(_G.MSUF_SetGlobalUiScale) == "function" then
-        _G.MSUF_SetGlobalUiScale(ui.Scale, true)
-    elseif not ui.Enabled and type(_G.MSUF_ResetGlobalUiScale) == "function" then
-        _G.MSUF_ResetGlobalUiScale(true)
-    end
-    DirectRequestScaleApply("MSUF2_DASH_GLOBAL_SCALE")
-    return true
-end
-local function DirectGlobalScalePercent()
-    local _, ui = DirectGlobalState()
-    if not ui then return nil end
-    return ui.Enabled and DirectPercent(ui.Scale, 1) or false
-end
-local function DirectSetGlobalScalePercent(value)
-    local _, ui = DirectGlobalState()
-    if not ui then return false end
-    if value == false then return DirectSetGlobalScale(false, ui.Scale, "auto") end
-    return DirectSetGlobalScale(true, DirectSnapPercent(value, 30, 150, 1) / 100, "custom")
-end
-local function DirectMSUFScalePercent()
-    local db = DirectGeneralDB()
-    return db and DirectPercent(DirectClamp(tonumber(db.msufUiScale) or 1, 0.25, 2.0), 1) or nil
-end
-local function DirectSetMSUFScalePercent(value)
-    local db = DirectGeneralDB()
-    if not db then return false end
-    local scale = DirectSnapPercent(value, MSUF_SCALE_MIN_PERCENT, MSUF_SCALE_MAX_PERCENT, MSUF_SCALE_STEP_PERCENT) / 100
-    db.msufUiScale = scale
-    if type(_G.MSUF_ApplyMsufScale) == "function" then _G.MSUF_ApplyMsufScale(scale) end
-    DirectRequestScaleApply("MSUF2_DASH_MSUF_SCALE")
-    return true
-end
-local function DirectMenuScalePercent()
-    local db = DirectGeneralDB()
-    return db and MenuScalePercentFromStored(db.slashMenuScale) or nil
-end
-local function DirectSetMenuScalePercent(value)
-    local db = DirectGeneralDB()
-    if not db then return false end
-    local scale = MenuScaleStoredFromPercent(value)
-    db.slashMenuScale = scale
-    if M.frame and type(M.ApplyMenuFrameScale) == "function" then
-        M.ApplyMenuFrameScale(M.frame)
-    elseif M.frame and type(M.frame.SetScale) == "function" then
-        M.frame:SetScale((type(M.GetEffectiveMenuScale) == "function" and M.GetEffectiveMenuScale(scale)) or scale)
-    end
-    return true
-end
-local function DirectPixelScale()
-    if type(_G.MSUF_GetPixelPerfectScale) == "function" then
-        local value = tonumber(_G.MSUF_GetPixelPerfectScale())
-        if value then return DirectClamp(value, 0.3, 1.5) end
-    end
-    if type(_G.GetPhysicalScreenSize) == "function" then
-        local _, height = _G.GetPhysicalScreenSize()
-        if tonumber(height) and height > 0 then return DirectClamp(768 / height, 0.3, 1.5) end
-    end
-    return 1
 end
 local function DirectRunSlash(message)
     local slash = _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
@@ -187,12 +80,6 @@ local function DirectRunSlash(message)
     slash(message or "")
     return true
 end
-local function DirectAction(setter, combatLocked)
-    local command = { kind = "button", set = setter, historyMode = "none" }
-    if combatLocked then command.blockCombat = DirectCombatLocked end
-    return command
-end
-
 local function LoadedSuiteFactoryReset()
     local suite = _G.MSUFSuite
     return type(suite) == "table" and type(suite.Database) == "table"
@@ -258,132 +145,6 @@ function M.FormatSuiteTitle(overview)
     if type(version) ~= "string" or version == "" then return M.Tr("MSUF Suite") end
     return M.Format("MSUF Suite %s", version:match("^%d") and ("v" .. version) or version)
 end
-
-local DASHBOARD_DIRECT_SPECS = {
-    {
-        path = "scaling.global_ui.percent", label = "Global UI Scale", kind = "slider", classification = "setting",
-        settingKey = "general.globalUiScale",
-        help = "Reads and applies the global WoW UI scale percentage directly.",
-        command = { kind = "slider", min = 30, max = 150, step = 1, percentIsValue = true,
-            get = DirectGlobalScalePercent, set = DirectSetGlobalScalePercent, blockCombat = DirectCombatLocked },
-    },
-    {
-        path = "scaling.msuf_frames.percent", label = "MSUF Frame Scale", kind = "slider", classification = "setting",
-        settingKey = "general.msufUiScale",
-        help = "Reads and applies the MSUF unit-frame scale percentage directly.",
-        command = { kind = "slider", min = MSUF_SCALE_MIN_PERCENT, max = MSUF_SCALE_MAX_PERCENT,
-            step = MSUF_SCALE_STEP_PERCENT, percentIsValue = true,
-            get = DirectMSUFScalePercent, set = DirectSetMSUFScalePercent, blockCombat = DirectCombatLocked },
-    },
-    {
-        path = "scaling.menu.percent", label = "MSUF Menu Scale", kind = "slider", classification = "setting",
-        settingKey = "general.slashMenuScale",
-        help = "Reads and applies the MSUF configuration-menu scale percentage directly.",
-        command = { kind = "slider", min = MENU_SCALE_MIN_PERCENT, max = MENU_SCALE_MAX_PERCENT,
-            step = MENU_SCALE_STEP_PERCENT, percentIsValue = true,
-            get = DirectMenuScalePercent, set = DirectSetMenuScalePercent, blockCombat = DirectCombatLocked },
-    },
-    { path = "display_recovery.reset_positions", label = "Reset Positions", classification = "action", actionKey = "reset_all_unit_positions",
-        command = DirectAction(function() return DirectRunSlash("reset") end, true) },
-    --- Wago and Discord are deliberately absent here: the card no longer carries those
-    --- buttons, so a direct control would advertise a menu location that does not exist.
-    --- Both links stay reachable through the guided setup Wago button and the support row.
-    { path = "display_recovery.print_help", label = "Print Help", classification = "action", actionKey = "assistant_help",
-        command = DirectAction(function() return DirectRunSlash("help") end) },
-    { path = "display_recovery.factory_reset_all", label = "Factory Reset All", classification = "action", actionKey = "factory_reset_all", confirmRequired = true,
-        command = DirectAction(function() return type(M.StageFactoryReset) == "function" and M.StageFactoryReset() or false end, true) },
-    { path = "scaling.global_ui.preset.1080p", label = "1080p", classification = "action", actionKey = "apply_global_scale_preset",
-        actionFixedArgs = { preset = "1080p" },
-        command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 1080, "1080p") end, true) },
-    { path = "scaling.global_ui.preset.1440p", label = "1440p", classification = "action", actionKey = "apply_global_scale_preset",
-        actionFixedArgs = { preset = "1440p" },
-        command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 1440, "1440p") end, true) },
-    { path = "scaling.global_ui.preset.4k", label = "4K", classification = "action", actionKey = "apply_global_scale_preset",
-        actionFixedArgs = { preset = "4k" },
-        command = DirectAction(function() return DirectSetGlobalScale(true, 768 / 2160, "4k") end, true) },
-    { path = "scaling.global_ui.preset.pixel", label = "Pixel", classification = "action", actionKey = "apply_global_scale_preset",
-        actionFixedArgs = { preset = "pixel" },
-        command = DirectAction(function() return DirectSetGlobalScale(true, DirectPixelScale(), "pixel") end, true) },
-    { path = "scaling.global_ui.apply", label = "Apply Global UI Scale", classification = "action", actionKey = "dashboard.globalUiScale.apply",
-        command = DirectAction(function()
-            local db, ui = DirectGlobalState()
-            return db and DirectSetGlobalScale(ui.Enabled, ui.Scale, db.globalUiScalePreset) or false
-        end, true) },
-    { path = "scaling.global_ui.revert_pending", label = "Revert Global UI Scale", classification = "action", actionKey = "dashboard.globalUiScale.revertPending",
-        command = DirectAction(function() return true end) },
-    { path = "scaling.global_ui.select_off", label = "Disable Global UI Scale", classification = "action", actionKey = "dashboard.globalUiScale.disable",
-        command = DirectAction(function()
-            local _, ui = DirectGlobalState()
-            return ui and DirectSetGlobalScale(false, ui.Scale, "auto") or false
-        end, true) },
-    { path = "scaling.msuf_frames.apply", label = "Apply MSUF Frame Scale", classification = "action", actionKey = "dashboard.msufFrameScale.apply",
-        command = DirectAction(function() return DirectSetMSUFScalePercent(DirectMSUFScalePercent()) end, true) },
-    { path = "scaling.msuf_frames.revert_pending", label = "Revert MSUF Frame Scale", classification = "action", actionKey = "dashboard.msufFrameScale.revertPending",
-        command = DirectAction(function() return true end) },
-    { path = "scaling.menu.apply", label = "Apply MSUF Menu Scale", classification = "action", actionKey = "dashboard.menuScale.apply",
-        command = DirectAction(function() return DirectSetMenuScalePercent(DirectMenuScalePercent()) end, true) },
-    { path = "scaling.menu.revert_pending", label = "Revert MSUF Menu Scale", classification = "action", actionKey = "dashboard.menuScale.revertPending",
-        command = DirectAction(function() return true end) },
-}
-DASHBOARD_DIRECT_SPECS[#DASHBOARD_DIRECT_SPECS + 1] = {
-    path = "display_recovery.suite_factory_reset", label = "Suite Factory Reset", classification = "action",
-    actionKey = "suite_factory_reset", confirmRequired = true,
-    command = DirectAction(RunSuiteFactoryReset, true),
-}
-for i = 1, #DASHBOARD_DIRECT_SPECS do
-    local spec = DASHBOARD_DIRECT_SPECS[i]
-    spec.meta = DashboardMeta(spec.path, spec.classification, {
-        label = spec.label,
-        kind = spec.kind or "button",
-        help = spec.help,
-        settingKey = spec.settingKey,
-        actionKey = spec.actionKey,
-        actionFixedArgs = spec.actionFixedArgs,
-        actionInputArg = spec.actionInputArg,
-        confirmRequired = spec.confirmRequired == true,
-        historyMode = spec.command and spec.command.historyMode,
-        command = spec.command,
-    })
-end
-DASHBOARD_DIRECT_BY_ID = {}
-local DASHBOARD_DIRECT_BY_ACTION = {}
-for i = 1, #DASHBOARD_DIRECT_SPECS do
-    local spec = DASHBOARD_DIRECT_SPECS[i]
-    DASHBOARD_DIRECT_BY_ID[spec.meta.controlId] = spec
-    if type(spec.actionKey) == "string" and spec.actionKey ~= "" then
-        DASHBOARD_DIRECT_BY_ACTION[spec.actionKey] = spec
-    end
-end
-function M.RunDashboardDirectAction(actionKey)
-    local spec = DASHBOARD_DIRECT_BY_ACTION[tostring(actionKey or "")]
-    local command = spec and spec.command
-    if not (command and type(command.set) == "function") then
-        return false, "That Dashboard action is not available in this menu build."
-    end
-    if type(command.blockCombat) == "function" then
-        local blocked = command.blockCombat()
-
-        if blocked == true then return false, "That Dashboard action is unavailable during combat." end
-    end
-    local result, detail = command.set()
-
-    if result == false then return false, detail or "The Dashboard action could not be completed." end
-    return true, detail or (spec and spec.label) or "Dashboard action complete."
-end
-local function RegisterDashboardDirectControls()
-    if type(M.RegisterVirtualRuntimeControl) ~= "function" then return 0 end
-    local registered = 0
-    for i = 1, #DASHBOARD_DIRECT_SPECS do
-        local spec = DASHBOARD_DIRECT_SPECS[i]
-        if spec.actionKey ~= "suite_factory_reset" or LoadedSuiteFactoryReset() then
-            local id = M.RegisterVirtualRuntimeControl(spec.meta, "dashboard-direct")
-            if id then registered = registered + 1 end
-        end
-    end
-    return registered
-end
-M.RegisterDashboardDirectControls = RegisterDashboardDirectControls
-RegisterDashboardDirectControls()
 
 local function GetBundledChangelog()
     -- Changelog data is bundled as static state. The dashboard renders it read-only and should
@@ -779,39 +540,6 @@ function Dashboard.PrepareActionHelpers(state)
         RefreshDashboardFrameStatus()
     end
     M.ToggleDashboardEditMode = ToggleEditMode
-    local function StartNewAssistantTask()
-        local A = MSUF and MSUF.Assistant
-        if not A then return end
-        if type(A.StartNewTaskWithRuntime) == "function" then
-            return A.StartNewTaskWithRuntime("new-task")
-        end
-        if type(A.StartNewTask) ~= "function" and type(A.EnsureRuntimeLoaded) == "function" then
-            local loaded = A.EnsureRuntimeLoaded("new-task")
-            if not loaded then return false end
-            A = MSUF and MSUF.Assistant or A
-        end
-        if type(A.ShowRuntimeDashboardCard) == "function" then A.ShowRuntimeDashboardCard() end
-        if type(A.StartNewTask) == "function" then return A.StartNewTask() end
-        if A.Workflow and type(A.Workflow.CancelActiveWorkflow) == "function" then A.Workflow.CancelActiveWorkflow() end
-        if type(A.CloseLargeTextPanel) == "function" then
-            A.CloseLargeTextPanel()
-        else
-            A.largeTextPanel = nil
-        end
-        if type(A.ClearHistory) == "function" then A.ClearHistory() end
-        local ui = A.dashboardUI
-        if ui and ui.input then
-            ui.input:SetText("")
-            if ui.input.SetFocus then ui.input:SetFocus() end
-            if ui.input._msufAssistantPlaceholder and ui.input._msufAssistantPlaceholder.SetShown then ui.input._msufAssistantPlaceholder:SetShown(true) end
-        end
-        if type(A.RequestRefreshUI) == "function" then
-            A.RequestRefreshUI("assistant.new_task")
-        elseif type(A.RefreshUI) == "function" then
-            A.RefreshUI()
-        end
-    end
-    M.StartNewAssistantTask = StartNewAssistantTask
     local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
     local function CopyWagoLink()
         if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end
@@ -954,26 +682,24 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop)
     AddTooltip(wago, "Wago Profiles", "Browse Wago profiles")
     return launcherH
 end
-function Dashboard.BuildAssistantHero(state, mainTop)
-    local root, x0, mainW, Card, ApplyDashboardHeroGradient = state.root, state.x0, state.mainW, state.Card, state.ApplyDashboardHeroGradient
-    local Kicker = state.Kicker
-    local tinyHero = mainW < 390
-    local heroH = tinyHero and 398 or (mainW < 560 and 382 or 360)
-    local hero = Card(root, "", x0, mainTop, mainW, heroH, T.colors.glassHost, T.colors.cardBorder)
-    ApplyDashboardHeroGradient(hero, mainW, heroH)
-    T.ApplyNeonEdge(hero, "ambient", { variant = "host" })
-    if MSUF and MSUF.Assistant and type(MSUF.Assistant.BuildDashboardCard) == "function" then
-        MSUF.Assistant.BuildDashboardCard(hero, mainW, heroH)
-    else
-        Kicker(hero, "MSUF", 22, -24)
-        local title = T.Font(hero, "GameFontNormalLarge", M.Tr("Dashboard unavailable"), T.colors.text)
-        title:SetPoint("TOPLEFT", hero, "TOPLEFT", 24, -52)
-        title:SetWidth(mainW - 44)
-        W.Text(hero, "The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF.", 22, -82, mainW - 44, T.colors.muted)
-    end
+function Dashboard.BuildSearchHero(state, mainTop)
+    local mainW = state.mainW
+    local heroH = mainW < 390 and 174 or 156
+    local hero = state.Card(state.root, "", state.x0, mainTop, mainW, heroH, T.colors.glassHost, T.colors.cardBorder)
+    state.ApplyDashboardHeroGradient(hero, mainW, heroH)
+    state.Kicker(hero, "MSUF", 22, -20)
+    local title = T.Font(hero, "GameFontNormalLarge", M.Tr("Find settings and help"), T.colors.text)
+    title:SetPoint("TOPLEFT", hero, "TOPLEFT", 22, -42)
+    title:SetWidth(mainW - 44)
+    W.Text(hero, "Search enabled features in your own words.", 22, -72, mainW - 44, T.colors.muted)
+    state.Button(hero, "Search", 22, -heroH + 44, math.min(220, mainW - 44), 28, function()
+        if DirectCombatLocked() then return end
+        local box = M.nav and M.nav.searchBox
+        if box and box.SetFocus then box:SetFocus() end
+    end, "primary", "search.open", "navigation", { navigationKey = "search" })
     return heroH
 end
---- Compact MSUF Suite card between the Assistant hero and the collapsed cards.
+--- Compact MSUF Suite card between the search hero and the collapsed cards.
 --- It is built only while the Suite reports an overview, so nothing is promoted
 --- when the Suite is not installed. Returns its height, 0 when there is no card.
 function Dashboard.BuildSuiteCard(state, ctx, top)
@@ -1210,7 +936,7 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
     local function PendingMenuScale()
         return Clamp(pendingMenuScale or AppliedMenuScale(), MENU_SCALE_MIN_PERCENT / 100, MENU_SCALE_MAX_PERCENT / 100)
     end
-    local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct, semanticPath, command)
+    local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct, semanticPath, settingKey)
         local slider = W.Slider(parent, label, minPct, maxPct, stepPct, width)
         HideSliderValueBox(slider)
         slider:ClearAllPoints()
@@ -1222,10 +948,9 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
             slider._msuf2Title:SetWidth(width)
         end
         EnablePercentWheel(slider, minPct, maxPct, stepPct)
-        RegisterDashboardControl(slider, DashboardMeta(semanticPath, command and "setting" or "ephemeral", {
-            help = command and "Reads and applies this scale percentage directly."
-                or "Selects a pending scale percentage; use Apply to commit it.",
-            command = command,
+        RegisterDashboardControl(slider, DashboardMeta(semanticPath, settingKey and "setting" or "ephemeral", {
+            help = "Selects a pending scale percentage; use Apply to commit it.",
+            settingKey = settingKey,
         }), label, "slider")
         return slider
     end
@@ -1233,20 +958,8 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
         W.Text(scaling, opts.help, opts.x, opts.top - 20, colW, T.colors.muted)
         local status = W.Text(scaling, "", opts.x, opts.top - 40, colW, T.colors.muted)
         local Refresh
-        local command = {
-            kind = "slider", min = opts.minPct, max = opts.maxPct, step = opts.stepPct, percentIsValue = true,
-            blockCombat = DirectCombatLocked,
-            get = function() return Percent(opts.applied(), 1) end,
-            set = function(value)
-                local pct = SnapPct(value, opts.minPct, opts.maxPct, opts.stepPct)
-                opts.apply(pct / 100)
-                if Refresh then Refresh() end
-                return true
-            end,
-            refresh = function() if Refresh then Refresh() end end,
-        }
         local slider = BuildScaleSlider(scaling, opts.label, opts.x, opts.top, colW, opts.minPct, opts.maxPct, opts.stepPct,
-            opts.semanticPath .. ".percent", command)
+            opts.semanticPath .. ".percent", opts.settingKey)
         local apply, revert
         Refresh = function()
             local applied = opts.applied()
@@ -1282,23 +995,8 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
     W.Text(scaling, "Changes the global WoW UI scale through MSUF presets.", globalX, globalTop - 20, colW, T.colors.muted)
     local globalStatus = W.Text(scaling, "", globalX, globalTop - 40, colW, T.colors.muted)
     local RefreshGlobalScale, ApplyGlobalScale
-    local globalScaleCommand = {
-        kind = "slider", min = 30, max = 150, step = 1, percentIsValue = true,
-        blockCombat = DirectCombatLocked,
-        get = function()
-            local _, _, appliedEnabled, appliedScale = SelectedGlobalScale()
-            return appliedEnabled and Percent(appliedScale, 1) or false
-        end,
-        set = function(value)
-            local _, _, _, appliedScale = SelectedGlobalScale()
-            if value == false then ApplyGlobalScale(false, appliedScale, "auto")
-            else ApplyGlobalScale(true, SnapPct(value, 30, 150, 1) / 100, "custom") end
-            return true
-        end,
-        refresh = function() if RefreshGlobalScale then RefreshGlobalScale() end end,
-    }
     local globalScale = BuildScaleSlider(scaling, "Global UI Scale", globalX, globalTop, colW, 30, 150, 1,
-        "scaling.global_ui.percent", globalScaleCommand)
+        "scaling.global_ui.percent", "general.globalUiScale")
     local globalApply, globalRevert
     RefreshGlobalScale = function()
         local selectedEnabled, selectedScale, appliedEnabled, appliedScale = SelectedGlobalScale()
@@ -1359,7 +1057,7 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
         RefreshGlobalScale()
     end, nil, "scaling.global_ui.select_off", "ephemeral")
     local RefreshMsufScale = BuildSimpleScaleColumn({
-        x = msufX, top = msufTop, label = "MSUF Frame Scale", help = "Changes the actual MSUF unit frames in-game.",
+        x = msufX, top = msufTop, label = "MSUF Frame Scale", settingKey = "general.msufUiScale", help = "Changes the actual MSUF unit frames in-game.",
         semanticPath = "scaling.msuf_frames",
         minPct = MSUF_SCALE_MIN_PERCENT, maxPct = MSUF_SCALE_MAX_PERCENT, stepPct = MSUF_SCALE_STEP_PERCENT,
         applied = AppliedMsufScale,
@@ -1377,7 +1075,7 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
         end,
     })
     local RefreshMenuScale = BuildSimpleScaleColumn({
-        x = menuX, top = menuTop, label = "MSUF Menu Scale", help = "Changes only this configuration menu window.",
+        x = menuX, top = menuTop, label = "MSUF Menu Scale", settingKey = "general.slashMenuScale", help = "Changes only this configuration menu window.",
         semanticPath = "scaling.menu",
         minPct = MENU_SCALE_MIN_PERCENT, maxPct = MENU_SCALE_MAX_PERCENT, stepPct = MENU_SCALE_STEP_PERCENT,
         applied = AppliedMenuScale,
@@ -1502,10 +1200,6 @@ function Dashboard.Build(ctx)
     if type(M.BuildFirstLoadDashboardScene) == "function" and M.BuildFirstLoadDashboardScene(ctx) == true then
         return
     end
-    -- BuildPageEntry clears the page catalog immediately before invoking us.
-    -- Restore the frame-free contracts first; conditional real widgets below
-    -- then promote only the controls whose disclosures are currently open.
-    RegisterDashboardDirectControls()
     local root = ctx.wrapper
     local width = ctx.width or 760
     local x0, y0 = 12, -12
@@ -1521,7 +1215,7 @@ function Dashboard.Build(ctx)
     local launcherH = Dashboard.BuildGuidedSetupLauncher(state, mainTop)
 
     mainTop = mainTop - launcherH - 10
-    local heroH = Dashboard.BuildAssistantHero(state, mainTop)
+    local heroH = Dashboard.BuildSearchHero(state, mainTop)
     local featureBlockBottom = mainTop - heroH
     local suiteH = Dashboard.BuildSuiteCard(state, ctx, featureBlockBottom - 10)
     if suiteH > 0 then featureBlockBottom = featureBlockBottom - 10 - suiteH end
@@ -1534,4 +1228,4 @@ function Dashboard.Build(ctx)
     local bottom = state.supportTop - supportH
     ctx:SetContentHeight(math.abs(bottom) + 42)
 end
-M.RegisterPage("home", { title = "MSUF Menu", build = Dashboard.Build, version = 9 })
+M.RegisterPage("home", { title = "MSUF Menu", build = Dashboard.Build, version = 10 })

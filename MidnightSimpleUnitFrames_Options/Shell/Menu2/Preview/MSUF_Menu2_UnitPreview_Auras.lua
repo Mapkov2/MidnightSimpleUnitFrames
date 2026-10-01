@@ -1309,6 +1309,10 @@ end
 
 local function BindDragProxy(frame, handle)
     if not (frame and handle) then return end
+    -- The forwarding scripts close over the handle: bind them once per handle
+    -- instead of rebuilding nine closures on every repaint.
+    if frame._msufDragProxyHandle == handle then return end
+    frame._msufDragProxyHandle = handle
     if frame.EnableMouse then frame:EnableMouse(true) end
     if frame.EnableMouseWheel then frame:EnableMouseWheel(true) end
     if frame.SetPropagateMouseWheel then frame:SetPropagateMouseWheel(false) end
@@ -1516,9 +1520,15 @@ local function CustomTextConfig(bounds)
 end
 
 local function PreviewAuraState(box, kind, index, icon, cfg, targetDots)
-    local options = {
-        decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3,
-    }
+    -- One options table per icon, refilled: the animation tick asks for a new
+    -- state every frame.
+    local options = icon._msufPreviewAuraOptions
+    if not options then
+        options = {}
+        icon._msufPreviewAuraOptions = options
+    end
+    options.decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
+    options.duration, options.oneShot, options.pandemicThreshold = nil, nil, nil
     local fn
     local elapsed
     if box and box._animationEnabled == true then
@@ -1680,6 +1690,62 @@ local function LayoutPreviewStealableMarker(icon, size, enabled, style, shape, i
     end
     marker:Hide()
 end
+-- Read-only stand-in for a lane without placed style: the pandemic host
+-- reads its defaults from it.
+local NO_PANDEMIC_CONFIG = {}
+--- What the animation tick needs to advance a laid-out lane: one record per
+--- visual, refilled by every layout.
+local function RecordAuraAnimation(visual, kind, shown, textCfg, size, targetDots, swipe, swipeReverse,
+    showStacks, showCooldown, portrait, pandemicPlaced)
+    local anim = visual._msufAuraAnim
+    if not anim then
+        anim = {}
+        visual._msufAuraAnim = anim
+    end
+    anim.kind, anim.shown, anim.textCfg, anim.size, anim.targetDots = kind, shown, textCfg, size, targetDots
+    anim.swipe, anim.swipeReverse, anim.showStacks, anim.showCooldown = swipe, swipeReverse, showStacks, showCooldown
+    anim.portrait, anim.pandemicPlaced = portrait, pandemicPlaced
+end
+local function AnimateAuraVisual(box, visual, a3)
+    local anim = visual and visual._msufAuraAnim
+    local icons = visual and visual._icons
+    if not (anim and icons and visual:IsShown()) then return end
+    for i = 1, tonumber(anim.shown) or 0 do
+        local icon = icons[i]
+        if not icon then return end
+        local auraState = PreviewAuraState(box, anim.kind, i, icon, anim.textCfg, anim.targetDots)
+        if anim.swipe and icon.swipe then
+            LayoutPreviewAuraSwipe(icon.swipe, icon, anim.size, auraState and auraState.remainingFrac, anim.swipeReverse)
+        end
+        LayoutPreviewDurationBar(icon.durationBar, icon, anim.textCfg, anim.size, auraState)
+        if i == 1 and anim.pandemicPlaced and a3 then
+            local visible = auraState and auraState.pandemicActive
+            if visible == nil then visible = true end
+            if icon._msufAuraAnimPandemic ~= visible then
+                icon._msufAuraAnimPandemic = visible
+                a3.ApplyPandemicVisual(icon, anim.pandemicPlaced, visible)
+            end
+        end
+        icon.stack:SetText(anim.showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "")
+        if anim.portrait then
+            icon.timer:SetText(anim.showCooldown and (auraState and auraState.text or tostring(7 + i)) or "")
+        else
+            icon.timer:SetText(anim.showCooldown and (auraState and auraState.text or (i % 2 == 0 and "18" or "")) or "")
+        end
+    end
+end
+--- Animation tick for the aura dummies: timers, stacks, swipes, duration bars
+--- and the pandemic window follow the shared clock on the icons the last
+--- layout placed. Nothing is read from settings and nothing is created.
+function Auras.Animate(box)
+    if not box then return end
+    local a3 = MSUF and MSUF.MSUF_Auras3
+    local visuals = box.auraPreviewVisuals
+    if visuals then
+        for i = 1, #AURA_PREVIEW_KINDS do AnimateAuraVisual(box, visuals[AURA_PREVIEW_KINDS[i]], a3) end
+    end
+    AnimateAuraVisual(box, box.defensivePortraitPreview, a3)
+end
 local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local bounds = state and state[kind]
     if not (handle and bounds) then
@@ -1790,8 +1856,10 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
             local placed = bounds.stylePlaced or (bounds.item and bounds.item.placed) or nil
             local pandemicVisible = auraState and auraState.pandemicActive
             if pandemicVisible == nil then pandemicVisible = true end
-            a3.ApplyPandemicVisual(icon, placed or {}, placed and bounds.item.targetDots == true
-                and placed.pandemicEnabled == true and i == 1 and not barOnly and pandemicVisible)
+            local pandemicShown = placed and bounds.item.targetDots == true
+                and placed.pandemicEnabled == true and i == 1 and not barOnly and pandemicVisible
+            a3.ApplyPandemicVisual(icon, placed or NO_PANDEMIC_CONFIG, pandemicShown)
+            icon._msufAuraAnimPandemic = pandemicShown
         end
         ApplyAuraFont(icon.stack, stackFont)
         PlaceAuraText(icon.stack, icon, stackAnchor, stackX, stackY)
@@ -1801,6 +1869,11 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         icon.timer:SetText(showCooldown and (auraState and auraState.text or (i % 2 == 0 and "18" or "")) or "")
         icon:Show()
     end
+    local placed = bounds.stylePlaced or (bounds.item and bounds.item.placed) or nil
+    RecordAuraAnimation(visual, kind, bounds.shown, textCfg, size, bounds.item and bounds.item.targetDots == true,
+        showSwipe and not barOnly, swipeReverse, showStacks, showCooldown, false,
+        a3 and type(a3.ApplyPandemicVisual) == "function" and placed and bounds.item.targetDots == true
+            and placed.pandemicEnabled == true and not barOnly and placed or nil)
     for i = bounds.shown + 1, #(visual._icons or {}) do
         local icon = visual._icons[i]
         if icon.swipe then icon.swipe:Hide() end
@@ -1898,8 +1971,10 @@ local function LayoutDefensivePortrait(box, mock, state, S)
             local placed = bounds.stylePlaced or (bounds.item and bounds.item.placed) or nil
             local pandemicVisible = auraState and auraState.pandemicActive
             if pandemicVisible == nil then pandemicVisible = true end
-            a3.ApplyPandemicVisual(icon, placed or {}, placed and bounds.item.targetDots == true
-                and placed.pandemicEnabled == true and i == 1 and not barOnly and pandemicVisible)
+            local pandemicShown = placed and bounds.item.targetDots == true
+                and placed.pandemicEnabled == true and i == 1 and not barOnly and pandemicVisible
+            a3.ApplyPandemicVisual(icon, placed or NO_PANDEMIC_CONFIG, pandemicShown)
+            icon._msufAuraAnimPandemic = pandemicShown
         end
         if icon.swipe then
             if showSwipe and not barOnly then
@@ -1922,6 +1997,11 @@ local function LayoutDefensivePortrait(box, mock, state, S)
         icon:Show()
         BindDragProxy(icon, handle)
     end
+    local portraitPlaced = bounds.stylePlaced or (bounds.item and bounds.item.placed) or nil
+    RecordAuraAnimation(visual, "custom4", shown, textCfg, size, bounds.item and bounds.item.targetDots == true,
+        showSwipe and not barOnly, textCfg.cooldownSwipeReverse == true, showStacks, showCooldown, true,
+        a3 and type(a3.ApplyPandemicVisual) == "function" and portraitPlaced and bounds.item.targetDots == true
+            and portraitPlaced.pandemicEnabled == true and not barOnly and portraitPlaced or nil)
     for i = shown + 1, #(visual._icons or {}) do
         local icon = visual._icons[i]
         if icon.swipe then icon.swipe:Hide() end

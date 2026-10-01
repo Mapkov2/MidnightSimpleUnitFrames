@@ -107,17 +107,14 @@ local Tr = M.AuraSettings.Tr
 local MatchSuffix = M.AuraSettings.MatchSuffix
 local AuraCatalogToken = M.AuraControls.AuraCatalogToken
 
-local function LaneFrameEffectAssistantContract(unit, lane, field)
+local function LaneFrameEffectSearchRouteMetadata(unit, lane, field)
     if field == "type" then
         return "auras3." .. tostring(unit or "shared") .. "."
             .. (lane == "buff" and "buff" or "debuff") .. ".frameEffectType"
     end
-    return {
-        assistantDisposition = "compound",
-        assistantDispositionReason = "This Full-Frame effect detail shares a compound color or numeric value; only its Effect dropdown has a direct Assistant setting contract.",
-    }
+    return {}
 end
-M._customContainerAssistantSuffixes = {
+M._customContainerSearchSuffixes = {
     "enabled", "filters.enabled", "filters.hidePermanent", "filters.onlyMine",
     "filters.onlyImportant", "filters.raid", "filters.raidInCombat",
     "filters.includeNameplateOnly", "filters.includeDispellable", "filters.dispellableAny",
@@ -133,10 +130,10 @@ local AuraControlMeta = M.AuraControls.AuraControlMeta
 local AuraControlMetaAtVisiblePath = M.AuraControls.AuraControlMetaAtVisiblePath
 local RegisterAuraControl = M.AuraControls.RegisterAuraControl
 local RegisterAuraTextAction = M.AuraControls.RegisterAuraTextAction
-local function RegisterAuraChoiceBar(ctx, bar, values, path, assistantContract)
+local function RegisterAuraChoiceBar(ctx, bar, values, path, routeContract)
     if not bar then return bar end
     RegisterAuraControl(ctx, bar, bar._msuf2SearchTitle or "Editing", "segment", path,
-        assistantContract and "setting" or "ephemeral", assistantContract)
+        routeContract and "setting" or "ephemeral", routeContract)
     return bar
 end
 local Round = M.AuraSettings.Round
@@ -1041,7 +1038,7 @@ local function BuildUnitStyleFrameEffect(S)
         function() return tostring(ReadEffectValue("Type", "none")) end,
         function(value) WriteEffectValue("Type", value or "none", "AURAS3_LANE_FRAME_EFFECT") end,
         AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame.type", nil,
-            LaneFrameEffectAssistantContract(unit, lane, "type"))))
+            LaneFrameEffectSearchRouteMetadata(unit, lane, "type"))))
     local effectColor = W.Color(frameEffect, "Color")
     M.BindColor(ctx, effectColor,
         function()
@@ -1053,7 +1050,7 @@ local function BuildUnitStyleFrameEffect(S)
             WriteEffectValue("Color", { r, g, blue, c[4] or 0.80 }, "AURAS3_LANE_FRAME_EFFECT_COLOR")
         end,
         AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame.color", nil,
-            LaneFrameEffectAssistantContract(unit, lane, "color")))
+            LaneFrameEffectSearchRouteMetadata(unit, lane, "color")))
     -- BindColor remains the single command/history owner and automatically
     -- feeds the card's three-dot picker.  The duplicate inline swatch is hidden
     -- so Full-Frame colors have one visible entry point only.
@@ -1083,7 +1080,7 @@ local function BuildUnitStyleFrameEffect(S)
                 end
             end,
             AuraControlMeta(ctx, "style.lane." .. AuraCatalogToken(lane) .. ".full-frame." .. AuraCatalogToken(suffix), nil,
-                LaneFrameEffectAssistantContract(unit, lane, suffix))))
+                LaneFrameEffectSearchRouteMetadata(unit, lane, suffix))))
     end
     EffectSlider("Opacity", 0, -96, 5, 100, 5, "Alpha", 0.80, "AURAS3_LANE_FRAME_EFFECT_ALPHA")
     EffectSlider("Layer (0-30)", 1, -96, 0, 30, 1, "Layer", 0, "AURAS3_LANE_FRAME_EFFECT_LAYER")
@@ -1273,11 +1270,9 @@ local function BuildUnitOrdering(ctx, b, unit, lane)
     lane = lane == "debuff" and "debuff" or "buff"
     local section = b:Section("Ordering", 156)
     local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
-    local function OrderingAssistantContract(suffix)
+    local function OrderingSearchRouteMetadata(suffix)
         return {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "This ordering control targets the selected UnitFrame Aura lane.",
-            assistantSettingKeys = { "auras3." .. tostring(unit) .. "." .. lane .. "." .. suffix },
+            searchSettingKeys = { "auras3." .. tostring(unit) .. "." .. lane .. "." .. suffix },
         }
     end
     local function ReadSortMethod()
@@ -1317,7 +1312,7 @@ local function BuildUnitOrdering(ctx, b, unit, lane)
         AuraControlMetaAtVisiblePath(ctx,
             "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken("AURAS3_SORT_METHOD"),
             "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method",
-            nil, OrderingAssistantContract("sortMethod")))
+            nil, OrderingSearchRouteMetadata("sortMethod")))
     AddTooltip(sortMethod, "Aura sorting", "Only relevant sorting methods are shown for buffs and debuffs.")
     local sortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, width - 48,
         ReadSortDirection,
@@ -1332,7 +1327,7 @@ local function BuildUnitOrdering(ctx, b, unit, lane)
         AuraControlMetaAtVisiblePath(ctx,
             "style.lane." .. AuraCatalogToken(lane) .. "." .. AuraCatalogToken("AURAS3_SORT_DIRECTION"),
             "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction",
-            nil, OrderingAssistantContract("sortReverse")))
+            nil, OrderingSearchRouteMetadata("sortReverse")))
     AddTooltip(sortDirection, "Aura sort order", "Reversed flips the complete priority order.")
 end
 
@@ -1581,10 +1576,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                     ApplyUnit(ctx, unit, "AURAS3_" .. tostring(lane):upper() .. "_MAX_DURATION", true)
                 end
             end,
-            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {
-                assistantDisposition = "compound",
-                assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-            })))
+            AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {})))
     end
     local specs = lane == "buff" and {
         { "Only mine", "onlyMine", "Only auras applied by the player." },
@@ -1616,9 +1608,7 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         local settingContract = "auras3." .. unit .. "." .. lane .. ".filter." .. spec[2]
         if lane == "debuff" and spec[2] == "raid" then
             settingContract = {
-                assistantDisposition = "dynamic",
-                assistantDispositionReason = "The visible Raid switch folds the legacy exclusive Raid value into the canonical Debuff Raid filter.",
-                assistantSettingKeys = {
+                searchSettingKeys = {
                     "auras3." .. unit .. ".debuff.filter.raid",
                     "auras3." .. unit .. ".debuff.filter.exclusive",
                 },
@@ -2333,15 +2323,13 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local normalLane = currentTab == "buff" or currentTab == "debuff"
     local currentTool = CurrentUnitAuraTool(unit, currentTab)
     local customContainerPatterns = {}
-    for i = 1, #M._customContainerAssistantSuffixes do
-        local suffix = M._customContainerAssistantSuffixes[i]
+    for i = 1, #M._customContainerSearchSuffixes do
+        local suffix = M._customContainerSearchSuffixes[i]
         customContainerPatterns[i] = "^auras3%." .. tostring(unit):gsub("([^%w])", "%%%1") .. "%.custom%d+%."
             .. tostring(suffix):gsub("([^%w])", "%%%1") .. "$"
     end
     local customContainerContract = {
-        assistantDisposition = "dynamic",
-        assistantDispositionReason = "This selector opens the dynamic editor for any persisted setting on the selected Custom Aura container.",
-        assistantSettingKeyPatterns = customContainerPatterns,
+        searchSettingKeyPatterns = customContainerPatterns,
     }
     local outer = builder:CollapsibleSection("auras", "Auras", 120, false)
     local auraBuilder = CreateNestedAuraBuilder(ctx, builder, outer)

@@ -172,9 +172,7 @@ end
 local function Meta(ctx, unit, path, key, classification)
     local meta = UP.ControlMeta and UP.ControlMeta(ctx, "dispel." .. tostring(path), classification or "setting") or {}
     if key then
-        meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "This control is owned by the UnitFrame currently open in Menu2."
-        meta.assistantSettingKeys = { tostring(unit) .. "." .. tostring(key), "general." .. tostring(key) }
+        meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(key), "general." .. tostring(key) }
     end
     return meta
 end
@@ -360,9 +358,7 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
         local meta = UP.ControlMeta and UP.ControlMeta(ctx, path, "setting") or {}
         meta.kind = "textinput"
         meta.label = label
-        meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "The lazy Unit Preview exact-offset field edits Player's Dispel Symbol coordinate."
-        meta.assistantSettingKeys = { unitSettingKey, legacySettingKey }
+        meta.searchSettingKeys = { unitSettingKey, legacySettingKey }
         meta.command = {
             kind = "textinput",
             historyMode = "single",
@@ -379,7 +375,7 @@ local function BuildUnitDispelSymbolSection(ctx, builder, unit)
                 if value == nil then return false end
                 local x, y = UP.ReadDispelSymbolOffsets("player")
                 if axis == "x" then x = value else y = value end
-                return UP.WriteDispelSymbolOffsets("player", x, y, "MSUF2_UF_DISPEL_SYMBOL_ASSISTANT_OFFSET")
+                return UP.WriteDispelSymbolOffsets("player", x, y, "MSUF2_UF_DISPEL_SYMBOL_SEARCH_OFFSET")
             end,
         }
         M.RegisterVirtualRuntimeControl(meta, "unit-preview-offset")

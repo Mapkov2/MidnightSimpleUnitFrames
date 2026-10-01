@@ -674,18 +674,22 @@ local function NPCColor(kind)
     if kind == "npcRegular" then return 0.70, 0.56, 0.33 end
     return 0.85, 0.10, 0.10
 end
+-- One stops table, refilled on every call: the shared gradient evaluator
+-- caches its colour curve on the table and checks it against these values, so
+-- a repaint or an animation tick builds neither a table nor a curve.
+local previewGradientStops = {}
 local function PreviewGradientHealth(cache, g)
-    return {
-        gradientLowR = (cache and cache.healthGradientLowR) or g.healthGradientLowR or 1,
-        gradientLowG = (cache and cache.healthGradientLowG) or g.healthGradientLowG or 0,
-        gradientLowB = (cache and cache.healthGradientLowB) or g.healthGradientLowB or 0,
-        gradientMidR = (cache and cache.healthGradientMidR) or g.healthGradientMidR or 1,
-        gradientMidG = (cache and cache.healthGradientMidG) or g.healthGradientMidG or 1,
-        gradientMidB = (cache and cache.healthGradientMidB) or g.healthGradientMidB or 0,
-        gradientHighR = (cache and cache.healthGradientHighR) or g.healthGradientHighR or 0,
-        gradientHighG = (cache and cache.healthGradientHighG) or g.healthGradientHighG or 1,
-        gradientHighB = (cache and cache.healthGradientHighB) or g.healthGradientHighB or 0,
-    }
+    local t = previewGradientStops
+    t.gradientLowR = (cache and cache.healthGradientLowR) or g.healthGradientLowR or 1
+    t.gradientLowG = (cache and cache.healthGradientLowG) or g.healthGradientLowG or 0
+    t.gradientLowB = (cache and cache.healthGradientLowB) or g.healthGradientLowB or 0
+    t.gradientMidR = (cache and cache.healthGradientMidR) or g.healthGradientMidR or 1
+    t.gradientMidG = (cache and cache.healthGradientMidG) or g.healthGradientMidG or 1
+    t.gradientMidB = (cache and cache.healthGradientMidB) or g.healthGradientMidB or 0
+    t.gradientHighR = (cache and cache.healthGradientHighR) or g.healthGradientHighR or 0
+    t.gradientHighG = (cache and cache.healthGradientHighG) or g.healthGradientHighG or 1
+    t.gradientHighB = (cache and cache.healthGradientHighB) or g.healthGradientHighB or 0
+    return t
 end
 local function GradientPreviewColor(pct, health)
     pct = Clamp01(pct, 0.75)
@@ -1073,31 +1077,48 @@ local UnitPreviewText = {}
 function UnitPreviewText.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
 end
+-- The export is split into calls of at most 23 values: one call with every
+-- value keeps them all on the stack at once, and this main chunk sat at 223
+-- of Lua 5.1's 250 stack slots (the gate holds main chunks to 230).
 M.AssignNamedValues(Model, [[
-    UNIT_KEYS UNIT_SET UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizePreviewRaidGroupNameAnchor
-    TEXT_ANCHORS HP_MODES POWER_MODES SEP_ITEMS PORTRAIT_MODE_ITEMS PORTRAIT_RENDER_ITEMS PortraitClassItems
-    PORTRAIT_SHAPE_ITEMS PORTRAIT_BORDER_ITEMS PORTRAIT_STYLE_DEFAULTS CanonKey EnsureDB CurrentPanelKey UnitDB
-    SeedTextFromGeneral NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet
-    TOTINLINE_SEP_VALID TOTINLINE_CUSTOM_SEPARATOR TOTINLINE_CUSTOM_SEPARATOR_MAX TruncateUtf8Chars CleanToTInlineCustomSeparator
-    ToTInlineSeparator ShortenPreviewName TextScopeSet ForceTextUnit ApplyPanelUnit RefreshAllControls Label PlaceTopLeft
-    SetOptionWidth AddOptionDivider SetWidgetEnabled AddPlainCheck NormalizePortraitClassStyle EnsureUnitPortraitStyle
-    PortraitStyleGet PortraitStyleSet ApplyPortrait NormalizeStatusPreviewId ClassColor Clamp01 SettingsCache PreviewNPCKind
-    NPCColor GradientPreviewColor HealthColor DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor
-    ClassPortraitVisual UnitPreviewPortraitTexture FontColor NormalizeToTInlineColorMode PreviewNameColorFlags PreviewNameColor
-    PreviewToTInlineColor SetTex NormalizePreviewAnchorMode UnitPreviewBarOverrideEnabled PreviewHealPredictionEnabled
-    PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled PreviewOverlayWidth LayoutUnitPreviewOverlay
-    MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor ResolveNameOffsetDelta NumText JoinSep FormatMode UnitPreviewText LiveUnitData LiveRaidSubgroup
+    UNIT_KEYS UNIT_SET UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText
+    NormalizePreviewRaidGroupNameAnchor TEXT_ANCHORS HP_MODES POWER_MODES SEP_ITEMS PORTRAIT_MODE_ITEMS
+    PORTRAIT_RENDER_ITEMS PortraitClassItems PORTRAIT_SHAPE_ITEMS PORTRAIT_BORDER_ITEMS PORTRAIT_STYLE_DEFAULTS
+    CanonKey EnsureDB CurrentPanelKey UnitDB SeedTextFromGeneral NormalizeHpMode
 ]],
-    UNIT_KEYS, UNIT_SET, UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor,
-    TEXT_ANCHORS, HP_MODES, POWER_MODES, SEP_ITEMS, PORTRAIT_MODE_ITEMS, PORTRAIT_RENDER_ITEMS, PortraitClassItems,
-    PORTRAIT_SHAPE_ITEMS, PORTRAIT_BORDER_ITEMS, PORTRAIT_STYLE_DEFAULTS, CanonKey, EnsureDB, CurrentPanelKey, UnitDB,
-    SeedTextFromGeneral, NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet,
-    TOTINLINE_SEP_VALID, TOTINLINE_CUSTOM_SEPARATOR, TOTINLINE_CUSTOM_SEPARATOR_MAX, TruncateUtf8Chars, CleanToTInlineCustomSeparator,
-    ToTInlineSeparator, ShortenPreviewName, TextScopeSet, ForceTextUnit, ApplyPanelUnit, RefreshAllControls, Label, PlaceTopLeft,
-    SetOptionWidth, AddOptionDivider, SetWidgetEnabled, AddPlainCheck, NormalizePortraitClassStyle, EnsureUnitPortraitStyle,
-    PortraitStyleGet, PortraitStyleSet, ApplyPortrait, NormalizeStatusPreviewId, ClassColor, Clamp01, SettingsCache, PreviewNPCKind,
-    NPCColor, GradientPreviewColor, HealthColor, DarkMatchHPColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor,
-    ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor, NormalizeToTInlineColorMode, PreviewNameColorFlags, PreviewNameColor,
-    PreviewToTInlineColor, SetTex, NormalizePreviewAnchorMode, UnitPreviewBarOverrideEnabled, PreviewHealPredictionEnabled,
-    PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, PreviewOverlayWidth, LayoutUnitPreviewOverlay,
-    MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, ResolveNameOffsetDelta, NumText, JoinSep, FormatMode, UnitPreviewText, LiveUnitData, LiveRaidSubgroup)
+    UNIT_KEYS, UNIT_SET, UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText,
+    NormalizePreviewRaidGroupNameAnchor, TEXT_ANCHORS, HP_MODES, POWER_MODES, SEP_ITEMS, PORTRAIT_MODE_ITEMS,
+    PORTRAIT_RENDER_ITEMS, PortraitClassItems, PORTRAIT_SHAPE_ITEMS, PORTRAIT_BORDER_ITEMS, PORTRAIT_STYLE_DEFAULTS,
+    CanonKey, EnsureDB, CurrentPanelKey, UnitDB, SeedTextFromGeneral, NormalizeHpMode)
+M.AssignNamedValues(Model, [[
+    NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet TOTINLINE_SEP_VALID TOTINLINE_CUSTOM_SEPARATOR
+    TOTINLINE_CUSTOM_SEPARATOR_MAX TruncateUtf8Chars CleanToTInlineCustomSeparator ToTInlineSeparator
+    ShortenPreviewName TextScopeSet ForceTextUnit ApplyPanelUnit RefreshAllControls Label PlaceTopLeft SetOptionWidth
+    AddOptionDivider SetWidgetEnabled AddPlainCheck NormalizePortraitClassStyle EnsureUnitPortraitStyle
+]],
+    NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, TOTINLINE_SEP_VALID,
+    TOTINLINE_CUSTOM_SEPARATOR, TOTINLINE_CUSTOM_SEPARATOR_MAX, TruncateUtf8Chars, CleanToTInlineCustomSeparator,
+    ToTInlineSeparator, ShortenPreviewName, TextScopeSet, ForceTextUnit, ApplyPanelUnit, RefreshAllControls, Label,
+    PlaceTopLeft, SetOptionWidth, AddOptionDivider, SetWidgetEnabled, AddPlainCheck, NormalizePortraitClassStyle,
+    EnsureUnitPortraitStyle)
+M.AssignNamedValues(Model, [[
+    PortraitStyleGet PortraitStyleSet ApplyPortrait NormalizeStatusPreviewId ClassColor Clamp01 SettingsCache
+    PreviewNPCKind NPCColor GradientPreviewColor HealthColor DarkMatchHPColor HealthBackgroundColor
+    PowerBackgroundColor PowerColor ClassPortraitVisual UnitPreviewPortraitTexture FontColor
+    NormalizeToTInlineColorMode PreviewNameColorFlags PreviewNameColor PreviewToTInlineColor SetTex
+]],
+    PortraitStyleGet, PortraitStyleSet, ApplyPortrait, NormalizeStatusPreviewId, ClassColor, Clamp01, SettingsCache,
+    PreviewNPCKind, NPCColor, GradientPreviewColor, HealthColor, DarkMatchHPColor, HealthBackgroundColor,
+    PowerBackgroundColor, PowerColor, ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor,
+    NormalizeToTInlineColorMode, PreviewNameColorFlags, PreviewNameColor, PreviewToTInlineColor, SetTex)
+M.AssignNamedValues(Model, [[
+    NormalizePreviewAnchorMode UnitPreviewBarOverrideEnabled PreviewHealPredictionEnabled
+    PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled PreviewOverlayWidth
+    LayoutUnitPreviewOverlay MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor
+    ResolveNameOffsetDelta NumText JoinSep FormatMode UnitPreviewText LiveUnitData LiveRaidSubgroup
+]],
+    NormalizePreviewAnchorMode, UnitPreviewBarOverrideEnabled, PreviewHealPredictionEnabled,
+    PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, PreviewOverlayWidth,
+    LayoutUnitPreviewOverlay, MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight,
+    ResolveNameAnchor, ResolveNameOffsetDelta, NumText, JoinSep, FormatMode, UnitPreviewText, LiveUnitData,
+    LiveRaidSubgroup)

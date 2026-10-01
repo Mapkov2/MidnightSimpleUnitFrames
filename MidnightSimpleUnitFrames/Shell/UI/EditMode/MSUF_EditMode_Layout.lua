@@ -473,6 +473,19 @@ local fadingGuides = {}
 local guideParent
 local guideFadeFrame
 
+--- Snap.Apply runs every drag frame: the guide colour reuses one fallback
+--- table and the edge lists below are scratch arrays refilled per call.
+local guideAccentFallback = { 1.00, 0.82, 0.00, 1 }
+local snapDragX, snapDragY, snapTargetX, snapTargetY = {}, {}, {}, {}
+
+local function GuideAccent()
+    local legacy = _G.MSUF_THEME
+    guideAccentFallback[1] = legacy and legacy.titleR or 1.00
+    guideAccentFallback[2] = legacy and legacy.titleG or 0.82
+    guideAccentFallback[3] = legacy and legacy.titleB or 0.00
+    return ThemeColor("accent", guideAccentFallback)
+end
+
 local function GetGuide()
     if not guideParent then
         guideParent = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_SnapGuides", UIParent))
@@ -484,8 +497,8 @@ local function GetGuide()
     if not g then
         g = PixelLayoutRegion(guideParent:CreateTexture(nil, "OVERLAY"))
     end
-    local th = T()
-    g:SetColorTexture(th.titleR, th.titleG, th.titleB, 0.72)
+    local accent = GuideAccent()
+    g:SetColorTexture(accent[1], accent[2], accent[3], 0.72)
     g:SetAlpha(1)
     g._msufGuideFade = nil
     g:Show()
@@ -623,8 +636,9 @@ function Snap.Apply(cx, cy, hw, hh, dragKey)
     local screenCY = uiH * 0.5
 
     --- Check screen center
-    local dxEdges = { dL, dCX, dR }
-    local dyEdges = { dB, dCY, dT }
+    local dxEdges, dyEdges = snapDragX, snapDragY
+    dxEdges[1], dxEdges[2], dxEdges[3] = dL, dCX, dR
+    dyEdges[1], dyEdges[2], dyEdges[3] = dB, dCY, dT
     for _, de in ipairs(dxEdges) do
         local d = abs(de - screenCX)
         if d < bestDistX then bestDistX = d; bestDX = screenCX - de; snapEdgeX = screenCX end
@@ -641,8 +655,9 @@ function Snap.Apply(cx, cy, hw, hh, dragKey)
 
             --- 3?3 X edge pairs
             if tL then
-                local targetXEdges = { tL, tCX, tR }
-                local targetYEdges = { tB, tCY, tT }
+                local targetXEdges, targetYEdges = snapTargetX, snapTargetY
+                targetXEdges[1], targetXEdges[2], targetXEdges[3] = tL, tCX, tR
+                targetYEdges[1], targetYEdges[2], targetYEdges[3] = tB, tCY, tT
                 for _, de in ipairs(dxEdges) do
                     for _, te in ipairs(targetXEdges) do
                         local d = abs(de - te)
@@ -1444,32 +1459,29 @@ end
 
 local function IsExternalEditAnchor(anchor)
     if anchor == nil or anchor == UIParent or anchor == WorldFrame then return false end
-    local ok, owned = true, anchor._msufOwnedAnchorRoot
-    return not (ok and owned == true)
+    return anchor._msufOwnedAnchorRoot ~= true
 end
+
+--- A drag onto an external anchor captures its rollback points every tick:
+--- one flat scratch array (5 slots per point, .n points) consumed within the
+--- same TryApplyFramePoint call, so no tick allocates.
+local rollbackPoints = { n = 0 }
 
 local function CaptureFramePoints(frame)
     if not (frame and frame.GetPoint) then return nil end
     local count = 1
-    if frame.GetNumPoints then
-        local value = frame.GetNumPoints(frame)
-        do
-count = tonumber(value) or 0
-end
-    end
-    local points = {}
+    if frame.GetNumPoints then count = tonumber(frame:GetNumPoints()) or 0 end
+    local points, n = rollbackPoints, 0
     for i = 1, count do
-        local result = { true, frame.GetPoint(frame, i) }
-        if result[1] and result[2] then
-            points[#points + 1] = {
-                point = result[2],
-                anchor = result[3],
-                relativePoint = result[4],
-                x = result[5],
-                y = result[6],
-            }
+        local point, anchor, relativePoint, x, y = frame:GetPoint(i)
+        if point then
+            local slot = n * 5
+            n = n + 1
+            points[slot + 1], points[slot + 2], points[slot + 3] = point, anchor, relativePoint
+            points[slot + 4], points[slot + 5] = x, y
         end
     end
+    points.n = n
     return points
 end
 
@@ -1477,9 +1489,9 @@ local function RestoreFramePoints(frame, points)
     if not (frame and points) then return false end
     frame.ClearAllPoints(frame)
 
-    for i = 1, #points do
-        local p = points[i]
-        frame:SetPoint(p.point, p.anchor, p.relativePoint, p.x, p.y)
+    for i = 1, points.n do
+        local slot = (i - 1) * 5
+        frame:SetPoint(points[slot + 1], points[slot + 2], points[slot + 3], points[slot + 4], points[slot + 5])
     end
     return true
 end
@@ -1795,7 +1807,9 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
     local anchorCX = targetCX + gridDX
     local anchorCY = targetCY + gridDY
     local nextX, nextY = GroupOffsetFromCenter(bar, d.conf, targetCX, targetCY, gridDX, gridDY)
-    local changed = d.conf.offsetX ~= nextX or d.conf.offsetY ~= nextY
+    -- A size tier's own position when Edit Mode shows that tier (MSUF_UF_Group_EM2.lua).
+    local xKey, yKey = bar._msufGFOffsetKeyX or "offsetX", bar._msufGFOffsetKeyY or "offsetY"
+    local changed = d.conf[xKey] ~= nextX or d.conf[yKey] ~= nextY
     local positionChanged = (d.lastGroupTargetCX == nil)
         or abs(targetCX - d.lastGroupTargetCX) > 0.001
         or abs(targetCY - d.lastGroupTargetCY) > 0.001
@@ -1832,8 +1846,8 @@ local function ApplyGroupDragPosition(d, centerX, centerY)
         d.lastGroupAnchorCY = anchorCY
     end
     if changed then
-        d.conf.offsetX = nextX
-        d.conf.offsetY = nextY
+        d.conf[xKey] = nextX
+        d.conf[yKey] = nextY
         -- Only the write earns the stamp. A click that never moved would
         -- otherwise label untouched legacy offsets as already converted, and
         -- GF.EnsureStableGridPosition refuses to convert them ever after.

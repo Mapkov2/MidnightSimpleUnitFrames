@@ -242,15 +242,12 @@ local function Meta(path, classification, exact)
     if (kind == "setting" or kind == "action") and not resolved.settingKey and not resolved.actionKey
         and IsDynamicBarPath(path)
     then
-        resolved.assistantDisposition = resolved.assistantDisposition or "dynamic"
-        resolved.assistantDispositionReason = resolved.assistantDispositionReason
-            or "The exact DB and Registry target is selected by the explicit Bars scope; Shared, unit, Party, and Raid scopes own distinct setting keys."
-        resolved.assistantSettingKeys = resolved.assistantSettingKeys or BAR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
-        resolved.assistantSettingKeyPatterns = resolved.assistantSettingKeyPatterns
+        resolved.searchSettingKeys = resolved.searchSettingKeys or BAR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        resolved.searchSettingKeyPatterns = resolved.searchSettingKeyPatterns
             or BAR_DYNAMIC_SETTING_PATTERNS_BY_PATH[path]
         local suffix = BAR_DYNAMIC_SETTING_SUFFIX_BY_PATH[path]
-        if suffix and not resolved.assistantSettingKeyPatterns then
-            resolved.assistantSettingKeyPatterns = { "^barScope%.[%w_]+%." .. suffix .. "$" }
+        if suffix and not resolved.searchSettingKeyPatterns then
+            resolved.searchSettingKeyPatterns = { "^barScope%.[%w_]+%." .. suffix .. "$" }
         end
     end
     return ControlMeta("opt_bars", "global", path, classification, resolved)
@@ -321,7 +318,7 @@ local function RegisterDragRows(container, path)
     local owner = rows[1] and rows[1].frame
     if owner then
         RegisterControl(owner, Meta(path .. ".order", "setting", {
-            assistantSettingKeyPatterns = { "^barScope%.[%w_]+%.hlPrioOrder$" },
+            searchSettingKeyPatterns = { "^barScope%.[%w_]+%.hlPrioOrder$" },
             command = HIGHLIGHT_ORDER_COMMAND,
         }), "Highlight priority order", "dragrow")
         -- The remaining visible rows are handles for the same atomic four-item
@@ -715,10 +712,8 @@ local function AttachBarsColorShortcut(section, title, note, label, getRGB, setR
             source = registeredMeta.controlPath or registeredMeta.identityKey,
             get = getRGB,
             set = setRGB,
-            assistantDisposition = registeredMeta.assistantDisposition,
-            assistantDispositionReason = registeredMeta.assistantDispositionReason,
-            assistantSettingKeys = registeredMeta.assistantSettingKeys,
-            assistantSettingKeyPatterns = registeredMeta.assistantSettingKeyPatterns,
+            searchSettingKeys = registeredMeta.searchSettingKeys,
+            searchSettingKeyPatterns = registeredMeta.searchSettingKeyPatterns,
             blockCombat = function()
                 return type(M.BlockCombatAction) == "function" and M.BlockCombatAction() or false
             end,

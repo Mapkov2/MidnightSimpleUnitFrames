@@ -286,11 +286,12 @@ local UNIT_NAME_POSITION_LABELS = {
 }
 
 local function MoverLabelText(key, cfg)
-    if cfg and cfg.popupType == "unit" and key ~= "boss" then
+    if cfg and cfg.popupType == "unit" and key ~= "boss" and key ~= "arena" then
         local named = UNIT_NAME_POSITION_LABELS[key]
         if named then return Tr(named) end
         return string.format(Tr("%s Name Position"), tostring(cfg.label or key))
     end
+    if U.ElementLabel then return U.ElementLabel(key, cfg) end
     return Tr(cfg and cfg.label or key)
 end
 
@@ -361,7 +362,7 @@ local function CreateMover(key, cfg)
                 self._brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.60)
                 return
             end
-            if cfg.popupType == "unit" and key ~= "boss" and not self._dragging then
+            if cfg.popupType == "unit" and key ~= "boss" and key ~= "arena" and not self._dragging then
                 self._label:Show()
             else
                 self._label:Hide()
@@ -1175,33 +1176,32 @@ local function ForPreviewFrames(fn, value)
     end
 end
 
+local function SyncMoversAfterReforce()
+    if _G.MSUF_PreviewTestMode and EM2.Movers and EM2.Movers.SyncAll then
+        EM2.Movers.SyncAll()
+    end
+end
+
 local function MSUF_EM2_ReforcePreviewFrames()
     if not _G.MSUF_PreviewTestMode then return end
     if IsConfigCombatLocked() then return end
-    ForPreviewFrames(function(frame)
-        if frame.ForceUpdate then frame:ForceUpdate("EM2_PREVIEW") end
-        frame:Show()
-        if frame.SetAlpha then frame:SetAlpha(1) end
-        if frame.EnableMouse then frame:EnableMouse(true) end
-    end)
+    ForPreviewFrames(ReforcePreviewFrame, true)
     if EM2.Movers and EM2.Movers.SyncAll then
         EM2.Movers.SyncAll()
-        C_Timer.After(0, function()
-            if _G.MSUF_PreviewTestMode and EM2.Movers and EM2.Movers.SyncAll then
-                EM2.Movers.SyncAll()
-            end
-        end)
+        C_Timer.After(0, SyncMoversAfterReforce)
     end
 end
 ExportPublic("MSUF_EM2_ReforcePreviewFrames", MSUF_EM2_ReforcePreviewFrames)
 
+local function RunQueuedPreviewReforce()
+    previewReforceQueued = false
+    MSUF_EM2_ReforcePreviewFrames()
+end
+
 local function MSUF_EM2_SchedulePreviewReforce()
     if previewReforceQueued then return end
     previewReforceQueued = true
-    C_Timer.After(0.1, function()
-        previewReforceQueued = false
-        MSUF_EM2_ReforcePreviewFrames()
-    end)
+    C_Timer.After(0.1, RunQueuedPreviewReforce)
 end
 ExportPublic("MSUF_EM2_SchedulePreviewReforce", MSUF_EM2_SchedulePreviewReforce)
 
@@ -1329,9 +1329,11 @@ do
                         UninstallPipelineWrappers()
                         return original(...)
                     end
-                    local results = { original(...) }
-                    ScheduleReforce(0.05)
-                    return unpackResults(results)
+                    --- A colour wheel or slider drag calls this per value
+                    --- change: queue one coalesced reforce (it runs on a
+                    --- timer, so before the call is fine) and tail-call.
+                    if not IsConfigCombatLocked() then MSUF_EM2_SchedulePreviewReforce() end
+                    return original(...)
                 end
                 wrapped[name] = original
                 wrappers[name] = wrapper

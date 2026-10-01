@@ -1,4 +1,4 @@
--- Menu2 search text index: provides normalized labels and help strings for Search/Assistant.
+-- Menu2 search text index: provides normalized labels and help strings for Search.
 -- Keep entries data-like and side-effect free so lookup remains deterministic.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
@@ -47,15 +47,22 @@ local function ShortLabel(text, limit)
     text = TrimText(text)
     limit = tonumber(limit) or 22
     if #text <= limit then return text end
-    return text:sub(1, math.max(1, limit - 3)) .. "..."
+    local endIndex = math.max(1, limit - 3)
+    -- Never cut through a localized UTF-8 character.
+    while endIndex > 0 do
+        local nextByte = string.byte(text, endIndex + 1)
+        if not nextByte or nextByte < 128 or nextByte >= 192 then break end
+        endIndex = endIndex - 1
+    end
+    return text:sub(1, endIndex) .. "..."
 end
 
 
 local function SearchPlaceholderText()
     -- The placeholder is translated through Menu2, but always has an English fallback so the
     -- search box remains useful when locale data loads late.
-    local text = M.Tr("Ask MSUF anything...")
-    if type(text) ~= "string" or text == "" then text = "Ask MSUF anything..." end
+    local text = M.Tr("Search settings...")
+    if type(text) ~= "string" or text == "" then text = "Search settings..." end
     return text
 end
 local function SearchBoxHasText(searchBox)

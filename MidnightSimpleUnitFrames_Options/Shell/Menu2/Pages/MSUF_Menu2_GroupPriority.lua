@@ -60,24 +60,22 @@ local function PriorityMeta(ctx, path, settingKey)
         classification = "setting",
     }
     meta.settingKey = settingKey
-    meta.assistantDisposition = nil
-    meta.assistantDispositionReason = nil
     return meta
 end
 
 local function RegisterAction(widget, ctx, path, label, extra)
     if type(RegisterControl) ~= "function" then return widget end
-    local directAssistantAction = type(extra) == "table" and extra.actionKey and extra.actionKey ~= "open_page"
-    local assistantLabel = directAssistantAction and label or ("Open Priority Frames for " .. tostring(label))
+    local directAction = type(extra) == "table" and extra.actionKey and extra.actionKey ~= "open_page"
+    local actionLabel = directAction and label or ("Open Priority Frames for " .. tostring(label))
     extra = M.Assign({
         -- Character pins, row indices, and key capture depend on live page
-        -- context. From Assistant chat these controls therefore navigate to
+        -- context. From Search chat these controls therefore navigate to
         -- the exact Priority page instead of mutating a guessed character or
         -- row; the physical Menu button keeps its normal direct behavior.
         actionKey = "open_page",
-        actionFixedArgs = { page = "gf_priority", label = assistantLabel },
+        actionFixedArgs = { page = "gf_priority", label = actionLabel },
     }, extra)
-    return RegisterControl(widget, ctx, path, assistantLabel, "button", "action", extra)
+    return RegisterControl(widget, ctx, path, actionLabel, "button", "action", extra)
 end
 
 local function RequestPageRefresh(ctx, reason)
@@ -364,7 +362,7 @@ local function BuildPriorityPage(ctx)
     if T.CenterButtonLabel then T.CenterButtonLabel(editMode) end
     editMode:SetScript("OnClick", OpenPriorityEditModeWithFeedback)
     RegisterAction(editMode, ctx, "overview.open_edit_mode", "Open Priority Frames in Edit Mode", {
-        actionKey = "assistant.action.editMode.enter",
+        actionKey = "menu.action.editMode.enter",
         actionFixedArgs = { unit = "gf_priority" },
     })
     local liveStatus = W.Text(overview, "", 24, -132, overviewW - 48, T.colors.accent)
@@ -585,7 +583,7 @@ local function BuildPriorityPage(ctx)
     end)
     TrackSectionRefresh(ctx, who, RefreshPins)
 
-    local placement = b:CollapsibleSection("placement", "Placement", 352, false)
+    local placement = b:CollapsibleSection("placement", "Placement", 525, false)
     local placementW = placement._msuf2Width or b.width or 720
     W.Text(placement,
         "Attach the strip to the active Party, Raid, or Mythic Raid container, or choose Free position and place it with Edit Mode.",
@@ -625,10 +623,24 @@ local function BuildPriorityPage(ctx)
     if T.CenterButtonLabel then T.CenterButtonLabel(move) end
     move:SetScript("OnClick", OpenPriorityEditModeWithFeedback)
     RegisterAction(move, ctx, "placement.open_edit_mode", "Position Priority Frames in Edit Mode", {
-        actionKey = "assistant.action.editMode.enter",
+        actionKey = "menu.action.editMode.enter",
         actionFixedArgs = { unit = "gf_priority" },
     })
-    local placementHint = W.Text(placement, "", 24, -308, placementW - 48, T.colors.muted)
+    for index, entry in ipairs({
+        { "width", "Priority frame width (0 inherits)", 0, 500, 0 },
+        { "height", "Priority frame height (0 inherits)", 0, 200, 0 },
+        { "unitsPerColumn", "Frames per row or column", 1, 5, 5 },
+    }) do
+        local key, label, low, high, fallback = unpack(entry)
+        local slider = W.Slider(placement, label, low, high, 1, 300)
+        W.MoveWidget(slider, placement, index == 2 and max(360, placementW - 342) or 24,
+            index == 3 and -422 or -342, 300, "LEFT")
+        M.BindNumberWidget(ctx, slider,
+            function() return tonumber(PriorityConf()[key]) or fallback end,
+            function(value) SetPriorityOption(ctx, key, value, label) end,
+            fallback, M.Assign(PriorityMeta(ctx, "placement." .. key, "gf_priority." .. key), { step = 1, roundStep = true }))
+    end
+    local placementHint = W.Text(placement, "", 24, -490, placementW - 48, T.colors.muted)
     local function RefreshPlacement()
         local conf = PriorityConf()
         local attached = conf.anchorMode ~= "FREE"

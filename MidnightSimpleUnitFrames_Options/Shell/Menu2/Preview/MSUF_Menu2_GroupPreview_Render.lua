@@ -14,6 +14,60 @@ local F = M.Fallbacks or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local issecretvalue = _G.issecretvalue
 local wipe = _G.wipe
+local MENU_EXTRA_OPTIONS = { position = false, sampleCount = 3 }
+Render.NO_GROUP_VISUAL = {}
+-- Blizzard's BackdropTemplateMixin:SetBackdrop skips a table it already holds
+-- (HasBackdropInfo compares identity), so each repaint passes the same table.
+local MOCK_BACKDROPS = {}
+function Render.MockBackdrop(file)
+    local backdrop = MOCK_BACKDROPS[file]
+    if not backdrop then backdrop = { bgFile = file }; MOCK_BACKDROPS[file] = backdrop end
+    return backdrop
+end
+-- Friendly bosses need boss units, which Classic Era and TBC do not have: a
+-- client fact read once at load. A harness without MSUF.Client previews them.
+local PREVIEW_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSUF.Client.SupportsUnit("boss1") == true
+local ADDITIONAL_PREVIEW_PREFIXES = PREVIEW_BOSS_UNITS and { "pets", "targets", "friendlyBoss", "healerMana" }
+    or { "pets", "targets", "healerMana" }
+Render.ADDITIONAL_PREVIEW_PREFIXES = ADDITIONAL_PREVIEW_PREFIXES
+-- Menu samples form a compact shared scene. Screen positions belong to the
+-- live/Edit Mode layout; projecting them here would hide the group or samples.
+-- `out` (optional) is the caller's reused result table, so a settings repaint
+-- allocates nothing once the layout exists.
+function Render.AdditionalPreviewLayout(gf, kind, conf, liveW, liveH, out)
+    if not (gf and gf.GetAdditionalPreviewSpec) or conf.enabled == false
+        or (conf.petsEnabled ~= true and (kind ~= "party" or conf.targetsEnabled ~= true)
+            and (conf.friendlyBossEnabled ~= true or not PREVIEW_BOSS_UNITS) and conf.healerManaEnabled ~= true) then return nil end
+    local count = kind == "party" and 5 or 10
+    local result = out or {}
+    local items = result._items
+    if not items then items = {}; result._items = items end
+    result.minX, result.maxX, result.minY, result.maxY = -liveW / 2, liveW / 2, -liveH / 2, liveH / 2
+    local left = liveW / 2 + 18
+    for i = 1, #ADDITIONAL_PREVIEW_PREFIXES do
+        local prefix = ADDITIONAL_PREVIEW_PREFIXES[i]
+        local spec = gf.GetAdditionalPreviewSpec(kind, prefix, count, MENU_EXTRA_OPTIONS)
+        if spec and spec.enabled then
+            local x, y = left + spec.totalWidth / 2, liveH / 2 - spec.totalHeight / 2
+            local item = items[prefix]
+            if not item then item = {}; items[prefix] = item end
+            item.spec, item.x, item.y = spec, x, y
+            result[prefix] = item
+            result.maxX = x + spec.totalWidth / 2
+            result.minY = math.min(result.minY, y - spec.totalHeight / 2)
+            left = result.maxX + 18
+        else
+            result[prefix] = nil
+        end
+    end
+    return result
+end
+function Render.HideAdditionalPreview(box)
+    for _, root in pairs(box._additionalPreviewRoots or {}) do root:Hide() end
+    if box._mock and MSUF.GF and MSUF.GF.HideBuffCoveragePreview then
+        MSUF.GF.HideBuffCoveragePreview(box._mock)
+    end
+end
 Render._HealthBackgroundColorMode = M.PreviewHelpers.HealthBackgroundColorMode
 function Render._MatchHealthBackgroundColor(r, g, b, general)
     if general and general.darkMode == true and general.darkBgCustomColor ~= true then
@@ -30,7 +84,12 @@ function Render._ApplyHealthBackgroundFill(mock, missing, reverse, healthFractio
     local bar = mock and mock._health
     if not (backgroundBar and bar) then return end
     backgroundBar:ClearAllPoints()
-    backgroundBar:SetAllPoints(missing == true and bar or mock)
+    if missing ~= true and (mock._nameBarTopInset or 0) > 0 then
+        backgroundBar:SetPoint("TOPLEFT", mock, "TOPLEFT", 0, -mock._nameBarTopInset)
+        backgroundBar:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", 0, 0)
+    else
+        backgroundBar:SetAllPoints(missing == true and bar or mock)
+    end
     if backgroundBar.SetOrientation then backgroundBar:SetOrientation("HORIZONTAL") end
     local backgroundReverse = reverse
     if missing == true then backgroundReverse = not reverse end
@@ -41,10 +100,40 @@ function Render._ApplyHealthBackgroundFill(mock, missing, reverse, healthFractio
     local missingValue = missing == true and (1 - pct) or 1
     backgroundBar:SetValue(missingValue)
 end
-local function ResolvePreviewNameGeometry(conf, runtimeText, baselineOffset)
+function Render.ApplyNameBar(mock, conf, group, scale, height, powerInset)
+    local enabled = conf.nameBarEnabled == true
+    local topInset = 0
+    if enabled then
+        local configured = math.max(1, math.min(tonumber(conf.nameBarHeight) or 14,
+            math.max(1, (tonumber(conf.height) or height / scale) - 5)))
+        topInset = math.max(0, math.min(configured * scale, height - powerInset - scale))
+        local texture = mock._nameBarBackground
+        if not texture then
+            texture = PixelLayoutRegion(mock:CreateTexture(nil, "BACKGROUND"))
+            mock._nameBarBackground = texture
+        end
+        texture:ClearAllPoints()
+        texture:SetPoint("TOPLEFT", mock, "TOPLEFT", 0, 0)
+        texture:SetPoint("TOPRIGHT", mock, "TOPRIGHT", 0, 0)
+        texture:SetHeight(topInset)
+        texture:SetColorTexture(group.nameBarR or conf.nameBarR or .05,
+            group.nameBarG or conf.nameBarG or .05, group.nameBarB or conf.nameBarB or .05,
+            group.nameBarAlpha or conf.nameBarAlpha or .95)
+        texture:Show()
+    elseif mock._nameBarBackground then
+        mock._nameBarBackground:Hide()
+    end
+    mock._nameBarTopInset = topInset
+end
+local function ResolvePreviewNameGeometry(conf, runtimeText, baselineOffset, nameBarHeight)
     conf, runtimeText = conf or {}, runtimeText or {}
     local x = tonumber(conf.nameOffsetX)
     if x == nil then x = tonumber(runtimeText.nameX) or 0 end
+    if conf.nameBarEnabled == true then
+        -- Centred in the strip, as the runtime text spec (no free offsets).
+        return "TOP", 0, -math.max(0, (nameBarHeight or tonumber(conf.nameBarHeight) or 14)
+            - (tonumber(conf.nameFontSize) or 12)) / 2 + (tonumber(baselineOffset) or 0)
+    end
     local y = tonumber(conf.nameOffsetY)
     if y ~= nil then
         y = y + (tonumber(baselineOffset) or 0)
@@ -1199,45 +1288,68 @@ local TEXT_LEVEL_SPECS = {
     { "powerRight", "powerLayer", "powerTextLayer", 2 },
 }
 
+-- Handle keys per text slot and reused region lists: placing the text handles
+-- on every repaint allocates nothing.
+local TEXT_SLOT_HANDLE_KEYS = {
+    hp = { "hpLeft", "hpCenter", "hpRight" },
+    power = { "powerLeft", "powerCenter", "powerRight" },
+}
+local function TextRegionList(box, key, a, b, c)
+    local lists = box._msufGFTextRegionLists
+    if not lists then lists = {}; box._msufGFTextRegionLists = lists end
+    local list = lists[key]
+    if not list then list = {}; lists[key] = list end
+    list[1], list[2], list[3] = a, b, c
+    return list
+end
+local function PlaceTextHandleGroup(scene, handles, mock, H, groupKey, prefix, left, center, right)
+    local keys = TEXT_SLOT_HANDLE_KEYS[prefix]
+    if H.TextMovesTogether(scene.kind, prefix) then
+        handles[keys[1]]:Hide()
+        handles[keys[2]]:Hide()
+        handles[keys[3]]:Hide()
+        if not H.PlaceHandleAroundRegions(handles[groupKey], mock, TextRegionList(scene.box, prefix, left, center, right), 3) then handles[groupKey]:Hide() end
+    else
+        handles[groupKey]:Hide()
+        if not H.PlaceHandleAroundRegions(handles[keys[1]], mock, TextRegionList(scene.box, keys[1], left), 3) then handles[keys[1]]:Hide() end
+        if not H.PlaceHandleAroundRegions(handles[keys[2]], mock, TextRegionList(scene.box, keys[2], center), 3) then handles[keys[2]]:Hide() end
+        if not H.PlaceHandleAroundRegions(handles[keys[3]], mock, TextRegionList(scene.box, keys[3], right), 3) then handles[keys[3]]:Hide() end
+    end
+end
 local function PlaceTextHandles(scene)
     local box, mock, H = scene.box, scene.mock, scene.H
     local handles = scene.textHandles
     for i = 1, #TEXT_HANDLE_KEYS do handles[TEXT_HANDLE_KEYS[i]]._previewScale = scene.previewScale end
     -- Name is a natural-width FontString. Its actual region is the sole source
     -- for glyph, grab-handle and focus geometry.
-    if not H.PlaceHandleAroundRegions(handles.name, mock, { mock._nameFS }, 3, "name") then handles.name:Hide() end
-    local function PlaceGroup(groupKey, prefix, regions)
-        if H.TextMovesTogether(scene.kind, prefix) then
-            handles[prefix .. "Left"]:Hide()
-            handles[prefix .. "Center"]:Hide()
-            handles[prefix .. "Right"]:Hide()
-            if not H.PlaceHandleAroundRegions(handles[groupKey], mock, regions, 3) then handles[groupKey]:Hide() end
-        else
-            handles[groupKey]:Hide()
-            for i = 1, 3 do
-                local key = prefix .. ({ "Left", "Center", "Right" })[i]
-                if not H.PlaceHandleAroundRegions(handles[key], mock, { regions[i] }, 3) then handles[key]:Hide() end
-            end
-        end
-    end
-    PlaceGroup("hpGroup", "hp", { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS })
-    PlaceGroup("powerGroup", "power", { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS })
+    if not H.PlaceHandleAroundRegions(handles.name, mock, TextRegionList(box, "name", mock._nameFS), 3, "name") then handles.name:Hide() end
+    PlaceTextHandleGroup(scene, handles, mock, H, "hpGroup", "hp", mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS)
+    PlaceTextHandleGroup(scene, handles, mock, H, "powerGroup", "power", mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS)
     H.ApplyTextFocus(box, mock)
 end
 
+-- One iterator for the live-frame strata walk instead of a closure per repaint.
+local hostStrataWalk = {}
+local function HostStrataVisit(frame, _, frameKind)
+    local walk = hostStrataWalk
+    if not (frame and frame.GetFrameStrata) then return false end
+    local S = walk.S
+    local strata = frame:GetFrameStrata()
+    if S.issecretvalue(strata) == true or not strata or strata == "" then return false end
+    strata = S.NormalizeFrameStrata(strata, S.PREVIEW_UNITFRAME_STRATA)
+    walk.fallback = walk.fallback or strata
+    if frameKind == walk.kind or frame._msufGFKind == walk.kind then walk.live = strata; return true end
+    return false
+end
 local function PreviewHostStrata(scene)
     local gf, kind, S = scene.gf, scene.kind, scene.S
     local live, fallback
     if gf and type(gf.ForEachFrame) == "function" then
-        gf.ForEachFrame(function(frame, _, frameKind)
-            if not (frame and frame.GetFrameStrata) then return false end
-            local strata = frame:GetFrameStrata()
-            if S.issecretvalue(strata) == true or not strata or strata == "" then return false end
-            strata = S.NormalizeFrameStrata(strata, S.PREVIEW_UNITFRAME_STRATA)
-            fallback = fallback or strata
-            if frameKind == kind or frame._msufGFKind == kind then live = strata; return true end
-            return false
-        end, true)
+        local walk = hostStrataWalk
+        walk.S, walk.kind, walk.live, walk.fallback = S, kind, nil, nil
+        gf.ForEachFrame(HostStrataVisit, true)
+        live, fallback = walk.live, walk.fallback
+        walk.S, walk.live, walk.fallback = nil, nil, nil
     end
     live = S.NormalizeFrameStrata(live or fallback or S.PREVIEW_UNITFRAME_STRATA, S.PREVIEW_UNITFRAME_STRATA)
     if live == "AUTO" then live = S.PREVIEW_UNITFRAME_STRATA end
@@ -1451,7 +1563,7 @@ local function FinalizeScene(scene)
     box._visibleLayerButtonCount = visibleLayerButtonCount
     -- The in-world dummies answer to the same rail. Pushing from here instead of
     -- from the chip's OnClick covers every route into the state -- click, Shift
-    -- solo, Assistant command, page re-entry -- and the engine compares a
+    -- solo, Search command, page re-entry -- and the engine compares a
     -- signature, so a refresh that changed nothing costs one string.
     if scene.gf and type(scene.gf.SetPreviewLayerFilter) == "function" then
         scene.gf.SetPreviewLayerFilter(scene.layerVisible, scene.soloLayer)
@@ -1464,6 +1576,147 @@ end
 --- state table (the Refresh stages also take the install-time env table);
 --- RenderAuras and Stage.Refresh run them in the original order.
 local Stage = {}
+
+--- Aura sample state at the box's animation clock. Scratch and options live
+--- on the lane handle per icon, so neither a repaint nor an animation tick
+--- allocates them.
+local function GroupPreviewAuraState(box, previewAnimation, groupKey, index, handle, cfg)
+    if not (box._animationEnabled == true and handle) then return nil end
+    local buildAuraState = previewAnimation and previewAnimation.BuildAuraState or _G.MSUF_BuildPreviewAnimationAuraState
+    if type(buildAuraState) ~= "function" then return nil end
+    local states = handle._previewAuraStates
+    if not states then states = {}; handle._previewAuraStates = states end
+    local scratch = states[index]
+    if not scratch then scratch = {}; states[index] = scratch end
+    local optionsByIndex = handle._previewAuraOptions
+    if not optionsByIndex then optionsByIndex = {}; handle._previewAuraOptions = optionsByIndex end
+    local options = optionsByIndex[index]
+    if not options then options = {}; optionsByIndex[index] = options end
+    options.decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
+    return buildAuraState(groupKey, index, scratch, options, box._animationElapsed)
+end
+local function GroupAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
+    if not (swipe and icon) then return end
+    local max, min, floor = math.max, math.min, math.floor
+    remainingFrac = max(0.08, min(0.92, tonumber(remainingFrac) or 0.48))
+    local w = max(1, floor((tonumber(size) or 1) * remainingFrac + 0.5))
+    swipe:ClearAllPoints()
+    swipe:SetWidth(w)
+    swipe:SetHeight(max(1, tonumber(size) or 1))
+    if reverse == true then
+        swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
+        swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+    else
+        swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
+        swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+    end
+end
+local function GroupAuraDurationBar(bar, icon, cfg, size, auraState)
+    if not (bar and icon and cfg and cfg.showDurationBar == true) then
+        if bar then bar:Hide() end
+        return
+    end
+    local max, min, floor = math.max, math.min, math.floor
+    size = max(1, tonumber(size) or 1)
+    local height = max(1, min(size, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
+    local inset = max(1, floor(size / 32 + 0.5))
+    local frac
+    if cfg.durationBarDirection == "ELAPSED" then
+        frac = auraState and auraState.elapsedFrac or 0.38
+    else
+        frac = auraState and auraState.remainingFrac or 0.62
+    end
+    local r, g, b = AuraDurationBarColor()
+    bar:SetVertexColor(r, g, b, 0.92)
+    frac = max(0.02, min(1, tonumber(frac) or 0.62))
+    bar:ClearAllPoints()
+    bar:SetHeight(height)
+    if auraState then
+        bar:SetWidth(max(1, floor(max(1, size - inset * 2) * frac + 0.5)))
+        if cfg.durationBarPosition == "TOP" then
+            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        else
+            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        end
+    elseif cfg.durationBarPosition == "TOP" then
+        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+    else
+        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+    end
+    bar:Show()
+end
+--- Animation tick for one aura lane: timers, stacks, swipes and duration bars
+--- of the icons the last layout placed (Stage.LayoutAuraGroup records it).
+local function AnimateGroupAuraLane(box, previewAnimation, handle)
+    local anim = handle and handle._msufGFAuraAnim
+    if not anim then return end
+    local icons, rects = handle._icons, handle._previewRects
+    for i = 1, anim.maxIcons do
+        local tex = icons and icons[i]
+        if tex and rects and rects[i] then
+            local auraState = GroupPreviewAuraState(box, previewAnimation, anim.groupKey, i, handle, anim.cfg)
+            local swipe = handle._iconSwipes and handle._iconSwipes[i]
+            if swipe and anim.swipe then
+                GroupAuraPreviewSwipe(swipe, tex, anim.size, auraState and auraState.remainingFrac, anim.swipeReverse)
+            end
+            GroupAuraDurationBar(handle._iconDurationBars and handle._iconDurationBars[i], tex, anim.cfg, anim.size, auraState)
+            local stack = handle._iconStacks and handle._iconStacks[i]
+            if stack then stack:SetText(anim.showStacks and (auraState and auraState.stacks or (i % 3 == 1 and "2" or "")) or "") end
+            local timer = handle._iconTimers and handle._iconTimers[i]
+            if timer then timer:SetText(anim.showCooldown and (auraState and auraState.text or (i % 2 == 0 and "12" or "")) or "") end
+        end
+    end
+end
+local GROUP_AURA_LANE_HANDLES = { "buffHandle", "trackedBuffHandle", "debuffHandle", "externalHandle" }
+local NO_HEALTH_BACKGROUND = {}
+--- Health fill colour at a health fraction: the compiled fixed colour, or the
+--- page's colour mode at that fraction. The full refresh and the animation
+--- tick share it, like the background colour below.
+local function GroupHealthFillColor(runtimeHealth, HealthColor, conf, hpPct, cls)
+    local mode = runtimeHealth and runtimeHealth.mode
+    if mode == "dark" or mode == "unified" or mode == "custom" then
+        local r, g, b = runtimeHealth.r, runtimeHealth.g, runtimeHealth.b
+        if r then return r, g, b end
+    end
+    return HealthColor(conf, hpPct or 0.72, cls)
+end
+local function GroupHealthBackgroundColor(S, MSUF, ClassColor, mode, hbCfg, conf, gen, runtimeHealth, cls, hr, hg, hb, hpPct)
+    local hbr, hbg, hbb = hbCfg.r or conf.bgR or 0.06, hbCfg.g or conf.bgG or 0.06, hbCfg.b or conf.bgB or 0.07
+    if mode == "health_gradient" and MSUF.UFBarTextCommon
+        and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
+        hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(runtimeHealth, hpPct)
+    elseif mode == "match_health" then
+        hbr, hbg, hbb = S.HealthBackgroundRenderer._MatchHealthBackgroundColor(hr or hbr, hg or hbg, hb or hbb, gen)
+    elseif mode == "class" then
+        hbr, hbg, hbb = ClassColor(cls, hbr, hbg, hbb)
+    end
+    return hbr, hbg, hbb
+end
+--- Value texts from the slot set the full refresh resolved (kept per box).
+local function GroupHealthSlotText(gf, htx, mode, hidePercentSymbol, absorbIcon, fakeHP)
+    if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, htx.fakeMax, htx.delimiter, false, nil, hidePercentSymbol, htx.short, htx.fakeAbsorb, absorbIcon == true) end
+    return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
+end
+local function GroupHealthTextColor(htx, fakeHP)
+    if htx.byHealth then
+        local pct = fakeHP / htx.fakeMax
+        if pct <= 0.5 then return 1, pct * 2, 0 end
+        return (1 - pct) * 2, 1, 0
+    end
+    return htx.r, htx.g, htx.b
+end
+local function GroupPowerSlotText(gf, ptx, mode, hidePercentSymbol, fakePow)
+    if gf and gf.FormatPowerText then return gf.FormatPowerText(mode, fakePow, ptx.fakeMax, ptx.delimiter, nil, hidePercentSymbol) end
+    return mode == "PERCENT" and (hidePercentSymbol and "70" or "70%") or "70"
+end
+local function GroupSlotAbsorbIcon(runtimeText, conf, runtimeIconKey, dbIconKey)
+    local absorbIcon = runtimeText[runtimeIconKey]
+    if absorbIcon == nil then absorbIcon = conf[dbIconKey] end
+    if absorbIcon == nil then absorbIcon = runtimeText.healthAbsorbIcon == true or conf.hpAbsorbIcon == true end
+    return absorbIcon == true
+end
 
 --- Aura lane helpers: icon pools, growth and anchor resolution, text, swipe,
 --- border and duration bar painters shared by every lane.
@@ -1562,66 +1815,9 @@ function Stage.PrepareAuraLanes(st)
         border:Show()
     end
     local function PreviewAuraState(groupKey, index, handle, cfg)
-        if not (self._animationEnabled == true and handle) then return nil end
-        local buildAuraState = previewAnimation and previewAnimation.BuildAuraState or _G.MSUF_BuildPreviewAnimationAuraState
-        if type(buildAuraState) ~= "function" then return nil end
-        handle._previewAuraStates = handle._previewAuraStates or {}
-        local scratch = handle._previewAuraStates[index] or {}
-        handle._previewAuraStates[index] = scratch
-        return buildAuraState(groupKey, index, scratch, {
-            decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3,
-        }, self._animationElapsed)
+        return GroupPreviewAuraState(self, previewAnimation, groupKey, index, handle, cfg)
     end
-    local function LayoutAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
-        if not (swipe and icon) then return end
-        remainingFrac = max(0.08, min(0.92, tonumber(remainingFrac) or 0.48))
-        local w = max(1, floor((tonumber(size) or 1) * remainingFrac + 0.5))
-        swipe:ClearAllPoints()
-        swipe:SetWidth(w)
-        swipe:SetHeight(max(1, tonumber(size) or 1))
-        if reverse == true then
-            swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
-            swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
-        else
-            swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
-            swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
-        end
-    end
-    local function LayoutAuraDurationBar(bar, icon, cfg, size, auraState)
-        if not (bar and icon and cfg and cfg.showDurationBar == true) then
-            if bar then bar:Hide() end
-            return
-        end
-        size = max(1, tonumber(size) or 1)
-        local height = max(1, min(size, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
-        local inset = max(1, floor(size / 32 + 0.5))
-        local frac
-        if cfg.durationBarDirection == "ELAPSED" then
-            frac = auraState and auraState.elapsedFrac or 0.38
-        else
-            frac = auraState and auraState.remainingFrac or 0.62
-        end
-        local r, g, b = AuraDurationBarColor()
-        bar:SetVertexColor(r, g, b, 0.92)
-        frac = max(0.02, min(1, tonumber(frac) or 0.62))
-        bar:ClearAllPoints()
-        bar:SetHeight(height)
-        if auraState then
-            bar:SetWidth(max(1, floor(max(1, size - inset * 2) * frac + 0.5)))
-            if cfg.durationBarPosition == "TOP" then
-                bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-            else
-                bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-            end
-        elseif cfg.durationBarPosition == "TOP" then
-            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-            bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-        else
-            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-            bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-        end
-        bar:Show()
-    end
+    local LayoutAuraPreviewSwipe, LayoutAuraDurationBar = GroupAuraPreviewSwipe, GroupAuraDurationBar
     local function RuntimeAuraGridShape(count, perRow, verticalGrowth)
         count = max(Round(count), 1)
         perRow = max(Round(perRow), 1)
@@ -1804,7 +2000,7 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
                     end
                 end
                 local auraState = PreviewAuraState(groupKey, i, handle, cfg)
-                tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
+                tex:SetTexture(ids[((i - 1) % #ids) + 1])
                 ApplyPreviewIconZoom(tex, cfg.iconZoom or scene.auraIconZoom, 0)
                 if tex.SetAlpha then tex:SetAlpha(barOnly and 0 or 1) end
                 tex:SetSize(size, size)
@@ -1860,6 +2056,11 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
                 tex:Show()
             end
         end
+        local anim = handle._msufGFAuraAnim
+        if not anim then anim = {}; handle._msufGFAuraAnim = anim end
+        anim.groupKey, anim.maxIcons, anim.cfg, anim.size = groupKey, maxIcons, cfg, size
+        anim.swipe, anim.swipeReverse = showSwipe and not barOnly, cooldownSwipeReverse
+        anim.showStacks, anim.showCooldown = showStacks, showCooldown
         for i = maxIcons + 1, #(handle._icons or {}) do
             if handle._icons[i] then handle._icons[i]:Hide() end
             if handle._iconSwipes and handle._iconSwipes[i] then handle._iconSwipes[i]:Hide() end
@@ -2100,6 +2301,9 @@ function Render.Install(box, ctx, deps)
     function box:Refresh(reason)
         return Stage.Refresh(env, self, reason)
     end
+    function box:RefreshAnimation()
+        return Stage.Animate(env, self)
+    end
     box:EnableKeyboard(true)
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
     box:SetScript("OnKeyDown", function(self, key)
@@ -2174,6 +2378,47 @@ function Stage.Refresh(env, self, reason)
     Stage.ConfigureStatusHandles(st, env)
     Stage.BindSpellHandleHelpers(st, env)
     Stage.RenderSpellIndicators(st, env)
+    -- The animation tick advances this scene (Stage.Animate).
+    st.complete, st.animated = true, self._animationEnabled == true
+    self._msufGFScene = st
+end
+
+--- Animation tick: health, prediction and power fills, the value texts and
+--- their handles, and the aura timers, stacks, swipes and duration bars follow
+--- the clock on the scene the last full refresh built while the animation
+--- ran. Layout, textures, fonts, layers and indicators stay as that refresh
+--- placed them. False when there is no such scene (first frame, scope switch)
+--- or the full refresh has to decide (combat, text drag): the driver then runs
+--- it.
+function Stage.Animate(env, self)
+    local st = self._msufGFScene
+    if not (st and st.complete == true and st.animated == true and self._animationEnabled == true) then return false end
+    if (_G.InCombatLockdown and _G.InCombatLockdown()) or _G.MSUF_InCombat == true or self._msufGFTextDragActive then return false end
+    local scene = st.scene
+    if scene.kind ~= scene.H.CurrentScope() then return false end
+    local previewAnimation = scene.previewAnimation
+    local buildFrameState = previewAnimation and previewAnimation.BuildFrameState
+        or _G.MSUF_BuildPreviewAnimationFrameState
+    if type(buildFrameState) ~= "function" then return false end
+    local animState = buildFrameState(self, 1, scene.kind, self._msufGFMenuPreviewAnimState or {}, self._animationElapsed)
+    self._msufGFMenuPreviewAnimState = animState
+    scene.animState = animState
+    local max, min = math.max, math.min
+    st.hpPct = max(0.02, min(0.98, tonumber(animState.hpPct) or 0.72))
+    st.powerPct = max(0, min(1, tonumber(animState.powerPct) or 0.70))
+    st.healPct = max(0.01, min(0.24, tonumber(animState.healPct) or 0.12))
+    st.absorbPct = max(0.01, min(0.24, tonumber(animState.absorbPct) or 0.08))
+    scene.hpPct, scene.powerPct, scene.healPct, scene.absorbPct = st.hpPct, st.powerPct, st.healPct, st.absorbPct
+    Stage.PaintHealthValues(st, env)
+    if st.powerShown then st.mock._power:SetValue(st.powerPct) end
+    Stage.PaintHealthTexts(st, env)
+    Stage.PaintPowerTexts(st, env)
+    PlaceTextHandles(scene)
+    local S = scene.S
+    for i = 1, #GROUP_AURA_LANE_HANDLES do
+        AnimateGroupAuraLane(self, previewAnimation, S[GROUP_AURA_LANE_HANDLES[i]])
+    end
+    return true
 end
 
 --- Rebases the preview frame-level band, builds the scene and unpacks the
@@ -2540,17 +2785,58 @@ function Stage.LayoutMockFrame(st, env)
             frameScale = tonumber(sc2) or 1
         end
         liveW, liveH = max(1, liveW), max(1, liveH)
+        local additional = self._additionalPreviewLayout
+        if st.reason ~= "GROUP_PREVIEW_ANIMATE" then
+            local layoutScratch = self._additionalPreviewLayoutScratch
+            if not layoutScratch then layoutScratch = {}; self._additionalPreviewLayoutScratch = layoutScratch end
+            additional = Render.AdditionalPreviewLayout(gf, kind, conf, liveW, liveH, layoutScratch)
+            self._additionalPreviewLayout = additional
+            local topology = additional and ((additional.pets and 1 or 0) + (additional.targets and 2 or 0)
+                + (additional.friendlyBoss and 4 or 0) + (additional.healerMana and 8 or 0)) or 0
+            if topology ~= self._additionalPreviewTopology or kind ~= self._additionalPreviewKind then
+                -- The initial main-only default lock is not a fit for a newly
+                -- enabled scene: refit once when the contents change and give
+                -- the default lock back when the scene is main-only again. A
+                -- lock the user set keeps its zoom and position, as the lock
+                -- tooltip promises; an unlocked (Fit) preview refits.
+                if topology > 0 or (self._additionalPreviewTopology or 0) > 0 then
+                    local userLock = self._manualZoom ~= nil and self._msuf2ZoomLockIsDefault ~= true
+                    if not userLock then
+                        local defaultLock = self._msuf2ZoomLockDefaultPending == true
+                            or self._msuf2ZoomLockIsDefault == true
+                            or self._msuf2ZoomLockDefaultDropped == true
+                        self._manualZoom, self._dragFrozenScale = nil, nil
+                        self._zoomPanX, self._zoomPanY = nil, nil
+                        self._msuf2ZoomLockIsDefault = nil
+                        self._msuf2ZoomLockDefaultPending = defaultLock and topology == 0 or nil
+                        self._msuf2ZoomLockDefaultDropped = defaultLock and topology > 0 or nil
+                    end
+                end
+                self._additionalPreviewTopology, self._additionalPreviewKind = topology, kind
+            end
+        end
+        local hasAdditional = (self._additionalPreviewTopology or 0) > 0
+        local minX, maxX, minY, maxY
+        if hasAdditional then minX, maxX, minY, maxY = additional.minX, additional.maxX, additional.minY, additional.maxY end
         local autoZoom = min(self._msufGFRenderState.GF_PREVIEW_MIN_W / liveW, self._msufGFRenderState.GF_PREVIEW_MIN_H / liveH)
         autoZoom = max(1.4, min(2.8, autoZoom))
-        ResolveDefaultZoomLock(self, autoZoom)
+        if hasAdditional then
+            -- Overview can be smaller than the interactive zoom minimum:
+            -- silently clipping enabled samples is not a useful initial view.
+            -- Expand and deliberate zoom retain their existing controls.
+            autoZoom = min(autoZoom, min(max(1, stageW - 24) / (maxX - minX),
+                max(1, stageH - 24) / (maxY - minY)))
+        end
+        if not hasAdditional then ResolveDefaultZoomLock(self, autoZoom) end
         local manualZoom = tonumber(self._manualZoom)
         local frozenZoom = tonumber(self._dragFrozenScale)
         local previewScale = manualZoom and ClampZoom(manualZoom) or (frozenZoom and ClampZoom(frozenZoom) or autoZoom)
         self._mockAutoScale = autoZoom
         self._mockScale = previewScale
         UpdateZoomControls(self)
-        local mockW = max(48, Round(liveW * previewScale))
-        local mockH = max(20, Round(liveH * previewScale))
+        local overview = hasAdditional and not manualZoom and not frozenZoom
+        local mockW = max(overview and 1 or 48, Round(liveW * previewScale))
+        local mockH = max(overview and 1 or 20, Round(liveH * previewScale))
         local powerH = runtimePower and runtimePower.enabled == true and ScaleValue(runtimePower.height, previewScale, 0) or 0
         if not runtimeSpec then powerH = H.MockPowerHeight(kind, conf, previewScale, frameScale) end
         -- Runtime parity for Power.Apply's three placements: embedded (inside the
@@ -2579,13 +2865,54 @@ function Stage.LayoutMockFrame(st, env)
         local inset = 0
         local startX = Round((stageW - mockW) * 0.5)
         local startY = -Round((stageH - mockH) * 0.5)
+        if hasAdditional then
+            startX = Round(stageW / 2 - (minX + maxX) / 2 * previewScale - mockW / 2)
+            startY = Round(-stageH / 2 - (minY + maxY) / 2 * previewScale + mockH / 2)
+            -- Deliberate zoom may crop the scene; keep its main sample reachable.
+            if not overview and mockW < stageW and mockH < stageH then
+                startX = max(8, min(stageW - mockW - 8, startX))
+                startY = min(-8, max(-stageH + mockH + 8, startY))
+            end
+        end
         local mock = self._mock
         mock._previewScale = previewScale
         self._mockBaseOffsetX, self._mockBaseOffsetY = startX, startY
         mock:ClearAllPoints()
         mock:SetPoint("TOPLEFT", self._stage, "TOPLEFT", startX + (tonumber(self._zoomPanX) or 0), startY + (tonumber(self._zoomPanY) or 0))
         mock:SetSize(mockW, mockH)
-        PixelLayoutRegion(mock, "SetBackdrop", { bgFile = WHITE8X8 })
+        self._additionalPreviewRoots = self._additionalPreviewRoots or {}
+        if st.reason ~= "GROUP_PREVIEW_ANIMATE" then
+            local prefixes = Render.ADDITIONAL_PREVIEW_PREFIXES
+            for i = 1, #prefixes do
+                local prefix = prefixes[i]
+                local item = additional and additional[prefix]
+                local root = self._additionalPreviewRoots[prefix]
+                if item and gf.RenderAdditionalPreview then
+                    if not root then
+                        root = PixelLayoutRegion(CreateFrame("Frame", nil, self._stage))
+                        root:EnableMouse(false)
+                        self._additionalPreviewRoots[prefix] = root
+                    end
+                    root:ClearAllPoints()
+                    root:SetPoint("CENTER", mock, "CENTER", item.x * previewScale, item.y * previewScale)
+                    root:SetSize(item.spec.totalWidth * previewScale, item.spec.totalHeight * previewScale)
+                    local holder = gf.RenderAdditionalPreview(root, kind, prefix, kind == "party" and 5 or 10, MENU_EXTRA_OPTIONS)
+                    if holder then
+                        holder:SetScale(previewScale)
+                        holder:ClearAllPoints(); holder:SetPoint("CENTER", root, "CENTER", 0, 0)
+                        root:Show()
+                    else root:Hide() end
+                elseif root then
+                    if gf and gf.HideAdditionalPreview then gf.HideAdditionalPreview(root, prefix) end
+                    root:Hide()
+                end
+            end
+        end
+        if st.reason ~= "GROUP_PREVIEW_ANIMATE" and gf and gf.RenderBuffCoveragePreview then
+            if conf.enabled == false then gf.HideBuffCoveragePreview(mock)
+            else gf.RenderBuffCoveragePreview(mock, conf, previewScale) end
+        end
+        PixelLayoutRegion(mock, "SetBackdrop", Render.MockBackdrop(WHITE8X8))
         local bgAlpha = conf.hpBgAlpha or 0.85
         if runtimeSpec and runtimeSpec.backgroundAlpha ~= nil then bgAlpha = runtimeSpec.backgroundAlpha end
         mock:SetBackdropColor(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09,
@@ -2618,16 +2945,15 @@ function Stage.RenderHealthBars(st, env)
         local barTex = runtimeHealth.texture or (runtimeSpec and runtimeSpec.texture) or (gf and gf.ResolveBarTexture and gf.ResolveBarTexture(kind)) or ResolvePreviewStatusbarTexture(conf, "barTexture")
         local bgTex = runtimeHealth.backgroundTexture or (runtimeSpec and runtimeSpec.backgroundTexture) or (gf and gf.ResolveBarBgTexture and gf.ResolveBarBgTexture(kind)) or WHITE8X8
         mock._health:SetStatusBarTexture(barTex)
-        mock._health:ClearAllPoints()
-        mock._health:SetPoint("TOPLEFT", mock, "TOPLEFT", inset, -inset)
-        mock._health:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -inset, powerInsetH > 0 and (powerInsetH + inset) or inset)
-        local runtimeHealthMode = runtimeHealth and runtimeHealth.mode
-        local hr, hg, hb
-        if runtimeHealthMode == "dark" or runtimeHealthMode == "unified" or runtimeHealthMode == "custom" then
-            hr, hg, hb = runtimeHealth.r, runtimeHealth.g, runtimeHealth.b
+        if st.reason ~= "GROUP_PREVIEW_ANIMATE" then
+            Render.ApplyNameBar(mock, conf, (runtimeSpec and runtimeSpec.group) or Render.NO_GROUP_VISUAL,
+                st.previewScale, mock:GetHeight(), powerInsetH)
         end
-        if not hr then hr, hg, hb = HealthColor(conf, hpPct or 0.72, cls) end
-        local groupVisual = (runtimeSpec and runtimeSpec.group) or {}
+        mock._health:ClearAllPoints()
+        mock._health:SetPoint("TOPLEFT", mock, "TOPLEFT", inset, -inset - (mock._nameBarTopInset or 0))
+        mock._health:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -inset, powerInsetH > 0 and (powerInsetH + inset) or inset)
+        local hr, hg, hb = GroupHealthFillColor(runtimeHealth, HealthColor, conf, hpPct, cls)
+        local groupVisual = (runtimeSpec and runtimeSpec.group) or Render.NO_GROUP_VISUAL
         -- Live parity: the engine dims the fill texture (Elements_Alpha), never
         -- the status-bar color's alpha channel, which the client drops on refill.
         local hpFillAlpha = tonumber(groupVisual.hpBarAlpha) or tonumber(conf.hpBarAlpha) or 1
@@ -2652,22 +2978,15 @@ function Stage.RenderHealthBars(st, env)
                 runtimeHealth.barGradient, "_msufGFPreviewHealthGradients")
         end
         mock._healthBg:SetTexture(bgTex)
-        local hbCfg = runtimeHealth.background or {}
-        local hbr, hbg, hbb = hbCfg.r or conf.bgR or 0.06, hbCfg.g or conf.bgG or 0.06, hbCfg.b or conf.bgB or 0.07
+        local hbCfg = runtimeHealth.background or NO_HEALTH_BACKGROUND
         mock._msufGFPreviewBackgroundColorMode = S.HealthBackgroundRenderer._HealthBackgroundColorMode(runtimeHealth, gen)
-        if mock._msufGFPreviewBackgroundColorMode == "health_gradient" and MSUF.UFBarTextCommon
-            and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
-            hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(runtimeHealth, hpPct)
-        elseif mock._msufGFPreviewBackgroundColorMode == "match_health" then
-            hbr, hbg, hbb = S.HealthBackgroundRenderer._MatchHealthBackgroundColor(hr or hbr, hg or hbg, hb or hbb, gen)
-        elseif mock._msufGFPreviewBackgroundColorMode == "class" then
-            hbr, hbg, hbb = ClassColor(cls, hbr, hbg, hbb)
-        end
-        mock._healthBg:SetVertexColor(hbr, hbg, hbb, hbCfg.a or groupVisual.hpBgAlpha or conf.hpBgAlpha or 0.85)
-        S.HealthBackgroundRenderer._ApplyHealthBackgroundFill(mock,
-            runtimeHealth.backgroundFillMode == "missing"
-                or (not runtimeSpec and gen and gen.barBgFillMode == "missing"),
-            hpReverse, hpPct)
+        local hbr, hbg, hbb = GroupHealthBackgroundColor(S, MSUF, ClassColor, mock._msufGFPreviewBackgroundColorMode,
+            hbCfg, conf, gen, runtimeHealth, cls, hr, hg, hb, hpPct)
+        st.healthBgCfg, st.healthBgAlpha = hbCfg, hbCfg.a or groupVisual.hpBgAlpha or conf.hpBgAlpha or 0.85
+        mock._healthBg:SetVertexColor(hbr, hbg, hbb, st.healthBgAlpha)
+        st.healthBgMissing = runtimeHealth.backgroundFillMode == "missing"
+            or (not runtimeSpec and gen and gen.barBgFillMode == "missing")
+        S.HealthBackgroundRenderer._ApplyHealthBackgroundFill(mock, st.healthBgMissing, hpReverse, hpPct)
         local tempMaxShown
         if runtimeSpec then
             tempMaxShown = runtimeTempMaxHealth.enabled == true
@@ -2726,6 +3045,7 @@ function Stage.RenderHealthBars(st, env)
             end
             mock._healPred:SetWidth(max(1, mockW * healPct))
             mock._healPred:SetValue(1)
+            st.healPredFollows = true
         else
             mock._healPred:SetAllPoints(mock._health)
             if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill((healPredMode == 1) and false or ((healPredMode == 5) and not hpReverse or true)) end
@@ -2774,6 +3094,7 @@ function Stage.RenderHealthBars(st, env)
         end
         if absorbFollows then mock._absorb:SetWidth(max(1, mockW * absorbPct)) end
         mock._absorb:SetValue(absorbFollows and 1 or absorbPct)
+        st.absorbFollows = absorbFollows and true or false
         mock._absorb:SetShown(absorbShown)
         local healAbsorbShown
         if runtimeSpec then
@@ -2805,7 +3126,27 @@ function Stage.RenderHealthBars(st, env)
         mock._healAbsorb:SetWidth(max(1, healAbsorbW))
         mock._healAbsorb:SetValue(0.07)
         mock._healAbsorb:SetShown(healAbsorbShown)
-        st.barTex, st.bgTex, st.cls, st.gen, st.hpFillAlpha = barTex, bgTex, cls, gen, hpFillAlpha
+        st.barTex, st.bgTex, st.cls, st.gen, st.hpFillAlpha, st.hpReverse = barTex, bgTex, cls, gen, hpFillAlpha, hpReverse
+end
+
+--- Animation tick for the health bar: fill and colour, background colour and
+--- fill, and the prediction and absorb fills at the animated fractions.
+function Stage.PaintHealthValues(st, env)
+    local mock, hpPct, max = st.mock, st.hpPct, math.max
+    local hr, hg, hb = GroupHealthFillColor(st.runtimeHealth, env.HealthColor, st.conf, hpPct, st.cls)
+    mock._health:SetStatusBarColor(hr, hg, hb)
+    mock._health:SetValue(hpPct)
+    local hbr, hbg, hbb = GroupHealthBackgroundColor(st.S, env.MSUF, env.ClassColor, mock._msufGFPreviewBackgroundColorMode,
+        st.healthBgCfg, st.conf, st.gen, st.runtimeHealth, st.cls, hr, hg, hb, hpPct)
+    mock._healthBg:SetVertexColor(hbr, hbg, hbb, st.healthBgAlpha)
+    st.S.HealthBackgroundRenderer._ApplyHealthBackgroundFill(mock, st.healthBgMissing, st.hpReverse, hpPct)
+    if st.healPredFollows then
+        mock._healPred:SetWidth(max(1, st.mockW * st.healPct))
+    else
+        mock._healPred:SetValue(st.healPct)
+    end
+    if st.absorbFollows then mock._absorb:SetWidth(max(1, st.mockW * st.absorbPct)) end
+    mock._absorb:SetValue(st.absorbFollows and 1 or st.absorbPct)
 end
 
 --- Power bar placement (embedded, attached below, detached) with its handle,
@@ -2858,7 +3199,8 @@ function Stage.RenderPowerBar(st, env)
         if powerBarHandle then SetPreviewFrameLevel(powerBarHandle, powerFrameLevel) end
         -- Layer gating hides only the drawn bar; the health inset keeps following
         -- the settings so hiding the preview layer never fakes a layout change.
-        if powerH > 0 and LayerOn("power") then
+        st.powerShown = powerH > 0 and LayerOn("power")
+        if st.powerShown then
             mock._power:SetAlpha(LayerAlpha("power"))
             mock._power:SetStatusBarTexture(runtimePower.texture or barTex)
             mock._power:ClearAllPoints()
@@ -3022,7 +3364,8 @@ function Stage.RenderNameText(st, env)
             -- Anchor and offsets are one editor-owned tuple. A queued compiled spec
             -- may legitimately lag this cold preview refresh by one apply tick.
             local nameAnchor, nox, noy = ResolvePreviewNameGeometry(conf, runtimeText,
-                (runtimeSpec and gf and gf.ResolveFontBaselineOffset and gf.ResolveFontBaselineOffset(kind)) or baselineOffset)
+                (runtimeSpec and gf and gf.ResolveFontBaselineOffset and gf.ResolveFontBaselineOffset(kind)) or baselineOffset,
+                (mock._nameBarTopInset or 0) / previewScale)
             local namePoint, nameX, nameY, nameJustify = ResolvePreviewNamePoint(nameAnchor, nox, noy)
             mock._nameFS._msufPreviewNameEndpointX = nameX
             mock._nameFS._msufPreviewNameEndpointY = nameY
@@ -3030,6 +3373,7 @@ function Stage.RenderNameText(st, env)
             -- separately. This avoids a one-pixel drift at fractional Fit scales.
             nameX, nameY = ConfigToOffset(nameX, previewScale), ConfigToOffset(nameY, previewScale)
             local nameAnchorToFrame = runtimeText.nameAnchorToFrame
+            if conf.nameBarEnabled == true then nameAnchorToFrame = true end
             if nameAnchorToFrame == nil then nameAnchorToFrame = conf._msufLegacyNameAnchorToFrame == true end
             local nameRef = (runtimeText.anchorToBars ~= false and nameAnchorToFrame ~= true and mock._health) or mock
             LayoutPreviewName(mock._nameFS, nameRef, namePoint, nameX, nameY, nameJustify)
@@ -3093,10 +3437,15 @@ function Stage.RenderHealthText(st, env)
         end
         -- Exact live values when available; while the combat animation runs,
         -- the current value follows the animated fraction on the live scale.
-        local fakeMax = (scene.liveData and scene.liveData.hpMax) or 1000000
+        -- The slot set is kept on the box: the animation tick formats the
+        -- values from it (Stage.PaintHealthTexts).
+        local htx = st.self._msufGFHealthTextState
+        if not htx then htx = {}; st.self._msufGFHealthTextState = htx end
+        st.healthText = htx
+        htx.fakeMax = (scene.liveData and scene.liveData.hpMax) or 1000000
         local fakeHP = (not scene.animState and scene.liveData and scene.liveData.hpCur)
-            or max(1, floor(fakeMax * hpPct + 0.5))
-        local fakeAbsorb = (scene.liveData and scene.liveData.absorb) or 125000
+            or max(1, floor(htx.fakeMax * hpPct + 0.5))
+        htx.fakeAbsorb = (scene.liveData and scene.liveData.absorb) or 125000
         local hpTextR, hpTextG, hpTextB = fr or 1, fg or 1, fb or 1
         local healthTextMode = (conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil)
             and conf.colorHealthTextByHealth or (gen and gen.colorHealthTextByHealth)
@@ -3106,40 +3455,51 @@ function Stage.RenderHealthText(st, env)
             or (not runtimeSpec and (healthTextMode == true or healthTextMode == "HEALTH"))
         if healthTextByClass then
             hpTextR, hpTextG, hpTextB = ClassColor(cls, hpTextR, hpTextG, hpTextB)
-        elseif healthTextByHealth then
-            local pct = fakeHP / fakeMax
-            if pct <= 0.5 then
-                hpTextR, hpTextG, hpTextB = 1, pct * 2, 0
-            else
-                hpTextR, hpTextG, hpTextB = (1 - pct) * 2, 1, 0
-            end
         end
-        local hpDelimiter = runtimeText.healthDelimiter or conf.textDelimiter or " - "
-        local function PreviewHealthText(mode, hidePercentSymbol, runtimeIconKey, dbIconKey)
-            local absorbIcon = runtimeText[runtimeIconKey]
-            if absorbIcon == nil then absorbIcon = conf[dbIconKey] end
-            if absorbIcon == nil then absorbIcon = runtimeText.healthAbsorbIcon == true or conf.hpAbsorbIcon == true end
-            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false, nil, hidePercentSymbol, runtimeText.healthShortNumbers == true or (runtimeText.healthShortNumbers == nil and conf.hpFullValueShort ~= false), fakeAbsorb, absorbIcon == true) end
-            return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
-        end
+        htx.byHealth = healthTextByHealth and not healthTextByClass or false
+        htx.r, htx.g, htx.b, htx.alpha = hpTextR, hpTextG, hpTextB, textAlpha
+        hpTextR, hpTextG, hpTextB = GroupHealthTextColor(htx, fakeHP)
+        htx.delimiter = runtimeText.healthDelimiter or conf.textDelimiter or " - "
+        htx.short = runtimeText.healthShortNumbers == true or (runtimeText.healthShortNumbers == nil and conf.hpFullValueShort ~= false)
+        htx.leftMode, htx.centerMode, htx.rightMode = hpLeftMode, hpCenterMode, hpRightMode
+        htx.leftHide, htx.centerHide, htx.rightHide = hpLeftHidePercent, hpCenterHidePercent, hpRightHidePercent
+        htx.leftIcon = GroupSlotAbsorbIcon(runtimeText, conf,
+            runtimeText.healthReverse == true and "healthRightAbsorbIcon" or "healthLeftAbsorbIcon",
+            conf.hpTextReverse == true and "hpTextRightAbsorbIcon" or "hpTextLeftAbsorbIcon")
+        htx.centerIcon = GroupSlotAbsorbIcon(runtimeText, conf, "healthCenterAbsorbIcon", "hpTextCenterAbsorbIcon")
+        htx.rightIcon = GroupSlotAbsorbIcon(runtimeText, conf,
+            runtimeText.healthReverse == true and "healthLeftAbsorbIcon" or "healthRightAbsorbIcon",
+            conf.hpTextReverse == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon")
         PaintPreviewText(mock._hpLeftFS, hpLeftSize, hpLeftMode, "LEFT", "LEFT",
             pad4 + ConfigToOffset(runtimeText[hpRev and "healthRightX" or "healthLeftX"] or ((conf.hpOffsetX or 0) + (conf[hpRev and "hpTextRightOffsetX" or "hpTextLeftOffsetX"] or 0)), previewScale),
             ConfigToOffset(runtimeText[hpRev and "healthRightY" or "healthLeftY"] or ((conf.hpOffsetY or 0) + (conf[hpRev and "hpTextRightOffsetY" or "hpTextLeftOffsetY"] or 0) + baselineOffset), previewScale),
-            "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpLeftMode, hpLeftHidePercent,
-                runtimeText.healthReverse == true and "healthRightAbsorbIcon" or "healthLeftAbsorbIcon",
-                conf.hpTextReverse == true and "hpTextRightAbsorbIcon" or "hpTextLeftAbsorbIcon"))
+            "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpLeftMode, hpLeftHidePercent, htx.leftIcon, fakeHP))
         PaintPreviewText(mock._hpCenterFS, hpCenterSize, hpCenterMode, "CENTER", "CENTER",
             ConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0) + baselineOffset), previewScale),
-            "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpCenterMode, hpCenterHidePercent,
-                "healthCenterAbsorbIcon", "hpTextCenterAbsorbIcon"))
+            "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpCenterMode, hpCenterHidePercent, htx.centerIcon, fakeHP))
         PaintPreviewText(mock._hpRightFS, hpRightSize, hpRightMode, "RIGHT", "RIGHT",
             -pad4 + ConfigToOffset(runtimeText[hpRev and "healthLeftX" or "healthRightX"] or ((conf.hpOffsetX or 0) + (conf[hpRev and "hpTextLeftOffsetX" or "hpTextRightOffsetX"] or 0)), previewScale),
             ConfigToOffset(runtimeText[hpRev and "healthLeftY" or "healthRightY"] or ((conf.hpOffsetY or 0) + (conf[hpRev and "hpTextLeftOffsetY" or "hpTextRightOffsetY"] or 0) + baselineOffset), previewScale),
-            "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpRightMode, hpRightHidePercent,
-                runtimeText.healthReverse == true and "healthLeftAbsorbIcon" or "healthRightAbsorbIcon",
-                conf.hpTextReverse == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon"))
+            "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpRightMode, hpRightHidePercent, htx.rightIcon, fakeHP))
         st.SlotHidePercentSymbol, st.pad4 = SlotHidePercentSymbol, pad4
+end
+
+--- Animation tick for the health texts: values at the animated health and,
+--- when the colour follows health, the colour.
+function Stage.PaintHealthTexts(st, env)
+    local htx, mock, gf = st.healthText, st.mock, st.gf
+    if not htx then return end
+    local fakeHP = math.max(1, math.floor(htx.fakeMax * st.hpPct + 0.5))
+    mock._hpLeftFS:SetText(GroupHealthSlotText(gf, htx, htx.leftMode, htx.leftHide, htx.leftIcon, fakeHP))
+    mock._hpCenterFS:SetText(GroupHealthSlotText(gf, htx, htx.centerMode, htx.centerHide, htx.centerIcon, fakeHP))
+    mock._hpRightFS:SetText(GroupHealthSlotText(gf, htx, htx.rightMode, htx.rightHide, htx.rightIcon, fakeHP))
+    if htx.byHealth then
+        local r, g, b = GroupHealthTextColor(htx, fakeHP)
+        mock._hpLeftFS:SetTextColor(r, g, b, htx.alpha)
+        mock._hpCenterFS:SetTextColor(r, g, b, htx.alpha)
+        mock._hpRightFS:SetTextColor(r, g, b, htx.alpha)
+    end
 end
 
 --- Power text slots: sizes, modes, visibility and formatted text.
@@ -3158,32 +3518,44 @@ function Stage.RenderPowerText(st, env)
         elseif gf and gf.IsPowerTextEnabled then
             showPowerText = showText and gf.IsPowerTextEnabled(kind, conf)
         end
-        local fakePowMax = (scene.liveData and scene.liveData.powerMax) or 100
+        -- Kept on the box for the animation tick (Stage.PaintPowerTexts).
+        local ptx = st.self._msufGFPowerTextState
+        if not ptx then ptx = {}; st.self._msufGFPowerTextState = ptx end
+        st.powerText = ptx
+        ptx.fakeMax = (scene.liveData and scene.liveData.powerMax) or 100
         local fakePow = (not scene.animState and scene.liveData and scene.liveData.powerCur)
-            or max(0, floor(fakePowMax * powerPct + 0.5))
-        local powerDelimiter = runtimeText.powerDelimiter or conf.powerTextDelimiter or conf.textDelimiter or " - "
-        local function PreviewPowerText(mode, hidePercentSymbol)
-            if gf and gf.FormatPowerText then return gf.FormatPowerText(mode, fakePow, fakePowMax, powerDelimiter, nil, hidePercentSymbol) end
-            return mode == "PERCENT" and (hidePercentSymbol and "70" or "70%") or "70"
-        end
+            or max(0, floor(ptx.fakeMax * powerPct + 0.5))
+        ptx.delimiter = runtimeText.powerDelimiter or conf.powerTextDelimiter or conf.textDelimiter or " - "
         local powerLeftMode = runtimeText.powerLeft or conf.powerTextLeft or "NONE"
         local powerCenterMode = runtimeText.powerCenter or conf.powerTextCenter or "NONE"
         local powerRightMode = runtimeText.powerRight or conf.powerTextRight or "NONE"
         local powerLeftHidePercent = SlotHidePercentSymbol("powerLeftHidePercentSymbol", "powerTextLeftHidePercentSymbol")
         local powerCenterHidePercent = SlotHidePercentSymbol("powerCenterHidePercentSymbol", "powerTextCenterHidePercentSymbol")
         local powerRightHidePercent = SlotHidePercentSymbol("powerRightHidePercentSymbol", "powerTextRightHidePercentSymbol")
+        ptx.leftMode, ptx.centerMode, ptx.rightMode = powerLeftMode, powerCenterMode, powerRightMode
+        ptx.leftHide, ptx.centerHide, ptx.rightHide = powerLeftHidePercent, powerCenterHidePercent, powerRightHidePercent
         PaintPreviewText(mock._powerLeftFS, pwrLeftSize, powerLeftMode, "BOTTOMLEFT", "BOTTOMLEFT",
             pad4 + ConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0) + baselineOffset), previewScale),
-            "LEFT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerLeftMode, powerLeftHidePercent))
+            "LEFT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, GroupPowerSlotText(gf, ptx, powerLeftMode, powerLeftHidePercent, fakePow))
         PaintPreviewText(mock._powerCenterFS, pwrCenterSize, powerCenterMode, "BOTTOM", "BOTTOM",
             ConfigToOffset(runtimeText.powerCenterX or ((conf.powerOffsetX or 0) + (conf.powerTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0) + baselineOffset), previewScale),
-            "CENTER", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerCenterMode, powerCenterHidePercent))
+            "CENTER", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, GroupPowerSlotText(gf, ptx, powerCenterMode, powerCenterHidePercent, fakePow))
         PaintPreviewText(mock._powerRightFS, pwrRightSize, powerRightMode, "BOTTOMRIGHT", "BOTTOMRIGHT",
             -pad4 + ConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset), previewScale),
-            "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerRightMode, powerRightHidePercent))
+            "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, GroupPowerSlotText(gf, ptx, powerRightMode, powerRightHidePercent, fakePow))
+end
+
+--- Animation tick for the power texts: values at the animated power.
+function Stage.PaintPowerTexts(st, env)
+    local ptx, mock, gf = st.powerText, st.mock, st.gf
+    if not ptx then return end
+    local fakePow = math.max(0, math.floor(ptx.fakeMax * st.powerPct + 0.5))
+    mock._powerLeftFS:SetText(GroupPowerSlotText(gf, ptx, ptx.leftMode, ptx.leftHide, fakePow))
+    mock._powerCenterFS:SetText(GroupPowerSlotText(gf, ptx, ptx.centerMode, ptx.centerHide, fakePow))
+    mock._powerRightFS:SetText(GroupPowerSlotText(gf, ptx, ptx.rightMode, ptx.rightHide, fakePow))
 end
 
 --- Group block border, bounds guide and the aura lanes (RenderAuras), whose

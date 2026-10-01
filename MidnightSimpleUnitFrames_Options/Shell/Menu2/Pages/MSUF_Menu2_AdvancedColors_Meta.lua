@@ -3,9 +3,9 @@ MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 
--- Advanced Colors page: Assistant metadata.
+-- Advanced Colors page: Search metadata.
 -- Owns the semantic path -> setting/action key maps, the dynamic setting-key
--- lists, the reviewed Assistant dispositions and the Meta(...) builder behind
+-- lists, the reviewed Search dispositions and the Meta(...) builder behind
 -- every control on the Colors page. Split from MSUF_Menu2_AdvancedColors.lua:
 -- it loads right before that page and publishes through M.ColorsPage, which
 -- the page and its later siblings pick from.
@@ -211,49 +211,6 @@ local COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH = {
         "^[%a]+%.statusDNDTextColor$",
     },
 }
-local function ColorReviewedDisposition(path)
-    if path:match("^auras%.dispel%.[a-z]+%.enabled$") then
-        return "compound", "This switch adds or removes one optional entry in the shared dispel-type color map."
-    end
-    if path:match("^texture_layer%d*%.") then
-        return "compound", "This swatch writes the persisted RGB channels for one texture layer color as a single visible color."
-    end
-    if path:match("^castbar%.text_color%.") then
-        return "dynamic", "This control targets the castbar unit currently selected in the adjacent unit selector."
-    end
-    if path == "font.name_custom.color" then
-        return "compound", "This swatch writes the persisted custom name-color channels as a single visible color."
-    end
-    if path:match("^status_text%.color%.") then
-        return "dynamic", "This control targets the unit and status indicator currently selected in the adjacent selectors."
-    end
-    if path:match("^bar_gradient%.") then
-        return "dynamic", "This color targets the explicit Bars scope shared with the Health and Power gradient controls."
-    end
-    if path == "prediction.heal_color" then
-        return "dynamic", "This RGB swatch writes the three persisted heal-prediction color channels as one visible color."
-    end
-    if path:match("^level_difficulty%.[a-z_]+$") then
-        return "dynamic", "This swatch routes one visible color to the three persisted RGB channels for one level difficulty band."
-    end
-    if path == "bar.health_loss_color" or path == "bar.power_loss_color" then
-        return "dynamic", "This swatch routes one visible color to the three persisted RGB channels for one recent-loss effect."
-    end
-    if path == "group_frame.health.color" then
-        return "dynamic", "This swatch writes the active health-color mode across Party, Raid, and Mythic Raid."
-    end
-    if path:match("^group_frame%.") then
-        return "compound", "This shared control writes the same Group color option across Party, Raid, and Mythic Raid."
-    end
-    if path:match("^power%.editor%.") then
-        return "dynamic", "This control targets the power type currently selected in the adjacent resource selector."
-    end
-    if path:match("^class_power%.editor%.") or path:match("^class_power%.resource_slots%.")
-        or path:match("^class_power%.full_resource%.")
-    then
-        return "dynamic", "This control targets the Class Resource type currently selected in the adjacent resource selector."
-    end
-end
 local function Meta(path, classification, exact)
     exact = type(exact) == "table" and exact or {}
     if exact.settingKey == nil then
@@ -265,9 +222,8 @@ local function Meta(path, classification, exact)
     if exact.actionInputArg == nil then exact.actionInputArg = COLOR_ACTION_INPUT_BY_PATH[path] end
     if exact.actionFixedArgs == nil then exact.actionFixedArgs = COLOR_ACTION_FIXED_ARGS_BY_PATH[path] end
     if exact.settingKey == nil and exact.actionKey == nil then
-        exact.assistantDisposition, exact.assistantDispositionReason = ColorReviewedDisposition(path)
-        exact.assistantSettingKeys = COLOR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
-        exact.assistantSettingKeyPatterns = COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH[path]
+        exact.searchSettingKeys = COLOR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        exact.searchSettingKeyPatterns = COLOR_DYNAMIC_SETTING_PATTERNS_BY_PATH[path]
     end
     return ControlMeta("opt_colors", "advanced", path, classification, exact)
 end

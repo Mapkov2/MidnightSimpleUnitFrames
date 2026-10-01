@@ -163,17 +163,27 @@ local function Conf(k) local db=DB(); return db and db[k] end
 local CK = U.NormalizeUnitKey
 local UnitLabel = U.UnitLabel
 local UnitPageKey = U.UnitPageKey
-local UNIT_COPY_TARGETS = {
-    { key="player", label="Player" },
-    { key="target", label="Target" },
-    { key="focus", label="Focus" },
-    { key="focustarget", label="Focus Target" },
-    { key="targettarget", label="ToT" },
-    { key="pet", label="Pet" },
-    { key="pettarget", label="Pet Target" },
-    { key="boss", label="Boss" },
-    { key="arena", label="Arena" },
-}
+local UNIT_COPY_TARGETS = {}
+do
+    --- Only units this client has: "All units" would otherwise create focus,
+    --- boss or arena tables on clients without them (Client.SupportsUnit).
+    local client = MSUF and MSUF.Client
+    for _, target in ipairs({
+        { key="player", label="Player" },
+        { key="target", label="Target" },
+        { key="focus", label="Focus" },
+        { key="focustarget", label="Focus Target" },
+        { key="targettarget", label="ToT" },
+        { key="pet", label="Pet" },
+        { key="pettarget", label="Pet Target" },
+        { key="boss", label="Boss" },
+        { key="arena", label="Arena" },
+    }) do
+        if not (client and client.SupportsUnit) or client.SupportsUnit(target.key) then
+            UNIT_COPY_TARGETS[#UNIT_COPY_TARGETS + 1] = target
+        end
+    end
+end
 local San = Quick.San
 local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
 local CanonPowerBarUnitKey = _G.MSUF_CanonPowerBarUnitKey
@@ -653,7 +663,8 @@ function ResourcePopup.Sync()
     if not (cfg and conf) then return end
     local frame = cfg.getFrame and cfg.getFrame()
     if not frame then ResourcePopup.Close(); return end
-    resourceFrame._titleFS:SetText(Tr(cfg.resourceKind == "classpower" and "Class Resources" or "Detached power bar"))
+    resourceFrame._titleFS:SetText(cfg.resourceKind == "classpower" and Tr("Class Resources")
+        or (U.ElementLabel and U.ElementLabel(resourceFrame.resourceKey, cfg)) or Tr("Detached power bar"))
     Quick.SetBoxText(resourceFrame.xBox, conf[cfg.subframeOffsetXKey] or 0)
     Quick.SetBoxText(resourceFrame.yBox, conf[cfg.subframeOffsetYKey] or (cfg.resourceKind == "power" and -4 or 0))
     Quick.SetBoxText(resourceFrame.wBox, frame and floor(frame:GetWidth() + 0.5) or 0)
@@ -785,35 +796,4 @@ function ResourcePopup.RefreshHistory()
     if resourceFrame and resourceFrame:IsShown() and resourceFrame._refreshUndoRedo then
         resourceFrame._refreshUndoRedo()
     end
-end
-local ASSISTANT_UNIT_FIELDS = {
-    x = { "xBox" }, y = { "yBox" }, width = { "wBox" }, height = { "hBox" },
-    detachedX = { "dpbXBox" }, detachedY = { "dpbYBox" }, detachedWidth = { "dpbWBox" },
-    detachedHeight = { "dpbHBox" }, detachedLayer = { "dpbLevelBox" },
-    detached = { "detachBtn", true }, textOnBar = { "dpbTextBtn", true },
-    syncClass = { "dpbSyncBtn", true }, anchorClass = { "dpbAnchorBtn", true },
-}
-function UnitPopup.GetAssistantField(field)
-    if not (pf and pf.unit and pf:IsShown()) then return nil end
-    local spec = ASSISTANT_UNIT_FIELDS[field]
-    local widget = spec and pf[spec[1]]
-    if not widget then return nil end
-    if spec[2] then return widget._checked == true end
-    return tonumber(widget.GetText and widget:GetText())
-end
-function UnitPopup.SetAssistantField(field, value)
-    if BlockConfigCombatLocked() or not (pf and pf.unit and pf:IsShown()) then return false end
-    local spec = ASSISTANT_UNIT_FIELDS[field]
-    local widget = spec and pf[spec[1]]
-    if not widget then return false end
-    if spec[2] then
-        local checked = value == true
-        if widget.SetCheckedVisual then widget:SetCheckedVisual(checked) end
-        widget._checked = checked
-        if field == "detached" then ApplyDetachPower(checked) else Apply() end
-    else
-        Quick.SetBoxText(widget, tonumber(value))
-        Apply()
-    end
-    return UnitPopup.GetAssistantField(field) == (spec[2] and (value == true) or tonumber(value))
 end

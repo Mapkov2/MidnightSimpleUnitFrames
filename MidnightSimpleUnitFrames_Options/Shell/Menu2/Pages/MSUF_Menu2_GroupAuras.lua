@@ -45,7 +45,7 @@ local function AuraCatalogPageKey(value, fallback)
     local token = tostring(value or ""):lower():gsub("[^%w_%-]+", "-"):gsub("^%-+", ""):gsub("%-+$", "")
     return token ~= "" and token or (fallback or "gf_auras")
 end
-local function AuraControlMeta(ctx, path, classification, assistantContract)
+local function AuraControlMeta(ctx, path, classification, routeContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
     path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
     local pageKey = AuraCatalogPageKey(ctx and ctx.key or M.activeKey, "gf_auras")
@@ -58,19 +58,12 @@ local function AuraControlMeta(ctx, path, classification, assistantContract)
         classification = classification or "setting",
         ephemeral = classification == "ephemeral" or nil,
     }
-    if type(assistantContract) == "string" and assistantContract ~= "" then
-        meta.settingKey = assistantContract
-    elseif type(assistantContract) == "table" then
-        meta.settingKey = assistantContract.settingKey
-        meta.assistantDisposition = assistantContract.assistantDisposition
-        meta.assistantDispositionReason = assistantContract.assistantDispositionReason
-        meta.assistantSettingKeys = assistantContract.assistantSettingKeys
-        meta.assistantSettingKeyPatterns = assistantContract.assistantSettingKeyPatterns
-    end
-    if meta.classification == "setting" or meta.classification == "action" then
-        meta.assistantDisposition = meta.assistantDisposition or "dynamic"
-        meta.assistantDispositionReason = meta.assistantDispositionReason
-            or "This control targets the currently selected Group scope and Aura lane."
+    if type(routeContract) == "string" and routeContract ~= "" then
+        meta.settingKey = routeContract
+    elseif type(routeContract) == "table" then
+        meta.settingKey = routeContract.settingKey
+        meta.searchSettingKeys = routeContract.searchSettingKeys
+        meta.searchSettingKeyPatterns = routeContract.searchSettingKeyPatterns
     end
     return meta
 end
@@ -283,9 +276,7 @@ local function BindAuraRootEnabled(ctx, widget)
             RefreshContext(ctx)
         end,
         AuraControlMeta(ctx, "group-workspace.root.enabled", nil, {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "This master switch targets the selected Group scope's persisted Aura backend gate.",
-            assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.enabled"),
+            searchSettingKeys = GroupAuraSettingKeys(scope, ".auras.enabled"),
         }))
     return widget
 end
@@ -310,9 +301,7 @@ local function BindAuraLaneEnabled(ctx, widget, groupKey)
             RefreshContext(ctx)
         end,
         AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(groupKey, "lane") .. ".enabled", nil, {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "Visible targets the selected Group scope and Aura lane and also activates the Aura backend when enabled.",
-            assistantSettingKeys = GroupAuraSettingKeys(scope,
+            searchSettingKeys = GroupAuraSettingKeys(scope,
                 ".auras." .. groupKey .. ".enabled"),
         }))
     return widget
@@ -458,12 +447,10 @@ local function BuildGFAuras(ctx)
                 RefreshContext(ctx)
             end,
             AuraControlMeta(ctx, "group-workspace.lane.externals.auto-blacklist-buffs", nil, {
-                assistantDisposition = "dynamic",
-                assistantDispositionReason = "This toggle targets duplicate handling between the selected Group scope's External Defensive and Buff containers.",
                 -- This workspace control is rebuilt for Party and Raid states
                 -- under one stable catalog identity. Keep its finite route set
                 -- complete regardless of which state was captured last.
-                assistantSettingKeys = AllGroupAuraSettingKeys(".auras.externals.autoBlacklistBuffs"),
+                searchSettingKeys = AllGroupAuraSettingKeys(".auras.externals.autoBlacklistBuffs"),
             }))
         if type(M.AddTooltip) == "function" then
             M.AddTooltip(autoBlacklist, "Auto-blacklist from Buffs",
@@ -486,18 +473,16 @@ local function BuildGFAuras(ctx)
         local growthX = anchorX + dropdownW + gap
         local function Dropdown(label, x, values, key, fallback, y, width)
             width = width or dropdownW
-            local assistantContract
+            local routeContract
             if lane == "externals" and key == "growth" then
-                assistantContract = {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = "Growth targets the selected Group scope's External Defensive container.",
-                    assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.growth"),
+                routeContract = {
+                    searchSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals.growth"),
                 }
             end
             local widget = BindLiveAuraDropdown(W.Dropdown(section, label, values, width),
                 scope, lane, key, fallback,
                 AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key), nil,
-                    assistantContract))
+                    routeContract))
             W.MoveWidget(widget, section, x, y or -34, width, "LEFT")
             controls[#controls + 1] = widget
             return widget
@@ -506,18 +491,16 @@ local function BuildGFAuras(ctx)
         Dropdown("Growth", growthX, growthValues, "growth", defaults.growth)
         local col4 = floor((inner - gap * 3) / 4)
         local function Slider(label, col, y, minValue, maxValue, key, fallback)
-            local assistantContract
+            local routeContract
             if lane == "externals" and (key == "layer" or key == "max") then
-                assistantContract = {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = (key == "layer" and "Layer" or "Max") .. " targets the selected Group scope's External Defensive container.",
-                    assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals." .. key),
+                routeContract = {
+                    searchSettingKeys = GroupAuraSettingKeys(scope, ".auras.externals." .. key),
                 }
             end
             local widget = BindLiveAuraSlider(W.Slider(section, label, minValue, maxValue, 1, col4),
                 scope, lane, key, fallback,
                 AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key), nil,
-                    assistantContract))
+                    routeContract))
             W.MoveWidget(widget, section, 24 + (col - 1) * (col4 + gap), y, col4)
             controls[#controls + 1] = widget
             return widget
@@ -531,9 +514,7 @@ local function BuildGFAuras(ctx)
             scope, lane, "iconScale", 100,
             AuraControlMeta(ctx,
                 "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout.icon-scale", nil, {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = "Icon Scale targets the selected Group scope's Aura container.",
-                    assistantSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. tostring(lane) .. ".iconScale"),
+                    searchSettingKeys = GroupAuraSettingKeys(scope, ".auras." .. tostring(lane) .. ".iconScale"),
                 }))
         W.MoveWidget(iconScale, section, 24 + 2 * (col4 + gap), -146, col4)
         controls[#controls + 1] = iconScale

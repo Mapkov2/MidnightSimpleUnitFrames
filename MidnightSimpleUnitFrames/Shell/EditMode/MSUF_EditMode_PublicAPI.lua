@@ -581,19 +581,32 @@ function External.GetInspectorValues(key)
         state and tonumber(state.width), state and tonumber(state.height)
 end
 
+--- MSUF's own adapters (owner "MSUF.*") hear about the session first: an
+--- error in another addon's callback still surfaces on the normal Lua error
+--- path, but can no longer skip MSUF's own session start or teardown.
+local function IsOwnListener(owner)
+    return type(owner) == "string" and owner:sub(1, 5) == "MSUF."
+end
+
 local function NotifySession(enabled, reason)
+    for owner, listener in pairs(listeners) do
+        if IsOwnListener(owner) then listener.callback(enabled, reason) end
+    end
     for _, record in pairs(records) do
         if record.onSessionChanged then Invoke(record, "onSessionChanged", enabled, reason) end
     end
-    for _, listener in pairs(listeners) do
-        listener.callback(enabled, reason)
+    for owner, listener in pairs(listeners) do
+        if not IsOwnListener(owner) then listener.callback(enabled, reason) end
     end
 end
 
 function External.BeginSession()
     if sessionActive then return true end
-    sessionActive, sessionSnapshot = true, {}
-    for key, record in pairs(records) do sessionSnapshot[key] = Capture(record) end
+    --- The session starts only with its entry snapshot complete, so a capture
+    --- that raises leaves no half-filled snapshot for the next entry to reuse.
+    local snapshot = {}
+    for key, record in pairs(records) do snapshot[key] = Capture(record) end
+    sessionActive, sessionSnapshot = true, snapshot
     NotifySession(true, "enter")
     return true
 end

@@ -24,7 +24,7 @@ local function AuraCatalogPageKey(value, fallback)
     return token ~= "" and token or (fallback or "auras")
 end
 
-local function AuraControlMeta(ctx, path, classification, assistantContract)
+local function AuraControlMeta(ctx, path, classification, routeContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
     path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
     local pageKey = AuraCatalogPageKey(ctx and ctx.key or M.activeKey, "auras")
@@ -37,29 +37,21 @@ local function AuraControlMeta(ctx, path, classification, assistantContract)
         classification = classification or "setting",
         ephemeral = classification == "ephemeral" or nil,
     }
-    if type(assistantContract) == "string" and assistantContract ~= "" then
-        meta.settingKey = assistantContract
-    elseif type(assistantContract) == "table" then
-        meta.settingKey = assistantContract.settingKey
-        meta.actionKey = assistantContract.actionKey
-        meta.actionFixedArgs = assistantContract.actionFixedArgs
-        meta.actionInputArg = assistantContract.actionInputArg
-        meta.assistantDisposition = assistantContract.assistantDisposition
-        meta.assistantDispositionReason = assistantContract.assistantDispositionReason
-        meta.assistantSettingKeys = assistantContract.assistantSettingKeys
-        meta.assistantSettingKeyPatterns = assistantContract.assistantSettingKeyPatterns
-    end
-    if (meta.classification == "setting" or meta.classification == "action")
-        and not meta.settingKey and not meta.actionKey and not meta.assistantDisposition
-    then
-        meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "This Aura control targets the selected scope, lane, tool, or container on the current Aura workspace."
+    if type(routeContract) == "string" and routeContract ~= "" then
+        meta.settingKey = routeContract
+    elseif type(routeContract) == "table" then
+        meta.settingKey = routeContract.settingKey
+        meta.actionKey = routeContract.actionKey
+        meta.actionFixedArgs = routeContract.actionFixedArgs
+        meta.actionInputArg = routeContract.actionInputArg
+        meta.searchSettingKeys = routeContract.searchSettingKeys
+        meta.searchSettingKeyPatterns = routeContract.searchSettingKeyPatterns
     end
     return meta
 end
 
-local function AuraControlMetaAtVisiblePath(ctx, identityPath, visiblePath, classification, assistantContract)
-    local meta = AuraControlMeta(ctx, identityPath, classification, assistantContract)
+local function AuraControlMetaAtVisiblePath(ctx, identityPath, visiblePath, classification, routeContract)
+    local meta = AuraControlMeta(ctx, identityPath, classification, routeContract)
     visiblePath = tostring(visiblePath or identityPath or "control"):lower():gsub("[^%w%._/-]+", "-")
     visiblePath = visiblePath:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
     meta.controlPath = "auras/" .. visiblePath:gsub("%.", "/")
@@ -76,16 +68,12 @@ local function RegisterAuraControl(ctx, widget, label, kind, path, classificatio
         meta.navigationKey = navigationKey
     elseif classification == "action" then
         if type(navigationKey) == "string" then meta.actionKey = navigationKey end
-        if meta.actionKey then
-            meta.assistantDisposition = nil
-            meta.assistantDispositionReason = nil
-        end
     end
     M.RegisterSearchWidget(widget, meta)
     return widget
 end
 
-local function RegisterAuraTextAction(ctx, widget, input, label, path, assistantContract)
+local function RegisterAuraTextAction(ctx, widget, input, label, path, routeContract)
     if widget then
         widget._msuf2CommandAction = {
             kind = "button",
@@ -99,7 +87,7 @@ local function RegisterAuraTextAction(ctx, widget, input, label, path, assistant
             end,
         }
     end
-    return RegisterAuraControl(ctx, widget, label, "button", path, "action", assistantContract)
+    return RegisterAuraControl(ctx, widget, label, "button", path, "action", routeContract)
 end
 
 local function AddTooltip(widget, title, body)

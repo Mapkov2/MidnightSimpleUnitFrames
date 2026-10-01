@@ -59,15 +59,12 @@ local function Meta(path, classification, exact)
     elseif path == "scope.overrides.reset" then
         resolved.actionKey = resolved.actionKey or "reset_all_scoped_global_font_overrides"
     elseif (classification or "setting") == "setting" then
-        resolved.assistantDisposition = resolved.assistantDisposition or "dynamic"
-        resolved.assistantDispositionReason = resolved.assistantDispositionReason
-            or "This control reads and writes the explicitly selected Shared, unit, Party, or Raid font scope; some modes intentionally span multiple stored representation keys."
-        resolved.assistantSettingKeys = resolved.assistantSettingKeys or FONT_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+        resolved.searchSettingKeys = resolved.searchSettingKeys or FONT_DYNAMIC_SETTING_KEYS_BY_PATH[path]
         local suffixes = FONT_DYNAMIC_SETTING_SUFFIXES_BY_PATH[path]
-        if suffixes and not resolved.assistantSettingKeyPatterns then
-            resolved.assistantSettingKeyPatterns = {}
+        if suffixes and not resolved.searchSettingKeyPatterns then
+            resolved.searchSettingKeyPatterns = {}
             for i = 1, #suffixes do
-                resolved.assistantSettingKeyPatterns[i] = "^fontScope%.[%w_]+%." .. suffixes[i] .. "$"
+                resolved.searchSettingKeyPatterns[i] = "^fontScope%.[%w_]+%." .. suffixes[i] .. "$"
             end
         end
     end

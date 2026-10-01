@@ -9,13 +9,16 @@ MSUF.MSUF2 = M
 -- popup. Split from MSUF_Menu2_Bindings.lua: it loads right after the History
 -- sibling, picks the shared aliases from M and publishes the same M.* names
 -- (M.PageHasReset, M.BuildPageResetWarning, M.ResetPageToDefaults,
--- M.ShowPageResetConfirm), so pages and the Assistant keep calling them.
--- The Assistant calls M.ResetPageToDefaults from the main addon, which can run
--- before the LoadOnDemand Options addon has installed M.Format (Theme.lua).
+-- M.ShowPageResetConfirm), so pages and the toolbar keep calling them.
+-- M.Format comes from MSUF_Menu2_Theme.lua, which the manifest loads first.
 local Fmt = M.Format
 local KS, KSW, WL = M.KeySet, M.KeySetFromWords, M.WordList
 local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
 if type(ApplyService) ~= "table" then error("MSUF Menu2 ApplyService missing") end
+-- Client capabilities, read once at load (Game/Shared/Initialize.lua).
+local Client = MSUF.Client or {}
+local SUPPORTS_ELLESMERE_EDIT_MODE = Client.SupportsEllesmereEditMode == true
+local SUPPORTS_BLIZZARD_EDIT_MODE = Client.SupportsBlizzardEditMode == true
 
 
 local DeepCopy = M.DeepCopy
@@ -509,12 +512,18 @@ local function ApplyAfterPageReset(pageKey, info)
         local db = M.EnsureDB()
         local general = db and db.general
         _G.MSUF_NSRTNicknames_ApplySetting()
-        _G.MSUF_EllesmereEditMode_SetEnabled(not (type(general) == "table" and general.ellesmereEditModeIntegration == false))
+        -- Kernel/MSUF_RuntimeContracts.lua requires these two adapters only
+        -- where the client supports them; Classic flavors load neither.
+        if SUPPORTS_ELLESMERE_EDIT_MODE then
+            _G.MSUF_EllesmereEditMode_SetEnabled(not (type(general) == "table" and general.ellesmereEditModeIntegration == false))
+        end
         _G.MSUF_Grid2EditMode_SetEnabled(not (type(general) == "table" and general.grid2EditModeIntegration == false))
         _G.MSUF_DetailsEditMode_SetEnabled(not (type(general) == "table" and general.detailsEditModeIntegration == false))
         _G.MSUF_DominosEditMode_SetEnabled(not (type(general) == "table" and general.dominosEditModeIntegration == false))
         _G.MSUF_DandersEditMode_SetEnabled(not (type(general) == "table" and general.dandersEditModeIntegration == false))
-        _G.MSUF_BlizzardEditMode_SetEnabled(not (type(general) == "table" and general.blizzardEditModeIntegration == false))
+        if SUPPORTS_BLIZZARD_EDIT_MODE then
+            _G.MSUF_BlizzardEditMode_SetEnabled(not (type(general) == "table" and general.blizzardEditModeIntegration == false))
+        end
     end
     -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
     -- secure group headers or Auras3 lanes unnecessarily.
@@ -586,8 +595,10 @@ local function PurgeRuntimeCachesForReset(info)
         -- A global bump is intended here (unlike a single-control edit): a page
         -- reset means every scope's cached aura lane layout should recompute.
         a3.BumpRuntimeConfig()
+        -- The spell-indicator renderer is a Midnight/Forever module; Classic
+        -- flavors never load Auras3/MSUF_Auras3_SpellIndicators.lua.
         local siRuntime = a3.SpellIndicators
-        siRuntime.RequestGeometryRepair()
+        if siRuntime and siRuntime.RequestGeometryRepair then siRuntime.RequestGeometryRepair() end
     end
     local gf = MSUF and MSUF.GF
     if gf then

@@ -4,6 +4,7 @@
     <Script file="Pages\MSUF_Menu2_GroupSpecs.lua"/>
     <Script file="Pages\MSUF_Menu2_Group.lua"/>
     <Script file="Pages\MSUF_Menu2_Group_SpellModel.lua"/>
+    <Script file="Pages\MSUF_Menu2_GroupLayoutAdditional.lua"/>
     <Script file="Pages\MSUF_Menu2_GroupLayout.lua"/>
     <Script file="Pages\MSUF_Menu2_GroupBars.lua"/>
     <Script file="Pages\MSUF_Menu2_GroupAuras.lua"/>
@@ -16,6 +17,7 @@
     <Script file="Pages\MSUF_Menu2_AdvancedColors_Meta.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedColors.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedColors_Group.lua"/>
+    <Script file="Pages\MSUF_Menu2_ResourceExtras.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedColors_Resources.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedColors_Context.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedGameplay.lua"/>
@@ -24,6 +26,9 @@
     <Script file="Preview\MSUF_Menu2_ClassPowerPreview.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedClassPower.lua"/>
     <Script file="Pages\MSUF_Menu2_SwingTimers.lua"/>
+    <Script file="Pages\MSUF_Menu2_ProfileSearch.lua"/>
+    <Script file="Pages\MSUF_Menu2_ProfileVariants.lua"/>
+    <Script file="Pages\MSUF_Menu2_ProfileSync.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedProfiles.lua"/>
     <Script file="Pages\MSUF_Menu2_AuraSettings.lua"/>
     <Script file="Pages\MSUF_Menu2_AuraControls.lua"/>

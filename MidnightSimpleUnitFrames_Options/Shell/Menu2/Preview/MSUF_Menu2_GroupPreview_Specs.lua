@@ -62,11 +62,15 @@ gf_indicators=indicators
         LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 }, RIGHT = { 1, 0.5 },
         BOTTOMLEFT = { 0, 0 }, BOTTOM = { 0.5, 0 }, BOTTOMRIGHT = { 1, 0 },
     },
+    -- Icon file IDs, not spell IDs: the same icons the unit preview's mock
+    -- auras use (Preview/MSUF_Menu2_UnitPreview_Auras.lua), which exist on
+    -- every client. Spell IDs resolved to the question mark wherever the
+    -- spell does not exist (Classic Era, TBC, WoW Forever).
     AURA_MOCK_ICON_IDS = {
-        buff = { 774, 17, 139, 33076, 33763, 81749 },
-        trackedBuff = { 10060, 53563, 1022, 6940, 1044, 194384 },
-        debuff = { 589, 980, 172, 12294, 1943, 5782 },
-        external = { 6940, 1022, 33206, 116849, 47788, 357170 },
+        buff = { 135987, 136116, 135932, 136085, 132333, 135981 },
+        trackedBuff = { 136048, 135964, 135987, 136085, 135981, 136116 },
+        debuff = { 136118, 136139, 136197, 135817, 132851, 136188 },
+        external = { 135964, 136048, 135932, 132333, 136116, 135987 },
     },
     AURA_GROWTH_TABLE = {
         RIGHTDOWN = { px = 1, py = 0, sx = 0, sy = -1 }, RIGHTUP = { px = 1, py = 0, sx = 0, sy = 1 },

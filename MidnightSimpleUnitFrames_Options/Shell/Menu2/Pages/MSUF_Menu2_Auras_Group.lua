@@ -128,12 +128,12 @@ local function GroupScopeKinds(scope)
     if scope == "party" then return "party" end
     return "raid", "mythicraid"
 end
-local GroupAssistantSettingKeys = M.GroupAuraSettingKeys
-local function GroupAssistantBlacklistSettingKeys(scope, suffix)
+local GroupSearchSettingKeys = M.GroupAuraSettingKeys
+local function GroupSearchBlacklistSettingKeys(scope, suffix)
     suffix = tostring(suffix or "")
     if scope == "party" then return { "gf_party" .. suffix } end
     -- Raid/Mythic share this editor and backing blacklist operation, but the
-    -- Assistant Registry intentionally exposes one canonical Raid list key.
+    -- Search Registry intentionally exposes one canonical Raid list key.
     return { "gf_raid" .. suffix }
 end
 local function GroupConf(kind)
@@ -295,7 +295,7 @@ local function BindGroupRootSwitch(ctx, parent, label, x, y, width, scope, key, 
         end,
         AuraControlMeta(ctx, "group-style.root." .. AuraCatalogToken(key)))
 end
-local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, scope, groupKey, key, defaultValue, mode, afterSet, assistantContract)
+local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, scope, groupKey, key, defaultValue, mode, afterSet, routeContract)
     return BindSlider(ctx, parent, label, x, y, minVal, maxVal, step, width,
         function()
             local group = GFReadGroup(scope, groupKey)
@@ -306,7 +306,7 @@ local function BindGroupSlider(ctx, parent, label, x, y, minVal, maxVal, step, w
             GFWriteGroupValue(scope, groupKey, key, v, mode or "visual")
             if afterSet then afterSet(v) end
         end,
-        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key), nil, assistantContract))
+        AuraControlMeta(ctx, "group-style.lane." .. AuraCatalogToken(groupKey, "lane") .. "." .. AuraCatalogToken(key), nil, routeContract))
 end
 local function BindGroupDropdown(ctx, parent, label, x, y, values, width, scope, groupKey, key, defaultValue, mode, afterSet, controlMeta)
     return BindDropdown(ctx, parent, label, x, y, values, width,
@@ -416,9 +416,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
     local basicsRightX = 24 + basicsCol + basicsGap
     BindGroupSlider(ctx, frameBasics, "Icon Zoom (%)", 24, -48, 100, 200, 1, basicsCol,
         scope, lane, "iconZoom", 100, "visual", RefreshStylePreview, {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "Icon Zoom targets the selected Group scope's selected Aura Style lane.",
-            assistantSettingKeys = GroupAssistantSettingKeys(scope, ".auras." .. lane .. ".iconZoom"),
+            searchSettingKeys = GroupSearchSettingKeys(scope, ".auras." .. lane .. ".iconZoom"),
         })
     AddAuraTooltipHelp(BindGroupSwitch(ctx, frameBasics, "Show Tooltip", basicsRightX, -48, basicsCol,
         scope, lane, "showTooltip", true, "visual", RefreshStylePreview))
@@ -603,11 +601,9 @@ local function BuildGroupOrdering(ctx, b, scope, lane)
     lane = lane == "externals" and "externals" or (lane == "debuff" and "debuff" or "buff")
     local section = b:Section("Ordering", 156)
     local width = section and (section._msuf2Width or section.GetWidth and section:GetWidth()) or b.width or 720
-    local function OrderingAssistantContract(suffix)
+    local function OrderingSearchRouteMetadata(suffix)
         return {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "This ordering control targets the selected Group Aura lane; Raid and Mythic Raid share this workspace.",
-            assistantSettingKeys = GroupAssistantSettingKeys(scope, ".auras." .. lane .. "." .. suffix),
+            searchSettingKeys = GroupSearchSettingKeys(scope, ".auras." .. lane .. "." .. suffix),
         }
     end
     local groupSortMethod = BindGroupDropdown(ctx, section, "Sort By", 24, -48, AuraSortMethodValues(lane), width - 48,
@@ -615,7 +611,7 @@ local function BuildGroupOrdering(ctx, b, scope, lane)
         AuraControlMetaAtVisiblePath(ctx,
             "group-style.lane." .. AuraCatalogToken(lane) .. ".sortmethod",
             "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-method",
-            nil, OrderingAssistantContract("sortMethod")))
+            nil, OrderingSearchRouteMetadata("sortMethod")))
     AddTooltip(groupSortMethod, "Aura sorting", "Only relevant sorting methods are shown for helpful and harmful auras.")
     local groupSortDirection = BindDropdown(ctx, section, "Order", 24, -104, AURA_SORT_DIRECTION_VALUES, width - 48,
         function()
@@ -628,7 +624,7 @@ local function BuildGroupOrdering(ctx, b, scope, lane)
         AuraControlMetaAtVisiblePath(ctx,
             "group-style.lane." .. AuraCatalogToken(lane) .. ".sort-direction",
             "group-workspace.lane." .. AuraCatalogToken(lane) .. ".ordering.sort-direction",
-            nil, OrderingAssistantContract("sortReverse")))
+            nil, OrderingSearchRouteMetadata("sortReverse")))
     AddTooltip(groupSortDirection, "Aura sort order", "Reversed flips the complete priority order.")
 end
 local GFReadBlacklistCat = Model.ReadGroupBlacklistCategory
@@ -696,10 +692,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then
             ConfigureMaxDurationSlider(BindSlider(ctx, filter, "Maximum duration", 16, -230, 0, 180, 1, filterW - 32,
                 ReadMaxDuration, WriteMaxDuration,
-                AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".max-duration", nil, {
-                    assistantDisposition = "compound",
-                    assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-                })))
+                AuraControlMeta(ctx, "group-filter.lane." .. AuraCatalogToken(lane) .. ".max-duration", nil, {})))
         end
     end
     if not showBlacklist then return end
@@ -897,9 +890,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 GFWriteGroupValue(scope, lane, "filterToken", value == true and "Player" or "ALL", "auras")
             end,
             AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil, {
-                assistantDisposition = "dynamic",
-                assistantDispositionReason = "This control targets the selected Group scope and Aura lane.",
-                assistantSettingKeys = GroupAssistantSettingKeys(scope,
+                searchSettingKeys = GroupSearchSettingKeys(scope,
                     ".auras." .. lane .. ".filterToken"),
             }))
         AddTooltip(onlyMine, "Only mine", lane == "debuff"
@@ -917,9 +908,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 end
             end,
             AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil, {
-                assistantDisposition = "dynamic",
-                assistantDispositionReason = "This control targets the selected Group scope and Aura lane.",
-                assistantSettingKeys = GroupAssistantBlacklistSettingKeys(scope,
+                searchSettingKeys = GroupSearchBlacklistSettingKeys(scope,
                     ".auras." .. lane .. ".blacklist.hidePermanent"),
             }))
         AddTooltip(hidePermanent, "Hide permanent auras", "Always excludes auras without a duration.")
@@ -946,9 +935,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
         end,
         CreateHidePermanentWriter(scope, lane),
         AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.hide-permanent", nil, {
-            assistantDisposition = "dynamic",
-            assistantDispositionReason = "This control targets the selected Group scope and Aura lane.",
-            assistantSettingKeys = GroupAssistantBlacklistSettingKeys(scope,
+            searchSettingKeys = GroupSearchBlacklistSettingKeys(scope,
                 ".auras." .. lane .. ".blacklist.hidePermanent"),
         }))
     AddTooltip(hidePermanent, "Hide permanent auras",
@@ -972,9 +959,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
             end,
             AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.native." .. AuraCatalogToken(item.value), nil,
                 item.value == selectedFilterToken and {
-                    assistantDisposition = "dynamic",
-                    assistantDispositionReason = "The active native-filter choice represents Filter Token for the selected Group scope and Aura lane.",
-                    assistantSettingKeys = GroupAssistantSettingKeys(scope,
+                    searchSettingKeys = GroupSearchSettingKeys(scope,
                         ".auras." .. lane .. ".filterToken"),
                 } or nil))
         AddTooltip(control, item.tooltipTitle or item.text or item.value,
@@ -987,10 +972,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                     and Model.ReadGroupBlacklistMaxDuration(scope, lane) or 0
             end,
             CreateMaxDurationWriter(scope, lane),
-            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {
-                assistantDisposition = "compound",
-                assistantDispositionReason = "The native candidate-filter duration limit has no Assistant setting contract yet.",
-            })))
+            AuraControlMeta(ctx, "group-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.max-duration", nil, {})))
     end
 end
 

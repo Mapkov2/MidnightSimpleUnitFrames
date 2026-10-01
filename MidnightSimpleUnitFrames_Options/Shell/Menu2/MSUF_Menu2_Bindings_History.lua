@@ -23,7 +23,10 @@ local DeepCopy = M.DeepCopy
 local QueueMenuRefresh = M.QueueMenuRefresh
 local CancelQueuedMenuRefresh = M.CancelQueuedMenuRefresh
 local HISTORY_LIMIT = 500
+-- Synchronous CaptureHistory nesting only; an open transaction is tracked by
+-- historyTransaction itself because it legitimately spans many frames.
 local historyDepth = 0
+local historyDepthStamp
 local historyRestoring = false
 local historySessionActive = false
 local historySessionBaseSnapshot
@@ -34,8 +37,45 @@ local historySurfaces = {}
 local historySurfaceMarkers = {}
 local historySurfaceCount = 0
 local deferredHistoryCommit
+local historySnapshotFailureReported = false
 local function WipeTable(t)
     for k in pairs(t) do t[k] = nil end
+end
+-- CaptureHistory runs fn synchronously, so a depth still held in a later frame
+-- belongs to an fn that raised past it (the client already reported that
+-- error). Without pcall nothing can restore the counter on that error path, so
+-- every entry point heals it first; GetTime() is constant within one frame.
+local function HistoryFrameStamp()
+    local now = _G.GetTime
+    return now and now() or 0
+end
+local function HealLeakedHistoryDepth()
+    if historyDepth > 0 and historyDepthStamp ~= HistoryFrameStamp() then
+        historyDepth = 0
+        historyDepthStamp = nil
+    end
+end
+local function EnterHistoryDepth()
+    if historyDepth == 0 then historyDepthStamp = HistoryFrameStamp() end
+    historyDepth = historyDepth + 1
+end
+local function LeaveHistoryDepth()
+    if historyDepth > 0 then historyDepth = historyDepth - 1 end
+    if historyDepth == 0 then historyDepthStamp = nil end
+end
+local function HistoryBusy()
+    HealLeakedHistoryDepth()
+    return historyDepth > 0 or historyTransaction ~= nil or historyRestoring
+end
+-- A profile holding a value the snapshot refuses (a function, NaN, a cycle...)
+-- cannot be undone; its edits still apply, and the reason is reported once.
+local function ReportHistorySnapshotFailure()
+    if historySnapshotFailureReported then return end
+    historySnapshotFailureReported = true
+    if type(MSUF.ReportError) == "function" then
+        MSUF.ReportError("Menu2 history", "the active profile holds a value the undo snapshot cannot copy;"
+            .. " menu changes apply without undo until that value is removed")
+    end
 end
 local function EnsureHistoryStacks()
     M.historyUndo = M.historyUndo or {}
@@ -145,19 +185,76 @@ end
 local function SnapshotDB()
     -- Spec-profile routing is the only persisted options family outside the
     -- active profile DB. Keep its tiny per-character state in the same history
-    -- transaction so Assistant/UI undo and redo remain truthful for every
+    -- transaction so menu undo and redo remain truthful for every
     -- setting without copying the complete GlobalDB/profile collection.
     local externalAPI = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
     local externalState = type(externalAPI) == "table"
         and type(externalAPI._CaptureHistorySnapshot) == "function"
         and externalAPI._CaptureHistorySnapshot() or nil
+    local profileDB
+    if MSUF.ProfileVariants then profileDB=MSUF.ProfileVariants.BaseSnapshot(M.EnsureDB(),true)
+    else profileDB=DeepCopy(M.EnsureDB()) end
+    if type(profileDB)~="table" then return nil end
     return {
         _msuf2HistoryState = true,
-        profileDB = DeepCopy(M.EnsureDB()),
+        profileDB = profileDB,
         profileRouting = SnapshotProfileRouting(),
         externalEditMode = externalState,
         externalProviders = SnapshotHistoryProviders(),
     }
+end
+-- Profile identity of each snapshot (MSUF.ProfileRuntime.Identity). It sits
+-- beside the snapshot, never inside it: the guided tour keeps a snapshot in
+-- SavedVariables, which must not serialize a profile table. A snapshot without
+-- a stamp (one saved before a reload) counts as another profile's.
+local snapshotProfiles = setmetatable({}, { __mode = "k" })
+local SnapshotUnstampedDB = SnapshotDB
+SnapshotDB = function()
+    local snapshot = SnapshotUnstampedDB()
+    local runtime = MSUF.ProfileRuntime
+    if type(snapshot) == "table" and runtime and runtime.Identity then
+        snapshotProfiles[snapshot] = runtime.Identity()
+    end
+    return snapshot
+end
+local function IsForeignProfileSnapshot(snapshot)
+    local runtime = MSUF.ProfileRuntime
+    if type(snapshot) ~= "table" or not (runtime and runtime.IsCurrentIdentity) then return false end
+    return runtime.IsCurrentIdentity(snapshotProfiles[snapshot]) ~= true
+end
+-- A profile switch, reset, rename or import leaves every older snapshot
+-- pointing at another profile. Those are dropped, never replayed: the history
+-- restarts on the active profile.
+local function RebaseHistoryToActiveProfile()
+    if historyTransaction then M.CancelHistoryTransaction() end
+    return M.ClearHistory()
+end
+local function StackHoldsForeignSnapshot(stack)
+    for i = 1, #stack do
+        local entry = stack[i]
+        if IsForeignProfileSnapshot(entry.before) or IsForeignProfileSnapshot(entry.after) then return true end
+    end
+    return false
+end
+-- Called by MSUF.ProfileRuntime after every profile apply; a no-op unless a
+-- stored snapshot belongs to another profile. Refused while combat locks
+-- configuration (the next apply retries; restores refuse foreign snapshots).
+function M.RebaseHistoryForProfileChange()
+    if IsConfigCombatLocked() then return false end
+    local foreign = (deferredHistoryCommit and IsForeignProfileSnapshot(deferredHistoryCommit.before))
+        or (historyTransaction and IsForeignProfileSnapshot(historyTransaction.before))
+        or IsForeignProfileSnapshot(historySessionBaseSnapshot)
+        or IsForeignProfileSnapshot(historySessionSnapshot)
+    for _, marker in pairs(historySurfaceMarkers) do
+        if foreign then break end
+        foreign = IsForeignProfileSnapshot(marker.snapshot)
+    end
+    if not foreign then
+        local undo, redo = EnsureHistoryStacks()
+        foreign = StackHoldsForeignSnapshot(undo) or StackHoldsForeignSnapshot(redo)
+    end
+    if not foreign then return true end
+    return RebaseHistoryToActiveProfile()
 end
 local function HistoryProfileDB(snapshot)
     if type(snapshot) == "table" and snapshot._msuf2HistoryState == true then return snapshot.profileDB end
@@ -198,7 +295,7 @@ end
 -- the newly registered element's real state; session discard remains owned by
 -- the Edit Mode API's independent entry snapshot.
 function M.SyncExternalHistoryState()
-    if historyRestoring or historyDepth > 0 or historyTransaction then return false end
+    if HistoryBusy() then return false end
     if not historySessionActive then return false end
     historySessionSnapshot = SnapshotDB()
     NotifyHistoryChanged(false)
@@ -283,6 +380,7 @@ local function CommandFeedback(text, kind, seconds)
     if type(fn) == "function" then fn(text, kind or "info", seconds or 1.25) end
 end
 local function PushHistory(label, source, before, after)
+    if type(before)~="table" or type(after)~="table" then return false end
     if DeepEqual(before, after) then return false end
     if historySessionActive and type(historySessionBaseSnapshot) ~= "table" then historySessionBaseSnapshot = before end
     local stack, redo = EnsureHistoryStacks()
@@ -529,8 +627,9 @@ local function FlushApplyServiceNow()
     return false
 end
 
-local function ApplyHistorySnapshot(snapshot, reason, source)
+local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     if type(snapshot) ~= "table" then return false end
+    if trustProfile ~= true and IsForeignProfileSnapshot(snapshot) then return false, "profile_mismatch" end
     local profileDB = HistoryProfileDB(snapshot)
     if type(profileDB) ~= "table" then return false end
     historyRestoring = true
@@ -543,7 +642,21 @@ local function ApplyHistorySnapshot(snapshot, reason, source)
     local willEnable = type(restoredUi) == "table" and restoredUi.Enabled == true
     local scaleChanged = wasEnabled ~= willEnable
         or (willEnable and tonumber(activeUi.Scale) ~= tonumber(restoredUi.Scale))
+    if MSUF.ProfileVariants then MSUF.ProfileVariants.Restore(false) end
+    if MSUF.ProfileFields and MSUF.ProfileFields.RestoreExternal then
+        local restored=MSUF.ProfileFields.RestoreExternal(activeDB,profileDB)
+        -- A refused restore must not leave the live profile without its active
+        -- variant overlays, which Restore(false) stripped above.
+        if not restored then
+            historyRestoring=false
+            if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
+            return false
+        end
+        profileDB=MSUF.ProfileFields.StripExternal(DeepCopy(profileDB))
+    end
     DeepReplace(activeDB, profileDB)
+    if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
+    if MSUF.ProfileFields and MSUF.ProfileFields.ApplyExternal then MSUF.ProfileFields.ApplyExternal(reason or "MSUF2_HISTORY") end
     RestoreProfileRouting(snapshot)
     local externalAPI = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
     if type(externalAPI) == "table" and type(externalAPI._RestoreHistorySnapshot) == "function"
@@ -621,16 +734,16 @@ function M.RestoreGuidedTourRestorePoint(snapshot)
     local expectedProfile = type(snapshot) == "table" and tostring(snapshot._msuf2GuidedProfileName or "") or ""
     local activeProfile = tostring(_G.MSUF_ActiveProfile or "Default")
     if expectedProfile == "" or activeProfile ~= expectedProfile then return false, "profile_mismatch" end
-    return ApplyHistorySnapshot(snapshot, "MSUF2_GUIDED_TOUR_RESTORE", "guided_tour:restore_point")
+    return ApplyHistorySnapshot(snapshot, "MSUF2_GUIDED_TOUR_RESTORE", "guided_tour:restore_point", true)
 end
 
 function M.IsHistoryCapturing()
-    return historyDepth > 0 or historyRestoring
+    return HistoryBusy()
 end
 function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
     if M.BlockCombatAction() then return false end
-    if historyDepth > 0 or historyRestoring then
+    if HistoryBusy() then
         local result = fn()
 
         if result ~= false then
@@ -642,18 +755,24 @@ function M.CaptureHistory(label, source, fn)
         end
         return result
     end
-    if historyTransaction and source and historyTransaction.source ~= source then
-        M.CommitHistoryTransaction()
-        return M.CaptureHistory(label, source, fn)
-    end
+    -- Without a before-snapshot the edit still applies, only without an undo
+    -- entry; the held depth keeps nested writes from retrying the snapshot.
     local before = CurrentHistorySnapshot()
-    historyDepth = historyDepth + 1
+    local snapshotted = type(before) == "table"
+    if not snapshotted then ReportHistorySnapshotFailure() end
+    EnterHistoryDepth()
     local result = fn()
-    historyDepth = historyDepth - 1
+    LeaveHistoryDepth()
 
     if result == false then return result end
-    local pushed = PushHistory(label, source, before, SnapshotDB())
-    if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
+    local pushed = false
+    if snapshotted then
+        local after = SnapshotDB()
+        if type(after) ~= "table" then ReportHistorySnapshotFailure() end
+        pushed = PushHistory(label, source, before, after)
+    end
+    if MSUF.ProfileVariants then MSUF.ProfileVariants.RequestApply("PROFILE_VARIANT_SETTING") end
+    if (pushed or not snapshotted) and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return result
 end
 function M.RunWithHistory(label, source, fn)
@@ -700,6 +819,12 @@ function M.StartHistorySession(surface)
     if historySurfaces[surface] then
         M.FlushDeferredHistory()
         return true
+    end
+    if not historySessionActive then
+        -- A fresh session starts quiescent: a capture or restore that raised in
+        -- an earlier session must not keep refusing every later edit.
+        HealLeakedHistoryDepth()
+        historyRestoring = false
     end
     local entrySnapshot
     if deferredHistoryCommit or not historySessionActive or type(historySessionSnapshot) ~= "table" then
@@ -756,6 +881,10 @@ function M.CancelHistorySurface(surface, restoreState)
     surface = tostring(surface or "menu")
     local marker = historySurfaceMarkers[surface]
     if not marker then return false end
+    if IsForeignProfileSnapshot(marker.snapshot) then
+        RebaseHistoryToActiveProfile()
+        return false
+    end
     if historyTransaction then M.CancelHistoryTransaction() end
     if restoreState == true and type(marker.snapshot) == "table" then
         local profileDB = HistoryProfileDB(marker.snapshot)
@@ -780,11 +909,10 @@ function M.CheckpointHistory(label, source)
     -- Runtime apply helpers checkpoint under their own source while a bound
     -- slider transaction is live. They are nested effects of the same user
     -- gesture, not a new action, and must never close that transaction.
-    if historyDepth > 0 or historyRestoring then return false end
-    if historyTransaction and source and historyTransaction.source ~= source then M.CommitHistoryTransaction() end
-    if not historySessionActive or historyTransaction then return false end
+    if HistoryBusy() or not historySessionActive then return false end
     local before = CurrentHistorySnapshot()
     local after = SnapshotDB()
+    if type(before) ~= "table" or type(after) ~= "table" then ReportHistorySnapshotFailure() end
     local pushed = PushHistory(label or "MSUF2 change", source or "menu:checkpoint", before, after)
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return pushed
@@ -792,23 +920,26 @@ end
 function M.BeginHistoryTransaction(label, source)
     if M.BlockCombatAction() then return false end
     if historyTransaction and source and historyTransaction.source ~= source then M.CommitHistoryTransaction() end
-    if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
+    if HistoryBusy() or not historySessionActive then return false end
+    local before = CurrentHistorySnapshot()
+    if type(before) ~= "table" then ReportHistorySnapshotFailure() end
     historyTransaction = {
         label = label or "MSUF2 change",
         source = source or "menu:transaction",
-        before = CurrentHistorySnapshot(),
+        before = before,
     }
-    historyDepth = historyDepth + 1
     return true
 end
 function M.PrepareHistoryChange(label, source)
     if M.BlockCombatAction() then return nil end
-    if historyDepth > 0 or historyRestoring or historyTransaction then return nil end
+    if HistoryBusy() then return nil end
+    local before = CurrentHistorySnapshot()
+    if type(before) ~= "table" then ReportHistorySnapshotFailure() end
     return {
         _msuf2PreparedHistory = true,
         label = label or "MSUF change",
         source = source or "external:change",
-        before = CurrentHistorySnapshot(),
+        before = before,
     }
 end
 function M.CommitPreparedHistory(prepared)
@@ -825,7 +956,6 @@ function M.CommitHistoryTransaction()
     local tx = historyTransaction
     if not tx then return false end
     historyTransaction = nil
-    historyDepth = math.max(0, historyDepth - 1)
     if IsConfigCombatLocked() then
         DeferHistoryCommit(tx.label, tx.source, tx.before)
         return false
@@ -837,14 +967,14 @@ end
 function M.CancelHistoryTransaction()
     if not historyTransaction then return false end
     historyTransaction = nil
-    historyDepth = math.max(0, historyDepth - 1)
     return true
 end
 function M.ResetHistorySession()
     if M.BlockCombatAction() then return false end
     if not historySessionActive or type(historySessionBaseSnapshot) ~= "table" then return false end
-    local ok = ApplyHistorySnapshot(historySessionBaseSnapshot, "MSUF2_HISTORY_RESET_SESSION")
+    local ok, why = ApplyHistorySnapshot(historySessionBaseSnapshot, "MSUF2_HISTORY_RESET_SESSION")
     if ok then M.ClearHistory() end
+    if why == "profile_mismatch" then RebaseHistoryToActiveProfile() end
     if ok then CommandFeedback("Session changes reset", "ok", 1.4) end
     return ok
 end
@@ -887,12 +1017,14 @@ function M.Undo()
     local undo, redo = EnsureHistoryStacks()
     local entry = table.remove(undo)
     if not entry then return false end
-    local ok = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO", entry.source)
+    local ok, why = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO", entry.source)
     if ok then
         redo[#redo + 1] = entry
         if historySessionActive and type(historySessionBaseSnapshot) == "table" then
             historySessionDirty = not DeepEqual(historySessionBaseSnapshot, entry.before)
         end
+    elseif why == "profile_mismatch" then
+        RebaseHistoryToActiveProfile()
     else
         undo[#undo + 1] = entry
     end
@@ -906,12 +1038,14 @@ function M.Redo()
     local undo, redo = EnsureHistoryStacks()
     local entry = table.remove(redo)
     if not entry then return false end
-    local ok = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO", entry.source)
+    local ok, why = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO", entry.source)
     if ok then
         undo[#undo + 1] = entry
         if historySessionActive and type(historySessionBaseSnapshot) == "table" then
             historySessionDirty = not DeepEqual(historySessionBaseSnapshot, entry.after)
         end
+    elseif why == "profile_mismatch" then
+        RebaseHistoryToActiveProfile()
     else
         redo[#redo + 1] = entry
     end
@@ -937,7 +1071,7 @@ function M.RequestUnitApply(unit, reason, opts)
 end
 function M.SetUnitValue(unit, key, value, reason, opts)
     if M.BlockCombatAction() then return false end
-    if historyDepth == 0 and not historyRestoring then
+    if not HistoryBusy() then
         return M.CaptureHistory(tostring(key), "unit:" .. tostring(unit) .. ":" .. tostring(key), function()
             return M.SetUnitValue(unit, key, value, reason, opts)
         end)
@@ -961,7 +1095,7 @@ function M.RequestGeneralApply(reason, opts)
 end
 function M.SetGeneralValue(key, value, reason, opts)
     if M.BlockCombatAction() then return false end
-    if historyDepth == 0 and not historyRestoring then
+    if not HistoryBusy() then
         return M.CaptureHistory(tostring(key), "general:" .. tostring(key), function()
             return M.SetGeneralValue(key, value, reason, opts)
         end)

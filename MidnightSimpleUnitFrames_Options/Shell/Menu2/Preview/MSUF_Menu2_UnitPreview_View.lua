@@ -238,7 +238,7 @@ local function RefreshHandleSelectionVisuals(box)
                 kind = "button",
                 historyMode = "none",
                 canExecute = function() return targetHandle ~= nil end,
-                set = function() return OpenPreviewHandleSettings(targetHandle, "assistant") end,
+                set = function() return OpenPreviewHandleSettings(targetHandle, "search") end,
             }
         end
         RegisterUnitPreviewControl(gear, "handle." .. tostring(selected._key) .. ".open_settings",
@@ -487,7 +487,7 @@ end
 
 --- Move one explicitly named handle on the currently visible Unit preview.
 ---
---- This is the deterministic Assistant/Edit Mode entry point. It deliberately
+--- This is the deterministic Search/Edit Mode entry point. It deliberately
 --- does not consult the shared Edit Mode nudge target or the currently selected
 --- mover. The write is accepted only after exact DB readback; a failed readback
 --- is rolled back before returning false.
@@ -774,7 +774,7 @@ local function MakeHandle(preview, key, fields, label, color)
             gear._msuf2UnitPreviewOpenCommand = {
                 kind = "button",
                 historyMode = "none",
-                set = function() return OpenPreviewHandleSettings(h, "assistant") end,
+                set = function() return OpenPreviewHandleSettings(h, "search") end,
             }
         end
     end

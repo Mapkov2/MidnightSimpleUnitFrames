@@ -1,5 +1,5 @@
 -- Menu2 search query aliases: maps natural search wording to known pages and controls.
--- Data should stay deterministic and side-effect free so Search and Assistant can share it.
+-- Data stays deterministic and side-effect free so localized search can reuse canonical terms.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 
@@ -270,7 +270,7 @@ einheitenfenster=unit frame|unitframe|frames
 spieler=player|player frame|playerframe
 spielerframe=player frame|playerframe|unit frame
 ziel=target|target frame|targetframe
-zielframe=target frame|targetframe|unit frame
+zielframe=target frame|targetframe
 zielziel=target of target|targettarget|tot
 tot=target of target|targettarget|target target
 targettarget=target of target|tot|target target
@@ -437,3 +437,193 @@ runen=runes|runic power|class resources
 eclipse=eclipse|class resources|druid
 stagger=stagger|class resources|brewmaster
 ]]
+
+-- Later blocks add words to a key; they never replace its meaning. Assigning
+-- used to swap "color" (bar, unit and class colors) for castbar terms.
+local function AddAliasTerms(key, terms)
+    local list = Data.QUERY_ALIASES[key]
+    if not list then
+        Data.QUERY_ALIASES[key] = TermList(terms)
+        return
+    end
+    local seen = {}
+    for i = 1, #list do seen[list[i]] = true end
+    for term in tostring(terms or ""):gmatch("[^|]+") do
+        if not seen[term] then
+            seen[term] = true
+            list[#list + 1] = term
+        end
+    end
+end
+
+Data.CONTROL_QUERY_TARGETS = {
+    ["tracked buffs"] = { pageKey = "suite_cooldownManager" },
+    ["received buffs"] = { pageKey = "suite_cooldownManager" },
+    ["raid"] = { pageKey = "gf_layout" },
+    ["schlachtzug"] = { pageKey = "gf_layout" },
+    ["ridden mount"] = { settingSuffix = "tooltipDetails.unitMount" },
+    ["mount"] = { settingSuffix = "tooltipDetails.unitMount" },
+    ["nebenhand"] = { settingKey = "swingTimers.main.offhandLane" },
+    ["3d portrait"] = { settingSuffix = ".portraitRender" },
+    ["3d portraet"] = { settingSuffix = ".portraitRender" },
+    ["3d porträt"] = { settingSuffix = ".portraitRender" },
+    ["drachen spiegeln"] = { settingSuffix = ".portraitDragonFlip" },
+    ["drachenspiegeln"] = { settingSuffix = ".portraitDragonFlip" },
+    ["dragon flip"] = { settingSuffix = ".portraitDragonFlip" },
+    ["zaehne zusammenbeissen"] = { settingKey = "bars.showIgnorePain" },
+    ["zähne zusammenbeißen"] = { settingKey = "bars.showIgnorePain" },
+    ["zahne zusammenbeissen"] = { settingKey = "bars.showIgnorePain" },
+    ["mana vorschau"] = { settingKey = "bars.manaUpcomingCost" },
+    ["mana preview"] = { settingKey = "bars.manaUpcomingCost" },
+    ["profilvariante"] = { controlSuffix = ".variant.select" },
+    ["profile variants"] = { controlSuffix = ".variant.select" },
+    ["profile variant"] = { controlSuffix = ".variant.select" },
+    ["profilsynchronisierung"] = { controlSuffix = ".sync.group.select" },
+    ["profil synchronisieren"] = { controlSuffix = ".sync.group.select" },
+    ["profile sync"] = { controlSuffix = ".sync.group.select" },
+    ["profile synchronization"] = { controlSuffix = ".sync.group.select" },
+    ["profile synchronisation"] = { controlSuffix = ".sync.group.select" },
+    ["variante aufnehmen"] = { controlSuffix = ".variant.values.edit" },
+}
+
+
+-- Compact native wording for common feature searches. Search routing still resolves only indexed controls/pages.
+AddAliasTerms("zielframe", "target frame|target size|target scale")
+AddAliasTerms("zielrahmen", "target frame|target size|target scale")
+AddAliasTerms("targetframe", "target frame|target size|target scale")
+AddAliasTerms("targetframesize", "target frame|target size|target scale")
+AddAliasTerms("castbarfarbe", "castbar|cast bar color|castbar color")
+AddAliasTerms("partyframeshidden", "party frames|group frames|layout|hidden|visibility")
+AddAliasTerms("taschen", "bags|backpack|inventory")
+AddAliasTerms("sacs", "bags|backpack|inventory")
+AddAliasTerms("bolsas", "bags|backpack|inventory")
+AddAliasTerms("가방", "bags|backpack|inventory")
+AddAliasTerms("背包", "bags|backpack|inventory")
+AddAliasTerms("сумки", "bags|backpack|inventory")
+AddAliasTerms("minikarte", "minimap|minimap icon|miscellaneous")
+AddAliasTerms("minicarte", "minimap|minimap icon|miscellaneous")
+AddAliasTerms("мини карта", "minimap|minimap icon|miscellaneous")
+AddAliasTerms("小地图", "minimap|minimap icon|miscellaneous")
+AddAliasTerms("小地圖", "minimap|minimap icon|miscellaneous")
+AddAliasTerms("cooldowns", "cooldown|cooldown manager|cooldown timers")
+AddAliasTerms("재사용 대기시간", "cooldown|cooldown manager|cooldown timers")
+AddAliasTerms("冷却", "cooldown|cooldown manager|cooldown timers")
+AddAliasTerms("冷卻", "cooldown|cooldown manager|cooldown timers")
+
+Data.SEARCH_EXAMPLES = {
+    enUS = { {"Target size", "target size", "uf_target"}, {"Cast bar color", "castbar color", "opt_castbar"}, {"Hidden party frames", "party frames hidden", "gf_layout"}, {"Bags", "bags", "suite_bags"}, {"Minimap", "minimap icon"}, {"Cooldowns", "cooldown timers", "suite_cooldownManager"} },
+    enGB = { {"Target size", "target size", "uf_target"}, {"Cast bar colour", "castbar colour", "opt_castbar"}, {"Hidden party frames", "party frames hidden", "gf_layout"}, {"Bags", "bags", "suite_bags"}, {"Minimap", "minimap icon"}, {"Cooldowns", "cooldown timers", "suite_cooldownManager"} },
+    deDE = { {"Zielframe Größe", "zielframe groesser", "uf_target"}, {"Zauberleistenfarbe", "castbar farbe", "opt_castbar"}, {"Versteckte Gruppenrahmen", "gruppenrahmen verborgen", "gf_layout"}, {"Taschen", "taschen", "suite_bags"}, {"Minikarte", "minikarte", nil}, {"Abklingzeiten", "abklingzeiten", "suite_cooldownManager"} },
+    esES = { {"Tamaño del objetivo", "tamaño marco objetivo", "uf_target"}, {"Color de la barra de lanzamiento", "color barra lanzamiento", "opt_castbar"}, {"Marcos de grupo ocultos", "marcos de grupo ocultos", "gf_layout"}, {"Bolsas", "bolsas", "suite_bags"}, {"Minimapa", "minimapa", nil}, {"Reutilizaciones", "tiempos de reutilización", "suite_cooldownManager"} },
+    esMX = { {"Tamaño del objetivo", "tamaño marco objetivo", "uf_target"}, {"Color de la barra de lanzamiento", "color barra lanzamiento", "opt_castbar"}, {"Marcos de grupo ocultos", "marcos de grupo ocultos", "gf_layout"}, {"Bolsas", "bolsas", "suite_bags"}, {"Minimapa", "minimapa", nil}, {"Reutilizaciones", "tiempos de reutilización", "suite_cooldownManager"} },
+    frFR = { {"Taille de la cible", "taille cadre cible", "uf_target"}, {"Couleur de barre d'incantation", "couleur barre incantation", "opt_castbar"}, {"Cadres de groupe cachés", "cadres groupe cachés", "gf_layout"}, {"Sacs", "sacs", "suite_bags"}, {"Mini-carte", "minicarte", nil}, {"Temps de recharge", "temps de recharge", "suite_cooldownManager"} },
+    itIT = { {"Dimensione del bersaglio", "dimensione riquadro bersaglio", "uf_target"}, {"Colore barra di lancio", "colore barra lancio", "opt_castbar"}, {"Riquadri gruppo nascosti", "riquadri gruppo nascosti", "gf_layout"}, {"Borse", "borse", "suite_bags"}, {"Minimappa", "minimappa", nil}, {"Tempi di recupero", "tempi di recupero", "suite_cooldownManager"} },
+    ptBR = { {"Tamanho do alvo", "tamanho quadro alvo", "uf_target"}, {"Cor da barra de lançamento", "cor barra lancamento", "opt_castbar"}, {"Quadros de grupo ocultos", "quadros grupo ocultos", "gf_layout"}, {"Bolsas", "bolsas", "suite_bags"}, {"Minimapa", "minimapa", nil}, {"Recargas", "recarga", "suite_cooldownManager"} },
+    ruRU = { {"Размер цели", "размер рамки цели", "uf_target"}, {"Цвет полосы заклинания", "цвет полосы заклинания", "opt_castbar"}, {"Скрытые групповые рамки", "скрытые рамки группы", "gf_layout"}, {"Сумки", "сумки", "suite_bags"}, {"Миникарта", "мини карта", nil}, {"Перезарядка", "перезарядка", "suite_cooldownManager"} },
+    koKR = { {"대상 프레임 크기", "대상 프레임 크기", "uf_target"}, {"시전 바 색상", "시전 바 색상", "opt_castbar"}, {"숨겨진 파티 프레임", "숨겨진 파티 프레임", "gf_layout"}, {"가방", "가방", "suite_bags"}, {"미니맵", "미니맵", nil}, {"재사용 대기시간", "재사용 대기시간", "suite_cooldownManager"} },
+    zhCN = { {"目标框体大小", "目标大小", "uf_target"}, {"施法条颜色", "施法条颜色", "opt_castbar"}, {"隐藏的小队框体", "隐藏小队框体", "gf_layout"}, {"背包", "背包", "suite_bags"}, {"小地图", "小地图", nil}, {"冷却", "冷却", "suite_cooldownManager"} },
+    zhTW = { {"目標框架大小", "目標大小", "uf_target"}, {"施法條顏色", "施法條顏色", "opt_castbar"}, {"隱藏的小隊框架", "隱藏小隊框架", "gf_layout"}, {"背包", "背包", "suite_bags"}, {"小地圖", "小地圖", nil}, {"冷卻", "冷卻", "suite_cooldownManager"} },
+}
+
+
+
+
+-- Common localized query components used by the example phrases above.
+-- A color word adds color terms only: a bare "castbar" there matched every castbar row.
+AddAliasTerms("groesser", "target size|increase|scale")
+AddAliasTerms("größer", "target size|increase|scale")
+AddAliasTerms("farbe", "color|castbar color")
+AddAliasTerms("gruppenrahmen", "party frames|group frames|layout")
+AddAliasTerms("verborgen", "hidden|party frames|group frames")
+AddAliasTerms("tamaño", "target size|target frame|scale")
+AddAliasTerms("marco", "frame|frames|party frames")
+AddAliasTerms("objetivo", "target|target frame|target size")
+AddAliasTerms("color", "color|castbar color")
+AddAliasTerms("ocultos", "hidden|party frames|group frames")
+AddAliasTerms("ocultosgrupo", "hidden|party frames|group frames")
+AddAliasTerms("grupo", "group|party frames|group frames")
+AddAliasTerms("taille", "target size|target frame|scale")
+AddAliasTerms("cadre", "frame|frames|party frames")
+AddAliasTerms("cible", "target|target frame|target size")
+AddAliasTerms("couleur", "color|castbar color")
+AddAliasTerms("cachés", "hidden|party frames|group frames")
+AddAliasTerms("dimensione", "target size|target frame|scale")
+AddAliasTerms("riquadro", "frame|frames|party frames")
+AddAliasTerms("bersaglio", "target|target frame|target size")
+AddAliasTerms("colore", "color|castbar color")
+AddAliasTerms("nascosti", "hidden|party frames|group frames")
+AddAliasTerms("gruppo", "group|party frames|group frames")
+AddAliasTerms("tamanho", "target size|target frame|scale")
+AddAliasTerms("quadro", "frame|frames|party frames")
+AddAliasTerms("alvo", "target|target frame|target size")
+AddAliasTerms("cor", "color|castbar color")
+AddAliasTerms("размер", "target size|target frame|scale")
+AddAliasTerms("рамки", "frame|frames|party frames")
+AddAliasTerms("цели", "target|target frame|target size")
+AddAliasTerms("цвет", "color|castbar color")
+AddAliasTerms("полосы", "castbar|cast bar|castbar color")
+AddAliasTerms("скрытые", "hidden|party frames|group frames")
+AddAliasTerms("группы", "group|party frames|group frames")
+AddAliasTerms("대상", "target|target frame|target size")
+AddAliasTerms("프레임", "frame|frames|party frames")
+AddAliasTerms("크기", "target size|scale")
+AddAliasTerms("시전", "castbar|cast bar|castbar color")
+AddAliasTerms("바", "castbar|cast bar|castbar color")
+AddAliasTerms("색상", "color|castbar color")
+AddAliasTerms("숨겨진", "hidden|party frames|group frames")
+AddAliasTerms("파티", "party|party frames|group frames")
+AddAliasTerms("目标框体大小", "target frame|target size|scale")
+AddAliasTerms("施法条颜色", "castbar|castbar color|color")
+AddAliasTerms("隐藏小队框体", "hidden|party frames|group frames")
+AddAliasTerms("目標框架大小", "target frame|target size|scale")
+AddAliasTerms("施法條顏色", "castbar|castbar color|color")
+AddAliasTerms("隱藏小隊框架", "hidden|party frames|group frames")
+
+-- CJK query segments used by the compact locale examples.
+AddAliasTerms("目标", "target|target frame")
+AddAliasTerms("框体", "frame|unit frame")
+AddAliasTerms("大小", "width|height|scale|size")
+AddAliasTerms("施法条", "castbar|cast bar")
+AddAliasTerms("颜色", "color|castbar color")
+AddAliasTerms("隐藏", "hidden|hide|party frames")
+AddAliasTerms("小队", "party|party frames|group frames")
+AddAliasTerms("目標", "target|target frame")
+AddAliasTerms("框架", "frame|unit frame")
+AddAliasTerms("顏色", "color|castbar color")
+AddAliasTerms("隱藏", "hidden|hide|party frames")
+AddAliasTerms("隊伍", "party|party frames|group frames")
+
+
+AddAliasTerms("施法条颜色", "castbar|cast bar|interrupt")
+AddAliasTerms("施法條顏色", "castbar|cast bar|interrupt")
+
+
+-- Natural sentence grammar and compact domain nouns for localized questions.
+local localizedHardStops = [[
+estan mis sono dove sont mes le la les du des ma mia mie miei onde estao minhas meus где мои 를 을 은 는 이 가 에서 에 어디에 있나요 설정은 设置在哪里 設定在哪裡 在哪里 在哪裡 我想
+]]
+for word in localizedHardStops:gmatch("%S+") do Data.STOP_WORDS[word] = true end
+local localizedSoftStops = [[ quiero cambiar je veux changer voglio cambiare quero mudar хочу изменить 변경하고 싶어요 ]]
+for word in localizedSoftStops:gmatch("%S+") do Data.QUERY_SOFT_STOP_WORDS[word] = true end
+local AddLocalizedAlias = AddAliasTerms
+AddLocalizedAlias("borse", "bags|backpack|inventory")
+AddLocalizedAlias("borsa", "bags|backpack|inventory")
+AddLocalizedAlias("bolsa", "bags|backpack|inventory")
+AddLocalizedAlias("bolsas", "bags|backpack|inventory")
+AddLocalizedAlias("sac", "bags|backpack|inventory")
+AddLocalizedAlias("sacs", "bags|backpack|inventory")
+AddLocalizedAlias("taschen", "bags|backpack|inventory")
+AddLocalizedAlias("сумки", "bags|backpack|inventory")
+AddLocalizedAlias("가방", "bags|backpack|inventory")
+AddLocalizedAlias("背包", "bags|backpack|inventory")
+AddLocalizedAlias("recarga", "cooldown|cooldown manager|cooldown timers")
+AddLocalizedAlias("recargas", "cooldown|cooldown manager|cooldown timers")
+AddLocalizedAlias("перезарядка", "cooldown manager|cooldown timers|менеджер восстановления|времени восстановления")
+
+
+-- Additional inflected sentence fillers, kept separate from feature vocabulary.
+for word in ([[ ich den ]]):gmatch("%S+") do Data.STOP_WORDS[word] = true end
+for word in ([[ möchte machen ]]):gmatch("%S+") do Data.QUERY_SOFT_STOP_WORDS[word] = true end
+
+AddLocalizedAlias("调大", "target size|width|height|scale")
+AddLocalizedAlias("放大", "target size|width|height|scale")

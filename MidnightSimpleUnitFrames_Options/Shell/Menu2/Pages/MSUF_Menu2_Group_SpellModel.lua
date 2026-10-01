@@ -73,6 +73,27 @@ local function AuraGroup(kind, groupKey)
     root[groupKey] = root[groupKey] or {}
     return root[groupKey]
 end
+-- The deep-style keys GF.EnsureSpellIndicatorStyle fills, read once from a
+-- scratch scope. A complete style block skips the call: it builds its defaults
+-- table on every call, and the group preview reads this model ~16 times per
+-- repaint.
+local spellStyleKeys
+local function SpellStyleComplete(gf, si)
+    local style = si.style
+    if type(style) ~= "table" or style.iconShape ~= nil then return false end
+    if not spellStyleKeys then
+        local probe = {}
+        gf.EnsureSpellIndicatorStyle(probe)
+        spellStyleKeys = {}
+        for key in pairs(probe.spellIndicators and probe.spellIndicators.style or {}) do
+            spellStyleKeys[#spellStyleKeys + 1] = key
+        end
+    end
+    for i = 1, #spellStyleKeys do
+        if style[spellStyleKeys[i]] == nil then return false end
+    end
+    return #spellStyleKeys > 0
+end
 local function SpellIndicators(kind)
     local conf = Conf(kind)
     if type(conf.spellIndicators) ~= "table" then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, strata = "AUTO", iconZoom = 100, iconScale = 100 } end
@@ -81,7 +102,10 @@ local function SpellIndicators(kind)
     if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100 end
     if conf.spellIndicators.iconScale == nil then conf.spellIndicators.iconScale = 100 end
     local gf = GF()
-    if gf and type(gf.EnsureSpellIndicatorStyle) == "function" then gf.EnsureSpellIndicatorStyle(conf) end
+    if gf and type(gf.EnsureSpellIndicatorStyle) == "function"
+        and not SpellStyleComplete(gf, conf.spellIndicators) then
+        gf.EnsureSpellIndicatorStyle(conf)
+    end
     return conf.spellIndicators
 end
 local function IconStyleValues()

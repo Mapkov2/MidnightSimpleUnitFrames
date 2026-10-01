@@ -92,6 +92,55 @@ local function LayoutInfo()
     return info
 end
 
+--- The cache must not outlive a layout change made outside MSUF: Blizzard's
+--- own Edit Mode saving or switching a layout, or a spec change selecting
+--- another one. Each MSUF save or layout switch takes a token, because the
+--- client answers it with EDIT_MODE_LAYOUTS_UPDATED too (and GetLayouts stays
+--- one behind until then); any other EDIT_MODE_LAYOUTS_UPDATED drops the
+--- cache. Tokens expire, so a lost echo cannot hide a foreign update for long.
+local ownSavesPending, ownSaveExpiry = 0, 0
+local OWN_SAVE_ECHO_SECONDS = 3
+
+local function Now()
+    return type(_G.GetTime) == "function" and _G.GetTime() or 0
+end
+
+local function OwnSaveInFlight()
+    if ownSavesPending > 0 and Now() > ownSaveExpiry then ownSavesPending = 0 end
+    return ownSavesPending > 0
+end
+
+local function NoteOwnLayoutWrite()
+    ownSavesPending = ownSavesPending + 1
+    ownSaveExpiry = Now() + OWN_SAVE_ECHO_SECONDS
+end
+
+local function SaveLayouts(api, info)
+    NoteOwnLayoutWrite()
+    api.SaveLayouts(info)
+end
+
+local function OnLayoutsUpdated()
+    if OwnSaveInFlight() then
+        ownSavesPending = ownSavesPending - 1
+        return
+    end
+    InvalidateLayoutCache()
+end
+
+--- A layout switch need not send EDIT_MODE_LAYOUTS_UPDATED (a spec change
+--- re-reads the layouts silently), so every MSUF capture and save first asks
+--- the client which layout is active. A different one replaces the cache with
+--- the fresh list. Skipped while an MSUF write is unanswered: the fresh list
+--- would be one behind.
+local function ValidateLayoutCache()
+    if not cachedLayoutInfo or OwnSaveInFlight() then return end
+    local api = Blizzard()
+    local fresh = api and api.GetLayouts()
+    if type(fresh) ~= "table" or type(fresh.layouts) ~= "table" then return end
+    if fresh.activeLayout ~= cachedLayoutInfo.activeLayout then cachedLayoutInfo = fresh end
+end
+
 local function ActiveLayout()
     local info = LayoutInfo()
     if not info then return nil end
@@ -170,6 +219,7 @@ local function EnsureEditableLayout(name)
     for i = 1, #info.layouts do
         local layout = info.layouts[i]
         if type(layout) == "table" and layout.layoutName == name then
+            NoteOwnLayoutWrite()
             api.SetActiveLayout(presets + i)
             info.activeLayout = presets + i
             cachedLayoutInfo = info
@@ -197,7 +247,8 @@ local function EnsureEditableLayout(name)
         layoutName = name, layoutType = layoutType, systems = systems,
         interfaceStyle = interfaceStyle,
     }
-    api.SaveLayouts(info)
+    SaveLayouts(api, info)
+    NoteOwnLayoutWrite()
     api.SetActiveLayout(presets + #info.layouts)
     --- The just-saved table IS the truth; a re-fetch here would serve the
     --- pre-creation state and hide the new layout from every reader.
@@ -589,12 +640,13 @@ end
 
 local function MutateSettings(systemId, changes)
     if InCombat() then return false end
+    ValidateLayoutCache()
     local entry, info = EnsureSystemEntry(systemId)
     if not entry then return false end
     local api = Blizzard()
     if not api then return false end
     ApplySettingsTo(entry, changes)
-    api.SaveLayouts(info)
+    SaveLayouts(api, info)
     ApplyVisual(systemId, entry)
     --- Blizzard-side relayouts (the tracker's UpdateHeight most visibly)
     --- re-anchor the frame from the manager's own cached anchor, which never
@@ -638,6 +690,7 @@ local function CaptureSettings(entry, settingIds)
 end
 
 local function Capture(systemId, settingIds)
+    ValidateLayoutCache()
     local entry = EnsureSystemEntry(systemId)
     if not entry then return nil end
     local anchor = entry.anchorInfo
@@ -659,6 +712,7 @@ local function Restore(systemId, state)
     if InCombat() or type(state) ~= "table" then return false end
     local x, y = tonumber(state.x), tonumber(state.y)
     if type(state.point) ~= "string" or not x or not y then return false end
+    ValidateLayoutCache()
     local entry, info = EnsureSystemEntry(systemId)
     if not entry then return false end
     local api = Blizzard()
@@ -669,7 +723,7 @@ local function Restore(systemId, state)
     if type(state.relativePoint) == "string" then anchor.relativePoint = state.relativePoint end
     anchor.offsetX, anchor.offsetY = x, y
     if type(state.settings) == "table" then ApplySettingsTo(entry, state.settings) end
-    api.SaveLayouts(info)
+    SaveLayouts(api, info)
     ApplyAnchorVisual(systemId, anchor.point, anchor.relativeTo, anchor.relativePoint, x, y)
     if type(state.settings) == "table" then ApplyVisual(systemId, entry) end
     StoreSnapshot(systemId, entry)
@@ -695,11 +749,13 @@ end
 
 local snapshotRetry
 
---- Profile apply/import: push the stored snapshot back into the active
---- saved layout in ONE SaveLayouts, then apply the visuals directly.
---- Presets stay untouched — the user creates an editable layout through the
---- Edit Mode dialog first. In combat this arms a one-shot
---- PLAYER_REGEN_ENABLED retry (no recurring cost).
+--- Explicit restore and opt-in profile import: push the stored snapshot back
+--- into the active saved layout in ONE SaveLayouts, then apply the visuals
+--- directly. A plain profile switch, reset or rebind never calls this: the
+--- stored snapshot can be older than the live Blizzard layout. Presets stay
+--- untouched — the user creates an editable layout through the Edit Mode
+--- dialog first. In combat this arms a one-shot PLAYER_REGEN_ENABLED retry
+--- (no recurring cost).
 local function ApplyProfileSnapshot()
     if not Enabled() or EditModeRuleBlocked() then return false end
     local general = General()
@@ -717,7 +773,9 @@ local function ApplyProfileSnapshot()
         return false
     end
     local api = Blizzard()
-    InvalidateLayoutCache()
+    --- A fresh list is one behind while an MSUF write is unanswered; the
+    --- cache is the truth then.
+    if not OwnSaveInFlight() then InvalidateLayoutCache() end
     local info, layout = ActiveLayout()
     if not (api and layout) then return false end
     local applied = {}
@@ -743,7 +801,7 @@ local function ApplyProfileSnapshot()
         end
     end
     if #applied == 0 then return false end
-    api.SaveLayouts(info)
+    SaveLayouts(api, info)
     for i = 1, #applied do
         local systemId, entry = applied[i][1], applied[i][2]
         local anchor = entry.anchorInfo
@@ -751,19 +809,11 @@ local function ApplyProfileSnapshot()
             tonumber(anchor.offsetX) or 0, tonumber(anchor.offsetY) or 0)
         ApplyVisual(systemId, entry)
     end
-    --- One-shot hard resync (LibEditModeOverride's trick): toggling
-    --- Blizzard's Edit Mode panel makes the manager reload and re-apply the
-    --- saved layouts, so its internal caches finally match our data-only
-    --- saves. Only here — after a profile apply a brief flash is fine; per
-    --- stepper click it would not be. Never mid-session or in combat.
-    if not sessionActive and not InCombat() then
-        local manager = _G.EditModeManagerFrame
-        if manager and type(_G.ShowUIPanel) == "function" and type(_G.HideUIPanel) == "function" then
-            _G.ShowUIPanel(manager)
-            _G.HideUIPanel(manager)
-            InvalidateLayoutCache()
-        end
-    end
+    --- No Blizzard Edit Mode panel toggle here: opening and closing it from
+    --- addon code runs Blizzard's Edit Mode enter/exit (aura provider switch,
+    --- secure system iteration, layout rebuild) with MSUF taint. SaveLayouts
+    --- already persisted the layout and the visuals above already painted it,
+    --- exactly like a mover commit.
     return true
 end
 
@@ -921,10 +971,29 @@ end
 
 local Add = _G.MSUF_EM2.ExternalProviders.CreateElementRegistrar(API, OWNER, registered)
 
+local layoutEvents
+local function SetLayoutEventsEnabled(enabled)
+    local client = MSUF.Client
+    if type(client) == "table" and type(client.SupportsEvent) == "function"
+        and not client.SupportsEvent("EDIT_MODE_LAYOUTS_UPDATED") then return end
+    if not layoutEvents then
+        if not enabled or type(_G.CreateFrame) ~= "function" then return end
+        layoutEvents = _G.CreateFrame("Frame")
+        layoutEvents:SetScript("OnEvent", OnLayoutsUpdated)
+    end
+    if enabled then
+        layoutEvents:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
+    else
+        layoutEvents:UnregisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
+        InvalidateLayoutCache()
+    end
+end
+
 local function Activate()
     if active or not Enabled() then return false end
     if not Blizzard() then return false end
     active = true
+    SetLayoutEventsEnabled(true)
     local minimapSetting = _G.Enum.EditModeMinimapSetting or {}
     local chatSetting = _G.Enum.EditModeChatFrameSetting or {}
     local microSetting = _G.Enum.EditModeMicroMenuSetting or {}
@@ -948,6 +1017,7 @@ local function Activate()
                 "Header underneath", minimapHeader),
         }, { minimapSize, minimapRotate, minimapHeader })) then
         active = false
+        SetLayoutEventsEnabled(false)
         return false
     end
     Add(Element(systemEnum.ChatFrame, "chat",
@@ -1072,8 +1142,10 @@ local function Deactivate()
     if not active then return false end
     SessionChanged(false)
     active = false
+    SetLayoutEventsEnabled(false)
     if next(registered) then API.UnregisterOwner(OWNER) end
-    registered = {}
+    --- Wiped in place: the element registrar keeps this table.
+    for id in pairs(registered) do registered[id] = nil end
     return true
 end
 

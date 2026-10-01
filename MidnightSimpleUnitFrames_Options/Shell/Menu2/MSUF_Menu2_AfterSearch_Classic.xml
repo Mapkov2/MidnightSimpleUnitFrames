@@ -1,4 +1,0 @@
-<Ui xmlns="http://www.blizzard.com/wow/ui/">
-    <Script file="Pages\MSUF_Menu2_Unit.lua"/>
-    <Script file="Pages\MSUF_Menu2_UnitLazy.lua"/>
-</Ui>

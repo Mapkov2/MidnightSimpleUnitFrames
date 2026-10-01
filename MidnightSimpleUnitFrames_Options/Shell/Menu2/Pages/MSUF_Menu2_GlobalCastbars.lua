@@ -33,6 +33,12 @@ local function GCDBarSupported()
         local bar = castbar and castbar.statusBar
         if not bar and type(_G.CreateFrame) == "function" then bar = PixelLayoutRegion(_G.CreateFrame("StatusBar")) end
         gcdBarSupported = bar ~= nil and type(bar.SetTimerDuration) == "function"
+        -- The runtime's own answer adds what only it knows: WoW Forever arms
+        -- the bar only while its spell data has the GCD spell.
+        local runtimeSupported = _G.MSUF_GCDBar_IsSupported
+        if gcdBarSupported and type(runtimeSupported) == "function" then
+            gcdBarSupported = runtimeSupported() == true
+        end
     end
     return gcdBarSupported
 end
@@ -41,7 +47,7 @@ end
 -- re-establish the binder names they use before their unchanged bodies.
 local function BuildBehaviorSection(S, secBuilder)
     local BuildCastControlSpecs, ApplyAndRefresh, ApplyCastbarsIfNeeded, ShakeCastPreview = S.BuildCastControlSpecs, S.ApplyAndRefresh, S.ApplyCastbarsIfNeeded, S.ShakeCastPreview
-    local behavior = secBuilder:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 196, true)
+    local behavior = secBuilder:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 224, true)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(behavior, { "cast.interrupt_feedback" }, {
             title = "Interrupt Feedback Color",
@@ -49,6 +55,11 @@ local function BuildBehaviorSection(S, secBuilder)
         })
     end
     local leftX, rightX = 14, 392
+    local syncLastTick
+    local function ApplyTicksAndSync(...)
+        ApplyAndRefresh(...)
+        if syncLastTick then syncLastTick() end
+    end
     local behaviorControls = BuildCastControlSpecs(behavior, {
         { "toggle", "Shake on interrupt", leftX, -42, 260, "castbarInterruptShake", false, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh },
         { "slider", "Shake strength", leftX, -72, 320, 0, 30, 1, "castbarShakeStrength", 8, "MSUF2_CASTBAR_SHAKE_STRENGTH", function(reason, value, applyQueued) ApplyCastbarsIfNeeded(reason, nil, applyQueued); ShakeCastPreview(value) end },
@@ -63,7 +74,8 @@ local function BuildBehaviorSection(S, secBuilder)
         { "toggle", "Always use fill direction for all casts", rightX, -42, 360, "castbarUnifiedDirection", false, "MSUF2_CASTBAR_UNIFIED_DIRECTION", ApplyAndRefresh },
         { "dropdown", "Castbar fill direction", rightX, -72, 300, VT("RTL", "Right to left (default)", "LTR", "Left to right"), "castbarFillDirection", "RTL", "MSUF2_CASTBAR_FILL_DIRECTION", ApplyAndRefresh },
         { "toggle", "Use opposite fill direction for target", rightX, -126, 360, "castbarOpositeDirectionTarget", false, "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh },
-        { "toggle", "Spell-specific channel tick markers", rightX, -150, 360, "castbarShowChannelTicks", false, "MSUF2_CASTBAR_TICKS", ApplyAndRefresh },
+        { "toggle", "Spell-specific channel tick markers", rightX, -150, 360, "castbarShowChannelTicks", false, "MSUF2_CASTBAR_TICKS", ApplyTicksAndSync },
+        { "toggle", "Highlight last channel tick", rightX, -178, 360, "castbarAccentLastTick", false, "MSUF2_CASTBAR_LAST_TICK", ApplyAndRefresh },
     }, "behavior")
     if M.AddTooltip then
         M.AddTooltip(behaviorControls.castbarShowChannelTicks,
@@ -84,6 +96,14 @@ local function BuildBehaviorSection(S, secBuilder)
         M.AddTooltip(behaviorControls.castbarOpositeDirectionTarget, "Use opposite fill direction for target",
             "Flips the fill direction on the Target castbar only, so it can mirror your Player castbar when the two frames face each other.", tip)
     end
+    -- The accent marks the last of the channel tick markers, so it needs them on.
+    local lastTick = behaviorControls.castbarAccentLastTick
+    local function TicksOn() return ReadGBool("castbarShowChannelTicks", false) end
+    if W.SetControlDisabledReason and W.TurnOnReason then
+        W.SetControlDisabledReason(lastTick, W.TurnOnReason("Spell-specific channel tick markers", TicksOn))
+    end
+    syncLastTick = function() SetControlEnabled(lastTick, TicksOn()) end
+    M.TrackRefresh(S.ctx, syncLastTick)
 end
 local function BuildFilterSection(S, secBuilder)
     local BuildCastControlSpecs, ApplyAndRefresh = S.BuildCastControlSpecs, S.ApplyAndRefresh
@@ -106,9 +126,16 @@ local function BuildFilterSection(S, secBuilder)
 end
 local function BuildGCDSection(S, secBuilder)
     local ctx, BuildCastControlSpecs = S.ctx, S.BuildCastControlSpecs
-    local gcd = secBuilder:CollapsibleSection("castbar_gcd", "GCD Bar", 148, false)
+    local gcd = secBuilder:CollapsibleSection("castbar_gcd", "GCD Bar", 346, false)
     local gcdLeftX = 14
     local syncGCD
+    -- The separate-bar controls depend on the master switch and on "Place GCD
+    -- bar separately"; re-sync their enabled state after either changes.
+    local function ApplyDetached(...)
+        local refreshLayout = _G.MSUF_GCDBar_RefreshLayout
+        if type(refreshLayout) == "function" then refreshLayout(...) end
+        if syncGCD then syncGCD() end
+    end
     local gcdControls = BuildCastControlSpecs(gcd, {
         { "toggle", "Show GCD bar for instant casts", gcdLeftX, -46, 300, "showGCDBar", false, "MSUF2_CASTBAR_GCD", nil, { switch = true,
             afterSet = function(_, enabled)
@@ -117,6 +144,14 @@ local function BuildGCDSection(S, secBuilder)
             end } },
         { "toggle", "GCD bar: show time text", gcdLeftX, -78, 300, "showGCDBarTime", true, "MSUF2_CASTBAR_GCD_TIME" },
         { "toggle", "GCD bar: show spell name + icon", gcdLeftX, -104, 300, "showGCDBarSpell", true, "MSUF2_CASTBAR_GCD_SPELL" },
+        { "toggle", "Place GCD bar separately", gcdLeftX, -134, 340, "gcdBarDetached", false, "MSUF2_CASTBAR_GCD_DETACHED", ApplyDetached },
+        { "toggle", "Keep separate GCD background visible", gcdLeftX, -160, 360, "gcdBarIdle", false, "MSUF2_CASTBAR_GCD_IDLE", _G.MSUF_GCDBar_RefreshLayout },
+        { "toggle", "Separate GCD bar only in combat", gcdLeftX, -186, 360, "gcdBarCombatOnly", false, "MSUF2_CASTBAR_GCD_COMBAT", _G.MSUF_GCDBar_RefreshLayout },
+        { "slider", "Separate GCD bar width", gcdLeftX, -218, 320, 40, 600, 1, "gcdBarWidth", 180, "MSUF2_CASTBAR_GCD_WIDTH", _G.MSUF_GCDBar_RefreshLayout },
+        { "slider", "Separate GCD bar height", gcdLeftX, -272, 320, 4, 50, 1, "gcdBarHeight", 12, "MSUF2_CASTBAR_GCD_HEIGHT", _G.MSUF_GCDBar_RefreshLayout },
+        { "slider", "Separate GCD horizontal position", 392, -46, 320, -2000, 2000, 1, "gcdBarX", 0, "MSUF2_CASTBAR_GCD_X", _G.MSUF_GCDBar_RefreshLayout },
+        { "slider", "Separate GCD vertical position", 392, -104, 320, -1500, 1500, 1, "gcdBarY", -180, "MSUF2_CASTBAR_GCD_Y", _G.MSUF_GCDBar_RefreshLayout },
+        { "slider", "Separate GCD opacity (percent)", 392, -162, 320, 0, 100, 5, "gcdBarOpacity", 100, "MSUF2_CASTBAR_GCD_ALPHA", _G.MSUF_GCDBar_RefreshLayout },
     }, "gcd")
     if M.AddTooltip then
         M.AddTooltip(gcdControls.showGCDBar,
@@ -129,18 +164,27 @@ local function BuildGCDSection(S, secBuilder)
         M.AddTooltip(gcdControls.showGCDBarSpell, "GCD bar: show spell name + icon",
             "Writes the instant spell's name on the GCD bar and shows its icon. Off leaves the spell text blank.", tip)
     end
+    local masterControls = { gcdControls.showGCDBarTime, gcdControls.showGCDBarSpell, gcdControls.gcdBarDetached }
+    local detachedControls = {}
+    for _, key in ipairs({ "gcdBarIdle", "gcdBarCombatOnly", "gcdBarWidth", "gcdBarHeight", "gcdBarX", "gcdBarY", "gcdBarOpacity" }) do
+        detachedControls[#detachedControls + 1] = gcdControls[key]
+    end
     if W.SetControlsDisabledReason and W.TurnOnReason then
-        W.SetControlsDisabledReason({ gcdControls.showGCDBarTime, gcdControls.showGCDBarSpell },
-            W.TurnOnReason("Show GCD bar for instant casts", function() return ReadGBool("showGCDBar", false) end))
+        local masterReason = W.TurnOnReason("Show GCD bar for instant casts", function() return ReadGBool("showGCDBar", false) end)
+        local detachedReason = W.TurnOnReason("Place GCD bar separately", function() return ReadGBool("gcdBarDetached", false) end)
+        W.SetControlsDisabledReason(masterControls, masterReason)
+        W.SetControlsDisabledReason(detachedControls, function(control) return masterReason(control) or detachedReason(control) end)
     end
     syncGCD = function()
-        SetControlsEnabled({ gcdControls.showGCDBarTime, gcdControls.showGCDBarSpell }, ReadGBool("showGCDBar", false))
+        local master = ReadGBool("showGCDBar", false)
+        SetControlsEnabled(masterControls, master)
+        SetControlsEnabled(detachedControls, master and ReadGBool("gcdBarDetached", false))
     end
     M.TrackRefresh(ctx, syncGCD)
 end
 local function BuildTexturesSection(S, secBuilder)
     local ApplyCastbarTextures, RequestCastPreviewRefresh, BuildCastControlSpecs = S.ApplyCastbarTextures, S.RequestCastPreviewRefresh, S.BuildCastControlSpecs
-    local textures = secBuilder:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
+    local textures = secBuilder:CollapsibleSection("castbar_textures", "Textures & Outline", 246, false)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(textures, {
             "cast.interruptible", "cast.non_interruptible", "cast.background", "cast.border",
@@ -166,6 +210,7 @@ local function BuildTexturesSection(S, secBuilder)
         { "toggle", "Show latency indicator", texRightX, -120, 360, "castbarShowLatency", true, "MSUF2_CASTBAR_LATENCY", ApplyTexturesAndPreview },
         { "toggle", "Show spark (leading edge highlight)", texRightX, -144, 360, "castbarShowSpark", false, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview },
         { "toggle", "Spark extends beyond bar", texRightX, -168, 360, "castbarSparkOverflow", true, "MSUF2_CASTBAR_SPARK_OVERFLOW", ApplyTexturesAndPreview },
+        { "toggle", "Show network latency in milliseconds", texRightX, -196, 360, "castbarShowLatencyText", false, "MSUF2_CASTBAR_LATENCY_TEXT", ApplyTexturesAndPreview },
     }, "textures")
     if M.AddTooltip and textureControls then
         local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
@@ -371,33 +416,50 @@ local function BuildInterruptReadySection(S, secBuilder)
         RequestCastPreviewRefresh()
         if syncKickReady then syncKickReady() end
     end
-    local kickControls = BuildCastControlSpecs(kick, {
-        { "toggle", "Show on Target castbar", kickLeftX, -56, 300, "kickReadyShowTarget", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
-        { "toggle", "Show on Focus castbar", kickLeftX, -82, 300, "kickReadyShowFocus", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
-        { "toggle", "Show on Boss castbars", kickLeftX, -108, 300, "kickReadyShowBoss", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
-        { "toggle", "Show on Arena castbars", kickLeftX, -134, 300, "kickReadyShowArena", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady },
-        { "dropdown", "Indicator style", kickRightX, -56, 300, VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border", "MSUF2_KICK_READY_STYLE", ApplyKickReady },
-        { "slider", "Indicator size", kickRightX, -110, 320, 8, 32, 1, "kickReadySize", 16, "MSUF2_KICK_READY_SIZE", ApplyAndRefresh },
-        { "toggle", "Auto-size to castbar height", kickRightX, -164, 360, "kickReadyAutoSize", true, "MSUF2_KICK_READY_AUTO", ApplyKickReady },
-    }, "interrupt_ready")
+    -- One toggle per castbar unit this client has (MSUF.Client.SupportsUnit):
+    -- Classic Era has no focus, boss or arena castbars, TBC no boss castbars and
+    -- WoW Forever no arena castbars. Kept toggles stack from the top.
+    local kickSpecs = {}
+    for _, unitToggle in ipairs({
+        { "target", "Show on Target castbar", "kickReadyShowTarget" },
+        { "focus", "Show on Focus castbar", "kickReadyShowFocus" },
+        { "boss", "Show on Boss castbars", "kickReadyShowBoss" },
+        { "arena", "Show on Arena castbars", "kickReadyShowArena" },
+    }) do
+        if unitToggle[1] == "target" or not M.SupportsFrameScope or M.SupportsFrameScope(unitToggle[1]) then
+            kickSpecs[#kickSpecs + 1] = { "toggle", unitToggle[2], kickLeftX, -56 - #kickSpecs * 26, 300, unitToggle[3], false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady }
+        end
+    end
+    kickSpecs[#kickSpecs + 1] = { "dropdown", "Indicator style", kickRightX, -56, 300, VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border", "MSUF2_KICK_READY_STYLE", ApplyKickReady }
+    kickSpecs[#kickSpecs + 1] = { "slider", "Indicator size", kickRightX, -110, 320, 8, 32, 1, "kickReadySize", 16, "MSUF2_KICK_READY_SIZE", ApplyAndRefresh }
+    kickSpecs[#kickSpecs + 1] = { "toggle", "Auto-size to castbar height", kickRightX, -164, 360, "kickReadyAutoSize", true, "MSUF2_KICK_READY_AUTO", ApplyKickReady }
+    local kickControls = BuildCastControlSpecs(kick, kickSpecs, "interrupt_ready")
     local colorHint = W.Text(kick, "Colors: Colors menu > Castbar Colors", kickRightX, -196, 370, T.colors.muted)
     W.LabelAt(kick, "Placement", kickLeftX, -172, 160, "GameFontNormalSmall", T.colors.accent)
     M.Assign(kickControls, BuildCastControlSpecs(kick, {
+        { "toggle", "Show interrupt availability markers", kickRightX, -216, 370, "kickReadyTimeMarker", false, "MSUF2_KICK_TIME_MARKER", ApplyKickReady },
+        { "toggle", "Shade cast time after interrupts recover", kickRightX, -244, 370, "kickReadyTimeSegment", false, "MSUF2_KICK_TIME_SEGMENT", ApplyKickReady },
         { "dropdown", "Anchor", kickLeftX, -190, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
         { "slider", "X offset", kickLeftX, -244, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
         { "slider", "Y offset", kickLeftX, -298, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
     }, "interrupt_ready.placement"))
     local style, size, auto = kickControls.kickReadyStyle, kickControls.kickReadySize, kickControls.kickReadyAutoSize
     local placementControls = { kickControls.kickReadyAnchor, kickControls.kickReadyOffsetX, kickControls.kickReadyOffsetY }
+    -- The time markers draw on an indicator's castbar, so they follow the unit toggles too.
+    local markerControls = { kickControls.kickReadyTimeMarker, kickControls.kickReadyTimeSegment }
     syncKickReady = function()
-        local enabled = ReadGBool("kickReadyShowTarget", false) or ReadGBool("kickReadyShowFocus", false)
-            or ReadGBool("kickReadyShowBoss", false) or ReadGBool("kickReadyShowArena", false)
+        -- Only a toggle this client builds can turn the indicator on.
+        local enabled = ReadGBool("kickReadyShowTarget", false)
+            or (kickControls.kickReadyShowFocus ~= nil and ReadGBool("kickReadyShowFocus", false))
+            or (kickControls.kickReadyShowBoss ~= nil and ReadGBool("kickReadyShowBoss", false))
+            or (kickControls.kickReadyShowArena ~= nil and ReadGBool("kickReadyShowArena", false))
         local autoOn = ReadGBool("kickReadyAutoSize", true)
         local isFill = ReadG("kickReadyStyle", "border") == "fill"
         SetControlEnabled(style, enabled)
         SetControlEnabled(auto, enabled and not isFill)
         SetControlEnabled(size, enabled and not isFill and not autoOn)
         SetControlsEnabled(placementControls, enabled and not isFill)
+        SetControlsEnabled(markerControls, enabled)
         SetControlEnabled(colorHint, enabled)
     end
     M.TrackRefresh(ctx, syncKickReady)
@@ -539,12 +601,12 @@ local function BuildCastbars(ctx)
     b:GlobalStyleHeader("Castbar", "Castbar behavior, textures and interrupt indicators.", 72)
     local S = CreateCastbarPageState(ctx, b)
     local LazyCastbarSection = S.LazyCastbarSection
-    LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 196, defaultOpen = true, build = function(_, secBuilder) return BuildBehaviorSection(S, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 224, defaultOpen = true, build = function(_, secBuilder) return BuildBehaviorSection(S, secBuilder) end })
     LazyCastbarSection({ sectionId = "castbar_filters", title = "Filtering & Feedback", height = 110, build = function(_, secBuilder) return BuildFilterSection(S, secBuilder) end })
     if GCDBarSupported() then
-        LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 148, build = function(_, secBuilder) return BuildGCDSection(S, secBuilder) end })
+        LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 346, build = function(_, secBuilder) return BuildGCDSection(S, secBuilder) end })
     end
-    LazyCastbarSection({ sectionId = "castbar_textures", title = "Textures & Outline", height = 220, build = function(_, secBuilder) return BuildTexturesSection(S, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_textures", title = "Textures & Outline", height = 246, build = function(_, secBuilder) return BuildTexturesSection(S, secBuilder) end })
     -- Empowered casts are an Evoker mechanic: Midnight only. WoW Forever and the
     -- Classic clients have no Evoker (MSUF.Client.HasEmpoweredCasts). A harness
     -- that fakes only IsClassic still hides the section.

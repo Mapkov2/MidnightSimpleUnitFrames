@@ -125,24 +125,6 @@ local CLASSPOWER_SETTING_KEY_BY_PATH = {
 local CLASSPOWER_ACTION_KEY_BY_PATH = {
     ["quick_setup.class_bar"] = "class_power_quick_setup",
 }
-local CLASSPOWER_REVIEWED_BY_PATH = {
-    ["detached_power.text.outline"] = {
-        "dynamic",
-        "Player text outline routes the Player font override plus the mutually exclusive bold/no-outline flags through one coordinated control.",
-    },
-    ["detached_power.text.preset"] = {
-        "compound",
-        "A detached-power text preset writes the Player power-text slot modes as one coordinated layout.",
-    },
-    ["detached_power.text.slot_offset.x"] = {
-        "dynamic",
-        "This offset targets the currently selected left, center, or right Player power-text slot.",
-    },
-    ["detached_power.text.slot_offset.y"] = {
-        "dynamic",
-        "This offset targets the currently selected left, center, or right Player power-text slot.",
-    },
-}
 local CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH = {
     ["detached_power.text.outline"] = {
         "player.fontOverride", "player.boldText", "player.noOutline",
@@ -158,13 +140,8 @@ local function Meta(path, classification, exact)
     exact = type(exact) == "table" and exact or {}
     if exact.settingKey == nil then exact.settingKey = CLASSPOWER_SETTING_KEY_BY_PATH[path] end
     if exact.actionKey == nil then exact.actionKey = CLASSPOWER_ACTION_KEY_BY_PATH[path] end
-    if exact.settingKey == nil and exact.actionKey == nil then
-        local reviewed = CLASSPOWER_REVIEWED_BY_PATH[path]
-        if reviewed then
-            exact.assistantDisposition = reviewed[1]
-            exact.assistantDispositionReason = reviewed[2]
-            exact.assistantSettingKeys = CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH[path]
-        end
+    if exact.settingKey == nil and exact.actionKey == nil and CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH[path] then
+        exact.searchSettingKeys = CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH[path]
     end
     return ControlMeta("classpower", "advanced", path, classification, exact)
 end
@@ -1600,7 +1577,7 @@ end
 -- Collapsed sections build only their shell on the visible cold path; content
 -- builds on first expand through the shared lazy-section registry. Hidden
 -- search-index builds and persisted-open sections still build synchronously
--- inside BuildSectionLazy, so search, Assistant coverage, and reopened
+-- inside BuildSectionLazy, so search, Search coverage, and reopened
 -- sections keep seeing the full page.
 function Page:LazySection(id, title, height, method)
     local UnitPage = M.UnitPage
@@ -1637,6 +1614,7 @@ function Page:Build()
     self:LazySection("classpower_detached_power", "Player Power", function() return DetachedPowerSectionHeight(self.width) end, Page.BuildDetachedPower)
     self:LazySection("classpower_player_hp", "Extra Health Bar", function() return self.width < 680 and 980 or 700 end, Page.BuildPlayerHP)
     self:LazySection("classpower_alt_mana", "Alternative Mana", 476, Page.BuildAlternativeMana)
+    if M.ResourceExtrasPage then M.ResourceExtrasPage.Build(self,Bars,ApplyClassPower) end
     -- All callbacks share one late-bound state refresh instead of capturing every control.
     self.refresh = self.refresh(function() self:RefreshControlState() end)
     M.RefreshClassPowerDetachedState = self.refresh

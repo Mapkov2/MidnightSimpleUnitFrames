@@ -54,11 +54,24 @@ local function EffectiveScaleRatio(frame, targetFrame)
         return ClampEffectiveScaleRatio(sourceEffective / targetEffective)
     end
 end
+-- A unit the client has no frames for (focus/boss/arena on Classic Era, arena
+-- on WoW Forever) never gets a compiled spec, and Config.GetSpec recompiles the
+-- whole unit config on every miss. Client facts, memoized once per unit.
+local previewUnitSupported = {}
+local function PreviewUnitSupported(runtimeUnit)
+    local supported = previewUnitSupported[runtimeUnit]
+    if supported == nil then
+        local client = MSUF.Client
+        supported = not (client and type(client.SupportsUnit) == "function") or client.SupportsUnit(runtimeUnit) == true
+        previewUnitSupported[runtimeUnit] = supported
+    end
+    return supported
+end
 function Runtime.SpecForPreviewKey(key)
     local uf = MSUF and MSUF.UF
     local config = uf and uf.Config
     local runtimeUnit = (key == "boss" and "boss1") or (key == "arena" and "arena1") or key
-    if not runtimeUnit then return nil end
+    if not runtimeUnit or not PreviewUnitSupported(runtimeUnit) then return nil end
     local dbRef, profileName = _G.MSUF_DB, _G.MSUF_ActiveProfile
     if config and (dbRef ~= lastDBRef or profileName ~= lastProfileName) then
         lastDBRef, lastProfileName = dbRef, profileName

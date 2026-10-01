@@ -604,6 +604,10 @@ function CP.ResolveColor(token, fallbackR, fallbackG, fallbackB, powerColorFn)
         r, g, b = _G.MSUF_GetPowerBarColor(0, token)
         if type(r) == "number" then return r, g, b end
     end
+    if type(_G.MSUF_GetDefaultPowerColor) == "function" and token then
+        r, g, b = _G.MSUF_GetDefaultPowerColor(token)
+        if type(r) == "number" then return r, g, b end
+    end
     local pbc = _G.PowerBarColor
     local c = pbc and token and pbc[token]
     if c then
@@ -972,7 +976,7 @@ function H.ShowPreviewHandleContext(handle, opts)
                             local h, fn = popup._handle, popup._openSettings
                             if h == nil or type(fn) ~= "function" then return false end
                             popup:Hide()
-                            return fn(h, "assistant") ~= false
+                            return fn(h, "search") ~= false
                         end,
                     },
                 })
@@ -1169,6 +1173,7 @@ function H.EnsureZoomLockButton(box, zoomBar, opts)
         -- An explicit click owns the state from here on. In particular, an
         -- early Unlock must cancel a not-yet-resolved default lock.
         box._msuf2ZoomLockDefaultPending = nil
+        box._msuf2ZoomLockIsDefault, box._msuf2ZoomLockDefaultDropped = nil, nil
         if locked then
             local scale = tonumber(box._manualZoom) or tonumber(box._mockScale) or tonumber(box._mockAutoScale) or 1
             setZoom(box, scale, opts.lockReason or "PREVIEW_ZOOM_LOCK")
@@ -1573,11 +1578,13 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
     -- was just looking at with an older Full/Fit state.  Capture the rendered
     -- Compact scale before the larger canvas changes its auto-fit geometry.
     -- Pan remains mode-local because the two canvases have different bounds.
-    local compactZoomToCarry
+    local compactZoomToCarry, compactZoomCarriedDefault
     if active == true and compact == false and box._msuf2PreserveExpandedZoomOnNextExpand ~= true then
         compactZoomToCarry = tonumber(box._manualZoom)
             or tonumber(box._mockScale)
             or tonumber(box._mockAutoScale)
+        -- A carried Fit scale or default lock was not the user's choice.
+        compactZoomCarriedDefault = box._manualZoom == nil or box._msuf2ZoomLockIsDefault == true or nil
     end
 
     local function Store(prefix)
@@ -1585,6 +1592,8 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
         box[prefix .. "PanX"] = tonumber(box._zoomPanX) or 0
         box[prefix .. "PanY"] = tonumber(box._zoomPanY) or 0
         box[prefix .. "DefaultLockPending"] = box._msuf2ZoomLockDefaultPending == true or nil
+        box[prefix .. "LockIsDefault"] = box._msuf2ZoomLockIsDefault == true or nil
+        box[prefix .. "DefaultDropped"] = box._msuf2ZoomLockDefaultDropped == true or nil
         box[prefix .. "Initialized"] = true
     end
     local function Restore(prefix, fallbackZoom)
@@ -1593,16 +1602,23 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
             box._zoomPanX = tonumber(box[prefix .. "PanX"]) or 0
             box._zoomPanY = tonumber(box[prefix .. "PanY"]) or 0
             box._msuf2ZoomLockDefaultPending = box[prefix .. "DefaultLockPending"] == true or nil
+            box._msuf2ZoomLockIsDefault = box[prefix .. "LockIsDefault"] == true or nil
+            box._msuf2ZoomLockDefaultDropped = box[prefix .. "DefaultDropped"] == true or nil
             return
         end
         box._manualZoom = tonumber(fallbackZoom)
         box._zoomPanX, box._zoomPanY = 0, 0
         box._msuf2ZoomLockDefaultPending = box._manualZoom == nil
             and box._msuf2ZoomLockDefaultEnabled == true or nil
+        -- The mode's fallback zoom is a default, not a user lock.
+        box._msuf2ZoomLockIsDefault = box._manualZoom ~= nil or nil
+        box._msuf2ZoomLockDefaultDropped = nil
         box[prefix .. "Initialized"] = true
         box[prefix .. "ManualZoom"] = box._manualZoom
         box[prefix .. "PanX"], box[prefix .. "PanY"] = 0, 0
         box[prefix .. "DefaultLockPending"] = box._msuf2ZoomLockDefaultPending
+        box[prefix .. "LockIsDefault"] = box._msuf2ZoomLockIsDefault
+        box[prefix .. "DefaultDropped"] = nil
     end
 
     if active == nil then
@@ -1616,6 +1632,8 @@ function H.SwitchCompactZoomMode(box, compact, defaultCompactZoom)
     if compactZoomToCarry then
         box._manualZoom = compactZoomToCarry
         box._msuf2ZoomLockDefaultPending = nil
+        box._msuf2ZoomLockIsDefault = compactZoomCarriedDefault
+        box._msuf2ZoomLockDefaultDropped = nil
     end
     box._msuf2CompactZoomMode = compact
     return true
@@ -1724,6 +1742,10 @@ function H.InstallZoomPan(ZoomPan, opts)
         if not initialScale then return false end
         box._manualZoom = ZoomPan.Clamp(initialScale)
         box._msuf2ZoomLockDefaultPending = nil
+        -- Remember that this lock is the preview's default, not a user choice:
+        -- a layout change may refit a default lock but must keep a user's.
+        box._msuf2ZoomLockIsDefault = true
+        box._msuf2ZoomLockDefaultDropped = nil
         return true
     end
     function ZoomPan.UpdateControls(box)
@@ -1802,6 +1824,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         if not box then return end
         -- Any explicit Fit/1:1/step/lock action supersedes the one-shot default.
         box._msuf2ZoomLockDefaultPending = nil
+        box._msuf2ZoomLockIsDefault, box._msuf2ZoomLockDefaultDropped = nil, nil
         if zoom == nil or zoom == "fit" then
             box._manualZoom = nil
             box._zoomPanX, box._zoomPanY = 0, 0
@@ -1849,10 +1872,12 @@ function H.InstallZoomPan(ZoomPan, opts)
         surface[PAN_CURSOR_X], surface[PAN_CURSOR_Y] = nil, nil
         surface[PAN_START_X], surface[PAN_START_Y] = nil, nil
         surface:SetScript("OnUpdate", nil)
-        if box and type(box.OnPreviewCanvasMoved) == "function" and button then
+        if box and button then
             local moved = (tonumber(box._zoomPanX) or 0) ~= (tonumber(startX) or 0)
                 or (tonumber(box._zoomPanY) or 0) ~= (tonumber(startY) or 0)
-            if moved then box.OnPreviewCanvasMoved(box, button) end
+            -- A dragged canvas is the user's position: the lock keeps it.
+            if moved then box._msuf2ZoomLockIsDefault, box._msuf2ZoomLockDefaultDropped = nil, nil end
+            if moved and type(box.OnPreviewCanvasMoved) == "function" then box.OnPreviewCanvasMoved(box, button) end
         end
         local update = deps[opts.updateHintKey or "UpdateHandleHint"]
         if box and type(update) == "function" then update(box, box._selectedHandle) end
@@ -1865,6 +1890,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         if not (backgroundLeft or ctrlLeft or button == "RightButton" or button == "MiddleButton") then return false end
         if not box._manualZoom then
             box._manualZoom = ZoomPan.Clamp(box._mockScale or box._mockAutoScale or 1)
+            box._msuf2ZoomLockIsDefault, box._msuf2ZoomLockDefaultDropped = nil, nil
             ZoomPan.UpdateControls(box)
         end
         local cx, cy = GetCursorPosition()
@@ -2155,7 +2181,7 @@ function H.BuildZoomCommand(box, zoomPan, reason)
         set = function(value)
             value = tonumber(value)
             if not value then return false end
-            zoomPan.SetZoom(box, value / 100, reason or "ASSISTANT_PREVIEW_ZOOM")
+            zoomPan.SetZoom(box, value / 100, reason or "SEARCH_PREVIEW_ZOOM")
             local scale = tonumber(box._manualZoom) or tonumber(box._mockScale)
                 or tonumber(box._mockAutoScale) or 1
             return floor(scale * 100 + 0.5) == floor(value + 0.5)
@@ -2547,7 +2573,7 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
         self:Refresh()
     end)
     -- Layer pills are toggles, not fire-and-forget buttons.  Expose the exact
-    -- state transition to RuntimeControlCatalog so Assistant requests such as
+    -- state transition to RuntimeControlCatalog so Search requests such as
     -- "show Guides" and "hide Guides" are idempotent and disabled layers can
     -- fail closed instead of silently inverting another state.
     btn._msuf2CommandAction = {
@@ -2679,11 +2705,17 @@ function H.NormalizeTextFocusSlot(slot)
     if slot == "left" or slot == "center" or slot == "right" then return slot end
     return nil
 end
+-- Read-only defaults: a focus ring repainted on every repaint or animation
+-- tick reuses them instead of a new colour table per call.
+local TEXT_FOCUS_DEFAULT_COLORS = {
+    hp = { 0.28, 0.86, 0.45 },
+    power = { 0.95, 0.72, 0.18 },
+    name = { 0.30, 0.66, 1.00 },
+}
 function H.TextFocusColor(kind, colors)
-    colors = colors or {}
-    if kind == "hp" then return colors.hp or { 0.28, 0.86, 0.45 } end
-    if kind == "power" then return colors.power or { 0.95, 0.72, 0.18 } end
-    return colors.name or { 0.30, 0.66, 1.00 }
+    if kind == "hp" then return colors and colors.hp or TEXT_FOCUS_DEFAULT_COLORS.hp end
+    if kind == "power" then return colors and colors.power or TEXT_FOCUS_DEFAULT_COLORS.power end
+    return colors and colors.name or TEXT_FOCUS_DEFAULT_COLORS.name
 end
 function H.EnsureTextFocusFrame(box, parent)
     if not (box and parent) then return nil end

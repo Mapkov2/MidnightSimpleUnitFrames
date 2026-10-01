@@ -32,6 +32,18 @@ local StopRestingFlipbook = RestingFlipbook.Stop
 local function StatusIconOnHide(self)
     if StopRestingFlipbook then StopRestingFlipbook(self.tex) end
 end
+-- Atlas availability is a static client fact: probe each name once per
+-- session instead of on every preview repaint.
+local previewAtlasAvailable = {}
+local function PreviewAtlasAvailable(atlas)
+    local available = previewAtlasAvailable[atlas]
+    if available == nil then
+        local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
+        available = getAtlasInfo ~= nil and getAtlasInfo(atlas) ~= nil
+        previewAtlasAvailable[atlas] = available
+    end
+    return available
+end
 local Preview = MSUF.UFPreview or {}
 local PreviewModel = Preview.Model or {}
 local MakeFS = PreviewModel.MakeFS
@@ -258,7 +270,7 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
                 return
             end
             local atlas = isAssist and "UI-HUD-UnitFrame-Player-Group-GuideIcon" or "UI-HUD-UnitFrame-Player-Group-LeaderIcon"
-            if tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas) then
+            if tex.SetAtlas and PreviewAtlasAvailable(atlas) then
                 tex:SetAtlas(atlas)
             else
                 tex:SetTexture(path)
@@ -279,8 +291,7 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             tex:SetTexture(path)
         elseif tex and ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, "combat", "combat") then
             -- Custom texture applied above.
-        elseif tex and tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo
-            and C_Texture.GetAtlasInfo("UI-HUD-UnitFrame-Player-CombatIcon") then
+        elseif tex and tex.SetAtlas and PreviewAtlasAvailable("UI-HUD-UnitFrame-Player-CombatIcon") then
             tex:SetAtlas("UI-HUD-UnitFrame-Player-CombatIcon")
         elseif tex then
             tex:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
@@ -339,10 +350,9 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             local foreverBadge = spec.id == "level" and (((runtimeCfg and runtimeCfg.foreverBadge) == true)
                 or ((conf and conf.levelIndicatorForeverBadge) == true)
                 or ((conf == nil or conf.levelIndicatorForeverBadge == nil) and g and g.levelIndicatorForeverBadge == true))
-            local getAtlasInfo = C_Texture and C_Texture.GetAtlasInfo
-            local atlasAvailable = MSUF.Client and MSUF.Client.IsForever == true
-                or (getAtlasInfo and getAtlasInfo("UI-HUD-UnitFrame-SmallCircle"))
             if foreverBadge and tex.SetAtlas then
+                local atlasAvailable = MSUF.Client and MSUF.Client.IsForever == true
+                    or PreviewAtlasAvailable("UI-HUD-UnitFrame-SmallCircle")
                 local badgeSize = math.max(28, math.floor((((runtimeCfg and runtimeCfg.size) or 14) * 2.5) + 0.5))
                 if tex.ClearAllPoints and tex.SetPoint then
                     tex:ClearAllPoints()

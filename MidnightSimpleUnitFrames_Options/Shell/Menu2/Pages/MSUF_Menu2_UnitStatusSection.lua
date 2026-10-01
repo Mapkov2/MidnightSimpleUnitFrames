@@ -164,11 +164,8 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         end
         return out
     end
-    local selectedStatusContract = {
-        assistantDisposition = "dynamic",
-        assistantDispositionReason = "This editor targets whichever status indicator is selected in the adjacent selector.",
-    }
-    local function RegisterStatusSearch(control, label, extraKeywords, values, help, semanticPath, classification, assistantContract)
+    local selectedStatusContract = {}
+    local function RegisterStatusSearch(control, label, extraKeywords, values, help, semanticPath, classification, routeContract)
         if not (control and type(M.RegisterSearchWidget) == "function") then return end
         local meta = ControlMeta(ctx, semanticPath, classification)
         meta.label = label
@@ -179,8 +176,8 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         meta.help = help or "Status icon controls include the Level indicator, visibility, anchor, size, and layer. Position is edited in Preview."
         -- The section-wide fallback is search text, not a per-control hover tooltip.
         if not help then meta.helpTooltip = false end
-        if type(assistantContract) == "table" then
-            for key, value in pairs(assistantContract) do meta[key] = value end
+        if type(routeContract) == "table" then
+            for key, value in pairs(routeContract) do meta[key] = value end
         end
         if classification == "action" and semanticPath
             and (semanticPath == "status.selected.reset" or semanticPath == "status.advanced.reset")
@@ -188,7 +185,6 @@ function StatusSection.PrepareBinders(state, ctx, unit)
             meta.actionKey = "reset_unit_status_indicator"
             meta.actionFixedArgs = { unit = unit }
             meta.actionInputArg = "status"
-            meta.assistantDisposition, meta.assistantDispositionReason = nil, nil
         end
         M.RegisterSearchWidget(control, meta)
     end
@@ -375,9 +371,7 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
     if happiness and happiness.value == "statusPetHappiness" and type(M.RegisterVirtualRuntimeControl) == "function" then
         local meta = ControlMeta(ctx, "status.indicator.pet_happiness", "setting")
         meta.kind, meta.label = "toggle", happiness.text
-        meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "Pet Happiness is shown or hidden through the shared status indicator editor."
-        meta.assistantSettingKeys = { tostring(unit) .. "." .. tostring(happiness.show) }
+        meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(happiness.show) }
         meta.command = {
             kind = "toggle",
             get = function() return ReadStatusEnabled(happiness) end,
@@ -395,8 +389,7 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
         local meta = ControlMeta(ctx, "status.indicator.pet_xp", "setting")
         meta.kind, meta.label = "toggle", petXP.text
         meta.keywords = { "pet xp", "pet experience", "pet experience bar" }
-        meta.assistantDisposition = "dynamic"
-        meta.assistantSettingKeys = { tostring(unit) .. "." .. tostring(petXP.show) }
+        meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(petXP.show) }
         meta.command = {
             kind = "toggle",
             get = function() return ReadStatusEnabled(petXP) end,
@@ -417,9 +410,7 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
         local meta = ControlMeta(ctx, "status.indicator.threat", "setting")
         meta.kind, meta.label = "toggle", threat.text
         meta.keywords = { "threat", "threat percent", "aggro", "aggro percent" }
-        meta.assistantDisposition = "dynamic"
-        meta.assistantDispositionReason = "The threat text is shown or hidden through the shared status indicator editor."
-        meta.assistantSettingKeys = { tostring(unit) .. "." .. tostring(threat.show) }
+        meta.searchSettingKeys = { tostring(unit) .. "." .. tostring(threat.show) }
         meta.command = {
             kind = "toggle",
             get = function() return ReadStatusEnabled(threat) end,

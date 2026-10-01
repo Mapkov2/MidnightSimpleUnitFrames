@@ -333,7 +333,7 @@ local function BuildPageEntry(key, hidden)
     entry._msuf2BuildIncomplete = nil
     return entry
 end
--- Cold-path public entry point used by Search and Assistant V2. Callers must
+-- Cold-path public entry point used by Search. Callers must
 -- invoke it only after an explicit menu interaction; it intentionally creates
 -- and caches the requested page's real controls so RuntimeControlCatalog stays
 -- the single executable source of truth.
@@ -463,7 +463,8 @@ function M.InvalidatePage(key)
         M.RememberFixedPreviewExpansionForRebuild(key)
         if key ~= "search" then MarkSearchIndexDirty() end
         M.ReleasePinnedPreviews("INVALIDATE_PAGE", nil, key)
-        M.ReleaseGFNativePreviews("INVALIDATE_PAGE", nil)
+        -- Invalidating another page must not hide the visible page's group preview.
+        M.ReleaseGFNativePreviews("INVALIDATE_PAGE", key ~= M.activeKey and M.activeKey or nil)
         ClearSearchRegistryPage(key)
         if key == "home" then M.dashboardEditModeButton = nil end
         local entries, seen = {}, {}

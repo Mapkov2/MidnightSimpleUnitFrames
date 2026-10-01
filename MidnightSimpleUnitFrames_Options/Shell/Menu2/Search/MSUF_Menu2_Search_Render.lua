@@ -38,19 +38,19 @@ end
 local function BuildSearchPage(ctx)
     -- Render can lazily refresh stale results when the query changed, but it still calls the
     -- search query layer instead of reconstructing index data here.
+    if SearchCombatLocked() or not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
     local width = ctx.width
     local query = TrimText(M.searchQuery or "")
-    local combatLocked = SearchCombatLocked() and true or false
-    local queryReady = not combatLocked and #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    local queryReady = #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
     local results = M.searchResults or {}
     if M.searchResultsQuery ~= query and not M.searchResultsPending then
-        results = combatLocked and {} or SearchPages(query)
+        results = SearchPages(query)
         M.searchResults = results
         M.searchResultsQuery = query
     end
     local b = W.PageBuilder(ctx)
     b:Header("Smart Search", query ~= "" and M.Format("Results for \"%s\"", query)
-        or "Type a setting or ask MSUF in your own words.", 78)
+        or "Search enabled features in your own words.", 78)
     local maxVisible = SEARCH_VISIBLE_RESULTS
     local visible = math.min(#results, maxVisible)
     local hasExpandedResult = false
@@ -66,23 +66,19 @@ local function BuildSearchPage(ctx)
     local rowH = hasExpandedResult and 62 or 30
     local resultTopY = SEARCH_STATE.indexing and -88 or -70
     local rows = math.max(3, math.ceil(math.max(visible, 1) / columns))
-    local showAssistantCTA = queryReady and not M.searchResultsPending
     local sectionH = math.max(160, 74 + rows * rowH + (SEARCH_STATE.indexing and 18 or 0))
-        + (showAssistantCTA and 42 or 0)
     local sec = b:Section("Best matches", sectionH)
-    if combatLocked then
-        W.Text(sec, "Search is paused in combat.", 14, -44, width - 28, T.colors.muted)
-    elseif query == "" then
-        W.Text(sec, "Start typing to search every MSUF2 menu page.", 14, -44, width - 28, T.colors.muted)
+    if query == "" then
+        W.Text(sec, "Start typing to search available settings and help.", 14, -44, width - 28, T.colors.muted)
     elseif not queryReady then
         W.Text(sec, M.Format("Type at least %d characters to search.", MIN_SEARCH_QUERY_LEN), 14, -44, width - 28, T.colors.muted)
     elseif M.searchResultsPending then
         W.Text(sec, M.Format("Searching for \"%s\"...", query), 14, -44, width - 28, T.colors.muted)
     elseif #results == 0 then
         W.Text(sec, M.Format("No exact setting found for \"%s\".", query), 14, -44, width - 28, T.colors.muted)
-        W.Text(sec, SEARCH_STATE.indexing and "Still indexing menu pages..." or "Ask MSUF below and it will guide you to the right option.", 14, -70, width - 28, T.colors.dim)
+        W.Text(sec, SEARCH_STATE.indexing and "Still indexing menu pages..." or "Try fewer words or a different spelling.", 14, -70, width - 28, T.colors.dim)
     else
-        W.Text(sec, M.Format("Best %d match(es). Open one or ask MSUF for a guided answer.", visible), 14, -44, width - 28, T.colors.muted)
+        W.Text(sec, M.Format("Best %d match(es). Open one to view its setting or help.", visible), 14, -44, width - 28, T.colors.muted)
         if SEARCH_STATE.indexing then
             W.Text(sec, "Indexing more menu pages in the background.", 14, -62, width - 28, T.colors.dim)
         end
@@ -117,17 +113,7 @@ local function BuildSearchPage(ctx)
                         historyMode = "none",
                         help = noOpen and "Selects this informational search result."
                             or "Opens this search result, including its exact options route and anchor.",
-                        command = {
-                            kind = "button",
-                            historyMode = "none",
-                            canExecute = function() return btn.IsShown == nil or btn:IsShown() end,
-                            set = function()
-                                local click = btn.GetScript and btn:GetScript("OnClick")
-                                if type(click) ~= "function" then return false end
-                                click(btn, "LeftButton")
-                                return noOpen or M.activeKey == pageKey
-                            end,
-                        },
+
                     })
             end
             if SearchResultHasDetail(rec) then
@@ -143,29 +129,16 @@ local function BuildSearchPage(ctx)
             W.Text(sec, M.Format("Showing the best %d matches. Add one more word to narrow it further.", maxVisible), 14, resultTopY - rows * rowH, width - 28, T.colors.dim)
         end
     end
-    if showAssistantCTA then
-        local assistantLabel = #results == 0 and "Ask MSUF for help" or "Ask MSUF about this"
-        local ask = T.Button(sec, assistantLabel, math.min(220, width - 28), 26)
-        ask:SetPoint("BOTTOMLEFT", sec, "BOTTOMLEFT", 14, 12)
-        ask:SetScript("OnClick", function() OpenSearchResults(query) end)
-        if type(M.RegisterMenuChromeControl) == "function" then
-            M.RegisterMenuChromeControl(ask, "search.ask-assistant", "Ask MSUF about the current search", "ephemeral", {
-                historyMode = "none",
-                help = "Sends the current natural-language search to the MSUF Assistant.",
-            })
-        end
-    end
-    local quick = b:Section("Support Search Examples", 206)
-    local shortcutDispel = "dispel border overlay any debuff"
-    local shortcutStripe = "where is debuff stripe"
-    local shortcutHighlights = "highlight priority dispel aggro target"
+    local quick = b:Section("Search Examples", 206)
+    local examples = M.SearchData and M.SearchData.SEARCH_EXAMPLES or {}
+    local locale = MSUF.GetEffectiveLocale and MSUF.GetEffectiveLocale() or MSUF.LOCALE or "enUS"
+    local candidates = examples[locale] or examples.enUS or { { "Profiles", "profiles" }, { "Castbar", "castbar" }, { "Buffs", "buffs" } }
+    -- An example tied to a page shows only where search offers that page;
+    -- asking never builds the index before anything was typed.
     local shortcuts = {}
-    for row in ([[
-Move Frames=where do I move my unitframe;Background=change my backgrond;Raid Frames=move raid frames;Text Size=make text bigger;Profiles=import profile wago;Castbar=evoker castbar;Buffs=show only my buffs;Blizzard=hide blizzard frames
-Range Check=unit frame range check;Level Text=where is level text anchor;Performance=why is msuf lagging;Minimap=where is the minimap icon setting;Rounded=rounded frames ausschalten;Dispel=]] .. shortcutDispel .. [[;Stripe=]] .. shortcutStripe .. [[;Highlights=]] .. shortcutHighlights .. [[
-]]):gmatch("[^;]+") do
-        local label, query = row:match("^%s*(.-)=(.-)%s*$")
-        if label and query then shortcuts[#shortcuts + 1] = { label, query } end
+    local IsSearchPageAvailable = Search._CoreAPI.IsSearchPageAvailable
+    for _, shortcut in ipairs(candidates) do
+        if not shortcut[3] or IsSearchPageAvailable(shortcut[3]) then shortcuts[#shortcuts + 1] = shortcut end
     end
     local buttonW = math.floor((width - 56) / 3)
     for i = 1, #shortcuts do
@@ -196,17 +169,7 @@ Range Check=unit frame range check;Level Text=where is level text anchor;Perform
                     actionFixedArgs = { query = searchQuery },
                     historyMode = "none",
                     help = "Runs this built-in MSUF support search.",
-                    command = {
-                        kind = "button",
-                        historyMode = "none",
-                        canExecute = function() return btn.IsShown == nil or btn:IsShown() end,
-                        set = function()
-                            local click = btn.GetScript and btn:GetScript("OnClick")
-                            if type(click) ~= "function" then return false end
-                            click(btn, "LeftButton")
-                            return true
-                        end,
-                    },
+
                 })
         end
     end

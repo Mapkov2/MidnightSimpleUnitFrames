@@ -45,6 +45,17 @@ function Shared.SameSettingValue(a, b, depth)
     end
     return true
 end
+-- Section Reset and the custom badge compare against the factory profile, a
+-- constant of the session: decode it once instead of on every Unit or Group page
+-- build. Callers only read it; Reset deep-copies each value it restores.
+local factoryProfile
+function Shared.FactoryProfile()
+    if factoryProfile then return factoryProfile end
+    local create = MSUF.MSUF_CreateFactoryDefaultProfile or _G.MSUF_CreateFactoryDefaultProfile
+    local profile = type(create) == "function" and create() or nil
+    if type(profile) == "table" then factoryProfile = profile end
+    return factoryProfile
+end
 function Shared.CachedSectionDefaults(opts, scope)
     local cache = opts._msuf2SectionDefaultsCache
     if not cache then
@@ -263,22 +274,18 @@ local function SharedControlMeta(opts, suffix, classification)
         actionKey = opts.actionKey,
         actionFixedArgs = opts.actionFixedArgs,
         actionInputArg = opts.actionInputArg,
-        assistantSettingKeys = opts.assistantSettingKeys,
-        assistantSettingKeyPatterns = opts.assistantSettingKeyPatterns,
+        searchSettingKeys = opts.searchSettingKeys,
+        searchSettingKeyPatterns = opts.searchSettingKeyPatterns,
         command = opts.controlCommand,
     }
     -- Shared section actions inherit the owning page's live scope; the
-    -- identity must not masquerade as a static Assistant Registry action.
+    -- identity must not masquerade as a static Search Registry action.
     return meta
 end
 local function RegisterSharedControl(widget, opts, suffix, label, kind, classification)
     local meta = SharedControlMeta(opts, suffix, classification)
     if not (widget and meta and type(M.RegisterSearchWidget) == "function") then return widget end
     meta.label, meta.kind = label, kind
-    if meta.classification == "setting" or meta.classification == "action" then
-        meta.assistantDisposition = opts.assistantDisposition
-        meta.assistantDispositionReason = opts.assistantDispositionReason
-    end
     M.RegisterSearchWidget(widget, meta)
     return widget
 end
@@ -496,7 +503,9 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                     btn:SetPoint("TOPLEFT", popup, "TOPLEFT", x, opts.targetY or -60)
                     x = x + TargetWidth(key, btn) + (opts.targetGap or 6)
                 end
-                if btn.SetActive then btn:SetActive(selected == key) end
+                if btn.SetActive then
+                    btn:SetActive(type(selected) == "table" and selected[key] == true or selected == key)
+                end
             end
         end
     end

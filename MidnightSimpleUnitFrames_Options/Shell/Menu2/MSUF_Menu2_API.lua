@@ -8,9 +8,8 @@ local M = MSUF.MSUF2 or _G.MSUF2
 if not M then return end
 local MenuRuntime = M.MenuRuntime or {}
 
--- M.Format is installed by MSUF_Menu2_Theme.lua. This file is also loaded by
--- audits and by Assistant entry points that run before the theme exists, so
--- route through a fallback instead of indexing a nil.
+-- M.Format is installed by MSUF_Menu2_Theme.lua, which MSUF_Menu2.xml loads
+-- before this file.
 local Fmt = M.Format
 
 local ExportPublic = MSUF.ExportPublic
@@ -26,160 +25,45 @@ ExportPublic("MSUF_SwitchMirrorPage", function(pageKey) return M.SelectPage(page
 ExportPublic("MSUF_GetCurrentMirrorPage", function() return M.activeKey or "home" end)
 ExportPublic("MSUF_GetMirrorPages", function() return M.pages end)
 
-local function VisibleControlDirection(page, label)
-    local route = type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(page) or tostring(page or "MSUF menu")
-    label = tostring(label or "")
-    if label ~= "" and not tostring(route):find(label, 1, true) then return tostring(route) .. " > " .. label end
-    return tostring(route)
-end
-
-local function OpenExactSettingControl(settingKey, fallbackLabel, fallbackPage)
-    settingKey = tostring(settingKey or "")
-    fallbackPage = tostring(fallbackPage or "")
-    if settingKey == "" then return false, "Which exact MSUF option do you want me to open?" end
-    if M.BlockCombatAction and M.BlockCombatAction() then
-        return false, "I cannot open and focus an options control during combat. Try again after combat."
-    end
-
+-- The missing cooldown-anchor warning opens its real setting through this
+-- public navigation entry point. It never invokes the setting's action.
+local function OpenExactSettingControl(settingKey, label, pageKey)
+    if type(settingKey) ~= "string" or settingKey == ""
+        or type(pageKey) ~= "string" or not M.pages[pageKey] then return false end
+    if M.BlockCombatAction and M.BlockCombatAction() then return false end
     local bridge = M.SearchBridge
+    if not (bridge and type(bridge.OpenSearchTarget) == "function") then return false end
+    -- The route is applied and the target page built once, by OpenSearchTarget.
+    -- A shown window needs no open; a hidden one reopens on its cached page.
+    if not (M.frame and M.frame.IsShown and M.frame:IsShown())
+        and M.Open(M.activeKey or pageKey) == false then return false end
+    local exactTarget = { pageKey = pageKey, settingKey = settingKey }
+    local static = M.Search and M.Search.StaticIndex
+    if static and type(static.GetRecords) == "function" then
+        for _, record in ipairs(static.GetRecords()) do
+            local target = record.exactTarget
+            if record.key == pageKey and target and target.settingKey == settingKey then
+                exactTarget = target
+                break
+            end
+        end
+    end
     local route
-    local exactTarget = { settingKey = settingKey, pageKey = fallbackPage }
-    -- Selector-dependent pages must receive their finite workspace route before
-    -- M.Open lazily builds the page and before the runtime catalog is queried.
-    if fallbackPage ~= "" and bridge and type(bridge.PrepareSearchTarget) == "function" then
-        local _, preparedRoute, preparedTarget = bridge.PrepareSearchTarget(
-            fallbackPage, fallbackLabel or settingKey, fallbackLabel, exactTarget)
-        route = preparedRoute
-        if type(preparedTarget) == "table" then exactTarget = preparedTarget end
+    if type(bridge.RouteForExactTarget) == "function" then
+        route = bridge.RouteForExactTarget(pageKey, label or settingKey, label, exactTarget)
     end
-
-    local catalog = M.RuntimeControlCatalog
-    local function FindControl(page)
-        if catalog and type(catalog.FindBySettingKey) == "function" then
-            return catalog.FindBySettingKey(settingKey, page)
-        end
+    if exactTarget.sectionId then
+        route = route or {}
+        route.accordion = route.accordion or {}
+        route.accordion[pageKey .. ":" .. exactTarget.sectionId] = true
     end
-    local record, widget = FindControl(fallbackPage)
-    local page = tostring((record and record.pageKey) or fallbackPage or "")
-    if page == "" then return false, "I know that setting, but its MSUF menu page is not mapped yet." end
-
-    -- Opening the owning page lazily builds its real widgets and populates the
-    -- runtime catalog. Resolve once more afterwards to obtain the exact anchor.
-    if M.Open(page) == false then return false, "I could not open the MSUF options page." end
-    local builtRecord, builtWidget = FindControl(page)
-    record, widget = builtRecord or record, builtWidget or widget
-    page = tostring((record and record.pageKey) or page)
-    local label = tostring((record and (record.label or record.identityLabel)) or fallbackLabel or settingKey)
-    local query = tostring((record and (record.identityLabel or record.label)) or fallbackLabel or settingKey)
-    if bridge and type(bridge.OpenSearchTarget) == "function" then
-        local called, opened, focused, exact = bridge.OpenSearchTarget(
-            page, query, label, widget, route, exactTarget)
-        if called and opened == false then
-            return false, Fmt("I could not open the MSUF options page for %s.", label)
-        end
-        if called and focused == false then
-            return false, Fmt("I opened %s, but its exact %s control is not available there anymore.",
-                tostring(type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(page) or page), label)
-        end
-        if called and exact == false then
-            return true, Fmt("Opened %s and highlighted the closest matching control.", VisibleControlDirection(page, label))
-        end
-    elseif type(M.SelectPage) == "function" then
-        M.SelectPage(page)
-    end
-    return true, Fmt("Opened %s and focused its exact control.", VisibleControlDirection(page, label))
+    local called, opened, focused, exact = bridge.OpenSearchTarget(
+        pageKey, label or settingKey, label, nil, route, exactTarget)
+    return called and opened and focused and exact == true
 end
-
 M.OpenExactSettingControl = OpenExactSettingControl
 ExportPublic("MSUF_OpenExactSettingControl", OpenExactSettingControl)
 
--- Assistant-facing bridge for color settings. Reuse the real Menu2 color
--- button so the Color Painter gets the same live setter, history transaction,
--- context label, and cancellation behavior as a direct user click.
-local function OpenExactColorSettingPicker(settingKey, fallbackLabel, fallbackPage)
-    local opened, message = OpenExactSettingControl(settingKey, fallbackLabel, fallbackPage)
-    if opened == false then return false, message end
-
-    local catalog = M.RuntimeControlCatalog
-    if not (catalog and type(catalog.FindBySettingKey) == "function") then
-        return false, "I opened the setting, but the exact color control is not available yet."
-    end
-    local record, widget = catalog.FindBySettingKey(settingKey, fallbackPage)
-    if not (record and widget and tostring(record.kind or "") == "color"
-        and type(widget.GetRGB) == "function" and type(widget.SetRGB) == "function")
-    then
-        return false, "I opened the setting, but it is not exposed as a Color Painter control."
-    end
-
-    local openPicker = M.OpenColorContextPicker
-        or (M.Widgets and M.Widgets.OpenColorContextPicker)
-    if type(openPicker) ~= "function" then
-        return false, "I opened the color setting, but Color Painter is not available yet."
-    end
-
-    local label = tostring(record.label or record.identityLabel or fallbackLabel or settingKey)
-    local owners = type(widget._msuf2ColorContextOwners) == "table"
-        and widget._msuf2ColorContextOwners or { widget }
-    openPicker(widget._msuf2ColorContextTitle or label, owners,
-        widget._msuf2ColorContextNote or "Opened from the MSUF Assistant.", widget)
-    return true, Fmt("Opened Color Painter for %s.", label)
-end
-
-M.OpenExactColorSettingPicker = OpenExactColorSettingPicker
-ExportPublic("MSUF_OpenExactColorSettingPicker", OpenExactColorSettingPicker)
-
-local function OpenExactCatalogControl(semanticId, fallbackLabel, fallbackPage)
-    semanticId = tostring(semanticId or "")
-    fallbackPage = tostring(fallbackPage or "")
-    if semanticId == "" then return false, "Which exact MSUF control do you want me to open?" end
-    if M.BlockCombatAction and M.BlockCombatAction() then
-        return false, "I cannot open and focus an options control during combat. Try again after combat."
-    end
-
-    local catalog = M.RuntimeControlCatalog
-    if not (catalog and type(catalog.Resolve) == "function") then
-        return false, "The exact-control catalog is not available yet. Reopen the MSUF menu and try again."
-    end
-    if fallbackPage == "" then return false, "I know that control, but its MSUF menu page is not mapped yet." end
-
-    local bridge = M.SearchBridge
-    local route
-    local exactTarget = { semanticId = semanticId, pageKey = fallbackPage }
-    -- Generated rows can live behind an Aura lane/tool selector and therefore
-    -- do not exist in the current runtime catalog until that route is applied.
-    if bridge and type(bridge.PrepareSearchTarget) == "function" then
-        local _, preparedRoute, preparedTarget = bridge.PrepareSearchTarget(
-            fallbackPage, fallbackLabel or semanticId, fallbackLabel, exactTarget)
-        route = preparedRoute
-        if type(preparedTarget) == "table" then exactTarget = preparedTarget end
-    end
-    if M.Open(fallbackPage) == false then return false, "I could not open the MSUF options page." end
-
-    local record, widget = catalog.Resolve(semanticId, { pageKey = fallbackPage })
-    if not record then
-        return false, Fmt("I opened %s, but that exact control is not available in the current context.", fallbackPage)
-    end
-    local page = tostring(record.pageKey or fallbackPage)
-    local label = tostring(record.label or record.identityLabel or fallbackLabel or semanticId)
-    local query = tostring(record.identityLabel or record.label or fallbackLabel or semanticId)
-    if bridge and type(bridge.OpenSearchTarget) == "function" then
-        local called, opened, focused = bridge.OpenSearchTarget(
-            page, query, label, widget, route, exactTarget)
-        if called and opened == false then
-            return false, Fmt("I could not open the MSUF options page for %s.", label)
-        end
-        if called and focused == false then
-            return false, Fmt("I opened %s, but its exact %s control is not available there anymore.",
-                tostring(type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(page) or page), label)
-        end
-    elseif type(M.SelectPage) == "function" then
-        M.SelectPage(page)
-    end
-    return true, Fmt("Opened %s and focused its exact control.", VisibleControlDirection(page, label))
-end
-
-M.OpenExactCatalogControl = OpenExactCatalogControl
-ExportPublic("MSUF_OpenExactCatalogControl", OpenExactCatalogControl)
 do
     local combatFrame
     local combatRegistered = false

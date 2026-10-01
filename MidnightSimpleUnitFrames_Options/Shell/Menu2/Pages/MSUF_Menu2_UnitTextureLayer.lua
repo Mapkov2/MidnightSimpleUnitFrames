@@ -483,7 +483,7 @@ local function BuildTextureLayer(ctx, builder, unit)
             "This control edits the texture-layer slot selected in the accordion's slot bar.")
         local keys = {}
         for i = 1, #SLOT_PREFIXES do keys[i] = tostring(unit) .. "." .. SLOT_PREFIXES[i] .. base end
-        meta.assistantSettingKeys = keys
+        meta.searchSettingKeys = keys
         if step and meta then meta.step, meta.roundStep = step, true end
         return meta
     end

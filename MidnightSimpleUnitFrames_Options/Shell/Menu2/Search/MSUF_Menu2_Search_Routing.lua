@@ -20,9 +20,6 @@ local C = Search._RoutingContext or {}
 
 M = C.M or M
 local NormalizeSearchText = C.NormalizeSearchText
-local BuildSearchQueryClauses = C.BuildSearchQueryClauses
-local BuildSearchTokenList = C.BuildSearchTokenList
-local SearchEditDistanceWithin = C.SearchEditDistanceWithin
 local SearchCombatLocked = C.SearchCombatLocked
 local ContentWidth = C.ContentWidth
 local ContentHeight = C.ContentHeight
@@ -31,90 +28,7 @@ local DASHBOARD_ROUTE_SCALING = C.DASHBOARD_ROUTE_SCALING
 local Lines = M.Lines
 local KeySetFromWords = M.KeySetFromWords
 
-if not (NormalizeSearchText and BuildSearchQueryClauses and BuildSearchTokenList and SearchEditDistanceWithin and SearchCombatLocked and ContentWidth and ContentHeight) then return end
-
-local function ScoreAnchorTextClauses(normalized, queryNorm, clauses)
-    -- Anchor scoring favors exact page-control text first, then prefix/contains/fuzzy matches.
-    -- This keeps search useful for typos while still sending precise queries to the right row.
-    if normalized == "" or type(clauses) ~= "table" or #clauses == 0 then return 0 end
-    local score, matched = 0, 0
-    if queryNorm ~= "" then
-        if normalized == queryNorm then score = score + 900 end
-        if normalized:find(queryNorm, 1, true) then score = score + 260 end
-    end
-    local tokens = BuildSearchTokenList(normalized)
-    for i = 1, #clauses do
-        local clause = clauses[i]
-        local best = 0
-        for k = 1, #clause.terms do
-            local term = clause.terms[k]
-            if normalized == term then
-                best = math.max(best, 220)
-            elseif normalized:sub(1, #term) == term then
-                best = math.max(best, 130)
-            elseif normalized:find(term, 1, true) then
-                best = math.max(best, 70)
-            elseif #term >= 5 and not term:find(" ", 1, true) then
-                local maxDistance = (#term >= 8) and 2 or 1
-                for t = 1, #tokens do
-                    if math.abs(#tokens[t] - #term) <= maxDistance and SearchEditDistanceWithin(tokens[t], term, maxDistance) then
-                        best = math.max(best, 24)
-                        break
-                    end
-                end
-            end
-        end
-        if best > 0 then
-            score = score + best
-            matched = matched + 1
-        end
-    end
-    if matched == 0 then return 0 end
-    if matched == #clauses then score = score + 180 else score = score - ((#clauses - matched) * 35) end
-    if #normalized <= 42 then score = score + 30 end
-    if #normalized > 120 then score = score - 40 end
-    return score
-end
-
-local function ScoreAnchorText(text, query, fallback)
-    local normalized = NormalizeSearchText(text)
-    if normalized == "" then return 0 end
-    local queryNorm, clauses = BuildSearchQueryClauses(query)
-    local queryScore = ScoreAnchorTextClauses(normalized, queryNorm, clauses)
-
-    local fallbackScore = 0
-    if fallback and fallback ~= query then
-        local fallbackNorm, fallbackClauses = BuildSearchQueryClauses(fallback)
-        fallbackScore = ScoreAnchorTextClauses(normalized, fallbackNorm, fallbackClauses)
-    end
-
-    if queryScore > 0 and fallbackScore > 0 then
-        return queryScore + math.floor(fallbackScore * 0.25)
-    end
-    return math.max(queryScore, math.floor(fallbackScore * 0.75))
-end
-
-local function CollectSearchAnchorCandidates(frame, out, depth)
-    if not frame or depth > 16 then return end
-    if frame.GetRegions then
-        local regions = { frame:GetRegions() }
-        for i = 1, #regions do
-            local region = regions[i]
-            if region and region.GetObjectType and region:GetObjectType() == "FontString" and region.GetText then
-                local text = region:GetText()
-                if text and text ~= "" then
-                    out[#out + 1] = { region = region, text = text }
-                end
-            end
-        end
-    end
-    if frame.GetChildren then
-        local children = { frame:GetChildren() }
-        for i = 1, #children do
-            CollectSearchAnchorCandidates(children[i], out, depth + 1)
-        end
-    end
-end
+if not (NormalizeSearchText and SearchCombatLocked and ContentWidth and ContentHeight) then return end
 
 local function SearchAnchorOwnership(wrapper, anchor)
     if not (wrapper and anchor and anchor.GetTop) then return false, nil end
@@ -132,41 +46,10 @@ local function SearchAnchorOwnership(wrapper, anchor)
     return false, nil
 end
 
-local function FindSearchAnchor(pageKey, query, fallback, preferredAnchor)
-    local entry = M.cache and M.cache[pageKey]
-    local wrapper = entry and entry.wrapper
-    if not wrapper then return nil end
-    if SearchAnchorOwnership(wrapper, preferredAnchor) then return preferredAnchor end
-
-    local candidates = {}
-    CollectSearchAnchorCandidates(wrapper, candidates, 1)
-    -- Fixed Editing/Preview panels live in the shared header host, outside the
-    -- wrapper's physical child tree. Include the active page-owned stack in the
-    -- same search pass so plain-text and exact-control routing stay equivalent.
-    local headers = entry and entry.pageHeaders
-    if type(headers) == "table" then
-        for i = 1, #headers do
-            local record = headers[i]
-            if record and record.active and record.section then
-                CollectSearchAnchorCandidates(record.section, candidates, 1)
-            end
-        end
-    end
-
-    local best, bestScore
-    for i = 1, #candidates do
-        local candidate = candidates[i]
-        local score = ScoreAnchorText(candidate.text, query, fallback)
-        if score > 0 and (not bestScore or score > bestScore) then
-            best, bestScore = candidate, score
-        end
-    end
-    return best and best.region or nil
-end
-
 local function ResolveExactSearchAnchor(pageKey, exactTarget)
     if type(exactTarget) ~= "table" then return nil, nil end
     local sectionId = tostring(exactTarget.sectionId or "")
+    local declaredSection
     if sectionId ~= "" then
         local entry = M.cache and M.cache[pageKey]
         local sections = entry and entry.sections
@@ -177,8 +60,10 @@ local function ResolveExactSearchAnchor(pageKey, exactTarget)
             -- lazily. Activate/materialize the declared exact section before
             -- resolving its runtime control; otherwise a changelog/search link
             -- can fail on a cold page or resolve a widget under a hidden group.
-            entry._msuf2ResolveMissingSection(sectionId)
+            declaredSection = entry._msuf2ResolveMissingSection(sectionId)
         end
+        entry = M.cache and M.cache[pageKey]
+        declaredSection = (entry and entry.sections and entry.sections[sectionId]) or declaredSection
     end
     local controlId = tostring(exactTarget.controlId or "")
     local catalog = M.RuntimeControlCatalog
@@ -189,7 +74,13 @@ local function ResolveExactSearchAnchor(pageKey, exactTarget)
         return nil, false, true
     end
     local settingKey = tostring(exactTarget.settingKey or "")
-    if settingKey == "" or not (catalog and type(catalog.FindBySettingKey) == "function") then return nil, false, false end
+    if settingKey == "" then
+        -- A section identity is sufficient for section/color results. Virtual
+        -- sections may resolve to their owning feature row through the page.
+        if sectionId ~= "" then return declaredSection, declaredSection ~= nil, true end
+        return nil, false, false
+    end
+    if not (catalog and type(catalog.FindBySettingKey) == "function") then return nil, false, true end
     local _, widget = catalog.FindBySettingKey(settingKey, pageKey, exactTarget)
     if widget then
         if type(widget._msuf2PrepareExactSearchTarget) == "function" then
@@ -201,19 +92,20 @@ local function ResolveExactSearchAnchor(pageKey, exactTarget)
 end
 
 local function FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
-    local exactAnchor, exactMatched, exactRequired = ResolveExactSearchAnchor(pageKey, exactTarget)
+    local exactAnchor, exactMatched = ResolveExactSearchAnchor(pageKey, exactTarget)
     if exactMatched then
         local wrapper = M.cache and M.cache[pageKey] and M.cache[pageKey].wrapper
         if SearchAnchorOwnership(wrapper, exactAnchor) then return exactAnchor, true end
         return nil, false
     end
-    if exactRequired then return nil, false end
-    return FindSearchAnchor(pageKey, query, fallback, preferredAnchor), exactMatched
+    -- Page-only help stops at the page. Missing exact targets fail closed;
+    -- query wording and visible labels never select a different widget.
+    return nil, false
 end
 
 local function OpenAnchorCollapsibles(region)
     local entries, seen = {}, {}
-    local parent = region and region.GetParent and region:GetParent()
+    local parent = region
     while parent do
         local entry = parent._msuf2CollapsibleEntry
         if entry and not seen[entry] then
@@ -723,9 +615,9 @@ portrait=portrait|class icon|2d portrait|avatar|face
 text=text|name text|health text|hp text|power text|font size|text slot|delimiter|hide percent
 power=resource bar|power bar|mana bar|role power|smooth fill|tank power|healer power|dps power
 range=range fade|range check|distance check|out of range
-layout_advanced=layout|growth|direction|spacing|columns|rows|width|height
+layout_advanced=group layout|layout|growth|direction|columns|rows|collapse empty groups|center solo|small raid
 sorting=sorting|sort|role order|player first|groups first
-scaling=frame scaling|scale|smooth health fill|smooth fill|party smooth fill|raid smooth fill
+scaling=size and scaling|size & scaling|frame scaling|scale|width|height|spacing|group size|raid size|size overrides|resize appearance
 transparency=transparency|alpha|opacity|fade
 anchor=anchoring|anchor|position|move party|move raid|x offset|y offset
 ]],
@@ -1052,6 +944,7 @@ local function ApplyRouteValues(target, values, setter)
 end
 
 local function ApplySearchRoute(pageKey, route)
+    if SearchCombatLocked() or (not (M.frame and M.frame.IsShown and M.frame:IsShown())) then return false end
     if type(route) ~= "table" then return false end
     local changed = false
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
@@ -1061,7 +954,7 @@ local function ApplySearchRoute(pageKey, route)
     end
     local accordion = route.accordion
     if type(accordion) == "table" then
-        -- Exact Search/Assistant navigation resolves its control immediately
+        -- Exact Search navigation resolves its control immediately
         -- after opening the page. Remember only the explicitly opened lazy
         -- sections so their page build can materialize those controls in the
         -- same call; ordinary cold page builds remain shell-only.
@@ -1141,7 +1034,12 @@ local function ApplySearchRoute(pageKey, route)
             _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
             db = _G.MSUF_DB.general
         end
-        if ApplyRouteValues(db, general) then changed = true end
+        -- These are existing menu selectors, never feature values. Reject all
+        -- other fields even if an external caller supplies a route table.
+        for _, key in ipairs({ "hpPowerTextSelectedKey", "_fontScopeKey" }) do
+            local value = general[key]
+            if value ~= nil and db[key] ~= value then db[key] = value; changed = true end
+        end
     end
     if changed and pageKey and type(M.InvalidatePage) == "function" then
         M.InvalidatePage(pageKey)
@@ -1150,7 +1048,7 @@ local function ApplySearchRoute(pageKey, route)
 end
 local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
     if SearchCombatLocked() then return end
-    if M.frame and M.frame.IsShown and not M.frame:IsShown() then return end
+    if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
     if M.activeKey ~= pageKey then return end
     local entry = M.cache and M.cache[pageKey]
     local wrapper = entry and entry.wrapper
@@ -1165,7 +1063,7 @@ local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, e
         -- the options window. Do no resolver, layout, scroll, or highlight
         -- work once either condition becomes true.
         if SearchCombatLocked() then return end
-        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return end
+        if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
         if M.activeKey ~= pageKey then return end
         local currentEntry = M.cache and M.cache[pageKey]
         wrapper = currentEntry and currentEntry.wrapper
@@ -1202,6 +1100,15 @@ end
 -- control mid-resolution and orphan the anchor widget.
 local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     if type(exactTarget) ~= "table" then return route end
+    if exactTarget.prepareKind == "groupSizingTab" then
+        local tab = exactTarget.prepareValue
+        if pageKey == "gf_layout" and exactTarget.sectionId == "scaling"
+            and (tab == "general" or tab == "tier10" or tab == "tier20" or tab == "tier25" or tab == "tier40") then
+            route = type(route) == "table" and route or {}
+            SearchRouteOpenAccordion(route, pageKey, "scaling")
+        end
+        return route
+    end
     if exactTarget.prepareKind == "groupAuraWorkspace" then
         local scope, lane, tool = tostring(exactTarget.prepareValue or ""):match("^(%w+)_(%w+)_(%w+)$")
         if pageKey ~= "gf_auras"
@@ -1227,11 +1134,14 @@ local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     return route
 end
 local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)
+    if SearchCombatLocked() or (not (M.frame and M.frame.IsShown and M.frame:IsShown())) then return false, false, false end
     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
     local routingFallback = fallback
     if type(exactTarget) == "table" and type(exactTarget.settingKey) == "string" then
         routingFallback = tostring(fallback or "") .. " " .. exactTarget.settingKey
     end
+    if type(exactTarget) == "table" and exactTarget.prepareKind == "profileEditor"
+        and (pageKey ~= "profiles" or not M.ProfileSearch.Prepare(exactTarget)) then return false, false, false end
     route = route or SearchRouteForTarget(pageKey, query, routingFallback)
     route = SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     local routeChanged = ApplySearchRoute(pageKey, route)

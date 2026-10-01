@@ -86,6 +86,10 @@ local function BuildPageInfo()
     return info, Ensure
 end
 
+local function DecodeIdentityPart(value)
+    return value and value:gsub("%%(%x%x)", function(byte) return string.char(tonumber(byte, 16)) end)
+end
+
 local function Decode()
     local blob = Search.StaticIndexBlob
     if type(blob) ~= "string" or blob == "" then return {} end
@@ -98,6 +102,10 @@ local function Decode()
             exactSectionId, exactTargetKinds, exactTargetContracts, haystack =
             line:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
         if pageKey and pageKey ~= "" then
+            local encodedPage, encodedControl = searchIdentity:match("^id\031([^\031]+)\031([^\031]+)$")
+            local controlId = DecodeIdentityPart(encodedControl)
+            if DecodeIdentityPart(encodedPage) ~= pageKey or not controlId
+                or not controlId:match("^[%w_%.:/%-]+$") then controlId = nil end
             local page = EnsurePage(pageKey)
             local displayLabel = Translate(label)
             -- The baked text is English. A localized label is added on top instead of
@@ -121,6 +129,14 @@ local function Decode()
             haystack = haystack .. " " .. hintNorm
             if page.groupNorm ~= "" then haystack = haystack .. " " .. page.groupNorm end
 
+            -- Each sizing control belongs to one immutable tab. Its generated
+            -- contract can prepare that exact view even before the page is built.
+            local sizingTab
+            if pageKey == "gf_layout" and exactSectionId == "scaling" and exactTargetKinds == "groupSizingTab" then
+                sizingTab = exactTargetContracts:match("^groupSizingTab=([^=|]+)=%*$")
+                if sizingTab ~= "general" and sizingTab ~= "tier10" and sizingTab ~= "tier20"
+                    and sizingTab ~= "tier25" and sizingTab ~= "tier40" then sizingTab = nil end
+            end
             count = count + 1
             records[count] = {
                 key = pageKey,
@@ -137,11 +153,14 @@ local function Decode()
                 haystack = haystack,
                 tokenLimit = CONTROL_TOKEN_LIMIT,
                 static = true,
-                exactTarget = (settingKey ~= "" or actionKey ~= "") and {
+                exactTarget = (controlId or settingKey ~= "" or actionKey ~= "") and {
+                    controlId = controlId,
                     pageKey = pageKey,
                     settingKey = settingKey ~= "" and settingKey or nil,
                     actionKey = actionKey ~= "" and actionKey or nil,
                     sectionId = exactSectionId ~= "" and exactSectionId or nil,
+                    prepareKind = sizingTab and "groupSizingTab" or nil,
+                    prepareValue = sizingTab,
                     prepareKinds = exactTargetKinds ~= "" and exactTargetKinds or nil,
                     prepareContracts = exactTargetContracts ~= "" and exactTargetContracts or nil,
                     label = displayLabel,

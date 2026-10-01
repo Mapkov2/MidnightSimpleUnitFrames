@@ -29,7 +29,7 @@ end
 
 local CP = M.ColorsPage or {}
 M.ColorsPage = CP
--- Assistant metadata (Meta) comes from the MSUF_Menu2_AdvancedColors_Meta.lua
+-- Search metadata (Meta) comes from the MSUF_Menu2_AdvancedColors_Meta.lua
 -- sibling that loads right before this page; the Group, Resources and Context
 -- siblings that load right after it pick the helpers published at the bottom.
 local Meta = CP.Meta
@@ -694,8 +694,8 @@ local function ButtonAt(parent, label, x, y, width, onClick, semanticPath)
         end)
     end
     -- These two resets depend on the adjacent ephemeral selectors and have no
-    -- stable Assistant action contract. Keep them menu-executable but exclude
-    -- them from automatic Assistant mutation.
+    -- stable Search action contract. Keep them menu-executable but exclude
+    -- them from automatic Search mutation.
     local classification = (semanticPath == "castbar.text_color.reset" or semanticPath == "status_text.color.reset")
         and "ephemeral" or "action"
     RegisterControl(btn, Meta(semanticPath, classification), label, "button")
@@ -1496,7 +1496,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     end
     -- Mode-first: the four coloring modes are the most consequential choice on
     -- this page, so they lead the section as one segmented card row. That row
-    -- is the canonical bound control for search and Assistant automation.
+    -- is the canonical bound control for search and Search automation.
     local BAR_MODE_CARDS = {
         { mode = "dark", title = "Dark Mode", desc = "Dark, neutral bars for every frame." },
         { mode = "class", title = "Class Colors", desc = "Health bars use Blizzard class colors." },
@@ -2025,7 +2025,7 @@ end
 
 -- One taxonomy: the painter tabs above decide which category of sections is
 -- visible below the preview. Every legacy section id survives unchanged inside
--- its category, so search keywords, Assistant metadata and cross-page focus
+-- its category, so search keywords, Search metadata and cross-page focus
 -- requests keep working. Categories build lazily on first activation; hidden
 -- (coverage/audit) builds materialize everything, matching the old groups.
 local COLOR_CATEGORY_ORDER = { "unit", "group", "cast", "auras", "resources" }

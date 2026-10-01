@@ -333,6 +333,19 @@ local function EnsureColorPickerHideHook()
         if btn and type(btn._msuf2CommitColorInteraction) == "function" then
             btn:_msuf2CommitColorInteraction()
         end
+        -- Release the shared Blizzard picker once its own handler is done:
+        -- Classic's Okay/Cancel hide the frame before they call swatchFunc or
+        -- cancelFunc, which still need the owner. A stale owner made this hook
+        -- commit an MSUF control, and the menu's close hide the picker, when
+        -- another addon used the picker later.
+        local timer = _G.C_Timer
+        if btn and timer and timer.After then
+            timer.After(0, function()
+                if self._msuf2ColorOwner == btn and not (self.IsShown and self:IsShown()) then
+                    self._msuf2ColorOwner = nil
+                end
+            end)
+        end
     end)
 end
 function W.CloseMenuOwnedColorPicker()

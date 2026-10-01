@@ -93,7 +93,13 @@ local function SearchCombatLocked()
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
 end
 
+local function SearchMenuClosed()
+    return not (M.frame and M.frame.IsShown and M.frame:IsShown())
+end
+
 local function CancelSearchBackgroundIndex()
+    SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
+    M.searchResultsPending = nil
     SEARCH_STATE.indexing = false
     SEARCH_STATE.indexQueue = nil
 end
@@ -110,6 +116,63 @@ local SEARCH_DASHBOARD_SUPPORT_KEYWORDS = SearchData.DASHBOARD_SUPPORT_KEYWORDS 
 local SEARCH_DASHBOARD_WAGO_KEYWORDS = SearchData.DASHBOARD_WAGO_KEYWORDS or {}
 local SEARCH_DASHBOARD_SCALING_KEYWORDS = SearchData.DASHBOARD_SCALING_KEYWORDS or {}
 local SEARCH_DASHBOARD_CHANGELOG_KEYWORDS, CONTROL_KIND_LABEL = SearchData.DASHBOARD_CHANGELOG_KEYWORDS or {}, SearchData.CONTROL_KIND_LABEL or {}
+
+-- Locale dictionaries use natural spellings. Fold their keys exactly like
+-- input so accents/case never turn grammar into an unmatched required clause.
+-- Built on the first visible, out-of-combat query, and again after a source
+-- dictionary gains a key (a companion addon may add words after that query)
+-- or M.InvalidateSearchLexicon() (for words added to an existing key). The
+-- SearchData source tables stay intact.
+local LEXICON_SOURCES = { stop = SEARCH_STOP_WORDS, soft = SEARCH_QUERY_SOFT_STOP_WORDS, aliases = SEARCH_QUERY_ALIASES }
+local searchLexiconReady = false
+local compactQueryKeys
+LEXICON_SOURCES.watch = { __newindex = function(dictionary, key, value)
+    rawset(dictionary, key, value)
+    searchLexiconReady = false
+end }
+if getmetatable(LEXICON_SOURCES.stop) == nil then setmetatable(LEXICON_SOURCES.stop, LEXICON_SOURCES.watch) end
+if getmetatable(LEXICON_SOURCES.soft) == nil then setmetatable(LEXICON_SOURCES.soft, LEXICON_SOURCES.watch) end
+if getmetatable(LEXICON_SOURCES.aliases) == nil then setmetatable(LEXICON_SOURCES.aliases, LEXICON_SOURCES.watch) end
+function M.InvalidateSearchLexicon()
+    searchLexiconReady = false
+end
+local function EnsureSearchLexicon()
+    if searchLexiconReady then return end
+    local function FoldFlags(source)
+        local result = {}
+        for key, value in pairs(source) do
+            local folded = NormalizeSearchText(key)
+            if folded ~= "" then result[folded] = value end
+        end
+        return result
+    end
+    SEARCH_STOP_WORDS = FoldFlags(LEXICON_SOURCES.stop)
+    SEARCH_QUERY_SOFT_STOP_WORDS = FoldFlags(LEXICON_SOURCES.soft)
+    local sourceAliases = LEXICON_SOURCES.aliases
+    local keys, aliases, seenByKey = {}, {}, {}
+    for key in pairs(sourceAliases) do keys[#keys + 1] = key end
+    table.sort(keys)
+    for _, key in ipairs(keys) do
+        local folded = NormalizeSearchText(key)
+        if folded ~= "" then
+            local terms = aliases[folded]
+            if not terms then terms = {}; aliases[folded] = terms; seenByKey[folded] = {} end
+            local seen, source = seenByKey[folded], sourceAliases[key]
+            for _, term in ipairs(source) do
+                term = NormalizeSearchText(term)
+                if term ~= "" and not seen[term] then terms[#terms + 1] = term; seen[term] = true end
+            end
+        end
+    end
+    SEARCH_QUERY_ALIASES = aliases
+    -- Everything derived from the lexicon follows a rebuild.
+    compactQueryKeys = nil
+    SEARCH_STATE.aliasTypoKeys, SEARCH_STATE.aliasTypoKeyLengths = nil, nil
+    SEARCH_STATE.aliasTypoCache, SEARCH_STATE.aliasTypoCount = {}, 0
+    SEARCH_STATE.queryClauseCacheNorm, SEARCH_STATE.queryClauseCacheClauses = nil, nil
+    SEARCH_STATE.lexiconGeneration = (SEARCH_STATE.lexiconGeneration or 0) + 1
+    searchLexiconReady = true
+end
 
 local function SearchIgnoreQueryWord(word)
     return SEARCH_STOP_WORDS[word] or SEARCH_QUERY_SOFT_STOP_WORDS[word]
@@ -184,16 +247,92 @@ local function AddSearchTermUnique(list, seen, term, allowSoftStop)
     list[#list + 1] = term
 end
 
+-- Compact CJK text has no whitespace. Use the finite translated concept
+-- vocabulary, longest term first, and preserve unknown runs as normal terms.
+-- This is query-only and bounded by the input/word limits.
+-- Keys are bucketed by their first character in that global order, so each
+-- position only compares the keys that can start there (compactQueryKeys is
+-- declared with the lexicon, which drops it on every rebuild).
+local function UTF8LeadLength(first)
+    return first >= 240 and 4 or (first >= 224 and 3 or (first >= 192 and 2 or 1))
+end
+local function CompactQueryKeys()
+    if compactQueryKeys then return compactQueryKeys end
+    local keys, seen = {}, {}
+    for _, dictionary in ipairs({ SEARCH_QUERY_ALIASES, SEARCH_STOP_WORDS, SEARCH_QUERY_SOFT_STOP_WORDS }) do
+        for key in pairs(dictionary) do
+            if key:find("[\227-\237][\128-\191][\128-\191]") and not seen[key] then
+                seen[key] = true
+                keys[#keys + 1] = key
+            end
+        end
+    end
+    table.sort(keys, function(a, b) return #a == #b and a < b or #a > #b end)
+    -- A key shorter than its own first character (malformed UTF-8) keeps the
+    -- any-position comparison; rank decides between it and a bucket key.
+    local byLead, short, rank = {}, {}, {}
+    for i = 1, #keys do
+        local key = keys[i]
+        rank[key] = i
+        local leadLength = UTF8LeadLength(byte(key, 1))
+        if #key < leadLength then
+            short[#short + 1] = key
+        else
+            local lead = key:sub(1, leadLength)
+            local bucket = byLead[lead]
+            if not bucket then bucket = {}; byLead[lead] = bucket end
+            bucket[#bucket + 1] = key
+        end
+    end
+    compactQueryKeys = { byLead = byLead, short = short, rank = rank }
+    return compactQueryKeys
+end
+local function CompactKeyAt(compact, word, index)
+    local found
+    local bucket = compact.byLead[word:sub(index, index + UTF8LeadLength(byte(word, index)) - 1)]
+    if bucket then
+        for k = 1, #bucket do
+            local key = bucket[k]
+            if word:sub(index, index + #key - 1) == key then found = key; break end
+        end
+    end
+    local short = compact.short
+    for k = 1, #short do
+        local key = short[k]
+        if word:sub(index, index + #key - 1) == key then
+            if not found or compact.rank[key] < compact.rank[found] then found = key end
+            break
+        end
+    end
+    return found
+end
 local function SearchRawWords(normalized, allowSoftStop)
     local raw = {}
-    for word in tostring(normalized or ""):gmatch("%S+") do
+    local function Add(word)
         local ignored
-        if allowSoftStop then
-            ignored = SEARCH_STOP_WORDS[word]
+        if allowSoftStop then ignored = SEARCH_STOP_WORDS[word] else ignored = SearchIgnoreQueryWord(word) end
+        if not ignored and word ~= "" and #raw < SEARCH_MAX_RAW_WORDS then raw[#raw + 1] = word end
+    end
+    for word in tostring(normalized or ""):gmatch("%S+") do
+        if not SEARCH_QUERY_ALIASES[word] and word:find("[\227-\237][\128-\191][\128-\191]") then
+            local compact, index, unknown = CompactQueryKeys(), 1, ""
+            while index <= #word and #raw < SEARCH_MAX_RAW_WORDS do
+                local found = CompactKeyAt(compact, word, index)
+                if found then
+                    Add(unknown)
+                    unknown = ""
+                    Add(found)
+                    index = index + #found
+                else
+                    local length = UTF8LeadLength(byte(word, index))
+                    unknown = unknown .. word:sub(index, index + length - 1)
+                    index = index + length
+                end
+            end
+            Add(unknown)
         else
-            ignored = SearchIgnoreQueryWord(word)
+            Add(word)
         end
-        if not ignored then raw[#raw + 1] = word end
         if #raw >= SEARCH_MAX_RAW_WORDS then break end
     end
     return raw
@@ -201,29 +340,118 @@ end
 
 local SearchEditDistanceWithin
 
+-- ASCII keeps the allocation-free byte path. Native text uses bounded cached
+-- UTF-8 symbols so one typed character is one edit in every supported locale.
+local utfTokens, utfTokenCount = {}, 0
+local function SearchUTFCharacters(text)
+    local cached = utfTokens[text]
+    if cached then return cached end
+    local chars = {}
+    for char in text:gmatch("[%z\001-\127\194-\244][\128-\191]*") do chars[#chars + 1] = char end
+    if utfTokenCount >= 512 then utfTokens, utfTokenCount = {}, 0 end
+    utfTokens[text], utfTokenCount = chars, utfTokenCount + 1
+    return chars
+end
+-- #SearchUTFCharacters(text) without building the table: one character per
+-- lead byte of that pattern. ASCII text is its byte length.
+local function SearchCharCount(text)
+    if not text:find("[\128-\255]") then return #text end
+    local count = 0
+    for i = 1, #text do
+        local b = byte(text, i)
+        if b < 128 or (b >= 194 and b <= 244) then count = count + 1 end
+    end
+    return count
+end
+local function SearchTypoDistance(text)
+    local native = text:find("[\128-\255]") ~= nil
+    local length = native and SearchCharCount(text) or #text
+    if length < (native and 2 or 5) then return nil end
+    return length >= 8 and 2 or 1
+end
+-- The characters of SearchUTFCharacters as numbers in a reused array: a lead
+-- byte and its continuation bytes in base 256 (unique per byte sequence). A
+-- character longer than four bytes returns nil; the caller then compares the
+-- strings. Edit-distance rows are reused too: every cell is written before
+-- it is read, so nothing is allocated per comparison.
+local EDIT_SCRATCH = { codesA = {}, codesB = {}, rowA = {}, rowB = {}, rowC = {}, asciiA = {}, asciiB = {} }
+local function SearchUTFCodes(text, out)
+    local count, i, n = 0, 1, #text
+    while i <= n do
+        local lead = byte(text, i)
+        if lead < 128 or (lead >= 194 and lead <= 244) then
+            local code, j = lead, i + 1
+            while j <= n do
+                local continuation = byte(text, j)
+                if continuation < 128 or continuation > 191 then break end
+                code = code * 256 + continuation
+                j = j + 1
+            end
+            if j - i > 4 then return nil end
+            count = count + 1
+            out[count] = code
+            i = j
+        else
+            i = i + 1
+        end
+    end
+    return count
+end
+local function SearchUTFEditDistanceWithin(a, b, distance)
+    local first, second = EDIT_SCRATCH.codesA, EDIT_SCRATCH.codesB
+    local la, lb = SearchUTFCodes(a, first), SearchUTFCodes(b, second)
+    if not (la and lb) then
+        first, second = SearchUTFCharacters(a), SearchUTFCharacters(b)
+        la, lb = #first, #second
+    end
+    if math.abs(la - lb) > distance then return false end
+    local before, previous, current = EDIT_SCRATCH.rowA, EDIT_SCRATCH.rowB, EDIT_SCRATCH.rowC
+    for j = 0, lb do previous[j] = j end
+    for i = 1, la do
+        current[0] = i
+        local rowMin = i
+        for j = 1, lb do
+            local cost = first[i] == second[j] and 0 or 1
+            local value = math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
+            if i > 1 and j > 1 and first[i] == second[j - 1] and first[i - 1] == second[j] then
+                value = math.min(value, before[j - 2] + 1)
+            end
+            current[j] = value
+            if value < rowMin then rowMin = value end
+        end
+        if rowMin > distance then return false end
+        before, previous, current = previous, current, before
+    end
+    return previous[lb] <= distance
+end
+
 local function SearchAliasTypoKeys()
-    if SEARCH_STATE.aliasTypoKeys then return SEARCH_STATE.aliasTypoKeys end
+    if SEARCH_STATE.aliasTypoKeys then return SEARCH_STATE.aliasTypoKeys, SEARCH_STATE.aliasTypoKeyLengths end
     local keys = {}
     for key in pairs(SEARCH_QUERY_ALIASES) do
-        if #key >= 5 then keys[#keys + 1] = key end
+        if SearchTypoDistance(key) then keys[#keys + 1] = key end
     end
     table.sort(keys, function(a, b)
         if #a ~= #b then return #a < #b end
         return a < b
     end)
-    SEARCH_STATE.aliasTypoKeys = keys
-    return keys
+    local lengths = {}
+    for i = 1, #keys do lengths[i] = SearchCharCount(keys[i]) end
+    SEARCH_STATE.aliasTypoKeys, SEARCH_STATE.aliasTypoKeyLengths = keys, lengths
+    return keys, lengths
 end
 
 local function SearchAliasKeyForTypo(word)
-    if not SearchEditDistanceWithin or #word < 5 then return nil end
+    local maxDistance = SearchTypoDistance(word)
+    if not SearchEditDistanceWithin or not maxDistance then return nil end
     if SEARCH_STATE.aliasTypoCache[word] ~= nil then return SEARCH_STATE.aliasTypoCache[word] or nil end
-    local maxDistance = (#word >= 8) and 2 or 1
     local bestKey, bestDelta
-    local keys = SearchAliasTypoKeys()
+    local keys, lengths = SearchAliasTypoKeys()
+    local wordLength = SearchCharCount(word)
     for i = 1, #keys do
         local key = keys[i]
-        if math.abs(#key - #word) <= maxDistance and SearchEditDistanceWithin(word, key, maxDistance) then
+        local lengthDelta = lengths[i] - wordLength
+        if lengthDelta <= maxDistance and lengthDelta >= -maxDistance and SearchEditDistanceWithin(word, key, maxDistance) then
             local delta = math.abs(#key - #word)
             if not bestKey or delta < bestDelta or (delta == bestDelta and #key < #bestKey) then
                 bestKey = key
@@ -231,6 +459,8 @@ local function SearchAliasKeyForTypo(word)
             end
         end
     end
+    SEARCH_STATE.aliasTypoCount = (SEARCH_STATE.aliasTypoCount or 0) + 1
+    if SEARCH_STATE.aliasTypoCount > 128 then SEARCH_STATE.aliasTypoCache = {}; SEARCH_STATE.aliasTypoCount = 1 end
     SEARCH_STATE.aliasTypoCache[word] = bestKey or false
     return bestKey
 end
@@ -297,7 +527,8 @@ local function SearchCanonicalWords(raw)
 end
 
 local function BuildSearchQueryClauses(query)
-    local normalized = NormalizeSearchText(query)
+    EnsureSearchLexicon()
+    local normalized = NormalizeSearchText(tostring(query or ""):sub(1, 256))
     if normalized == SEARCH_STATE.queryClauseCacheNorm and SEARCH_STATE.queryClauseCacheClauses then
         return normalized, SEARCH_STATE.queryClauseCacheClauses
     end
@@ -363,6 +594,9 @@ end
 SearchEditDistanceWithin = function(a, b, maxDistance)
     if a == b then return true end
     maxDistance = tonumber(maxDistance) or 1
+    if a:find("[\128-\255]") or b:find("[\128-\255]") then
+        return SearchUTFEditDistanceWithin(a, b, maxDistance)
+    end
     local la, lb = #a, #b
     if math.abs(la - lb) > maxDistance then return false end
 
@@ -399,7 +633,7 @@ SearchEditDistanceWithin = function(a, b, maxDistance)
         return true
     end
 
-    local prev, curr = {}, {}
+    local prev, curr = EDIT_SCRATCH.asciiA, EDIT_SCRATCH.asciiB
     for j = 0, lb do prev[j] = j end
     for i = 1, la do
         curr[0] = i
@@ -417,20 +651,40 @@ SearchEditDistanceWithin = function(a, b, maxDistance)
     return prev[lb] <= maxDistance
 end
 
+-- Runs for every record and clause a keystroke does not match literally. Per
+-- query, termCache keeps the term's typo distance [1] and character count [2]
+-- beside its token results (string keys); a record's token character counts
+-- are computed once with its tokens. Only the length test runs per token.
+local function SearchTokenCharCounts(rec, tokens)
+    local counts = rec.tokenCharCounts
+    if counts and rec.tokenCharCountsFor == tokens then return counts end
+    counts = {}
+    for i = 1, #tokens do counts[i] = SearchCharCount(tokens[i]) end
+    rec.tokenCharCounts, rec.tokenCharCountsFor = counts, tokens
+    return counts
+end
 local function SearchFuzzyTokenMatch(rec, term, distanceCache)
-    if not rec or #term < 5 or term:find(" ", 1, true) then return false end
-    if not rec.tokens then
-        rec.tokens = BuildSearchTokenList(rec.haystack or "", rec.tokenLimit)
-    end
-    local maxDistance = (#term >= 8) and 2 or 1
+    if not rec then return false end
     local termCache = distanceCache[term]
     if not termCache then
-        termCache = {}
+        local maxDistance = not term:find(" ", 1, true) and SearchTypoDistance(term) or false
+        termCache = { maxDistance or false, maxDistance and SearchCharCount(term) or 0 }
         distanceCache[term] = termCache
     end
-    for i = 1, #rec.tokens do
-        local token = rec.tokens[i]
-        if math.abs(#token - #term) <= maxDistance then
+    local maxDistance = termCache[1]
+    if not maxDistance then return false end
+    local tokens = rec.tokens
+    if not tokens or rec.tokensLexicon ~= SEARCH_STATE.lexiconGeneration then
+        -- Tokens drop stop words, so a rebuilt lexicon re-tokenizes once.
+        tokens = BuildSearchTokenList(rec.haystack or "", rec.tokenLimit)
+        rec.tokens, rec.tokensLexicon = tokens, SEARCH_STATE.lexiconGeneration
+    end
+    local counts = SearchTokenCharCounts(rec, tokens)
+    local termLength = termCache[2]
+    for i = 1, #tokens do
+        local lengthDelta = counts[i] - termLength
+        if lengthDelta <= maxDistance and lengthDelta >= -maxDistance then
+            local token = tokens[i]
             local matched = termCache[token]
             if matched == nil then
                 matched = SearchEditDistanceWithin(token, term, maxDistance)
@@ -868,9 +1122,10 @@ local BuildRegistrySearchRecord
 local runtimeControlMetaScratch = {}
 local runtimeControlMetaScratchBusy = false
 
-local function RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, rawLabel, help, command)
+local function RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, rawLabel, help)
     if type(M.RegisterRuntimeControl) ~= "function" then return nil end
     local payload = runtimeControlMetaScratchBusy and {} or runtimeControlMetaScratch
+    payload.searchIndexed = meta.searchIndexed == true
     payload.controlId = meta.controlId
     payload.identityKey = meta.identityKey
     payload.controlPath = meta.controlPath
@@ -879,19 +1134,16 @@ local function RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, 
     payload.label = label
     payload.identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel
     payload.settingKey = meta.settingKey
+    payload.sectionId = meta.sectionId
+    payload.searchPrepareKind = meta.searchPrepareKind
+    payload.searchPrepareValue = meta.searchPrepareValue
     payload.actionKey = meta.actionKey
     payload.actionFixedArgs = meta.actionFixedArgs
     payload.actionInputArg = meta.actionInputArg
     payload.navigationKey = meta.navigationKey
-    payload.assistantDisposition = meta.assistantDisposition
-    payload.assistantDispositionReason = meta.assistantDispositionReason
-    payload.assistantSettingKeys = meta.assistantSettingKeys
-    payload.assistantSettingKeyPatterns = meta.assistantSettingKeyPatterns
     payload.classification = meta.classification or meta.controlType
     payload.ephemeral = meta.ephemeral
     payload.help = help
-    payload.confirmRequired = meta.confirmRequired
-    payload.command = command
     local wasBusy = runtimeControlMetaScratchBusy
     runtimeControlMetaScratchBusy = true
     local result = M.RegisterRuntimeControl(widget, payload, "search")
@@ -980,6 +1232,11 @@ function M.RegisterSearchWidget(widget, meta)
         return
     end
     EnsureSearchLocaleFresh()
+    if type(meta.prepareExactSearchTarget) == "function" then
+        widget._msuf2ExactTargetKinds = { [meta.searchPrepareKind] = true }
+        widget._msuf2ExactTargetContracts = { [meta.searchPrepareKind] = { [meta.searchPrepareValue] = true } }
+        widget._msuf2PrepareExactSearchTarget = meta.prepareExactSearchTarget
+    end
     local pageKey = meta.pageKey or M.PageKeyForWidget(widget) or M.activeKey
     if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
 
@@ -996,23 +1253,16 @@ function M.RegisterSearchWidget(widget, meta)
     local kind = meta.kind or widget._msuf2ControlKind or "control"
     local anchor = meta.anchor or widget._msuf2Title or widget._msuf2Label or widget
     local rawValues = meta.values or widget.values
-    local command = meta.command or widget._msuf2CommandAction
-    if not command and type(M.BuildRuntimeWidgetCommand) == "function" then
-        command = M.BuildRuntimeWidgetCommand(widget, meta, kind)
-    end
     local keywords = meta.keywords
     local help = meta.help or meta.description
     local catalogId
     local catalogClass = meta.classification or meta.controlType
-    local catalogInteractive = meta.catalog ~= false and (type(command) == "table"
+    local catalogInteractive = meta.catalog ~= false and (meta.controlId ~= nil or meta.settingKey ~= nil
         or catalogClass == "setting" or catalogClass == "action"
         or catalogClass == "navigation" or catalogClass == "ephemeral")
-    -- Search also indexes headings/descriptions, but those are not Assistant
-    -- controls. Construction-time buttons/sliders are search-only until their
-    -- explicit page binding supplies a command or reviewed classification.
-    -- Sending them early created fallback IDs that were promoted moments later.
+    -- Only explicitly identified controls join the exact navigation catalog.
     if catalogInteractive then
-        catalogId = RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, rawLabel, help, command)
+        catalogId = RegisterSearchRuntimeControl(widget, meta, pageKey, kind, label, rawLabel, help)
     end
     if help and widget._msuf2TooltipWired == nil then M.WireSearchHelpTooltip(widget, meta, catalogClass, help, rawLabel) end
 
@@ -1049,7 +1299,6 @@ function M.RegisterSearchWidget(widget, meta)
         and previous.label == label
         and previous.kind == kind
         and previous.anchor == anchor
-        and previous.command == command
         and previous.controlId == catalogId
         and previous.identityLabel == (meta.identityLabel or widget._msuf2SearchText or rawLabel)
         and previous.identityKey == meta.identityKey
@@ -1062,10 +1311,6 @@ function M.RegisterSearchWidget(widget, meta)
         and previous.actionFixedArgs == meta.actionFixedArgs
         and previous.actionInputArg == meta.actionInputArg
         and previous.navigationKey == meta.navigationKey
-        and previous.assistantDisposition == meta.assistantDisposition
-        and previous.assistantDispositionReason == meta.assistantDispositionReason
-        and previous.assistantSettingKeys == meta.assistantSettingKeys
-        and previous.assistantSettingKeyPatterns == meta.assistantSettingKeyPatterns
         and previous.keywords == keywords
         and previous.help == help
         and previous._rawValues == rawValues
@@ -1083,23 +1328,19 @@ function M.RegisterSearchWidget(widget, meta)
         kind = kind,
         anchor = anchor,
         values = CopyStaticSearchValues(rawValues),
-        command = command,
         controlId = catalogId,
         identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel,
         identityKey = meta.identityKey,
         controlPath = meta.controlPath,
         sectionId = meta.sectionId,
         classification = meta.classification or meta.controlType,
+        searchPrepareKind = meta.searchPrepareKind, searchPrepareValue = meta.searchPrepareValue,
         ephemeral = meta.ephemeral,
         settingKey = meta.settingKey,
         actionKey = meta.actionKey,
         actionFixedArgs = meta.actionFixedArgs,
         actionInputArg = meta.actionInputArg,
         navigationKey = meta.navigationKey,
-        assistantDisposition = meta.assistantDisposition,
-        assistantDispositionReason = meta.assistantDispositionReason,
-        assistantSettingKeys = meta.assistantSettingKeys,
-        assistantSettingKeyPatterns = meta.assistantSettingKeyPatterns,
         confirmRequired = meta.confirmRequired,
         keywords = keywords,
         help = help,
@@ -1205,45 +1446,6 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
     return record
 end
 
-local function BuildButtonCommandAction(widget, entry)
-    if not (widget and type(entry) == "table" and entry.kind == "button") then return nil end
-    local function ReadClickHandler()
-        if type(widget.GetScript) ~= "function" then return nil end
-        local handler = widget.GetScript(widget, "OnClick")
-        if type(handler) == "function" then return handler end
-        return nil
-    end
-    if not ReadClickHandler() then return nil end
-    return {
-        kind = "button",
-        label = entry.label,
-        set = function()
-            local handler = ReadClickHandler()
-            if not handler then return false end
-            if type(widget.IsEnabled) == "function" then
-                local enabled = widget.IsEnabled(widget)
-                if enabled == false then return false end
-            end
-            if type(widget.Click) == "function" then
-                widget:Click("LeftButton", true)
-            else
-                handler(widget, "LeftButton", true)
-            end
-            return true
-        end,
-        labelFn = function()
-            if widget.GetText then
-                local text = widget.GetText(widget)
-                if text and text ~= "" then return text end
-            end
-            return entry.label or "Button"
-        end,
-        sourceFn = function(label)
-            return tostring(entry.pageKey or "page") .. ":button:" .. tostring(label or entry.label or "button")
-        end,
-    }
-end
-
 local function SearchIdentityComponent(value)
     local text = tostring(value or "")
     -- Search identities are baked into a Lua long-string. Escape the separator
@@ -1314,36 +1516,10 @@ BuildRegistrySearchRecord = function(entry)
                 identityKey = entry.identityKey,
                 controlPath = entry.controlPath,
                 label = entry.label,
+                prepareKind = entry.searchPrepareKind, prepareValue = entry.searchPrepareValue,
             }
         end
-        local widget = entry.widget
-        local command = entry.command or (widget and widget._msuf2CommandAction) or BuildButtonCommandAction(widget, entry)
-        if command then
-            rec.command = command
-            rec.widget = widget
-            if widget and type(M.RegisterRuntimeControl) == "function" then
-                local controlId = M.RegisterRuntimeControl(widget, {
-                    pageKey = entry.pageKey,
-                    kind = entry.kind,
-                    label = entry.label,
-                    identityLabel = entry.identityLabel,
-                    identityKey = entry.identityKey,
-                    controlPath = entry.controlPath,
-                    classification = entry.classification,
-                    ephemeral = entry.ephemeral,
-                    settingKey = entry.settingKey,
-                    actionKey = entry.actionKey,
-                    navigationKey = entry.navigationKey,
-                    assistantDisposition = entry.assistantDisposition,
-                    assistantDispositionReason = entry.assistantDispositionReason,
-                    assistantSettingKeys = entry.assistantSettingKeys,
-                    assistantSettingKeyPatterns = entry.assistantSettingKeyPatterns,
-                    help = entry.help,
-                    command = command,
-                }, "search-command")
-                if controlId then entry.controlId, rec.controlId = controlId, controlId end
-            end
-        end
+
     end
     return rec
 end
@@ -1376,6 +1552,38 @@ local STATIC_ROW_CLIENT_CAPABILITY = {
     ["id\031uf_focus\031menu2%2Euf_focus%2Eunit%2Estatus%2Ethreat%2Ebackground"] = "SupportsThreatText",
     ["id\031uf_boss\031menu2%2Euf_boss%2Eunit%2Estatus%2Ethreat%2Ebackground"] = "SupportsThreatText",
     ["id\031gf_indicators\031menu2%2Egf_indicators%2Egroup%2Efield%2Ethreattextbackground"] = "SupportsThreatText",
+    -- Group Frames > Layout > Buff coverage, built on WoW Forever only
+    -- (MSUF_Menu2_GroupLayoutAdditional.lua); Midnight shares the index file.
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoverageenabled"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragewild"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragethorns"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoverageintellect"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoverageblessings"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragestamina"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragespirit"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragethornstankonly"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoverageglow"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragecombat"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragesize"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoverageanchor"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragex"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragey"] = "IsForever",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragelayer"] = "IsForever",
+}
+-- Rows of controls a client builds only where it has the unit or group scope
+-- (M.SupportsFrameScope): Group Frames > Layout > Friendly bosses needs boss
+-- units (MSUF_Menu2_GroupLayoutAdditional.lua), the Mythic raid group cap the
+-- Mythic Raid scope (MSUF_Menu2_GroupLayout.lua).
+local STATIC_ROW_FRAME_SCOPE = {
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybossenabled"] = "boss",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosshealeronly"] = "boss",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosswidth"] = "boss",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybossheight"] = "boss",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybossx"] = "boss",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybossy"] = "boss",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosscolumns"] = "boss",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosstextsize"] = "boss",
+    ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ehidemythicgroupsfivetoeight"] = "mythicraid",
 }
 local staticRowsWithoutClientSupport
 
@@ -1388,15 +1596,27 @@ local function StaticRowsWithoutClientSupport()
             staticRowsWithoutClientSupport[identity] = true
         end
     end
+    local supportsScope = M.SupportsFrameScope
+    if type(supportsScope) == "function" then
+        for identity, scope in pairs(STATIC_ROW_FRAME_SCOPE) do
+            if not supportsScope(scope) then staticRowsWithoutClientSupport[identity] = true end
+        end
+    end
+    -- Class resource rows follow the client's resource capabilities; the
+    -- client-only resource extras follow the list their page builds. A page
+    -- the client never registers (Swing Timers off Forever) loses its rows
+    -- in SearchProviders.FilterAvailable.
     local supportsSetting = client and client.SupportsClassResourceSetting
-    if type(supportsSetting) == "function" or not (client and client.IsForever) then
-        local records = Search.StaticIndex.GetRecords()
-        for i = 1, #records do
-            local rec = records[i]
-            if (rec.key == "swingtimers" and not (client and client.IsForever))
-                or (type(supportsSetting) == "function" and not supportsSetting(rec.exactTarget and rec.exactTarget.settingKey)) then
-                staticRowsWithoutClientSupport[rec.searchIdentity] = true
-            end
+    local extras = M.ResourceExtrasPage
+    local clientOnly, built = {}, {}
+    if extras and extras.ClientOnlySettings then clientOnly, built = extras.ClientOnlySettings() end
+    local records = Search.StaticIndex.GetRecords()
+    for i = 1, #records do
+        local rec = records[i]
+        local key = rec.exactTarget and rec.exactTarget.settingKey
+        if (key and clientOnly[key] and not built[key])
+            or (type(supportsSetting) == "function" and not supportsSetting(key)) then
+            staticRowsWithoutClientSupport[rec.searchIdentity] = true
         end
     end
     return staticRowsWithoutClientSupport
@@ -1404,7 +1624,7 @@ end
 
 --- Static inventory for controls whose page has never been built. A live widget
 --- record for the exact same semantic route always wins: it carries the real
---- anchor and executable command. Equal labels on different controls stay intact.
+--- anchor and exact identity. Equal labels on different controls stay intact.
 local function AddStaticIndexSearchRecords(records, covered)
     local staticIndex = Search.StaticIndex
     if not (staticIndex and type(staticIndex.GetRecords) == "function") then return end
@@ -1441,7 +1661,8 @@ end
 ---   settingKey  exact target: the control registered with this setting key
 ---   controlId   exact runtime control ID; also locates actions without running them
 ---   sectionId   accordion (b:CollapsibleSection id) opened on the way there
----   anchorText  on-page text to scroll to when there is no exact control
+---   anchorText  page words that steer the route (sections, selections) when
+---               there is no exact control; search never scrolls to text
 --- A page row adds its keywords to the page's own record, help becomes the
 --- page's answer and hint its breadcrumb. A faq row is a question (label) with
 --- its answer (help) that opens pageKey, ranked like the built-in FAQ.
@@ -1496,7 +1717,7 @@ function SearchProviders.Record(row, info)
             rec.answer, rec.anchorFallback, rec.priority, rec.faq = help, anchorText or label, 0, true
             rec.providerRow = row
             rec.sectionId, rec.controlId = sectionId, controlId
-            if controlId or settingKey then
+            if controlId or settingKey or sectionId then
                 rec.exactTarget = { pageKey = info.key, controlId = controlId, settingKey = settingKey,
                     sectionId = sectionId, label = label }
             end
@@ -1532,9 +1753,9 @@ function SearchProviders.Record(row, info)
     }
     rec.searchIdentity = controlId and CatalogSearchIdentity("id", info.key, controlId)
         or CatalogSearchIdentity("provided", info.key, settingKey or kind, labelNorm, hint)
-    if controlId or settingKey then
+    if controlId or settingKey or sectionId then
         rec.exactTarget = { pageKey = info.key, controlId = controlId, settingKey = settingKey,
-            sectionId = sectionId, label = label }
+            sectionId = sectionId, label = label, prepareKind = row.prepareKind, prepareValue = row.prepareValue }
     end
     if sectionId then rec.route = { accordion = { [info.key .. ":" .. sectionId] = true } } end
     return rec
@@ -1574,6 +1795,7 @@ end
 --- the menu language does. A provider that raised on its last call is skipped
 --- until it registers again, so one broken provider cannot break search.
 function SearchProviders.Collect(pageInfoByKey)
+    if SearchCombatLocked() or SearchMenuClosed() then return { pages = {}, records = {}, pageKeys = {} } end
     local cache = SEARCH_STATE.providerCache
     if cache then return cache end
     cache = { pages = {}, records = {}, pageKeys = {}, rows = 0, skipped = 0 }
@@ -1603,24 +1825,22 @@ end
 
 --- Provider records join after the static rows. A live widget registered for the
 --- exact control ID, same setting, or otherwise same kind and label on the page wins:
---- it carries the real anchor and command, exactly like static rows.
+--- it carries the real anchor and exact identity, exactly like static rows.
 function SearchProviders.Append(records, cache)
     local list = cache.records
     if #list == 0 then return end
     local live = {}
-    for pageKey in pairs(cache.pageKeys) do
-        local ids = SEARCH_STATE.registryByPage[pageKey]
-        for i = 1, #(ids or EMPTY_SEARCH_RECORDS) do
-            local entry = SEARCH_STATE.registry[ids[i]]
-            if entry then
-                if type(entry.controlId) == "string" and entry.controlId ~= "" then
-                    live[pageKey .. "\031id\031" .. entry.controlId] = true
-                end
-                if type(entry.settingKey) == "string" and entry.settingKey ~= "" then
-                    live[pageKey .. "\031" .. entry.settingKey] = true
-                end
-                live[pageKey .. "\031" .. tostring(entry.kind) .. "\031" .. NormalizeSearchText(entry.label)] = true
+    for i = 1, #records do
+        local record = records[i]
+        if record.anchor and cache.pageKeys[record.key] then
+            local target = record.exactTarget
+            if target and target.controlId and target.controlId ~= "" then
+                live[record.key .. "\031id\031" .. target.controlId] = i
             end
+            if target and target.settingKey and target.settingKey ~= "" then
+                live[record.key .. "\031" .. target.settingKey] = i
+            end
+            live[record.key .. "\031" .. record.kind .. "\031" .. record.labelNorm] = i
         end
     end
     for i = 1, #list do
@@ -1629,7 +1849,22 @@ function SearchProviders.Append(records, cache)
         local liveKey = target and target.controlId and (rec.key .. "\031id\031" .. target.controlId)
             or target and target.settingKey and (rec.key .. "\031" .. target.settingKey)
             or (rec.key .. "\031" .. rec.kind .. "\031" .. rec.labelNorm)
-        if not live[liveKey] then
+        local index = live[liveKey]
+        if index then
+            -- Keep the live identity/anchor and the provider's localized words
+            -- and ownership. Copy before merging: cached widget records must
+            -- not retain provider terms after a feature is disabled or renamed.
+            local merged = {}
+            for key, value in pairs(records[index]) do merged[key] = value end
+            -- The live words come first: provider text first, cut at the
+            -- record budget, could drop all of them. The budget stays one
+            -- record's, so the provider's tail is what a long merge cuts.
+            merged.haystack = ((merged.haystack or "") .. " " .. (rec.haystack or "")):sub(1, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
+            merged.tokens = nil
+            merged.providerRow = rec.providerRow
+            merged.answer = merged.answer or rec.answer
+            records[index] = merged
+        else
             rec.order = #records + 1
             records[#records + 1] = rec
         end
@@ -1638,10 +1873,11 @@ end
 
 --- Registers, replaces (same name) or with a nil function removes a provider.
 --- The function is not called here; see SearchProviders.Collect.
-function M.RegisterSearchProvider(name, collect)
+function M.RegisterSearchProvider(name, collect, contextChanged)
     if type(name) ~= "string" or name == "" then return false end
     if collect ~= nil and type(collect) ~= "function" then return false end
-    SEARCH_STATE.providers[name] = collect and { collect = collect } or nil
+    if contextChanged ~= nil and type(contextChanged) ~= "function" then return false end
+    SEARCH_STATE.providers[name] = collect and { collect = collect, contextChanged = contextChanged } or nil
     SEARCH_STATE.providerCache = nil
     MarkSearchIndexDirty()
     return true
@@ -1688,6 +1924,20 @@ function SearchProviders.FilterAvailable(records)
         end
     end
     for i = #records, write + 1, -1 do records[i] = nil end
+end
+
+--- Whether search would offer a page, without building the index: registered,
+--- supported by this client and allowed by every availability predicate. The
+--- predicates get the page key and a page-shaped record, as for page records.
+local pageAvailabilityProbe = { kind = "page" }
+local function IsSearchPageAvailable(pageKey)
+    if type(pageKey) ~= "string" or not (M.pages and M.pages[pageKey]) then return false end
+    if M.SupportsUnitPage and not M.SupportsUnitPage(pageKey) then return false end
+    pageAvailabilityProbe.key = pageKey
+    for _, isAvailable in pairs(SEARCH_STATE.availability) do
+        if isAvailable(pageKey, nil, pageAvailabilityProbe) == false then return false end
+    end
+    return true
 end
 
 local SEARCH_FAQ = SearchData.BuildFAQ and SearchData.BuildFAQ({
@@ -1785,7 +2035,7 @@ end
 local SearchPages, SetSearchResults
 
 local function RefreshSearchResultsPage()
-    if M.activeKey ~= "search" then return end
+    if M.activeKey ~= "search" or SearchMenuClosed() then return end
     -- SearchPages already returns nothing in combat, but the refresh below still
     -- invalidated and rebuilt the search page. Stop before any of that runs.
     if SearchCombatLocked() then return end
@@ -1801,17 +2051,22 @@ end
 -- path that constructs frames, runs on a timer, or touches the DB per query.
 -- CancelSearchBackgroundIndex stays: menu chrome still calls it on close/hide.
 
+local function RefreshProviderContexts()
+    for _, provider in pairs(SEARCH_STATE.providers) do
+        if provider.contextChanged and provider.contextChanged() == true then
+            SEARCH_STATE.providerCache = nil
+            MarkSearchIndexDirty()
+        end
+    end
+end
+
 local function GetSearchRecords()
     -- Combat does no search work at all. Everything below this line either builds
     -- UI (the deferred section pump) or rebuilds/decodes the index, so the gate has
     -- to sit above it rather than relying on every caller checking first.
-    if SearchCombatLocked() then return SEARCH_STATE.records or EMPTY_SEARCH_RECORDS end
+    if SearchCombatLocked() or SearchMenuClosed() then return EMPTY_SEARCH_RECORDS end
     EnsureSearchLocaleFresh()
-    -- Search usage is what starts draining deferred section content (closed
-    -- sections of visited pages). Until then those jobs stay parked so cold
-    -- page builds remain shell-only.
-    local pumpSections = M.UnitPage and M.UnitPage.PumpBackgroundSections
-    if type(pumpSections) == "function" then pumpSections() end
+    RefreshProviderContexts()
     if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then
         SEARCH_STATE.records = BuildSearchRecords()
         SEARCH_STATE.recordsDirty = false
@@ -1820,7 +2075,15 @@ local function GetSearchRecords()
 end
 
 local function CurateSearchResults(results, supportQuestion)
-    local topScore = results[1] and (tonumber(results[1].score) or 0) or 0
+    -- An exact query target is pinned on top by its bonus; the floor comes
+    -- from the best other result, so that bonus never empties the list.
+    local topScore = 0
+    for i = 1, #results do
+        if not results[i].exactQueryHit then
+            topScore = tonumber(results[i].score) or 0
+            break
+        end
+    end
     local floorScore = SEARCH_MIN_RESULT_SCORE
     if topScore >= 600 then
         floorScore = math.max(floorScore, topScore * (supportQuestion and 0.70 or 0.42))
@@ -1838,7 +2101,7 @@ local function CurateSearchResults(results, supportQuestion)
     local curated = {}
     for i = 1, #results do
         local rec = results[i]
-        if rec and ((tonumber(rec.score) or 0) >= floorScore or SpecificControlMatch(rec)) then
+        if rec and (rec.exactQueryHit or (tonumber(rec.score) or 0) >= floorScore or SpecificControlMatch(rec)) then
             curated[#curated + 1] = rec
             if #curated >= SEARCH_MAX_RESULTS then break end
         end
@@ -1846,14 +2109,38 @@ local function CurateSearchResults(results, supportQuestion)
     return curated
 end
 
+local exactQueryTargets
+local function ExactQueryTarget(normalized)
+    if not exactQueryTargets then
+        exactQueryTargets = {}
+        for phrase, target in pairs(SearchData.CONTROL_QUERY_TARGETS or {}) do
+            exactQueryTargets[NormalizeSearchText(phrase)] = target
+        end
+    end
+    return exactQueryTargets[normalized]
+end
+local function MatchesExactQueryTarget(rec, target)
+    if not target then return false end
+    if target.pageKey then return rec.key == target.pageKey and rec.kind == "page" end
+    local exact = rec.exactTarget
+    if not exact then return false end
+    if target.settingKey then return exact.settingKey == target.settingKey end
+    if target.settingSuffix then
+        local key = tostring(exact.settingKey or "")
+        return key:sub(-#target.settingSuffix) == target.settingSuffix
+    end
+    local id = tostring(exact.controlId or "")
+    return rec.key == "profiles" and target.controlSuffix and id:find(target.controlSuffix, 1, true) ~= nil
+end
+
 function SearchPages(query)
     query = TrimText(query)
-    if SearchCombatLocked() then
+    if SearchCombatLocked() or SearchMenuClosed() then
         CancelSearchBackgroundIndex()
-        return {}
+        return EMPTY_SEARCH_RECORDS
     end
     -- Raw setting keys ("gf_party.hpTextMode") reach search from exports and
-    -- Assistant answers. The baked index is pre-normalized without camelCase
+    -- support references. The baked index is pre-normalized without camelCase
     -- tokens, and the scope prefix names the provider rather than the control,
     -- so its tokens ("party") never appear in a page haystack. Drop the prefix
     -- and split the remaining camelCase into words. Only single-token queries
@@ -1867,6 +2154,7 @@ function SearchPages(query)
     if #clauses == 0 then return {} end
     if #normalized < MIN_SEARCH_QUERY_LEN then return {} end
 
+    local exactQueryTarget = ExactQueryTarget(normalized)
     local supportQuestion = SearchLooksLikeSupportQuestion(query, normalized)
     local genericLocationSubject, genericLocationClauses = SearchGenericLocationSubjectClauses(query, normalized)
     local genericLocationQuestion = genericLocationSubject ~= nil and genericLocationClauses ~= nil
@@ -1903,6 +2191,11 @@ function SearchPages(query)
                 matchedClauses = matchedClauses + 1
                 score = score + clauseScore
             end
+        end
+        local exactQueryHit = MatchesExactQueryTarget(rec, exactQueryTarget)
+        if exactQueryHit then
+            matched, matchedClauses, missedClauses = true, #clauses, 0
+            score = score + 5000
         end
         if matched and matchedClauses >= requiredMatches then
             if rec.labelNorm == normalized or rec.titleNorm == normalized then
@@ -1942,6 +2235,7 @@ function SearchPages(query)
                 if rec.key == "profiles" and rec.kind == "page" then score = score - 180 end
             end
             rec.score = score
+            rec.exactQueryHit = exactQueryHit
             rec.matchedClauses = matchedClauses
             rec.missedClauses = missedClauses
             rec.queryClauseCount = #clauses
@@ -1955,28 +2249,6 @@ function SearchPages(query)
         return tostring(a.label) < tostring(b.label)
     end)
     return CurateSearchResults(results, supportQuestion and not genericLocationQuestion)
-end
-
-local function ShouldUseAssistantForQuery(query, results)
-    query = TrimText(query)
-    local normalized = NormalizeSearchText(query)
-    if #normalized < MIN_SEARCH_QUERY_LEN or SearchCombatLocked() then return false end
-    results = type(results) == "table" and results or {}
-    if #results == 0 then return true end
-
-    if query:find("?", 1, true)
-        or normalized:find("can you", 1, true) or normalized:find("could you", 1, true)
-        or normalized:find("would you", 1, true) or normalized:find("please ", 1, true)
-        or normalized:find("kannst du", 1, true) or normalized:find("konntest du", 1, true)
-        or normalized:find("kannst ", 1, true) or normalized:find("bitte ", 1, true)
-        or SearchLooksLikeGenericLocationQuestion(query, normalized) then
-        return true
-    end
-
-    local _, clauses = BuildSearchQueryClauses(query)
-    if #clauses < 3 then return false end
-    return SearchLooksLikeSupportQuestion(query, normalized)
-        or (#clauses >= 5 and SearchLooksLikeControlQuestion(query, normalized))
 end
 
 SetSearchResults = function(results, query) M.searchResults = results or {}; M.searchResultsQuery = query or "" end
@@ -1994,35 +2266,8 @@ local function ShowSearchPageForQuery(query)
     end
 end
 
-local function SubmitAssistantSearchQuery(query)
-    query = TrimText(query)
-    if query == "" then return false end
-    local A = (MSUF and MSUF.Assistant) or M.Assistant
-    if not A then return false end
-    local result
-    if type(A.SubmitExplicitQuery) == "function" then
-        local submitted
-        submitted, result = A.SubmitExplicitQuery(query, "assistant-search")
-        if not submitted then return false end
-    elseif type(A.SubmitDeferred) == "function" then
-        result = A.SubmitDeferred(query)
-    elseif type(A.Submit) == "function" then
-        result = A.Submit(query)
-    else
-        return false
-    end
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
-    if type(M.SelectPage) == "function" then M.SelectPage("home") end
-    if result and result.status == "combat" then return true end
-    if type(A.RequestRefreshUI) == "function" then
-        A.RequestRefreshUI("assistant.search")
-    elseif type(A.RefreshUI) == "function" then
-        A.RefreshUI()
-    end
-    return true
-end
-
 local function RunSearchInputQuery(query, openPage)
+    if SearchCombatLocked() or SearchMenuClosed() then CancelSearchBackgroundIndex(); return end
     query = TrimText(query)
     M.searchQuery = query
     M.searchResultsPending = nil
@@ -2030,13 +2275,6 @@ local function RunSearchInputQuery(query, openPage)
     if query == "" then
         SetSearchResults(nil, "")
         if openPage then ShowSearchPageForQuery(query) end
-        return
-    end
-
-    if SearchCombatLocked() then
-        CancelSearchBackgroundIndex()
-        SetSearchResults(nil, query)
-        if openPage and M.activeKey ~= "search" then ShowSearchPageForQuery(query) end
         return
     end
 
@@ -2051,6 +2289,7 @@ local function RunSearchInputQuery(query, openPage)
 end
 
 local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
+    if SearchCombatLocked() or SearchMenuClosed() then CancelSearchBackgroundIndex(); return end
     query = TrimText(query)
     openPage = openPage == true
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
@@ -2076,7 +2315,7 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
         if serial ~= SEARCH_STATE.inputSerial then return end
         -- Combat can start inside the debounce window. Drop the pending query
         -- instead of running it against a locked-down UI.
-        if SearchCombatLocked() then return end
+        if SearchCombatLocked() or SearchMenuClosed() then return end
         if searchBox and searchBox.GetText then
             local latest = TrimText(searchBox:GetText() or "")
             if latest ~= query then return end
@@ -2090,7 +2329,6 @@ end
 
 local function OpenSearchResults(query)
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
-    if SubmitAssistantSearchQuery(query) then return end
     RunSearchInputQuery(query, true)
 end
 
@@ -2148,10 +2386,9 @@ Search._CoreAPI = {
     SearchBoxHasText = SearchBoxHasText,
     SearchPages = SearchPages,
     GetSearchRecords = GetSearchRecords,
+    IsSearchPageAvailable = IsSearchPageAvailable,
     GetFAQRecords = function() return SEARCH_FAQ end,
     GetSearchProviderCache = function() return SEARCH_STATE.providerCache end,
-    ShouldUseAssistantForQuery = ShouldUseAssistantForQuery,
-    SubmitAssistantSearchQuery = SubmitAssistantSearchQuery,
     SearchPlaceholderText = SearchPlaceholderText,
     ShortLabel = ShortLabel,
     TrimText = TrimText,

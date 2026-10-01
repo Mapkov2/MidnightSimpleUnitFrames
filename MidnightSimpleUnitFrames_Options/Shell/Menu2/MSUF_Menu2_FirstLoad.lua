@@ -60,7 +60,7 @@ local function FirstLoadActionAvailability(firstLoad)
         return false, Tr("First-load onboarding is already closed. Use Guided Setup on the Dashboard to run the tour again.")
     end
     -- Existing-profile upgrades are owned by the release highlight scene. Do
-    -- not let stale Search/Assistant virtual actions bypass its explicit skip
+    -- not let a stale search or chrome action bypass its explicit skip
     -- warning and close onboarding behind the user's back.
     local highlights = MSUF and MSUF.UpgradeHighlights
     if type(highlights) == "table" and type(highlights.ShouldShow) == "function" then

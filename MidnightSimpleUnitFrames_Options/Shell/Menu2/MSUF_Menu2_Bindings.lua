@@ -370,68 +370,29 @@ local function NotifyGuidedControlInteraction(widget)
         M.NotifyGuidedTourControlInteraction(widget)
     end
 end
--- metadata is optional and backward-compatible.  Stable controlId/identityKey
--- and settingKey/actionKey/navigationKey values flow into both the executable
--- command and the canonical runtime-control catalog.
+-- metadata is optional and backward-compatible. Stable controlId/identityKey
+-- and settingKey/actionKey/navigationKey values flow into the runtime-control
+-- catalog. The command keeps only what is read back: its identity and source
+-- (catalog, guided tour, colour shortcuts, history source) and get/set, which
+-- classify a bound control as a setting.
 local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
     if not widget then return end
     opts = type(opts) == "table" and opts or {}
-    local minValue, maxValue
-    if kind == "slider" and widget.GetMinMaxValues then minValue, maxValue = widget:GetMinMaxValues() end
     local command = {
         kind = kind,
         ctxKey = ctx and ctx.key,
         controlId = opts.controlId or widget._msuf2ControlId,
-        identityKey = opts.identityKey,
-        controlPath = opts.controlPath,
         settingKey = opts.settingKey,
         actionKey = opts.actionKey,
-        -- An action-backed bound widget carries its argument contract here too.
-        -- RuntimeControlCatalog reads both off the command, and without them an
-        -- action control looks argument-less and is downgraded to "guided",
-        -- which the release schema refuses to publish.
-        actionInputArg = opts.actionInputArg,
-        actionFixedArgs = opts.actionFixedArgs,
         navigationKey = opts.navigationKey,
         historySource = opts.historySource,
-        assistantDisposition = opts.assistantDisposition,
-        assistantDispositionReason = opts.assistantDispositionReason,
-        assistantSettingKeys = opts.assistantSettingKeys,
-        assistantSettingKeyPatterns = opts.assistantSettingKeyPatterns,
+        searchSettingKeys = opts.searchSettingKeys,
+        searchSettingKeyPatterns = opts.searchSettingKeyPatterns,
         classification = opts.classification,
-        historyMode = opts.historyMode or (opts.classification == "ephemeral" and "none" or nil),
-        valueKind = opts.valueKind,
-        percentIsValue = opts.percentIsValue == true,
-        confirmRequired = opts.confirmRequired == true,
         get = getValue,
         set = setValue,
-        values = type(opts.values or widget.values) == "table" and (opts.values or widget.values) or nil,
-        getValues = function()
-            local values = opts.values or widget.values
-            -- Keep provider failures observable. RuntimeControlCatalog owns the
-            -- outer protected call and must be able to fail coverage when a
-            -- real bound dropdown cannot materialize its choices. Returning an
-            -- empty table here used to turn provider exceptions into a vacuous
-            -- 100% value-coverage result. A provider may still intentionally
-            -- return an empty table; only errors/non-table contracts fail.
-            if type(values) == "function" then values = values() end
-            return values
-        end,
-        min = opts.min or minValue,
-        max = opts.max or maxValue,
-        step = opts.step or widget._msuf2Step,
-        label = opts.label,
-        labelFn = function()
-            return WidgetHistoryLabel(ctx, widget, opts.label)
-        end,
         sourceFn = function(label)
             return WidgetHistorySource(ctx, widget, label)
-        end,
-        refresh = function()
-            M.RequestOrRefresh(ctx, "command-refresh")
-        end,
-        blockCombat = function()
-            return BlockCombatAndRefresh(ctx)
         end,
     }
     widget._msuf2CommandAction = command
@@ -442,19 +403,17 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
             kind = kind,
             label = opts.label or widget._msuf2SearchText or widget._msuf2SearchTitle,
             identityLabel = widget._msuf2SearchText or widget._msuf2SearchTitle or opts.label,
-            identityKey = command.identityKey,
-            controlPath = command.controlPath,
+            identityKey = opts.identityKey,
+            controlPath = opts.controlPath,
             settingKey = command.settingKey,
             actionKey = command.actionKey,
-            actionInputArg = command.actionInputArg,
-            actionFixedArgs = command.actionFixedArgs,
+            actionInputArg = opts.actionInputArg,
+            actionFixedArgs = opts.actionFixedArgs,
             navigationKey = command.navigationKey,
-            assistantDisposition = command.assistantDisposition,
-            assistantDispositionReason = command.assistantDispositionReason,
-            assistantSettingKeys = command.assistantSettingKeys,
-            assistantSettingKeyPatterns = command.assistantSettingKeyPatterns,
+            searchSettingKeys = command.searchSettingKeys,
+            searchSettingKeyPatterns = command.searchSettingKeyPatterns,
             classification = command.classification,
-            confirmRequired = command.confirmRequired,
+            confirmRequired = opts.confirmRequired == true,
             command = command,
         }, "binding")
     end

@@ -308,6 +308,7 @@ local LABEL_BY_KEY = {
     pet = "Pet",
     pettarget = "Pet Target",
     boss = "Boss",
+    arena = "Arena",
     gf_party = "Party Frames",
     gf_raid = "Raid Frames",
     gf_mythicraid = "Mythic Raid Frames",
@@ -345,7 +346,7 @@ local function CurrentFocusSelection()
     if auraPopup and type(auraPopup.IsOpen) == "function" and auraPopup.IsOpen() then
         local unit = rawget(_G, "MSUF_EM2_ActiveAuraUnit")
         if type(unit) == "string" then
-            local key = unit:match("^boss%d+$") and "boss" or unit
+            local key = (unit:match("^boss%d+$") and "boss") or (unit:match("^arena%d+$") and "arena") or unit
             if UNIT_KEYS[key] then return key, "auras", nil end
         end
     end
@@ -367,7 +368,7 @@ local function AuraSelectionFrame(key, component)
     local unit = rawget(_G, "MSUF_EM2_ActiveAuraUnit")
     local kind = rawget(_G, "MSUF_EM2_ActiveAuraGroup")
     if type(unit) ~= "string" or type(kind) ~= "string" then return nil end
-    local selectionUnit = unit:match("^boss%d+$") and "boss" or unit
+    local selectionUnit = (unit:match("^boss%d+$") and "boss") or (unit:match("^arena%d+$") and "arena") or unit
     if selectionUnit ~= key then return nil end
     local a3 = MSUF and MSUF.MSUF_Auras3
     local edit = a3 and a3.EditMode
@@ -395,7 +396,8 @@ local function SelectionValues(key, component, slot)
         conf = db and db[key]
     end
 
-    local label = HelpText(LABEL_BY_KEY[key] or key)
+    local label = LABEL_BY_KEY[key] and HelpText(LABEL_BY_KEY[key])
+        or (cfg and U.ElementLabel and U.ElementLabel(key, cfg)) or HelpText(key)
     local detail = SelectionDetail(component, slot)
     if detail then label = label .. " / " .. HelpText(detail) end
     local frame = AuraSelectionFrame(key, component)
@@ -538,15 +540,17 @@ function HUD.ResetCurrentPosition()
         return
     end
 
-    if not UNIT_KEYS[key] then HUD.SetStatus(HelpText("EM_SELECT_FIRST"), "warn"); return end
+    if not UNIT_KEYS[key] then HUD.SetStatus(HelpText("Reset unavailable"), "warn"); return end
     local db = _G.MSUF_DB
     local conf = db and db[key]
     if not conf then return end
     if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
         _G.MSUF_EM_UndoBeforeChange("unit", key)
     end
-    conf.offsetX = 0
-    conf.offsetY = 0
+    local defaultX, defaultY = 0, 0
+    if type(_G.MSUF_GetDefaultUnitOffsets) == "function" then defaultX, defaultY = _G.MSUF_GetDefaultUnitOffsets(key) end
+    conf.offsetX = defaultX
+    conf.offsetY = defaultY
     if not ApplySettingsForKeySafe(key) then
         ApplyAllSettingsSafe()
     end
@@ -1381,7 +1385,7 @@ function HUD.StopTour()
 end
 
 -- Readable lifecycle helpers for non-visual controllers (for example the
--- load-on-demand Assistant).  Keep these on the existing HUD owner so callers
+-- menu).  Keep these on the existing HUD owner so callers
 -- never need to retain HUD frames or reproduce button click side effects.
 function HUD.IsHelpShown()
     return guidedTourBridgeRequested
@@ -2110,7 +2114,10 @@ local function EnsureHUD()
         local db = _G.MSUF_DB; if not db then return end
         local a2 = db.auras3; if not a2 then return end
         local sh = a2.shared; if not sh then return end
+        local undo = EM2.Undo
+        local tracked = undo and undo.BeginChange and undo.BeginChange("aura", "shared", "Toggle") == true
         sh.showInEditMode = not (sh.showInEditMode and true or false)
+        if tracked then undo.CommitChange() end
         SetActive(auraBtn, sh.showInEditMode and _G.MSUF_UnitPreviewActive == true)
         local a3 = MSUF and MSUF.MSUF_Auras3
         if a3 and type(a3.RefreshEditPreview) == "function" then
@@ -2174,11 +2181,14 @@ local function EnsureHUD()
             db.general = db.general or {}
             local enabled = not HUD.CooldownAnchorEnabled(db.general)
             local setter = _G.MSUF_SetCooldownAnchorEnabled
+            local undo = EM2.Undo
+            local tracked = undo and undo.BeginChange and undo.BeginChange("general", "cooldown", "Toggle") == true
             if type(setter) == "function" then
                 setter(enabled, true)
             else
                 db.general.anchorToCooldown = enabled
             end
+            if tracked then undo.CommitChange() end
             SetActive(cdmBtn, HUD.CooldownAnchorEnabled(db.general))
             ApplyAllSettingsSafe()
             HUD.SetStatus(HelpText(enabled and "EM_CDM_ON" or "EM_CDM_OFF"), "info")
@@ -2200,6 +2210,8 @@ local function EnsureHUD()
         ov._onPick = function(frameName)
             local db = _G.MSUF_DB; if not db then return end
             db.general = db.general or {}
+            local undo = EM2.Undo
+            local tracked = undo and undo.BeginChange and undo.BeginChange("general", "anchor", "Set") == true
             db.general.anchorName = frameName
             local setter = _G.MSUF_SetCooldownAnchorEnabled
             if type(setter) == "function" then
@@ -2207,6 +2219,7 @@ local function EnsureHUD()
             else
                 db.general.anchorToCooldown = false
             end
+            if tracked then undo.CommitChange() end
             SetActive(cdmBtn, false)
             ApplyAllSettingsSafe()
             HUD.SetStatus(HelpText("EM_ANCHOR_SET") .. ": " .. tostring(frameName or ""), "ok")
@@ -2488,6 +2501,7 @@ end
 
 function HUD.Hide()
     HUD.StopTour()
+    if DockUI.tooltipRestoreLevel ~= nil then DockUI.ReleaseTooltip() end
     if DockUI.drag then StopDockDrag() end
     local cf = _G["MSUF_EM2_CancelConfirm"]; if cf then cf:Hide() end
     SetLayoutEventsEnabled(false)

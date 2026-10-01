@@ -1629,6 +1629,7 @@ local function RefreshClassPowerAnimation(preview)
         and not UpdateSecondaryClassTimerAnimation(preview, state.ebonFrame) then return false end
     if state.powerFrame and not UpdateDetachedPowerAnimation(preview, state.powerFrame, state.bars, state.player) then return false end
     if state.hpFrame and not UpdatePlayerHPAnimation(preview, state.hpFrame, state.bars, state.player) then return false end
+    if Preview.UpdateSampleThresholds then Preview.UpdateSampleThresholds(preview) end
     return true
 end
 local function PaintPlayerReference(preview, spec, bars, playerDB)
@@ -1702,6 +1703,225 @@ local function PlaceBound(preview, key, region, label, color, pad, layerKey)
     bound._msufPlaced = true
     bound:Show()
 end
+-- These are deterministic menu samples, never attached to real resource frames.
+-- Reuse the menu meter painter and retain objects across configuration refreshes.
+-- The extra resource meters follow the live builder (ClassPower/MSUF_CP_ExtraAuras):
+-- they exist on Midnight only, for the player's real class and specialization
+-- (C_SpecializationInfo first, like the ClassPower controller), and paint the
+-- live bar and text colours. Client facts are read once here.
+local SAMPLE = {
+    LIVE_EXTRAS = MSUF.Client ~= nil and MSUF.Client.IsRetail == true and MSUF.Client.IsForever ~= true,
+    FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true,
+    BLUE = { .45, .7, 1 }, RED = { 1, .2, .15 }, WHITE = { 1, 1, 1 },
+    FIVE = { 1, .65, .2 }, TICK = { .3, 1, .7 }, COST = { .7, .7, 1 },
+    ARCANE = { .66, .42, 1 }, ARCANE_WARN = { 1, .78, .25 },
+    NO_MARKS = {}, METER_OPTS = {},
+}
+function SAMPLE.Color(bars, colorKey, fallback)
+    local color = bars[colorKey]
+    return type(color) == "table" and color or fallback
+end
+function SAMPLE.MeterOpts(width, height, fraction, texture, color)
+    local opts = SAMPLE.METER_OPTS
+    opts.width, opts.height, opts.fraction, opts.texture = width, height, fraction, texture
+    opts.r, opts.g, opts.b = color[1], color[2], color[3]
+    opts.bgR, opts.bgG, opts.bgB, opts.bgA, opts.bgTexture, opts.outline = nil, nil, nil, nil, nil, nil
+    return opts
+end
+--- One eligibility rule for every extra resource sample: the live rule
+--- (Midnight, the real class and spec, the option) plus the previewed class.
+--- The options and the previewed class come first: both samples are off by
+--- default, and then the player's class and specialization are never read.
+local function ExtraSampleEligible(bars, class, spec)
+    if not SAMPLE.LIVE_EXTRAS then return false, false end
+    local pain = class == "WARRIOR" and bars.showIgnorePain == true
+    local arcane = spec ~= nil and spec.key == "mage_arcane" and bars.showArcaneWindow == true
+    if not (pain or arcane) then return false, false end
+    local liveClass = select(2, UnitClass("player"))
+    local getSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization) or GetSpecialization
+    local liveSpec = type(getSpec) == "function" and getSpec() or nil
+    return pain and liveClass == "WARRIOR" and liveSpec == 3, arcane and liveClass == "MAGE" and liveSpec == 1
+end
+local function SampleMeter(preview, samples, bars, key, row, colorKey, fallback, fraction, text, textColor)
+    local frame = samples[key] or EnsureMeter(preview, "resourceSample" .. key)
+    samples[key] = frame
+    frame:ClearAllPoints()
+    frame:SetPoint("TOP", preview.playerRef, "BOTTOM", tonumber(bars.resourceExtraOffsetX) or 0,
+        (tonumber(bars.resourceExtraOffsetY) or -18) - row * ((tonumber(bars.resourceExtraHeight) or 8) + 6))
+    RenderMeter(frame, nil, SAMPLE.MeterOpts(tonumber(bars.resourceExtraWidth) or 220,
+        tonumber(bars.resourceExtraHeight) or 8, fraction, ResolveTexture(bars.classPowerTexture),
+        SAMPLE.Color(bars, colorKey, fallback)))
+    frame.center:SetFont((_G.MSUF_GetFontPath and _G.MSUF_GetFontPath()) or STANDARD_TEXT_FONT,
+        tonumber(bars.classPowerFontSize) or 14, "OUTLINE")
+    frame.center:SetTextColor(textColor[1], textColor[2], textColor[3], 1)
+    frame.center:SetText(text); frame.center:SetPoint("CENTER", frame, "CENTER")
+    frame.center:SetAlpha(1)
+    frame.center:Show(); frame._sampleLayer = "class"; frame._sampleActive=true; frame:Show()
+    return frame
+end
+local function SampleStrip(preview, samples, bars, powerFrame, key, height, anchor, offset, colorKey, fallback, fraction)
+    local frame = samples[key] or EnsureMeter(preview, "resourceSample" .. key); samples[key] = frame
+    frame:ClearAllPoints(); frame:SetPoint(anchor, powerFrame, anchor == "BOTTOMLEFT" and "TOPLEFT" or "BOTTOMLEFT", 0, offset)
+    RenderMeter(frame, nil, SAMPLE.MeterOpts(powerFrame:GetWidth(), height, fraction, WHITE8,
+        SAMPLE.Color(bars, colorKey, fallback)))
+    frame._sampleLayer="power";frame._sampleActive=true;frame:Show(); return frame
+end
+-- The live power bar the marks sit on: the Mana display source, else the
+-- player's real power type (MSUF_CP_ResourceMarks Target), and its maximum for
+-- ABSOLUTE marks. Secret or missing values leave the maximum unknown.
+local function SamplePowerTarget(mana)
+    local power, token
+    if mana then
+        power, token = 0, "MANA"
+    elseif type(UnitPowerType) == "function" then
+        power, token = UnitPowerType("player")
+    end
+    if type(power) ~= "number" or (issecretvalue and issecretvalue(power)) then return token, nil end
+    local maximum = type(UnitPowerMax) == "function" and UnitPowerMax("player", power) or nil
+    if type(maximum) ~= "number" or (issecretvalue and issecretvalue(maximum)) then maximum = nil end
+    return token, maximum
+end
+local function RenderExtraSamples(preview, bars, player, spec, classFrame, powerFrame)
+    local samples = preview.resourceSamples or {}; preview.resourceSamples = samples
+    for _, frame in pairs(samples) do frame:Hide(); frame._sampleActive=false end
+    local base = preview.resourceSamplePowerBaseState
+    preview.resourceSamplePowerBase=nil
+    if powerFrame then
+        if not base then base = {}; preview.resourceSamplePowerBaseState = base end
+        local r,g,b,a=powerFrame.fill:GetVertexColor()
+        base.host, base.r, base.g, base.b, base.a = powerFrame, r or 1, g or 1, b or 1, a or 1
+        preview.resourceSamplePowerBase = base
+    end
+    local class = PreviewClassToken(spec)
+    local pain, arcane = ExtraSampleEligible(bars, class, spec)
+    if pain then
+        local frame = SampleMeter(preview, samples, bars, "PAIN", 0, "ignorePainColor", SAMPLE.BLUE, .65, "7.8 s", SAMPLE.WHITE)
+        frame.marker = frame.marker or MakeTexture(frame, "OVERLAY")
+        frame.marker:SetColorTexture(1,1,1,1); frame.marker:SetWidth(2)
+        frame.marker:ClearAllPoints(); frame.marker:SetPoint("TOP", frame.fill, "TOPRIGHT")
+        frame.marker:SetPoint("BOTTOM", frame.fill, "BOTTOMRIGHT")
+        frame.marker:SetShown(bars.ignorePainTimeMarker ~= false)
+    end
+    if arcane then
+        -- The Arcane Surge phase of the window (MSUF_CP_ExtraAuras): the window
+        -- colour, the chosen text, blank above the show-from seconds, and the
+        -- warning colour below the warning time or during the last global
+        -- cooldown (1.5 s here), exactly like the live rules (0 turns it off).
+        -- The sample sits below the warning time.
+        local warn = tonumber(bars.arcaneWindowWarnSeconds)
+        if not warn or warn ~= warn then warn = 3 end
+        warn = max(0, min(10, warn))
+        if bars.arcaneWindowWarnLastGCD == true then warn = 1.5 end
+        local seconds = max(.5, warn - .5)
+        local mode, from = bars.arcaneWindowText, tonumber(bars.arcaneWindowTextFrom) or 0
+        local casts = math.ceil(seconds / 1.5)
+        local text = mode == "gcds" and string.format("x%d", casts)
+            or mode == "both" and string.format("%.1f (x%d)", seconds, casts) or string.format("%.1f", seconds)
+        if from > 0 and seconds >= from then text = "" end
+        SampleMeter(preview, samples, bars, "ARCANE", 0, "arcaneWindowColor", SAMPLE.ARCANE, .25, text,
+            (warn > 0 and seconds < warn) and SAMPLE.Color(bars, "arcaneWindowWarnColor", SAMPLE.ARCANE_WARN) or SAMPLE.WHITE)
+    end
+    -- The existing detached mock uses Energy unless its configured source is Mana.
+    -- Alternate-mana has no mock host here and is therefore not misrepresented.
+    local mana = powerFrame and PlayerManaSourceActive(player) and not PowerShowsEbonMight(bars, player, spec)
+    if mana then
+        local regenTimers = MSUF.CPBuilders and MSUF.CPBuilders.ManaRegenTimersSupported
+        regenTimers = regenTimers and regenTimers() or false
+        if regenTimers and bars.manaRegenPause == true then SampleStrip(preview, samples, bars, powerFrame, "FIVE",3,"BOTTOMLEFT",1,"manaRegenPauseColor",SAMPLE.FIVE,.6) end
+        if regenTimers and bars.manaGainPulse == true then SampleStrip(preview, samples, bars, powerFrame, "TICK",2,"TOPLEFT",-1,"manaGainPulseColor",SAMPLE.TICK,.5) end
+        if bars.manaUpcomingCost == true then
+            local frame=SampleStrip(preview, samples, bars, powerFrame, "COST",powerFrame:GetHeight(),"TOPLEFT",0,"manaCostColor",SAMPLE.COST,.18)
+            frame:ClearAllPoints();frame:SetPoint("TOPRIGHT",powerFrame.fill,"TOPRIGHT")
+            frame:SetWidth(max(1,powerFrame:GetWidth()*.18))
+            frame.fill:SetWidth(frame:GetWidth())
+            if powerFrame._msufCPPreviewShapeAxis=="VERTICAL" then
+                frame:ClearAllPoints();frame:SetPoint("BOTTOMLEFT",powerFrame.fill,"TOPLEFT",0,-powerFrame:GetHeight()*.18)
+                frame:SetSize(powerFrame:GetWidth(),max(1,powerFrame:GetHeight()*.18))
+                frame.fill:SetSize(frame:GetWidth(),frame:GetHeight())
+            end
+            frame.bg:Hide()
+            if powerFrame._msufCPPreviewHasShape then
+                local mask=frame.costMask
+                if not mask then mask=PixelLayoutRegion(powerFrame:CreateMaskTexture(nil,"OVERLAY"));frame.costMask=mask end
+                if not frame.costMasked then frame.fill:AddMaskTexture(mask);frame.costMasked=true end
+                mask:SetTexture(powerFrame.fill:GetTexture(),"CLAMPTOBLACKADDITIVE","CLAMPTOBLACKADDITIVE")
+                mask:ClearAllPoints();mask:SetAllPoints(powerFrame);mask:Show()
+            elseif frame.costMasked then frame.fill:RemoveMaskTexture(frame.costMask);frame.costMasked=false;frame.costMask:Hide() end
+        end
+    end
+    preview.resourceSampleMarks = preview.resourceSampleMarks or {}
+    for _, texture in ipairs(preview.resourceSampleMarks) do texture:Hide() end
+    local thresholds = preview.resourceSampleThresholds or {}
+    preview.resourceSampleThresholds = thresholds
+    local thresholdCount = 0
+    local count=0
+    local marks = bars.resourceMarks or SAMPLE.NO_MARKS
+    -- The power bar's type and maximum are read only once a mark sits on it.
+    local powerToken, powerMaximum, powerResolved
+    for i=1,min(#marks,256) do
+        local rule=marks[i]
+        local host,token,maximum
+        if rule.target=="CLASS" and classFrame and spec and spec.mode~="aura_segmented" then
+            host,token,maximum=classFrame,spec.token,tonumber(spec.segments)
+        elseif rule.target~="CLASS" and rule.target~="ALTMANA" and powerFrame then
+            if not powerResolved then powerToken, powerMaximum = SamplePowerTarget(mana); powerResolved = true end
+            host,token,maximum=powerFrame,powerToken,powerMaximum
+        end
+        local value=tonumber(rule.value)
+        local fraction=value and (rule.mode=="ABSOLUTE" and maximum and maximum>0 and value/maximum
+            or rule.mode~="ABSOLUTE" and value/100)
+        if host and rule.enabled~=false and (not rule.resource or rule.resource=="ALL" or rule.resource==token)
+            and fraction and fraction>=0 and fraction<=1 then
+            count=count+1
+            -- Live marks draw on OVERLAY sublevel 7, above the fill and its edge.
+            local texture=preview.resourceSampleMarks[count] or MakeTexture(host,"OVERLAY",7)
+            preview.resourceSampleMarks[count]=texture;texture:SetParent(host);texture:ClearAllPoints()
+            local color=rule.color or SAMPLE.WHITE;texture:SetColorTexture(color[1],color[2],color[3],1)
+            texture:SetWidth(max(1,min(20,tonumber(rule.width) or 2)))
+            texture:SetPoint("TOP",host,"TOPLEFT",host:GetWidth()*fraction,0)
+            texture:SetPoint("BOTTOM",host,"BOTTOMLEFT",host:GetWidth()*fraction,0)
+            texture:SetShown(rule.mark~=false)
+            if rule.threshold==true then
+                thresholdCount = thresholdCount + 1
+                local entry = thresholds[thresholdCount]
+                if not entry then entry = {}; thresholds[thresholdCount] = entry end
+                entry.host, entry.spec, entry.fraction = host, host==classFrame and spec or nil, fraction
+                entry.direction, entry.color, entry.maximum = rule.direction, color, maximum
+            end
+        end
+    end
+    preview.resourceSampleThresholdCount = thresholdCount
+    if Preview.UpdateSampleThresholds then Preview.UpdateSampleThresholds(preview) end
+end
+function Preview.UpdateSampleThresholds(preview)
+    local base=preview.resourceSamplePowerBase
+    if base then base.host.fill:SetVertexColor(base.r,base.g,base.b,base.a) end
+    local thresholds = preview.resourceSampleThresholds
+    for i = 1, tonumber(preview.resourceSampleThresholdCount) or 0 do
+        local rule = thresholds[i]
+        local host,spec=rule.host,rule.spec
+        local value
+        if spec then
+            value=AnimationEnabled(preview) and CPPreview.AnimatedValue and CPPreview.AnimatedValue(spec,PreviewElapsed(preview)) or spec.value
+            value=(tonumber(value) or 0)/(rule.maximum or 1)
+        else
+            value=host._msufCPPreviewShapeAxis=="VERTICAL" and host.fill:GetHeight()/max(1,host:GetHeight())
+                or host.fill:GetWidth()/max(1,host:GetWidth())
+        end
+        if (rule.direction=="BELOW" and value<rule.fraction) or (rule.direction~="BELOW" and value>=rule.fraction) then
+            local color=rule.color
+            if spec then
+                local segments = host.segments
+                for s = 1, segments and #segments or 0 do
+                    local fill = segments[s]
+                    local _,_,_,alpha=fill:GetVertexColor()
+                    fill:SetVertexColor(color[1],color[2],color[3],alpha or 1)
+                end
+            else host.fill:SetVertexColor(color[1],color[2],color[3],base and base.a or 1) end
+        end
+    end
+end
+
 local function RefreshBounds(preview, classFrame, ebonFrame, powerFrame, hpFrame)
     PlaceBound(preview, "reference", preview.playerRef, "Reference", { 0.60, 0.66, 0.78 }, 1)
     PlaceBound(preview, "class", classFrame, "Class", { 0.30, 0.78, 0.55 }, 1)
@@ -1738,6 +1958,9 @@ local function ResolvePreviewFit(preview, classFrame, ebonFrame, powerFrame, hpF
     if Wanted("class") then AddPreviewRegionBounds(preview, ebonFrame, bounds) end
     if Wanted("power") then AddPreviewRegionBounds(preview, powerFrame, bounds) end
     if Wanted("hp") then AddPreviewRegionBounds(preview, hpFrame, bounds) end
+    for _, frame in pairs(preview.resourceSamples or {}) do
+        if Wanted(frame._sampleLayer) then AddPreviewRegionBounds(preview, frame, bounds) end
+    end
     for i = 1, #(preview.handles or {}) do
         local handle = preview.handles[i]
         local key = handle._layerKey or handle._key
@@ -1794,6 +2017,9 @@ local function ApplyLayerVisibility(preview)
     local hpTextOn = hpOn and LayerOn(preview, "hpText")
     local boundsOn = LayerOn(preview, "bounds")
     local guidesOn = GuidesOn(preview)
+    for _, frame in pairs(preview.resourceSamples or {}) do
+        SetShownSafe(frame, frame._sampleActive == true and LayerOn(preview, frame._sampleLayer))
+    end
     SetShownSafe(preview.playerRef, LayerOn(preview, "reference"))
     SetShownSafe(preview.classPower, classOn)
     if not classOn then HideBarOutline(preview.classPower) end
@@ -2169,7 +2395,7 @@ function Preview.Create(ctx, builder)
     box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText", 2)
     function box:Refresh()
         --- Keep the persisted Guides choice authoritative across factory reset,
-        --- profile switch and Assistant mutation even when this preview frame
+        --- profile switch and Search mutation even when this preview frame
         --- was already constructed under the previous profile table.
         if type(box.layerVisibility) == "table" then
             box.layerVisibility.guides = PreviewGuidesEnabled()
@@ -2190,6 +2416,7 @@ function Preview.Create(ctx, builder)
         end
         local powerFrame = RenderDetachedPower(box, bars, player, classFrame, spec)
         local hpFrame = RenderPlayerHP(box, bars, player, classFrame, powerFrame, spec, ebonFrame)
+        RenderExtraSamples(box, bars, player, spec, classFrame, powerFrame)
         box._msufCPPreviewAnim = {
             bars = bars,
             player = player,

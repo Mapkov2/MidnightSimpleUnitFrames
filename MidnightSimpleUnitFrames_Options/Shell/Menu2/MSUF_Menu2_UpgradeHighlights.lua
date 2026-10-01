@@ -100,7 +100,7 @@ function M.RestartUpgradeHighlightTour(source)
             { userFacingFailure = true }
     end
     return true, "Restarted the " .. tostring(releaseKey or "current")
-        .. " upgrade highlight tour at highlight 1.", { source = tostring(source or "assistant") }
+        .. " upgrade highlight tour at highlight 1.", { source = tostring(source or "menu") }
 end
 
 local function ApplyTargetRoute(item)
@@ -493,15 +493,6 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     local buttonsTop = cardTop - cardHeight - 20
     local buttonY = buttonsTop
     local function ConfigureCurrent()
-        local openAssistant = item.id == "assistant"
-        if openAssistant then
-            -- Home normally rebuilds straight back into the still-active
-            -- highlight tour. Bypass that scene for exactly this rebuild so
-            -- the Dashboard can create its cold Assistant card before the LoD
-            -- bridge starts the runtime. The next normal Home build resumes
-            -- the tour at the following highlight.
-            M._upgradeHighlightAssistantDetour = true
-        end
         Controller():Advance("opened")
         OpenPage(item)
         if item.id == "page_history"
@@ -509,27 +500,13 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
         then
             M.SetPageHistoryTourCue(true)
         end
-        -- The Assistant remains load-on-demand. Only its explicit final
-        -- highlight action promotes the normal Home card and loads runtime.
-        if openAssistant then
-            -- A refused/redundant page rebuild must not leak the one-shot
-            -- bypass into a later unrelated Home navigation.
-            M._upgradeHighlightAssistantDetour = nil
-            if type(M.StartNewAssistantTask) == "function" then
-                M.StartNewAssistantTask()
-                return
-            end
-            local assistant = MSUF and MSUF.Assistant
-            if type(assistant) == "table" and type(assistant.StartNewTaskWithRuntime) == "function" then
-                assistant.StartNewTaskWithRuntime("upgrade-highlights")
-            end
         -- Edit Mode has no page to land on, so its action starts the mode
         -- itself. `M.ToggleDashboardEditMode` is not an option here: it is
         -- created inside the Dashboard build, which early-returns into this
         -- scene, so it does not exist while the tour owns Home. The shared
         -- lifecycle setter is file scope, is a no-op when the mode already
         -- runs, and shows the standard combat-lock message on its own.
-        elseif item.id == "edit_mode" then
+        if item.id == "edit_mode" then
             if type(M.SetMSUFEditModeActive) == "function" then
                 M.SetMSUFEditModeActive(true, nil, { source = "upgrade_highlights" })
             end
@@ -635,10 +612,6 @@ local function BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, content
 end
 
 function M.BuildUpgradeHighlightDashboardScene(ctx)
-    if M._upgradeHighlightAssistantDetour == true then
-        M._upgradeHighlightAssistantDetour = nil
-        return false
-    end
     local controller = Controller()
     if not controller or type(controller.ShouldShow) ~= "function" or not controller:ShouldShow() then return false end
     local T = M.Theme

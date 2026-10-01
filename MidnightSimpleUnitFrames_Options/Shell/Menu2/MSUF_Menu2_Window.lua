@@ -1559,7 +1559,7 @@ local function BuildWindowToolbar(state)
     toolbarEdit:SetScript("OnClick", RunToolbarEditMode)
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(toolbarEdit, "toolbar.edit-mode", "Edit Mode", "action", {
-            actionKey = "assistant.action.editMode.toggle",
+            actionKey = "menu.action.editMode.toggle",
             historyMode = "none", help = "Toggles MSUF Edit Mode.",
         })
     end
