@@ -68,7 +68,7 @@ function Gates.ApplySections(ctx, gateKey, enabled, opts)
             if primary and entry.label then
                 local title = M.Tr("Basics")
                 if not enabled then title = title .. " - " .. M.Tr("Frame disabled") end
-                entry.label:SetText(title)
+                M.Theme.SetTranslatedText(entry.label, title)
                 local color = enabled and M.Theme.colors.text or M.Theme.colors.disabled
                 entry.label:SetTextColor(color[1], color[2], color[3], 1)
             end

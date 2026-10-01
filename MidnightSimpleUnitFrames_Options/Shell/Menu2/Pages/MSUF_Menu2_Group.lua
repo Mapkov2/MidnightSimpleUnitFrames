@@ -344,7 +344,7 @@ local function Set(kind, key, value, mode)
         end
         return true
     end
-    return M.RunWithHistory("Group " .. tostring(key), "group:" .. tostring(kind) .. ":" .. tostring(key), Write)
+    return M.RunWithHistory(M.Format("Group %s", tostring(key)), "group:" .. tostring(kind) .. ":" .. tostring(key), Write)
 end
 local function Bool(kind, key, default)
     local value = Val(kind, key, default and true or false)
@@ -421,7 +421,7 @@ local function SetSyncedValue(key, value, apply)
         if changed and type(apply) == "function" then apply() end
         return changed
     end
-    return M.RunWithHistory("Group " .. tostring(key), "group:synced:" .. tostring(key), Write)
+    return M.RunWithHistory(M.Format("Group %s", tostring(key)), "group:synced:" .. tostring(key), Write)
 end
 --- "DEFAULT" is the pre-release spelling of AUTO; map it so a profile from an in-between
 --- build keeps its choice instead of resetting. Mirrors the engine normalizer.
@@ -1502,7 +1502,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         end
         if not btn._firstText then
             btn._firstText = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
+            if btn._firstText.SetFont then btn._firstText:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
             btn._firstText:SetText("1")
             btn._firstText:SetTextColor(0, 0, 0, 1)
         end
@@ -1516,7 +1516,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         end
         if not btn._arrow then
             btn._arrow = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
+            if btn._arrow.SetFont then btn._arrow:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
             btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
         end
         btn._arrow:SetText(info.arrow)
@@ -1557,9 +1557,9 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             })
         end
         local text = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-        if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
+        if text.SetFont then text:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
         text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
-        text:SetText(info.text)
+        text:SetText(M.Tr(info.text))
         btn._label = text
         btn:SetScript("OnEnter", function(self)
             SetTileVisual(self, Val(CurrentScope(), "growth", "DOWN") == info.value, true)
@@ -1572,7 +1572,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             Set(CurrentScope(), "growth", info.value, "geometry")
             RefreshGrowthTiles()
         end)
-        RegisterGroupControl(btn, ctx, "field.growth.option." .. info.value, "Growth: " .. info.text, "button", "setting", {
+        RegisterGroupControl(btn, ctx, "field.growth.option." .. info.value, M.Format("Growth: %s", M.Tr(info.text)), "button", "setting", {
             searchSettingKeys = { "gf_party.growth", "gf_raid.growth", "gf_mythicraid.growth" },
             command = {
                 kind = "dropdown", valueKind = "enum", values = GROWTH_VALUES,
@@ -1796,6 +1796,7 @@ M.Assign(GroupPage, {
     ScopeColor = ScopeColor,
     BuildGrowthDirectionTiles = BuildGrowthDirectionTiles,
     BuildRoleOrderRows = BuildRoleOrderRows,
+    ScopeLabel = ScopeLabel,
     SetOptionEnabled = SetOptionEnabled,
     SetOptionsEnabled = SetOptionsEnabled,
     ApplyScopeEnabledGate = ApplyScopeEnabledGate,

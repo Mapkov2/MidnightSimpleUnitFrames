@@ -405,46 +405,26 @@ local function ToTInlineSeparator(v, custom)
     if type(v) ~= "string" or v == "" or not TOTINLINE_SEP_VALID[v] then return "|" end
     return v
 end
-local function ShortenPreviewName(name, key, layoutConf)
+--- Shortens a preview name like the runtime does. The settings come from the
+--- unit's compiled text spec (nameShorten, nameShortenMax, nameShortenSide,
+--- nameShortenDots), which UF_Config's ResolveNameShortening fills with every
+--- per-frame alias and clamp; the inline target of target uses its own block
+--- (text.inlineToT). The cut counts characters, never bytes, so a Cyrillic or
+--- CJK name is never split inside a character.
+local function ShortenPreviewName(name, resolved, layoutConf)
     name = tostring(name or "")
-    key = CanonKey(key)
-    if name == "" then return name end
-    local db = EnsureDB()
-    local g = db.general or {}
-    local u = db[key] or {}
-    local shorten = db.shortenNames and true or false
-    if u.fontOverride == true and u.shortenNames ~= nil then shorten = u.shortenNames and true or false end
-    if not shorten then return name end
-    local maxChars
-    if u.fontOverride == true and tonumber(u.shortenNameMaxChars) then
-        maxChars = tonumber(u.shortenNameMaxChars)
-    else
-        maxChars = tonumber(g.shortenNameMaxChars) or 6
-    end
-    maxChars = floor(max(4, min(40, maxChars)) + 0.5)
-    if #name <= maxChars then return name end
-    local mode
-    if u.fontOverride == true and u.shortenNameClipSide ~= nil then
-        mode = u.shortenNameClipSide
-    else
-        mode = g.shortenNameClipSide or "LEFT"
-    end
-    local showDots
-    if u.fontOverride == true and u.shortenNameShowDots ~= nil then
-        showDots = u.shortenNameShowDots and true or false
-    elseif g.shortenNameShowDots ~= nil then
-        showDots = g.shortenNameShowDots and true or false
-    else
-        showDots = true
-    end
-    local anchorConf = layoutConf or u
-    local nameAnchor = tostring(anchorConf.nameTextAnchor or "TOPLEFT"):upper()
+    if name == "" or type(resolved) ~= "table" or resolved.nameShorten ~= true then return name end
+    local maxChars = tonumber(resolved.nameShortenMax) or 6
+    local _, chars = name:gsub("[^\128-\191]", "")
+    if chars <= maxChars then return name end
+    local showDots = resolved.nameShortenDots == true
+    local nameAnchor = tostring(layoutConf and layoutConf.nameTextAnchor or "TOPLEFT"):upper()
     if nameAnchor ~= "LEFT" and nameAnchor ~= "TOPLEFT" and nameAnchor ~= "FRAMELEFT" then showDots = false end
-    if mode == "RIGHT" then
-        local text = name:sub(1, maxChars)
+    if resolved.nameShortenSide == "RIGHT" then
+        local text = TruncateUtf8Chars(name, maxChars)
         return showDots and (text .. "...") or text
     end
-    local text = name:sub(#name - maxChars + 1)
+    local text = name:sub(#TruncateUtf8Chars(name, chars - maxChars) + 1)
     return showDots and ("..." .. text) or text
 end
 local function TextScopeSet(key, field, value)
@@ -756,9 +736,7 @@ local function HealthColor(key, data)
                (cache and cache.unifiedBarG) or g.unifiedBarG or 0.60,
                (cache and cache.unifiedBarB) or g.unifiedBarB or 0.90
     end
-    return (cache and cache.darkBarR) or g.darkBarR or g.darkBarGray or 0.07,
-           (cache and cache.darkBarG) or g.darkBarG or g.darkBarGray or 0.07,
-           (cache and cache.darkBarB) or g.darkBarB or g.darkBarGray or 0.07
+    return PreviewHelpers.DarkBarColor(cache)
 end
 local function DarkMatchHPColor(r, g, b, cache)
     local gen = (cache and cache.generalRef) or M.EnsureDB().general

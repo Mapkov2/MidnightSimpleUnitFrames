@@ -343,7 +343,7 @@ local function BuildGFResourceBarSection(ctx, b)
             v = floor(max(1, min(30, tonumber(v) or CurrentPowerHeight(CurrentScope()))) + 0.5)
             Set(CurrentScope(), "powerHeight", v, "geometry")
         end,
-        3, (function()
+        DefaultPowerHeight(), (function()
             local meta = ControlMeta(ctx, "field.powerHeight")
             meta.step, meta.roundStep = 1, true
             return meta
@@ -358,7 +358,7 @@ local function BuildGFResourceBarSection(ctx, b)
         function(v)
             local scope = CurrentScope()
             local conf = Conf(scope)
-            if v and not (tonumber(conf.detachedPowerBarWidth) or 0 > 0) then
+            if v and not ((tonumber(conf.detachedPowerBarWidth) or 0) > 0) then
                 -- Seed the geometry the detached card edits, mirroring the unit page.
                 conf.detachedPowerBarWidth = tonumber(conf.width) or 80
             end
@@ -436,7 +436,7 @@ local function BuildGFResourceBarSection(ctx, b)
         if Bool(CurrentScope(), "powerShowDamager", false) then roles[#roles + 1] = "DPS" end
         SetSectionBadgesAndStatus(power, {
             OnOffBadge(enabled, "Shown", "Hidden"),
-            { text = BadgeNumber(CurrentPowerHeight(CurrentScope())) .. "px", kind = enabled and "info" or "muted" },
+            { text = M.Format("%s px", BadgeNumber(CurrentPowerHeight(CurrentScope()))), kind = enabled and "info" or "muted" },
             { text = #roles > 0 and table.concat(roles, "/") or "No roles", kind = enabled and "accent" or "muted" },
             { text = detached and "Detached" or "Attached", kind = enabled and "info" or "muted" },
         })
@@ -615,22 +615,24 @@ local function BuildGFTextSection(ctx, b)
         widget:HookScript("OnLeave", RestoreGFPreviewTextFocus)
     end
     local BadgeValue = UnitSectionShared.TextBadgeValue
+    -- Slot, setting key. No literal defaults: Val answers the scope's own
+    -- default (GF.Val), which differs between Party and Raid.
     local GF_TEXT_SUMMARY_SLOTS = {
         hp = {
-            { "right", "textRight", "NONE" },
-            { "center", "textCenter", "PERCENT" },
-            { "left", "textLeft", "NONE" },
+            { "right", "textRight" },
+            { "center", "textCenter" },
+            { "left", "textLeft" },
         },
         power = {
-            { "right", "powerTextRight", "CURPERCENT" },
-            { "center", "powerTextCenter", "NONE" },
-            { "left", "powerTextLeft", "NONE" },
+            { "right", "powerTextRight" },
+            { "center", "powerTextCenter" },
+            { "left", "powerTextLeft" },
         },
     }
     local function TextSlotSummary(kind)
         local scope = CurrentScope()
         return UnitSectionShared.TextSlotSummary(kind, GF_TEXT_SUMMARY_SLOTS, function(slot)
-            return Val(scope, slot[2], slot[3])
+            return Val(scope, slot[2])
         end, kind == "hp" and HEALTH_TEXT_MODES or TEXT_MODES, OptionText)
     end
     local function UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
@@ -650,9 +652,9 @@ local function BuildGFTextSection(ctx, b)
             }
         elseif tab == "advanced" then
             badges = {
-                { text = "Name " .. BadgeNumber(Val(scope, "nameTextLayer", 5)), kind = nameOn and "info" or "muted" },
-                { text = "HP " .. BadgeNumber(Val(scope, "textLayer", 5)), kind = hpOn and "info" or "muted" },
-                { text = "Power " .. BadgeNumber(Val(scope, "powerTextLayer", 2)), kind = powerOn and "info" or "muted" },
+                { text = M.Format("Name %s", BadgeNumber(Val(scope, "nameTextLayer", 5))), kind = nameOn and "info" or "muted" },
+                { text = M.Format("HP %s", BadgeNumber(Val(scope, "textLayer", 5))), kind = hpOn and "info" or "muted" },
+                { text = M.Format("Power %s", BadgeNumber(Val(scope, "powerTextLayer", 2))), kind = powerOn and "info" or "muted" },
             }
         else
             badges = {
@@ -1028,7 +1030,7 @@ local function BuildGFDebuffStripeSection(ctx, b)
         SetSectionBadgesAndStatus(stripe, {
             OnOffBadge(enabled, "Active", "Off"),
             { text = OptionText(DEBUFF_STRIPE_EDGES, Val(CurrentScope(), "debuffStripeEdge", "BOTTOM"), "Bottom Edge"), kind = enabled and "info" or "muted" },
-            { text = BadgeNumber(Num(CurrentScope(), "debuffStripeHeight", 3)) .. "px", kind = enabled and "accent" or "muted" },
+            { text = M.Format("%s px", BadgeNumber(Num(CurrentScope(), "debuffStripeHeight", 3))), kind = enabled and "accent" or "muted" },
         })
     end
     TrackSectionRefresh(ctx, stripe, RefreshStripeState)
@@ -1109,7 +1111,7 @@ local function BuildGFRangeFadeSection(ctx, b)
         if offlineHidden then
             offlineText, offlineKind = "Offline hidden", "accent"
         elseif offlineFade then
-            offlineText = "Offline " .. tostring(floor(Num(CurrentScope(), "offlineAlpha", 0.5) * 100 + 0.5)) .. "%"
+            offlineText = M.Format("Offline %d%%", floor(Num(CurrentScope(), "offlineAlpha", 0.5) * 100 + 0.5))
             offlineKind = "accent"
         end
         SetSectionBadgesAndStatus(range, {

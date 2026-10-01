@@ -562,7 +562,7 @@ local function MinimizeSlashMenuWindow(frame)
     local start = CaptureFrameLayout(frame)
     frame._msuf2Minimized = true
     frame._msuf2PreMinimizeLayout = start
-    if M.minimizedBar.title and frame.title and frame.title.GetText then M.minimizedBar.title:SetText(frame.title:GetText() or "MSUF Menu") end
+    if M.minimizedBar.title and frame.title and frame.title.GetText then T.SetTranslatedText(M.minimizedBar.title, frame.title:GetText() or "MSUF Menu") end
     ApplyMenuFramePriority(M.minimizedBar)
     if M.minimizedBar.SetAlpha then M.minimizedBar:SetAlpha(0) end
     M.minimizedBar:Show()
@@ -713,11 +713,11 @@ local function RefreshDashboardEditModeButton()
         local btn = buttons[i]
         if btn then
             if active then
-                btn:SetText(L_EDIT_MODE_ON)
+                btn:SetText(L_EDIT_MODE_ON, true)
             elseif combatLocked then
-                btn:SetText(L_EDIT_MODE_OFF_COMBAT)
+                btn:SetText(L_EDIT_MODE_OFF_COMBAT, true)
             else
-                btn:SetText(L_EDIT_MODE_OFF)
+                btn:SetText(L_EDIT_MODE_OFF, true)
             end
             if btn.SetEnabled then btn:SetEnabled(active or not combatLocked) end
             if btn.SetActive then btn:SetActive(active) end
@@ -1553,7 +1553,7 @@ local function BuildWindowToolbar(state)
         RefreshDashboardEditModeButton()
         if f.RefreshStatus then f:RefreshStatus() end
     end
-    local toolbarEdit = T.Button(status, L_EDIT_MODE_OFF, 152, 24)
+    local toolbarEdit = T.Button(status, "Edit Mode: Off", 152, 24)
     toolbarEdit:SetPoint("BOTTOMRIGHT", status, "BOTTOMRIGHT", -24, 12)
     T.CenterButtonLabel(toolbarEdit)
     toolbarEdit:SetScript("OnClick", RunToolbarEditMode)
@@ -1649,6 +1649,16 @@ local function BuildWindowToolbar(state)
     status.seeNewFeaturesButton = toolbarFeatures
     status.resetPageButton = toolbarReset
     status.editModeButton = toolbarEdit
+    -- The fade-out runs on a MenuTimer task; when the menu quiesces (or the
+    -- task is refused in combat) the message is cleared at once instead.
+    local function ClearStatusFeedback()
+        local feedback = f and f.status and f.status.feedbackText
+        if not feedback then return end
+        f.status._msuf2FeedbackSerial = (f.status._msuf2FeedbackSerial or 0) + 1
+        feedback:SetAlpha(0)
+        feedback:SetText("")
+    end
+    MenuRuntime:SetQuiesceSettler("status-feedback", ClearStatusFeedback)
     function M.ShowStatusFeedback(text, kind, seconds)
         if not (f and f.status and f.status.feedbackText and text and text ~= "") then return end
         local feedback = f.status.feedbackText
@@ -1656,12 +1666,12 @@ local function BuildWindowToolbar(state)
         local color = colorKey and T.colors[colorKey] or T.colors.muted
         f.status._msuf2FeedbackSerial = (f.status._msuf2FeedbackSerial or 0) + 1
         local serial = f.status._msuf2FeedbackSerial
-        feedback:SetText(M.Tr(tostring(text)))
+        T.SetTranslatedText(feedback, M.Tr(tostring(text)))
         if feedback.SetTextColor then feedback:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
         feedback:SetAlpha(1)
         if T.PlayMotion then T.PlayMotion(feedback, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 }) end
         local delay = tonumber(seconds) or 1.4
-        C_Timer.After(delay, function()
+        local fade = C_Timer.After(delay, function()
             if not (f and f.status and f.status.feedbackText) then return end
             if f.status._msuf2FeedbackSerial ~= serial then return end
             if T.PlayMotion then
@@ -1678,6 +1688,7 @@ local function BuildWindowToolbar(state)
                 feedback:SetText("")
             end
         end)
+        if not fade then ClearStatusFeedback() end
     end
     M.ShowInlineFeedback = M.ShowStatusFeedback
 end
@@ -1701,7 +1712,7 @@ local function InstallWindowStatusRuntime(state)
         SetCachedText(status, "_msuf2CombatText", sbCombat, combatText)
         local version = GetAddonVersion()
         local versionText = type(version) == "string" and version ~= ""
-            and (version:match("^%d") and ("v" .. version) or version) or "v5.0 Beta 1"
+            and (version:match("^%d") and ("v" .. version) or version) or ""
         SetCachedText(status, "_msuf2VersionText", sbVersion, versionText)
         RefreshDashboardEditModeButton()
         RefreshToolbarPageReset()

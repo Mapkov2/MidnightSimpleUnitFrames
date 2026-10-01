@@ -1144,10 +1144,10 @@ function W.OpenDropdown(owner, values, currentValue, onSelect)
 end
 function W.Dropdown(section, label, values, width)
     local x, y = NextRow(section, 48)
-    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
+    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
-    local btn = T.Button(section, "", width or 240, 22)
+    local btn = T.Button(section, "", width or 240, 22, { history = false })
     RegisterSearchObject(btn, label, "dropdown", { anchor = title, values = values })
     btn._msuf2Title = title
     btn._msuf2ControlKind = "dropdown"
@@ -1211,7 +1211,11 @@ function W.Dropdown(section, label, values, width)
         local sr, sg, sb, sa = DropdownItemSwatch(selectedItem)
         PaintDropdownChoice(self, self._msuf2Label, icon, sr, sg, sb, sa, -26, statusbarTexture, barPreview)
         RestoreDropdownDefaultFont(self._msuf2Label)
-        self:SetText(selectedItem and DropdownItemText(selectedItem) or TextFor(value))
+        if selectedItem then
+            self:SetText(DropdownItemText(selectedItem), true)
+        else
+            self:SetText(TextFor(value))
+        end
         if DropdownItemHasFontPreview(selectedItem) then ApplyDropdownItemFont(self._msuf2Label, selectedItem) end
     end
     function btn:GetValue()

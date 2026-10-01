@@ -1578,7 +1578,7 @@ function T.ApplyCollapseVisual(chevron, hint, open)
         local hintKey = text .. "\030" .. tostring(c[1]) .. "\030" .. tostring(c[2]) .. "\030" .. tostring(c[3]) .. "\030" .. "0.74"
         if hint._msuf2CollapseVisualKey ~= hintKey then
             hint._msuf2CollapseVisualKey = hintKey
-            hint:SetText(text)
+            T.SetTranslatedText(hint, text)
             if hint.SetTextColor then hint:SetTextColor(c[1], c[2], c[3], 0.74) end
         end
     end
@@ -2053,6 +2053,13 @@ function T.SkinEditBox(editBox)
     return editBox
 end
 local function FontSetText(self, value) return self._msuf2RawSetText(self, Tr(value or "")) end
+-- Text that is translated already (composed, formatted or a locale name) goes
+-- through the raw setter: a second lookup would log it as a missing key.
+function T.SetTranslatedText(fs, text)
+    local raw = fs._msuf2RawSetText
+    if raw then return raw(fs, text) end
+    return fs:SetText(text)
+end
 function T.Font(parent, template, text, color, role)
     local fs = PixelLayoutRegion(parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight"))
     fs._msuf2FontRole = role
@@ -2568,14 +2575,16 @@ local function ButtonVisual(btn, active, hover)
         btn._msuf2Label:SetTextColor(c.accent[1], c.accent[2], c.accent[3], 1)
     end
 end
-local function ButtonSetText(self, value)
+-- translated = true marks text the caller translated already (a selected
+-- dropdown entry, a composed status label); it is shown as is.
+local function ButtonSetText(self, value, translated)
     local raw = value or ""
-    local text = Tr(raw)
+    local text = translated == true and raw or Tr(raw)
     if self._msuf2RawText == raw and self._msuf2Label and self._msuf2Label:GetText() == text then return end
     self._msuf2RawText = raw
     self._msuf2SearchText = raw
     if self._msuf2Label then self._msuf2Label._msuf2SearchText = raw end
-    self._msuf2Label:SetText(text)
+    T.SetTranslatedText(self._msuf2Label, text)
     if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then
         -- Dropdown buttons display the selected value, but selected text is not
         -- always the semantic control name. Opt-in controls keep one stable
@@ -2656,8 +2665,10 @@ local BUTTON_STYLE_HOOKS = {
     OnEnable = ButtonRefreshVisual,
     OnDisable = ButtonRefreshVisual,
 }
+-- The click checkpoint snapshots the whole profile, so it is opt-in
+-- (_msuf2HistoryCheckpoint, set from T.Button's opts.history).
 local function ButtonHistoryCheckpoint(self)
-    if self._msuf2SkipHistoryCheckpoint then return end
+    if self._msuf2HistoryCheckpoint ~= true or self._msuf2SkipHistoryCheckpoint then return end
     local checkpoint = M and M.CheckpointHistory
     if type(checkpoint) ~= "function" then return end
     local label = self._msuf2HistoryLabel
@@ -2666,8 +2677,25 @@ local function ButtonHistoryCheckpoint(self)
     if label == "" then label = "MSUF2 button" end
     checkpoint(label, self._msuf2HistorySource or ("button:" .. tostring(self)))
 end
+-- A button without an explicit opts.history opts in only as page content:
+-- a page handler may write settings without recording history itself. Core
+-- widgets that record history (sliders, segments, dropdowns, scope bars) or
+-- write nothing pass history = false; chrome outside the page scroll child
+-- opts in explicitly where it writes the profile.
+local function IsPageContent(parent)
+    local scrollChild = M and M.scrollChild
+    local frame = parent
+    while frame and scrollChild do
+        if frame == scrollChild then return true end
+        frame = frame.GetParent and frame:GetParent() or nil
+    end
+    return false
+end
 function T.Button(parent, text, width, height, opts)
     local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
+    local history = opts and opts.history
+    if history == nil then history = IsPageContent(parent) end
+    btn._msuf2HistoryCheckpoint = history == true
     btn:SetSize(width or 120, height or 24)
     if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
     local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Btn", 2, "BACKGROUND", "BORDER")

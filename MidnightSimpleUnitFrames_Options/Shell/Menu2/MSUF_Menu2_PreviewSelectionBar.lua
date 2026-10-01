@@ -420,7 +420,7 @@ function SB.Create(box, deps)
     bar.editX, bar.editY = editX, editY
     bar.axisX, bar.axisY = stepX, stepY
 
-    local openBtn = (T and T.Button and T.Button(bar, Tr(box, "Open settings"), 110, 18))
+    local openBtn = (T and T.Button and T.Button(bar, "Open settings", 110, 18))
         or PixelLayoutRegion(CreateFrame("Button", nil, bar, "BackdropTemplate"))
     if T and T.CenterButtonLabel then T.CenterButtonLabel(openBtn) end
     openBtn:SetPoint("RIGHT", bar, "RIGHT", -8, 0)
@@ -428,7 +428,7 @@ function SB.Create(box, deps)
         local handle = SelectedHandle(box)
         if handle then Call(box, "OpenSettings", box, handle, "selectionbar") end
     end)
-    local resetBtn = (T and T.Button and T.Button(bar, Tr(box, "Reset"), 60, 18))
+    local resetBtn = (T and T.Button and T.Button(bar, "Reset", 60, 18, { history = true }))
         or PixelLayoutRegion(CreateFrame("Button", nil, bar, "BackdropTemplate"))
     if T and T.CenterButtonLabel then T.CenterButtonLabel(resetBtn) end
     resetBtn:SetPoint("RIGHT", openBtn, "LEFT", -6, 0)

@@ -80,7 +80,7 @@ local function ApplyPickerPriority(panel, blocker)
 end
 
 local function Font(parent, template, text, color)
-    return T.Font(parent, template, Tr(text or ""), color or T.colors.text)
+    return T.Font(parent, template, text or "", color or T.colors.text)
 end
 local function MenuFontStamp()
     local db = _G.MSUF_DB
@@ -611,7 +611,7 @@ function Picker.BuildAdvancedCard(panel)
     local tabSpecs = { { "quick", "Quick" }, { "class", "Class" }, { "recent", "Recent" }, { "saved", "Saved" } }
     for i = 1, #tabSpecs do
         local spec = tabSpecs[i]
-        local tab = T.Button(advancedCard, Tr(spec[2]), 78, 20)
+        local tab = T.Button(advancedCard, spec[2], 78, 20)
         if tab._msuf2Label then tab._msuf2Label:SetJustifyH("CENTER") end
         tab._msuf2SkipHistoryCheckpoint = true
         tab._msuf2PaletteKey = spec[1]
@@ -647,14 +647,14 @@ function Picker.BuildAdvancedCard(panel)
     local hexTitle = Font(advancedCard, "GameFontNormalSmall", "HEX", T.colors.muted); panel.hexTitle = hexTitle
     local hex = Input(advancedCard, 64, false); panel.hex = hex
     hex._commit = HexCommitter(panel)
-    local copy = T.Button(advancedCard, Tr("Copy"), 54, 22); panel.copy = copy
+    local copy = T.Button(advancedCard, "Copy", 54, 22); panel.copy = copy
     if copy._msuf2Label then
         copy._msuf2Label:ClearAllPoints(); copy._msuf2Label:SetPoint("LEFT", 4, 0); copy._msuf2Label:SetPoint("RIGHT", -4, 0)
         copy._msuf2Label:SetJustifyH("CENTER")
     end
     AddFlatButtonIcon(copy, "copy")
     copy:SetScript("OnClick", function() hex:SetFocus(); hex:HighlightText() end)
-    local save = T.Button(advancedCard, Tr("Save"), 54, 22); panel.save = save
+    local save = T.Button(advancedCard, "Save", 54, 22, { history = true }); panel.save = save
     if save._msuf2Label then
         save._msuf2Label:ClearAllPoints(); save._msuf2Label:SetPoint("LEFT", 4, 0); save._msuf2Label:SetPoint("RIGHT", -4, 0)
         save._msuf2Label:SetJustifyH("CENTER")
@@ -708,17 +708,17 @@ function Picker.BuildActionBar(panel)
     actionBar:SetPoint("BOTTOMLEFT", PICKER_PAD, 8); actionBar:SetPoint("BOTTOMRIGHT", -PICKER_PAD, 8); actionBar:SetHeight(42)
     if T.ApplySurface then T.ApplySurface(actionBar, "status") end
     panel.actionBar = actionBar
-    local more = T.Button(actionBar, Tr("Advanced"), 110, 26); panel.more = more
+    local more = T.Button(actionBar, "Advanced", 110, 26); panel.more = more
     if more._msuf2Label then more._msuf2Label:SetJustifyH("CENTER") end
     more._msuf2SkipHistoryCheckpoint = true
     more:SetScript("OnClick", function() panel:SetAdvanced(not panel.advanced) end)
     if M.AddTooltip then
         M.AddTooltip(more, "Advanced color tools", "Quick colors, precise RGB and HEX values, recent colors, saved colors, and class colors.")
     end
-    local cancel = T.Button(actionBar, Tr("Cancel"), 98, 26); panel.cancel = cancel
+    local cancel = T.Button(actionBar, "Cancel", 98, 26); panel.cancel = cancel
     if cancel._msuf2Label then cancel._msuf2Label:SetJustifyH("CENTER") end
     cancel:SetScript("OnClick", function() panel:Finish(true) end)
-    local done = T.Button(actionBar, Tr("Apply Color"), 94, 26); panel.done = done
+    local done = T.Button(actionBar, "Apply Color", 94, 26); panel.done = done
     if done._msuf2Label then done._msuf2Label:SetJustifyH("CENTER") end
     if T.ApplyButtonRole then T.ApplyButtonRole(done, "primary") end
     done:SetScript("OnClick", function() panel:Finish(false) end)
@@ -786,7 +786,7 @@ function Picker.DefineContextList(panel)
         self._ownerDropdownOpen = opened and true or nil
     end
 
-    panel.classColorMode = T.Button(panel, Tr("Power bar color by class"), 306, 24)
+    panel.classColorMode = T.Button(panel, "Power bar color by class", 306, 24)
     panel.classColorMode:SetPoint("TOPLEFT", PICKER_PAD, -132)
     panel.classColorMode._msuf2SkipHistoryCheckpoint = true
     panel.classColorMode:SetScript("OnClick", function()
@@ -877,7 +877,7 @@ function Picker.DefineLayout(panel)
         for i = 1, 3 do self.rgb[i]:SetShown(advanced); self.rgbLabels[i]:SetShown(advanced) end
         self.hexTitle:SetShown(advanced); self.hex:SetShown(advanced); self.copy:SetShown(advanced); self.save:SetShown(advanced)
         self.more:SetSize(advanced and ADVANCED_MORE_WIDTH or SIMPLE_MORE_WIDTH, 26)
-        self.more:SetText(Tr(advanced and "Back to controls" or "More Options"))
+        self.more:SetText(Tr(advanced and "Back to controls" or "More Options"), true)
         self.cancel:SetSize(advanced and ADVANCED_CANCEL_WIDTH or SIMPLE_CANCEL_WIDTH, 26)
         self.done:SetSize(advanced and ADVANCED_DONE_WIDTH or SIMPLE_DONE_WIDTH, 26)
         self.more:ClearAllPoints(); self.more:SetPoint("LEFT", ACTION_SIDE_PAD, 0)
@@ -988,11 +988,11 @@ function Picker.DefineReadout(panel)
         if not self.owner then return end
         self:Layout()
         if type(self.owner._msuf2GetColorByClass) == "function" then
-            self.classColorMode:SetText(Tr("Power bar color by class") .. ": " .. Tr(self.owner._msuf2GetColorByClass() and "On" or "Off"))
+            self.classColorMode:SetText(Tr("Power bar color by class") .. ": " .. Tr(self.owner._msuf2GetColorByClass() and "On" or "Off"), true)
         end
         local r, g, b = self.owner:GetRGB(); local originalValue = self.originals and self.originals[self.owner]
         self.original:SetColorTexture(originalValue and originalValue[1] or r, originalValue and originalValue[2] or g, originalValue and originalValue[3] or b, 1)
-        self.selector.label:SetText(Tr(self.owner._msuf2ColorLabel or self.owner._msuf2SearchText or "Color"))
+        T.SetTranslatedText(self.selector.label, Tr(self.owner._msuf2ColorLabel or self.owner._msuf2SearchText or "Color"))
         self._readoutHex, self._readoutR, self._readoutG, self._readoutB = nil, nil, nil, nil
         self:RefreshColorReadout(true)
         self:RefreshOpacity()
@@ -1082,7 +1082,7 @@ function Picker.DefineSession(panel)
         self._msuf2OnFinish = type(onFinish) == "function" and onFinish or nil
         self._msuf2OnLiveChange = type(onLiveChange) == "function" and onLiveChange or nil
         local visibleScope = Tr(scopeTag or "")
-        self.title:SetText(Tr("MSUF Color Picker") .. (visibleScope ~= "" and (" · " .. visibleScope) or ""))
+        T.SetTranslatedText(self.title, Tr("MSUF Color Picker") .. (visibleScope ~= "" and (" · " .. visibleScope) or ""))
         local context = Tr(contextTitle or "Colors")
         local detail = Tr(contextNote or "Choose a target, then paint it.")
         self.infoButton._msuf2PickerInfoTitle = context

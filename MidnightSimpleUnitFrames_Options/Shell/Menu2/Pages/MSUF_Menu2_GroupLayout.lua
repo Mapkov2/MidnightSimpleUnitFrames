@@ -484,7 +484,7 @@ local function BuildGFGeometrySection(ctx, b)
     end)
 end
 
-local function BuildClassPriorityRows(ctx, parent, width)
+local function BuildClassPriorityRows(ctx, parent, width, topY)
     local tokens = "WARRIOR,PALADIN,HUNTER,ROGUE,PRIEST,DEATHKNIGHT,SHAMAN,MAGE,WARLOCK,MONK,DRUID,DEMONHUNTER,EVOKER"
     -- Blizzard's CLASS_SORT_ORDER names exactly the classes this client has (9 on
     -- Classic Era, TBC and WoW Forever, 11 on Mists); RAID_CLASS_COLORS also
@@ -511,7 +511,7 @@ local function BuildClassPriorityRows(ctx, parent, width)
         Set(CurrentScope(), "classOrder", table.concat(order, ","), "rebuild")
     end
     holder = Shared.MakeDragSortRows(parent, definitions, {
-        x = 16, y = -68, width = width - 32, rowHeight = 22, gap = 4,
+        x = 16, y = topY, width = width - 32, rowHeight = 22, gap = 4,
         controlDomain = "group", controlPageKey = ctx.key, controlPath = "sorting.class_priority",
         controlClassification = "setting", onReorder = function()
             M.RunWithHistory("Class priority order", "group:classOrder:" .. CurrentScope(), Save)
@@ -527,11 +527,11 @@ local function BuildClassPriorityRows(ctx, parent, width)
         holder:SnapRows()
         holder:SetRowsEnabled(Conf(CurrentScope()).sortClassPriority == true)
     end)
-    return #definitions
+    return holder
 end
 
 local function BuildGFSortingSection(ctx, b)
-    local sorting = b:CollapsibleSection("sorting", "Sorting", 722, false)
+    local sorting = b:CollapsibleSection("sorting", "Sorting", nil, false)
     local sortingW = sorting._msuf2Width or b.width or 720
     local sortingGap = 16
     local sortingLeftX = 20
@@ -643,10 +643,18 @@ local function BuildGFSortingSection(ctx, b)
         end
         SetSectionBadgesAndStatus(sorting, badges)
     end
-    local classCard = W.ControlCard(sorting, "Class priority", "Drag classes to reorder within the current group and role order.", 20, -280, sortingInnerW, 418)
-    M.GroupFrameAdditionalSections.ExactScope(BindScopeToggle(ctx, W.ToggleAt(classCard, "Use class priority", 16, -36, sortingInnerW - 32),
+    local classCard = W.ControlCard(sorting, "Class priority", "Drag classes to reorder within the current group and role order.", 20, -280, sortingInnerW, 120)
+    -- Measure once during construction, including a wrapped description.
+    local classToggleY = -56 - max(16, classCard.subtitle:GetStringHeight())
+    M.GroupFrameAdditionalSections.ExactScope(BindScopeToggle(ctx, W.ToggleAt(classCard, "Use class priority", 16, classToggleY, sortingInnerW - 32),
         "sortClassPriority", false, "rebuild"), "sortClassPriority")
-    BuildClassPriorityRows(ctx, classCard, sortingInnerW)
+    local classRowsY = classToggleY - 40
+    local classRows = BuildClassPriorityRows(ctx, classCard, sortingInnerW, classRowsY)
+    local classCardHeight = -classRowsY + classRows:GetHeight() + 16
+    classCard:SetHeight(classCardHeight)
+    classCard._msuf2ContextColorHeight = classCardHeight
+    sorting._msuf2CursorY = -280 - classCardHeight
+    b:FinishSection(sorting, 24)
     TrackSectionRefresh(ctx, sorting, refreshSortingControls)
 end
 
@@ -922,17 +930,47 @@ local GROUP_LAYOUT_SECTION_SPECS = {
     { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection, prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PrepareRangeSwitch(ctx, sec) end },
     { sectionId = "transparency", title = "Transparency", autoHeight = true, build = BuildGFTransparencySection },
     { sectionId = "layout_advanced", title = "Group Layout", height = GEOMETRY_SECTION_HEIGHT, build = BuildGFGeometrySection },
-    { sectionId = "sorting", title = "Sorting", height = 722, build = BuildGFSortingSection },
+    { sectionId = "sorting", title = "Sorting", autoHeight = true, build = BuildGFSortingSection },
     -- clientCapability: the MSUF.Client fact that must be true for the section to
     -- exist, the same capability names Search/MSUF_Menu2_Search_IndexQuery.lua
     -- ties client-only static search rows to. frameScope: the unit or group scope
     -- the section needs (M.SupportsFrameScope), e.g. boss units for allied bosses.
-    { sectionId = "buff_coverage", title = "Buff coverage (Forever)", height = 656, clientCapability = "IsForever", build = AdditionalSections.BuffCoverage },
-    { sectionId = "name_bar", title = "Name strip", height = 300, build = AdditionalSections.NameBar },
-    { sectionId = "party_targets", title = "Member targets", height = 456, build = AdditionalSections.Targets },
-    { sectionId = "group_pets", title = "Pet frames", height = 546, build = AdditionalSections.Pets },
-    { sectionId = "friendly_bosses", title = "Allied boss frames", height = 536, frameScope = "boss", build = AdditionalSections.FriendlyBosses },
-    { sectionId = "healer_mana", title = "Healer mana bars", height = 600, build = AdditionalSections.HealerMana },
+    {
+        sectionId = "buff_coverage", title = "Buff coverage (Forever)", height = 656, clientCapability = "IsForever", build = AdditionalSections.BuffCoverage,
+        prepareShell = function(ctx, section)
+            AdditionalSections.PrepareSwitch(ctx, section, "buffCoverageEnabled", "Show buff coverage icons", "visual")
+        end,
+    },
+    {
+        sectionId = "name_bar", title = "Name strip", height = 300, build = AdditionalSections.NameBar,
+        prepareShell = function(ctx, section)
+            AdditionalSections.PrepareSwitch(ctx, section, "nameBarEnabled", "Show names on a strip above the health bar", "rebuild")
+        end,
+    },
+    {
+        sectionId = "party_targets", title = "Member targets", height = 456, build = AdditionalSections.Targets,
+        prepareShell = function(ctx, section)
+            AdditionalSections.PrepareSwitch(ctx, section, "targetsEnabled", "Enable", "rebuild")
+        end,
+    },
+    {
+        sectionId = "group_pets", title = "Pet frames", height = 546, build = AdditionalSections.Pets,
+        prepareShell = function(ctx, section)
+            AdditionalSections.PrepareSwitch(ctx, section, "petsEnabled", "Enable", "rebuild")
+        end,
+    },
+    {
+        sectionId = "friendly_bosses", title = "Allied boss frames", height = 536, frameScope = "boss", build = AdditionalSections.FriendlyBosses,
+        prepareShell = function(ctx, section)
+            AdditionalSections.PrepareSwitch(ctx, section, "friendlyBossEnabled", "Enable", "rebuild")
+        end,
+    },
+    {
+        sectionId = "healer_mana", title = "Healer mana bars", height = 520, build = AdditionalSections.HealerMana,
+        prepareShell = function(ctx, section)
+            AdditionalSections.PrepareSwitch(ctx, section, "healerManaEnabled", "Enable", "rebuild")
+        end,
+    },
 }
 
 local function BuildGFLayout(ctx)

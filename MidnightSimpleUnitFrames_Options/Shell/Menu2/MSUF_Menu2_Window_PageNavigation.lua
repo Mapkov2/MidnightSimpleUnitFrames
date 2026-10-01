@@ -74,7 +74,7 @@ local function UpdateNav(key)
     local labelsDirty = M._msuf2NavLocaleKey ~= localeKey
     M._msuf2NavLocaleKey = localeKey
     for pageKey, btn in pairs(M.navButtons) do
-        if labelsDirty and btn._msuf2RawLabel and btn.SetText then btn:SetText(M.Tr(btn._msuf2RawLabel)) end
+        if labelsDirty and btn._msuf2RawLabel and btn.SetText then btn:SetText(btn._msuf2RawLabel) end
         local active = pageKey == activeNavKey
         if btn.SetActive and btn._msuf2Active ~= active then btn:SetActive(active) end
     end
@@ -82,12 +82,12 @@ local function UpdateNav(key)
     M._msuf2NavActiveKey = activeNavKey
     if labelsDirty and M.navHeaders then
         for _, btn in pairs(M.navHeaders) do
-            if btn._msuf2RawLabel and btn.SetText then btn:SetText(string.upper(M.Tr(btn._msuf2RawLabel))) end
+            if btn._msuf2RawLabel and btn.SetText then btn:SetText(string.upper(M.Tr(btn._msuf2RawLabel)), true) end
         end
     end
     if labelsDirty and M.navTitles then
         for _, title in pairs(M.navTitles) do
-            if title._msuf2RawLabel and title.SetText then title:SetText(string.upper(M.Tr(title._msuf2RawLabel))) end
+            if title._msuf2RawLabel and title.SetText then SetTranslatedText(title, string.upper(M.Tr(title._msuf2RawLabel))) end
         end
     end
     if labelsDirty and M.nav and M.nav.searchBox then UpdateSearchPlaceholder(M.nav.searchBox) end

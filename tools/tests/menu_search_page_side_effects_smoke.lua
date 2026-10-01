@@ -37,6 +37,8 @@ for _, name in ipairs({ "EnableKeyboard", "SetPropagateKeyboardInput", "SetNumer
     "ClearFocus", "SetCursorPosition", "HighlightText" }) do
     widgetMethods[name] = function(self, ...) self["fixture" .. name] = { ... } end
 end
+widgetMethods.SetChecked = function(self, value) self.checked = value and true or false end
+widgetMethods.GetChecked = function(self) return self.checked and true or false end
 widgetMethods.HasFocus = function() return false end
 widgetMethods.SetAutoFocus = function(self, value) self.autoFocus = value end
 widgetMethods.SetValueStep = function(self, value) self.valueStep = value end

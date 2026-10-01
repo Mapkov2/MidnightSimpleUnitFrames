@@ -422,7 +422,7 @@ local function BuildTextureLayer(ctx, builder, unit)
         end
         local changed
         if type(M.RunWithHistory) == "function" then
-            changed = M.RunWithHistory("Texture: " .. texture.text,
+            changed = M.RunWithHistory(M.Format("Texture: %s", M.Tr(texture.text)),
                 "unit:texture-layer-texture:" .. tostring(unit) .. ":" .. tostring(boundSlot), Write)
         else
             changed = Write()

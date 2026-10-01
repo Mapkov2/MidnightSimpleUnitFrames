@@ -657,9 +657,9 @@ local function HealthColor(conf, pct, classToken)
         mode = globalMode or NormalizeHealthMode(conf.healthColorMode) or "class"
     end
     if mode == "dark" then
-        return conf.gfDarkR or (cache and cache.darkBarR) or 0,
-            conf.gfDarkG or (cache and cache.darkBarG) or 0,
-            conf.gfDarkB or (cache and cache.darkBarB) or 0
+        -- Group Config: each channel of the scope's own dark colour wins.
+        local r, g, b = PreviewHelpers.DarkBarColor(cache)
+        return tonumber(conf.gfDarkR) or r, tonumber(conf.gfDarkG) or g, tonumber(conf.gfDarkB) or b
     end
     if mode == "unified" then
         return conf.gfUnifiedR or (cache and cache.unifiedBarR) or 0.10,

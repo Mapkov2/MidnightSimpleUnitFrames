@@ -170,10 +170,19 @@ local function FinishPreviewHook(name, ...)
 end
 UninstallPreviewHooks = function()
     for name, original in pairs(wrappedNames) do
-        if _G[name] == wrappers[name] then _G[name] = original end
-        wrappedNames[name] = nil
-        wrappers[name] = nil
+        -- Restore only while this wrapper is the outermost one. When another
+        -- wrapper sits on top (Edit Mode's preview reforce wraps some of the
+        -- same globals), this one stays in that chain and passes straight
+        -- through while no preview is shown; forgetting it would wrap the
+        -- chain again on every show.
+        if _G[name] == wrappers[name] then
+            _G[name] = original
+            wrappedNames[name] = nil
+            wrappers[name] = nil
+        end
     end
+    -- A preview shown again scans at once instead of waiting out the throttle.
+    lastPreviewHookScanAt = -100
 end
 Preview.UninstallRefreshHooks = UninstallPreviewHooks
 InstallPreviewHooks = function()

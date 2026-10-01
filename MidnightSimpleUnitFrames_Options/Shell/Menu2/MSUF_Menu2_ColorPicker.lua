@@ -123,7 +123,7 @@ local function EnsureColorPickerPlus()
     panel:SetFrameLevel((picker:GetFrameLevel() or 1) + 20)
     if T and T.ApplySurface then T.ApplySurface(panel, "popup") end
 
-    local title = T.Font(panel, "GameFontNormalLarge", Tr("Precision color editor"), T.colors.text, "heading")
+    local title = T.Font(panel, "GameFontNormalLarge", "Precision color editor", T.colors.text, "heading")
     title:SetPoint("TOPLEFT", 16, -14)
     local target = T.Font(panel, "GameFontHighlightSmall", "", T.colors.muted, "supporting")
     target:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
@@ -138,9 +138,9 @@ local function EnsureColorPickerPlus()
     current:SetPoint("TOPRIGHT", -16, -62)
     current:SetSize(151, 34)
     panel._msuf2Original, panel._msuf2Current = original, current
-    local oldLabel = T.Font(panel, "GameFontDisableSmall", Tr("Original"), T.colors.dim)
+    local oldLabel = T.Font(panel, "GameFontDisableSmall", "Original", T.colors.dim)
     oldLabel:SetPoint("BOTTOMLEFT", original, "TOPLEFT", 0, 2)
-    local newLabel = T.Font(panel, "GameFontDisableSmall", Tr("Current"), T.colors.dim)
+    local newLabel = T.Font(panel, "GameFontDisableSmall", "Current", T.colors.dim)
     newLabel:SetPoint("BOTTOMRIGHT", current, "TOPRIGHT", 0, 2)
 
     local rgbLabel = T.Font(panel, "GameFontNormalSmall", "RGB", T.colors.muted)
@@ -178,13 +178,13 @@ local function EnsureColorPickerPlus()
         if r then PickerPlusApply(r, g, b) end
     end
     panel._msuf2Hex = hex
-    local copy = T.Button(panel, Tr("Copy"), 68, 22)
+    local copy = T.Button(panel, "Copy", 68, 22)
     copy:SetPoint("LEFT", hex, "RIGHT", 8, 0)
     copy:SetScript("OnClick", function()
         hex:SetFocus()
         hex:HighlightText()
     end)
-    local save = T.Button(panel, Tr("Save"), 68, 22)
+    local save = T.Button(panel, "Save", 68, 22, { history = true })
     save:SetPoint("LEFT", copy, "RIGHT", 6, 0)
     save:SetScript("OnClick", function()
         local store = ColorPickerPlusStore()
@@ -197,11 +197,11 @@ local function EnsureColorPickerPlus()
         panel:RefreshPalettes()
     end)
 
-    local recentTitle = T.Font(panel, "GameFontNormalSmall", Tr("Recent"), T.colors.text)
+    local recentTitle = T.Font(panel, "GameFontNormalSmall", "Recent", T.colors.text)
     recentTitle:SetPoint("TOPLEFT", 16, -176)
-    local savedTitle = T.Font(panel, "GameFontNormalSmall", Tr("Saved colors"), T.colors.text)
+    local savedTitle = T.Font(panel, "GameFontNormalSmall", "Saved colors", T.colors.text)
     savedTitle:SetPoint("TOPLEFT", 16, -230)
-    local savedHint = T.Font(panel, "GameFontDisableSmall", Tr("Right-click a saved color to remove it."), T.colors.dim)
+    local savedHint = T.Font(panel, "GameFontDisableSmall", "Right-click a saved color to remove it.", T.colors.dim)
     savedHint:SetPoint("TOPRIGHT", -16, -230)
     panel._msuf2RecentButtons, panel._msuf2SavedButtons = {}, {}
     for i = 1, 9 do
@@ -229,7 +229,7 @@ local function EnsureColorPickerPlus()
         panel._msuf2SavedButtons[i] = btn
     end
 
-    local classTitle = T.Font(panel, "GameFontNormalSmall", Tr("Class colors"), T.colors.text)
+    local classTitle = T.Font(panel, "GameFontNormalSmall", "Class colors", T.colors.text)
     classTitle:SetPoint("TOPLEFT", 16, -354)
     panel._msuf2ClassButtons = {}
     local tokens = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
@@ -245,7 +245,7 @@ local function EnsureColorPickerPlus()
         if M.AddTooltip then M.AddTooltip(btn, token:gsub("DEATHKNIGHT", "Death Knight"):gsub("DEMONHUNTER", "Demon Hunter"), Tr("Apply this class color.")) end
         panel._msuf2ClassButtons[i] = btn
     end
-    local note = T.Font(panel, "GameFontDisableSmall", Tr("Opacity remains beside the setting when that element supports it."), T.colors.dim)
+    local note = T.Font(panel, "GameFontDisableSmall", "Opacity remains beside the setting when that element supports it.", T.colors.dim)
     note:SetPoint("BOTTOMLEFT", 16, 14)
     note:SetWidth(312)
 
@@ -278,7 +278,7 @@ local function EnsureColorPickerPlus()
         local r, g, b = pickerFrame:GetColorRGB()
         self._msuf2Current:SetColorTexture(r, g, b, 1)
         self._msuf2Original:SetColorTexture(owner._msuf2PrevR or r, owner._msuf2PrevG or g, owner._msuf2PrevB or b, 1)
-        self._msuf2Target:SetText(Tr(owner._msuf2ColorLabel or owner._msuf2SearchText or "Selected color"))
+        T.SetTranslatedText(self._msuf2Target, Tr(owner._msuf2ColorLabel or owner._msuf2SearchText or "Selected color"))
         if not self._msuf2Hex:HasFocus() then self._msuf2Hex:SetText(ColorHex(r, g, b)) end
         local bytes = { ColorByte(r), ColorByte(g), ColorByte(b) }
         for i = 1, 3 do if not self._msuf2RGB[i]:HasFocus() then self._msuf2RGB[i]:SetText(bytes[i]) end end
@@ -397,7 +397,7 @@ end
 --- values on the button so cancel can restore the UI state.
 function W.Color(section, label)
     local x, y = NextRow(section, 32)
-    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
+    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(230)

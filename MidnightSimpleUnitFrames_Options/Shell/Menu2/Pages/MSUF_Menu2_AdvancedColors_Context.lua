@@ -905,6 +905,14 @@ local function RegisterAuraContextFactories()
     FixedContextFactory("aura.dispel.bleed", function() return ContextDispelType("aura.dispel.bleed", "Bleed") end)
 end
 local function RegisterGroupContextFactories()
+    FixedContextFactory("group.healer_mana_text", function()
+        local target = ContextTarget("group.healer_mana_text", "Text color",
+            CP.HealerManaTextRGB, CP.SetHealerManaTextRGB, { historyLabel = "Text color" })
+        local state = ContextDBRowsState(GROUP_COLOR_DB_KEYS,
+            { "healerManaTextR", "healerManaTextG", "healerManaTextB" }, CP.ApplyHealerManaText)
+        target.captureState, target.restoreState = state.captureState, state.restoreState
+        return target
+    end)
     FixedContextFactory("group.health", function()
         local target = ContextTarget("group.health", "Group health bar", GroupHealthBarRGB, SetGroupHealthBarRGB)
         local state = ContextDBRowsState(GROUP_COLOR_DB_KEYS, {

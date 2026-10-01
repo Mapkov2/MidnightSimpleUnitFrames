@@ -163,15 +163,15 @@ local function CreatePaletteController(parent, searchBox)
         palette:EnableMouse(true)
         palette:Hide()
 
-        local heading = T.Font(palette, "GameFontNormalSmall", Tr("Best matches"), T.colors.text)
+        local heading = T.Font(palette, "GameFontNormalSmall", "Best matches", T.colors.text)
         T.StyleFontString(heading, T.colors.text, 2)
         heading:SetPoint("TOPLEFT", palette, "TOPLEFT", 12, -9)
 
-        local keyHint = T.Font(palette, "GameFontDisableSmall", Tr("Up/Down  Enter"), T.colors.dim)
+        local keyHint = T.Font(palette, "GameFontDisableSmall", "Up/Down  Enter", T.colors.dim)
         T.StyleFontString(keyHint, T.colors.dim, 2)
         keyHint:SetPoint("TOPRIGHT", palette, "TOPRIGHT", -12, -9)
 
-        local status = T.Font(palette, "GameFontDisableSmall", Tr("Searching..."), T.colors.muted)
+        local status = T.Font(palette, "GameFontDisableSmall", "Searching...", T.colors.muted)
         T.StyleFontString(status, T.colors.muted, 2)
         status:SetPoint("TOPLEFT", palette, "TOPLEFT", 12, -(HEADER_H + 10))
         status:SetPoint("RIGHT", palette, "RIGHT", -12, 0)
@@ -231,7 +231,7 @@ local function CreatePaletteController(parent, searchBox)
             self.rows[i] = row
         end
 
-        local moreResults = T.Button(palette, Tr("More"), PALETTE_W - PANEL_PAD * 2, 24)
+        local moreResults = T.Button(palette, "More", PALETTE_W - PANEL_PAD * 2, 24)
         moreResults:SetPoint("BOTTOMLEFT", palette, "BOTTOMLEFT", PANEL_PAD, 7)
         moreResults:SetPoint("BOTTOMRIGHT", palette, "BOTTOMRIGHT", -PANEL_PAD, 7)
         moreResults:SetScript("OnClick", function()

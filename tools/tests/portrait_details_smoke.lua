@@ -168,7 +168,27 @@ local anchor, _, relative, x, y = dragon:GetPoint(1)
 assert(anchor == "TOPLEFT" and relative == "TOPLEFT", "mirrored anchor")
 near(x, -15*holder:GetWidth()/58*1.8+17); near(y, 11*holder:GetHeight()/58*1.8-9)
 near(dragon.vertexColor[1], .2); near(dragon.vertexColor[2], .5)
-assert(dragon.texCoord[1] > dragon.texCoord[2], "dragon atlas mirror")
+-- SetAtlas owns the sheet crop; local UVs must cover the whole dragon.
+local function FullDragon(tex, flip)
+    near(tex.texCoord[1], flip and 1 or 0); near(tex.texCoord[2], flip and 0 or 1)
+    near(tex.texCoord[3], 0); near(tex.texCoord[4], 1)
+end
+FullDragon(dragon, true)
+for _, classification in ipairs({ "elite", "rare", "rareelite", "worldboss" }) do
+    env.UnitClassification = function() return classification end
+    for _, flip in ipairs({ false, true, false }) do
+        conf.portraitDragonFlip = flip; p = apply()
+        assert(dragon:IsShown(), classification .. " dragon missing")
+        FullDragon(dragon, flip)
+        local previewHolder = env.CreateFrame("Frame", nil, env.UIParent)
+        previewHolder:SetSize(60, 60)
+        portrait.PaintClassification(previewHolder, true, classification, 60, 60, previewHolder, p, "player")
+        assert(previewHolder.blizzElite:IsShown(), classification .. " preview dragon missing")
+        FullDragon(previewHolder.blizzElite, flip)
+    end
+end
+env.UnitClassification = function() return "elite" end
+conf.portraitDragonFlip = true; p = apply()
 assert(dragon.layer == "ARTWORK" or dragon.drawLayer == "ARTWORK", "dragon draw layer")
 assert(dragon:GetParent() == holder.dragonFrame, "a level above the ring must give the dragon its own frame")
 -- The draw layer orders the dragon on the frame it shares: the default level is
@@ -190,15 +210,20 @@ assert(dragon:GetParent() == holder and frame.portrait:GetParent() == holder,
 conf.portraitDragonLevel = 5; apply()
 assert(dragon:GetParent() == holder.dragonFrame, "the dragon must move back to its own frame")
 -- Unchanged repaints neither re-level the dragon frame nor ask for its parent.
-local relevels, parentReads = 0, 0
+local relevels, parentReads, atlasWrites, uvWrites = 0, 0, 0, 0
 local dragonFrame = holder.dragonFrame
 local setLevel, getParent = dragonFrame.SetFrameLevel, dragon.GetParent
+local setAtlas, setUV = dragon.SetAtlas, dragon.SetTexCoord
+dragon.SetAtlas = function(self, ...) atlasWrites = atlasWrites + 1; return setAtlas(self, ...) end
+dragon.SetTexCoord = function(self, ...) uvWrites = uvWrites + 1; return setUV(self, ...) end
 dragonFrame.SetFrameLevel = function(self, ...) relevels = relevels + 1; return setLevel(self, ...) end
 dragon.GetParent = function(self) parentReads = parentReads + 1; return getParent(self) end
 for _ = 1, 3 do portrait.Update(frame, "UNIT_CLASSIFICATION_CHANGED", "player") end
 assert(dragon:IsShown(), "classification repaints keep the dragon")
 local repaintParentReads = parentReads
 dragonFrame.SetFrameLevel, dragon.GetParent = setLevel, getParent
+dragon.SetAtlas, dragon.SetTexCoord = setAtlas, setUV
+assert(atlasWrites == 0 and uvWrites == 0, "unchanged dragon repaint rewrote its atlas or UVs")
 assert(relevels == 0 and repaintParentReads == 0, "an unchanged dragon repaint re-levelled or re-parented the dragon")
 conf.portraitDragonLayer = "ARTWORK"
 conf.portraitDragonInInstances = false; inside = true; apply()

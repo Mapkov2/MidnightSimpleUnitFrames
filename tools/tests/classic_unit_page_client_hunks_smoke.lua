@@ -89,6 +89,8 @@ local function LoadPages(client)
         end },
         ExportPublic = function() end,
         Translate = function(text) return text end,
+        -- The core's combat lock, which Support resolves on MSUF.Public.
+        Public = { IsConfigCombatLocked = function() return false end, ShowConfigCombatLockMessage = function() end },
         MSUF2 = {
             Widgets = { LabelAt = function() return Recorder() end },
             Theme = { colors = { accent = { 1, 1, 1, 1 } } },

@@ -2073,7 +2073,7 @@ local function SetButtonEnabled(button, enabled)
 end
 
 local function SetButtonText(button, text)
-    if button and type(button.SetText) == "function" then button:SetText(Tr(text)) end
+    if button and type(button.SetText) == "function" then button:SetText(Tr(text), true) end
     if button and M.Theme and type(M.Theme.CenterButtonLabel) == "function" then M.Theme.CenterButtonLabel(button) end
 end
 
@@ -2416,15 +2416,15 @@ function M.RefreshGuidedTourChrome(reason)
     end
     SetStageIcon(chrome, stage)
     local stagePosition, stageTotal = ActiveStagePosition(stage)
-    chrome.step:SetText(format(Tr("MISSION %d/%d - %d XP"), stagePosition, stageTotal, TourExperience()))
+    M.Theme.SetTranslatedText(chrome.step, format(Tr("MISSION %d/%d - %d XP"), stagePosition, stageTotal, TourExperience()))
 
     if profileMismatch then
-        chrome.title:SetText(Tr("Active profile changed"))
-        chrome.section:SetText(format(Tr("Tour profile: %s - Active profile: %s"), tourProfile, activeProfile))
+        M.Theme.SetTranslatedText(chrome.title, Tr("Active profile changed"))
+        M.Theme.SetTranslatedText(chrome.section, format(Tr("Tour profile: %s - Active profile: %s"), tourProfile, activeProfile))
         chrome.help:SetText(displayHelp)
     elseif manualAway then
-        chrome.title:SetText(format(Tr("Tour paused - %s"), PersonalizedTitle(stage)))
-        chrome.section:SetText(Tr("Progress is saved while you use another page."))
+        M.Theme.SetTranslatedText(chrome.title, format(Tr("Tour paused - %s"), PersonalizedTitle(stage)))
+        M.Theme.SetTranslatedText(chrome.section, Tr("Progress is saved while you use another page."))
         chrome.help:SetText(displayHelp)
     else
         chrome.title:SetText(PersonalizedTitle(stage))
@@ -2439,18 +2439,18 @@ function M.RefreshGuidedTourChrome(reason)
                 power_moves = "MSUF POWER MOVES",
                 final_review = "READY TO PLAY",
             }
-            chrome.section:SetText(Tr(labels[stage.id] or "GUIDED SETUP"))
+            M.Theme.SetTranslatedText(chrome.section, Tr(labels[stage.id] or "GUIDED SETUP"))
         elseif position.overview then
             local controls = AllStageControls(stage, position.sections)
-            chrome.section:SetText(format(Tr("MISSION BRIEF - %d checkpoints - %d settings"), #position.sections, #controls))
+            M.Theme.SetTranslatedText(chrome.section, format(Tr("MISSION BRIEF - %d checkpoints - %d settings"), #position.sections, #controls))
         elseif position.control then
             if ControlIsAction(position.control) then
-                chrome.section:SetText(format(Tr("CHECKPOINT %d/%d - ACTION %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
+                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - ACTION %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
             else
-                chrome.section:SetText(format(Tr("CHECKPOINT %d/%d - SETTING %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
+                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - SETTING %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
             end
         elseif position.section then
-            chrome.section:SetText(format(Tr("CHECKPOINT %d/%d - %s - %d settings"), position.index, #position.sections, Tr(position.section.label), #position.controls))
+            M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - %s - %d settings"), position.index, #position.sections, Tr(position.section.label), #position.controls))
         end
         chrome.help:SetText(displayHelp)
     end
@@ -2540,7 +2540,7 @@ function M.RefreshGuidedTourChrome(reason)
 end
 
 local function ChromeButton(parent, T, label, handler)
-    local button = T.Button(parent, Tr(label), 70, 24)
+    local button = T.Button(parent, label, 70, 24)
     button._msuf2SkipHistoryCheckpoint = true
     if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
     button:SetScript("OnClick", function(self)
@@ -2925,11 +2925,11 @@ local function InfoCard(builder, T, title, body, iconKey, height)
     local card = builder:Section("", height or 82)
     if card.title then card.title:SetText("") end
     AddCardIcon(card, T, iconKey or "home")
-    local heading = T.Font(card, "GameFontNormal", Tr(title), T.colors.text)
+    local heading = T.Font(card, "GameFontNormal", title, T.colors.text)
     heading:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -12)
     heading:SetPoint("RIGHT", card, "RIGHT", -16, 0)
     heading:SetJustifyH("LEFT")
-    local copy = T.Font(card, "GameFontHighlightSmall", Tr(body), T.colors.muted)
+    local copy = T.Font(card, "GameFontHighlightSmall", body, T.colors.muted)
     copy:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -36)
     SetWrapped(copy, builder.width - 70)
     if type(T.PlayMotion) == "function" then
@@ -2964,25 +2964,21 @@ local function PreviewCard(builder, T, W, title, body, iconKey, spec)
 end
 
 local function Header(builder, title, subtitle)
-    return builder:Header(Tr(title), Tr(subtitle), 72)
+    return builder:Header(title, subtitle, 72)
 end
 
 local function PersonalQuestion(ctx, builder, T, W, key, label, values, opts)
     opts = type(opts) == "table" and opts or {}
     local card = builder:Section("", 100)
     if card.title then card.title:SetText("") end
-    local localized = {}
-    for i = 1, #values do
-        localized[i] = { value = values[i].value, text = Tr(values[i].text), icon = values[i].icon }
-    end
-    local segment = W.Segment(card, Tr(label), localized, max(240, builder.width - 28))
+    local segment = W.Segment(card, label, values, max(240, builder.width - 28))
     RegisterSpecialClickTargets("menu_basics", key, segment.buttons)
     local function Refresh()
         segment:SetValue(Preference(key))
     end
     for i = 1, #(segment.buttons or {}) do
         local button = segment.buttons[i]
-        local value = localized[i]
+        local value = values[i]
         if value and type(T.AttachNavIcon) == "function" then T.AttachNavIcon(button, value.icon, false, true) end
         button:SetScript("OnClick", function(self)
             if BlockedByCombat() then return end
@@ -3117,7 +3113,7 @@ local function BuildEditModePage(ctx, T, W)
     stateCopy:SetPoint("TOPLEFT", stateLabel, "BOTTOMLEFT", 0, -8)
     stateCopy:SetWidth(max(120, b.width - 252))
     stateCopy:SetJustifyH("LEFT")
-    local button = T.Button(action, Tr("Open MSUF Edit Mode"), min(210, max(150, floor(b.width * 0.30))), 28)
+    local button = T.Button(action, "Open MSUF Edit Mode", min(210, max(150, floor(b.width * 0.30))), 28)
     button:SetPoint("RIGHT", action, "RIGHT", -16, 0)
     if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
     if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(button) end
@@ -3141,29 +3137,29 @@ local function BuildEditModePage(ctx, T, W)
             end
         end
         if not decision then
-            decisionCopy:SetText(Tr("This client has no Cooldown Manager. Unit Frames use their own anchor."))
+            M.Theme.SetTranslatedText(decisionCopy, Tr("This client has no Cooldown Manager. Unit Frames use their own anchor."))
         elseif anchorDecision == "cooldown" then
-            decisionCopy:SetText(Tr("Selected: Unitframes follow Blizzard's Essential Cooldowns. If Blizzard's Essential Cooldowns move, the anchored Unitframe layout follows."))
+            M.Theme.SetTranslatedText(decisionCopy, Tr("Selected: Unitframes follow Blizzard's Essential Cooldowns. If Blizzard's Essential Cooldowns move, the anchored Unitframe layout follows."))
         elseif anchorDecision == "independent" then
-            decisionCopy:SetText(Tr("Selected: Unitframes use the current global/custom anchor. Moving Blizzard's Essential Cooldowns will not move them."))
+            M.Theme.SetTranslatedText(decisionCopy, Tr("Selected: Unitframes use the current global/custom anchor. Moving Blizzard's Essential Cooldowns will not move them."))
         else
-            decisionCopy:SetText(Tr("Required before placement. Changing this later can shift the whole layout because the saved offsets use a different anchor."))
+            M.Theme.SetTranslatedText(decisionCopy, Tr("Required before placement. Changing this later can shift the whole layout because the saved offsets use a different anchor."))
         end
         if placementComplete then
-            stateLabel:SetText(Tr("Frame moved - placement complete"))
-            stateCopy:SetText(active and Tr("Exit keeps the result. You can now continue the guide.") or Tr("The required Edit Mode movement is complete."))
+            M.Theme.SetTranslatedText(stateLabel, Tr("Frame moved - placement complete"))
+            M.Theme.SetTranslatedText(stateCopy, active and Tr("Exit keeps the result. You can now continue the guide.") or Tr("The required Edit Mode movement is complete."))
         elseif movementComplete then
-            stateLabel:SetText(Tr("Player moved - now open its size popup"))
-            stateCopy:SetText(Tr("Click the highlighted Player mover. Width and Height live in that popup."))
+            M.Theme.SetTranslatedText(stateLabel, Tr("Player moved - now open its size popup"))
+            M.Theme.SetTranslatedText(stateCopy, Tr("Click the highlighted Player mover. Width and Height live in that popup."))
         elseif active then
-            stateLabel:SetText(Tr("Move one highlighted frame to continue"))
-            stateCopy:SetText(Tr("Two arrows point to a movable frame. Drag it once; Next unlocks after a real position change."))
+            M.Theme.SetTranslatedText(stateLabel, Tr("Move one highlighted frame to continue"))
+            M.Theme.SetTranslatedText(stateCopy, Tr("Two arrows point to a movable frame. Drag it once; Next unlocks after a real position change."))
         elseif anchorDecision then
-            stateLabel:SetText(Tr("Anchor chosen - open Edit Mode and move a frame"))
-            stateCopy:SetText(Tr("The placement step completes after you drag the highlighted frame once."))
+            M.Theme.SetTranslatedText(stateLabel, Tr("Anchor chosen - open Edit Mode and move a frame"))
+            M.Theme.SetTranslatedText(stateCopy, Tr("The placement step completes after you drag the highlighted frame once."))
         else
-            stateLabel:SetText(Tr("Choose anchoring before placement"))
-            stateCopy:SetText(Tr("Edit Mode unlocks after the anchor choice above."))
+            M.Theme.SetTranslatedText(stateLabel, Tr("Choose anchoring before placement"))
+            M.Theme.SetTranslatedText(stateCopy, Tr("Edit Mode unlocks after the anchor choice above."))
         end
         SetFontColor(stateLabel, placementComplete and (T.colors.ok or T.colors.accent) or (active and (T.colors.warning or T.colors.accent) or T.colors.text))
         SetButtonText(button, active and "Exit and keep changes" or "Open MSUF Edit Mode")
@@ -3214,7 +3210,7 @@ local function BuildGroupEditModePage(ctx, T, W)
     stateCopy:SetPoint("TOPLEFT", stateLabel, "BOTTOMLEFT", 0, -8)
     stateCopy:SetWidth(max(120, b.width - 252))
     stateCopy:SetJustifyH("LEFT")
-    local button = T.Button(action, Tr("Open MSUF Edit Mode"), min(210, max(150, floor(b.width * 0.30))), 28)
+    local button = T.Button(action, "Open MSUF Edit Mode", min(210, max(150, floor(b.width * 0.30))), 28)
     button:SetPoint("RIGHT", action, "RIGHT", -16, 0)
     if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
     if type(T.SkinPrimaryButton) == "function" then T.SkinPrimaryButton(button) end
@@ -3224,17 +3220,17 @@ local function BuildGroupEditModePage(ctx, T, W)
         local complete = GroupEditModePlacementComplete()
         local moved = GroupEditModeMovementComplete()
         if complete then
-            stateLabel:SetText(Tr("Party Frames moved - checkpoint complete"))
-            stateCopy:SetText(Tr("Click its mover whenever you want the Width, Height, and Spacing popup."))
+            M.Theme.SetTranslatedText(stateLabel, Tr("Party Frames moved - checkpoint complete"))
+            M.Theme.SetTranslatedText(stateCopy, Tr("Click its mover whenever you want the Width, Height, and Spacing popup."))
         elseif moved then
-            stateLabel:SetText(Tr("Party moved - now open its geometry popup"))
-            stateCopy:SetText(Tr("Click the highlighted Party Frames mover for Width, Height, and Spacing."))
+            M.Theme.SetTranslatedText(stateLabel, Tr("Party moved - now open its geometry popup"))
+            M.Theme.SetTranslatedText(stateCopy, Tr("Click the highlighted Party Frames mover for Width, Height, and Spacing."))
         elseif status.active then
-            stateLabel:SetText(Tr("Drag the highlighted Party Frames mover"))
-            stateCopy:SetText(Tr("After the drag, click that mover once to see the geometry popup."))
+            M.Theme.SetTranslatedText(stateLabel, Tr("Drag the highlighted Party Frames mover"))
+            M.Theme.SetTranslatedText(stateCopy, Tr("After the drag, click that mover once to see the geometry popup."))
         else
-            stateLabel:SetText(Tr("Open Edit Mode and move Party Frames"))
-            stateCopy:SetText(Tr("The next checkpoint unlocks after a real Party-frame position change."))
+            M.Theme.SetTranslatedText(stateLabel, Tr("Open Edit Mode and move Party Frames"))
+            M.Theme.SetTranslatedText(stateCopy, Tr("The next checkpoint unlocks after a real Party-frame position change."))
         end
         SetFontColor(stateLabel, complete and (T.colors.ok or T.colors.accent) or T.colors.text)
         SetButtonText(button, status.active and "Exit and keep changes" or "Open MSUF Edit Mode")
@@ -3282,17 +3278,17 @@ local function BuildFinalReviewPage(ctx, T, W)
         local restoreProfileMismatch = ProfileMismatch()
         local restore = b:Section("", 92)
         if restore.title then restore.title:SetText("") end
-        local title = T.Font(restore, "GameFontNormal", Tr(restoreAlreadyUsed and "Starting setup restored" or "Starting setup saved"), T.colors.text)
+        local title = T.Font(restore, "GameFontNormal", restoreAlreadyUsed and "Starting setup restored" or "Starting setup saved", T.colors.text)
         title:SetPoint("TOPLEFT", restore, "TOPLEFT", 16, -20)
         title:SetWidth(max(120, b.width - 260))
         title:SetJustifyH("LEFT")
-        local copy = T.Font(restore, "GameFontDisableSmall", Tr(restoreAlreadyUsed
+        local copy = T.Font(restore, "GameFontDisableSmall", restoreAlreadyUsed
             and "The starting profile values are active again. Finish when you are ready."
-            or "You can restore the profile state captured before this guided setup."),
+            or "You can restore the profile state captured before this guided setup.",
             restoreAlreadyUsed and (T.colors.ok or T.colors.accent) or T.colors.muted)
         copy:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
         SetWrapped(copy, max(120, b.width - 260))
-        local button = T.Button(restore, Tr(restoreAlreadyUsed and "Starting setup restored" or "Restore starting setup"), min(220, max(170, floor(b.width * 0.32))), 28)
+        local button = T.Button(restore, restoreAlreadyUsed and "Starting setup restored" or "Restore starting setup", min(220, max(170, floor(b.width * 0.32))), 28)
         button:SetPoint("RIGHT", restore, "RIGHT", -16, 0)
         button._msuf2SkipHistoryCheckpoint = true
         if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
@@ -3303,7 +3299,7 @@ local function BuildFinalReviewPage(ctx, T, W)
             if not armed then
                 armed = true
                 SetButtonText(button, "Confirm restore")
-                copy:SetText(Tr("This replaces the current profile values with the setup starting point. Click again to confirm."))
+                M.Theme.SetTranslatedText(copy, Tr("This replaces the current profile values with the setup starting point. Click again to confirm."))
                 SetFontColor(copy, T.colors.warning or T.colors.warn or T.colors.muted)
                 return
             end
@@ -3315,7 +3311,7 @@ local function BuildFinalReviewPage(ctx, T, W)
                 Invoke(Tour(), "MarkRestorePointUsed", false)
                 armed = false
                 SetButtonText(button, "Restore starting setup")
-                copy:SetText(Tr("The starting setup could not be restored. Your current values remain active."))
+                M.Theme.SetTranslatedText(copy, Tr("The starting setup could not be restored. Your current values remain active."))
                 SetFontColor(copy, T.colors.warning or T.colors.warn or T.colors.muted)
             end
         end)
@@ -3338,7 +3334,7 @@ local function BuildFinalReviewPage(ctx, T, W)
             Tr("Optional modules beyond unit frames: action bars, bags, chat, minimap and more."), T.colors.muted)
         suiteCopy:SetPoint("TOPLEFT", suiteTitle, "BOTTOMLEFT", 0, -8)
         SetWrapped(suiteCopy, max(120, b.width - 260))
-        local suiteButton = T.Button(suite, Tr("Open Suite Modules"), min(220, max(170, floor(b.width * 0.32))), 28)
+        local suiteButton = T.Button(suite, "Open Suite Modules", min(220, max(170, floor(b.width * 0.32))), 28)
         suiteButton:SetPoint("RIGHT", suite, "RIGHT", -16, 0)
         suiteButton._msuf2SkipHistoryCheckpoint = true
         if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(suiteButton) end

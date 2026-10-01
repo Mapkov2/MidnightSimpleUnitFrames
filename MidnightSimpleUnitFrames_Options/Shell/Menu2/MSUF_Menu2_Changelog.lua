@@ -107,7 +107,7 @@ local function BuildFullChangelog(ctx)
         button:SetPoint("TOPLEFT", root, "TOPLEFT", x or 18, y)
         local linkWidth = max(80, availableWidth or contentWidth)
         button:SetWidth(linkWidth)
-        local fs = T.Font(button, "GameFontHighlightSmall", Tr(text), T.colors.accent2 or T.colors.warning, "body")
+        local fs = T.Font(button, "GameFontHighlightSmall", text, T.colors.accent2 or T.colors.warning, "body")
         fs:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
         fs:SetWidth(linkWidth)
         fs:SetJustifyH("LEFT")
@@ -135,7 +135,7 @@ local function BuildFullChangelog(ctx)
         return button
     end
 
-    AddText(Tr("See New Features"), "GameFontNormalHuge", T.colors.title or T.colors.text, 18, contentWidth, 8, "title")
+    AddText("See New Features", "GameFontNormalHuge", T.colors.title or T.colors.text, 18, contentWidth, 8, "title")
     if suiteData then
         local tabWidth = math.min(164, math.floor((contentWidth - 8) / 2))
         for index, tab in ipairs({ { key = "msuf", label = "MSUF" }, { key = "suite", label = "MSUF Suite" } }) do
@@ -155,12 +155,12 @@ local function BuildFullChangelog(ctx)
         y = y - 42
     end
     if source == "msuf" then
-        AddText(Tr("Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu."),
+        AddText("Browse releases from 6.02 onward. Highlight links open the matching feature directly in the MSUF menu.",
             "GameFontHighlightSmall", T.colors.muted, 18, contentWidth, 18, "body")
     end
 
     if not data then
-        AddText(Tr("No release notes bundled with this build."), "GameFontHighlight", T.colors.muted, 18, contentWidth, 10, "body")
+        AddText("No release notes bundled with this build.", "GameFontHighlight", T.colors.muted, 18, contentWidth, 10, "body")
         ctx:SetContentHeight(math.abs(y) + 36)
         return
     end
@@ -215,7 +215,7 @@ local function BuildFullChangelog(ctx)
                     if type(section) == "table" and type(section.bullets) == "table" and #section.bullets > 0 then
                         local isHighlights = tostring(section.title or ""):lower() == "highlights"
                         local sectionTitle = source == "suite" and section.title == "Changes" and "Changelog" or section.title
-                        AddText(Tr(sectionTitle or ""), "GameFontNormal", isHighlights and T.colors.accent or T.colors.accent2,
+                        AddText(sectionTitle or "", "GameFontNormal", isHighlights and T.colors.accent or T.colors.accent2,
                             34, contentWidth - 32, 8, "section")
                         for bulletIndex = 1, #section.bullets do
                             local text, link = BulletParts(section.bullets[bulletIndex])
@@ -227,7 +227,7 @@ local function BuildFullChangelog(ctx)
                             if isHighlights and link then
                                 AddLinkedText(text, link, 58, contentWidth - 56, 7)
                             else
-                                AddText(Tr(text), "GameFontHighlightSmall", T.colors.text, 58, contentWidth - 56, 7, "body")
+                                AddText(text, "GameFontHighlightSmall", T.colors.text, 58, contentWidth - 56, 7, "body")
                             end
                         end
                         y = y - 4

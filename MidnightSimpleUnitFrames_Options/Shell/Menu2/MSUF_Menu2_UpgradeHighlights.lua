@@ -192,7 +192,7 @@ local function AddTooltip(widget, title, body)
 end
 
 local function Button(parent, T, releaseKey, suffix, label, x, y, width, onClick, role, help)
-    local button = T.Button(parent, Tr(label), width, 26)
+    local button = T.Button(parent, label, width, 26)
     button._msuf2SkipHistoryCheckpoint = true
     button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
@@ -250,15 +250,16 @@ local function CreateScene(ctx, T)
 end
 
 local function Header(scene, T, releaseKey, title, copy, contentWidth)
-    local kicker = T.Font(scene, "GameFontDisableSmall", format(Tr("UPGRADED TO MSUF %s"), releaseKey), T.colors.coreHot or T.colors.accent)
+    local kicker = T.Font(scene, "GameFontDisableSmall", "", T.colors.coreHot or T.colors.accent)
+    T.SetTranslatedText(kicker, format(Tr("UPGRADED TO MSUF %s"), releaseKey))
     kicker:SetPoint("TOP", scene, "TOP", 0, -32)
     SetTextLayout(kicker, contentWidth, "CENTER")
 
-    local heading = T.Font(scene, "GameFontNormalHuge", Tr(title), T.colors.title or T.colors.text)
+    local heading = T.Font(scene, "GameFontNormalHuge", title, T.colors.title or T.colors.text)
     heading:SetPoint("TOP", scene, "TOP", 0, -64)
     SetTextLayout(heading, contentWidth, "CENTER")
 
-    local body = T.Font(scene, "GameFontHighlight", Tr(copy), T.colors.muted)
+    local body = T.Font(scene, "GameFontHighlight", copy, T.colors.muted)
     body:SetPoint("TOP", scene, "TOP", 0, -106)
     SetTextLayout(body, min(680, contentWidth), "CENTER")
 end
@@ -273,11 +274,11 @@ local function SummaryRow(parent, T, item, number, x, y, width, compact)
     CreateIconWell(row, T, item.icon, 32, 10, -8)
     local numberText = T.Font(row, "GameFontDisableSmall", format("%02d", number), T.colors.coreHot or T.colors.accent)
     numberText:SetPoint("TOPLEFT", row, "TOPLEFT", 52, -8)
-    local title = T.Font(row, "GameFontHighlight", Tr(item.title), T.colors.text)
+    local title = T.Font(row, "GameFontHighlight", item.title, T.colors.text)
     title:SetPoint("TOPLEFT", row, "TOPLEFT", 78, -8)
     SetTextLayout(title, width - 90, "LEFT")
     if not compact then
-        local copy = T.Font(row, "GameFontDisableSmall", Tr(item.summary), T.colors.dim)
+        local copy = T.Font(row, "GameFontDisableSmall", item.summary, T.colors.dim)
         copy:SetPoint("TOPLEFT", row, "TOPLEFT", 80, -28)
         SetTextLayout(copy, width - 90, "LEFT")
     end
@@ -340,7 +341,7 @@ local function BuildLanding(ctx, scene, T, releaseKey, spec, record, contentWidt
     end
 
     local hintTop = buttonsTop - 44
-    local hint = T.Font(scene, "GameFontDisableSmall", Tr("About two minutes. You can leave at any point and configure each area later."), T.colors.dim)
+    local hint = T.Font(scene, "GameFontDisableSmall", "About two minutes. You can leave at any point and configure each area later.", T.colors.dim)
     hint:SetPoint("TOP", scene, "TOP", 0, hintTop)
     SetTextLayout(hint, contentWidth, "CENTER")
     local height = math.abs(hintTop) + 36
@@ -373,7 +374,7 @@ local function BuildLayerDummyPreview(card, T, x, width)
 
     local half = floor(width / 2)
     local accent = T.colors.coreHot or T.colors.accent
-    local label = T.Font(panel, "GameFontDisableSmall", Tr("Layer (0-30)"), T.colors.muted)
+    local label = T.Font(panel, "GameFontDisableSmall", "Layer (0-30)", T.colors.muted)
     label:SetPoint("TOPLEFT", panel, "TOPLEFT", 14, -12)
 
     local trackWidth = max(56, half - 58)
@@ -398,14 +399,14 @@ local function BuildLayerDummyPreview(card, T, x, width)
     value:SetPoint("LEFT", track, "RIGHT", 10, 0)
 
     local overviewX = half + 12
-    local overviewTitle = T.Font(panel, "GameFontDisableSmall", Tr("Layer Overview"), T.colors.muted)
+    local overviewTitle = T.Font(panel, "GameFontDisableSmall", "Layer Overview", T.colors.muted)
     overviewTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", overviewX, -12)
     local rows = { { "18", "Text" }, { "12", "Auras" }, { "5", "Border" } }
     for i = 1, #rows do
         local y = -28 - ((i - 1) * 15)
         local num = T.Font(panel, "GameFontHighlightSmall", rows[i][1], accent)
         num:SetPoint("TOPLEFT", panel, "TOPLEFT", overviewX, y)
-        local name = T.Font(panel, "GameFontHighlightSmall", Tr(rows[i][2]), T.colors.text)
+        local name = T.Font(panel, "GameFontHighlightSmall", rows[i][2], T.colors.text)
         name:SetPoint("TOPLEFT", panel, "TOPLEFT", overviewX + 26, y)
     end
     return panel
@@ -418,7 +419,7 @@ end
 local function BuildTourControls(ctx, card, T, spec, x, y, width)
     local rows = spec.rows()
     if type(rows) ~= "table" or #rows == 0 then return false end
-    local hint = T.Font(card, "GameFontDisableSmall", Tr("TRY IT RIGHT HERE"), T.colors.coreHot or T.colors.accent)
+    local hint = T.Font(card, "GameFontDisableSmall", "TRY IT RIGHT HERE", T.colors.coreHot or T.colors.accent)
     hint:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
     SetTextLayout(hint, width, "LEFT")
     local result = M.Widgets.SettingsRows(ctx, card, {
@@ -465,17 +466,17 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     CreateIconWell(card, T, item.icon, compact and 44 or 52, 20, -20)
 
     local titleTop = compact and -80 or -24
-    local title = T.Font(card, "GameFontNormalLarge", Tr(item.title), T.colors.title or T.colors.text)
+    local title = T.Font(card, "GameFontNormalLarge", item.title, T.colors.title or T.colors.text)
     title:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop)
     SetTextLayout(title, textWidth, "LEFT")
 
-    local summary = T.Font(card, "GameFontHighlight", Tr(item.summary), T.colors.muted)
+    local summary = T.Font(card, "GameFontHighlight", item.summary, T.colors.muted)
     summary:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 40)
     SetTextLayout(summary, textWidth, "LEFT")
 
-    local why = T.Font(card, "GameFontDisableSmall", Tr("WHY IT MATTERS"), T.colors.coreHot or T.colors.accent)
+    local why = T.Font(card, "GameFontDisableSmall", "WHY IT MATTERS", T.colors.coreHot or T.colors.accent)
     why:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 104)
-    local impact = T.Font(card, "GameFontHighlight", Tr(item.impact), T.colors.text)
+    local impact = T.Font(card, "GameFontHighlight", item.impact, T.colors.text)
     impact:SetPoint("TOPLEFT", card, "TOPLEFT", textX, titleTop - 124)
     SetTextLayout(impact, textWidth, "LEFT")
     if hasLayerPreview then
@@ -579,7 +580,7 @@ local function BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, content
         if type(T.ApplySurface) == "function" then T.ApplySurface(row, "card") end
         local marker = T.Font(row, "GameFontHighlight", format("%d.", i), T.colors.coreHot or T.colors.accent)
         marker:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -12)
-        local text = T.Font(row, "GameFontHighlight", Tr(item.missed), T.colors.text)
+        local text = T.Font(row, "GameFontHighlight", item.missed, T.colors.text)
         text:SetPoint("TOPLEFT", row, "TOPLEFT", 40, -12)
         SetTextLayout(text, contentWidth - 52, "LEFT")
     end
@@ -603,7 +604,7 @@ local function BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, content
     end
 
     local noteTop = buttonsTop - 44
-    local note = T.Font(scene, "GameFontDisableSmall", Tr("Skipping closes this release tour only. Every setting remains available in Menu2."), T.colors.dim)
+    local note = T.Font(scene, "GameFontDisableSmall", "Skipping closes this release tour only. Every setting remains available in Menu2.", T.colors.dim)
     note:SetPoint("TOP", scene, "TOP", 0, noteTop)
     SetTextLayout(note, contentWidth, "CENTER")
     local height = math.abs(noteTop) + 36

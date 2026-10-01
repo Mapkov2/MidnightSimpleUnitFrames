@@ -215,7 +215,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     arrow:SetTexture(T.media.collapseArrow)
     local PaintHeaderTone = CreateDashboardAccordionTone(header, arrow)
     PaintHeaderTone(false, false)
-    local title = T.Font(header, "GameFontNormal", M.Tr(opts.title or "Changelog"), T.colors.text)
+    local title = T.Font(header, "GameFontNormal", opts.title or "Changelog", T.colors.text)
     title:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
     title:SetPoint("RIGHT", header, "RIGHT", -94, 0)
     title:SetJustifyH("LEFT")
@@ -355,7 +355,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     }), opts.title or "Changelog", "button")
     local function PaintHeader(isOpen)
         PaintHeaderTone(isOpen, false)
-        hint:SetText(isOpen and M.Tr("Hide") or M.Tr("View"))
+        hint:SetText(isOpen and "Hide" or "View")
     end
     local function RefreshOpenState()
         M.SetMenuStateValue("dashboardChangelogOpen", open)
@@ -418,7 +418,7 @@ function Dashboard.PrepareSurfaceHelpers(state, root)
         card:SetPoint("TOPLEFT", parent or root, "TOPLEFT", x, y)
         card:SetSize(w, h)
         if title and title ~= "" then
-            local label = T.Font(card, "GameFontNormal", M.Tr(title), T.colors.text)
+            local label = T.Font(card, "GameFontNormal", title, T.colors.text)
             label:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
             card._msuf2Title = label
         end
@@ -480,7 +480,7 @@ function Dashboard.PrepareSurfaceHelpers(state, root)
             { c.coreBlue[1], c.coreBlue[2], c.coreBlue[3], 0.035 })
     end
     local function Button(parent, text, x, y, w, h, onClick, skin, semanticPath, classification, exact)
-        local btn = T.Button(parent, M.Tr(text or ""), w, h or 24)
+        local btn = T.Button(parent, text or "", w, h or 24)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
         T.CenterButtonLabel(btn)
         if skin == "primary" and T.SkinPrimaryButton then T.SkinPrimaryButton(btn) end
@@ -491,7 +491,8 @@ function Dashboard.PrepareSurfaceHelpers(state, root)
         return btn
     end
     local function Kicker(parent, text, x, y, color)
-        local fs = T.Font(parent, "GameFontDisableSmall", string.upper(M.Tr(text or "")), color or T.colors.accent)
+        local fs = T.Font(parent, "GameFontDisableSmall", "", color or T.colors.accent)
+        T.SetTranslatedText(fs, string.upper(M.Tr(text or "")))
         fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 16, y or -16)
         return fs
     end
@@ -499,7 +500,7 @@ function Dashboard.PrepareSurfaceHelpers(state, root)
         local pill = T.Panel(parent, nil, T.colors.pillBaseSolid, T.colors.pillEdge)
         pill:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
         pill:SetSize(w or 82, 20)
-        local label = T.Font(pill, "GameFontDisableSmall", M.Tr(text or ""), color or T.colors.muted)
+        local label = T.Font(pill, "GameFontDisableSmall", text or "", color or T.colors.muted)
         label:SetPoint("CENTER", pill, "CENTER", 0, 0)
         label:SetJustifyH("CENTER")
         pill._msuf2Label = label
@@ -634,7 +635,7 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop)
     Kicker(launcher, tourActive and "GUIDED SETUP IN PROGRESS" or (tourCompleted and "GUIDED SETUP COMPLETE" or "GUIDED SETUP"), 16, -14)
     local launcherTitle = tourActive and "Continue your MSUF setup"
         or (tourCompleted and "Review or run setup again" or "Get the essentials right in a few minutes")
-    local title = T.Font(launcher, "GameFontNormal", M.Tr(launcherTitle), T.colors.text)
+    local title = T.Font(launcher, "GameFontNormal", launcherTitle, T.colors.text)
     title:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, -36)
     title:SetWidth(max(120, mainW - (launcherNarrow and 32 or 388)))
     title:SetJustifyH("LEFT")
@@ -688,7 +689,7 @@ function Dashboard.BuildSearchHero(state, mainTop)
     local hero = state.Card(state.root, "", state.x0, mainTop, mainW, heroH, T.colors.glassHost, T.colors.cardBorder)
     state.ApplyDashboardHeroGradient(hero, mainW, heroH)
     state.Kicker(hero, "MSUF", 22, -20)
-    local title = T.Font(hero, "GameFontNormalLarge", M.Tr("Find settings and help"), T.colors.text)
+    local title = T.Font(hero, "GameFontNormalLarge", "Find settings and help", T.colors.text)
     title:SetPoint("TOPLEFT", hero, "TOPLEFT", 22, -42)
     title:SetWidth(mainW - 44)
     W.Text(hero, "Search enabled features in your own words.", 22, -72, mainW - 44, T.colors.muted)
@@ -786,7 +787,7 @@ function Dashboard.PrepareDisclosure(state)
         arrow:SetPoint("LEFT", head, "LEFT", 16, 0)
         local PaintHeaderTone = CreateDashboardAccordionTone(head, arrow)
         PaintHeaderTone(open, false)
-        local label = T.Font(head, "GameFontNormal", M.Tr(title), T.colors.text)
+        local label = T.Font(head, "GameFontNormal", title, T.colors.text)
         label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
         if type(fillPills) == "function" then fillPills(head, width) end
         head:SetScript("OnClick", function()
@@ -965,7 +966,7 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
             local applied = opts.applied()
             local pending = opts.pending()
             local changed = math.abs(applied - pending) > 0.001
-            status:SetText(M.Format(M.Tr("Applied: %d%%  Selected: %d%%"), Percent(applied, 1), Percent(pending, 1)))
+            T.SetTranslatedText(status, M.Format("Applied: %d%%  Selected: %d%%", Percent(applied, 1), Percent(pending, 1)))
             SetSliderValueSafe(slider, SnapPct(pending * 100, opts.minPct, opts.maxPct, opts.stepPct))
             if apply then
                 if changed then apply:Enable() else apply:Disable() end
@@ -1003,7 +1004,7 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
         local applied = appliedEnabled and (Percent(appliedScale, 1) .. "%") or M.Tr("Off")
         local selected = selectedEnabled and (Percent(selectedScale, 1) .. "%") or M.Tr("Off")
         local changed = (selectedEnabled ~= appliedEnabled) or math.abs(selectedScale - appliedScale) > 0.001
-        globalStatus:SetText(M.Format(M.Tr("Applied: %s   Selected: %s"), applied, selected))
+        T.SetTranslatedText(globalStatus, M.Format("Applied: %s   Selected: %s", applied, selected))
         SetSliderValueSafe(globalScale, SnapPct(selectedScale * 100, 30, 150, 1))
         if globalApply then
             if changed then globalApply:Enable() else globalApply:Disable() end
@@ -1117,7 +1118,7 @@ function Dashboard.BuildSupportCard(state)
     local supportCompact = recoveryW < 560
     local supportH = supportCompact and 116 or 78
     local support = Card(root, "", x0, supportTop, recoveryW, supportH, T.colors.panel2, T.colors.borderSoft)
-    local supportTitle = T.Font(support, "GameFontNormal", M.Tr("How to support MSUF"), T.colors.text)
+    local supportTitle = T.Font(support, "GameFontNormal", "How to support MSUF", T.colors.text)
     supportTitle:SetPoint("TOPLEFT", support, "TOPLEFT", 16, -16)
     local supportTextW = max(160, recoveryW - (supportCompact and 32 or 230))
     local supportDesc = W.Text(support, "If MSUF helps your UI, support links are one click away.", 16, -42, supportTextW, T.colors.muted)

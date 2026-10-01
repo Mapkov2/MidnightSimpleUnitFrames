@@ -7,7 +7,9 @@
 -- raises: Lua 5.1 without pcall cannot release the capture depth on that error
 -- path, so the depth heals on the next frame instead of refusing every later
 -- edit until /reload. A profile value the snapshot refuses (F4) still lets the
--- edit apply, without an undo entry, and is reported once.
+-- edit apply, without an undo entry, and is reported once. The undo stack
+-- also keeps a memory budget (review 2026-10-01, C5.5): whole-profile
+-- snapshots of a large profile never pile up to the 500-step limit.
 --
 -- Boots the real core and Options graph of one client (client_world.lua).
 -- Plain Lua 5.1, repo root as arg 1 and the client flavor as arg 2.
@@ -248,6 +250,36 @@ Check(M.Undo() == false, "a restore the external profile root refused reported s
 Check(M.EnsureDB().player.width == 333, "a refused undo left the active variant overlay stripped")
 Check(not M.IsHistoryCapturing(), "a refused undo left history restoring")
 
+---------------------------------------------------------------------------
+-- 5. The undo stack keeps a memory budget, not only a step count (C5.5)
+---------------------------------------------------------------------------
+-- Each step holds whole-profile snapshots. A large profile (here 40,000
+-- extra values, about 1.6 MB per snapshot) must not keep 500 steps alive; the
+-- oldest steps go first and the newest stays undoable. The budget does not
+-- depend on the client, so one flavor pays for the large profile.
+local budgetChecked = flavor == "Mainline"
+if budgetChecked then
+    F.RegisterExternal("suiteModules", { Resolve = function() return suiteStore end, Restore = function() return true end })
+    V.Replace(db, nil)
+    M.ClearHistory()
+    db = M.EnsureDB()
+    local bulk = {}
+    for i = 1, 40000 do bulk[i] = i end
+    db.general.smokeHistoryBulk = bulk
+    M.EndHistorySession("menu")
+    Check(M.StartHistorySession("menu"), "history session did not restart for the budget check")
+    local pushes = 45
+    for i = 1, pushes do
+        Check(Edit("Smoke budget " .. i, "smokeHistoryBudget") == true, "budget edit " .. i .. " was refused")
+    end
+    local kept = UndoCount()
+    Check(kept >= 1 and kept < pushes, "the undo stack kept " .. kept .. " whole-profile steps of a large profile")
+    local last = db.general.smokeHistoryBudget
+    Check(M.Undo() and M.EnsureDB().general.smokeHistoryBudget == last - 1, "the newest step was not undoable after trimming")
+    db = M.EnsureDB()
+    db.general.smokeHistoryBulk, db.general.smokeHistoryBudget = nil, nil
+end
+
 print("menu_page_reset_history_smoke: " .. flavor .. " ok (" .. #keys .. " page resets undone and redone,"
     .. " profile reset, raised edit healed, transaction kept, unsnapshottable profile reported once,"
-    .. " refused undo keeps variant overlays)")
+    .. " refused undo keeps variant overlays" .. (budgetChecked and ", undo stack within its memory budget)" or ")"))

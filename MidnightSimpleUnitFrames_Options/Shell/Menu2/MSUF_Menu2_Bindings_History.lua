@@ -23,6 +23,11 @@ local DeepCopy = M.DeepCopy
 local QueueMenuRefresh = M.QueueMenuRefresh
 local CancelQueuedMenuRefresh = M.CancelQueuedMenuRefresh
 local HISTORY_LIMIT = 500
+-- Every entry keeps whole-profile snapshots (consecutive entries share one),
+-- so the step count alone allowed hundreds of profile copies. Their estimated
+-- size is capped too; the oldest steps go first and the newest always stays.
+local HISTORY_BYTE_BUDGET = 48 * 1024 * 1024
+local SNAPSHOT_ENTRY_BYTES, SNAPSHOT_TABLE_BYTES = 40, 64
 -- Synchronous CaptureHistory nesting only; an open transaction is tracked by
 -- historyTransaction itself because it legitimately spans many frames.
 local historyDepth = 0
@@ -239,7 +244,13 @@ end
 -- Called by MSUF.ProfileRuntime after every profile apply; a no-op unless a
 -- stored snapshot belongs to another profile. Refused while combat locks
 -- configuration (the next apply retries; restores refuse foreign snapshots).
+-- Cached pages skip their refreshers while the menu data revision is
+-- unchanged. A profile apply while the menu is open (a switch from the slash
+-- command, a spec swap, a variant context change) therefore requests a refresh,
+-- which bumps the revision: the visible page repaints now and every cached
+-- page when it shows next. A closed menu bumps it when it opens again.
 function M.RebaseHistoryForProfileChange()
+    if M.frame and M.frame:IsShown() then M.RequestRefresh(nil, "profile-change") end
     if IsConfigCombatLocked() then return false end
     local foreign = (deferredHistoryCommit and IsForeignProfileSnapshot(deferredHistoryCommit.before))
         or (historyTransaction and IsForeignProfileSnapshot(historyTransaction.before))
@@ -379,6 +390,42 @@ local function CommandFeedback(text, kind, seconds)
     local fn = M.ShowStatusFeedback or M.ShowInlineFeedback
     if type(fn) == "function" then fn(text, kind or "info", seconds or 1.25) end
 end
+-- Estimated bytes of one snapshot: table headers plus hash entries. Strings
+-- are interned and shared with the live profile, so they add nothing.
+local snapshotBytes = setmetatable({}, { __mode = "k" })
+local function TableBytes(value, seen)
+    if type(value) ~= "table" or seen[value] then return 0 end
+    seen[value] = true
+    local bytes = SNAPSHOT_TABLE_BYTES
+    for _, item in pairs(value) do
+        bytes = bytes + SNAPSHOT_ENTRY_BYTES + TableBytes(item, seen)
+    end
+    return bytes
+end
+local function SnapshotBytes(snapshot)
+    if type(snapshot) ~= "table" then return 0 end
+    local bytes = snapshotBytes[snapshot]
+    if not bytes then
+        bytes = TableBytes(snapshot, {})
+        snapshotBytes[snapshot] = bytes
+    end
+    return bytes
+end
+local function HistoryStackBytes(stack)
+    local counted, bytes = {}, 0
+    for i = 1, #stack do
+        local entry = stack[i]
+        local before, after = entry.before, entry.after
+        if before and not counted[before] then counted[before] = true; bytes = bytes + SnapshotBytes(before) end
+        if after and not counted[after] then counted[after] = true; bytes = bytes + SnapshotBytes(after) end
+    end
+    return bytes
+end
+local function TrimHistoryToBudget(stack)
+    while #stack > 1 and HistoryStackBytes(stack) > HISTORY_BYTE_BUDGET do
+        table.remove(stack, 1)
+    end
+end
 local function PushHistory(label, source, before, after)
     if type(before)~="table" or type(after)~="table" then return false end
     if DeepEqual(before, after) then return false end
@@ -393,6 +440,7 @@ local function PushHistory(label, source, before, after)
     while #stack > HISTORY_LIMIT do
         table.remove(stack, 1)
     end
+    TrimHistoryToBudget(stack)
     WipeTable(redo)
     if historySessionActive then
         historySessionSnapshot = after

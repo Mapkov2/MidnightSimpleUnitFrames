@@ -37,12 +37,27 @@ local function WithExactGroupScope(widget, key, prepare)
     end
     return widget
 end
+-- Prepare the master on the lazy shell; content reuses its widget and binding.
+local function PrepareAdditionalSwitch(ctx, section, key, label, mode)
+    local entry = section and section._msuf2CollapsibleEntry
+    if entry and entry.featureSwitch then return entry.featureSwitch end
+    local toggle = W.SectionSwitch(section, label)
+    -- These masters default off in every scope; read the current config once.
+    local function Enabled() return MSUF.GF.GetConf(GP.CurrentScope())[key] and true or false end
+    M.BindBoolWidget(ctx, toggle, Enabled, function(value)
+        GP.Set(GP.CurrentScope(), key, value, mode)
+        GP.RefreshContext(ctx)
+    end, GP.ResolveControlMeta(ctx, nil, "field." .. key))
+    WithExactGroupScope(toggle, key)
+    toggle:SetChecked(Enabled())
+    return toggle
+end
 local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
-    local height = prefix == "healerMana" and 600 or prefix == "friendlyBoss" and 536 or prefix == "pets" and 546 or 456
+    local height = prefix == "healerMana" and 520 or prefix == "friendlyBoss" and 536 or prefix == "pets" and 546 or 456
     local section = b:CollapsibleSection(id, title, height, false)
     local width = section._msuf2Width or b.width or 720
     local controlWidth = max(180, (width - 96) / 2)
-    WithExactGroupScope(BindScopeToggle(ctx, W.ToggleAt(section, "Enable", 32, -38, controlWidth), prefix .. "Enabled", false, "rebuild"), prefix .. "Enabled")
+    PrepareAdditionalSwitch(ctx, section, prefix .. "Enabled", "Enable", "rebuild")
     if extra then extra(section, controlWidth) end
     local function Slider(label, key, low, high, step, default, x, y)
         ScopeSlider(ctx, section, label, low, high, step, controlWidth, prefix .. key, default, "rebuild", x, y, controlWidth, "LEFT")
@@ -60,7 +75,10 @@ local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
     end
     if prefix == "healerMana" then
         BindScopeToggle(ctx, W.ToggleAt(section, "Show mana amount", 32, -308, controlWidth), "healerManaShowValue", true, "rebuild")
-        ScopeColor(ctx, section, "Text color", controlWidth, "healerManaTextR", "healerManaTextG", "healerManaTextB", {1, 1, 1}, "rebuild", 32, -536, controlWidth, "LEFT")
+        W.AttachContextColorReferences(section, { "group.healer_mana_text" }, {
+            title = "Healer mana bars", historyLabel = "Text color",
+            historySource = "menu:group-healer-mana-text-color", maxTargets = 1,
+        })
     end
 end
 local function BuildTargets(ctx, b)
@@ -93,7 +111,7 @@ end
 local function BuildNameBar(ctx, b)
     local section = b:CollapsibleSection("name_bar", "Name strip", 300, false)
     local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
-    WithExactGroupScope(BindScopeToggle(ctx, W.ToggleAt(section, "Show names on a strip above the health bar", 32, -38, width * 2), "nameBarEnabled", false, "rebuild"), "nameBarEnabled")
+    PrepareAdditionalSwitch(ctx, section, "nameBarEnabled", "Show names on a strip above the health bar", "rebuild")
     local function Slider(label, key, low, high, step, default, x, y)
         ScopeSlider(ctx, section, label, low, high, step, width, key, default, "rebuild", x, y, width, "LEFT")
     end
@@ -127,7 +145,7 @@ end
 local function BuildBuffCoverage(ctx, b)
     local section = b:CollapsibleSection("buff_coverage", "Buff coverage (Forever)", 656, false)
     local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
-    WithExactGroupScope(BindScopeToggle(ctx, W.ToggleAt(section, "Show buff coverage icons", 32, -38, width * 2), "buffCoverageEnabled", false, "visual"), "buffCoverageEnabled")
+    PrepareAdditionalSwitch(ctx, section, "buffCoverageEnabled", "Show buff coverage icons", "visual")
     for i = 1, #BUFF_COVERAGE_TOGGLES do
         local entry = BUFF_COVERAGE_TOGGLES[i]
         local x, y = i % 2 == 1 and 32 or width + 64, -78 - math.floor((i - 1) / 2) * 36
@@ -174,5 +192,5 @@ end
 M.GroupFrameAdditionalSections = {
     Targets = BuildTargets, Pets = BuildPets, FriendlyBosses = BuildFriendlyBosses, HealerMana = BuildHealerMana,
     NameBar = BuildNameBar, BuffCoverage = BuildBuffCoverage,
-    SizingTier = BuildSizingTier, ExactScope = WithExactGroupScope,
+    SizingTier = BuildSizingTier, ExactScope = WithExactGroupScope, PrepareSwitch = PrepareAdditionalSwitch,
 }

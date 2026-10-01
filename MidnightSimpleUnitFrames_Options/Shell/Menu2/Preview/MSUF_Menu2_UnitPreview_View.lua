@@ -1191,18 +1191,23 @@ local function BuildPreview(parent, panel, width, height)
         mock.classPower[bucket][index] = tex
         return tex
     end
-    for i = 1, 10 do
-        ClassPowerTexture("segmentBgs", i, "BACKGROUND")
-        ClassPowerTexture("segments", i, "ARTWORK", nil, false)
-        ClassPowerTexture("segmentEdges", i, "OVERLAY")
-        local rfs = MakeFS(mock.classPower.textOwner, "OVERLAY", 8)
-        rfs:SetJustifyH("CENTER")
-        if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
-        if rfs.SetShadowColor then rfs:SetShadowColor(0, 0, 0, 1) end
-        if rfs.SetShadowOffset then rfs:SetShadowOffset(1, -1) end
-        rfs:Hide()
-        mock.classPower.runeTexts[i] = rfs
+    --- Segment slots grow once to the largest count shown (Sweeping Strikes
+    --- has 18) and are kept; ten cover every other resource.
+    function mock.classPower:EnsureSegmentSlots(count)
+        for i = #self.segments + 1, count do
+            ClassPowerTexture("segmentBgs", i, "BACKGROUND")
+            ClassPowerTexture("segments", i, "ARTWORK", nil, false)
+            ClassPowerTexture("segmentEdges", i, "OVERLAY")
+            local rfs = MakeFS(self.textOwner, "OVERLAY", 8)
+            rfs:SetJustifyH("CENTER")
+            if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
+            if rfs.SetShadowColor then rfs:SetShadowColor(0, 0, 0, 1) end
+            if rfs.SetShadowOffset then rfs:SetShadowOffset(1, -1) end
+            rfs:Hide()
+            self.runeTexts[i] = rfs
+        end
     end
+    mock.classPower:EnsureSegmentSlots(10)
     mock.classPower.text = MakeFS(mock.classPower.textOwner, "OVERLAY", 12)
     mock.classPower.text:SetJustifyH("CENTER")
     if mock.classPower.text.SetJustifyV then mock.classPower.text:SetJustifyV("MIDDLE") end

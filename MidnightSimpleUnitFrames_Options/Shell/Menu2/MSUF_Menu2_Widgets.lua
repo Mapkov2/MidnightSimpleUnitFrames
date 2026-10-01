@@ -31,7 +31,6 @@ local ACCORDION_OPEN_CORNER_UV = 17 / 128
 -- builder x=12 + ctx width=(CONTENT_W-32), viewport right=(CONTENT_W-28).
 -- Keep only the header cap inside the viewport; body layout remains unchanged.
 local ACCORDION_HEADER_RIGHT_INSET = 8
-local sliderSerial = 0
 local Tr = M.TranslateText
 local EM2Util = (_G.MSUF_EM2 and _G.MSUF_EM2.Util) or {}
 local function ThemeColor(name, fallback)
@@ -316,12 +315,15 @@ end
 local function ConsumeMenuFocusRequest(req)
     if type(req) == "table" and _G.MSUF_EM2_MenuFocusRequest == req then req.consumed = true end
 end
+-- Every collapsible section reads two state tables while it builds and
+-- refreshes. Once the persisted per-character state holds the bound table
+-- there is nothing to resolve; only the first read (or a rebound table) runs
+-- the full EnsurePersistentMenuState pass.
 local function MenuStateTable(field)
-    if type(M.GetPersistentMenuStateTable) == "function" then
-        M[field] = M.GetPersistentMenuStateTable(field)
-    else
-        M[field] = M[field] or {}
-    end
+    local bound = M[field]
+    local state = M._persistentMenuState
+    if bound ~= nil and state and state[field] == bound then return bound end
+    M[field] = M.GetPersistentMenuStateTable(field)
     return M[field]
 end
 local function GetCollapseHintClickState() return MenuStateTable("collapseHintClickState") end
@@ -735,9 +737,13 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
                 local section = entry.frame
                 if section then
                     local h = (section.GetHeight and section:GetHeight()) or entry.height or 120
-                    local key = tostring(self.parent) .. "\030" .. tostring(self.x) .. "\030" .. tostring(y) .. "\030" .. tostring(h)
-                    if section._msuf2RelayoutKey ~= key then
-                        section._msuf2RelayoutKey = key
+                    -- Compared field by field: a relayout runs on every
+                    -- disclosure and settle and must not build key strings.
+                    if section._msuf2RelayoutParent ~= self.parent or section._msuf2RelayoutX ~= self.x
+                        or section._msuf2RelayoutY ~= y or section._msuf2RelayoutH ~= h
+                    then
+                        section._msuf2RelayoutParent, section._msuf2RelayoutX = self.parent, self.x
+                        section._msuf2RelayoutY, section._msuf2RelayoutH = y, h
                         section:ClearAllPoints()
                         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
                         layoutChanged = true
@@ -751,10 +757,11 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
                 local openChanged = entry._msuf2RelayoutOpen ~= open
                 entry._msuf2RelayoutOpen = open
                 local outerH = entry.headerHeight + (open and entry.contentHeight or 0)
-                local key = tostring(self.parent) .. "\030" .. tostring(self.x) .. "\030" .. tostring(y)
-                    .. "\030" .. tostring(outerH) .. "\030" .. tostring(open)
-                if entry._msuf2RelayoutKey ~= key then
-                    entry._msuf2RelayoutKey = key
+                if entry._msuf2RelayoutParent ~= self.parent or entry._msuf2RelayoutX ~= self.x
+                    or entry._msuf2RelayoutY ~= y or entry._msuf2RelayoutH ~= outerH or openChanged
+                then
+                    entry._msuf2RelayoutParent, entry._msuf2RelayoutX = self.parent, self.x
+                    entry._msuf2RelayoutY, entry._msuf2RelayoutH = y, outerH
                     entry.outer:ClearAllPoints()
                     entry.outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
                     entry.outer:SetHeight(outerH)
@@ -810,7 +817,7 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
         section._msuf2Width = self.width
         section._msuf2ContextColorHost = true
         section._msuf2ContextColorHostTitle = title
-        local fs = T.Font(section, "GameFontNormal", Tr(title or ""), T.colors.text, "section")
+        local fs = T.Font(section, "GameFontNormal", title or "", T.colors.text, "section")
         SetSearchText(fs, title)
         fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs
@@ -880,7 +887,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
         arrow:SetTexture(T.media.collapseArrow)
         -- Keep the selected face for accordion titles. Expressway's automatic
         -- Regular -> SemiBold face switch can cold-start blank until a relayout.
-        local label = T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text, "accordion")
+        local label = T.Font(header, "GameFontNormal", title or "", T.colors.text, "accordion")
         SetSearchText(label, title)
         label:SetJustifyH("LEFT")
         local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
@@ -1068,7 +1075,7 @@ function PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
         RegisterSearchObject(section, title, "section")
         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         section:SetSize(self.width, height or 78)
-        local fs = T.Font(section, "GameFontNormalLarge", Tr(title or ""), T.colors.text, "heading")
+        local fs = T.Font(section, "GameFontNormalLarge", title or "", T.colors.text, "heading")
         SetSearchText(fs, title)
         fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs
@@ -1161,7 +1168,6 @@ function PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
     end
 end
 function W.PageBuilder(ctx, opts)
-    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     opts = type(opts) == "table" and opts or {}
     local contentX = tonumber(opts.contentX) or tonumber(ctx and ctx._msuf2ContentX) or 12
     local topInset = tonumber(opts.topInset) or tonumber(ctx and ctx._msuf2TopInset) or 0
@@ -1534,8 +1540,9 @@ local COLLAPSIBLE_BADGE_STYLES = {
         text = { 0.680, 0.730, 0.860, 1 },
     },
 }
+-- Measures the translated text the badge shows.
 local function CollapsibleBadgeWidth(text)
-    text = tostring(Tr(text or ""))
+    text = tostring(text or "")
     return max(48, min(176, floor(22 + (#text * 6.2) + 0.5)))
 end
 -- The badge styles copy token colors at file load, before the menu accent
@@ -1569,6 +1576,7 @@ function W.SetCollapsibleBadges(section, specs)
         or section._msuf2CollapsibleBadgesOnlyWhenOpen == false
         or entry._msuf2CollapsibleBadgesOnlyWhenOpen == false
     local badgesOpen = entry.open == true and entry._msuf2Closing ~= true
+    local changed = false
     for i = 1, #specs do
         local spec = specs[i] or {}
         local badge = entry._msuf2Badges[i]
@@ -1586,23 +1594,37 @@ function W.SetCollapsibleBadges(section, specs)
         end
         local text = Tr(spec.text or "")
         local style = COLLAPSIBLE_BADGE_STYLES[spec.kind or spec.style or "info"] or COLLAPSIBLE_BADGE_STYLES.info
-        badge:SetSize(tonumber(spec.width) or CollapsibleBadgeWidth(text), tonumber(spec.height) or 20)
-        if badge.text then
-            badge.text:SetText(text)
-            local c = style.text
-            badge.text:SetTextColor(c[1], c[2], c[3], c[4] or 1)
-        end
-        if badge._msuf2Fill then
-            local c = style.bg
-            if T.SetFillGradient then
-                T.SetFillGradient(badge._msuf2Fill, c, 0.12, -0.18)
-            else
-                badge._msuf2Fill:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+        local width = tonumber(spec.width) or CollapsibleBadgeWidth(text)
+        local height = tonumber(spec.height) or 20
+        -- Page refreshers call this on every refresh; an unchanged badge
+        -- writes nothing and the header keeps its layout.
+        if badge._msuf2BadgeText ~= text or badge._msuf2BadgeStyle ~= style
+            or badge._msuf2BadgeW ~= width or badge._msuf2BadgeH ~= height
+        then
+            badge._msuf2BadgeText, badge._msuf2BadgeStyle = text, style
+            badge._msuf2BadgeW, badge._msuf2BadgeH = width, height
+            changed = true
+            badge:SetSize(width, height)
+            if badge.text then
+                T.SetTranslatedText(badge.text, text)
+                local c = style.text
+                badge.text:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+                if badge.text.SetWidth then badge.text:SetWidth(max(20, width - 10)) end
+                if badge.text.SetMaxLines then badge.text:SetMaxLines(1) end
+                if badge.text.SetWordWrap then badge.text:SetWordWrap(false) end
             end
-        end
-        if badge._msuf2Edge then
-            local c = style.border
-            badge._msuf2Edge:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+            if badge._msuf2Fill then
+                local c = style.bg
+                if T.SetFillGradient then
+                    T.SetFillGradient(badge._msuf2Fill, c, 0.12, -0.18)
+                else
+                    badge._msuf2Fill:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+                end
+            end
+            if badge._msuf2Edge then
+                local c = style.border
+                badge._msuf2Edge:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+            end
         end
         local shown = text ~= ""
         if shown then
@@ -1614,20 +1636,23 @@ function W.SetCollapsibleBadges(section, specs)
             if not badgesOpen and not allowCollapsed then shown = false end
             if spec.onlyWhenOpen == true and not badgesOpen then shown = false end
         end
-        badge._msuf2BadgeWantedShown = shown and true or false
-        if badge.text and badge.text.SetWidth then badge.text:SetWidth(max(20, (badge.GetWidth and badge:GetWidth() or 54) - 10)) end
-        if badge.text and badge.text.SetMaxLines then badge.text:SetMaxLines(1) end
-        if badge.text and badge.text.SetWordWrap then badge.text:SetWordWrap(false) end
-        badge:SetShown(shown)
+        shown = shown and true or false
+        if badge._msuf2BadgeWantedShown ~= shown then
+            badge._msuf2BadgeWantedShown = shown
+            badge:SetShown(shown)
+            changed = true
+        end
     end
     for i = #specs + 1, #entry._msuf2Badges do
         local badge = entry._msuf2Badges[i]
-        if badge then
+        if badge and badge._msuf2BadgeWantedShown ~= false then
             badge._msuf2BadgeWantedShown = false
             badge:SetShown(false)
+            changed = true
         end
     end
-    if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
+    -- Only a changed badge set re-anchors the header (badges, hint, title).
+    if changed and entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
 end
 --- "Custom" text marker for a section whose settings differ from what Reset
 --- section restores. It has its own slot because summary headers hide the
@@ -1645,14 +1670,14 @@ function W.SetCollapsibleCustomBadge(section, shown)
         local style = COLLAPSIBLE_BADGE_STYLES.accent
         badge = PixelLayoutRegion(CreateFrame("Frame", nil, header))
         badge:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 2)
-        badge:SetSize(CollapsibleBadgeWidth("Custom"), 20)
+        badge:SetSize(CollapsibleBadgeWidth(Tr("Custom")), 20)
         local fill, edge = T.CreateSuperellipseLayers(badge, "_msuf2HeaderBadge", 1, "ARTWORK", "OVERLAY")
         if fill then
             if T.SetFillGradient then T.SetFillGradient(fill, style.bg, 0.12, -0.18)
             else fill:SetVertexColor(style.bg[1], style.bg[2], style.bg[3], style.bg[4] or 1) end
         end
         if edge then edge:SetVertexColor(style.border[1], style.border[2], style.border[3], style.border[4] or 1) end
-        badge.text = T.Font(badge, "GameFontDisableSmall", Tr("Custom"), T.colors.text)
+        badge.text = T.Font(badge, "GameFontDisableSmall", "Custom", T.colors.text)
         badge.text:SetPoint("CENTER", badge, "CENTER", 0, 0)
         badge.text:SetTextColor(style.text[1], style.text[2], style.text[3], style.text[4] or 1)
         if badge.text.SetWordWrap then badge.text:SetWordWrap(false) end
@@ -2474,7 +2499,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
     btn._msuf2QuietCheckBox = true
     btn:SetPoint("TOPLEFT", x, y)
     btn:SetSize(28, 28)
-    btn._msuf2Label = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
+    btn._msuf2Label = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(btn._msuf2Label, label)
     btn._msuf2Label:SetPoint("LEFT", btn, "RIGHT", 8, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
@@ -2594,7 +2619,7 @@ local function CreateToggle(section, label, x, y, labelWidth)
     return btn
 end
 function W.Text(parent, text, x, y, width, color)
-    local fs = T.Font(parent, "GameFontHighlightSmall", Tr(text or ""), color or T.colors.muted, "supporting")
+    local fs = T.Font(parent, "GameFontHighlightSmall", text or "", color or T.colors.muted, "supporting")
     SetSearchText(fs, text)
     RegisterSearchObject(fs, text, "text")
     fs:SetPoint("TOPLEFT", x or 0, y or 0)
@@ -2672,7 +2697,7 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
     parent._msuf2ControlCards = parent._msuf2ControlCards or {}
     parent._msuf2ControlCards[#parent._msuf2ControlCards + 1] = card
     if card.EnableMouse then card:EnableMouse(false) end
-    local heading = T.Font(card, "GameFontNormal", Tr(title or ""), T.colors.text, "card")
+    local heading = T.Font(card, "GameFontNormal", title or "", T.colors.text, "card")
     SetSearchText(heading, title)
     heading:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
     heading:SetWidth(max(24, width - 32))
@@ -2770,7 +2795,7 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn._msuf2ProxyBaseWidth = switchW + 12
     btn._msuf2UpdateToggleProxyBounds = UpdateToggleProxyBounds
     local side = labelSide or "RIGHT"
-    local labelFS = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
+    local labelFS = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(labelFS, label)
     labelFS:SetJustifyH(side == "LEFT" and "RIGHT" or "LEFT")
     if not labelWidth and section and section._msuf2Width then labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - switchW - 30) end
@@ -2815,12 +2840,12 @@ function W.SectionSwitch(section, label, displayLabel)
     button:ClearAllPoints()
     button:SetPoint("RIGHT", entry.header, "RIGHT", -14, 0)
     button:SetFrameLevel(entry.header:GetFrameLevel() + 3)
-    local state = T.Font(entry.header, "GameFontHighlightSmall", "", T.colors.text, "caption")
+    local state = T.Font(entry.header, "GameFontHighlightSmall", displayLabel or "Enable", T.colors.text, "caption")
     state:SetPoint("RIGHT", button, "LEFT", -8, 0)
     local setChecked = button.SetChecked
     button.SetChecked = function(self, checked)
-        setChecked(self, checked)
-        state:SetText(Tr(displayLabel or "Enable"))
+        -- Scope refreshes need no repaint when the master value is unchanged.
+        if self:GetChecked() ~= checked then setChecked(self, checked) end
     end
     button:SetChecked(false)
     entry.featureSwitch = button
@@ -2905,7 +2930,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
         maxRight = maxRight,
         startX = startX,
     })
-    local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", Tr(opts.label or "Editing:"), opts.labelColor or T.colors.text, "control")
+    local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", opts.label or "Editing:", opts.labelColor or T.colors.text, "control")
     SetSearchText(label, opts.label or "Editing:")
     RegisterSearchObject(label, opts.label or "Editing:", "text")
     label:SetPoint("LEFT", section, "TOPLEFT", labelX, centerY)
@@ -2930,7 +2955,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
             x = startX
             y = y - rowStep
         end
-        local btn = T.Button(section, Tr(item.text or item.label or item.value or ""), width, buttonH)
+        local btn = T.Button(section, item.text or item.label or item.value or "", width, buttonH, { history = false })
         btn._msuf2SegmentChoice = true
         -- The logical ScopeOverrideBar owns search/catalog identity and values.
         -- Child buttons are implementation details; registering both creates
@@ -2942,7 +2967,13 @@ function W.ScopeOverrideBar(ctx, section, opts)
         btn._msuf2BaseWidth = width
         T.CenterButtonLabel(btn)
         if btn.RefreshVisual then btn:RefreshVisual() end
-        btn:SetScript("OnClick", function() bar:SetValue(item.value) end)
+        -- A scope switch the page stores in the profile stays undoable; a
+        -- click on the scope already shown records nothing.
+        btn:SetScript("OnClick", function(self)
+            if bar:SetValue(item.value) then
+                M.CheckpointHistory(self:GetText() or "Scope", "button:" .. tostring(self))
+            end
+        end)
         -- Scope bars that know per-scope overrides mark a departing scope with
         -- a " *" text cue (not color alone) and say so on hover.
         if type(opts.hasOverride) == "function" and item.value ~= "shared" then
@@ -2981,7 +3012,7 @@ function W.ScopeOverrideBar(ctx, section, opts)
             end
             if btn._msuf2ScopeText and btn._msuf2ScopeOverride ~= override then
                 btn._msuf2ScopeOverride = override
-                if btn._msuf2Label then btn._msuf2Label:SetText(override and (btn._msuf2ScopeText .. " *") or btn._msuf2ScopeText) end
+                if btn._msuf2Label then T.SetTranslatedText(btn._msuf2Label, override and (btn._msuf2ScopeText .. " *") or btn._msuf2ScopeText) end
             end
         end
     end
@@ -3359,7 +3390,7 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
     return widget
 end
 function W.LabelAt(parent, text, x, y, width, template, color)
-    local fs = T.Font(parent, template or "GameFontNormalSmall", Tr(text or ""), color or T.colors.text)
+    local fs = T.Font(parent, template or "GameFontNormalSmall", text or "", color or T.colors.text)
     SetSearchText(fs, text)
     RegisterSearchObject(fs, text, "text")
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
@@ -3377,7 +3408,7 @@ function W.DividerAt(parent, y, leftPad, rightPad)
 end
 function W.Button(section, label, width)
     local x, y = NextRow(section, 32)
-    local btn = T.Button(section, Tr(label or ""), width or 160, 24)
+    local btn = T.Button(section, label or "", width or 160, 24)
     btn._msuf2ControlKind = "button"
     RegisterSearchObject(btn, label, "button")
     btn:SetPoint("TOPLEFT", x, y)
@@ -3688,7 +3719,7 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
         tonumber(opts.expandedSectionHeight) or (math.abs(expandedTop) + expandedHeight + 8))
     local pageKey = opts.pageKey
     local pageWrapper = opts.wrapper
-    local button = T.Button(toolbar, Tr("Expand"), tonumber(opts.buttonWidth) or 88, 20)
+    local button = T.Button(toolbar, "Expand", tonumber(opts.buttonWidth) or 88, 20, { history = false })
     if T.CenterButtonLabel then T.CenterButtonLabel(button) end
     if T.SkinPrimaryButton then T.SkinPrimaryButton(button) end
     button:SetPoint("RIGHT", toolbar, "RIGHT", -12, 0)
@@ -3726,10 +3757,10 @@ function W.AttachFixedPreviewExpander(section, toolbar, previewBox, opts)
     local function RefreshButton()
         if record.expanded then
             button:SetSize(130, 20)
-            button:SetText(Tr("Compact Preview"))
+            button:SetText("Compact Preview")
         else
             button:SetSize(88, 20)
-            button:SetText(Tr("Expand"))
+            button:SetText("Expand")
         end
     end
     local function RefreshPreview(reason)
@@ -4095,26 +4126,24 @@ end
 -- Coalesce the two ownership-settling checks per shared box. The callbacks
 -- always resolve the current record, so an older page can never repaint after
 -- a rapid page switch and navigation does not accumulate timer generations.
+-- Each queued check is its MenuTimer task: the menu runtime cancels pending
+-- tasks on hide and in combat, and a cancelled task no longer counts as queued.
 local function QueuePinnedPreviewSync(box)
     if not box then return end
     local function DispatchCurrent()
         local current = box._msuf2PinnedPreviewRecord
         if current and type(current.update) == "function" then current.update() end
     end
-    if not (C_Timer and C_Timer.After) then
-        DispatchCurrent()
-        return
-    end
-    if not box._msuf2PinnedPreviewImmediateSyncQueued then
-        box._msuf2PinnedPreviewImmediateSyncQueued = true
-        C_Timer.After(0, function()
+    local immediate = box._msuf2PinnedPreviewImmediateSyncQueued
+    if not (immediate and immediate.active) then
+        box._msuf2PinnedPreviewImmediateSyncQueued = C_Timer.After(0, function()
             box._msuf2PinnedPreviewImmediateSyncQueued = nil
             DispatchCurrent()
         end)
     end
-    if not box._msuf2PinnedPreviewSettledSyncQueued then
-        box._msuf2PinnedPreviewSettledSyncQueued = true
-        C_Timer.After(0.05, function()
+    local settled = box._msuf2PinnedPreviewSettledSyncQueued
+    if not (settled and settled.active) then
+        box._msuf2PinnedPreviewSettledSyncQueued = C_Timer.After(0.05, function()
             box._msuf2PinnedPreviewSettledSyncQueued = nil
             DispatchCurrent()
         end)
@@ -4269,13 +4298,14 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         local available = section._msuf2Width - x - 14
         if available > 0 and width > available then width = max(72, available) end
     end
-    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
+    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(width)
     title:SetJustifyH("LEFT")
-    sliderSerial = sliderSerial + 1
-    local slider = PixelLayoutRegion(CreateFrame("Slider", "MSUF2NativeSlider" .. sliderSerial, section))
+    -- Unnamed: a template-free Slider has no named parts, and a name per slider
+    -- would leave one permanent global behind for every slider ever built.
+    local slider = PixelLayoutRegion(CreateFrame("Slider", nil, section))
     slider._msuf2Title = title
     slider._msuf2ControlKind = "slider"
     RegisterSearchObject(slider, label, "slider", { anchor = title })
@@ -4295,7 +4325,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     HideSliderTemplateParts(slider)
     if T.StyleSlider then T.StyleSlider(slider) end
     local function StepButton(text)
-        local btn = T.Button(section, text, 20, 24, { noSearch = true })
+        local btn = T.Button(section, text, 20, 24, { noSearch = true, history = false })
         SetSearchText(btn, text)
         if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, slider)
         else btn._msuf2ControlPartOf = slider end
@@ -4563,7 +4593,7 @@ function W.Segment(section, label, values, width)
     local bw = count > 0 and math.floor(((width or 360) - gap * (count - 1)) / count) or 80
     for i = 1, count do
         local item = holder.values[i]
-        local btn = T.Button(holder, item.text or tostring(item.value), bw, 24)
+        local btn = T.Button(holder, item.text or tostring(item.value), bw, 24, { history = false })
         -- A Segment is one logical control. Its option buttons are visual
         -- parts and must not become duplicate catalog records.
         if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(btn, holder)
@@ -4646,7 +4676,7 @@ local function TextInputSetOnValueCommitted(self, fn) self._msuf2OnCommit = fn e
 function W.TextInput(section, label, width)
     local x, y = NextRow(section, 48)
     width = width or 260
-    local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text, "control")
+    local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     local edit = PixelLayoutRegion(CreateFrame("EditBox", nil, section, "InputBoxTemplate"))

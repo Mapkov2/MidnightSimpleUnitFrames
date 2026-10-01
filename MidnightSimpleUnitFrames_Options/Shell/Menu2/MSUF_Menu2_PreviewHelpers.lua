@@ -669,6 +669,29 @@ function CP.IsCharged(spec, bars, slot)
         and bars and bars.showChargedComboPoints ~= false
         and spec.chargedSlots and spec.chargedSlots[slot] == true
 end
+--- Segments a class resource preview draws: the spec's count, at most ten,
+--- or eighteen for Sweeping Strikes, whose live bar shows 18 stacks
+--- (MSUF_CP_NativeAuras.lua).
+--- The dark bar colour the engine draws: the settings cache's resolved
+--- colour, else the saved dark colour, else the dark gray, else 0.07 (the
+--- rule of UF_Config ResolveDarkColor and CP_PlayerHP DarkColor).
+function H.DarkBarColor(cache)
+    if cache and type(cache.darkBarR) == "number" and type(cache.darkBarG) == "number"
+        and type(cache.darkBarB) == "number" then
+        return cache.darkBarR, cache.darkBarG, cache.darkBarB
+    end
+    local db = _G.MSUF_DB
+    local g = db and db.general
+    local gray = tonumber(g and (g.darkBarGray or g.darkBgBrightness)) or 0.07
+    if gray > 1 then gray = gray / 100 end
+    return tonumber(g and g.darkBarR) or gray, tonumber(g and g.darkBarG) or gray, tonumber(g and g.darkBarB) or gray
+end
+function CP.SegmentCount(spec)
+    local count = floor(tonumber(spec and spec.segments) or 5)
+    local limit = spec and spec.token == "SWEEPING_STRIKES" and 18 or 10
+    if count < 1 then count = 1 elseif count > limit then count = limit end
+    return count
+end
 function CP.IsSingleBarMode(mode)
     return mode == "continuous" or mode == "timer_bar" or mode == "stagger" or mode == "aura_single" or mode == "ironfur"
 end
@@ -1564,7 +1587,7 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
         hint._close = close
         box._msuf2PreviewControlsHint = hint
     end
-    if hint._text then hint._text:SetText(tr("Drag handles to move.")) end
+    if hint._text then T.SetTranslatedText(hint._text, tr("Drag handles to move.")) end
     hint:Show()
     return hint
 end

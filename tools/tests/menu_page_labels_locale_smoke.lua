@@ -50,6 +50,10 @@ local REQUIRED = {
     "Seconds and global cooldowns", "Show the time from (seconds left, 0 = always)",
     "Warn during the last global cooldown", "Arcane Soul phase bar",
     "The saved profile variants cannot be read (%s). They are kept unchanged, and editing them here is blocked.",
+    -- Group and aura page formats that replaced concatenated text
+    -- (menu_pages_quality_smoke section 10).
+    "%s px", "Name %s", "HP %s", "Power %s", "Offline %d%%", "Offline visible", "Offline hidden",
+    "Border %s", "IDs: %s", "%s: %s", "%s Indicator", "Group %s", "Texture: %s",
 }
 
 ---------------------------------------------------------------------------

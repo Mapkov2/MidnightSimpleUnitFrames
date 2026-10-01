@@ -102,6 +102,13 @@ local function GroupColorAt(ctx, section, label, x, y, prefix, dr, dg, db, label
         function(r, g, b) SetGroupRGB(prefix, r, g, b, "MSUF2_GROUP_COLORS", "visual") end,
         labelWidth, swatchWidth, Meta("group_frame.color." .. tostring(prefix)), { dr, dg, db })
 end
+local function HealerManaTextRGB() return GroupRGB("healerManaText", 1, 1, 1) end
+local function SetHealerManaTextRGB(r, g, b)
+    SetGroupRGB("healerManaText", r, g, b, "MSUF2_GROUP_HEALER_MANA_TEXT", "rebuild")
+end
+local function ApplyHealerManaText()
+    return RequestGroupColorApply("MSUF2_GROUP_HEALER_MANA_TEXT", "rebuild")
+end
 local function Clamp01(value, fallback)
     value = tonumber(value)
     if value == nil then value = fallback or 0 end
@@ -168,6 +175,13 @@ local function BuildGroupFrameColors(ctx, b)
     local background = b:CollapsibleSection("colors_group_frames_background", "Bar Background", 112, false)
     local state = b:CollapsibleSection("colors_group_frames_state", "State Tints", 242, false)
     local highlights = b:CollapsibleSection("colors_group_frames_highlights", "Group Highlights", 220, false)
+    local healerMana = b:CollapsibleSection("colors_group_frames_healer_mana", "Healer mana bars", 80, false)
+    ColorValueAt(ctx, healerMana, "Text color", 12, -10, HealerManaTextRGB, SetHealerManaTextRGB,
+        nil, nil, Meta("group_frame.healer_mana.text_color", nil, { searchSettingKeys = {
+            "gf_party.healerManaTextR", "gf_party.healerManaTextG", "gf_party.healerManaTextB",
+            "gf_raid.healerManaTextR", "gf_raid.healerManaTextG", "gf_raid.healerManaTextB",
+            "gf_mythicraid.healerManaTextR", "gf_mythicraid.healerManaTextG", "gf_mythicraid.healerManaTextB",
+        } }), { 1, 1, 1 })
 
     ValueDropdownAt(ctx, health, "Bar Color Mode", 12, -10, GROUP_BAR_MODES, min(360, cardW - 32),
         GroupBarMode,
@@ -230,4 +244,7 @@ CP.SetGroupRGB = SetGroupRGB
 CP.SetGroupRGBA = SetGroupRGBA
 CP.GroupHealthBarRGB = GroupHealthBarRGB
 CP.SetGroupHealthBarRGB = SetGroupHealthBarRGB
+CP.HealerManaTextRGB = HealerManaTextRGB
+CP.SetHealerManaTextRGB = SetHealerManaTextRGB
+CP.ApplyHealerManaText = ApplyHealerManaText
 CP.BuildGroupFrameColors = BuildGroupFrameColors

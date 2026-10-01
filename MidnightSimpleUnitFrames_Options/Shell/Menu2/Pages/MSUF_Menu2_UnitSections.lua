@@ -25,6 +25,7 @@ local CopyUnitSettings, ReadBool = UP.CopyUnitSettings, UP.ReadBool
 local SetBool, ReadNumber, SetNumber = UP.SetBool, UP.ReadNumber, UP.SetNumber
 local SetControlEnabled, NormalizeBossLayoutMode, UpdateLoadActive = UP.SetControlEnabled, UP.NormalizeBossLayoutMode, UP.UpdateLoadActive
 local SettingMeta, ReviewedMeta, RegisterControl = UP.SettingMeta, UP.ReviewedMeta, UP.RegisterControl
+local UNIT_ANCHOR_SECTION_HEIGHT = 306
 local UNIT_AURAS_MENU_UNITS = M.KeySetFromWords "player pet target focus boss arena"
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
 local TOT_INLINE_CUSTOM_SEPARATOR_MAX = 5
@@ -1076,7 +1077,7 @@ local function BuildBasics(ctx, builder, unit, label)
     M.TrackRefresh(ctx, RefreshBasicsEnabled)
 end
 local function BuildLayout(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("anchoring", "Anchor", 306, false)
+    local sec = builder:CollapsibleSection("anchoring", "Anchor", UNIT_ANCHOR_SECTION_HEIGHT, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local anchorLeftX = 20
     local anchorGap = 24
@@ -1517,7 +1518,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
         end
         if not btn._firstText then
             btn._firstText = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
+            if btn._firstText.SetFont then btn._firstText:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
             btn._firstText:SetText("1")
             btn._firstText:SetTextColor(0, 0, 0, 1)
         end
@@ -1530,7 +1531,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
 
         if not btn._arrow then
             btn._arrow = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
+            if btn._arrow.SetFont then btn._arrow:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
             btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
         end
         btn._arrow:SetText(info.arrow)
@@ -1574,7 +1575,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
             })
         end
         local text = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-        if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
+        if text.SetFont then text:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
         text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
         text:SetText(M.Tr(info.text or ""))
         btn._label = text
@@ -1810,7 +1811,7 @@ local function BuildUnitPage(info)
                 return refresh
             end,
         })
-        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchor", height = 220 })
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout, { sectionId = "anchoring", title = "Anchor", height = UNIT_ANCHOR_SECTION_HEIGHT })
         if UNIT_AURAS_MENU_UNITS[info.unit] and type(M.BuildAuras3UnitSection) == "function" then
             -- This workspace owns nested Buff/Debuff/Custom sections and previews;
             -- the lazy one-section proxy would stack those sections into one body.

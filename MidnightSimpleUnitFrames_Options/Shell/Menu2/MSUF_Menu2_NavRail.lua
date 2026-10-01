@@ -180,7 +180,7 @@ local function NavTooltipEnabled(btn)
     return btn._msuf2NavOff == true or (label and label.IsTruncated and label:IsTruncated())
 end
 local function CreateNavButton(parent, key, label, indent, availability)
-    local btn = T.Button(parent, M.Tr(label), NavItemWidth(indent), NAV_BUTTON_H)
+    local btn = T.Button(parent, label, NavItemWidth(indent), NAV_BUTTON_H)
     if btn._msuf2Label and btn._msuf2Label.SetFontObject and _G.GameFontHighlight then
         btn._msuf2Label:SetFontObject(_G.GameFontHighlight)
     end
@@ -310,7 +310,7 @@ local function CreateHistoryControls(parent)
             btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 32, 0)
             btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
             btn._msuf2Label:SetJustifyH("LEFT")
-            btn._msuf2Label:SetText(M.Tr(label))
+            btn._msuf2Label:SetText(label)
             T.StyleFontString(btn._msuf2Label, T.colors.text, NAV_TEXT_BUMP)
         end
         local icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 5))
@@ -402,6 +402,17 @@ local function CreateHistoryControls(parent)
     row.feedback = feedback
     row.feedbackIcon = feedbackIcon
     M.historyControls = row
+    -- The fade-out runs on a MenuTimer task; when the menu quiesces (or the
+    -- task is refused in combat) the message is cleared at once instead.
+    local function ClearHistoryFeedback()
+        row._msuf2FeedbackSerial = (row._msuf2FeedbackSerial or 0) + 1
+        feedback:SetText("")
+        feedback:SetAlpha(0)
+        feedbackIcon:SetAlpha(0)
+    end
+    M.MenuRuntime:SetQuiesceSettler("history-feedback", function()
+        if M.historyControls == row then ClearHistoryFeedback() end
+    end)
     function M.ShowHistoryFeedback(text, seconds)
         local controls = M.historyControls
         local message = controls and controls.feedback
@@ -418,9 +429,7 @@ local function CreateHistoryControls(parent)
             T.PlayMotion(message, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 })
             T.PlayMotion(icon, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 })
         end
-        local timer = C_Timer
-        if not (timer and timer.After) then return end
-        timer.After(tonumber(seconds) or 2.0, function()
+        local fade = C_Timer.After(tonumber(seconds) or 2.0, function()
             if M.historyControls ~= controls or controls._msuf2FeedbackSerial ~= serial then return end
             local function ClearFeedback()
                 if M.historyControls ~= controls or controls._msuf2FeedbackSerial ~= serial then return end
@@ -444,6 +453,7 @@ local function CreateHistoryControls(parent)
                 ClearFeedback()
             end
         end)
+        if not fade and controls == row then ClearHistoryFeedback() end
     end
     function M.RefreshHistoryControls()
         local controls = M.historyControls
@@ -786,7 +796,7 @@ local function BuildNavRail(parent)
             -- right so the title keeps its alignment above the page rows.
             local row = PixelLayoutRegion(CreateFrame("Button", nil, list))
             row:SetSize(NavItemWidth(0) - 2, 18)
-            local title = T.Font(row, "GameFontNormalSmall", M.Tr(item.title), T.colors.navHeaderText or T.colors.muted)
+            local title = T.Font(row, "GameFontNormalSmall", item.title, T.colors.navHeaderText or T.colors.muted)
             T.StyleFontString(title, T.colors.navHeaderText or T.colors.muted, NAV_TEXT_BUMP)
             title:SetJustifyH("LEFT")
             title:SetSize(NavItemWidth(0) - 20, 18)
@@ -811,7 +821,7 @@ local function BuildNavRail(parent)
         elseif item.header then
             local id = item.id or item.header
             if M.navHeaderState[id] == nil then M.navHeaderState[id] = item.defaultOpen ~= false end
-            local btn = T.Button(list, M.Tr(item.header), NavItemWidth(0), NAV_BUTTON_H)
+            local btn = T.Button(list, item.header, NavItemWidth(0), NAV_BUTTON_H)
             btn._msuf2NavHeader = true
             btn._msuf2NavHeaderId = id
             btn._msuf2RawLabel = item.header

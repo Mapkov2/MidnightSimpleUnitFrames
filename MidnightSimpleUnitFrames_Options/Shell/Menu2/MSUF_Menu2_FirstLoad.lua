@@ -219,7 +219,7 @@ local function CreateVersionRow(parent, T, text, contentWidth, top)
     local row = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
     row:SetSize(rowWidth, 20)
     row:SetPoint("TOP", parent, "TOP", 0, top)
-    local label = T.Font(row, "GameFontDisableSmall", Tr(text), T.colors.coreHot or T.colors.accent)
+    local label = T.Font(row, "GameFontDisableSmall", text, T.colors.coreHot or T.colors.accent)
     label:SetAllPoints(row)
     label:SetJustifyH("CENTER")
     return row
@@ -257,10 +257,11 @@ local function CreateProtectionPanel(parent, T, contentWidth, top, compact, inst
             local x = (i - 1) * itemWidth
             item:SetPoint("TOPLEFT", panel, "TOPLEFT", x, 0)
         end
-        local label = T.Font(item, "GameFontDisableSmall", Tr(spec[1]), T.colors.muted)
+        local label = T.Font(item, "GameFontDisableSmall", spec[1], T.colors.muted)
         label:SetPoint("TOPLEFT", item, "TOPLEFT", 16, -8)
-        local valueText = spec[4] == false and spec[2] or Tr(spec[2])
-        local value = T.Font(item, "GameFontNormalSmall", valueText, spec[3] and T.colors.ok or T.colors.text)
+        -- spec[4] == false marks a value shown as is (a profile name).
+        local value = T.Font(item, "GameFontNormalSmall", "", spec[3] and T.colors.ok or T.colors.text)
+        T.SetTranslatedText(value, spec[4] == false and spec[2] or Tr(spec[2]))
         value:SetPoint("TOPLEFT", item, "TOPLEFT", 16, -28)
         value:SetPoint("RIGHT", item, "RIGHT", -12, 0)
         value:SetJustifyH("LEFT")
@@ -292,7 +293,7 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
         -- Straddles the top border so the recommendation reads at a glance,
         -- like a pricing-card ribbon.
         local pill = T.Panel(card, nil, T.colors.coreRaised or T.colors.panel2, T.colors.accent or T.colors.coreBlue)
-        local pillText = T.Font(pill, "GameFontDisableSmall", Tr("RECOMMENDED"), T.colors.accent or T.colors.coreBlue)
+        local pillText = T.Font(pill, "GameFontDisableSmall", "RECOMMENDED", T.colors.accent or T.colors.coreBlue)
         pillText:SetPoint("CENTER", pill, "CENTER", 0, 0)
         pill:SetSize(floor((pillText:GetStringWidth() or 84) + 20), 20)
         pill:SetPoint("CENTER", card, "TOP", 0, 0)
@@ -301,30 +302,30 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
 
     if compact then
         CreateIconWell(card, T, data.icon, 30, 14, -34)
-        local meta = T.Font(card, "GameFontDisableSmall", Tr(data.meta), T.colors.coreHot or T.colors.accent)
+        local meta = T.Font(card, "GameFontDisableSmall", data.meta, T.colors.coreHot or T.colors.accent)
         meta:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -12)
         meta:SetPoint("RIGHT", card, "RIGHT", -16, 0)
         meta:SetJustifyH("LEFT")
-        local title = T.Font(card, "GameFontNormal", Tr(data.title), T.colors.text)
+        local title = T.Font(card, "GameFontNormal", data.title, T.colors.text)
         title:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -36)
         title:SetPoint("RIGHT", card, "RIGHT", -16, 0)
         title:SetJustifyH("LEFT")
-        local body = T.Font(card, "GameFontHighlightSmall", Tr(data.body), T.colors.muted)
+        local body = T.Font(card, "GameFontHighlightSmall", data.body, T.colors.muted)
         body:SetPoint("TOPLEFT", card, "TOPLEFT", 56, -56)
         SetTextLayout(body, width - 68, "LEFT")
     else
-        local timing = T.Font(card, "GameFontDisableSmall", Tr(data.timing), T.colors.muted)
+        local timing = T.Font(card, "GameFontDisableSmall", data.timing, T.colors.muted)
         timing:SetPoint("TOPRIGHT", card, "TOPRIGHT", -16, -16)
         timing:SetJustifyH("RIGHT")
-        local meta = T.Font(card, "GameFontDisableSmall", Tr(data.meta), T.colors.coreHot or T.colors.accent)
+        local meta = T.Font(card, "GameFontDisableSmall", data.meta, T.colors.coreHot or T.colors.accent)
         meta:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
         meta:SetPoint("RIGHT", timing, "LEFT", -8, 0)
         meta:SetJustifyH("LEFT")
         CreateIconWell(card, T, data.icon, 34, 16, -42)
-        local title = T.Font(card, "GameFontNormal", Tr(data.title), T.colors.text)
+        local title = T.Font(card, "GameFontNormal", data.title, T.colors.text)
         title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -88)
         SetTextLayout(title, width - 32, "LEFT")
-        local body = T.Font(card, "GameFontHighlightSmall", Tr(data.body), T.colors.muted)
+        local body = T.Font(card, "GameFontHighlightSmall", data.body, T.colors.muted)
         body:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -112)
         SetTextLayout(body, width - 32, "LEFT")
     end
@@ -340,7 +341,7 @@ local function CreateRouteCard(parent, T, data, x, top, width, height, compact)
 end
 
 local function CreateFooterButton(parent, T, label, x, top, width, onClick, id)
-    local button = T.Button(parent, Tr(label), width, 24)
+    local button = T.Button(parent, label, width, 24)
     button._msuf2SkipHistoryCheckpoint = true
     button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, top)
     if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
@@ -542,7 +543,6 @@ function M.BuildFirstLoadDashboardScene(ctx)
     else
         copyText = "Your frames are ready now. Follow the complete guided setup, import a profile, or start playing with the defaults."
     end
-    copyText = Tr(copyText)
     local copy = type(W.LabelAt) == "function"
         and W.LabelAt(scene, copyText, 0, copyTop, min(700, contentWidth), "GameFontHighlight", T.colors.muted)
         or T.Font(scene, "GameFontHighlight", copyText, T.colors.muted)
@@ -634,7 +634,7 @@ function M.BuildFirstLoadDashboardScene(ctx)
     -- Closing the window without a choice keeps the scene armed; say so instead
     -- of surprising the player when it comes back after the next open.
     local hintTop = footnoteTop - 18
-    local hint = T.Font(scene, "GameFontDisableSmall", Tr("Pick any option to continue - this page will not show again."), T.colors.dim)
+    local hint = T.Font(scene, "GameFontDisableSmall", "Pick any option to continue - this page will not show again.", T.colors.dim)
     hint:SetPoint("TOP", scene, "TOP", 0, hintTop)
     SetTextLayout(hint, contentWidth, "CENTER")
 

@@ -201,13 +201,6 @@ local UNIT_CP_ROUNDED_OPTS = {
 }
 local NormalizePreviewClassPowerShape = CPPreview.NormalizeClassShape
 local NormalizePreviewClassPowerShapeAlign = _G.MSUF_UF_NormalizeShapeAlign
-local function PreviewClassPowerSegmentCount(spec, limit)
-    local count = math.floor(tonumber(spec and spec.segments) or 5)
-    if count < 1 then count = 1 end
-    limit = tonumber(limit) or 10
-    if count > limit then count = limit end
-    return count
-end
 local function PreviewClassPowerAutoFitWidth(segCount, height, gap)
     segCount = math.floor(tonumber(segCount) or 1)
     if segCount < 1 then segCount = 1 elseif segCount > 10 then segCount = 10 end
@@ -1623,7 +1616,7 @@ function Stage.ResolvePowerGeometry(st)
     local displayPowerToken = box._playerManaSourcePreviewActive and "MANA" or data.powerToken
     local cpH = classPowerOn and (tonumber(bars.classPowerHeight) or 4) or 0
     if cpH < 2 then cpH = 2 elseif cpH > 30 then cpH = 30 end
-    local classPowerSegCount = PreviewClassPowerSegmentCount(classPowerPreviewSpec, 10)
+    local classPowerSegCount = CPPreview.SegmentCount(classPowerPreviewSpec)
     box._runtimeClassPowerW = classPowerOn and PreviewClassPowerWidth(bars, w, cpH, classPowerSegCount) or 0
     -- Augmentation no longer builds a composite surface: Ebon Might is rendered
     -- by the ordinary Player Power bar and Essence stays an ordinary Class
@@ -1726,7 +1719,7 @@ function Stage.MeasureTextFootprint(st, Preview)
         local rawBaseline = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
         if rawBaseline < -4 then rawBaseline = -4 elseif rawBaseline > 4 then rawBaseline = 4 end
         if PreviewLayerWanted(box, "nameText") and conf.showName ~= false and (not runtimeSpec or runtimeSpec.showName ~= false) then
-            local label = R.ShortenPreviewName(data.name, key, conf)
+            local label = R.ShortenPreviewName(data.name, runtimeText, conf)
             if runtimeText and runtimeText.directLayout == true then
                 minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directName", "CENTER", "CENTER", 0, 0, ApproxTextWidth(label, rawNameSize, 14), rawNameSize + 6, w, h)
             else
@@ -2613,9 +2606,8 @@ function Stage.RenderClassPower(st)
                 (cp.shapeInfo or cp.rounded) and 0 or cp.bgAlpha)
             mock.classPower:SetBackdropBorderColor(0, 0, 0, (cp.shapeInfo or cp.rounded) and 0 or 1)
         end
-        cp.segCount = floor(tonumber(cp.preview and cp.preview.segments) or 5)
-        if cp.segCount < 1 then cp.segCount = 1 end
-        if mock.classPower.segments and cp.segCount > #mock.classPower.segments then cp.segCount = #mock.classPower.segments end
+        cp.segCount = CPPreview.SegmentCount(cp.preview)
+        mock.classPower:EnsureSegmentSlots(cp.segCount)
         local previewW = S(cpW)
         local rawGap = cp.shapeInfo and (tonumber(bars.classPowerGap) or 0) or ((tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0))
         local gap = max(0, S(rawGap))
@@ -3070,7 +3062,7 @@ end
 function Stage.RenderTextContent(st)
     local D, R, box, conf, data, detachedPowerManagedByClassPreview, floor, format = st.D, st.R, st.box, st.conf, st.data, st.detachedPowerManagedByClassPreview, st.floor, st.format
     local key, mock, powerFrac, runtimeSpec, runtimeStatus, runtimeText = st.key, st.mock, st.powerFrac, st.runtimeSpec, st.runtimeStatus, st.runtimeText
-    mock.nameText:SetText(R.ShortenPreviewName(data.name, key, conf))
+    mock.nameText:SetText(R.ShortenPreviewName(data.name, runtimeText, conf))
     mock.raidGroupNameText:SetText(D.PreviewRaidGroupNameText(conf))
     -- Live snapshots carry the frame's exact values; the stylized pair only
     -- backs mock data. Animated refreshes strip hpCur/powerCur so texts follow
@@ -3194,7 +3186,7 @@ function Stage.LayoutTextSlots(st)
             local tr, tg, tb = R.PreviewNameColor("target", data, fr, fg, fb)
             local ir, ig, ib = R.PreviewToTInlineColor(totConf.totInlineColorMode, totData, tr, tg, tb, fr, fg, fb)
             mock.totInlineSep:SetText(sep ~= "" and sep or " ")
-            mock.totInlineText:SetText(R.ShortenPreviewName(totData.name, "targettarget", conf))
+            mock.totInlineText:SetText(R.ShortenPreviewName(totData.name, runtimeText and runtimeText.inlineToT, conf))
             mock.totInlineText:SetTextColor(ir, ig, ib, box._fontPreviewTextAlpha)
             local inlineAnchor = (showRaidGroupName and raidGroupAnchor == "NAMERIGHT") and mock.raidGroupNameText or mock.nameText
             mock.totInlineSep:ClearAllPoints()

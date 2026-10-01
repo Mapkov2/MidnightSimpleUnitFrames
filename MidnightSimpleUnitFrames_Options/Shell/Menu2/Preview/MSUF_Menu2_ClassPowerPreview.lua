@@ -293,8 +293,7 @@ end
 local function HPColor(bars, spec)
     local mode = tostring(bars and bars.playerHPBarColorMode or "GLOBAL"):upper()
     if mode == "DARK" then
-        local cache = type(_G.MSUF_UFCore_GetSettingsCache) == "function" and _G.MSUF_UFCore_GetSettingsCache() or nil
-        return (cache and cache.darkBarR) or 0.07, (cache and cache.darkBarG) or 0.07, (cache and cache.darkBarB) or 0.08
+        return Helpers.DarkBarColor(type(_G.MSUF_UFCore_GetSettingsCache) == "function" and _G.MSUF_UFCore_GetSettingsCache() or nil)
     end
     if mode == "GRADIENT" then
         local pct = 0.74
@@ -712,6 +711,20 @@ local function MakeTexture(parent, layer, subLevel, allPoints, hidden)
     if hidden then tex:Hide() end
     return tex
 end
+--- Segment slots of the class resource row. Ten cover every pip resource;
+--- Sweeping Strikes shows 18 stacks (MSUF_CP_NativeAuras.lua), so the row
+--- grows once to the largest count it has shown and keeps the slots.
+local function EnsureClassPowerSlots(frame, count)
+    for i = #frame.segments + 1, count do
+        frame.bgs[i] = MakeTexture(frame, "BACKGROUND", nil, nil, true)
+        frame.segments[i] = MakeTexture(frame, "ARTWORK", nil, nil, true)
+        frame.edges[i] = MakeTexture(frame, "OVERLAY", 5, nil, true)
+        local runeText = MakeText(frame.textOwner, "OVERLAY", "CENTER", 9)
+        runeText:Hide()
+        frame.runeTexts[i] = runeText
+        frame.hashes[i] = MakeTexture(frame, "OVERLAY", 7, nil, true)
+    end
+end
 local function EnsureClassPower(preview)
     if preview.classPower then return preview.classPower end
     local frame = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate"))
@@ -723,15 +736,7 @@ local function EnsureClassPower(preview)
     if frame.textOwner.EnableMouse then frame.textOwner:EnableMouse(false) end
     frame.segments, frame.bgs, frame.edges, frame.runeTexts, frame.hashes = {}, {}, {}, {}, {}
     frame.notches = {}
-    for i = 1, 10 do
-        frame.bgs[i] = MakeTexture(frame, "BACKGROUND", nil, nil, true)
-        frame.segments[i] = MakeTexture(frame, "ARTWORK", nil, nil, true)
-        frame.edges[i] = MakeTexture(frame, "OVERLAY", 5, nil, true)
-        local runeText = MakeText(frame.textOwner, "OVERLAY", "CENTER", 9)
-        runeText:Hide()
-        frame.runeTexts[i] = runeText
-        frame.hashes[i] = MakeTexture(frame, "OVERLAY", 7, nil, true)
-    end
+    EnsureClassPowerSlots(frame, 10)
     frame.text = MakeText(frame.textOwner, "OVERLAY", "CENTER", 9)
     frame.text:Hide()
     preview.classPower = frame
@@ -860,12 +865,7 @@ local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth, nativeB
     if maxWidth and width > maxWidth then width = maxWidth end
     return floor(width + 0.5)
 end
-local function SegmentCount(spec)
-    local count = floor(tonumber(spec and spec.segments) or 5)
-    local limit = spec and spec.token == "SWEEPING_STRIKES" and 18 or 10
-    if count < 1 then count = 1 elseif count > limit then count = limit end
-    return count
-end
+local SegmentCount = CPPreview.SegmentCount
 
 local function IsAugCompositePreviewSpec(spec)
     return spec and spec.key == "evoker_augmentation_ebon"
@@ -911,6 +911,7 @@ local function RenderClassPower(preview, bars, player, spec)
     end
     local h = Clamp(bars.classPowerHeight, 4, 2, 30)
     local count = SegmentCount(spec)
+    EnsureClassPowerSlots(frame, count)
     -- Augmentation is no longer special here: Ebon Might lives on the Player
     -- Power bar, so Essence is an ordinary Class Resource with its own width,
     -- offsets and anchor.
@@ -2394,6 +2395,13 @@ function Preview.Create(ctx, builder)
     box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp", 0)
     box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText", 2)
     function box:Refresh()
+        -- Like the unit preview, never render in combat: the refresh waits for
+        -- PLAYER_REGEN_ENABLED (the menu closes at combat start; this covers a
+        -- surface that is still shown).
+        if PreviewAnimationInCombat() then
+            if self.RegisterEvent then self:RegisterEvent("PLAYER_REGEN_ENABLED") end
+            return
+        end
         --- Keep the persisted Guides choice authoritative across factory reset,
         --- profile switch and Search mutation even when this preview frame
         --- was already constructed under the previous profile table.
@@ -2451,6 +2459,11 @@ function Preview.Create(ctx, builder)
     function box:RefreshAnimation()
         return RefreshClassPowerAnimation(box)
     end
+    box:SetScript("OnEvent", function(self, event)
+        if event ~= "PLAYER_REGEN_ENABLED" then return end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        if self:IsShown() and self:_msufCPPreviewHostShown() then self:Refresh() end
+    end)
     function box:_msufCPPreviewHostShown()
         if tostring(M.activeKey or "") ~= tostring(self._msufCPPreviewPageKey or "classpower") then return false end
         if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end

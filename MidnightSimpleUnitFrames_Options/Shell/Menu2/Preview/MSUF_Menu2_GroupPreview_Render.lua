@@ -1328,48 +1328,25 @@ local function PlaceTextHandles(scene)
     H.ApplyTextFocus(box, mock)
 end
 
--- One iterator for the live-frame strata walk instead of a closure per repaint.
-local hostStrataWalk = {}
-local function HostStrataVisit(frame, _, frameKind)
-    local walk = hostStrataWalk
-    if not (frame and frame.GetFrameStrata) then return false end
-    local S = walk.S
-    local strata = frame:GetFrameStrata()
-    if S.issecretvalue(strata) == true or not strata or strata == "" then return false end
-    strata = S.NormalizeFrameStrata(strata, S.PREVIEW_UNITFRAME_STRATA)
-    walk.fallback = walk.fallback or strata
-    if frameKind == walk.kind or frame._msufGFKind == walk.kind then walk.live = strata; return true end
-    return false
-end
+--- Strata of the preview host. Handles and effect roots stay on it: the live
+--- runtime keeps every layer-aware element on its owning frame's strata, so
+--- neither a live frame's strata nor a configured legacy strata applies here.
 local function PreviewHostStrata(scene)
-    local gf, kind, S = scene.gf, scene.kind, scene.S
-    local live, fallback
-    if gf and type(gf.ForEachFrame) == "function" then
-        local walk = hostStrataWalk
-        walk.S, walk.kind, walk.live, walk.fallback = S, kind, nil, nil
-        gf.ForEachFrame(HostStrataVisit, true)
-        live, fallback = walk.live, walk.fallback
-        walk.S, walk.live, walk.fallback = nil, nil, nil
-    end
-    live = S.NormalizeFrameStrata(live or fallback or S.PREVIEW_UNITFRAME_STRATA, S.PREVIEW_UNITFRAME_STRATA)
-    if live == "AUTO" then live = S.PREVIEW_UNITFRAME_STRATA end
+    local S = scene.S
     local host = scene.mock.GetFrameStrata and scene.mock:GetFrameStrata()
     if S.issecretvalue(host) == true or not host or host == "" then
         host = scene.box.GetFrameStrata and scene.box:GetFrameStrata()
         if S.issecretvalue(host) == true or host == "" then host = nil end
     end
-    return live, host
+    return host
 end
 
-local function ApplyHandleStrata(scene, handle, value, live, host)
+local function ApplyHandleStrata(scene, handle, host)
     local S = scene.S
     if handle and handle.SetFrameStrata and host then
         local current = handle.GetFrameStrata and handle:GetFrameStrata()
         if S.issecretvalue(current) == true or current ~= host then handle:SetFrameStrata(host) end
     end
-    -- Legacy strata is deliberately ignored: the live runtime now keeps every
-    -- layer-aware element on the owning frame's strata as well.
-    return 0
 end
 
 local function SyncIconDetailLevels(layers, handle)
@@ -1415,7 +1392,7 @@ local function FinalizeScene(scene)
             type(effect) == "table" and tostring(effect.type or "none"):lower() or nil)
     end
     PlaceTextHandles(scene)
-    local liveStrata, hostStrata = PreviewHostStrata(scene)
+    local hostStrata = PreviewHostStrata(scene)
     local auraHandles = {
         { S.buffHandle, scene.buffCfg, 5 },
         { S.trackedBuffHandle, scene.trackedBuffCfg, 9 },
@@ -1425,7 +1402,7 @@ local function FinalizeScene(scene)
     for i = 1, #auraHandles do
         local item, handle = auraHandles[i], auraHandles[i][1]
         if handle then
-            ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
+            ApplyHandleStrata(scene, handle, hostStrata)
             local level = SetPreviewFrameLevel(handle, ElementLevel(item[2].layer, item[3], 0))
             for j = 1, #(handle._auraStyleOwners or {}) do
                 local owner = handle._auraStyleOwners[j]
@@ -1449,15 +1426,14 @@ local function FinalizeScene(scene)
     -- dead in the preview while it worked on the real frame.
     local dispelSymbolCfg = scene.runtimeSpec and scene.runtimeSpec.dispelSymbol
     if S.dispelSymbolHandle then
-        ApplyHandleStrata(scene, S.dispelSymbolHandle, dispelSymbolCfg and dispelSymbolCfg.strata or "AUTO", liveStrata, hostStrata)
+        ApplyHandleStrata(scene, S.dispelSymbolHandle, hostStrata)
         SetPreviewFrameLevel(S.dispelSymbolHandle, ElementLevel(dispelSymbolCfg and dispelSymbolCfg.layer, 8, 8))
     end
     local rawIndicators = conf.spellIndicators or {}
     local runtimeIndicators = scene.runtimeSpellIndicators or {}
     local spellLayer = runtimeIndicators.layer ~= nil and runtimeIndicators.layer or rawIndicators.layer
-    local spellStrata = runtimeIndicators.strata ~= nil and runtimeIndicators.strata or rawIndicators.strata
     local selected = scene.selectedSpellCfg
-    ApplyHandleStrata(scene, S.spellHandle, "AUTO", liveStrata, hostStrata)
+    ApplyHandleStrata(scene, S.spellHandle, hostStrata)
     SetPreviewFrameLevel(S.spellHandle, ElementLevel(selected and selected.layer or spellLayer, 9, 1))
     SyncIconDetailLevels(S.Layers, S.spellHandle)
     local selectedEffectOwner = box._msufGFSelectedSpellEffectOwner
@@ -1470,7 +1446,7 @@ local function FinalizeScene(scene)
         -- that live frame can remain on a higher strata during teardown and
         -- produce a negative local offset below the menu mock. Keep the preview
         -- root on the host strata and express priority in a bounded local band.
-        ApplyHandleStrata(scene, selectedEffectRoot, "AUTO", liveStrata, hostStrata)
+        ApplyHandleStrata(scene, selectedEffectRoot, hostStrata)
         SetPreviewFrameLevel(selectedEffectRoot, SelectedSpellEffectLevel(effectLayer, priority))
     end
     if selectedEffectOwner then
@@ -1478,26 +1454,24 @@ local function FinalizeScene(scene)
     end
     local selectedIconEffectRoot = S.spellHandle._msufSpellPreviewIconEffectRoot
     if selectedIconEffectRoot and selectedIconEffectRoot.IsShown and selectedIconEffectRoot:IsShown() then
-        ApplyHandleStrata(scene, selectedIconEffectRoot,
-            selected and selected.strata or spellStrata, liveStrata, hostStrata)
+        ApplyHandleStrata(scene, selectedIconEffectRoot, hostStrata)
         SetPreviewFrameLevel(selectedIconEffectRoot, S.spellHandle:GetFrameLevel() + 4)
     end
     for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
-        ApplyHandleStrata(scene, handle, "AUTO", liveStrata, hostStrata)
+        ApplyHandleStrata(scene, handle, hostStrata)
         SetPreviewFrameLevel(handle, ElementLevel(handle._msufSpellIndicatorLayer or spellLayer, 9, 1))
         SyncIconDetailLevels(S.Layers, handle)
         local effectRoot = handle._msufSpellPreviewEffectRoot
         if effectRoot and effectRoot.IsShown and effectRoot:IsShown() then
             local priority = max(1, min(10, floor((tonumber(effectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
             local effectLayer = S.ClampLayer(effectRoot._msufSpellPreviewLayer, 0)
-            ApplyHandleStrata(scene, effectRoot, "AUTO", liveStrata, hostStrata)
+            ApplyHandleStrata(scene, effectRoot, hostStrata)
             SetPreviewFrameLevel(effectRoot, SpellEffectPreviewLevel(effectLayer, priority,
                 effectRoot._msufSpellPreviewKind))
         end
         local iconEffectRoot = handle._msufSpellPreviewIconEffectRoot
         if iconEffectRoot and iconEffectRoot.IsShown and iconEffectRoot:IsShown() then
-            ApplyHandleStrata(scene, iconEffectRoot,
-                handle._msufSpellIndicatorStrata or spellStrata, liveStrata, hostStrata)
+            ApplyHandleStrata(scene, iconEffectRoot, hostStrata)
             SetPreviewFrameLevel(iconEffectRoot, handle:GetFrameLevel() + 4)
         end
     end

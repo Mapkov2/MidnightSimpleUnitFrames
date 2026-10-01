@@ -26,22 +26,16 @@ local function Clamp(value, minValue, maxValue)
     if value > maxValue then return maxValue end
     return value
 end
-local function Print(msg)
-    if type(print) == "function" then print("|cff00ff00MSUF:|r " .. tostring(msg or "")) end
-end
 local Tr = MSUF.Translate
 M.TranslateText = Tr
+-- The core (Kernel/MSUF_Util.lua) owns the combat lock and its throttled,
+-- translated message, and publishes both on MSUF.Public before the Options
+-- package can load.
 local function IsConfigCombatLocked()
-    if type(_G.MSUF_IsConfigCombatLocked) == "function" then return _G.MSUF_IsConfigCombatLocked() and true or false end
-    if _G.InCombatLockdown and _G.InCombatLockdown() then return true end
-    return false
+    return MSUF.Public.IsConfigCombatLocked() and true or false
 end
 local function ShowConfigCombatLockMessage()
-    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-        _G.MSUF_ShowConfigCombatLockMessage()
-    else
-        Print("Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
-    end
+    return MSUF.Public.ShowConfigCombatLockMessage()
 end
 local function BlockConfigCombatLocked(silent)
     if not IsConfigCombatLocked() then return false end
@@ -49,6 +43,7 @@ local function BlockConfigCombatLocked(silent)
     return true
 end
 M.IsConfigCombatLocked = M.IsConfigCombatLocked or IsConfigCombatLocked
+M.ShowConfigCombatLockMessage = ShowConfigCombatLockMessage
 
 -- Every delayed Menu2-only task goes through this registry. C_Timer.After
 -- cannot be cancelled, so a callback queued while the menu is open would
@@ -62,6 +57,13 @@ local Runtime = M.MenuRuntime
 if type(Runtime) ~= "table" then
     Runtime = {}
     M.MenuRuntime = Runtime
+end
+-- Transient chrome (the status and history feedback lines) fades out
+-- on a MenuTimer task. Quiesce cancels every task, so each owner registers how
+-- its chrome settles at once; nothing stale waits for the next open.
+local quiesceSettlers = {}
+function Runtime:SetQuiesceSettler(key, settle)
+    quiesceSettlers[key] = settle
 end
 
 function Runtime:CancelPendingTasks(reason)
@@ -141,6 +143,7 @@ function Runtime:Quiesce(reason)
     if search and type(search.CancelSearchBackgroundIndex) == "function" then search.CancelSearchBackgroundIndex() end
     local theme = M.Theme
     if theme and type(theme.StopAllMenuAnimations) == "function" then theme.StopAllMenuAnimations() end
+    for _, settle in pairs(quiesceSettlers) do settle(reason) end
     return true
 end
 local function EnsureGeneral()

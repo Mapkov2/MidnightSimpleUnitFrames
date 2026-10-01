@@ -270,7 +270,7 @@ RegisterMenuCommand({
         local total, missing = 0, 0
         if type(M.GetLocaleCoverage) == "function" then total, missing = M.GetLocaleCoverage() end
         local locale = MSUF.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
-        print(string.format("|cff00b7ebMSUF2|r locale %s: %d keys seen, %d missing translations.", locale, total or 0, missing or 0))
+        print("|cff00b7ebMSUF|r " .. Fmt("Locale %s: %d keys seen, %d missing translations.", locale, total or 0, missing or 0))
     end,
 })
 
@@ -284,7 +284,7 @@ RegisterMenuCommand({
         if type(_G.MSUF_VersionCheck_DebugFakeUpdate) == "function" then
             _G.MSUF_VersionCheck_DebugFakeUpdate()
         else
-            print("|cffffd700MSUF:|r Version test helper is not loaded.")
+            print("|cffffd700MSUF:|r " .. M.Tr("Version test helper is not loaded."))
         end
     end,
 })
@@ -299,7 +299,7 @@ RegisterMenuCommand({
         local msg = rest:lower()
         local firstLoad = MSUF and MSUF.FirstLoad6
         if type(firstLoad) ~= "table" or type(firstLoad.Reset) ~= "function" then
-            print("|cff00b7ebMSUF|r: First-load module is not loaded.")
+            print("|cff00b7ebMSUF|r: " .. M.Tr("First-load module is not loaded."))
             return
         end
         local arg = msg:match("^(%S+)") or ""
@@ -322,7 +322,7 @@ RegisterMenuCommand({
             return
         end
         if arg ~= "" and arg ~= "fresh" and arg ~= "upgrade" then
-            print("|cff00b7ebMSUF|r: Usage: /msuf firstload [fresh|upgrade|status]")
+            print("|cff00b7ebMSUF|r: " .. Fmt("Usage: %s", "/msuf firstload [fresh|upgrade|status]"))
             return
         end
         if M.BlockCombatAction and M.BlockCombatAction() then return end

@@ -32,10 +32,9 @@ end
 -- MSUF_Menu2_Bindings_History.lua and the page "Reset to defaults" logic in
 -- MSUF_Menu2_Bindings_Reset.lua; both load right after this file and publish
 -- through the same M table.
-local refreshQueued = false
-local refreshTimer
+local refreshTask
 local MENU_REFRESH_DELAY = 0.04
-local C_Timer = M.MenuTimer or _G.C_Timer
+local MenuTimer = M.MenuTimer
 local UNIT_KEYS = KS("player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena")
 M.UNIT_KEYS = UNIT_KEYS
 local TEXT_SLOT_SIDES = { "Left", "Center", "Right" }
@@ -188,16 +187,10 @@ local IsConfigCombatLocked = M.IsConfigCombatLocked
 function M.IsConfigCombatLocked()
     return IsConfigCombatLocked()
 end
-function M.ShowConfigCombatLockMessage()
-    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-        _G.MSUF_ShowConfigCombatLockMessage()
-    elseif print then
-        print("|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
-    end
-end
+local ShowConfigCombatLockMessage = M.ShowConfigCombatLockMessage
 function M.BlockCombatAction()
     if not IsConfigCombatLocked() then return false end
-    M.ShowConfigCombatLockMessage()
+    ShowConfigCombatLockMessage()
     return true
 end
 function M.StageFactoryReset()
@@ -214,27 +207,25 @@ local function BlockCombatAndRefresh(ctx)
     return true
 end
 
+-- A queued refresh is the MenuTimer task itself, never a separate flag: the
+-- menu runtime cancels every pending task when the menu hides or combat starts,
+-- and a flag set beside a cancelled task would refuse every later request.
+local function TaskPending(task)
+    return task ~= nil and task.active == true
+end
+local function RunMenuRefresh()
+    refreshTask = nil
+    if IsConfigCombatLocked() then return end
+    if M.frame and M.frame.IsShown and M.frame:IsShown() and M.Refresh then M.Refresh() end
+end
 local function QueueMenuRefresh()
-    if refreshQueued then return end
-    refreshQueued = true
-    local function Run()
-        refreshQueued = false
-        refreshTimer = nil
-        if IsConfigCombatLocked() then return end
-        if M.frame and M.frame.IsShown and M.frame:IsShown() and M.Refresh then M.Refresh() end
-    end
-    if C_Timer and C_Timer.NewTimer then
-        refreshTimer = C_Timer.NewTimer(MENU_REFRESH_DELAY, Run)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(MENU_REFRESH_DELAY, Run)
-    else
-        Run()
-    end
+    if TaskPending(refreshTask) then return end
+    refreshTask = MenuTimer.NewTimer(MENU_REFRESH_DELAY, RunMenuRefresh)
 end
 local function CancelQueuedMenuRefresh()
-    refreshQueued = false
-    if refreshTimer and refreshTimer.Cancel then refreshTimer:Cancel() end
-    refreshTimer = nil
+    local task = refreshTask
+    refreshTask = nil
+    if task then task:Cancel() end
 end
 -- The History sibling notifies through the coalesced menu refresh and the
 -- Reset sibling finishes a page reset with it; both pick these from M.
@@ -306,45 +297,29 @@ local function RunRefreshList(refreshers)
         if type(fn) == "function" then fn() end
     end
 end
+local activeRefreshTask
+local function RunActiveRefresh()
+    activeRefreshTask = nil
+    local active = ResolveRefreshEntry()
+    if active then M.RunEntryRefreshers(active) end
+end
 function M.RequestRefresh(ctx, reason)
     local entry = ResolveRefreshEntry(ctx)
     if entry then
-        if entry._msuf2RefreshQueued then return true end
+        if TaskPending(entry._msuf2RefreshQueued) then return true end
         M.MarkMenuDataDirty(reason or "request-refresh")
-        entry._msuf2RefreshQueued = true
         -- Refreshers are entry-local and de-duplicated, so rebuilding one page does not force
         -- all Menu2 controls to resync.
-        local function Run()
+        entry._msuf2RefreshQueued = MenuTimer.After(MENU_REFRESH_DELAY, function()
             entry._msuf2RefreshQueued = nil
             if entry._msuf2Invalidated then return end
-            if M.RunEntryRefreshers then
-                M.RunEntryRefreshers(entry)
-            else
-                RunRefreshList(entry.refreshers)
-            end
-        end
-        if C_Timer and C_Timer.After then
-            C_Timer.After(MENU_REFRESH_DELAY, Run)
-        else
-            Run()
-        end
+            M.RunEntryRefreshers(entry)
+        end)
         return true
     end
-    if M._msuf2RefreshQueued then return true end
+    if TaskPending(activeRefreshTask) then return true end
     M.MarkMenuDataDirty(reason or "request-refresh")
-    M._msuf2RefreshQueued = true
-    local function Run()
-        M._msuf2RefreshQueued = nil
-        local active = ResolveRefreshEntry()
-        if active then
-            if M.RunEntryRefreshers then M.RunEntryRefreshers(active) else RunRefreshList(active.refreshers) end
-        end
-    end
-    if C_Timer and C_Timer.After then
-        C_Timer.After(MENU_REFRESH_DELAY, Run)
-    else
-        Run()
-    end
+    activeRefreshTask = MenuTimer.After(MENU_REFRESH_DELAY, RunActiveRefresh)
     return true
 end
 function M.Refresh(ctx)
@@ -507,11 +482,7 @@ function M.BindSlider(ctx, slider, getValue, setValue, metadata)
         -- Some Slider implementations deliver their final OnValueChanged after
         -- OnMouseUp; committing on the next event tick folds that value into the
         -- same single Undo/Redo step without any recurring timer or idle work.
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, function() M.CommitHistoryTransaction() end)
-        else
-            M.CommitHistoryTransaction()
-        end
+        MenuTimer.After(0, function() M.CommitHistoryTransaction() end)
     end
     slider._msuf2BeginSliderHistory = BeginSliderHistory
     slider._msuf2CommitSliderHistory = CommitSliderHistory

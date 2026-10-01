@@ -1115,7 +1115,7 @@ local function TrackUnitStyleBadges(S)
             if lane == "debuff" then
                 local borderMode = ReadScopeDebuffBorderMode()
                 frameBasicsBadges[#frameBasicsBadges + 1] = {
-                    text = "Border " .. ChoiceLabel(DEBUFF_TYPE_BORDER_MODE_VALUES, borderMode, borderMode),
+                    text = M.Format("Border %s", M.Tr(ChoiceLabel(DEBUFF_TYPE_BORDER_MODE_VALUES, borderMode, borderMode))),
                     kind = borderMode == "OFF" and "muted" or "accent",
                     showWhenClosed = true,
                 }
