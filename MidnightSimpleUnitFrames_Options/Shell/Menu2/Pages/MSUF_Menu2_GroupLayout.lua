@@ -467,7 +467,7 @@ local function BuildGFGeometrySection(ctx, b)
     local rules = W.ControlCard(section, "Group visibility", nil, 20, -246, inner, 262 - missingRows * 36)
     local organization = {}
     for i, entry in ipairs(visibilityRows) do
-        organization[entry[2]] = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(rules, entry[1], 16, -40 - (i - 1) * 36, inner - 32), "layout"), entry[2], false, "rebuild")
+        organization[entry[2]] = M.GroupFrameAdditionalSections.ExactScope(BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(rules, entry[1], 16, -40 - (i - 1) * 36, inner - 32), "layout"), entry[2], false, "rebuild"), entry[2])
     end
     W.Text(rules, "Group visibility options apply only to their matching Party, Raid, or Mythic Raid scope. Empty groups collapse when Preserve raid groups is enabled.", 16, -188 + missingRows * 36, inner - 32, T.colors.muted)
     TrackSectionRefresh(ctx, section, function()
@@ -644,8 +644,8 @@ local function BuildGFSortingSection(ctx, b)
         SetSectionBadgesAndStatus(sorting, badges)
     end
     local classCard = W.ControlCard(sorting, "Class priority", "Drag classes to reorder within the current group and role order.", 20, -280, sortingInnerW, 418)
-    BindScopeToggle(ctx, W.ToggleAt(classCard, "Use class priority", 16, -36, sortingInnerW - 32),
-        "sortClassPriority", false, "rebuild")
+    M.GroupFrameAdditionalSections.ExactScope(BindScopeToggle(ctx, W.ToggleAt(classCard, "Use class priority", 16, -36, sortingInnerW - 32),
+        "sortClassPriority", false, "rebuild"), "sortClassPriority")
     BuildClassPriorityRows(ctx, classCard, sortingInnerW)
     TrackSectionRefresh(ctx, sorting, refreshSortingControls)
 end
@@ -688,21 +688,21 @@ local function BuildGFScalingSection(ctx, b)
         local control = baseSlider(ctx, parent, label, low, high, step, sliderWidth, key, default, mode, x, y, placeWidth, justify, meta)
         meta.label, meta.kind = label, "slider"
         M.RegisterSearchWidget(control, meta)
-        return AttachGroupFocus(control, "layout")
+        return AttachGroupFocus(M.GroupFrameAdditionalSections.ExactScope(control, key, meta.prepareExactSearchTarget), "layout")
     end
     local function ScopeDropdown(ctx, parent, label, values, sliderWidth, key, default, mode, x, y, placeWidth)
         local meta = SizingMeta(key, "general")
         local control = baseDropdown(ctx, parent, label, values, sliderWidth, key, default, mode, x, y, placeWidth, "LEFT", meta)
         meta.label, meta.kind, meta.values = label, "dropdown", values
         M.RegisterSearchWidget(control, meta)
-        return control
+        return M.GroupFrameAdditionalSections.ExactScope(control, key, meta.prepareExactSearchTarget)
     end
     local function BindScopeToggle(ctx, widget, key, default, mode)
         local meta = SizingMeta(key, "general")
         local control = baseToggle(ctx, widget, key, default, mode, meta)
         meta.kind = "toggle"
         M.RegisterSearchWidget(control, meta)
-        return control
+        return M.GroupFrameAdditionalSections.ExactScope(control, key, meta.prepareExactSearchTarget)
     end
     local general = frames.general
     local sizeCard = W.ControlCard(general, "Base dimensions", "Used before scaling and raid size overrides.", 20, -4, col, 248)

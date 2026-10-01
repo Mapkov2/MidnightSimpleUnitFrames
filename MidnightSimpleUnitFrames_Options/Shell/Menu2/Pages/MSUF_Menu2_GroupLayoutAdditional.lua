@@ -4,12 +4,45 @@ local M = MSUF.MSUF2
 local W, T, GP = M.Widgets, M.Theme, M.GroupPage
 local max, min, floor = math.max, math.min, math.floor
 local BindScopeToggle, ScopeSlider, ScopeDropdown, ScopeColor = GP.BindScopeToggle, GP.ScopeSlider, GP.ScopeDropdown, GP.ScopeColor
+-- Release links select a declared scope and retain any existing tab hook.
+local EXACT_SCOPES = {
+    centerSolo = { "party" }, smallRaidAsParty = { "party" },
+    collapseEmptyGroups = { "raid", "mythicraid" },
+    hideMythicGroupsFiveToEight = { "mythicraid" },
+    layoutTiersEnabled = { "raid", "mythicraid" },
+    excludeHiddenGroups = { "raid", "mythicraid" },
+}
+local function WithExactGroupScope(widget, key, prepare)
+    if not widget then return widget end
+    local contracts = {}
+    for _, scope in ipairs(EXACT_SCOPES[key] or { "party", "raid", "mythicraid" }) do
+        if MSUF.Client.SupportsGroupKind(scope) then contracts[scope] = "gf_" .. scope .. "." .. key end
+    end
+    local previousPrepare = widget._msuf2PrepareExactSearchTarget
+    widget._msuf2ExactTargetKinds = widget._msuf2ExactTargetKinds or {}
+    widget._msuf2ExactTargetKinds.groupScope = true
+    widget._msuf2ExactTargetContracts = widget._msuf2ExactTargetContracts or {}
+    widget._msuf2ExactTargetContracts.groupScope = contracts
+    widget._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+        if type(exactTarget) ~= "table" then return false end
+        if exactTarget.prepareKind ~= "groupScope" then
+            return previousPrepare and previousPrepare(widget, exactTarget) or false
+        end
+        local scope = tostring(exactTarget.prepareValue or "")
+        local settingKey = contracts[scope]
+        if not settingKey or tostring(exactTarget.settingKey or "") ~= settingKey then return false end
+        M.SetMenuStateValue("gfScope", scope)
+        if GP.CurrentScope() ~= scope then return false end
+        return not prepare or prepare() == true
+    end
+    return widget
+end
 local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
     local height = prefix == "healerMana" and 600 or prefix == "friendlyBoss" and 536 or prefix == "pets" and 546 or 456
     local section = b:CollapsibleSection(id, title, height, false)
     local width = section._msuf2Width or b.width or 720
     local controlWidth = max(180, (width - 96) / 2)
-    BindScopeToggle(ctx, W.ToggleAt(section, "Enable", 32, -38, controlWidth), prefix .. "Enabled", false, "rebuild")
+    WithExactGroupScope(BindScopeToggle(ctx, W.ToggleAt(section, "Enable", 32, -38, controlWidth), prefix .. "Enabled", false, "rebuild"), prefix .. "Enabled")
     if extra then extra(section, controlWidth) end
     local function Slider(label, key, low, high, step, default, x, y)
         ScopeSlider(ctx, section, label, low, high, step, controlWidth, prefix .. key, default, "rebuild", x, y, controlWidth, "LEFT")
@@ -60,7 +93,7 @@ end
 local function BuildNameBar(ctx, b)
     local section = b:CollapsibleSection("name_bar", "Name strip", 300, false)
     local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
-    BindScopeToggle(ctx, W.ToggleAt(section, "Show names on a strip above the health bar", 32, -38, width * 2), "nameBarEnabled", false, "rebuild")
+    WithExactGroupScope(BindScopeToggle(ctx, W.ToggleAt(section, "Show names on a strip above the health bar", 32, -38, width * 2), "nameBarEnabled", false, "rebuild"), "nameBarEnabled")
     local function Slider(label, key, low, high, step, default, x, y)
         ScopeSlider(ctx, section, label, low, high, step, width, key, default, "rebuild", x, y, width, "LEFT")
     end
@@ -94,7 +127,7 @@ end
 local function BuildBuffCoverage(ctx, b)
     local section = b:CollapsibleSection("buff_coverage", "Buff coverage (Forever)", 656, false)
     local width = max(180, ((section._msuf2Width or b.width or 720) - 96) / 2)
-    BindScopeToggle(ctx, W.ToggleAt(section, "Show buff coverage icons", 32, -38, width * 2), "buffCoverageEnabled", false, "visual")
+    WithExactGroupScope(BindScopeToggle(ctx, W.ToggleAt(section, "Show buff coverage icons", 32, -38, width * 2), "buffCoverageEnabled", false, "visual"), "buffCoverageEnabled")
     for i = 1, #BUFF_COVERAGE_TOGGLES do
         local entry = BUFF_COVERAGE_TOGGLES[i]
         local x, y = i % 2 == 1 and 32 or width + 64, -78 - math.floor((i - 1) / 2) * 36
@@ -141,5 +174,5 @@ end
 M.GroupFrameAdditionalSections = {
     Targets = BuildTargets, Pets = BuildPets, FriendlyBosses = BuildFriendlyBosses, HealerMana = BuildHealerMana,
     NameBar = BuildNameBar, BuffCoverage = BuildBuffCoverage,
-    SizingTier = BuildSizingTier,
+    SizingTier = BuildSizingTier, ExactScope = WithExactGroupScope,
 }

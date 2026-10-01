@@ -132,8 +132,9 @@ local function Decode()
             -- Each sizing control belongs to one immutable tab. Its generated
             -- contract can prepare that exact view even before the page is built.
             local sizingTab
-            if pageKey == "gf_layout" and exactSectionId == "scaling" and exactTargetKinds == "groupSizingTab" then
-                sizingTab = exactTargetContracts:match("^groupSizingTab=([^=|]+)=%*$")
+            if pageKey == "gf_layout" and exactSectionId == "scaling"
+                and ("," .. exactTargetKinds .. ","):find(",groupSizingTab,", 1, true) then
+                sizingTab = ("|" .. exactTargetContracts .. "|"):match("|groupSizingTab=([^=|]+)=%*|")
                 if sizingTab ~= "general" and sizingTab ~= "tier10" and sizingTab ~= "tier20"
                     and sizingTab ~= "tier25" and sizingTab ~= "tier40" then sizingTab = nil end
             end
