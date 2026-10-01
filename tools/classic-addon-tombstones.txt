@@ -1,0 +1,18 @@
+# Retail addons this tree retired, and the Retail files that retired with them.
+#
+# A line with one field names a retired Retail addon folder. Nothing below it may
+# be tracked and no TOC may sit in it; an empty folder that `git rm` left on a
+# Windows checkout, or one that holds ignored files only, is fine.
+#
+# A line "<retired addon><TAB><path>" names a file of a shipped addon folder that
+# retired with that addon. It is not tracked, no TOC or XML manifest loads it,
+# and Retail parity, the Retail source resolver, the override rebase tool and
+# the Retail sync skip it instead of reporting it missing.
+#
+# Readers: tools/test-classic-prototype.ps1 and the packagers through
+# Import-MsufAddonTombstones (.github/scripts/ClassicGate.Common.psm1), and
+# .github/scripts/classic_tombstones.py for the Python tools. Keep both parsers
+# in step with these rules.
+MidnightSimpleUnitFrames_Assistant
+MidnightSimpleUnitFrames_Assistant	MidnightSimpleUnitFrames/Locales/MSUF_PriorityFrames_FAQ.lua
+MidnightSimpleUnitFrames_Assistant	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_AssistantBridge.lua
