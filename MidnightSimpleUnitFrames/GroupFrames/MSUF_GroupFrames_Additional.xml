@@ -1,0 +1,16 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <Button name="MSUF_GroupAdditionalUnitTemplate" inherits="SecureUnitButtonTemplate" virtual="true">
+    <Size x="100" y="24"/>
+    <Frames>
+      <StatusBar parentKey="Health">
+        <Anchors><Anchor point="TOPLEFT"/><Anchor point="BOTTOMRIGHT"/></Anchors>
+        <BarTexture file="Interface\TargetingFrame\UI-StatusBar"/>
+        <Layers>
+          <Layer level="BACKGROUND"><Texture parentKey="Background" setAllPoints="true"><Color r="0.04" g="0.04" b="0.04" a="0.95"/></Texture></Layer>
+          <Layer level="OVERLAY"><FontString parentKey="Name" inherits="GameFontHighlightSmall"><Anchors><Anchor point="LEFT" x="3"/><Anchor point="RIGHT" x="-3"/></Anchors></FontString></Layer>
+        </Layers>
+      </StatusBar>
+    </Frames>
+    <Scripts><OnLoad function="MSUF_GroupAdditionalUnitOnLoad"/></Scripts>
+  </Button>
+</Ui>

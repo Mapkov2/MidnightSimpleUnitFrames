@@ -92,7 +92,9 @@ local function EnsureHolder(frame, layer)
     if not (frame and CreateFrame) then return nil end
     local holder = frame.petHappinessIndicatorHolder
     if not holder then
-        holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
+        -- The visual root, like the status holders: "Show only below 100%
+        -- health" fades the root, and the icon must fade with the frame.
+        holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
         holder:SetAllPoints(frame)
         if holder.EnableMouse then holder:EnableMouse(false) end
         if holder.SetClipsChildren then holder:SetClipsChildren(false) end

@@ -29,11 +29,18 @@ resolved once when the file loads (a file-level upvalue such as
 `IS_CLASSIC_FAMILY`), never on a client check per event, so a shared hot path
 pays one upvalue test at most and Mainline never enters the Classic branch.
 The former whole-file Classic copies of Retail files (owned shadows) were
-collapsed that way on 2026-09-19, thirteen of fourteen; the one row left in
-`tools/classic-owned-shadows.tsv` is `Classic/State/MSUF_Defaults.lua`. Do not
-add a shadow. Vanilla, TBC, and Mists include implementations from `Classic`, but
+collapsed that way, thirteen of fourteen on 2026-09-19 and the last one,
+`Classic/State/MSUF_Defaults.lua`, on 2026-09-20, so
+`tools/classic-owned-shadows.tsv` is empty. Do not add a shadow. Vanilla, TBC, and Mists include implementations from `Classic`, but
 they keep separate loader manifests so their contracts can diverge without
 copying the backend.
+
+The group XML manifests load the shared `GroupFrames/MSUF_GroupFrames_Additional`
+Lua/XML pair after the group runtime, for optional target, pet, friendly-boss and
+healer-mana views. These additive modules remain in the shared group subsystem;
+no copied per-flavor implementation is introduced. The WoW Forever buff coverage
+icons live in `Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua`, which only the
+Mainline group manifest loads, at the same boundary.
 
 Vanilla, TBC, and Mists ship no aura alias catalog: their backend reads aura
 payloads and matches ranked and cast-versus-aura IDs by aura name at runtime.
@@ -161,3 +168,17 @@ OnUpdate, polling or Combat Log parser is used. The dedicated Swing Timer smoke
 checks ownership, concurrent hands, duration delivery, equipment, profile changes,
 real media-choice paths, preview isolation, number-only display and fill direction.
 Offline tests do not establish live visuals, taint safety or measured performance.
+
+Optional extras: the off-hand lane draws the off-hand timer as a strip in the
+main-hand bar in the off-hand colour; out of reach, a bar takes its reach colour
+and fades to its reach opacity; a queued next-swing attack (Heroic Strike,
+Cleave, Maul, Raptor Strike, matched by spell name so every rank counts) shows
+its icon beside the main-hand bar and tints the border, and with the cue text on
+the bar's title names it (the spell name, or the player's own text per attack).
+Settings saved under the former extras names move to the current ones once.
+C_SwingTimer.EnableRangeCheck
+is one switch per hand shared with Blizzard's bars, which drop it when their
+CVar turns off, so the module re-asserts it after that CVar changes and on every
+apply. A target change only re-reads the range of checked hands, a haste proc
+does nothing unless a weapon was equipped or removed, and spell-state events are
+registered only for classes with next-swing attacks.

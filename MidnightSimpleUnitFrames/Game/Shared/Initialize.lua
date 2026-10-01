@@ -251,7 +251,7 @@ Client.AddonVersion = type(addonVersion) == "string" and addonVersion ~= "" and 
 
 --- The one MSUF version accessor, for chat lines, tooltips and bug reports.
 --- Client.AddonVersion above is resolved once, from the TOC this client loaded,
---- so no other file may ask a TOC again: the Options and Assistant packages
+--- so no other file may ask a TOC again: the Options package
 --- carry their own "## Version" field, and a Mainline TOC carries one
 --- conditioned line per game type. Returns nil when detection did not run;
 --- callers that need a placeholder keep their own.

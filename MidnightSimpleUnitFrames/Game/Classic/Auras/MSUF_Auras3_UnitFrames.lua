@@ -79,7 +79,6 @@ A3.NormalizeClassicStealableStyle = A3.NormalizeClassicStealableStyle or functio
     return "BORDER_ICON"
 end
 local GetAuraApplicationDisplayCount = C_UnitAuras and C_UnitAuras.GetAuraApplicationDisplayCount
-local GetAuraDispelTypeColor = C_UnitAuras and C_UnitAuras.GetAuraDispelTypeColor
 
 local Compile = A3._ClassicCompile
 assert(type(Compile) == "table", "Classic aura backend requires Game/Classic/Auras/MSUF_Auras3_Compile.lua")
@@ -275,14 +274,15 @@ local function ApplyButtonLayout(lane, button, index)
     if not cfg then return end
     button._msufA3Lane = lane
     button:SetSize(cfg.buttonWidth or cfg.size, cfg.buttonHeight or cfg.size)
-    -- Click-through and tooltip hover are independent on every supported
-    -- Classic branch. EnableMouse(false) disabled both and made the tooltip
-    -- setting silently non-functional for the common click-through profile.
+    -- A Classic aura button has no click action and covers part of the secure
+    -- unit button it sits on, so its clicks always pass through to that unit
+    -- button (targeting, click-casting, menus), as on Retail's native aura
+    -- buttons. Hover stays independent so the tooltip setting still works.
     if button.SetMouseClickEnabled and button.SetMouseMotionEnabled then
-        button:SetMouseClickEnabled(cfg.clickThrough ~= true)
+        button:SetMouseClickEnabled(false)
         button:SetMouseMotionEnabled(cfg.showTooltip == true)
     else
-        button:EnableMouse(cfg.clickThrough ~= true or cfg.showTooltip == true)
+        button:EnableMouse(cfg.showTooltip == true)
     end
     if button.Cooldown then
         if button.Cooldown.SetDrawSwipe then button.Cooldown:SetDrawSwipe(cfg.showCooldown == true and cfg.showCooldownSwipe ~= false) end
@@ -367,10 +367,6 @@ local function CreateAuraButton(lane, index)
     if type(lane.PostCreateButton) == "function" then
         lane:PostCreateButton(button)
     end
-    local CT = A3.CooldownText
-    if CT and type(CT.RegisterButton) == "function" then
-        CT.RegisterButton(button, "unit")
-    end
     return button
 end
 
@@ -452,6 +448,7 @@ end
 
 local function ClearLane(lane)
     lane.all = WipeTable(lane.all)
+    lane.mine = WipeTable(lane.mine)
     lane.active = WipeTable(lane.active)
     lane.sorted = WipeTable(lane.sorted)
     lane.ordered = WipeTable(lane.ordered)
@@ -472,6 +469,7 @@ end
 
 local function ResetLaneData(lane, skipOrderScratch)
     lane.all = WipeTable(lane.all)
+    lane.mine = WipeTable(lane.mine)
     lane.active = WipeTable(lane.active)
     if skipOrderScratch ~= true then
         lane.sorted = WipeTable(lane.sorted)
@@ -508,6 +506,11 @@ local function EnsureLane(root, state, kind, cfg)
         root = parent,
         frame = frame,
         all = {},
+        -- Per-lane "cast by the player" answers by aura instance ID. They never
+        -- go into the AuraData: a UNIT_AURA payload is one set of tables for
+        -- every lane and frame on the unit, and lanes resolve ownership by
+        -- different rules (native PLAYER membership or the source unit).
+        mine = {},
         active = {},
         sorted = {},
         ordered = {},
@@ -638,6 +641,10 @@ end
 --- lane filter strings, so a cached membership query allocates nothing.
 A3._ClassicAuraTokenSets = A3._ClassicAuraTokenSets or {}
 A3._ClassicAuraTokenSerial = A3._ClassicAuraTokenSerial or {}
+--- Per filter: true once C_UnitAuras.GetUnitAuraInstanceIDs agreed with the
+--- slot walk on a non-empty set, false once it disagreed (walk for the rest of
+--- the session), nil while unverified.
+A3._ClassicAuraTokenTrust = A3._ClassicAuraTokenTrust or {}
 A3._ClassicAuraTokenSet = function(unit, filter)
     local serial = A3._ClassicAuraTokenSerial[unit] or 0
     local setsByFilter = A3._ClassicAuraTokenSets[unit]
@@ -654,24 +661,46 @@ A3._ClassicAuraTokenSet = function(unit, filter)
     local set = WipeTable(entry.set)
     entry.set = set
     entry.serial = serial
-    local getInstanceIDs = C_UnitAuras and C_UnitAuras.GetUnitAuraInstanceIDs
-    if type(getInstanceIDs) == "function" then
-        local ids = getInstanceIDs(unit, filter)
-        if type(ids) == "table" and not IsSecret(ids) then
-            for i = 1, #ids do
-                local id = ids[i]
-                if id ~= nil and not IsSecret(id) then set[id] = true end
-            end
+    -- One C_UnitAuras.GetUnitAuraInstanceIDs call (documented on every
+    -- Classic branch) answers a rebuild without an AuraData per aura. No
+    -- Blizzard Classic UI calls it, so each filter first checks it against
+    -- the GetAuraSlots/GetAuraDataBySlot walk AuraUtil.ForEachAura uses: the
+    -- first non-empty agreement trusts it, any disagreement keeps the walk.
+    local trust = A3._ClassicAuraTokenTrust[filter]
+    local getIDs = trust ~= false and C_UnitAuras and C_UnitAuras.GetUnitAuraInstanceIDs
+    local ids = type(getIDs) == "function" and getIDs(unit, filter) or nil
+    if type(ids) ~= "table" or IsSecret(ids) then ids = nil end
+    if ids and (trust == true or not (GetAuraSlots and GetAuraDataBySlot)) then
+        for i = 1, #ids do
+            local id = ids[i]
+            if id ~= nil and not IsSecret(id) then set[id] = true end
         end
         return set
     end
     if GetAuraSlots and GetAuraDataBySlot then
         local slots, count = FillAuraSlots(entry.scratch or {}, GetAuraSlots(unit, filter))
         entry.scratch = slots
+        local walked = 0
         for i = 2, count do
             local data = GetAuraDataBySlot(unit, slots[i])
             local id = data and data.auraInstanceID
-            if id ~= nil and not IsSecret(id) then set[id] = true end
+            if id ~= nil and not IsSecret(id) and set[id] == nil then
+                set[id] = true
+                walked = walked + 1
+            end
+        end
+        if ids then
+            local agree = #ids == walked
+            for i = 1, #ids do
+                if not agree then break end
+                local id = ids[i]
+                agree = id ~= nil and not IsSecret(id) and set[id] == true
+            end
+            if not agree then
+                A3._ClassicAuraTokenTrust[filter] = false
+            elseif walked > 0 then
+                A3._ClassicAuraTokenTrust[filter] = true
+            end
         end
     end
     return set
@@ -692,7 +721,7 @@ local function ProcessData(lane, unit, data, fromLaneScan)
         -- Full-scan data already passed Blizzard's PLAYER filter. Delta
         -- payloads do not carry that guarantee, so test their exact native
         -- membership before they can enter or remain in an Only Mine lane.
-        data.isPlayerAura = fromLaneScan == true
+        lane.mine[auraInstanceID] = fromLaneScan == true
             or not Filtered(unit, auraInstanceID, cfg.filter)
         return data
     end
@@ -707,7 +736,13 @@ local function ProcessData(lane, unit, data, fromLaneScan)
         -- group unit some Classic clients return every aura for |PLAYER.
         local sourceUnit = data.sourceUnit
         local fromPlayer = data.isFromPlayerOrPlayerPet
-        if sourceUnit ~= nil and not IsSecret(sourceUnit) then
+        -- A trusted positive flag decides at once, before any UnitIsUnit call:
+        -- the default "player first" sort asks this for every aura, and a
+        -- non-literal source would cost three calls each.
+        if lane._msufA3NativePlayerFilterTrusted ~= false
+            and fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true then
+            lane.mine[auraInstanceID] = true
+        elseif sourceUnit ~= nil and not IsSecret(sourceUnit) then
             -- The literal tokens are the common case and need no API call.
             local sourceIsPlayer = sourceUnit == "player"
                 or sourceUnit == "pet" or sourceUnit == "vehicle"
@@ -716,14 +751,9 @@ local function ProcessData(lane, unit, data, fromLaneScan)
                     or UnitIsUnit("pet", sourceUnit)
                     or UnitIsUnit("vehicle", sourceUnit)
             end
-            data.isPlayerAura = sourceIsPlayer == true
-                or (lane._msufA3NativePlayerFilterTrusted ~= false
-                    and fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true)
-        elseif lane._msufA3NativePlayerFilterTrusted ~= false
-            and fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true then
-            data.isPlayerAura = true
+            lane.mine[auraInstanceID] = sourceIsPlayer == true
         else
-            data.isPlayerAura = lane._msufA3NativePlayerFilterTrusted ~= false
+            lane.mine[auraInstanceID] = lane._msufA3NativePlayerFilterTrusted ~= false
                 and not Filtered(unit, auraInstanceID, cfg.playerFilter)
         end
     end
@@ -746,71 +776,28 @@ local function MatchFilter(unit, auraInstanceID, filter)
     return not Filtered(unit, auraInstanceID, filter)
 end
 
-local function AuraDispelColorByCurve(curve, unit, data)
-    if not (curve and unit and data and data.auraInstanceID and GetAuraDispelTypeColor) then
-        return false
-    end
-    if data._msufA3DispelKnown == true then
-        if data._msufA3DispelHasColor == true then
-            if data._msufA3DispelSecretColor == true then
-                local color = data._msufA3DispelColorObject
-                local r, g, b, a = ColorObjectRGBA(color)
-                if r then
-                    return true, r, g, b, a or 1, true
-                end
-                return false
-            end
-            return true, data._msufA3DispelR, data._msufA3DispelG, data._msufA3DispelB, data._msufA3DispelA, false
-        end
-        return false
-    end
-    local color = GetAuraDispelTypeColor(unit, data.auraInstanceID, curve)
-    local r, g, b, a = ColorObjectRGBA(color)
-    data._msufA3DispelKnown = true
-    if r then
-        data._msufA3DispelHasColor = true
-        if HasSecretColor(r, g, b, a) then
-            data._msufA3DispelSecretColor = true
-            data._msufA3DispelColorObject = color
-            data._msufA3DispelR, data._msufA3DispelG, data._msufA3DispelB, data._msufA3DispelA = nil, nil, nil, nil
-            return true, r, g, b, a or 1, true
-        end
-        data._msufA3DispelSecretColor = nil
-        data._msufA3DispelColorObject = nil
-        data._msufA3DispelR, data._msufA3DispelG, data._msufA3DispelB, data._msufA3DispelA = r, g, b, a or 1
-        return true, r, g, b, a or 1, false
-    end
-    data._msufA3DispelHasColor = false
-    data._msufA3DispelSecretColor = nil
-    data._msufA3DispelColorObject = nil
-    data._msufA3DispelR, data._msufA3DispelG, data._msufA3DispelB, data._msufA3DispelA = nil, nil, nil, nil
-    return false
-end
-
+--- The aura's dispel type colour: the compiled per-type colour (profile
+--- overrides included), else Blizzard's DebuffTypeColor. An untyped debuff
+--- takes the None colour, as Blizzard's Classic AuraUtil.SetAuraBorderColor
+--- paints it (DEBUFF_DISPLAY_INFO.None). A plain lookup by the public
+--- dispelName that never writes into the AuraData, which UNIT_AURA shares
+--- with every other listener.
 local function AuraDispelColor(cfg, unit, data)
-    local hasColor, r, g, b, a, secret = AuraDispelColorByCurve(cfg and cfg.dispelColorCurve, unit, data)
-    if hasColor then return hasColor, r, g, b, a, secret end
-    local name = PlainString(data and data.dispelName)
-    local color = name and _G.DebuffTypeColor and _G.DebuffTypeColor[name]
+    local raw = data and data.dispelName
+    local name = PlainString(raw)
+    if raw == nil or name == "" then
+        name = "None"
+    elseif not name then
+        return false
+    end
+    local colors = cfg and cfg.dispelTypeColors
+    local color = colors and colors[name]
+    if color then return true, color[1], color[2], color[3], 1, false end
+    color = _G.DebuffTypeColor and (_G.DebuffTypeColor[name] or (name == "None" and _G.DebuffTypeColor.none))
     if color then
-        r, g, b, a = ColorObjectRGBA(color)
+        local r, g, b, a = ColorObjectRGBA(color)
         if r then return true, r, g, b, a or 1, HasSecretColor(r, g, b, a) end
     end
-    return false
-end
-
-local function AuraDispelNoneColor(cfg)
-    if cfg and cfg.dispelNoneReady == true then
-        if cfg.dispelNoneSecret == true then
-            return true, cfg.dispelNoneR, cfg.dispelNoneG, cfg.dispelNoneB, cfg.dispelNoneA, true
-        end
-        return true, cfg.dispelNoneR, cfg.dispelNoneG, cfg.dispelNoneB, cfg.dispelNoneA or 1, false
-    end
-    local curve = cfg and cfg.dispelColorCurve
-    if not (curve and curve.Evaluate) then return false end
-    local color = curve:Evaluate(0)
-    local r, g, b, a = ColorObjectRGBA(color)
-    if r then return true, r, g, b, a or 1, HasSecretColor(r, g, b, a) end
     return false
 end
 
@@ -819,7 +806,7 @@ local function MatchDispelTrigger(lane, unit, data, trigger)
     if trigger == "ANY_DEBUFF" then
         return true
     elseif trigger == "PLAYER_CAST" then
-        return data.isPlayerAura == true
+        return lane.mine[data.auraInstanceID] == true
     elseif trigger == "DISPEL_TYPE" then
         local dispelName = PlainString(data.dispelName)
         return dispelName ~= nil and dispelName ~= ""
@@ -837,14 +824,17 @@ end
 
 local function DirectDispelVisualColor(visual, unit, data)
     if visual and visual.colorMode == "TYPE" then
-        local hasColor, r, g, b, a, secret = AuraDispelColorByCurve(visual.dispelColorCurve, unit, data)
+        local hasColor, r, g, b, a, secret = AuraDispelColor(visual, unit, data)
         if hasColor then return r, g, b, a, secret == true end
     end
     return visual and visual.r or 0.25, visual and visual.g or 0.75, visual and visual.b or 1, visual and visual.a or 1, false
 end
 
+--- Any debuff has no native filter of its own, so lanes without a PLAYER scan
+--- keep it on the lane path (Compile's directVisualEligible); an Only mine
+--- lane resolves every trigger here, so Any debuff reads the first HARMFUL aura.
 local function ResolveDirectDispelTriggerVisual(unit, visual, trigger)
-    local filter = DirectVisualFilterForTrigger(trigger)
+    local filter = DirectVisualFilterForTrigger(trigger) or (trigger == "ANY_DEBUFF" and "HARMFUL" or nil)
     if not (filter and GetAuraDataByIndex and IsUnitToken(unit)) then
         return false
     end
@@ -997,9 +987,10 @@ local function ShouldShowAura(lane, unit, data)
         return false
     end
     if Blacklisted(cfg, data) then return false end
+    local mine = lane.mine[data.auraInstanceID] == true
     if cfg.classicFeatureMatch == true and features
         and type(features.MatchAura) == "function" then
-        return features.MatchAura(cfg, unit, data, MatchFilter, TimedAura)
+        return features.MatchAura(cfg, unit, data, MatchFilter, TimedAura, mine)
     end
     if type(cfg.includeSpellIDs) == "table" then
         local spellID = data and data.spellId
@@ -1029,7 +1020,7 @@ local function ShouldShowAura(lane, unit, data)
     if cfg.filterRequirements and features
         and type(features.MatchFilterRequirements) == "function" then
         return features.MatchFilterRequirements(
-            cfg.filterPlan or cfg.filterRequirements, unit, data, MatchFilter)
+            cfg.filterPlan or cfg.filterRequirements, unit, data, MatchFilter, mine)
     end
     if not cfg.hasFilterWork then return true end
     local auraInstanceID = data.auraInstanceID
@@ -1040,7 +1031,7 @@ local function ShouldShowAura(lane, unit, data)
         return MatchFilter(unit, auraInstanceID, cfg.importantFilter)
     end
     if cfg.hasInclusive then
-        if cfg.onlyMine and data.isPlayerAura then return true end
+        if cfg.onlyMine and mine then return true end
         if cfg.raid and MatchFilter(unit, auraInstanceID, cfg.raidFilter) then return true end
         if cfg.raidInCombat and MatchFilter(unit, auraInstanceID, cfg.raidInCombatFilter) then return true end
         if cfg.includeStealable and MatchFilter(unit, auraInstanceID, cfg.stealableFilter) then return true end
@@ -1077,18 +1068,13 @@ local function AddAuraToLane(lane, unit, data, fromLaneScan)
         lane.ordered[n] = auraInstanceID
         lane.orderedCount = n
     end
-    if lane.config.hasFilterWork ~= true then
-        lane.active[auraInstanceID] = true
-        if lane._msufA3VisualCacheReady == true then
-            ConsiderLaneAuraVisual(lane, unit, data)
-        end
-        return true, data
+    -- Frame cleanse visuals read every aura the lane scanned, so an aura the
+    -- icon filters drop still reaches them (CompileLane).
+    if lane._msufA3VisualCacheReady == true then
+        ConsiderLaneAuraVisual(lane, unit, data)
     end
-    if ShouldShowAura(lane, unit, data) then
+    if lane.config.hasFilterWork ~= true or ShouldShowAura(lane, unit, data) then
         lane.active[auraInstanceID] = true
-        if lane._msufA3VisualCacheReady == true then
-            ConsiderLaneAuraVisual(lane, unit, data)
-        end
         return true, data
     end
     lane.active[auraInstanceID] = nil
@@ -1165,6 +1151,7 @@ local function AppendClassicWeaponEnchantSlot(lane, unit, slot, hasEnchant, expi
     data.isHarmful = false
     data.isFromPlayerOrPlayerPet = true
     data.isPlayerAura = true
+    lane.mine[auraInstanceID] = true
     data.name = _G.ENCHANTED or "Weapon Enchant"
     data.icon = _G.GetInventoryItemTexture and _G.GetInventoryItemTexture("player", slot) or nil
     data.applications = tonumber(charges) or 0
@@ -1341,6 +1328,7 @@ local function HideCooldown(button, cooldown)
         if cooldown.Clear then cooldown:Clear() end
         cooldown:Hide()
     end
+    if cooldown._msufA3BucketConfig then A3._ClassicTrackCooldownBucket(cooldown, nil, nil) end
 end
 
 local function EnsureOwnHighlight(button)
@@ -1410,9 +1398,6 @@ local function UpdateDispelTypeOverlay(button, lane, unit, data)
         return
     end
     local hasColor, r, g, b, a, secret = AuraDispelColor(cfg, unit, data)
-    if not hasColor then
-        hasColor, r, g, b, a, secret = AuraDispelNoneColor(cfg)
-    end
     local tex = button._msufA3DispelOverlay
     if hasColor then
         tex = tex or EnsureDispelTypeOverlay(button)
@@ -1457,8 +1442,8 @@ local function UpdateDispelTypeOverlay(button, lane, unit, data)
     A3._UpdateClassicAuraDispelTypeSymbol(button, cfg, data)
 end
 
-local function UpdateOwnHighlight(button, cfg, data)
-    local active = cfg and cfg.ownHighlight == true and data and data.isPlayerAura == true
+local function UpdateOwnHighlight(button, cfg, mine)
+    local active = cfg and cfg.ownHighlight == true and mine == true
     local tex = button._msufA3OwnHighlight
     if active then
         tex = EnsureOwnHighlight(button)
@@ -1482,11 +1467,11 @@ local function UpdateOwnHighlight(button, cfg, data)
     end
 end
 
-local function CooldownTextRGB(cfg, data)
+--- remaining: seconds left, nil for an untimed aura.
+local function CooldownTextRGB(cfg, remaining)
     if not (cfg and cfg.cooldownTextBuckets == true) then
         return cfg and cfg.cooldownSafeR or 1, cfg and cfg.cooldownSafeG or 1, cfg and cfg.cooldownSafeB or 1
     end
-    local remaining = RemainingTime(data)
     if not remaining then
         return cfg.cooldownSafeR or 1, cfg.cooldownSafeG or 1, cfg.cooldownSafeB or 1
     end
@@ -1538,11 +1523,11 @@ ResetCooldownTextColor = function(cooldown)
     cooldown._msufA3ColorApplied = nil
     cooldown._msufA3TextColorPlain = nil
     cooldown._msufA3TextR, cooldown._msufA3TextG, cooldown._msufA3TextB = nil, nil, nil
+    if cooldown._msufA3BucketConfig then A3._ClassicTrackCooldownBucket(cooldown, nil, nil) end
 end
 
-local function ApplyCooldownTextColor(cooldown, cfg, data)
-    if not (cooldown and cfg and cfg.showCooldownText ~= false and cfg.cooldownTextBuckets == true) then return end
-    local r, g, b = CooldownTextRGB(cfg, data)
+--- Paints one bucket colour on the countdown text, once per change.
+local function PaintCooldownTextColor(cooldown, r, g, b)
     if cooldown._msufA3TextColorPlain == true
         and cooldown._msufA3TextR == r
         and cooldown._msufA3TextG == g
@@ -1571,6 +1556,37 @@ local function ApplyCooldownTextColor(cooldown, cfg, data)
     end
 end
 
+--- Time alone moves a countdown through the colour buckets, with no aura
+--- event. While the aura can still cross a threshold the shared timer driver
+--- (Visuals) re-checks it four times a second; the last threshold untracks it.
+local function ApplyCooldownTextColor(cooldown, cfg, data)
+    if not (cooldown and cfg and cfg.showCooldownText ~= false and cfg.cooldownTextBuckets == true) then return end
+    local remaining = RemainingTime(data)
+    PaintCooldownTextColor(cooldown, CooldownTextRGB(cfg, remaining))
+    if remaining ~= nil and remaining > (cfg.cooldownUrgentSeconds or 5) then
+        A3._ClassicTrackCooldownBucket(cooldown, cfg, PlainNumber(data.expirationTime))
+    elseif cooldown._msufA3BucketConfig then
+        A3._ClassicTrackCooldownBucket(cooldown, nil, nil)
+    end
+end
+
+A3._ClassicTrackCooldownBucket = function(cooldown, cfg, expiration)
+    cooldown._msufA3BucketConfig, cooldown._msufA3BucketExpiration = cfg, expiration
+    local visuals = A3.ClassicVisuals
+    if visuals and visuals.TrackCooldownBucket then visuals.TrackCooldownBucket(cooldown, cfg ~= nil) end
+end
+
+if A3.ClassicVisuals then
+    A3.ClassicVisuals.RepaintCooldownBucket = function(cooldown, now)
+        local cfg, expiration = cooldown._msufA3BucketConfig, cooldown._msufA3BucketExpiration
+        if not (cfg and expiration) then return A3._ClassicTrackCooldownBucket(cooldown, nil, nil) end
+        local remaining = expiration - now
+        if remaining < 0 then remaining = 0 end
+        PaintCooldownTextColor(cooldown, CooldownTextRGB(cfg, remaining))
+        if remaining <= (cfg.cooldownUrgentSeconds or 5) then A3._ClassicTrackCooldownBucket(cooldown, nil, nil) end
+    end
+end
+
 local function UpdateLaneFromDelta(lane, unit, updateInfo)
     local cfg = lane.config
     if not (cfg and cfg.enabled) then return false end
@@ -1585,7 +1601,12 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
             local data = added[i]
             local auraInstanceID = data and data.auraInstanceID
             if auraInstanceID ~= nil and DataMatchesLane(data, cfg) then
-                if AddAuraToLane(lane, unit, data) then needsRender = true end
+                local active, stored = AddAuraToLane(lane, unit, data)
+                if active then
+                    needsRender = true
+                elseif stored and visualEnabled then
+                    visualDirty = true
+                end
             end
         end
     end
@@ -1596,7 +1617,7 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
             local auraInstanceID = updated[i]
             if auraInstanceID ~= nil and lane.all[auraInstanceID] then
                 local oldData = lane.all[auraInstanceID]
-                local oldPlayer = oldData and oldData.isPlayerAura
+                local oldPlayer = lane.mine[auraInstanceID]
                 -- Time-keyed sorts re-render only when a sort input moved. Read
                 -- the old values before the fetch, and as plain numbers: the
                 -- comparators rank a secret or missing time as one constant.
@@ -1609,17 +1630,20 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
                 if data then
                     lane.all[auraInstanceID] = data
                     local nowActive = cfg.hasFilterWork ~= true or ShouldShowAura(lane, unit, data)
-                    if visualEnabled and wasActive then
+                    -- The cached visual comes from every stored aura, yet an
+                    -- in-place refresh keeps an aura's dispel type and filter
+                    -- membership. A filtered-out aura moves it only by flipping
+                    -- its owner (Cast by me); a shown one, or one entering the
+                    -- lane, also moves the stripe.
+                    if visualEnabled and (wasActive or nowActive
+                        or oldPlayer ~= lane.mine[auraInstanceID]) then
                         lane._msufA3VisualCacheReady = nil
                         visualDirty = true
                     end
                     if nowActive then
                         lane.active[auraInstanceID] = true
-                        if visualEnabled and not wasActive then
-                            ConsiderLaneAuraVisual(lane, unit, data)
-                        end
                         if wasActive then
-                            if oldPlayer ~= data.isPlayerAura
+                            if oldPlayer ~= lane.mine[auraInstanceID]
                                 or (cfg.reorderOnUpdate == true
                                     and (oldDuration ~= PlainNumber(data.duration)
                                         or oldExpiration ~= PlainNumber(data.expirationTime))) then
@@ -1641,12 +1665,13 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
                     end
                 else
                     lane.all[auraInstanceID] = nil
+                    lane.mine[auraInstanceID] = nil
                     lane.orderDirty = true
+                    if visualEnabled then
+                        lane._msufA3VisualCacheReady = nil
+                        visualDirty = true
+                    end
                     if wasActive then
-                        if visualEnabled then
-                            lane._msufA3VisualCacheReady = nil
-                            visualDirty = true
-                        end
                         lane.active[auraInstanceID] = nil
                         needsRender = true
                     end
@@ -1661,12 +1686,13 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
             local auraInstanceID = removed[i]
             if auraInstanceID ~= nil and lane.all[auraInstanceID] then
                 lane.all[auraInstanceID] = nil
+                lane.mine[auraInstanceID] = nil
                 lane.orderDirty = true
+                if visualEnabled then
+                    lane._msufA3VisualCacheReady = nil
+                    visualDirty = true
+                end
                 if lane.active[auraInstanceID] then
-                    if visualEnabled then
-                        lane._msufA3VisualCacheReady = nil
-                        visualDirty = true
-                    end
                     lane.active[auraInstanceID] = nil
                     needsRender = true
                 end
@@ -1704,6 +1730,7 @@ local function UpdateCappedLaneFromDelta(lane, unit, updateInfo)
                     needsFullScan = true
                 end
                 lane.all[auraInstanceID] = nil
+                lane.mine[auraInstanceID] = nil
                 lane.active[auraInstanceID] = nil
                 lane.orderDirty = true
             end
@@ -1740,6 +1767,7 @@ local function UpdateCappedLaneFromDelta(lane, unit, updateInfo)
                     end
                 else
                     lane.all[auraInstanceID] = nil
+                    lane.mine[auraInstanceID] = nil
                     lane.active[auraInstanceID] = nil
                     lane.orderDirty = true
                     if wasActive then return true, true end
@@ -1860,7 +1888,7 @@ UpdateButton = function(lane, button, unit, data)
         UpdateButtonStacks(button, unit, data)
     end
     if cfg.ownHighlight == true or button._msufA3OwnHighlight then
-        UpdateOwnHighlight(button, cfg, data)
+        UpdateOwnHighlight(button, cfg, lane.mine[data.auraInstanceID])
     end
     if cfg.showDispelTypeBorder == true or button._msufA3DispelOverlay then
         UpdateDispelTypeOverlay(button, lane, unit, data)
@@ -1943,13 +1971,13 @@ BuildButtonUpdater = function(cfg)
     if own and dispel then
         return function(lane, button, unit, data)
             core(lane, button, unit, data)
-            UpdateOwnHighlight(button, lane.config, data)
+            UpdateOwnHighlight(button, lane.config, lane.mine[data.auraInstanceID])
             UpdateDispelTypeOverlay(button, lane, unit, data)
         end
     elseif own then
         return function(lane, button, unit, data)
             core(lane, button, unit, data)
-            UpdateOwnHighlight(button, lane.config, data)
+            UpdateOwnHighlight(button, lane.config, lane.mine[data.auraInstanceID])
         end
     elseif dispel then
         return function(lane, button, unit, data)
@@ -2059,7 +2087,10 @@ local function RenderLane(lane, unit)
         end
     end
     if count > 1 then
+        -- The comparators read this lane's ownership answers (lane.mine).
+        Compile.SetSortOwnership(lane.mine)
         table_sort(sorted, cfg.sortComparator or SortAuras)
+        Compile.SetSortOwnership(nil)
     end
 
     local visible = math_min(cfg.max, count)
@@ -2075,13 +2106,12 @@ local function RenderLane(lane, unit)
     return true
 end
 
+--- Walks lane.all, never lane.active: cleanse visuals ignore the icon filters.
 local function ResolveDispelTriggerVisual(lane, unit, visual, trigger)
     if not (lane and visual and trigger) then return false end
-    local active = lane.active
     local all = lane.all
-    if not (active and all) then return false end
-    for auraInstanceID in next, active do
-        local data = all[auraInstanceID]
+    if not all then return false end
+    for _, data in next, all do
         if data and MatchDispelTrigger(lane, unit, data, trigger) then
             local token = data.auraInstanceID
             if IsSecret(token) then token = nil end
@@ -2110,6 +2140,32 @@ A3._UpdateClassicDispelSymbols = function(frame, lane, visual, unit)
                 or MatchDispelTrigger(lane, unit, data, symbol.trigger)
             if matched then present[dispelName] = true end
         end
+    end
+    return renderer.UpdateDispelSymbols(frame, visual, present)
+end
+
+--- Symbols resolved from the unit, for a debuff lane whose native PLAYER scan
+--- never sees other casters' debuffs. The trigger picks the walked filter:
+--- dispellable by me, cast by me, or every debuff (Any dispel type); only a
+--- readable dispel type adds a symbol, as in the lane walk above.
+A3._UpdateClassicDirectDispelSymbols = function(frame, visual, unit)
+    local renderer = A3.ClassicVisuals
+    if not (renderer and type(renderer.UpdateDispelSymbols) == "function") then return false end
+    local symbol = visual and visual.symbol
+    if not (frame and symbol and symbol.enabled == true and IsUnitToken(unit) and GetAuraSlots and GetAuraDataBySlot) then
+        return renderer.HideDispelSymbols and renderer.HideDispelSymbols(frame) or false
+    end
+    local trigger = symbol.trigger
+    local filter = trigger == "PLAYER_CAST" and "HARMFUL|PLAYER"
+        or (trigger == "BY_ME" and DirectVisualFilterForTrigger(trigger)) or "HARMFUL"
+    local present = WipeTable(frame._msufA3ClassicDispelPresent)
+    frame._msufA3ClassicDispelPresent = present
+    local slots, count = FillAuraSlots(frame._msufA3ClassicDispelSlots, GetAuraSlots(unit, filter))
+    frame._msufA3ClassicDispelSlots = slots
+    for i = 2, count do
+        local data = GetAuraDataBySlot(unit, slots[i])
+        local dispelName = PlainString(data and data.dispelName)
+        if dispelName and dispelName ~= "" then present[dispelName] = true end
     end
     return renderer.UpdateDispelSymbols(frame, visual, present)
 end
@@ -2261,17 +2317,14 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
     if not (visual and visual.enabled == true) then
         return ClearFrameAuraVisualState(frame)
     end
+    local debuffLane = state and state.lanes and state.lanes.debuff
+    -- The stripe alone shows the debuffs the lane's filter matches.
+    local stripeActive = visual.stripeEnabled == true and HasActiveDebuff(debuffLane)
     if cfg and cfg.visualDirect == true then
-        --- directVisualEligible is false whenever the symbol is enabled, so this
-        --- branch only ever runs with symbols off. It must still clear a host
-        --- left over from the previous config: turning the symbol off flips
-        --- eligibility on, and every later update takes this branch, so the last
-        --- rendered symbol would stay frozen on the frame. Every other exit from
-        --- this function touches the symbol host; this one did not.
-        local directRenderer = A3.ClassicVisuals
-        local directSymbolChanged = directRenderer
-            and type(directRenderer.HideDispelSymbols) == "function"
-            and directRenderer.HideDispelSymbols(frame) or false
+        --- Symbols are on here only for a lane with a native PLAYER scan; the
+        --- helper also hides a host left over from the previous config, so a
+        --- symbol turned off never stays frozen on the frame.
+        local directSymbolChanged = A3._UpdateClassicDirectDispelSymbols(frame, visual, unit)
         local borderActive, br, bg, bb, ba, borderSecret, borderToken = false
         local overlayActive, orr, og, ob, oa, overlaySecret, overlayToken = false
         if visual.borderEnabled == true then
@@ -2287,16 +2340,15 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
         if borderActive == true and visual.borderShowOn ~= nil then
             borderActive = A3._ClassicDispelBorderShowOnAllows(visual, unit)
         end
-        return SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, false, visual)
+        return SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, stripeActive, visual)
             or directSymbolChanged
     end
-    local lane = state and state.lanes and state.lanes.debuff
+    local lane = debuffLane
     if not (lane and lane.config and lane.config.enabled == true) then
         return ClearFrameAuraVisualState(frame)
     end
     if lane._msufA3VisualCacheReady == true then
         local anyDebuff = lane._msufA3VisualAnyDebuff == true
-        local stripeActive = anyDebuff and visual.stripeEnabled == true
         local symbolChanged = A3._UpdateClassicDispelSymbols(frame, lane, visual, unit)
         -- The lane cache keeps the unfiltered border; Show on applies per update.
         local borderActive = anyDebuff and lane._msufA3VisualBorderActive == true
@@ -2314,7 +2366,7 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
             lane._msufA3VisualOverlaySecret == true, lane._msufA3VisualOverlayToken,
             stripeActive, visual) or symbolChanged
     end
-    local anyDebuff = HasActiveDebuff(lane)
+    local anyDebuff = lane.all and next(lane.all) ~= nil or false
     local borderActive, br, bg, bb, ba, borderSecret, borderToken = false
     local overlayActive, orr, og, ob, oa, overlaySecret, overlayToken = false
     if anyDebuff and visual.borderEnabled == true then
@@ -2331,7 +2383,6 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
     if borderActive == true and visual.borderShowOn ~= nil then
         borderActive = A3._ClassicDispelBorderShowOnAllows(visual, unit)
     end
-    local stripeActive = anyDebuff and visual.stripeEnabled == true
     local symbolChanged = A3._UpdateClassicDispelSymbols(frame, lane, visual, unit)
     return SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, stripeActive, visual)
         or symbolChanged
@@ -2422,13 +2473,14 @@ local function CurrentFrameState(frame, unit)
         return state, cfg
     end
 
-    local gen = A3._runtimeConfigGen or 1
-    if state and state.configGen == gen and state.config and state.unit == unit
-        and state.frameSpec == frame.MSUFSpec then
-        return state, state.config
-    end
-
+    -- The compile cache knows every input of a unit config (generation, the
+    -- profile's auras3 table, the unit-frame spec serial, a scoped
+    -- invalidation), so the applied config is current only while it is the
+    -- one the cache returns.
     local cfg = A3.ResolveUnitFrameConfig(unit, frame.MSUFSpec)
+    if state and state.config == cfg and cfg and state.unit == unit then
+        return state, cfg
+    end
     if not (cfg and cfg.enabled) then
         return state, cfg
     end
@@ -2494,8 +2546,12 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
     -- needFullUpdate and the scanning sentinel are cleared only where the lane
     -- state is known good again: the two lane-less exits here, and the end of
     -- the lane loop below.
+    -- A direct visual reads the unit's debuffs by filter. An update-only
+    -- payload refreshes auras in place: no dispel type, caster or filter
+    -- membership changes, so only a full update or an add/remove re-reads it.
     if cfg.visualDirect == true and not ConfigHasEnabledAuraLane(cfg) then
         state.scanning, state.needFullUpdate = nil, false
+        if not (full or membershipBumped) then return false end
         return UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
     end
 
@@ -2544,7 +2600,11 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
 
     local visualChanged = false
     if cfg.visualDirect == true then
-        visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
+        -- Same rule as the lane-less exit above; a lane that changed may move
+        -- the debuff stripe, which follows the lane.
+        if full or membershipBumped or changedCount > 0 then
+            visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
+        end
     elseif auraVisualDirty == true then
         if cfg.visual ~= nil or FrameHasAuraVisualState(frame) then
             visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
@@ -3031,35 +3091,46 @@ function A3.RequestApply(scopeOrReason, reason)
     return A3.RefreshAll()
 end
 
+--- A scoped refresh recompiles only its own frames, as on Retail
+--- (Runtime_Facade): a unit scope drops that unit's cached configs before
+--- RequestUnit re-applies it, and a group scope's re-apply recompiles its
+--- frames. Only an unknown scope still invalidates every frame.
 function A3.RefreshUnit(unit)
     if A3._ClassicAuraRuntimeCombatBlocked() then
         return A3._QueueDeferredAuraRuntime(unit, "AURAS3_CLASSIC_REFRESH_UNIT")
     end
-    A3.BumpRuntimeConfig()
-    A3._runtimeConfigCache = nil
-    Compile.ResetFrameSpecConfigCache()
+    local key = tostring(unit or ""):lower()
+    if key == "boss" then
+        for i = 1, 5 do A3.InvalidateUnitRuntimeConfig("boss" .. i) end
+    elseif key == "arena" then
+        for i = 1, math_max(3, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) do
+            A3.InvalidateUnitRuntimeConfig("arena" .. i)
+        end
+    elseif MANAGED_UNITS[key] then
+        A3.InvalidateUnitRuntimeConfig(key)
+    elseif not (A3._AuraPreviewGroupKind(key) ~= nil or key == "group" or key == "groups") then
+        -- A shared or unknown scope still invalidates every frame.
+        A3.BumpRuntimeConfig()
+        A3._runtimeConfigCache = nil
+        Compile.ResetFrameSpecConfigCache()
+    end
     return A3.RequestUnit(unit, 0)
 end
 
+--- The global font follower. FontRuntime calls it after a global font change
+--- and the profile layer after a switch, reset, import or Profile Variant, so
+--- without a scope it is a real refresh of every aura owner, group frames
+--- included: each recompiles from the active profile and re-lays out its
+--- buttons (Retail bumps its visual generation and re-renders the same set).
+--- The aura Edit Mode wraps A3.RefreshAll and refreshes its preview from there.
 function A3.ApplyFontsFromGlobal(scope, reason)
     if A3._ClassicAuraRuntimeCombatBlocked() then
         return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_CLASSIC_FONT_VISUALS", true)
     end
-    local frames = A3._runtimeFrames
-    if not frames then return true end
-    for _, frame in pairs(frames) do
-        local state = frame and frame._msufA3State
-        if state then
-            for _, lane in pairs(state.lanes or EMPTY_LANES) do
-                for i = 1, lane.createdButtons or 0 do
-                    local button = lane[i]
-                    if button then ApplyButtonLayout(lane, button, i) end
-                end
-            end
-        end
-    end
     if scope ~= nil then return A3.RequestScope(scope, reason or "AURAS3_CLASSIC_FONT_VISUALS") end
-    return true
+    local didWork = A3.RefreshAll() == true
+    A3._NotifyAuraColdpathPreview(reason or "AURAS3_CLASSIC_FONT_VISUALS", "shared")
+    return didWork
 end
 MSUF.ExportPublic("MSUF_Auras3_ApplyFontsFromGlobal", A3.ApplyFontsFromGlobal)
 
@@ -3128,19 +3199,20 @@ end
 
 MSUF.InstallClassicAuraPreview({
     A3 = A3,
-    ApplyConfig = ApplyConfig,
     CompileFrameAuraVisual = CompileFrameAuraVisual,
     ExportPublic = ExportPublic,
-    HideState = HideState,
-    ResolveGroupFrameConfig = ResolveGroupFrameConfig,
     UF = UF,
-    UpdateAuras = UpdateAuras,
 })
 
+--- Drops one unit's cached configs (the menu apply service and scoped
+--- refreshes call it before re-applying that unit). Every other unit keeps its
+--- compiled config, so its next UNIT_AURA neither recompiles nor rescans.
 function A3.InvalidateUnitRuntimeConfig(unit)
-    local runtimeUnit = NormalizeRuntimeUnit(unit)
-    if runtimeUnit and A3._runtimeConfigCache then A3._runtimeConfigCache[runtimeUnit] = nil end
-    Compile.ResetFrameSpecConfigCache()
+    local runtimeUnit = unit ~= nil and NormalizeRuntimeUnit(unit) or nil
+    if runtimeUnit then
+        if A3._runtimeConfigCache then A3._runtimeConfigCache[runtimeUnit] = nil end
+        Compile.InvalidateFrameSpecConfig(runtimeUnit)
+    end
     return runtimeUnit
 end
 
@@ -3151,7 +3223,6 @@ function A3.RenderUnitChangedFrame(frame, oldUnit, newUnit)
         A3._runtimeFrames[oldUnit] = nil
     end
     if newUnit then
-        frame.unit = newUnit
         A3.InvalidateUnitRuntimeConfig(newUnit)
     end
     if A3._ClassicAuraRuntimeCombatBlocked() then
@@ -3269,10 +3340,16 @@ A3._ClassicIdentityAuraEvent = A3._ClassicIdentityAuraEvent or {
     ARENA_OPPONENT_UPDATE = true,
 }
 
+--- Edit Mode and menu group test frames (GF preview rows) are bound to a real
+--- token, usually "player", but draw deterministic sample icons of their own.
+--- The live backend never attaches to them, as on Retail (Runtime_Facade):
+--- it would render the player's real auras under the samples and run every
+--- player UNIT_AURA once more per test frame.
 function AurasElement.IsEnabled(frame)
     local unit = A3._ClassicBindFrameUnit(frame)
     if not unit then return false end
     if IsGroupFrame(frame) then
+        if frame._msufGFIsPreviewFrame == true then return false end
         local cfg = ResolveGroupFrameConfig(frame, unit)
         return cfg and cfg.enabled == true or false
     end
@@ -3327,6 +3404,11 @@ function AurasElement.Apply(frame)
     if not frame then return end
     local unit = A3._ClassicBindFrameUnit(frame)
     local isGroup = IsGroupFrame(frame)
+    if isGroup and frame._msufGFIsPreviewFrame == true then
+        frame._msufA3GroupRuntime = nil
+        HideState(frame)
+        return
+    end
     frame._msufA3GroupRuntime = isGroup == true or nil
     if isGroup then
         frame._msufA3GroupConfig = nil
@@ -3346,6 +3428,11 @@ function AurasElement.Enable(frame)
     EnsureClassicAuraOnShowRefresh(frame)
     local unit = A3._ClassicBindFrameUnit(frame)
     if IsGroupFrame(frame) then
+        if frame._msufGFIsPreviewFrame == true then
+            frame._msufA3GroupRuntime = nil
+            HideState(frame)
+            return false
+        end
         frame._msufA3GroupRuntime = true
         frame._msufA3GroupConfig = nil
         local cfg = ResolveGroupFrameConfig(frame, unit)

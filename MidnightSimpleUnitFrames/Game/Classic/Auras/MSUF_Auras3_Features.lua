@@ -218,11 +218,15 @@ function Features.IsExternalDefensiveAura(data)
     return result == true
 end
 
-function Features.MatchFilterRequirements(plan, unit, data, matchFilter)
+--- mine is the lane's own answer to "cast by the player" (the backend keeps it
+--- per lane, outside the shared AuraData); a caller without one may still
+--- carry it on its data as isPlayerAura.
+function Features.MatchFilterRequirements(plan, unit, data, matchFilter, mine)
     local req = plan and plan.requirements or plan
     if not req then return true end
-    if req.player == true and data.isPlayerAura ~= true then return false end
-    if req.notPlayer == true and data.isPlayerAura == true then return false end
+    if mine == nil then mine = data.isPlayerAura == true end
+    if req.player == true and mine ~= true then return false end
+    if req.notPlayer == true and mine == true then return false end
     if req.important == true and not Features.IsImportantAura(data) then return false end
     if req.stealable == true and data.isStealable ~= true then return false end
     if req.boss == true and data.isBossAura ~= true then return false end
@@ -420,7 +424,6 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         -- 3 expiration, 4 expiration only), as in CompileLane.
         reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4,
         sortReverse = placed.sortReverse == true,
-        clickThrough = placed.clickThrough == true,
         showTooltip = placed.showTooltip ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         showCooldownText = placed.showCooldown ~= false,
@@ -630,8 +633,9 @@ end
 --- matchFilter and timedAura are the backend's own predicates (ShouldShowAura in
 --- MSUF_Auras3_UnitFrames.lua), so a custom container decides filter-token
 --- membership and Hide permanent exactly like a Buff/Debuff lane does.
-function Features.MatchAura(cfg, unit, data, matchFilter, timedAura)
+function Features.MatchAura(cfg, unit, data, matchFilter, timedAura, mine)
     if not (cfg and type(data) == "table") then return false end
+    if mine == nil then mine = data.isPlayerAura == true end
     local spellID = PublicNumber(data.spellId)
     local name = not IsSecret(data.name) and data.name or nil
     if cfg.includeSpellIDs then
@@ -644,10 +648,10 @@ function Features.MatchAura(cfg, unit, data, matchFilter, timedAura)
     local duration = PublicNumber(data.duration) or 0
     if cfg.maxDuration and cfg.maxDuration > 0 and duration > cfg.maxDuration then return false end
     if cfg.filterRequirements then
-        return Features.MatchFilterRequirements(cfg.filterPlan or cfg.filterRequirements, unit, data, matchFilter)
+        return Features.MatchFilterRequirements(cfg.filterPlan or cfg.filterRequirements, unit, data, matchFilter, mine)
     end
     if cfg.hasInclusive == true then
-        if cfg.onlyMine == true and data.isPlayerAura == true then return true end
+        if cfg.onlyMine == true and mine == true then return true end
         local auraInstanceID = data.auraInstanceID
         if cfg.onlyImportant == true and matchFilter(unit, auraInstanceID, cfg.importantFilter) then return true end
         if cfg.raid == true and matchFilter(unit, auraInstanceID, cfg.raidFilter) then return true end
@@ -691,6 +695,9 @@ function Features.ApplyAutoExclusions(buff, debuff, customLanes, source, unit)
             for spellID in pairs(lane.includeSpellIDs or {}) do target.classicExcludeSpellIDs[spellID] = true end
             for name in pairs(lane.includeSpellNames or {}) do target.classicExcludeSpellNames[name] = true end
             target.hasFilterWork = true
+            -- An exclusion is decided per aura, like the blacklist, so a lane
+            -- without an inclusive filter keeps its capped visible-only scan.
+            if target.hasInclusive ~= true then target.cappedFilterScan = true end
         end
     end
 end

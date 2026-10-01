@@ -12,7 +12,7 @@ if type(A3) ~= "table" then return end
 local V = A3.ClassicVisuals or {}
 A3.ClassicVisuals = V
 
-local type, tostring, tonumber, select = type, tostring, tonumber, select
+local type, tostring, tonumber, select, next = type, tostring, tonumber, select, next
 local math_floor, math_max, math_min = math.floor, math.max, math.min
 local CreateFrame = _G.CreateFrame
 local C_UnitAuras = _G.C_UnitAuras
@@ -268,41 +268,75 @@ local function ApplyShadow(button, style, size, shape)
         style.shadowR, style.shadowG, style.shadowB, style.shadowA)
 end
 
+--- Largest inner band, as a share of the icon: an inner style shades the
+--- artwork itself, so an unclamped thickness would black the icon out.
+local ICON_INNER_BAND_MAX = 0.3
+
+--- The border ring, drawn like Retail's ApplyIconStyleBorder
+--- (Auras3/Runtime/MSUF_Auras3_Runtime_ButtonVisuals.lua). Outer styles frame
+--- the icon behind it at BORDER(-1); inner styles (Shadow) sit wholly inside,
+--- clamped, on top at ARTWORK(7). A shaped icon draws one ring per pixel of
+--- thickness.
 local function ApplyBorder(button, style, size, shape)
     local flat = button._msufA3StyleBorder
     local pieces = button._msufA3StyleBorderPieces
-    local shaped = button._msufA3ShapedStyleBorder
+    local rings = button._msufA3ShapedStyleBorders
     if shape ~= Shape.RECTANGLE then
         if flat then flat:Hide() end
         HidePieces(pieces)
-        if not (style and style.borderEnabled) then if shaped then shaped:Hide() end; return end
-        if not shaped then
-            shaped = PixelLayoutRegion(button:CreateTexture(nil, "BORDER", nil, -1))
-            button._msufA3ShapedStyleBorder = shaped
+        if not (style and style.borderEnabled) then
+            for i = 1, rings and #rings or 0 do rings[i]:Hide() end
+            return
         end
-        if not SetShapeTexture(shaped, shape, true) then shaped:Hide(); return end
-        local extent = style.borderThickness
-        shaped:ClearAllPoints()
-        shaped:SetPoint("TOPLEFT", button, "TOPLEFT", -extent, extent)
-        shaped:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", extent, -extent)
-        shaped:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
-        shaped:Show()
+        rings = rings or {}
+        button._msufA3ShapedStyleBorders = rings
+        local media = Shape.MEDIA[shape]
+        local inner = style.borderPlacement == "inner" and not (media and media.borderOuterOnly)
+        local count = math_max(1, math_min(8, math_floor((style.borderThickness or 1) + 0.5)))
+        for i = 1, count do
+            local ring = rings[i]
+            if not ring then
+                ring = PixelLayoutRegion(button:CreateTexture(nil, inner and "ARTWORK" or "BORDER", nil, inner and 7 or -1))
+                rings[i] = ring
+            elseif ring.SetDrawLayer then
+                ring:SetDrawLayer(inner and "ARTWORK" or "BORDER", inner and 7 or -1)
+            end
+            if not SetShapeTexture(ring, shape, true) then ring:Hide(); return end
+            local inset = inner and (i - 1) or -i
+            ring:ClearAllPoints()
+            ring:SetPoint("TOPLEFT", button, "TOPLEFT", inset, -inset)
+            ring:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -inset, inset)
+            ring:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
+            ring:Show()
+        end
+        for i = count + 1, #rings do rings[i]:Hide() end
         return
     end
-    if shaped then shaped:Hide() end
+    for i = 1, rings and #rings or 0 do rings[i]:Hide() end
     if not (style and style.borderEnabled) then if flat then flat:Hide() end; HidePieces(pieces); return end
     if style.borderTexture and MSUF.BorderStyles then
         if flat then flat:Hide() end
+        local inner = style.borderPlacement == "inner"
+        local edge = style.borderEdge or 8
+        local inset = 0
+        if inner then
+            edge = math_max(1, math_min(edge, math_floor(size * ICON_INNER_BAND_MAX)))
+            inset = edge * 0.5
+        end
+        -- The draw layer is baked into the pieces: a placement change rebuilds them.
+        if pieces and button._msufA3StyleBorderInner ~= inner then
+            HidePieces(pieces)
+            pieces = nil
+        end
         if not pieces then
-            pieces = MSUF.BorderStyles.Create(button,
-                style.borderPlacement == "inner" and "ARTWORK" or "BORDER",
-                style.borderPlacement == "inner" and 7 or -1, style.borderTexture)
+            pieces = MSUF.BorderStyles.Create(button, inner and "ARTWORK" or "BORDER", inner and 7 or -1, style.borderTexture)
             button._msufA3StyleBorderPieces = pieces
+            button._msufA3StyleBorderInner = inner
         else
             MSUF.BorderStyles.SetTexture(pieces, style.borderTexture)
         end
-        MSUF.BorderStyles.Apply(pieces, button, style.borderEdge or style.borderThickness,
-            size, size, style.borderR, style.borderG, style.borderB, style.borderA)
+        MSUF.BorderStyles.Apply(pieces, button, edge, size, size,
+            style.borderR, style.borderG, style.borderB, style.borderA, inset)
         return
     end
     HidePieces(pieces)
@@ -383,6 +417,9 @@ function V.ApplyButtonLayout(lane, button)
     elseif button.Count then if barOnly or cfg.showStacks == false then button.Count:Hide() else button.Count:Show() end end
     -- Layout generation stamp: the two inputs this pass was computed from.
     -- Written last, so a pass that raised is repeated by the next update.
+    -- The indicator pass redraws after it, as this pass re-shows the icon.
+    button._msufA3IndicatorConfig = nil
+    button._msufA3NumberText = nil
     button._msufA3LayoutConfig = cfg
     button._msufA3LayoutCooldownShown = button._msufA3CooldownShown
 end
@@ -391,15 +428,122 @@ end
 -- no engine-validated consumer on any Classic branch, and on Mists/TBC the
 -- bound objects produced hour-scale timers. The bar animates from plain
 -- duration/expiration numbers instead, the way Blizzard's own Classic timer
--- bars do. OnUpdate only runs while the bar is shown, so permanent auras
--- (hidden bar) cost nothing.
-local function DurationBarOnUpdate(bar)
+-- bars do.
+local function DurationBarPaint(bar, now)
     local duration = bar._msufA3ClassicBarDuration
     local expiration = bar._msufA3ClassicBarExpiration
     if not (duration and expiration) then return end
-    local remaining = expiration - (_G.GetTime and _G.GetTime() or 0)
+    local remaining = expiration - now
     if remaining < 0 then remaining = 0 end
     bar:SetValue(bar._msufA3ClassicBarElapsed == true and (duration - remaining) or remaining)
+end
+
+--- One shared driver animates every shown duration bar (20 Hz) and re-checks
+--- the cooldown-text colour buckets (4 Hz) that time alone moves, so a raid of
+--- timed auras costs one OnUpdate instead of one per bar. It runs only while
+--- something on screen is tracked: a bar while it is visible, a bucket while
+--- its countdown is visible and its aura can still cross a threshold. Their
+--- OnShow/OnHide follow a hidden parent; a show catches each up once.
+local BAR_TICK, BUCKET_TICK = 0.05, 0.25
+local tickBars, tickBuckets = {}, {}
+local tickDriver
+local barElapsed, bucketElapsed = 0, 0
+
+local function TickDriverOnUpdate(_, elapsed)
+    barElapsed = barElapsed + elapsed
+    bucketElapsed = bucketElapsed + elapsed
+    local now
+    if barElapsed >= BAR_TICK then
+        barElapsed = 0
+        now = _G.GetTime()
+        for bar in next, tickBars do DurationBarPaint(bar, now) end
+    end
+    if bucketElapsed >= BUCKET_TICK then
+        bucketElapsed = 0
+        local repaint = V.RepaintCooldownBucket
+        if repaint then
+            now = now or _G.GetTime()
+            for cooldown in next, tickBuckets do repaint(cooldown, now) end
+        end
+    end
+end
+
+local function TickDriverSync()
+    if next(tickBars) == nil and next(tickBuckets) == nil then
+        if tickDriver and tickDriver._msufA3Running == true then
+            tickDriver:Hide()
+            tickDriver._msufA3Running = nil
+        end
+        return
+    end
+    if not tickDriver then
+        tickDriver = CreateFrame("Frame")
+        tickDriver:SetScript("OnUpdate", TickDriverOnUpdate)
+    end
+    if tickDriver._msufA3Running ~= true then
+        tickDriver._msufA3Running = true
+        tickDriver:Show()
+    end
+end
+
+function V.TrackDurationBar(bar, track)
+    track = track == true or nil
+    if tickBars[bar] == track then return end
+    tickBars[bar] = track
+    TickDriverSync()
+end
+
+--- A countdown that becomes visible is re-checked once, then tracked while its
+--- aura can still cross a threshold (the re-check may untrack it).
+local function CooldownBucketOnShow(cooldown)
+    if cooldown._msufA3BucketWanted ~= true then return end
+    local repaint = V.RepaintCooldownBucket
+    if repaint then repaint(cooldown, _G.GetTime()) end
+    if cooldown._msufA3BucketWanted == true and tickBuckets[cooldown] ~= true then
+        tickBuckets[cooldown] = true
+        TickDriverSync()
+    end
+end
+
+local function CooldownBucketOnHide(cooldown)
+    if tickBuckets[cooldown] == true then
+        tickBuckets[cooldown] = nil
+        TickDriverSync()
+    end
+end
+
+--- track: the countdown's aura can still cross a bucket threshold. The driver
+--- re-checks it only while it is visible.
+function V.TrackCooldownBucket(cooldown, track)
+    track = track == true or nil
+    cooldown._msufA3BucketWanted = track
+    if track and cooldown._msufA3BucketHooked ~= true and cooldown.HookScript then
+        cooldown._msufA3BucketHooked = true
+        cooldown:HookScript("OnShow", CooldownBucketOnShow)
+        cooldown:HookScript("OnHide", CooldownBucketOnHide)
+    end
+    local on = track and (not cooldown.IsVisible or cooldown:IsVisible() == true) or nil
+    if tickBuckets[cooldown] == on then return end
+    tickBuckets[cooldown] = on
+    TickDriverSync()
+end
+
+--- What the shared driver currently animates (smokes read it).
+function V.TimerTracked(object)
+    return tickBars[object] == true or tickBuckets[object] == true
+end
+
+--- A bar under a hidden parent is not tracked (V.UpdateButtonVisual
+--- skips it); it catches up here, once, when it becomes visible.
+local function DurationBarOnShow(bar)
+    if bar._msufA3ClassicBarExpiration then
+        DurationBarPaint(bar, _G.GetTime())
+        V.TrackDurationBar(bar, true)
+    end
+end
+
+local function DurationBarOnHide(bar)
+    V.TrackDurationBar(bar, false)
 end
 
 local function DurationBar(button, cfg)
@@ -409,9 +553,15 @@ local function DurationBar(button, cfg)
         bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
         bar:SetMinMaxValues(0, 1)
         bar:SetValue(0)
-        bar:SetScript("OnUpdate", DurationBarOnUpdate)
+        bar._msufA3ClassicBarMax = 1
+        bar:SetScript("OnShow", DurationBarOnShow)
+        bar:SetScript("OnHide", DurationBarOnHide)
         button._msufA3DurationBar = bar
     end
+    -- Geometry and colour follow the compiled lane config alone (a new table
+    -- for every config generation), so an unchanged refresh writes none.
+    if bar._msufA3LayoutConfig == cfg then return bar end
+    bar._msufA3LayoutConfig = cfg
     local height = Clamp(cfg.durationBarHeight, 2, 1, math_max(1, cfg.buttonHeight or cfg.size))
     local inset = math_max(1, math_floor(((cfg.buttonHeight or cfg.size or 24) / 32) + 0.5))
     bar:ClearAllPoints()
@@ -442,9 +592,15 @@ end
 local function HideFrameEffect(button)
     local timer = button and button._msufA3ClassicFrameEffectTimer
     if timer and timer.Cancel then timer:Cancel() end
-    if button then button._msufA3ClassicFrameEffectTimer = nil end
+    if button then
+        button._msufA3ClassicFrameEffectTimer = nil
+        button._msufA3ClassicFrameEffectTimerAt = nil
+        button._msufA3ClassicFrameEffectStamp = nil
+    end
     local root = button and button._msufA3ClassicFrameEffectRoot
-    if not root then return end
+    -- Nothing drawn: a lane without an effect hides nothing on every update.
+    if not (root and root._msufA3EffectDrawn == true) then return end
+    root._msufA3EffectDrawn = nil
     local pulse = root._msufA3ClassicPulse
     if pulse and pulse.IsPlaying and pulse:IsPlaying() then pulse:Stop() end
     if root.SetAlpha then root:SetAlpha(1) end
@@ -465,6 +621,7 @@ local function EnsureFrameEffectRoot(button, frame)
         -- and no native secret-backed descendant gate is required here.
         root = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
         if root.EnableMouse then root:EnableMouse(false) end
+        root:Hide()
         button._msufA3ClassicFrameEffectRoot = root
     elseif root.GetParent and root:GetParent() ~= frame and root.SetParent then
         root:SetParent(frame)
@@ -534,13 +691,23 @@ local function ApplyFrameEffect(lane, button, data)
             return false
         end
         if remaining > threshold then
+            -- One timer per aura application: a refresh that kept the same
+            -- expiration and effect keeps the pending one.
+            if button._msufA3ClassicFrameEffectTimer
+                and button._msufA3ClassicFrameEffectTimerAt == expiration
+                and button._msufA3ClassicFrameEffectTimerEffect == effect then
+                return false
+            end
             HideFrameEffect(button)
             local delay = remaining - threshold
             local timerAPI = _G.C_Timer
             if timerAPI and timerAPI.NewTimer then
                 local auraInstanceID = button.auraInstanceID
+                button._msufA3ClassicFrameEffectTimerAt = expiration
+                button._msufA3ClassicFrameEffectTimerEffect = effect
                 button._msufA3ClassicFrameEffectTimer = timerAPI.NewTimer(delay, function()
                     button._msufA3ClassicFrameEffectTimer = nil
+                    button._msufA3ClassicFrameEffectTimerAt = nil
                     if button.auraInstanceID == auraInstanceID and button._msufA3Shown == true then
                         ApplyFrameEffect(lane, button, data)
                     end
@@ -551,6 +718,21 @@ local function ApplyFrameEffect(lane, button, data)
     end
 
     local frame = lane.ownerFrame
+    -- Stamp: the effect drawn for this config on this frame stays as it is on
+    -- an unchanged refresh, so a Pulse never restarts and nothing is re-laid.
+    local drawn = button._msufA3ClassicFrameEffectRoot
+    if drawn and button._msufA3ClassicFrameEffectStamp == effect
+        and button._msufA3ClassicFrameEffectFrame == frame then
+        if kind == "namecolor" and drawn._name and frame then
+            local source = frame.Name or frame.name or frame.NameText or frame.nameText or frame._nameFS
+            local text = source and source.GetText and source:GetText()
+            if text ~= drawn._name._msufA3Text then
+                drawn._name:SetText(text)
+                drawn._name._msufA3Text = text
+            end
+        end
+        return true
+    end
     local root, target = EnsureFrameEffectRoot(button, frame)
     if not root then HideFrameEffect(button); return false end
     HideFrameEffect(button)
@@ -579,13 +761,19 @@ local function ApplyFrameEffect(lane, button, data)
             local path, size, flags = source:GetFont()
             if path and size then overlay:SetFont(path, size, flags or "") end
         end
-        if source.GetText then overlay:SetText(source:GetText()) end
+        if source.GetText then
+            overlay._msufA3Text = source:GetText()
+            overlay:SetText(overlay._msufA3Text)
+        end
         overlay:ClearAllPoints(); overlay:SetAllPoints(source)
         overlay:SetTextColor(r, g, b, a); overlay:Show()
     else
         ApplyFrameEffectEdges(root, target, effect, kind, r, g, b, a)
     end
     root:Show()
+    root._msufA3EffectDrawn = true
+    button._msufA3ClassicFrameEffectStamp = effect
+    button._msufA3ClassicFrameEffectFrame = frame
     return true
 end
 
@@ -603,6 +791,11 @@ local function ApplyIndicatorVisual(button, cfg)
         and visual ~= "number" and visual ~= "none" then
         visual = "icon"
     end
+    if visual ~= "icon" and button.Cooldown then button.Cooldown:Hide() end
+    if visual == "none" and button.Count then button.Count:Hide() end
+    -- Swatch, icon and glow follow the compiled lane config alone. The layout
+    -- pass clears this stamp, as it re-shows the icon this pass may hide.
+    if button._msufA3IndicatorConfig == cfg then return visual end
     local color = type(cfg.color) == "table" and cfg.color or NO_INDICATOR_COLOR
     local r, g, b, a = Color(color, 0.69, 0.50, 0.88, 1)
     local swatch = button._msufA3ClassicIndicatorSwatch
@@ -619,8 +812,6 @@ local function ApplyIndicatorVisual(button, cfg)
     end
     local showIcon = visual == "icon"
     if button.Icon then button.Icon:SetShown(showIcon) end
-    if visual ~= "icon" and button.Cooldown then button.Cooldown:Hide() end
-    if visual == "none" and button.Count then button.Count:Hide() end
 
     local glow = button._msufA3ClassicIconGlow
     if showIcon and cfg.iconEffect == "glow" then
@@ -636,6 +827,7 @@ local function ApplyIndicatorVisual(button, cfg)
     elseif glow then
         glow:Hide()
     end
+    button._msufA3IndicatorConfig = cfg
     return visual
 end
 
@@ -651,7 +843,10 @@ local function EnsureStealableTexture(button, key, subLevel)
 end
 
 local function UpdateStealableMarker(button, cfg, data)
-    local active = cfg.showStealableMarker == true and data and data.isStealable == true
+    local active = cfg.showStealableMarker == true and data and data.isStealable == true or false
+    -- Drawn once per config and stealable state.
+    if button._msufA3StealableConfig == cfg and button._msufA3StealableActive == active then return end
+    button._msufA3StealableConfig, button._msufA3StealableActive = cfg, active
     local border = button._msufA3ClassicStealableBorder
     local icon = button._msufA3ClassicStealableIcon
     if active ~= true then
@@ -696,7 +891,10 @@ function V.UpdateButtonVisual(lane, button, unit, data)
     local visual = ApplyIndicatorVisual(button, cfg)
     if visual == "number" and button.Count then
         local applications = tonumber(data and data.applications) or 1
-        button.Count:SetText(applications)
+        if button._msufA3NumberText ~= applications then
+            button.Count:SetText(applications)
+            button._msufA3NumberText = applications
+        end
         button.Count:Show()
     end
     UpdateStealableMarker(button, cfg, data)
@@ -707,33 +905,57 @@ function V.UpdateButtonVisual(lane, button, unit, data)
         local expiration = tonumber(data and data.expirationTime)
         local timed = rawDuration and expiration and rawDuration > 0 and expiration > 0
         if timed then
+            local elapsedMode = cfg.durationBarDirection == "ELAPSED"
+            -- A refresh of the same application leaves the bar to the driver.
+            local same = bar._msufA3ClassicBarExpiration == expiration
+                and bar._msufA3ClassicBarDuration == rawDuration
+                and bar._msufA3ClassicBarElapsed == elapsedMode
             bar._msufA3ClassicBarDuration = rawDuration
             bar._msufA3ClassicBarExpiration = expiration
-            bar._msufA3ClassicBarElapsed = cfg.durationBarDirection == "ELAPSED"
-            bar:SetMinMaxValues(0, rawDuration)
-            DurationBarOnUpdate(bar)
-            bar:Show()
+            bar._msufA3ClassicBarElapsed = elapsedMode
+            if bar._msufA3ClassicBarMax ~= rawDuration then
+                bar:SetMinMaxValues(0, rawDuration)
+                bar._msufA3ClassicBarMax = rawDuration
+            end
+            if not (same and bar:IsShown()) then
+                DurationBarPaint(bar, _G.GetTime())
+                bar:Show()
+            end
+            -- Only a bar on screen is animated: under a hidden frame or lane
+            -- its OnShow tracks it when it appears.
+            V.TrackDurationBar(bar, bar:IsVisible())
         else
             -- Reusing a status bar after a timed aura must not retain its
             -- previous timer state for the next permanent aura.
             bar._msufA3ClassicBarDuration = nil
             bar._msufA3ClassicBarExpiration = nil
-            bar:SetMinMaxValues(0, 1)
+            if bar._msufA3ClassicBarMax ~= 1 then
+                bar:SetMinMaxValues(0, 1)
+                bar._msufA3ClassicBarMax = 1
+            end
             bar:SetValue(0)
             bar:Hide()
+            V.TrackDurationBar(bar, false)
         end
     elseif button._msufA3DurationBar then
         button._msufA3DurationBar:Hide()
+        V.TrackDurationBar(button._msufA3DurationBar, false)
     end
 end
 
 function V.HideButtonVisual(button)
     if not button then return end
-    if button._msufA3DurationBar then button._msufA3DurationBar:Hide() end
+    if button._msufA3DurationBar then
+        button._msufA3DurationBar:Hide()
+        V.TrackDurationBar(button._msufA3DurationBar, false)
+    end
+    if button.Cooldown then V.TrackCooldownBucket(button.Cooldown, false) end
     if button._msufA3ClassicIndicatorSwatch then button._msufA3ClassicIndicatorSwatch:Hide() end
     if button._msufA3ClassicIconGlow then button._msufA3ClassicIconGlow:Hide() end
     if button._msufA3ClassicStealableBorder then button._msufA3ClassicStealableBorder:Hide() end
     if button._msufA3ClassicStealableIcon then button._msufA3ClassicStealableIcon:Hide() end
+    button._msufA3IndicatorConfig = nil
+    button._msufA3StealableConfig = nil
     HideFrameEffect(button)
 end
 

@@ -35,7 +35,9 @@ end
 local function EnsureBar(frame)
     local holder = frame.petXPBar
     if holder then return holder end
-    holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
+    -- On the visual root, which "Show only below 100% health" fades, so the
+    -- bar fades with the rest of the pet frame.
+    holder = PixelLayoutRegion(CreateFrame("Frame", nil, frame._msufHealthVisualRoot or frame))
     holder:EnableMouse(false)
     holder.back = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND"))
     holder.back:SetAllPoints()

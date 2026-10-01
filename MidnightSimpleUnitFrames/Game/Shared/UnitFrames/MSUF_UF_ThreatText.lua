@@ -88,6 +88,12 @@ local PLATE_PAD_X, PLATE_PAD_Y = 2, 1
 local PLATE_ALPHA = 0.75
 -- Anchor cache marker while the text is centred on the plate.
 local PLATE_ANCHOR = "PLATE"
+-- The plate is a status bar filled by the percentage itself. A value at or
+-- below the minimum leaves it empty, everything from 1 fills it. A secret
+-- value below 1 prints as "" (TruncateWhenZero rounds down), so a secret zero
+-- clears the plate with its number, and nothing is ever compared.
+local PLATE_TEXTURE = "Interface\\Buttons\\WHITE8X8"
+local PLATE_MIN = 1 - 1 / 1024
 
 -- Color curve, low to high threat, blended linearly at 0%, 50% and 100%. The
 -- palette is global (general.<key>R/G/B, unset = the default here) and shared by
@@ -228,9 +234,9 @@ local function EnsureText(frame, layer)
     return fs
 end
 
--- Built on first use: the plate draws on ARTWORK, below the text's OVERLAY, in
--- the same holder. The sample stays shown at alpha 0, so the engine keeps its
--- size current.
+-- Built on first use: a status bar child of the holder, one frame level below
+-- it, so the number on the holder always draws on top of the plate. The sample
+-- stays shown at alpha 0, so the engine keeps its size current.
 local function EnsurePlate(frame)
     local plate = frame.threatIndicatorPlate
     if not plate then
@@ -238,8 +244,13 @@ local function EnsurePlate(frame)
         local sample = PixelLayoutRegion(holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
         sample:SetText(PLATE_SAMPLE)
         sample:SetAlpha(0)
-        plate = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
-        plate:SetColorTexture(0, 0, 0, PLATE_ALPHA)
+        plate = PixelLayoutRegion(CreateFrame("StatusBar", nil, holder))
+        if plate.EnableMouse then plate:EnableMouse(false) end
+        plate:SetStatusBarTexture(PLATE_TEXTURE)
+        plate:SetStatusBarColor(0, 0, 0, PLATE_ALPHA)
+        plate:SetMinMaxValues(PLATE_MIN, 1)
+        plate:SetValue(1)
+        plate._msufThreatPlateValue = 1
         plate:SetPoint("TOPLEFT", sample, "TOPLEFT", -PLATE_PAD_X, PLATE_PAD_Y)
         plate:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", PLATE_PAD_X, -PLATE_PAD_Y)
         plate:Hide()
@@ -247,6 +258,24 @@ local function EnsurePlate(frame)
         frame.threatIndicatorPlate = plate
     end
     return plate, plate._msufThreatSample
+end
+
+-- A shown plain number always fills the plate; only a change writes.
+local function FillPlate(fs)
+    local plate = fs._msufThreatPlate
+    if plate and plate._msufThreatPlateValue ~= 1 then
+        plate:SetValue(1)
+        plate._msufThreatPlateValue = 1
+    end
+end
+
+-- A secret percentage goes straight into the bar, uncompared and uncached.
+local function FillPlateSecret(fs, scaled)
+    local plate = fs._msufThreatPlate
+    if plate then
+        plate:SetValue(scaled)
+        plate._msufThreatPlateValue = nil
+    end
 end
 
 -- The sample copies whatever font the text ended up with, a refused font included.
@@ -378,6 +407,12 @@ local function Layout(frame, fs, cfg, spec)
             plate:SetAlpha(alpha)
             plate._msufThreatAlpha = alpha
         end
+        local holderLevel = frame.threatIndicatorHolder._msufThreatFrameLevel
+        local plateLevel = holderLevel and (holderLevel > 0 and holderLevel - 1 or 0)
+        if plateLevel and plate._msufThreatFrameLevel ~= plateLevel and plate.SetFrameLevel then
+            plate:SetFrameLevel(plateLevel)
+            plate._msufThreatFrameLevel = plateLevel
+        end
         fs._msufThreatPlate = plate
         if fs._msufThreatShown == true then plate:Show() else plate:Hide() end
         return
@@ -398,6 +433,7 @@ local function ShowValue(fs, value, curve)
         fs._msufThreatValue = value
     end
     if curve then PaintStep(fs, value < 100 and value or 100) end
+    FillPlate(fs)
     SetShown(fs, true)
 end
 
@@ -413,6 +449,7 @@ local function ShowSecretValue(fs, scaled, curve, unit, mob)
         return
     end
     fs:SetText(WrapString(TruncateWhenZero(scaled), nil, "%"))
+    FillPlateSecret(fs, scaled)
     if curve then
         local state = UnitThreatSituation and UnitThreatSituation(unit, mob)
         local step = 0

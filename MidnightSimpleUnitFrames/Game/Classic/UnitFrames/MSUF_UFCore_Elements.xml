@@ -4,6 +4,7 @@
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Health.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_TempMaxHealth.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Power.lua"/>
+  <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_PortraitDetails.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Portrait.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Prediction.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Status.lua"/>

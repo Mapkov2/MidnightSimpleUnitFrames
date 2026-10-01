@@ -20,14 +20,46 @@ local DEFAULTS = {
     textAlign = "AUTO", textX = 0, textY = 0,
     backgroundColor = { 0.08, 0.08, 0.08 }, borderColor = { 0, 0, 0 },
     textColor = { 1, 1, 1 },
+    -- Main hand only: the off-hand lane and the next-swing cue. The cue can also
+    -- name the queued attack on the bar: its spell name, or the text set here
+    -- for that attack (one entry per next-swing attack below, empty = name).
+    offhandLane = false, nextSwingCue = true, nextSwingColor = { 0.35, 0.8, 1 },
+    nextSwingText = false, nextSwingLabel78 = "", nextSwingLabel845 = "",
+    nextSwingLabel6807 = "", nextSwingLabel2973 = "",
+    -- Every hand: grey the bar while the target is out of that weapon's reach.
+    reachCheck = false, reachOpacity = 70, reachColor = { 0.55, 0.55, 0.6 },
 }
 local LIMITS = {
     width = { 40, 1200 }, height = { 4, 100 }, scale = { 50, 200 }, opacity = { 0, 100 },
     x = { -2000, 2000 }, y = { -1200, 1200 }, backgroundOpacity = { 0, 100 },
     borderSize = { 0, 8 }, fontSize = { 6, 72 }, textX = { -300, 300 }, textY = { -200, 200 },
+    reachOpacity = { 0, 100 },
 }
 local frames, byType = {}, {}
 local active, preview, driver, nativeEnabled, formatter
+-- Attacks that replace the next melee swing, by class. The client answers by
+-- spell name, so every rank matches.
+local NEXT_SWING = { WARRIOR = { 78, 845 }, DRUID = { 6807 }, HUNTER = { 2973 } }
+-- Every next-swing attack in menu order, for the per-attack cue texts.
+local NEXT_SWING_ORDER = { 78, 845, 6807, 2973 }
+local CUE_LABEL_LIMIT = 40
+local cueNames, cueIcons, cueLabelKeys, cueSpell, cueTitled = {}, {}, {}, nil, false
+local cueEventsBound, reachEventsBound, equippedOff, equippedRanged = false, false, nil, nil
+local Public = _G.issecretvalue and function(value) return not _G.issecretvalue(value) end or function() return true end
+
+-- Settings saved under the former names of the swing extras move over once
+-- (the former key is removed); the queued-attack text was always on with them.
+local FORMER = {
+    combineOffhand = "offhandLane", rangeWarning = "reachCheck", rangeAlpha = "reachOpacity",
+    rangeColor = "reachColor", queuedAttack = "nextSwingCue", queuedColor = "nextSwingColor",
+    heroicText = "nextSwingLabel78", cleaveText = "nextSwingLabel845", maulText = "nextSwingLabel6807",
+}
+local function CarryFormer(bar)
+    if bar.queuedAttack ~= nil and bar.nextSwingText == nil then bar.nextSwingText = bar.queuedAttack == true end
+    for former, current in pairs(FORMER) do
+        if bar[former] ~= nil then bar[current], bar[former] = bar[former], nil end
+    end
+end
 
 local function Copy(value)
     if type(value) ~= "table" then return value end
@@ -47,6 +79,7 @@ local function DB()
         if type(cfg[hand]) ~= "table" then cfg[hand] = {} end
         local bar = cfg[hand]
         if bar.direction == nil then bar.direction = bar.reverse and "LEFT" or "RIGHT" end
+        if bar.queuedAttack ~= nil or bar.combineOffhand ~= nil or bar.rangeWarning ~= nil then CarryFormer(bar) end
         for key, value in pairs(DEFAULTS) do
             if bar[key] == nil then
                 if key == "y" then bar[key] = value - (i - 1) * 26
@@ -96,6 +129,7 @@ local function Stop(frame)
     frame.Time:SetText("0.0")
     frame.Bar:SetTimerDuration(frame.duration)
     frame.Bar:SetValue(0)
+    if frame.Lane then frame.Lane:SetTimerDuration(frame.duration); frame.Lane:SetValue(0) end
 end
 local function BindTimer(frame)
     local cfg = frame.config
@@ -103,6 +137,12 @@ local function BindTimer(frame)
         or _G.Enum.StatusBarTimerDirection.ElapsedTime
     if cfg.display == "bar" then
         frame.Bar:SetTimerDuration(frame.duration, _G.Enum.StatusBarInterpolation.Immediate, direction)
+    end
+    if frame.Lane and frames.main.config.offhandLane and frames.main.config.display == "bar" then
+        local main = frames.main.config
+        local laneDirection = main.fill == "remaining" and _G.Enum.StatusBarTimerDirection.RemainingTime
+            or _G.Enum.StatusBarTimerDirection.ElapsedTime
+        frame.Lane:SetTimerDuration(frame.duration, _G.Enum.StatusBarInterpolation.Immediate, laneDirection)
     end
     frame.binding:SetDuration(frame.duration)
     frame.binding:SetEnabled((cfg.time or cfg.display == "text") and frame:IsShown())
@@ -214,6 +254,7 @@ local function SuppressNative()
 end
 local function RefreshVisibility()
     local main, off, ranged = _G.UnitAttackSpeed("player")
+    equippedOff, equippedRanged = (off or 0) > 0, (ranged or 0) > 0
     local listen = false
     for i = 1, #HANDS do
         local frame = frames[HANDS[i]]
@@ -224,7 +265,12 @@ local function RefreshVisibility()
         if frame.handlesSwings and not preview then listen = true end
         local shown = active and cfg.enabled and (preview or (equipped
             and (cfg.visibility == "always" or _G.UnitAffectingCombat("player"))))
+        -- The off-hand lane draws the off-hand timer inside the main-hand bar.
+        local lane = frame.hand == "off" and frames.main.config.offhandLane == true
+            and frames.main.config.display == "bar" and frames.main.handlesSwings == true
+        if lane then shown = false end
         frame:SetShown(shown == true)
+        if frame.Lane then frame.Lane:SetShown(lane and frame.handlesSwings and frames.main:IsShown() or false) end
         frame:EnableMouse(preview == true and cfg.enabled)
         if not cfg.enabled or not equipped then Stop(frame) end
         local barShown = cfg.display == "bar"
@@ -253,6 +299,150 @@ local function RefreshVisibility()
         if listen then driver:RegisterEvent("PLAYER_SWING")
         else driver:UnregisterEvent("PLAYER_SWING") end
     end
+end
+
+-- Out of reach: the bar fades to the chosen opacity and takes the reach
+-- colour. Written only when the state flips; the lane inherits main's alpha.
+local function PaintReach(frame)
+    local c = frame.config
+    local outside = c.reachCheck == true and frame.outside == true and not preview
+    if frame.reachShown == outside then return end
+    frame.reachShown = outside
+    frame:SetAlpha(c.opacity / 100 * (outside and c.reachOpacity / 100 or 1))
+    frame.Bar:SetStatusBarColor(unpack(outside and c.reachColor or c.color))
+end
+-- C_SwingTimer.EnableRangeCheck is one switch per hand shared with Blizzard's
+-- bars, which turn it off when their CVar drops: force re-asserts it.
+local function SyncRanges(force)
+    for i = 1, #HANDS do
+        local frame = frames[HANDS[i]]
+        local enabled = (active and frame.handlesSwings and frame.config.reachCheck and not preview) and true or false
+        local swingType = _G.Enum.PlayerSwingType[NAMES[frame.hand]]
+        if force or enabled ~= frame.rangeEnabled then
+            frame.rangeEnabled = enabled
+            _G.C_SwingTimer.EnableRangeCheck(swingType, enabled)
+        end
+        local range = enabled and _G.C_SwingTimer.IsTargetWithinSwingRange(swingType)
+        frame.outside = enabled and Public(range) and range == false or false
+        PaintReach(frame)
+    end
+end
+local function SyncReachEvents()
+    local want = false
+    for i = 1, #HANDS do
+        local frame = frames[HANDS[i]]
+        if active and frame.config.enabled and frame.config.reachCheck then want = true end
+    end
+    if want == reachEventsBound then return end
+    reachEventsBound = want
+    if want then
+        driver:RegisterEvent("PLAYER_TARGET_CHANGED")
+        driver:RegisterEvent("PLAYER_SWING_RANGE_UPDATE")
+    else
+        driver:UnregisterEvent("PLAYER_TARGET_CHANGED")
+        driver:UnregisterEvent("PLAYER_SWING_RANGE_UPDATE")
+    end
+end
+-- Spell names and icons are static: read once per apply, never per event.
+local function ResolveCue()
+    for i = #cueNames, 1, -1 do cueNames[i] = nil end
+    local _, class = _G.UnitClass("player")
+    local list = NEXT_SWING[class]
+    local spellAPI = _G.C_Spell
+    if not (list and spellAPI and spellAPI.GetSpellName) then return end
+    for i = 1, #list do
+        local name = spellAPI.GetSpellName(list[i])
+        if Public(name) and type(name) == "string" then
+            cueNames[#cueNames + 1] = name
+            cueIcons[name] = spellAPI.GetSpellTexture and spellAPI.GetSpellTexture(list[i]) or nil
+            cueLabelKeys[name] = "nextSwingLabel" .. list[i]
+        end
+    end
+end
+-- A queued next-swing attack shows its icon beside the main-hand bar and
+-- tints the bar's border; with the cue text on, the bar's title names it in
+-- the cue colour. Written only when the queued attack changes.
+local function UpdateCue()
+    local main = frames.main
+    if not main then return end
+    local c = main.config
+    local current
+    if c.nextSwingCue and c.display == "bar" and not preview then
+        local isCurrent = _G.C_Spell.IsCurrentSpell
+        for i = 1, #cueNames do
+            local answer = isCurrent(cueNames[i])
+            if Public(answer) and answer then current = cueNames[i]; break end
+        end
+    end
+    if current == cueSpell then return end
+    cueSpell = current
+    if current then
+        main.Cue:SetTexture(cueIcons[current])
+        main.Cue:Show()
+        main:SetBackdropBorderColor(unpack(c.nextSwingColor))
+        if c.nextSwingText then
+            local label = c[cueLabelKeys[current]]
+            main.Title:SetText(type(label) == "string" and label ~= "" and label or current)
+            main.Title:SetTextColor(unpack(c.nextSwingColor))
+            main.Title:Show()
+            cueTitled = true
+        end
+    else
+        main.Cue:Hide()
+        main:SetBackdropBorderColor(unpack(c.borderColor))
+    end
+    if cueTitled and not (current and c.nextSwingText) then
+        cueTitled = false
+        main.Title:SetText((MSUF.L and MSUF.L[LABELS.main]) or LABELS.main)
+        main.Title:SetTextColor(unpack(c.textColor))
+        main.Title:SetShown(c.title and c.display == "bar")
+    end
+end
+local function SyncCueEvents()
+    local main = frames.main
+    local want = (active and main and main.config.enabled and main.config.nextSwingCue and #cueNames > 0) and true or false
+    if want == cueEventsBound then return end
+    cueEventsBound = want
+    if want then
+        driver:RegisterEvent("CURRENT_SPELL_CAST_CHANGED")
+        driver:RegisterEvent("ACTIONBAR_UPDATE_STATE")
+    else
+        driver:UnregisterEvent("CURRENT_SPELL_CAST_CHANGED")
+        driver:UnregisterEvent("ACTIONBAR_UPDATE_STATE")
+    end
+end
+-- The off-hand lane: a strip along the main-hand bar's far edge (its right
+-- side when vertical) in the off-hand bar's own colour.
+local function StyleLane()
+    local main, off = frames.main, frames.off
+    local cfg = main.config
+    if not (cfg.offhandLane and cfg.display == "bar") then
+        if off.Lane then off.Lane:Hide() end
+        return
+    end
+    if not off.Lane then off.Lane = CreateSurface(main) end
+    local lane, inset = off.Lane, main.inset
+    local vertical = cfg.direction == "UP" or cfg.direction == "DOWN"
+    local thickness = math.max(2, math.floor(((vertical and cfg.width or cfg.height) - 2 * inset) / 3 + 0.5))
+    lane:ClearAllPoints()
+    if vertical then
+        lane:SetPoint("TOPRIGHT", main, "TOPRIGHT", -inset, -inset)
+        lane:SetPoint("BOTTOMRIGHT", main, "BOTTOMRIGHT", -inset, inset)
+        lane:SetWidth(thickness)
+    else
+        lane:SetPoint("BOTTOMLEFT", main, "BOTTOMLEFT", inset, inset)
+        lane:SetPoint("BOTTOMRIGHT", main, "BOTTOMRIGHT", -inset, inset)
+        lane:SetHeight(thickness)
+    end
+    lane:SetFrameLevel(main.Bar:GetFrameLevel() + 1)
+    lane:SetStatusBarTexture(main.texture)
+    lane:SetStatusBarColor(unpack(off.config.color))
+    lane:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
+    lane:SetRotatesTexture(vertical)
+    lane:SetReverseFill(cfg.direction == "LEFT" or cfg.direction == "DOWN")
+    lane.Background:SetTexture(main.texture)
+    lane.Background:SetVertexColor(0, 0, 0)
+    lane.Background:SetAlpha(0.5)
 end
 
 local function StyleFonts(frame, cfg)
@@ -298,9 +488,21 @@ local function Style(frame, cfg)
     frame.Time:ClearAllPoints()
     frame.Time:SetPoint(align, frame.Text, align, padding + cfg.textX, cfg.textY)
     frame.Time:SetJustifyH(align)
+    frame.reachShown = nil
+    if frame.hand == "main" then
+        if not frame.Cue then
+            frame.Cue = PixelLayoutRegion(frame.Text:CreateTexture(nil, "OVERLAY"))
+            frame.Cue:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        end
+        frame.Cue:SetSize(cfg.height, cfg.height)
+        frame.Cue:ClearAllPoints()
+        frame.Cue:SetPoint("RIGHT", frame, "LEFT", -2, 0)
+        frame.Cue:Hide()
+        cueSpell, cueTitled = nil, false
+    end
 end
 
-local function OnEvent(_, event, a, b)
+local function OnEvent(_, event, a, b, c)
     if event == "PLAYER_SWING" then
         local frame = byType[b]
         if frame and frame.handlesSwings then Start(frame, a) end
@@ -309,12 +511,32 @@ local function OnEvent(_, event, a, b)
         active = false
         _G.SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
     elseif event == "CVAR_UPDATE" then
-        if active and a == "showSwingTimer" then SuppressNative() end
+        if active and a == "showSwingTimer" then SuppressNative(); SyncRanges(true) end
     elseif event == "ADDON_LOADED" then
         if a == "Blizzard_SwingTimer" then SuppressNative() end
+    elseif event == "PLAYER_SWING_RANGE_UPDATE" then
+        local frame = byType[a]
+        if frame then
+            frame.outside = frame.rangeEnabled == true and Public(c) and c == true and Public(b) and b == false or false
+            PaintReach(frame)
+        end
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        SyncRanges()
+    elseif event == "CURRENT_SPELL_CAST_CHANGED" or event == "ACTIONBAR_UPDATE_STATE" then
+        UpdateCue()
+    elseif event == "UNIT_ATTACK_SPEED" then
+        -- Haste procs change the speeds many times a minute; only equipping or
+        -- removing an off-hand or ranged weapon changes which bars run.
+        local _, off, ranged = _G.UnitAttackSpeed("player")
+        if ((off or 0) > 0) ~= equippedOff or ((ranged or 0) > 0) ~= equippedRanged then
+            RefreshVisibility()
+            SyncRanges()
+        end
     else
         if event == "PLAYER_REGEN_DISABLED" then preview = false end
         RefreshVisibility()
+        SyncRanges()
+        if event == "PLAYER_REGEN_DISABLED" then UpdateCue() end
         if event == "WEAPON_SLOT_CHANGED" then
             for i = 1, #HANDS do
                 local frame = frames[HANDS[i]]
@@ -331,8 +553,14 @@ function Swing.Apply()
         local hand = HANDS[i]
         Style(frames[hand] or CreateBar(hand), cfg[hand])
     end
+    StyleLane()
     SuppressNative()
+    ResolveCue()
+    SyncCueEvents()
+    SyncReachEvents()
     RefreshVisibility()
+    SyncRanges(true)
+    UpdateCue()
 end
 local function Enable()
     if active or not Swing.IsAvailable() then return end
@@ -354,13 +582,18 @@ local function Disable()
     if not active then return end
     active, preview = false, false
     driver:UnregisterAllEvents()
-    driver.listening = nil
+    driver.listening, cueEventsBound, reachEventsBound = nil, false, false
     for i = 1, #HANDS do
         local frame = frames[HANDS[i]]
         Stop(frame)
         frame:Hide()
         frame:EnableMouse(false)
+        if frame.rangeEnabled then _G.C_SwingTimer.EnableRangeCheck(_G.Enum.PlayerSwingType[NAMES[frame.hand]], false) end
+        frame.rangeEnabled, frame.outside, frame.reachShown = false, false, nil
+        if frame.Lane then frame.Lane:Hide() end
     end
+    if frames.main and frames.main.Cue then frames.main.Cue:Hide() end
+    cueSpell, cueTitled = nil, false
     _G.SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
     for i = 1, #HANDS do
         local frame = _G["SwingTimer" .. NAMES[HANDS[i]] .. "Frame"]
@@ -390,6 +623,7 @@ function Swing.Set(hand, key, value)
         end
         value = Copy(value)
     elseif type(value) ~= "string" then return false end
+    if key:find("^nextSwingLabel") and #value > CUE_LABEL_LIMIT then return false end
     if key == "visibility" and value ~= "always" and value ~= "combat" then return false end
     if key == "fill" and value ~= "elapsed" and value ~= "remaining" then return false end
     if key == "display" and value ~= "bar" and value ~= "text" then return false end
@@ -406,10 +640,22 @@ function Swing.SetPreview(value)
     if preview then
         for i = 1, #HANDS do Stop(frames[HANDS[i]]) end
     end
-    if active then RefreshVisibility() end
+    if active then RefreshVisibility(); SyncRanges(); UpdateCue() end
     return true
 end
 function Swing.GetPreview() return preview == true end
+-- The next-swing attacks with a cue text, in menu order: spell ID, the
+-- client's spell name (nil when the client has none) and the setting key.
+function Swing.CueAttacks()
+    local list, spellAPI = {}, _G.C_Spell
+    for i = 1, #NEXT_SWING_ORDER do
+        local id = NEXT_SWING_ORDER[i]
+        local name = spellAPI and spellAPI.GetSpellName and spellAPI.GetSpellName(id)
+        if not (Public(name) and type(name) == "string") then name = nil end
+        list[i] = { id = id, name = name, key = "nextSwingLabel" .. id }
+    end
+    return list
+end
 function Swing.RefreshSettings()
     MSUF.MSUF_ApplyModules()
     Swing.Apply()

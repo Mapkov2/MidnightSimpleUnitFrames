@@ -21,7 +21,7 @@ local USE_UNASSIGNED_POWER_FALLBACK = IS_FOREVER or (MSUF.Client ~= nil and MSUF
 -- (MSUF.GF, aliased `GF` in every file). Keep the surface minimal:
 --
 --   * Public / external bridges  -> global _G.MSUF_* wrappers (see lists below).
---       Options, EditMode, the Assistant, slash/debug, LoadOnDemand modules and
+--       Options, EditMode, slash/debug, LoadOnDemand modules and
 --       third-party addons call these by GLOBAL NAME. Treat them as a stable
 --       ABI: do not rename or delete; if one becomes unused keep it as a thin
 --       wrapper (deprecated) rather than removing it.
@@ -186,6 +186,97 @@ GF.DELIMITER_OPTIONS = {
 --- Defaults
 ---
 local PARTY_DEFAULTS = {
+    smallRaidAsParty = false,
+    --- Buff coverage icons (WoW Forever; Game/Forever/GroupFrames).
+    buffCoverageEnabled = false,
+    buffCoverageWild = true,
+    buffCoverageThorns = false,
+    buffCoverageIntellect = true,
+    buffCoverageBlessings = true,
+    buffCoverageStamina = true,
+    buffCoverageSpirit = false,
+    buffCoverageThornsTankOnly = true,
+    buffCoverageGlow = false,
+    buffCoverageCombat = false,
+    buffCoverageSize = 14,
+    buffCoverageAnchor = "BOTTOM",
+    buffCoverageX = 0,
+    buffCoverageY = 2,
+    buffCoverageLayer = 6,
+    nameBarEnabled = false,
+    nameBarHeight = 14,
+    nameBarR = 0.05,
+    nameBarG = 0.05,
+    nameBarB = 0.05,
+    nameBarAlpha = 0.95,
+    autoScaleIndicatorsOnResize = false,
+    autoScaleAurasOnResize = false,
+    autoScaleTrackedOnResize = false,
+    layoutTiersEnabled = false,
+    excludeHiddenGroups = false,
+    collapseEmptyGroups = false,
+    hideMythicGroupsFiveToEight = false,
+    centerSolo = false,
+    tier10Width = 0,
+    tier10Height = 0,
+    tier10Position = false,
+    tier10X = 0,
+    tier10Y = 0,
+    tier10Growth = "INHERIT",
+    tier20Width = 0,
+    tier20Height = 0,
+    tier20Position = false,
+    tier20X = 0,
+    tier20Y = 0,
+    tier20Growth = "INHERIT",
+    tier25Width = 0,
+    tier25Height = 0,
+    tier25Position = false,
+    tier25X = 0,
+    tier25Y = 0,
+    tier25Growth = "INHERIT",
+    tier40Width = 0,
+    tier40Height = 0,
+    tier40Position = false,
+    tier40X = 0,
+    tier40Y = 0,
+    tier40Growth = "INHERIT",
+    targetsEnabled = false,
+    targetsWidth = 100,
+    targetsHeight = 24,
+    targetsColumns = 1,
+    targetsX = -250,
+    targetsY = 150,
+    targetsTextSize = 11,
+    petsEnabled = false,
+    petsMaxCount = 40,
+    petsWidth = 100,
+    petsHeight = 24,
+    petsColumns = 1,
+    petsX = -250,
+    petsY = -150,
+    petsTextSize = 11,
+    friendlyBossEnabled = false,
+    friendlyBossWidth = 100,
+    friendlyBossHeight = 24,
+    friendlyBossColumns = 1,
+    friendlyBossX = 250,
+    friendlyBossY = 150,
+    friendlyBossTextSize = 11,
+    healerManaEnabled = false,
+    healerManaWidth = 100,
+    healerManaHeight = 24,
+    healerManaX = 250,
+    healerManaY = -150,
+    healerManaTextSize = 11,
+    targetsIncludePlayer = false,
+    friendlyBossHealerOnly = true,
+    healerManaShowValue = true,
+    healerManaTextR = 1,
+    healerManaTextG = 1,
+    healerManaTextB = 1,
+    sortClassPriority = false,
+    classOrder = "WARRIOR,PALADIN,HUNTER,ROGUE,PRIEST,DEATHKNIGHT,SHAMAN,MAGE,WARLOCK,MONK,DRUID,DEMONHUNTER,EVOKER",
     enabled           = false,
     blizzardFallbackMode = "AUTO", --- AUTO / SHOW / NONE when this MSUF scope is disabled
     --- AUTO / SHOW / MOUSEOVER / HIDDEN for Blizzard's Raid Manager tab. One shared
@@ -720,6 +811,9 @@ end
 --- members. Visuals intentionally inherit the active raid/mythic-raid spec;
 --- this table owns only activation, selection policy, and container geometry.
 local PRIORITY_DEFAULTS = {
+    width         = 0,
+    height        = 0,
+    unitsPerColumn = 5,
     enabled       = false,
     autoTanks     = true,
     maxFrames     = 5,
@@ -916,7 +1010,7 @@ function GF.ResolveAnchorPoint(kind, conf, parent)
     if conf.relativePoint ~= nil and not RetireLegacyRelativePoint(conf, point, parent) then
         return point, conf.relativePoint
     end
-    --- Keep the legacy projection in step so exports, imports and the Assistant
+    --- Keep the legacy projection in step so exports, imports and the menu
     --- never read a point the menu no longer shows.
     if conf.point ~= point then conf.point = point end
     return point, point
@@ -948,6 +1042,54 @@ local function RoundScaled(v, scale)
     return -math_floor((-v) + 0.5)
 end
 
+local layoutCountCache = {}
+function GF.InvalidateLayoutRoster() wipe(layoutCountCache) end
+function GF.GetLayoutGroupCount(kind)
+    local conf = GF.GetConf(kind)
+    local count = _G.GetNumGroupMembers() or 0
+    if kind == "party" or conf.excludeHiddenGroups ~= true or not _G.IsInRaid() then return count end
+    local cached = layoutCountCache[kind]
+    if cached then return cached end
+    local visible = 0
+    for i = 1, count do
+        local _, _, group = _G.GetRaidRosterInfo(i)
+        if (not _GF_issecretvalue or _GF_issecretvalue(group) ~= true) and type(group) == "number" then
+            local allowed = not (kind == "mythicraid" and conf.hideMythicGroupsFiveToEight == true and group > 4)
+            local filter = conf.groupFilter
+            if allowed and type(filter) == "table" then allowed = filter[group] ~= false and filter[tostring(group)] ~= false
+            elseif allowed and type(filter) == "string" and filter ~= "" then
+                local numeric, match = false, false
+                for token in filter:gmatch("[^,]+") do
+                    local n = tonumber(token)
+                    if n then numeric = true; if n == group then match = true end end
+                end
+                if numeric then allowed = match end
+            end
+            if allowed then visible = visible + 1 end
+        else
+            -- Incomplete/opaque roster: preserve the public total until settled.
+            return count
+        end
+    end
+    layoutCountCache[kind] = visible
+    return visible
+end
+--- `count` is the member count a layout is drawn for: previews and Edit Mode
+--- pass their sample count, nil means the live roster.
+function GF.GetLayoutTier(kind, count)
+    local conf = GF.GetConf(kind)
+    if kind == "party" or conf.layoutTiersEnabled ~= true then return nil end
+    local n = tonumber(count) or GF.GetLayoutGroupCount(kind)
+    return n <= 10 and "tier10" or n <= 20 and "tier20" or n <= 25 and "tier25" or "tier40"
+end
+function GF.ResolveLayoutGrowth(kind, conf, count)
+    conf = conf or GF.GetConf(kind)
+    local tier = GF.GetLayoutTier(kind, count)
+    local value = tier and conf[tier .. "Growth"]
+    if value == "UP" or value == "DOWN" or value == "LEFT" or value == "RIGHT" then return value end
+    return conf.growth or "DOWN"
+end
+
 function GF.ResolveFrameScale(kind)
     local conf = GF.GetConf(kind)
     if not conf then return 1 end
@@ -957,8 +1099,7 @@ function GF.ResolveFrameScale(kind)
         return ClampScalePct(conf.frameScaleManual, 100) / 100
     end
 
-    local getNum = _G.GetNumGroupMembers
-    local n = getNum and getNum() or 0
+    local n = GF.GetLayoutGroupCount(kind)
     local s10 = ClampScalePct(conf.scaleAt10,  SCALE_AUTO_DEFAULTS[1].scale)
     local s20 = ClampScalePct(conf.scaleAt20,  SCALE_AUTO_DEFAULTS[2].scale)
     local s25 = ClampScalePct(conf.scaleAt25,  SCALE_AUTO_DEFAULTS[3].scale)
@@ -995,7 +1136,7 @@ function GF.ScaleFrameValue(kind, value, minValue)
     return GF.ScaleValue(value, scale, minValue)
 end
 
-function GF.GetScaledFrameMetrics(kind)
+function GF.GetScaledFrameMetrics(kind, count)
     local conf = GF.GetConf(kind)
     local isRaidLike = IsRaidLikeKind(kind)
     if not conf then
@@ -1004,8 +1145,63 @@ function GF.GetScaledFrameMetrics(kind)
     local scale = GF.ApplyFrameScale(kind)
     local w = GF.ScaleValue(tonumber(conf.width) or (isRaidLike and 80 or 120), scale, 1)
     local h = GF.ScaleValue(tonumber(conf.height) or (isRaidLike and 32 or 40), scale, 1)
+    local tier = GF.GetLayoutTier(kind, count)
+    if tier then
+        local tw, th = tonumber(conf[tier .. "Width"]), tonumber(conf[tier .. "Height"])
+        if tw and tw > 0 then w = math_floor(math_max(20, math_min(500, tw)) + .5) end
+        if th and th > 0 then h = math_floor(math_max(10, math_min(200, th)) + .5) end
+    end
     local sp = GF.ScaleValue(tonumber(conf.spacing) or 1, scale, 0)
     return w, h, sp, scale
+end
+
+--- Where the active layout sits, for the live anchor, the previews and Edit
+--- Mode alike: the conf keys holding its offsets (offsetX/offsetY, or a size
+--- tier's own pair when that tier positions itself) and whether the block is
+--- pinned to the screen centre instead (Party "Center party frames while solo";
+--- never while Edit Mode arranges the groups, so a drag moves what it shows).
+function GF.ResolveGroupPositionKeys(kind, conf, count)
+    conf = conf or GF.GetConf(kind)
+    if kind == "party" and conf.centerSolo == true and GF._groupEditActive ~= true
+        and not (_G.IsInGroup and _G.IsInGroup()) then
+        return nil, nil, true
+    end
+    local tier = GF.GetLayoutTier(kind, count)
+    if tier and conf[tier .. "Position"] == true then return tier .. "X", tier .. "Y", false end
+    return "offsetX", "offsetY", false
+end
+
+--- The conf keys the active layout's frame size comes from: a size tier's own
+--- width or height when it sets one (non-zero), the base size otherwise.
+function GF.ResolveGroupSizeKeys(kind, conf, count)
+    conf = conf or GF.GetConf(kind)
+    local tier = GF.GetLayoutTier(kind, count)
+    local widthKey, heightKey = "width", "height"
+    if tier then
+        if (tonumber(conf[tier .. "Width"]) or 0) > 0 then widthKey = tier .. "Width" end
+        if (tonumber(conf[tier .. "Height"]) or 0) > 0 then heightKey = tier .. "Height" end
+    end
+    return widthKey, heightKey
+end
+
+-- Zero keeps the active group's dimensions; explicit sizes belong only to
+-- duplicate Priority frames and never rewrite the inherited appearance table.
+--- `kind` names the scope `conf` belongs to; callers that compile a scope pass
+--- it. Without it the scope is recovered from the conf table's identity.
+function GF.GetResizeScale(conf, kind)
+    kind = kind or (conf == GF.GetConf("raid") and "raid" or conf == GF.GetConf("mythicraid") and "mythicraid" or "party")
+    local w, h = GF.GetScaledFrameMetrics(kind)
+    local baseW, baseH = tonumber(conf.width) or 120, tonumber(conf.height) or 40
+    return math_max(.25, math_min(3, w / math_max(1, baseW), h / math_max(1, baseH)))
+end
+
+function GF.GetPriorityFrameMetrics(kind)
+    local w, h = GF.GetScaledFrameMetrics(kind)
+    local conf = GF.GetPriorityConf and GF.GetPriorityConf() or {}
+    local width, height = tonumber(conf.width) or 0, tonumber(conf.height) or 0
+    if width > 0 then w = math_floor(math.max(20, math.min(500, width)) + .5) end
+    if height > 0 then h = math_floor(math.max(10, math.min(200, height)) + .5) end
+    return w, h
 end
 
 function GF.GetScaledPowerHeight(kind)
@@ -1087,7 +1283,9 @@ local function GetRaidGroupLayoutParts(conf, count, preservedGroupCount)
         groups = tonumber(preservedGroupCount) or groups
         if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
     elseif type(GF.GetPreservedRaidGroupCount) == "function" then
-        groups = tonumber(GF.GetPreservedRaidGroupCount(conf)) or groups
+        -- Without a live snapshot count this sizes a preview or an Edit Mode
+        -- mover: empty live subgroups must not collapse sample groups.
+        groups = tonumber(GF.GetPreservedRaidGroupCount(conf, true)) or groups
         if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
     end
     local blockColumns = math_ceil(5 / primary)
@@ -1116,8 +1314,9 @@ end
 
 function GF.GetPreservedRaidGridMetrics(kind, count, preservedGroupCount)
     local conf = GF.GetConf(kind)
-    local w, h, sp = GF.GetScaledFrameMetrics(kind)
-    local growth = conf.growth or "DOWN"
+    local tierCount = (tonumber(count) or 0) > 0 and count or nil
+    local w, h, sp = GF.GetScaledFrameMetrics(kind, tierCount)
+    local growth = GF.ResolveLayoutGrowth(kind, conf, tierCount)
 
     count = tonumber(count) or 0
     local upc, primary, maxGroups, blockColumns = GetRaidGroupLayoutParts(conf, count, preservedGroupCount)
@@ -1168,8 +1367,9 @@ function GF.GetGridMetrics(kind, count, preservedGroupCount)
         return GF.GetPreservedRaidGridMetrics(kind, count, preservedGroupCount)
     end
 
-    local w, h, sp = GF.GetScaledFrameMetrics(kind)
-    local growth = conf.growth or "DOWN"
+    local tierCount = (tonumber(count) or 0) > 0 and count or nil
+    local w, h, sp = GF.GetScaledFrameMetrics(kind, tierCount)
+    local growth = GF.ResolveLayoutGrowth(kind, conf, tierCount)
     local upc = math_floor((tonumber(conf.unitsPerColumn) or 5) + 0.5)
     if upc < 1 then upc = 1 elseif upc > 40 then upc = 40 end
 
@@ -1373,10 +1573,20 @@ function GF.IsArenaPartyContext()
     return type(isInBrawl) ~= "function" or isInBrawl() ~= true
 end
 
+--- A raid of up to five shown with the Party layout. Only while the Party scope
+--- itself is on: otherwise the Raid scope keeps the raid, or nothing would show.
+function GF.IsSmallRaidPartyContext()
+    if not _G.IsInRaid() then return false end
+    local conf = GF.GetConf("party")
+    local count = _G.GetNumGroupMembers()
+    return conf.enabled == true and conf.smallRaidAsParty == true and count > 0 and count <= 5
+end
+
 function GF.GetLiveGroupKind()
     if GF.IsArenaPartyContext and GF.IsArenaPartyContext() then
         return "party"
     end
+    if GF.IsSmallRaidPartyContext() then return "party" end
     if _G.IsInRaid and _G.IsInRaid() then
         return GF.GetLiveRaidKind and GF.GetLiveRaidKind() or "raid"
     end
@@ -3107,7 +3317,7 @@ ExportPublic("MSUF_GetAssistStatusIconTexture", function(style, useMidnight)
 end)
 
 ---
---- Public DB-config bridges: consumed by Options/EditMode/Assistant by global
+--- Public DB-config bridges: consumed by Options/EditMode by global
 --- name. Stable ABI -- keep exported even when internal callers are few.
 ---
 ExportPublic("MSUF_GF_EnsureDB", GF.EnsureDB)

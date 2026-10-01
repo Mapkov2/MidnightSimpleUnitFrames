@@ -17,6 +17,8 @@
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Status.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Indicators.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Runtime.lua"/>
+  <Script file="..\..\..\GroupFrames\MSUF_GroupFrames_Additional.lua"/>
+  <Include file="..\..\..\GroupFrames\MSUF_GroupFrames_Additional.xml"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_Preview.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Group\MSUF_UF_Group_EM2.lua"/>
 </Ui>

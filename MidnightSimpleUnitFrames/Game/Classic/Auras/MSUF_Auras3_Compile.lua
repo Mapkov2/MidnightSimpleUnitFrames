@@ -22,9 +22,6 @@ if A3.__unitFrameBackendLoaded or A3._ClassicCompile then return end
 local type, tostring, tonumber, pairs, select = type, tostring, tonumber, pairs, select
 local math_floor, math_ceil, math_min, math_max = math.floor, math.ceil, math.min, math.max
 local wipe = table.wipe or wipe
-local C_CurveUtil = _G.C_CurveUtil
-local CreateColor = _G.CreateColor
-local Enum = _G.Enum
 local IsSecret = _G.issecretvalue or function() return false end
 -- Debuffs this player can dispel, in the filter this client honours
 -- (Game/Shared/Initialize.lua; Classic Era needs HARMFUL|RAID).
@@ -48,7 +45,6 @@ local DISPEL_POINTS = {
     { 9, "Enrage", 0.95, 0.37, 0.96 },
     { 11, "Bleed", 0.80, 0.10, 0.10 },
 }
-local DISPEL_CURVE_CACHE = {}
 
 local UNIT_FLAG = {
     player = "showPlayer", pet = "showPet",
@@ -82,7 +78,6 @@ local DEFAULT_SHARED = {
     debuffShowCooldownSwipe = true,
     debuffShowCooldownText = true,
     debuffShowStackCount = true,
-    clickThroughAuras = false,
     iconSize = 26,
     spacing = 2,
     perRow = 12,
@@ -431,49 +426,22 @@ local function DispelColorValue(spec, key, fallback)
     return Clamp01(value, fallback)
 end
 
-local function AddDispelCurvePoint(curve, index, r, g, b, a)
-    if not (curve and curve.AddPoint and CreateColor) then return end
-    curve:AddPoint(index, CreateColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), Clamp01(a, 1)))
-end
-
-local function DispelCurveSignature(spec)
-    local parts = {}
-    local n = 0
-    n = n + 1; parts[n] = tostring(DispelColorValue(spec, "typeNoneR", 0.80))
-    n = n + 1; parts[n] = tostring(DispelColorValue(spec, "typeNoneG", 0.00))
-    n = n + 1; parts[n] = tostring(DispelColorValue(spec, "typeNoneB", 0.00))
-    for i = 2, #DISPEL_POINTS do
+--- The per-type dispel colours, by AuraData.dispelName ("None" for an untyped
+--- debuff), with the profile's overrides. Classic reads the public dispel type
+--- straight from the aura: no Blizzard Classic UI calls the curve APIs
+--- (C_CurveUtil, GetAuraDispelTypeColor) Retail colours its native buttons with.
+local function DispelTypeColors(spec)
+    local colors = {}
+    for i = 1, #DISPEL_POINTS do
         local point = DISPEL_POINTS[i]
         local key = "type" .. point[2]
-        n = n + 1; parts[n] = tostring(DispelColorValue(spec, key .. "R", point[3]))
-        n = n + 1; parts[n] = tostring(DispelColorValue(spec, key .. "G", point[4]))
-        n = n + 1; parts[n] = tostring(DispelColorValue(spec, key .. "B", point[5]))
-    end
-    return table.concat(parts, ":")
-end
-
-local function BuildDispelColorCurve(spec)
-    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
-    local signature = DispelCurveSignature(spec)
-    local cached = DISPEL_CURVE_CACHE[signature]
-    if cached then return cached end
-    local curve = C_CurveUtil.CreateColorCurve()
-    if not curve then return nil end
-    if curve.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step then
-        curve:SetType(Enum.LuaCurveType.Step)
-    end
-    AddDispelCurvePoint(curve, 0, DispelColorValue(spec, "typeNoneR", 0.80), DispelColorValue(spec, "typeNoneG", 0.00), DispelColorValue(spec, "typeNoneB", 0.00), 1)
-    for i = 2, #DISPEL_POINTS do
-        local point = DISPEL_POINTS[i]
-        local key = "type" .. point[2]
-        AddDispelCurvePoint(curve, point[1],
+        colors[point[2]] = {
             DispelColorValue(spec, key .. "R", point[3]),
             DispelColorValue(spec, key .. "G", point[4]),
             DispelColorValue(spec, key .. "B", point[5]),
-            1)
+        }
     end
-    DISPEL_CURVE_CACHE[signature] = curve
-    return curve
+    return colors
 end
 
 local function ColorObjectRGBA(color)
@@ -491,33 +459,13 @@ end
 local function CompileDispelVisual(spec)
     local visual = type(spec) == "table" and spec or nil
     local mode = visual and visual.colorMode == "TYPE" and "TYPE" or "SINGLE"
-    local curve = BuildDispelColorCurve(visual)
-    local noneR, noneG, noneB, noneA, noneReady, noneSecret
-    if curve and curve.Evaluate then
-        local color = curve:Evaluate(0)
-        noneR, noneG, noneB, noneA = ColorObjectRGBA(color)
-        if IsSecret(noneR) == true then
-            noneReady = true
-            noneSecret = true
-        elseif noneR ~= nil then
-            noneReady = true
-            if IsSecret(noneA) ~= true and noneA == nil then noneA = 1 end
-            noneSecret = HasSecretColor(noneR, noneG, noneB, noneA) == true
-        end
-    end
     return {
         colorMode = mode,
         r = DispelColorValue(visual, "r", 0.25),
         g = DispelColorValue(visual, "g", 0.75),
         b = DispelColorValue(visual, "b", 1.00),
         a = DispelColorValue(visual, "a", 1.00),
-        dispelColorCurve = curve,
-        dispelNoneReady = noneReady == true,
-        dispelNoneR = noneR,
-        dispelNoneG = noneG,
-        dispelNoneB = noneB,
-        dispelNoneA = noneA,
-        dispelNoneSecret = noneSecret == true,
+        dispelTypeColors = DispelTypeColors(visual),
     }
 end
 
@@ -535,14 +483,13 @@ local function NormalizeRuntimeUnit(unit)
     return MANAGED_UNITS[unit] and unit or nil
 end
 
---- The current 6.0 factory owns identity through MSUFUnitKey/unitKey, while
---- the pre-12.1 scan backend originally consumed frame.unit. Keep that legacy
---- field synchronized only on Classic aura lifecycle entry points.
+--- The engine owns frame identity through MSUFUnitKey/unitKey. The backend
+--- only reads it, frame.unit last for a stand-in without either, and never
+--- writes frame.unit: engine frames are secure unit buttons, and no other
+--- engine or Retail path keeps that field in step.
 A3._ClassicBindFrameUnit = function(frame)
     if not frame then return nil end
-    local unit = frame.MSUFUnitKey or frame.unitKey or frame.unit
-    if unit ~= nil and frame.unit ~= unit then frame.unit = unit end
-    return unit
+    return frame.MSUFUnitKey or frame.unitKey or frame.unit
 end
 
 local function IsUnitToken(unit)
@@ -573,12 +520,10 @@ local function EnsureRootDB()
     local auras = db.auras3
     if type(auras.shared) ~= "table" then auras.shared = {} end
     if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
-    if auras.enabled == nil then auras.enabled = true end
-    if auras.showPlayer == nil then auras.showPlayer = false end
-    if auras.showTarget == nil then auras.showTarget = true end
-    if auras.showFocus == nil then auras.showFocus = true end
-    if auras.showBoss == nil then auras.showBoss = true end
-    if auras.showArena == nil then auras.showArena = true end
+    -- The compile only reads the unit show flags. A missing flag is off (the
+    -- pet's on), exactly as Retail's runtime reads it (UnitAuraIconsEnabled in
+    -- Runtime_ConfigValues); defaults are written by the profile and menu
+    -- layers, never from a compile.
     return auras, auras.shared
 end
 
@@ -771,9 +716,26 @@ local frameSpecConfigCache = setmetatable and setmetatable({}, { __mode = "k" })
 local function ResetFrameSpecConfigCache()
     frameSpecConfigCache = setmetatable and setmetatable({}, { __mode = "k" }) or {}
 end
+--- Drops only the configs one unit compiled from its frame specs, so a scoped
+--- refresh never makes the other unit frames recompile and rescan.
+local function InvalidateFrameSpecConfig(unit)
+    for frameSpec, cached in pairs(frameSpecConfigCache) do
+        if cached.unit == unit then frameSpecConfigCache[frameSpec] = nil end
+    end
+end
+
+--- The lane being sorted hands its own "cast by the player" answers to the
+--- comparators (RenderLane in MSUF_Auras3_UnitFrames.lua): they are kept per
+--- lane by aura instance ID, never in the AuraData that lanes share.
+local NO_OWNERSHIP = {}
+local sortOwnership = NO_OWNERSHIP
+local function SetSortOwnership(mine)
+    sortOwnership = mine or NO_OWNERSHIP
+end
 
 SortAuras = function(a, b)
-    if a.isPlayerAura ~= b.isPlayerAura then return a.isPlayerAura end
+    local am, bm = sortOwnership[a.auraInstanceID] == true, sortOwnership[b.auraInstanceID] == true
+    if am ~= bm then return am end
     return (a.auraInstanceID or 0) < (b.auraInstanceID or 0)
 end
 
@@ -786,7 +748,8 @@ local function AuraID(data)
 end
 
 local function SortAurasDefault(a, b)
-    if a.isPlayerAura ~= b.isPlayerAura then return a.isPlayerAura end
+    local am, bm = sortOwnership[a.auraInstanceID] == true, sortOwnership[b.auraInstanceID] == true
+    if am ~= bm then return am end
     local ca = PlainBool(a.canApplyAura)
     local cb = PlainBool(b.canApplyAura)
     if ca ~= cb then return ca == true end
@@ -845,6 +808,8 @@ SortComparator = function(mode)
     if mode == 4 then return SortAurasExpirationOnly end
     if mode == 5 then return SortAurasName end
     if mode == 6 then return SortAurasNameOnly end
+    -- Arrival order (instance ID); what Reverse turns into newest first.
+    if mode == 0 then return SortAurasID end
     return SortAuras
 end
 
@@ -965,7 +930,7 @@ local function CompileFrameAuraVisual(spec)
         g = dispel and dispel.g or 0.75,
         b = dispel and dispel.b or 1,
         a = dispel and dispel.a or 1,
-        dispelColorCurve = dispel and dispel.dispelColorCurve or nil,
+        dispelTypeColors = dispel and dispel.dispelTypeColors or nil,
         overlayStyle = overlayStyle,
         overlayAlpha = overlayAlpha,
         overlayOnHealth = overlayOnHealth == true,
@@ -1037,10 +1002,17 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local black = CompileBlacklist(laneBlacklist)
     local hasFilterWork = black ~= nil or hasInclusive or hidePermanent or nonPlayerFilter or satedFilter
     local renderEnabled = renderAllowed ~= false and show and maxCount > 0
+    local nativePlayerFilter = filterPlan and filterPlan.nativePlayerFilter == true or false
+    -- The frame's cleanse visuals (border, overlay, symbol) never follow this
+    -- lane's icon filters, as on Retail, where they are independent native
+    -- sensors: they come from everything the lane scans, filtered-out auras
+    -- included. A native PLAYER scan (Only mine) never sees other casters'
+    -- debuffs, so such a lane resolves them straight from the unit, as does a
+    -- lane without filter work whose visuals allow it.
     local visualDirect = kind == "debuff"
         and visual
-        and visual.directVisualEligible == true
-        and hasFilterWork ~= true
+        and (nativePlayerFilter == true
+            or (visual.directVisualEligible == true and hasFilterWork ~= true))
     local enabled = renderEnabled or (forceScan == true and kind == "debuff" and visualDirect ~= true)
     -- Capped scan: every rule ShouldShowAura applies to this lane (blacklist,
     -- auto-exclusion, Hide permanent, non-player, sated) is decided per aura,
@@ -1079,7 +1051,6 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         cooldownUrgentR, cooldownUrgentG, cooldownUrgentB = ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
     end
     local baseFilter = filterPlan and filterPlan.scanFilter or spec.filter
-    local nativePlayerFilter = filterPlan and filterPlan.nativePlayerFilter == true or false
     local debuffTypeBorderMode = kind == "debuff" and A3.NormalizeClassicDebuffTypeBorderMode(
         ReadRaw(sharedLayout, nil, "debuffTypeBorderMode"),
         ReadBool(sharedLayout, nil, "useDebuffTypeBorders", false), false) or "OFF"
@@ -1089,7 +1060,9 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         or onlyMine == true or ownHighlight == true or (visualNeedsPlayer == true and visualDirect ~= true)
         or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
     local sortComparator = sortOrder == 0 and (needsPlayerFlag and SortAuras or SortAurasID) or SortComparator(Round(sortOrder))
-    local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true
+    -- Arrival order renders unsorted; Reverse needs the sorted render, as a
+    -- custom container's does (Features.lua).
+    local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true and sortReverse ~= true
     local visibleOnlyScan = renderEnabled == true
         and naturalOrder == true
         and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
@@ -1144,7 +1117,6 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         ownR = ownR,
         ownG = ownG,
         ownB = ownB,
-        clickThrough = ReadBool(nil, shared, "clickThroughAuras", false),
         showTooltip = ReadBool(sharedLayout, nil, kind .. "ShowTooltip", DEFAULT_SHARED.showTooltip ~= false),
         showCooldownSwipe = showCooldownSwipe,
         showCooldownText = showCooldownText,
@@ -1206,13 +1178,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
             and ReadBool(sharedLayout, nil, "buffShowStealable", false),
         stealableStyle = kind == "buff" and A3.NormalizeClassicStealableStyle(
             ReadRaw(sharedLayout, nil, "buffStealableStyle")) or nil,
-        dispelColorCurve = dispelVisual and dispelVisual.dispelColorCurve or nil,
-        dispelNoneReady = dispelVisual and dispelVisual.dispelNoneReady == true or false,
-        dispelNoneR = dispelVisual and dispelVisual.dispelNoneR or nil,
-        dispelNoneG = dispelVisual and dispelVisual.dispelNoneG or nil,
-        dispelNoneB = dispelVisual and dispelVisual.dispelNoneB or nil,
-        dispelNoneA = dispelVisual and dispelVisual.dispelNoneA or nil,
-        dispelNoneSecret = dispelVisual and dispelVisual.dispelNoneSecret == true or false,
+        dispelTypeColors = dispelVisual and dispelVisual.dispelTypeColors or nil,
     }
 end
 
@@ -1291,11 +1257,15 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local hasFilterWork = black ~= nil or type(includeSpellIDs) == "table" or hidePermanent
         or nonPlayerFilter
         or (filterPlan and filterPlan.hasRequirements == true)
+    -- Cleanse visuals never follow the lane's icon filters (see CompileLane);
+    -- the debuff stripe alone shows the debuffs the lane matches, so a direct
+    -- lane still scans for it.
     local visualDirect = kind == "debuff"
         and visual
-        and visual.directVisualEligible == true
-        and hasFilterWork ~= true
-    local enabled = renderEnabled or (forceScan == true and kind == "debuff" and visualDirect ~= true)
+        and (nativePlayerFilter == true
+            or (visual.directVisualEligible == true and hasFilterWork ~= true))
+    local enabled = renderEnabled or (forceScan == true and kind == "debuff"
+        and (visualDirect ~= true or visual.stripeEnabled == true))
     local cappedFilterScan = (black ~= nil or hidePermanent or nonPlayerFilter)
         and type(includeSpellIDs) ~= "table"
         and not (filterPlan and filterPlan.hasRequirements == true)
@@ -1332,7 +1302,9 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         or (kind == "debuff" and visual and visual.needsPlayerFlag == true and visualDirect ~= true)
         or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
 
-    local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true
+    -- Arrival order renders unsorted; Reverse needs the sorted render, as a
+    -- custom container's does (Features.lua).
+    local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true and sortReverse ~= true
     local visibleOnlyScan = renderEnabled == true
         and naturalOrder == true
         and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
@@ -1380,7 +1352,6 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         cappedFilterScan = cappedFilterScan == true,
         -- Time-keyed modes only, as in CompileLane.
         reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4,
-        clickThrough = source.clickThrough == true,
         showTooltip = source[kind .. "ShowTooltip"] ~= false and source.showTooltip ~= false,
         showCooldownSwipe = renderEnabled == true and showCooldownSwipe == true,
         showCooldownText = renderEnabled == true and showCooldown == true,
@@ -1436,13 +1407,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         visual = kind == "debuff" and visual or nil,
         showDispelTypeBorder = showDispelTypeBorder == true,
         showDispelTypeSymbol = showDispelTypeBorder == true and debuffTypeBorderMode == "SYMBOL",
-        dispelColorCurve = dispelVisual and dispelVisual.dispelColorCurve or nil,
-        dispelNoneReady = dispelVisual and dispelVisual.dispelNoneReady == true or false,
-        dispelNoneR = dispelVisual and dispelVisual.dispelNoneR or nil,
-        dispelNoneG = dispelVisual and dispelVisual.dispelNoneG or nil,
-        dispelNoneB = dispelVisual and dispelVisual.dispelNoneB or nil,
-        dispelNoneA = dispelVisual and dispelVisual.dispelNoneA or nil,
-        dispelNoneSecret = dispelVisual and dispelVisual.dispelNoneSecret == true or false,
+        dispelTypeColors = dispelVisual and dispelVisual.dispelTypeColors or nil,
     }
 end
 
@@ -1479,7 +1444,6 @@ local function ResolveGroupFrameConfig(frame, unit)
             if external then visuals.EnrichGroupLane(external, source, "external", spec, scope) end
         end
         cfg.showTooltip = source.showTooltip ~= false
-        cfg.clickThrough = source.clickThrough == true
         cfg.lanes.buff = buff
         cfg.lanes.trackedBuff = trackedBuff
         cfg.lanes.debuff = debuff
@@ -1540,7 +1504,6 @@ local function BuildUnitFrameConfig(unit, frameSpec)
             if debuff then visuals.EnrichUnitLane(debuff, layout, sharedLayout, shared, "debuff", frameSpec) end
         end
         cfg.showTooltip = ReadBool(nil, shared, "showTooltip", true)
-        cfg.clickThrough = ReadBool(nil, shared, "clickThroughAuras", false)
         cfg.lanes.buff = buff
         cfg.lanes.debuff = debuff
         if buff then cfg.laneOrder[#cfg.laneOrder + 1] = "buff" end
@@ -1569,26 +1532,41 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     return cfg
 end
 
+local function ConfigRoot()
+    local db = _G.MSUF_DB
+    return type(db) == "table" and db.auras3 or nil
+end
+
+--- Compiled configs are keyed on every input that can change without a runtime
+--- generation bump: the active profile's auras3 table (a profile switch, reset
+--- or import swaps it) and, for a frame spec, UF.Config.serial (the unit-frame
+--- compiler refills the same spec table in place). The root is read after the
+--- build, which may create it.
 function A3.ResolveUnitFrameConfig(unit, frameSpec)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
+    local gen = A3._runtimeConfigGen or 1
+    local root = ConfigRoot()
     if frameSpec ~= nil then
-        local gen = A3._runtimeConfigGen or 1
+        local ufConfig = MSUF.UF and MSUF.UF.Config
+        local specSerial = ufConfig and ufConfig.serial or 0
         local cached = frameSpecConfigCache[frameSpec]
-        if cached and cached.gen == gen and cached.unit == unit then
+        if cached and cached.gen == gen and cached.unit == unit and cached.root == root
+            and cached.specSerial == specSerial then
             return cached.config
         end
         local cfg = BuildUnitFrameConfig(unit, frameSpec)
-        frameSpecConfigCache[frameSpec] = { gen = gen, unit = unit, config = cfg }
+        frameSpecConfigCache[frameSpec] = {
+            gen = gen, unit = unit, root = ConfigRoot(), specSerial = specSerial, config = cfg,
+        }
         return cfg
     end
     A3._runtimeConfigCache = A3._runtimeConfigCache or {}
-    local gen = A3._runtimeConfigGen or 1
     local cached = A3._runtimeConfigCache[unit]
-    if cached and cached.gen == gen then return cached.config end
+    if cached and cached.gen == gen and cached.root == root then return cached.config end
 
     local cfg = BuildUnitFrameConfig(unit, nil)
-    A3._runtimeConfigCache[unit] = { gen = gen, config = cfg }
+    A3._runtimeConfigCache[unit] = { gen = gen, root = ConfigRoot(), config = cfg }
     return cfg
 end
 
@@ -1678,4 +1656,6 @@ A3._ClassicCompile = {
     ResolveGroupFrameConfig = ResolveGroupFrameConfig,
     FrameAuraConfig = FrameAuraConfig,
     ResetFrameSpecConfigCache = ResetFrameSpecConfigCache,
+    InvalidateFrameSpecConfig = InvalidateFrameSpecConfig,
+    SetSortOwnership = SetSortOwnership,
 }
