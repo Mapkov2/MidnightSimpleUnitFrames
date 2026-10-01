@@ -15,7 +15,6 @@ ArcUI_Public	*	thirdparty	third-party addon global MSUF probes to detect that ad
 AuraUtil	Vanilla,Mists,TBC	table	Blizzard aura helper table
 BackdropTemplateMixin	*	table	Blizzard backdrop mixin applied to template frames
 BreakUpLargeNumbers	*	api	Blizzard client API the harness does not model
-BuffFrame	*	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
 CLASS_ICON_TCOORDS	*	constant	Blizzard UI constant the harness does not model
 C_ChatInfo	*	namespace	Blizzard C_* namespace the harness does not model
 C_ClassColor	*	namespace	Blizzard C_* namespace the harness does not model
@@ -47,7 +46,6 @@ CreateUnitHealPredictionCalculator	*	api	Blizzard client API the harness does no
 CurveConstants	*	table	Blizzard CurveConstants table
 DAMAGE_TEXT_FONT	*	constant	Blizzard UI constant the harness does not model
 DandersFrames	*	thirdparty	third-party addon global MSUF probes to detect that addon
-DebuffFrame	*	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
 Details	*	thirdparty	third-party addon global MSUF probes to detect that addon
 DisableAddOn	Vanilla,Mists,TBC	api	Blizzard Classic addon-toggle global
 Dominos	*	thirdparty	third-party addon global MSUF probes to detect that addon
@@ -62,7 +60,6 @@ GetComboPoints	*	api	Blizzard client API the harness does not model; Game/Shared
 GetCurrentKeyBoardFocus	*	api	Blizzard client API the harness does not model
 GetCursorPosition	*	api	Blizzard client API the harness does not model
 GetInstanceInfo	*	api	Blizzard client API the harness does not model
-GetInternalFontPathByKey	*	api	Blizzard client API the harness does not model
 GetMaxLevelForExpansionLevel	*	api	Blizzard client API the harness does not model
 GetMaximumExpansionLevel	*	api	Blizzard client API the harness does not model
 GetNetStats	*	api	Blizzard client API the harness does not model

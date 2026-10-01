@@ -30,13 +30,7 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
-    "path": "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
-    "call": "CreateFrame ( \"Frame\" )",
-    "count": 1,
-    "reason": "Unparented event/dispatch driver"
-  },
-  {
-    "path": "MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua",
+    "path": "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented event/dispatch driver"
@@ -120,9 +114,15 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
+    "path": "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Requests.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented event/dispatch driver"
+  },
+  {
     "path": "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua",
     "call": "CreateFrame ( \"Frame\" )",
-    "count": 2,
+    "count": 1,
     "reason": "Unparented event/dispatch driver"
   },
   {
@@ -150,7 +150,7 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
-    "path": "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua",
+    "path": "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Textures.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Invisible measurement/resource probe; preserve logical metrics; Unparented event/dispatch driver"

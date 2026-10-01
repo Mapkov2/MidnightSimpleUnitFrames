@@ -1,0 +1,70 @@
+# Unresolved _G.MSUF_* reads (tools/tests/global_links_smoke.lua). Kinds: dynamic (defined at run time; Evidence path::literal must hold), external (another addon), dead (owner still has to fix). Rows only shrink.
+Name	Kind	Owner	Evidence	Reason
+MSUF_AggroBorderTestMode	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua::SetBorderTestMode("MSUF_AggroBorderTestMode", "MSUF_AggroBorderTestScope"	test flag written through _G[flag] by SetBorderTestMode
+MSUF_AggroBorderTestScope	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua::SetBorderTestMode("MSUF_AggroBorderTestMode", "MSUF_AggroBorderTestScope"	test flag written through _G[flag] by SetBorderTestMode
+MSUF_ApplyAllSettings	dead	A-C6	-	Shell/EditMode/MSUF_EditMode_ExternalProvider.lua guards a provider nothing defines
+MSUF_ApplyArenaCastbarPositionSetting	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua::positionSetting = "MSUF_ApplyArenaCastbarPositionSetting"	exported by MSUF_CastbarPools from the descriptor
+MSUF_ApplyArenaCastbarsEnabled	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua::applyEnabled = "MSUF_ApplyArenaCastbarsEnabled"	exported by MSUF_CastbarPools from the descriptor
+MSUF_ApplyBossCastbarPositionSetting	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua::positionSetting = "MSUF_ApplyBossCastbarPositionSetting"	exported by MSUF_CastbarPools from the descriptor
+MSUF_ApplyBossCastbarsEnabled	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua::applyEnabled = "MSUF_ApplyBossCastbarsEnabled"	exported by MSUF_CastbarPools from the descriptor
+MSUF_ApplyCommitState	dead	A-C6	-	Shell/EditMode/MSUF_EditMode_Core.lua reads a batched commit state nothing creates (FontRuntime and TextureRuntime dropped their reads)
+MSUF_ArenaCastbar1	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua::framePrefix = "MSUF_ArenaCastbar"	castbar frame named from the pool descriptor's prefix and index
+MSUF_ArenaCastbarPreview1	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua::local name = "MSUF_ArenaCastbarPreview" .. index	preview frame named from its index
+MSUF_ArenaCastbar_Stop	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua::stop = "MSUF_ArenaCastbar_Stop"	exported by MSUF_CastbarPools from the descriptor
+MSUF_ArenaCastbars	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua::poolGlobal = "MSUF_ArenaCastbars"	pool table exported by MSUF_CastbarPools from the descriptor
+MSUF_Bars_RefreshAbsorbTextureTestPreview	dead	A-C7	-	Pages/MSUF_Menu2_Global.lua guards a preview refresh nothing defines
+MSUF_Bars_SeedTextFromGeneral	dead	A-C7	-	Pages/MSUF_Menu2_Unit.lua and UnitPreview_Model.lua guard a seeder nothing defines
+MSUF_BossCastbar	dead	A-C7	-	Preview/MSUF_Menu2_UnitPreview_Castbar.lua reads an unindexed boss castbar name nothing creates
+MSUF_BossCastbar1	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua::framePrefix = "MSUF_BossCastbar"	castbar frame named from the pool descriptor's prefix and index
+MSUF_BossCastbarPreview1	dead	A-C2	-	dead fallback in castbar, Edit Mode and preview code: the first boss preview is named MSUF_BossCastbarPreview without an index
+MSUF_BossCastbar_Stop	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua::stop = "MSUF_BossCastbar_Stop"	exported by MSUF_CastbarPools from the descriptor
+MSUF_BossCastbars	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua::poolGlobal = "MSUF_BossCastbars"	pool table exported by MSUF_CastbarPools from the descriptor
+MSUF_BossTargetBorderTestMode	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua::SetBorderTestMode("MSUF_BossTargetBorderTestMode", nil	test flag written through _G[flag] by SetBorderTestMode
+MSUF_CastbarBossYOffsetSlider	dead	A-C2	-	legacy slider frame read by Castbars/MSUF_CastbarPreviewEdit.lua and EditMode_Layout.lua; nothing creates it
+MSUF_ConfirmCopyToAll	dead	A-C7	-	Pages/MSUF_Menu2_Unit.lua reads a 5.x confirm dialog nothing defines
+MSUF_DevPrint	dead	A-C2	-	Castbars/MSUF_CastbarDriver.lua guards a debug printer nothing defines
+MSUF_DispelBorderTestMode	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua::SetBorderTestMode("MSUF_DispelBorderTestMode", "MSUF_DispelBorderTestScope"	test flag written through _G[flag] by SetBorderTestMode
+MSUF_DispelBorderTestScope	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua::SetBorderTestMode("MSUF_DispelBorderTestMode", "MSUF_DispelBorderTestScope"	test flag written through _G[flag] by SetBorderTestMode
+MSUF_EDITMODE_ACTIVE	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Support.lua reads a 5.x flag nothing sets
+MSUF_EM2_AuraPopup	dynamic	A-C6	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_AuraPopup.lua::Quick.CreateShell("MSUF_EM2_AuraPopup"	named frame created by Quick.CreateShell
+MSUF_EM2_CastPopup	dynamic	A-C6	MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_CastPopup.lua::Quick.CreateShell("MSUF_EM2_CastPopup"	named frame created by Quick.CreateShell
+MSUF_EM2_FocusLayer	dead	A-C6	-	Shell/EditMode/MSUF_EditMode_Focus.lua reads a frame nothing creates
+MSUF_EM2_Inspector	dead	A-C6	-	Shell/EditMode/MSUF_EditMode_Focus.lua reads a frame nothing creates
+MSUF_EditMode_Toggle	dead	A-C6	-	Shell/MSUF_MinimapButton.lua falls back to a 5.x toggle nothing defines (MSUF_SetMSUFEditModeDirect is the live entry point)
+MSUF_FocusCastbarPreview	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua::name = "MSUF_FocusCastbarPreview",	preview frame exported under its spec name (ExportPublic(config.name, frame))
+MSUF_GFOptionsPanel	dead	A-C1	-	legacy group options panel: UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua and Menu2_PagePreviews.lua read it, nothing creates it
+MSUF_GF_RebuildAll	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua::{ "MSUF_GF_RebuildAll", "RebuildAll" }	public alias exported from the GF_PUBLIC_ALIASES table
+MSUF_GF_Refresh	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua::{ "MSUF_GF_Refresh", "RefreshAll" }	public alias exported from the GF_PUBLIC_ALIASES table
+MSUF_GF_RefreshAll	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua::{ "MSUF_GF_RefreshAll", "RefreshAll" }	public alias exported from the GF_PUBLIC_ALIASES table
+MSUF_GF_RefreshColors	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua::{ "MSUF_GF_RefreshColors", "RefreshColors" }	public alias exported from the GF_PUBLIC_ALIASES table
+MSUF_GF_RefreshGeometry	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua::{ "MSUF_GF_RefreshGeometry", "RefreshGeometry" }	public alias exported from the GF_PUBLIC_ALIASES table
+MSUF_GF_RefreshOverlays	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua::{ "MSUF_GF_RefreshOverlays", "RefreshOverlays" }	public alias exported from the GF_PUBLIC_ALIASES table
+MSUF_GF_RefreshUnitBindings	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua::{ "MSUF_GF_RefreshUnitBindings", "RefreshUnitBindings" }	public alias exported from the GF_PUBLIC_ALIASES table
+MSUF_GF_RefreshVisuals	dynamic	A-C1	MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua::{ "MSUF_GF_RefreshVisuals", "RefreshVisuals" }	public alias exported from the GF_PUBLIC_ALIASES table
+MSUF_GetCastbarDetachedKey	dead	A-C6	-	Shell/EditMode/MSUF_EditMode_CastPopup.lua reads a provider nothing defines
+MSUF_IsEditModeActive	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Support.lua guards a 5.x query nothing defines
+MSUF_IsMSUFEditModeActive	dead	A-C5	-	Menu2_Support, GlobalMisc and Unit guard a query nothing defines
+MSUF_IsUnitFramePositionLocked	dead	A-C2	-	ClassPower/MSUF_CP_Core.lua and MSUF_CP_Controller_Surface.lua guard a lock query nothing defines
+MSUF_MAX_BOSS_FRAMES	dead	A-C2	-	castbar code reads it before Blizzard's MAX_BOSS_FRAMES; nothing defines it, so the fallback always decides
+MSUF_NormalizeHpTextMode	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Support.lua guards a normalizer nothing defines
+MSUF_NormalizePowerTextMode	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Support.lua guards a normalizer nothing defines
+MSUF_NormalizeUnitDispelOverlayTrigger	dead	A-C7	-	Pages/MSUF_Menu2_GroupBars.lua and UnitDispel.lua guard a normalizer nothing defines
+MSUF_PlayerCastbarPreview	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua::name = "MSUF_PlayerCastbarPreview",	preview frame exported under its spec name (ExportPublic(config.name, frame))
+MSUF_ProfileIO_SuppressRuntimeSideEffects	dead	A-C1	-	GroupFrames/MSUF_GroupFrames_DB.lua reads it; the flag is never set since the temporary-profile transaction was removed (Defaults dropped its reads)
+MSUF_PurgeBorderTestMode	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua::SetBorderTestMode("MSUF_PurgeBorderTestMode", "MSUF_PurgeBorderTestScope"	test flag written through _G[flag] by SetBorderTestMode
+MSUF_PurgeBorderTestScope	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua::SetBorderTestMode("MSUF_PurgeBorderTestMode", "MSUF_PurgeBorderTestScope"	test flag written through _G[flag] by SetBorderTestMode
+MSUF_RefreshStatusIndicators	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua::"MSUF_RefreshStatusIndicators",	status refresh alias written from STATUS_REFRESH_ALIASES
+MSUF_RequestStatusIconsRefreshForCurrent	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua::"MSUF_RequestStatusIconsRefreshForCurrent",	status refresh alias written from STATUS_REFRESH_ALIASES
+MSUF_SetEditMode	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Support.lua guards a 5.x setter nothing defines
+MSUF_StyleCheckmark	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Theme.lua guards a styler nothing defines
+MSUF_StyleToggleText	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Theme.lua guards a styler nothing defines
+MSUF_TargetCastbarPreview	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua::name = "MSUF_TargetCastbarPreview",	preview frame exported under its spec name (ExportPublic(config.name, frame))
+MSUF_ToggleEditMode	dead	A-C6	-	Shell/MSUF_MinimapButton.lua falls back to a 5.x toggle nothing defines (Kernel/MSUF_Keybinds.lua dropped its read)
+MSUF_UFCore_IsToTInlineNPCColorModeAvailable	dead	A-C7	-	Pages/MSUF_Menu2_UnitSections.lua reads a capability query nothing defines
+MSUF_UFPreview_ActiveNudgeBox	dynamic	A-C7	MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua::activeName = "MSUF_UFPreview_ActiveNudgeBox"	written through _G[activeName] by the Menu2 nudge box (MSUF_Menu2_Support.lua)
+MSUF_UFPreview_ClearFocus	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Widgets.lua reads a preview hook nothing defines
+MSUF_UIThemeProviderCandidate	external	A-C4	-	documented hand-off for a skin addon that loads before MSUF (Runtime/MSUF_UIThemeBridge.lua); MSUF never defines it
+MSUF_UnitFrameApplyState	dead	A-C6	-	Shell/EditMode/MSUF_EditMode_Core.lua reads a state table nothing creates
+MSUF_UpdateAllFrames	dead	A-C6	-	Shell/EditMode/MSUF_EditMode_Popups.lua falls back to a 5.x apply nothing defines
+MSUF_boss1CastBar	dead	A-C2	-	legacy boss castbar name kept as a fallback in Edit Mode and preview code; nothing creates it
+MSUF_player	dynamic	A-C4	MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua::return tostring(prefix) .. "_" .. tostring(unit or "unknown")	unit frame named by UF.FrameName (MSUF_<unit>)

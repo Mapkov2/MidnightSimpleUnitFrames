@@ -5,7 +5,12 @@
   <Script file="..\Classic\Auras\MSUF_Auras3_Features.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_Preview.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_Compile.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_Buttons.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_Filters.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_FrameVisuals.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_Lanes.lua"/>
   <Script file="..\Classic\Auras\MSUF_Auras3_UnitFrames.lua"/>
+  <Script file="..\Classic\Auras\MSUF_Auras3_Requests.lua"/>
   <Script file="..\..\Auras3\MSUF_Auras3_EditMode_Config.lua"/>
   <Script file="..\..\Auras3\MSUF_Auras3_EditMode_Layout.lua"/>
   <Script file="..\..\Auras3\MSUF_Auras3_EditMode_Drag.lua"/>

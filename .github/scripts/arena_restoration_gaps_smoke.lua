@@ -23,6 +23,8 @@ end
 local compile = loadstring or load
 local PROFILES = "MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
 local profiles = Read(PROFILES)
+-- The schema constant is owned by the normalizer split out of Profiles.
+local NORMALIZE = "MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"
 -- Reason: the Wago export path is three functions plus the root allowlist that
 -- decides which profile roots survive an export, so the harness compiles those
 -- four declarations and the schema constants they stamp into the payload.
@@ -33,7 +35,7 @@ local selectSnapshot = Slice.Function(profiles, "local function MSUF_ProfileIO_S
 local constants = table.concat({
     Slice.Constant(profiles, "local MSUF_PROFILEIO_WAGO_SCHEMA =", PROFILES),
     Slice.Constant(profiles, "local MSUF_PROFILEIO_WAGO_FULL_KEY =", PROFILES),
-    Slice.Constant(profiles, "local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA =", PROFILES),
+    Slice.Constant(Read(NORMALIZE), "local MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA =", NORMALIZE),
 }, "\n")
 -- Deliberate doubles, not slices: MSUF_DeepCopy reads a runtime limits table
 -- off the namespace, and the two Wago normalizers rewrite aura and group data

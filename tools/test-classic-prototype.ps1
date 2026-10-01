@@ -651,9 +651,9 @@ foreach ($client in $clientMatrix) {
 $groupOwnershipRelative = "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"
 $groupOwnershipSource = Get-Content -LiteralPath (Join-Path $root $groupOwnershipRelative) -Raw
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative `
-    -Pattern 'HardHideFrame\(_G\.PartyFrame\)' -Requirement "hide the PartyFrame owner"
+    -Pattern 'HideFrame\(_G\.PartyFrame\)' -Requirement "hide the PartyFrame owner"
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative `
-    -Pattern 'HardHideFrame\(_G\.CompactRaidFrameContainer\)' -Requirement "hide the CompactRaidFrameContainer owner"
+    -Pattern 'HideFrame\(_G\.CompactRaidFrameContainer\)' -Requirement "hide the CompactRaidFrameContainer owner"
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative -Forbidden `
     -Pattern 'PartyMemberFramePool\s*,\s*function' -Requirement "hook the PartyMemberFramePool members; only their owner is hidden"
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative -Forbidden `
@@ -1193,6 +1193,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceExtras.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtras.lua",
     "MidnightSimpleUnitFrames/State/MSUF_ProfileFields.lua",
+    "MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua",
     "MidnightSimpleUnitFrames/State/MSUF_ProfileExternal.lua",
     "MidnightSimpleUnitFrames/State/MSUF_ProfileVariants.lua",
     "MidnightSimpleUnitFrames/State/MSUF_ProfileSync.lua",
@@ -1206,6 +1207,9 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Units.lua",
     "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua",
     "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua",
+    "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Geometry.lua",
+    "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Text.lua",
+    "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Textures.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayoutAdditional.lua",
     "MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua",
@@ -1214,6 +1218,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
+    "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
     "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua",
@@ -1454,8 +1459,10 @@ foreach ($classicSuffix in $classicSuffixes) {
 }
 Write-Host "Classic flavor load coverage: $($mainlineCoveragePaths.Count) Mainline Lua paths x $($classicSuffixes.Count) flavors; $coverageLoadedCount loaded, $coverageReplacedCount replaced, $coverageExcludedCount excluded with reason"
 
-$classicAuraPath = Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"
-$classicAuraSource = Get-Content -LiteralPath $classicAuraPath -Raw
+# The unit-frame aura backend is split by cohesion; its contracts hold for the set.
+$classicAuraSource = (@("Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests") | ForEach-Object {
+    Get-Content -LiteralPath (Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_$_.lua") -Raw
+}) -join "`n"
 foreach ($requiredContract in @('Client.IsClassic', 'AuraUtil.ForEachAura', 'C_UnitAuras.GetAuraSlots', 'events = { "UNIT_AURA" }')) {
     if ($classicAuraSource.IndexOf($requiredContract) -lt 0) {
         throw "Classic aura backend is missing contract: $requiredContract"

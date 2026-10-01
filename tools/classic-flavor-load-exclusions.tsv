@@ -44,6 +44,7 @@ MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Signatures.lua	*	Ret
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Sort.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_UnitConfig.lua	*	Retail 12.1 native AuraContainer runtime factory, consumed only by Auras3/MSUF_Auras3_UnitFrames.lua, which Classic replaces
 MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEmpower.lua	*	Evoker empowered-cast stages; Evokers and empowered casts exist only on Retail
+MidnightSimpleUnitFrames/Castbars/MSUF_CastbarNativeTimer.lua	*	Dead 12.1 PTR spike: MSUF.CastbarNativeTimer has no caller in any addon and its setting castbarNativeTimer is never written; Classic clients also lack C_DurationUtil.CreateDuration. Mainline keeps Retail's load order until Retail drops the file
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_BalanceDruid.lua	*	Retail Astral Power prediction and eclipse colors; Mists Balance uses the SIGNED_CONTINUOUS route in Game/Mists/ClassPower.lua
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_EbonMight.lua	*	Augmentation Evoker Ebon Might bar on the 12.1 CustomAuraContainer; no Classic client has Evokers
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Ironfur.lua	*	Guardian Druid Ironfur tracker; Ironfur is a Legion spell that Vanilla, TBC and Mists do not have

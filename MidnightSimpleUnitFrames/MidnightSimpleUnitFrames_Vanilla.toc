@@ -80,6 +80,7 @@ State\MSUF_ProfileVariants.lua
 State\MSUF_ProfileSync.lua
 State\MSUF_ProfileVariantEditor.lua
 State\MSUF_ProfileVariantsRuntime.lua
+State\MSUF_ProfileNormalize.lua
 State\MSUF_Profiles.lua
 Shell\UI\MSUF_Style.lua
 Kernel\MSUF_Modules.lua
@@ -157,7 +158,6 @@ Runtime\MSUF_TextureRuntime.lua
 # ---------------------------------------------------------------
 # CASTBARS / CLASS POWER
 # ---------------------------------------------------------------
-Castbars\MSUF_CastbarNativeTimer.lua
 Castbars\MSUF_Castbars_Core.lua
 Castbars\MSUF_CastbarStyle.lua
 Castbars\MSUF_CastbarUtils.lua
@@ -172,6 +172,7 @@ Castbars\MSUF_CastbarVisuals.lua
 Castbars\MSUF_CastbarEngine.lua
 Castbars\MSUF_CastbarDriver.lua
 Castbars\MSUF_FocusKick_StateDriver.lua
+Castbars\MSUF_CastbarPools.lua
 Castbars\MSUF_BossCastbars.lua
 Castbars\MSUF_BossCastbars_Preview.lua
 Castbars\MSUF_ArenaCastbars.lua

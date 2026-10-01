@@ -85,6 +85,12 @@ for client in client_suffixes():
               client, "Classic aura preview must load before the Classic aura backend")
         check(order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_Compile.lua") < order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"),
               client, "Classic aura compiler must load before the Classic aura backend")
+        # The backend files import the earlier ones at load (A3._ClassicBackend).
+        backend = ["Compile", "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests"]
+        for earlier, later in zip(backend, backend[1:]):
+            check(order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_" + earlier + ".lua")
+                  < order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_" + later + ".lua"),
+                  client, "Classic aura backend file", earlier, "must load before", later)
     controller = "ClassPower/MSUF_CP_Controller.lua"
     # Target-owned combo points: the constants build the module's power ids, the
     # shared module builds the provider parts, the provider publishes

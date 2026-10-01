@@ -101,7 +101,6 @@ LE_PARTY_CATEGORY_HOME	constant	Blizzard UI constant, enum or shared string
 LE_PARTY_CATEGORY_INSTANCE	constant	Blizzard UI constant, enum or shared string
 LOCALIZED_CLASS_NAMES_MALE	constant	Blizzard FrameXMLBase/Constants.lua defines native LocalizedClassList(false); used for localized class-priority labels
 LibStub	thirdparty	LibStub, the embedded library registry every Ace-style library asks for
-MSUF_BeginEditModeTransaction	vestigial	no file defines this global any more; the read is type-guarded, so Edit Mode entry simply starts no undo transaction
 MSUF_EditModeSizing	vestigial	no file defines this global any more; both reads are truth tests, so the castbar preview drag never enters its SIZE mode
 NO	constant	Blizzard UI constant, enum or shared string
 OKAY	constant	Blizzard UI constant, enum or shared string

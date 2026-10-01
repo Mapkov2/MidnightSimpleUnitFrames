@@ -85,7 +85,9 @@ Check(defaults:find('"arena1", "arena2", "arena3",', 1, true),
     "arena1..3 left the unit-aura runtime unit list")
 
 -- 3) Profile IO ---------------------------------------------------------------
+-- The unit-key and text-scope ledgers live in the normalizer split out of Profiles.
 local profiles = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
+    .. Read("MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua")
 Check(profiles:find('"focus", "pet", "pettarget", "boss", "arena" }', 1, true),
     "MSUF_PROFILEIO_UNIT_KEYS lost the arena scope")
 Check(profiles:find('lk:find("arenacast", 1, true)', 1, true),
@@ -104,14 +106,22 @@ Check(anchors:find('"player", "target", "focus", "boss", "arena"', 1, true),
     "CASTBAR_UNITS no longer syncs the arena castbars")
 local arenaCastbars = Read("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua")
 for _, marker in ipairs({
-    'ExportPublic("MSUF_ApplyArenaCastbarPositionSetting"',
-    'ExportPublic("MSUF_ArenaCastbars_SyncLifecycle"',
+    'positionSetting = "MSUF_ApplyArenaCastbarPositionSetting"',
+    'syncLifecycle = "MSUF_ArenaCastbars_SyncLifecycle"',
     '"ARENA_OPPONENT_UPDATE"',
     '"ARENA_PREP_OPPONENT_SPECIALIZATIONS"',
     '"PVP_MATCH_STATE_CHANGED"',
 }) do
     Check(arenaCastbars:find(marker, 1, true),
         "MSUF_ArenaCastbars lost its lifecycle contract: " .. marker)
+end
+local castbarPools = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua")
+for _, marker in ipairs({
+    "ExportPublic(EXPORTS.positionSetting, ApplyPositionSetting)",
+    "ExportPublic(EXPORTS.syncLifecycle, SyncLifecycle)",
+}) do
+    Check(castbarPools:find(marker, 1, true),
+        "the castbar pool module lost its lifecycle exports: " .. marker)
 end
 
 local CASTBAR_PREVIEWS = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua"
@@ -362,6 +372,7 @@ for _, toc in ipairs(classicTocs) do
 
     local previousCastbar
     for _, module in ipairs({
+        "Castbars\\MSUF_CastbarPools.lua",
         "Castbars\\MSUF_BossCastbars.lua",
         "Castbars\\MSUF_BossCastbars_Preview.lua",
         "Castbars\\MSUF_ArenaCastbars.lua",
@@ -405,6 +416,9 @@ local function ExerciseArenaCastbarEventGate(valid)
             return value
         end,
     }
+    -- The arena descriptor is built by the shared pool module, which loads first.
+    assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua"))(
+        "MidnightSimpleUnitFrames", gateNamespace)
     assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua"))(
         "MidnightSimpleUnitFrames", gateNamespace)
 
@@ -489,8 +503,11 @@ local function ExerciseArenaCastbarPool(slots, expected)
         _G[name] = frame
         return frame
     end
+    local namespace = ArenaNamespace()
+    assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua"))(
+        "MidnightSimpleUnitFrames", namespace)
     assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua"))(
-        "MidnightSimpleUnitFrames", ArenaNamespace())
+        "MidnightSimpleUnitFrames", namespace)
     _G.MSUF_ApplyArenaCastbarPositionSetting(true, true)
     local pool = _G.MSUF_ArenaCastbars
     local label = tostring(slots)

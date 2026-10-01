@@ -54,12 +54,19 @@ Classic-only Blizzard frame suppression such as the target-anchored
 Auras use a client-selected backend. Mainline loads the Retail Auras3 runtime
 unchanged, including its native 12.1 `Blizzard_AuraContainer` path. The
 Vanilla, TBC, and Mists manifests (`Game/<Flavor>/Auras.xml`) load
-`Game/Classic/Auras/MSUF_Auras3_Compile.lua` immediately before
-`Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua`. The compile file owns lane
-config compilation: lane specs, filters, blacklist hashes, dispel visuals and
-sort comparators. The runtime file owns `UNIT_AURA`, uses the Classic
-`C_UnitAuras`/`AuraUtil` scan contract, and reuses MSUF's pooled aura buttons.
-Its lifecycle binds the factory's
+`Game/Classic/Auras/MSUF_Auras3_Compile.lua` immediately before the unit-frame
+aura backend, six files in this order: `MSUF_Auras3_Buttons.lua` (button pool
+and per-aura visuals), `_Filters` (filter-token membership, ownership and lane
+filters), `_FrameVisuals` (frame-level dispel border, overlay, stripe and
+symbols), `_Lanes` (lane state, full scans, deltas and rendering),
+`_UnitFrames` (the Auras element: `UNIT_AURA` and identity dispatch, enable and
+disable, event lists) and `_Requests` (the refresh and apply service and its
+combat deferral). They share internals only through `A3._ClassicCompile` and
+`A3._ClassicBackend`. The compile file owns lane config compilation: the one
+lane schema that unit, group and custom-container lanes all fill, lane specs,
+filters, blacklist hashes, dispel visuals and sort comparators. The backend
+owns `UNIT_AURA`, uses the Classic `C_UnitAuras`/`AuraUtil` scan contract, and
+reuses MSUF's pooled aura buttons. Its lifecycle binds the factory's
 `MSUFUnitKey`/`unitKey` to the legacy backend unit field and resolves tooltip
 aura indices when the AuraInstanceID tooltip APIs do not exist.
 
