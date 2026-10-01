@@ -8,12 +8,59 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "840ED206D39DD0A331FF94BF7B1A6953C618B78EDF002482F154F8DD8DC5A668",
-    currentVersion = "6.5-beta12",
+    sourceSha256 = "AC24A538D5C23FD4B9B364E4FCFFD890D0276F9B9ABCE400056B195F9DBC2ADA",
+    currentVersion = "6.5-beta13",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-beta11",
-    rangeLabel = "6.5-beta11 -> 6.5-beta12",
+    previousVersion = "6.5-beta12",
+    rangeLabel = "6.5-beta12 -> 6.5-beta13",
     entries = {
+        {
+            version = "6.5-beta13",
+            date = "2026-10-02",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Toggle additional group features directly from their accordion headers. Name strip, Member targets, Pet frames, Allied boss frames, Healer mana bars and Forever Buff coverage keep their master switch available while the section is closed.",
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "enable",
+                                label = "Enable",
+                                sectionId = "healer_mana",
+                                controlId = "menu2.gf_layout.group.field.healermanaenabled",
+                                settingKey = "gf_raid.healerManaEnabled",
+                                prepareKind = "groupScope",
+                                prepareValue = "raid",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Healer mana Text color is now under Colors > Group > Healer mana bars and remains accessible through the section's three-dot color menu. Existing saved values are retained; color edits follow the shared Party, Raid and Mythic Raid group-color behavior.",
+                        "Updated menu and Edit Mode translations across all twelve supported locales.",
+                        "Classic aura rendering, group configuration and castbar frame pools have clearer shared ownership while retaining their existing controls.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Group headers handle combat transitions, roster changes and small raids more consistently. Group layout, class priority, indicators and previews refresh through their shared owners.",
+                        "Classic aura filters, icon rendering and event updates remain consistent across profile and specialization changes.",
+                        "Arena and boss castbars share frame lifecycle handling, restore native text when needed and keep outline and cooldown state current.",
+                        "Mists Death Knight runes follow their rune type colors when no explicit rune color override is selected. Combo points and aura-based class resources update their displayed values correctly.",
+                        "Profile normalization retains supported numeric spell IDs, profile changes refresh visible menu pages, and Undo history stays bounded for large profiles.",
+                        "Global font and texture changes retain frame opacity and refresh the affected text. Unit tooltips display available AFK and DND flags, and portrait atlas artwork keeps its full image and flip direction.",
+                        "Edit Mode Cancel discards unfinished text edits before restoring settings. Combat interruptions preserve supported drag positions, and movement history uses translated labels.",
+                        "Menu search normalizes Unicode input, retains edits and avoids rebuilding unaffected pages. Menu previews reuse their presentation state.",
+                        "Group Anchor and class priority sections size their wrapped text correctly. Portrait controls and the Healer mana section use the corrected spacing.",
+                        "Opening Options from the Game Menu shares the deferred cold-load boundary with the keybind, reducing first-open script-time pressure.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta12",
             date = "2026-10-01",

@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta13 - 2026-10-02
+
+### Highlights
+
+- **Toggle additional group features directly from their accordion headers.** Name strip, Member targets, Pet frames, Allied boss frames, Healer mana bars and Forever Buff coverage keep their master switch available while the section is closed.
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"healer_mana","controlId":"menu2.gf_layout.group.field.healermanaenabled","settingKey":"gf_raid.healerManaEnabled","prepareKind":"groupScope","prepareValue":"raid","query":"enable","label":"Enable"} -->
+
+### Changes
+
+- Healer mana Text color is now under Colors > Group > Healer mana bars and remains accessible through the section's three-dot color menu. Existing saved values are retained; color edits follow the shared Party, Raid and Mythic Raid group-color behavior.
+- Updated menu and Edit Mode translations across all twelve supported locales.
+- Classic aura rendering, group configuration and castbar frame pools have clearer shared ownership while retaining their existing controls.
+
+### Fixes
+
+- Group headers handle combat transitions, roster changes and small raids more consistently. Group layout, class priority, indicators and previews refresh through their shared owners.
+- Classic aura filters, icon rendering and event updates remain consistent across profile and specialization changes.
+- Arena and boss castbars share frame lifecycle handling, restore native text when needed and keep outline and cooldown state current.
+- Mists Death Knight runes follow their rune type colors when no explicit rune color override is selected. Combo points and aura-based class resources update their displayed values correctly.
+- Profile normalization retains supported numeric spell IDs, profile changes refresh visible menu pages, and Undo history stays bounded for large profiles.
+- Global font and texture changes retain frame opacity and refresh the affected text. Unit tooltips display available AFK and DND flags, and portrait atlas artwork keeps its full image and flip direction.
+- Edit Mode Cancel discards unfinished text edits before restoring settings. Combat interruptions preserve supported drag positions, and movement history uses translated labels.
+- Menu search normalizes Unicode input, retains edits and avoids rebuilding unaffected pages. Menu previews reuse their presentation state.
+- Group Anchor and class priority sections size their wrapped text correctly. Portrait controls and the Healer mana section use the corrected spacing.
+- Opening Options from the Game Menu shares the deferred cold-load boundary with the keybind, reducing first-open script-time pressure.
+
 ## 6.5-beta12 - 2026-10-01
 
 ### Highlights
