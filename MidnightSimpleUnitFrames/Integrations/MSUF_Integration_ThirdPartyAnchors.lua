@@ -55,8 +55,9 @@ local InCombatLockdown = InCombatLockdown
 local UIParent = UIParent
 local type = type
 local issecretvalue = _G.issecretvalue
--- Every provider frame and CVar accessor here is foreign; a raised probe is a
--- normal miss on the shared boundary and is never reported.
+-- Every provider frame and CVar accessor here is foreign. The probes check
+-- types first; one that still raises reaches the client error handler (there
+-- is no protected boundary here).
 local format = string.format
 
 local ARCUI_ANCHOR_EVENT = "ArcUI.AnchorProxy.SizeChanged"
@@ -908,7 +909,9 @@ local function InstallMissingCooldownAnchorPopup()
         text = "%s",
         button1 = "|cff40ff80" .. Tr("Fix now") .. "|r",
         button2 = _G.CANCEL or Tr("Cancel"),
-        OnAccept = OpenCooldownAnchorSetting,
+        -- StaticPopup keeps the dialog open when OnAccept returns true, and the
+        -- navigation returns true when it found the setting: discard it.
+        OnAccept = function() OpenCooldownAnchorSetting() end,
         timeout = 0,
         whileDead = true,
         hideOnEscape = true,

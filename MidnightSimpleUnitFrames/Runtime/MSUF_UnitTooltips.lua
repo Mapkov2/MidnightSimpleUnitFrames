@@ -587,18 +587,23 @@ Tooltips.ShowUnit = function(owner, unit, opts)
     end
 
     -- Dedupe: re-hovering the same frame/unit (mouse jitter, or OnEnter
-    -- re-firing) must not rebuild or re-anchor the tooltip.
+    -- re-firing) must not rebuild or re-anchor the tooltip. It is still ours
+    -- while it shows, carries this owner/unit/anchor stamp and belongs to the
+    -- frame MSUF_AnchorGameTooltip handed to SetOwner (UIParent for the cursor
+    -- and fixed anchors). Never read the displayed unit back: GameTooltip:GetUnit
+    -- resolves it through UnitTokenFromGUID, which is secret for an
+    -- identity-restricted unit (an enemy player in an arena or battleground),
+    -- and comparing that secret raises.
     local gt = _G.GameTooltip
+    local tooltipOwner = owner or UIParent
+    if anchor == TOOLTIP_ANCHOR_CURSOR or anchor == TOOLTIP_ANCHOR_FIXED then tooltipOwner = UIParent end
     if gt
         and gt._msufUnitTooltipOwner == owner
         and gt._msufUnitTooltipUnit == unit
         and gt._msufUnitTooltipAnchor == anchor
         and gt.IsShown and gt:IsShown()
-        and gt.GetUnit then
-        local _, shownUnit = gt:GetUnit()
-        if shownUnit == unit then
-            return true
-        end
+        and gt.IsOwned and gt:IsOwned(tooltipOwner) then
+        return true
     end
     HidePlayerInfoTooltip()
     gt = MSUF_AnchorGameTooltip(owner, g, anchor)

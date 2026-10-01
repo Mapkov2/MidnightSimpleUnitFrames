@@ -182,6 +182,7 @@ local SetShown = V.SetShown
 local issecretvalue = _G.issecretvalue
 
 local Portrait = {}
+local Details = MSUF.PortraitDetails
 local ApplyUnitPortrait
 local ApplyClassPortrait
 local UpdateCastPortrait
@@ -855,7 +856,21 @@ local function ArenaPreviewClassToken(unit, frame)
   return nil
 end
 
+-- Class atlas data cannot change while the client runs; GetAtlasInfo builds a
+-- new table per call, so each class atlas is asked once per session.
+local classAtlasInfo = {}
+local function ClassAtlasInfo(atlas)
+  local info = classAtlasInfo[atlas]
+  if info == nil then
+    local textureAPI = _G.C_Texture
+    info = textureAPI and textureAPI.GetAtlasInfo and textureAPI.GetAtlasInfo(atlas) or false
+    classAtlasInfo[atlas] = info
+  end
+  return info or nil
+end
+
 ApplyClassPortrait = function(texture, unit, p, class, frame, force)
+  Details.HideModel(frame)
   class = class or BossPreviewClassToken(unit, frame) or ArenaPreviewClassToken(unit, frame) or UnitClassToken(unit)
   local frameUnit = frame and frame.MSUFUnitKey
   local classStyle = p and p.classStyle or "BLIZZARD"
@@ -864,7 +879,8 @@ ApplyClassPortrait = function(texture, unit, p, class, frame, force)
     and texture._msufPortraitClassUnit == unit
     and texture._msufPortraitClassFrameUnit == frameUnit
     and texture._msufPortraitClassToken == class
-    and texture._msufPortraitClassStyle == classStyle then
+    and texture._msufPortraitClassStyle == classStyle
+    and texture._msufPortraitClassFlip == (p and p.flip == true) then
     return
   end
   local key = BuildClassPortraitKey(unit, frame, p, class)
@@ -876,9 +892,17 @@ ApplyClassPortrait = function(texture, unit, p, class, frame, force)
   if type(visual) == "table" then
     if visual.atlas and texture and texture.SetAtlas then
       SetAtlasCached(texture, visual.atlas)
+      local info = ClassAtlasInfo(visual.atlas)
+      if info then
+        local left, right = info.leftTexCoord or 0, info.rightTexCoord or 1
+        SetTexCoordCached(texture, p and p.flip and right or left, p and p.flip and left or right,
+          info.topTexCoord or 0, info.bottomTexCoord or 1)
+      end
     elseif visual.texture then
       SetTextureCached(texture, visual.texture)
-      SetTexCoordCached(texture, visual.left or 0, visual.right or 1, visual.top or 0, visual.bottom or 1)
+      local left, right = visual.left or 0, visual.right or 1
+      SetTexCoordCached(texture, p and p.flip and right or left, p and p.flip and left or right,
+        visual.top or 0, visual.bottom or 1)
     else
       visual = nil
     end
@@ -891,6 +915,7 @@ ApplyClassPortrait = function(texture, unit, p, class, frame, force)
       texture._msufPortraitClassFrameUnit = frameUnit
       texture._msufPortraitClassToken = class
       texture._msufPortraitClassStyle = classStyle
+      texture._msufPortraitClassFlip = p and p.flip == true
     end
     return
   end
@@ -906,6 +931,7 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
   ClearClassPortraitCache(texture)
   local l, r, t, b = Get2DPortraitTexCoords(p)
   if BossPreviewActive(unit, frame) then
+    Details.HideModel(frame)
     SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
     SetTexCoordCached(texture, l, r, t, b)
     SetVertexColorCached(texture, 1, 1, 1, 1)
@@ -926,9 +952,15 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
   end
 
   if force ~= true and key ~= nil and texture._msufPortraitKey == key then
+    if p.render == "3D" and frame.MSUFPortraitModel and frame.MSUFPortraitModel._msufReady then SetShown(texture, false) end
     return
   end
 
+  if Details.ApplyModel(frame, unit, p) then
+    texture._msufPortraitKey = key
+    return
+  end
+  SetShown(texture, true)
   texture._msufTexture = nil
   texture._msufAtlas = nil
   -- Blizzard's stock frames pass disablePortraitMask (UnitFrame.lua) so the
@@ -1002,6 +1034,7 @@ local function ApplyCastPortraitIcon(frame, icon)
   end
   SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
   SetVertexColorCached(texture, 1, 1, 1, 1)
+  Details.SuspendModel(frame)
   SetShown(frame.portrait, false)
   -- The native defensive AuraButton lives on the next absolute frame level.
   -- Keep normal cast state independent underneath it; Blizzard's secret
@@ -1022,7 +1055,8 @@ local function RestoreCastPortraitIcon(frame, forceHideIcon)
   frame._msufPortraitCastIconActive = nil
   if active then
     SetShown(texture, false)
-    SetShown(frame.portrait, frame._msufPortraitPositionAnchorOnly ~= true)
+    local modelShown = Details.ResumeModel(frame)
+    SetShown(frame.portrait, not modelShown and frame._msufPortraitPositionAnchorOnly ~= true)
   elseif forceHideIcon == true and texture then
     -- The active flag and the cached shown state can both go stale when the
     -- option is switched off while a cast overlay is up (deferred applies,
@@ -1461,6 +1495,7 @@ local CLASSIFICATION_DRAGONS = {
   worldboss = { atlas = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold-Winged", x = 34 },
 }
 local CLASSIFICATION_REFRESH_EVENTS = {
+  PLAYER_ENTERING_WORLD = true, ZONE_CHANGED_NEW_AREA = true,
   UNIT_CLASSIFICATION_CHANGED = true, PLAYER_TARGET_CHANGED = true,
   PLAYER_FOCUS_CHANGED = true, UNIT_TARGET = true, MSUF_FORCE_UPDATE = true,
   MSUF_UNIT_IDENTITY_VISUAL = true, MSUF_UNIT_IDENTITY_SOFT = true,
@@ -1469,7 +1504,7 @@ local CLASSIFICATION_REFRESH_EVENTS = {
   PORTRAITS_UPDATED = true, PARTY_MEMBER_ENABLE = true, PARTY_MEMBER_DISABLE = true,
 }
 
-function Portrait.PaintClassification(holder, enabled, classification, width, height, renderParent)
+function Portrait.PaintClassification(holder, enabled, classification, width, height, renderParent, p, unit)
   if not holder then return end
   local dragon = holder.blizzElite
   -- Classification may be restricted on Retail; never index a secret value.
@@ -1489,28 +1524,41 @@ function Portrait.PaintClassification(holder, enabled, classification, width, he
     end
     style.info = atlasInfo
   end
+  local parent = Details.DragonParent(holder, p, renderParent)
   if not dragon then
-    local border = renderParent or holder.border or holder
+    local border = parent
     dragon = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 3), true)
     dragon:SetSnapToPixelGrid(false)
     dragon:SetTexelSnappingBias(0)
+    dragon._msufDragonParent = parent
     holder.blizzElite = dragon
+  elseif dragon._msufDragonParent ~= parent then
+    dragon:SetParent(parent)
+    dragon._msufDragonParent = parent
   end
   if dragon._msufDragonAtlas ~= style.atlas then
     dragon:SetAtlas(style.atlas)
     dragon:SetVertexColor(1, 1, 1, 1)
     dragon._msufDragonAtlas = style.atlas
+    dragon._msufDragonFlip, dragon._msufDragonR = nil, nil
   end
   width = width or holder._msufLayoutWidth or holder:GetWidth()
   height = height or holder._msufLayoutHeight or holder:GetHeight()
+  local scale, x, y = p and p.dragonScale or 1, p and p.dragonX or 0, p and p.dragonY or 0
+  local flip = p and p.dragonFlip == true
   if dragon._msufDragonWidth ~= width or dragon._msufDragonHeight ~= height
-    or dragon._msufDragonLayoutAtlas ~= style.atlas then
+    or dragon._msufDragonLayoutAtlas ~= style.atlas or dragon._msufDragonScale ~= scale
+    or dragon._msufDragonX ~= x or dragon._msufDragonY ~= y or dragon._msufDragonAnchorFlip ~= flip then
     dragon:ClearAllPoints()
-    dragon:SetPoint("TOPRIGHT", holder, "TOPRIGHT", style.x * width / 58, 11 * height / 58)
-    dragon:SetSize(atlasInfo.width * width / 58, atlasInfo.height * height / 58)
+    local anchor = flip and "TOPLEFT" or "TOPRIGHT"
+    dragon:SetPoint(anchor, holder, anchor, (flip and -1 or 1) * style.x * width / 58 * scale + x, 11 * height / 58 * scale + y)
+    dragon:SetSize(atlasInfo.width * width / 58 * scale, atlasInfo.height * height / 58 * scale)
+    dragon._msufDragonScale, dragon._msufDragonX, dragon._msufDragonY = scale, x, y
+    dragon._msufDragonAnchorFlip = flip
     dragon._msufDragonWidth, dragon._msufDragonHeight = width, height
     dragon._msufDragonLayoutAtlas = style.atlas
   end
+  Details.StyleDragon(dragon, p, unit, atlasInfo)
   SetShown(dragon, true)
 end
 
@@ -1525,12 +1573,13 @@ local function UpdatePortraitClassification(frame, p)
   local classification
   local enabled = p and p.enabled == true and p.shape == "BLIZZARD" and p.blizzardElite == true
   local unit = frame.MSUFUnitKey
+  enabled = enabled and Details.DragonAllowed(p, unit)
   if enabled and unit then
     classification = Portrait.GetClassificationPreview(frame.MSUFSpec and frame.MSUFSpec.key or unit)
     if not classification and BossPreviewActive(unit, frame) then classification = "worldboss" end
     if not classification and _G.UnitClassification then classification = _G.UnitClassification(unit) end
   end
-  Portrait.PaintClassification(frame.MSUFPortraitHolder, enabled, classification)
+  Portrait.PaintClassification(frame.MSUFPortraitHolder, enabled, classification, nil, nil, nil, p, unit)
 end
 
 local function StopClassificationPreview()
@@ -1590,18 +1639,19 @@ function Portrait.GetUnitlessEvents(frame, spec)
     return EMPTY_EVENTS
   end
   local unit = frame and frame.MSUFUnitKey or spec and spec.unit
+  -- Portrait details only extend the per-unit set (MSUF_UF_PortraitDetails.lua).
   if p.render == "CLASS" then
-    return PORTRAIT_UNITLESS_EVENTS
+    return Details.UnitlessEvents(PORTRAIT_UNITLESS_EVENTS, p)
   end
   if spec and spec.scope == "group" then
-    return PORTRAIT_UNITLESS_EVENTS
+    return Details.UnitlessEvents(PORTRAIT_UNITLESS_EVENTS, p)
   end
   if unit == "target" then
-    return TARGET_PORTRAIT_EXTRA_EVENTS
+    return Details.UnitlessEvents(TARGET_PORTRAIT_EXTRA_EVENTS, p)
   elseif unit == "targettarget" then
-    return TARGET_PORTRAIT_EXTRA_EVENTS
+    return Details.UnitlessEvents(TARGET_PORTRAIT_EXTRA_EVENTS, p)
   end
-  return PORTRAIT_UNITLESS_EVENTS
+  return Details.UnitlessEvents(PORTRAIT_UNITLESS_EVENTS, p)
 end
 
 function Portrait.IsEnabled(frame, spec)
@@ -1630,6 +1680,8 @@ function Portrait.AcquirePositionAnchor(frame, p)
   LayoutPortrait(frame, p)
   ApplyPortraitMask(holder, p)
   frame._msufPortraitPositionAnchorOnly = true
+  Details.HideModel(frame)
+  if holder.innerShadow then holder.innerShadow:Hide() end
   SetShown(frame.portrait, false)
   if frame.MSUFPortraitCastIcon then SetShown(frame.MSUFPortraitCastIcon, false) end
   if holder.bg then SetShown(holder.bg, false) end
@@ -1683,6 +1735,7 @@ function Portrait.Apply(frame, spec)
   LayoutPortrait(frame, p)
   ApplyPortraitMask(holder, p)
   ApplyPortraitBackground(holder, p)
+  Details.ApplyShadow(holder, p)
   LayoutPortraitBorder(holder, p, ResolvePortraitBorderColor(frame, p))
   UpdatePortraitClassification(frame, p)
   SetShown(holder, true)
@@ -1714,6 +1767,7 @@ function Portrait.Apply(frame, spec)
 end
 
 function Portrait.Disable(frame)
+  Details.HideModel(frame)
   ApplyPortraitClickTarget(frame, nil)
   SyncPlayerPortraitWorldEvent(frame, frame and frame.MSUFSpec, nil)
   local holder = frame.MSUFPortraitHolder
@@ -1786,6 +1840,12 @@ function Portrait.Update(frame, event, unit)
     or event == "MSUF_UNIT_IDENTITY_SOFT"
     or event == "MSUF_UNIT_IDENTITY_SOFT_VISUAL"
   local forceRefresh = PORTRAIT_GUID_BUST_EVENTS[event] == true
+  -- Only a 3D portrait listens to combat edges, where identity secrecy can
+  -- change: rebind when that answer changed, otherwise nothing else to do.
+  if Details.COMBAT_EDGE_EVENTS[event] then
+    if not Details.IdentityRestrictionChanged(frame, unit, p) then return end
+    forceRefresh = true
+  end
   if forceRefresh then
     frame._msufPortraitForceRefresh = true
   end

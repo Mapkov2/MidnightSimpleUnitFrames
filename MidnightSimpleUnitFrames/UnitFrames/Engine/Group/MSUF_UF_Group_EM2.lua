@@ -304,7 +304,9 @@ local function PriorityMetrics(conf, count)
   local gf = GF()
   local baseKind = GetLiveGroupKind() or "party"
   local w, h = 80, 32
-  if gf and type(gf.GetScaledFrameMetrics) == "function" then
+  if gf and type(gf.GetPriorityFrameMetrics) == "function" then
+    w, h = gf.GetPriorityFrameMetrics(baseKind)
+  elseif gf and type(gf.GetScaledFrameMetrics) == "function" then
     w, h = gf.GetScaledFrameMetrics(baseKind)
   else
     local base = gf and type(gf.GetConf) == "function" and gf.GetConf(baseKind) or nil
@@ -314,8 +316,11 @@ local function PriorityMetrics(conf, count)
   count = min(5, max(1, floor((tonumber(count) or 5) + 0.5)))
   local spacing = min(40, max(0, floor((tonumber(conf and conf.spacing) or 2) + 0.5)))
   local horizontal = conf and (conf.growth == "LEFT" or conf.growth == "RIGHT")
-  local totalW = horizontal and (w * count + spacing * (count - 1)) or w
-  local totalH = horizontal and h or (h * count + spacing * (count - 1))
+  local primary = min(count, min(5, max(1, floor((tonumber(conf and conf.unitsPerColumn) or 5) + .5))))
+  local secondary = math.ceil(count / primary)
+  local columns, rows = horizontal and primary or secondary, horizontal and secondary or primary
+  local totalW = w * columns + spacing * (columns - 1)
+  local totalH = h * rows + spacing * (rows - 1)
   return totalW, totalH
 end
 
@@ -579,6 +584,26 @@ local function HidePreviewVisualsForCombat()
   if _previewAnchors.priority then _previewAnchors.priority:Hide() end
 end
 
+--- The conf keys of the layout Edit Mode shows: a size tier's own position or
+--- size when it sets one, else the base offsets and size (the live anchor uses
+--- the same resolver, GF.ResolveGroupPositionKeys).
+local function PositionKeys(kind, conf)
+  local gf = GF()
+  if kind ~= "priority" and gf and type(gf.ResolveGroupPositionKeys) == "function" then
+    local xKey, yKey = gf.ResolveGroupPositionKeys(kind, conf, GetPositionCount(kind))
+    if xKey then return xKey, yKey end
+  end
+  return "offsetX", "offsetY"
+end
+
+local function SizeKeys(kind, conf)
+  local gf = GF()
+  if kind ~= "priority" and gf and type(gf.ResolveGroupSizeKeys) == "function" then
+    return gf.ResolveGroupSizeKeys(kind, conf, GetPositionCount(kind))
+  end
+  return "width", "height"
+end
+
 local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
   local anchor = EnsurePreviewAnchor(kind)
   if not anchor then return nil end
@@ -610,8 +635,9 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
   -- afterwards.
   local point, relativePoint = ResolveAnchorPoint(kind, conf, parent)
   local defX, defY = GetDefaultCenter(kind)
-  local cx = tonumber(conf and conf.offsetX)
-  local cy = tonumber(conf and conf.offsetY)
+  local xKey, yKey = PositionKeys(kind, conf)
+  local cx = tonumber(conf and conf[xKey])
+  local cy = tonumber(conf and conf[yKey])
   if cx == nil then cx = defX end
   if cy == nil then cy = defY end
   local gf = GF()
@@ -672,6 +698,7 @@ local function SyncContainer(kind)
     totalH = max((runtime.GetHeight and runtime:GetHeight()) or totalH, totalH, 1)
   end
 
+  container._msufGFOffsetKeyX, container._msufGFOffsetKeyY = PositionKeys(kind, conf)
   container:SetSize(max(totalW, 1), max(totalH, 1))
   container._msufGFGridWidth = max(totalW, 1)
   container._msufGFGridHeight = max(totalH, 1)
@@ -692,8 +719,9 @@ local function SyncContainer(kind)
       local parent = ResolveAnchorFrame(conf, container)
       local point, relativePoint = ResolveAnchorPoint(kind, conf, parent)
       local defX, defY = GetDefaultCenter(kind)
-      local cx = tonumber(conf.offsetX)
-      local cy = tonumber(conf.offsetY)
+      local xKey, yKey = PositionKeys(kind, conf)
+      local cx = tonumber(conf[xKey])
+      local cy = tonumber(conf[yKey])
       if cx == nil then cx = defX end
       if cy == nil then cy = defY end
       container:SetPoint(point, parent, relativePoint, floor(cx + 0.5), floor(cy + 0.5))
@@ -953,6 +981,7 @@ local function ShowPreviewOnly()
         if liveAnchor then
           gf.SetPreviewAnchor(kind, nil)
           gf.HidePreview(kind)
+          if gf.ShowAdditionalGroupPreview then gf.ShowAdditionalGroupPreview(kind, GetRequestedPreviewCount(kind)) end
           needsLiveVisibility = true
         else
           gf.SetPreviewAnchor(kind, EnsurePreviewAnchor(kind) or EnsureContainer(kind))
@@ -971,6 +1000,12 @@ local function ShowPreviewOnly()
     RefreshGroupGeometry(gf)
   end
 
+  if not nativeAllowed and gf.ShowAdditionalGroupPreview then
+    for _, kind in ipairs(GROUP_KINDS) do
+      if KindEnabled(kind) and ShouldShowPreviewKind(kind) then gf.ShowAdditionalGroupPreview(kind, GetRequestedPreviewCount(kind))
+      elseif gf.HideAdditionalGroupPreview then gf.HideAdditionalGroupPreview(kind) end
+    end
+  end
   SyncAllContainers()
   for _, kind in ipairs(MOVER_KINDS) do
     if _containers[kind] then WireDragFrame(_containers[kind], kind, "group-container") end
@@ -982,6 +1017,9 @@ end
 local function HidePreviewOnly()
   local gf = GF()
   _previewShownByEM2 = false
+  if gf and gf.HideAdditionalGroupPreview then
+    for _, kind in ipairs(GROUP_KINDS) do gf.HideAdditionalGroupPreview(kind) end
+  end
   if ConfigLocked() then
     HidePreviewVisualsForCombat()
     return
@@ -1039,8 +1077,9 @@ local function NudgePreviewKind(kind, dx, dy)
   end
 
   local defX, defY = GetDefaultCenter(kind)
-  conf.offsetX = floor(((tonumber(conf.offsetX) or defX) + (tonumber(dx) or 0)) + 0.5)
-  conf.offsetY = floor(((tonumber(conf.offsetY) or defY) + (tonumber(dy) or 0)) + 0.5)
+  local xKey, yKey = PositionKeys(kind, conf)
+  conf[xKey] = floor(((tonumber(conf[xKey]) or defX) + (tonumber(dx) or 0)) + 0.5)
+  conf[yKey] = floor(((tonumber(conf[yKey]) or defY) + (tonumber(dy) or 0)) + 0.5)
   conf.positionMode = STABLE_GRID_POSITION_MODE
 
   SyncContainer(kind)
@@ -1097,6 +1136,8 @@ ExportPublic("MSUF_GF_EM2_SetActivePreviewKind", GF_EM2_SetActivePreviewKind)
 local function EnterEditMode()
   if _em2Active then return end
   _em2Active = true
+  local gf = GF()
+  if gf then gf._groupEditActive = true end
   if SyncCombatHooks then SyncCombatHooks(true) end
   _previewShownByEM2 = true
   ShowPreviewOnly()
@@ -1110,6 +1151,7 @@ local function ExitEditMode()
   _previewShownByEM2 = false
 
   local gf = GF()
+  if gf then gf._groupEditActive = nil end
   if HasNativePreviewAPI(gf) then
     for _, kind in ipairs(GROUP_KINDS) do
       gf.SetPreviewAnchor(kind, nil)
@@ -1128,7 +1170,70 @@ local function ExitEditMode()
   end
 end
 
+-- Independent extra blocks use the existing public mover adapter: drag, nudge,
+-- history and numeric dimensions share its combat and session guarantees. All
+-- of them are registered in one batch (one history sync and one refresh).
+local ADDITIONAL_BLOCK_NAMES = {
+  pets = "Pet frames", targets = "Member targets",
+  friendlyBoss = "Allied boss frames", healerMana = "Healer mana bars",
+}
+local function RegisterAdditionalMovers()
+  local api = MSUF.EditModeAPI or _G.MSUF_EditModeAPI
+  local gf = GF()
+  if not (api and gf) or not (api.RegisterElements or api.RegisterElement) then return end
+  local Translate = MSUF.Translate or function(text) return text end
+  local blocks = gf.ADDITIONAL_BLOCKS or { "pets", "targets", "friendlyBoss", "healerMana" }
+  local defaultX, defaultY = gf.ADDITIONAL_DEFAULT_X or {}, gf.ADDITIONAL_DEFAULT_Y or {}
+  local elements = {}
+  for _, scope in ipairs(GROUP_KINDS) do
+    for _, extra in ipairs(blocks) do
+      if (extra ~= "targets" or scope == "party") and (extra ~= "friendlyBoss" or gf.ADDITIONAL_HAS_BOSS_UNITS ~= false) then
+        local kind, prefix = scope, extra
+        local function Capture()
+          local conf = GetConf(kind)
+          if not conf then return nil end
+          return { x = tonumber(conf[prefix .. "X"]) or defaultX[prefix] or 0, y = tonumber(conf[prefix .. "Y"]) or defaultY[prefix] or 0,
+            width = tonumber(conf[prefix .. "Width"]) or 100, height = tonumber(conf[prefix .. "Height"]) or 24 }
+        end
+        local function Restore(state)
+          if ConfigLocked() or type(state) ~= "table" then return false end
+          local conf = GetConf(kind)
+          if not conf then return false end
+          local x, y, width, height = tonumber(state.x), tonumber(state.y), tonumber(state.width), tonumber(state.height)
+          if not x or not y or not width or not height then return false end
+          if x ~= x or y ~= y or width ~= width or height ~= height then return false end
+          conf[prefix .. "X"], conf[prefix .. "Y"] = max(-2000, min(2000, x)), max(-2000, min(2000, y))
+          conf[prefix .. "Width"], conf[prefix .. "Height"] = max(20, min(500, width)), max(10, min(200, height))
+          local live = GF()
+          if live and live.RefreshAdditionalGroups then live.RefreshAdditionalGroups() end
+          return true
+        end
+        local function Dimension(field, label, low, high)
+          return { id = field, kind = "number", label = label, min = low, max = high, step = 1,
+            get = function() local state = Capture(); return state and state[field] end,
+            set = function(value) local state = Capture(); if not state then return false end; state[field] = value; return Restore(state) end }
+        end
+        elements[#elements + 1] = {
+          id = kind .. "_" .. prefix, label = LABELS[kind] .. ": " .. Translate(ADDITIONAL_BLOCK_NAMES[prefix] or prefix),
+          group = LABELS[kind], order = 80,
+          getFrame = function() local live = GF(); return live and live.GetAdditionalEditPreviewFrame and live.GetAdditionalEditPreviewFrame(kind, prefix) end,
+          isEnabled = function() local conf = GetConf(kind); return conf and conf.enabled == true and conf[prefix .. "Enabled"] == true end,
+          getPosition = Capture, setPosition = Restore,
+          extraControls = { Dimension("width", Translate("Width"), 20, 500), Dimension("height", Translate("Height"), 10, 200) },
+        }
+      end
+    end
+  end
+  if #elements == 0 then return end
+  if api.RegisterElements then
+    api.RegisterElements("msuf_group_extras", elements)
+  else
+    for i = 1, #elements do api.RegisterElement("msuf_group_extras", elements[i]) end
+  end
+end
+
 local function RegisterGF()
+  RegisterAdditionalMovers()
   for i, kind in ipairs(GROUP_KINDS) do
     local regKind = kind
     local key = KIND_TO_KEY[regKind]
@@ -1417,8 +1522,9 @@ local function GF_EM2_ResetPosition(kind)
     _G.MSUF_EM_UndoBeforeChange("gf", kind)
   end
   local x, y = GetDefaultCenter(kind)
-  conf.offsetX = x
-  conf.offsetY = y
+  local xKey, yKey = PositionKeys(kind, conf)
+  conf[xKey] = x
+  conf[yKey] = y
   conf.positionMode = STABLE_GRID_POSITION_MODE
   if kind == "priority" then
     conf.anchorMode = "RAID_RIGHT"
@@ -1477,22 +1583,25 @@ local function BuildGFPopup(mode)
         applyGF.EnsureStableGridPosition(mode, GetPositionCount(mode), conf)
       end
     end
-    local currentX = San(conf.offsetX, 0)
-    local currentY = San(conf.offsetY, 0)
+    local xKey, yKey = PositionKeys(mode, conf)
+    local widthKey, heightKey = SizeKeys(mode, conf)
+    local currentX = San(conf[xKey], 0)
+    local currentY = San(conf[yKey], 0)
     local displayX = popup.xBox and tonumber(popup.xBox:GetText())
     local displayY = popup.yBox and tonumber(popup.yBox:GetText())
     conf.positionMode = STABLE_GRID_POSITION_MODE
 
+    -- A size tier's own override keeps its wider range (20-500 by 10-200).
     local w = popup.wBox and tonumber(popup.wBox:GetText())
-    if w then conf.width = floor(max(40, min(400, w)) + 0.5) end
+    if w then conf[widthKey] = floor(max(widthKey == "width" and 40 or 20, min(widthKey == "width" and 400 or 500, w)) + 0.5) end
     local h = popup.hBox and tonumber(popup.hBox:GetText())
-    if h then conf.height = floor(max(16, min(200, h)) + 0.5) end
+    if h then conf[heightKey] = floor(max(heightKey == "height" and 16 or 10, min(200, h)) + 0.5) end
 
     local frame = SyncContainer(mode)
     if type(TranslateFramePosition) == "function" then
-      conf.offsetX, conf.offsetY = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
+      conf[xKey], conf[yKey] = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
     else
-      conf.offsetX, conf.offsetY = San(displayX, currentX), San(displayY, currentY)
+      conf[xKey], conf[yKey] = San(displayX, currentX), San(displayY, currentY)
     end
 
     RefreshAfterPopupApply(mode)
@@ -1513,10 +1622,12 @@ local function BuildGFPopup(mode)
     if type(FramePositionValues) == "function" then
       x, y = FramePositionValues(SyncContainer(mode))
     end
-    S(popup.xBox, x ~= nil and x or San(conf.offsetX, 0))
-    S(popup.yBox, y ~= nil and y or San(conf.offsetY, 0))
-    S(popup.wBox, conf.width or (isRaid and 80 or 120))
-    S(popup.hBox, conf.height or (isRaid and 32 or 40))
+    local xKey, yKey = PositionKeys(mode, conf)
+    local widthKey, heightKey = SizeKeys(mode, conf)
+    S(popup.xBox, x ~= nil and x or San(conf[xKey], 0))
+    S(popup.yBox, y ~= nil and y or San(conf[yKey], 0))
+    S(popup.wBox, conf[widthKey] or (isRaid and 80 or 120))
+    S(popup.hBox, conf[heightKey] or (isRaid and 32 or 40))
   end
 
   popup.Sync = Sync
@@ -1550,7 +1661,8 @@ local function BuildGFPopup(mode)
   end
 
   --- Copies the source group's size only. Position stays untouched so a size
-  --- copy cannot unexpectedly move another group block.
+  --- copy cannot unexpectedly move another group block. The size shown on each
+  --- side is the one that counts: a size tier's own override when it has one.
   local function CopySizeTo(targetMode)
     targetMode = NormalizeKind(targetMode)
     if not targetMode or targetMode == mode then return end
@@ -1559,8 +1671,14 @@ local function BuildGFPopup(mode)
     local dst = GetConf(targetMode)
     if not src or not dst then return end
     if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("gf", targetMode) end
-    if src.width ~= nil then dst.width = floor(max(40, min(400, tonumber(src.width) or 120)) + 0.5) end
-    if src.height ~= nil then dst.height = floor(max(16, min(200, tonumber(src.height) or 40)) + 0.5) end
+    local srcW, srcH = SizeKeys(mode, src)
+    local dstW, dstH = SizeKeys(targetMode, dst)
+    if src[srcW] ~= nil then
+      dst[dstW] = floor(max(dstW == "width" and 40 or 20, min(dstW == "width" and 400 or 500, tonumber(src[srcW]) or 120)) + 0.5)
+    end
+    if src[srcH] ~= nil then
+      dst[dstH] = floor(max(dstH == "height" and 16 or 10, min(200, tonumber(src[srcH]) or 40)) + 0.5)
+    end
     RefreshAfterPopupApply(targetMode)
     local targetKey = KIND_TO_KEY[targetMode]
     if targetKey and EM2.Focus and EM2.Focus.Pulse then
@@ -1575,7 +1693,8 @@ local function BuildGFPopup(mode)
     local conf = Conf()
     if not conf then return end
     if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("gf", mode) end
-    conf.offsetX, conf.offsetY = 0, 0
+    local xKey, yKey = PositionKeys(mode, conf)
+    conf[xKey], conf[yKey] = 0, 0
     conf.positionMode = STABLE_GRID_POSITION_MODE
     RefreshAfterPopupApply(mode)
     local key = KIND_TO_KEY[mode]

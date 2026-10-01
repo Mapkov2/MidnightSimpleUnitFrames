@@ -311,6 +311,10 @@ end
 
 local function IndexFrameUnit(frame, unit)
   if not frame then return end
+  -- Menu and Edit Mode samples show sample tokens ("player"); they never own
+  -- the unit index, or the live frame's status, ready-check and aura requests
+  -- reach the sample (and its release leaves the live frame unindexed).
+  if IsPreviewFrame(ShellFrame(frame), VisualFrame(frame)) then unit = nil end
   local old = frame._msufGFIndexedUnit
   local wasPriority = frame._msufGFIndexedPriority == true
   local isPriority = IsPriorityFrame(frame)
@@ -828,6 +832,16 @@ local function ScanOneChild(child, kind)
   return GF.ApplyButton(child, kind, "MSUF_GF_SCAN")
 end
 
+--- One GetChildren() expansion per header: re-running it per child was
+--- O(n^2) over a 40-button raid header on every roster settle.
+local function ScanChildList(kind, ...)
+  local found = false
+  for i = 1, select("#", ...) do
+    found = ScanOneChild((select(i, ...)), kind) or found
+  end
+  return found
+end
+
 function GF.ScanHeader(key, kind)
   local found = false
   local auras = MSUF.MSUF_Auras3
@@ -839,9 +853,7 @@ function GF.ScanHeader(key, kind)
 
   local function ScanPhysicalHeader(header)
     if not (header and header.GetChildren) then return end
-    for i = 1, select("#", header:GetChildren()) do
-      found = ScanOneChild(select(i, header:GetChildren()), kind) or found
-    end
+    found = ScanChildList(kind, header:GetChildren()) or found
   end
 
   if GF.ForEachHeader then

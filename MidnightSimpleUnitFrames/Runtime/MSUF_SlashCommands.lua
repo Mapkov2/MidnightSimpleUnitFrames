@@ -569,14 +569,19 @@ Commands.Register({
         end
         MSUF_Chat_RunEnsureDB()
         if MSUF_DB then
+            local client = MSUF.Client
             for unit, defaults in pairs(MSUF_RESET_DEFAULTS) do
-                MSUF_DB[unit] = MSUF_DB[unit] or {}
-                local t = MSUF_DB[unit]
-                for k, v in pairs(defaults) do
-                    t[k] = v
-                end
-                if t.enabled == nil then
-                    t.enabled = true
+                -- A unit this client cannot show (arena on Era and Forever, boss
+                -- on Era and TBC) keeps its stored settings.
+                if not (client and client.SupportsUnit) or client.SupportsUnit(unit) then
+                    MSUF_DB[unit] = MSUF_DB[unit] or {}
+                    local t = MSUF_DB[unit]
+                    for k, v in pairs(defaults) do
+                        t[k] = v
+                    end
+                    if t.enabled == nil then
+                        t.enabled = true
+                    end
                 end
             end
             MSUF_ResetPositionAnchorsToScreen()

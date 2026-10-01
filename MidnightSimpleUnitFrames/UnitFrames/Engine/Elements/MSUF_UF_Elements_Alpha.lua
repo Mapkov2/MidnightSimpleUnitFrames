@@ -254,6 +254,14 @@ local TEXT_ALPHA_FIELDS = {
   "raidGroupNameText",
   "statusIndicatorText",
   "statusAFKTimerText",
+  -- Status texts laid out like the level text, the level badge behind it,
+  -- and the threat holder (its number and plate keep their own alpha).
+  "raceText",
+  "classStatusText",
+  "stanceIndicatorText",
+  "levelBackdrop",
+  "levelBackdropRing",
+  "threatIndicatorHolder",
 }
 local HEALTH_GRADIENT_FIELDS = { "left", "right", "up", "down" }
 
@@ -278,7 +286,9 @@ end
 
 local function SetTextLayerAlpha(frame, alpha, force)
   for i = 1, #TEXT_ALPHA_FIELDS do
-    SetAlphaCached(frame and frame[TEXT_ALPHA_FIELDS[i]], alpha, "_msufAlphaText", force)
+    local region = frame and frame[TEXT_ALPHA_FIELDS[i]]
+    -- A status text keeps the status opacity its layout wrote (_msufStatusAlpha).
+    SetAlphaCached(region, alpha * (region and region._msufStatusAlpha or 1), "_msufAlphaText", force)
   end
 end
 

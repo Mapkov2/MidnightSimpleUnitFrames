@@ -57,24 +57,37 @@ local SPELL_BANK_PLAYER = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpe
 local issecretvalue = _G.issecretvalue
 local UnitExistsPlain = UF.UnitExistsSafe
 
-local SUPPORTED_UNITS = {
-  target = true, targettarget = true, focus = true, focustarget = true, pet = true, pettarget = true,
-  boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-  arena1 = true, arena2 = true, arena3 = true,
-}
-
 -- Bitmasks let one driver frame know which unit families need target/focus/pet/boss events
 -- without registering a separate expensive event set for every unitframe.
-local RANGE_UNITS = {
-  "target", "targettarget", "focus", "focustarget", "pet", "pettarget",
-  "boss1", "boss2", "boss3", "boss4", "boss5",
-  "arena1", "arena2", "arena3",
-}
-local RANGE_UNIT_BITS = {
-  target = 1, targettarget = 2, focus = 4, focustarget = 8, pet = 16, pettarget = 1024,
-  boss1 = 32, boss2 = 64, boss3 = 128, boss4 = 256, boss5 = 512,
-  arena1 = 1024, arena2 = 2048, arena3 = 4096,
-}
+-- Every per-unit table comes from one ordered list in one pass: the supported
+-- set, RANGE_UNITS (the order the driver's unit-event spans follow), the boss
+-- and arena families, and one bit per unit for the driver mask. Assigning the
+-- bits in that loop keeps them unique by construction; hand-numbered bits once
+-- gave pettarget and arena1 the same bit, so a pass that swapped those two
+-- units left the unit-event registration stale (and pettarget + arena1 summed
+-- to arena2's bit). The builder is a function so its temporaries stay out of
+-- this chunk's local budget. Arena slots follow MSUF_MAX_ARENA_FRAMES
+-- (MSUF.Client.MaxArenaOpponents from Game/Shared/Initialize.lua: 3 on
+-- Mainline, 5 on TBC/Mists), clamped to 3..5.
+local SUPPORTED_UNITS, RANGE_UNITS, RANGE_UNIT_BITS, BOSS_UNITS, BOSS_UNIT_SET, ARENA_UNITS = (function(arenaSlots)
+  local supported, order, bits, boss, bossSet, arena = {}, {
+    "target", "targettarget", "focus", "focustarget", "pet", "pettarget",
+    "boss1", "boss2", "boss3", "boss4", "boss5",
+  }, {}, {}, {}, {}
+  for i = 1, arenaSlots do order[#order + 1] = "arena" .. i end
+  for i = 1, #order do
+    local unit = order[i]
+    supported[unit] = true
+    bits[unit] = 2 ^ (i - 1)
+    if unit:match("^boss%d$") then
+      boss[#boss + 1] = unit
+      bossSet[unit] = true
+    elseif unit:match("^arena%d$") then
+      arena[#arena + 1] = unit
+    end
+  end
+  return supported, order, bits, boss, bossSet, arena
+end)(math.max(3, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3))))
 local TARGET_EVENT_TARGET_BIT = 1
 local TARGET_EVENT_FOCUS_BIT = 2
 local TARGET_EVENT_PET_BIT = 4
@@ -104,24 +117,6 @@ local MOVEMENT_EVENTS = {
   "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING",
 }
 
-local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
-local BOSS_UNIT_SET = {
-  boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-}
-local ARENA_UNITS = { "arena1", "arena2", "arena3" }
--- arena4..N (N = MSUF.Client.MaxArenaOpponents: 3 on Mainline, 5 on TBC/Mists).
--- Game/Shared/Initialize.lua publishes it as MSUF_MAX_ARENA_FRAMES; clamp it to
--- the two extra bits below. Mainline (3, or unset) appends nothing.
-do
-  local extraArenaBits = { 8192, 16384 }
-  for i = 4, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)) do
-    local unit = "arena" .. i
-    SUPPORTED_UNITS[unit] = true
-    RANGE_UNITS[#RANGE_UNITS + 1] = unit
-    RANGE_UNIT_BITS[unit] = extraArenaBits[i - 3]
-    ARENA_UNITS[#ARENA_UNITS + 1] = unit
-  end
-end
 local UNIT_EVENT_FILTER_LIMIT = 4
 
 local ENEMY_SPELLS = {
@@ -1420,10 +1415,12 @@ local function RegisterDriver()
     end
     local extraUsed = 0
     if unitCount > 0 then
-      -- RegisterUnitEvent accepts at most UNIT_EVENT_FILTER_LIMIT (4) unit
-      -- tokens. target, focus and pet with boss1-5 plus arena1-5 can reach 13
-      -- tokens, so spread the spans over as many 4-token driver frames as
-      -- needed. The main driver always keeps the first span (first == 1).
+      -- target, focus and pet with boss1-5 plus arena1-5 can reach 13 tokens.
+      -- The 12.1 API documentation lists RegisterUnitEvent's units as a
+      -- variadic list (see the GroupRangeFade note in MSUF_UF_Core.lua), but
+      -- no client has been checked in game with more than four, so the spans
+      -- stay at UNIT_EVENT_FILTER_LIMIT (4) tokens per driver frame, which is
+      -- valid either way. The main driver always keeps the first span.
       local chunkLast = math.min(unitCount, UNIT_EVENT_FILTER_LIMIT)
       RegisterDriverUnitChunk(f, 1, chunkLast)
       while chunkLast < unitCount do
@@ -1634,7 +1631,13 @@ function RangeFade.Apply(frame, spec)
 end
 
 function RangeFade.Update(frame)
-  Range.RegisterFrame(frame, frame and frame.MSUFSpec)
+  -- UF.ApplyElementToFrame runs Apply (Range.RegisterFrame) right before this
+  -- update, so registering again repeated the whole pass: alpha compile, range
+  -- evaluation and driver sync. Only a frame whose registration no longer
+  -- matches its unit still needs one.
+  if frame and frame._msufRangeUnit ~= frame.MSUFUnitKey then
+    Range.RegisterFrame(frame, frame.MSUFSpec)
+  end
 end
 
 function RangeFade.Disable(frame)

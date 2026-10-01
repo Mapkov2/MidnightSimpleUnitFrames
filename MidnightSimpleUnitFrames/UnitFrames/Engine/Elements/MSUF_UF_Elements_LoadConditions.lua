@@ -22,6 +22,7 @@ local Secrets = MSUF.Secrets or {}
 local UnitExistsPlain = Secrets.UnitExistsPlain
 local type = type
 local tonumber = tonumber
+local next = next
 
 local EMPTY_EVENTS = {}
 local HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
@@ -93,7 +94,8 @@ local function ApplyHealthAlpha(frame)
   -- straight to SetAlpha (upstream/live 12.1).
   if _G.MSUF_UnitEditModeActive == true
     or (BOSS_PREVIEW_UNITS[frame.MSUFUnitKey] and (_G.MSUF_BossTestMode == true
-      or _G.MSUF2_BossUnitframePreviewActive == true)) then
+      or _G.MSUF2_BossUnitframePreviewActive == true))
+    or frame._msufArenaPreviewForced == true then
     frame._msufHealthVisualRoot:SetAlpha(1)
     if frame._msufHealthIndependentVisualRoot then frame._msufHealthIndependentVisualRoot:SetAlpha(1) end
     return
@@ -362,6 +364,54 @@ local function RegisterVisibility(frame, spec)
   return true
 end
 
+-- "Hide in instance" and "Hide in housing" resolve into a constant "hide"
+-- while inside, so the frame is hidden, and its events are suspended by the
+-- core, exactly when leaving has to bring it back. One shared EventBus
+-- subscription, which no frame's visibility can silence, rebuilds those
+-- drivers on every zone and housing-plot boundary instead of frame routes.
+local ZONE_EVENT_KEY = "MSUF_UF_LOAD_CONDITIONS_ZONE"
+local ZONE_EVENTS = { "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }
+-- Walking onto or off a plot changes C_Housing.IsInsideHouseOrPlot without a
+-- zone change; Blizzard_HousingControls follows these two events for it.
+local HOUSING_PLOT_EVENTS = { "HOUSE_PLOT_ENTERED", "HOUSE_PLOT_EXITED" }
+local zoneFrames = {}
+local zoneEventsRegistered = false
+
+local function OnZoneBoundary()
+  for frame in next, zoneFrames do
+    RegisterVisibility(frame, frame.MSUFSpec)
+  end
+end
+
+local function SetZoneEvents(list, wanted, register, unregister)
+  local client = MSUF.Client
+  local supports = client and client.SupportsEvent
+  for i = 1, #list do
+    local event = list[i]
+    if not wanted then
+      unregister(event, ZONE_EVENT_KEY)
+    elseif type(supports) ~= "function" or supports(event) == true then
+      register(event, ZONE_EVENT_KEY, OnZoneBoundary)
+    end
+  end
+end
+
+local function SyncZoneFrame(frame, spec)
+  local load = spec and spec.enabled ~= false and spec.load
+  if frame then
+    zoneFrames[frame] = load and (load.hideInInstance == true or load.hideInHousing == true) or nil
+  end
+  local wanted = next(zoneFrames) ~= nil
+  if wanted == zoneEventsRegistered then return end
+  local register, unregister = _G.MSUF_EventBus_Register, _G.MSUF_EventBus_Unregister
+  if type(register) ~= "function" or type(unregister) ~= "function" then return end
+  SetZoneEvents(ZONE_EVENTS, wanted, register, unregister)
+  if type(C_Housing and C_Housing.IsInsideHouseOrPlot) == "function" then
+    SetZoneEvents(HOUSING_PLOT_EVENTS, wanted, register, unregister)
+  end
+  zoneEventsRegistered = wanted
+end
+
 function LoadConditions.GetEvents(frame, spec)
   return HealthVisibilityEnabled(frame, spec) and HEALTH_EVENTS or EMPTY_EVENTS
 end
@@ -386,6 +436,7 @@ end
 function LoadConditions.Apply(frame, spec)
   ConfigureHealthAlpha(frame, spec)
   RegisterVisibility(frame, spec)
+  SyncZoneFrame(frame, spec)
 end
 
 function LoadConditions.Update(frame, event)
@@ -418,6 +469,7 @@ function LoadConditions.Disable(frame)
   if not frame then
     return
   end
+  SyncZoneFrame(frame, nil)
   ClearHealthAlpha(frame)
   if UnregisterStateDriver and InCombatLockdown and InCombatLockdown() then
     UF.MarkDirty(frame.MSUFUnitKey)
@@ -947,7 +999,14 @@ local function ApplyArenaPreviewText(frame, hp, hpMax, power, powerMax, classTok
     SetShown(frame.nameText, true)
   end
   if frame.levelText then
-    frame.levelText:SetText("80")
+    -- Opponents are max level on every arena client: 70 on TBC, 90 on Mists
+    -- and Midnight. Ask the client instead of carrying one expansion's cap,
+    -- the way GameRulesUtil.GetEffectiveMaxLevelForPlayer does (a capped
+    -- player level, such as a Classic pre-patch, wins).
+    local cap = type(GetMaxLevelForPlayerExpansion) == "function" and tonumber(GetMaxLevelForPlayerExpansion()) or nil
+    local playerCap = type(GetMaxPlayerLevel) == "function" and tonumber(GetMaxPlayerLevel()) or nil
+    local maxLevel = cap and playerCap and math.min(cap, playerCap) or cap or playerCap
+    frame.levelText:SetText(maxLevel and tostring(maxLevel) or "??")
     SetShown(frame.levelText, true)
   end
 
@@ -1032,13 +1091,19 @@ local function ClearArenaPreviewFramesForCombat()
     local frame = UF.frames and UF.frames["arena" .. i]
     if ClearArenaPreviewFrameForRuntime(frame, true) then cleared = true end
   end
-  if cleared then arenaPreviewCombatCleanupPending = true end
+  if cleared then
+    arenaPreviewCombatCleanupPending = true
+    -- Same as the boss preview: the handoff leaves mul = 1 until the range
+    -- runtime evaluates the real opponents again.
+    RequestBossRangeRefresh()
+  end
   return cleared
 end
 UF.ClearArenaPreviewFramesForCombat = ClearArenaPreviewFramesForCombat
 ExportPublic("MSUF_ClearArenaUnitframePreviewForCombat", ClearArenaPreviewFramesForCombat)
 
 local function ApplyArenaPreviewFrames(active)
+  local cleared = false
   for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
     local frame = UF.frames and UF.frames["arena" .. i]
     local unit = "arena" .. i
@@ -1048,12 +1113,18 @@ local function ApplyArenaPreviewFrames(active)
       if frame.EnableMouse then frame:EnableMouse(true) end
       ApplyArenaPreviewFrameData(frame, i)
     elseif frame then
-      ClearArenaPreviewFrameForRuntime(frame, true)
+      if ClearArenaPreviewFrameForRuntime(frame, true) then cleared = true end
     end
+  end
+  if cleared then
+    RequestBossRangeRefresh()
   end
 end
 
 local function ReapplyArenaPreviewAlpha(reason)
+  for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+    RefreshHealthAlpha(UF.frames and UF.frames["arena" .. i])
+  end
   if type(UF.RefreshElements) ~= "function" then
     return false
   end

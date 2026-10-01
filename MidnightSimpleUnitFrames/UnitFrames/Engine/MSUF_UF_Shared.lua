@@ -175,7 +175,7 @@ function Shared.NormalizePortraitMode(conf)
 end
 
 function Shared.NormalizePortraitRender(mode)
-  return mode == "CLASS" and "CLASS" or "2D"
+  return (mode == "CLASS" or mode == "3D") and mode or "2D"
 end
 
 function Shared.NormalizePortraitClassStyle(value)
@@ -221,7 +221,7 @@ function Shared.NormalizePortraitBorderDirection(value)
   return PORTRAIT_BORDER_DIRECTIONS[value] == true and value or "UP"
 end
 
---- Zoom is stored as a percentage (100..200); a legacy 1..2 multiplier is
+--- Zoom is stored as a percentage (100..300); a legacy 1..2 multiplier is
 --- scaled up before clamping.
 function Shared.NormalizePortraitZoom(value)
   value = Number(value, 100)
@@ -230,8 +230,8 @@ function Shared.NormalizePortraitZoom(value)
   end
   if value < 100 then
     return 100
-  elseif value > 200 then
-    return 200
+  elseif value > 300 then
+    return 300
   end
   return value
 end
@@ -286,7 +286,7 @@ end
 --- The BLIZZARD shape starts from the full texture instead: the stock player
 --- frame renders its circular portrait without any crop, so zoom 100 must be
 --- pixel-identical to Blizzard before the zoom/pan sliders take over.
---- Zoom (100..200) and pan (-100..100) are normalized here. The unit compiler
+--- Zoom (100..300) and pan (-100..100) are normalized here. The unit compiler
 --- used to normalize both at its call site and the group compiler inside its
 --- own copy, so both paths still produce exactly the coords they always did;
 --- normalizing an already-normalized value is a no-op. Group portraits never
@@ -322,6 +322,12 @@ function Shared.CompilePortraitTexCoords(p, zoom, width, height, panX, panY)
   p.texR = centerX + spanX * 0.5
   p.texT = centerY - spanY * 0.5
   p.texB = centerY + spanY * 0.5
+  if p.flip then
+    p.texL, p.texR = p.texR, p.texL
+    -- The image offset is screen space: mirror it with the UVs, so a mirrored
+    -- portrait is the exact mirror image and the zoom centre keeps its spot.
+    if p.panOffsetX ~= 0 then p.panOffsetX = -p.panOffsetX end
+  end
 end
 
 -- Called only while applying layout, shared by live and menu portraits.

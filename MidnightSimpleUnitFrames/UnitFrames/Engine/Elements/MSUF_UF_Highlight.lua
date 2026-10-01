@@ -329,7 +329,8 @@ local function HighlightDebug()
     local list = not f and uf and uf.frameList
     if not f and type(list) == "table" then
       for i = 1, #list do
-        if list[i] and list[i].unit == "target" then f = list[i] break end
+        -- Engine frames carry MSUFUnitKey, not .unit.
+        if list[i] and list[i].MSUFUnitKey == "target" then f = list[i] break end
       end
     end
   end

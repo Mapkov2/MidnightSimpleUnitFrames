@@ -26,6 +26,7 @@ local eventFrame
 local runtimeObservers = {}
 local dirtyApplyMaskCache = {}
 local appliedLayoutScaleByKind = {}
+local appliedLayoutWidthByKind, appliedLayoutHeightByKind = {}, {}
 
 local function InCombat()
   return InCombatLockdown and InCombatLockdown()
@@ -56,7 +57,10 @@ local function SetupLiveHeader(key, kind)
   if type(GF.EnsureDB) == "function" then GF.EnsureDB() end
   local resolve = GF.ResolveFrameScale
   local desiredScale = type(resolve) == "function" and tonumber(resolve(kind)) or nil
-  if desiredScale ~= nil and appliedLayoutScaleByKind[kind] ~= desiredScale then
+  local width, height
+  if GF.GetScaledFrameMetrics then width, height = GF.GetScaledFrameMetrics(kind) end
+  if (desiredScale ~= nil and appliedLayoutScaleByKind[kind] ~= desiredScale)
+    or (width ~= nil and (appliedLayoutWidthByKind[kind] ~= width or appliedLayoutHeightByKind[kind] ~= height)) then
     if type(GF.InvalidateCompiledSpecs) == "function" then
       GF.InvalidateCompiledSpecs(kind)
     end
@@ -66,6 +70,7 @@ local function SetupLiveHeader(key, kind)
   if header and desiredScale ~= nil then
     appliedLayoutScaleByKind[kind] = desiredScale
   end
+  if header then appliedLayoutWidthByKind[kind], appliedLayoutHeightByKind[kind] = width, height end
   return header, scanned
 end
 
@@ -514,6 +519,7 @@ function GF.UpdateGroupVisibility()
 end
 
 function GF.RefreshHeaderLayout(kind)
+  if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
   local inCombat = InCombat()
   if not inCombat and GF.EnsureDB then GF.EnsureDB() end
   local enabled = AnyGroupFrameEnabled()
@@ -634,6 +640,7 @@ function GF.RefreshPriorityFrames(reason)
 end
 
 function GF.RebuildAll()
+  if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
   if InCombat() then return GF.DeferGroupRuntime("rebuild") end
   if GF.InvalidateCompiledSpecs then GF.InvalidateCompiledSpecs() end
   local result = GF.RefreshHeaderLayout()
@@ -877,6 +884,7 @@ local function RuntimeOnEvent(self, event, unit)
     end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
+    if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
     if event == "GROUP_ROSTER_UPDATE" and type(GF.ApplyGroupBorder) == "function" then
       -- The border textures are unprotected and can follow Party/Raid state
       -- immediately even when secure header retirement must wait for combat.

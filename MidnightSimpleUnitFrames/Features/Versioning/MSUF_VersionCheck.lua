@@ -27,14 +27,18 @@ local IsInGroup, IsInRaid, IsInGuild = IsInGroup, IsInRaid, IsInGuild
 local LE_PARTY_CATEGORY_HOME     = LE_PARTY_CATEGORY_HOME
 local LE_PARTY_CATEGORY_INSTANCE = LE_PARTY_CATEGORY_INSTANCE
 
---- Version parsing. The numeric key preserves prerelease ordering while staying
---- below Lua's exact-integer range for bounded components.
+--- Version parsing. The minor is a decimal fraction, the way every MSUF line
+--- numbers its releases (6.09, 6.1, 6.11 ... 6.20, 6.21, 6.5): "6.5" is 6.50
+--- and therefore newer than "6.20". The numeric key (the release epoch) keeps
+--- prerelease ordering below Lua's exact-integer range; later schemes must
+--- stay monotonic with it, because peers compare the epoch they broadcast.
 --- Secret-safe: operates on addon-controlled strings only.
 local function VersionToNumber(str)
     if type(str) ~= "string" then return 0 end
     local value = str:match("^%s*(.-)%s*$")
     if not value or value == "" or #value > 32 then return 0 end
-    local maj, min, pat, channel, revisionText = string_match(value:lower(), "^(%d+)%.(%d+)%.?(%d*)%-?([%a]*)(%d*)$")
+    local maj, minText, pat, channel, revisionText = string_match(value:lower(), "^(%d+)%.(%d+)%.?(%d*)%-?([%a]*)(%d*)$")
+    if not minText or #minText > 3 then return 0 end
     local hasSeparator = value:find("-", 1, true) ~= nil
     if channel == "" then
         if hasSeparator or revisionText ~= "" then return 0 end
@@ -42,17 +46,23 @@ local function VersionToNumber(str)
         return 0
     end
     local revision = tonumber(revisionText) or 0
-    maj, min, pat = tonumber(maj), tonumber(min), tonumber(pat) or 0
-    if not maj or not min or maj > 999 or min > 999 or pat > 999 or revision > 99999 then return 0 end
+    local min = tonumber((minText .. "00"):sub(1, 3))
+    maj, pat = tonumber(maj), tonumber(pat) or 0
+    if not maj or not min or maj > 999 or pat > 999 or revision > 99999 then return 0 end
     local rank
     if channel == "" then rank = 4
     elseif channel == "alpha" then rank = 1
     elseif channel == "beta" then rank = 2
     elseif channel == "rc" then rank = 3
     else return 0 end
-    local normalized = string_format("%d.%d%s%s", maj, min, pat > 0 and ("." .. pat) or "", channel ~= "" and ("-" .. channel .. revision) or "")
+    local suffix = string_format("%s%s", pat > 0 and ("." .. pat) or "", channel ~= "" and ("-" .. channel .. revision) or "")
+    local normalized = string_format("%d.%s%s", maj, minText, suffix)
     local number = ((((maj * 1000) + min) * 1000 + pat) * 10 + rank) * 100000 + revision
-    return number, normalized, { major = maj, minor = min, patch = pat, channel = channel, revision = revision }
+    -- Clients before the epoch read the minor as an integer (6.5 < 6.20); a
+    -- one-digit minor is sent to them as two digits, which they rank right.
+    local legacy = string_format("%d.%s%s", maj, #minText == 1 and (minText .. "0") or minText, suffix)
+    return number, normalized, { major = maj, minor = min, minorText = minText, patch = pat, channel = channel,
+        revision = revision, legacy = legacy }
 end
 
 --- State (session-scoped)
@@ -107,35 +117,50 @@ local function BroadcastOnce()
     if not myVersionStr or myVersionNum <= 0 then return end
     if not prefixOk then return end
 
-    local payload = "V:" .. myVersionStr
+    -- V2 carries the release epoch; clients before it only read V:.
+    local epoch = "V2:" .. string_format("%.0f", myVersionNum) .. ":" .. myVersionStr
+    local payload = "V:" .. ((myVersionParts and myVersionParts.legacy) or myVersionStr)
 
     --- Guild
     if IsInGuild and IsInGuild() then
+        C_ChatInfo.SendAddonMessage(MSG_PREFIX, epoch, "GUILD")
         C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "GUILD")
     end
 
     --- Group / Raid / Instance
     if IsInGroup and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
+        C_ChatInfo.SendAddonMessage(MSG_PREFIX, epoch, "INSTANCE_CHAT")
         C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "INSTANCE_CHAT")
     elseif IsInGroup and IsInGroup(LE_PARTY_CATEGORY_HOME) then
         if IsInRaid and IsInRaid() then
-            C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "RAID")
+            C_ChatInfo.SendAddonMessage(MSG_PREFIX, epoch, "RAID")
+        C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "RAID")
         else
-            C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "PARTY")
+            C_ChatInfo.SendAddonMessage(MSG_PREFIX, epoch, "PARTY")
+        C_ChatInfo.SendAddonMessage(MSG_PREFIX, payload, "PARTY")
         end
     end
 end
 
 local VALID_VERSION_CHANNELS = { GUILD = true, PARTY = true, RAID = true, INSTANCE_CHAT = true }
+local MAX_EPOCH = 2 ^ 53
 local function OnAddonMessage(_, prefix, payload, channel)
     if prefix ~= MSG_PREFIX then return end
-    if type(payload) ~= "string" or #payload > 40 or not VALID_VERSION_CHANNELS[channel] then return end
+    if type(payload) ~= "string" or #payload > 64 or not VALID_VERSION_CHANNELS[channel] then return end
 
-    local ver = string_match(payload, "^V:(.+)$")
-    if not ver then return end
-
-    local num, normalized = VersionToNumber(ver)
-    if num <= 0 then return end
+    local num, normalized
+    local epoch, label = string_match(payload, "^V2:(%d+):([%w%.%-]+)$")
+    if epoch then
+        -- The epoch ranks; the label is only shown (and stays plain text).
+        num = tonumber(epoch)
+        if not num or num <= 0 or num >= MAX_EPOCH or #label > 24 then return end
+        normalized = label
+    else
+        local ver = string_match(payload, "^V:(.+)$")
+        if not ver then return end
+        num, normalized = VersionToNumber(ver)
+        if num <= 0 then return end
+    end
 
     --- Secret-safe: comparing addon-generated integers only
     if num > highestSeenNum then
@@ -228,10 +253,10 @@ MSUF.VersionCheck = {
         local parts = myVersionParts or {}
         local fakeStr
         if parts.channel and parts.channel ~= "" then
-            fakeStr = string_format("%d.%d%s-%s%d", parts.major, parts.minor,
+            fakeStr = string_format("%d.%s%s-%s%d", parts.major, parts.minorText,
                 parts.patch > 0 and ("." .. parts.patch) or "", parts.channel, parts.revision + 1)
         else
-            fakeStr = string_format("%d.%d.%d", parts.major or 0, parts.minor or 0, (parts.patch or 0) + 1)
+            fakeStr = string_format("%d.%s.%d", parts.major or 0, parts.minorText or "0", (parts.patch or 0) + 1)
         end
         print(string_format(
             "|cff7aa2f7MSUF|r: |cff888888[DEBUG]|r Simulating update from %s → %s",

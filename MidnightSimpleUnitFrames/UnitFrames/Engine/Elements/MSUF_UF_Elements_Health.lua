@@ -331,10 +331,14 @@ function Health.Layout(frame, spec, powerEnabled)
     powerInset = tonumber(power.height) or 3
     if not IsFiniteNumber(powerInset) or powerInset < 0 then powerInset = 0 end
   end
-  if bar._msufHealthPowerInset == powerInset and bar._msufHealthLayoutFrame == frame then return end
+  local topInset = tonumber(spec and spec.health and spec.health.topInset) or 0
+  if not IsFiniteNumber(topInset) or topInset < 0 then topInset = 0 end
+  if spec and type(spec.height) == "number" then topInset = math.max(0, math.min(topInset, spec.height - powerInset - 1)) end
+  if bar._msufHealthPowerInset == powerInset and bar._msufHealthTopInset == topInset and bar._msufHealthLayoutFrame == frame then return end
   bar:ClearAllPoints()
-  bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+  bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -topInset)
   bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, powerInset)
+  bar._msufHealthTopInset = topInset
   bar._msufHealthPowerInset = powerInset
   bar._msufHealthLayoutFrame = frame
 end

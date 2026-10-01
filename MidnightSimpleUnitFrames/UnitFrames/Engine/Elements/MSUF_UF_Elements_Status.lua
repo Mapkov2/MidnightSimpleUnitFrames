@@ -252,15 +252,22 @@ local function SetAtlas(region, atlas)
   end
 end
 
+-- Atlas data cannot change while the client runs, and GetAtlasInfo builds a
+-- new table per call (UpdateCombat asks on every UNIT_FLAGS in combat), so
+-- each name is asked once per session.
+local atlasKnown = {}
 local function AtlasAvailable(region, atlas)
   if not (region and region.SetAtlas and type(atlas) == "string" and atlas ~= "") then
     return false
   end
-  local textureAPI = _G.C_Texture
-  if not (textureAPI and type(textureAPI.GetAtlasInfo) == "function") then
-    return false
+  local known = atlasKnown[atlas]
+  if known == nil then
+    local textureAPI = _G.C_Texture
+    known = textureAPI ~= nil and type(textureAPI.GetAtlasInfo) == "function"
+      and textureAPI.GetAtlasInfo(atlas) ~= nil
+    atlasKnown[atlas] = known
   end
-  return textureAPI.GetAtlasInfo(atlas) ~= nil
+  return known
 end
 
 local function StopRestingFlipbook(tex, resetAtlas)
@@ -1509,7 +1516,8 @@ local IDENTITY_TEXT_FIELDS = { "levelText", "levelBackdrop", "levelBackdropRing"
 
 --- Level difficulty tier, mirroring TargetFrameMixin:CheckLevel. Returns an
 --- index into Shared.LEVEL_DIFFICULTY_TIERS. Hung on Runtime rather than kept
---- as locals: this chunk sits at Lua 5.1's 200-local ceiling.
+--- as file-scope locals, like the other cold helpers here, to leave this
+--- chunk room under Lua 5.1's 200-local ceiling.
 function Runtime.BuildLevelTierMap()
   local map = {}
   local difficulty = _G.Enum and _G.Enum.RelativeContentDifficulty
@@ -2103,6 +2111,14 @@ function Runtime.UpdatePVP(frame, status)
   local tex = frame and frame.pvpIndicatorIcon
   local unit = frame and frame.MSUFUnitKey
   if not (cfg and cfg.enabled and tex and unit) then
+    SetShown(tex, false)
+    return
+  end
+  -- Classic compiles the indicator whenever it is configured (contextGated, see
+  -- MSUF_UF_Config.lua): the player's PvP context flips in combat, where no
+  -- recompile can run, so it is read here from the cached context instead.
+  if cfg.contextGated == true and status.testMode ~= true
+    and not (UF.PVPIndicatorContextActive and UF.PVPIndicatorContextActive()) then
     SetShown(tex, false)
     return
   end

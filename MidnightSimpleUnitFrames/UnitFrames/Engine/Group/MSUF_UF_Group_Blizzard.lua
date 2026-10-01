@@ -622,7 +622,10 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
   local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
   local msufOwnsGroupFrames = MSUFOwnsLiveGroupFrames()
   local partyUsesMSUF = partyConf.enabled == true
+  -- A small raid on the Party layout is shown by the MSUF party frames, so
+  -- Blizzard's raid frames must not show the same raid a second time.
   local raidUsesMSUF = raidConf.enabled == true
+    or (GF.IsSmallRaidPartyContext ~= nil and GF.IsSmallRaidPartyContext() == true)
   local partyActive = PartyScopeActive()
   local raidActive = RaidScopeActive()
   local partyMode = NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode)

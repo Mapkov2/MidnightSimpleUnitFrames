@@ -15,7 +15,8 @@ local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
--- Isolate integration commands, but report failures with the throwing stack.
+-- Integration commands run unprotected (no protected call): a failure reaches
+-- the client error handler with the throwing stack.
 local PROVIDER_ID = "ellesmere"
 local LISTENER_OWNER = addonName or "MidnightSimpleUnitFrames"
 

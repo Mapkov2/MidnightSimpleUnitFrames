@@ -155,6 +155,8 @@ local function ActivePreviewCount(kind)
   return DefaultPreviewCount(kind)
 end
 
+GF.GetActivePreviewCount = ActivePreviewCount
+
 local function VisiblePreviewCount(kind, count)
   count = floor((tonumber(count) or 0) + 0.5)
   if count < 1 then return count end
@@ -246,9 +248,17 @@ local function PositionContainer(kind, count)
     -- Resolving can retire a legacy relativePoint into the offsets, so read
     -- those afterwards.
     point, relativePoint = ResolveAnchorPoint(kind, conf, relative)
-    local cx, cy = tonumber(conf.offsetX), tonumber(conf.offsetY)
-    if cx == nil or cy == nil then cx, cy = DefaultCenter(kind) end
-    x, y = floor(cx + 0.5), floor(cy + 0.5)
+    -- Tier positions and the solo centring resolve for the shown sample count.
+    local xKey, yKey, centered = "offsetX", "offsetY", false
+    if GF.ResolveGroupPositionKeys then xKey, yKey, centered = GF.ResolveGroupPositionKeys(kind, conf, count) end
+    if centered then
+      relative, point, relativePoint, x, y = UIParent, "CENTER", "CENTER", 0, 0
+    else
+      local cx, cy = tonumber(conf[xKey]), tonumber(conf[yKey])
+      if cx == nil or cy == nil then cx, cy = tonumber(conf.offsetX), tonumber(conf.offsetY) end
+      if cx == nil or cy == nil then cx, cy = DefaultCenter(kind) end
+      x, y = floor(cx + 0.5), floor(cy + 0.5)
+    end
   end
   if GF.ConfigureAnchorPointScreenClamp then
     GF.ConfigureAnchorPointScreenClamp(container, point, containerW, containerH)
@@ -1651,6 +1661,7 @@ function GF.ShowPreview(kind, count, opts)
   opts = type(opts) == "table" and opts or nil
 
   GF._previewActive[kind] = true
+  if GF.ShowAdditionalGroupPreview then GF.ShowAdditionalGroupPreview(kind, count) end
   GF._previewShownCounts[kind] = count
   local serial = BumpPreviewBuildSerial(kind)
 
@@ -1687,6 +1698,7 @@ end
 
 function GF.HidePreview(kind)
   kind = NormalizeKind(kind) or "party"
+  if GF.HideAdditionalGroupPreview then GF.HideAdditionalGroupPreview(kind) end
   local container = GF._previewContainer[kind]
   local frames = GF._previewFrames[kind]
   if GF._previewActive[kind] ~= true

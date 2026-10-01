@@ -1079,11 +1079,13 @@ local HealthFadeActive
 local function SpecNeedsGroupVisuals(spec)
   local cfg = spec and spec.group
   if not cfg then return false end
+  -- The name bar plate is built and hidden by this element (ApplyNameBar).
   return HealthFadeActive(cfg) == true
     or cfg.targetIndicator == true
     or cfg.focusIndicator == true
     or cfg.deadBgEnabled == true
     or cfg.debuffStripeEnabled == true
+    or cfg.nameBarEnabled == true
 end
 
 local UpdateBordersFromVisualState
@@ -1287,6 +1289,25 @@ function GroupVisuals.UpdateGoneState(frame, event, unit, seedHP)
   end
 end
 
+local function ApplyNameBar(frame, cfg)
+  local bar = frame and frame.MSUFGFNameBar
+  if not frame or not (cfg and cfg.nameBarEnabled) then if bar then bar:Hide() end; return end
+  if not bar then
+    bar = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
+    bar:EnableMouse(false)
+    bar.background = PixelLayoutRegion(bar:CreateTexture(nil, "BACKGROUND"))
+    bar.background:SetAllPoints()
+    frame.MSUFGFNameBar = bar
+  end
+  bar:SetFrameLevel((frame.hpBar or frame):GetFrameLevel() + 1)
+  bar:ClearAllPoints()
+  bar:SetPoint("TOPLEFT", frame, "TOPLEFT")
+  bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT")
+  bar:SetHeight(cfg.nameBarHeight)
+  bar.background:SetColorTexture(cfg.nameBarR, cfg.nameBarG, cfg.nameBarB, cfg.nameBarAlpha)
+  bar:Show()
+end
+
 function GroupVisuals.Apply(frame)
   if frame then
     frame._msufGFDeadBgState = nil
@@ -1313,6 +1334,7 @@ function GroupVisuals.Apply(frame)
   end
   SetIndicatorRegistration(frame, cfg and cfg.targetIndicator == true, cfg and cfg.focusIndicator == true)
   PrepareVisuals(frame, cfg)
+  ApplyNameBar(frame, cfg)
   UpdateVisuals(frame, "MSUF_GF_VISUALS_APPLY")
 end
 function GroupVisuals.Update(frame, event, unit, updateInfo, seedMaxHP, percentReady)
@@ -1321,6 +1343,7 @@ end
 
 function GroupVisuals.Disable(frame)
   if not frame then return end
+  if frame.MSUFGFNameBar then frame.MSUFGFNameBar:Hide() end
   SetIndicatorRegistration(frame, false, false)
   HideEdges(frame.MSUFGFTargetEdges)
   HideEdges(frame.MSUFGFFocusEdges)

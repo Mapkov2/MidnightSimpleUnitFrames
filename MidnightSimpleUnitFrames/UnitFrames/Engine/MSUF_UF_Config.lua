@@ -183,7 +183,7 @@ local function Bool(value, fallback)
     return value == true
 end
 
---- Fallback for a profile with no stored aggroOutlineMode. Bars, the Assistant
+--- Fallback for a profile with no stored aggroOutlineMode. Bars, menu search
 --- manifest and the group frames all declare this border ON, so a profile that
 --- never recorded a decision follows that. Only the retired indicator key can
 --- turn it off without an explicit mode, and Defaults seeds the real key from
@@ -827,6 +827,8 @@ function UF.PVPIndicatorContextActive()
 end
 
 local PVP_CONTEXT_REFRESH_ELEMENTS = { "StatusIndicators", "PVPIndicator", "GroupStatusRuntime" }
+-- Classic only (assigned below): repaint the context-gated indicators in place.
+local RepaintPVPIndicators
 local PVP_CONTEXT_FORCE_EVENTS = {
   ACTIVE_GAME_MODE_UPDATED = true,
   PLAYER_ENTERING_WORLD = true,
@@ -846,6 +848,13 @@ function UF.RefreshPVPIndicatorContext(reason, force, warModeOverride)
   end
   if force ~= true and oldKnown and oldActive == active then
     return false
+  end
+  -- Classic compiles the indicators whenever configured and gates them on this
+  -- cached context at runtime, so a context flip, mid-combat included, is only
+  -- a repaint; a recompile would wait for combat to end.
+  if RepaintPVPIndicators then
+    RepaintPVPIndicators()
+    return true
   end
   if UF.RefreshElements then
     UF.RefreshElements(nil, PVP_CONTEXT_REFRESH_ELEMENTS, reason or "MSUF_PVP_CONTEXT")
@@ -870,10 +879,26 @@ end
 local IS_CLASSIC_FAMILY = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
 
 --- Classic clients have no War Mode: the context follows the player's own PvP flag
---- (UnitIsPVP, free-for-all, the flag timer), which also flips mid-combat, so the
---- Classic driver recompiles in combat too. Claiming the driver slot here skips the
---- Mainline driver below.
+--- (UnitIsPVP, free-for-all, the flag timer), which also flips mid-combat. The
+--- unit and group compilers therefore build the indicator whenever it is
+--- configured (pvp.contextGated), Runtime.UpdatePVP hides it outside the context,
+--- and a context flip repaints the indicators in place, in combat too. Claiming
+--- the driver slot here skips the Mainline driver below.
 if IS_CLASSIC_FAMILY then
+  RepaintPVPIndicators = function()
+    local runtime = MSUF.UFStatusRuntime
+    local update = runtime and runtime.UpdatePVP
+    if type(update) ~= "function" then return end
+    local frames = UF.attachedFrameList
+    for i = 1, #frames do
+      local frame = frames[i]
+      local status = frame._msufStatusIndicatorStatus or frame._msufGFStatusRuntimeStatus
+      local pvp = status and status.pvp
+      if pvp and pvp.enabled == true and pvp.contextGated == true then
+        update(frame, status)
+      end
+    end
+  end
   local UnitIsPVP, UnitIsPVPFreeForAll, IsPVPTimerRunning = _G.UnitIsPVP, _G.UnitIsPVPFreeForAll, _G.IsPVPTimerRunning
   ComputePVPIndicatorContextActive = function()
     local instanceType = CurrentInstanceType()
@@ -1172,10 +1197,8 @@ local function CompileLoadConditions(out, conf)
   if load.active then
     Shared.AddEvent(load.unitlessEvents, "PLAYER_REGEN_ENABLED")
   end
-  if load.hideInInstance == true or load.hideInHousing == true then
-    Shared.AddEvent(load.unitlessEvents, "PLAYER_ENTERING_WORLD")
-    Shared.AddEvent(load.unitlessEvents, "ZONE_CHANGED_NEW_AREA")
-  end
+  -- Instance and housing boundaries reach LoadConditions' shared zone driver,
+  -- not the frame: a frame those conditions hide has its own events suspended.
 end
 
 local function TextureFromGlobal()
@@ -1542,6 +1565,10 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.levelOffset = Shared.NormalizePortraitLevelOffset(conf.portraitLevelOffset, 7)
   out.portrait.overlayAlign = Shared.NormalizePortraitOverlayAlign(conf.portraitOverlayAlign)
   out.portrait.alpha = Clamp01(Number(conf.portraitAlpha, 100) / 100, 1)
+  -- Optional module (MSUF_UF_PortraitDetails.lua): a load without it must not
+  -- break every compile.
+  local portraitDetails = MSUF.PortraitDetails
+  if portraitDetails then portraitDetails.Compile(out.portrait, conf) end
   Shared.CompilePortraitTexCoords(out.portrait, conf.portraitZoom, out.portrait.width, out.portrait.height,
     conf.portraitPanX, conf.portraitPanY)
   out.portrait.border = out.portrait.border or {}
@@ -1556,6 +1583,8 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.border.a = Number(general.portraitBorderColorA, 1)
   local portraitEdgeSoftnessLevel = min(15, max(0,
     floor((Number(conf.portraitEdgeSoftness, 0) / 2) + 0.5)))
+  -- A 3D model is a native rectangle no mask can feather; the softness still
+  -- feathers the 2D portrait that stands in while the unit's identity is private.
   if out.portrait.shape == "BLIZZARD" or out.portrait.border.style ~= "NONE" then
     portraitEdgeSoftnessLevel = 0
   end
@@ -1665,7 +1694,9 @@ local function CompileUnitStatus(out, conf, general, key)
   end
 
   local pvp = status.pvp
-  if pvp.enabled and UF.PVPIndicatorContextActive and not UF.PVPIndicatorContextActive() then
+  if IS_CLASSIC_FAMILY then
+    pvp.contextGated = pvp.enabled == true or nil
+  elseif pvp.enabled and UF.PVPIndicatorContextActive and not UF.PVPIndicatorContextActive() then
     pvp.enabled = false
     pvp.contextDisabled = true
   end
@@ -2375,7 +2406,9 @@ function Config.GetSpec(unit)
   if Config.dirty == true and not ConfigInCombat() then
     Config.Refresh()
   end
-  if not Config.specs[unit] then
+  -- Refresh compiles only the client's units: a unit it lacks (boss on TBC,
+  -- arena on Era) must not recompile every spec on each call.
+  if not Config.specs[unit] and UF.IsManagedUnit and UF.IsManagedUnit(unit) then
     Config.Refresh()
   end
   return Config.specs[unit]

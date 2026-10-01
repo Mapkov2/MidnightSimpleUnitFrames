@@ -66,9 +66,11 @@ local function PriorityConf()
   return GF.GetPriorityConf and GF.GetPriorityConf() or nil
 end
 
+-- The roster Priority Frames read. A small raid on the Party layout still has
+-- raidN tokens; its party1-4 tokens cover only the player's own subgroup.
 local function CurrentGroupType()
   local kind = type(GF.GetLiveGroupKind) == "function" and GF.GetLiveGroupKind() or nil
-  if kind == "party" then return "party" end
+  if kind == "party" and not (IsInRaid and IsInRaid()) then return "party" end
   if kind == "raid" or kind == "mythicraid" then return "raid" end
   if IsInRaid and IsInRaid() then return "raid" end
   if IsInGroup and IsInGroup() then return "party" end
@@ -79,6 +81,8 @@ local function PriorityBaseKind(groupType)
   groupType = groupType or CurrentGroupType()
   if groupType == "party" then return "party" end
   if groupType == "raid" then
+    -- Its visuals follow the Party layout the small raid is shown with.
+    if GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext() then return "party" end
     local kind = type(GF.GetLiveRaidKind) == "function" and GF.GetLiveRaidKind() or "raid"
     return kind == "mythicraid" and "mythicraid" or "raid"
   end
@@ -608,6 +612,10 @@ function GF.SetPriorityOption(key, value)
     value = value == true
   elseif key == "maxFrames" then
     value = ClampMaxFrames(value)
+  elseif key == "unitsPerColumn" then
+    value = math.max(1, math.min(5, floor((tonumber(value) or 5) + .5)))
+  elseif key == "width" or key == "height" then
+    value = math.max(0, math.min(key == "width" and 500 or 200, floor((tonumber(value) or 0) + .5)))
   elseif key == "growth" then
     if value ~= "UP" and value ~= "DOWN" and value ~= "LEFT" and value ~= "RIGHT" then return false end
   elseif key == "spacing" then

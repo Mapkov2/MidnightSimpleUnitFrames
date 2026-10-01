@@ -42,6 +42,10 @@ local EMPTY_EVENTS = {}
 local function PVPIndicatorContextActive()
   return UF and type(UF.PVPIndicatorContextActive) == "function" and UF.PVPIndicatorContextActive() == true
 end
+-- Classic's PvP context follows the player's own flag, which flips in combat:
+-- compile the icon whenever configured and let Runtime.UpdatePVP gate it on the
+-- cached context (pvp.contextGated, MSUF_UF_Config.lua).
+local PVP_CONTEXT_GATED = MSUF.Client ~= nil and MSUF.Client.Family == "Classic"
 
 local function Layer(value, fallback)
   value = floor((tonumber(value) or fallback or 5) + 0.5)
@@ -467,13 +471,13 @@ local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, ph
   return events or EMPTY_EVENTS, unitlessEvents or EMPTY_EVENTS
 end
 
-local function StatusRegion(conf, enabled, sizeKey, sizeFallback, anchorKey, anchorFallback, xKey, xFallback, yKey, yFallback, layerKey, layerFallback)
+local function StatusRegion(conf, enabled, resize, sizeKey, sizeFallback, anchorKey, anchorFallback, xKey, xFallback, yKey, yFallback, layerKey, layerFallback)
   return {
     enabled = enabled,
-    size = Num(conf[sizeKey], sizeFallback),
+    size = math.max(1, floor(Num(conf[sizeKey], sizeFallback) * resize + .5)),
     anchor = conf[anchorKey] or anchorFallback,
-    x = Num(conf[xKey], xFallback),
-    y = Num(conf[yKey], yFallback),
+    x = Num(conf[xKey], xFallback) * resize,
+    y = Num(conf[yKey], yFallback) * resize,
     layer = Layer(conf[layerKey], layerFallback),
   }
 end
@@ -498,12 +502,14 @@ local GROUP_STATUS_REGIONS = {
   threat = { "threatTextSize", 9, "threatTextAnchor", "TOP", "threatTextX", 0, "threatTextY", -1, "threatTextLayer", 7 },
 }
 
-local function StatusRegionDef(conf, enabled, key)
+--- `resize` is the scope's indicator resize ratio, resolved once per compile.
+local function StatusRegionDef(conf, enabled, key, resize)
   local d = GROUP_STATUS_REGIONS[key]
-  return StatusRegion(conf, enabled, d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9], d[10])
+  return StatusRegion(conf, enabled, resize, d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9], d[10])
 end
 
 local function CompileStatus(kind, conf)
+  local resize = conf.autoScaleIndicatorsOnResize == true and GF.GetResizeScale(conf, kind) or 1
   local roleEnabled = conf.roleIcon == true
   local raidMarkerEnabled = conf.raidMarker == true
   local leaderEnabled = conf.leaderIcon == true
@@ -511,7 +517,7 @@ local function CompileStatus(kind, conf)
   local readyCheckEnabled = conf.readyCheckIcon == true
   local summonEnabled = conf.summonIcon == true
   local incomingResEnabled = conf.resurrectIcon == true
-  local pvpEnabled = conf.pvpIcon == true and PVPIndicatorContextActive()
+  local pvpEnabled = conf.pvpIcon == true and (PVP_CONTEXT_GATED or PVPIndicatorContextActive())
   local phaseEnabled = conf.phaseIcon == true
   local statusDeadGhostTextEnabled = conf.statusText == true or conf.statusGhostText == true
   local statusConnectionTextEnabled = conf.statusText == true
@@ -531,31 +537,31 @@ local function CompileStatus(kind, conf)
     or raidMarkerEnabled or raidGroupEnabled or statusTextEnabled or incomingResEnabled or pvpEnabled
     or levelEnabled
 
-  local role = StatusRegionDef(conf, roleEnabled, "role")
+  local role = StatusRegionDef(conf, roleEnabled, "role", resize)
   role.style = conf.roleIconStyle
   role.customIcon = conf.roleIconCustomIcon
   role.showTank = conf.roleIconShowTank ~= false
   role.showHealer = conf.roleIconShowHealer ~= false
   role.showDPS = conf.roleIconShowDPS ~= false
-  local leader = StatusRegionDef(conf, leaderEnabled, "leader")
+  local leader = StatusRegionDef(conf, leaderEnabled, "leader", resize)
   leader.style = conf.leaderIconStyle
   leader.customIcon = conf.leaderIconCustomIcon
-  local assist = StatusRegionDef(conf, assistEnabled, "assist")
+  local assist = StatusRegionDef(conf, assistEnabled, "assist", resize)
   assist.style = conf.assistIconStyle
   assist.customIcon = conf.assistIconCustomIcon
-  local statusText = StatusRegionDef(conf, statusTextEnabled, "statusText")
+  local statusText = StatusRegionDef(conf, statusTextEnabled, "statusText", resize)
   statusText.showDead = conf.statusText == true
   statusText.showGhost = conf.statusGhostText == true
   statusText.showAFK = conf.statusAFKText == true
   statusText.showDND = conf.statusDNDText == true
-  statusText.dead = StatusRegionDef(conf, conf.statusText == true, "statusText")
-  statusText.ghost = StatusRegionDef(conf, conf.statusGhostText == true, "statusGhost")
-  statusText.afk = StatusRegionDef(conf, conf.statusAFKText == true, "statusAFK")
-  statusText.dnd = StatusRegionDef(conf, conf.statusDNDText == true, "statusDND")
-  statusText.afkTimer = StatusRegionDef(conf, conf.statusAFKTimerText == true, "statusAFKTimer")
-  local raidGroup = StatusRegionDef(conf, raidGroupEnabled, "raidGroup")
+  statusText.dead = StatusRegionDef(conf, conf.statusText == true, "statusText", resize)
+  statusText.ghost = StatusRegionDef(conf, conf.statusGhostText == true, "statusGhost", resize)
+  statusText.afk = StatusRegionDef(conf, conf.statusAFKText == true, "statusAFK", resize)
+  statusText.dnd = StatusRegionDef(conf, conf.statusDNDText == true, "statusDND", resize)
+  statusText.afkTimer = StatusRegionDef(conf, conf.statusAFKTimerText == true, "statusAFKTimer", resize)
+  local raidGroup = StatusRegionDef(conf, raidGroupEnabled, "raidGroup", resize)
   raidGroup.style = conf.groupNumberStyle or "PAREN"
-  local level = StatusRegionDef(conf, levelEnabled, "level")
+  local level = StatusRegionDef(conf, levelEnabled, "level", resize)
   level.difficultyColor = levelColored
   level.difficultyColors = levelColored
     and Shared.ResolveLevelDifficultyColors(_G.MSUF_DB and _G.MSUF_DB.general) or nil
@@ -564,29 +570,30 @@ local function CompileStatus(kind, conf)
   -- compile an entry, so Midnight and Mists specs stay as they were.
   local threat
   if MSUF.Client and MSUF.Client.SupportsThreatText == true then
-    threat = StatusRegionDef(conf, conf.threatText == true, "threat")
+    threat = StatusRegionDef(conf, conf.threatText == true, "threat", resize)
     threat.colorCurve = conf.threatTextColorCurve ~= false
     threat.background = conf.threatTextBackground == true
   end
   --- Every icon carries its own style now, so the non-role indicators stop falling back to the
   --- retired scope-wide default. The value may carry the "@MIDNIGHT" suffix; the DB resolvers
   --- split it, so it is forwarded untouched.
-  local raidMarker = StatusRegionDef(conf, raidMarkerEnabled, "raidMarker")
+  local raidMarker = StatusRegionDef(conf, raidMarkerEnabled, "raidMarker", resize)
   raidMarker.style = conf.raidMarkerStyle
   raidMarker.customIcon = conf.raidMarkerCustomIcon
-  local readyCheck = StatusRegionDef(conf, readyCheckEnabled, "readyCheck")
+  local readyCheck = StatusRegionDef(conf, readyCheckEnabled, "readyCheck", resize)
   readyCheck.style = conf.readyCheckIconStyle
   readyCheck.customIcon = conf.readyCheckIconCustomIcon
-  local summon = StatusRegionDef(conf, summonEnabled, "summon")
+  local summon = StatusRegionDef(conf, summonEnabled, "summon", resize)
   summon.style = conf.summonIconStyle
   summon.customIcon = conf.summonIconCustomIcon
-  local incomingRes = StatusRegionDef(conf, incomingResEnabled, "incomingRes")
+  local incomingRes = StatusRegionDef(conf, incomingResEnabled, "incomingRes", resize)
   incomingRes.style = conf.resurrectIconStyle
   incomingRes.customIcon = conf.resurrectIconCustomIcon
-  local pvp = StatusRegionDef(conf, pvpEnabled, "pvp")
+  local pvp = StatusRegionDef(conf, pvpEnabled, "pvp", resize)
   pvp.style = conf.pvpIconStyle
   pvp.customIcon = conf.pvpIconCustomIcon
-  local phase = StatusRegionDef(conf, phaseEnabled, "phase")
+  pvp.contextGated = PVP_CONTEXT_GATED and pvpEnabled or nil
+  local phase = StatusRegionDef(conf, phaseEnabled, "phase", resize)
   phase.style = conf.phaseIconStyle
   phase.customIcon = conf.phaseIconCustomIcon
 
@@ -751,6 +758,12 @@ local function CompileDispelSymbol(conf)
   return out
 end
 
+local function NameBarHeight(kind, conf)
+  if conf.nameBarEnabled ~= true then return 0 end
+  local _, height = GF.GetScaledFrameMetrics(kind)
+  return math.max(1, math.min(Num(conf.nameBarHeight, 14), math.max(1, height - 5)))
+end
+
 local function CompileGroupVisuals(kind, conf)
   local general = _G.MSUF_DB and _G.MSUF_DB.general
   local hoverR, hoverG, hoverB = ResolveHighlightRGB()
@@ -764,6 +777,10 @@ local function CompileGroupVisuals(kind, conf)
   end
   return {
     kind = kind,
+    nameBarEnabled = conf.nameBarEnabled == true,
+    nameBarHeight = NameBarHeight(kind, conf),
+    nameBarR = Num(conf.nameBarR, .05), nameBarG = Num(conf.nameBarG, .05), nameBarB = Num(conf.nameBarB, .05),
+    nameBarAlpha = Clamp01(conf.nameBarAlpha, .95),
     rangeFadeEnabled = conf.rangeFadeEnabled == true,
     rangeFadeAlpha = Clamp01(conf.rangeFadeAlpha, 0.4),
     rangeFadeLayerMode = NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode),
@@ -1246,7 +1263,10 @@ local function CompileCoreAuras(kind, conf)
   local trackedBuffGrowthX, trackedBuffGrowthY = SplitAuraGrowth(buff.trackedGrowth or buff.growth, "RIGHTDOWN")
   local debuffGrowthX, debuffGrowthY = SplitAuraGrowth(debuff.growth, "RIGHTDOWN")
   local externalGrowthX, externalGrowthY = SplitAuraGrowth(externals.growth, "RIGHTDOWN")
-  local auraScale = DynamicAuraScale(root)
+  local resizeScale = GF.GetResizeScale and GF.GetResizeScale(conf, kind) or 1
+  local dynamicScale = DynamicAuraScale(root)
+  local auraScale = dynamicScale * (conf.autoScaleAurasOnResize == true and resizeScale or 1)
+  local trackedScale = dynamicScale * (conf.autoScaleTrackedOnResize == true and resizeScale or 1)
   local defaultBuffSize = (kind == "raid" or kind == "mythicraid") and 16 or 22
   local defaultTrackedBuffSize = (kind == "raid" or kind == "mythicraid") and 16 or 22
   local defaultDebuffSize = (kind == "raid" or kind == "mythicraid") and 16 or 20
@@ -1268,7 +1288,7 @@ local function CompileCoreAuras(kind, conf)
       debuffs = IsBlizzardAuraTypeEnabled(root or {}, "debuffs"),
       dispels = IsBlizzardAuraTypeEnabled(root or {}, "dispels"),
       externals = IsBlizzardAuraTypeEnabled(root or {}, "externals"),
-      iconSize = Num(root and root.blizzardIconSize, 20),
+      iconSize = S(root and root.blizzardIconSize, 20, 1),
       organizationType = root and root.blizzardOrganizationType or "default",
       strata = root and root.blizzardContainerStrata or "AUTO",
       frameLevelOffset = Layer(root and root.blizzardContainerFrameLevel, 1),
@@ -1345,7 +1365,8 @@ local function CompileCoreAuras(kind, conf)
     stackX = buff.trackedStackX,
     stackY = buff.trackedStackY,
   }
-  ApplyAuraLane(out, "trackedBuff", "trackedBuff", trackedBuff, AURA_LANE_DEFAULTS.trackedBuff, 8, defaultTrackedBuffSize, trackedBuffGrowthX, trackedBuffGrowthY, S, kind)
+  local function T(value, fallback, minValue) return ScaleAuraValue(Num(value, fallback), trackedScale, minValue) end
+  ApplyAuraLane(out, "trackedBuff", "trackedBuff", trackedBuff, AURA_LANE_DEFAULTS.trackedBuff, 8, defaultTrackedBuffSize, trackedBuffGrowthX, trackedBuffGrowthY, T, kind)
   out.trackedBuffIncludeHash = trackedBuffIncludeHash
   out.trackedBuffTrackedCount = trackedBuffCount or 0
   ApplyAuraLane(out, "debuff", "debuff", debuff, AURA_LANE_DEFAULTS.debuff, Num(conf.auraMaxIcons, 4), defaultDebuffSize, debuffGrowthX, debuffGrowthY, S, kind)
@@ -1406,7 +1427,9 @@ local function CompilePortrait(kind, conf, frameHeight)
   local portrait = {
     enabled = mode ~= "OFF",
     side = mode == "RIGHT" and "RIGHT" or "LEFT",
-    render = Shared.NormalizePortraitRender(conf.portraitRender),
+    -- The group page offers 2D and class art only; an imported 3D value would
+    -- otherwise build a native model on every party and raid button.
+    render = conf.portraitRender == "CLASS" and "CLASS" or "2D",
     classStyle = Shared.NormalizePortraitClassStyle(conf.portraitClassStyle),
     castSpellIcon = conf.portraitCastSpellIcon == true,
     clickable = conf.portraitClickable == true,
@@ -1444,6 +1467,8 @@ local function CompilePortrait(kind, conf, frameHeight)
       a = Num(conf.portraitBgColorA, 0.85),
     },
   }
+  local portraitDetails = MSUF.PortraitDetails
+  if portraitDetails then portraitDetails.Compile(portrait, conf) end
   Shared.CompilePortraitTexCoords(portrait, conf.portraitZoom, width, height, conf.portraitPanX, conf.portraitPanY)
   return portrait
 end
@@ -1518,15 +1543,17 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
   local powerFontSize = Num(conf.powerFontSize, 9)
   return {
     anchorToBars = true,
-    nameAnchorToFrame = conf._msufLegacyNameAnchorToFrame == true,
+    nameAnchorToFrame = conf.nameBarEnabled == true or conf._msufLegacyNameAnchorToFrame == true,
     nameLegacyTruncation = conf._msufLegacyNameAnchorToFrame == true,
     nameClassColor = nameTextOptions.nameClassColor == true,
     nameNpcColor = nameTextOptions.nameNpcColor == true,
     nameNpcClassColor = nameTextOptions.nameNpcClassColor == true,
     nameColor = nameTextOptions.nameColor,
-    nameAnchor = conf.nameAnchor or "LEFT",
-    nameX = Num(conf.nameOffsetX, 0),
-    nameY = Num(conf.nameOffsetY, 0) + baselineOffset,
+    nameAnchor = conf.nameBarEnabled == true and "TOP" or conf.nameAnchor or "LEFT",
+    -- The name bar centres the name in its strip: like nameY below, the free
+    -- offsets (default X 28 for the LEFT anchor) do not apply to it.
+    nameX = conf.nameBarEnabled == true and 0 or Num(conf.nameOffsetX, 0),
+    nameY = conf.nameBarEnabled == true and (-math.max(0, NameBarHeight(kind, conf) - Num(conf.nameFontSize, 12)) / 2 + baselineOffset) or Num(conf.nameOffsetY, 0) + baselineOffset,
     nameLayer = Layer(conf.nameTextLayer, 5),
     nameShorten = nameTextOptions.nameShorten == true,
     nameShortenMax = nameTextOptions.nameShortenMax,
@@ -1761,6 +1788,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     showHealthText = conf.showHPText ~= false,
     showPowerText = IsPowerTextEnabled(kind, conf),
     health = {
+      topInset = group.nameBarEnabled and group.nameBarHeight or 0,
       mode = healthVisual.mode,
       r = healthVisual.r,
       g = healthVisual.g,
@@ -1811,9 +1839,9 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       hideInClientScene = conf.hideInClientScene ~= false,
       hideInHousing = conf.hideInHousing == true,
     },
-    cornerIndicators = GF.CompileCornerIndicators and GF.CompileCornerIndicators(conf) or { enabled = false },
+    cornerIndicators = GF.CompileCornerIndicators and GF.CompileCornerIndicators(conf, kind) or { enabled = false },
     dispelSymbol = CompileDispelSymbol(conf),
-    spellIndicators = GF.CompileSpellIndicators and GF.CompileSpellIndicators(conf) or { enabled = false, items = {} },
+    spellIndicators = GF.CompileSpellIndicators and GF.CompileSpellIndicators(conf, kind) or { enabled = false, items = {} },
   }
 end
 
@@ -1889,6 +1917,7 @@ local function RefreshColorDomain(kind, base, conf)
   local healthVisual = ResolveHealthVisual(conf)
   local health = base.health or {}
   base.health = health
+  health.topInset = conf.nameBarEnabled == true and math.min(Num(conf.nameBarHeight, 14), math.max(1, base.height - 5)) or 0
   health.texture = texture
   health.backgroundTexture = backgroundTexture
   health.mode = healthVisual.mode
@@ -1958,7 +1987,7 @@ local function RefreshColorDomain(kind, base, conf)
   end
 
   if GF.CompileCornerIndicators then
-    base.cornerIndicators = ReplaceTableContents(base.cornerIndicators, GF.CompileCornerIndicators(conf))
+    base.cornerIndicators = ReplaceTableContents(base.cornerIndicators, GF.CompileCornerIndicators(conf, kind))
   end
   base.dispelSymbol = ReplaceTableContents(base.dispelSymbol, CompileDispelSymbol(conf))
   BumpSpecDomain(base, "_msufTextColorRevision")
@@ -1975,7 +2004,7 @@ local function RefreshAggroDomain(kind, base, conf)
   local general = GeneralDB() or {}
   base.border = ReplaceTableContents(base.border, CompileBorderSpec(kind, conf, general))
   if GF.CompileCornerIndicators then
-    base.cornerIndicators = ReplaceTableContents(base.cornerIndicators, GF.CompileCornerIndicators(conf))
+    base.cornerIndicators = ReplaceTableContents(base.cornerIndicators, GF.CompileCornerIndicators(conf, kind))
   end
   BumpSpecDomain(base, "_msufBorderVisualRevision")
 end
@@ -2108,6 +2137,39 @@ local TEXT_SPEC_ROOT_KEYS = {
   "showName", "showHealthText", "showPowerText", "text",
 }
 
+-- Frame-specific strip geometry must use the same available health area as
+-- Health.Layout. Priority dimensions and role-filtered power differ per frame.
+local function PatchNameBarHeight(base, spec, frame, conf, powerHeight)
+  local group = base.group
+  if not (group and group.nameBarEnabled) then
+    spec.group, spec.health, spec.text = group, base.health, base.text
+    frame._msufGFNameBarBase = nil
+    return
+  end
+  local power = spec.power
+  local powerInset = power and power.enabled and power.embed ~= false and power.detached ~= true and powerHeight or 0
+  local height = math.max(0, math.min(group.nameBarHeight, spec.height - powerInset - 1))
+  local changed = frame._msufGFNameBarBase ~= base or frame._msufGFNameBarHeight ~= height
+    or frame._msufGFNameBarTextRevision ~= base._msufTextLayoutRevision
+    or frame._msufGFNameBarColorRevision ~= base._msufTextColorRevision
+  local ownGroup, health, text = frame._msufGFNameBarGroup, frame._msufGFNameBarHealth, frame._msufGFNameBarText
+  if changed then
+    ownGroup, health, text = ownGroup or {}, health or {}, text or {}
+    CopyShallow(ownGroup, group)
+    CopyShallow(health, base.health)
+    CopyShallow(text, base.text)
+    ownGroup.nameBarHeight, health.topInset = height, height
+    local fontSize = Num(conf.nameFontSize, 12)
+    local baseline = base.text.nameY + math.max(0, group.nameBarHeight - fontSize) / 2
+    text.nameY = baseline - math.max(0, height - fontSize) / 2
+    frame._msufGFNameBarGroup, frame._msufGFNameBarHealth, frame._msufGFNameBarText = ownGroup, health, text
+    frame._msufGFNameBarBase, frame._msufGFNameBarHeight = base, height
+    frame._msufGFNameBarTextRevision = base._msufTextLayoutRevision
+    frame._msufGFNameBarColorRevision = base._msufTextColorRevision
+  end
+  spec.group, spec.health, spec.text = ownGroup, health, text
+end
+
 local function PatchFrameSpec(base, kind, frame, unit, conf)
   local spec = frame._msufGFSpec
   if not spec then
@@ -2144,6 +2206,18 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
       frame._msufGFBorderVisualRevision = base._msufBorderVisualRevision
     end
   end
+  local shell = frame._msufSecureShell or frame
+  local header = shell.GetParent and shell:GetParent()
+  local previewCount = (frame._msufGFIsPreviewFrame or shell._msufGFIsPreviewFrame) and GF.GetActivePreviewCount
+    and GF.GetActivePreviewCount(kind) or nil
+  if (shell._msufGFPriorityFrame or (header and header._msufGFPriorityHeader)) and GF.GetPriorityFrameMetrics then
+    spec.width, spec.height = GF.GetPriorityFrameMetrics(kind)
+  elseif previewCount and GF.GetLayoutTier and GF.GetLayoutTier(kind, previewCount) then
+    -- A sample count can sit in another size tier than the live roster.
+    spec.width, spec.height = GF.GetScaledFrameMetrics(kind, previewCount)
+  else
+    spec.width, spec.height = base.width, base.height
+  end
   spec.unit = unit
   spec.key = "gf_" .. kind
   spec.groupKind = kind
@@ -2164,6 +2238,7 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
   power.enabled = powerHeight > 0
   power.height = powerHeight
   spec.power = power
+  PatchNameBarHeight(base, spec, frame, conf, powerHeight)
   -- Power text is part of the same role-gated runtime ownership as the bar.
   -- A DPS frame with its power bar disabled must not retain PowerText events.
   spec.showPowerText = powerHeight > 0 and base.showPowerText == true

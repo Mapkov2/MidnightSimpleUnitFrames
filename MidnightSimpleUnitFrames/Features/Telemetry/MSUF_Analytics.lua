@@ -1,7 +1,9 @@
 --- Wago Analytics integration for MSUF beta telemetry.
 --- Cold-path only: one session snapshot, never from combat, no OnUpdate or hot-path hooks.
---- Telemetry must stay opt-in/defensive and may read coarse configuration state only; it
---- should not observe unit events, frame state, profile import payloads, or user text input.
+--- Telemetry is on by default (the existing beta telemetry behaviour; the stored
+--- MSUF_GlobalDB.global.analytics.enabled flag turns it off for good), stays defensive and
+--- may read coarse configuration state only; it should not observe unit events, frame
+--- state, profile import payloads, or user text input.
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local ExportPublic = MSUF.ExportPublic
@@ -217,7 +219,7 @@ local function CollectSessionSnapshot(target)
     if not db then return end
 
     -- Snapshot data is coarse feature/config shape only. Do not include unit state, profile
-    -- import strings, user-entered Assistant text, or frame positions.
+    -- import strings, user-entered search text, or frame positions.
     local general = type(db.general) == "table" and db.general or {}
     local gameplay = type(db.gameplay) == "table" and db.gameplay or {}
     local auras3 = type(db.auras3) == "table" and db.auras3 or {}

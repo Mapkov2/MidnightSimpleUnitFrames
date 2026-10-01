@@ -529,10 +529,16 @@ local function RefreshUnitFrameRuntimeAfterPreview(frame)
   end
 end
 
+-- Blizzard's Mainline PlayerFrame combat icon (PlayerFrame.xml AttackIcon);
+-- clients without the atlas draw the classic state icon, like the status element.
+local COMBAT_ICON_ATLAS = "UI-HUD-UnitFrame-Player-CombatIcon"
+
 local function EnsureCombatTexture(tex)
   if not tex or tex._msufPreviewAnimCombatTexture then return end
-  if tex.SetAtlas then
-    tex:SetAtlas("UI-HUD-UnitFrame-Player-PortraitCombatIcon")
+  local textureAPI = _G.C_Texture
+  if tex.SetAtlas and textureAPI and type(textureAPI.GetAtlasInfo) == "function"
+    and textureAPI.GetAtlasInfo(COMBAT_ICON_ATLAS) ~= nil then
+    tex:SetAtlas(COMBAT_ICON_ATLAS)
   elseif tex.SetTexture then
     tex:SetTexture("Interface\\CharacterFrame\\UI-StateIcon")
     if tex.SetTexCoord then tex:SetTexCoord(0.5, 1, 0, 0.5) end
@@ -860,7 +866,13 @@ function PA.ApplyUnitFrame(frame, index, kind)
   local power = floor(powerMax * (state.powerPct or 0.75) + 0.5)
 
   SetBar(frame.hpBar or frame.Health or frame.health, hp, hpMax, true)
-  SetBar(frame.targetPowerBar or frame.powerBar or frame.Power or frame.power, power, powerMax, true)
+  local powerBar = frame.targetPowerBar or frame.powerBar or frame.Power or frame.power
+  local powerSpec = frame.MSUFSpec and frame.MSUFSpec.power
+  if powerSpec and powerSpec.enabled ~= true then
+    SetRegionShown(powerBar, false)
+  else
+    SetBar(powerBar, power, powerMax, true)
+  end
   ApplyPrediction(frame, hpMax, state)
   ApplyPreviewName(frame, kind)
   ApplyText(frame, hp, hpMax, power, powerMax, state.hpPct, state.powerPct)

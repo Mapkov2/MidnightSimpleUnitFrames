@@ -222,6 +222,11 @@ end
 --- Header size estimates use live roster counts when available, otherwise the
 --- last known count. This keeps preview/mover geometry stable during login.
 local function ConfiguredCount(kind, conf)
+  if kind == "party" and GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext() then
+    local n = GetNumGroupMembers() or 0
+    if conf.showPlayer == false then n = n - 1 end
+    return RememberLayoutCount(kind, n)
+  end
   if kind == "party" then
     if GetNumSubgroupMembers then
       local n = GetNumSubgroupMembers() or 0
@@ -235,7 +240,7 @@ local function ConfiguredCount(kind, conf)
     return 5
   end
   if GetNumGroupMembers then
-    local n = GetNumGroupMembers() or 0
+    local n = GF.GetLayoutGroupCount and GF.GetLayoutGroupCount(kind) or GetNumGroupMembers() or 0
     if n > 0 then return RememberLayoutCount(kind, n) end
   end
   return UnknownRaidLayoutCount(kind)
@@ -363,6 +368,17 @@ local function EnsureAnchor(key, conf, totalW, totalH, runtimeClampInsets)
     UF.Config.AdaptScreenPosition(conf)
   end
   local offsetX, offsetY = conf.offsetX or 0, conf.offsetY or 0
+  -- The same resolver places previews and Edit Mode movers (tier positions,
+  -- solo centring), so what a drag moves is what the live anchor shows.
+  if key ~= "priority" and GF.ResolveGroupPositionKeys then
+    local kind = key == "raid" and (GF.GetLiveRaidKind and GF.GetLiveRaidKind() or "raid") or "party"
+    local xKey, yKey, centered = GF.ResolveGroupPositionKeys(kind, conf)
+    if centered then
+      parent, point, relativePoint, offsetX, offsetY = UIParent, "CENTER", "CENTER", 0, 0
+    elseif xKey ~= "offsetX" then
+      offsetX, offsetY = tonumber(conf[xKey]) or offsetX, tonumber(conf[yKey]) or offsetY
+    end
+  end
   if parent == UIParent and conf.screenPositionMode == "relativeHeight"
     and type(_G.MSUF_Snap) == "function" then
     offsetX = _G.MSUF_Snap(anchor, offsetX)
@@ -458,9 +474,12 @@ local function ClampInt(value, fallback, minValue, maxValue)
   return value
 end
 
+local RaidGroupAllowed
 local function PreservedRaidGroupLimit(conf)
-  if not (conf and conf.preserveRaidGroups == true) then return nil end
-  return ClampInt(conf.maxColumns, 8, 1, 8)
+  if not conf then return nil end
+  local mythicCap = conf.hideMythicGroupsFiveToEight == true and GF.IsMythicRaidContext and GF.IsMythicRaidContext()
+  if conf.preserveRaidGroups ~= true then return mythicCap and 4 or nil end
+  return math.min(ClampInt(conf.maxColumns, 8, 1, 8), mythicCap and 4 or 8)
 end
 
 local function ResolvePreservedRaidGroupCount(conf, maxRosterGroup)
@@ -469,13 +488,21 @@ local function ResolvePreservedRaidGroupCount(conf, maxRosterGroup)
   return groups > 8 and 8 or groups
 end
 
-function GF.GetPreservedRaidGroupCount(conf)
+--- keepEmpty: count every configured group (previews, Edit Mode movers);
+--- only the live layout collapses empty subgroups.
+function GF.GetPreservedRaidGroupCount(conf, keepEmpty)
   local maxRosterGroup = 0
+  local occupied = keepEmpty ~= true and conf.collapseEmptyGroups == true and {} or nil
   if IsInRaid and IsInRaid() and GetNumGroupMembers and GetRaidRosterInfo then
     for index = 1, GetNumGroupMembers() or 0 do
       local subgroup = tonumber((select(3, GetRaidRosterInfo(index)))) or 0
       if subgroup > maxRosterGroup then maxRosterGroup = subgroup end
+      if occupied and subgroup > 0 and RaidGroupAllowed(conf, subgroup) then occupied[subgroup] = true end
     end
+  end
+  if occupied then
+    local count = 0; for _ in pairs(occupied) do count = count + 1 end
+    return math.max(1, count)
   end
   return ResolvePreservedRaidGroupCount(conf, maxRosterGroup)
 end
@@ -552,6 +579,13 @@ end
 local function ResolveGroupFilter(conf)
   local value = conf and conf.groupFilter
   local groupLimit = PreservedRaidGroupLimit(conf)
+  if conf and conf.hideMythicGroupsFiveToEight == true and GF.IsMythicRaidContext and GF.IsMythicRaidContext() then
+    -- Complete rosters use the filtered nameList. An incomplete native fallback
+    -- must still honor the explicit subgroup cap, even with class/role filters.
+    local out = {}
+    for i = 1, 4 do if RaidGroupAllowed(conf, i) then out[#out + 1] = tostring(i) end end
+    return #out > 0 and table_concat(out, ",") or "0"
+  end
   if type(value) == "string" then
     return value ~= "" and value or nil
   elseif type(value) == "table" then
@@ -603,8 +637,10 @@ local function GroupFilterAllows(conf, groupIndex, classFile, role, ignoreGroupL
   return true
 end
 
-local function RaidGroupAllowed(conf, groupIndex)
-  local filter = conf and conf.groupFilter
+RaidGroupAllowed = function(conf, groupIndex)
+  if not conf then return true end
+  if conf.hideMythicGroupsFiveToEight == true and GF.IsMythicRaidContext and GF.IsMythicRaidContext() and groupIndex > 4 then return false end
+  local filter = conf.groupFilter
   if type(filter) == "table" then
     local value = filter[groupIndex]
     return value ~= false and (value ~= nil or filter[tostring(groupIndex)] ~= false)
@@ -674,6 +710,7 @@ local function AppendNameListEntry(entries, unit, index, conf, name, subgroup, c
     index = index or 0,
     player = IsPlayerUnit(unit),
     group = subgroup or 0,
+    class = issecretvalue(classFile) ~= true and classFile or nil,
   }
   return true
 end
@@ -741,8 +778,18 @@ local function ArenaPartyExpectedCompanionCount()
   return known and count or false
 end
 
-local function BuildPlayerFirstRoleNameList(key, kind, conf)
-  if conf.playerFirstInRole ~= true then
+local function ClassPriority(conf)
+  if conf.sortClassPriority ~= true then return nil end
+  local result, count = {}, 0
+  for token in (type(conf.classOrder) == "string" and conf.classOrder or ""):gmatch("[^,%s]+") do
+    token = token:upper()
+    if not result[token] then count = count + 1; result[token] = count end
+  end
+  return result
+end
+
+local function BuildPlayerFirstRoleNameList(key, kind, conf, mode)
+  if conf.playerFirstInRole ~= true and conf.sortClassPriority ~= true then
     return nil
   end
   local entries = {}
@@ -780,16 +827,20 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf)
     return nil
   end
 
-  local priority = RolePriority(conf)
+  local priority = mode == "ROLE" and RolePriority(conf) or {}
+  local classes = ClassPriority(conf)
   table_sort(entries, function(a, b)
     local ar = priority[a.role] or 999
     local br = priority[b.role] or 999
     if ar ~= br then
       return ar < br
     end
-    if a.player ~= b.player then
-      return a.player == true
+    if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
+    if classes then
+      local ac, bc = classes[a.class] or 999, classes[b.class] or 999
+      if ac ~= bc then return ac < bc end
     end
+    if mode == "NAME" and a.name ~= b.name then return a.name < b.name end
     return (a.index or 0) < (b.index or 0)
   end)
 
@@ -811,9 +862,14 @@ local function EntryRolePriority(entry, priority)
   return priority and priority[entry and entry.role] or 999
 end
 
+local function SmallRaidParty(kind)
+  return kind == "party" and GF.IsSmallRaidPartyContext ~= nil and GF.IsSmallRaidPartyContext() == true
+end
+
 local function BuildRaidFreezeEntries(kind, conf, mode, descending, preservedBlocks)
   local groupCount = ResolvePreservedRaidGroupCount(conf)
-  if not IsRaidLikeKind(kind) then
+  -- A raid of up to five shown with the Party layout reads the raid roster too.
+  if not IsRaidLikeKind(kind) and not SmallRaidParty(kind) then
     return nil, groupCount
   end
   local count = GetNumGroupMembers and GetNumGroupMembers() or 0
@@ -843,17 +899,23 @@ local function BuildRaidFreezeEntries(kind, conf, mode, descending, preservedBlo
   if not rosterComplete or #entries == 0 then
     return nil, groupCount
   end
+  -- The Party layout may hide the player; a raid header lists everyone, so the
+  -- name list is what keeps that choice in a small raid.
+  if kind == "party" and conf.showPlayer == false then
+    for i = #entries, 1, -1 do
+      if entries[i].player == true then table.remove(entries, i) end
+    end
+    if #entries == 0 then return nil, groupCount end
+  end
 
   local priority = (mode == "ROLE" or mode == "GROUP_ROLE") and RolePriority(conf) or nil
   local alphabeticalInRole = conf.sortAlphabeticalWithinRole == true
+  local classes = ClassPriority(conf)
   local function SortBefore(a, b)
-    if mode == "NAME" and a.name ~= b.name then
-      return a.name < b.name
-    elseif mode == "ROLE" then
+    if mode == "ROLE" then
       local ar, br = EntryRolePriority(a, priority), EntryRolePriority(b, priority)
       if ar ~= br then return ar < br end
       if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
-      if alphabeticalInRole and a.name ~= b.name then return a.name < b.name end
     elseif mode == "GROUP" or mode == "GROUP_ROLE" then
       local ag, bg = a.group or 0, b.group or 0
       if ag ~= bg then return ag < bg end
@@ -861,8 +923,14 @@ local function BuildRaidFreezeEntries(kind, conf, mode, descending, preservedBlo
         local ar, br = EntryRolePriority(a, priority), EntryRolePriority(b, priority)
         if ar ~= br then return ar < br end
         if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
-        if alphabeticalInRole and a.name ~= b.name then return a.name < b.name end
       end
+    end
+    if classes then
+      local ac, bc = classes[a.class] or 999, classes[b.class] or 999
+      if ac ~= bc then return ac < bc end
+    end
+    if (mode == "NAME" or alphabeticalInRole and (mode == "ROLE" or mode == "GROUP_ROLE")) and a.name ~= b.name then
+      return a.name < b.name
     end
     return (a.index or 0) < (b.index or 0)
   end
@@ -977,50 +1045,103 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
       nameLists[groupIndex] = names and table_concat(names, ",") or ""
     end
   end
-  local nativeGroupingOrder = not nameLists and (mode == "GROUP_ROLE" or mode == "ROLE")
-    and RoleOrder(conf) or nil
+  local layoutGroupCount = groupCount
+  if conf.collapseEmptyGroups == true and nameLists then
+    layoutGroupCount = 0
+    for i = 1, groupCount do
+      if nameLists[i] ~= "" and RaidGroupAllowed(conf, i) then layoutGroupCount = layoutGroupCount + 1 end
+    end
+    layoutGroupCount = math.max(1, layoutGroupCount)
+  end
+  local nameListBlocks
+  if nameLists then
+    nameListBlocks = {}
+    local all = mode == "ROLE" or (mode == "GROUP_ROLE" and conf.sortClassPriority == true)
+    local playerBlock
+    if not all and mode == "GROUP_ROLE" and conf.playerFirstInRole == true then
+      for i = 1, #entries do
+        if entries[i].player == true then playerBlock = entries[i].group; break end
+      end
+    end
+    for groupIndex = 1, groupCount do
+      nameListBlocks[groupIndex] = all or groupIndex == playerBlock
+    end
+  end
   return {
     mode = mode,
     groupCount = groupCount,
+    layoutGroupCount = layoutGroupCount,
     nameLists = nameLists,
-    nativeGroupingOrder = nativeGroupingOrder,
+    nameListBlocks = nameListBlocks,
   }
+end
+
+--- Class priority as a native groupingOrder: the configured classes in order;
+--- classes it does not name sort after them, as in the name-list comparator.
+local function NativeClassOrder(conf)
+  local classes = ClassPriority(conf)
+  if not classes then return nil end
+  local ordered = {}
+  for token, position in pairs(classes) do ordered[position] = token end
+  return #ordered > 0 and table_concat(ordered, ",") or nil
+end
+
+--- SecureGroupHeader sorts the live roster itself, also in combat: one grouping
+--- dimension (GROUP, CLASS or ASSIGNEDROLE with a groupingOrder), INDEX or NAME
+--- inside a group, and DESC over the whole list. A NAMELIST is a membership
+--- filter frozen out of combat (a member who joins during a fight gets no frame
+--- until it ends), so it is used only for orders native attributes cannot
+--- express: player first inside a role, the flat Group + Role raid order, class
+--- priority under a role or group order, and a small raid on the Party layout
+--- that hides the player. Raid-wide role fill of preserved groups is decided in
+--- BuildPreservedRaidSortSnapshot.
+local function NeedsNameList(mode, conf, smallRaidParty)
+  if conf.playerFirstInRole == true and (mode == "ROLE" or mode == "GROUP_ROLE") then return true end
+  if mode == "GROUP_ROLE" then return true end
+  if conf.sortClassPriority == true and (mode == "ROLE" or mode == "GROUP" or mode == "GROUP_ROLE") then return true end
+  return smallRaidParty == true and conf.showPlayer == false
+end
+
+local function NativeSortState(key, mode, conf)
+  local sortMethod, groupBy, groupingOrder = "INDEX", nil, nil
+  local classOrder = conf.sortClassPriority == true and NativeClassOrder(conf) or nil
+  if classOrder and (mode == "INDEX" or mode == "NAME") then
+    groupBy, groupingOrder = "CLASS", classOrder
+    if mode == "NAME" then sortMethod = "NAME" end
+  elseif mode == "NAME" then
+    sortMethod = "NAME"
+  elseif mode == "ROLE" then
+    groupBy, groupingOrder = "ASSIGNEDROLE", RoleOrder(conf)
+    if key ~= "party" and conf.sortAlphabeticalWithinRole == true then sortMethod = "NAME" end
+  elseif key ~= "party" and (mode == "GROUP" or mode == "GROUP_ROLE") then
+    groupBy, groupingOrder = "GROUP", RaidGroupingOrder(conf)
+  end
+  return sortMethod, groupBy, groupingOrder
 end
 
 local function BuildSortState(key, kind, conf)
   local mode = ResolveSortMode(key, conf)
-  local sortMethod = "INDEX"
-  local groupBy, groupingOrder, nameList
+  local smallRaidParty = key == "party" and SmallRaidParty(kind)
+  local sortMethod, groupBy, groupingOrder, nameList = "INDEX", nil, nil, nil
 
-  if key ~= "party" then
-    nameList = BuildRaidFreezeNameList(kind, conf, mode, conf.sortDescending == true)
-    if nameList then
-      sortMethod = "NAMELIST"
+  if NeedsNameList(mode, conf, smallRaidParty) then
+    if key ~= "party" or smallRaidParty then
+      nameList = BuildRaidFreezeNameList(kind, conf, mode, conf.sortDescending == true)
+    else
+      nameList = BuildPlayerFirstRoleNameList(key, kind, conf, mode)
     end
-  elseif mode == "ROLE" and conf.playerFirstInRole == true then
-    nameList = BuildPlayerFirstRoleNameList(key, kind, conf)
-    if nameList then
-      sortMethod = "NAMELIST"
-    end
+    if nameList then sortMethod = "NAMELIST" end
+  end
+  if not nameList then
+    sortMethod, groupBy, groupingOrder = NativeSortState(key, mode, conf)
   end
 
-  if nameList then
-    groupBy = nil
-    groupingOrder = nil
-  elseif mode == "NAME" then
-    sortMethod = "NAME"
-  elseif mode == "ROLE" then
-    groupBy = "ASSIGNEDROLE"
-    groupingOrder = RoleOrder(conf)
-  elseif key ~= "party" and (mode == "GROUP" or mode == "GROUP_ROLE") then
-    groupBy = "GROUP"
-    groupingOrder = RaidGroupingOrder(conf)
-  end
-
+  -- A raid-roster name list is already in its final order (descending included).
+  local rosterList = nameList ~= nil and (key ~= "party" or smallRaidParty)
   return {
     mode = mode,
     sortMethod = sortMethod,
-    sortDir = (nameList and key ~= "party") and "ASC" or (conf.sortDescending == true and "DESC" or "ASC"),
+    sortDir = rosterList and "ASC" or (conf.sortDescending == true and "DESC" or "ASC"),
     groupBy = groupBy,
     groupingOrder = groupingOrder,
     nameList = nameList,
@@ -1028,18 +1149,31 @@ local function BuildSortState(key, kind, conf)
   }
 end
 
+--- Preserved blocks sort natively inside their subgroup (the header's
+--- groupFilter): Group + Role by ASSIGNEDROLE, Group by INDEX or CLASS. Only
+--- the blocks BuildPreservedRaidSortSnapshot marks use their name list: every
+--- block of the raid-wide role fill, the player's own block for player first,
+--- and every block for class priority under Group + Role.
 local function BuildPreservedSortState(conf, groupIndex, snapshot)
   local mode = snapshot.mode
-  local nameList = snapshot.nameLists and snapshot.nameLists[groupIndex] or nil
-  -- The raid-wide role order (mode ROLE) needs the complete-roster nameList;
-  -- until it is readable the block keeps its native per-subgroup role sort.
-  local nativeRole = not nameList and (mode == "GROUP_ROLE" or mode == "ROLE")
+  local nameList = snapshot.nameLists and snapshot.nameListBlocks and snapshot.nameListBlocks[groupIndex]
+    and snapshot.nameLists[groupIndex] or nil
+  local sortMethod, groupBy, groupingOrder = "INDEX", nil, nil
+  if not nameList then
+    if mode == "GROUP_ROLE" or mode == "ROLE" then
+      groupBy, groupingOrder = "ASSIGNEDROLE", RoleOrder(conf)
+      if conf.sortAlphabeticalWithinRole == true then sortMethod = "NAME" end
+    elseif conf.sortClassPriority == true then
+      groupingOrder = NativeClassOrder(conf)
+      groupBy = groupingOrder and "CLASS" or nil
+    end
+  end
   return {
     mode = mode,
-    sortMethod = nameList and "NAMELIST" or "INDEX",
+    sortMethod = nameList and "NAMELIST" or sortMethod,
     sortDir = nameList and "ASC" or (conf.sortDescending == true and "DESC" or "ASC"),
-    groupBy = nativeRole and "ASSIGNEDROLE" or nil,
-    groupingOrder = nativeRole and snapshot.nativeGroupingOrder or nil,
+    groupBy = groupBy,
+    groupingOrder = groupingOrder,
     nameList = nameList,
     playerFirst = conf.playerFirstInRole == true,
   }
@@ -1396,7 +1530,8 @@ end
 
 local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex, preservedSortSnapshot)
   local buttonTemplate = ButtonTemplate()
-  local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing, conf.groupGrowth)
+  local growth = GF.ResolveLayoutGrowth and GF.ResolveLayoutGrowth(kind, conf) or conf.growth
+  local point, xOffset, yOffset, columnAnchor = GrowthAttributes(growth, spacing, conf.groupGrowth)
   local upc = ClampInt(conf.unitsPerColumn, 5, 1, preservedGroupIndex and 5 or 40)
   local columns = preservedGroupIndex and floor((5 + upc - 1) / upc)
     or RequiredHeaderColumns(kind, conf, layoutCount)
@@ -1462,7 +1597,7 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
   changed = SetAttrIfChanged(header, "showPlayer", conf.showPlayer ~= false) or changed
   changed = SetAttrIfChanged(header, "showSolo", conf.showSolo == true) or changed
   changed = SetAttrIfChanged(header, "showParty", key == "party") or changed
-  changed = SetAttrIfChanged(header, "showRaid", key == "raid") or changed
+  changed = SetAttrIfChanged(header, "showRaid", key == "raid" or (GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext()) == true) or changed
   changed = SetAttrIfChanged(header, "point", point) or changed
   changed = SetAttrIfChanged(header, "xOffset", xOffset) or changed
   changed = SetAttrIfChanged(header, "yOffset", yOffset) or changed
@@ -1482,7 +1617,7 @@ end
 
 local function PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
   if not (header and anchor) then return end
-  local growth = conf.growth or "DOWN"
+  local growth = GF.ResolveLayoutGrowth and GF.ResolveLayoutGrowth(header._msufGFKind, conf) or conf.growth or "DOWN"
   local offset = groupIndex - 1
   local point, x, y
   if growth == "DOWN" or growth == "UP" then
@@ -1521,13 +1656,15 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
 
   local primary = ClampInt(conf.unitsPerColumn, 5, 1, 5)
   local blockColumns = floor((5 + primary - 1) / primary)
-  local vertical = conf.growth ~= "LEFT" and conf.growth ~= "RIGHT"
+  local growth = GF.ResolveLayoutGrowth and GF.ResolveLayoutGrowth(kind, conf) or conf.growth
+  local vertical = growth ~= "LEFT" and growth ~= "RIGHT"
   local blockW = vertical and (blockColumns * w + (blockColumns - 1) * spacing)
     or (primary * w + (primary - 1) * spacing)
   local blockH = vertical and (primary * h + (primary - 1) * spacing)
     or (blockColumns * h + (blockColumns - 1) * spacing)
   local groupCount = sortSnapshot.groupCount
   local headers = GF.raidGroupHeaders
+  local visibleIndex = 0
 
   for groupIndex = 1, groupCount do
     local header = headers[groupIndex]
@@ -1547,7 +1684,13 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
     header._msufRaidGroupIndex = groupIndex
     local _, wasHiddenForLayout, sortState = ConfigureHeader(header, "raid", kind, conf, w, h, spacing, layoutCount, groupIndex, sortSnapshot)
     header._msufPreservedGroupAllowed = PreservedBlockAllowed(conf, sortState, groupIndex)
-    PositionPreservedRaidHeader(header, groupIndex, conf, anchor, spacing, blockW, blockH)
+    local positionIndex = groupIndex
+    if conf.collapseEmptyGroups == true and sortSnapshot.nameLists then
+      if sortSnapshot.nameLists[groupIndex] == "" then header._msufPreservedGroupAllowed = false end
+      if header._msufPreservedGroupAllowed then visibleIndex = visibleIndex + 1 end
+      positionIndex = math.max(1, visibleIndex)
+    end
+    PositionPreservedRaidHeader(header, positionIndex, conf, anchor, spacing, blockW, blockH)
 
     if wasHiddenForLayout and header._msufPreservedGroupAllowed == true then
       local coalescedShow = GF.ScheduleScan and BeginHeaderLayoutRebind(header)
@@ -1570,7 +1713,9 @@ local PRIORITY_SECURE_INIT_VERSION = 1
 
 local function PriorityLayoutParts(kind, conf, count)
   local w, h = 80, 32
-  if GF.GetScaledFrameMetrics then
+  if GF.GetPriorityFrameMetrics then
+    w, h = GF.GetPriorityFrameMetrics(kind)
+  elseif GF.GetScaledFrameMetrics then
     w, h = GF.GetScaledFrameMetrics(kind)
   else
     local raid = GF.GetConf and GF.GetConf(kind) or {}
@@ -1580,8 +1725,11 @@ local function PriorityLayoutParts(kind, conf, count)
   if spacing < 0 then spacing = 0 elseif spacing > 40 then spacing = 40 end
   count = ClampInt(count, 1, 1, 5)
   local horizontal = conf and (conf.growth == "LEFT" or conf.growth == "RIGHT")
-  local totalW = horizontal and (w * count + spacing * (count - 1)) or w
-  local totalH = horizontal and h or (h * count + spacing * (count - 1))
+  local primary = math.min(count, ClampInt(conf and conf.unitsPerColumn, 5, 1, 5))
+  local secondary = math.ceil(count / primary)
+  local columns, rows = horizontal and primary or secondary, horizontal and secondary or primary
+  local totalW = w * columns + spacing * (columns - 1)
+  local totalH = h * rows + spacing * (rows - 1)
   return w, h, spacing, totalW, totalH
 end
 
@@ -1619,6 +1767,8 @@ end
 local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spacing)
   local kindChanged = header._msufGFKind ~= nil and header._msufGFKind ~= kind
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing)
+  local unitsPerColumn = ClampInt(conf.unitsPerColumn, 5, 1, 5)
+  local maxColumns = math.ceil(5 / unitsPerColumn)
   local initialWidth = floor((w or 80) + 0.5)
   local initialHeight = floor((h or 32) + 0.5)
   local sizeChanged = AttrChanged(header, "initial-width", initialWidth)
@@ -1627,7 +1777,8 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
   local topologyChanged = AttrChanged(header, "point", point)
     or AttrChanged(header, "xOffset", xOffset)
     or AttrChanged(header, "yOffset", yOffset)
-    or AttrChanged(header, "unitsPerColumn", 5)
+    or AttrChanged(header, "unitsPerColumn", unitsPerColumn)
+    or AttrChanged(header, "maxColumns", maxColumns)
   local shouldHide = header.IsShown and header:IsShown()
     and (kindChanged or sizeChanged or secureInitChanged or topologyChanged
       or AttrChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE)
@@ -1658,7 +1809,7 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
   changed = SetAttrIfChanged(header, "showPlayer", true) or changed
   changed = SetAttrIfChanged(header, "showSolo", false) or changed
   changed = SetAttrIfChanged(header, "showParty", kind == "party") or changed
-  changed = SetAttrIfChanged(header, "showRaid", kind ~= "party") or changed
+  changed = SetAttrIfChanged(header, "showRaid", kind ~= "party" or (GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext()) == true) or changed
   changed = SetAttrIfChanged(header, "groupFilter", nil) or changed
   changed = SetAttrIfChanged(header, "roleFilter", nil) or changed
   changed = SetAttrIfChanged(header, "groupBy", nil) or changed
@@ -1671,8 +1822,8 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
   changed = SetAttrIfChanged(header, "yOffset", yOffset) or changed
   changed = SetAttrIfChanged(header, "columnSpacing", spacing) or changed
   changed = SetAttrIfChanged(header, "columnAnchorPoint", columnAnchor) or changed
-  changed = SetAttrIfChanged(header, "unitsPerColumn", 5) or changed
-  changed = SetAttrIfChanged(header, "maxColumns", 1) or changed
+  changed = SetAttrIfChanged(header, "unitsPerColumn", unitsPerColumn) or changed
+  changed = SetAttrIfChanged(header, "maxColumns", maxColumns) or changed
   header._msufGFKind = kind
   header._msufGFKey = "priority"
   header._msufGFPriorityHeader = true
@@ -1782,10 +1933,10 @@ function GF.SetupHeader(key, kind)
   local layoutCount = ConfiguredCount(kind, conf)
   if GF.EnsureStableGridPosition then
     GF.EnsureStableGridPosition(kind, layoutCount, conf,
-      preservedSortSnapshot and preservedSortSnapshot.groupCount or nil)
+      preservedSortSnapshot and preservedSortSnapshot.layoutGroupCount or nil)
   end
   local w, h, spacing, _, _, totalW, totalH = LayoutParts(kind, conf, layoutCount,
-    preservedSortSnapshot and preservedSortSnapshot.groupCount or nil)
+    preservedSortSnapshot and preservedSortSnapshot.layoutGroupCount or nil)
   local anchor = EnsureAnchor(key, conf, totalW, totalH)
   anchor.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or (kind == "party" and "gf_party" or "gf_raid")
   anchor._msufIsGroupFrame = true

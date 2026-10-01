@@ -154,10 +154,11 @@ end
 
 --- Corner indicators use normal runtime logic for threat slots and native
 --- AuraContainer sensors for dispellable slots.
-function GF.CompileCornerIndicators(conf)
+function GF.CompileCornerIndicators(conf, kind)
   conf = conf or {}
   local general = GeneralDB() or {}
-  local size = Num(conf.ciSize, 8)
+  local resize = conf.autoScaleIndicatorsOnResize == true and GF.GetResizeScale(conf, kind) or 1
+  local size = math.max(1, math.floor(Num(conf.ciSize, 8) * resize + .5))
   local alpha = Alpha(conf.ciAlpha, 1)
   local layer = Layer(conf.ciLayer, 7)
   local strata = NormalizeFrameStrata(conf.ciStrata, "AUTO")
@@ -500,7 +501,7 @@ end
 --- Spell indicators keep the old 5.7 per-spell model, but the runtime consumes
 --- this as 12.1 CustomAuraContainer aura slots. Each item is one manually
 --- anchored, exact SpellID-filtered helpful aura slot plus optional frame effect.
-function GF.CompileSpellIndicators(conf)
+function GF.CompileSpellIndicators(conf, kind)
   local si = SpellIndicatorModule()
   local siCfg = type(conf and conf.spellIndicators) == "table" and conf.spellIndicators or nil
   if not (si and siCfg and siCfg.enabled == true) then
@@ -522,7 +523,7 @@ function GF.CompileSpellIndicators(conf)
   end
   local layer = Layer(siCfg.layer, 9)
   local strata = NormalizeFrameStrata(siCfg.strata, "AUTO")
-  local iconScale = IconScale(siCfg.iconScale)
+  local iconScale = IconScale(siCfg.iconScale) * (conf.autoScaleIndicatorsOnResize == true and GF.GetResizeScale(conf, kind) or 1)
   local specs = CollectSpecs(siCfg, si)
   local items, watched, watchedCount = {}, {}, 0
   for i = 1, #specs do

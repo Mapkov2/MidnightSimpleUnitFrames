@@ -812,6 +812,17 @@ local function SetNameTextCached(frame, value)
   end
 end
 
+-- Start of the UTF-8 character after the one at pos. File scope: a closure
+-- here would be built again for every name update.
+local function NextUtf8Byte(name, pos)
+  local byte = string_byte(name, pos)
+  if not byte then return pos + 1 end
+  if byte < 128 then return pos + 1 end
+  if byte < 224 then return pos + 2 end
+  if byte < 240 then return pos + 3 end
+  return pos + 4
+end
+
 -- Native 5.73 Group Frames shortened the actual UTF-8 name and only added
 -- dots when its character count exceeded the configured cap. Preserve that
 -- behavior for migrated Group profiles instead of showing 6.0's separate
@@ -821,33 +832,24 @@ local function TruncateLegacyGroupName(name, rt)
   maxChars = floor((maxChars or 0) + 0.5)
   if name == nil or maxChars <= 0 or issecretvalue(name) == true then return name end
 
-  local function NextByte(pos)
-    local byte = string_byte(name, pos)
-    if not byte then return pos + 1 end
-    if byte < 128 then return pos + 1 end
-    if byte < 224 then return pos + 2 end
-    if byte < 240 then return pos + 3 end
-    return pos + 4
-  end
-
   local count, pos, byteLength = 0, 1, #name
   while pos <= byteLength do
     count = count + 1
-    pos = NextByte(pos)
+    pos = NextUtf8Byte(name, pos)
   end
   if count <= maxChars then return name end
 
   local dots = rt.nameLegacyShortenDots == true and ".." or ""
   if rt.nameShortenSide == "LEFT" then
     pos = 1
-    for _ = 1, count - maxChars do pos = NextByte(pos) end
+    for _ = 1, count - maxChars do pos = NextUtf8Byte(name, pos) end
     return dots .. string_sub(name, pos)
   end
 
   count, pos = 0, 1
   while pos <= byteLength and count < maxChars do
     count = count + 1
-    pos = NextByte(pos)
+    pos = NextUtf8Byte(name, pos)
   end
   return string_sub(name, 1, pos - 1) .. dots
 end

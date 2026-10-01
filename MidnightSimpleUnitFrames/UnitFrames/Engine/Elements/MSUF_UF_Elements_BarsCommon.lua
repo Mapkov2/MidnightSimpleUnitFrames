@@ -1399,15 +1399,22 @@ local function CompileHealthPercentGradientReader(channels)
   -- sample. Bind the immutable stops once; do not repeat generic API guards,
   -- frame/spec resolution or secret probes for the same event payload.
   -- The owner selects ReadUnit for opaque inputs before entering this reader.
+  local lastPercent, rr, gg, bb
   return function(unit, percent)
+    -- Identical public samples share the immutable gradient's last color.
+    -- Opaque samples still use the native ReadUnit path above.
+    if percent == lastPercent then return rr, gg, bb, true end
     local pct = percent / 100
     if pct < 0 then pct = 0 elseif pct > 1 then pct = 1 end
     if pct <= 0.5 then
       local t = pct * 2
-      return r + dr1 * t, g + dg1 * t, b + db1 * t, true
+      rr, gg, bb = r + dr1 * t, g + dg1 * t, b + db1 * t
+    else
+      local t = (pct - 0.5) * 2
+      rr, gg, bb = mr + dr2 * t, mg + dg2 * t, mb + db2 * t
     end
-    local t = (pct - 0.5) * 2
-    return mr + dr2 * t, mg + dg2 * t, mb + db2 * t, true
+    lastPercent = percent
+    return rr, gg, bb, true
   end
 end
 

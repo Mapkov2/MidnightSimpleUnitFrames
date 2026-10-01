@@ -22,6 +22,11 @@ local GroupUsesExternalAnchor
 -- The table deduplicates Boss' five physical frames and repeated apply fanout.
 local pendingReenableReload = {}
 local reenableReloadPromptShown = false
+-- A frame a profile variant switches on and off never detaches (see
+-- HoldVariantOff). One that was detached before its variant existed comes back
+-- from the next reload; until then its variant asks for that reload once per
+-- session instead of on every context change.
+local variantReloadPrompted = {}
 
 -- Saved transparency is visual-only. Reassert these three owners once after
 -- PLAYER_ENTERING_WORLD settles without paying for a second geometry/full-spec
@@ -66,14 +71,26 @@ local function ClearPendingReenableReload(frame, spec)
   end
 end
 
+-- Whether a saved profile variant switches this frame's own on/off field.
+local function VariantSwitchesFrame(frame, spec)
+  local variants = MSUF.ProfileVariants
+  local switches = variants and variants.SwitchesUnitFrame
+  if type(switches) ~= "function" then return false end
+  return switches(spec and spec.key or (frame and frame.MSUFUnitKey)) == true
+end
+
 local function RequireReloadForReenable(frame, spec)
   if not (frame and frame._msufDisabledByConfig == true and spec and spec.enabled ~= false) then
     return false
   end
 
-  pendingReenableReload[ReenableReloadKey(frame, spec)] = true
+  local key = ReenableReloadKey(frame, spec)
+  pendingReenableReload[key] = true
+  local variantSwitch = VariantSwitchesFrame(frame, spec)
+  if variantSwitch and variantReloadPrompted[key] then return true end
   if not reenableReloadPromptShown then
     reenableReloadPromptShown = true
+    if variantSwitch then variantReloadPrompted[key] = true end
     local showReload = _G.MSUF_ShowReloadRecommendedPopup
     if type(showReload) == "function" then
       showReload("Unit frame enable - reload required")
@@ -487,6 +504,7 @@ local function ApplyPosition(frame, spec)
   local anchor, missingAnchorName, requestedAnchor = ResolveAnchor(spec, frame)
   local key = ScreenCacheKey(spec, frame)
   frame._msufRequestedAnchorName = requestedAnchor
+  frame._msufMissingAnchorName = missingAnchorName
 
   if missingAnchorName then
     local missingCooldownAnchor = IsCooldownViewerAnchor(requestedAnchor)
@@ -729,6 +747,20 @@ local function DisableFrame(frame)
   -- transition will believe the hidden frame is still watched and skip both
   -- RegisterUnitWatch and Show forever.
   frame._msufUnitWatched = nil
+end
+
+-- Off by a profile variant: the frame stays attached with its elements, hidden,
+-- its unit watch gone and its spec off, so the core drops and suspends its
+-- events. The load-condition visibility driver is the one thing that would show
+-- it again; it is released the way the element does for an off spec, and the
+-- next enabled apply rebuilds it.
+local function HoldVariantOff(frame)
+  frame._msufVariantOff = true
+  local active = frame._msufActiveElements
+  local loadConditions = UF.elements and UF.elements.LoadConditions
+  if active and active.LoadConditions == true and loadConditions and loadConditions.Disable then
+    loadConditions.Disable(frame)
+  end
 end
 
 local function RegisterGlobals(unit, frame)
@@ -1083,17 +1115,26 @@ local function ApplyFrame(frame, spec, applyMask)
 
   if spec.enabled == false then
     DisableFrame(frame)
+    if frame._msufDisabledByConfig ~= true and VariantSwitchesFrame(frame, spec) then
+      HoldVariantOff(frame)
+      return true
+    end
     if UF.DetachFrame then UF.DetachFrame(frame) end
     frame._msufDisabledByConfig = true
+    frame._msufVariantOff = nil
     return true
   end
 
   frame._msufDisabledByConfig = nil
+  -- Back from a variant's off state: every element is applied again, the
+  -- released visibility driver included.
+  local fromVariantOff = frame._msufVariantOff == true
   if ApplySize(frame, spec) == false or ApplyPosition(frame, spec) == false then
     return false
   end
 
-  UF.ApplySpec(frame, spec, "MSUF_APPLY", applyMask == nil and true or applyMask)
+  UF.ApplySpec(frame, spec, "MSUF_APPLY", (applyMask == nil or fromVariantOff) and true or applyMask)
+  frame._msufVariantOff = nil
 
   local unitWatched = frame._msufUnitWatched == true
   if UnitWatchRegistered then
@@ -1934,6 +1975,26 @@ GroupUsesExternalAnchor = function(db, frameName)
   return false
 end
 
+-- True when an anchor that the last position pass found missing (unit frames
+-- and group anchors record its name) resolves now.
+local function MissingLateAnchorResolved()
+  for i = 1, #UF.frameList do
+    local frame = UF.frameList[i]
+    local name = frame._msufMissingAnchorName
+    local resolved = name and ResolveNamedAnchor(name)
+    if resolved and resolved ~= frame then return true end
+  end
+  local anchors = MSUF.GF and MSUF.GF.anchors
+  if type(anchors) == "table" then
+    for _, anchor in pairs(anchors) do
+      local name = anchor._msufMissingAnchorName
+      local resolved = name and ResolveNamedAnchor(name)
+      if resolved and resolved ~= anchor then return true end
+    end
+  end
+  return false
+end
+
 local function HasLateAnchorConfig()
   local db = _G.MSUF_DB
   if type(db) ~= "table" then return false end
@@ -2117,8 +2178,15 @@ do
     end
     if event == "ADDON_LOADED"
       and addon ~= "Blizzard_EditMode"
-      and addon ~= "Blizzard_CooldownViewer"
-      and not HasLateAnchorConfig() then return end
+      and addon ~= "Blizzard_CooldownViewer" then
+      if not HasLateAnchorConfig() then return end
+      -- Another addon's load matters only when it resolves a missing anchor;
+      -- re-applying every frame on each load (talents, collections) hitched,
+      -- and in combat queued the same full apply for its end.
+      EnsureCooldownWidthObservers(true)
+      if MissingLateAnchorResolved() then ScheduleLateAnchorReanchor() end
+      return
+    end
     EnsureCooldownWidthObservers(true)
     if event == "EDIT_MODE_LAYOUTS_UPDATED" then
       ScheduleCooldownAnchorMask(cooldownAnchorConfigMask)

@@ -38,7 +38,7 @@ local function WriteCVar(enabled)
     return true
 end
 
---- Explicit user action (menu toggle, Assistant): writes the CVar in both
+--- Explicit user action (menu toggle): writes the CVar in both
 --- directions. `value` falls back to the saved setting when omitted.
 local function ApplySetting(value)
     if value == nil then value = IsEnabled() end

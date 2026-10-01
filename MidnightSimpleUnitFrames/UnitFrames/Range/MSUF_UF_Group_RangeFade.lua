@@ -857,11 +857,11 @@ local function StatusTexture(bar)
   return tex ~= false and tex or nil
 end
 
-local function SetStatusAlpha(bar, alpha, key)
+local function SetStatusAlpha(bar, alpha, key, texKey)
   SetAlphaCached(bar, alpha, key)
   local tex = StatusTexture(bar)
   if tex and tex ~= bar then
-    SetAlphaCached(tex, alpha, key .. "Tex")
+    SetAlphaCached(tex, alpha, texKey)
   end
 end
 
@@ -917,7 +917,7 @@ local function ApplyDirectHealthRangeAlpha(frame, alpha)
     return
   end
   frame._msufGFVisualHealthAlpha = alpha
-  SetStatusAlpha(frame.hpBar or frame.Health, alpha, "_msufGFRangeHealth")
+  SetStatusAlpha(frame.hpBar or frame.Health, alpha, "_msufGFRangeHealth", "_msufGFRangeHealthTex")
   SetTextureAlpha(frame.bg, alpha, "_msufGFRangeHealthBg")
   SetTextureAlpha(frame.hpBarBG, alpha, "_msufGFRangeHealthBg")
 end
