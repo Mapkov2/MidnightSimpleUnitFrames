@@ -229,7 +229,9 @@ local function Boot(withFeatures, client)
         assert(loadfile(base .. "MSUF_Auras3_Features.lua"))("MidnightSimpleUnitFrames", namespace)
     end
     assert(loadfile(base .. "MSUF_Auras3_Compile.lua"))("MidnightSimpleUnitFrames", namespace)
-    assert(loadfile(base .. "MSUF_Auras3_UnitFrames.lua"))("MidnightSimpleUnitFrames", namespace)
+    for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
+        assert(loadfile(base .. "MSUF_Auras3_" .. module .. ".lua"))("MidnightSimpleUnitFrames", namespace)
+    end
     Check(element, "Classic aura element did not register")
     Check(type(A3._ClassicCompile) == "table", "Classic compile exports missing")
     Check((A3.ClassicFeatures ~= nil) == (withFeatures == true), "Classic feature compiler presence mismatch")
@@ -396,7 +398,10 @@ do
                 Check(lane.hidePermanent == hidePermanent, label .. " lost its Hide permanent flag")
                 Check(lane.hasFilterWork == (onlyMine or hidePermanent), label .. " has the wrong filter-work flag")
                 Check(lane.needsPlayerFlag == onlyMine, label .. " has the wrong ownership-resolution flag")
-                Check(lane.naturalOrder == not onlyMine and lane.visibleOnlyScan == not onlyMine,
+                -- Arrival order renders unsorted whatever ownership work the
+                -- lane does (C3.5: Only mine used to switch it to a sort).
+                Check(lane.naturalOrder == true and lane.visibleOnlyScan == true
+                    and lane.sortComparator == Compile.SortComparator(0),
                     label .. " has the wrong scan ordering")
                 Check(lane.cappedFilterScan == (hidePermanent and not onlyMine),
                     label .. " has the wrong capped-scan decision")

@@ -313,7 +313,13 @@ end
 if featuresPath then
     assert(loadfile(featuresPath))("MidnightSimpleUnitFrames", namespace)
 end
+-- The backend set in its Auras.xml order; backendPath stands in for UnitFrames.
+local classicBackend = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_"
+for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes" }) do
+    assert(loadfile(classicBackend .. module .. ".lua"))("MidnightSimpleUnitFrames", namespace)
+end
 assert(loadfile(backendPath))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(classicBackend .. "Requests.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(registered, "Classic aura element did not register")
 
 local frame = setmetatable({
@@ -1259,7 +1265,7 @@ assert(playerBuff.visible == firstVisible and OrderedIDs(playerBuff) == firstOrd
 -- next UNIT_AURA bumps its serial. Two units and two filters must never share
 -- a cached set, a repeat query must not rescan, and an aura add or remove must
 -- reach only the unit whose event arrived.
-local tokenSet = assert(namespace.MSUF_Auras3._ClassicAuraTokenSet,
+local tokenSet = assert(namespace.MSUF_Auras3._ClassicBackend.Filters.TokenSet,
     "Classic token-membership accessor missing")
 local memberIDs = {
     target = { ["HELPFUL|PLAYER"] = { 7007 }, ["HARMFUL|PLAYER"] = { 7201 } },

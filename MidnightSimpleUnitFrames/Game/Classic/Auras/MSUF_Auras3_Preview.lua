@@ -5,7 +5,8 @@ local A3 = dependencies.A3
 local CompileFrameAuraVisual = dependencies.CompileFrameAuraVisual
 local ExportPublic = dependencies.ExportPublic
 local UF = dependencies.UF
-function A3._NormalizeClassicDispelPreviewScope(scope)
+local CombatBlocked = dependencies.CombatBlocked
+local function NormalizePreviewScope(scope)
     scope = tostring(scope or "shared"):lower()
     if scope == "" or scope == "all" or scope == "global" then return "shared" end
     if scope == "gf_party" then return "party" end
@@ -14,9 +15,9 @@ function A3._NormalizeClassicDispelPreviewScope(scope)
     return scope
 end
 
-function A3._ClassicDispelPreviewApplies(frame, scope, includeGroup)
+local function PreviewApplies(frame, scope, includeGroup)
     if not frame then return false end
-    local wanted = A3._NormalizeClassicDispelPreviewScope(scope)
+    local wanted = NormalizePreviewScope(scope)
     local spec = frame.MSUFSpec
     local groupKind = frame._msufGFKind or (spec and spec.groupKind)
     local isGroup = groupKind ~= nil or (spec and spec.scope == "group")
@@ -29,7 +30,7 @@ function A3._ClassicDispelPreviewApplies(frame, scope, includeGroup)
     return frame.MSUFUnitKey == wanted or frame.configKey == wanted
 end
 
-function A3._ForEachClassicDispelPreviewFrame(fn)
+local function ForEachPreviewFrame(fn)
     if UF and type(UF.ForEachFrame) == "function" then UF.ForEachFrame(fn) end
     local gf = MSUF and MSUF.GF
     if not gf then return end
@@ -45,52 +46,52 @@ function A3._ForEachClassicDispelPreviewFrame(fn)
     end
 end
 
-function A3._ApplyClassicDispelOverlayPreview(frame)
+local function ApplyOverlayPreview(frame)
     local renderer = A3.ClassicVisuals
     if not (renderer and type(renderer.UpdateDispelOverlayPreview) == "function") then return false end
     local active = _G.MSUF_DispelOverlayPreviewMode == true
-        and A3._ClassicDispelPreviewApplies(frame, _G.MSUF_DispelOverlayPreviewScope, true)
+        and PreviewApplies(frame, _G.MSUF_DispelOverlayPreviewScope, true)
     local visual = active and frame and frame.MSUFSpec and CompileFrameAuraVisual(frame.MSUFSpec) or nil
     active = active and visual and visual.overlayEnabled == true or false
     return renderer.UpdateDispelOverlayPreview(frame, visual, active)
 end
 
 function A3.RefreshDispelOverlayPreview()
-    A3._ForEachClassicDispelPreviewFrame(A3._ApplyClassicDispelOverlayPreview)
+    ForEachPreviewFrame(ApplyOverlayPreview)
     return true
 end
 
 function A3.SetDispelOverlayPreview(active, scope)
     active = active == true
-    if active and A3._ClassicAuraRuntimeCombatBlocked() then active = false end
+    if active and CombatBlocked() then active = false end
     ExportPublic("MSUF_DispelOverlayPreviewMode", active)
     ExportPublic("MSUF_DispelOverlayPreviewScope",
-        active and A3._NormalizeClassicDispelPreviewScope(scope) or nil)
+        active and NormalizePreviewScope(scope) or nil)
     A3.RefreshDispelOverlayPreview()
     return active
 end
 
-function A3._ApplyClassicDispelSymbolPreview(frame)
+local function ApplySymbolPreview(frame)
     local renderer = A3.ClassicVisuals
     if not (renderer and type(renderer.UpdateDispelSymbolPreview) == "function") then return false end
     local active = _G.MSUF_DispelSymbolPreviewMode == true
-        and A3._ClassicDispelPreviewApplies(frame, _G.MSUF_DispelSymbolPreviewScope, false)
+        and PreviewApplies(frame, _G.MSUF_DispelSymbolPreviewScope, false)
     local visual = active and frame and frame.MSUFSpec and CompileFrameAuraVisual(frame.MSUFSpec) or nil
     active = active and visual and visual.symbol and visual.symbol.enabled == true or false
     return renderer.UpdateDispelSymbolPreview(frame, visual, active)
 end
 
 function A3.RefreshDispelSymbolPreview()
-    A3._ForEachClassicDispelPreviewFrame(A3._ApplyClassicDispelSymbolPreview)
+    ForEachPreviewFrame(ApplySymbolPreview)
     return true
 end
 
 function A3.SetDispelSymbolPreview(active, scope)
     active = active == true
-    if active and A3._ClassicAuraRuntimeCombatBlocked() then active = false end
+    if active and CombatBlocked() then active = false end
     ExportPublic("MSUF_DispelSymbolPreviewMode", active)
     ExportPublic("MSUF_DispelSymbolPreviewScope",
-        active and A3._NormalizeClassicDispelPreviewScope(scope) or nil)
+        active and NormalizePreviewScope(scope) or nil)
     A3.RefreshDispelSymbolPreview()
     return active
 end
@@ -102,9 +103,9 @@ end
 
 ExportPublic("MSUF_SetDispelOverlayPreview", A3.SetDispelOverlayPreview)
 ExportPublic("MSUF_RefreshDispelOverlayPreview", A3.RefreshDispelOverlayPreview)
-ExportPublic("MSUF_ApplyDispelOverlayPreviewToFrame", A3._ApplyClassicDispelOverlayPreview)
+ExportPublic("MSUF_ApplyDispelOverlayPreviewToFrame", ApplyOverlayPreview)
 ExportPublic("MSUF_SetDispelSymbolPreview", A3.SetDispelSymbolPreview)
 ExportPublic("MSUF_RefreshDispelSymbolPreview", A3.RefreshDispelSymbolPreview)
-ExportPublic("MSUF_ApplyDispelSymbolPreviewToFrame", A3._ApplyClassicDispelSymbolPreview)
+ExportPublic("MSUF_ApplyDispelSymbolPreviewToFrame", ApplySymbolPreview)
 ExportPublic("MSUF_SetDispelSymbolPreviewMoveHandler", A3.SetDispelSymbolPreviewMoveHandler)
 end

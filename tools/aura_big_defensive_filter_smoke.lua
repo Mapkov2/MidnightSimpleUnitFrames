@@ -284,7 +284,9 @@ assert(has(groupConfig, "out.buffIncludeHash, out.buffIncludeSignature, allowDur
     and has(groupConfig, 'out[prefix .. "MaxDuration"] = 0'),
     "Group Highlights can still inherit generic duration candidate filters")
 
+-- The normalization pipeline lives in the normalizer split out of Profiles.
 local profiles = readFile("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
+    .. readFile("MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua")
 assert(has(profiles, "MSUF_PROFILEIO_CURRENT_NORMALIZATION_REVISION = 21")
     and has(profiles, "MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false)")
     and has(profiles, "MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true)"),

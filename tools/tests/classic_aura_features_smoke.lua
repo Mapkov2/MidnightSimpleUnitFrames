@@ -35,7 +35,7 @@ local features = assert(A3.ClassicFeatures, "Classic feature compiler did not lo
 -- publishes; the shipped manifests load it right after this file.
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua"))(
     "MidnightSimpleUnitFrames", namespace)
-assert(type(A3._ClassicSortMode) == "function", "Classic compile did not publish the sort parser")
+assert(type(A3._ClassicCompile.SortMode) == "function", "Classic compile did not publish the sort parser")
 
 local auras = {
     customContainers = {
@@ -87,11 +87,13 @@ assert(defensive.padding == 0, "portrait aura lane inherited standalone lane pad
 local targetLanes, targetOrder = features.CompileUnitLanes(auras, "target", {}, 5)
 assert(#targetOrder == 2, "target custom lanes did not compile")
 assert(targetLanes.custom1.includeSpellIDs[999001] == true, "normal custom lane spell missing")
-assert(targetLanes.custom1.filterRequirements == nil and targetLanes.custom1.onlyImportant == false
-    and targetLanes.custom1.raid == false,
+-- Every container switch compiles into requirements (CompileContainerFilter).
+assert(targetLanes.custom1.filterRequirements == nil and targetLanes.custom1.hasInclusive == false,
     "disabled custom filter master still applied token filters")
-assert(targetLanes.custom1.hidePermanent == true and targetLanes.custom1.maxDuration == 0,
-    "Classic custom lane did not keep hide-permanent while cooling the duration filter")
+-- Hide permanent and Maximum duration hold with the token filters off, as on
+-- Retail; the slider's 180 s ceiling clamps a larger stored value (C3.4).
+assert(targetLanes.custom1.hidePermanent == true and targetLanes.custom1.maxDuration == 180,
+    "Classic custom lane did not keep hide-permanent and the clamped maximum duration with its filters off")
 assert(targetLanes.custom4.includeSpellIDs[703] == true, "known target DoT missing")
 assert(targetLanes.custom4.includeSpellIDs[999001] == true, "explicit custom target DoT missing")
 assert(targetLanes.custom4.onlyMine == true,

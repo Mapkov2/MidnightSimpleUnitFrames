@@ -71,7 +71,10 @@ assert(featuresSource:find("cfg.includeSpellNames and cfg.includeSpellNames[name
 -- and returned nil for uncached IDs, which would leave the name set empty.
 assert(featuresSource:find("if type(GetSpellInfo) == \"function\" then\n        name = GetSpellInfo(spellID)", 1, true),
     "Classic name sets must resolve through the synchronous legacy GetSpellInfo first")
-local backendSource = readFile("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
+local backendSource = ""
+for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
+    backendSource = backendSource .. readFile("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_" .. module .. ".lua") .. "\n"
+end
 assert(backendSource:find("and cfg.includeSpellNames[name] == true", 1, true),
     "ShouldShowAura must fall back to the aura name")
 

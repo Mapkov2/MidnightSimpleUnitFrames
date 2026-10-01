@@ -86,7 +86,7 @@ function Loader.Group(path)
         file:close()
     end
     if entry == "MSUF_Profiles.lua" then
-        return { directory .. "/MSUF_ProfileRuntime.lua", path }
+        return { directory .. "/MSUF_ProfileRuntime.lua", directory .. "/MSUF_ProfileNormalize.lua", path }
     elseif entry == "MSUF_Menu2_Window.lua" then
         return { directory .. "/MSUF_Menu2_PageLifecycle.lua", path }
     elseif entry == "MSUF_Menu2_ClassPowerPreview.lua" then
@@ -265,10 +265,16 @@ local function PrepareDirectContracts(source, namespace)
     end
     if Uses("GF.GetLiveGroupKind") or Uses("GF.GetAnchorPoint") then
         namespace.GF = namespace.GF or {}
-        local text = Read(SourcePath("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"))
+        -- GetAnchorPoint and ANCHOR_POINTS live in the geometry part of the group DB.
+        local owners = {
+            GetLiveGroupKind = "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua",
+            GetAnchorPoint = "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Geometry.lua",
+        }
         for _, name in ipairs({ "GetLiveGroupKind", "GetAnchorPoint" }) do
             if not namespace.GF[name] then
-                local body = Slice.Function(text, "function GF." .. name, "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua")
+                local owner = owners[name]
+                local text = Read(SourcePath(owner))
+                local body = Slice.Function(text, "function GF." .. name, owner)
                 local points = text:match("local ANCHOR_POINTS = %b{}") or ""
                 assert(compileSource("local GF = ...\n" .. points .. "\n" .. body))(namespace.GF)
             end

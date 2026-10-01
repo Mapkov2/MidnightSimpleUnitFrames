@@ -1,5 +1,6 @@
--- Classic aura backend: fixes from the 2026-09-30 aura review, run against the
--- real backend files with widget, C_UnitAuras, UnitCanAssist and UnitGUID stubs.
+-- Classic aura backend: fixes from the 2026-09-30 aura review (F*, R*) and the
+-- 2026-10-01 quality review (C3.*), run against the real backend files with
+-- widget, C_UnitAuras, UnitCanAssist and UnitGUID stubs.
 -- Each section names the finding it pins and fails on the code before its fix.
 -- Arguments: repository root, then optionally the backend, features, compile
 -- and visuals paths (mutation runs).
@@ -139,6 +140,16 @@ local function Matches(aura, filter)
     end
     if filter:find("|PLAYER", 1, true) and aura.mine ~= true then return false end
     if filter:find("RAID_PLAYER_DISPELLABLE", 1, true) and aura.dispellable ~= true then return false end
+    -- Classification tokens apply only to an aura that declares its own set,
+    -- so the sections written before C3.4 keep their token-blind membership.
+    if aura.tokens then
+        for token in filter:gmatch("[^|]+") do
+            if token ~= "HELPFUL" and token ~= "HARMFUL" and token ~= "PLAYER"
+                and token ~= "RAID_PLAYER_DISPELLABLE" and aura.tokens[token] ~= true then
+                return false
+            end
+        end
+    end
     return true
 end
 _G.UnitExists = function(unit) return exists[unit] ~= false end
@@ -229,7 +240,9 @@ local chain = {
     "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
     "Game/Classic/Auras/MSUF_Auras3_Preview.lua", "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
-    "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Buttons.lua", "Game/Classic/Auras/MSUF_Auras3_Filters.lua",
+    "Game/Classic/Auras/MSUF_Auras3_FrameVisuals.lua", "Game/Classic/Auras/MSUF_Auras3_Lanes.lua",
+    "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua", "Game/Classic/Auras/MSUF_Auras3_Requests.lua",
 }
 local overridePaths = {}
 for relative, path in pairs(overrides) do overridePaths[ADDON .. relative] = path end
@@ -433,6 +446,43 @@ do
         "F12: the shared menu apply left the pet on the previous Global Aura Appearance")
     assert(A3._runtimeConfigGen == gen + 1, "F7: one shared menu apply bumped the runtime generation "
         .. tostring(A3._runtimeConfigGen - gen) .. " times")
+end
+
+-- C3.3 (review 2026-10-01). A group-scope menu apply keeps the unit-frame configs ------
+-- The shared menu model invalidates a group scope through
+-- A3.InvalidateGroupRuntimeConfig and bumps the global generation only when
+-- that is missing, which it was on Classic: every party edit made every unit
+-- frame recompile and rescan on its next UNIT_AURA.
+do
+    LoadProfile(Profile({
+        target = { layout = {}, layoutShared = { showBuffs = true, showDebuffs = true }, filters = {} },
+    }))
+    A3.BumpRuntimeConfig()
+    local Model = A3.MenuModel
+    assert(Model and Model.Apply, "C3.3: precondition: the shared menu model is not loaded")
+    world.target, world.party1 = { Aura(true) }, { Aura(true), Aura(true), Aura(true) }
+    local target = NewFrame("target", {})
+    local partySpec = { scope = "group", auras = { enabled = true, showBuffs = true, maxBuffs = 4 } }
+    local party = NewFrame("party1", partySpec, GroupFields("party"))
+    groupFrames[#groupFrames + 1] = party
+    assert(Visible(party, "buff") == 3, "C3.3: precondition: the party frame does not show three buffs")
+    local targetConfig, gen = Config(target), A3._runtimeConfigGen
+    -- The group settings are edited in place, then the party scope is applied.
+    partySpec.auras.maxBuffs = 2
+    Model.Apply("party", "C33_PARTY_APPLY")
+    assert(A3._runtimeConfigGen == gen, "C3.3: a party apply bumped the global runtime generation")
+    assert(Visible(party, "buff") == 2, "C3.3: the party apply did not reach the party frame")
+    local scans = api.slots
+    ReplayUnitAura(target)
+    assert(Config(target) == targetConfig and api.slots == scans,
+        "C3.3: a party apply made the target frame recompile and rescan")
+    -- Another kind's apply leaves the party frame's compiled config alone.
+    local partyConfig = Config(party)
+    Model.Apply("raid", "C33_RAID_APPLY")
+    ReplayUnitAura(party)
+    assert(Config(party) == partyConfig, "C3.3: a raid apply recompiled the party frame")
+    assert(A3._runtimeConfigGen == gen, "C3.3: a raid apply bumped the global runtime generation")
+    groupFrames[#groupFrames] = nil
 end
 
 -- F2. Cleanse visuals never follow the Debuffs lane's icon filters ---------------------
@@ -650,15 +700,15 @@ do
     local walked, listed = api.bySlot - slotsBefore, api.ids - idsBefore
     assert(walked == 0 and listed == K, "R1: " .. K .. " membership rebuilds read " .. walked
         .. " AuraData by slot and made " .. listed .. " list calls (want 0 and " .. K .. ")")
-    assert(A3._ClassicAuraTokenTrust["HELPFUL|PLAYER"] == true,
+    assert(A3._ClassicBackend.Filters.TokenTrust["HELPFUL|PLAYER"] == true,
         "R1: the instance-ID list was not trusted after agreeing with the slot walk")
     local lane = Lane(target, "buff")
     assert(lane.active[first.auraInstanceID] == true and lane.mine[first.auraInstanceID] == true,
         "R1: an own buff added after the verification left the Only mine lane")
-    local serials = A3._ClassicAuraTokenSerial
+    local serials = A3._ClassicBackend.Filters.TokenSerial
     local bytes = BytesPerCall(function()
         serials.target = serials.target + 1
-        A3._ClassicAuraTokenSet("target", "HELPFUL|PLAYER")
+        A3._ClassicBackend.Filters.TokenSet("target", "HELPFUL|PLAYER")
     end, 50)
     print(("R1: %d rebuilds over %d own buffs: %d AuraData reads, %d list calls; %.0f B per rebuild"):format(
         K, #world.target - 1, walked, listed, bytes))
@@ -669,7 +719,7 @@ do
     local own = Aura(false, { mine = true })
     world.target[#world.target + 1] = own
     Update(target, { addedAuras = { Snapshot(own) } })
-    assert(A3._ClassicAuraTokenTrust["HARMFUL|PLAYER"] == false and debuffLane.active[own.auraInstanceID] == true,
+    assert(A3._ClassicBackend.Filters.TokenTrust["HARMFUL|PLAYER"] == false and debuffLane.active[own.auraInstanceID] == true,
         "R1: a disagreeing instance-ID list was trusted or hid the player's own debuff")
     idsBefore = api.ids
     local again = Aura(false, { mine = true })
@@ -1034,8 +1084,10 @@ do
         "F17: Arrival order with Reverse ignored Reverse on the Buff lane: " .. VisibleIDs(Lane(focus, "buff")))
     assert(VisibleIDs(Lane(focus, "custom1")) == newestFirst,
         "F17: Arrival order with Reverse is not newest first in a custom container: " .. VisibleIDs(Lane(focus, "custom1")))
-    -- Applying the same compiled config again must not reverse twice.
+    -- Applying the same compiled config again (Apply, then Enable, as
+    -- UF.ApplyElementToFrame runs them) must not reverse twice.
     registered.Apply(focus)
+    registered.Enable(focus)
     assert(VisibleIDs(Lane(focus, "buff")) == newestFirst and VisibleIDs(Lane(focus, "custom1")) == newestFirst,
         "F17: re-applying the config reversed the order a second time")
     -- Without ownership work the lane would render in arrival order unsorted.
@@ -1097,11 +1149,17 @@ end
 do
     assert(A3.UpdateMenuAuraPreview == nil and A3._ClassicMenuPreviewSourceLane == nil,
         "F14: the uncalled Classic menu aura preview (it could never render) is back")
-    local backendPath = overrides["Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"]
-        or (ADDON .. "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
-    local handle = assert(io.open(backendPath, "rb"))
-    local source = handle:read("*a")
-    handle:close()
+    -- Review 2026-10-01: no caller in any addon or in a file a Classic TOC loads
+    -- (A3._HideLane is called only by Retail's NativeApply, which defines its own).
+    assert(A3._HideLane == nil and A3.UnitFrameOwnsUnitAura == nil and A3.IconStylePreviewForScope == nil,
+        "F14: an uncalled Classic aura export (_HideLane, UnitFrameOwnsUnitAura, IconStylePreviewForScope) is back")
+    local source = ""
+    for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
+        local relative = "Game/Classic/Auras/MSUF_Auras3_" .. module .. ".lua"
+        local handle = assert(io.open(overrides[relative] or (ADDON .. relative), "rb"))
+        source = source .. handle:read("*a")
+        handle:close()
+    end
     assert(not source:find("A3.CooldownText", 1, true),
         "F14: the Classic backend calls the A3.CooldownText hook again, which no Classic file defines")
     assert(type(_G.MSUF_SetDispelOverlayPreview) == "function" and type(_G.MSUF_SetDispelSymbolPreview) == "function",
@@ -1188,6 +1246,151 @@ do
         "F9: the shared timer driver kept running with nothing to animate")
     _G.MSUF_DB.auras3.customContainers = nil
     _G.C_Timer.NewTimer = nil
+end
+
+-- C3.1 (review 2026-10-01). A frame-effect edit reaches an aura that is already shown ---
+-- The menu edits the stored effect (the container's `frame` table) in place and
+-- applies the unit scope. The draw stamp was that stored table, so the shown
+-- effect kept its old colour and kind until the aura went away; it is now the
+-- compiled lane config, which every apply rebuilds.
+do
+    local DOT = 670101
+    local timers, cancels = 0, 0
+    _G.C_Timer.NewTimer = function()
+        timers = timers + 1
+        return { Cancel = function() cancels = cancels + 1 end }
+    end
+    LoadProfile(Profile({ target = {
+        layout = {}, filters = {}, layoutShared = { showBuffs = false, showDebuffs = false },
+    } }))
+    local effect = { type = "border", color = { 1, 0, 0, 1 }, priority = 5, thickness = 2, layer = 0 }
+    _G.MSUF_DB.auras3.customContainers = { perUnit = { target = { items = {
+        [4] = { enabled = true, targetDots = true, auraType = "DEBUFF", spellIDs = tostring(DOT),
+            customSpellIDs = { [DOT] = true }, filters = { onlyMine = true },
+            placed = { size = 20, max = 4, perRow = 4 }, frame = effect },
+    } } } }
+    A3.BumpRuntimeConfig()
+    local dot = Aura(false, { spellId = DOT, mine = true, sourceUnit = "player", isFromPlayerOrPlayerPet = true,
+        duration = 30, expirationTime = 80 })
+    world.target = { dot }
+    local target = NewFrame("target", {})
+    local dots = assert(Lane(target, "custom4"), "C3.1: precondition: the Dots on target container is missing")
+    local button = dots[dots.visibleByID[dot.auraInstanceID]]
+    local root = button and button._msufA3ClassicFrameEffectRoot
+    local edge = root and root._edges and root._edges[1]
+    assert(root and root._shown == true and edge and edge._vr == 1 and edge._vg == 0,
+        "C3.1: precondition: the red Border frame effect did not draw")
+    -- Colour edit while the aura is shown.
+    effect.color = { 0, 1, 0, 1 }
+    A3.RefreshUnit("target")
+    assert(edge._vr == 0 and edge._vg == 1,
+        "C3.1: a frame-effect colour edit did not reach the shown aura (it kept the old colour)")
+    -- Kind edit: Border becomes Pulse.
+    local plays = pulses.play
+    effect.type = "pulse"
+    A3.RefreshUnit("target")
+    assert(pulses.play == plays + 1, "C3.1: a frame-effect kind edit did not reach the shown aura")
+    -- An unchanged refresh still keeps the drawn effect and never restarts the Pulse.
+    Update(target, { updatedAuraInstanceIDs = { dot.auraInstanceID } })
+    assert(pulses.play == plays + 1, "C3.1: an unchanged refresh restarted the Pulse frame effect")
+    -- Expiring timing: a threshold edit replaces the pending timer.
+    effect.timing, effect.expireThreshold = "expiring", 5
+    A3.RefreshUnit("target")
+    assert(timers == 1, "C3.1: precondition: an Expiring effect scheduled " .. timers .. " timers")
+    effect.expireThreshold = 10
+    A3.RefreshUnit("target")
+    assert(timers == 2 and cancels >= 1,
+        "C3.1: a threshold edit kept the pending Expiring timer of the old setting")
+    _G.MSUF_DB.auras3.customContainers = nil
+    _G.C_Timer.NewTimer = nil
+end
+
+-- C3.4 (review 2026-10-01). Custom containers honour their filter switches -------------
+-- The container Filters tool offers the full Retail switch set on Classic, and
+-- Retail ANDs every enabled switch into the container's filter. The Classic
+-- compiler read Only mine and Hide permanent alone and fixed Maximum duration
+-- at 0, so every other switch and the slider did nothing.
+do
+    LoadProfile(Profile({ focus = { layout = {}, filters = {}, layoutShared = { showBuffs = false, showDebuffs = false } } }))
+    local raidBuff = Aura(true, { spellId = 671001, tokens = { RAID = true } })
+    local plainBuff = Aura(true, { spellId = 671002, tokens = {} })
+    local longBuff = Aura(true, { spellId = 671003, tokens = { RAID = true }, duration = 600, expirationTime = 650 })
+    local permanentBuff = Aura(true, { spellId = 671004, tokens = { RAID = true }, duration = 0, expirationTime = 0 })
+    local ccDebuff = Aura(false, { spellId = 671005, tokens = { CROWD_CONTROL = true } })
+    local otherDebuff = Aura(false, { spellId = 671006, tokens = {} })
+    world.focus = { raidBuff, plainBuff, longBuff, permanentBuff, ccDebuff, otherDebuff }
+    local buffs = { enabled = true, raid = true }
+    local items = {
+        [1] = { enabled = true, auraType = "BUFF", spellIDs = "671001 671002 671003 671004",
+            filters = buffs, placed = { size = 20, max = 8, perRow = 8 } },
+        [2] = { enabled = true, auraType = "DEBUFF", spellIDs = "671005 671006",
+            filters = { enabled = true, crowdControl = true }, placed = { size = 20, max = 8, perRow = 8 } },
+    }
+    _G.MSUF_DB.auras3.customContainers = { perUnit = { focus = { items = items } } }
+    A3.BumpRuntimeConfig()
+    local focus = NewFrame("focus", {})
+    assert(VisibleIDs(Lane(focus, "custom1")) == IDs(raidBuff, longBuff, permanentBuff),
+        "C3.4: the Raid switch of a custom container did not filter: " .. VisibleIDs(Lane(focus, "custom1")))
+    assert(VisibleIDs(Lane(focus, "custom2")) == IDs(ccDebuff),
+        "C3.4: the Crowd control switch of a custom container did not filter: " .. VisibleIDs(Lane(focus, "custom2")))
+    -- Maximum duration hides longer auras and, as Blizzard's container filter
+    -- does, permanent ones.
+    buffs.maxDuration = 60
+    A3.RefreshUnit("focus")
+    assert(VisibleIDs(Lane(focus, "custom1")) == IDs(raidBuff),
+        "C3.4: Maximum duration did not hide longer and permanent auras: " .. VisibleIDs(Lane(focus, "custom1")))
+    -- Enable filters off: the switches stop, Maximum duration stays.
+    buffs.enabled = false
+    A3.RefreshUnit("focus")
+    assert(VisibleIDs(Lane(focus, "custom1")) == IDs(raidBuff, plainBuff),
+        "C3.4: turning the container filters off left the switches on or dropped Maximum duration: "
+        .. VisibleIDs(Lane(focus, "custom1")))
+    _G.MSUF_DB.auras3.customContainers = nil
+end
+
+-- C3.5 (review 2026-10-01). Arrival order and lane strata ignore unrelated settings -----
+-- Arrival order put the player's auras first as soon as anything needed
+-- ownership answers (here the own-buff highlight, an appearance toggle). A
+-- container's stored legacy strata lifted it out of the frame's strata, which
+-- Retail's native hosts never do: every lane takes its parent's strata.
+do
+    LoadProfile(Profile({ target = {
+        layout = {}, filters = {}, layoutShared = { showBuffs = true, showDebuffs = false, buffSortMethod = "INSTANCE_ID" },
+    } }))
+    local older = Aura(true, { sourceUnit = "party2" })
+    local mine = Aura(true, { sourceUnit = "player", isFromPlayerOrPlayerPet = true, mine = true })
+    world.target = { older, mine }
+    A3.BumpRuntimeConfig()
+    local target = NewFrame("target", {})
+    assert(VisibleIDs(Lane(target, "buff")) == IDs(older, mine), "C3.5: precondition: arrival order is not oldest first")
+    _G.MSUF_DB.auras3.shared.highlightOwnBuffs = true
+    A3.RefreshUnit("target")
+    assert(Lane(target, "buff").config.ownHighlight == true, "C3.5: precondition: the own-buff highlight did not compile")
+    assert(VisibleIDs(Lane(target, "buff")) == IDs(older, mine),
+        "C3.5: the own-buff highlight reordered an Arrival order lane: " .. VisibleIDs(Lane(target, "buff")))
+    _G.MSUF_DB.auras3.shared.highlightOwnBuffs = nil
+
+    -- Strata: children inherit the parent's strata until one is set on them.
+    local savedSet, savedGet = Widget.SetFrameStrata, Widget.GetFrameStrata
+    function Widget:SetFrameStrata(strata) self._strata = strata end
+    function Widget:GetFrameStrata()
+        return self._strata or (self._parent and self._parent:GetFrameStrata()) or "MEDIUM"
+    end
+    local DOT = 670201
+    _G.MSUF_DB.auras3.customContainers = { perUnit = { target = { items = {
+        [1] = { enabled = true, auraType = "BUFF", spellIDs = tostring(DOT), strata = "HIGH",
+            filters = { enabled = true }, placed = { size = 20, max = 4, perRow = 4 } },
+    } } } }
+    world.target = { Aura(true, { spellId = DOT }) }
+    local strataFrame = NewFrame("target", {})
+    strataFrame:SetFrameStrata("LOW")
+    A3.RefreshUnit("target")
+    local container = assert(Lane(strataFrame, "custom1"), "C3.5: precondition: the custom container is missing")
+    assert(container.frame:GetFrameStrata() == "LOW" and Lane(strataFrame, "buff").frame:GetFrameStrata() == "LOW",
+        "C3.5: an aura lane left its frame's strata (custom container: "
+        .. tostring(container.frame:GetFrameStrata()) .. ")")
+    Widget.SetFrameStrata, Widget.GetFrameStrata = savedSet, savedGet
+    _G.MSUF_DB.auras3.customContainers = nil
 end
 
 -- F10. The icon-style border draws like Retail's ApplyIconStyleBorder ------------------

@@ -12,22 +12,11 @@ MSUF = MSUF or _G.MSUF_NS or {}
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then return end
 
-A3.NormalizeClassicDebuffTypeBorderMode = A3.NormalizeClassicDebuffTypeBorderMode or function(value, legacyBorder, legacySymbol)
-    local mode = type(value) == "string" and value:upper() or nil
-    if mode == "SYMBOL" or mode == "BORDER" then return mode end
-    if mode == "OFF" then
-        if legacySymbol == true or legacyBorder == true then return "SYMBOL" end
-        return "OFF"
-    end
-    return (legacySymbol == true or legacyBorder == true) and "SYMBOL" or "OFF"
-end
-
 local Features = A3.ClassicFeatures or {}
 A3.ClassicFeatures = Features
 
-local type, tostring, tonumber, pairs, next, select = type, tostring, tonumber, pairs, next, select
+local type, tostring, tonumber, pairs, next = type, tostring, tonumber, pairs, next
 local math_floor, math_max, math_min = math.floor, math.max, math.min
-local table_sort = table.sort
 -- Debuffs this player can dispel, in the filter this client honours
 -- (Game/Shared/Initialize.lua; Classic Era needs HARMFUL|RAID).
 local DISPELLABLE_DEBUFF_FILTER = MSUF.Client.DispellableDebuffFilter or "HARMFUL|RAID_PLAYER_DISPELLABLE"
@@ -47,11 +36,6 @@ end
 local function Round(value)
     value = tonumber(value) or 0
     return math_floor(value + 0.5)
-end
-
-local function Bool(value, fallback)
-    if value == nil then return fallback == true end
-    return value == true
 end
 
 local function Scope(unit)
@@ -173,6 +157,35 @@ function Features.CompileSettingsFilter(filters, helpful)
     -- moved between clients without losing their richer Retail configuration.
     if filters.onlyMine == true then req.player = true end
     return FinalizeFilterPlan(helpful, false, req)
+end
+
+--- Custom container filters. The menu offers a container the full Retail
+--- switch set on every client (MSUF_Menu2_Auras_CustomWorkspace.lua), and
+--- Retail ANDs each enabled switch into the container's native filter string
+--- (NativeFilter in Auras3/Runtime/MSUF_Auras3_Runtime_ConfigValues.lua).
+--- Classic resolves the same switches as post-scan requirements; only PLAYER
+--- and the nameplate token reach the scan filter. Every token used here is in
+--- the Classic AuraUtil.AuraFilters list, except IMPORTANT and DISPELLABLE,
+--- which MatchFilterRequirements decides from the AuraData. Unit Buff/Debuff
+--- lanes keep CompileSettingsFilter: their Classic menu offers Only mine alone.
+function Features.CompileContainerFilter(filters, helpful)
+    filters = type(filters) == "table" and filters.enabled ~= false and filters or {}
+    local req = NewFilterRequirements()
+    if filters.onlyMine == true then req.player = true end
+    if filters.raid == true or filters.exclusive == "raid" then req.raid = true end
+    if filters.raidInCombat == true then req.raidInCombat = true end
+    if filters.includeDispellable == true or filters.dispellable == true then req.raidPlayerDispellable = true end
+    if filters.dispellableAny == true then req.dispellableAny = true end
+    if filters.onlyImportant == true then req.important = true end
+    if helpful then
+        if filters.cancelable == true then req.cancelable = true end
+        if filters.notCancelable == true then req.notCancelable = true end
+        if filters.externalDefensive == true then req.externalDefensive = true end
+        if filters.bigDefensive == true then req.bigDefensive = true end
+    elseif filters.crowdControl == true then
+        req.crowdControl = true
+    end
+    return FinalizeFilterPlan(helpful, filters.includeNameplateOnly == true, req)
 end
 
 function Features.CompileRawFilter(filter, helpful)
@@ -360,14 +373,14 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     -- The Buff/Debuff lane parser (MSUF_Auras3_Compile.lua, loaded before any
     -- lane compiles) with the same Player & Priority First fallback, so one
     -- sort name orders a container and a lane alike.
-    local sortOrder = A3._ClassicSortMode(placed.sortMethod, 1)
+    local sortOrder = A3._ClassicCompile.SortMode(placed.sortMethod, 1)
     if forcePlayer == true and (not activeFilters or activeFilters.onlyMine ~= true) then
         local source = activeFilters or {}
         activeFilters = {}
         for key, value in pairs(source) do activeFilters[key] = value end
         activeFilters.onlyMine = true
     end
-    local filterPlan = Features.CompileSettingsFilter(activeFilters, helpful)
+    local filterPlan = Features.CompileContainerFilter(activeFilters, helpful)
     local filter = filterPlan.scanFilter
     local onlyMine = activeFilters and activeFilters.onlyMine == true or false
     local hasInclusive = filterPlan.hasRequirements == true
@@ -381,17 +394,6 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         enabled = maxCount > 0,
         renderEnabled = maxCount > 0,
         harmful = helpful ~= true,
-        filter = filter,
-        playerFilter = filterPlan.nativePlayerFilter == true and filter or (filter .. "|PLAYER"),
-        importantFilter = filter .. "|IMPORTANT",
-        raidFilter = filter .. "|RAID",
-        raidInCombatFilter = filter .. "|RAID_IN_COMBAT",
-        stealableFilter = "HELPFUL|STEALABLE",
-        dispellableFilter = DISPELLABLE_DEBUFF_FILTER,
-        bossFilter = "HARMFUL|BOSS",
-        crowdControlFilter = filter .. "|CROWD_CONTROL",
-        externalDefensiveFilter = filter .. "|EXTERNAL_DEFENSIVE",
-        bigDefensiveFilter = filter .. "|BIG_DEFENSIVE",
         max = maxCount,
         size = size,
         buttonWidth = buttonWidth,
@@ -410,24 +412,18 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         y = Round(Number(placed.y, 0, -4096, 4096)),
         anchor = Anchor(placed.anchor, "TOPRIGHT"),
         layer = Round(Number(entry.layer, 9, 0, 30)),
-        strata = tostring(entry.strata or "AUTO"):upper(),
         alpha = Number(placed.alpha, 1, 0, 1),
         xSign = xSign,
         ySign = ySign,
         verticalGrowth = vertical,
         initialAnchor = ButtonAnchor(xSign, ySign),
-        sortOrder = sortOrder,
-        naturalOrder = sortOrder == 0 and placed.sortReverse ~= true,
         visibleOnlyScan = false,
         cappedFilterScan = false,
-        -- A refresh can move an aura only in the time-keyed modes (2 duration,
-        -- 3 expiration, 4 expiration only), as in CompileLane.
-        reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4,
-        sortReverse = placed.sortReverse == true,
         showTooltip = placed.showTooltip ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         showCooldownText = placed.showCooldown ~= false,
         showCooldown = placed.showCooldown ~= false,
+        cooldownSwipeDarken = false,
         cooldownDecimalSeconds = Number(placed.cooldownDecimalSeconds, 3, 0, 30),
         showStacks = placed.showStacks ~= false,
         showDispelTypeBorder = debuffTypeBorderMode ~= "OFF",
@@ -440,7 +436,6 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         stackSize = Number(placed.stackSize, 14, 6, 40),
         stackX = Number(placed.stackX, 0, -2000, 2000),
         stackY = Number(placed.stackY, 0, -2000, 2000),
-        stackR = 1, stackG = 1, stackB = 1,
         includeSpellIDs = spellIDs,
         includeSpellNames = NameHash(spellIDs),
         filterPlan = filterPlan,
@@ -449,16 +444,10 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         hasFilterWork = true,
         classicFeatureMatch = true,
         hidePermanent = filters.hidePermanent == true,
-        maxDuration = 0,
+        -- Read whether or not the token filters are on, as the menu keeps the
+        -- slider active and Retail compiles it (CustomConfig): 0 is off.
+        maxDuration = Round(Number(filters.maxDuration, 0, 0, 180)),
         onlyMine = onlyMine,
-        onlyImportant = false,
-        raid = false,
-        raidInCombat = false,
-        includeDispellable = false,
-        dispellableAny = false,
-        crowdControl = false,
-        externalDefensive = false,
-        bigDefensive = false,
         hasInclusive = hasInclusive,
         needsPlayerFlag = filterPlan.needsPlayerFlag == true
             or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5,
@@ -474,6 +463,12 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         icon = entry.icon,
         missing = placed.missing == true,
     }
+    -- The shared lane schema (MSUF_Auras3_Compile.lua): filter tokens, sort
+    -- flags and the global countdown and stack colours, as every lane has them.
+    local Schema = A3._ClassicCompile.LaneSchema
+    Schema.FilterTokens(cfg, filter, filterPlan.nativePlayerFilter == true, "HARMFUL|BOSS")
+    Schema.Ordering(cfg, sortOrder, placed.sortReverse == true)
+    Schema.GlobalTextColors(cfg)
     return cfg
 end
 
@@ -592,7 +587,6 @@ local function AddIndicatorLane(lanes, order, unit, item, index, prefix)
         placed = item.placed,
         frame = item.frame,
         layer = item.layer,
-        strata = item.strata,
         color = item.color,
         icon = item.icon,
         filters = { onlyMine = item.onlyOwn == true },
@@ -631,7 +625,7 @@ local function PublicNumber(value)
 end
 
 --- matchFilter and timedAura are the backend's own predicates (ShouldShowAura in
---- MSUF_Auras3_UnitFrames.lua), so a custom container decides filter-token
+--- MSUF_Auras3_Filters.lua), so a custom container decides filter-token
 --- membership and Hide permanent exactly like a Buff/Debuff lane does.
 function Features.MatchAura(cfg, unit, data, matchFilter, timedAura, mine)
     if not (cfg and type(data) == "table") then return false end
@@ -645,22 +639,18 @@ function Features.MatchAura(cfg, unit, data, matchFilter, timedAura, mine)
         end
     end
     if cfg.hidePermanent == true and timedAura(unit, data) == false then return false end
-    local duration = PublicNumber(data.duration) or 0
-    if cfg.maxDuration and cfg.maxDuration > 0 and duration > cfg.maxDuration then return false end
+    if cfg.maxDuration and cfg.maxDuration > 0 then
+        local duration = PublicNumber(data.duration) or 0
+        if duration > cfg.maxDuration then return false end
+        -- As Blizzard's AuraContainerUtil candidate filter: a maximum duration
+        -- also filters out permanent auras.
+        if timedAura(unit, data) == false then return false end
+    end
+    -- Every filter switch of a container (Only mine included) compiles into
+    -- these requirements (CompileContainerFilter); a lane has inclusive filter
+    -- work exactly when it has requirements.
     if cfg.filterRequirements then
         return Features.MatchFilterRequirements(cfg.filterPlan or cfg.filterRequirements, unit, data, matchFilter, mine)
-    end
-    if cfg.hasInclusive == true then
-        if cfg.onlyMine == true and mine == true then return true end
-        local auraInstanceID = data.auraInstanceID
-        if cfg.onlyImportant == true and matchFilter(unit, auraInstanceID, cfg.importantFilter) then return true end
-        if cfg.raid == true and matchFilter(unit, auraInstanceID, cfg.raidFilter) then return true end
-        if cfg.raidInCombat == true and matchFilter(unit, auraInstanceID, cfg.raidInCombatFilter) then return true end
-        if cfg.includeDispellable == true and matchFilter(unit, auraInstanceID, cfg.dispellableFilter) then return true end
-        if cfg.crowdControl == true and matchFilter(unit, auraInstanceID, cfg.crowdControlFilter) then return true end
-        if cfg.externalDefensive == true and matchFilter(unit, auraInstanceID, cfg.externalDefensiveFilter) then return true end
-        if cfg.bigDefensive == true and matchFilter(unit, auraInstanceID, cfg.bigDefensiveFilter) then return true end
-        return false
     end
     return true
 end

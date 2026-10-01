@@ -3,8 +3,9 @@
 --- dispel visuals and sort comparators. It turns DB/model choices into the
 --- lane config the runtime consumes, so UNIT_AURA never walks SavedVariables.
 ---
---- Loaded immediately before MSUF_Auras3_UnitFrames.lua, which imports these
---- helpers through A3._ClassicCompile.
+--- Loaded immediately before the unit-frame aura backend (Buttons.lua first),
+--- which imports these helpers through A3._ClassicCompile, the one A3 field
+--- this file publishes.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
@@ -23,9 +24,31 @@ local type, tostring, tonumber, pairs, select = type, tostring, tonumber, pairs,
 local math_floor, math_ceil, math_min, math_max = math.floor, math.ceil, math.min, math.max
 local wipe = table.wipe or wipe
 local IsSecret = _G.issecretvalue or function() return false end
+local InCombatLockdown = _G.InCombatLockdown
 -- Debuffs this player can dispel, in the filter this client honours
 -- (Game/Shared/Initialize.lua; Classic Era needs HARMFUL|RAID).
 local DISPELLABLE_DEBUFF_FILTER = MSUF.Client.DispellableDebuffFilter or "HARMFUL|RAID_PLAYER_DISPELLABLE"
+
+-- Saved profiles can arrive from Retail, an older Classic build, or another
+-- Classic family client. Keep the explicit three-state setting authoritative
+-- while preserving the former boolean contract (which represented the old
+-- border+symbol presentation). The lane compilers here and in Features.lua
+-- and the Classic visuals call both normalizers when a lane compiles or
+-- renders, which is always after this file has loaded.
+A3.NormalizeClassicDebuffTypeBorderMode = A3.NormalizeClassicDebuffTypeBorderMode or function(value, legacyBorder, legacySymbol)
+    local mode = type(value) == "string" and value:upper() or nil
+    if mode == "SYMBOL" or mode == "BORDER" then return mode end
+    if mode == "OFF" then
+        if legacySymbol == true or legacyBorder == true then return "SYMBOL" end
+        return "OFF"
+    end
+    return (legacySymbol == true or legacyBorder == true) and "SYMBOL" or "OFF"
+end
+A3.NormalizeClassicStealableStyle = A3.NormalizeClassicStealableStyle or function(value)
+    value = type(value) == "string" and value:upper() or "BORDER_ICON"
+    if value == "BORDER" or value == "BORDER_ICON" or value == "ICON" then return value end
+    return "BORDER_ICON"
+end
 
 local BOSS_UNITS = {
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
@@ -308,7 +331,14 @@ local GROUP_LANE_SPECS = {
     },
 }
 
-A3._ClassicBaseLaneOrder = { "buff", "trackedBuff", "debuff", "external" }
+local BASE_LANE_ORDER = { "buff", "trackedBuff", "debuff", "external" }
+
+--- Aura runtime work waits while combat blocks it: in lockdown, or while
+--- MSUF's own combat flag is set. The apply service (Requests.lua), the unit
+--- change follower (UnitFrames.lua) and the dispel previews (Preview.lua) ask it.
+local function AuraRuntimeCombatBlocked()
+    return (InCombatLockdown and InCombatLockdown()) or _G.MSUF_InCombat == true
+end
 
 local function WipeTable(tbl)
     if not tbl then return {} end
@@ -351,7 +381,7 @@ end
 --- (Features.lua calls it when it compiles a container), so a sort name the
 --- shared menu writes sorts the same way on every lane. Classic has no priority
 --- slots: a Custom Priority container keeps arrival order, like INSTANCE_ID.
-function A3._ClassicSortMode(value, fallback)
+local function SortMode(value, fallback)
     value = tostring(value or ""):upper():gsub("[%s%-]+", "_")
     if value == "DEFAULT" or value == "PLAYER" then return 1 end
     if value == "DURATION" or value == "DURATION_ONLY" or value == "BIG_DEFENSIVE" then return 2 end
@@ -487,20 +517,13 @@ end
 --- only reads it, frame.unit last for a stand-in without either, and never
 --- writes frame.unit: engine frames are secure unit buttons, and no other
 --- engine or Retail path keeps that field in step.
-A3._ClassicBindFrameUnit = function(frame)
+local function BindFrameUnit(frame)
     if not frame then return nil end
     return frame.MSUFUnitKey or frame.unitKey or frame.unit
 end
 
 local function IsUnitToken(unit)
     return unit ~= nil and IsSecret(unit) ~= true and type(unit) == "string" and unit ~= ""
-end
-
-local function NormalizeConfigUnit(unit)
-    unit = NormalizeRuntimeUnit(unit)
-    if BOSS_UNITS[unit] then return "boss" end
-    if unit == "arena1" or unit == "arena2" or unit == "arena3" then return "arena" end
-    return unit
 end
 
 local function IsGroupFrame(frame)
@@ -531,12 +554,6 @@ local function ReadRaw(primary, secondary, key)
     if primary and primary[key] ~= nil then return primary[key] end
     if secondary and secondary[key] ~= nil then return secondary[key] end
     return nil
-end
-
-local function ReadShared(shared, key)
-    local v = shared and shared[key]
-    if v == nil then v = DEFAULT_SHARED[key] end
-    return v
 end
 
 local function ReadBool(primary, secondary, key, defaultValue)
@@ -625,7 +642,7 @@ local function EffectiveTables(auras, runtimeUnit)
     return layout, sharedLayout, blacklist, filters
 end
 
-A3._ClassicResolveHidePermanent = function(blacklist, filtersRoot, kind)
+local function ResolveHidePermanent(blacklist, filtersRoot, kind)
     kind = tostring(kind or "buff"):lower()
     if kind == "buffs" then kind = "buff" end
     if kind == "debuffs" then kind = "debuff" end
@@ -654,7 +671,7 @@ A3._ClassicResolveHidePermanent = function(blacklist, filtersRoot, kind)
     return kind == "buff" and rootFilters and rootFilters.hidePermanent == true or false
 end
 
-A3._ClassicReadBlacklistHidePermanent = function(scope, kind)
+local function ReadBlacklistHidePermanent(scope, kind)
     scope = tostring(scope or "player")
     if BOSS_UNITS[scope] then scope = "boss" end
     -- The shared menu model collapses every Arena scope to arena1 for reads.
@@ -668,7 +685,7 @@ A3._ClassicReadBlacklistHidePermanent = function(scope, kind)
     if type(A3.EnsureDB) == "function" then auras = A3.EnsureDB() end
     if type(auras) ~= "table" then auras = EnsureRootDB() end
     local _, _, blacklist, filters = EffectiveTables(auras, runtimeUnit)
-    return A3._ClassicResolveHidePermanent(blacklist, filters, kind)
+    return ResolveHidePermanent(blacklist, filters, kind)
 end
 
 local function CompileBlacklist(blacklist)
@@ -725,7 +742,7 @@ local function InvalidateFrameSpecConfig(unit)
 end
 
 --- The lane being sorted hands its own "cast by the player" answers to the
---- comparators (RenderLane in MSUF_Auras3_UnitFrames.lua): they are kept per
+--- comparators (RenderLane in MSUF_Auras3_Lanes.lua): they are kept per
 --- lane by aura instance ID, never in the AuraData that lanes share.
 local NO_OWNERSHIP = {}
 local sortOwnership = NO_OWNERSHIP
@@ -811,6 +828,95 @@ SortComparator = function(mode)
     -- Arrival order (instance ID); what Reverse turns into newest first.
     if mode == 0 then return SortAurasID end
     return SortAuras
+end
+
+--- The lane schema. Three compilers build the lanes the backend renders: unit
+--- Buff/Debuff lanes and group lanes (below), custom containers, their portrait
+--- variants and group indicators (Features.lua). Each reads its own settings;
+--- the parts every lane carries are filled by these builders, so the runtime
+--- (Buttons, Filters, Lanes) reads one shape. As hand-synced copies the
+--- containers had drifted: no countdown colour buckets, a fixed stack colour.
+--- tools/tests/classic_aura_lane_schema_smoke.lua checks every compiler.
+local LaneSchema = {}
+
+--- The filter-token strings the runtime membership checks use (Filters.lua).
+function LaneSchema.FilterTokens(lane, filter, nativePlayerFilter, bossFilter)
+    lane.filter = filter
+    lane.playerFilter = nativePlayerFilter and filter or (filter .. "|PLAYER")
+    lane.importantFilter = filter .. "|IMPORTANT"
+    lane.raidFilter = filter .. "|RAID"
+    lane.raidInCombatFilter = filter .. "|RAID_IN_COMBAT"
+    lane.stealableFilter = "HELPFUL|STEALABLE"
+    lane.dispellableFilter = DISPELLABLE_DEBUFF_FILTER
+    lane.bossFilter = bossFilter
+end
+
+--- Sort mode (SortMode) and Reverse. Arrival order renders unsorted unless it
+--- is reversed. A refresh can move an aura only in the time-keyed modes (2
+--- duration, 3 expiration, 4 expiration only); every other key is fixed for
+--- the aura's lifetime, and an ownership flip is caught by the update path.
+function LaneSchema.Ordering(lane, sortOrder, sortReverse)
+    lane.sortOrder = sortOrder
+    lane.sortComparator = SortComparator(sortOrder)
+    lane.sortReverse = sortReverse == true
+    lane.naturalOrder = sortOrder == 0 and sortReverse ~= true
+    lane.reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4
+end
+
+--- The global text colours (Colors page): the countdown colour buckets with
+--- their thresholds, which Retail applies to every lane too
+--- (BuildAuraDurationStyle, Auras3/Runtime/MSUF_Auras3_Runtime_DurationText.lua),
+--- and the stack count colour.
+function LaneSchema.GlobalTextColors(lane)
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local buckets = general and general.aurasCooldownTextUseBuckets == true
+    lane.cooldownTextBuckets = buckets
+    lane.cooldownSafeR, lane.cooldownSafeG, lane.cooldownSafeB = 1, 1, 1
+    lane.cooldownWarnR, lane.cooldownWarnG, lane.cooldownWarnB = 1, 0.85, 0.20
+    lane.cooldownUrgentR, lane.cooldownUrgentG, lane.cooldownUrgentB = 1, 0.55, 0.10
+    if buckets == true then
+        lane.cooldownSafeR, lane.cooldownSafeG, lane.cooldownSafeB =
+            ReadGeneralColor("aurasCooldownTextSafeColor", 1, 1, 1)
+        lane.cooldownWarnR, lane.cooldownWarnG, lane.cooldownWarnB =
+            ReadGeneralColor("aurasCooldownTextWarningColor", 1, 0.85, 0.20)
+        lane.cooldownUrgentR, lane.cooldownUrgentG, lane.cooldownUrgentB =
+            ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
+    end
+    lane.cooldownSafeSeconds = ClampNumber(general and general.aurasCooldownTextSafeSeconds, 60, 0, 600)
+    lane.cooldownWarningSeconds = ClampNumber(general and general.aurasCooldownTextWarningSeconds, 15, 0, 60)
+    lane.cooldownUrgentSeconds = ClampNumber(general and general.aurasCooldownTextUrgentSeconds, 5, 0, 60)
+    lane.stackR, lane.stackG, lane.stackB = ReadGeneralColor("aurasStackCountColor", 1, 1, 1)
+end
+
+--- Unit Buff/Debuff and group lanes lay out maxCount square icons, perRow to a
+--- row (to a column when vertical); containers lay out bars and portraits
+--- themselves (Features.lua).
+function LaneSchema.IconGrid(lane, size, spacing, maxCount, perRow, vertical, padding)
+    local roundedPerRow = Round(perRow)
+    local cols, rows = GridShape(Round(maxCount), roundedPerRow, vertical)
+    lane.size, lane.spacing, lane.step = size, spacing, size + spacing
+    lane.perRow, lane.cols, lane.rows, lane.padding = roundedPerRow, cols, rows, padding
+    lane.width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * padding)
+    lane.height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * padding)
+end
+
+--- The Retail-only filters (important, raid, stealable, boss, raid in combat,
+--- maximum duration) have no Classic Buff/Debuff or group setting, so those
+--- lanes carry them as fixed off values; ShouldShowAura reads them.
+function LaneSchema.RetailOnlyFiltersOff(lane)
+    lane.exclusiveImportant, lane.onlyImportant = false, false
+    lane.raid, lane.raidInCombat, lane.includeStealable, lane.boss = false, false, false, false
+    lane.maxDuration = 0
+end
+
+--- The per-aura dispel type border and its symbol mode on a Debuff lane, and
+--- the type colours they paint with: the frame visual's when it has one.
+function LaneSchema.DispelTypeBorder(lane, mode, visual)
+    local show = lane.kind == "debuff" and lane.renderEnabled == true and mode ~= "OFF"
+    local dispelVisual = lane.kind == "debuff" and (visual or (show and CompileDispelVisual(nil))) or nil
+    lane.showDispelTypeBorder = show == true
+    lane.showDispelTypeSymbol = show == true and mode == "SYMBOL"
+    lane.dispelTypeColors = dispelVisual and dispelVisual.dispelTypeColors or nil
 end
 
 --- Config compilation turns DB/model choices into lane specs that the runtime
@@ -960,6 +1066,28 @@ local function CompileFrameAuraVisual(spec)
     }
 end
 
+local function OwnHighlightColor(kind)
+    if kind == "buff" then return ReadGeneralColor("aurasOwnBuffHighlightColor", 1, 0.85, 0.20) end
+    return ReadGeneralColor("aurasOwnDebuffHighlightColor", 1, 0.30, 0.30)
+end
+
+--- The tooltip switch and the countdown and stack text of a unit Buff/Debuff lane.
+local function UnitLaneText(lane, spec, layout, sharedLayout, kind)
+    lane.showTooltip = ReadBool(sharedLayout, nil, kind .. "ShowTooltip", DEFAULT_SHARED.showTooltip ~= false)
+    lane.cooldownSize = ReadNumber(layout, nil, spec.cooldownSizeKey, DEFAULT_SHARED.cooldownTextSize, 6, 40)
+    lane.cooldownDecimalSeconds = ReadNumber(sharedLayout, nil, kind .. "CooldownDecimalSeconds",
+        DEFAULT_SHARED.cooldownDecimalSeconds or 3, 0, 30)
+    lane.cooldownAnchor = ReadAnchor(sharedLayout, nil, kind .. "CooldownTextAnchor",
+        DEFAULT_SHARED.cooldownTextAnchor or "CENTER")
+    lane.cooldownX = ReadNumber(layout, nil, spec.cooldownXKey, DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000)
+    lane.cooldownY = ReadNumber(layout, nil, spec.cooldownYKey, DEFAULT_SHARED.cooldownTextOffsetY, -2000, 2000)
+    lane.showStacks = ReadBool(sharedLayout, nil, spec.showStackKey, DEFAULT_SHARED.showStackCount ~= false)
+    lane.stackAnchor = ReadAnchor(sharedLayout, nil, spec.stackAnchorKey, DEFAULT_SHARED.stackCountAnchor or "TOPRIGHT")
+    lane.stackSize = ReadNumber(layout, nil, spec.stackSizeKey, DEFAULT_SHARED.stackTextSize, 6, 40)
+    lane.stackX = ReadNumber(layout, nil, spec.stackXKey, DEFAULT_SHARED.stackTextOffsetX, -2000, 2000)
+    lane.stackY = ReadNumber(layout, nil, spec.stackYKey, DEFAULT_SHARED.stackTextOffsetY, -2000, 2000)
+end
+
 local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist, filtersRoot, kind, forceScan, visual, renderAllowed)
     local spec = LANE_SPECS[kind]
     local sizeDefault = tonumber(ReadRaw(layout, nil, spec.sizeKey))
@@ -977,7 +1105,6 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local y = ReadNumber(layout, nil, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)
     local anchor = ReadAnchor(layout, nil, spec.anchorKey, spec.defaultAnchor)
     local layer = ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 1, 15)
-    local stackAnchor = ReadAnchor(sharedLayout, nil, spec.stackAnchorKey, DEFAULT_SHARED.stackCountAnchor or "TOPRIGHT")
     local filters = FilterTable(filtersRoot, spec.dbKey)
     local nonPlayerFilter = kind == "debuff" and filters and filters.nonPlayer == true or false
     local explicitLaneBlacklist = type(blacklist) == "table"
@@ -988,7 +1115,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     -- raid, stealable, boss, raid-in-combat, max duration) have no Classic
     -- setting, so the lane config exports them as fixed off values.
     local onlyMine = filters and filters.onlyMine == true
-    local hidePermanent = A3._ClassicResolveHidePermanent(blacklist, filtersRoot, kind)
+    local hidePermanent = ResolveHidePermanent(blacklist, filtersRoot, kind)
     local showSated = kind ~= "buff" or ReadBool(nil, shared, "showSated", true)
     local satedThreshold = kind == "buff" and ReadNumber(nil, shared, "satedShowAtSeconds", 0, 0, 3600) or 0
     local satedFilter = kind == "buff" and (showSated ~= true or satedThreshold > 0)
@@ -1022,77 +1149,28 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     -- filters OR-ed extra filter tokens into the lane; Classic keeps it so the
     -- Only mine scan path is unchanged.
     local cappedFilterScan = hasFilterWork == true and hasInclusive ~= true
-    local step = size + spacing
-    local roundedMax = Round(maxCount)
-    local roundedPerRow = Round(perRow)
-    local cols, rows = GridShape(roundedMax, roundedPerRow, verticalGrowth)
-    local sortOrder = A3._ClassicSortMode(ReadRaw(sharedLayout, nil, kind .. "SortMethod"), DEFAULT_SHARED.sortOrder)
+    local sortOrder = SortMode(ReadRaw(sharedLayout, nil, kind .. "SortMethod"), DEFAULT_SHARED.sortOrder)
     local sortReverse = ReadBool(sharedLayout, nil, kind .. "SortReverse", false)
     local showCooldownSwipe = ReadBool(sharedLayout, nil, spec.showSwipeKey, DEFAULT_SHARED.showCooldownSwipe ~= false)
     local showCooldownText = ReadBool(sharedLayout, nil, spec.showTextKey, DEFAULT_SHARED.showCooldownText ~= false)
     local cooldownSwipeDarken = ReadBool(nil, shared, "cooldownSwipeDarkenOnLoss", false)
-    local stackR, stackG, stackB = ReadGeneralColor("aurasStackCountColor", 1, 1, 1)
-    local ownR, ownG, ownB = 1, 1, 1
-    if ownHighlight == true then
-        if kind == "buff" then
-            ownR, ownG, ownB = ReadGeneralColor("aurasOwnBuffHighlightColor", 1, 0.85, 0.20)
-        else
-            ownR, ownG, ownB = ReadGeneralColor("aurasOwnDebuffHighlightColor", 1, 0.30, 0.30)
-        end
-    end
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    local cooldownTextBuckets = general and general.aurasCooldownTextUseBuckets == true
-    local cooldownSafeR, cooldownSafeG, cooldownSafeB = 1, 1, 1
-    local cooldownWarnR, cooldownWarnG, cooldownWarnB = 1, 0.85, 0.20
-    local cooldownUrgentR, cooldownUrgentG, cooldownUrgentB = 1, 0.55, 0.10
-    if cooldownTextBuckets == true then
-        cooldownSafeR, cooldownSafeG, cooldownSafeB = ReadGeneralColor("aurasCooldownTextSafeColor", 1, 1, 1)
-        cooldownWarnR, cooldownWarnG, cooldownWarnB = ReadGeneralColor("aurasCooldownTextWarningColor", 1, 0.85, 0.20)
-        cooldownUrgentR, cooldownUrgentG, cooldownUrgentB = ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
-    end
     local baseFilter = filterPlan and filterPlan.scanFilter or spec.filter
     local debuffTypeBorderMode = kind == "debuff" and A3.NormalizeClassicDebuffTypeBorderMode(
         ReadRaw(sharedLayout, nil, "debuffTypeBorderMode"),
         ReadBool(sharedLayout, nil, "useDebuffTypeBorders", false), false) or "OFF"
-    local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and debuffTypeBorderMode ~= "OFF"
-    local dispelVisual = (kind == "debuff" and (visual or (showDispelTypeBorder and CompileDispelVisual(nil)))) or nil
     local needsPlayerFlag = (filterPlan and filterPlan.needsPlayerFlag == true)
         or onlyMine == true or ownHighlight == true or (visualNeedsPlayer == true and visualDirect ~= true)
         or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
-    local sortComparator = sortOrder == 0 and (needsPlayerFlag and SortAuras or SortAurasID) or SortComparator(Round(sortOrder))
-    -- Arrival order renders unsorted; Reverse needs the sorted render, as a
-    -- custom container's does (Features.lua).
-    local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true and sortReverse ~= true
-    local visibleOnlyScan = renderEnabled == true
-        and naturalOrder == true
-        and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
 
-    return {
+    local lane = {
         kind = kind,
         unit = runtimeUnit,
         enabled = enabled == true,
         renderEnabled = renderEnabled == true,
         harmful = spec.harmful == true,
-        filter = baseFilter,
-        playerFilter = nativePlayerFilter and baseFilter or (baseFilter .. "|PLAYER"),
-        importantFilter = baseFilter .. "|IMPORTANT",
-        raidFilter = baseFilter .. "|RAID",
-        raidInCombatFilter = baseFilter .. "|RAID_IN_COMBAT",
-        stealableFilter = "HELPFUL|STEALABLE",
-        dispellableFilter = DISPELLABLE_DEBUFF_FILTER,
-        bossFilter = spec.filter .. "|BOSS",
-        max = renderEnabled and roundedMax or 0,
+        max = renderEnabled and Round(maxCount) or 0,
         weaponEnchants = kind == "buff" and runtimeUnit == "player"
             and ReadBool(shared, layout, "showWeaponEnchants", false),
-        size = size,
-        spacing = spacing,
-        step = step,
-        perRow = roundedPerRow,
-        cols = cols,
-        rows = rows,
-        padding = lanePadding,
-        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
-        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
         x = Round(x),
         y = Round(y),
         anchor = anchor,
@@ -1103,83 +1181,99 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         ySign = ySign,
         verticalGrowth = verticalGrowth == true,
         initialAnchor = ButtonAnchor(xSign, ySign),
-        sortOrder = Round(sortOrder),
-        sortComparator = sortComparator,
-        sortReverse = sortReverse == true,
-        naturalOrder = naturalOrder,
-        visibleOnlyScan = visibleOnlyScan == true,
         cappedFilterScan = cappedFilterScan == true,
-        -- A refresh can move an aura only in the time-keyed modes (2 duration,
-        -- 3 expiration, 4 expiration only). Every other key is fixed for the
-        -- aura's lifetime; an ownership flip is caught by the update path.
-        reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4,
         ownHighlight = ownHighlight == true,
-        ownR = ownR,
-        ownG = ownG,
-        ownB = ownB,
-        showTooltip = ReadBool(sharedLayout, nil, kind .. "ShowTooltip", DEFAULT_SHARED.showTooltip ~= false),
+        ownR = 1, ownG = 1, ownB = 1,
         showCooldownSwipe = showCooldownSwipe,
         showCooldownText = showCooldownText,
         showCooldown = renderEnabled == true and (showCooldownSwipe ~= false or showCooldownText ~= false),
         cooldownSwipeDarken = cooldownSwipeDarken == true,
-        cooldownTextBuckets = cooldownTextBuckets,
-        cooldownSafeR = cooldownSafeR,
-        cooldownSafeG = cooldownSafeG,
-        cooldownSafeB = cooldownSafeB,
-        cooldownWarnR = cooldownWarnR,
-        cooldownWarnG = cooldownWarnG,
-        cooldownWarnB = cooldownWarnB,
-        cooldownUrgentR = cooldownUrgentR,
-        cooldownUrgentG = cooldownUrgentG,
-        cooldownUrgentB = cooldownUrgentB,
-        cooldownSafeSeconds = ClampNumber(general and general.aurasCooldownTextSafeSeconds, 60, 0, 600),
-        cooldownWarningSeconds = ClampNumber(general and general.aurasCooldownTextWarningSeconds, 15, 0, 60),
-        cooldownUrgentSeconds = ClampNumber(general and general.aurasCooldownTextUrgentSeconds, 5, 0, 60),
-        cooldownSize = ReadNumber(layout, nil, spec.cooldownSizeKey, DEFAULT_SHARED.cooldownTextSize, 6, 40),
-        cooldownDecimalSeconds = ReadNumber(sharedLayout, nil, kind .. "CooldownDecimalSeconds",
-            DEFAULT_SHARED.cooldownDecimalSeconds or 3, 0, 30),
-        cooldownAnchor = ReadAnchor(sharedLayout, nil, kind .. "CooldownTextAnchor", DEFAULT_SHARED.cooldownTextAnchor or "CENTER"),
-        cooldownX = ReadNumber(layout, nil, spec.cooldownXKey, DEFAULT_SHARED.cooldownTextOffsetX, -2000, 2000),
-        cooldownY = ReadNumber(layout, nil, spec.cooldownYKey, DEFAULT_SHARED.cooldownTextOffsetY, -2000, 2000),
-        showStacks = ReadBool(sharedLayout, nil, spec.showStackKey, DEFAULT_SHARED.showStackCount ~= false),
-        stackAnchor = stackAnchor,
-        stackSize = ReadNumber(layout, nil, spec.stackSizeKey, DEFAULT_SHARED.stackTextSize, 6, 40),
-        stackX = ReadNumber(layout, nil, spec.stackXKey, DEFAULT_SHARED.stackTextOffsetX, -2000, 2000),
-        stackY = ReadNumber(layout, nil, spec.stackYKey, DEFAULT_SHARED.stackTextOffsetY, -2000, 2000),
-        stackR = stackR,
-        stackG = stackG,
-        stackB = stackB,
         blacklist = black,
         filterPlan = filterPlan,
         filterRequirements = filterPlan and filterPlan.requirements or nil,
         nativePlayerFilter = nativePlayerFilter,
         hasFilterWork = hasFilterWork,
         visualDirect = visualDirect == true,
-        exclusiveImportant = false,
-        onlyImportant = false,
         onlyMine = onlyMine == true,
-        raid = false,
-        includeStealable = false,
-        boss = false,
         hidePermanent = hidePermanent == true,
         nonPlayerFilter = nonPlayerFilter,
-        maxDuration = 0,
         showSated = showSated == true,
         satedThreshold = satedThreshold,
         satedFilter = satedFilter == true,
-        raidInCombat = false,
         hasInclusive = hasInclusive == true,
         needsPlayerFlag = needsPlayerFlag,
         needsCombatRefresh = filterPlan and filterPlan.needsCombatRefresh == true or false,
         visual = kind == "debuff" and visual or nil,
-        showDispelTypeBorder = showDispelTypeBorder == true,
-        showDispelTypeSymbol = showDispelTypeBorder == true and debuffTypeBorderMode == "SYMBOL",
         showStealableMarker = kind == "buff" and renderEnabled == true
             and ReadBool(sharedLayout, nil, "buffShowStealable", false),
         stealableStyle = kind == "buff" and A3.NormalizeClassicStealableStyle(
             ReadRaw(sharedLayout, nil, "buffStealableStyle")) or nil,
-        dispelTypeColors = dispelVisual and dispelVisual.dispelTypeColors or nil,
     }
+    if ownHighlight == true then lane.ownR, lane.ownG, lane.ownB = OwnHighlightColor(kind) end
+    UnitLaneText(lane, spec, layout, sharedLayout, kind)
+    LaneSchema.DispelTypeBorder(lane, debuffTypeBorderMode, visual)
+    LaneSchema.FilterTokens(lane, baseFilter, nativePlayerFilter, spec.filter .. "|BOSS")
+    LaneSchema.IconGrid(lane, size, spacing, maxCount, perRow, verticalGrowth, lanePadding)
+    LaneSchema.Ordering(lane, sortOrder, sortReverse)
+    LaneSchema.GlobalTextColors(lane)
+    LaneSchema.RetailOnlyFiltersOff(lane)
+    -- Arrival order is the aura instance order alone, as Retail's
+    -- AuraInstanceIDOnly sort: the ownership work that Only mine, the own-aura
+    -- highlight or a cast-by-me dispel visual turns on never reorders it, and
+    -- the unsorted render may stop scanning once the lane is full.
+    lane.visibleOnlyScan = renderEnabled == true and lane.naturalOrder == true
+        and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
+    return lane
+end
+
+--- Generic Classic group lanes support only All and Player. The stored token is
+--- never rewritten: Retail can consume it again after an import. The External
+--- lane's auto-blacklist is an internal ownership rule, not a user-selected
+--- Retail filter, so that one negation is preserved.
+local function GroupLaneRawFilter(kind, spec, rawFilter)
+    if kind ~= "buff" and kind ~= "debuff" then return rawFilter end
+    local playerOnly = false
+    local excludeExternalDefensives = false
+    for token in tostring(rawFilter):gmatch("[^|]+") do
+        token = token:upper():gsub("%s+", "")
+        if token == "PLAYER" then
+            playerOnly = true
+        elseif token == "!EXTERNAL_DEFENSIVE" or token == "NOT_EXTERNAL_DEFENSIVE" then
+            excludeExternalDefensives = true
+        end
+    end
+    rawFilter = playerOnly and (spec.filter .. "|PLAYER") or spec.filter
+    if kind == "buff" and excludeExternalDefensives then
+        rawFilter = rawFilter .. "|!EXTERNAL_DEFENSIVE"
+    end
+    return rawFilter
+end
+
+--- A tracked-buff lane's include list. Classic aura payloads often carry a
+--- different spellId than the configured one (TBC spell ranks, Mists
+--- cast-vs-aura ID drift), so the compiled list adds aliases and the spells'
+--- names; exact-ID matching silently emptied tracked-buff whitelists.
+local function GroupIncludeSpells(hash)
+    if type(hash) ~= "table" then return nil, nil end
+    local includeSpellIDs
+    for key, enabled in pairs(hash) do
+        if enabled == true then
+            local id = tonumber(key)
+            if id and id > 0 then
+                includeSpellIDs = includeSpellIDs or {}
+                if type(A3.AddAuraSpellIDAndAliases) == "function" then
+                    A3.AddAuraSpellIDAndAliases(includeSpellIDs, id)
+                else
+                    includeSpellIDs[math_floor(id + 0.5)] = true
+                end
+            end
+        end
+    end
+    local includeSpellNames
+    if includeSpellIDs and A3.ClassicFeatures and type(A3.ClassicFeatures.NameHash) == "function" then
+        includeSpellNames = A3.ClassicFeatures.NameHash(includeSpellIDs)
+    end
+    return includeSpellIDs, includeSpellNames
 end
 
 local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAllowed)
@@ -1202,56 +1296,13 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     end
     local layer = ClampNumber(source[spec.layerKey], spec.defaultLayer, 1, 15)
     local alpha = ClampNumber(source[spec.alphaKey], 1, 0, 1)
-    local rawFilter = source[spec.filterKey] or spec.filter
-    if kind == "buff" or kind == "debuff" then
-        -- Generic Classic group lanes support only All and Player. Do not
-        -- rewrite the stored token: Retail can consume it again after import.
-        -- The External lane's auto-blacklist is an internal ownership rule,
-        -- not a user-selected Retail filter, so preserve that one negation.
-        local playerOnly = false
-        local excludeExternalDefensives = false
-        for token in tostring(rawFilter):gmatch("[^|]+") do
-            token = token:upper():gsub("%s+", "")
-            if token == "PLAYER" then
-                playerOnly = true
-            elseif token == "!EXTERNAL_DEFENSIVE" or token == "NOT_EXTERNAL_DEFENSIVE" then
-                excludeExternalDefensives = true
-            end
-        end
-        rawFilter = playerOnly and (spec.filter .. "|PLAYER") or spec.filter
-        if kind == "buff" and excludeExternalDefensives then
-            rawFilter = rawFilter .. "|!EXTERNAL_DEFENSIVE"
-        end
-    end
+    local rawFilter = GroupLaneRawFilter(kind, spec, source[spec.filterKey] or spec.filter)
     local filterPlan = A3.ClassicFeatures and A3.ClassicFeatures.CompileRawFilter
         and A3.ClassicFeatures.CompileRawFilter(rawFilter, spec.harmful ~= true) or nil
     local filter = filterPlan and filterPlan.scanFilter or spec.filter
     local nativePlayerFilter = filterPlan and filterPlan.nativePlayerFilter == true or false
     local black = CompileBlacklistHash(source[spec.blacklistKey])
-    -- Classic aura payloads often carry a different spellId than the
-    -- configured one (TBC spell ranks, Mists cast-vs-aura ID drift), so the
-    -- compiled include list adds alias and name tolerance; exact-ID matching
-    -- silently emptied tracked-buff whitelists.
-    local includeSpellIDs, includeSpellNames
-    if spec.includeHashKey and type(source[spec.includeHashKey]) == "table" then
-        for key, enabled in pairs(source[spec.includeHashKey]) do
-            if enabled == true then
-                local id = tonumber(key)
-                if id and id > 0 then
-                    includeSpellIDs = includeSpellIDs or {}
-                    if type(A3.AddAuraSpellIDAndAliases) == "function" then
-                        A3.AddAuraSpellIDAndAliases(includeSpellIDs, id)
-                    else
-                        includeSpellIDs[math_floor(id + 0.5)] = true
-                    end
-                end
-            end
-        end
-        if includeSpellIDs and A3.ClassicFeatures
-            and type(A3.ClassicFeatures.NameHash) == "function" then
-            includeSpellNames = A3.ClassicFeatures.NameHash(includeSpellIDs)
-        end
-    end
+    local includeSpellIDs, includeSpellNames = GroupIncludeSpells(spec.includeHashKey and source[spec.includeHashKey])
     local hidePermanent = spec.hidePermanentKey and source[spec.hidePermanentKey] == true or false
     local nonPlayerFilter = spec.nonPlayerKey and source[spec.nonPlayerKey] == true or false
     local hasFilterWork = black ~= nil or type(includeSpellIDs) == "table" or hidePermanent
@@ -1271,23 +1322,8 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         and not (filterPlan and filterPlan.hasRequirements == true)
     local showCooldown = source[spec.showCooldownKey] ~= false
     local showCooldownSwipe = showCooldown and source[spec.showSwipeKey] ~= false
-    local stackR, stackG, stackB = ReadGeneralColor("aurasStackCountColor", 1, 1, 1)
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
-    local cooldownTextBuckets = general and general.aurasCooldownTextUseBuckets == true
-    local cooldownSafeR, cooldownSafeG, cooldownSafeB = 1, 1, 1
-    local cooldownWarnR, cooldownWarnG, cooldownWarnB = 1, 0.85, 0.20
-    local cooldownUrgentR, cooldownUrgentG, cooldownUrgentB = 1, 0.55, 0.10
-    if cooldownTextBuckets == true then
-        cooldownSafeR, cooldownSafeG, cooldownSafeB = ReadGeneralColor("aurasCooldownTextSafeColor", 1, 1, 1)
-        cooldownWarnR, cooldownWarnG, cooldownWarnB = ReadGeneralColor("aurasCooldownTextWarningColor", 1, 0.85, 0.20)
-        cooldownUrgentR, cooldownUrgentG, cooldownUrgentB = ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
-    end
-    local step = size + spacing
     local lanePadding = Round(ClampNumber(source.stylePadding, 0, 0, 16))
-    local roundedMax = Round(maxCount)
-    local roundedPerRow = Round(perRow)
-    local cols, rows = GridShape(roundedMax, roundedPerRow, verticalGrowth)
-    local sortOrder = A3._ClassicSortMode(source[kind .. "SortMethod"] or source.sortMethod,
+    local sortOrder = SortMode(source[kind .. "SortMethod"] or source.sortMethod,
         source.sortByDuration == true and 2 or 1)
     local sortReverse = source[kind .. "SortReverse"] == true
         or (source[kind .. "SortReverse"] == nil and source.sortReverse == true)
@@ -1295,44 +1331,18 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         source.debuffDispelBorderMode or source.debuffTypeBorderMode or source.dispelBorderMode,
         source.debuffShowDispelBorder == true or source.showDispelBorder == true,
         source.debuffShowDispelSymbol == true or source.showDispelSymbol == true) or "OFF"
-    local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and debuffTypeBorderMode ~= "OFF"
-    local dispelVisual = (kind == "debuff" and (visual or (showDispelTypeBorder and CompileDispelVisual(nil)))) or nil
     local needsPlayerFlag = source.preferPlayer == true
         or (filterPlan and filterPlan.needsPlayerFlag == true)
         or (kind == "debuff" and visual and visual.needsPlayerFlag == true and visualDirect ~= true)
         or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
 
-    -- Arrival order renders unsorted; Reverse needs the sorted render, as a
-    -- custom container's does (Features.lua).
-    local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true and sortReverse ~= true
-    local visibleOnlyScan = renderEnabled == true
-        and naturalOrder == true
-        and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
-
-    return {
+    local lane = {
         kind = kind,
         unit = unit,
         enabled = enabled == true,
         renderEnabled = renderEnabled == true,
         harmful = spec.harmful == true,
-        filter = filter,
-        playerFilter = nativePlayerFilter and filter or (filter .. "|PLAYER"),
-        importantFilter = filter .. "|IMPORTANT",
-        raidFilter = filter .. "|RAID",
-        raidInCombatFilter = filter .. "|RAID_IN_COMBAT",
-        stealableFilter = "HELPFUL|STEALABLE",
-        dispellableFilter = DISPELLABLE_DEBUFF_FILTER,
-        bossFilter = "HARMFUL|BOSS",
-        max = renderEnabled and roundedMax or 0,
-        size = size,
-        spacing = spacing,
-        step = step,
-        perRow = roundedPerRow,
-        cols = cols,
-        rows = rows,
-        padding = lanePadding,
-        width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing + 2 * lanePadding),
-        height = math_max(1, rows * size + math_max(rows - 1, 0) * spacing + 2 * lanePadding),
+        max = renderEnabled and Round(maxCount) or 0,
         x = Round(x),
         y = Round(y),
         anchor = anchor,
@@ -1344,32 +1354,12 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         ySign = ySign,
         verticalGrowth = verticalGrowth == true,
         initialAnchor = ButtonAnchor(xSign, ySign),
-        sortOrder = sortOrder,
-        sortComparator = sortOrder == 0 and SortAurasID or SortComparator(sortOrder),
-        sortReverse = sortReverse == true,
-        naturalOrder = naturalOrder,
-        visibleOnlyScan = visibleOnlyScan == true,
         cappedFilterScan = cappedFilterScan == true,
-        -- Time-keyed modes only, as in CompileLane.
-        reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4,
         showTooltip = source[kind .. "ShowTooltip"] ~= false and source.showTooltip ~= false,
         showCooldownSwipe = renderEnabled == true and showCooldownSwipe == true,
         showCooldownText = renderEnabled == true and showCooldown == true,
         showCooldown = renderEnabled == true and showCooldown == true,
         cooldownSwipeDarken = source.cooldownSwipeDarkenOnLoss == true,
-        cooldownTextBuckets = cooldownTextBuckets,
-        cooldownSafeR = cooldownSafeR,
-        cooldownSafeG = cooldownSafeG,
-        cooldownSafeB = cooldownSafeB,
-        cooldownWarnR = cooldownWarnR,
-        cooldownWarnG = cooldownWarnG,
-        cooldownWarnB = cooldownWarnB,
-        cooldownUrgentR = cooldownUrgentR,
-        cooldownUrgentG = cooldownUrgentG,
-        cooldownUrgentB = cooldownUrgentB,
-        cooldownSafeSeconds = ClampNumber(general and general.aurasCooldownTextSafeSeconds, 60, 0, 600),
-        cooldownWarningSeconds = ClampNumber(general and general.aurasCooldownTextWarningSeconds, 15, 0, 60),
-        cooldownUrgentSeconds = ClampNumber(general and general.aurasCooldownTextUrgentSeconds, 5, 0, 60),
         cooldownSize = ClampNumber(source[spec.cooldownSizeKey] or source.cooldownSize, DEFAULT_SHARED.cooldownTextSize, 6, 40),
         cooldownDecimalSeconds = ClampNumber(source[kind .. "CooldownDecimalSeconds"] or source.cooldownDecimalSeconds, 3, 0, 30),
         cooldownAnchor = ReadAnchor(source, nil, spec.cooldownAnchorKey, "CENTER"),
@@ -1380,9 +1370,6 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         stackSize = ClampNumber(source[spec.stackSizeKey], DEFAULT_SHARED.stackTextSize, 6, 40),
         stackX = 0,
         stackY = 0,
-        stackR = stackR,
-        stackG = stackG,
-        stackB = stackB,
         blacklist = black,
         includeSpellIDs = includeSpellIDs,
         includeSpellNames = includeSpellNames,
@@ -1391,35 +1378,62 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         nativePlayerFilter = nativePlayerFilter,
         hasFilterWork = hasFilterWork,
         visualDirect = visualDirect == true,
-        exclusiveImportant = false,
-        onlyImportant = false,
         onlyMine = false,
-        raid = false,
-        includeStealable = false,
-        boss = false,
-        raidInCombat = false,
         hasInclusive = false,
         hidePermanent = hidePermanent,
         nonPlayerFilter = nonPlayerFilter,
-        maxDuration = 0,
         needsPlayerFlag = needsPlayerFlag == true,
         needsCombatRefresh = filterPlan and filterPlan.needsCombatRefresh == true or false,
         visual = kind == "debuff" and visual or nil,
-        showDispelTypeBorder = showDispelTypeBorder == true,
-        showDispelTypeSymbol = showDispelTypeBorder == true and debuffTypeBorderMode == "SYMBOL",
-        dispelTypeColors = dispelVisual and dispelVisual.dispelTypeColors or nil,
     }
+    LaneSchema.DispelTypeBorder(lane, debuffTypeBorderMode, visual)
+    LaneSchema.FilterTokens(lane, filter, nativePlayerFilter, "HARMFUL|BOSS")
+    LaneSchema.IconGrid(lane, size, spacing, maxCount, perRow, verticalGrowth, lanePadding)
+    LaneSchema.Ordering(lane, sortOrder, sortReverse)
+    LaneSchema.GlobalTextColors(lane)
+    LaneSchema.RetailOnlyFiltersOff(lane)
+    -- Arrival order renders unsorted, whatever ownership work the lane does.
+    lane.visibleOnlyScan = renderEnabled == true and lane.naturalOrder == true
+        and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
+    return lane
+end
+
+--- A group edit must not evict the unit-frame configs: each group kind keeps a
+--- revision the group config cache is keyed on, as on Retail
+--- (Auras3/Runtime/MSUF_Auras3_Runtime_GroupConfig.lua); [false] covers a frame
+--- without a declared kind. The shared menu model calls this for a group
+--- scope and bumps the global generation only when it is missing. Revisions
+--- advance only on configuration writes, never on aura events.
+local groupConfigRevisions = { party = 0, raid = 0, mythicraid = 0, [false] = 0 }
+
+function A3.InvalidateGroupRuntimeConfig(scope)
+    if type(scope) ~= "string" then return false end
+    local party = scope == "party" or scope == "gf_party" or scope:match("^party%d+$") ~= nil
+    local raid = scope == "raid" or scope == "gf_raid" or scope:match("^raid%d+$") ~= nil
+    local mythic = raid or scope == "mythicraid" or scope == "gf_mythicraid"
+    if scope == "group" or scope == "groups" then party, raid, mythic = true, true, true end
+    if not (party or raid or mythic) then return false end
+    if party then groupConfigRevisions.party = groupConfigRevisions.party + 1 end
+    if raid then groupConfigRevisions.raid = groupConfigRevisions.raid + 1 end
+    if mythic then groupConfigRevisions.mythicraid = groupConfigRevisions.mythicraid + 1 end
+    groupConfigRevisions[false] = groupConfigRevisions[false] + 1
+    return true
 end
 
 local function ResolveGroupFrameConfig(frame, unit)
     if not frame then return nil end
-    unit = unit or A3._ClassicBindFrameUnit(frame)
+    unit = unit or BindFrameUnit(frame)
     local spec = frame.MSUFSpec
     local source = spec and (spec.auras or (spec.group and spec.group.auras))
-    local gen = A3._runtimeConfigGen or 1
+    -- Both counters only advance, so their sum keeps one generation check on a
+    -- cache hit; the kind is compared too, as two kinds can reach equal sums.
+    local kind = frame._msufGFKind
+    local gen = (A3._runtimeConfigGen or 1)
+        + (groupConfigRevisions[kind or false] or groupConfigRevisions[false])
     local cached = frame._msufA3GroupConfig
     if cached and frame._msufA3GroupSource == source and frame._msufA3GroupUnit == unit
-        and frame._msufA3GroupSpec == spec and frame._msufA3GroupGen == gen then
+        and frame._msufA3GroupSpec == spec and frame._msufA3GroupGen == gen
+        and frame._msufA3GroupKind == kind then
         return cached
     end
 
@@ -1471,6 +1485,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     frame._msufA3GroupUnit = unit
     frame._msufA3GroupSpec = spec
     frame._msufA3GroupGen = gen
+    frame._msufA3GroupKind = kind
     frame._msufA3GroupConfig = cfg
     return cfg
 end
@@ -1479,7 +1494,7 @@ local function FrameAuraConfig(frame, unit)
     if IsGroupFrame(frame) then
         return ResolveGroupFrameConfig(frame, unit)
     end
-    return A3.ResolveUnitFrameConfig(unit or A3._ClassicBindFrameUnit(frame), frame and frame.MSUFSpec)
+    return A3.ResolveUnitFrameConfig(unit or BindFrameUnit(frame), frame and frame.MSUFSpec)
 end
 
 local function BuildUnitFrameConfig(unit, frameSpec)
@@ -1638,6 +1653,12 @@ function A3.UnitFrameAuraEnabled(unit)
 end
 
 A3._ClassicCompile = {
+    LaneSchema = LaneSchema,
+    BASE_LANE_ORDER = BASE_LANE_ORDER,
+    SortMode = SortMode,
+    BindFrameUnit = BindFrameUnit,
+    ReadBlacklistHidePermanent = ReadBlacklistHidePermanent,
+    AuraRuntimeCombatBlocked = AuraRuntimeCombatBlocked,
     MANAGED_UNITS = MANAGED_UNITS,
     DEFAULT_SHARED = DEFAULT_SHARED,
     WipeTable = WipeTable,

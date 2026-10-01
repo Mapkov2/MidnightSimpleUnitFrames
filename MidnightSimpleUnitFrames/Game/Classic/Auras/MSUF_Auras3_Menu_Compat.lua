@@ -13,10 +13,12 @@ local type, tostring, pairs = type, tostring, pairs
 local A3 = MSUF.MSUF_Auras3
 local Model = type(A3) == "table" and A3.MenuModel or nil
 if type(Model) ~= "table" or A3.__classicAuraMenuCompatLoaded == true then return end
-if type(A3._ClassicReadBlacklistHidePermanent) ~= "function"
+local Compile = A3._ClassicCompile
+if type(Compile) ~= "table" or type(Compile.ReadBlacklistHidePermanent) ~= "function"
     or type(Model.WriteBlacklistHidePermanent) ~= "function" then
     return
 end
+local ReadBlacklistHidePermanent = Compile.ReadBlacklistHidePermanent
 
 local DeepCopy = MSUF.MSUF_DeepCopy
 
@@ -79,7 +81,7 @@ end
 local WriteBlacklistHidePermanent = Model.WriteBlacklistHidePermanent
 
 function Model.ReadBlacklistHidePermanent(scope, kind)
-    return A3._ClassicReadBlacklistHidePermanent(scope, kind) == true
+    return ReadBlacklistHidePermanent(scope, kind) == true
 end
 
 function Model.WriteBlacklistHidePermanent(scope, kind, value)

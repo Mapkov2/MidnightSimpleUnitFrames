@@ -212,7 +212,9 @@ local chain = {
     "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
     "Game/Classic/Auras/MSUF_Auras3_Preview.lua", "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
-    "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Buttons.lua", "Game/Classic/Auras/MSUF_Auras3_Filters.lua",
+    "Game/Classic/Auras/MSUF_Auras3_FrameVisuals.lua", "Game/Classic/Auras/MSUF_Auras3_Lanes.lua",
+    "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua", "Game/Classic/Auras/MSUF_Auras3_Requests.lua",
 }
 local overridePaths = {}
 for relative, path in pairs(overrides) do overridePaths[ADDON .. relative] = path end
@@ -253,11 +255,13 @@ local function HasEvent(list, event)
     return false
 end
 local function Border(frame) return frame._msufA3DispelActive == true end
---- A menu change reaches a live frame as an Auras element apply, after which the
---- core re-derives the frame's event routes.
+--- A menu change reaches a live frame as an Auras element apply (Apply, then
+--- Enable, as UF.ApplyElementToFrame runs them), after which the core
+--- re-derives the frame's event routes.
 local function Reapply(frame)
     A3.BumpRuntimeConfig()
     registered.Apply(frame)
+    registered.Enable(frame)
     Subscribe(frame)
 end
 local function NewFrame(unit, spec)

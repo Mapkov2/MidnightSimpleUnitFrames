@@ -101,7 +101,12 @@ local featuresPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_
 local retailPath = root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
 assert(loadfile(featuresPath))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua"))("MidnightSimpleUnitFrames", namespace)
+local classicBackend = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_"
+for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes" }) do
+    assert(loadfile(classicBackend .. module .. ".lua"))("MidnightSimpleUnitFrames", namespace)
+end
 assert(loadfile(classicPath))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(classicBackend .. "Requests.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(retailPath))("MidnightSimpleUnitFrames", namespace)
 
 assert(registrations == 1, "Retail aura backend registered after Classic ownership")
@@ -137,7 +142,7 @@ local frame = { MSUFUnitKey = "target", MSUFSpec = {} }
 assert(frame.unit == nil, "lifecycle smoke precondition failed")
 assert(registered.IsEnabled(frame) == true, "target aura element stayed disabled")
 -- Engine frames carry MSUFUnitKey; the backend reads it and never writes frame.unit.
-assert(frame.unit == nil and namespace.MSUF_Auras3._ClassicBindFrameUnit(frame) == "target",
+assert(frame.unit == nil and namespace.MSUF_Auras3._ClassicCompile.BindFrameUnit(frame) == "target",
     "Classic aura lifecycle wrote frame.unit or lost MSUFUnitKey")
 local petFrame = { MSUFUnitKey = "pet", MSUFSpec = {} }
 assert(registered.IsEnabled(petFrame) == true,
@@ -308,7 +313,7 @@ assert(groupFrame.MSUFSpec.auras.debuffMaxDuration == 36
     and groupFrame.MSUFSpec.auras.buffFilter == "HELPFUL|RAID"
     and groupFrame.MSUFSpec.auras.debuffFilter == "HARMFUL|PLAYER|RAID",
     "Classic group compilation mutated portable profile values")
-assert(namespace.MSUF_Auras3._ClassicAuraIndexByInstanceID("target", 22, "HARMFUL") == 2,
+assert(namespace.MSUF_Auras3._ClassicBackend.Buttons.AuraIndexByInstanceID("target", 22, "HARMFUL") == 2,
     "Classic tooltip fallback did not resolve the filtered aura index")
 
 -- Exercise the real Group SavedVariables -> compiled Group spec -> Classic

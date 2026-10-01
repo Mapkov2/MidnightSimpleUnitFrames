@@ -4,7 +4,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- AuraContainer visual implementation and pays no load/runtime cost here.
 if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then return end
@@ -15,7 +15,6 @@ A3.ClassicVisuals = V
 local type, tostring, tonumber, select, next = type, tostring, tonumber, select, next
 local math_floor, math_max, math_min = math.floor, math.max, math.min
 local CreateFrame = _G.CreateFrame
-local C_UnitAuras = _G.C_UnitAuras
 local STEALABLE_TEXTURE = "Interface\\TargetingFrame\\UI-TargetingFrame-Stealable"
 
 local function Clamp(value, fallback, minValue, maxValue)
@@ -387,12 +386,6 @@ function A3.ApplyAuraDispelPreview(border, icon, size, mode, shape)
     return true
 end
 
-function A3.IconStylePreviewForScope(scope)
-    local root = _G.MSUF_DB and _G.MSUF_DB.auras3
-    local shared = root and root.shared or {}
-    return V.SharedIconStyle(shared, scope)
-end
-
 function V.ApplyButtonLayout(lane, button)
     local cfg = lane and lane.config
     if not (cfg and button) then return end
@@ -692,10 +685,12 @@ local function ApplyFrameEffect(lane, button, data)
         end
         if remaining > threshold then
             -- One timer per aura application: a refresh that kept the same
-            -- expiration and effect keeps the pending one.
+            -- expiration and compiled config keeps the pending one. The
+            -- config, not cfg.frameEffect: that is the stored profile table,
+            -- which a menu edit (a new threshold) changes in place.
             if button._msufA3ClassicFrameEffectTimer
                 and button._msufA3ClassicFrameEffectTimerAt == expiration
-                and button._msufA3ClassicFrameEffectTimerEffect == effect then
+                and button._msufA3ClassicFrameEffectTimerConfig == cfg then
                 return false
             end
             HideFrameEffect(button)
@@ -704,7 +699,7 @@ local function ApplyFrameEffect(lane, button, data)
             if timerAPI and timerAPI.NewTimer then
                 local auraInstanceID = button.auraInstanceID
                 button._msufA3ClassicFrameEffectTimerAt = expiration
-                button._msufA3ClassicFrameEffectTimerEffect = effect
+                button._msufA3ClassicFrameEffectTimerConfig = cfg
                 button._msufA3ClassicFrameEffectTimer = timerAPI.NewTimer(delay, function()
                     button._msufA3ClassicFrameEffectTimer = nil
                     button._msufA3ClassicFrameEffectTimerAt = nil
@@ -720,8 +715,11 @@ local function ApplyFrameEffect(lane, button, data)
     local frame = lane.ownerFrame
     -- Stamp: the effect drawn for this config on this frame stays as it is on
     -- an unchanged refresh, so a Pulse never restarts and nothing is re-laid.
+    -- It is the compiled lane config (a new table per compile), never
+    -- cfg.frameEffect: that is the stored profile table, which a menu edit
+    -- changes in place, so a shown aura kept the old colour and kind.
     local drawn = button._msufA3ClassicFrameEffectRoot
-    if drawn and button._msufA3ClassicFrameEffectStamp == effect
+    if drawn and button._msufA3ClassicFrameEffectStamp == cfg
         and button._msufA3ClassicFrameEffectFrame == frame then
         if kind == "namecolor" and drawn._name and frame then
             local source = frame.Name or frame.name or frame.NameText or frame.nameText or frame._nameFS
@@ -772,7 +770,7 @@ local function ApplyFrameEffect(lane, button, data)
     end
     root:Show()
     root._msufA3EffectDrawn = true
-    button._msufA3ClassicFrameEffectStamp = effect
+    button._msufA3ClassicFrameEffectStamp = cfg
     button._msufA3ClassicFrameEffectFrame = frame
     return true
 end
