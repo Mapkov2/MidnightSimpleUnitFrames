@@ -17,9 +17,18 @@ local CreateFrame = CreateFrame
 BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
 BINDING_NAME_MSUF_TOGGLE_OPTIONS = "Toggle MSUF Options"
 BINDING_NAME_MSUF_TOGGLE_EDITMODE = "Toggle MSUF Edit Mode"
-BINDING_NAME_MSUF_PRIORITY_TOGGLE = type(MSUF.Translate) == "function"
-    and MSUF.Translate("Pin or unpin hovered group member")
-    or "Pin or unpin hovered group member"
+--- The menu language is known only once the saved locale is read at
+--- ADDON_LOADED, so the translated labels are set again then.
+local function ApplyBindingLabels()
+    local translate = type(MSUF.Translate) == "function" and MSUF.Translate or function(text) return text end
+    local variantLabel = translate("Toggle profile variant %d")
+    for slot = 1, 8 do _G["BINDING_NAME_MSUF_VARIANT_" .. slot] = variantLabel:format(slot) end
+    BINDING_NAME_MSUF_PRIORITY_TOGGLE = translate("Pin or unpin hovered group member")
+end
+ApplyBindingLabels()
+if type(MSUF.RegisterLocaleCallback) == "function" then
+    MSUF.RegisterLocaleCallback("MSUF_Keybinds", ApplyBindingLabels)
+end
 local MSUF_BINDING_COMMANDS = {
     "MSUF_TOGGLE_OPTIONS",
     "MSUF_TOGGLE_EDITMODE",

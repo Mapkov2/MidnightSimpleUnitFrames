@@ -41,3 +41,7 @@ local function TryDecodeFactoryPayload(encoding, cleaned)
 end
 
 MSUF.TryDecodeFactoryPayload = TryDecodeFactoryPayload
+-- Profile import strings reach the same native CBOR rejection: a garbled
+-- payload must come back as a failed decode (an import message), never as a
+-- Lua error from inside the codec.
+MSUF.TryDeserializeNativeCBOR = TryDeserializeFactoryPayload

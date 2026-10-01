@@ -122,6 +122,17 @@ local IDENTITY_ELEMENTS = {
 }
 UF.identityElements = IDENTITY_ELEMENTS
 
+-- Elements that only their own events keep current: neither the identity plan
+-- nor the forced runtime plan reseeds them. A hidden frame's events are
+-- suspended (SuspendHiddenFrameEvents), so FrameOnShow replays these once;
+-- resting and a stance or form can change while a mount, Alt+Z or a load
+-- condition hides the player frame. An element opts in with the reshow trait.
+local RESHOW_ELEMENTS = UF.reshowElements or {
+  RestingIndicator = true,
+  StanceIndicator = true,
+}
+UF.reshowElements = RESHOW_ELEMENTS
+
 local IDENTITY_BAR_ELEMENTS = {
   Health = true,
   Power = true,
@@ -384,8 +395,6 @@ local function GetUpdateKey(name)
   return UPDATE_KEYS[name]
 end
 
-local RESTING_UPDATE_KEY = GetUpdateKey("RestingIndicator")
-
 function UF.BasicElementAllowed(name)
   return BASIC_ELEMENTS[name] == true
 end
@@ -402,6 +411,7 @@ local function EventElementAllowed(name)
     or EVENT_ELEMENTS[name] == true
     or STATUS_EVENT_ELEMENTS[name] == true
 end
+UF.EventElementAllowed = EventElementAllowed
 
 local function ApplyElementAllowed(name)
   local traits = UF.elementTraits[name]
@@ -432,6 +442,7 @@ function UF.RegisterElement(name, element, traits)
     end
     if traits.forceUpdate == true then FORCE_UPDATE_ELEMENTS[name] = true end
     if traits.identity == true then IDENTITY_ELEMENTS[name] = true end
+    if traits.reshow == true then RESHOW_ELEMENTS[name] = true end
   end
   GetUpdateKey(name)
   return true
@@ -497,8 +508,18 @@ local IDENTITY_STABLE_DISPATCH_EVENTS = {
 }
 
 local function BeginFrameEvent(frame, event)
-  frame._msufDispatchToken = (frame._msufDispatchToken or 0) + 1
+  local token = (frame._msufDispatchToken or 0) + 1
+  frame._msufDispatchToken = token
   frame._msufDispatchActive = true
+  -- A group lifecycle refresh defers the end of exactly one dispatch token
+  -- (BuildLifecycleFullPath). A follower error leaves that window behind; the
+  -- frame's next dispatch carries a later token and retires it, so neither the
+  -- dispatch nor the refresh flag stays pinned on the frame.
+  local deferred = frame._msufDeferDispatchEnd
+  if deferred ~= nil and deferred ~= token then
+    frame._msufDeferDispatchEnd = nil
+    frame._msufGroupStateRefresh = nil
+  end
   -- Keep the per-frame state table allocated, but invalidate its contents for
   -- this dispatch. RefreshUnitState still performs the same full read on the
   -- first consumer, while later consumers in the same dispatch share it.
@@ -513,7 +534,8 @@ local function BeginFrameEvent(frame, event)
 end
 
 local function EndFrameEvent(frame)
-  if frame._msufDeferDispatchEnd == true then return end
+  local deferred = frame._msufDeferDispatchEnd
+  if deferred ~= nil and deferred == frame._msufDispatchToken then return end
   frame._msufDispatchActive = nil
 end
 
@@ -675,16 +697,14 @@ local function FrameOnShow(frame)
     RegisterFrameEvent(frame, "UNIT_IN_RANGE_UPDATE", frame._msufCoreRangeEventUnitless == true)
     frame._msufCoreRangeEventSuspended = nil
   end
-  -- Zoning can deliver PLAYER_UPDATE_RESTING/PLAYER_ENTERING_WORLD while an
-  -- ancestor keeps the player frame hidden, so FrameOnEvent intentionally
-  -- drops the update. Re-seed only this event-owned player state on the cold
-  -- OnShow edge; the generic runtime plan stays unchanged for every other
-  -- refresh and no polling/driver work is added.
-  if frame.MSUFUnitKey == "player" then
-    local updateResting = frame[RESTING_UPDATE_KEY]
-    if updateResting then
-      updateResting(frame, "MSUF_UF_ONSHOW", "player")
-    end
+  -- Zoning can deliver PLAYER_UPDATE_RESTING/PLAYER_ENTERING_WORLD, and a form
+  -- change UPDATE_SHAPESHIFT_FORM, while the frame or an ancestor is hidden,
+  -- and a hidden frame does not receive them. Re-seed only that event-owned
+  -- state (RESHOW_ELEMENTS) on the cold OnShow edge; the generic runtime plan
+  -- stays unchanged for every other refresh and no polling/driver work is added.
+  local reshow = frame._msufReshowPath
+  if reshow then
+    reshow(frame, "MSUF_UF_ONSHOW", frame.MSUFUnitKey)
   end
   if frame._msufCoreScope == "group" then
     if HeaderLayoutRebindActive(frame) then
@@ -1636,7 +1656,9 @@ local function BuildLifecycleFullPath(healthPath, powerUpdate, powerTextUpdate,
   return function(frame, event)
     local unit = frame.MSUFUnitKey
     frame._msufGroupStateRefresh = true
-    frame._msufDeferDispatchEnd = true
+    -- Keep open only the dispatch this refresh starts (the health route or the
+    -- Begin below takes the next token), so every follower shares its snapshot.
+    frame._msufDeferDispatchEnd = (frame._msufDispatchToken or 0) + 1
     if healthPath then healthPath(frame, event, nil) else BeginFrameEvent(frame, event) end
 
     local power, powerMax, powerType, powerToken, powerMetaChanged
@@ -2011,6 +2033,10 @@ local function ArenaOpponentIdentityUpdate(frame, event, unit)
     and IsArenaUnit(unit) and unit ~= frame.MSUFUnitKey then
     return
   end
+  -- RegisterUnitWatch can show the frame before this update reaches Lua; its
+  -- OnShow already reseeded the same GUID (MarkOnShowIdentityFollowup), so skip
+  -- only that redundant follower, exactly like the boss route.
+  if ConsumeOnShowIdentityFollowup(frame, event, frame.MSUFUnitKey) then return end
   QueueDependentIdentity(frame, event)
 end
 
@@ -2286,6 +2312,7 @@ function UF.RebuildRuntimeStatusState(frame)
     end
   end
   frame._msufRuntimeOnShowNeedsFull = onShowNeedsFull
+  frame._msufReshowPath = BuildRuntimeSequencePlan(frame, RESHOW_ELEMENTS).path
   frame._msufGroupIdentityFns = frame._msufIdentityFns
   frame._msufGroupIdentityCount = frame._msufIdentityCount
   frame._msufGroupIdentityLabels = frame._msufIdentityLabels
@@ -2751,6 +2778,7 @@ function UF.DetachFrame(frame)
   frame._msufRuntimeAllCount = nil
   frame._msufRuntimeAllLabels = nil
   frame._msufRuntimeAllPath = nil
+  frame._msufReshowPath = nil
   frame._msufGroupIdentityFns = nil
   frame._msufGroupIdentityCount = nil
   frame._msufGroupIdentityLabels = nil

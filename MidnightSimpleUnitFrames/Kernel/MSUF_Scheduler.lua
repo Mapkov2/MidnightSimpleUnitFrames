@@ -25,9 +25,27 @@ local function ArmNextFrame()
     frame:SetScript("OnUpdate", FlushNextFrame)
 end
 
+-- Each callback runs through secureexecuterange (every client: Blizzard's
+-- CallbackRegistry dispatches with it): an error goes to the error handler and
+-- the next callback still runs in the same frame. One reusable slot per call
+-- site keeps this allocation-free. A harness without it calls directly.
+local RunEach = _G.secureexecuterange
+if type(RunEach) ~= "function" then
+    RunEach = function(list, fn, ...)
+        for i = 1, #list do fn(i, list[i], ...) end
+    end
+end
+local function Call(_, callback) callback() end
+local queuedSlot, delayedSlot = {}, {}
+local function RunIsolated(slot, callback)
+    slot[1] = callback
+    RunEach(slot, Call)
+    slot[1] = nil
+end
+
 -- Keep the driver armed until the queue is drained. Advance/remove the current
--- item before calling it: an error is visible and the next frame can continue
--- at the next item without replaying the failure or stranding pending work.
+-- item before calling it: an error is visible and the queue continues at the
+-- next item without replaying the failure or stranding pending work.
 function FlushNextFrame()
     local head = Scheduler.head or 1
     local snapshotTail = Scheduler.tail or 0
@@ -39,7 +57,7 @@ function FlushNextFrame()
         if key ~= nil then
             local callback = pending[key]
             pending[key] = nil
-            if callback then callback() end
+            if callback then RunIsolated(queuedSlot, callback) end
         end
     end
     local liveTail = Scheduler.tail or 0
@@ -101,12 +119,21 @@ end
 --- SignalAfter plus one table store and allocates nothing. Keys are therefore
 --- meant to be stable identities (a string, a module table, a frame), never a
 --- value minted per call.
+---
+--- Clients without TimedSignalMap (Midnight 12.1.0 live, every Classic client)
+--- use C_Timer.After with one runner closure cached per key, so a reschedule
+--- allocates nothing there either: a superseded timer still fires, and only the
+--- timer that is due (or the last one outstanding) runs the work.
 local delayedPending = Scheduler.delayedPending or {}
 local delayedKeys = Scheduler.delayedKeys or {}
-local delayedGenerations = Scheduler.delayedGenerations or {}
+local delayedRunners = Scheduler.delayedRunners or {}
+local delayedOutstanding = Scheduler.delayedOutstanding or {}
+local delayedDeadline = Scheduler.delayedDeadline or {}
 Scheduler.delayedPending = delayedPending
 Scheduler.delayedKeys = delayedKeys
-Scheduler.delayedGenerations = delayedGenerations
+Scheduler.delayedRunners = delayedRunners
+Scheduler.delayedOutstanding = delayedOutstanding
+Scheduler.delayedDeadline = delayedDeadline
 
 local signalMap = Scheduler.signalMap
 if signalMap == nil then
@@ -121,16 +148,17 @@ end
 
 -- Resolve the supported timer backend once. Missing platform services are a
 -- startup error; a delayed callback must never silently become synchronous.
-local after
+local after, GetTime
 if not signalMap then
     after = assert(_G.C_Timer and _G.C_Timer.After, "MSUF scheduler requires C_Timer.After")
+    GetTime = _G.GetTime
 end
 
 local function RunDelayed(key)
     local fn = delayedPending[key]
     if fn == nil then return end
     delayedPending[key] = nil
-    fn()
+    RunIsolated(delayedSlot, fn)
 end
 
 --- Schedule fn under key after delay seconds. A second call for the same key
@@ -153,14 +181,24 @@ function Scheduler.ScheduleAfter(key, delay, fn)
         return true
     end
 
-    -- Without TimedSignalMap a pending C_Timer.After cannot be replaced, so a
-    -- generation counter retires the stale one instead of cancelling it.
-    local generation = (delayedGenerations[key] or 0) + 1
-    delayedGenerations[key] = generation
-    after(delay, function()
-        if delayedGenerations[key] ~= generation then return end
-        RunDelayed(key)
-    end)
+    -- Without TimedSignalMap a pending C_Timer.After cannot be replaced. The
+    -- runner of a timer that fires before the newest deadline steps aside while
+    -- another timer is still outstanding; the last one always runs the work, so
+    -- a clock disagreement can only delay it, never drop it.
+    local runner = delayedRunners[key]
+    if runner == nil then
+        runner = function()
+            local outstanding = (delayedOutstanding[key] or 1) - 1
+            delayedOutstanding[key] = outstanding
+            if delayedPending[key] == nil then return end
+            if outstanding > 0 and (not GetTime or GetTime() + 0.001 < delayedDeadline[key]) then return end
+            RunDelayed(key)
+        end
+        delayedRunners[key] = runner
+    end
+    delayedOutstanding[key] = (delayedOutstanding[key] or 0) + 1
+    delayedDeadline[key] = GetTime and (GetTime() + delay) or 0
+    after(delay, runner)
     return true
 end
 
@@ -171,8 +209,6 @@ function Scheduler.CancelScheduled(key)
     local signalKey = delayedKeys[key]
     if signalMap and signalKey ~= nil then
         signalMap:CancelSignal(signalKey)
-    else
-        delayedGenerations[key] = (delayedGenerations[key] or 0) + 1
     end
     return had
 end

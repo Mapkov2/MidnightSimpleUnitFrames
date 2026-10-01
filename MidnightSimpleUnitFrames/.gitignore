@@ -5,8 +5,8 @@ luac.out
 # Local scratch output
 *.tmp
 *.bak
-.codex-remote-attachments/
-**/.codex-remote-attachments/
+# Hidden tool and editor folders
+.*/
 
 # OS/editor noise
 .DS_Store

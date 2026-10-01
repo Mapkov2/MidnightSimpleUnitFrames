@@ -3,6 +3,44 @@
 local _, MSUF = ...
 local pendingApply, deferFrame
 
+--- Active profile identity. Profile storage calls BeforeMutation right before
+--- it switches, resets, renames, deletes or imports into the active profile,
+--- which bumps the generation: a snapshot taken before the mutation never
+--- matches afterwards, even when the table and the name stay the same (an
+--- import). Undo history and the Edit Mode session snapshot carry an Identity()
+--- stamp and refuse a restore that IsCurrentIdentity() rejects, so a restore
+--- only ever writes back into the profile it was taken from.
+local profileGeneration = 0
+
+local function MSUF_ProfileIO_Identity()
+    return { name = _G.MSUF_ActiveProfile, db = _G.MSUF_DB, generation = profileGeneration }
+end
+
+local function MSUF_ProfileIO_IsCurrentIdentity(identity)
+    return type(identity) == "table" and identity.generation == profileGeneration
+        and identity.db == _G.MSUF_DB and identity.name == _G.MSUF_ActiveProfile
+end
+
+--- Runs before the active profile table or its contents are replaced: an open
+--- MSUF Edit Mode session ends against the profile it edited.
+local function MSUF_ProfileIO_BeforeActiveProfileMutation()
+    profileGeneration = profileGeneration + 1
+    local em2 = _G.MSUF_EM2
+    local state = type(em2) == "table" and em2.State or nil
+    if type(state) == "table" and type(state.ExitForProfileChange) == "function" then
+        state.ExitForProfileChange()
+    end
+end
+
+--- After the mutation the Menu2 history is rebased onto the new profile. The
+--- history refuses while combat locks configuration; the next apply retries,
+--- and every restore path refuses a snapshot of another profile meanwhile.
+local function MSUF_ProfileIO_RebaseHistory()
+    local menu = MSUF.MSUF2
+    local rebase = type(menu) == "table" and menu.RebaseHistoryForProfileChange or nil
+    if type(rebase) == "function" then rebase() end
+end
+
 local function MSUF_ProfileIO_SafeMSUFScale()
     local g = type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table" and MSUF_DB.general or nil
     local scale = tonumber(g and g.msufUiScale) or 1
@@ -88,7 +126,7 @@ end
 ---   1. Blizzard frame ownership, then the MSUF frame scale.
 ---   2. Small profile-scoped switches (target sounds, NSRT nicknames) and the
 ---      external Edit Mode adapters (Ellesmere, Grid2, Details, Dominos,
----      Danders, Blizzard) plus the stored Blizzard Edit Mode snapshot.
+---      Danders, Blizzard).
 ---   3. Cached-view invalidation: group-frame conf cache, number-format
 ---      upvalues, unit-frame compiled configs. These must precede any rebuild
 ---      or the rebuild reads the previous profile's cached tables.
@@ -102,6 +140,9 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     if MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll) then
         return
     end
+    MSUF_ProfileIO_RebaseHistory()
+    if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
+    if MSUF.ProfileSync then MSUF.ProfileSync.Activate(); MSUF.ProfileSync.RefreshEvents() end
     MSUF.UF.DisableBlizzardFrames()
     if type(_G.MSUF_ApplyCurrentProfileGlobalUiScale) == "function" then
         _G.MSUF_ApplyCurrentProfileGlobalUiScale()
@@ -119,8 +160,9 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     _G.MSUF_DandersEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.dandersEditModeIntegration == false))
     if MSUF.Client.SupportsBlizzardEditMode then
         _G.MSUF_BlizzardEditMode_SetEnabled(not (type(activeGeneral) == "table" and activeGeneral.blizzardEditModeIntegration == false))
-        --- Re-apply the stored layout only when the client provides Edit Mode.
-        _G.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
+        --- The stored Blizzard Edit Mode snapshot is not pushed here: it can be
+        --- older than the live Blizzard layout. Only an import that carries it
+        --- with the profiles-page opt-in on applies it (MSUF_Profiles.lua).
     end
     --- Group-frame config tables are cached by identity. Drop those references
     --- before the runtime rebuild reads the newly active profile root.
@@ -142,7 +184,13 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     _G.MSUF_ApplyPowerBarEmbedLayout_All()
     MSUF_ProfileIO_ApplyCastbarRuntime(reason)
     MSUF_ProfileIO_ApplyExternalFontFollowers(applyAll == true)
+    if MSUF.ProfileFields and MSUF.ProfileFields.ApplyExternal then MSUF.ProfileFields.ApplyExternal(reason) end
     MSUF_ProfileIO_CheckLocaleReload()
 end
 
-MSUF.ProfileRuntime = { Apply = MSUF_ProfileIO_PostProfileRuntimeApply }
+MSUF.ProfileRuntime = {
+    Apply = MSUF_ProfileIO_PostProfileRuntimeApply,
+    BeforeMutation = MSUF_ProfileIO_BeforeActiveProfileMutation,
+    Identity = MSUF_ProfileIO_Identity,
+    IsCurrentIdentity = MSUF_ProfileIO_IsCurrentIdentity,
+}

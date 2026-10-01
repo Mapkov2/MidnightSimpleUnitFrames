@@ -16,4 +16,12 @@
              >
         MSUF_Keybind_TogglePriorityFrame()
     </Binding>
+    <Binding name="MSUF_VARIANT_1" category="Midnight Simple Unitframes (MSUF)">MSUF_ToggleProfileVariant(1)</Binding>
+    <Binding name="MSUF_VARIANT_2" category="Midnight Simple Unitframes (MSUF)">MSUF_ToggleProfileVariant(2)</Binding>
+    <Binding name="MSUF_VARIANT_3" category="Midnight Simple Unitframes (MSUF)">MSUF_ToggleProfileVariant(3)</Binding>
+    <Binding name="MSUF_VARIANT_4" category="Midnight Simple Unitframes (MSUF)">MSUF_ToggleProfileVariant(4)</Binding>
+    <Binding name="MSUF_VARIANT_5" category="Midnight Simple Unitframes (MSUF)">MSUF_ToggleProfileVariant(5)</Binding>
+    <Binding name="MSUF_VARIANT_6" category="Midnight Simple Unitframes (MSUF)">MSUF_ToggleProfileVariant(6)</Binding>
+    <Binding name="MSUF_VARIANT_7" category="Midnight Simple Unitframes (MSUF)">MSUF_ToggleProfileVariant(7)</Binding>
+    <Binding name="MSUF_VARIANT_8" category="Midnight Simple Unitframes (MSUF)">MSUF_ToggleProfileVariant(8)</Binding>
 </Bindings>

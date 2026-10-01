@@ -158,7 +158,7 @@ local function MSUF_Defaults_Stage_FillUnitFrameDefaults(profileDB)
     end
     --- Player castbar: custom channel tick markers (PLAYER ONLY)
     --- Stored under MSUF_DB.player.castbar.* so it does not touch general castbar settings.
-    profileDB.player.castbar = profileDB.player.castbar or {}
+    if type(profileDB.player.castbar) ~= "table" then profileDB.player.castbar = {} end
     do
         local pc = profileDB.player.castbar
         if pc.channelTickUseCustom == nil then pc.channelTickUseCustom = false end
@@ -575,6 +575,16 @@ local function MSUF_Defaults_Stage_SeedUnitPortraitDefaults(profileDB, g, legacy
         PortraitDefault("portraitOffsetX", 0)
         PortraitDefault("portraitOffsetY", 0)
         PortraitDefault("portraitZoom", 100)
+        PortraitDefault("portraitFlip", false)
+        PortraitDefault("portraitInnerShadow", 0)
+        PortraitDefault("portraitDragonScale", 100)
+        PortraitDefault("portraitDragonX", 0)
+        PortraitDefault("portraitDragonY", 0)
+        PortraitDefault("portraitDragonFlip", false)
+        PortraitDefault("portraitDragonClassColor", false)
+        PortraitDefault("portraitDragonInInstances", true)
+        PortraitDefault("portraitDragonLayer", "OVERLAY")
+        PortraitDefault("portraitDragonLevel", 1)
         PortraitDefault("portraitBorderStyle", "NONE")
         PortraitDefault("portraitEdgeSoftness", 0)
         PortraitDefault("portraitBorderThickness", 2)

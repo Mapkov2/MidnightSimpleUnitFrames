@@ -102,11 +102,16 @@ fs._msufFontScaleAnimationMode = mode
 end
 end
 
---- SetFont validates assets/arguments natively. Its return value and immediate
---- readback are not synchronous readiness guarantees on cold Classic clients.
---- Native errors propagate; readiness belongs to the caller and font coordinator.
+--- SetFont validates assets/arguments natively; native errors propagate. On
+--- the Mainline family (Midnight, WoW Forever) an unavailable asset returns
+--- false, so the caller's fallback font runs. On Classic clients the return
+--- value and immediate readback are no synchronous readiness guarantee on a
+--- cold client: success is reported and readiness stays with the caller and
+--- the font coordinator.
+local SETFONT_RESULT_IS_READY = MSUF.Client ~= nil and MSUF.Client.Family == "Mainline"
 local function MSUF_SetFontChecked(fs, path, size, flags)
-    fs:SetFont(path, size, flags or "")
+    local accepted = fs:SetFont(path, size, flags or "")
+    if SETFONT_RESULT_IS_READY then return accepted ~= false end
     return true
 end
 

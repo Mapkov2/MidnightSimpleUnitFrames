@@ -250,7 +250,7 @@ local function MSUF_Defaults_Stage_SeedFontDefaults(profileDB, g)
     if g.nameNpcClassColor == nil then
         g.nameNpcClassColor = false
     end
-    if g.fontColor == nil then
+    if type(g.fontColor) ~= "string" then
         g.fontColor = "white"
     end
     if g.shortenNameMaxChars == nil then
@@ -356,7 +356,7 @@ local function MSUF_Defaults_Stage_SeedHighlightStatusTooltipDefaults(profileDB,
         end
     end
     --- Status indicators (AFK/DND/Dead/Ghost toggles)
-    if g.statusIndicators == nil then
+    if type(g.statusIndicators) ~= "table" then
         g.statusIndicators = {}
     end
 

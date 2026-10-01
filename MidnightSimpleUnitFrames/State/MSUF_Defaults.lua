@@ -27,20 +27,27 @@ local ARENA_AURA_SLOTS = math.max(3, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)
 --- * Keep factory-profile seeding separate from normal default filling so
 ---   existing users are never overwritten by a new shipped baseline.
 
---- MSUF default class-resource colors
---- Keep this tiny and global so:
---- 1) class power fallback colors use the new defaults
---- 2) reset-to-default in the Colors menu also lands on these defaults
---- 3) no runtime overhead in hot paths (one-time table write at load)
+--- MSUF default class-resource colors, kept in MSUF's own table: Blizzard's
+--- PowerBarColor stays exactly as shipped (writing into it recoloured
+--- Blizzard's own bars and tainted entries Blizzard code reads). The power
+--- color resolver reads MSUF._PBCSnap before Blizzard's table, and
+--- MSUF_GetDefaultPowerColor gives the menu and the class power fallback the
+--- same default.
 do
-    local pbc = _G.PowerBarColor
-    if type(pbc) == "table" then
-        pbc.RUNES = pbc.RUNES or {}
-        pbc.RUNES.r, pbc.RUNES.g, pbc.RUNES.b = 128/255, 0, 17/255      --- #800011
-
-        pbc.SOUL_SHARDS = pbc.SOUL_SHARDS or {}
-        pbc.SOUL_SHARDS.r, pbc.SOUL_SHARDS.g, pbc.SOUL_SHARDS.b = 135/255, 136/255, 238/255 --- #8788EE
-    end
+    local defaults = {
+        RUNES = { r = 128/255, g = 0, b = 17/255 },                --- #800011
+        SOUL_SHARDS = { r = 135/255, g = 136/255, b = 238/255 },   --- #8788EE
+    }
+    MSUF._PBCSnap = defaults
+    ExportPublic("MSUF_GetDefaultPowerColor", function(token)
+        local c = defaults[token]
+        if c == nil then
+            local pbc = _G.PowerBarColor
+            c = type(pbc) == "table" and token ~= nil and pbc[token] or nil
+        end
+        if type(c) ~= "table" then return nil end
+        return c.r or c[1], c.g or c[2], c.b or c[3]
+    end)
 end
 
 --- MSUF Defaults / DB initialization
@@ -133,7 +140,7 @@ end
 --- any frame/compiler code sees the DB so downstream modules only need to
 --- understand the current enum set.
 local function MSUF_Defaults_NormalizePortraitRenderValue(v)
-    if v == "CLASS" then return "CLASS" end
+    if v == "CLASS" or v == "3D" then return v end
     return "2D"
 end
 
@@ -817,7 +824,7 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     --- Fresh-install defaults: status indicators (AFK/DND) off by default
     local g = db.general
     if type(g) == 'table' then
-        g.statusIndicators = g.statusIndicators or {}
+        if type(g.statusIndicators) ~= "table" then g.statusIndicators = {} end
         local si = g.statusIndicators
         SetDefault(si, "showAFK", false)
         SetDefault(si, "showDND", false)
@@ -1838,7 +1845,6 @@ local function MSUF_Defaults_CreateFactoryProfile()
         end
     end
     out.general = out.general or {}
-    MSUF_Defaults_MuteForeverHealth(out, true)
     out.general._msufFactoryProfileApplied = true
     out._msufFactoryPlayerDefensivesEnabled_v1 = MSUF_FACTORY_DEFAULT_PLAYER_DEFENSIVES_ENABLED
     return out
@@ -2473,7 +2479,7 @@ local function MSUF_Defaults_Stage_SeedBarColorDefaults(profileDB, g)
     end
     --- Bars: Aggro highlight overlay (Target/Focus/Boss)
     --- Aggro indicator: re-uses the HP outline border as an orange warning when YOU have aggro (target/focus/boss).
-    --- Bars offers "Aggro border" with dropdown default 1 (On), the Assistant
+    --- Bars offers "Aggro border" with dropdown default 1 (On), menu search
     --- manifest declares 1, and group frames default aggroEnabled = true. The
     --- compiled unitframe fallback, however, only consulted the retired
     --- indicator key below - which this very block coerces to "off" for every
@@ -2961,9 +2967,17 @@ local MSUF_Defaults_Stage_SeedGameplayDefaults = sharedShellDefaults.MSUF_Defaul
 --- Auras3 root, group aura factory seeding, custom display/container tables,
 --- Blizzard aura frame split, debuff type border mode, defensive shape, filters.
 local function MSUF_Defaults_Stage_SeedAuraDefaults(profileDB)
-    --- Auras3 defaults (new installs / reset profile)
-    if profileDB.auras3 == nil then
+    --- Auras3 defaults (new installs / reset profile). A value that is not a
+    --- table (a corrupt or hand-edited import) is replaced the same way, and a
+    --- per-unit owner that is not a table is dropped so the runtime never
+    --- indexes a scalar owner.
+    if type(profileDB.auras3) ~= "table" then
         profileDB.auras3 = MSUF_Defaults_CreateCanonicalUnitAuras()
+    end
+    if type(profileDB.auras3.perUnit) == "table" then
+        for unit, owner in pairs(profileDB.auras3.perUnit) do
+            if type(owner) ~= "table" then profileDB.auras3.perUnit[unit] = nil end
+        end
     end
     --- Group Aura defaults use the same explicit native factory as profile
     --- reset. Only truly Aura-empty scopes are initialized here; an old flat
@@ -3053,12 +3067,12 @@ local function MSUF_Defaults_Stage_SeedAuraDefaults(profileDB)
         end
 
         if legacyAuraModel then
-            if a3.shared and a3.shared.filters then
+            if type(a3.shared.filters) == "table" then
                 EnsureImportantSplit(a3.shared.filters)
             end
-            if a3.perUnit then
+            if type(a3.perUnit) == "table" then
                 for _, pu in pairs(a3.perUnit) do
-                    if pu and pu.filters then
+                    if type(pu) == "table" and type(pu.filters) == "table" then
                         EnsureImportantSplit(pu.filters)
                     end
                 end
@@ -3304,6 +3318,15 @@ local function MSUF_Defaults_IsCurrentProfileDB(db)
             return false
         end
     end
+    --- A stamped profile saved by an import that failed half way can still
+    --- carry a scalar aura root or owner; the heavy pass repairs both.
+    local auras = db.auras3
+    if type(auras) ~= "table" then return false end
+    if type(auras.perUnit) == "table" then
+        for _, owner in pairs(auras.perUnit) do
+            if type(owner) ~= "table" then return false end
+        end
+    end
     local g = db.general
     if type(g.fontKey) ~= "string" or g.fontKey == ""
         or db.shortenNames == nil
@@ -3323,8 +3346,8 @@ end
 --- allowPersistedFastPath is intentionally reserved for profile initialization
 --- and private export copies. Normal profile switches retain the old behavior
 --- of repairing the newly selected table even when its revision is current.
---- temporaryProfile keeps export materialization from evicting the real active
---- profile from the session-local last-heavy-run cache.
+--- A private copy (export, import candidate) goes through
+--- MSUF_NormalizeProfileDefaults, which never touches that session cache.
 local function MSUF_NormalizeProfileDefaults(profile, force, allowPersistedFastPath)
     assert(type(profile) == "table", "MSUF profile must be a table")
     MSUF_Defaults_PruneRetiredClassPowerTextFields(profile)
@@ -3352,7 +3375,6 @@ local function MSUF_EnsureDB(force, allowPersistedFastPath)
     return profile
 end
 ExportPublic("MSUF_EnsureDB", MSUF_EnsureDB)
-_G.EnsureDB = MSUF_EnsureDB
 --- Optional exports for other modules
 MSUF.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile
 MSUF.MSUF_EnsureDB_Heavy = MSUF_EnsureDB_Heavy

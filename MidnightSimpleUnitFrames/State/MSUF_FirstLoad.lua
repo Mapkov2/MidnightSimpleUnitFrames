@@ -179,6 +179,16 @@ if retiredNames then
     if retiredNames[globalDB.global.defaultProfileForNewChars] then
         globalDB.global.defaultProfileForNewChars = nil
     end
+    -- An archived profile is no sync member any more; a stale name would
+    -- later claim a module a new profile of that name joins.
+    local syncGroups = globalDB.global.profileSyncGroups
+    if type(syncGroups) == "table" then
+        for _, group in pairs(syncGroups) do
+            if type(group) == "table" and type(group.members) == "table" then
+                for name in pairs(retiredNames) do group.members[name] = nil end
+            end
+        end
+    end
 end
 ProfilePolicy.ArchivedThisLoad = archivedCount
 
@@ -253,7 +263,7 @@ MSUF.FirstLoad6 = FirstLoad
 
 -- Session-only guard on top of the persisted status. It keeps the scene hidden
 -- for the rest of this session even if the persisted status is restored to
--- "pending" (for example by an Assistant undo of a first-load action).
+-- "pending" (for example by undo of a first-load action).
 FirstLoad.deferredThisSession = false
 
 -- Some profile/bootstrap paths can repair or replace the SavedVariables root

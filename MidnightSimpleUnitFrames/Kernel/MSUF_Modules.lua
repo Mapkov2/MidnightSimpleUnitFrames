@@ -4,7 +4,7 @@
 --- Modules register Enable/Disable/IsEnabled hooks here. The registry owns
 --- ordering, late registration and the idempotent enable/disable pass
 --- (MSUF_ApplyModules), which State/MSUF_Profiles.lua runs after every profile
---- apply and Assistant actions run after ownership changes. RefreshSettings,
+--- apply and menu actions run after ownership changes. RefreshSettings,
 --- Shutdown, GetModule, ToggleModule and ListModules are exported companions
 --- without in-addon callers. There is no Init phase: a module that needs login
 --- work wires it at file load (see Features/Versioning). Individual modules
@@ -93,6 +93,22 @@ local function GetDesiredEnabled(module)
     return true
 end
 
+--- A module's state flips only once its Enable/Disable returned, so one that
+--- raises is retried at the next apply instead of being recorded as done.
+--- Each switch runs through secureexecuterange (every client): the error goes
+--- to the error handler and the remaining modules still apply.
+local RunEach = _G.secureexecuterange
+if type(RunEach) ~= "function" then
+    RunEach = function(list, fn) for i = 1, #list do fn(i, list[i]) end end
+end
+local switchSlot = {}
+local function SwitchModule(_, m)
+    local enable = m.__msufSwitchTo == true
+    local fn = enable and m.Enable or m.Disable
+    if type(fn) == "function" then fn(m) end
+    m.__msufEnabled = enable
+end
+
 --- Public: Apply desired enabled/disabled states to all modules.
 --- Apply is idempotent: it only calls Enable/Disable when the desired state
 --- differs from the current module state.
@@ -101,22 +117,20 @@ function MSUF.MSUF_ApplyModules()
 
     for i = 1, #MSUF.MSUF_Modules do
         local m = MSUF.MSUF_Modules[i]
-        if m then
+        if m and m.__msufSwitchTo == nil then
             local desired = GetDesiredEnabled(m)
             --- MSUF_ToggleModule override
             if m.__msufDebugOff then desired = false end
             local current = not not m.__msufEnabled
 
-            if desired and not current then
-                m.__msufEnabled = true
-                if type(m.Enable) == "function" then
-                    m:Enable()
-                end
-            elseif (not desired) and current then
-                m.__msufEnabled = false
-                if type(m.Disable) == "function" then
-                    m:Disable()
-                end
+            if desired ~= current then
+                -- The in-progress marker keeps a nested apply from switching
+                -- the same module twice.
+                m.__msufSwitchTo = desired
+                switchSlot[1] = m
+                RunEach(switchSlot, SwitchModule)
+                switchSlot[1] = nil
+                m.__msufSwitchTo = nil
             end
         end
     end

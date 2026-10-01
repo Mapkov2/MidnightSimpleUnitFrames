@@ -116,12 +116,14 @@ local function MSUF_ProfileIO_ParseTableLiteral(str)
         return nil, "unterminated string"
     end
     local function ParseNumber()
-        local rest = state.text:sub(state.pos)
-        local token = rest:match("^[+-]?0[xX][%da-fA-F]+")
-            or rest:match("^[+-]?%d+%.?%d*[eE][+-]?%d+")
-            or rest:match("^[+-]?%d*%.%d+[eE][+-]?%d+")
-            or rest:match("^[+-]?%d+%.?%d*")
-            or rest:match("^[+-]?%d*%.%d+")
+        --- Anchored at the cursor. Matching on a copy of the remaining input
+        --- made every number cost the whole tail (quadratic on big strings).
+        local text, pos = state.text, state.pos
+        local token = text:match("^[+-]?0[xX][%da-fA-F]+", pos)
+            or text:match("^[+-]?%d+%.?%d*[eE][+-]?%d+", pos)
+            or text:match("^[+-]?%d*%.%d+[eE][+-]?%d+", pos)
+            or text:match("^[+-]?%d+%.?%d*", pos)
+            or text:match("^[+-]?%d*%.%d+", pos)
         if not token or token == "" or token == "+" or token == "-" then return nil, "invalid number" end
         local value = tonumber(token)
         if not value or value ~= value or value == math.huge or value == -math.huge then return nil, "invalid number" end
@@ -336,8 +338,9 @@ do
         return decode_lsb(), decode_msb()
     end
     local TryDeserialize
-    -- Legacy format readers may reject bytes by returning nil.
-    -- Exceptions propagate with their original stack to the client.
+    -- Legacy format readers may reject bytes by returning nil. The native
+    -- decompressor and base64 decoder report rejection by returning nothing;
+    -- native CBOR raises and goes through the Kernel boundary below.
 
     local function TryBlizzardDecompress(E, compressed)
         if type(compressed) ~= "string" or #compressed > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
@@ -418,9 +421,9 @@ do
             return nil
         end
         if type(E.DeserializeCBOR) ~= "function" then return nil end
-        local tbl = E.DeserializeCBOR(payload)
-        if type(tbl) == "table" then return tbl end
-        return nil
+        --- Native CBOR rejects malformed bytes by raising (Forever reports
+        --- "unknown cbor value"); the Kernel boundary turns that into nil.
+        return MSUF.TryDeserializeNativeCBOR(E, payload)
     end
 
 

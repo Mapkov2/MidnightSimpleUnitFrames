@@ -37,6 +37,10 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
     if g.castbarShowChannelTicks == nil then
         g.castbarShowChannelTicks = false
     end
+    if g.castbarShowLatencyText == nil then g.castbarShowLatencyText = false end
+    if g.castbarAccentLastTick == nil then g.castbarAccentLastTick = false end
+    if g.kickReadyTimeMarker == nil then g.kickReadyTimeMarker = false end
+    if g.kickReadyTimeSegment == nil then g.kickReadyTimeSegment = false end
     --- Opposite fill-direction for enemy castbar
     if g.castbarOpositeDirectionTarget == nil then
         g.castbarOpositeDirectionTarget = false
@@ -56,6 +60,14 @@ local function MSUF_Defaults_Stage_SeedCastbarCoreDefaults(profileDB, g)
     if g.showGCDBar == nil then
         g.showGCDBar = false
     end
+    if g.gcdBarDetached == nil then g.gcdBarDetached = false end
+    if g.gcdBarIdle == nil then g.gcdBarIdle = false end
+    if g.gcdBarCombatOnly == nil then g.gcdBarCombatOnly = false end
+    if g.gcdBarWidth == nil then g.gcdBarWidth = 180 end
+    if g.gcdBarHeight == nil then g.gcdBarHeight = 12 end
+    if g.gcdBarX == nil then g.gcdBarX = 0 end
+    if g.gcdBarY == nil then g.gcdBarY = -180 end
+    if g.gcdBarOpacity == nil then g.gcdBarOpacity = 100 end
     if g.showGCDBarTime == nil then
         g.showGCDBarTime = true
     end

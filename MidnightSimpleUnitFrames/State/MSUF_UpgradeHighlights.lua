@@ -228,16 +228,6 @@ local DATA = {
                     action = "Start Edit Mode",
                 },
                 {
-                    id = "assistant",
-                    icon = "home",
-                    pageKey = "home",
-                    title = "The optional local MSUF Assistant",
-                    summary = "A new on-demand Assistant can find exact settings, explain controls and prepare reversible changes.",
-                    impact = "You can ask for a setting in plain language while the Assistant remains inactive when you do not use it.",
-                    missed = "the local Assistant for exact settings, explanations and reversible changes",
-                    action = "Try the Assistant",
-                },
-                {
                     id = "menu_accent",
                     icon = "opt_misc",
                     pageKey = "opt_misc",

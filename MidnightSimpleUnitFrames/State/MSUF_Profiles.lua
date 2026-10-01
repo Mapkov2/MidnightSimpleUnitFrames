@@ -41,8 +41,8 @@ end
 --- reset and import below routes its schema repair through it, so a missing
 --- export must not degrade into profiles that silently skip normalization.
 local MSUF_ENSURE_DB = MSUF.Require("MSUF_EnsureDB", "State/MSUF_Profiles.lua")
-local function MSUF_ProfileIO_RunEnsureDB(force, allowPersistedFastPath, temporaryProfile)
-    MSUF_ENSURE_DB(force == true, allowPersistedFastPath == true, temporaryProfile == true)
+local function MSUF_ProfileIO_RunEnsureDB(force, allowPersistedFastPath)
+    MSUF_ENSURE_DB(force == true, allowPersistedFastPath == true)
     return true
 end
 
@@ -65,7 +65,25 @@ function MSUF.ProfileIOCompleteFirstLoadImport()
     return completed == true
 end
 local ApplyProfileRuntime = MSUF.ProfileRuntime.Apply
---- Profile lifecycle API. These globals are used by Menu2, assistant actions,
+local Variants, ProfileSync = MSUF.ProfileVariants, MSUF.ProfileSync
+local function PrepareProfileMutation(rebindOnly)
+    local beforeMutation = MSUF.ProfileRuntime.BeforeMutation
+    if beforeMutation and not rebindOnly then beforeMutation() end
+    if Variants then Variants.Restore() end
+end
+local function BeforeProfileSwitch()
+    --- Sync rides on top of a profile change: a flush that cannot run is
+    --- reported and the change goes ahead. The profile itself is never at
+    --- risk; only the propagation to the other members is skipped.
+    if ProfileSync then
+        local ok,why=ProfileSync.Flush()
+        if not ok then ProfileSync.Report("Profile sync skipped (%s).", why) end
+    end
+    PrepareProfileMutation()
+    if Variants then Variants.SetManual(nil) end
+    return true
+end
+--- Profile lifecycle API. These globals are used by Menu2, menu actions,
 --- slash handlers, and legacy callers, so the public surface stays global even
 --- though the implementation is isolated in this State module.
 function MSUF_GetCharKey()
@@ -181,8 +199,11 @@ local function MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
 end
 local MSUF_ProfileIO_TranslateProfileToCurrent
 local MSUF_ProfileIO_TranslateProfilesToCurrent
-local MSUF_ProfileIO_NotifyAssistantProfileEpochChanged
+local MSUF_ProfileIO_NotifySuiteProfileChanged
 function MSUF_InitProfiles()
+    if Variants and Variants.IsRecording() then return end
+    -- A rebind to a different profile passes BeforeProfileSwitch below.
+    PrepareProfileMutation(true)
     local previousActive = type(MSUF_ActiveProfile) == "string" and MSUF_ActiveProfile or nil
     local previousDB = type(MSUF_DB) == "table" and MSUF_DB or nil
     local hadEstablishedOwner = previousActive ~= nil and previousActive ~= "" and previousDB ~= nil
@@ -217,6 +238,10 @@ function MSUF_InitProfiles()
         local fallback = MSUF_ProfileIO_FallbackProfileTable(profiles)
         profiles[active] = CopyTable(fallback or {})
     end
+    if hadEstablishedOwner and (previousActive~=active or previousDB~=profiles[active]) then
+        local ok,why=BeforeProfileSwitch()
+        if not ok then return false,why end
+    end
     if MSUF_ProfileIO_TranslateProfilesToCurrent then
         MSUF_ProfileIO_TranslateProfilesToCurrent(profiles, "init")
     end
@@ -233,16 +258,19 @@ function MSUF_InitProfiles()
     --- avoiding a second complete pass when this exact profile was already
     --- repaired earlier in the startup chain.
     MSUF_ProfileIO_RunEnsureDB(false, true)
+    if Variants then Variants.ResolveCurrent() end
+    if ProfileSync then ProfileSync.Activate(); ProfileSync.RefreshEvents() end
     if hadEstablishedOwner and (previousActive ~= active or previousDB ~= MSUF_DB) then
         ApplyProfileRuntime("PROFILE_INIT_REBIND", false)
-        MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_INIT_REBIND", active, MSUF_DB)
+        MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_INIT_REBIND", active)
     end
  end
 local function MSUF_ProfileIO_NotifySuiteLifecycle(kind, source, target)
     local suite = rawget(_G, "MSUFSuite")
     if type(suite) == "table" and type(suite.OnMSUFProfileLifecycle) == "function" then
-        suite.OnMSUFProfileLifecycle(kind, source, target)
+        return suite.OnMSUFProfileLifecycle(kind, source, target)
     end
+    return true
 end
 function MSUF_CreateProfile(name)
     if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
@@ -270,16 +298,9 @@ function MSUF_CreateProfile(name)
     print("|cff00ff00MSUF:|r Created new profile '"..name.."'.")
     return true
  end
-MSUF_ProfileIO_NotifyAssistantProfileEpochChanged = function(reason, name, db)
-    -- A profile epoch also changes when reset/import keeps the active name or
-    -- table identity. Publish that cold-path scalar before the combat gate so
-    -- the Assistant can detect the boundary lazily on its next safe menu use.
-    local epoch = (tonumber(rawget(_G, "MSUF_ProfileOwnerEpoch")) or 0) + 1
-    ExportPublic("MSUF_ProfileOwnerEpoch", epoch)
-
+MSUF_ProfileIO_NotifySuiteProfileChanged = function(reason, name)
     -- Profile mutations may cross combat for the core's existing deferred
-    -- runtime-apply path. Do not even resolve the optional LoD Assistant there;
-    -- its next safe DB access owns lazy cleanup through the epoch above.
+    -- runtime-apply path. Suite lifecycle notifications remain out of combat.
     if rawget(_G, "MSUF_InCombat") == true
         or (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true)
         or (type(_G.UnitAffectingCombat) == "function" and _G.UnitAffectingCombat("player") == true)
@@ -290,20 +311,17 @@ MSUF_ProfileIO_NotifyAssistantProfileEpochChanged = function(reason, name, db)
     if type(suite) == "table" and type(suite.OnMSUFProfileChanged) == "function" then
         suite.OnMSUFProfileChanged(name, reason)
     end
-    local assistant = type(MSUF) == "table" and rawget(MSUF, "Assistant") or nil
-    local callback = type(assistant) == "table" and rawget(assistant, "OnProfileEpochChanged") or nil
-    if type(callback) ~= "function" and type(assistant) == "table" then
-        callback = rawget(assistant, "OnProfileOwnerSwitched")
-    end
-    if type(callback) ~= "function" then return false end
-    return true, callback(name, db, epoch, reason)
+    return true
 end
 function MSUF_SwitchProfile(name)
+    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     if not name or type(profiles[name]) ~= "table" then
         print("|cffff0000MSUF:|r Unknown profile: "..tostring(name))
         return false, "unknown profile"
     end
+    local prepared,why=BeforeProfileSwitch()
+    if not prepared then return false,why end
     local charKey = MSUF_GetCharKey()
     local char = type(chars[charKey]) == "table" and chars[charKey] or {}
     chars[charKey] = char
@@ -330,15 +348,33 @@ function MSUF_SwitchProfile(name)
     --- second broad default-fill pass while stale/malformed tables still repair.
     MSUF_ProfileIO_RunEnsureDB(false, true)
     ApplyProfileRuntime("PROFILE_SWITCH", false)
-    MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_SWITCH", name, MSUF_DB)
+    MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_SWITCH", name)
     print("|cff00ff00MSUF:|r Switched to profile '"..name.."'.")
     return true
  end
 function MSUF_ResetProfile(name)
+    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     name = name or MSUF_ActiveProfile
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     if not name or not profiles[name] then return false, "unknown profile" end
-    profiles[name] = {}
+    if name == MSUF_ActiveProfile then local ok,why=BeforeProfileSwitch(); if not ok then return false,why end end
+    if name ~= MSUF_ActiveProfile then
+        --- A stored profile needs its schema stamp (an unstamped table is
+        --- archived as pre-6.0 at the next login), so it is seeded the way
+        --- MSUF_CreateProfile seeds one; the active one is seeded by EnsureDB.
+        local createFactoryProfile = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile)
+            or _G.MSUF_CreateFactoryDefaultProfile
+        local profile = type(createFactoryProfile) == "function" and createFactoryProfile() or nil
+        if type(profile) ~= "table" then
+            print("|cffff0000MSUF:|r Factory defaults are not available; profile was not reset.")
+            return false, "factory defaults unavailable"
+        end
+        profiles[name] = profile
+        MSUF_ProfileIO_TranslateProfileToCurrent(profile, { source = "profile_reset", trustNormalizationMarker = true })
+        MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
+    else
+        profiles[name] = {}
+    end
     if name == MSUF_ActiveProfile then
         MSUF_DB = profiles[name]
         _G.MSUF_GF_InvalidateConfCache()
@@ -347,14 +383,18 @@ function MSUF_ResetProfile(name)
             _G.MSUF_UFCore_InvalidateSettingsCache()
         end
         MSUF_ProfileIO_RunEnsureDB(true)
+        --- The reset belongs to this profile only: sync members keep their
+        --- settings and receive just the edits made after it.
+        if ProfileSync then ProfileSync.Rebase() end
         ApplyProfileRuntime("PROFILE_RESET", false)
-        MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_RESET", name, MSUF_DB)
+        MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_RESET", name)
     end
     MSUF_ProfileIO_NotifySuiteLifecycle("reset", name)
     print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
     return true
  end
 function MSUF_DeleteProfile(name)
+    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     name = name or MSUF_ActiveProfile
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     if not name or not profiles[name] then return false, "unknown profile" end
@@ -382,6 +422,7 @@ function MSUF_DeleteProfile(name)
         print("|cffff0000MSUF:|r Cannot delete the last remaining profile.")
         return false, "cannot delete last profile"
     end
+    if MSUF_ActiveProfile == name then local ok,why=BeforeProfileSwitch(); if not ok then return false,why end end
     if chars then
         for _, char in pairs(chars) do
             if type(char) == "table" then
@@ -402,6 +443,7 @@ function MSUF_DeleteProfile(name)
     if globalMeta.defaultProfileForNewChars == name then
         globalMeta.defaultProfileForNewChars = nil
     end
+    if ProfileSync then ProfileSync.RenameOrDelete(name) end
     profiles[name] = nil
     if MSUF_ActiveProfile == name then
         MSUF_SwitchProfile(fallbackName)
@@ -411,6 +453,7 @@ function MSUF_DeleteProfile(name)
     return true
  end
 function MSUF_CopyProfile(sourceName, destName)
+    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     if not sourceName or sourceName == "" then
         print("|cffff0000MSUF:|r No source profile specified.")
         return false
@@ -429,7 +472,12 @@ function MSUF_CopyProfile(sourceName, destName)
         print("|cffff0000MSUF:|r Profile '"..destName.."' already exists.")
         return false
     end
-    profiles[destName] = CopyTable(src)
+    local copy,why
+    if Variants then copy,why=Variants.BaseSnapshot(src,true) else copy=CopyTable(src) end
+    if not copy then return false,why end
+    if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(copy) end
+    copy.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
+    profiles[destName] = copy
     if MSUF_ProfileIO_TranslateProfileToCurrent then
         MSUF_ProfileIO_TranslateProfileToCurrent(profiles[destName], {
             source = "profile_copy",
@@ -437,11 +485,13 @@ function MSUF_CopyProfile(sourceName, destName)
         })
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[destName])
-    MSUF_ProfileIO_NotifySuiteLifecycle("copy", sourceName, destName)
+    local ok,reason=MSUF_ProfileIO_NotifySuiteLifecycle("copy", sourceName, destName)
+    if ok==false then profiles[destName]=nil; return false,reason end
     print("|cff00ff00MSUF:|r Copied '"..sourceName.."' -> '"..destName.."'.")
     return true
 end
 function MSUF_RenameProfile(sourceName, destName)
+    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     if not sourceName or sourceName == "" then
         print("|cffff0000MSUF:|r No source profile specified.")
         return false
@@ -470,6 +520,8 @@ function MSUF_RenameProfile(sourceName, destName)
         return false
     end
 
+    if MSUF_ActiveProfile == sourceName then local ok,why=BeforeProfileSwitch(); if not ok then return false,why end end
+    if ProfileSync then ProfileSync.RenameOrDelete(sourceName,destName) end
     profiles[destName] = src
     profiles[sourceName] = nil
     if chars then
@@ -2278,9 +2330,18 @@ end
 local function MSUF_IsUnitframeGeneralKey(key)
     return (MSUF_IsUnitframeAlphaKey(key) or (not MSUF_IsColorKey(key)) or MSUF_IsAuraGeneralKey(key)) and (not MSUF_IsCastbarKey(key))
 end
-local function MSUF_CopyGeneralSubset(filterFn)
+MSUF.ProfileGeneralOwner = function(key)
+    local lower=key:lower()
+    if lower:find("menu",1,true) or lower:find("slash",1,true) or lower:find("integration",1,true)
+        or lower:find("blizzardeditmode",1,true) or key=="UIScale" or key=="locale" then return end
+    if MSUF_IsAuraGeneralKey(key) then return "auras" end
+    if MSUF_IsCastbarKey(key) then return "castbars" end
+    if MSUF_IsColorKey(key) then return "colors" end
+    return "unitframes"
+end
+local function MSUF_CopyGeneralSubset(filterFn, profile)
     local out = {}
-    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local g = ((profile or MSUF_DB) and (profile or MSUF_DB).general) or {}
     for k, v in pairs(g) do
         if filterFn(k, v) then
             out[k] = MSUF_DeepCopy(v)
@@ -2288,29 +2349,24 @@ local function MSUF_CopyGeneralSubset(filterFn)
     end
      return out
 end
-local function MSUF_WipeGeneralSubset(filterFn)
-    if type(MSUF_DB) ~= "table" then
-        MSUF_DB = {}
+--- db is the profile table an import stages into (never nil).
+local function MSUF_WipeGeneralSubset(filterFn, db)
+    if type(db.general) ~= "table" then
+        db.general = {}
     end
-    if type(MSUF_DB.general) ~= "table" then
-        MSUF_DB.general = {}
-    end
-    local g = MSUF_DB.general
+    local g = db.general
     for k in pairs(g) do
         if filterFn(k, g[k]) then
             g[k] = nil
         end
     end
  end
-local function MSUF_ApplyGeneralSubset(tbl)
+local function MSUF_ApplyGeneralSubset(tbl, db)
     if not tbl then  return end
-    if type(MSUF_DB) ~= "table" then
-        MSUF_DB = {}
+    if type(db.general) ~= "table" then
+        db.general = {}
     end
-    if type(MSUF_DB.general) ~= "table" then
-        MSUF_DB.general = {}
-    end
-    local g = MSUF_DB.general
+    local g = db.general
     for k, v in pairs(tbl) do
         g[k] = MSUF_DeepCopy(v)
     end
@@ -2369,6 +2425,8 @@ local function MSUF_ProfileIO_EnsureCompleteProfileDB()
         end
     end
 end
+--- Variant recording takes its base only after this complete pass.
+MSUF.ProfileIOEnsureCompleteProfileDB = MSUF_ProfileIO_EnsureCompleteProfileDB
 
 --- Export normalization does not try to make the live DB pretty. It creates a
 --- clean payload copy, translates old aliases, and strips runtime/cache-only
@@ -2469,6 +2527,7 @@ local MSUF_PROFILEIO_WAGO_SCHEMA = 1
 local MSUF_PROFILEIO_WAGO_FULL_KEY = "msuf6"
 local MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS = {
     arena = true,
+    profileVariants = true,
     auras2 = true,
     bars = true,
     boss = true,
@@ -2749,7 +2808,8 @@ local function MSUF_ProfileIO_SelectSupportedProfile(decoded)
     return nil
 end
 
-local function MSUF_CopyGroupFramePayload()
+local function MSUF_CopyGroupFramePayload(profile)
+    local MSUF_DB = profile or _G.MSUF_DB
     local payload = {}
     if type(MSUF_DB) ~= "table" then
         return payload
@@ -2777,6 +2837,9 @@ end
 --- are session-transient by design — the user decides per session.
 local MSUF_ProfileIO_ExportBlizzardEM = false
 local MSUF_ProfileIO_ImportBlizzardEM = false
+local MSUF_ProfileIO_ExportVariants, MSUF_ProfileIO_ImportVariants = true, true
+ExportPublic("MSUF_Profiles_SetExportVariants", function(value) MSUF_ProfileIO_ExportVariants=value==true end)
+ExportPublic("MSUF_Profiles_SetImportVariants", function(value) MSUF_ProfileIO_ImportVariants=value==true end)
 ExportPublic("MSUF_Profiles_SetExportBlizzardEditMode", function(value)
     MSUF_ProfileIO_ExportBlizzardEM = value == true
 end)
@@ -2942,7 +3005,11 @@ function UnitSelection.Commit(payload, selected, db)
 end
 
 local function MSUF_SnapshotForKind(kind, selectedUnits)
+    if Variants and Variants.IsRecording() then return nil end
     MSUF_ProfileIO_EnsureCompleteProfileDB()
+    local MSUF_DB
+    if Variants then MSUF_DB=Variants.BaseSnapshot(_G.MSUF_DB,true) else MSUF_DB=_G.MSUF_DB end
+    if type(MSUF_DB)~="table" then return nil end
     local payload = {}
     if kind == "unitselection" then
         if type(selectedUnits) ~= "table" then return nil end
@@ -2959,7 +3026,7 @@ local function MSUF_SnapshotForKind(kind, selectedUnits)
         --- Everything EXCEPT: gameplay, colors, castbars
         for k, v in pairs(MSUF_DB or {}) do
             if k == "general" then
-                payload.general = MSUF_CopyGeneralSubset(MSUF_IsUnitframeGeneralKey)
+                payload.general = MSUF_CopyGeneralSubset(MSUF_IsUnitframeGeneralKey, MSUF_DB)
             elseif k == "classColors" or k == "npcColors" or k == "gameplay" then
                 --- exclude
             else
@@ -2970,23 +3037,26 @@ local function MSUF_SnapshotForKind(kind, selectedUnits)
     elseif kind == "castbar" then
         payload.general = MSUF_CopyGeneralSubset(function(key)
             return MSUF_IsCastbarKey(key) and (not MSUF_IsColorKey(key))
-        end)
+        end, MSUF_DB)
     elseif kind == "colors" then
         payload.general = MSUF_CopyGeneralSubset(function(key)
             return MSUF_IsColorKey(key)
-        end)
+        end, MSUF_DB)
         payload.classColors = MSUF_DeepCopy((MSUF_DB and MSUF_DB.classColors) or {})
         payload.npcColors   = MSUF_DeepCopy((MSUF_DB and MSUF_DB.npcColors) or {})
     elseif kind == "gameplay" then
         payload.gameplay = MSUF_DeepCopy((MSUF_DB and MSUF_DB.gameplay) or {})
     elseif kind == "groupframe" or kind == "groupframes" then
-        payload = MSUF_CopyGroupFramePayload()
+        payload = MSUF_CopyGroupFramePayload(MSUF_DB)
     elseif kind == "all" then
         payload = MSUF_DeepCopy(MSUF_DB or {})
         MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload)
     else
          return nil
     end
+    if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(payload) end
+    payload.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
+    if kind~="all" or not MSUF_ProfileIO_ExportVariants then payload.profileVariants=nil end
     if type(payload.general) == "table" then
         payload.general.blizzardEditModeSnapshot = nil
     end
@@ -3215,12 +3285,13 @@ local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
         end
     end
 end
---- Import transaction, step 1 of 2: decode, select, validate and stage.
+--- Import transaction, step 1 of 3: decode, select, validate and stage.
 --- Runs before anything is written. It performs no SavedVariables writes, no
 --- ExportPublic and no prints, so every rejection (including a truncated
 --- string pasted into new-profile import) leaves the stored profiles
---- untouched. A native decoder that raises propagates from here, which is
---- still ahead of every write. mode is "active" (current or new profile) or
+--- untouched. The codec returns nil for bytes the native decoders reject
+--- (native CBOR raises into the Kernel boundary), so a garbled string is an
+--- ordinary rejection here. mode is "active" (current or new profile) or
 --- "external" (MSUF_ImportExternal). Returns a plan table, or nil plus reason
 --- plus (active mode) the exact chat line the pre-transaction entry points
 --- printed for that rejection. External reasons keep their old strings too.
@@ -3295,6 +3366,16 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     end
     plan.kind = kind
     local payload = plan.payload
+    if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(payload) end
+    payload.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
+    --- Variants that will not be imported are dropped before validation, so
+    --- a string is never rejected for data the import leaves behind.
+    if kind~="all" or not MSUF_ProfileIO_ImportVariants then payload.profileVariants=nil end
+    if payload.profileVariants~=nil and Variants then
+        local clean,variantError=Variants.ValidateForProfile(payload,payload.profileVariants)
+        if not clean then return nil,variantError,"|cffff0000MSUF:|r Import failed: "..variantError end
+        payload.profileVariants=clean
+    end
     if kind == "unitselection" then
         local selectedUnits, selectionError = UnitSelection.Validate(payload)
         if not selectedUnits then
@@ -3360,36 +3441,171 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     MSUF_ProfileIO_CollectProfileMediaWarnings(payload)
     return plan
 end
---- Import transaction, step 2 of 2: write an accepted plan into the active
---- profile. Everything that can reject a string already ran in
---- MSUF_ProfileIO_PrepareImport, so this step has no failure return.
-local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
-    local kind, payload = plan.kind, plan.payload
-    if not plan.isSnapshot then
-        MSUF_ProfileIO_RunEnsureDB()
-        --- Keep profile table reference stable; wipe + copy.
-        if type(MSUF_DB) ~= "table" then
-            MSUF_DB = {}
+--- Import transaction, step 2 of 3: stage the complete profile the commit
+--- will install and run every normalizer over it: the forced defaults pass,
+--- the unit alpha keys, the group-frame repair and the aura model. Nothing
+--- live is written here. A payload a normalizer cannot digest raises while
+--- every stored profile is still untouched, so a malformed string can never
+--- leave a half-written profile behind that fails again at every login.
+--- base is the target profile's current content: the active profile's base
+--- snapshot, a new profile's factory table, or the stored external target.
+--- Partial kinds merge into a private copy of it; full kinds only take its
+--- local variants while variant import is off.
+local ImportTx = {}
+function ImportTx.Merge(kind, payload, db)
+    if kind == "unitframe" then
+        --- Wipe & replace the same general-key set that Unitframes export.
+        MSUF_WipeGeneralSubset(MSUF_IsUnitframeGeneralKey, db)
+        if type(payload.general) == "table" then
+            MSUF_ApplyGeneralSubset(payload.general, db)
         end
-        MSUF_WipeTable(MSUF_DB)
         for k, v in pairs(payload) do
-            MSUF_DB[k] = v
+            if k ~= "general" then
+                if type(v) == "table" then
+                    if type(db[k]) ~= "table" then
+                        db[k] = {}
+                    end
+                    MSUF_WipeTable(db[k])
+                    for kk, vv in pairs(v) do
+                        db[k][kk] = MSUF_DeepCopy(vv)
+                    end
+                else
+                    db[k] = v
+                end
+            end
         end
-        if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
-            MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
+    elseif kind == "groupframe" then
+        for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid", "gf_priority" }) do
+            local value = payload[key]
+            if type(value) == "table" then
+                if type(db[key]) ~= "table" then
+                    db[key] = {}
+                end
+                MSUF_WipeTable(db[key])
+                for kk, vv in pairs(value) do
+                    db[key][kk] = MSUF_DeepCopy(vv)
+                end
+            elseif value ~= nil then
+                db[key] = MSUF_DeepCopy(value)
+            end
         end
-        MSUF_ProfileIO_RunEnsureDB(true)
-        MSUF.ProfileIOCompleteFirstLoadImport()
-        MSUF_ProfileIO_EnsureUnitframeAlphaDB()
-        MSUF_ProfileIO_PostImportApply_Auras("all", payload)
-        MSUF_ProfileIO_PostImportApply_GroupFrames("all", payload)
-        MSUF_ProfileIO_PostImportApply_UnitAlphas("all", payload)
-        ApplyProfileRuntime("PROFILE_IMPORT", true)
-        MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
-        return true
+    elseif kind == "castbar" then
+        MSUF_WipeGeneralSubset(function(key)
+            return MSUF_IsCastbarKey(key) and (not MSUF_IsColorKey(key))
+        end, db)
+        if type(payload.general) == "table" then
+            MSUF_ApplyGeneralSubset(payload.general, db)
+        end
+    elseif kind == "colors" then
+        MSUF_WipeGeneralSubset(function(key)
+            return MSUF_IsColorKey(key)
+        end, db)
+        if type(payload.general) == "table" then
+            MSUF_ApplyGeneralSubset(payload.general, db)
+        end
+        if type(db.classColors) ~= "table" then db.classColors = {} end
+        if type(db.npcColors) ~= "table" then db.npcColors = {} end
+        MSUF_WipeTable(db.classColors)
+        MSUF_WipeTable(db.npcColors)
+        if type(payload.classColors) == "table" then
+            for kk, vv in pairs(payload.classColors) do
+                db.classColors[kk] = MSUF_DeepCopy(vv)
+            end
+        end
+        if type(payload.npcColors) == "table" then
+            for kk, vv in pairs(payload.npcColors) do
+                db.npcColors[kk] = MSUF_DeepCopy(vv)
+            end
+        end
+    elseif kind == "gameplay" then
+        if type(db.gameplay) ~= "table" then db.gameplay = {} end
+        MSUF_WipeTable(db.gameplay)
+        if type(payload.gameplay) == "table" then
+            for kk, vv in pairs(payload.gameplay) do
+                db.gameplay[kk] = MSUF_DeepCopy(vv)
+            end
+        end
     end
-    if kind ~= "unitselection" then MSUF_ProfileIO_RunEnsureDB() end
-
+end
+function ImportTx.Stage(plan, base)
+    local kind, payload = plan.kind, plan.payload
+    local candidate
+    if kind == "unitselection" then
+        --- Defaults can migrate unrelated categories. Repair a private
+        --- candidate; the commit copies only the selected owners back.
+        candidate = MSUF_DeepCopy(base)
+        UnitSelection.Commit(payload, plan.selectedUnits, candidate)
+        _G.MSUF_NormalizeProfileDefaults(candidate, true)
+        MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
+        plan.selection = UnitSelection.Copy(candidate, plan.selectedUnits)
+        return candidate
+    end
+    if kind == "all" then
+        candidate = MSUF_DeepCopy(payload)
+        if not MSUF_ProfileIO_ImportVariants then
+            candidate.profileVariants = MSUF_DeepCopy(base.profileVariants)
+        end
+    else
+        candidate = MSUF_DeepCopy(base)
+        ImportTx.Merge(kind, payload, candidate)
+    end
+    if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(candidate) end
+    _G.MSUF_NormalizeProfileDefaults(candidate, true)
+    MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
+    --- The group-frame and aura modules load after this file; the import
+    --- refreshes below treat them as optional the same way.
+    local gf, auras = MSUF.GF, MSUF.MSUF_Auras3
+    if type(gf) == "table" and type(gf.RepairGroupDB) == "function" then gf.RepairGroupDB(candidate) end
+    if type(auras) == "table" and type(auras.NormalizeProfileDB) == "function" then auras.NormalizeProfileDB(candidate) end
+    --- Local variants kept across a full import are checked against the new
+    --- settings they will overlay. They stay stored either way (they are the
+    --- user's data); a mismatch is reported once after the commit.
+    if kind == "all" and not MSUF_ProfileIO_ImportVariants and candidate.profileVariants ~= nil and Variants then
+        local clean, why = Variants.ValidateForProfile(candidate, candidate.profileVariants)
+        if clean then candidate.profileVariants = clean else plan.keptVariantsProblem = why end
+    end
+    plan.candidate = candidate
+    return candidate
+end
+--- Base content of the active profile for staging: the base snapshot (never
+--- a live variant overlay). A full import with variant import on needs none.
+function ImportTx.LiveBase(plan)
+    MSUF_ProfileIO_RunEnsureDB()
+    if plan.kind == "all" and MSUF_ProfileIO_ImportVariants then return {} end
+    if type(MSUF_DB) ~= "table" then return {} end
+    if Variants then return Variants.BaseSnapshot(MSUF_DB, true) end
+    return MSUF_DeepCopy(MSUF_DB)
+end
+--- A new profile starts from the same factory table MSUF_CreateProfile
+--- builds, repaired the way the following profile switch repairs it.
+function ImportTx.FactoryBase()
+    local create = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile)
+        or _G.MSUF_CreateFactoryDefaultProfile
+    local profile = type(create) == "function" and create() or nil
+    if type(profile) ~= "table" then return nil end
+    MSUF_ProfileIO_TranslateProfileToCurrent(profile, {
+        source = "profile_create",
+        trustNormalizationMarker = true,
+    })
+    MSUF_ProfileIO_EnsureProfileMenuDefaults(profile)
+    _G.MSUF_NormalizeProfileDefaults(profile, false, true)
+    return profile
+end
+function ImportTx.ReportKeptVariants(plan)
+    if not plan.keptVariantsProblem then return end
+    local translate = type(MSUF.Translate) == "function" and MSUF.Translate or function(text) return text end
+    print("|cffffd700MSUF:|r " .. string.format(translate("Your profile variants were kept, but they do not match the imported settings and stay inactive (%s)."),
+        translate(tostring(plan.keptVariantsProblem))))
+end
+--- Import transaction, step 3 of 3: swap the staged candidate into the active
+--- profile. Everything that can reject a string or raise already ran on the
+--- private candidate, so this step has no failure return.
+local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
+    --- Pending edits reach the other sync members first; the imported
+    --- settings themselves stay in this profile (re-based below).
+    if ProfileSync then ProfileSync.Flush() end
+    PrepareProfileMutation()
+    local kind, payload = plan.kind, plan.payload
     --- Always keep the profile-table reference stable (important!).
     --- Do not replace MSUF_DB with a new table here. Runtime modules keep
     --- references into the active profile and are invalidated by the apply hook.
@@ -3397,128 +3613,13 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         MSUF_DB = {}
     end
     if kind == "unitselection" then
-        -- Defaults can migrate unrelated categories. Repair a private candidate,
-        -- then commit only the selected owners back to the stable live table.
-        local candidate = MSUF_DeepCopy(MSUF_DB)
-        UnitSelection.Commit(payload, plan.selectedUnits, candidate)
-        _G.MSUF_NormalizeProfileDefaults(candidate, true)
-        MSUF_ProfileIO_EnsureUnitframeAlphaDB(candidate)
-        payload = UnitSelection.Copy(candidate, plan.selectedUnits)
-        UnitSelection.Commit(payload, plan.selectedUnits, MSUF_DB)
-    elseif kind == "unitframe" then
-        --- Wipe & replace the same general-key set that Unitframes export.
-        MSUF_WipeGeneralSubset(MSUF_IsUnitframeGeneralKey)
-        if type(payload.general) == "table" then
-            MSUF_ApplyGeneralSubset(payload.general)
-        end
-        for k, v in pairs(payload) do
-            if k ~= "general" then
-                if type(v) == "table" then
-                    if type(MSUF_DB[k]) ~= "table" then
-                        MSUF_DB[k] = {}
-                    end
-                    MSUF_WipeTable(MSUF_DB[k])
-                    for kk, vv in pairs(v) do
-                        MSUF_DB[k][kk] = MSUF_DeepCopy(vv)
-                    end
-                else
-                    MSUF_DB[k] = v
-                end
-            end
-        end
-    elseif kind == "groupframe" then
-        if payload.gf_party ~= nil then
-            if type(payload.gf_party) == "table" then
-                if type(MSUF_DB.gf_party) ~= "table" then
-                    MSUF_DB.gf_party = {}
-                end
-                MSUF_WipeTable(MSUF_DB.gf_party)
-                for kk, vv in pairs(payload.gf_party) do
-                    MSUF_DB.gf_party[kk] = MSUF_DeepCopy(vv)
-                end
-            else
-                MSUF_DB.gf_party = MSUF_DeepCopy(payload.gf_party)
-            end
-        end
-        if payload.gf_raid ~= nil then
-            if type(payload.gf_raid) == "table" then
-                if type(MSUF_DB.gf_raid) ~= "table" then
-                    MSUF_DB.gf_raid = {}
-                end
-                MSUF_WipeTable(MSUF_DB.gf_raid)
-                for kk, vv in pairs(payload.gf_raid) do
-                    MSUF_DB.gf_raid[kk] = MSUF_DeepCopy(vv)
-                end
-            else
-                MSUF_DB.gf_raid = MSUF_DeepCopy(payload.gf_raid)
-            end
-        end
-        if payload.gf_mythicraid ~= nil then
-            if type(payload.gf_mythicraid) == "table" then
-                if type(MSUF_DB.gf_mythicraid) ~= "table" then
-                    MSUF_DB.gf_mythicraid = {}
-                end
-                MSUF_WipeTable(MSUF_DB.gf_mythicraid)
-                for kk, vv in pairs(payload.gf_mythicraid) do
-                    MSUF_DB.gf_mythicraid[kk] = MSUF_DeepCopy(vv)
-                end
-            else
-                MSUF_DB.gf_mythicraid = MSUF_DeepCopy(payload.gf_mythicraid)
-            end
-        end
-        if payload.gf_priority ~= nil then
-            if type(payload.gf_priority) == "table" then
-                if type(MSUF_DB.gf_priority) ~= "table" then
-                    MSUF_DB.gf_priority = {}
-                end
-                MSUF_WipeTable(MSUF_DB.gf_priority)
-                for kk, vv in pairs(payload.gf_priority) do
-                    MSUF_DB.gf_priority[kk] = MSUF_DeepCopy(vv)
-                end
-            else
-                MSUF_DB.gf_priority = MSUF_DeepCopy(payload.gf_priority)
-            end
-        end
-    elseif kind == "castbar" then
-        MSUF_WipeGeneralSubset(function(key)
-            return MSUF_IsCastbarKey(key) and (not MSUF_IsColorKey(key))
-        end)
-        if type(payload.general) == "table" then
-            MSUF_ApplyGeneralSubset(payload.general)
-        end
-    elseif kind == "colors" then
-        MSUF_WipeGeneralSubset(function(key)
-            return MSUF_IsColorKey(key)
-        end)
-        if type(payload.general) == "table" then
-            MSUF_ApplyGeneralSubset(payload.general)
-        end
-        if type(MSUF_DB.classColors) ~= "table" then MSUF_DB.classColors = {} end
-        if type(MSUF_DB.npcColors) ~= "table" then MSUF_DB.npcColors = {} end
-        MSUF_WipeTable(MSUF_DB.classColors)
-        MSUF_WipeTable(MSUF_DB.npcColors)
-        if type(payload.classColors) == "table" then
-            for kk, vv in pairs(payload.classColors) do
-                MSUF_DB.classColors[kk] = MSUF_DeepCopy(vv)
-            end
-        end
-        if type(payload.npcColors) == "table" then
-            for kk, vv in pairs(payload.npcColors) do
-                MSUF_DB.npcColors[kk] = MSUF_DeepCopy(vv)
-            end
-        end
-    elseif kind == "gameplay" then
-        if type(MSUF_DB.gameplay) ~= "table" then MSUF_DB.gameplay = {} end
-        MSUF_WipeTable(MSUF_DB.gameplay)
-        if type(payload.gameplay) == "table" then
-            for kk, vv in pairs(payload.gameplay) do
-                MSUF_DB.gameplay[kk] = MSUF_DeepCopy(vv)
-            end
-        end
-    elseif kind == "all" then
+        UnitSelection.Commit(plan.selection, plan.selectedUnits, MSUF_DB)
+    else
+        --- The staged candidate is private and fully normalized: move its
+        --- values over without another copy.
         MSUF_WipeTable(MSUF_DB)
-        for kk, vv in pairs(payload) do
-            MSUF_DB[kk] = MSUF_DeepCopy(vv)
+        for k, v in pairs(plan.candidate) do
+            MSUF_DB[k] = v
         end
     end
     --- Ensure the active profile table in GlobalDB points to MSUF_DB.
@@ -3529,6 +3630,21 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         MSUF_ProfileIO_RunEnsureDB(true)
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     end
+    if ProfileSync then ProfileSync.Rebase() end
+    if not plan.isSnapshot then
+        MSUF.ProfileIOCompleteFirstLoadImport()
+        MSUF_ProfileIO_PostImportApply_Auras("all", payload)
+        MSUF_ProfileIO_PostImportApply_GroupFrames("all", payload)
+        MSUF_ProfileIO_PostImportApply_UnitAlphas("all", payload)
+        if MSUF.Client and MSUF.Client.SupportsBlizzardEditMode and type(payload.general) == "table"
+            and type(payload.general.blizzardEditModeSnapshot) == "table" then
+            _G.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
+        end
+        ApplyProfileRuntime("PROFILE_IMPORT", true)
+        MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_IMPORT", MSUF_ActiveProfile)
+        ImportTx.ReportKeptVariants(plan)
+        return true
+    end
     MSUF_ProfileIO_PostImportApply_Auras(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(plan.snapshotKind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
@@ -3537,9 +3653,10 @@ local function MSUF_ProfileIO_CommitImportToActiveProfile(plan)
         _G.MSUF_BlizzardEditMode_ApplyProfileSnapshot()
     end
     ApplyProfileRuntime("PROFILE_IMPORT", true)
-    MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_IMPORT", MSUF_ActiveProfile, MSUF_DB)
+    MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_IMPORT", MSUF_ActiveProfile)
     MSUF.ProfileIOCompleteFirstLoadImport()
-     return true
+    ImportTx.ReportKeptVariants(plan)
+    return true
 end
 function MSUF_ExportSelectionToString(kind, selectedUnits)
     local snap = MSUF_SnapshotForKind(kind, selectedUnits)
@@ -3554,12 +3671,19 @@ end
 --- Imports schema-600 MSUF2/MSUF3/MSUF4 strings or safe text snapshots into
 --- the active profile. Returns true, or false plus the rejection reason.
 function MSUF_ImportFromString(str)
+    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     MSUF_ProfileIO_ResetImportWarnings()
     local plan, why, chatLine = MSUF_ProfileIO_PrepareImport(str, "active")
     if not plan then
         print(chatLine)
         return false, why
     end
+    local base, baseWhy = ImportTx.LiveBase(plan)
+    if not base then
+        print("|cffff0000MSUF:|r Import failed: " .. tostring(baseWhy))
+        return false, baseWhy
+    end
+    ImportTx.Stage(plan, base)
     MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     if plan.isSnapshot then
         print("|cff00ff00MSUF:|r Imported " .. tostring(plan.snapshotKind) .. " settings into the active profile.")
@@ -3570,13 +3694,14 @@ function MSUF_ImportFromString(str)
     return true
 end
 --- Imports a string into a new profile and switches to it. The string is
---- decoded, validated and staged BEFORE the profile is created or switched, so
---- a rejected string creates nothing, switches nothing and leaves
---- SavedVariables untouched. A failed create stops there; a failed switch
---- switches back and removes the created profile.
+--- decoded, validated, staged and normalized BEFORE the profile is created or
+--- switched, so a rejected string creates nothing, switches nothing and
+--- leaves SavedVariables untouched. A failed create stops there; a failed
+--- switch switches back and removes the created profile, from Suite too.
 --- Returns true, or false plus reason plus stage ("name", "exists", "decode",
 --- "create" or "switch").
 function MSUF_ImportIntoNewProfile(name, str)
+    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     MSUF_ProfileIO_ResetImportWarnings()
     name = type(name) == "string" and name:match("^%s*(.-)%s*$") or ""
     if name == "" then
@@ -3593,6 +3718,15 @@ function MSUF_ImportIntoNewProfile(name, str)
         print(chatLine)
         return false, why, "decode"
     end
+    local base = {}
+    if plan.kind ~= "all" then
+        base = ImportTx.FactoryBase()
+        if not base then
+            print("|cffff0000MSUF:|r Factory defaults are not available; profile was not created.")
+            return false, "factory defaults unavailable", "create"
+        end
+    end
+    ImportTx.Stage(plan, base)
     local previous = MSUF_ActiveProfile or "Default"
     local created = MSUF_CreateProfile(name)
     profiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
@@ -3604,6 +3738,7 @@ function MSUF_ImportIntoNewProfile(name, str)
     if MSUF_ActiveProfile ~= name then
         if previousExists then MSUF_SwitchProfile(previous) end
         profiles[name] = nil
+        MSUF_ProfileIO_NotifySuiteLifecycle("delete", name)
         return false, "could not switch profile", "switch"
     end
     MSUF_ProfileIO_CommitImportToActiveProfile(plan)
@@ -3658,18 +3793,37 @@ local function MSUF_ProfileIO_MaterializeProfileCopyForExport(profile, profileKe
     MSUF.MSUF_Auras3.NormalizeProfileDB(profile)
     return profile
 end
-local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
+local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
     if type(profileKey) ~= "string" or profileKey == "" then
          return false, "invalid profileKey"
     end
-    if type(newTable) ~= "table" then
+    if type(plan) ~= "table" or type(plan.payload) ~= "table" then
          return false, "not a table"
     end
-    --- newTable is the staged payload of an accepted MSUF_ProfileIO_PrepareImport
-    --- plan: it is already validated, translated and media-checked.
+    --- plan is an accepted MSUF_ProfileIO_PrepareImport plan: its payload is
+    --- already validated, translated and media-checked. The stored or active
+    --- table only changes after the staged candidate survived every normalizer,
+    --- so a stored profile is always the normalized one.
     MSUF_ProfileIO_EnsureProfileSystemInitialized()
+    if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     local existing = MSUF_GlobalDB.profiles[profileKey]
     local isActive = (profileKey == MSUF_ActiveProfile)
+    local base = {}
+    if not MSUF_ProfileIO_ImportVariants and type(existing) == "table" then
+        base = existing
+        if isActive and Variants and type(MSUF_DB) == "table" then
+            local why
+            base, why = Variants.BaseSnapshot(MSUF_DB, true)
+            if not base then return false, why end
+        end
+    end
+    local newTable = ImportTx.Stage(plan, base)
+    if isActive then
+        --- As for any import into the active profile: pending edits reach
+        --- the sync members first, the imported settings stay local.
+        if ProfileSync then ProfileSync.Flush() end
+        PrepareProfileMutation()
+    end
     if isActive and type(MSUF_DB) ~= "table" and type(existing) == "table" then
         MSUF_DB = existing
     end
@@ -3683,14 +3837,16 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         end
         MSUF_GlobalDB.profiles[profileKey] = target
         MSUF_ProfileIO_RunEnsureDB(true)
+        if ProfileSync then ProfileSync.Rebase() end
         MSUF.ProfileIOCompleteFirstLoadImport()
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()
         MSUF_ProfileIO_PostImportApply_Auras("all", target)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
         ApplyProfileRuntime("PROFILE_EXTERNAL_IMPORT", true)
-        MSUF_ProfileIO_NotifyAssistantProfileEpochChanged("PROFILE_EXTERNAL_IMPORT", profileKey, target)
+        MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_EXTERNAL_IMPORT", profileKey)
         MSUF_ProfileIO_ReportImportWarnings()
+        ImportTx.ReportKeptVariants(plan)
         return true
     end
     if type(existing) == "table" then
@@ -3701,19 +3857,17 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
         end
         MSUF_GlobalDB.profiles[profileKey] = existing
         MSUF_ProfileIO_ReportImportWarnings()
+        ImportTx.ReportKeptVariants(plan)
         MSUF.ProfileIOCompleteFirstLoadImport()
         return true
     end
-    local stored = {}
-    for k, v in pairs(newTable) do
-        stored[k] = v
-    end
-    MSUF_GlobalDB.profiles[profileKey] = stored
+    MSUF_GlobalDB.profiles[profileKey] = newTable
     MSUF_ProfileIO_ReportImportWarnings()
     MSUF.ProfileIOCompleteFirstLoadImport()
     return true
 end
 function MSUF_ExportExternal(profileKey)
+    if Variants and Variants.IsRecording() then return false,"finish editing the variant first" end
     local profileTbl = MSUF_ProfileIO_GetProfileTable(profileKey)
     if type(profileTbl) ~= "table" then
          return false, "unknown profileKey"
@@ -3722,7 +3876,9 @@ function MSUF_ExportExternal(profileKey)
     if profileKey == MSUF_ActiveProfile then
         MSUF_ProfileIO_EnsureCompleteProfileDB()
         profileTbl = MSUF_DB
-        payload = MSUF_DeepCopy(profileTbl)
+        local snapshotWhy
+        if Variants then payload,snapshotWhy=Variants.BaseSnapshot(profileTbl,true) else payload=MSUF_DeepCopy(profileTbl) end
+        if not payload then return false,snapshotWhy or "profile exceeds snapshot limits" end
     else
         payload = MSUF_DeepCopy(profileTbl)
         local materialized, why = MSUF_ProfileIO_MaterializeProfileCopyForExport(payload, profileKey)
@@ -3731,6 +3887,9 @@ function MSUF_ExportExternal(profileKey)
         end
         payload = materialized
     end
+    if MSUF.ProfileFields and MSUF.ProfileFields.StripExternal then MSUF.ProfileFields.StripExternal(payload) end
+    payload.assistant = nil -- retired Assistant history (State/MSUF_RetiredData.lua)
+    if not MSUF_ProfileIO_ExportVariants then payload.profileVariants=nil end
     local snap = {
         addon   = "MSUF",
         fmt     = 2,
@@ -3757,7 +3916,7 @@ function MSUF_ImportExternal(profileString, profileKey)
     if not plan then
         return false, why
     end
-    return MSUF_ProfileIO_OverwriteProfile(profileKey, plan.payload)
+    return MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
 end
 --- Expose real implementations under stable, explicit names for load-order proxies.
 ExportPublic("MSUF_Profiles_ExportExternal", MSUF_ExportExternal)

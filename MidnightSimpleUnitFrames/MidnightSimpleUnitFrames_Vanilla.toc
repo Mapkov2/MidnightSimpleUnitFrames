@@ -58,7 +58,6 @@ Locales\ptBR.lua
 Locales\ruRU.lua
 Locales\zhCN.lua
 Locales\zhTW.lua
-Locales\MSUF_PriorityFrames_FAQ.lua
 
 # ---------------------------------------------------------------
 # KERNEL / STATE / UI PRIMITIVES
@@ -75,6 +74,12 @@ State\MSUF_Defaults.lua
 Runtime\MSUF_NumberFormat.lua
 State\MSUF_ProfileCodec.lua
 State\MSUF_ProfileRuntime.lua
+State\MSUF_ProfileFields.lua
+State\MSUF_ProfileExternal.lua
+State\MSUF_ProfileVariants.lua
+State\MSUF_ProfileSync.lua
+State\MSUF_ProfileVariantEditor.lua
+State\MSUF_ProfileVariantsRuntime.lua
 State\MSUF_Profiles.lua
 Shell\UI\MSUF_Style.lua
 Kernel\MSUF_Modules.lua
@@ -104,6 +109,7 @@ Media\MSUF_Media.lua
 Runtime\MSUF_BorderStyles.lua
 Runtime\MSUF_PortraitMedia.lua
 State\MSUF_ProfileIO.lua
+State\MSUF_RetiredData.lua
 Runtime\MSUF_SlashCommands.lua
 Runtime\MSUF_UnitTooltips.lua
 Runtime\MSUF_BlizzEditModeBridge.lua
@@ -183,6 +189,10 @@ ClassPower\MSUF_CP_PlayerHP.lua
 ClassPower\MSUF_CP_Controller_Config.lua
 ClassPower\MSUF_CP_Controller_Colors.lua
 ClassPower\MSUF_CP_Controller_Surface.lua
+ClassPower\MSUF_CP_ExtraAuras.lua
+ClassPower\MSUF_CP_ManaExtras.lua
+ClassPower\MSUF_CP_ResourceMarks.lua
+ClassPower\MSUF_CP_ResourceExtras.lua
 ClassPower\MSUF_CP_Controller.lua
 
 # ---------------------------------------------------------------

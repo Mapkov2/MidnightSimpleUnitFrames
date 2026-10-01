@@ -10,6 +10,16 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local type, pairs = type, pairs
 local unpack = unpack or table.unpack
+-- Every subscriber runs through secureexecuterange (Blizzard's CallbackRegistry
+-- dispatches with it on every client): a subscriber that raises goes to the
+-- error handler and the rest of the fan-out still runs. A test harness that
+-- lacks it gets a plain loop with the same order.
+local RunEach = secureexecuterange
+if type(RunEach) ~= "function" then
+    RunEach = function(list, fn, ...)
+        for i = 1, #list do fn(i, list[i], ...) end
+    end
+end
 
 local bus = { handlers = {} }
 local driver = CreateFrame("Frame")
@@ -146,8 +156,13 @@ function bus:Register(event, key, fn, unitFilter, once)
         end
         ev.index[key] = nil
     end
-    local n = #ev.list + 1
-    ev.list[n] = { key = key, fn = fn, once = once and true or false, dead = false, units = units }
+    -- Copy-on-write like Compact: a dispatch in progress keeps walking the
+    -- array it started with, which never gains a key while it runs.
+    local old, list = ev.list, {}
+    for i = 1, #old do list[i] = old[i] end
+    local n = #list + 1
+    list[n] = { key = key, fn = fn, once = once and true or false, dead = false, units = units }
+    ev.list = list
     ev.index[key] = n
     RefreshDriverRegistration(event, ev)
     return true
@@ -178,21 +193,28 @@ function bus:UnregisterAll(prefix)
     end
 end
 
--- Dispatch owns no mutable depth/cleanup state. A thrown callback reaches the
--- client error handler normally; subsequent events remain usable. Removing a
--- once subscription before invocation also makes nested delivery deterministic.
+-- Dispatch owns no mutable depth/cleanup state and allocates nothing. A thrown
+-- callback reaches the client error handler and the next subscriber still
+-- runs. Removing a once subscription before invocation also makes nested
+-- delivery deterministic. Only unit events carry a unit filter.
+local function Deliver(_, handler, event, ...)
+    local callback, units = handler.fn, handler.units
+    if callback then
+        if units then
+            local unit = ...
+            if not (unit and units[unit] == true) then return end
+        end
+        if handler.once then bus:Unregister(event, handler.key) end
+        callback(event, ...)
+    end
+end
 driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]
     if not ev then return end
-    local list, unit = ev.list, ...
-    for i = 1, #list do
-        local handler = list[i]
-        local callback, units = handler.fn, handler.units
-        if callback and (not ev.unitEvent or not units or (unit and units[unit] == true)) then
-            if handler.once then bus:Unregister(event, handler.key) end
-            callback(event, ...)
-        end
-    end
+    local list = ev.list
+    -- One subscriber has no neighbours to isolate: skip the protected range.
+    if #list == 1 then return Deliver(1, list[1], event, ...) end
+    RunEach(list, Deliver, event, ...)
 end)
 --- Public API
 local ExportPublic = MSUF.ExportPublic

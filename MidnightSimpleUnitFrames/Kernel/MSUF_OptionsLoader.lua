@@ -129,7 +129,7 @@ local function MakeMenuForwarder(name)
 end
 
 --- Stable public entry points used by the minimap button, compartment, game
---- menu, keybinds, Edit Mode focus helpers, changelog, and Assistant routing.
+--- menu, keybinds, Edit Mode focus helpers, and changelog.
 local FORWARDED_GLOBALS = {
     "MSUF2_Open",
     "MSUF2_Toggle",
@@ -142,8 +142,6 @@ local FORWARDED_GLOBALS = {
     "MSUF_GetCurrentMirrorPage",
     "MSUF_GetMirrorPages",
     "MSUF_OpenExactSettingControl",
-    "MSUF_OpenExactColorSettingPicker",
-    "MSUF_OpenExactCatalogControl",
     "MSUF_StartGuidedTour",
     "MSUF_ResumeGuidedTour",
 }
