@@ -13,7 +13,11 @@
 --   * a unit shift in combat (two raid members swap slots).
 -- Budgets were measured on the 2026-10-01 baseline (1908d740) and sit 2% above
 -- the larger of baseline and current. Raise one only with the measurement and the
--- reason; never to hide a regression.
+-- reason; never to hide a regression. The original KB limits are for 32-bit Lua.
+-- 2026-10-02: keep them and the instruction limits unchanged; use separately
+-- measured 64-bit limits for the same baseline/current and identical harness.
+-- Lua object sizes differ with pointer width, so a 32-bit KB limit cannot
+-- validate a 64-bit interpreter. An empty-table allocation identifies the layout.
 --
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
@@ -99,7 +103,6 @@ local function Measure(case, fn)
     local budget = (BUDGETS[flavor] or {})[case]
     if budget and not MEASURE_ONLY then
         Check(ticks <= budget[1], string.format("%s: %d k instructions, budget %d k", case, ticks, budget[1]))
-        Check(kb <= budget[2], string.format("%s: %.1f KB allocated, budget %d KB", case, kb, budget[2]))
     end
 end
 
@@ -157,9 +160,37 @@ end)
 h:LeaveCombat()
 Check(#h.violations == 0, "protected write in lockdown:\n" .. tostring(h.violations[1]))
 
+-- Probe after every measurement so calibration does not perturb the fixture heap.
+-- 64-bit baseline/current maxima in KB, measured with PUC Lua 5.1 (x64):
+-- Mainline: 284.1, 11.9, 262.6, 5103.2, 13.8, 744.7, 32.6.
+-- Vanilla: 352.9, 14.0, 519.8, 6319.1, 22.8, 1765.2, 94.7.
+-- Each limit is ceil(maximum * 1.02), exactly the original 2% headroom.
+local MEMORY_BUDGETS_64 = {
+    Mainline = { party_join = 290, party_settle = 13, party_apply = 268, raid_build = 5206,
+        raid_settle = 15, raid_apply = 760, raid_shift = 34 },
+    Vanilla = { party_join = 360, party_settle = 15, party_apply = 531, raid_build = 6446,
+        raid_settle = 24, raid_apply = 1801, raid_shift = 97 },
+}
+collectgarbage("collect")
+collectgarbage("stop")
+local tableBefore = collectgarbage("count")
+local tableProbe = {}
+local emptyTableBytes = (collectgarbage("count") - tableBefore) * 1024
+collectgarbage("restart")
+assert(emptyTableBytes == 32 or emptyTableBytes == 64,
+    "unmeasured Lua table layout: " .. tostring(emptyTableBytes) .. " bytes")
+local wideTables = emptyTableBytes == 64
+
 local summary = {}
 for _, result in ipairs(results) do
+    local budget = (BUDGETS[flavor] or {})[result.case]
+    if budget and not MEASURE_ONLY then
+        local memoryBudget = wideTables and MEMORY_BUDGETS_64[flavor][result.case] or budget[2]
+        Check(result.kb <= memoryBudget, string.format("%s: %.1f KB allocated, budget %d KB",
+            result.case, result.kb, memoryBudget))
+    end
     summary[#summary + 1] = string.format("%s %dk/%.1fKB", result.case, result.k, result.kb)
 end
-print(string.format("group_roster_budget_smoke: ok (%s%s: %s)", flavor, MEASURE_ONLY and ", measure only" or "",
+print(string.format("group_roster_budget_smoke: ok (%s, %s-bit%s: %s)", flavor,
+    wideTables and "64" or "32", MEASURE_ONLY and ", measure only" or "",
     table.concat(summary, ", ")))
