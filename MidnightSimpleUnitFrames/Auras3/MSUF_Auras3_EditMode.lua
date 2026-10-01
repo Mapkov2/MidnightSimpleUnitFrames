@@ -291,8 +291,8 @@ local function OnEditModeChanged(active)
         EM.HideAll()
         ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
         ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
-        -- Leaving edit mode must not strip the boss page's aura preview lanes.
-        if BossPageAuraPreviewActive() then RequestEditModeAurasRefresh(0) end
+        -- Leaving edit mode must not strip the boss or arena page's aura preview lanes.
+        if BossPageAuraPreviewActive() or ArenaPageAuraPreviewActive() then RequestEditModeAurasRefresh(0) end
     end
 end
 

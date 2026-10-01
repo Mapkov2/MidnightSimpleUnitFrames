@@ -240,6 +240,7 @@ function Model.Apply(unit, reason)
         EachRuntimeUnit(unit, Refresh)
     else
         Refresh("player")
+        Refresh("pet")
         Refresh("target")
         Refresh("focus")
         for i = 1, #BOSS_UNITS do Refresh(BOSS_UNITS[i]) end

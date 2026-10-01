@@ -41,6 +41,7 @@ end
 
 local NewPlayerDefensiveContainer = assert(MSUF.MSUF_CreateCanonicalPlayerDefensiveAuraContainer,
     "Aura defaults must load before Auras3 core")
+local DEFENSIVE_TEMPLATE = NewPlayerDefensiveContainer() -- read-only fill source
 
 local function EnsurePlayerDefensiveCoreDefault(auras, factoryEnabled)
     if type(auras) ~= "table" then return nil end
@@ -73,7 +74,7 @@ local function EnsurePlayerDefensiveCoreDefault(auras, factoryEnabled)
             item[PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER] = true
         end
     end
-    FillMissing(item, NewPlayerDefensiveContainer())
+    FillMissing(item, DEFENSIVE_TEMPLATE)
     item.name = "Defensive Buffs"
     item.auraType = "BUFF"
     item.sourceUnit = "player"
@@ -142,8 +143,6 @@ if type(A3) ~= "table" then
     A3 = {}
     MSUF.MSUF_Auras3 = A3
 end
-
-local ExportPublic = MSUF.ExportPublic
 
 ExportPublic("MSUF_Auras3", A3)
 
@@ -235,9 +234,23 @@ function A3.NormalizeProfileDB(db)
     return current, current.shared
 end
 
+-- Normalizing is idempotent: skip it while the stamped profile is unchanged.
+local sDB, sAuras, sItem, sGen
+local function DefensiveItem(a)
+    a = a.customContainers; a = type(a) == "table" and a.perUnit
+    a = type(a) == "table" and a.player; a = type(a) == "table" and a.items
+    return type(a) == "table" and a[4] or nil
+end
 function A3.EnsureDB()
-    local current, shared = A3.NormalizeProfileDB(EnsureRootDB())
+    local db = EnsureRootDB()
+    local cur, it = db.auras3, sItem
+    if cur and cur == sAuras and db == sDB and sGen == A3._runtimeConfigGen and it
+        and DefensiveItem(cur) == it and it.name == "Defensive Buffs" and type(it.placed) == "table" then
+        return cur, cur.shared
+    end
+    local current, shared = A3.NormalizeProfileDB(db)
     A3.DBRef = current
+    sDB, sAuras, sItem, sGen = db, current, DefensiveItem(current), A3._runtimeConfigGen
     return current, shared
 end
 

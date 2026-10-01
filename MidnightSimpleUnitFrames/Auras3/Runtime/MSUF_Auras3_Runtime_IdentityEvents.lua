@@ -976,6 +976,13 @@ A3._EnsureDirectIdentityRefreshFrame = function()
                 if refreshNonGroup and (unit == "player" or not A3._IsGroupUnitToken(unit)) then
                     A3._ScheduleDirectIdentityEventRefresh(unit, unit == "player")
                 end
+                -- A player faction edge flips UnitCanAssist for unit-frame owners too.
+                local owners = event == "UNIT_FACTION" and unit == "player" and A3._unitAuraIdentityOwnersByUnit
+                if owners then
+                    for u in pairs(owners) do
+                        if u ~= "player" and not A3._IsGroupUnitToken(u) then A3._ScheduleDirectIdentityEventRefresh(u, true) end
+                    end
+                end
                 return
             end
             local units = A3._directIdentityEventUnits[event]

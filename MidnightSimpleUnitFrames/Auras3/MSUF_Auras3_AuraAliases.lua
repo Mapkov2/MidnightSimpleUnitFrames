@@ -5,6 +5,8 @@
 local _, MSUF = ...
 local A3 = MSUF.MSUF_Auras3
 local catalog = A3.AuraAliasCatalog
+-- No catalog (camelot without a known Forever marker): resolve nothing.
+if type(catalog) ~= "table" then function A3.CompileCustomAuraAliases() end return end
 local common, localized = catalog.common, catalog.localized
 local width, step = catalog.width, catalog.width + 1
 local find, sub, byte = string.find, string.sub, string.byte
