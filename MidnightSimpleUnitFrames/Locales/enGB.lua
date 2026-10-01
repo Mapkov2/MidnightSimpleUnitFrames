@@ -4408,6 +4408,25 @@ L["1–10 players"] = "1–10 players"
 L["11–20 players"] = "11–20 players"
 L["21–25 players"] = "21–25 players"
 L["Group visibility options apply only to their matching Party, Raid, or Mythic Raid scope. Empty groups collapse when Preserve raid groups is enabled."] = "Group visibility options apply only to their matching Party, Raid, or Mythic Raid scope. Empty groups collapse when Preserve raid groups is enabled."
+-- Menu diagnostics commands (2026-10-01).
+L["Locale %s: %d keys seen, %d missing translations."] = "Locale %s: %d keys seen, %d missing translations."
+L["Version test helper is not loaded."] = "Version test helper is not loaded."
+L["First-load module is not loaded."] = "First-load module is not loaded."
+L["Usage: %s"] = "Usage: %s"
+
+-- Edit Mode quality pass 2026-10-01: history labels, HUD tips, Classic Edit Mode route.
+L["Choose %s in the game menu"] = "Choose %s in the game menu"
+L["%s settings"] = "%s settings"
+L["%s Anchor"] = "%s Anchor"
+L["%s %s: %s"] = "%s %s: %s"
+L["%s %s"] = "%s %s"
+L["Unit frame"] = "Unit frame"
+L["General layout"] = "General layout"
+L["Group frame"] = "Group frame"
+L["Move"] = "Move"
+L["Nudge"] = "Nudge"
+L["Set"] = "Set"
+L["Change"] = "Change"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end
