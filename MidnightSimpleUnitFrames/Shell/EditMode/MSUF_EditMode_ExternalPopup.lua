@@ -4,9 +4,6 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
-if type(_G.MSUF_InstallEditPopupUI) == "function" then
-    _G.MSUF_InstallEditPopupUI(addonName, MSUF)
-end
 
 local Quick = EM2.QuickPopup or {}
 local External = EM2.ExternalElements

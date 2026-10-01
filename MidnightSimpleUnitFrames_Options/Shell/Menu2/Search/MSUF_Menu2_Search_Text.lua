@@ -43,18 +43,35 @@ local function TrimText(text)
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+--- The first `limit` bytes of text, shortened so the cut never ends inside a
+--- UTF-8 character: a continuation byte (128-191) after the cut moves it back.
+local function Utf8BytePrefix(text, limit)
+    if #text <= limit then return text end
+    local cut = limit
+    while cut > 0 do
+        local nextByte = string.byte(text, cut + 1)
+        if not nextByte or nextByte < 128 or nextByte >= 192 then break end
+        cut = cut - 1
+    end
+    return text:sub(1, cut)
+end
+
+--- Characters, not bytes: one per ASCII byte and per UTF-8 lead byte.
+local function CharCount(text)
+    if not text:find("[\128-\255]") then return #text end
+    local count = 0
+    for i = 1, #text do
+        local b = string.byte(text, i)
+        if b < 128 or (b >= 194 and b <= 244) then count = count + 1 end
+    end
+    return count
+end
+
 local function ShortLabel(text, limit)
     text = TrimText(text)
     limit = tonumber(limit) or 22
     if #text <= limit then return text end
-    local endIndex = math.max(1, limit - 3)
-    -- Never cut through a localized UTF-8 character.
-    while endIndex > 0 do
-        local nextByte = string.byte(text, endIndex + 1)
-        if not nextByte or nextByte < 128 or nextByte >= 192 then break end
-        endIndex = endIndex - 1
-    end
-    return text:sub(1, endIndex) .. "..."
+    return Utf8BytePrefix(text, math.max(1, limit - 3)) .. "..."
 end
 
 
@@ -94,6 +111,21 @@ local function UpdateSearchPlaceholder(searchBox)
     end
 end
 
+--- string.lower folds ASCII only. Cyrillic capitals are two-byte UTF-8:
+--- U+0400-U+040F (\208\128-\143) lower to U+0450-U+045F (\209\144-\159),
+--- U+0410-U+041F (\208\144-\159) to U+0430-U+043F (\208\176-\191) and
+--- U+0420-U+042F (\208\160-\175) to U+0440-U+044F (\209\128-\143). Ё and ё
+--- fold to е, the spelling most typed queries use.
+local CYRILLIC_FOLD = { ["\208\129"] = "\208\181", ["\209\145"] = "\208\181" }
+for b = 128, 175 do
+    local capital = "\208" .. string.char(b)
+    if not CYRILLIC_FOLD[capital] then
+        CYRILLIC_FOLD[capital] = (b < 144 and ("\209" .. string.char(b + 16)))
+            or (b < 160 and ("\208" .. string.char(b + 32)))
+            or ("\209" .. string.char(b - 32))
+    end
+end
+
 local NORMALIZED_TEXT_CACHE_LIMIT = 4096
 local NORMALIZED_TEXT_CACHE_MAX_SOURCE_LEN = 256
 local normalizedTextCache, normalizedTextCacheCount = {}, 0
@@ -113,6 +145,7 @@ local function NormalizeSearchText(text)
         text = text:gsub("\195\150", "oe"):gsub("\195\182", "oe")
         text = text:gsub("\195\156", "ue"):gsub("\195\188", "ue")
         text = text:gsub("\195\159", "ss")
+        if text:find("[\208\209]") then text = text:gsub("[\208\209][\128-\191]", CYRILLIC_FOLD) end
         for from, to in pairs(SEARCH_TEXT_FOLDS) do text = text:gsub(from, to) end
         for i = 1, #SEARCH_UTF_PUNCTUATION do text = text:gsub(SEARCH_UTF_PUNCTUATION[i], " ") end
         text = text:gsub("[\240-\244][\128-\191][\128-\191][\128-\191]", " ")
@@ -418,6 +451,11 @@ Text.ContentWidth = ContentWidth
 Text.ContentHeight = ContentHeight
 Text.TrimText = TrimText
 Text.ShortLabel = ShortLabel
+Text.Utf8BytePrefix = Utf8BytePrefix
+Text.CharCount = CharCount
+--- Query length as the minimum-length rule counts it: characters of the
+--- normalized query, so one Cyrillic or CJK character is not two or three.
+Text.QueryLength = function(query) return CharCount(NormalizeSearchText(query)) end
 Text.SearchPlaceholderText = SearchPlaceholderText
 Text.SearchBoxHasText = SearchBoxHasText
 Text.RefreshSearchPlaceholder = RefreshSearchPlaceholder

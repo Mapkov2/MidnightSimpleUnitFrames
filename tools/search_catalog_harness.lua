@@ -154,6 +154,14 @@ do
     assert(groupChunk, groupDefaultsPath .. ": " .. tostring(groupErr))
     local groupOK, groupResult = pcall(groupChunk, "MidnightSimpleUnitFrames", MSUF)
     assert(groupOK, groupDefaultsPath .. ": " .. tostring(groupResult))
+    -- The rest of the group DB, split by cohesion; it loads before the migrations.
+    for _, part in ipairs({ "Geometry", "Text", "Textures" }) do
+        local partPath = Join(CORE, "GroupFrames/MSUF_GroupFrames_DB_" .. part .. ".lua")
+        local partChunk, partErr = loadfile(partPath)
+        assert(partChunk, partPath .. ": " .. tostring(partErr))
+        local partOK, partResult = pcall(partChunk, "MidnightSimpleUnitFrames", MSUF)
+        assert(partOK, partPath .. ": " .. tostring(partResult))
+    end
     local groupMigrationsPath = Join(CORE, "GroupFrames/MSUF_GroupFrames_DB_Migrations.lua")
     local groupMigrationsChunk, groupMigrationsErr = loadfile(groupMigrationsPath)
     assert(groupMigrationsChunk, groupMigrationsPath .. ": " .. tostring(groupMigrationsErr))

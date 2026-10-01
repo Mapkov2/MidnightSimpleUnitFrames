@@ -817,20 +817,39 @@ local function ApplyProfileSnapshot()
     return true
 end
 
+--- ShowUIPanel keeps MSUF's taint out of a panel only when the frame is a
+--- registered UI panel: it then hands the frame to Blizzard's forbidden
+--- FramePositionDelegate through attributes (UIParentPanelManager.lua
+--- ShowUIPanel). Midnight and WoW Forever register EditModeManagerFrame
+--- (Mainline UIPanelWindows.lua, area "center"). The Classic clients do not,
+--- so there ShowUIPanel calls EditModeManagerFrame:Show() from MSUF code and
+--- Blizzard's OnShow -> EnterEditMode runs with MSUF taint. Those clients
+--- open the registered Game Menu instead; its Edit Mode button is one secure
+--- click away.
+local function UIPanel(frame, name)
+    local windows = _G.UIPanelWindows
+    return frame and type(windows) == "table" and windows[name] ~= nil and frame or nil
+end
+
 local function OpenSettings()
     local manager = _G.EditModeManagerFrame
     if InCombat() or not manager or EditModeRuleBlocked() then return false end
-    if type(_G.ShowUIPanel) == "function" then
-        --- Blizzard's own manager can switch the active layout while the MSUF
-        --- session stays open. The cached info predates that switch, so keeping
-        --- it would make the next mover drag edit the previous layout and save
-        --- the whole stale table back over the user's choice. Handing control
-        --- over is a save-free moment, so dropping the cache is safe here.
-        InvalidateLayoutCache()
-        _G.ShowUIPanel(manager)
-        return true
+    if type(_G.ShowUIPanel) ~= "function" then return false end
+    local panel = UIPanel(manager, "EditModeManagerFrame") or UIPanel(_G.GameMenuFrame, "GameMenuFrame")
+    if not panel then return false end
+    --- Blizzard's own manager can switch the active layout while the MSUF
+    --- session stays open. The cached info predates that switch, so keeping
+    --- it would make the next mover drag edit the previous layout and save
+    --- the whole stale table back over the user's choice. Handing control
+    --- over is a save-free moment, so dropping the cache is safe here.
+    InvalidateLayoutCache()
+    _G.ShowUIPanel(panel)
+    if panel ~= manager and type(_G.MSUF_EM2_SetHUDStatus) == "function" then
+        local translate = MSUF.Translate or tostring
+        local entry = type(_G.HUD_EDIT_MODE_MENU) == "string" and _G.HUD_EDIT_MODE_MENU or "Edit Mode"
+        _G.MSUF_EM2_SetHUDStatus(string.format(translate("Choose %s in the game menu"), entry), "info", 4)
     end
-    return false
+    return true
 end
 
 local function BlizzardLabel(globalName, fallback)

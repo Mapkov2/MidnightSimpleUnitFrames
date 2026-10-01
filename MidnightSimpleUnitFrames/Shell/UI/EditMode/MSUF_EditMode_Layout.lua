@@ -695,142 +695,6 @@ function Snap.Apply(cx, cy, hw, hh, dragKey)
     return snappedX, snappedY
 end
 
---- MSUF_EM2_Anchors.lua
-
---- MSUF_EM2_Anchors.lua ? Phase 4: Anchor chain system
---- When element A moves, all elements anchored to A follow with same delta.
---- Chains propagate recursively (A?B?C: moving A moves B and C).
---- Width/height binding: child.width can track parent.width.
-local Anchors = {}
-EM2.Anchors = Anchors
-
---- chains[childKey] = { parent = parentKey, bindWidth = bool, bindHeight = bool }
-local chains = {}
-
---- --- Registration ---
-function Anchors.Link(childKey, parentKey, opts)
-    if not childKey or not parentKey then return end
-    opts = opts or {}
-    chains[childKey] = {
-        parent     = parentKey,
-        bindWidth  = opts.bindWidth or false,
-        bindHeight = opts.bindHeight or false,
-    }
-end
-
-function Anchors.Unlink(childKey)
-    chains[childKey] = nil
-end
-
-function Anchors.GetParent(childKey)
-    local c = chains[childKey]
-    return c and c.parent
-end
-
---- --- Query: all direct children of a parent ---
-function Anchors.GetChildren(parentKey)
-    local result = {}
-    for child, info in pairs(chains) do
-        if info.parent == parentKey then
-            result[#result + 1] = child
-        end
-    end
-    return result
-end
-
---- --- Recursive children (full chain) ---
-function Anchors.GetAllDescendants(parentKey, visited)
-    visited = visited or {}
-    if visited[parentKey] then return {} end
-    visited[parentKey] = true
-    local result = {}
-    for child, info in pairs(chains) do
-        if info.parent == parentKey and not visited[child] then
-            result[#result + 1] = child
-            local sub = Anchors.GetAllDescendants(child, visited)
-            for _, s in ipairs(sub) do result[#result + 1] = s end
-        end
-    end
-    return result
-end
-
---- --- Propagate movement delta to all descendants ---
---- Called after dragging parentKey by (dx, dy) in screen space.
---- Moves child movers and their underlying frames.
-function Anchors.PropagateMove(parentKey, dx, dy)
-    if (IsConfigCombatLocked and IsConfigCombatLocked())
-        or (InCombatLockdown and InCombatLockdown()) then return false end
-    if dx == 0 and dy == 0 then return end
-    local children = Anchors.GetAllDescendants(parentKey)
-    if #children == 0 then return end
-
-    local movers = EM2.Movers and EM2.Movers.All()
-    if not movers then return end
-
-    for _, childKey in ipairs(children) do
-        local mover = movers[childKey]
-        if mover and mover:IsShown() then
-            local l = (mover:GetLeft() or 0) + dx
-            local b = (mover:GetBottom() or 0) + dy
-            mover:ClearAllPoints()
-            mover:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l, b)
-
-            --- Move underlying frame
-            local cfg = EM2.Registry and EM2.Registry.Get(childKey)
-            if cfg then
-                local frame = cfg.getFrame and cfg.getFrame()
-                if frame then
-                    local fS = frame:GetEffectiveScale()
-                    local uiS = UIParent:GetEffectiveScale()
-                    local ratio = uiS / fS
-                    frame:ClearAllPoints()
-                    frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l * ratio, b * ratio)
-                end
-
-                --- Save to DB
-                if cfg.getConf then
-                    local conf = cfg.getConf()
-                    if conf then
-                        local w = mover:GetWidth() or 50
-                        local h = mover:GetHeight() or 20
-                        local uiW = UIParent:GetWidth() or 1
-                        local uiH = UIParent:GetHeight() or 1
-                        conf.offsetX = floor((l + w * 0.5) - uiW * 0.5 + 0.5)
-                        conf.offsetY = floor((b + h * 0.5) - uiH * 0.5 + 0.5)
-                    end
-                end
-            end
-        end
-    end
-end
-
---- --- Width/height binding sync ---
---- Call after any resize to propagate to bound children.
-function Anchors.SyncDimensions(parentKey)
-    local parentMover = EM2.Movers and EM2.Movers.Get(parentKey)
-    if not parentMover then return end
-    local pw = parentMover:GetWidth() or 0
-    local ph = parentMover:GetHeight() or 0
-
-    for childKey, info in pairs(chains) do
-        if info.parent == parentKey and (info.bindWidth or info.bindHeight) then
-            local cfg = EM2.Registry and EM2.Registry.Get(childKey)
-            if cfg and cfg.getConf then
-                local conf = cfg.getConf()
-                if conf then
-                    if info.bindWidth  then conf.width  = floor(pw + 0.5) end
-                    if info.bindHeight then conf.height = floor(ph + 0.5) end
-                end
-            end
-        end
-    end
-end
-
---- --- Clear all chains (on exit edit mode) ---
-function Anchors.Clear()
-    for k in pairs(chains) do chains[k] = nil end
-end
-
 local Nudge = {}
 EM2.Nudge = Nudge
 
@@ -874,14 +738,6 @@ local function GetCastbarOffsetKeys(unit)
     if not prefix or prefix == "" then return nil, nil end
     return prefix .. "OffsetX", prefix .. "OffsetY"
 end
-
-local CASTBAR_NUDGE_UNITS = {
-    castbar_player = "player",
-    castbar_target = "target",
-    castbar_focus  = "focus",
-    castbar_boss   = "boss",
-    castbar_arena  = "arena",
-}
 
 local CASTBAR_NUDGE_DEFAULTS = {
     player = { 0, 5 },
@@ -1214,39 +1070,6 @@ local function NudgeTarget(dx, dy, exactDelta)
     if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
     RefreshUFPreview("EM2_UNIT_NUDGE", key)
     return true
-end
-
--- Public, state-preserving movement route for non-visual controllers.  This is
--- intentionally the same function used by keyboard buttons so unit, castbar,
--- aura, group, and selected inline-preview moves retain their exact undo/apply
--- behavior without simulating a hidden secure click.
-function Nudge.Move(dx, dy, targetKey)
-    dx, dy = tonumber(dx), tonumber(dy)
-    if not IsFiniteNudgeNumber(dx) or not IsFiniteNudgeNumber(dy) then return false end
-    if dx == 0 and dy == 0 then return false end
-    local castbarUnit = type(targetKey) == "string" and CASTBAR_NUDGE_UNITS[targetKey] or nil
-    if type(targetKey) == "string" and targetKey:sub(1, 8) == "castbar_" and not castbarUnit then return false end
-    if castbarUnit then
-        local isActive = EM2.State and EM2.State.IsActive
-        if type(isActive) ~= "function" then return false end
-        if not isActive() then return false end
-        if type(IsConfigCombatLocked) ~= "function" then return false end
-        if IsConfigCombatLocked() then return false end
-    end
-    if type(targetKey) == "string" and targetKey ~= "" then
-        local clearPreview = _G.MSUF_EM2_SetPreviewNudgeTarget
-        if type(clearPreview) == "function" then clearPreview(nil) end
-        local setUnitKey = EM2.State and EM2.State.SetUnitKey
-        if type(setUnitKey) ~= "function" then return false end
-        if setUnitKey(targetKey) == false then return false end
-        if castbarUnit then
-            local getUnitKey = EM2.State and EM2.State.GetUnitKey
-            if type(getUnitKey) ~= "function" then return false end
-            if getUnitKey() ~= targetKey then return false end
-        end
-    end
-    if castbarUnit then return NudgeCastbar(castbarUnit, dx, dy) end
-    return NudgeTarget(dx, dy, true) == true
 end
 
 local NUDGE_DIRS = { { "UP", 0, 1 }, { "DOWN", 0, -1 }, { "LEFT", -1, 0 }, { "RIGHT", 1, 0 } }
@@ -2438,9 +2261,33 @@ function Ticker.Start()
     ScheduleDirtyFlush(0)
 end
 
-function Ticker.Stop()
+--- Edit Mode closes while a drag is still held (combat start, Exit, a
+--- profile switch). Native drags wrote their offsets on every tick and the
+--- exit re-applies them; an external element only previewed its position,
+--- and its provider persists it on "commit". The combat exit runs this inside
+--- PLAYER_REGEN_DISABLED, before lockdown, and defers nothing; a provider
+--- that refuses gets its start state back.
+local function CommitExternalDragOnStop(d)
+    if not (d and d.externalPublicElement and d.mover) then return end
+    local _, cx, _, _, cy = GetFrameEdgesUI(d.mover)
+    if cx == nil or cy == nil then return end
+    local uiScale = UIParent:GetEffectiveScale() or d.uiScale or 1
+    if uiScale <= 0 then uiScale = 1 end
+    if abs(cx * uiScale - (d.startCenterPX or cx * uiScale)) <= 0.5
+        and abs(cy * uiScale - (d.startCenterPY or cy * uiScale)) <= 0.5 then return end
+    if ApplyPublicExternalDragPosition(d, cx, cy, "commit") then return end
+    local external = EM2.ExternalElements
+    if external and type(external.RestoreHistoryState) == "function" then
+        external.RestoreHistoryState({ key = d.key, data = d.externalStartState })
+    end
+end
+
+function Ticker.Stop(commitHeldDrag)
     tickerActive = false
-    if activeDrag then SetActiveDragFlags(activeDrag, false) end
+    if activeDrag then
+        if commitHeldDrag == true then CommitExternalDragOnStop(activeDrag) end
+        SetActiveDragFlags(activeDrag, false)
+    end
     activeDrag = nil
     idleMoverDirty = false; idleHUDDirty = false
     dirtyFlushScheduled = false

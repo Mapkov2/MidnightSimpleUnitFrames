@@ -186,6 +186,10 @@ MSUF_DB = {
 }
 InCombatLockdown = function() return false end
 ShowUIPanel = function(frame) frame.panelShown = (frame.panelShown or 0) + 1 end
+-- Mainline UIPanelWindows.lua registers the Edit Mode manager; the Classic
+-- clients register only the Game Menu (see the Classic-shaped case below).
+UIPanelWindows = { EditModeManagerFrame = { area = "center" }, GameMenuFrame = { area = "center" } }
+GameMenuFrame = {}
 HideUIPanel = function(frame) frame.panelHidden = (frame.panelHidden or 0) + 1 end
 
 local namespace = {}
@@ -471,6 +475,23 @@ do
     assert(ctx.registered.minimap.isEnabled() == true, "Blizzard element stayed disabled without the rule")
     assert(ctx.registered.minimap.openSettings() == true and EditModeManagerFrame.panelShown == 1,
         "Blizzard Edit Mode did not open without the rule")
+
+    -- Classic clients: EditModeManagerFrame is no UI panel there, so ShowUIPanel
+    -- would show it straight from MSUF code (taint). The registered Game Menu
+    -- opens instead and the HUD names Blizzard's Edit Mode entry.
+    local registeredManager = UIPanelWindows.EditModeManagerFrame
+    UIPanelWindows.EditModeManagerFrame = nil
+    local status
+    MSUF_EM2_SetHUDStatus = function(text) status = text end
+    HUD_EDIT_MODE_MENU = "Edit Mode (client)"
+    GameMenuFrame.panelShown = nil
+    assert(ctx.registered.minimap.openSettings() == true and EditModeManagerFrame.panelShown == 1
+        and GameMenuFrame.panelShown == 1,
+        "Classic client showed the unregistered Edit Mode manager from addon code")
+    assert(status == "Choose Edit Mode (client) in the game menu",
+        "Classic client did not point at the game menu's Edit Mode entry: " .. tostring(status))
+    UIPanelWindows.EditModeManagerFrame = registeredManager
+    MSUF_EM2_SetHUDStatus, HUD_EDIT_MODE_MENU = nil, nil
 end
 
 -- A layout created from a preset keeps the preset's interfaceStyle (Gamepad

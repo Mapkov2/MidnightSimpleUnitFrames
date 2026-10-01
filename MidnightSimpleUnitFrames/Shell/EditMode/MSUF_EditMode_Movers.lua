@@ -20,7 +20,6 @@ local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local U = EM2.Util or {}
 local round = U.Round
 local ApplySettingsForKeySafe = U.ApplySettingsForKeySafe
-local ApplyAllSettingsSafe = U.ApplyAllSettingsSafe
 local Tr = U.Tr
 local ThemeColor = U.ThemeColor
 local SharedUI = U.SharedUI
@@ -909,22 +908,9 @@ RegisterAll()
 --- MSUF_EM2_Compat.lua
 
 --- MSUF_EM2_Compat.lua
---- Legacy global stubs so external files (30+) continue to work after
---- MSUF_EditMode.lua is deleted. Every function listed here was exported
---- by the old EditMode and is called from at least one other file.
---- --- Edit namespace (old code references _G.MSUF_Edit.*) ---
-ExportPublic("MSUF_Edit", _G.MSUF_Edit or {})
-local Edit = _G.MSUF_Edit
-Edit.Popups = Edit.Popups or {}
-Edit.Flow   = Edit.Flow   or {}
-Edit.Util   = Edit.Util   or {}
-Edit.UI     = Edit.UI     or {}
-
---- --- MSUF_EditState table (rawget'd by A2, Util, etc.) ---
-if not _G.MSUF_EditState then
-    ExportPublic("MSUF_EditState", { active = false, unitKey = nil, popupOpen = false })
-end
-
+--- Global entry points other files call: the Edit Mode switch, the popup and
+--- preview syncs and the castbar anchor toggle. (MSUF_EditState is published
+--- by Core, which loads first.)
 --- --- MSUF_IsInEditMode ---
 local function MSUF_IsInEditMode()
     if EM2.State then return EM2.State.IsActive() end
@@ -932,104 +918,9 @@ local function MSUF_IsInEditMode()
 end
 ExportPublic("MSUF_IsInEditMode", MSUF_IsInEditMode)
 
---- --- MSUF_GetAnchorFrame ---
-local function MSUF_GetAnchorFrame()
-    local db = _G.MSUF_DB
-    local g = db and db.general or {}
-    local isCooldownAnchorEnabled = _G.MSUF_IsCooldownAnchorEnabled
-    -- The Integrations module answers first; without it the client model does.
-    -- The C_CooldownViewer namespace is never the signal: the shared engine
-    -- exposes it on every client, while only the Mainline family ships
-    -- Blizzard's Cooldown Manager (Client.HostsCooldownManager).
-    local cooldownAnchorEnabled = type(isCooldownAnchorEnabled) == "function"
-        and isCooldownAnchorEnabled(g) == true
-        or (MSUF.Client ~= nil and MSUF.Client.HostsCooldownManager == true
-            and g.anchorToCooldown == true)
-    if cooldownAnchorEnabled then
-        local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
-        local getSize = _G.MSUF_GetUsableCooldownAnchorSize
-        if type(getSize) == "function" and getSize(ecv) ~= nil then return ecv end
-        return UIParent
-    end
-    local anchorName = g.anchorName
-    if anchorName and anchorName ~= "" and anchorName ~= "EssentialCooldownViewer" then
-        local f = _G[anchorName]
-        if f then return f end
-    end
-    return UIParent
-end
-ExportPublic("MSUF_GetAnchorFrame", MSUF_GetAnchorFrame)
-
---- --- MSUF_GetCurrentGridStep ---
-local function MSUF_GetCurrentGridStep()
-    if EM2.Grid then return EM2.Grid.GetGridStep() end
-    local db = _G.MSUF_DB
-    return (db and db.general and db.general.editModeGridStep) or 20
-end
-ExportPublic("MSUF_GetCurrentGridStep", MSUF_GetCurrentGridStep)
-
---- --- MSUF_MakeBlizzardOptionsMovable ---
-local function MSUF_MakeBlizzardOptionsMovable()
-    if BlockConfigCombatLocked() then return false end
-    local frame = _G.SettingsPanel or _G.InterfaceOptionsFrame
-    if not frame then return end
-    if frame.MSUF_Movable then return end
-    frame.MSUF_Movable = true
-    if frame.SetMovable then frame:SetMovable(true) end
-    if frame.SetClampedToScreen then frame:SetClampedToScreen(true) end
-    local drag = PixelLayoutRegion(CreateFrame("Frame", "MSUF_SettingsPanelDragHandle", frame), true)
-    drag:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -4)
-    drag:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -60, -4)
-    drag:SetHeight(22)
-    drag:EnableMouse(true)
-    drag:RegisterForDrag("LeftButton")
-    local function StartPanelDrag(self, button)
-        if button and button ~= "LeftButton" then return end
-        if BlockConfigCombatLocked() then return end
-        local p = self:GetParent()
-        if p and p.StartMoving then p:StartMoving() end
-    end
-    local function StopPanelDrag(self, button)
-        if button and button ~= "LeftButton" then return end
-        local p = self:GetParent()
-        if p and p.StopMovingOrSizing then p:StopMovingOrSizing() end
-    end
-    drag:SetScript("OnMouseDown", StartPanelDrag)
-    drag:SetScript("OnMouseUp", StopPanelDrag)
-    drag:SetScript("OnDragStart", StartPanelDrag)
-    drag:SetScript("OnDragStop", StopPanelDrag)
-    drag:SetScript("OnHide", StopPanelDrag)
-end
-ExportPublic("MSUF_MakeBlizzardOptionsMovable", MSUF_MakeBlizzardOptionsMovable)
-
---- --- MSUF_ResetCurrentEditUnit ---
-local function MSUF_ResetCurrentEditUnit()
-    local key = _G.MSUF_CurrentEditUnitKey
-    if not key then return end
-    local db = _G.MSUF_DB
-    local conf = db and db[key]
-    if not conf then return end
-    conf.width = nil; conf.height = nil; conf.offsetX = nil; conf.offsetY = nil
-    conf.anchorFrameName = nil
-    conf.anchorToUnitframe = "GLOBAL"
-    if db.general then
-        db.general.anchorToCooldown = false
-        db.general.anchorName = "UIParent"
-    end
-    if not ApplySettingsForKeySafe(key) then
-        ApplyAllSettingsSafe()
-    end
-end
-ExportPublic("MSUF_ResetCurrentEditUnit", MSUF_ResetCurrentEditUnit)
-
+--- Castbar code still calls this guarded refresh; the old edit info panel it
+--- updated is gone, so it does nothing.
 local function LegacyNoop() end
-local function UpdateGridOverlay()
-    if EM2.State and EM2.State.IsActive() then
-        if EM2.Grid then EM2.Grid.Show() end
-    else
-        if EM2.Grid then EM2.Grid.Hide() end
-    end
-end
 local function OpenMoverPopup(prefix, fallback, unit, parent)
     if EM2.Popups then
         EM2.Popups.Open(prefix and (prefix .. tostring(unit or "")) or unit, parent)
@@ -1039,18 +930,6 @@ local function OpenMoverPopup(prefix, fallback, unit, parent)
 end
 
 ExportPublic("MSUF_UpdateCastbarEditInfo", LegacyNoop)
-ExportPublic("MSUF_UpdateGridOverlay", UpdateGridOverlay)
-ExportPublic("MSUF_UpdateEditModeVisuals", UpdateGridOverlay)
-
-local function MSUF_CreateGridFrame()
-    if EM2.Grid then EM2.Grid.Show() end
-end
-ExportPublic("MSUF_CreateGridFrame", MSUF_CreateGridFrame)
-
-local function MSUF_OpenPositionPopup(unit, parent)
-    OpenMoverPopup(nil, nil, unit, parent)
-end
-ExportPublic("MSUF_OpenPositionPopup", MSUF_OpenPositionPopup)
 
 local function MSUF_OpenCastbarPositionPopup(unit, parent)
     OpenMoverPopup("castbar_", EM2.CastPopup, unit, parent)
@@ -1113,12 +992,6 @@ local function MSUF_SetMSUFEditModeDirect(active, unitKey)
 end
 ExportPublic("MSUF_SetMSUFEditModeDirect", MSUF_SetMSUFEditModeDirect)
 
---- --- MSUF_SetMSUFEditModeFromBlizzard ---
-local function MSUF_SetMSUFEditModeFromBlizzard(active)
-    MSUF_SetMSUFEditModeDirect(active, nil)
-end
-ExportPublic("MSUF_SetMSUFEditModeFromBlizzard", MSUF_SetMSUFEditModeFromBlizzard)
-
 --- --- Preview System ---
 --- One global flag: MSUF_PreviewTestMode. Mirrors MSUF_BossTestMode exactly.
 --- The core's visibility driver (line 2000) checks this flag to force-show.
@@ -1137,6 +1010,7 @@ local CASTBAR_TEST_FUNCS = {
 }
 local previewMoverSyncQueued = false
 local previewReforceQueued = false
+local SyncCastbarEditModeWithUnitEdit
 
 local function SchedulePreviewMoverSync(delay)
     if not (EM2.Movers and EM2.Movers.SyncAll) then return end
@@ -1203,7 +1077,6 @@ local function MSUF_EM2_SchedulePreviewReforce()
     previewReforceQueued = true
     C_Timer.After(0.1, RunQueuedPreviewReforce)
 end
-ExportPublic("MSUF_EM2_SchedulePreviewReforce", MSUF_EM2_SchedulePreviewReforce)
 
 local function MSUF_SyncAllUnitPreviews()
     local active = _G.MSUF_UnitPreviewActive and true or false
@@ -1247,9 +1120,7 @@ local function MSUF_SyncAllUnitPreviews()
     local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
     local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
     if batchingBossPreview then beginBossBatch() end
-    if _G.MSUF_SyncCastbarEditModeWithUnitEdit then
-        _G.MSUF_SyncCastbarEditModeWithUnitEdit()
-    end
+    SyncCastbarEditModeWithUnitEdit()
     --- Animated castbar motion is owned by the on-demand preview animation driver.
     for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
         local f = _G[fn]; if type(f) == "function" then f(false, true) end
@@ -1437,7 +1308,7 @@ do
             local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
             local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
             if batchingBossPreview then beginBossBatch() end
-            if _G.MSUF_SyncCastbarEditModeWithUnitEdit then _G.MSUF_SyncCastbarEditModeWithUnitEdit() end
+            SyncCastbarEditModeWithUnitEdit()
             --- Animated castbar motion is owned by the on-demand preview animation driver.
             for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
                 local f = _G[fn]; if type(f) == "function" then f(false, true) end
@@ -1469,8 +1340,8 @@ do
     ExportPublic("MSUF_SyncAllUnitPreviewsAsync", SyncAllUnitPreviewsAsync)
 end
 
---- --- MSUF_SyncCastbarEditModeWithUnitEdit (castbar preview sync) ---
-local function MSUF_SyncCastbarEditModeWithUnitEdit()
+--- --- Castbar preview sync ---
+function SyncCastbarEditModeWithUnitEdit()
     local db = _G.MSUF_DB
     if not db then return end
     db.general = db.general or {}
@@ -1491,24 +1362,6 @@ local function MSUF_SyncCastbarEditModeWithUnitEdit()
         _G.MSUF_UpdateBossCastbarPreview()
     end
 end
-ExportPublic("MSUF_SyncCastbarEditModeWithUnitEdit", MSUF_SyncCastbarEditModeWithUnitEdit)
-
---- --- MSUF_SyncBossUnitframePreviewWithUnitEdit ---
-local MSUF_SyncBossUnitframePreviewWithUnitEdit = function()
-    --- Provided by MidnightSimpleUnitFrames.lua; stub if not yet available
-end
-ExportPublic("MSUF_SyncBossUnitframePreviewWithUnitEdit", MSUF_SyncBossUnitframePreviewWithUnitEdit)
-
---- --- Edit.Flow.Exit ---
-Edit.Flow.Exit = function(source, opts)
-    if EM2.State then EM2.State.Exit(source or "flow") end
-end
-
---- --- Edit.Transitions ---
-Edit.Transitions = Edit.Transitions or {}
-Edit.Transitions.SetMSUFEditModeDirect = MSUF_SetMSUFEditModeDirect
-
---- --- AnyEditMode listeners (registration handled in State.lua) ---
 
 --- --- Castbar anchor toggle (detach/attach to unitframe) ---
 local function CastbarToggleFrameCenter(unit)

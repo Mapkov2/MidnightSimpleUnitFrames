@@ -247,28 +247,51 @@ MSUF_EM2.Undo = {
     CommitPrepared = function() historyCommits = historyCommits + 1; return true end,
 }
 MSUF_EM2.Focus = { NotifyPositionChanged = function() end }
-assert(MSUF_EM2.Nudge.Move(0, -1, "classpower") == true
-    and MSUF_DB.bars.classPowerOffsetY == -36 and combo.point[5] == -36,
+-- The arrow keys are override bindings that click four hidden buttons; the
+-- smoke selects an element and presses those buttons the same way.
+local nudgeButtons = {}
+local previousCreateFrame = CreateFrame
+CreateFrame = function(_, name)
+    local frame = { scripts = {} }
+    function frame:SetScript(script, handler) self.scripts[script] = handler end
+    function frame:Hide() end
+    function frame:SetSize() end
+    function frame:RegisterEvent() end
+    function frame:UnregisterEvent() end
+    if name then nudgeButtons[name] = frame end
+    return frame
+end
+SetOverrideBindingClick = function() end
+ClearOverrideBindings = function() end
+MSUF_EnableArrowKeyNudge(true)
+CreateFrame = previousCreateFrame
+local function Press(key, direction)
+    selectedKey = key
+    local button = assert(nudgeButtons["MSUF_EM2_Nudge" .. direction], direction .. " nudge button missing")
+    button.scripts.OnClick(button)
+end
+Press("classpower", "DOWN")
+assert(MSUF_DB.bars.classPowerOffsetY == -36 and combo.point[5] == -36,
     "Class Resource arrow nudge did not move its own Y offset")
 assert(MSUF_DB.player.detachedPowerBarOffsetY == -20,
     "Class Resource arrow nudge changed detached Power")
-assert(MSUF_EM2.Nudge.Move(0, 1, "power_player") == true
-    and MSUF_DB.player.detachedPowerBarOffsetY == -19 and energy.point[5] == -19,
+Press("power_player", "UP")
+assert(MSUF_DB.player.detachedPowerBarOffsetY == -19 and energy.point[5] == -19,
     "detached Power arrow nudge did not move its own Y offset")
-assert(MSUF_EM2.Nudge.Move(1, 0, "power_player") == true
-    and MSUF_DB.player.detachedPowerBarOffsetX == 8 and energy.point[4] == 8,
+Press("power_player", "RIGHT")
+assert(MSUF_DB.player.detachedPowerBarOffsetX == 8 and energy.point[4] == 8,
     "detached Power arrow nudge did not move its own X offset")
 assert(MSUF_DB.bars.classPowerOffsetX == 23 and historyCommits == 3,
     "resource arrow nudges changed Class Resource X or missed undo history")
 InCombatLockdown = function() return true end
-assert(MSUF_EM2.Nudge.Move(0, 1, "classpower") == false
-    and MSUF_DB.bars.classPowerOffsetY == -36 and historyCommits == 3,
+Press("classpower", "UP")
+assert(MSUF_DB.bars.classPowerOffsetY == -36 and historyCommits == 3,
     "resource arrow nudge changed position or undo history in combat")
 InCombatLockdown = function() return false end
 local refreshClass = MSUF_ClassPower_RefreshLayout
 MSUF_ClassPower_RefreshLayout = function() return false end
-assert(MSUF_EM2.Nudge.Move(0, 1, "classpower") == false
-    and MSUF_DB.bars.classPowerOffsetY == -36 and historyCommits == 3,
+Press("classpower", "UP")
+assert(MSUF_DB.bars.classPowerOffsetY == -36 and historyCommits == 3,
     "failed resource layout apply was saved or added to undo history")
 MSUF_ClassPower_RefreshLayout = refreshClass
 

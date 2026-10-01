@@ -806,6 +806,14 @@ local function SharedHistoryService()
     return menu
 end
 
+--- A focused popup box applies its text on OnEditFocusLost, which the client
+--- also fires when the popup hides. Cancel All and the combat exit drop that
+--- half-typed text before anything else (EditPopupUI Quick.DiscardFocusedEdits).
+local function DiscardFocusedPopupEdits()
+    local quick = EM2.QuickPopup
+    if quick and quick.DiscardFocusedEdits then quick.DiscardFocusedEdits() end
+end
+
 local function ExternalEditModeAPI()
     local api = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
     return type(api) == "table" and api or nil
@@ -932,11 +940,6 @@ function State.Enter(key, opts)
             ReforceUnitPreviewsAfterEnter()
         end)
 
-        --- Undo transaction
-        if type(MSUF_BeginEditModeTransaction) == "function" then
-            MSUF_BeginEditModeTransaction()
-        end
-
         --- Notify listeners (Auras3 previews etc.)
         NotifyListeners()
 
@@ -962,8 +965,15 @@ function State.Exit(source)
     --- deferred restore below would otherwise run one frame into combat.
     local combatLocked = source == "combat" or ((InCombatLockdown and InCombatLockdown()) and true or false)
 
-    --- Stop ticker FIRST (zero overhead from this point)
-    if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
+    --- Combat start cannot apply a half-typed popup value (protected writes)
+    --- and the history closes below, so the text is dropped.
+    if combatLocked then DiscardFocusedPopupEdits() end
+
+    --- Stop ticker FIRST (zero overhead from this point). A drag that is still
+    --- held keeps its position: the ticker commits an external element's
+    --- previewed position while the session is open (on a combat exit this is
+    --- still inside PLAYER_REGEN_DISABLED, before lockdown).
+    if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop(true) end
 
     --- Combat may interrupt an active drag or a debounced nudge. Cancel its
     --- timers before hiding widgets can fire OnHide commits. The shared
@@ -1052,6 +1062,10 @@ function State.CancelAll()
     if not active then return end
     local exitingProvider = provider
     enterGeneration = enterGeneration + 1
+
+    --- Drop half-typed popup text before the restore: closing the popups
+    --- afterwards would commit it on top of the restored profile.
+    DiscardFocusedPopupEdits()
 
     --- Stop ticker FIRST so no OnUpdate can write offsets after restore.
     if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
@@ -1275,11 +1289,16 @@ local HISTORY_CATEGORY_LABELS = {
     external = "External frame",
 }
 
+--- Menu2's undo surfaces show the label as given, so it is built from
+--- translated pieces through translated format strings ("Move Unit frame:
+--- player"). The key is a profile identifier and stays as it is.
 local function HistoryChangeLabel(category, key, action)
-    local label = HISTORY_CATEGORY_LABELS[tostring(category or "")] or "Edit Mode"
+    local tr = Util.Tr or tostring
+    local label = tr(HISTORY_CATEGORY_LABELS[tostring(category or "")] or "Edit Mode")
+    action = tr(tostring(action or "Change"))
     key = tostring(key or "")
-    if key ~= "" then label = label .. ": " .. key end
-    return tostring(action or "Change") .. " " .. label
+    if key ~= "" then return string.format(tr("%s %s: %s"), action, label, key) end
+    return string.format(tr("%s %s"), action, label)
 end
 
 local function HistoryChangeSource(category, key)

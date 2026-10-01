@@ -165,6 +165,23 @@ local function EnsureSearchLexicon()
         end
     end
     SEARCH_QUERY_ALIASES = aliases
+    -- A key of several words ("мини карта") can never be one query word, so
+    -- such keys are listed by their first word, longest first, and
+    -- SearchRawWords matches them as one word before it splits the query.
+    local multiWord = {}
+    for folded in pairs(aliases) do
+        if folded:find(" ", 1, true) then
+            local words = {}
+            for word in folded:gmatch("%S+") do words[#words + 1] = word end
+            local bucket = multiWord[words[1]]
+            if not bucket then bucket = {}; multiWord[words[1]] = bucket end
+            bucket[#bucket + 1] = { key = folded, words = words }
+        end
+    end
+    for _, bucket in pairs(multiWord) do
+        table.sort(bucket, function(a, b) return #a.words == #b.words and a.key < b.key or #a.words > #b.words end)
+    end
+    SEARCH_STATE.multiWordAliases = multiWord
     -- Everything derived from the lexicon follows a rebuild.
     compactQueryKeys = nil
     SEARCH_STATE.aliasTypoKeys, SEARCH_STATE.aliasTypoKeyLengths = nil, nil
@@ -313,7 +330,26 @@ local function SearchRawWords(normalized, allowSoftStop)
         if allowSoftStop then ignored = SEARCH_STOP_WORDS[word] else ignored = SearchIgnoreQueryWord(word) end
         if not ignored and word ~= "" and #raw < SEARCH_MAX_RAW_WORDS then raw[#raw + 1] = word end
     end
-    for word in tostring(normalized or ""):gmatch("%S+") do
+    local words = {}
+    for word in tostring(normalized or ""):gmatch("%S+") do words[#words + 1] = word end
+    local multiWord = SEARCH_STATE.multiWordAliases or EMPTY_SEARCH_RECORDS
+    local position = 0
+    while position < #words do
+        position = position + 1
+        local word = words[position]
+        local bucket = multiWord[word]
+        for b = 1, bucket and #bucket or 0 do
+            local candidate = bucket[b].words
+            local matched = true
+            for k = 2, #candidate do
+                if words[position + k - 1] ~= candidate[k] then matched = false; break end
+            end
+            if matched then
+                word = bucket[b].key
+                position = position + #candidate - 1
+                break
+            end
+        end
         if not SEARCH_QUERY_ALIASES[word] and word:find("[\227-\237][\128-\191][\128-\191]") then
             local compact, index, unknown = CompactQueryKeys(), 1, ""
             while index <= #word and #raw < SEARCH_MAX_RAW_WORDS do
@@ -354,15 +390,7 @@ local function SearchUTFCharacters(text)
 end
 -- #SearchUTFCharacters(text) without building the table: one character per
 -- lead byte of that pattern. ASCII text is its byte length.
-local function SearchCharCount(text)
-    if not text:find("[\128-\255]") then return #text end
-    local count = 0
-    for i = 1, #text do
-        local b = byte(text, i)
-        if b < 128 or (b >= 194 and b <= 244) then count = count + 1 end
-    end
-    return count
-end
+local SearchCharCount = SearchText.CharCount
 local function SearchTypoDistance(text)
     local native = text:find("[\128-\255]") ~= nil
     local length = native and SearchCharCount(text) or #text
@@ -528,7 +556,7 @@ end
 
 local function BuildSearchQueryClauses(query)
     EnsureSearchLexicon()
-    local normalized = NormalizeSearchText(tostring(query or ""):sub(1, 256))
+    local normalized = NormalizeSearchText(SearchText.Utf8BytePrefix(tostring(query or ""), 256))
     if normalized == SEARCH_STATE.queryClauseCacheNorm and SEARCH_STATE.queryClauseCacheClauses then
         return normalized, SEARCH_STATE.queryClauseCacheClauses
     end
@@ -1421,7 +1449,7 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
     local hintNorm = (kind == "faq") and "" or (displayHint == hint and idHintNorm or NormalizeSearchText(displayHint))
     local haystackText = table.concat(parts, " ")
     if kind ~= "faq" and kind ~= "page" and #haystackText > SEARCH_CONTROL_HAYSTACK_MAX_LEN then
-        haystackText = haystackText:sub(1, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
+        haystackText = SearchText.Utf8BytePrefix(haystackText, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
     end
     local haystackNorm = NormalizeSearchText(haystackText)
     local record = {
@@ -1741,7 +1769,7 @@ function SearchProviders.Record(row, info)
     for i = 1, #parts do AddSearchText(haystack, parts[i]) end
     local haystackText = table.concat(haystack, " ")
     if #haystackText > SEARCH_CONTROL_HAYSTACK_MAX_LEN then
-        haystackText = haystackText:sub(1, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
+        haystackText = SearchText.Utf8BytePrefix(haystackText, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
     end
     local rec = {
         key = info.key, label = label, kind = kind, hint = hint, title = info.title, group = info.group,
@@ -1859,7 +1887,8 @@ function SearchProviders.Append(records, cache)
             -- The live words come first: provider text first, cut at the
             -- record budget, could drop all of them. The budget stays one
             -- record's, so the provider's tail is what a long merge cuts.
-            merged.haystack = ((merged.haystack or "") .. " " .. (rec.haystack or "")):sub(1, SEARCH_CONTROL_HAYSTACK_MAX_LEN)
+            merged.haystack = SearchText.Utf8BytePrefix((merged.haystack or "") .. " " .. (rec.haystack or ""),
+                SEARCH_CONTROL_HAYSTACK_MAX_LEN)
             merged.tokens = nil
             merged.providerRow = rec.providerRow
             merged.answer = merged.answer or rec.answer
@@ -2040,7 +2069,7 @@ local function RefreshSearchResultsPage()
     -- invalidated and rebuilt the search page. Stop before any of that runs.
     if SearchCombatLocked() then return end
     local query = TrimText(M.searchQuery or "")
-    if query == "" or #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then return end
+    if query == "" or SearchText.QueryLength(query) < MIN_SEARCH_QUERY_LEN then return end
     SetSearchResults(SearchPages(query), query)
     if M.InvalidatePage then M.InvalidatePage("search") end
     if M.SelectPage then M.SelectPage("search") end
@@ -2152,7 +2181,7 @@ function SearchPages(query)
     end
     local normalized, clauses = BuildSearchQueryClauses(query)
     if #clauses == 0 then return {} end
-    if #normalized < MIN_SEARCH_QUERY_LEN then return {} end
+    if SearchCharCount(normalized) < MIN_SEARCH_QUERY_LEN then return {} end
 
     local exactQueryTarget = ExactQueryTarget(normalized)
     local supportQuestion = SearchLooksLikeSupportQuestion(query, normalized)
@@ -2173,6 +2202,10 @@ function SearchPages(query)
     local results = {}
     local records = GetSearchRecords()
     local fuzzyDistanceCache = {}
+    -- The page the user searched from ranks first. While results show, the
+    -- active page is the search page itself and that page is searchReturnKey.
+    local currentPageKey = M.activeKey == "search" and M.searchReturnKey or M.activeKey
+    if currentPageKey == "home" or currentPageKey == "search" then currentPageKey = nil end
     for i = 1, #records do
         local rec = records[i]
         local score = 0
@@ -2215,10 +2248,7 @@ function SearchPages(query)
             score = score + SearchResultSpecificityBoost(rec, clauses)
             if missedClauses > 0 then score = score - (missedClauses * 60) end
             if rec.kind ~= "page" then score = score + 45 end
-            local activeKey = M.activeKey
-            if activeKey ~= "home" and activeKey ~= "search" and rec.key == activeKey then
-                score = score + 120
-            end
+            if currentPageKey and rec.key == currentPageKey then score = score + 120 end
             if rec.kind == "slider" or rec.kind == "dropdown" or rec.kind == "toggle" then score = score + 25 end
             if controlQuestion
                 and (rec.kind == "toggle" or rec.kind == "dropdown" or rec.kind == "slider" or rec.kind == "segment"
@@ -2278,7 +2308,7 @@ local function RunSearchInputQuery(query, openPage)
         return
     end
 
-    if #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then
+    if SearchText.QueryLength(query) < MIN_SEARCH_QUERY_LEN then
         SetSearchResults(nil, query)
         if openPage then ShowSearchPageForQuery(query) end
         return
@@ -2297,7 +2327,7 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
 
     M.searchQuery = query
 
-    if query == "" or SearchCombatLocked() or #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then
+    if query == "" or SearchCombatLocked() or SearchText.QueryLength(query) < MIN_SEARCH_QUERY_LEN then
         RunSearchInputQuery(query, openPage)
         if type(onComplete) == "function" then onComplete(query) end
         return
@@ -2359,6 +2389,7 @@ Search._RenderContext = {
     SearchCombatLocked = SearchCombatLocked,
     NormalizeSearchText = NormalizeSearchText,
     MIN_SEARCH_QUERY_LEN = MIN_SEARCH_QUERY_LEN,
+    QueryLength = SearchText.QueryLength,
     SearchPages = SearchPages,
     SEARCH_STATE = SEARCH_STATE,
     SEARCH_VISIBLE_RESULTS = SEARCH_VISIBLE_RESULTS,

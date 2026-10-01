@@ -20,6 +20,8 @@ local TrimText = C.TrimText
 local SearchCombatLocked = C.SearchCombatLocked
 local NormalizeSearchText = C.NormalizeSearchText
 local MIN_SEARCH_QUERY_LEN = C.MIN_SEARCH_QUERY_LEN or 2
+-- Characters of the normalized query (one Cyrillic or CJK character is one).
+local QueryLength = C.QueryLength or function(text) return #NormalizeSearchText(text) end
 local SearchPages = C.SearchPages
 local SEARCH_STATE = C.SEARCH_STATE or {}
 local SEARCH_VISIBLE_RESULTS = C.SEARCH_VISIBLE_RESULTS or 12
@@ -41,7 +43,7 @@ local function BuildSearchPage(ctx)
     if SearchCombatLocked() or not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return end
     local width = ctx.width
     local query = TrimText(M.searchQuery or "")
-    local queryReady = #NormalizeSearchText(query) >= MIN_SEARCH_QUERY_LEN
+    local queryReady = QueryLength(query) >= MIN_SEARCH_QUERY_LEN
     local results = M.searchResults or {}
     if M.searchResultsQuery ~= query and not M.searchResultsPending then
         results = SearchPages(query)

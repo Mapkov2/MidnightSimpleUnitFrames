@@ -38,7 +38,6 @@ local selectionFS, hintFS
 local hudStatusText, hudStatusKind, hudStatusUntil
 local selectionLastText, hintLastText, hintLastR, hintLastG, hintLastB, hintLastA
 local helpBtn
-local guidedTourBridgeRequested = false
 local bgWidget, gridWidget
 local HelpText
 
@@ -737,44 +736,13 @@ local function AddAdjustWidget(row, parent, width, height, withStateBg, onMouseW
     return f, fs
 end
 
-local HELP_KEYS = {
-    "EM_HELP_DRAG", "EM_HELP_NUDGE", "EM_HELP_POPUP", "EM_HELP_SNAP", "EM_HELP_OPACITY",
-    "EM_HELP_PREVIEW", "EM_HELP_UNDO", "EM_HELP_CDM", "EM_HELP_COPYTO", "EM_HELP_EXIT",
-    "EM_HELP_TITLE", "EM_TOUR_START", "EM_TOUR_NEXT", "EM_TOUR_BACK", "EM_TOUR_SKIP",
-    "EM_TOUR_DONE", "EM_TOUR_STEP", "EM_HELP_BTN", "EM_HELP_BTN_TIP", "EM_HINT_NONE",
-    "EM_HINT_SELECTED", "EM_HINT_POPUP", "EM_SELECT_FIRST", "EM_PREVIEW_ON", "EM_PREVIEW_OFF",
-    "EM_AURAS_ON", "EM_AURAS_OFF", "EM_SNAP_ON", "EM_SNAP_OFF", "EM_GRID_ON", "EM_GRID_OFF",
-    "EM_CDM_ON", "EM_CDM_OFF", "EM_ANCHOR_SET", "Drag & Move", "Arrow Key Nudge",
-    "Click Popup", "Grid & Snap", "Background Opacity", "Preview & Auras", "Undo / Cancel All",
-    "CDM & Anchor", "Copy Settings", "Exit Edit Mode", "Discard", "Edit Mode", "Groups", "Frames",
-    "Position", "Toolbar position", "Top", "Bottom", "Left", "Right", "Snap to screen edge",
-    "Auto-hide", "Edge offset", "Drag the six-dot handle to move and dock the toolbar.",
-    "Dock the Edit Mode toolbar at any screen edge.",
-    "Pick the frame or group to edit, including ones hidden behind another frame.",
-    "Choose which frame's settings page to open.",
-    "Selected", "No frames to select",
-}
-
-local EN_HELP = (type(MSUF) == "table" and MSUF.LocaleRegistry and MSUF.LocaleRegistry.enUS) or {}
-
 function HelpText(key)
     if type(key) ~= "string" then return key end
     local value = type(L) == "table" and rawget(L, key) or nil
     if type(value) == "string" and value ~= "" and value ~= key then
         return value
     end
-    value = EN_HELP[key]
-    return (type(value) == "string" and value ~= "" and value ~= key) and value or key
-end
-
---- Seed the current locale table for old callers, but all Help/Tour rendering
---- uses HelpText() so MSUF.SetLocale() rebuilds cannot expose raw keys again.
-do
-    for _, key in ipairs(HELP_KEYS) do
-        local text = EN_HELP[key]
-        local current = rawget(L, key)
-        if type(text) == "string" and (current == nil or current == key) then L[key] = text end
-    end
+    return key
 end
 
 --- The toolbar is a cold, event-driven workspace preference.  It deliberately
@@ -1328,19 +1296,7 @@ local function ResolveMenu2()
     return type(menu) == "table" and menu or nil
 end
 
-local function HideLegacyFrame(frame)
-    if frame and type(frame.Hide) == "function" then frame:Hide() end
-end
-
-local function CleanupLegacyTourFrames()
-    HideLegacyFrame(_G.MSUF_EM2_TutorialPanel)
-    HideLegacyFrame(_G.MSUF_EM2_TourCard)
-end
-
 local function OpenMenuGuidedTourAtEditMode()
-    CleanupLegacyTourFrames()
-    guidedTourBridgeRequested = false
-
     local menu = ResolveMenu2()
     local menuOpened = false
     if menu and type(menu.Open) == "function" then
@@ -1356,69 +1312,13 @@ local function OpenMenuGuidedTourAtEditMode()
     menu = ResolveMenu2()
     local openStage = menu and menu.OpenGuidedTourAtStage
     if type(openStage) == "function" then
-        local result = openStage("edit_mode")
-        if result ~= false then
-            guidedTourBridgeRequested = true
-            return true
-        end
+        if openStage("edit_mode") ~= false then return true end
     end
     return menuOpened
 end
 
---- The former floating Help reference panel has intentionally been removed.
---- Help now enters the complete, menu-native guided tour above.
-
-function HUD.TourStep(idx)
-    -- Legacy callers may still supply an overlay step number.  The menu tour
-    -- owns its own progress and maps this entry to its Edit Mode stage.
-    return OpenMenuGuidedTourAtEditMode()
-end
-
-function HUD.StartTour()
-    return OpenMenuGuidedTourAtEditMode()
-end
-
-function HUD.StopTour()
-    CleanupLegacyTourFrames()
-    guidedTourBridgeRequested = false
-    return true
-end
-
--- Readable lifecycle helpers for non-visual controllers (for example the
--- menu).  Keep these on the existing HUD owner so callers
--- never need to retain HUD frames or reproduce button click side effects.
-function HUD.IsHelpShown()
-    return guidedTourBridgeRequested
-end
-
-function HUD.SetHelpShown(shown)
-    shown = shown == true
-    if shown then
-        return OpenMenuGuidedTourAtEditMode()
-    end
-    HUD.StopTour()
-    return true
-end
-
-function HUD.IsTourActive()
-    return guidedTourBridgeRequested
-end
-
-function HUD.GetTourStep()
-    return HUD.IsTourActive() and 1 or 0
-end
-
-function HUD.SetTourActive(active)
-    if active == true then
-        return HUD.StartTour()
-    end
-    HUD.StopTour()
-    return true
-end
-
-function HUD.SetTourStep(step)
-    return OpenMenuGuidedTourAtEditMode()
-end
+--- Help opens the menu-native guided tour at its Edit Mode chapter.
+DockUI.OpenGuidedTour = OpenMenuGuidedTourAtEditMode
 
 local function UpdateDockSwitch(row, enabled)
     if not row then return end
@@ -1841,43 +1741,6 @@ ApplyDockLayout = function()
     if state.autoHide then ScheduleDockAutoHide() end
 end
 
-function HUD.GetDockState()
-    local state = EnsureDockState()
-    return state.dock, state.snapToEdge, state.autoHide, state.edgeOffset, state.freeX, state.freeY
-end
-
-function HUD.SetDockPosition(dock)
-    dock = type(dock) == "string" and dock:upper() or nil
-    if not (dock and dock ~= "FREE" and DOCK_ALLOWED[dock]) then return false end
-    local state = EnsureDockState()
-    state.dock = dock
-    state.snapToEdge = true
-    if hudFrame then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
-    return true
-end
-
-function HUD.SetDockSnap(enabled)
-    EnsureDockState().snapToEdge = enabled ~= false
-    if DockUI.positionPopup then RefreshPositionPopup() end
-    return true
-end
-
-function HUD.SetDockAutoHide(enabled)
-    EnsureDockState().autoHide = enabled == true
-    SetDockExpanded(true)
-    if DockUI.positionPopup then RefreshPositionPopup() end
-    if enabled == true then ScheduleDockAutoHide() end
-    return true
-end
-
-function HUD.SetDockEdgeOffset(offset)
-    local state = EnsureDockState()
-    state.edgeOffset = ClampDockNumber(offset, 0, 64, DOCK_EDGE_DEFAULT)
-    if hudFrame then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
-    if DockUI.positionPopup then RefreshPositionPopup() end
-    return state.edgeOffset
-end
-
 local function EnsureHUD()
     if hudFrame then return false end
     RefreshHUDTheme()
@@ -1990,9 +1853,7 @@ local function EnsureHUD()
         pulse:SetLooping("REPEAT")
         helpBtn._pulse = pulse
     end
-    helpBtn:SetScript("OnClick", function()
-        HUD.StartTour()
-    end)
+    helpBtn:SetScript("OnClick", DockUI.OpenGuidedTour)
     helpBtn:SetScript("OnEnter", function(self)
         if self._pulse then self._pulse:Stop() end
         self:SetAlpha(1)
@@ -2432,7 +2293,7 @@ function HUD.RefreshControls(force)
         or (external.CanOpenSettings and external.CanOpenSettings(key))))
     if settingsBtn then
         settingsBtn._msufTipText = external
-            and ((selectedCfg.label or key) .. " settings")
+            and string.format(HelpText("%s settings"), selectedCfg.label or key)
             or "Choose which frame's settings page to open."
     end
     RegisterPreviewAnimationRefreshOwner()
@@ -2447,7 +2308,9 @@ function HUD.RefreshControls(force)
         local providerId, providerLabel = HUD.AutomaticCooldownProvider()
         local detected = providerId ~= nil
         local verticalDock = IsVerticalDock(EnsureDockState().dock)
-        local providerAnchorText = detected and (providerLabel .. (verticalDock and "" or " Anchor")) or HelpText("Cooldown")
+        local providerAnchorText = detected
+            and (verticalDock and providerLabel or string.format(HelpText("%s Anchor"), providerLabel))
+            or HelpText("Cooldown")
         if force or cdmBtn._msufProviderAnchorText ~= providerAnchorText then
             cdmBtn._msufProviderAnchorText = providerAnchorText
             if cdmBtn._label and cdmBtn._label.SetText then cdmBtn._label:SetText(providerAnchorText) end
@@ -2489,18 +2352,7 @@ function HUD.Show()
     return true
 end
 
-function HUD.ShowPositionSettings(shown)
-    if InCombatLockdown and InCombatLockdown() then return false end
-    EnsureHUD()
-    ApplyDockLayout()
-    DockUI.ScheduleLayoutSettle()
-    local popup = EnsurePositionPopup()
-    if shown == false then popup:Hide() else popup:Show() end
-    return popup:IsShown()
-end
-
 function HUD.Hide()
-    HUD.StopTour()
     if DockUI.tooltipRestoreLevel ~= nil then DockUI.ReleaseTooltip() end
     if DockUI.drag then StopDockDrag() end
     local cf = _G["MSUF_EM2_CancelConfirm"]; if cf then cf:Hide() end

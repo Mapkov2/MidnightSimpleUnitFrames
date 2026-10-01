@@ -336,6 +336,12 @@ local function InstallClientFacts(target)
 
     local namespace = _G.MSUF_NS
     if type(namespace) ~= "table" then Fail("WoW stubs did not create MSUF_NS") end
+    -- Menu2 Support resolves the core's combat lock on MSUF.Public (Kernel/MSUF_Util.lua
+    -- publishes it before Options loads); the generator never enters combat.
+    local public = type(namespace.Public) == "table" and namespace.Public or {}
+    namespace.Public = public
+    public.IsConfigCombatLocked = public.IsConfigCombatLocked or function() return false end
+    public.ShowConfigCombatLockMessage = public.ShowConfigCombatLockMessage or function() end
     -- The Custom workspace offers Pandemic Warning & Style only where the Aura backend
     -- publishes its Pandemic applier. That applier ships in the 12.1 native aura runtime,
     -- which only some flavors load, so this flavor's own core load graph decides it.

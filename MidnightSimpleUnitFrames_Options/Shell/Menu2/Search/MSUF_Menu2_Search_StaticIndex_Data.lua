@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "6D81244044CFD2DF946BBDC920998E2D45207F6C3439B3CCE26E10BFC93190E7"
+Search.StaticIndexSourceSha256 = "97C84512ADD6707C4915A861696CA395411F15C1072B362A27E6A2013ED28E8A"
 Search.StaticIndexRecordCount = 3690
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
@@ -639,7 +639,6 @@ gf_layout	Strip height	slider			Layout > Field	strip height	idgf_layoutmenu2%2
 gf_layout	Strip opacity	slider			Layout > Field	strip opacity	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Enamebaralpha	name_bar			strip opacity layout field group layout field namebaralpha gf layout slider
 gf_layout	Tank	dragrow			Role Priority > Row	tank	idgf_layoutmenu2%2Egf_layout%2Egroup%2Esorting%2Erole_priority%2Erow%2Etank	sorting			tank role priority row group sorting role priority row tank gf layout dragrow
 gf_layout	Tank	toggle			Layout > Field	tank	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Epowershowtank	power			tank layout field group layout field powershowtank gf layout toggle
-gf_layout	Text color	color			Layout > Color	text color	idgf_layoutmenu2%2Egf_layout%2Egroup%2Ecolor%2Ehealermanatext	healer_mana			text color layout color group layout color healermanatext gf layout color
 gf_layout	Text on detached bar	toggle			Layout > Field	text on detached bar	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Edetachedpowerbartextonbar	power			text on detached bar layout field group layout field detachedpowerbartextonbar gf layout toggle
 gf_layout	Text size	slider			Layout > Field	text size	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosstextsize	friendly_bosses			text size layout field group layout field friendlybosstextsize gf layout slider
 gf_layout	Text size	slider			Layout > Field	text size	idgf_layoutmenu2%2Egf_layout%2Egroup%2Efield%2Ehealermanatextsize	healer_mana			text size layout field group layout field healermanatextsize gf layout slider
@@ -1007,6 +1006,7 @@ opt_colors	Target	toggle	general.npcTypeTarget		Npc > Type	target	idopt_colors
 opt_colors	Target Highlight Color	color			Frame > Color	target highlight color	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Egroup%2Eframe%2Ecolor%2Etarget	colors_group_frames_highlights			target highlight color frame color opt colors advanced group frame color target opt colors color
 opt_colors	Target of Target	toggle	general.npcTypeToT		Type > To	target of target	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Enpc%2Etype%2Eoption%2Enpc%2Etype%2Eto%2Et	colors_npc_type			target of target type to opt colors advanced npc type option npc type to t opt colors toggle general npctypetot
 opt_colors	Target text color	color			Color > Target	target text color	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Ecastbar%2Etext%2Ecolor%2Etarget%2Ename	colors_castbar_text			target text color color target opt colors advanced castbar text color target name opt colors color
+opt_colors	Text color	color			Mana > Text	text color	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Egroup%2Eframe%2Ehealer%2Emana%2Etext%2Ecolor	colors_group_frames_healer_mana			text color mana text opt colors advanced group frame healer mana text color opt colors color
 opt_colors	Text color	color			Text > Color	text color	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Estatus%2Etext%2Ecolor%2Evalue	colors_status_text			text color text color opt colors advanced status text color value opt colors color
 opt_colors	Texture layer color	color			Texture > Layer	texture layer color	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Etexture%2Elayer%2Ecolor	colors_texture_layer			texture layer color texture layer opt colors advanced texture layer color opt colors color
 opt_colors	Texture layer color 2	color			Texture > Layer2	texture layer color 2	idopt_colorsmenu2%2Eopt%2Ecolors%2Eadvanced%2Etexture%2Elayer2%2Ecolor	colors_texture_layer			texture layer color 2 texture layer2 opt colors advanced texture layer2 color opt colors color

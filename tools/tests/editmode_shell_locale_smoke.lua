@@ -2,6 +2,9 @@
 -- translated in the ten non-English ones, including the arena-together label
 -- picked by a conditional expression (scanners miss it) and the external
 -- popup's settings button, which used to concatenate untranslatable pieces.
+-- Quality program A-C6 (C6.4, C6.5): the HUD settings tip and provider anchor
+-- label, the Edit Mode history labels and the Classic route to Blizzard's Edit
+-- Mode are format strings over translated pieces, never English concatenation.
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 
 local failures = {}
@@ -21,7 +24,11 @@ local KEYS = {
     "Edit Arena 1-3 together", "Edit Arena 1-5 together", "Sync class", "Anchor class", "Text on bar",
     "No selection", "Opened settings", "Settings unavailable", "Preview animation unavailable",
     "Open %s settings",
+    "Choose %s in the game menu", "%s settings", "%s Anchor", "%s %s: %s", "%s %s",
+    "Unit frame", "General layout", "Group frame", "Move", "Nudge", "Set", "Change",
 }
+-- Pure format strings: every pack keeps the same placeholders.
+local IDENTITY = { ["%s %s: %s"] = true, ["%s %s"] = true }
 local ENGLISH = { enUS = true, enGB = true }
 local PACKS = { "deDE", "enGB", "enUS", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
 
@@ -38,12 +45,13 @@ for _, pack in ipairs(PACKS) do
     local source = Read("MidnightSimpleUnitFrames/Locales/" .. pack .. ".lua")
     for _, key in ipairs(KEYS) do
         local value = Value(source, key)
-        if Check(value ~= nil, pack .. ": missing " .. key) and not ENGLISH[pack] then
+        if Check(value ~= nil, pack .. ": missing " .. key) and not ENGLISH[pack] and not IDENTITY[key] then
             Check(value ~= key, pack .. ": " .. key .. " is not translated")
         end
         if value and key:find("%s", 1, true) then
+            local _, want = key:gsub("%%s", "")
             local _, count = value:gsub("%%s", "")
-            Check(count == 1, pack .. ": " .. key .. " must keep exactly one %s")
+            Check(count == want, pack .. ": " .. key .. " must keep exactly " .. want .. " %s")
         end
     end
 end
@@ -55,6 +63,14 @@ local external = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Ext
 Check(external:find('Tr("Open %s settings")', 1, true) ~= nil,
     "the external popup settings button does not translate its label")
 Check(not external:find('"Open " ..', 1, true), "the external popup still concatenates its settings label")
+local hud = Read("MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_HUD.lua")
+Check(hud:find('string.format(HelpText("%s settings"), selectedCfg.label or key)', 1, true)
+    and not hud:find('.. " settings")', 1, true), "the HUD settings tip concatenates its label")
+Check(hud:find('string.format(HelpText("%s Anchor"), providerLabel)', 1, true)
+    and not hud:find('" Anchor")', 1, true), "the HUD cooldown button concatenates its provider anchor label")
+local blizzard = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Blizzard.lua")
+Check(blizzard:find('translate("Choose %s in the game menu")', 1, true) ~= nil,
+    "the Classic route to Blizzard's Edit Mode does not translate its hint")
 
 if #failures > 0 then
     error("editmode_shell_locale_smoke failed:\n  " .. table.concat(failures, "\n  "))

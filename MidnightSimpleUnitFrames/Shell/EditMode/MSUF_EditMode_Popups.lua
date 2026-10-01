@@ -1,16 +1,12 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- EditMode/MSUF_EditMode_Popups.lua - popup router and unit frame popup.
 -- Owns popup composition only; protected frame edits route through EditMode apply helpers.
-local addonName, MSUF = ...
+local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
-
-if type(_G.MSUF_InstallEditPopupUI) == "function" then
-    _G.MSUF_InstallEditPopupUI(addonName, MSUF)
-end
 
 local U = EM2.Util or {}
 local ApplyAllSettingsSafe = U.ApplyAllSettingsSafe
@@ -396,9 +392,18 @@ local function ApplyMenu2UnitSelection(component, slot)
     return key
 end
 
+--- Writes the boxes before another action reads the profile, but only when
+--- one holds an edit: Apply always opens an undo entry.
+local function ApplyPendingEdits()
+    if not pf then return end
+    if Quick.HasEditedBox and not Quick.HasEditedBox(pf.xBox, pf.yBox, pf.wBox, pf.hBox,
+        pf.dpbXBox, pf.dpbYBox, pf.dpbWBox, pf.dpbHBox, pf.dpbLevelBox) then return end
+    Apply()
+end
+
 local function OpenMenu2Page(pageKey, component, slot)
     if not pf or not pf.unit then return end
-    Apply()
+    ApplyPendingEdits()
     local key = ApplyMenu2UnitSelection(component, slot)
     pageKey = pageKey or UnitPageKey(key or CK(pf.unit))
     Quick.OpenPage(pageKey, pf)
@@ -455,12 +460,13 @@ end
 --- Copies the source frame's size only. Position is deliberately excluded so a
 --- size copy cannot unexpectedly move another frame. The unit page copy dialog
 --- ("Frame Size") holds the same contract -- placement stays independently editable.
+--- One undo entry per target: the source's pending edits are written once,
+--- by the caller, before the first copy.
 local function CopySizeTo(targetKey)
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit or not targetKey then return end
     local db = DB()
     if not db then return end
-    Apply()
     local srcKey = CK(pf.unit)
     local src = srcKey and db[srcKey]
     if not src or targetKey == srcKey then return end
@@ -534,6 +540,8 @@ local function Build()
     end
 
     local function CopyMenuSelect(entry)
+        if BlockConfigCombatLocked() then return end
+        ApplyPendingEdits()
         if entry.key == "__all__" then
             local srcKey = pf and pf.unit and CK(pf.unit)
             for _, target in ipairs(UNIT_COPY_TARGETS) do
