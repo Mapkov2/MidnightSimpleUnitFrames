@@ -131,29 +131,31 @@ local HandleUnitDeathEvent
 -- dead/ghost and disconnect events are needed only for the short lifetime of
 -- an active cast. UNIT_FLAGS is Blizzard's authoritative dead/ghost lifecycle
 -- signal and avoids routing every high-frequency UNIT_HEALTH tick through the
--- castbar fallback. Boss frames already own a richer encounter lifecycle.
+-- castbar fallback. Boss and arena pools already own a richer lifecycle
+-- (persistent UNIT_FLAGS plus encounter or opponent events); an active cast only
+-- adds the UNIT_HEALTH fast death signal, so neither needs the manager poll.
 SetCastLifecycleActive = function(frame, active)
     if not frame or frame.unit == "player" then return true end
 
-    if frame._msufIsBossCastbar then
-        local lifecycleReady = frame._msufBossEventsRegistered == true
+    if frame._msufIsBossCastbar or frame._msufIsArenaCastbar then
+        local lifecycleReady = frame._msufPoolEventsRegistered == true
         if not lifecycleReady then
-            if frame._msufBossHealthEventRegistered then
+            if frame._msufPoolHealthEventRegistered then
                 frame:UnregisterEvent("UNIT_HEALTH")
-                frame._msufBossHealthEventRegistered = nil
+                frame._msufPoolHealthEventRegistered = nil
             end
             frame._msufCastLifecycleOwned = nil
             return false
         end
 
         if active then
-            if not frame._msufBossHealthEventRegistered then
+            if not frame._msufPoolHealthEventRegistered then
                 frame:RegisterUnitEvent("UNIT_HEALTH", frame.unit)
-                frame._msufBossHealthEventRegistered = true
+                frame._msufPoolHealthEventRegistered = true
             end
-        elseif frame._msufBossHealthEventRegistered then
+        elseif frame._msufPoolHealthEventRegistered then
             frame:UnregisterEvent("UNIT_HEALTH")
-            frame._msufBossHealthEventRegistered = nil
+            frame._msufPoolHealthEventRegistered = nil
         end
 
         frame._msufCastLifecycleOwned = true
@@ -288,6 +290,17 @@ local function ToKnownPlainBool(value)
     if value == true or value == 1 or value == "true" then return true end
     if value == false or value == 0 or value == "false" then return false end
     return nil
+end
+
+--- Another unit's empowered cast arrives through UnitChannelInfo (isEmpowered
+--- is NeverSecret) but fills like a cast in Blizzard's HandleCastStart
+--- (reverseChanneling), so it must not take the channel drain. The player's
+--- own empower stages are the player runtime's and never pass through here.
+local function FillEmpoweredLikeCast(state)
+    if state.castType == "CHANNEL" and state.unit ~= "player"
+        and ToKnownPlainBool(state.isEmpowered) == true then
+        state.castType = "EMPOWER"
+    end
 end
 
 local function CastStateActive(state)
@@ -555,6 +568,17 @@ local function StoreActiveStateIdentity(frame, state)
     frame._msufActiveSeq = nil
 end
 
+--- castBarID is NeverSecret. A terminal event that names another cast bar than
+--- the one shown belongs to a cast this bar no longer shows (a late interrupt
+--- of the previous cast); Blizzard's HandleInterruptOrSpellFailed matches its
+--- cast the same way. frame:Cast records the shown one; unknown on either side
+--- means "no information".
+local function NamesOtherCastBar(frame, castBarID)
+    local active = frame._msufActiveCastBarID
+    return active ~= nil and type(castBarID) == "number" and not toPlainIsSecret(castBarID)
+        and castBarID ~= active
+end
+
 local function ActiveSequenceChanged(frame, sequenceID)
     if not frame or sequenceID == nil then
         return false
@@ -576,6 +600,16 @@ local function CastbarAlreadyIdle(frame)
     if frame.MSUF_castActive == true or frame.interrupted or frame.hideTimer then return false end
     if frame.IsShown and frame:IsShown() then return false end
     return true
+end
+
+--- Shows an active cast the driver re-read outside the cast's own START event
+--- (stop and start re-checks, the end of a hold, a target or focus swap) and
+--- tells the engine subscribers, as RefreshFromEngine does: the focus-kick icon
+--- learns of a cast only through PublishState.
+local function ShowActiveState(frame, state)
+    StoreActiveStateIdentity(frame, state)
+    frame:Cast(state)
+    PublishState(frame, state)
 end
 
 local function RefreshFromEngine(frame, event)
@@ -661,8 +695,7 @@ local function EnsureDriverCallbacks(frame)
 
         local state = BuildState(frame)
         if CastStateActive(state) then
-            StoreActiveStateIdentity(frame, state)
-            frame:Cast(state)
+            ShowActiveState(frame, state)
             return
         end
 
@@ -676,30 +709,32 @@ local function EnsureDriverCallbacks(frame)
     end
 
     -- The second channel re-check, the channel failsafe, and the plain-cast
-    -- re-check all confirm the same thing; only their delays differ. Nothing
-    -- compares the callbacks (cancellation is the token scheme), so one
-    -- closure serves all three slots.
-    local function ConfirmStopOrSucceed()
-        if StopExpectationInvalid() then return end
+    -- re-check all confirm the same thing; only their delays differ. Each slot
+    -- still needs its own closure: ScheduleDelayed keys the Kernel scheduler by
+    -- the callback, and one shared key let the later deadline replace the
+    -- earlier one (the 0.12 s cast re-check became the 0.40 s failsafe).
+    local function NewConfirmStopOrSucceed()
+        return function()
+            if StopExpectationInvalid() then return end
 
-        local state = BuildState(frame)
-        if CastStateActive(state) then
-            StoreActiveStateIdentity(frame, state)
-            frame:Cast(state)
-            return
+            local state = BuildState(frame)
+            if CastStateActive(state) then
+                ShowActiveState(frame, state)
+                return
+            end
+
+            if ActiveSequenceChanged(frame, frame._msufStopExpSeq) then
+                RefreshFromEngine(frame)
+                return
+            end
+
+            frame:SetSucceeded()
         end
-
-        if ActiveSequenceChanged(frame, frame._msufStopExpSeq) then
-            RefreshFromEngine(frame)
-            return
-        end
-
-        frame:SetSucceeded()
     end
 
-    frame._msufStopCB_chanT2 = ConfirmStopOrSucceed
-    frame._msufStopCB_failsafe = ConfirmStopOrSucceed
-    frame._msufStopCB_castT1 = ConfirmStopOrSucceed
+    frame._msufStopCB_chanT2 = NewConfirmStopOrSucceed()
+    frame._msufStopCB_failsafe = NewConfirmStopOrSucceed()
+    frame._msufStopCB_castT1 = NewConfirmStopOrSucceed()
 
     frame._msufStartRetryCB = function()
         frame._msufStartRetryPending = nil
@@ -709,8 +744,7 @@ local function EnsureDriverCallbacks(frame)
 
         local state = BuildState(frame)
         if CastStateActive(state) then
-            StoreActiveStateIdentity(frame, state)
-            frame:Cast(state)
+            ShowActiveState(frame, state)
         end
     end
 
@@ -723,7 +757,7 @@ local function EnsureDriverCallbacks(frame)
 
         local nextState = BuildState(frame)
         if CastStateActive(nextState) then
-            frame:Cast(nextState)
+            ShowActiveState(frame, nextState)
             return
         end
 
@@ -753,7 +787,7 @@ local function EnsureDriverCallbacks(frame)
         local nextState = BuildState(frame)
         if CastStateActive(nextState) then
             frame.interrupted = nil
-            frame:Cast(nextState)
+            ShowActiveState(frame, nextState)
             return
         end
 
@@ -979,8 +1013,7 @@ local function RefreshTargetFocusChanged(frame)
 
     local state = BuildState(frame)
     if CastStateHasSpell(state) then
-        StoreActiveStateIdentity(frame, state)
-        frame:Cast(state)
+        ShowActiveState(frame, state)
         return true
     end
 
@@ -1126,7 +1159,7 @@ function _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
     return fallback
 end
 
-local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, interruptedBy)
+local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, interruptedBy, castBarID)
     if frame._msufDriverBackendEnabled ~= true then
         if frame.unit == "target" or frame.unit == "focus" then
             SetDriverEventsRegistered(frame, frame.unit, false)
@@ -1155,6 +1188,9 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
         ClearStartRetry(frame)
         AdvanceBuildStateGeneration(frame.unit)
         local token = AdvanceCastToken(frame)
+        -- A new cast ends the interrupt feedback hold at once, as in Blizzard's
+        -- CastingBarMixin:HandleCastStart; Cast() retires the pending hide.
+        frame.interrupted = nil
         frame.isNotInterruptible = false
         frame.MSUF_kickInterruptibleConfirmed = nil
         local state = RefreshFromEngine(frame, event)
@@ -1192,6 +1228,20 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
 
     if event == "UNIT_SPELLCAST_CHANNEL_STOP" then
         frame.MSUF_kickInterruptibleConfirmed = nil
+        -- A kicked channel ends with its interrupter on CHANNEL_STOP, not with
+        -- UNIT_SPELLCAST_INTERRUPTED (CastingBarFrame.lua: complete =
+        -- interruptedBy == nil). A secret interrupter is still an interrupter,
+        -- so it is tested before the nil comparison.
+        local kicked = toPlainIsSecret(interruptedBy) or interruptedBy ~= nil
+        if kicked and eventUnit == frame.unit and frame.MSUF_isChanneled == true
+            and frame.MSUF_castActive == true and not frame.interrupted
+            and not NamesOtherCastBar(frame, castBarID) then
+            ClearStopExpectation(frame)
+            frame:SetInterrupted(interruptedBy)
+            -- Subscribers (the focus-kick icon) play one interrupt feedback.
+            PublishState(frame, nil, "UNIT_SPELLCAST_INTERRUPTED")
+            return
+        end
         ScheduleStopConfirmation(frame, "CHANNEL")
         return
     end
@@ -1211,8 +1261,7 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
 
         local state = BuildState(frame)
         if CastStateActive(state) then
-            StoreActiveStateIdentity(frame, state)
-            frame:Cast(state)
+            ShowActiveState(frame, state)
         end
         return
     end
@@ -1248,7 +1297,9 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
     end
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
-        if eventUnit ~= frame.unit then return end
+        if eventUnit ~= frame.unit or NamesOtherCastBar(frame, castBarID) then return end
+        -- A kicked channel may already show its feedback from CHANNEL_STOP.
+        if frame.interrupted then return end
         ClearStopExpectation(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         frame:SetInterrupted(interruptedBy)
@@ -1352,7 +1403,11 @@ local function InstallDriverCastMethods(frame)
             state = BuildState(self)
             hasSpell = CastStateHasSpell(state)
         end
+        if hasSpell then FillEmpoweredLikeCast(state) end
         local stateActive = CastStateActive(state)
+        local castBarID = stateActive and state.castBarID or nil
+        self._msufActiveCastBarID = (type(castBarID) == "number" and not toPlainIsSecret(castBarID))
+            and castBarID or nil
 
         if state ~= nil then
             self._msufApiNotInterruptibleRaw = state.apiNotInterruptibleRaw

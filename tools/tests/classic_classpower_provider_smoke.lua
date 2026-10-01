@@ -61,8 +61,11 @@ assert(powerType == PT.Chi and mode == MODE.SEGMENTED,
     "Mists Windwalker Chi resolution regressed")
 powerType, mode = resolve(mists, "WARLOCK", 2)
 assert(powerType == PT.DemonicFury and mode == MODE.CONTINUOUS)
-powerType, mode = resolve(mists, "WARLOCK", 3)
+-- Blizzard's Mists ShardBar shows embers only once Burning Embers is known.
+powerType, mode = resolve(mists, "WARLOCK", 3, nil, nil, true)
 assert(powerType == PT.BurningEmbers and mode == MODE.FRACTIONAL)
+powerType, mode = resolve(mists, "WARLOCK", 3)
+assert(powerType == nil and mode == MODE.NONE, "Burning Embers skipped their spell gate")
 powerType, mode = resolve(mists, "WARLOCK", 1, nil, nil, true)
 assert(powerType == PT.SoulShards and mode == MODE.SEGMENTED)
 powerType, mode = resolve(mists, "DRUID", 2, PT.Energy)
@@ -106,5 +109,18 @@ powerType, mode = resolve(vanilla, "ROGUE", nil, PT.Energy)
 assert(powerType == PT.ComboPoints and mode == MODE.SEGMENTED)
 powerType, mode = resolve(vanilla, "PALADIN", nil, PT.Mana)
 assert(powerType == nil and mode == MODE.NONE)
+
+-- Forever's GetComboPoints is SecretWhenUnitPowerRestricted: the reader hands a
+-- secret on untouched instead of testing it with `or 0`.
+do
+    local handle = assert(io.open(repo .. "/MidnightSimpleUnitFrames/Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua", "rb"))
+    local source = handle:read("*a"):gsub("\r\n", "\n")
+    handle:close()
+    local read = source:find('local points = GetComboPoints(comboUnit, "target")', 1, true)
+    local guard = read and source:find("if issecretvalue and issecretvalue(points) then return points end", read, true)
+    local fallback = guard and source:find("return points or 0", guard, true)
+    assert(read and guard and fallback and not source:find('GetComboPoints(comboUnit, "target") or 0', 1, true),
+        "the combo point reader must test a secret before its `or 0` fallback")
+end
 
 print("client ClassPower providers smoke passed")

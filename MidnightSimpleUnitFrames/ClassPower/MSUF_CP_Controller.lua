@@ -1006,6 +1006,8 @@ do
         NotSecret = NotSecret,
         GetTime = GetTime,
         GetRuneCooldown = GetRuneCooldown,
+        --- Mists Death Knight rune types from the Classic routing; nil elsewhere.
+        RuneTypes = ClientCP and ClientCP.RuneTypes or nil,
         UnitHasVehicleUI = UnitHasVehicleUI,
         ResolveClassPowerColor = CPColors.ResolveClassPowerColor,
         ResolveClassPowerBgColor = CPColors.ResolveClassPowerBgColor,
@@ -1867,6 +1869,8 @@ do
             OnTipOfTheSpearSpellCast = OnTipOfTheSpearSpellCast,
             OnSpellTrackerReset = OnSpellTrackerReset,
             AcceptPowerToken = ClientCP and ClientCP.AcceptPowerToken or nil,
+            --- The reader the segmented renderer paints combo points from.
+            UnitPower = ClientCP and ClientCP.UnitPower or UnitPower,
         })
     if runtime then
         OnPowerUpdate = runtime.OnPowerUpdate
@@ -2049,6 +2053,9 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_AURA", false, "player")
         CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", false)
+        --- RUNE_TYPE_UPDATE exists only where the provider owns rune types
+        --- (Mists): an unknown event must never reach Register/UnregisterEvent.
+        if ClientCP and ClientCP.RuneTypes then CP_SetEventBound(eventFrame, "RUNE_TYPE_UPDATE", false) end
         CP_SetEventBound(eventFrame, "UNIT_HEALTH", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", false, "player")
@@ -2074,6 +2081,7 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", supportsCharged, "player")
         CP_SetEventBound(eventFrame, "UNIT_AURA", true, "player")
         CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", supportsRunes)
+        if ClientCP and ClientCP.RuneTypes then CP_SetEventBound(eventFrame, "RUNE_TYPE_UPDATE", supportsRunes) end
         CP_SetEventBound(eventFrame, "UNIT_HEALTH", true, "player")
         local wantMaxHealth = PHP.visible or (CP.visible and CP.renderMode == CPK.MODE.STAGGER)
         CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", wantMaxHealth, "player")
@@ -2124,6 +2132,7 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", wantPointCharge, "player")
     CP_SetEventBound(eventFrame, "UNIT_AURA", wantAura, "player")
     CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", wantRune)
+    if ClientCP and ClientCP.RuneTypes then CP_SetEventBound(eventFrame, "RUNE_TYPE_UPDATE", wantRune) end
     CP_SetEventBound(eventFrame, "UNIT_HEALTH", wantHealth, "player")
     CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", wantMaxHealth, "player")
     CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", wantMaxHealth, "player")
@@ -2195,8 +2204,8 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
         return
     end
 
-    if event == "RUNE_POWER_UPDATE" then
-        --- arg1 = runeID (1-6), arg2 = energize boolean
+    if event == "RUNE_POWER_UPDATE" or event == "RUNE_TYPE_UPDATE" then
+        --- arg1 = runeID (1-6), arg2 = energize boolean (RUNE_POWER_UPDATE only)
         OnRuneUpdate(arg1, arg2)
         return
     end

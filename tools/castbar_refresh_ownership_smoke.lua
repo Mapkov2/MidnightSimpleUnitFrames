@@ -17,6 +17,8 @@ local manager = read(root .. "Castbars/MSUF_Castbars.lua")
 local runtime = read(root .. "Castbars/MSUF_CastbarRuntime.lua")
 local driver = read(root .. "Castbars/MSUF_CastbarDriver.lua")
 local boss = read(root .. "Castbars/MSUF_BossCastbars.lua")
+-- Boss and arena castbars are descriptors of one pool module.
+local pools = read(root .. "Castbars/MSUF_CastbarPools.lua")
 local player = read(root .. "Castbars/MSUF_PlayerCastbarRuntime.lua")
 local anchors = read(root .. "Castbars/MSUF_CastbarAnchors.lua")
 local style = read(root .. "Castbars/MSUF_CastbarStyle.lua")
@@ -198,28 +200,29 @@ assert(contains(driver, "local function ToKnownPlainBool(value)"),
     "castbar lifecycle decisions must be secret-safe")
 assert(contains(runtime, "frame._msufCastLifecycleOwned ~= true"),
     "unit failsafe must remain limited to missing/degraded lifecycle ownership")
-assert(contains(boss, "frame._msufCastLifecycleOwned = true"),
+assert(contains(pools, "frame._msufCastLifecycleOwned = true"),
     "boss encounter lifecycle must suppress redundant unit polling")
-assert(not contains(boss, 'frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")')
-    and not contains(boss, 'frame:RegisterEvent("ENCOUNTER_START")')
-    and not contains(boss, 'frame:RegisterEvent("PLAYER_ENTERING_WORLD")'),
+assert(not contains(pools, "frame:RegisterEvent("),
     "global boss lifecycle events must not fan out through every boss frame")
 assert(contains(boss,
-        '_G.MSUF_EventBus_Register("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_BOSS_CASTBARS_ENGAGE", HandleBossPoolLifecycle)')
+        '{ event = "INSTANCE_ENCOUNTER_ENGAGE_UNIT", key = "MSUF_BOSS_CASTBARS_ENGAGE", action = "pass", prewarm = true }')
     and contains(boss,
-        '_G.MSUF_EventBus_Register("UNIT_TARGETABLE_CHANGED", "MSUF_BOSS_CASTBARS_TARGETABLE", HandleBossPoolLifecycle, BOSS_LIFECYCLE_UNITS)'),
+        '{ event = "UNIT_TARGETABLE_CHANGED", key = "MSUF_BOSS_CASTBARS_TARGETABLE", action = "unit", units = true }')
+    and contains(pools,
+        "register(row.event, row.key, HandleLifecycle, row.units and lifecycleUnits or nil,"),
     "shared boss lifecycle driver is incomplete")
 -- The bus drops any UNIT_* subscription that carries no unit filter, so the
 -- boss unit list is what makes the targetable subscription exist at all.
-assert(contains(boss, 'BOSS_LIFECYCLE_UNITS[bossLifecycleIndex] = "boss" .. bossLifecycleIndex'),
+assert(contains(pools, "lifecycleUnits[index] = UNIT_PREFIX .. index"),
     "boss targetable subscription lost its boss unit filter")
-assert(contains(boss, 'scheduleOnce("MSUF_BOSS_POOL_LIFECYCLE", FlushBossPoolLifecycle)')
-    and contains(boss, "bossPoolRefreshPendingGeneration ~= bossPoolRefreshGeneration"),
+assert(contains(pools, "scheduleOnce(SCHEDULE_PASS, FlushPass)")
+    and contains(pools, "passPendingGeneration ~= passGeneration")
+    and contains(boss, 'pass = "MSUF_BOSS_POOL_LIFECYCLE"'),
     "overlapping boss lifecycle events must coalesce and reject stale queued work")
-assert(contains(boss, "local state, stateKnown = BuildBossCastState(frame)")
-    and contains(boss, "stateKnown and not (state and state.active == true)"),
+assert(contains(pools, "local state, stateKnown = BuildCastState(frame)")
+    and contains(pools, "stateKnown and not (state and state.active == true)"),
     "inactive boss units must stop before anchor/layout/driver work")
-assert(not contains(boss, 'frame:RegisterUnitEvent("UNIT_HEALTH", frame.unit)'),
+assert(not contains(pools, 'frame:RegisterUnitEvent("UNIT_HEALTH", frame.unit)'),
     "inactive boss castbars must not retain the UNIT_HEALTH hotpath")
 assert(contains(driver, 'frame:RegisterUnitEvent("UNIT_HEALTH", frame.unit)')
     and contains(driver, 'frame:UnregisterEvent("UNIT_HEALTH")'),

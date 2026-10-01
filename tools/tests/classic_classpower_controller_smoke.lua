@@ -118,7 +118,7 @@ local function Start(spec)
         if runeID <= S.readyRunes then return 0, 10, true end
         return 95, 10, false
     end
-    function GetRuneType() return 1 end
+    function GetRuneType(runeID) return (spec.runeTypes and spec.runeTypes[runeID]) or 1 end
     function UnitAffectingCombat() return false end
     function wipe(tbl) for key in pairs(tbl) do tbl[key] = nil end return tbl end
     canaccesstable = function() return true end
@@ -423,6 +423,72 @@ Case("death and resurrect keep an aura resource", MISTS, function()
     ExpectBars(t, { 1, 1, 0, 0 }, "arcane with 2 charges")
     Fire(t, "PLAYER_DEAD")
     ExpectBars(t, { 1, 1, 0, 0 }, "arcane after PLAYER_DEAD")
+    return t
+end)
+
+-- The charge count is the text value: Arcane Charges once always printed 0.
+Case("arcane charges text shows the charge count", MISTS, function()
+    local t = Start({ class = "MAGE", spec = 1, primary = PT.Mana, hasMana = true, arcane = 2 })
+    assert(t.CP.renderMode == t.MODE.AURA_SEGMENTED, "arcane route")
+    MSUF_DB.bars.classPowerShowText = true
+    t.FullRefresh()
+    local text = assert(t.CP.text, "arcane charges have no text")
+    assert(text:GetText() == 2 or text:GetText() == "2",
+        "arcane charges text shows " .. tostring(text:GetText()) .. " with 2 charges")
+    t.S.arcane = 3
+    t.FullRefresh()
+    assert(text:GetText() == 3 or text:GetText() == "3",
+        "arcane charges text shows " .. tostring(text:GetText()) .. " with 3 charges")
+    return t
+end)
+
+-- Mists runes carry a type (RuneFrame_Shared.lua GetRuneType, runeColors) and
+-- repaint on RUNE_TYPE_UPDATE; an explicit Runes colour still wins.
+Case("rune types colour each rune", MISTS, function()
+    local runeTypes = { 1, 1, 2, 2, 3, 3 }
+    local t = Start({ class = "DEATHKNIGHT", spec = 1, primary = 6, runeTypes = runeTypes })
+    assert(t.CP.renderMode == t.MODE.RUNE_CD, "DK route")
+    assert(Registered(t, "RUNE_TYPE_UPDATE"), "RUNE_TYPE_UPDATE is not bound for Mists runes")
+    local expected = { { 1, 0, 0 }, { 1, 0, 0 }, { 0, 1, 1 }, { 0, 1, 1 }, { 0, 0.5, 0 }, { 0, 0.5, 0 } }
+    local function ExpectColors(want, label)
+        for i = 1, 6 do
+            local color = t.CP.bars[i].color
+            assert(color and Near(color[1], want[i][1]) and Near(color[2], want[i][2]) and Near(color[3], want[i][3]),
+                string.format("%s: rune %d is %s/%s/%s", label, i, tostring(color and color[1]),
+                    tostring(color and color[2]), tostring(color and color[3])))
+        end
+    end
+    ExpectColors(expected, "rune types")
+    runeTypes[1] = 4
+    Fire(t, "RUNE_TYPE_UPDATE", 1)
+    expected[1] = { 0.8, 0.1, 1 }
+    ExpectColors(expected, "a Blood rune turned Death")
+    MSUF_DB.general.classPowerColorOverrides = { RUNES = { 0.2, 0.3, 0.4 } }
+    _G.MSUF_ClassPower_InvalidateColors()
+    t.FullRefresh()
+    local custom = {}
+    for i = 1, 6 do custom[i] = { 0.2, 0.3, 0.4 } end
+    ExpectColors(custom, "an explicit Runes colour")
+    return t
+end)
+
+-- Target-owned combo points borrow the Energy token: an Energy tick repaints
+-- only when the points moved (a sentinel value survives an idle tick).
+Case("energy ticks repaint combo points only when they move", nil, function()
+    local t = Start({ class = "ROGUE", spec = 1, primary = PT.Energy, combo = 3, max = { [PT.ComboPoints] = 5 } })
+    ExpectBars(t, { 1, 1, 1, 0, 0 }, "rogue")
+    local event = Registered(t, "UNIT_POWER_FREQUENT") and "UNIT_POWER_FREQUENT" or "UNIT_POWER_UPDATE"
+    local first = t.CP.bars[1]
+    first._msufCPValue, first.value = nil, -1
+    Fire(t, event, "player", "ENERGY")
+    assert(first.value == -1, "an Energy tick with unchanged combo points repainted them")
+    t.S.combo = 4
+    Fire(t, event, "player", "ENERGY")
+    ExpectBars(t, { 1, 1, 1, 1, 0 }, "rogue after an Energy tick that moved the points")
+    -- The own token always repaints.
+    first._msufCPValue, first.value = nil, -1
+    Fire(t, event, "player", "COMBO_POINTS")
+    assert(first.value == 1, "a COMBO_POINTS event did not repaint")
     return t
 end)
 

@@ -21,6 +21,7 @@ local MODE = {
     CONTINUOUS = 6, SIGNED_CONTINUOUS = 12,
 }
 local AFFLICTION_SPELL = 74434
+local BURNING_EMBERS_SPELL = 108647
 local ARCANE_CHARGE = 36032
 
 local CLEARED_GLOBALS = {
@@ -164,7 +165,9 @@ local function Start(spec)
         return true, path, "requested"
     end
     MSUF_ResolveFontShadowMetrics = function() return 1, 1, -1 end
-    C_SpellBook = { IsSpellKnown = function(spellID) return spellID == AFFLICTION_SPELL and S.known end }
+    C_SpellBook = { IsSpellKnown = function(spellID)
+        return (spellID == AFFLICTION_SPELL or spellID == BURNING_EMBERS_SPELL) and S.known
+    end }
     C_UnitAuras = {
         GetPlayerAuraBySpellID = function(spellID)
             if spellID == ARCANE_CHARGE and S.arcane > 0 then
@@ -426,7 +429,7 @@ Case("death knight runes", MISTS, function()
     local ready, cooling = Count()
     assert(ready == 3 and cooling == 3, "fallback rune values: ready " .. ready .. ", cooling " .. cooling)
     assert(Registered(t, "RUNE_POWER_UPDATE"), "DK lost RUNE_POWER_UPDATE")
-    assert(not Registered(t, "RUNE_TYPE_UPDATE"), "rune type colouring is an owner decision; RUNE_TYPE_UPDATE must stay unbound")
+    assert(Registered(t, "RUNE_TYPE_UPDATE"), "Mists runes must repaint their type on RUNE_TYPE_UPDATE")
     t.S.readyRunes = 4
     Fire(t, "RUNE_POWER_UPDATE", 4, true)
     ready, cooling = Count()
@@ -489,10 +492,24 @@ Case("demonology fury", MISTS, function()
 end)
 
 Case("destruction embers", MISTS, function()
-    local t = Start({ class = "WARLOCK", spec = 3, primary = PT.Mana,
+    local t = Start({ class = "WARLOCK", spec = 3, primary = PT.Mana, known = true,
         power = { [PT.BurningEmbers] = 25 }, max = { [PT.BurningEmbers] = 4 } })
     assert(t.CP.renderMode == MODE.FRACTIONAL, "destruction route")
     ExpectBars(t, { 1, 1, 0.5, 0 }, "destruction with a client display modifier of 1")
+    return t
+end)
+
+-- Blizzard's Mists ShardBar shows embers only once Burning Embers is known.
+Case("destruction learns burning embers", MISTS, function()
+    local t = Start({ class = "WARLOCK", spec = 3, primary = PT.Mana, known = false,
+        power = { [PT.BurningEmbers] = 25 }, max = { [PT.BurningEmbers] = 4 } })
+    ExpectHidden(t, "destruction without Burning Embers")
+    assert(Registered(t, "SPELLS_CHANGED"), "hidden Destruction Warlock must keep SPELLS_CHANGED")
+    t.S.known = true
+    t.env:AdvanceTime(1)
+    Fire(t, "SPELLS_CHANGED")
+    assert(t.CP.renderMode == MODE.FRACTIONAL, "Burning Embers did not appear after SPELLS_CHANGED")
+    ExpectBars(t, { 1, 1, 0.5, 0 }, "destruction after SPELLS_CHANGED")
     return t
 end)
 

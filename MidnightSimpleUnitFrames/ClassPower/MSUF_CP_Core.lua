@@ -1118,6 +1118,7 @@ builders.RUNTIME = function(env)
     local POWER_TYPE_TOKENS = env.POWER_TYPE_TOKENS
     local PLAYER_CLASS = env.PLAYER_CLASS
     local UnitPowerMax = env.UnitPowerMax
+    local UnitPower = env.UnitPower
     local NotSecret = env.NotSecret
     local C_Spell = env.C_Spell
     local tonumber = env.tonumber
@@ -1337,6 +1338,14 @@ builders.RUNTIME = function(env)
         local expectedToken = CP.powerToken or POWER_TYPE_TOKENS[CP.powerType]
         if powerToken and expectedToken and powerToken ~= expectedToken then
             if not (AcceptPowerToken and AcceptPowerToken(CP.powerType, powerToken, expectedToken)) then return end
+            --- A borrowed token (Energy for target-owned combo points) ticks
+            --- several times a second: repaint only when the points the bar
+            --- shows really moved. The renderer records what it painted.
+            local painted = CP.paintedComboPoints
+            if painted ~= nil and UnitPower and CP.powerType == PT.ComboPoints then
+                local points = UnitPower("player", PT.ComboPoints)
+                if NotSecret(points) and points == painted then return end
+            end
         end
 
         RunActiveUpdate(CP.powerType, CP.currentMax)

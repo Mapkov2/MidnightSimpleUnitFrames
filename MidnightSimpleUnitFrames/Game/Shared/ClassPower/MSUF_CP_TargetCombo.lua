@@ -21,6 +21,7 @@ local MODE = CPK.MODE or {}
 local PT = K.PT or {}
 local NativeUnitPower = _G.UnitPower
 local GetComboPoints = _G.GetComboPoints
+local issecretvalue = _G.issecretvalue
 local type = type
 
 local TargetCombo = {}
@@ -34,7 +35,12 @@ function TargetCombo.NewPowerReader()
 
     local function UnitPower(unit, powerType, unmodified)
         if powerType == PT.ComboPoints and type(GetComboPoints) == "function" then
-            return GetComboPoints(comboUnit, "target") or 0
+            local points = GetComboPoints(comboUnit, "target")
+            --- WoW Forever marks the call SecretWhenUnitPowerRestricted: a
+            --- secret goes to the renderer's native sinks untouched, never
+            --- through a boolean test.
+            if issecretvalue and issecretvalue(points) then return points end
+            return points or 0
         end
         return NativeUnitPower(unit, powerType, unmodified)
     end

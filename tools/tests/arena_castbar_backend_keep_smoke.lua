@@ -110,6 +110,9 @@ local function Load(pool, flavor, general)
     env.EnsureDB = function() end
     env.MSUF_DB = { general = general }
 
+    -- Both descriptors are built by the shared pool module, which loads first.
+    ok, message = world:LoadFile(CORE .. "Castbars/MSUF_CastbarPools.lua", ADDON, ns)
+    Check(ok, flavor .. ": Castbars/MSUF_CastbarPools.lua failed: " .. tostring(message))
     ok, message = world:LoadFile(CORE .. pool.file, ADDON, ns)
     Check(ok, flavor .. ": " .. pool.file .. " failed: " .. tostring(message))
     Check(type(env[pool.apply]) == "function", flavor .. ": " .. pool.apply .. " is not exported")

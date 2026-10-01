@@ -644,6 +644,7 @@ modeBuilders.SEGMENTED = function(E)
         if maxPower <= 0 then return end
         local cur = UnitPower("player", powerType)
         if not NotSecret(cur) then
+            CP.paintedComboPoints = nil
             local visual = CP_GetVisual(E)
             local smoothInterp = visual and visual.smoothInterp
             local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
@@ -680,6 +681,8 @@ modeBuilders.SEGMENTED = function(E)
             return
         end
         cur = tonumber(cur) or 0
+        --- Read back by the runtime's borrowed-token test (Energy events).
+        CP.paintedComboPoints = powerType == PT.ComboPoints and cur or nil
         local visual = CP_GetVisual(E)
         local smoothInterp = visual and visual.smoothInterp
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
@@ -893,6 +896,10 @@ modeBuilders.RUNE = function(E)
     local GetEmptyAlpha = E.GetEmptyAlpha
     local EnsureRuneText = E.EnsureRuneText
     local ApplyFont = E.ApplyFont
+    --- Mists only: { Get = GetRuneType, colors = { [runeType] = { r, g, b } } }.
+    local RuneTypes = E.RuneTypes
+    local GetRuneType = RuneTypes and RuneTypes.Get
+    local RUNE_TYPE_COLORS = RuneTypes and RuneTypes.colors
     local nativeTimer = CreateNativeTimerSupport(E)
     local _runeTimeTextCache = {}
     local runeTextPresentationDirty = false
@@ -1167,20 +1174,40 @@ modeBuilders.RUNE = function(E)
         CP.runeNativeAny = hasNativeRune
 
         local isFull = visual and visual.useFullColor == true and readyCount >= maxPower
-        if CP._runeColorVersion ~= visualVersion or CP._runeFullColor ~= isFull then
+        --- Rune type colours stand in for the base colour while "colour by
+        --- type" is on and the Colors page sets no explicit Runes colour; the
+        --- full colour and per-slot colours keep their precedence.
+        local overrides = _cpDB.colorOverrides
+        local typeColors = RUNE_TYPE_COLORS and not hasVehicleUI
+            and visual and visual.colorByType ~= false
+            and not (type(overrides) == "table" and type(overrides.RUNES) == "table")
+            and RUNE_TYPE_COLORS or nil
+        local recolorAll = CP._runeColorVersion ~= visualVersion or CP._runeFullColor ~= isFull
+        if recolorAll or typeColors or CP._runeTypeColored then
             for displayIdx = 1, maxPower do
                 local bar = CP.bars[displayIdx]
                 if not bar then break end
-                local slotR = useSlotColors and visual.slotR and visual.slotR[displayIdx]
-                CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
-                    isFull and visual.fullG or (slotR and visual.slotG[displayIdx] or baseG),
-                    isFull and visual.fullB or (slotR and visual.slotB[displayIdx] or baseB), 1)
-                CP_StampVertexColor(bar._bg, 0, 0, 0, bgA)
-                bar._msufCPVisualVersion = visualVersion
-                bar._msufCPFullColor = isFull
+                local typeColor = typeColors and typeColors[GetRuneType(runeMap[displayIdx])] or nil
+                if recolorAll or bar._msufCPRuneTypeColor ~= typeColor then
+                    local slotR = useSlotColors and visual.slotR and visual.slotR[displayIdx]
+                    local r, g, bl = baseR, baseG, baseB
+                    if isFull then
+                        r, g, bl = visual.fullR, visual.fullG, visual.fullB
+                    elseif slotR then
+                        r, g, bl = slotR, visual.slotG[displayIdx], visual.slotB[displayIdx]
+                    elseif typeColor then
+                        r, g, bl = typeColor[1], typeColor[2], typeColor[3]
+                    end
+                    CP_StampStatusBarColor(bar, r, g, bl, 1)
+                    CP_StampVertexColor(bar._bg, 0, 0, 0, bgA)
+                    bar._msufCPVisualVersion = visualVersion
+                    bar._msufCPFullColor = isFull
+                    bar._msufCPRuneTypeColor = typeColor
+                end
             end
             CP._runeColorVersion = visualVersion
             CP._runeFullColor = isFull
+            CP._runeTypeColored = typeColors ~= nil or nil
         end
 
         local txt = CP.text
@@ -1459,6 +1486,7 @@ modeBuilders.AURA = function(E)
                         if NotSecret(apps) and apps ~= nil then cur = tonumber(apps) or 0 end
                     end
                 end
+                textValue = cur
             end
             local mwAbove5 = (powerType == "MAELSTROM_WEAPON" and cur > CPK.THRESH.MW_SPEND)
             local isFull = visual and visual.useFullColor == true and cur >= maxPower

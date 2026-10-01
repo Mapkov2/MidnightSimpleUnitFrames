@@ -36,6 +36,9 @@ local Routing = {
     --- COMBO_TARGET_CHANGED is bound wherever the client supports it: the
     --- controller's Classic event binder asks MSUF.Client.SupportsEvent.
     comboTargetEvent = true,
+    --- Mists Death Knight rune types (getter, repaint event, type colours);
+    --- nil on every other flavor and class.
+    RuneTypes = provider.RuneTypes,
 }
 
 --- The structural signature resolves on every UNIT_DISPLAYPOWER and
