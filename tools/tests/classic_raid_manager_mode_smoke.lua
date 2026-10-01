@@ -43,6 +43,12 @@ local mouseFoci = {}
 -- behind MSUF.Client.Family, read once when the file loads.
 _G.MSUF_NS = {
     Client = { Family = "Classic", IsClassic = true },
+    -- Kernel/MSUF_Require.lua: hard dependencies resolve from _G and raise when absent.
+    Require = function(name)
+        local value = _G[name]
+        assert(type(value) == "function" or type(value) == "table", "fixture lacks " .. tostring(name))
+        return value
+    end,
     UF = { IsUnitToken = function(unit) return type(unit) == "string" end },
     GF = {
         GetConf = function(kind) return configs[kind] end,
@@ -57,6 +63,10 @@ _G.IsInGroup = function() return false end
 _G.IsInRaid = function() return false end
 _G.GetNumGroupMembers = function() return 0 end
 _G.GetMouseFoci = function() return mouseFoci end
+-- Kernel/MSUF_Util.lua exports, which load before the group files.
+_G.MSUF_SetRoundLayoutToNearestPixel = function() return true end
+_G.MSUF_ScheduleLateAnchorReanchor = function() end
+_G.MSUF_Snap = function(_, value) return value end
 local secureHooks = {}
 _G.hooksecurefunc = function(frame, method, callback)
     if type(frame) == "table" then
@@ -123,6 +133,37 @@ assert(button.mouseEnabled == true, "expanded HIDDEN manager must keep its toggl
 manager.collapsed = true
 button.hooks.OnClick(button)
 assert(button.mouseEnabled == false, "collapsing a HIDDEN manager must make the toggle button click-through")
+
+-- Classic parents the raid container to the manager, so a mode that fades the tab
+-- must not fade (and leave clickable) the raid frames underneath it.
+do
+    local raidContainer = { parent = manager, ignoreParentAlpha = false, writes = 0 }
+    function raidContainer:GetParent() return self.parent end
+    function raidContainer:IsForbidden() return false end
+    function raidContainer:SetIgnoreParentAlpha(value) self.ignoreParentAlpha = value; self.writes = self.writes + 1 end
+    local function EffectiveAlpha()
+        return raidContainer.ignoreParentAlpha and 1 or manager.alpha
+    end
+    _G.CompactRaidFrameContainer = raidContainer
+    configs.party.enabled = false
+    for _, mode in ipairs({ "HIDDEN", "MOUSEOVER", "SHOW", "HIDDEN", "AUTO" }) do
+        configs.party.raidManagerMode = mode
+        mouseFoci = {}
+        GF.ApplyBlizzardRaidManagerMode()
+        assert(EffectiveAlpha() == 1, mode .. " faded the Classic raid frames with the Raid Manager tab")
+    end
+    configs.party.enabled, configs.party.showSolo = true, true
+    GF.ApplyBlizzardRaidManagerMode()
+    assert(manager.alpha == 0 and EffectiveAlpha() == 1, "AUTO hid the tab and faded the raid frames with it")
+    configs.party.enabled, configs.party.showSolo = false, false
+    configs.party.raidManagerMode = "SHOW"
+    GF.ApplyBlizzardRaidManagerMode()
+    assert(raidContainer.ignoreParentAlpha == false, "SHOW did not hand the container its default alpha back")
+    local writes = raidContainer.writes
+    GF.ApplyBlizzardRaidManagerMode()
+    assert(raidContainer.writes == writes, "an unchanged mode rewrote the container")
+    _G.CompactRaidFrameContainer = nil
+end
 
 configs.party.enabled = false
 configs.party.showSolo = false

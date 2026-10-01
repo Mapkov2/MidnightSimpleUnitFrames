@@ -450,6 +450,9 @@ local wanted = {}
 -- header owns only the partial final row; neither header needs visibility hooks.
 -- Attributes are written only when they change, inside one _ignore window, so a
 -- roster or settings pass that changes nothing leaves the header alone.
+-- SecureGroupPetHeader_OnAttributeChanged returns for every write in that window
+-- and for the closing write too, so one trailing write outside it runs the single
+-- update a shown header needs (the main headers' layout nonce).
 local function ConfigurePetHeader(header, kind, conf, width, height, units, rows, start)
     header._msufAdditionalKind, header._msufAdditionalPrefix = kind, "pets"
     wanted.template, wanted.templateType = "MSUF_GroupAdditionalUnitTemplate", "Button"
@@ -470,7 +473,10 @@ local function ConfigurePetHeader(header, kind, conf, width, height, units, rows
             cache[key] = wanted[key]
         end
     end
-    if changed then header:SetAttribute("_ignore", nil) end
+    if changed then
+        header:SetAttribute("_ignore", nil)
+        header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
+    end
     for i = 1, 40 do
         local child = header:GetAttribute(CHILD_KEYS[i])
         if not child then break end

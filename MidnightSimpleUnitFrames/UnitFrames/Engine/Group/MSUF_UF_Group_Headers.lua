@@ -62,6 +62,13 @@ local function InCombat()
   return InCombatLockdown and InCombatLockdown()
 end
 
+--- Hard dependencies on exports of files that load before this one (Kernel Util,
+--- the UF factory). Resolved per call on the cold header paths, so a fixture that
+--- never reaches one need not stub it.
+local function Dep(name)
+  return MSUF.Require(name, "UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua")
+end
+
 local function ResolvePetBattleFrameHider()
   if UF and UF.GetPetBattleFrameHider then
     return UF.GetPetBattleFrameHider()
@@ -357,9 +364,7 @@ local function EnsureAnchor(key, conf, totalW, totalH, runtimeClampInsets)
   local parent, missingAnchorName, rejectedAnchorName = GF.ResolveAnchorFrame(conf, anchor)
   anchor._msufMissingAnchorName = missingAnchorName
   anchor._msufRejectedAnchorName = rejectedAnchorName
-  if missingAnchorName and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
-    _G.MSUF_ScheduleLateAnchorReanchor()
-  end
+  if missingAnchorName then Dep("MSUF_ScheduleLateAnchorReanchor")() end
   anchor:Show()
   -- The Anchor Point owns both sides of a group anchor; resolving it can retire
   -- a legacy relativePoint into the offsets, so read those afterwards.
@@ -379,10 +384,10 @@ local function EnsureAnchor(key, conf, totalW, totalH, runtimeClampInsets)
       offsetX, offsetY = tonumber(conf[xKey]) or offsetX, tonumber(conf[yKey]) or offsetY
     end
   end
-  if parent == UIParent and conf.screenPositionMode == "relativeHeight"
-    and type(_G.MSUF_Snap) == "function" then
-    offsetX = _G.MSUF_Snap(anchor, offsetX)
-    offsetY = _G.MSUF_Snap(anchor, offsetY)
+  if parent == UIParent and conf.screenPositionMode == "relativeHeight" then
+    local snap = Dep("MSUF_Snap")
+    offsetX = snap(anchor, offsetX)
+    offsetY = snap(anchor, offsetY)
   end
   if key ~= "priority" then
     local footprintClamped = runtimeClampInsets and GF.ConfigureAnchorFootprintScreenClamp
@@ -410,9 +415,7 @@ local function EnsureAnchor(key, conf, totalW, totalH, runtimeClampInsets)
     -- provider has settled.
     anchor:ClearAllPoints()
     anchor:SetPoint(point, UIParent, relativePoint, offsetX, offsetY)
-    if parent ~= UIParent and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
-      _G.MSUF_ScheduleLateAnchorReanchor()
-    end
+    if parent ~= UIParent then Dep("MSUF_ScheduleLateAnchorReanchor")() end
   end
   anchor._msufStableExternalAnchor = (not ownedParent and resolvable) and parent or nil
   anchor._msufExternalAnchorFrozen = nil
@@ -1215,7 +1218,9 @@ local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate, PingableUnitFrame
 -- after the secure child exists, so keep this header attribute cleared.
 local SECURE_AURA_CONTAINER_TEMPLATE = not (MSUF.Client and MSUF.Client.IsClassic)
   and "CustomAuraContainerTemplate" or nil
-local SECURE_INIT_VERSION = 8
+local SECURE_INIT_VERSION = 9
+--- Insecure header method the secure snippet calls for every child it births.
+local CHILD_INIT_METHOD = "MSUFGFInitChild"
 
 local function ButtonTemplate()
   if UF and type(UF.GetSecureHeaderUnitButtonTemplate) == "function" then
@@ -1224,6 +1229,12 @@ local function ButtonTemplate()
   return SECURE_UNIT_BUTTON_TEMPLATE
 end
 
+--- SecureGroupHeader runs this snippet once per child it creates, in combat as
+--- well (SecureGroupHeaders.lua configureChildren -> SetupUnitButtonConfiguration),
+--- before it writes the child's unit. The last line is the oUF pattern: the
+--- restricted handle's CallMethod reaches the header's insecure method (RestrictedFrames.lua
+--- HANDLE:CallMethod, forceinsecure), which adopts the child; GetParent returns
+--- the protected header in combat too. Present on every client branch.
 local _initCfgNonce = 0
 local function BuildInitialConfigFunction(w, h)
   _initCfgNonce = _initCfgNonce + 1
@@ -1239,8 +1250,32 @@ self:SetAttribute('*type2', 'togglemenu')
 self:SetAttribute('*clickbutton2', nil)
 self:SetAttribute('toggleForVehicle', true)
 self:SetAttribute('ping-receiver', true)
+local header = self:GetParent()
+if header then header:CallMethod('%s', self:GetName()) end
 -- nonce %d
-]], w, h, _initCfgNonce)
+]], w, h, CHILD_INIT_METHOD, _initCfgNonce)
+end
+
+--- Runs insecurely (forceinsecure) from the snippet above. The adapter installs
+--- the child's unit hook only; the hook builds the visuals when the header writes
+--- the unit. Nothing here may touch a protected frame.
+local function OnHeaderChildInit(header, childName)
+  local child = type(childName) == "string" and _G[childName] or nil
+  local adopt = GF.AdoptHeaderChild
+  if child and adopt then adopt(child, header) end
+end
+
+--- One birth path for every MSUF SecureGroupHeader (party, raid, preserved raid
+--- groups, priority).
+local function CreateSecureHeader(name, parent)
+  local header = PixelLayoutRegion(CreateFrame("Frame", name, parent, "SecureGroupHeaderTemplate"))
+  -- 12.1.5 keeps the header rect on whole pixels in native code, which is
+  -- what the secure template anchors its managed children against.
+  -- SetRoundLayoutToNearestPixel is protected, so it is set here at
+  -- creation and never from a refresh path.
+  Dep("MSUF_SetRoundLayoutToNearestPixel")(header, true)
+  header[CHILD_INIT_METHOD] = OnHeaderChildInit
+  return header
 end
 
 --- Draw or hide the group block border on `host`. Live headers pass their
@@ -1669,13 +1704,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
   for groupIndex = 1, groupCount do
     local header = headers[groupIndex]
     if not header then
-      header = PixelLayoutRegion(CreateFrame("Frame", HeaderName("raid"), anchor, "SecureGroupHeaderTemplate"))
-      -- 12.1.5 keeps the header rect on whole pixels in native code, which is
-      -- what the secure template anchors its managed children against.
-      -- SetRoundLayoutToNearestPixel is protected, so it is set here at
-      -- creation and never from a refresh path.
-      local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-      if type(roundLayout) == "function" then roundLayout(header, true) end
+      header = CreateSecureHeader(HeaderName("raid"), anchor)
       headers[groupIndex] = header
     end
 
@@ -1709,7 +1738,7 @@ local function SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layo
   return headers[1], false
 end
 
-local PRIORITY_SECURE_INIT_VERSION = 1
+local PRIORITY_SECURE_INIT_VERSION = 2
 
 local function PriorityLayoutParts(kind, conf, count)
   local w, h = 80, 32
@@ -1879,13 +1908,7 @@ function GF.SetupPriorityHeader(kind, nameList, count)
     header = nil
   end
   if not header then
-    header = PixelLayoutRegion(CreateFrame("Frame", HeaderName("priority"), anchor, "SecureGroupHeaderTemplate"))
-    -- 12.1.5 keeps the header rect on whole pixels in native code, which is
-    -- what the secure template anchors its managed children against.
-    -- SetRoundLayoutToNearestPixel is protected, so it is set here at
-    -- creation and never from a refresh path.
-    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-    if type(roundLayout) == "function" then roundLayout(header, true) end
+    header = CreateSecureHeader(HeaderName("priority"), anchor)
     GF.headers.priority = header
     newHeader = true
   end
@@ -1975,13 +1998,7 @@ function GF.SetupHeader(key, kind)
   end
 
   if not header then
-    header = PixelLayoutRegion(CreateFrame("Frame", HeaderName(key), anchor, "SecureGroupHeaderTemplate"))
-    -- 12.1.5 keeps the header rect on whole pixels in native code, which is
-    -- what the secure template anchors its managed children against.
-    -- SetRoundLayoutToNearestPixel is protected, so it is set here at
-    -- creation and never from a refresh path.
-    local roundLayout = _G.MSUF_SetRoundLayoutToNearestPixel
-    if type(roundLayout) == "function" then roundLayout(header, true) end
+    header = CreateSecureHeader(HeaderName(key), anchor)
     GF.headers[key] = header
     newHeader = true
   end

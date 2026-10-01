@@ -222,6 +222,14 @@ local function ResetEdgesAlpha(edges)
   end
 end
 
+--- Secret-state field per shown key, built once. UpdateUnitEdges runs for every
+--- group frame on each target and focus change; concatenating the key there
+--- hashed a string per frame per change.
+local SECRET_SHOWN_KEYS = {
+  _msufGFTargetVisualShown = "_msufGFTargetVisualShownSecret",
+  _msufGFFocusVisualShown = "_msufGFFocusVisualShownSecret",
+}
+
 local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size, r, g, b, indicatorKind)
   local rounded = _G.MSUF_RoundedUF_OnGroupIndicatorPrepared
   if rounded and rounded(frame, indicatorKind, enabled == true, frame and frame[shownKey] == true, size, r, g, b, 1) then
@@ -233,7 +241,7 @@ local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size,
     HideEdges(frame and frame[edgesKey])
     if frame then
       frame[shownKey] = false
-      frame[shownKey .. "Secret"] = nil
+      frame[SECRET_SHOWN_KEYS[shownKey]] = nil
     end
     return
   end
@@ -252,7 +260,7 @@ local function PrepareUnitEdges(frame, enabled, edgesKey, shownKey, layer, size,
   end
   ResetEdgesAlpha(edges)
   frame[shownKey] = false
-  frame[shownKey .. "Secret"] = nil
+  frame[SECRET_SHOWN_KEYS[shownKey]] = nil
 end
 
 local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, showOverride, indicatorKind)
@@ -283,7 +291,7 @@ local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, sh
     show = false
     secretShow = false
   end
-  local secretKey = shownKey .. "Secret"
+  local secretKey = SECRET_SHOWN_KEYS[shownKey]
   local rounded = _G.MSUF_RoundedUF_OnGroupIndicatorChanged
   if rounded and rounded(frame, indicatorKind, show) then
     if secretShow then

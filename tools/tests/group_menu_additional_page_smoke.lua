@@ -133,6 +133,11 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
 
     -- The real page, every section built at once.
     local toggles = {}
+    local Color, inlineManaColors = M.Widgets.Color, 0
+    M.Widgets.Color = function(parent, label, ...)
+        if parent._msuf2SectionId == "healer_mana" then inlineManaColors = inlineManaColors + 1 end
+        return Color(parent, label, ...)
+    end
     local ToggleAt = M.Widgets.ToggleAt
     M.Widgets.ToggleAt = function(parent, label, ...)
         toggles[label] = true
@@ -146,6 +151,8 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     ctx.entry = { key = "gf_layout", refreshers = ctx.refreshers, frame = content, content = content }
     M.pages.gf_layout.build(ctx)
     M.UnitPage.BuildSectionLazy, M.Widgets.ToggleAt = lazy, ToggleAt
+    M.Widgets.Color = Color
+    assert(inlineManaColors == 0, flavor .. ": healer mana retained an inline color control")
     assert(toggles["Center party frames while solo"], flavor .. ": the full Layout page did not build")
     assert((toggles["Only while you are a healer"] == true) == hasBoss, flavor .. ": Friendly bosses built against the client's boss support")
     assert((toggles["Hide groups 5–8 in Mythic raids"] == true) == hasMythic,
@@ -154,6 +161,80 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local forever = flavor == "Forever"
     assert((toggles["Thorns only on tanks"] == true) == forever and (toggles["Glow missing icons"] == true) == forever,
         flavor .. ": Buff coverage lost its Thorns only on tanks or Glow missing icons switch")
+
+    -- The Colors control and the semantic three-dot target share storage,
+    -- rebuild applies and cancel restores all group scopes.
+    local colorContent = world.env.CreateFrame("Frame", nil, world.env.UIParent)
+    colorContent:SetSize(760, 1600)
+    local colorCtx = { key = "opt_colors", refreshers = {}, content = colorContent, frame = colorContent }
+    colorCtx.entry = { key = "opt_colors", refreshers = colorCtx.refreshers, frame = colorContent, content = colorContent }
+    local manaColor
+    M.Widgets.Color = function(parent, label, ...)
+        local control = Color(parent, label, ...)
+        if parent._msuf2SectionId == "colors_group_frames_healer_mana" then manaColor = control end
+        return control
+    end
+    M.ColorsPage.BuildGroupFrameColors(colorCtx, M.Widgets.PageBuilder(colorCtx))
+    M.Widgets.Color = Color
+    assert(manaColor, flavor .. ": Colors menu lost the healer mana text color")
+    manaColor._msuf2OnColorChanged(.2, .4, .6)
+    local targets = M.ResolveContextColorReferences({ "group.healer_mana_text" })
+    assert(#targets == 1, flavor .. ": healer mana three-dot target missing")
+    local target = targets[1]
+    local r, g, b = target.getRGB()
+    assert(r == .2 and g == .4 and b == .6, flavor .. ": central and contextual color diverged")
+    local previous = target.captureState()
+    target.setRGB(.7, .8, .9)
+    for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
+        local conf = GF.GetConf(scope)
+        assert(conf.healerManaTextR == .7 and conf.healerManaTextG == .8 and conf.healerManaTextB == .9,
+            flavor .. ": contextual color missed " .. scope)
+    end
+    target.restoreState(previous)
+    r, g, b = target.getRGB()
+    assert(r == .2 and g == .4 and b == .6, flavor .. ": contextual Cancel lost the prior text color")
+
+    -- The cold Layout page exposes masters before any additional body builds.
+    -- Opening a body must keep the same command; scope changes refresh that master.
+    local masters = {
+        name_bar = "nameBarEnabled", party_targets = "targetsEnabled", group_pets = "petsEnabled",
+        healer_mana = "healerManaEnabled",
+    }
+    if hasBoss then masters.friendly_bosses = "friendlyBossEnabled" end
+    if forever then masters.buff_coverage = "buffCoverageEnabled" end
+    M.gfScope = "party"
+    local raidConf = GF.GetConf("raid")
+    for _, key in pairs(masters) do conf[key], raidConf[key] = true, false end
+    local state = M.GetPersistentMenuStateTable("accordionState")
+    for id in pairs(masters) do state["gf_layout:" .. id] = false end
+    local coldContent = world.env.CreateFrame("Frame", nil, world.env.UIParent)
+    coldContent:SetSize(760, 4000)
+    local coldCtx = { key = "gf_layout", refreshers = {}, content = coldContent, frame = coldContent }
+    coldCtx.entry = { key = "gf_layout", refreshers = coldCtx.refreshers, frame = coldContent, content = coldContent }
+    M.pages.gf_layout.build(coldCtx)
+    for id, key in pairs(masters) do
+        local section = assert(coldCtx.entry.sections[id], flavor .. ": missing section " .. id)
+        local entry = section._msuf2CollapsibleEntry
+        local toggle = assert(entry.featureSwitch, flavor .. ": closed section has no master " .. id)
+        assert(not entry.open and toggle:GetParent() == entry.header, flavor .. ": master is not in closed header " .. id)
+        assert(toggle:GetChecked() == true, flavor .. ": header missed saved Party value " .. id)
+        toggle:GetScript("OnClick")(toggle, "LeftButton")
+        assert(conf[key] == false and raidConf[key] == false, flavor .. ": header did not toggle only Party " .. id)
+        toggle:GetScript("OnClick")(toggle, "LeftButton")
+        assert(conf[key] == true, flavor .. ": closed header cannot re-enable " .. id)
+        entry.open = true
+        entry._msuf2RefreshState(entry)
+        assert(entry.featureSwitch == toggle, flavor .. ": body replaced header binding " .. id)
+        M.gfScope = "raid"
+        for _, refresh in ipairs(coldCtx.refreshers) do refresh() end
+        assert(toggle:GetChecked() == false, flavor .. ": header retained stale Party state " .. id)
+        toggle:GetScript("OnClick")(toggle, "LeftButton")
+        assert(raidConf[key] == true and conf[key] == true, flavor .. ": header did not use current Raid scope " .. id)
+        raidConf[key] = false
+        M.gfScope = "party"
+        for _, refresh in ipairs(coldCtx.refreshers) do refresh() end
+    end
+
 end
 
 print("group_menu_additional_page_smoke: PASS")

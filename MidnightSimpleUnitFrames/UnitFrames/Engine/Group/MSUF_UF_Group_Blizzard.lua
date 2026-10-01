@@ -122,20 +122,58 @@ local function DeferHide(frame)
   EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 
---- Hard hiding prefers reparenting to a hidden parent. Protected frames cannot
---- always be reparented in combat, so those requests are queued for regen.
+--- A small raid on the Party layout hides Blizzard's raid frames only while the
+--- raid has five members or fewer. That is roster state, not an ownership change,
+--- so it has to reverse mid-session and in combat, and addon code must never show
+--- Blizzard's frames itself: CompactUnitFrame_OnShow would run tainted on 12.1.
+--- The container goes under this proxy instead of the hidden parent; a secure
+--- state driver owns the proxy's visibility (SecureStateDriver.lua resolveDriver,
+--- re-applied every 0.2 s and on GROUP_ROSTER_UPDATE). Raid tokens are contiguous
+--- and Blizzard shows the container only in a raid (ShouldShowRaidFrames), so
+--- "raid6 exists" is exactly "more than five members".
+local SMALL_RAID_PROXY_VISIBILITY = "[@raid6,exists] show; hide"
+local smallRaidProxy
+local softParked
+
+local function SmallRaidProxy()
+  if smallRaidProxy then
+    return smallRaidProxy
+  end
+  smallRaidProxy = PixelLayoutRegion(CreateFrame("Frame", "MSUF_GF_BlizzardSmallRaidParent", UIParent))
+  smallRaidProxy:SetAllPoints()
+  -- Registered while the proxy is still empty: the driver resolves once inside
+  -- this call, which must not show or hide anything of Blizzard's.
+  local registerStateDriver = _G.RegisterStateDriver
+  if registerStateDriver then
+    registerStateDriver(smallRaidProxy, "visibility", SMALL_RAID_PROXY_VISIBILITY)
+  end
+  return smallRaidProxy
+end
+
+--- Hard hiding prefers reparenting to a hidden parent; a soft-hidden frame goes
+--- under the small-raid proxy. Protected frames cannot always be reparented in
+--- combat, so those requests are queued for regen.
 local function ReparentHidden(frame)
   if not (frame and frame.SetParent) or IsForbidden(frame) then
     return
   end
-  local parent = HiddenParent()
   if InCombat() and frame.IsProtected and frame:IsProtected() then
     DeferHide(frame)
     return
   end
-  if frame.GetParent and not IsHiddenFrameParent(frame:GetParent()) then
-    frame:SetParent(parent)
+  local info = ownedFrames[frame]
+  local parent = info and info.soft and SmallRaidProxy() or HiddenParent()
+  local current = frame.GetParent and frame:GetParent()
+  if current == parent then
+    return
   end
+  if current ~= hiddenParent and current ~= smallRaidProxy then
+    if IsHiddenFrameParent(current) then
+      return
+    end
+    if info then info.original = current end
+  end
+  frame:SetParent(parent)
 end
 
 local function ResetParent(frame, parent)
@@ -143,8 +181,7 @@ local function ResetParent(frame, parent)
   if not (info and info.hidden) then
     return
   end
-  local hidden = HiddenParent()
-  if parent == hidden or IsHiddenFrameParent(parent) or IsHiddenFrameParent(frame:GetParent()) then
+  if parent == hiddenParent or parent == smallRaidProxy or IsHiddenFrameParent(parent) then
     return
   end
   ReparentHidden(frame)
@@ -160,7 +197,11 @@ local function HookFrame(frame)
   end
 end
 
-local function HardHideFrame(frame)
+--- Hard hide: Hide() and park under the hidden parent. Soft hide (the small-raid
+--- case): park under the proxy and leave the frame's own shown state to Blizzard;
+--- a hard-hidden frame moves over unchanged (no visibility edge), and Blizzard's
+--- next container update shows it from secure code.
+local function HideFrame(frame, soft)
   frame = ResolveFrame(frame)
   if not frame or IsForbidden(frame) then
     return nil
@@ -172,12 +213,18 @@ local function HardHideFrame(frame)
     ownedFrames[frame] = info
   end
   info.hidden = true
+  info.soft = soft == true or nil
+  if soft then
+    softParked = frame
+  elseif softParked == frame then
+    softParked = nil
+  end
 
   if InCombat() and frame.IsProtected and frame:IsProtected() then
     DeferHide(frame)
     return frame
   end
-  if frame.Hide then
+  if frame.Hide and not soft then
     frame:Hide()
   end
   HookFrame(frame)
@@ -185,11 +232,31 @@ local function HardHideFrame(frame)
   return frame
 end
 
+--- Give a soft-parked frame back to its own parent once the feature that parked
+--- it is off. Only while the proxy is visible: then the move changes no
+--- visibility and runs no Blizzard script. Otherwise the next pass retries.
+local function ReleaseSoftHiddenFrame(frame)
+  frame = ResolveFrame(frame)
+  local info = frame and ownedFrames[frame]
+  if not (info and info.soft) then
+    return false
+  end
+  if InCombat() or not (smallRaidProxy and smallRaidProxy:IsVisible()) then
+    return false
+  end
+  info.hidden, info.soft = false, nil
+  softParked = nil
+  if frame:GetParent() == smallRaidProxy then
+    frame:SetParent(info.original or UIParent)
+  end
+  return true
+end
+
 local function HidePartyFrames()
   -- CompactPartyFrame and the classic PartyMemberFrame pool are descendants of
   -- PartyFrame on 12.1. Hide only that owner; touching individual unit buttons
   -- would taint their secret-aware health/event execution.
-  HardHideFrame(_G.PartyFrame)
+  HideFrame(_G.PartyFrame)
 end
 
 --- CompactRaidFrameManager is deliberately absent here. The tab is a tool panel
@@ -202,8 +269,8 @@ local function HideRaidFrames()
   -- All generated CompactRaidGroup/CompactRaidFrame unit buttons are children
   -- of CompactRaidFrameContainer. Hide only the owners and leave Blizzard's
   -- unit-button scripts, events, colors and secret values completely untouched.
-  HardHideFrame(_G.CompactRaidFrameReservationManager)
-  HardHideFrame(_G.CompactRaidFrameContainer)
+  HideFrame(_G.CompactRaidFrameReservationManager)
+  HideFrame(_G.CompactRaidFrameContainer)
 end
 
 --- Blizzard Raid Manager visibility.
@@ -437,6 +504,22 @@ local function EnsureRaidManagerGamepadHooks(manager)
   display:HookScript("OnHide", RaidManagerDisplayOnHide)
 end
 
+--- Classic: Blizzard_CompactRaidFrames/Classic parents the raid container to the
+--- manager (CompactRaidFrameManager_OnLoad: self.container:SetParent(self)), so a
+--- mode that fades the tab would fade the raid frames with it -- invisible but still
+--- clickable. The container ignores its parent's alpha while a mode lowers it, and
+--- gets Blizzard's default back otherwise. Not protected, so it lands in combat too.
+local raidContainerIgnoresManagerAlpha = false
+local function KeepRaidContainerOpaque(lowered)
+  local container = _G.CompactRaidFrameContainer
+  if not (container and type(container.SetIgnoreParentAlpha) == "function") or IsForbidden(container) then
+    return
+  end
+  if lowered == raidContainerIgnoresManagerAlpha then return end
+  container:SetIgnoreParentAlpha(lowered)
+  raidContainerIgnoresManagerAlpha = lowered
+end
+
 --- The single owner of the tab's visibility. Every mode resolves to a plain
 --- alpha + mouse pair, so switching between them is always fully reversible and never
 --- needs a protected call for the part the user actually sees.
@@ -459,6 +542,7 @@ local function ApplyRaidManagerMode()
   raidManagerEffectiveMode = mode
   if IS_CLASSIC_FAMILY then
     if mode == "HIDDEN" then EnsureRaidManagerHooks(manager) end
+    KeepRaidContainerOpaque(mode ~= "SHOW")
   elseif mode ~= "SHOW" then
     EnsureRaidManagerGamepadHooks(manager)
   end
@@ -577,7 +661,7 @@ local function ApplyDisabledRaidFallback(mode)
 end
 
 BlizzardRosterEventWanted = function()
-  if MSUFOwnsLiveGroupFrames() then
+  if MSUFOwnsLiveGroupFrames() or softParked ~= nil then
     return true
   end
   local party = GF.GetConf and GF.GetConf("party") or {}
@@ -622,10 +706,14 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
   local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
   local msufOwnsGroupFrames = MSUFOwnsLiveGroupFrames()
   local partyUsesMSUF = partyConf.enabled == true
-  -- A small raid on the Party layout is shown by the MSUF party frames, so
-  -- Blizzard's raid frames must not show the same raid a second time.
   local raidUsesMSUF = raidConf.enabled == true
-    or (GF.IsSmallRaidPartyContext ~= nil and GF.IsSmallRaidPartyContext() == true)
+  -- A small raid on the Party layout is shown by the MSUF party frames, so
+  -- Blizzard's raid frames must not show the same raid a second time -- but only
+  -- while it is small. Parked on the first small raid; the proxy's driver then
+  -- follows the roster for the rest of the session, combat included.
+  local smallRaidWanted = partyUsesMSUF and partyConf.smallRaidAsParty == true
+  local smallRaidPark = smallRaidWanted
+    and (softParked ~= nil or (GF.IsSmallRaidPartyContext ~= nil and GF.IsSmallRaidPartyContext() == true))
   local partyActive = PartyScopeActive()
   local raidActive = RaidScopeActive()
   local partyMode = NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode)
@@ -636,6 +724,8 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
     .. "|" .. tostring(msufOwnsGroupFrames)
     .. "|" .. tostring(partyUsesMSUF)
     .. "|" .. tostring(raidUsesMSUF)
+    .. "|" .. tostring(smallRaidPark)
+    .. "|" .. tostring(softParked ~= nil)
     .. "|" .. tostring(partyActive)
     .. "|" .. tostring(raidActive)
     .. "|" .. tostring(partyMode)
@@ -655,7 +745,12 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
 
   if raidUsesMSUF then
     HideRaidFrames()
+  elseif raidMode == "NONE" then
+    ApplyDisabledRaidFallback(raidMode)
+  elseif smallRaidPark then
+    HideFrame(_G.CompactRaidFrameContainer, true)
   else
+    ReleaseSoftHiddenFrame(_G.CompactRaidFrameContainer)
     ApplyDisabledRaidFallback(raidMode)
   end
 
@@ -681,8 +776,9 @@ end
 local function FlushPending()
   for frame in next, pendingHide do
     pendingHide[frame] = nil
-    if frame and ownedFrames[frame] and ownedFrames[frame].hidden then
-      if frame.Hide and not IsForbidden(frame) then
+    local info = frame and ownedFrames[frame]
+    if info and info.hidden then
+      if frame.Hide and not info.soft and not IsForbidden(frame) then
         frame:Hide()
       end
       HookFrame(frame)

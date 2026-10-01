@@ -114,11 +114,15 @@ local function KindEnabled(kind)
   return conf and conf.enabled == true
 end
 
+--- Hard dependencies on exports of files that load before this one (Kernel Util,
+--- the UF factory, the Edit Mode core, layout and HUD). Resolved per call: Edit
+--- Mode is a cold path, and a fixture that never reaches one need not stub it.
+local function Dep(name)
+  return MSUF.Require(name, "UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua")
+end
+
 local function ConfigLocked()
-  if type(_G.MSUF_IsConfigCombatLocked) == "function" then
-    return _G.MSUF_IsConfigCombatLocked() and true or false
-  end
-  return (InCombatLockdown and InCombatLockdown()) and true or false
+  return Dep("MSUF_IsConfigCombatLocked")() and true or false
 end
 
 local function GroupGeometryMask(gf)
@@ -154,20 +158,11 @@ local function RefreshGroupBounds(gf, kind)
 end
 
 local function ShowConfigLock()
-  if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-    _G.MSUF_ShowConfigCombatLockMessage()
-  end
+  Dep("MSUF_ShowConfigCombatLockMessage")()
 end
 
 local function BlockConfigLocked()
-  if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-    return _G.MSUF_BlockConfigCombatLocked() and true or false
-  end
-  if ConfigLocked() then
-    ShowConfigLock()
-    return true
-  end
-  return false
+  return Dep("MSUF_BlockConfigCombatLocked")() and true or false
 end
 
 local function GetDefaultCenter(kind)
@@ -360,9 +355,7 @@ local function ResolveAnchorFrame(conf, owner)
   local gf = GF()
   if gf and type(gf.ResolveAnchorFrame) == "function" then
     local frame, missing = gf.ResolveAnchorFrame(conf, owner)
-    if missing and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
-      _G.MSUF_ScheduleLateAnchorReanchor()
-    end
+    if missing then Dep("MSUF_ScheduleLateAnchorReanchor")() end
     return frame
   end
   return UIParent
@@ -795,12 +788,12 @@ local function SyncMoversSoon(delay)
   end)
 end
 
+local SyncGFPopups -- defined below, beside its public export
+
 local function RefreshGFPositionUI(kind)
   local gf = GF()
   if gf and gf._RequestOptionsResync then gf._RequestOptionsResync() end
-  if type(_G.MSUF_EM2_SyncGFPopups) == "function" then
-    _G.MSUF_EM2_SyncGFPopups()
-  end
+  SyncGFPopups()
   if EM2.HUD and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
 end
 
@@ -830,11 +823,7 @@ local function BeginGroupDrag(frame, kind, source)
   if EM2.Focus and EM2.Focus.SetSelection then
     EM2.Focus.SetSelection(key, kind == "priority" and "placement" or nil, nil, { source = source or "group-drag" })
   end
-  if type(_G.MSUF_EM_UndoBeginChange) == "function" then
-    frame._msufGFHistoryDrag = _G.MSUF_EM_UndoBeginChange("gf", kind, "Move") == true
-  elseif _G.MSUF_EM_UndoBeforeChange then
-    _G.MSUF_EM_UndoBeforeChange("gf", kind)
-  end
+  frame._msufGFHistoryDrag = Dep("MSUF_EM_UndoBeginChange")("gf", kind, "Move") == true
   if kind == "priority" then
     DetachPriorityForFreeMove(GetConf(kind), frame)
   end
@@ -848,9 +837,9 @@ local function EndGroupDrag(frame)
   frame._msufGFEM2Dragging = nil
   local moved = false
   if EM2.Ticker then moved = EM2.Ticker.EndDrag() == true end
-  if frame._msufGFHistoryDrag and type(_G.MSUF_EM_UndoCommitChange) == "function" then
+  if frame._msufGFHistoryDrag then
     frame._msufGFHistoryDrag = nil
-    _G.MSUF_EM_UndoCommitChange()
+    Dep("MSUF_EM_UndoCommitChange")()
   end
   if moved then frame._msufGFEM2LastDragEnd = GetTime and GetTime() or 0 end
   if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
@@ -1068,9 +1057,7 @@ local function NudgePreviewKind(kind, dx, dy)
   if kind ~= "priority" and gf and type(gf.EnsureStableGridPosition) == "function" then
     gf.EnsureStableGridPosition(kind, GetPositionCount(kind), conf)
   end
-  if _G.MSUF_EM_UndoBeforeChange then
-    _G.MSUF_EM_UndoBeforeChange("gf", kind, true)
-  end
+  Dep("MSUF_EM_UndoBeforeChange")("gf", kind, true)
 
   if kind == "priority" then
     DetachPriorityForFreeMove(conf, RuntimeAnchor(kind) or _containers[kind])
@@ -1105,19 +1092,17 @@ local function GF_EM2_SetPreviewNudgeTarget(kind, source)
   local key = kind and KIND_TO_KEY[kind]
   if not key then return end
   if EM2.State then EM2.State.SetUnitKey(key) end
-  if type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then
-    _G.MSUF_EM2_SetPreviewNudgeTarget({
-      key = key,
-      frame = EnsureContainer(kind),
-      sourceFrame = source,
-      IsActive = function()
-        return IsPreviewActive(kind)
-      end,
-      Nudge = function(_, dx, dy)
-        NudgePreviewKind(kind, dx, dy)
-      end,
-    })
-  end
+  Dep("MSUF_EM2_SetPreviewNudgeTarget")({
+    key = key,
+    frame = EnsureContainer(kind),
+    sourceFrame = source,
+    IsActive = function()
+      return IsPreviewActive(kind)
+    end,
+    Nudge = function(_, dx, dy)
+      NudgePreviewKind(kind, dx, dy)
+    end,
+  })
 end
 ExportPublic("MSUF_GF_EM2_SetPreviewNudgeTarget", GF_EM2_SetPreviewNudgeTarget)
 
@@ -1275,11 +1260,9 @@ local function RegisterGF()
 end
 
 local function InstallStateHooks()
-  if _G.MSUF_RegisterAnyEditModeListener then
-    _G.MSUF_RegisterAnyEditModeListener(function(active)
-      if active then EnterEditMode() else ExitEditMode() end
-    end)
-  end
+  Dep("MSUF_RegisterAnyEditModeListener")(function(active)
+    if active then EnterEditMode() else ExitEditMode() end
+  end)
 end
 
 local function UpdateGFButton()
@@ -1458,7 +1441,7 @@ local function RefreshAfterPopupApply(mode)
     RequestPriorityApply(gf, "edit-mode-placement")
     if _em2Active then
       SyncContainer(mode)
-      _G.MSUF_GF_EM2_SetPreviewNudgeTarget(mode)
+      GF_EM2_SetPreviewNudgeTarget(mode)
     end
     C_Timer.After(0.05, function()
       if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
@@ -1476,7 +1459,7 @@ local function RefreshAfterPopupApply(mode)
     else
       SyncContainer(mode)
     end
-    _G.MSUF_GF_EM2_SetPreviewNudgeTarget(mode)
+    GF_EM2_SetPreviewNudgeTarget(mode)
   end
 
   C_Timer.After(0.05, function()
@@ -1487,9 +1470,7 @@ local function RefreshAfterPopupApply(mode)
 end
 
 local function SetHUDStatus(text, kind)
-  if type(_G.MSUF_EM2_SetHUDStatus) == "function" then
-    _G.MSUF_EM2_SetHUDStatus(Tr(text), kind)
-  end
+  Dep("MSUF_EM2_SetHUDStatus")(Tr(text), kind)
 end
 
 local function GroupComponentForPage(pageKey)
@@ -1518,9 +1499,7 @@ local function GF_EM2_ResetPosition(kind)
   if BlockConfigLocked() then return true end
   local conf = GetConf(kind)
   if not conf then return false end
-  if _G.MSUF_EM_UndoBeforeChange then
-    _G.MSUF_EM_UndoBeforeChange("gf", kind)
-  end
+  Dep("MSUF_EM_UndoBeforeChange")("gf", kind)
   local x, y = GetDefaultCenter(kind)
   local xKey, yKey = PositionKeys(kind, conf)
   conf[xKey] = x
@@ -1570,9 +1549,7 @@ local function BuildGFPopup(mode)
     if BlockConfigLocked() then return end
     local conf = Conf()
     if not conf then return end
-    if _G.MSUF_EM_UndoBeforeChange then
-      _G.MSUF_EM_UndoBeforeChange("gf", mode)
-    end
+    Dep("MSUF_EM_UndoBeforeChange")("gf", mode)
 
     -- Convert before reading the current offsets: they feed TranslateFramePosition
     -- below, so reading them in legacy semantics and stamping V2 afterwards would
@@ -1656,7 +1633,7 @@ local function BuildGFPopup(mode)
       M.gfScope = mode
       if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("gfScope", mode) end
     end
-    if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(mode) end
+    GF_EM2_SetActivePreviewKind(mode)
     QuickPopup().OpenPage(pageKey, popup)
   end
 
@@ -1670,7 +1647,7 @@ local function BuildGFPopup(mode)
     local src = Conf()
     local dst = GetConf(targetMode)
     if not src or not dst then return end
-    if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("gf", targetMode) end
+    Dep("MSUF_EM_UndoBeforeChange")("gf", targetMode)
     local srcW, srcH = SizeKeys(mode, src)
     local dstW, dstH = SizeKeys(targetMode, dst)
     if src[srcW] ~= nil then
@@ -1692,7 +1669,7 @@ local function BuildGFPopup(mode)
     if BlockConfigLocked() then return end
     local conf = Conf()
     if not conf then return end
-    if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("gf", mode) end
+    Dep("MSUF_EM_UndoBeforeChange")("gf", mode)
     local xKey, yKey = PositionKeys(mode, conf)
     conf[xKey], conf[yKey] = 0, 0
     conf.positionMode = STABLE_GRID_POSITION_MODE
@@ -1798,7 +1775,7 @@ local function ShowGFPopup(mode)
   if not _popups[mode] then _popups[mode] = BuildGFPopup(mode) end
   local popup = _popups[mode]
   if not popup then return end
-  _G.MSUF_GF_EM2_SetPreviewNudgeTarget(mode)
+  GF_EM2_SetPreviewNudgeTarget(mode)
   popup.Sync()
   popup:Show()
   local S = _G.MSUF_EM2_Menu2Style
@@ -1817,7 +1794,7 @@ local function HideGFPopup(mode)
   C_Timer.After(0, RefreshFocus)
 end
 
-local function SyncGFPopups()
+SyncGFPopups = function()
   for _, popup in pairs(_popups) do
     if popup and popup.IsShown and popup:IsShown() and popup.Sync then
       popup.Sync()

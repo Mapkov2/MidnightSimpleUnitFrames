@@ -99,6 +99,14 @@ function CreateFrame(kind, name, parent, template)
     local f = Frame(kind, name, parent, template)
     if name then _G[name] = f end
     if template == "MSUF_GroupAdditionalUnitTemplate" or template == "SecureGroupPetHeaderTemplate" then f.secure = true end
+    if template == "SecureGroupPetHeaderTemplate" then
+        -- SecureGroupHeaders.lua SecureGroupPetHeader_OnAttributeChanged: writes inside
+        -- the "_ignore" window, and the closing write itself, never update the header.
+        f.scripts.OnAttributeChanged = function(self, key)
+            if key == "_ignore" or self.attrs._ignore then return end
+            if self:IsVisible() then Count("PetHeaderUpdate:" .. tostring(self.name)) end
+        end
+    end
     if template == "MSUF_GroupAdditionalUnitTemplate" then
         f.Health = Frame("StatusBar", nil, f)
         f.Health.Background = Frame("Texture", nil, f.Health)
@@ -243,7 +251,11 @@ for _ = 1, 10 do for _, f in ipairs(frames) do if f.events.GROUP_ROSTER_UPDATE a
 assert(#timers == 1, "a roster storm queued more than one pass")
 conf.petsWidth = 140
 RunTimers()
+-- The template size plus one trailing write outside the _ignore window.
 assert(counters.SetAttribute and counters.SetAttribute <= 2, "a width change rewrote more than the template size")
+assert(counters["PetHeaderUpdate:MSUF_GroupAdditional_Pets"] == 1,
+    "a settings change on the shown pet header ran " .. tostring(counters["PetHeaderUpdate:MSUF_GroupAdditional_Pets"])
+    .. " secure updates; the _ignore window swallows every write, one trailing write must run exactly one")
 
 ---------------------------------------------------------------------------
 -- Mana rows follow the roster in combat (P2-9)

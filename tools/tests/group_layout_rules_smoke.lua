@@ -7,7 +7,7 @@ IsInGroup=function() return count>0 end
 GetRaidRosterInfo=function(i) return "Member"..i,0, i<=10 and 1 or 5 end
 wipe=function(t) for k in pairs(t) do t[k]=nil end return t end
 local ns={ExportPublic=function() end}
-assert(loadfile(root.."/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"))("MSUF",ns)
+for _,part in ipairs({"","_Geometry","_Text","_Textures"}) do assert(loadfile(root.."/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB"..part..".lua"))("MSUF",ns) end
 local GF=ns.GF
 -- The Party layout takes a small raid only while the Party scope is on.
 local party={enabled=true,smallRaidAsParty=true,width=120,height=40}
@@ -73,7 +73,7 @@ local allowedBody=assert(headersSource:match("\nRaidGroupAllowed = function%(con
 local RaidGroupAllowed=assert(loadstring("local GF=...\nreturn function(conf, groupIndex)\n"..allowedBody.."\nend"))({IsMythicRaidContext=function() return true end})
 assert(RaidGroupAllowed(nil,6)==true,"a missing conf broke the raid group filter")
 assert(RaidGroupAllowed({hideMythicGroupsFiveToEight=true},6)==false and RaidGroupAllowed({groupFilter={[2]=false}},2)==false,"raid group filter rules changed")
-local dbFile=assert(io.open(root.."/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua","rb"))
+local dbFile=assert(io.open(root.."/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Geometry.lua","rb"))
 local scaleBody=assert(dbFile:read("*a"):gsub("\r",""):match("\nfunction GF.ResolveFrameScale%(kind%)\n(.-)\nend\n"),"ResolveFrameScale moved");dbFile:close()
 assert(not scaleBody:find("getNum",1,true),"ResolveFrameScale keeps a dead GetNumGroupMembers local")
 print("group_layout_rules_smoke PASS")

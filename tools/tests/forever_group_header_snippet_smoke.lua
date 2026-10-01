@@ -152,6 +152,12 @@ local function Load(isForever)
     }
     local ns = {
         Client = { IsForever = isForever, IsClassic = false },
+        -- Kernel/MSUF_Require.lua: hard dependencies resolve from _G and raise when absent.
+        Require = function(name)
+            local value = _G[name]
+            assert(type(value) == "function" or type(value) == "table", "fixture lacks " .. tostring(name))
+            return value
+        end,
         -- Flat raid headers build a name list, which reads unit tokens.
         UF = { IsUnitToken = function(unit) return type(unit) == "string" and unit ~= "" end },
         GF = {},
@@ -187,6 +193,8 @@ _G.UnitGUID = function(unit) return tostring(unit) .. "-guid" end
 _G.UnitClass = function(unit) return "Class", unit == "party1" and "MAGE" or unit == "party2" and "WARRIOR" or "PRIEST" end
 _G.UnitGroupRolesAssigned = function() return "DAMAGER" end
 _G.issecretvalue = function() return false end
+_G.MSUF_ScheduleLateAnchorReanchor = function() end
+_G.MSUF_Snap = function(_, value) return value end
 -- Kernel/MSUF_Util.lua: protected frames refuse the call in combat.
 _G.MSUF_SetRoundLayoutToNearestPixel = function(frame, enabled)
     if not (frame and frame.SetRoundLayoutToNearestPixel) then return false end
@@ -215,6 +223,11 @@ local function CheckSnippet(header, width, height, label)
         and snippet:find("'ping-receiver', true", 1, true), label .. " snippet must set up clicks and pings")
     Check(header:GetAttribute("_initialAttributeNames") == nil, label .. " must not copy attributes instead")
     Check(header.hooks.OnShow == nil, label .. " must not hook OnShow to pre-create buttons")
+    -- A child born in combat is adopted through the header's insecure method
+    -- (the oUF pattern); tools/tests/group_header_combat_child_smoke.lua runs it.
+    Check(snippet:find("header:CallMethod('MSUFGFInitChild', self:GetName())", 1, true),
+        label .. " snippet must hand new children to the header's insecure method")
+    Check(type(header.MSUFGFInitChild) == "function", label .. " carries no MSUFGFInitChild method")
 end
 
 local SecureSort = assert(loadfile(repo .. "/tools/tests/secure_group_sort.lua"))()
@@ -299,6 +312,8 @@ local function RunClient(isForever)
     local priority = GF.SetupPriorityHeader("party", "player,party1", 2)
     Check(priority ~= nil, client .. ": Priority header did not build")
     Check(type(priority:GetAttribute("initialConfigFunction")) == "string", client .. " Priority header must carry the secure snippet")
+    Check(priority:GetAttribute("initialConfigFunction"):find("header:CallMethod('MSUFGFInitChild'", 1, true)
+        and type(priority.MSUFGFInitChild) == "function", client .. " Priority header must adopt combat-born children")
     Check(priority:GetAttribute("_initialAttributeNames") == nil and priority.hooks.OnShow == nil,
         client .. " Priority header must not bring back the snippet-free path")
     GF.GetPriorityFrameMetrics = function() return 110, 25 end

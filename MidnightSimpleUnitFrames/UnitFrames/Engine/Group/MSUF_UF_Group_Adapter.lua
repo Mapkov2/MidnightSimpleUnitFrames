@@ -821,6 +821,24 @@ local function InstallChildAttrHook(child, kind)
   child:HookScript("OnAttributeChanged", OnChildAttributeChanged)
 end
 
+--- Called from the header's secure snippet (Headers.lua OnHeaderChildInit) for
+--- every child SecureGroupHeader births, before the header writes its unit.
+--- Out of combat the roster settle scan adopts new children in one batched pass,
+--- so this returns at once. A child born in combat (or after REGEN_DISABLED,
+--- before lockdown) would stay an unstyled, clickable slot until regen: install
+--- its unit hook now, and the unit write builds the visual layer through
+--- OnChildAttributeChanged -> ApplyUnitFrame, whose protected writes are all
+--- combat-gated. The protected half (secure click attributes, RegisterForClicks)
+--- comes with the regen rescan that the roster change behind every birth defers.
+function GF.AdoptHeaderChild(child, header)
+  if not child or not (InCombat() or _G.MSUF_InCombat == true) then return false end
+  local kind = header and header._msufGFKind
+  if header and header._msufGFPriorityHeader == true then child._msufGFPriorityFrame = true end
+  if kind then child._msufGFKind = kind end
+  InstallChildAttrHook(child, kind)
+  return true
+end
+
 local function ScanOneChild(child, kind)
   if not (child and child.GetAttribute) then return false end
   InstallChildAttrHook(child, kind)

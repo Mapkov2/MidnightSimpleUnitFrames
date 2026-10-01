@@ -191,6 +191,14 @@ local function AnyGroupFrameEnabled()
 end
 GF.AnyGroupRuntimeEnabled = AnyGroupFrameEnabled
 
+--- UNIT_NAME_UPDATE has no unit filter (RegisterUnitEvent takes two units), and
+--- nameplates raise it all the time. Only these tokens can change a party
+--- nameList or a Priority Frames pin; RuntimeOnEvent drops every other unit
+--- after one lookup, before any config is read.
+local NAME_LIST_UNITS = { player = true }
+for i = 1, 4 do NAME_LIST_UNITS["party" .. i] = true end
+for i = 1, 40 do NAME_LIST_UNITS["raid" .. i] = true end
+
 local RUNTIME_EVENTS = {
   "PLAYER_LOGIN",
   "PLAYER_ENTERING_WORLD",
@@ -491,6 +499,13 @@ local function AddPendingReason(reason)
   reasons[reason] = true
 end
 
+--- Kinds a deferred pass can be scoped to. Anything else -- nil, MarkAllDirty's
+--- "dirty", the event names RuntimeOnEvent hands to RefreshHeaderLayout -- means
+--- every kind. The merged scope only widens: an unscoped request, or two
+--- different kinds, leave the pending kind at DEFER_ALL_KINDS until the flush.
+local DEFER_SCOPED_KINDS = { party = true, raid = true, mythicraid = true, priority = true, gf_priority = true }
+local DEFER_ALL_KINDS = false
+
 function GF.DeferGroupRuntime(reason, kind, mask)
   GF._pendingGroupRuntime = true
   reason = reason or GF._pendingGroupRuntimeReason or "refresh"
@@ -501,13 +516,12 @@ function GF.DeferGroupRuntime(reason, kind, mask)
   elseif reason ~= "refresh" then
     GF._pendingGroupRuntimeReason = reason
   end
-  if kind ~= nil then
-    local currentKind = GF._pendingGroupRuntimeKind
-    if currentKind ~= nil and currentKind ~= kind then
-      GF._pendingGroupRuntimeKind = nil
-    else
-      GF._pendingGroupRuntimeKind = kind
-    end
+  if not DEFER_SCOPED_KINDS[kind] then kind = DEFER_ALL_KINDS end
+  local currentKind = GF._pendingGroupRuntimeKind
+  if currentKind == nil then
+    GF._pendingGroupRuntimeKind = kind
+  elseif currentKind ~= kind then
+    GF._pendingGroupRuntimeKind = DEFER_ALL_KINDS
   end
   GF._pendingGroupRuntimeMask = MergeDirtyMask(GF._pendingGroupRuntimeMask, mask)
   return false
@@ -548,28 +562,31 @@ end
 -- entering-world handler returns (including from our layout nonce). Re-read the
 -- live kind/count and apply saved visuals once on the next frame so secure
 -- children have settled before anchor sizing, screen clamping, and opacity.
+--- What the one pending settle pass also refreshes; a merge keeps the widest.
+--- ROSTER (party state and roles) includes ROLES (role state only).
+local SETTLE = { LAYOUT = 0, ROLES = 1, ROSTER = 2 }
 local headerLayoutSettlePending = false
-local headerLayoutSettleNeedsRosterState = false
+local headerLayoutSettleState = SETTLE.LAYOUT
 
 local function FlushHeaderLayoutSettle()
-  local refreshRosterState = headerLayoutSettleNeedsRosterState
+  local state = headerLayoutSettleState
   headerLayoutSettlePending = false
-  headerLayoutSettleNeedsRosterState = false
+  headerLayoutSettleState = SETTLE.LAYOUT
 
   if not AnyGroupFrameEnabled() then return false end
   if InCombat() then
-    return GF.DeferGroupRuntime(refreshRosterState and "roster" or "layout")
+    return GF.DeferGroupRuntime(state ~= SETTLE.LAYOUT and "roster" or "layout")
   end
 
   local did = GF.RefreshHeaderLayout()
   did = RefreshStartupVisuals() or did
-  if not refreshRosterState then return did end
-  did = RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did
+  if state == SETTLE.ROSTER then did = RefreshVisiblePartyState("GROUP_ROSTER_UPDATE") or did end
+  if state == SETTLE.LAYOUT then return did end
   return RefreshVisibleRoleState("PLAYER_ROLES_ASSIGNED") or did
 end
 
-local function ScheduleHeaderLayoutSettle(refreshRosterState)
-  if refreshRosterState == true then headerLayoutSettleNeedsRosterState = true end
+local function ScheduleHeaderLayoutSettle(state)
+  if state and state > headerLayoutSettleState then headerLayoutSettleState = state end
   if headerLayoutSettlePending then return false end
   headerLayoutSettlePending = true
   if C_Timer and type(C_Timer.After) == "function" then
@@ -724,7 +741,7 @@ end
 
 function GF.MarkAllDirty(mask)
   if mask == GF.DIRTY_GEOMETRY or mask == GF.DIRTY_LAYOUT or mask == GF.DIRTY_CONFIG then
-    return GF.RefreshHeaderLayout("dirty")
+    return GF.RefreshHeaderLayout()
   end
   return GF.RefreshVisuals(nil, mask)
 end
@@ -791,6 +808,7 @@ local DEFERRED_REASON_UNITS = {
 local function FlushDeferred()
   local reasons = GF._pendingGroupRuntimeReasons
   local kind = GF._pendingGroupRuntimeKind
+  if kind == DEFER_ALL_KINDS then kind = nil end
   local mask = GF._pendingGroupRuntimeMask
   GF._pendingGroupRuntime = nil
   GF._pendingGroupRuntimeReason = nil
@@ -847,12 +865,13 @@ local function FlushDeferred()
 end
 
 local function RuntimeOnEvent(self, event, unit)
+  if event == "UNIT_NAME_UPDATE" and not (IsUnitToken(unit) and NAME_LIST_UNITS[unit]) then return end
   -- SavedVariables/config caches are only reliable at the startup event
   -- boundary. Handle it before the disabled fast-exit so a cold cache cannot
   -- unregister the very events that perform the first live header setup.
   if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
     SyncCombatState()
-    GF.RefreshHeaderLayout(event)
+    GF.RefreshHeaderLayout()
     if event == "PLAYER_ENTERING_WORLD" then
       startupVisualsPending = true
       RefreshVisiblePartyState(event)
@@ -892,13 +911,11 @@ local function RuntimeOnEvent(self, event, unit)
     end
     if InCombat() then
       GF.DeferGroupRuntime("roster")
-    elseif event == "GROUP_ROSTER_UPDATE" then
-      -- Let Blizzard's SecureGroupHeader finish the current roster dispatch;
-      -- repeated roster churn in the same frame collapses into this one pass.
-      ScheduleHeaderLayoutSettle(true)
     else
-      GF.RefreshHeaderLayout(event)
-      RefreshVisibleRoleState(event)
+      -- Let Blizzard's SecureGroupHeader finish the current roster dispatch;
+      -- repeated roster churn and a role poll's burst of PLAYER_ROLES_ASSIGNED /
+      -- ROLE_CHANGED_INFORM (one per member) collapse into this one pass.
+      ScheduleHeaderLayoutSettle(event == "GROUP_ROSTER_UPDATE" and SETTLE.ROSTER or SETTLE.ROLES)
     end
     return
   elseif event == "PVP_MATCH_STATE_CHANGED" then
@@ -907,11 +924,10 @@ local function RuntimeOnEvent(self, event, unit)
       GF.DeferGroupRuntime("roster", "party")
     else
       -- One coalesced cold-path pass per match-state edge; no polling.
-      ScheduleHeaderLayoutSettle(true)
+      ScheduleHeaderLayoutSettle(SETTLE.ROSTER)
     end
     return
   elseif event == "UNIT_NAME_UPDATE" then
-    if not IsUnitToken(unit) then return end
     local partyNameListUnit = ArenaPartyNameListActive()
       and (unit == "player" or unit:match("^party[1-4]$") ~= nil)
     local priorityUnit = false
@@ -937,7 +953,7 @@ local function RuntimeOnEvent(self, event, unit)
     -- Normal and mythic raid share one secure header, so the difficulty edge
     -- has to swap its config kind immediately; the queued settle only corrects
     -- the footprint afterwards.
-    GF.RefreshHeaderLayout(event)
+    GF.RefreshHeaderLayout()
     ScheduleHeaderLayoutSettle()
   elseif event == "ZONE_CHANGED_NEW_AREA" then
     -- HeaderScope() is nil for this event, so an inline pass would be an exact

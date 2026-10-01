@@ -95,8 +95,15 @@ local function InCombat()
   return InCombatLockdown and InCombatLockdown()
 end
 
+--- Hard dependencies on exports of files that load before this one (the UF
+--- factory, config and preview animation, the Auras3 preview). Resolved per call
+--- on the cold preview paths, so a fixture that never reaches one need not stub it.
+local function Dep(name)
+  return MSUF.Require(name, "UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua")
+end
+
 local function PreviewAnimationActive()
-  return type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true
+  return Dep("MSUF_IsPreviewAnimationEnabled")() == true
 end
 
 function NormalizeKind(kind)
@@ -129,9 +136,7 @@ local ClampPreviewOffsetOnScreen = _G.MSUF_UF_ClampAnchorOffsetOnScreen
 local function ResolveAnchorFrame(conf, owner)
   if type(GF.ResolveAnchorFrame) == "function" then
     local frame, missing = GF.ResolveAnchorFrame(conf, owner)
-    if missing and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
-      _G.MSUF_ScheduleLateAnchorReanchor()
-    end
+    if missing then Dep("MSUF_ScheduleLateAnchorReanchor")() end
     return frame
   end
   return UIParent
@@ -994,11 +999,8 @@ local function SetBar(bar, value, maxValue, animate, r, g, b, a)
 end
 
 local function ClassColor(class)
-  local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
-  if type(fastClass) == "function" then
-    local r, g, b = fastClass(class)
-    if r then return r, g, b end
-  end
+  local r, g, b = Dep("MSUF_UFCore_GetClassBarColorFast")(class)
+  if r then return r, g, b end
   local c = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
   if c then return c.r, c.g, c.b end
   return 0.25, 0.75, 0.30
@@ -1591,9 +1593,8 @@ local function ApplyPreviewFrame(kind, index, reason, layout, w, h, spacing, gro
   -- Menu dispel-overlay preview: only row 1 owns a native aura container, so
   -- the MSUF-drawn preview has to be re-stamped per row on every rebuild.
   -- One boolean read when no preview is active.
-  if _G.MSUF_DispelOverlayPreviewMode == true
-    and type(_G.MSUF_ApplyDispelOverlayPreviewToFrame) == "function" then
-    _G.MSUF_ApplyDispelOverlayPreviewToFrame(frame)
+  if _G.MSUF_DispelOverlayPreviewMode == true then
+    Dep("MSUF_ApplyDispelOverlayPreviewToFrame")(frame)
   end
   return true
 end

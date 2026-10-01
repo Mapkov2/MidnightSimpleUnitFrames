@@ -212,11 +212,15 @@ for _,f in ipairs(frames) do
 end
 -- Build the actual additional settings: role guidance belongs to both healer
 -- paths and has its own vertical space ahead of the color picker.
-local widgets={ToggleAt=function() return {} end}
+local function Toggle() return {SetChecked=function() end} end
+local widgets={ToggleAt=Toggle,SectionSwitch=Toggle}
 function widgets.Text(section,text,x,y,width) section.help=section.help or {};section.help[#section.help+1]={text=text,y=y,width=width} end
-local gp={BindScopeToggle=function() end,ScopeSlider=function() end,ScopeDropdown=function() end}
+local gp={BindScopeToggle=function(_,widget) return widget end,ScopeSlider=function() end,ScopeDropdown=function() end,
+ Conf=function() return {} end,CurrentScope=function() return "party" end,ResolveControlMeta=function() return {} end}
 function gp.ScopeColor(_,section,_,_,_,_,_,_,_,_,y) section.colorY=y end
-local menuNS={MSUF2={Widgets=widgets,Theme={colors={muted={}}},GroupPage=gp}}
+function widgets.AttachContextColorReferences(section, references) section.colorReferences=references end
+local menuNS={Client={SupportsGroupKind=function() return true end},GF={GetConf=function() return {} end},
+ MSUF2={Widgets=widgets,Theme={colors={muted={}}},GroupPage=gp,BindBoolWidget=function() end}}
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayoutAdditional.lua"))("MSUF",menuNS)
 local sections={}
 local builder={width=720}
@@ -228,7 +232,8 @@ for _,id in ipairs({"healer_mana","friendly_bosses"}) do
  assert(help and help.text:find("assigned group role",1,true) and help.text:find("Set Role",1,true),"assigned-role requirement absent")
  assert(-help.y+80<section.height,"role help has no wrapping space")
 end
-assert(-sections.healer_mana.colorY>432+80,"role help overlaps mana text-color picker")
+assert(sections.healer_mana.colorY==nil,"mana text-color picker remained inline")
+assert(sections.healer_mana.colorReferences[1]=="group.healer_mana_text","mana text color lost its contextual entry point")
 print("group_additional_frames_smoke PASS")
 
 -- Live health events reuse the values already read and forward secrets to the shared painter.

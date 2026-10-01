@@ -97,12 +97,10 @@ function GF.GetPriorityBaseKind()
   return PriorityBaseKind()
 end
 
+--- State/MSUF_Profiles.lua defines MSUF_GetCharKey before the group files load.
 local function CharacterKey()
-  local getKey = _G.MSUF_GetCharKey
-  if type(getKey) == "function" then
-    local key = getKey()
-    if type(key) == "string" and key ~= "" then return key end
-  end
+  local key = MSUF.Require("MSUF_GetCharKey", "UnitFrames/Engine/Group/MSUF_UF_Group_Priority.lua")()
+  if type(key) == "string" and key ~= "" then return key end
   return nil
 end
 

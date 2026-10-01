@@ -271,7 +271,9 @@ local function LoadGroupDB(client)
     _G.UnitGroupRolesAssigned = function(unit) return ROLES[unit] or "NONE" end
     _G.GetInstanceInfo = function() return instance[1], instance[2], instance[3] end
     local namespace = { Client = client, ExportPublic = function(_, value) return value end }
-    assert(loadfile(core .. "GroupFrames/MSUF_GroupFrames_DB.lua"))("MidnightSimpleUnitFrames", namespace)
+    for _, part in ipairs({ "", "_Geometry", "_Text", "_Textures" }) do
+        assert(loadfile(core .. "GroupFrames/MSUF_GroupFrames_DB" .. part .. ".lua"))("MidnightSimpleUnitFrames", namespace)
+    end
     local gf = namespace.GF
     gf.GetScaledPowerHeight = function() return 6 end
     return gf
