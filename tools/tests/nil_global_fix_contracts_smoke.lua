@@ -1,6 +1,6 @@
 -- nil_global_fix_contracts_smoke.lua <repoRoot>
 --
--- Seven shipped code paths read a name that no file defines. Lua 5.1 answers nil
+-- Four shipped code paths read a name that no file defines. Lua 5.1 answers nil
 -- for such a read, so each one either raised the first time its line ran or, worse,
 -- quietly turned a branch off for good. tools/tests/unresolved_global_reads_smoke.py
 -- now fails on the reads themselves; this smoke pins what the fixed code does,
@@ -10,25 +10,11 @@
 --                      fail-closed branch raised "table index is nil" instead of
 --                      closing. Section 1 makes the curated list fail its own
 --                      count check and requires a nonempty, zero-count result.
---   Geometry router    OM.RootDetailBlocked compared against an empty extracted
---                      phrase list, so it never blocked. Section 2 restores the
---                      rule it had until the phrase extraction: a frame-root
---                      offset row is out when the sentence names a detail its own
---                      label does not.
---   Class resource     ParseClassResourceFillFastShortcut read DetectDirection as
---                      a global, so "left"/"right"/"up"/"down" never chose an
---                      axis. Section 3 routes each direction.
---   Assistant apply    ApplyCastbar read the apply service as a global, so its
---                      fast path was dead and every castbar change took the
---                      global-call fallback. Section 4 pins the service route.
 --   Color picker       The Advanced card's HEX input got a nil commit handler,
---                      so Enter did nothing. Section 5 pins the shared handler
+--                      so Enter did nothing. Section 2 pins the shared handler
 --                      and both inputs that carry it.
---   Class resource     Preview.NudgeHandle, the Assistant's nudge entry point,
---   preview            called a nil StoreForHandle and raised. Section 6 pins the
---                      exported store reader and the preview's binding of it.
 --   Font registry      MSUF_GetFontPreviewObject called SetFontChecked, which is
---                      published as MSUF_SetFontChecked. Section 7 pins the call.
+--                      published as MSUF_SetFontChecked. Section 4 pins the call.
 --
 -- Run with plain Lua 5.1 and the repo root as arg 1.
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
@@ -36,7 +22,6 @@ local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))
 
 local CORE = root .. "/MidnightSimpleUnitFrames/"
 local OPTIONS = root .. "/MidnightSimpleUnitFrames_Options/"
-local ASSISTANT = root .. "/MidnightSimpleUnitFrames_Assistant/Assistant/"
 
 local function Check(condition, message)
     if not condition then error(message, 2) end
@@ -92,144 +77,7 @@ Check(tostring(failSignature):find("invalid", 1, true) ~= nil,
     "the fail-closed signature must say invalid: " .. tostring(failSignature))
 
 ---------------------------------------------------------------------------
--- 2. Geometry router: a frame-root offset row is out when the sentence names a
---    detail the row's own label does not.
----------------------------------------------------------------------------
-local geometryPath = ASSISTANT .. "MSUF_AssistantParser_Geometry.lua"
-local geometrySource = Slice.Read(geometryPath)
--- Trim and Normalize stand in for the parser core's own pair: this section only
--- needs lowercasing and whitespace folding, which is all OM.Clean asks of them.
-local geometryPrologue = [[
-local OM = { cleanCache = {}, cleanCacheOrder = {} }
-local function Trim(text) return (tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")) end
-local function Normalize(text) return (tostring(text or ""):lower():gsub("%s+", " ")) end
-local function HasPhrase(text, phrase)
-    text, phrase = Normalize(text), Normalize(phrase)
-    if phrase == "" then return false end
-    return (" " .. text .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
-end
-]]
-local RootDetailBlocked = Compile(geometryPrologue,
-    Slice.Function(geometrySource, "function OM.Clean", geometryPath) .. "\n"
-        .. Slice.Function(geometrySource, "function OM.RootDetailBlocked", geometryPath),
-    "OM.RootDetailBlocked", "OM.RootDetailBlocked")()
-
-local GEOMETRY_CASES = {
-    -- attribute, label, sentence, blocked
-    { "offsetX", "X Offset", "move the player name 5 to the left", true },
-    { "offsetX", "Name X Offset", "move the player name 5 to the left", false },
-    { "offsetY", "Y Offset", "move the target health text down 3", true },
-    { "offsetY", "Health Text Y Offset", "move the target health text down 3", false },
-    { "offsetX", "X Offset", "move the player frame 5 to the left", false },
-    -- Only frame-root offsets are judged; every other attribute is none of its business.
-    { "width", "Width", "make the player name wider", false },
-}
-for _, case in ipairs(GEOMETRY_CASES) do
-    local blocked = RootDetailBlocked({ attribute = case[1], label = case[2] }, case[3])
-    Check(blocked == case[4], "RootDetailBlocked(" .. case[1] .. "/" .. case[2] .. ", \"" .. case[3]
-        .. "\") answered " .. tostring(blocked) .. ", expected " .. tostring(case[4]))
-end
--- The extracted phrase row the guard used to read is gone, not merely unused.
-local geometryData = {}
-assert(loadfile(ASSISTANT .. "MSUF_AssistantParser_Geometry_Data.lua"))(
-    "MidnightSimpleUnitFrames_Assistant", geometryData)
-local phrases = geometryData.Assistant.ParserData.GEOMETRY_PARSER.PHRASES
-Check(phrases[37] == nil,
-    "GeometryPhrases[37] is back; it held a variable name the extractor inlined, never a phrase")
-
----------------------------------------------------------------------------
--- 3. Class resource fill shortcut: a named direction chooses the axis.
----------------------------------------------------------------------------
-local parserPath = ASSISTANT .. "MSUF_AssistantParser.lua"
-local parserSource = Slice.Read(parserPath)
-local rootData = {}
-assert(loadfile(ASSISTANT .. "MSUF_AssistantParser_Data.lua"))(
-    "MidnightSimpleUnitFrames_Assistant", rootData)
-local settings = {
-    ["bars.classPowerOffsetX"] = { key = "bars.classPowerOffsetX", label = "X Offset" },
-    ["bars.classPowerOffsetY"] = { key = "bars.classPowerOffsetY", label = "Y Offset" },
-    ["bars.classPowerFrameLevelOffset"] = { key = "bars.classPowerFrameLevelOffset", label = "Layer" },
-}
-local parserPrologue = [[
-local function HasPhrase(text, phrase)
-    return (" " .. tostring(text):lower() .. " "):find(" " .. tostring(phrase):lower() .. " ", 1, true) ~= nil
-end
-local function ContainsAny(text, words)
-    for i = 1, #(words or {}) do if HasPhrase(text, words[i]) then return true end end
-    return false
-end
-local function FirstNumber(text) return tonumber(tostring(text):match("%-?%d+")) end
-local P = { RootPhrases = PHRASES, DetectDirection = function(text)
-    ASKED[#ASKED + 1] = text
-    return DIRECTION
-end }
-local A = { Registry = { GetSetting = function(_, key) return SETTINGS[key] end } }
-]]
-local shortcutChunk = Compile("local PHRASES, SETTINGS, DIRECTION, ASKED = ...\n" .. parserPrologue,
-    Slice.Function(parserSource, "local function ParseClassResourceFillFastShortcut", parserPath),
-    "ParseClassResourceFillFastShortcut", "ParseClassResourceFillFastShortcut")
-local rootPhrases = rootData.Assistant.ParserData.ROOT_PARSER.PHRASES
-local function Shortcut(direction, text)
-    local asked = {}
-    local parse = shortcutChunk(rootPhrases, settings, direction, asked)
-    return parse(text), asked
-end
-
-local DIRECTION_CASES = {
-    { "left", "bars.classPowerOffsetX" },
-    { "right", "bars.classPowerOffsetX" },
-    { "up", "bars.classPowerOffsetY" },
-    { "down", "bars.classPowerOffsetY" },
-}
-for _, case in ipairs(DIRECTION_CASES) do
-    local text = "move the class resource bar 10 " .. case[1]
-    local plan, asked = Shortcut(case[1], text)
-    Check(#asked > 0, "the class resource shortcut never asked P.DetectDirection for \"" .. text .. "\"")
-    Check(type(plan) == "table" and plan.changes and plan.changes[1]
-        and plan.changes[1].setting.key == case[2],
-        "\"" .. text .. "\" routed to "
-            .. tostring(plan and plan.changes and plan.changes[1] and plan.changes[1].setting.key)
-            .. ", expected " .. case[2])
-end
--- The explicit phrases keep working with no direction at all.
-local explicit = Shortcut(nil, "move the class resource x offset to 10")
-Check(type(explicit) == "table" and explicit.changes[1].setting.key == "bars.classPowerOffsetX",
-    "an explicit axis phrase must still route without a direction word")
-
----------------------------------------------------------------------------
--- 4. Assistant castbar apply: the apply service is read per call.
----------------------------------------------------------------------------
-local domainsPath = ASSISTANT .. "MSUF_AssistantRegistry_Core_Apply_Domains.lua"
-local domainsSource = Slice.Read(domainsPath)
-local serviceCalls, globalCalls = {}, {}
-local applyPrologue = [[
-local function CurrentApplyService() return SERVICE end
-local function CallGlobal(name) GLOBALS[#GLOBALS + 1] = name; return false end
-local function ApplyGeneral() GLOBALS[#GLOBALS + 1] = "ApplyGeneral"; return true end
-]]
-local applyChunk = Compile("local GLOBALS, SERVICE = ...\n" .. applyPrologue,
-    Slice.Function(domainsSource, "local function ApplyCastbar", domainsPath),
-    "ApplyCastbar", "ApplyCastbar")
-local ApplyCastbar = applyChunk(globalCalls, {
-    RequestCastbars = function(reason, source, unit)
-        serviceCalls[#serviceCalls + 1] = tostring(reason) .. "/" .. tostring(source) .. "/" .. tostring(unit)
-        return true
-    end,
-})
-ApplyCastbar("MSUF_TEST", "target")
-Check(#serviceCalls == 1 and serviceCalls[1] == "MSUF_TEST/assistant/target",
-    "the castbar apply must take the service route, called " .. table.concat(serviceCalls, ", "))
-Check(#globalCalls == 0, "the service route must not also run the global fallback: "
-    .. table.concat(globalCalls, ", "))
-
--- Without a service the fallback still runs, so the fix added a route, not a gate.
-serviceCalls, globalCalls = {}, {}
-local Fallback = applyChunk(globalCalls, nil)
-Fallback("MSUF_TEST", "target")
-Check(#globalCalls > 0, "without an apply service the castbar apply must still call the globals")
-
----------------------------------------------------------------------------
--- 5. Context color picker: one HEX commit handler, both inputs.
+-- 2. Context color picker: one HEX commit handler, both inputs.
 ---------------------------------------------------------------------------
 local pickerPath = OPTIONS .. "Shell/Menu2/MSUF_Menu2_ContextColorPicker.lua"
 local pickerSource = Slice.Read(pickerPath):gsub("\r\n", "\n")
@@ -262,7 +110,7 @@ for _, assignment in ipairs({ "local CommitHex = HexCommitter(panel)", "hex._com
 end
 
 ---------------------------------------------------------------------------
--- 6. Class resource preview: the handle's store reader is exported and bound.
+-- 3. Class resource preview: the handle's store reader is exported and bound.
 ---------------------------------------------------------------------------
 local interactionNS = { MSUF2 = {
     ClassPowerStackPreview = { RequestRefresh = function() end },
@@ -285,12 +133,11 @@ Check(Interaction.Write == nil and Interaction.Apply == nil,
     "the display-only preview must not publish its retired movement writers")
 
 ---------------------------------------------------------------------------
--- 7. Font registry: the preview font object uses the published helper.
+-- 4. Font registry: the preview font object uses the published helper.
 ---------------------------------------------------------------------------
 local registrySource = Slice.Read(CORE .. "Runtime/MSUF_FontRegistry.lua"):gsub("\r\n", "\n")
 Check(registrySource:find("G.MSUF_SetFontChecked(obj, path, 14, \"\")", 1, true) ~= nil,
     "MSUF_FontRegistry.lua must call the published MSUF_SetFontChecked; a bare SetFontChecked "
         .. "is defined nowhere and raised on every font preview object")
 
-print("nil_global_fix_contracts_smoke: ok (7 sections, "
-    .. #GEOMETRY_CASES .. " geometry cases, " .. #DIRECTION_CASES .. " direction cases)")
+print("nil_global_fix_contracts_smoke: ok (4 core sections)")

@@ -26,11 +26,14 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             index[path] = i
             if path:find("/AliasData/", 1, true) then aliases[#aliases + 1] = path end
             if path:match("/Locales/%a%a%u%u%.lua$") then menuLocales = menuLocales + 1 end
-            assert(not path:find("_Options/", 1, true) and not path:find("_Assistant/", 1, true),
-                "optional UI was added to startup")
+            assert(not path:find("_Options/", 1, true), "optional UI was added to startup")
         end
         assert(menuLocales == 12, client .. ": client locale restricted saved menu language")
-        assert(bytes < (suffix == "Mainline" and 16000000 or 14000000),
+        -- A tripwire for large startup additions (a whole catalog or the Options
+        -- addon), not for ordinary growth: every pack carries each new menu label.
+        -- 2026-10-01: 16,000,000 -> 16,050,000 for the review fixes plus the
+        -- restored options (largest selection koKR/standard 16,004,468).
+        assert(bytes < (suffix == "Mainline" and 16050000 or 14000000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
@@ -106,5 +109,32 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             print(string.format("PASS %s deDE: %d Lua files, %.2f MB", client, #selected, bytes / 1000000))
         end
     end
+end
+
+-- WoW Forever's game type while the Forever marker is not recognized (renamed at
+-- launch, Client.IsForever false): the TOC skips the Retail catalog and every
+-- Forever catalog file returns early, so no catalog exists. The resolver must
+-- still load and resolve nothing; before, it raised at load and every enabled
+-- custom container then called the missing A3.CompileCustomAuraAliases.
+do
+    _G.GetLocale = function() return "enUS" end
+    local ns = { Client = { IsForever = false }, MSUF_Auras3 = { AuraSpellIDAliases = {} } }
+    local resolverLoaded = false
+    for _, path in ipairs(Manifest.Paths(root, "Mainline", "enUS", "camelot")) do
+        local resolver = path:find("/MSUF_Auras3_AuraAliases.lua", 1, true) ~= nil
+        if resolver or path:find("/AliasData/", 1, true) then
+            local ok, err = pcall(assert(loadfile(path)), "MidnightSimpleUnitFrames", ns)
+            assert(ok, "camelot without the Forever marker: " .. path .. " raised " .. tostring(err))
+            resolverLoaded = resolverLoaded or resolver
+        end
+    end
+    local A3 = ns.MSUF_Auras3
+    assert(resolverLoaded and A3.AuraAliasCatalog == nil,
+        "precondition: the unrecognized camelot client did not end without a catalog")
+    assert(type(A3.CompileCustomAuraAliases) == "function",
+        "camelot without the Forever marker: the alias resolver is missing")
+    A3.CompileCustomAuraAliases({ [774] = true, [17] = true })
+    assert(next(A3.AuraSpellIDAliases) == nil, "the alias resolver invented aliases without a catalog")
+    count = count + 1
 end
 print("PASS startup locale selection: " .. count .. " client/locale cases; exact catalogs, aliases, order and menu language")

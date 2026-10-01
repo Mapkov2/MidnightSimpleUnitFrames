@@ -223,9 +223,9 @@ end
 -- Channel ticks -----------------------------------------------------------------
 local function NewMarker()
     local marker = { shown = false }
-    function marker:SetColorTexture() end
+    function marker:SetColorTexture(...) self.color = {...} end
     function marker:SetAlpha() end
-    function marker:SetWidth() end
+    function marker:SetWidth(width) self.width = width end
     function marker:SetPoint() end
     function marker:ClearAllPoints() end
     function marker:Show() self.shown = true end
@@ -233,10 +233,14 @@ local function NewMarker()
     return marker
 end
 
-local function ShownTickMarkers(client, spellID)
+local function ShownTickMarkers(client, spellID, custom)
     InstallCommonGlobals()
     _G.MSUF_PlayerChannelHasteMarkers_Update = nil
     _G.MSUF_DB = { general = { castbarShowChannelTicks = true }, player = { castbar = {} } }
+    if custom then
+        _G.MSUF_DB.general.castbarAccentLastTick = true
+        _G.MSUF_DB.player.castbar = { channelTickUseCustom = true, channelTickCount = 3, channelTickPosPct = { 80, 20, 40 } }
+    end
     _G.IsPlayerSpell = function() return false end
     assert(loadfile(root .. "/" .. TICKS_FILE))("MidnightSimpleUnitFrames", Namespace(client))
     local statusBar = {}
@@ -249,7 +253,7 @@ local function ShownTickMarkers(client, spellID)
     for _, marker in ipairs(frame._msufPlayerChannelHasteMarkers or {}) do
         if marker.shown then shown = shown + 1 end
     end
-    return shown
+    return shown, frame
 end
 
 for _, case in ipairs({
@@ -288,6 +292,27 @@ for _, case in ipairs({
     local shown = ShownTickMarkers(case[2], case[3])
     Check(shown == case[4], string.format("(f) %s spell %d: %d tick markers shown, expected %d",
         case[1], case[3], shown, case[4]))
+end
+
+do
+    -- The accent marks the tick the fill edge reaches last. With unified
+    -- direction the channel fills, so that is the farthest position (80%).
+    local shown, frame = ShownTickMarkers(RETAIL, 15407, true)
+    local markers = frame._msufPlayerChannelHasteMarkers
+    _G.MSUF_DB.general.castbarUnifiedDirection = true
+    _G.MSUF_PlayerChannelHasteMarkers_Update(frame, true)
+    Check(shown == 3 and markers[1].width == 3 and markers[1].color[2] == .72 and markers[3].width == 2,
+        "last tick accent must use latest position in an unsorted custom list")
+    -- The default direction drains the channel toward its anchor: the edge
+    -- reaches the nearest position (20%) last.
+    _G.MSUF_DB.general.castbarUnifiedDirection = nil
+    _G.MSUF_PlayerChannelHasteMarkers_Update(frame, true)
+    Check(markers[2].width == 3 and markers[2].color[2] == .72 and markers[1].width == 2,
+        "a draining channel must accent the position its edge reaches last")
+    _G.MSUF_DB.general.castbarAccentLastTick = false
+    _G.MSUF_PlayerChannelHasteMarkers_Update(frame, true)
+    Check(markers[1].width == 2 and markers[1].color[2] == 1 and markers[2].width == 2,
+        "tick accent did not reset on reused texture")
 end
 
 -- Source contracts ----------------------------------------------------------------

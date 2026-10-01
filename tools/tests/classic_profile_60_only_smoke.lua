@@ -109,6 +109,7 @@ for _, relative in ipairs({ "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.
 end
 function MSUF_TryDecodeCompactString(value) return decoded[value] end
 function MSUF_EnsureDB() end
+function MSUF_NormalizeProfileDefaults(profile) return profile end
 namespace.ProfileRuntime = { Apply = function() end }
 
 MSUF_DB = currentProfile

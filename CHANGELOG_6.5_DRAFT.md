@@ -1,10 +1,10 @@
 # MSUF 6.5 — Full Changelog Draft
 
-This draft covers the committed unified 6.5 line through **6.5-beta11 (29 September 2026)**. Its five highlights are additions absent from committed **Retail 6.21**; the detail below also covers client ports and extensions made in the Classic repository. It follows the full 6.0 changelog's approach: lead with the changes players will notice, then explain their scope, fixes, and compatibility. Auras3, the Assistant, Texture Layers, Priority Frames, Dispel Symbols, four-way bar fill, and the other established 6.0 features are not presented as 6.5 additions.
+This draft covers the committed unified 6.5 line through **6.5-beta11 (29 September 2026)**. Its five highlights are additions absent from committed **Retail 6.21**; the detail below also covers client ports and extensions made in the Classic repository. It follows the full 6.0 changelog's approach: lead with the changes players will notice, then explain their scope, fixes, and compatibility. Auras3, Texture Layers, Priority Frames, Dispel Symbols, four-way bar fill, and the other established 6.0 features are not presented as 6.5 additions.
 
 ## 5 Highlights
 
-1. **Arena Frames built into MSUF.** Arena opponents get dedicated frames with their own castbars, Auras, Edit Mode movers, settings page, preview, and Assistant coverage. Match preparation, stealth, and trinket states have their own handling. Midnight provides three opponent slots; TBC and Mists provide five. Classic Era and WoW Forever do not expose Arena Frames.
+1. **Arena Frames built into MSUF.** Arena opponents get dedicated frames with their own castbars, Auras, Edit Mode movers, settings page, and preview. Match preparation, stealth, and trinket states have their own handling. Midnight provides three opponent slots; TBC and Mists provide five. Classic Era and WoW Forever do not expose Arena Frames.
 2. **A frame for your pet's target.** Pet Target is now a separate Unit Frame with its own runtime, defaults, settings, preview, and Edit Mode placement on supported clients. You can place and style it independently of the Pet frame.
 3. **Buffs and debuffs on the Pet frame.** The Pet frame now has configurable Aura lanes under Pet > Auras, so the pet's effects are visible and styled on the frame itself. Classic Pet XP appears when the client supplies XP data; WoW Forever hunter pets can also show their happiness.
 4. **New Slanted bar shape.** Health and other rectangular bars can use the new cut, angular edge instead of a square or rounded outline. A global switch and scope choices cover Unit Frames, Group Frames, Power bars, castbars, Class Resources, and mouseover. Runtime and menu previews use the same shape choice; saved Rounded styles return when Slanted is disabled.
@@ -12,15 +12,16 @@ This draft covers the committed unified 6.5 line through **6.5-beta11 (29 Septem
 
 ## Package and Client Support
 
-- The main addon, load-on-demand Options, and optional Assistant each ship manifests for Mainline, Vanilla, TBC, and Mists. WoW Forever is identified within the Mainline family by its Camelot client marker and uses its own capability and factory-profile paths.
+- The main addon and the load-on-demand Options each ship manifests for Mainline, Vanilla, TBC, and Mists. WoW Forever is identified within the Mainline family by its Camelot client marker and uses its own capability and factory-profile paths.
 - The Mainline manifests declare 12.0.7, 12.1.0, 12.1.5, and WoW Forever's Interface 16001. The 12.1.5 code paths activate only when their native APIs are present; 12.1.0 keeps guarded Aura, timer, and layout fallbacks.
 - The AddOn list reports the version for the current game type. Midnight still reports 6.20 in the beta11 manifests; Classic and WoW Forever report 6.5-beta11. `/msuf clientinfo` prints the detected client family, flavor, game mode, and addon version.
 - Menus and search omit controls unsupported by the running client. WoW Forever has no Arena Frames or Evoker Empowered Cast options; Classic clients do not offer unavailable Cooldown Manager anchors.
 - Fresh installs, new profiles, and full resets use client-aware factory layouts. Existing customized profiles keep their settings. WoW Forever has its own supplied layout.
+- The in-game Assistant is retired and no longer ships; its saved chat history is removed once and never travels in profile exports or copies. After a manual install, delete the old `MidnightSimpleUnitFrames_Assistant` folder from `Interface/AddOns` (an app update removes it for you).
 
 ## Arena Frames
 
-- Arena Frames have their own Unit Frame options, Aura and castbar configuration, Edit Mode movers, previews, and Assistant settings. Arena Group Frames use Party rather than Raid settings.
+- Arena Frames have their own Unit Frame options, Aura and castbar configuration, Edit Mode movers, and previews. Arena Group Frames use Party rather than Raid settings.
 - Midnight supports arena1–3. TBC and Mists support arena1–5, including all five castbars and portrait previews. Clients without Arena slots do not offer the feature.
 - Opponent slots refresh their power text when reassigned between Solo Shuffle rounds. Castbar events, font changes, and trinket fallback are handled per relevant Arena state; the Mists combat-log fallback subscribes only inside an arena.
 - Arena castbar geometry is validated when its style changes instead of before every cast.
@@ -78,7 +79,7 @@ These are later Retail changes brought into the 6.5 source. They extend the 6.0 
 
 ### Auras and Castbars
 
-- Buff and Debuff lanes own their layout, filters, effects, ordering, and visibility; their icon appearance remains shared by Aura type. The same ownership reaches Menu, Edit Mode, search, and Assistant controls.
+- Buff and Debuff lanes own their layout, filters, effects, ordering, and visibility; their icon appearance remains shared by Aura type. The same ownership reaches Menu, Edit Mode, and search controls.
 - The curated MSUF Highlights Group Buff filter and Custom Priority ordering for Target Dots and Custom 1–3 Aura containers are included. Existing profiles retain their chosen filters.
 - The blacklist workspace can collect blockable Auras during combat for review afterward, and manual entries can distinguish a cast ID from the Aura ID actually shown.
 - Non-Player Auras can filter encounter and environmental debuffs without including player or pet effects.
@@ -87,7 +88,6 @@ These are later Retail changes brought into the 6.5 source. They extend the 6.0 
 ### Menu and Profile Experience
 
 - Section headers carry their own on/off switch, current-value summary, and section action menu. Disabled frame scopes dim their settings while leaving selection and preview available.
-- The Assistant resolves requests that name a specific Unit Frame and keeps later Aura, filter, and profile-aware controls.
 - The compact color picker accepts a typed HEX value on Enter. The unified menus carry the twelve-locale translation pass from the Retail line.
 - The supplied factory profile carries the later Retail castbar direction, group-cleanse border, and Target Aura placement; client-specific variants adapt it without overwriting customized profiles.
 
@@ -101,4 +101,4 @@ These are later Retail changes brought into the 6.5 source. They extend the 6.0 
 
 ## Draft Boundary
 
-This is the committed **Retail `f7e8e3f1` / Classic `8b191b72`** comparison, not the final 6.5 release text. Current uncommitted changes in both checkouts and planned features are outside it. The 12.1.5 path is prepared in source; this draft does not claim final live-client, combat, visual, or performance certification.
+This is the committed **Retail `f7e8e3f1` / Classic `8b191b72`** comparison, not the final 6.5 release text. Current uncommitted changes in both checkouts and planned features are outside it, except the Assistant retirement under Package and Client Support, which changes what a manual install must contain. The 12.1.5 path is prepared in source; this draft does not claim final live-client, combat, visual, or performance certification.

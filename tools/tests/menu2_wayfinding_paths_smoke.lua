@@ -77,7 +77,7 @@ for i = 1, #ENGLISH do
 end
 
 -- Every part goes through M.Tr on its own, the way the rail and page show it;
--- the breadcrumb stays untranslated for search and the Assistant.
+-- the breadcrumb stays untranslated for search routing.
 M.Tr = function(text) return "<" .. text .. ">" end
 Check(M.NavPath("opt_misc", "Frame Highlights") == "<General> > <Miscellaneous> > <Frame Highlights>",
     "NavPath must translate each part separately: " .. M.NavPath("opt_misc", "Frame Highlights"))

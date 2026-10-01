@@ -55,6 +55,7 @@ local function Run(sourceRoot, nativePercent)
         Record("foreground",event,unit,hp,maxHP)
       end} }
   local file = sourceRoot.."/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua"
+  assert(loadfile(sourceRoot.."/MidnightSimpleUnitFrames/Kernel/MSUF_Bootstrap.lua"))("MidnightSimpleUnitFrames",ns)
   assert(loadfile(file))("MidnightSimpleUnitFrames",ns)
   local function Bar(label)
     return { SetMinMaxValues=function(_,low,high) Record(label..".range",low,high) end,

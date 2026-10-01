@@ -99,6 +99,10 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     bindEvents()
     assert(frame:IsEventRegistered("UNIT_POWER_POINT_CHARGE") == modern, flavor .. ": broad bindings leaked charged event")
     assert(frame:IsEventRegistered("RUNE_POWER_UPDATE") == (modern or mists), flavor .. ": broad bindings leaked rune event")
+    -- Search is navigation-only and runs while the real menu host is shown.
+    -- Keep pages cold, but provide the explicit open-menu context it requires.
+    M.frame = env.CreateFrame("Frame", nil, env.UIParent)
+    M.frame:Show()
     -- Cold static index must not resurrect settings the page cannot construct.
     for key, query in pairs({ showEbonMight = "Ebon Might", runeShowTime = "rune time",
         showChargedComboPoints = "empowered combo", showGuardianIronfur = "Ironfur" }) do

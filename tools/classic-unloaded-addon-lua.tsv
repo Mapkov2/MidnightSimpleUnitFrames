@@ -1,0 +1,4 @@
+Path	Kind	Reason
+MidnightSimpleUnitFrames/Features/Diagnostics/MSUF_Feature_DebugPosition.lua	mirror	Retail diagnostic that neither Retail nor any Classic TOC loads; kept byte-identical to Retail so a sync needs no override
+MidnightSimpleUnitFrames/Runtime/MSUF_UIThemeBridge.lua	retained	August theme bridge, un-wired by sync 3f4270e45 and superseded by MapkoSkin; kept on purpose by owner decision, retiring it is a separate explicit decision
+MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ThemeSkin.lua	retained	Menu2 skin of the same August theme bridge, superseded by MapkoSkin; kept on purpose by owner decision, retiring it is a separate explicit decision

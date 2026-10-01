@@ -62,9 +62,13 @@ local function LoadPages(client)
     _G.InCombatLockdown = function() return false end
     _G.UnitAffectingCombat = function() return false end
     _G.GameTooltip = Recorder()
+    -- The Assist guide atlas exists only on the Mainline-family branches
+    -- (upstream/live and upstream/forever Blizzard_UnitFrame/Mainline).
     _G.C_Texture = { GetAtlasInfo = function(atlas)
         atlasQueries[#atlasQueries + 1] = atlas
-        if atlas ~= "nameplates-icon-elite-silver" then return { width = 16, height = 16 } end
+        if atlas ~= "nameplates-icon-elite-silver" and atlas ~= "UI-HUD-UnitFrame-Player-Group-GuideIcon" then
+            return { width = 16, height = 16 }
+        end
     end }
     _G.MSUF_ApplyArenaUnitframePreviewState = function() arenaApplies = arenaApplies + 1 end
     -- No CoreFrame global exists in game either: the page reads the engine
@@ -126,13 +130,14 @@ local function PreviewCard(status, unit)
 end
 
 local HAPPINESS_LABELS = { "Unhappy - 75% damage", "Content - 100% damage", "Happy - 125% damage" }
--- arenaSlots: the slots ArenaPreviewFramesVisible walks (Unit page ARENA_SLOTS).
+-- arenaSlots: the slots ArenaPreviewFramesVisible walks (Unit page ARENA_SLOTS,
+-- MSUF.Client.MaxArenaOpponents: WoW Forever has no arena, so none, like Classic Era).
 local CLIENTS = {
     { name = "Vanilla", coreFrameReads = 0, project = 2, tag = "Vanilla", classic = true, arenaTargets = 0, arenaSlots = 0, arenaResync = true, happiness = true },
     { name = "TBC", coreFrameReads = 4, project = 5, tag = "TBC", classic = true, arenaTargets = 5, arenaSlots = 5, arenaResync = true, happiness = true },
     { name = "Mists", coreFrameReads = 4, project = 19, tag = "Mists", classic = true, arenaTargets = 5, arenaSlots = 5, arenaResync = true, happiness = false },
     { name = "Midnight", coreFrameReads = 3, project = 1, classic = false, arenaTargets = 3, arenaSlots = 3, arenaResync = false, happiness = false },
-    { name = "Forever", coreFrameReads = 3, project = 1, forever = true, classic = false, arenaTargets = 0, arenaSlots = 3, arenaResync = false, happiness = true },
+    { name = "Forever", coreFrameReads = 0, project = 1, forever = true, classic = false, arenaTargets = 0, arenaSlots = 0, arenaResync = true, happiness = true },
 }
 for _, case in ipairs(CLIENTS) do
     local client = LoadClient(case)
@@ -213,6 +218,21 @@ for _, case in ipairs(CLIENTS) do
         case.name .. ": a missing preview atlas must fall back to the file texture on Classic only")
     Check((#atlasQueries > 0) == case.classic,
         case.name .. ": GetAtlasInfo must be asked on Classic only, asked " .. #atlasQueries .. " times")
+
+    -- 5. Without the guide atlas the Assist preview draws Blizzard's real
+    -- Interface\GroupFrame\UI-Group-AssistantIcon (every mirror branch ships it).
+    local assistSpec = page.FindStatusSpec("player", "assist")
+    Check(assistSpec and assistSpec.value == "assist", case.name .. ": Assist indicator missing on Player")
+    local assistState, assistHolders = PreviewCard(status, "player")
+    assistState.RefreshIconPreviewStrip(assistSpec, true)
+    local assistTex = assistHolders[1].tex
+    if case.classic then
+        Check(Called(assistTex, "SetTexture(Interface\\GroupFrame\\UI-Group-AssistantIcon)"),
+            case.name .. ": the Assist preview lost Blizzard's UI-Group-AssistantIcon file texture")
+    else
+        Check(Called(assistTex, "SetAtlas(UI-HUD-UnitFrame-Player-Group-GuideIcon)"),
+            case.name .. ": the Assist preview no longer uses the guide atlas")
+    end
 end
 
 print("classic_unit_page_client_hunks_smoke: ok (" .. #CLIENTS .. " clients)")

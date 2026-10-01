@@ -296,8 +296,5 @@ assert(has(groupDB, "local state = createCanonical(true)")
     and has(profiles, 'createCanonical(true)'),
     "existing-profile repair can inherit new factory-only Group Aura defaults")
 
-local assistantData = readFile("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Auras_Data.lua")
-local groupValues = assert(assistantData:match("Data%.GF_AURA_FILTER_VALUES = {(.-)}%s*Data%.GF_AURA_FILTER_ALIASES"))
-assert(not has(groupValues, "CancelablePlayer") and not has(groupValues, "INCLUDE_NAME_PLATE_ONLY"), "Assistant still exposes removed Group choices")
-
 print("aura_big_defensive_filter_smoke: ok")
+

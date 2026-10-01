@@ -84,12 +84,6 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
-    "path": "MidnightSimpleUnitFrames/Features/Diagnostics/MSUF_Feature_DebugPosition.lua",
-    "call": "CreateFrame ( \"Frame\" )",
-    "count": 1,
-    "reason": "Unparented event/dispatch driver"
-  },
-  {
     "path": "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
@@ -130,6 +124,12 @@
     "call": "CreateFrame ( \"Frame\" )",
     "count": 2,
     "reason": "Unparented event/dispatch driver"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented OnUpdate driver for aura duration bars and cooldown-text colour buckets"
   },
   {
     "path": "MidnightSimpleUnitFrames/Game/Classic/BlizzardFrames.lua",
@@ -284,8 +284,8 @@
   {
     "path": "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Blizzard.lua",
     "call": "CreateFrame ( \"Frame\" )",
-    "count": 1,
-    "reason": "Unparented event/dispatch driver"
+    "count": 2,
+    "reason": "Unparented event/dispatch drivers (combat retry, layout update listener)"
   },
   {
     "path": "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua",
@@ -502,5 +502,47 @@
     "call": "CreateFrame ( \"Frame\" )",
     "count": 2,
     "reason": "Unparented Swing Timer event driver, created by startup or enable and reused by both"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented event dispatcher for additional group unit lifecycle and deferred protected layout; no visual regions"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 2,
+    "reason": "Unparented roster and restriction event dispatcher plus the unit-filtered UNIT_AURA listener frames for Forever buff coverage; no visual regions"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceExtras.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented optional resource lifecycle and deferred configuration event dispatcher; no visual regions"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceMarks.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented resource power/max/target event dispatcher; visible marker textures are separately pixel-wrapped"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ManaExtras.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented mana and spellcast event dispatcher; visible native duration and prediction bars are separately pixel-wrapped"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/State/MSUF_ProfileSync.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented profile synchronization event dispatcher; no visual regions"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/State/MSUF_ProfileVariantsRuntime.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented profile variant lifecycle event dispatcher; no visual regions"
   }
 ]

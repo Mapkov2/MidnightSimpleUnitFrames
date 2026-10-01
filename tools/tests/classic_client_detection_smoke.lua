@@ -100,7 +100,7 @@ local function Load(label, case)
     local client = assert(namespace.Client, label .. ": Client missing")
     -- MSUF.Client is the single client surface. The short MSUF.Retail/Vanilla/
     -- Era/Mists/TBC/Classic/Forever aliases and MSUF.Compat.Client had no reader
-    -- in any of the three addons and must not come back.
+    -- in either shipped addon and must not come back.
     for _, alias in ipairs({ "Retail", "Vanilla", "Era", "Mists", "TBC", "Classic", "Forever" }) do
         assert(namespace[alias] == nil, label .. ": dead client alias MSUF." .. alias .. " is back")
     end

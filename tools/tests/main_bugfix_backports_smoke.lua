@@ -69,6 +69,9 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
     local failure = world:FirstFailure()
     assert(not failure, tostring(failure and failure.file) .. ": " .. tostring(failure and failure.message))
     local M = world.core.MSUF2
+    -- Search navigation requires an open menu; keep the real query/index path.
+    M.frame = world.env.CreateFrame("Frame", nil, world.env.UIParent)
+    M.frame:Show()
     local search = M.Search
     for _, query in ipairs({ "m+", "m +", "M  +", "mythic+", "mythic +", "myhtic+", "myhtic +" }) do
         local normalized = search.Text.NormalizeSearchText(query)

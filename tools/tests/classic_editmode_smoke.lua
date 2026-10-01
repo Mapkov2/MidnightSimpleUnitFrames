@@ -262,6 +262,10 @@ assert(layoutInfo.layouts[1].systems[2].anchorInfo.point == "CENTER"
     and layoutInfo.layouts[1].systems[2].anchorInfo.offsetX == 0,
     "a WoW Forever snapshot entry rearranged a non-Forever HUD")
 assert(saves == 2, "profile snapshot did not save exactly once")
+-- Review F4: the apply never opens or closes Blizzard's Edit Mode panel from
+-- addon code; SaveLayouts plus the direct visual apply are the whole commit.
+assert(EditModeManagerFrame.panelShown == nil and EditModeManagerFrame.panelHidden == nil,
+    "profile snapshot apply toggled Blizzard's Edit Mode panel")
 
 -- Isolated adapter loads for client-shaped cases: fresh frames, layout data,
 -- registrations and profile state per load.
@@ -426,8 +430,9 @@ do
     assert(systems[3].anchorInfo.point == "CENTER" and systems[3].anchorInfo.offsetX == 5
         and #systems[3].settings == 1, "WoW Forever profile apply changed the Micro Menu layout row")
     assert(systems[5].anchorInfo.relativeTo == "UIParent", "a Midnight bags anchor reached WoW Forever")
-    assert(ctx.saves == 1 and EditModeManagerFrame.panelShown == 1,
-        "WoW Forever snapshot did not save and resync exactly once")
+    assert(ctx.saves == 1, "WoW Forever snapshot did not save exactly once")
+    assert(EditModeManagerFrame.panelShown == nil and EditModeManagerFrame.panelHidden == nil,
+        "WoW Forever snapshot apply toggled Blizzard's Edit Mode panel")
     assert(type(MinimapCluster.point) == "table", "WoW Forever minimap anchor was not applied")
 end
 
@@ -502,6 +507,114 @@ do
     local created = ctx.layoutInfo.layouts[#ctx.layoutInfo.layouts]
     assert(created.interfaceStyle == nil and created.systems[1].anchorInfo.offsetX == 3,
         "layout copied from an untagged preset changed shape")
+end
+
+-- Review F3: the cached layout list never outlives a layout change made
+-- outside MSUF. A foreign EDIT_MODE_LAYOUTS_UPDATED drops it, the echo of
+-- MSUF's own save keeps it (GetLayouts is one behind then), and a silent
+-- active-layout switch (spec change) is caught before MSUF captures or saves.
+do
+    local now = 100
+    GetTime = function() return now end
+    local eventFrames = {}
+    CreateFrame = function()
+        local frame = { events = {} }
+        function frame:RegisterEvent(event) self.events[event] = true end
+        function frame:UnregisterEvent(event) self.events[event] = nil end
+        function frame:UnregisterAllEvents() self.events = {} end
+        function frame:SetScript(_, fn) self.onEvent = fn end
+        eventFrames[#eventFrames + 1] = frame
+        return frame
+    end
+    local function Fire(event)
+        for _, frame in ipairs(eventFrames) do
+            if frame.events[event] and frame.onEvent then frame.onEvent(frame, event) end
+        end
+    end
+    local function CopyInfo(value)
+        if type(value) ~= "table" then return value end
+        local out = {}
+        for key, inner in pairs(value) do out[key] = CopyInfo(inner) end
+        return out
+    end
+    local client = {
+        SupportsEvent = function(event) return event == "EDIT_MODE_LAYOUTS_UPDATED" end,
+        IsGameRuleActive = function() return false end,
+    }
+    local ctx = LoadAdapter({ client = client, microSetting = { Orientation = 0, Order = 1, Size = 2, EyeSize = 3 }, snapshot = {} })
+    local saved = {}
+    C_EditMode.SaveLayouts = function(info) saved[#saved + 1] = info end
+
+    local chatState = assert(ctx.registered.chat.captureState(), "chat capture failed")
+    -- Blizzard's own Edit Mode moves the minimap and saves.
+    local blizzardSaved = CopyInfo(ctx.layoutInfo)
+    blizzardSaved.layouts[1].systems[1].anchorInfo.offsetX = 500
+    ctx.layoutInfo = blizzardSaved
+    Fire("EDIT_MODE_LAYOUTS_UPDATED")
+    assert(ctx.registered.chat.movePosition({ phase = "commit", state = chatState, deltaX = 5, deltaY = 0 }) == true,
+        "chat commit failed after a Blizzard-side save")
+    assert(saved[#saved] == blizzardSaved and blizzardSaved.layouts[1].systems[1].anchorInfo.offsetX == 500,
+        "an MSUF commit saved the layout list from before Blizzard's own save")
+
+    -- The echo of that MSUF save arrives while GetLayouts is one behind.
+    local truth = blizzardSaved
+    local behind = CopyInfo(truth)
+    behind.layouts[1].systems[2].anchorInfo.offsetX = -999
+    C_EditMode.GetLayouts = function() return behind end
+    Fire("EDIT_MODE_LAYOUTS_UPDATED")
+    local chatAfter = assert(ctx.registered.chat.captureState(), "chat capture failed after the save echo")
+    assert(chatAfter.x ~= -999 and ctx.registered.chat.movePosition({
+        phase = "commit", state = chatAfter, deltaX = 1, deltaY = 0 }) == true and saved[#saved] == truth,
+        "the echo of MSUF's own save dropped the cache; MSUF read a one-behind layout list")
+
+    -- A spec change selects another saved layout without any event.
+    now = now + 10
+    local switched = CopyInfo(truth)
+    switched.layouts[2] = {
+        layoutName = "Spec 2", layoutType = 2,
+        systems = { Entry(ctx.system.Minimap, 70, 80), Entry(ctx.system.ChatFrame, 1, 2) },
+    }
+    switched.activeLayout = 4
+    C_EditMode.GetLayouts = function() return switched end
+    local minimapState = assert(ctx.registered.minimap.captureState(), "minimap capture failed after a layout switch")
+    assert(minimapState.x == 70 and minimapState.y == 80,
+        "MSUF captured the previously active layout after a silent layout switch")
+    assert(ctx.registered.minimap.movePosition({ phase = "commit", state = minimapState, deltaX = 3, deltaY = 0 }) == true
+        and saved[#saved] == switched and switched.layouts[2].systems[1].anchorInfo.offsetX == 73
+        and switched.layouts[1].systems[1].anchorInfo.offsetX == 500,
+        "an MSUF commit after a silent layout switch edited the previously active layout")
+
+    MSUF_BlizzardEditMode_SetEnabled(false)
+    for _, frame in ipairs(eventFrames) do
+        assert(not frame.events.EDIT_MODE_LAYOUTS_UPDATED, "layout updates stayed registered with the integration off")
+    end
+    GetTime, CreateFrame = nil, nil
+end
+
+-- Review F2: turning the integration off and on registers the Blizzard
+-- elements again; the element registrar keeps the adapter's own table.
+do
+    local ctx = LoadAdapter({ microSetting = { Orientation = 0, Order = 1, Size = 2, EyeSize = 3 }, snapshot = {} })
+    local function Count()
+        local n = 0
+        for _ in pairs(ctx.registered) do n = n + 1 end
+        return n
+    end
+    MSUF_EditModeAPI.UnregisterOwner = function(owner)
+        assert(owner == "MSUF.Blizzard", "wrong Blizzard Edit Mode owner")
+        for id in pairs(ctx.registered) do ctx.registered[id] = nil end
+        return true
+    end
+    local loaded = Count()
+    assert(loaded == 6, "Blizzard adapter registered " .. loaded .. " elements, expected 6")
+    MSUF_BlizzardEditMode_SetEnabled(false)
+    assert(Count() == 0, "Blizzard elements stayed registered with the integration off")
+    MSUF_BlizzardEditMode_SetEnabled(true)
+    assert(Count() == loaded, "Blizzard elements did not register again after off and on: " .. Count())
+    MSUF_BlizzardEditMode_SetEnabled(false)
+    assert(Count() == 0, "the second off left Blizzard elements registered")
+    MSUF_BlizzardEditMode_SetEnabled(true)
+    assert(Count() == loaded, "Blizzard elements did not register again after the second on")
 end
 
 local function Read(relativePath)

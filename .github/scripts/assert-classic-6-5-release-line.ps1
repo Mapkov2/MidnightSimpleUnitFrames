@@ -33,8 +33,7 @@ if ($sourceVersion -ne $normalizedVersion) {
 
 $addons = @(
     "MidnightSimpleUnitFrames",
-    "MidnightSimpleUnitFrames_Options",
-    "MidnightSimpleUnitFrames_Assistant"
+    "MidnightSimpleUnitFrames_Options"
 )
 $clientMatrixPath = Join-Path $RepositoryRoot "tools/classic-client-matrix.tsv"
 $clientMatrix = @(Import-MsufClientMatrix -Path $clientMatrixPath `

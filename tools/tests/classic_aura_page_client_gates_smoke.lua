@@ -13,7 +13,7 @@
 --   * group blacklist writes re-apply only the Auras element,
 --   * a Non-player group filter token is not read as Only mine,
 --   * the group filters are Only mine and Hide permanent, with Classic tooltips
---     and the group filterToken / hidePermanent assistant keys,
+--     and the group filterToken / hidePermanent search aliases,
 --   * the group blacklist Preset opens on the lane default (SATED or RAID_BUFFS)
 --     while the picked preset is not in that lane's list.
 --
@@ -379,16 +379,16 @@ if IS_CLASSIC then
     assert(tooltipBodies["Only mine"] == "Only Debuffs applied by the player."
         and tooltipBodies["Hide permanent auras"] == "Always excludes auras without a duration.",
         flavor .. ": the Classic group filter tooltips are not the Classic texts")
-    local mineKeys = onlyMine.meta and onlyMine.meta.assistantSettingKeys
+    local mineKeys = onlyMine.meta and onlyMine.meta.searchSettingKeys
     assert(onlyMine.meta and onlyMine.meta.identityKey == "auras.group-workspace.lane.debuff.filters.only-mine"
         and type(mineKeys) == "table" and #mineKeys == 2
         and mineKeys[1] == "gf_raid.auras.debuff.filterToken" and mineKeys[2] == "gf_mythicraid.auras.debuff.filterToken",
-        flavor .. ": the Classic group Only mine switch lost its filterToken control id or assistant keys")
+        flavor .. ": the Classic group Only mine switch lost its filterToken control id or search keys")
     local hideMeta = switches["Hide permanent"].meta
-    local hideKeys = hideMeta and hideMeta.assistantSettingKeys
+    local hideKeys = hideMeta and hideMeta.searchSettingKeys
     assert(hideMeta and hideMeta.identityKey == "auras.group-workspace.lane.debuff.filters.hide-permanent"
         and type(hideKeys) == "table" and #hideKeys == 1 and hideKeys[1] == "gf_raid.auras.debuff.blacklist.hidePermanent",
-        flavor .. ": the Classic group Hide permanent switch lost its control id or assistant key")
+        flavor .. ": the Classic group Hide permanent switch lost its control id or search key")
     DB.gf_raid.auras.debuff.filterToken = "RaidPlayer"
     assert(onlyMine.get() == true, flavor .. ": a player-owned group token no longer reads as Only mine")
     DB.gf_raid.auras.debuff.filterToken = "NonPlayer"

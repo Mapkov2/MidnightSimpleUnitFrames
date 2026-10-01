@@ -8,7 +8,8 @@ local function Read(relativePath)
 end
 
 -- Classic loads the Retail aura page, its Group and Preview siblings and the
--- shared Custom workspace (MSUF_Menu2_AfterGroupPreview_Classic.xml).
+-- shared Custom workspace (MSUF_Menu2_AfterGroupPreview.xml, which the Classic
+-- Options TOCs name directly).
 local auras = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras.lua")
     .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Group.lua")
     .. Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_CustomWorkspace.lua")
@@ -50,7 +51,7 @@ assert(not status:find('W.Color(placementCard, "Text color")', 1, true),
 
 -- Classic loads the shared preview specs: the client model decides the Pet
 -- Happiness row (classic_pet_happiness_smoke.lua runs it per flavor).
-local previewManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Classic.xml")
+local previewManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview.xml")
 assert(previewManifest:find('<Script file="MSUF_Menu2_UnitPreview_Specs.lua"/>', 1, true),
     "Classic unit preview manifest no longer loads the shared preview specs")
 local specs = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua")

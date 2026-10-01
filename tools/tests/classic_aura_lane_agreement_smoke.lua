@@ -248,6 +248,9 @@ local function NewFrame(unit, spec, mayStayOff)
 end
 local function Update(frame, payload) return registered.Update(frame, "UNIT_AURA", frame.MSUFUnitKey, payload) end
 local function Refresh(frame, aura) return Update(frame, { updatedAuraInstanceIDs = { aura.auraInstanceID } }) end
+--- UNIT_FACTION: what flips UnitCanAssist with no aura change. An update-only
+--- UNIT_AURA leaves a direct visual alone, so Show on is re-read here.
+local function Faction(frame) return registered.Update(frame, "UNIT_FACTION", frame.MSUFUnitKey) end
 local function Border(frame) return frame._msufA3DispelActive == true end
 local function VisibleIDs(lane)
     local ids = {}
@@ -281,7 +284,7 @@ assert(bossCfg.visualDirect == true and bossCfg.visual.borderShowOn == "FRIENDLY
 assert(Border(boss) and boss._msufA3DispelOverlayActive == true,
     "Show on Friendly hid the border on a unit the player can assist")
 assistable.boss1 = false
-Refresh(boss, bossMagic)
+Faction(boss)
 assert(not Border(boss), "Show on Friendly kept the border on a unit the player cannot assist")
 assert(boss._msufA3DispelOverlayActive == true,
     "Show on filtered the overlay that only inherits the border's trigger")
@@ -291,7 +294,7 @@ A3.BumpRuntimeConfig()
 Refresh(boss, bossMagic)
 assert(Border(boss), "Show on Enemy hid the border on a unit the player cannot assist")
 assistable.boss1 = true
-Refresh(boss, bossMagic)
+Faction(boss)
 assert(not Border(boss), "Show on Enemy kept the border on a unit the player can assist")
 
 bossSpec.border.dispelShowOn = "BOTH"
@@ -299,7 +302,7 @@ A3.BumpRuntimeConfig()
 local asked = api.assist
 for _, canAssist in ipairs({ true, false, true }) do
     assistable.boss1 = canAssist
-    Refresh(boss, bossMagic)
+    Update(boss, { isFullUpdate = true })
     assert(Border(boss), "Show on Both filtered the border")
 end
 assert(api.assist == asked, "Show on Both asked UnitCanAssist " .. (api.assist - asked) .. " times")
@@ -339,12 +342,16 @@ Update(cleanse, { isFullUpdate = true })
 assert(Border(cleanse), "Show on Friendly with Dispellable by me hid the border on a friendly unit")
 -- The filter itself allocates nothing (a border-only frame: the overlay
 -- renderer's own signature strings would be measured otherwise).
+-- An update-only payload changes no debuff, so the direct visual (and its
+-- UnitCanAssist) is not re-read at all; the faction event re-reads it.
 local cleansePayload = { updatedAuraInstanceIDs = { cleanseMagic.auraInstanceID } }
 snapshots = false
 asked = api.assist
 Update(cleanse, cleansePayload)
+assert(api.assist == asked, "an update-only payload re-read the direct border's Show on filter")
+Faction(cleanse)
 assert(api.assist == asked + 1, "precondition: the allocation run does not reach the Show on filter")
-local bytes = BytesPerCall(function() Update(cleanse, cleansePayload) end, 200)
+local bytes = BytesPerCall(function() Faction(cleanse) end, 200)
 snapshots = true
 assert(bytes == 0, ("a Show on filtered update allocated %.1f bytes per event"):format(bytes))
 
@@ -360,7 +367,7 @@ assistable.party2 = true
 local party2 = NewFrame("party2", groupSpec, true)
 assert(not Border(party2), "group Show on Enemy showed the border on a unit the player can assist")
 assistable.party2 = false
-Refresh(party2, groupMagic)
+Faction(party2)
 assert(Border(party2), "group Show on Enemy hid the border on a unit the player cannot assist")
 
 -- Lane paths: the lane caches the unfiltered border, the frame applies Show on.

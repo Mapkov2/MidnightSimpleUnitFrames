@@ -15,7 +15,9 @@ A clean `git merge-file` result is written back and the row moves to the new
 blob. A conflict leaves the file and the row alone and is reported. Generated
 files are never merged. A row whose file equals Retail's blob no longer
 overrides anything and is dropped. tools/classic-owned-shadows.tsv gets the same
-merge, report-only unless --write-shadows is passed.
+merge, report-only unless --write-shadows is passed. Retail paths that
+tools/classic-addon-tombstones.txt retires are omitted on purpose and never
+reported as missing mirrors.
 
 Retail is read through its object database only (rev-parse, ls-tree, cat-file,
 log), never through a working tree, so a Retail checkout with edits in flight
@@ -50,17 +52,22 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+# The manifest rules for tools/classic-addon-tombstones.txt live beside the
+# gate's shared module; the gate's PowerShell reader follows the same rules.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / ".github" / "scripts"))
+import classic_tombstones  # noqa: E402
+
 OVERRIDES_MANIFEST = "tools/classic-retail-overrides.tsv"
 SHADOWS_MANIFEST = "tools/classic-owned-shadows.tsv"
 OWNED_MANIFEST = "tools/classic-owned-addon-paths.txt"
+TOMBSTONES_MANIFEST = classic_tombstones.MANIFEST
 
-# (Folder, Base) of the three addons, exactly as $targets in Retail's
+# (Folder, Base) of the two mirrored addons, exactly as $targets in Retail's
 # Sync-ClassicRetail.ps1 and in tools/test-classic-prototype.ps1. Retail ships
 # one unsuffixed TOC per addon; Classic keeps that file as <Base>_Mainline.toc.
 ADDON_TARGETS = (
     ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames"),
     ("MidnightSimpleUnitFrames_Options", "MidnightSimpleUnitFrames_Options"),
-    ("MidnightSimpleUnitFrames_Assistant", "MidnightSimpleUnitFrames_Assistant"),
 )
 ADDON_FOLDERS = tuple(folder for folder, _ in ADDON_TARGETS)
 
@@ -75,10 +82,6 @@ GENERATED_PATHS = frozenset((
     "MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua",
     # Menu2 search index (.github/scripts/search_static_index_project.lua).
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data.lua",
-    # Assistant control schema (tools/generate_assistant_control_schema.ps1).
-    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema_Data.lua",
-    # Assistant auto-coverage manifest (external coverage harness).
-    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_AutoCoverage_Manifest.lua",
 ))
 
 BLOB_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
@@ -471,13 +474,25 @@ def planned_rows(manifest, outcomes):
     return rows
 
 
-def mirror_state(classic, tree, override_paths):
+def read_tombstones(classic):
+    """The Classic tree's addon tombstones; a tree that predates the manifest retired nothing."""
+    if not (classic / TOMBSTONES_MANIFEST).is_file():
+        return classic_tombstones.Tombstones()
+    try:
+        return classic_tombstones.read(classic, ADDON_FOLDERS)
+    except (classic_tombstones.TombstoneError, UnicodeDecodeError) as error:
+        raise ToolError(str(error))
+
+
+def mirror_state(classic, tree, override_paths, retired=frozenset()):
     """Mirrored paths that are not at the Retail revision yet.
 
     Hashed the way the Classic gate hashes them (`git hash-object` with the
     checkout's own filters), so the answer matches what the gate will say.
+    A Retail path the tombstone manifest retires is no mirror: Classic omits it
+    on purpose, so it is never reported as missing.
     """
-    mirrored = sorted(key for key in tree if key not in override_paths)
+    mirrored = sorted(key for key in tree if key not in override_paths and key not in retired)
     present = [key for key in mirrored if working_file(classic, key).is_file()]
     differing = []
     if present:
@@ -609,10 +624,10 @@ def print_header(retail, classic, commit):
     sys.stdout.flush()
 
 
-def print_mirror_state(commit, state):
+def print_mirror_state(commit, state, retired=0):
     mirrored, differing, missing, stale = state
-    print("Mirrored paths: %d; %d differ from Retail %s, %d missing, %d no longer in Retail" % (
-        mirrored, len(differing), commit[:8], len(missing), len(stale)))
+    print("Mirrored paths: %d; %d differ from Retail %s, %d missing, %d no longer in Retail; %d retired by %s" % (
+        mirrored, len(differing), commit[:8], len(missing), len(stale), retired, TOMBSTONES_MANIFEST))
     for label, paths in (("differs", differing), ("missing", missing), ("not in Retail", stale)):
         for path in paths[:10]:
             print("  %-13s %s" % (label, path))
@@ -682,8 +697,13 @@ def run(arguments):
 
     commit = resolve_retail_commit(retail, arguments.retail_rev)
     tree = read_retail_tree(retail, commit)
+    tombstones = read_tombstones(classic)
     overrides = read_manifest(classic, OVERRIDES_MANIFEST, 2)
     shadows = read_manifest(classic, SHADOWS_MANIFEST, 3)
+    contradictions = sorted(row[0] for row in overrides.rows + shadows.rows if tombstones.covers(row[0]))
+    if contradictions:
+        raise ToolError("%s retires paths that a manifest row still overrides or shadows: %s" % (
+            TOMBSTONES_MANIFEST, ", ".join(contradictions)))
     resolved = {path.replace("\\", "/") for path in arguments.resolved}
     unknown = sorted(resolved - {row[0] for row in overrides.rows} - {row[0] for row in shadows.rows})
     if unknown:
@@ -701,8 +721,9 @@ def run(arguments):
     print()
 
     kept_overrides = {row[0] for row in planned_rows(overrides, override_outcomes)}
-    state = mirror_state(classic, tree, kept_overrides)
-    print_mirror_state(commit, state)
+    retired = frozenset(path for path in tree if tombstones.covers(path))
+    state = mirror_state(classic, tree, kept_overrides, retired)
+    print_mirror_state(commit, state, len(retired))
 
     if conflict_dir is not None:
         written = write_conflicts(conflict_dir, override_outcomes + shadow_outcomes)

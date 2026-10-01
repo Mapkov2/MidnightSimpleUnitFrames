@@ -28,6 +28,7 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         env.UIParent:SetScale(0.72)
     end
 
+    db.general.blizzardEditModeSnapshot={minimap={settings={[0]=7,[1]=9}}}
     assert(history.StartHistorySession("menu"), flavor .. ": history session did not start")
     local function Move(label, source, x)
         assert(history.CaptureHistory(label, source, function()
@@ -35,6 +36,33 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             return true
         end))
     end
+    -- Real native Edit Mode enums include settings[0]. Whole-profile history
+    -- must preserve them while real widget callbacks commit and undo/redo.
+    assert(not world.core.ProfileFields.Copy(db), "strict imported-patch copier must still reject zero keys")
+    local ctx={key="player",refreshers={}}
+    local toggle=env.CreateFrame("CheckButton",nil,env.UIParent)
+    function toggle:SetChecked(v) self.checked=v end
+    local originalToggle=player.showPower and true or false
+    history.BindToggle(ctx,toggle,function() return player.showPower end,function(v) player.showPower=v end)
+    toggle:GetScript("OnClick")(toggle)
+    assert(player.showPower~=originalToggle,flavor..": real toggle callback did not commit")
+    local dropdown=env.CreateFrame("Button",nil,env.UIParent)
+    local choose
+    function dropdown:SetOnValueChanged(fn) choose=fn end
+    function dropdown:SetValue(v) self.selected=v end
+    local originalWidth=player.width
+    history.BindDropdown(ctx,dropdown,function() return player.width end,function(v) player.width=v end)
+    choose(originalWidth+11)
+    assert(player.width==originalWidth+11 and dropdown.selected==player.width,flavor..": real dropdown callback did not commit")
+    assert(history.Undo() and player.width==originalWidth,flavor..": dropdown undo failed")
+    assert(history.Undo() and player.showPower==originalToggle,flavor..": toggle undo failed")
+    assert(db.general.blizzardEditModeSnapshot.minimap.settings[0]==7,"undo lost native enum zero")
+    assert(history.Redo() and player.showPower~=originalToggle)
+    assert(history.Redo() and player.width==originalWidth+11)
+    assert(db.general.blizzardEditModeSnapshot.minimap.settings[0]==7,"redo lost native enum zero")
+    assert(history.RunWithHistory("Suite bridge","suite:options",function() player.width=originalWidth+12;return true end))
+    assert(player.width==originalWidth+12 and history.Undo() and player.width==originalWidth+11)
+    assert(history.ResetHistorySession())
     local originalX = player.portraitOffsetX
     Move("Move: Portrait", "unitPreview:player:portrait:Move", 10)
     Move("Nudge: Portrait", "unitPreview:player:portrait:Nudge", 11)

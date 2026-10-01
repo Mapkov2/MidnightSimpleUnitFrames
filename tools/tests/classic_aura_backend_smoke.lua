@@ -136,7 +136,9 @@ assert(nativeBuffLane:GetAuraFrameCount() == 1
 local frame = { MSUFUnitKey = "target", MSUFSpec = {} }
 assert(frame.unit == nil, "lifecycle smoke precondition failed")
 assert(registered.IsEnabled(frame) == true, "target aura element stayed disabled")
-assert(frame.unit == "target", "Classic aura lifecycle did not bind MSUFUnitKey")
+-- Engine frames carry MSUFUnitKey; the backend reads it and never writes frame.unit.
+assert(frame.unit == nil and namespace.MSUF_Auras3._ClassicBindFrameUnit(frame) == "target",
+    "Classic aura lifecycle wrote frame.unit or lost MSUFUnitKey")
 local petFrame = { MSUFUnitKey = "pet", MSUFSpec = {} }
 assert(registered.IsEnabled(petFrame) == true,
     "Pet Aura lanes should enable on existing profiles without a showPet flag")
@@ -199,8 +201,12 @@ assert(targetConfig and targetConfig.lanes.custom1 and targetConfig.lanes.custom
 -- Arena is a first-class Classic runtime family: its three concrete units use
 -- the shared showArena gate, subscribe to their identity event, and receive
 -- canonical arena-scope refreshes without widening the request to other units.
-assert(_G.MSUF_DB.auras3.showArena == true,
-    "Classic Aura defaults did not enable the Arena unit family")
+-- The canonical profile defaults write that gate (showArena = true); the
+-- compile only reads it, so this profile without the key had it off so far.
+assert(_G.MSUF_DB.auras3.showArena == nil,
+    "the Classic aura compile wrote the Arena show flag into the profile")
+_G.MSUF_DB.auras3.showArena = true
+namespace.MSUF_Auras3.BumpRuntimeConfig()
 local function HasEvent(events, wanted)
     for index = 1, type(events) == "table" and #events or 0 do
         if events[index] == wanted then return true end
@@ -212,8 +218,8 @@ for index = 1, 3 do
     local unit = "arena" .. index
     local arenaFrame = { MSUFUnitKey = unit, MSUFSpec = {} }
     arenaRuntimeFrames[unit] = arenaFrame
-    assert(registered.IsEnabled(arenaFrame) == true and arenaFrame.unit == unit,
-        "Classic Arena Aura lifecycle did not bind/enable " .. unit)
+    assert(registered.IsEnabled(arenaFrame) == true and arenaFrame.unit == nil,
+        "Classic Arena Aura lifecycle did not enable " .. unit .. " or wrote frame.unit")
     local arenaConfig = assert(namespace.MSUF_Auras3.ResolveUnitFrameConfig(unit, arenaFrame.MSUFSpec),
         "Classic Arena Aura config missing for " .. unit)
     assert(arenaConfig.unit == unit and arenaConfig.enabled == true,
@@ -337,6 +343,8 @@ namespace.GF.GetConf = function() return _G.MSUF_DB.gf_party end
 namespace.GF.GetScaledFrameMetrics = function() return 80, 32 end
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"))(
+    "MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 local compiledGroupSpec = namespace.GF.CompileSpec("party")

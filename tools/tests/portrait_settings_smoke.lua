@@ -117,6 +117,25 @@ for _,shape in ipairs({"BLIZZARD","CIRCLE","SQUARE","ROUNDED","DIAMOND"}) do
             assert(frame.MSUFPortraitHolder.mask.allPoints==frame.MSUFPortraitHolder,"mask must not move with image")
         end
     end
+    -- Mirroring shows the exact mirror image: the zoom centre lands on the
+    -- mirrored spot whether the pan comes from the UVs, the image offset of the
+    -- unmasked Blizzard bust, or both (zoom just above 100).
+    for _,zoom in ipairs({100,105,150}) do
+        for _,pan in ipairs({-100,-40,40,100}) do
+            conf.portraitZoom=zoom; conf.portraitPanX=pan; conf.portraitPanY=-pan
+            conf.portraitFlip=false
+            local p=apply()
+            local plainX=((.5-p.texL)/(p.texR-p.texL)-.5)*60+frame.portrait._msufImageX
+            local plainY=(.5-(.5-p.texT)/(p.texB-p.texT))*60+frame.portrait._msufImageY
+            conf.portraitFlip=true
+            p=apply()
+            local mirroredX=((.5-p.texL)/(p.texR-p.texL)-.5)*60+frame.portrait._msufImageX
+            local mirroredY=(.5-(.5-p.texT)/(p.texB-p.texT))*60+frame.portrait._msufImageY
+            near(mirroredX,-plainX,shape.." mirrored zoom centre X at zoom "..zoom.." pan "..pan)
+            near(mirroredY,plainY,shape.." mirrored zoom centre Y at zoom "..zoom.." pan "..pan)
+        end
+    end
+    conf.portraitFlip=false
 end
 -- Geometry, placement, background and render switches on a reused holder.
 conf.portraitShape="BLIZZARD"
@@ -187,6 +206,14 @@ local group=env.MSUF_DB.gf_party
 for k,v in pairs({portraitMode="LEFT",portraitRender="2D",portraitShape="CIRCLE",
  portraitSizeOverride=40,portraitAlpha=40,portraitLevelOffset=0,portraitBorderStyle="NONE",
  hpBarAlpha=.5,alphaExcludeTextPortrait=false,portraitClickable=false}) do group[k]=v end
+-- The group page offers 2D and class art only; an imported 3D value must not
+-- reach the runtime, which would build a native model per party/raid button.
+for _,render in ipairs({"3D","CLASS","2D"}) do
+    group.portraitRender=render
+    core.GF.InvalidateCompiledSpecs("party")
+    local compiled=core.GF.CompileSpec("party",nil,"party1").portrait
+    assert(compiled.render==(render=="CLASS" and "CLASS" or "2D"),"party portrait render "..render.." compiled as "..tostring(compiled.render))
+end
 core.GF.InvalidateCompiledSpecs("party")
 local groupSpec=core.GF.CompileSpec("party",nil,"party1")
 frame.MSUFSpec=groupSpec; frame.MSUFUnitKey="party1"
@@ -236,7 +263,9 @@ for _,state in ipairs({"rareelite","rare","worldboss","normal","elite"}) do
     local previewDragon=box.mock.portrait.blizzElite
     if expected then
         assert(previewDragon and previewDragon:IsShown() and previewDragon.atlas==expected,"preview classification art")
-        assert(previewDragon:GetParent()==box.mock.portrait,"preview dragon must avoid hidden geometric border parent")
+        -- The default dragon level shares the frame that draws the preview's
+        -- image and ring, never the hidden geometric border frame.
+        assert(previewDragon:GetParent()==box.mock.portrait,"preview dragon must share the preview portrait frame")
     else assert(not previewDragon or not previewDragon:IsShown(),"normal preview hides dragon") end
 end
 classification="rareelite"
@@ -288,10 +317,12 @@ local M=core.MSUF2
 M.unitPortraitTabSelection={player="border"}
 local ctx={key="uf_player",width=720,refreshers={}}
 local binding, gateRefresh
+local previewBindings = {}
 local originalBind=M.BindDropdownWidget
 M.BindDropdownWidget=function(c,widget,get,set,meta)
     if meta and meta.controlId and meta.controlId:find("classification_preview",1,true) then
         binding={widget=widget,get=get,set=set,meta=meta}
+        previewBindings[#previewBindings+1]=binding
     end
     return originalBind(c,widget,get,set,meta)
 end
@@ -314,10 +345,13 @@ M.BindDropdownWidget=originalBind
 M.TrackCollapsibleRefresh=originalTrack
 assert(binding and binding.meta.classification=="ephemeral" and not binding.meta.settingKey,
     "runtime preview must not write a profile setting")
-binding.set("elite")
-assert(binding.get()=="elite" and dragon.atlas==gold,"menu runtime selection paints real frame")
-binding.widget:GetScript("OnHide")(binding.widget)
-assert(binding.get()=="OFF" and dragon.atlas==silver,"leaving preview control restores real identity")
+assert(#previewBindings==2,"border and dragon tabs each expose the shared runtime preview")
+for _, preview in ipairs(previewBindings) do
+    preview.set("elite")
+    assert(preview.get()=="elite" and dragon.atlas==gold,"menu runtime selection paints real frame")
+    preview.widget:GetScript("OnHide")(preview.widget)
+    assert(preview.get()=="OFF" and dragon.atlas==silver,"leaving either preview control restores real identity")
+end
 binding.set("worldboss")
 conf.portraitBlizzardElite=false; apply(); gateRefresh()
 assert(binding.get()=="OFF" and not dragon:IsShown(),"disabling the feature clears runtime session")

@@ -65,7 +65,10 @@ function World.Graph(root, tocRelative, locale, gameType)
         local source = Read(path)
         local directory = assert(path:match("^(.*)/"), "client_world: no directory for " .. path)
         if path:match("%.xml$") then
-            for child in source:gmatch('<[%w:]+%s+file="([^"]+)"') do visit(directory .. "/" .. child) end
+            for tag, child in source:gmatch('<([%w:]+)%s+file="([^"]+)"') do
+                tag = tag:match("([^:]+)$")
+                if tag == "Script" or tag == "Include" then visit(directory .. "/" .. child) end
+            end
         else
             for line in source:gmatch("[^\n]+") do
                 local reference = manifest.TocReference(line, locale, gameType)

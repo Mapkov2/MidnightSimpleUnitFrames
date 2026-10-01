@@ -1,6 +1,7 @@
 """Reject protected-call aliases in owned runtime Lua and XML, including string lookups."""
 from pathlib import Path
 import re
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 BANNED = {
@@ -72,18 +73,29 @@ def tokens(source):
             i += 1
 
 
+def versionable(addons):
+    """The files git versions below the addon folders: tracked plus untracked
+    files no ignore rule excludes. A folder walk would also read ignored local
+    leftovers and make a local run disagree with CI."""
+    listed = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *addons],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if listed.returncode != 0:
+        raise SystemExit("git ls-files failed: " + listed.stderr.decode("utf-8", "replace").strip())
+    return sorted({name for name in listed.stdout.decode("utf-8").split("\0") if name})
+
+
 def owned_files():
-    for addon in ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options"):
-        # XML <Script> bodies and On* handlers are Lua too.
-        for path in sorted([*(ROOT / addon).rglob("*.lua"), *(ROOT / addon).rglob("*.xml")]):
-            relative = path.relative_to(ROOT).as_posix()
-            if any(part in {"tools", "tests", "scripts", ".codex-remote-attachments"} for part in path.relative_to(ROOT).parts):
-                continue
-            if relative == "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_AssistantBridge.lua":
-                continue
-            if "/Libs/" in relative and "/Libs/MSUFUnitFrames/" not in relative:
-                continue
-            yield path
+    # XML <Script> bodies and On* handlers are Lua too.
+    for relative in versionable(("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options")):
+        path = ROOT / relative
+        if path.suffix.lower() not in (".lua", ".xml") or not path.is_file():
+            continue
+        if any(part in {"tools", "tests", "scripts"} for part in Path(relative).parts):
+            continue
+        if "/Libs/" in relative and "/Libs/MSUFUnitFrames/" not in relative:
+            continue
+        yield path
 
 
 def main():

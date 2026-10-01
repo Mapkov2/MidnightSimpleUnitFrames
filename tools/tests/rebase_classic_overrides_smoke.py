@@ -30,6 +30,10 @@ ASSISTANT = "MidnightSimpleUnitFrames_Assistant"
 OVERRIDES = "tools/classic-retail-overrides.tsv"
 SHADOWS = "tools/classic-owned-shadows.tsv"
 OWNED = "tools/classic-owned-addon-paths.txt"
+TOMBSTONES = "tools/classic-addon-tombstones.txt"
+# Retail keeps the Assistant addon and its Options bridge; Classic retired both.
+BRIDGE = OPTIONS + "/Shell/Menu2/MSUF_AssistantBridge.lua"
+TOMBSTONE_LINES = ASSISTANT + "\n" + ASSISTANT + "\t" + BRIDGE + "\n"
 
 CLEAN = CORE + "/Kernel/Clean.lua"
 CONFLICT = CORE + "/Kernel/Conflict.lua"
@@ -117,6 +121,7 @@ def build_retail(path):
     write(retail, RETAIL_TOC, toc("6.20"))
     write(retail, OPTIONS + "/" + OPTIONS + ".toc", "## Title: Options\n")
     write(retail, ASSISTANT + "/" + ASSISTANT + ".toc", "## Title: Assistant\n")
+    write(retail, BRIDGE, lua(BRIDGE))
     base = commit_all(retail, "base")
 
     for name in (CLEAN, UNIX, ZETA, MENU, PAGE, MIRROR):
@@ -157,7 +162,8 @@ def build_classic(path, retail, base, head):
     write(classic, TANGLE, lua(TANGLE, C="local C = 30"), crlf=True)
     write(classic, PAGE, lua(PAGE, A="local A = 100"), crlf=True)
     write(classic, OPTIONS + "/" + OPTIONS + "_Mainline.toc", "## Title: Options\n", crlf=True)
-    write(classic, ASSISTANT + "/" + ASSISTANT + "_Mainline.toc", "## Title: Assistant\n", crlf=True)
+    # The retired addon and its bridge are omitted on purpose, as the manifest says.
+    write(classic, TOMBSTONES, TOMBSTONE_LINES, crlf=True)
     # Owned shadows: one takes Retail's change cleanly, one conflicts with it.
     write(classic, PAGE_SHADOW, lua(PAGE, **edit), crlf=True)
     write(classic, TANGLE_SHADOW, lua(TANGLE, C="local C = 33 -- Classic"), crlf=True)
@@ -312,6 +318,23 @@ def main():
               "with every mirror level the trailer is offered for the rebase commit")
         check(status_line(output, CLEAN) == "" and "10 rows, 10 current" in output,
               "a second run finds every override current")
+        check("1 retired by " + TOMBSTONES in output and BRIDGE not in output,
+              "the Retail bridge the tombstone manifest retires is skipped, never reported as a missing mirror")
+
+        print("addon tombstones drive the skip")
+        write(classic, TOMBSTONES, ASSISTANT + "\n", crlf=True)
+        code, output, errors = run_tool(classic, retail, head)
+        check(code == 0 and "1 missing" in output and ("missing       " + BRIDGE) in output,
+              "without its path line the bridge is a missing mirror again (got %d) %s" % (code, errors))
+        write(classic, TOMBSTONES, TOMBSTONE_LINES + ASSISTANT + "\t" + CLEAN + "\n", crlf=True)
+        code, output, errors = run_tool(classic, retail, head)
+        check(code == 1 and "still overrides or shadows" in errors and CLEAN in errors,
+              "a tombstone that retires an overridden path is refused (got %d) %s" % (code, errors))
+        write(classic, TOMBSTONES, "MidnightSimpleUnitFrames\n", crlf=True)
+        code, output, errors = run_tool(classic, retail, head)
+        check(code == 1 and "retires a shipped addon" in errors,
+              "a tombstone that retires a shipped addon is refused (got %d) %s" % (code, errors))
+        write(classic, TOMBSTONES, TOMBSTONE_LINES, crlf=True)
 
         print("--write-shadows")
         code, output, errors = run_tool(classic, retail, head, "--write-shadows")

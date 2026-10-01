@@ -108,6 +108,7 @@ local function Load(opts)
   end
 
   local elements = {}
+  st.alphaCompiles = 0
   local UF = {
     frames = {},
     RegisterElement = function(name, element) elements[name] = element end,
@@ -116,6 +117,9 @@ local function Load(opts)
       frame.appliedMul = mul
       return true
     end,
+    -- Range.RegisterFrame compiles the frame's alpha runtime once per
+    -- registration, so this counts registrations.
+    CompileAlphaRuntime = function() st.alphaCompiles = st.alphaCompiles + 1 end,
   }
   local ns = {
     UF = UF,
@@ -130,6 +134,7 @@ local function Load(opts)
   st.frames = {}
   for i = 1, #units do
     local frame = { MSUFUnitKey = units[i], hooks = {} }
+    frame.hidden = opts.hidden and opts.hidden[units[i]] == true or nil
     function frame:IsVisible() return self.hidden ~= true end
     function frame:HookScript(name, fn) self.hooks[name] = fn end
     UF.frames[units[i]] = frame
@@ -345,6 +350,159 @@ scenarios[#scenarios + 1] = { "K one batched hide of all 13 frames unregisters e
     local d = st.drivers[i]
     assert(next(d.events) == nil, "K driver " .. i .. " still has events after the last frame hid")
     assert(d._msufRangeUnitFirst == nil and d._msufRangeUnitLast == nil, "K driver " .. i .. " kept a unit span")
+  end
+end }
+
+-- The driver re-registers its unit events only when the unit mask changes, so
+-- two units sharing a bit (pettarget and arena1 once both had 1024) or two sets
+-- summing to a third unit's bit must never compare equal.
+local function RangeUnitUnion(st)
+  local _, union = RangeDriverSpans(st)
+  local list = {}
+  for unit in pairs(union) do list[#list + 1] = unit end
+  table.sort(list)
+  return table.concat(list, ",")
+end
+
+local function SetShownAndSync(st, unit, shown)
+  local frame = st.frames[unit]
+  frame.hidden = not shown or nil
+  local hook = assert(frame.hooks[shown and "OnShow" or "OnHide"], unit .. " has no visibility hook")
+  hook(frame)
+end
+
+scenarios[#scenarios + 1] = { "L one batched pass swapping pettarget for arena1 re-registers arena1", function()
+  local st = Load({ classic = true, maxArena = 5, units = { "target", "pettarget", "arena1" },
+    hidden = { arena1 = true }, captureSchedule = true, known = {}, rangeResult = nil, interact = true })
+  assert(RangeUnitUnion(st) == "target", "L start expected target only, got " .. RangeUnitUnion(st))
+  -- The pet target frame hides and the arena frame shows before the coalesced
+  -- visibility sync runs once, exactly like one secure-driver pass in game.
+  SetShownAndSync(st, "pettarget", false)
+  SetShownAndSync(st, "arena1", true)
+  local flush = assert(st.scheduled.MSUF_RANGE_VISIBILITY_SYNC, "L the swap did not queue the visibility sync")
+  flush()
+  assert(RangeUnitUnion(st) == "arena1,target",
+    "L after the swap expected arena1,target on UNIT_IN_RANGE_UPDATE, got " .. RangeUnitUnion(st))
+end }
+
+scenarios[#scenarios + 1] = { "M pettarget plus arena1 never aliases arena2", function()
+  local st = Load({ classic = true, maxArena = 5, units = { "pettarget", "arena1", "arena2" },
+    hidden = { pettarget = true, arena1 = true }, captureSchedule = true, known = {}, rangeResult = nil, interact = true })
+  assert(RangeUnitUnion(st) == "arena2", "M start expected arena2 only, got " .. RangeUnitUnion(st))
+  SetShownAndSync(st, "arena2", false)
+  SetShownAndSync(st, "pettarget", true)
+  SetShownAndSync(st, "arena1", true)
+  assert(st.scheduled.MSUF_RANGE_VISIBILITY_SYNC, "M the swap did not queue the visibility sync")()
+  assert(RangeUnitUnion(st) == "arena1",
+    "M after the swap expected arena1 on UNIT_IN_RANGE_UPDATE, got " .. RangeUnitUnion(st))
+end }
+
+scenarios[#scenarios + 1] = { "N an element refresh registers the frame once", function()
+  local st = Load({ classic = true, known = { [355] = true }, rangeResult = 1, interact = true })
+  local frame = st.frame
+  frame.MSUFSpec = { range = { active = true, alpha = OUT_ALPHA } }
+  -- UF.ApplyElementToFrame with an update reason runs Apply, then Update.
+  local before = st.alphaCompiles
+  st.element.Apply(frame, frame.MSUFSpec)
+  st.element.Update(frame, "MSUF_ELEMENT_REFRESH", "target")
+  assert(st.alphaCompiles - before == 1,
+    "N Apply + Update registered the frame " .. (st.alphaCompiles - before) .. " times, expected once")
+  -- A registration left behind for another unit is still redone by Update.
+  frame._msufRangeUnit = "focus"
+  before = st.alphaCompiles
+  st.element.Update(frame, "MSUF_ELEMENT_REFRESH", "target")
+  assert(st.alphaCompiles - before == 1 and frame._msufRangeUnit == "target",
+    "N Update must re-register a frame whose registration names another unit")
+end }
+
+-- Lua 5.1 bytecode reader: per function its first source line, opcodes and
+-- local-variable count (the number luac -l prints as "locals"; the gate budgets
+-- the main chunk's to 190 of Lua's 200).
+local OP_CONCAT = 21
+local function ReadFunctions(path)
+  local data = string.dump(assert(loadfile(path)))
+  local pos = 13
+  local intSize, sizeTSize, instrSize, numberSize = data:byte(8), data:byte(9), data:byte(10), data:byte(11)
+  local function Int(size)
+    local value, scale = 0, 1
+    for i = 0, size - 1 do
+      value = value + data:byte(pos + i) * scale
+      scale = scale * 256
+    end
+    pos = pos + size
+    return value
+  end
+  -- Read the count before advancing: "pos = pos + Int()" would add to the
+  -- position from before the count was read.
+  local function Skip(count, width) pos = pos + count * width end
+  local function SkipString() Skip(Int(sizeTSize), 1) end
+  local function Function()
+    local fn = { ops = {}, children = {} }
+    SkipString()
+    fn.line = Int(intSize)
+    pos = pos + intSize + 4
+    for i = 1, Int(intSize) do
+      fn.ops[i] = data:byte(pos) % 64
+      pos = pos + instrSize
+    end
+    for _ = 1, Int(intSize) do
+      local kind = data:byte(pos)
+      pos = pos + 1
+      if kind == 1 then pos = pos + 1
+      elseif kind == 3 then pos = pos + numberSize
+      elseif kind == 4 then SkipString() end
+    end
+    for i = 1, Int(intSize) do fn.children[i] = Function() end
+    Skip(Int(intSize), intSize)
+    fn.locals = Int(intSize)
+    for _ = 1, fn.locals do
+      SkipString()
+      pos = pos + intSize * 2
+    end
+    for _ = 1, Int(intSize) do SkipString() end
+    return fn
+  end
+  return Function()
+end
+
+local function MainChunkLocals(path)
+  return ReadFunctions(path).locals
+end
+
+-- The function whose definition starts on the line holding `marker`.
+local function FunctionAt(path, marker)
+  local file = assert(io.open(path, "rb"))
+  local text = file:read("*a"):gsub("\r\n", "\n")
+  file:close()
+  local at = assert(text:find(marker, 1, true), "no " .. marker .. " in " .. path)
+  local line = select(2, text:sub(1, at):gsub("\n", "")) + 1
+  local function Find(fn)
+    if fn.line == line then return fn end
+    for i = 1, #fn.children do
+      local found = Find(fn.children[i])
+      if found then return found end
+    end
+  end
+  return assert(Find(ReadFunctions(path)), "no compiled function at line " .. line .. " of " .. path)
+end
+
+scenarios[#scenarios + 1] = { "O the main chunk keeps headroom under the gate's 190 locals", function()
+  local locals = MainChunkLocals(ELEMENT)
+  -- Retail's own copy sits at about 178. Keep at least 6 of the budget for the
+  -- next Retail sync: fold further Classic additions into the unit-table
+  -- builder or a table instead of new file-level locals.
+  assert(locals <= 184, "O MSUF_UF_RangeFade.lua main chunk has " .. locals
+    .. " locals; keep at least 6 of the gate's 190 free for Retail syncs")
+end }
+
+scenarios[#scenarios + 1] = { "P the group range health alpha builds no string per change", function()
+  -- MSUF_UF_Group_RangeFade.lua SetStatusAlpha runs on every range alpha change
+  -- of a party or raid frame in health layer mode; it built its texture cache
+  -- key with key .. "Tex" each time.
+  local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_Group_RangeFade.lua"
+  local fn = FunctionAt(path, "local function SetStatusAlpha(")
+  for i = 1, #fn.ops do
+    assert(fn.ops[i] ~= OP_CONCAT, "P SetStatusAlpha concatenates a string on the range hot path")
   end
 end }
 

@@ -685,7 +685,7 @@ function Loader.Install()
         { "Auras3/MSUF_Auras3_Core.lua", "ButtonAnchor", "MSUF_AuraButtonAnchor" },
         { "Castbars/MSUF_CastbarVisuals.lua", "NormalizeJustify", "MSUF_NormalizeCastbarTextJustify" },
         { "Castbars/MSUF_CastbarVisuals.lua", "NormalizeSpellNameTruncate", "MSUF_NormalizeCastbarTruncate" },
-        { "Kernel/MSUF_Util.lua", "CooldownAnchorSupported", "MSUF_CooldownAnchorSupported" },
+        { "Kernel/MSUF_Util.lua", "CooldownAnchorSupported", "MSUF_CooldownAnchorSupported", "local MSUF = _G.MSUF_NS or {}\n" },
         { "Kernel/MSUF_Util.lua", "IsPlayerInCombat", "MSUF_IsPlayerInCombat" },
         { "UnitFrames/Engine/MSUF_UF_Shared.lua", "NormalizeShapeAlign", "MSUF_UF_NormalizeShapeAlign" },
         { "UnitFrames/Engine/MSUF_UF_Shared.lua", "ShapeOutlineAlpha", "MSUF_UF_ShapeOutlineAlpha" },

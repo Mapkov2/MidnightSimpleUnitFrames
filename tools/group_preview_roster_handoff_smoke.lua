@@ -175,6 +175,7 @@ end
 
 function runtimeGF.EnsureDB() end
 function runtimeGF.GetLiveRaidKind() return "raid" end
+function runtimeGF.IsSmallRaidPartyContext() return false end
 function runtimeGF.ApplyBlizzardGroupFrameOwnership() end
 function runtimeGF.ApplyGroupBorder() end
 

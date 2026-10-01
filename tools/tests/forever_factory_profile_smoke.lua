@@ -114,6 +114,7 @@ local function loadModule(path)
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", ns)
 end
 loadModule("State/MSUF_StateHelpers.lua")
+loadModule("Kernel/MSUF_Boundary.lua")
 loadModule("State/MSUF_ProfileCodec.lua")
 local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(repo, "Mainline", ns, {

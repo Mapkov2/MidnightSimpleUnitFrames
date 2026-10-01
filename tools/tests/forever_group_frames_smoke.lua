@@ -33,6 +33,7 @@ local function LoadSpellIndicators(client, classToken, specIndex)
     _G.MSUF_GF_SpellIndicators = nil
     _G.MSUF_GF_CopySpellConfig = nil
     _G.MSUF_NormalizeFrameStrata = function(value, fallback) return value or fallback end
+    _G.MSUF_GetGeneralDB = function() return {} end
     _G.UnitClass = function() return classToken, classToken end
     _G.GetSpecialization = specIndex and function() return specIndex end or nil
     _G.GetSpecializationInfo = nil
@@ -236,6 +237,26 @@ for _, client in ipairs({ false, RETAIL }) do
     Check(compiled.activeSpec == "RestorationDruid" and #compiled.items == 8, label .. ": Retail compile changed")
     local _, noSpec = LoadSpellIndicators(client or nil, "DRUID", nil)
     Check(noSpec.GetPlayerSpec() == nil, label .. ": Retail spec without GetSpecialization must stay nil")
+end
+
+do
+    local gf = LoadSpellIndicators(FOREVER, "PRIEST", nil)
+    gf.GetResizeScale = function() return .5 end
+    local corner = gf.CompileCornerIndicators({ciSize=12, ciEnabled=true, autoScaleIndicatorsOnResize=true})
+    Check(corner.size == 6, "Resize: corner indicator must follow its independent toggle")
+    local base = {spellIndicators={enabled=true,spec="auto",specs={}}}
+    local normal = gf.CompileSpellIndicators(base)
+    base.autoScaleIndicatorsOnResize = true
+    local resized = gf.CompileSpellIndicators(base)
+    local compared = false
+    for i = 1, #normal.items do
+        local before, after = normal.items[i].placed, resized.items[i].placed
+        if before and after then
+            Check(after.size == math.floor(before.size * .5 + .5), "Resize: placed spell indicator must scale once")
+            compared = true
+        end
+    end
+    Check(compared, "Resize fixture needs a placed indicator")
 end
 
 ---------------------------------------------------------------------------

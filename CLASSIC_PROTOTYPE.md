@@ -39,8 +39,8 @@ builds `MSUF.Client`: the flavor flags, `SupportsEvent`, `SupportsUnit`,
 fully place, and it builds no API aliases. `MSUF.Client` is the single client
 surface: the short `MSUF.Retail`, `MSUF.Vanilla`, `MSUF.Era`, `MSUF.Mists`,
 `MSUF.TBC`, `MSUF.Classic` and `MSUF.Forever` shortcuts and the
-`MSUF.Compat.Client` bridge were removed on 2026-09-19 because no reader in any
-of the three addons used them (`Game/Shared/Initialize.lua:512-515`); do not
+`MSUF.Compat.Client` bridge were removed on 2026-09-19 because no reader in
+either shipped addon used them (`Game/Shared/Initialize.lua:512-515`); do not
 reintroduce them. `tools/tests/classic_client_bootstrap_smoke.lua:137` fails if
 the bridge comes back. New code branches on `MSUF.Client.Is*` or, better, on a
 named capability. The Classic TOCs load `Game/Classic/Initialize.lua` after it and
@@ -111,6 +111,9 @@ the `UnitFrames/Engine/MSUF_UF_Config.lua` override gated on
 `Pages/MSUF_Menu2_Unit.lua`, which every client loads) drops them from its unit
 pills and copy targets there, and the Classic-era interrupt-ready tables in
 `Castbars/MSUF_InterruptReady.lua` only name spells that exist on each client.
+A client build without `C_Spell.GetSpellCooldownDuration` reads the plain
+`C_Spell.GetSpellCooldown` table (what Blizzard's Classic action buttons call)
+and ignores the global cooldown, like the Duration API's ignoreGCD argument.
 Where a unit kind is unsupported, a castbar settings refresh keeps the profile's
 stored backend for that kind instead of rewriting it to hidden, so a profile made
 there still shows those castbars on a client that has the units: arena on Classic
@@ -194,11 +197,12 @@ calculator would be less correct and more expensive.
 
 ## Client boundaries
 
-- Mainline preserves every Core, Options, and Assistant Retail Lua path in its
-  original order. Its only additional Lua loads are exactly the Classic-owned
-  files listed in `$mainlineOwnedLuaExtras` in
-  `tools/test-classic-prototype.ps1`, each loaded once:
-  `Game/Shared/Initialize.lua`,
+- Mainline preserves every Core and Options Retail Lua path in its original
+  order; the only Retail paths it may drop are the ones
+  `tools/classic-addon-tombstones.txt` retires. Its only additional Lua loads
+  are exactly the Classic-owned files listed in `$mainlineOwnedLuaExtras` in
+  `tools/test-classic-prototype.ps1`, each loaded once. That list is the
+  authority; among others it holds `Game/Shared/Initialize.lua`,
   `Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua` (hunter pet happiness,
   which applies only when `MSUF.Client.SupportsPetHappiness` is true, so on
   WoW Forever), `Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua` (the threat
@@ -230,8 +234,10 @@ calculator would be less correct and more expensive.
 - Compatibility code never assigns to Blizzard `C_*` namespace tables. This is
   an enforced taint gate because doing so can later poison secure action-button
   clicks and surface as `ADDON_ACTION_FORBIDDEN` at `UseAction()`.
-- Options and Assistant keep their original zero-idle LoadOnDemand architecture
-  and have suffix TOCs for every supported client.
+- Options keeps its original zero-idle LoadOnDemand architecture and has a
+  suffixed TOC for every supported client. The in-game Assistant
+  (`MidnightSimpleUnitFrames_Assistant`) was retired in 6.5: no client ships it,
+  and `State/MSUF_RetiredData.lua` removes its saved history once per account.
 
 ## Client model: family and game mode
 
@@ -278,7 +284,9 @@ bottom-left corner of the frame. Forever makes a boss's values secret
 three global colors (Colors > Status Text Colors); pink rather than red, because
 red digits vanish on red enemy bars. A secret value is colored by threat state
 instead, because a color curve cannot evaluate it. A dark plate behind the number
-("Background") keeps it readable on any bar color. The party and raid frames show
+("Background") keeps it readable on any bar color; it is a status bar the percentage
+itself fills, so a secret zero, which prints as nothing, leaves no empty plate
+either. The party and raid frames show
 each member's threat on the player's target (Party on, Raid off by default; the
 plate likewise), repainted together by one driver at most every half second.
 Forever has nine classes and no Evoker, so `Client.HasEmpoweredCasts` is true on
@@ -292,6 +300,30 @@ applies it through the unit text module's display-name resolver, calls the
 nickname integration's resolver first, reads the separator from Blizzard's
 `Constants.CharacterNameSeparatorConsts`, and never searches or compares a
 secret name.
+Shared group loaders also include `GroupFrames/MSUF_GroupFrames_Additional.lua`
+and its XML template after the main group runtime. They own optional party-target,
+pet, friendly-boss and healer-mana frames; secure layout changes wait until combat
+ends. The group configuration compiler owns tier sizes, class ordering, small-raid
+party styling, independent indicator scaling and the separate name strip.
+`Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua` (Mainline manifest only,
+returns outside Forever) draws the buff coverage icons: UNIT_AURA per group token,
+spell-ID matching from the Forever SpellName data, incremental payloads, and no aura
+reads while aura data is restricted unless a buff is flagged never secret.
+The optional detached GCD bar stays behind the existing native duration capability
+probe and does not add a Classic timer emulation; the separate bar and its Edit Mode
+mover also need the Duration API (and spell 61304 on WoW Forever).
+
+The optional resource helpers follow capabilities, not client flags: Ignore Pain
+and the Arcane Surge window need the aura container and the spell in the client's
+spell data; the Mana regeneration pause and the Mana return pulse are game rules
+of Classic Era, TBC and WoW Forever and need the duration API
+(`MSUF.CPBuilders.ManaRegenTimersSupported`), and the menu, preview samples and
+search filter ask the same predicate. The Arcane window has one slot per phase
+(Arcane Surge, Arcane Soul above it, each in its own colour); its text shows
+seconds, the global cooldowns that can still start, or both, can stay blank until
+a chosen number of seconds is left, and can warn during the last global cooldown.
+Settings saved under the former names of these helpers move over once.
+
 Forever-only behaviour keys on `Client.IsForever`, read once at file load.
 `Client.AddonVersion` is the MSUF version of the running client, also read once
 at file load; every version display, the version check and the analytics read
@@ -359,8 +391,8 @@ because it survives a new client. `Client.Family == "Classic"` and
 so neither is rewritten into the other.
 
 Two checks keep the model honest. `tools/tests/classic_project_id_reads_smoke.lua`
-limits raw `WOW_PROJECT_ID` reads in Classic-owned and override files of all
-three addons (core, Options and Assistant) to a reviewed allowlist; that
+limits raw `WOW_PROJECT_ID` reads in Classic-owned and override files of both
+shipped addons (core and Options) to a reviewed allowlist; that
 allowlist has been empty since 2026-09-19 (`ALLOWED = {}` at line 99), so
 outside `Game/Shared/Initialize.lua` no raw project-ID read is left.
 `tools/audit-classic-ui-source.ps1` pins every TOC
@@ -370,16 +402,18 @@ until the client model handles it.
 
 ## Install for testing
 
-Copy these three folders into the selected Classic client's
-`Interface/AddOns` directory:
+Copy these two folders into the selected client's `Interface/AddOns`
+directory:
 
 - `MidnightSimpleUnitFrames`
 - `MidnightSimpleUnitFrames_Options`
-- `MidnightSimpleUnitFrames_Assistant`
 
 Do not rename the addon folders or the suffixed TOCs. WoW selects the matching
 TOC for the running client. Enable "Load out of date AddOns" only when testing
-against a newer point build than the interface values above.
+against a newer point build than the interface values above. A
+`MidnightSimpleUnitFrames_Assistant` folder left from an older build can be
+deleted: 6.5 no longer ships or loads it, and a CurseForge app update removes
+it by itself.
 
 ## Validation boundary
 
@@ -425,10 +459,30 @@ is no longer required, remove the `P` row and restore normal byte-identical
 mirroring. A new Retail path colliding with `O` likewise requires an explicit
 ownership decision and reviewed rebase; it is never resolved automatically.
 
+### Retired addons and files
+
+`tools/classic-addon-tombstones.txt` records what this tree retired on purpose.
+A line with one field names a retired Retail addon folder (today
+`MidnightSimpleUnitFrames_Assistant`); a line `<addon><TAB><path>` names a
+Retail file of a shipped addon that retired with it (today the Options bridge
+`Shell/Menu2/MSUF_AssistantBridge.lua` and `Locales/MSUF_PriorityFrames_FAQ.lua`,
+whose only consumer went with the Assistant). Retail parity,
+`.github/scripts/resolve_classic_retail_source.py` and
+`tools/rebase-classic-overrides.py` skip those paths instead of reporting them
+missing. The gate decides presence through git: it fails when git tracks a file
+below a retired folder, when a retired folder still holds a TOC, or when a
+retired path is tracked or loaded by any TOC or XML manifest. An empty retired
+folder that `git rm` leaves on a Windows checkout is fine. The PowerShell reader
+(`Import-MsufAddonTombstones` in `.github/scripts/ClassicGate.Common.psm1`) and
+the Python reader (`.github/scripts/classic_tombstones.py`) follow the same rules,
+and `tools/tests/classic_no_assistant_contract_smoke.py` checks every fixture
+with both. Retail's `Sync-ClassicRetail.ps1` does not read the manifest yet;
+until it does, port Retail changes with `tools/rebase-classic-overrides.py`.
+
 ### Global name resolution
 
-`tools/tests/unresolved_global_reads_smoke.py` compiles every Lua file of the
-three addons with `luac -l -p` and reads the GETGLOBAL and SETGLOBAL
+`tools/tests/unresolved_global_reads_smoke.py` compiles every Lua file of both
+shipped addons with `luac -l -p` and reads the GETGLOBAL and SETGLOBAL
 instructions out of the listing, which is the compiler's own answer to which
 names are read from and written to the global table. A read must resolve to a
 Lua 5.1 name, to a global this tree defines (a SETGLOBAL, an assignment to `_G`
@@ -478,7 +532,21 @@ The manifest deliberately retains the 48 `Media/Shapes` files plus
 MidnightSkin experiment. Their former canonical loader/consumer wiring no
 longer exists, so they are preserved historical source/assets, not claimed as
 runtime-reachable. Restoring or retiring that feature is a separate explicit
-decision.
+decision. The two Lua files are `retained` rows of
+`tools/classic-unloaded-addon-lua.tsv`, which records that decision for the
+gate's dead-Lua check below.
+
+Every versioned addon Lua file must be loaded by a shipped TOC: the gate fails
+on one that no TOC or XML manifest of any client reaches, because it would ship
+as dead payload. The exceptions are rows of `tools/classic-unloaded-addon-lua.tsv`
+(`Path<TAB>Kind<TAB>Reason`): `mirror` for an unchanged Retail mirror that Retail
+itself never loads (today `Features/Diagnostics/MSUF_Feature_DebugPosition.lua`),
+and `retained` for a Classic-owned file the owner keeps unloaded on purpose
+(today the two theme-bridge files), whose reason must cite the owner decision.
+An unlisted owned, overridden or mirrored file that no TOC loads fails, an
+overridden file can never be listed, and a row whose file a TOC loads is stale.
+The pixel layout coverage smoke skips the listed files, and
+`tools/tests/unloaded_addon_lua_smoke.py` pins the rules on fixtures.
 
 ### Flavor load coverage
 
@@ -501,15 +569,15 @@ Classic flavor, including one added later, or a comma list of matrix suffixes.
 Every row must stay needed: it fails as stale when Mainline no longer loads its
 path or when a listed flavor loads or replaces it. Each reason says why Classic
 does without the file and names the Classic file that takes its place, if any.
-The Assistant addon is outside this check. Full and `-SelfContained` runs both
-print the totals on the `Classic flavor load coverage:` line.
+Full and `-SelfContained` runs both print the totals on the
+`Classic flavor load coverage:` line.
 
 These are source/runtime-mock gates, not a substitute for logging into every
 class/spec on all game clients. Release certification still requires the live
 matrix: clean install and migrated profile, combat and reload, every
 class-resource owner, cast/channel/interrupt states, aura/filter/tooltip
-combination, party/raid secure headers, Options, Assistant, and action-button
-taint checks. A source build must not be described as live-certified until that
+combination, party/raid secure headers, Options, and action-button taint
+checks. A source build must not be described as live-certified until that
 matrix has actually passed.
 
 ## Running the gate and single smokes
@@ -527,12 +595,14 @@ stale as soon as a later rebase commit moves an override.
 `.github/scripts/resolve_classic_retail_source.py` derives it. It walks a Retail
 revision's history newest first and prints the newest commit whose addon tree
 matches this tree under the gate's rules: an override matches on its recorded
-base blob, every other mapped path on its blob, the three TOCs through the
-`_Mainline.toc` mapping, and the addon inventory must equal mapped Retail plus
-the owned paths. No Retail path may collide with an owned path, compared
-without case and folder by folder, and the Retail tree may hold only the three
-TOCs and regular, non-executable files. When nothing matches it exits 2 and
-names the nearest commit with its mismatching paths:
+base blob, every other mapped path on its blob, each shipped addon's Retail TOC
+through the `_Mainline.toc` mapping, retired paths
+(`tools/classic-addon-tombstones.txt`) are skipped, and the addon inventory must
+equal mapped Retail plus the owned paths. No Retail path may collide with an
+owned path, compared without case and folder by folder, and the Retail tree of
+the two shipped addons may hold only their two TOCs and regular, non-executable
+files. When nothing matches it exits 2 and names the nearest commit with its
+mismatching paths:
 
 ```powershell
 python .github/scripts/resolve_classic_retail_source.py --retail <Retail clone> --retail-rev <Retail main>
@@ -588,8 +658,9 @@ run through `.github/scripts/auras3_test_driver.lua`:
 lua .github/scripts/auras3_test_driver.lua tools/tests/classic_aura_backend_smoke.lua <repository root>
 ```
 
-Each smoke's `Invoke-GateSmoke` line in the gate is the reference. Driver smokes
-take the repository root, except:
+Each smoke's row in `tools/classic-gate-smokes.tsv` (columns Matrix, Runner,
+Smoke, Arguments, Label) is the reference. Driver smokes take the repository
+root, except:
 
 - `tools/tests/classic_client_bootstrap_smoke.lua`: a spec name (a matrix
   suffix, `FutureTaggedVanilla`, `FutureProjectVanilla` or `UnknownUntagged`),
@@ -651,11 +722,12 @@ therefore really compares; a self-contained run prints a `SKIPPED baseline
 comparison` line per smoke and the gate reports the whole comparison as a
 `SKIPPED:` step.
 
-Every tracked smoke either runs through `Invoke-GateSmoke` or is listed with a
-recorded reason in `$retiredSmokes` in `tools/test-classic-prototype.ps1`.
-`Invoke-GateSmoke` records each smoke it starts. After the last smoke the gate
-fails on a tracked smoke that neither ran nor is retired, on a retired smoke
-that still runs, and on a smoke that ran but is not tracked by git.
+Every tracked smoke either has a row in `tools/classic-gate-smokes.tsv` or is
+listed with a recorded reason in `$retiredSmokes` in
+`tools/test-classic-prototype.ps1`. `Invoke-GateSmoke` records each smoke it
+starts. After the last smoke the gate fails on a tracked smoke that neither ran
+nor is retired, on a retired smoke that still runs, and on a smoke that ran but
+is not tracked by git.
 
 ## Regenerating the Menu2 search index
 
@@ -666,11 +738,17 @@ are tracked, so a clean clone can reproduce both files byte for byte:
 | path | role |
 | --- | --- |
 | `.github/scripts/search_static_index_project.lua` | the generator |
-| `tools/assistant_v1_catalog_crosswalk.lua` | the harness that builds every Menu2 page headlessly |
-| `tools/AssistantTraining/wow_stubs.lua` | the WoW API stubs the harness runs on |
-| `tools/assistant_runtime_manifest_loader.lua` | runtime manifest loader the harness requires |
-| `tools/assistant_graphify_inventory.lua` | inventory module the harness requires |
-| `.github/scripts/assistant_graphify_setting_dispositions.lua` | disposition ledger the harness loads |
+| `tools/search_catalog_harness.lua` | the harness that builds every Menu2 page headlessly; the generator splices it in |
+| `tools/MenuTest/wow_stubs.lua` | the WoW API stubs the generator and the harness run on |
+| `.github/scripts/auras3_test_loader.lua` | the aura model loader the harness installs |
+| `.github/quality/service_ports.lua` | the runtime service ports the harness installs |
+| `.github/scripts/msuf_source_slice.lua` | the source slicer the harness reads the profile module with |
+| `tools/classic-client-matrix.tsv` | the client facts the generator installs per flavor |
+
+The generator does not run the harness file as it is: it cuts the harness at two
+marker lines and splices its own manifest and client facts in (`HARNESS_CUT` and
+`HARNESS_MANIFEST_HOOK` at the top of the generator). Keep both marker lines of
+`tools/search_catalog_harness.lua` byte for byte, or regeneration fails.
 
 `MSUF_SEARCH_SOURCE_SHA256` is the hash the index records: the SHA256 over every
 Lua and XML file under `Shell/Menu2`, relative path and normalized content
@@ -693,17 +771,16 @@ lua .github/scripts/search_static_index_project.lua
 in the client matrix; no `--flavor` writes the Mainline file. `--stdout` prints
 instead of writing, which is how a regeneration is diffed without touching the
 worktree. Regenerating without a content change reproduces the committed bytes,
-so the two index files are also the reference for what the Classic menu builds
-(`tools/tests/classic_assistant_control_schema_smoke.py` uses the Classic one).
+so the two index files are also the reference for what each menu builds.
 
-`MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantControlSchema_Data_Classic.lua`
-is NOT generated here: the Retail generator was never ported, so the file is
-reviewed snapshot data and says so in its header. The smoke above pins its shape
-and its recorded divergence from the built controls, and refuses any tracked
-Classic-owned file that claims a generator this repository does not contain.
-`tools/assistant_graphify_inventory_data.lua` made the same false claim and was
-retired on 2026-09-20: no gate step read it, its generator was never ported, and
-about 145 of its 2179 records pointed past the end of the file they named.
+A file this repository writes may only claim a generator it tracks:
+`tools/tests/classic_no_assistant_contract_smoke.py` reads the first lines of
+every tracked file that is not an unchanged Retail mirror and fails on a
+"generated by" claim naming an untracked file. The changelog payloads
+(`State/MSUF_Changelog.lua`, `Options/State/MSUF_ChangelogFull.lua`) are
+generated from `CHANGELOG.md` by the tracked `tools/update-addon-changelog.ps1`;
+after editing `CHANGELOG.md` run it with `-Version <VERSION>`, and the gate runs
+its `-Check` mode, which fails on a stale or hand-edited payload.
 
 ## Adding a client flavor
 
@@ -714,7 +791,7 @@ unreleased client. Checklist:
 1. Add a row to `tools/classic-client-matrix.tsv`: suffix, interface list,
    `X-MSUF-Client` token, project global, game type, mirror branch, CurseForge
    game version names and `IsClassic`.
-2. Add the three suffixed TOCs (core, Options, Assistant) by following the
+2. Add the two suffixed TOCs (core and Options) by following the
    closest existing Classic flavor. Each carries the matrix interface list and
    an `X-MSUF-Client` line with the matrix token; the core TOC loads
    `Game/Shared/Initialize.lua` and its flavor manifests.
@@ -763,9 +840,9 @@ fails if Blizzard renames the placeholder name "Camelot". Once a build exists:
    rules and the Blizzard addon states.
 2. If the client loads `MidnightSimpleUnitFrames_Mainline.toc`, add its interface
    number to the Mainline row of `tools/classic-client-matrix.tsv` and to the
-   three `_Mainline.toc` files. The gate already allows the Mainline
+   two `_Mainline.toc` files. The gate already allows the Mainline
    `## Interface` line to differ from Retail.
-3. If the client needs its own TOC suffix instead, add a matrix row and the three
+3. If the client needs its own TOC suffix instead, add a matrix row and the two
    suffixed TOCs. The gate currently accepts exactly one non-Classic client, so
    `tools/test-classic-prototype.ps1` first needs a second Mainline-family client
    in its single-Mainline check, the Retail TOC name mapping, the Mainline load
@@ -914,3 +991,17 @@ OnUpdate, polling or Combat Log parser is used. The dedicated Swing Timer smoke
 checks ownership, concurrent hands, duration delivery, equipment, profile changes,
 real media-choice paths, preview isolation, number-only display and fill direction.
 Offline tests do not establish live visuals, taint safety or measured performance.
+
+Optional extras: the off-hand lane draws the off-hand timer as a strip in the
+main-hand bar in the off-hand colour; out of reach, a bar takes its reach colour
+and fades to its reach opacity; a queued next-swing attack (Heroic Strike,
+Cleave, Maul, Raptor Strike, matched by spell name so every rank counts) shows
+its icon beside the main-hand bar and tints the border, and with the cue text on
+the bar's title names it (the spell name, or the player's own text per attack).
+Settings saved under the former extras names move to the current ones once.
+C_SwingTimer.EnableRangeCheck
+is one switch per hand shared with Blizzard's bars, which drop it when their
+CVar turns off, so the module re-asserts it after that CVar changes and on every
+apply. A target change only re-reads the range of checked hands, a haste proc
+does nothing unless a weapon was equipped or removed, and spell-state events are
+registered only for classes with next-swing attacks.

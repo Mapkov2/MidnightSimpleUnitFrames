@@ -408,24 +408,40 @@ if ($LASTEXITCODE -ne 0) { throw "Classic error visibility contract failed" }
 
 $targets = @(
     @{ Folder = "MidnightSimpleUnitFrames"; Base = "MidnightSimpleUnitFrames" },
-    @{ Folder = "MidnightSimpleUnitFrames_Options"; Base = "MidnightSimpleUnitFrames_Options" },
-    @{ Folder = "MidnightSimpleUnitFrames_Assistant"; Base = "MidnightSimpleUnitFrames_Assistant" }
+    @{ Folder = "MidnightSimpleUnitFrames_Options"; Base = "MidnightSimpleUnitFrames_Options" }
 )
+# tools/classic-addon-tombstones.txt names the Retail addons this tree retired
+# and the Retail files of the shipped addons that retired with them. Those
+# paths, and only those, may be missing from the mirror below; the manifest is
+# proven against git and the load graph once every TOC has been walked.
+$addonTombstoneRelative = "tools/classic-addon-tombstones.txt"
+Assert-TrackedFile -RelativePath $addonTombstoneRelative -Label "Classic addon tombstone manifest"
+$addonTombstones = Import-MsufAddonTombstones -Path (Join-Path $root $addonTombstoneRelative) `
+    -ShippedAddons ([string[]]@($targets | ForEach-Object { $_.Folder }))
+$tombstonedRetailPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($tombstonedPath in $addonTombstones.Paths) { [void]$tombstonedRetailPaths.Add($tombstonedPath) }
+# Scans read the files git versions, never a folder walk, so ignored local
+# files (luac.out, local scripts) cannot make a local run differ from CI.
+$versionableAddonLua = [string[]]@(Get-MsufVersionableFiles -Root $root `
+    -Folders ([string[]]@($targets | ForEach-Object { $_.Folder })) -Extension @(".lua"))
 $clients = $clientMatrix
 $expectedVersion = (Get-Content -LiteralPath (Join-Path $root "VERSION") -Raw).Trim()
 & (Join-Path $root ".github/scripts/assert-classic-6-5-release-line.ps1") `
     -RepositoryRoot $root -ReleaseVersion $expectedVersion
+# The release line proves the two changelog payloads' version and source hash;
+# the tracked generator's check mode proves their whole content, so a hand
+# edit or a stale regeneration fails here instead of at release time.
+Assert-TrackedFile -RelativePath "tools/update-addon-changelog.ps1" -Label "Changelog payload generator"
+& (Join-Path $root "tools/update-addon-changelog.ps1") -Version $expectedVersion -Check
 
 # Writing addon-owned fallbacks into Blizzard's C_* namespace taints the table
 # and can surface later as ADDON_ACTION_FORBIDDEN at UseAction(). Compatibility
 # adapters must stay below MSUF.Compat instead.
 $taintWritePattern = '(?m)^\s*(?:_G\.)?C_[A-Za-z0-9_]+\.[A-Za-z0-9_]+\s*=(?!=)'
-foreach ($target in $targets) {
-    foreach ($file in Get-ChildItem -LiteralPath (Join-Path $root $target.Folder) -Recurse -Filter "*.lua" -File) {
-        $source = Get-Content -LiteralPath $file.FullName -Raw
-        if ($source -match $taintWritePattern) {
-            throw "Blizzard C_* namespace mutation is forbidden: $($file.FullName)"
-        }
+foreach ($luaRelative in $versionableAddonLua) {
+    $source = [IO.File]::ReadAllText((Join-Path $root $luaRelative))
+    if ($source -match $taintWritePattern) {
+        throw "Blizzard C_* namespace mutation is forbidden: $luaRelative"
     }
 }
 
@@ -551,6 +567,20 @@ foreach ($target in $targets) {
     }
 
 }
+
+# Every file any shipped TOC reaches, over the union of its locale and game
+# type branches. The tombstone proof and the unreached-Lua check read it.
+$shippedLoadedPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($target in $targets) {
+    foreach ($client in $clients) {
+        $shippedToc = Join-Path (Join-Path $root $target.Folder) ("{0}_{1}.toc" -f $target.Base, $client.Suffix)
+        foreach ($loadedPath in (Get-MsufLoadGraph -Path $shippedToc -Duplicates Skip).AllPaths) {
+            [void]$shippedLoadedPaths.Add($loadedPath)
+        }
+    }
+}
+Assert-MsufAddonTombstones -Root $root -Tombstones $addonTombstones -LoadedPaths ([string[]]@($shippedLoadedPaths))
+Write-Host "Addon tombstones: $($addonTombstones.Addons.Count) retired addons untracked and without a TOC; $($addonTombstones.Paths.Count) retired Retail paths untracked and unloaded"
 
 # Source contracts below pin one condition per call, so a failure names the
 # condition that broke and the file it broke in instead of the group it sits in.
@@ -859,6 +889,20 @@ foreach ($overrideLine in $overrideLines) {
 }
 Assert-OrdinalPathOrder -Paths $overridePathsInOrder.ToArray() -Label "Classic Retail override manifest"
 
+# Every versioned addon Lua file is loaded by a shipped TOC, so no dead payload
+# ships and no Classic edit lands in a file that never runs. The exceptions are
+# listed with a kind and a reason in tools/classic-unloaded-addon-lua.tsv: an
+# unchanged Retail mirror Retail never loads ('mirror'), or a Classic-owned file
+# the owner keeps on purpose ('retained', citing the decision). The pixel layout
+# coverage smoke skips the same files. Rules: Assert-MsufUnloadedAddonLua.
+$unloadedLuaRelative = "tools/classic-unloaded-addon-lua.tsv"
+Assert-TrackedFile -RelativePath $unloadedLuaRelative -Label "Classic unloaded addon Lua manifest"
+$unloadedLua = Assert-MsufUnloadedAddonLua -Root $root -ManifestPath (Join-Path $root $unloadedLuaRelative) `
+    -VersionableLua $versionableAddonLua -LoadedPaths ([string[]]@($shippedLoadedPaths)) `
+    -OwnedPaths ([string[]]@($ownedAddonPaths)) -OverridePaths ([string[]]@($overrideBaseBlobs.Keys)) `
+    -TrackedPaths ([string[]]@($trackedAddonPaths))
+Write-Host "Unloaded addon Lua: every versioned addon Lua file is loaded by a shipped TOC except $($unloadedLua.Mirrors) listed Retail mirror(s) and $($unloadedLua.Retained) retained owned file(s)"
+
 # O files that are whole-file shadows of a Retail file record that Retail
 # counterpart and the Retail blob the shadow was last reconciled with. A
 # malformed manifest fails here; drift against current Retail is reported in
@@ -959,6 +1003,13 @@ if ($retailReferenceRootFull) {
         $relativePath = $Matches[3].Replace([char]92, [char]47)
         Assert-NormalizedAddonPath -RelativePath $relativePath -Label "Retail Git tree entry"
         $candidateRelativePath = Convert-RetailPath -RelativePath $relativePath
+        $candidatePath = Join-Path $root $candidateRelativePath
+        if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
+            if ($tombstonedRetailPaths.Contains($candidateRelativePath)) {
+                continue
+            }
+            throw "Mapped Retail file is missing from Classic repository: $candidateRelativePath"
+        }
         if ($retailMappedPathCase.ContainsKey($candidateRelativePath)) {
             throw "Retail mapping collision: $($retailMappedPathCase[$candidateRelativePath]) versus $relativePath at $candidateRelativePath"
         }
@@ -970,10 +1021,6 @@ if ($retailReferenceRootFull) {
         if ($relativePath.EndsWith('.toc', [StringComparison]::OrdinalIgnoreCase)) {
             [void]$retailTocSources.Add($relativePath)
         }
-        $candidatePath = Join-Path $root $candidateRelativePath
-        if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
-            throw "Mapped Retail file is missing from Classic repository: $candidateRelativePath"
-        }
     }
 
     $expectedRetailTocs = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -981,7 +1028,7 @@ if ($retailReferenceRootFull) {
         [void]$expectedRetailTocs.Add($target.Folder + "/" + $target.Base + ".toc")
     }
     if (-not $retailTocSources.SetEquals($expectedRetailTocs)) {
-        throw "Retail tree must contain exactly the three unsuffixed addon TOCs; found: $($retailTocSources -join ', ')"
+        throw "Retail tree must contain exactly one unsuffixed TOC per shipped addon ($(@($expectedRetailTocs) -join ', ')); found: $($retailTocSources -join ', ')"
     }
 
     foreach ($overridePath in $overrideBaseBlobs.Keys) {
@@ -1126,11 +1173,6 @@ $retailParityTargets = @(
         Label = "Options"
         Reference = "MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options.toc"
         Current = "MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options_Mainline.toc"
-    },
-    @{
-        Label = "Assistant"
-        Reference = "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant.toc"
-        Current = "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant_Mainline.toc"
     }
 )
 $mainlineOwnedLuaExtras = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -1142,12 +1184,31 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua",
     "MidnightSimpleUnitFrames/Game/Forever/ClassPower.lua",
     "MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileSearch.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileVariants.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileSync.lua",
+    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ExtraAuras.lua",
+    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ManaExtras.lua",
+    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceMarks.lua",
+    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceExtras.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtras.lua",
+    "MidnightSimpleUnitFrames/State/MSUF_ProfileFields.lua",
+    "MidnightSimpleUnitFrames/State/MSUF_ProfileExternal.lua",
+    "MidnightSimpleUnitFrames/State/MSUF_ProfileVariants.lua",
+    "MidnightSimpleUnitFrames/State/MSUF_ProfileSync.lua",
+    "MidnightSimpleUnitFrames/State/MSUF_ProfileVariantEditor.lua",
+    "MidnightSimpleUnitFrames/State/MSUF_ProfileVariantsRuntime.lua",
+    "MidnightSimpleUnitFrames/State/MSUF_RetiredData.lua",
     "MidnightSimpleUnitFrames/State/MSUF_AuraDefaults.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_ForeverFactory.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Bars.lua",
     "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Units.lua",
     "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua",
+    "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua",
+    "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayoutAdditional.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimers.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua",
@@ -1225,6 +1286,9 @@ foreach ($parityTarget in $retailParityTargets) {
     foreach ($referencePath in $referencePaths) {
         $referenceRelative = Get-RepositoryRelativePath -RepositoryFull $retailReferenceRootFull -FullPath $referencePath -Label "$($parityTarget.Label) Retail reference path"
         if (-not $retailMappedBlobs.ContainsKey($referenceRelative)) {
+            if ($tombstonedRetailPaths.Contains($referenceRelative)) {
+                continue
+            }
             throw "$($parityTarget.Label) Retail load path is outside the mapped Retail inventory: $referenceRelative"
         }
         $referenceRelativePaths.Add($referenceRelative)
@@ -1282,7 +1346,7 @@ if (-not $SelfContained -and -not $actualMainlineOwnedLuaExtras.SetEquals($mainl
 # loaded owned shadow (tools/classic-owned-shadows.tsv), or be excluded with a
 # reason in tools/classic-flavor-load-exclusions.tsv. A Lua file Retail adds to
 # a manifest Classic copies therefore cannot go missing on Classic unnoticed.
-# Every exclusion row must still be needed. The Assistant addon is not covered.
+# Every exclusion row must still be needed.
 $flavorExclusionRelative = "tools/classic-flavor-load-exclusions.tsv"
 $flavorExclusionPath = Join-Path $root $flavorExclusionRelative
 if (-not (Test-Path -LiteralPath $flavorExclusionPath -PathType Leaf)) {
@@ -1405,29 +1469,21 @@ if ($classicAuraCompileSource -match 'CustomAuraContainerTemplate|AURA_CONTAINER
     throw "Classic aura compiler must not depend on Blizzard_AuraContainer"
 }
 
-# Lua 5.1 compiles at most 200 locals and 60 upvalues per function. The gate
-# holds every file this repository writes or overrides to 190 main-chunk locals
-# and 56 upvalues, so a file reports before it reaches the ceiling rather than
-# after a sync makes it uncompilable. Files already over the rule are listed
-# below with a reason and are pinned to the value they have today.
+# Lua 5.1 compiles at most 200 locals and 60 upvalues per function, and a
+# function's registers (locals plus the temporaries of its largest expression)
+# may not exceed 250 stack slots ("function or expression too complex"). The
+# gate holds every file this repository writes or overrides to 190 locals per
+# function, 230 main-chunk stack slots and 56 upvalues, so a file reports
+# before it reaches the ceiling rather than after a sync makes it
+# uncompilable. Files already over the rule are listed below with a reason and
+# are pinned to the value they have today.
 $luaLocalBudget = 190
+$luaSlotBudget = 230
 $luaUpvalueBudget = 56
 $luaBudgetExceptions = [ordered]@{
     "MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_HUD.lua" = @{
         Locals = 4; Upvalues = 60
         Reason = "Retail override at Lua 5.1's 60-upvalue ceiling; the headroom is Retail's to reclaim, and this repository must not diverge further"
-    }
-    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_Assistant.lua" = @{
-        Locals = 200; Upvalues = 30
-        Reason = "Retail override at Lua 5.1's 200-local ceiling; splitting it belongs to the Retail Assistant, not to a Classic override"
-    }
-    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantParser.lua" = @{
-        Locals = 196; Upvalues = 27
-        Reason = "Retail override 4 locals below the ceiling; the split belongs to the Retail Assistant"
-    }
-    "MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantParser_Registry.lua" = @{
-        Locals = 200; Upvalues = 16
-        Reason = "Retail override at Lua 5.1's 200-local ceiling; the split belongs to the Retail Assistant"
     }
 }
 
@@ -1472,13 +1528,14 @@ function Invoke-LuacBatch {
                 $close = $line.IndexOf(":0,0>", [StringComparison]::Ordinal)
                 $candidate = if ($close -gt 6) { $line.Substring(6, $close - 6) } else { "" }
                 $currentFile = if ($candidate -ceq "(luac)" -or $candidate -ceq "") { $null } else { $candidate }
-                if ($currentFile) { $stats[$currentFile] = [pscustomobject]@{ MainLocals = -1; MaxUpvalues = 0 } }
+                if ($currentFile) { $stats[$currentFile] = [pscustomobject]@{ MainLocals = -1; MainSlots = -1; MaxLocals = 0; MaxUpvalues = 0 } }
                 continue
             }
             if ($null -eq $currentFile) { continue }
             if ($line -match '^(\d+)\+? params, (\d+) slots, (\d+) upvalues, (\d+) locals') {
                 $entry = $stats[$currentFile]
-                if ($entry.MainLocals -lt 0) { $entry.MainLocals = [int]$Matches[4] }
+                if ($entry.MainLocals -lt 0) { $entry.MainLocals = [int]$Matches[4]; $entry.MainSlots = [int]$Matches[2] }
+                if ([int]$Matches[4] -gt $entry.MaxLocals) { $entry.MaxLocals = [int]$Matches[4] }
                 if ([int]$Matches[3] -gt $entry.MaxUpvalues) { $entry.MaxUpvalues = [int]$Matches[3] }
             }
         }
@@ -1494,10 +1551,10 @@ function Invoke-LuacBatch {
 # $luac and $lua were resolved and version-checked by the tool preflight; a
 # missing tool was either fatal there or recorded as a skipped step.
 if ($luac) {
-    $luaFiles = foreach ($target in $targets) {
-        Get-ChildItem -LiteralPath (Join-Path $root $target.Folder) -Recurse -Filter "*.lua" -File
-    }
-    $syntax = Invoke-LuacBatch -LuacPath $luac.Source -Files ([string[]]@($luaFiles | ForEach-Object { $_.FullName }))
+    # The files git versions, read once near the top: ignored local copies
+    # (luac.out, scripts under an addon's tools/ or docs/) are not the product.
+    $luaFiles = [string[]]@($versionableAddonLua | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $root $_)) })
+    $syntax = Invoke-LuacBatch -LuacPath $luac.Source -Files $luaFiles
     if ($syntax.ExitCode -ne 0) {
         # Name the file: re-run the failing chunk one file at a time.
         foreach ($file in $syntax.Chunk) {
@@ -1534,16 +1591,29 @@ if ($luac) {
             throw "Lua 5.1 budget: main-chunk header not found for $relativePath"
         }
         $localCeiling = $luaLocalBudget
+        $slotCeiling = $luaSlotBudget
         $upvalueCeiling = $luaUpvalueBudget
         $exception = $null
         if ($luaBudgetExceptions.Contains($relativePath)) {
             $exception = $luaBudgetExceptions[$relativePath]
             $localCeiling = [Math]::Max($luaLocalBudget, [int]$exception.Locals)
+            if ($exception.Contains("Slots")) { $slotCeiling = [Math]::Max($luaSlotBudget, [int]$exception.Slots) }
             $upvalueCeiling = [Math]::Max($luaUpvalueBudget, [int]$exception.Upvalues)
         }
         if ($measured.MainLocals -gt $localCeiling) {
             $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
             throw "Lua 5.1 local budget exceeded: $relativePath has $($measured.MainLocals) main-chunk locals; budget $localCeiling of Lua's 200$why"
+        }
+        # Installer-wrapped files (Edit Mode HUD and Layout) keep almost no
+        # main-chunk locals, so every function's local count is held to the
+        # same budget.
+        if ($measured.MaxLocals -gt $localCeiling) {
+            $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
+            throw "Lua 5.1 local budget exceeded: $relativePath has a function with $($measured.MaxLocals) locals; budget $localCeiling of Lua's 200$why"
+        }
+        if ($measured.MainSlots -gt $slotCeiling) {
+            $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
+            throw "Lua 5.1 stack budget exceeded: $relativePath main chunk uses $($measured.MainSlots) stack slots; budget $slotCeiling of Lua's 250 (split the widest call or table constructor)$why"
         }
         if ($measured.MaxUpvalues -gt $upvalueCeiling) {
             $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
@@ -1552,14 +1622,19 @@ if ($luac) {
         $budgetMeasured.Add([pscustomobject]@{
             Path = $relativePath
             MainLocals = $measured.MainLocals
+            MainSlots = $measured.MainSlots
             MaxUpvalues = $measured.MaxUpvalues
             IsException = [bool]$exception
         })
     }
-    Write-Host "Lua 5.1 budgets: $($budgetRelativePaths.Count) Classic-owned and override files within $luaLocalBudget main-chunk locals and $luaUpvalueBudget upvalues; $($luaBudgetExceptions.Count) recorded exceptions"
+    Write-Host "Lua 5.1 budgets: $($budgetRelativePaths.Count) Classic-owned and override files within $luaLocalBudget locals per function, $luaSlotBudget main-chunk stack slots and $luaUpvalueBudget upvalues; $($luaBudgetExceptions.Count) recorded exceptions"
     foreach ($offender in @($budgetMeasured | Sort-Object -Property MainLocals -Descending | Select-Object -First 5)) {
         $mark = if ($offender.IsException) { " [exception]" } else { "" }
         Write-Host "    locals  $($offender.MainLocals)/$luaLocalBudget $($offender.Path)$mark"
+    }
+    foreach ($offender in @($budgetMeasured | Sort-Object -Property MainSlots -Descending | Select-Object -First 5)) {
+        $mark = if ($offender.IsException) { " [exception]" } else { "" }
+        Write-Host "    slots   $($offender.MainSlots)/$luaSlotBudget $($offender.Path)$mark"
     }
     foreach ($offender in @($budgetMeasured | Sort-Object -Property MaxUpvalues -Descending | Select-Object -First 5)) {
         $mark = if ($offender.IsException) { " [exception]" } else { "" }
@@ -1636,7 +1711,7 @@ Write-Host "Mainline override Lua: $mainlineOverrideLuaCount Retail paths retain
 if (-not $SelfContained) {
     Write-Host "Mainline owned Lua: $($actualMainlineOwnedLuaExtras.Count) of $($mainlineOwnedLuaExtras.Count) declared O shared/Arena additions loaded; no Game/Classic load"
 }
-Write-Host "Retail zero-overhead load graph: $($mainlineLoaded.Count) core files, $currentRetailHashCount Retail Lua paths across Core/Options/Assistant validated against $retailReferenceLabel"
+Write-Host "Retail zero-overhead load graph: $($mainlineLoaded.Count) core files, $currentRetailHashCount Retail Lua paths across Core/Options validated against $retailReferenceLabel"
 foreach ($skippedStep in $skippedSteps) {
     Write-Host "SKIPPED: $skippedStep"
 }

@@ -14,8 +14,7 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $expectedProjectId = "1384660"
 $addonNames = @(
     "MidnightSimpleUnitFrames",
-    "MidnightSimpleUnitFrames_Options",
-    "MidnightSimpleUnitFrames_Assistant"
+    "MidnightSimpleUnitFrames_Options"
 )
 $clientMatrixPath = Join-Path $repoRoot "tools/classic-client-matrix.tsv"
 $clientMatrix = @(Import-MsufClientMatrix -Path $clientMatrixPath)
@@ -116,10 +115,11 @@ function Test-ForbiddenArtifactPath {
 
     $segments = @($normalized -split '/')
     $forbiddenDirectories = @(
-        ".git", ".github", ".agents", ".codex", ".idea", ".vscode",
         "_local_workflows", "graphify-out", "docs", "doc", "test", "tests",
         "tools", "scripts", "__pycache__", "_backups", "backups"
     )
+    # A hidden segment (version control, editor or tool state) never ships.
+    if (@($segments | Where-Object { $_.StartsWith('.') }).Count -gt 0) { return $true }
     foreach ($segment in $segments) {
         if ($forbiddenDirectories -contains $segment.ToLowerInvariant()) { return $true }
     }
@@ -131,8 +131,8 @@ function Test-ForbiddenArtifactPath {
     if ($leaf -match '(?i)\.(?:md|markdown|html?|py|pyc|pyo|ps1|psm1|psd1)$') { return $true }
     # The name-token rule is for stray tooling files only. It must never decide
     # the fate of addon payload: "Spec" and "Test" are ordinary WoW vocabulary,
-    # and MSUF_AssistantRegistry_Profiles_Workflow_Spec.lua was silently dropped
-    # from every zip by this rule although both Assistant manifests load it.
+    # and a loaded *_Spec.lua file was once silently dropped from every zip by
+    # this rule although the addon manifests loaded it.
     # Payload with such a name is judged by Assert-StagedLoadGraph instead.
     if (Test-AddonPayloadLeaf -Leaf $leaf) { return $false }
     if (Test-ToolingNameToken -Leaf $leaf) { return $true }
@@ -144,63 +144,20 @@ function Test-AddonPayloadLeaf {
     return $Leaf -match '(?i)\.(?:lua|xml|toc|tga|blp|png|jpg|ttf|otf|ogg|mp3|wav)$'
 }
 
-function Test-ToolingNameToken {
-    param([Parameter(Mandatory = $true)][string]$Leaf)
-    return $Leaf -match '(?i)(?:^|[-_.])(?:test|tests|smoke|spec|perfy|graphify)(?:[-_.]|$)'
-}
+# The tooling-name rule and the staged load-graph proof live in
+# ClassicGate.Common.psm1, beside Get-MsufLoadGraph, the walker the gate uses.
+Set-Alias -Name Test-ToolingNameToken -Value Test-MsufToolingLeaf
 
 # Every Lua and XML file a staged TOC reaches must exist in the stage, so a
 # file removed by a staging rule fails the build instead of shipping a broken
-# load graph. A Lua or XML file whose name looks like tooling ships only when
-# the load graph reaches it; otherwise the build stops and asks for a decision.
+# load graph. The shared walker reads every condition stacked on a TOC line
+# (the alias catalog lines carry a locale and a game-type condition). A Lua or
+# XML file whose name looks like tooling ships only when the load graph reaches
+# it; otherwise the build stops and asks for a decision.
 function Assert-StagedLoadGraph {
     param([Parameter(Mandatory = $true)][string]$StageRoot)
-
-    $reached = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    $missing = [Collections.Generic.List[string]]::new()
-    $pending = [Collections.Generic.Stack[string]]::new()
-
-    function Add-Reference {
-        param([string]$OwnerPath, [string]$Reference)
-        $entry = ($Reference -replace '\s*\[[^\]]*\]\s*$', '').Trim()
-        if (-not $entry -or $entry -notmatch '(?i)\.(?:lua|xml)$') { return }
-        $ownerDirectory = Split-Path -Parent $OwnerPath
-        $target = [IO.Path]::GetFullPath((Join-Path $ownerDirectory $entry.Replace('\', [IO.Path]::DirectorySeparatorChar).Replace('/', [IO.Path]::DirectorySeparatorChar)))
-        if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
-            $missing.Add("$(Get-RelativePath -Root $StageRoot -FullName $OwnerPath) -> $entry")
-            return
-        }
-        if ($reached.Add($target) -and $target -match '(?i)\.xml$') { $pending.Push($target) }
-    }
-
-    $tocs = @(Get-ChildItem -LiteralPath $StageRoot -Filter '*.toc' -File -Recurse)
-    foreach ($toc in $tocs) {
-        foreach ($line in [IO.File]::ReadAllLines($toc.FullName)) {
-            $trimmed = $line.Trim()
-            if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
-            Add-Reference -OwnerPath $toc.FullName -Reference $trimmed
-        }
-    }
-    while ($pending.Count -gt 0) {
-        $xmlPath = $pending.Pop()
-        $content = [IO.File]::ReadAllText($xmlPath)
-        $content = [regex]::Replace($content, '<!--.*?-->', '', [Text.RegularExpressions.RegexOptions]::Singleline)
-        foreach ($match in [regex]::Matches($content, '<(?:Script|Include)\s+[^>]*?file\s*=\s*"([^"]+)"', [Text.RegularExpressions.RegexOptions]::IgnoreCase)) {
-            Add-Reference -OwnerPath $xmlPath -Reference $match.Groups[1].Value
-        }
-    }
-    if ($missing.Count -gt 0) {
-        throw "Staged package load graph has missing files: $($missing -join '; ')"
-    }
-
-    $unreachedTooling = @(Get-ChildItem -LiteralPath $StageRoot -File -Recurse | Where-Object {
-        $_.Extension -match '(?i)^\.(?:lua|xml)$' -and (Test-ToolingNameToken -Leaf $_.Name) -and
-        -not $reached.Contains([IO.Path]::GetFullPath($_.FullName))
-    } | ForEach-Object { Get-RelativePath -Root $StageRoot -FullName $_.FullName })
-    if ($unreachedTooling.Count -gt 0) {
-        throw "Staged Lua/XML files are named like tooling and no TOC loads them; remove them from the addon tree or load them: $($unreachedTooling -join ', ')"
-    }
-    Write-Host "Staged load graph: $($tocs.Count) TOCs reach $($reached.Count) Lua/XML files; none missing"
+    $graph = Assert-MsufStagedLoadGraph -StageRoot $StageRoot
+    Write-Host "Staged load graph: $($graph.Tocs) TOCs reach $($graph.Reached) Lua/XML files; none missing"
 }
 
 function Remove-ForbiddenStageArtifacts {
@@ -442,9 +399,16 @@ if ($LASTEXITCODE -ne 0 -or $trackedAddonPaths.Count -eq 0) {
     throw "Could not enumerate tracked Classic addon files: $($trackedAddonPaths -join ', ')"
 }
 $trackedAddonPaths = @($trackedAddonPaths | ForEach-Object { $_.Replace('\', '/') } | Sort-Object -Unique)
+# A retired addon or a retired Retail file (tools/classic-addon-tombstones.txt)
+# must never reach a zip, even if it was tracked again by mistake.
+$addonTombstones = Import-MsufAddonTombstones -Path (Join-Path $repoRoot "tools/classic-addon-tombstones.txt") -ShippedAddons $addonNames
+$retiredTracked = @($trackedAddonPaths | Where-Object { $addonTombstones.Paths -ccontains $_ })
+if ($retiredTracked.Count -gt 0) {
+    throw "Tracked package paths are retired by tools/classic-addon-tombstones.txt: $($retiredTracked -join ', ')"
+}
 foreach ($relative in $trackedAddonPaths) {
     if (-not ($addonNames | Where-Object { $relative.StartsWith("$_/", [StringComparison]::Ordinal) })) {
-        throw "Tracked package path is outside the three addon roots: $relative"
+        throw "Tracked package path is outside the shipped addon roots ($($addonNames -join ', ')): $relative"
     }
     $sourcePath = Join-Path $repoRoot ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
     if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {

@@ -83,6 +83,13 @@ Check(element.GetUnitlessEvents(frame)[1] == "UNIT_PET_EXPERIENCE", "XP event mi
 element.Create(frame, frame.MSUFSpec)
 local holder = frame.petXPBar
 Check(holder and holder.width == 80 and holder.height == 8, "default geometry")
+Check(holder.parent == frame, "without a visual root the bar lives on the frame")
+-- "Show only below 100% health" fades the frame's visual root; the bar must
+-- be on it to fade with the pet frame.
+local rooted = { MSUFUnitKey = "pet", MSUFSpec = frame.MSUFSpec, _msufHealthVisualRoot = Region(nil) }
+element.Create(rooted, rooted.MSUFSpec)
+Check(rooted.petXPBar and rooted.petXPBar.parent == rooted._msufHealthVisualRoot,
+    "the XP bar must live on the pet frame's visual root")
 Check(holder.point and holder.point[1] == "BOTTOM" and holder.point[4] == 0
     and holder.point[5] == -5, "default anchor")
 element.Update(frame)

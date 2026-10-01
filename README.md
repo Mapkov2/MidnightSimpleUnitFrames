@@ -4,7 +4,7 @@
   <h1>Midnight Simple Unit Frames</h1>
 
   <p>
-    Clean, highly configurable unit frames, group frames, castbars and auras for World of Warcraft Retail.
+    Clean, highly configurable unit frames, group frames, castbars and auras for World of Warcraft: Midnight, WoW Forever, Classic Era, The Burning Crusade Anniversary and Mists of Pandaria Classic.
   </p>
 
   <p>
@@ -14,20 +14,20 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/Version-6.0%20RC1-38C7F0?style=flat-square" alt="MSUF version 6.0 RC1">
-    <img src="https://img.shields.io/badge/WoW-Retail%2012.1-148EFF?style=flat-square&logo=worldofwarcraft&logoColor=white" alt="World of Warcraft Retail 12.1">
+    <img src="https://img.shields.io/badge/Version-6.5%20beta-38C7F0?style=flat-square" alt="MSUF version 6.5 beta">
+    <img src="https://img.shields.io/badge/WoW-Midnight%20%7C%20Forever%20%7C%20Classic-148EFF?style=flat-square&logo=worldofwarcraft&logoColor=white" alt="World of Warcraft Midnight, WoW Forever and Classic">
     <img src="https://img.shields.io/github/last-commit/Mapkov2/MidnightSimpleUnitFrames?style=flat-square&logo=github" alt="Latest GitHub commit">
   </p>
 </div>
 
 > [!IMPORTANT]
-> **6.0 RC1 is a prerelease build.** Release candidates continue to use the **Beta** channel on addon platforms until the final 6.0 release.
+> **6.5 is in beta.** This branch carries the multi-client 6.5 line, and its builds use the **Beta** channel on addon platforms until the final 6.5 release.
 
 ## What is MSUF?
 
 Midnight Simple Unit Frames (MSUF) is a complete, customizable replacement for Blizzard's unit and group frames. It brings player, target, focus, focus-target, boss, party and raid frames together with castbars, auras and class resources in one consistent interface.
 
-MSUF is made for players who want clear combat information, extensive visual control and a lightweight event-driven runtime. The full configuration UI and the optional Assistant load only when requested.
+MSUF is made for players who want clear combat information, extensive visual control and a lightweight event-driven runtime. The full configuration UI loads only when requested.
 
 > **Signature per-frame Fill Direction:** MSUF lets each Unit Frame fill its Health and Power bars horizontally from left to right or right to left, or vertically from bottom to top or top to bottom. This per-frame combination of vertical and mirrored bar layouts is a level of control not currently offered by other unit-frame addons.
 
@@ -47,7 +47,7 @@ MSUF is made for players who want clear combat information, extensive visual con
 - Full Edit Mode positioning, previews, snapping and layer controls
 - Profiles, specialization switching and profile import/export
 - Searchable options, guided setup and recovery tools
-- Optional Masque, LibSharedMedia and Clique integration
+- Optional LibSharedMedia and Clique integration
 
 ## Feature highlights
 
@@ -63,32 +63,31 @@ MSUF is made for players who want clear combat information, extensive visual con
 ## More included
 
 - Configurable Class Power displays, including an optional Guardian Druid Ironfur tracker
-- SharedMedia textures and fonts, Masque support and Clique compatibility
+- SharedMedia textures and fonts and Clique compatibility
 - Searchable, load-on-demand options with guided setup and recovery tools
-- Optional load-on-demand MSUF Assistant for local feature help and safe setting changes
 - Twelve included locales: English, German, French, Spanish, Italian, Portuguese, Russian, Korean and Simplified/Traditional Chinese
 - Performance-oriented event routing designed to stay quiet when features are disabled
 
 ## Install and open
 
 1. Install MSUF through [CurseForge](https://www.curseforge.com/wow/addons/midnightsimpleunitframes) or [Wago Addons](https://addons.wago.io/addons/midnightsimpleunitframes).
-2. For a manual installation, keep all three packaged folders together in `World of Warcraft/_retail_/Interface/AddOns`:
+2. For a manual installation, keep both packaged folders together in the client's `Interface/AddOns` folder. One package serves every supported client; WoW picks the matching TOC:
    - `MidnightSimpleUnitFrames`
    - `MidnightSimpleUnitFrames_Options`
-   - `MidnightSimpleUnitFrames_Assistant`
 3. Reload the game and type `/msuf` to open the configuration menu.
 
-The Core addon runs normally without opening Options or the Assistant. Both companions are loaded on demand.
+The Core addon runs normally without opening Options; the Options companion is loaded on demand. The in-game Assistant was retired in 6.5: if an older build left a `MidnightSimpleUnitFrames_Assistant` folder in `Interface/AddOns`, delete it (an app update removes it for you).
 
 ## Compatibility
 
 | | |
 | --- | --- |
-| **Game** | World of Warcraft Retail |
-| **Interface versions** | 12.0.7 and 12.1.0 |
-| **Current source version** | 6.0 RC1 |
+| **Game** | World of Warcraft: Midnight, WoW Forever, Classic Era, The Burning Crusade Anniversary and Mists of Pandaria Classic |
+| **Interface versions** | Midnight 12.0.7, 12.1.0 and 12.1.5; WoW Forever 16001; Classic Era 1.15.9; TBC Anniversary 2.5.6; Mists Classic 5.5.4 (`tools/classic-client-matrix.tsv` is the list) |
+| **Client differences** | Classic Era has no focus, boss or arena frames and TBC Anniversary no boss frames; arena frames exist on Midnight, TBC Anniversary and Mists Classic, Mythic Raid group frames on Midnight only |
+| **Current source version** | 6.5 beta (`VERSION`); Midnight shows the Retail release number |
 | **Main command** | `/msuf` |
-| **Optional integrations** | Masque, LibSharedMedia, Clique and WagoAnalytics |
+| **Optional integrations** | LibSharedMedia, Clique and WagoAnalytics |
 
 ## Developer APIs
 

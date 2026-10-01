@@ -12,33 +12,39 @@ luarc-notes.md
 luarsp-project.json
 AGENTS.md
 
-# Local MSUF developer toolbelt. These scripts/docs are intentionally local-only
-# and should not ship with the addon or be pushed to GitHub.
+# Local developer toolbelt: nothing below tools/ is versioned unless a rule
+# below re-includes it or it is already tracked. The Classic gate, its
+# manifests and the smokes it runs are tracked; a new file directly in tools/
+# needs `git add -f`.
 tools/
-# Versioned input for the fail-closed Retail-to-Classic ownership contract.
 !/tools/
 /tools/*
 !/tools/classic-owned-addon-paths.txt
 !/tools/classic-retail-overrides.tsv
-# Verification suite (smokes, static checks, Assistant release gate). Runs on
-# this machine only; CI is packaging-only and never invokes these.
-# The Menu2 search index generator and the ledger it loads are NOT in this
-# list: both are tracked so a clean clone can regenerate the two index files
-# (see CLASSIC_PROTOTYPE.md, "Regenerating the Menu2 search index").
+!/tools/classic-addon-tombstones.txt
+!/tools/MenuTest/
+!/tools/search_catalog_harness.lua
+# Smokes: the whole folder is versioned, so a new smoke is added without -f.
+# The gate runs every smoke tools/classic-gate-smokes.tsv lists and fails on a
+# tracked smoke it neither runs nor retires.
+!/tools/tests/
+# Local-only Retail verification scripts; the Classic gate runs only the one
+# smoke below .github/scripts/tests/ that is tracked and listed in
+# tools/classic-gate-smokes.tsv. The Menu2 search index generator and the
+# harness it loads are tracked so a clean clone can regenerate the two index
+# files (see CLASSIC_PROTOTYPE.md, "Regenerating the Menu2 search index").
 .github/scripts/tests/
 .github/scripts/msuf_static_checks.py
-.github/scripts/run_assistant_release_gate.ps1
-.github/scripts/assistant_training_coverage_dispositions.lua
 .github/scripts/blizzard_frame_ownership_smoke.lua
 _local_workflows/
 MidnightSimpleUnitFrames/scripts/
 MidnightSimpleUnitFrames/docs/
-MidnightSimpleUnitFrames/.codex-remote-attachments/
-MidnightSimpleUnitFrames/**/.codex-remote-attachments/
+# Hidden tool and editor folders inside the addon folders: never versioned,
+# never shipped.
+/MidnightSimpleUnitFrames*/**/.*/
 
 # Local planning notes and audit write-ups. Working documents, not product docs:
 # they stay on disk and are never tracked.
-/ASSISTANT_GOAL.md
 /*_AUDIT_*.md
 
 # Local standalone addon worktree; not part of the MSUF repo.

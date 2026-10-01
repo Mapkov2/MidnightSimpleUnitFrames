@@ -289,7 +289,7 @@ do
         env.MSUF_EnsureDB(true)
         M.activeKey = "classpower"
         M.GetClassPowerPreviewSpec = function() return M.ClassPowerPreviewSpecs.rogue_combo end
-        local chunk = assert(loadstring(source .. "\nreturn { fit = ResolvePreviewFit, apply = ApplyPreviewZoom }", "@preview-fit-test"))
+        local chunk = assert(loadstring(source .. "\nreturn { fit = ResolvePreviewFit, apply = ApplyPreviewZoom, samples = RenderExtraSamples, animate = RefreshClassPowerAnimation }", "@preview-fit-test"))
         setfenv(chunk, env)
         local geometry = chunk("MidnightSimpleUnitFrames_Options", ns)
         local parent = env.CreateFrame("Frame", nil, env.UIParent)
@@ -305,6 +305,196 @@ do
         box:Refresh()
         assert(box._msufCPPreviewAnim.classFrame and box._msufCPPreviewAnim.classFrame:IsShown(),
             flavor .. ": enabled class resource is missing from the menu preview")
+        -- Samples are menu-owned and are rebuilt from current configuration.
+        local b, player = env.MSUF_DB.bars, env.MSUF_DB.player
+        local power=env.CreateFrame("Frame",nil,box.stage);power:SetSize(220,8)
+        power.fill=power:CreateTexture();power.fill:SetSize(158,8)
+        local classFrame=box._msufCPPreviewAnim.classFrame
+        env.MSUF_PlayerPowerManaOverrideActive=true;player.playerPowerSource="MANA"
+        env.UnitClass=function() return "Warrior","WARRIOR" end
+        -- The sample reads the specialization like the live builder does
+        -- (C_SpecializationInfo first). The deprecated global exists only with
+        -- the loadDeprecationFallbacks CVar and must not decide it.
+        local liveSpec=3
+        env.C_SpecializationInfo={GetSpecialization=function() return liveSpec end}
+        env.GetSpecialization=function() return 3 end
+        b.showIgnorePain=true;b.ignorePainTimeMarker=true
+        b.showArcaneWindow=true;b.manaUpcomingCost=true;b.manaRegenPause=true;b.manaGainPulse=true
+        -- The regeneration strips need the duration API; this fixture has it.
+        env.C_DurationUtil=setmetatable({CreateDuration=function() return World.Stub end},{__index=World.Stub})
+        local regen=flavor=="Forever" or flavor=="Vanilla" or flavor=="TBC"
+        b.resourceMarks={{target="CLASS",mode="PERCENT",value=50,mark=true,width=3,color={.2,.4,.6}},
+            {target="PRIMARY",resource="MANA",mode="PERCENT",value=60,mark=true,color={.8,.2,.1}}}
+        geometry.samples(box,b,player,{key="warrior_whirlwind",classToken="WARRIOR",mode="segmented",token="RAGE",segments=100,value=70},classFrame,power)
+        assert(box.resourceSamples.COST:IsShown(),flavor..": mana cost sample missing")
+        assert((box.resourceSamples.PAIN and box.resourceSamples.PAIN:IsShown() or false)==(flavor=="Mainline"),flavor..": Ignore Pain eligibility wrong")
+        do
+            local warrior={key="warrior_whirlwind",classToken="WARRIOR",mode="segmented",token="RAGE",segments=100,value=70}
+            liveSpec=2
+            geometry.samples(box,b,player,warrior,classFrame,power)
+            assert(not box.resourceSamples.PAIN or not box.resourceSamples.PAIN:IsShown(),
+                flavor..": Ignore Pain sample shown for a non-Protection spec (deprecated GetSpecialization decided it)")
+            env.C_SpecializationInfo=false;env.GetSpecialization=function() return 3 end
+            geometry.samples(box,b,player,warrior,classFrame,power)
+            assert((box.resourceSamples.PAIN and box.resourceSamples.PAIN:IsShown() or false)==(flavor=="Mainline"),
+                flavor..": Ignore Pain sample lost the global fallback where C_SpecializationInfo is missing")
+            env.C_SpecializationInfo={GetSpecialization=function() return liveSpec end}
+            liveSpec=3
+            geometry.samples(box,b,player,warrior,classFrame,power)
+        end
+        assert((box.resourceSamples.FIVE and box.resourceSamples.FIVE:IsShown() or false)==regen,flavor..": regeneration pause sample eligibility wrong")
+        assert((box.resourceSamples.TICK and box.resourceSamples.TICK:IsShown() or false)==regen,flavor..": mana return pulse sample eligibility wrong")
+        assert(box.resourceSampleMarks[1]:IsShown() and box.resourceSampleMarks[2]:IsShown(),"configured marks missing")
+        local cost=box.resourceSamples.COST
+        local additions,removals=0,0
+        cost.fill.AddMaskTexture=function() additions=additions+1 end
+        cost.fill.RemoveMaskTexture=function() removals=removals+1 end
+        power._msufCPPreviewHasShape=true;power._msufCPPreviewShapeAxis="VERTICAL"
+        power.fill:SetTexture("Interface\\Buttons\\WHITE8X8")
+        geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
+        assert(cost.costMasked and additions==1 and cost:GetWidth()==power:GetWidth(),"shaped cost sample mask/layout missing")
+        geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
+        assert(additions==1,"shape mask repeatedly reattached")
+        power._msufCPPreviewHasShape=false;power._msufCPPreviewShapeAxis=nil
+        geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
+        assert(not cost.costMasked and removals==1,"shape mask leaked into normal host")
+        b.resourceMarks={{target="CLASS",mode="PERCENT",value=50,threshold=true,color={.2,.4,.6}}}
+        geometry.samples(box,b,player,{key="mage_arcane",classToken="MAGE",mode="segmented",token="ARCANE_CHARGES",segments=4,value=3},classFrame,power)
+        local first=classFrame.segments[1];local oldPaint=first.SetVertexColor;local painted
+        first.SetVertexColor=function(self,r,g,blue,a) painted={r,g,blue};return oldPaint(self,r,g,blue,a) end
+        local cp=M.ClassPowerPreview;local oldValue=cp.AnimatedValue
+        cp.AnimatedValue=function() return 3 end;box._animationEnabled=true
+        assert(geometry.animate(box) and painted[1]==.2 and painted[2]==.4,"animation erased configured threshold color")
+        cp.AnimatedValue=function() return 1 end
+        assert(geometry.animate(box) and not(painted[1]==.2 and painted[2]==.4),"threshold ignored changed animated value")
+        cp.AnimatedValue=oldValue;first.SetVertexColor=oldPaint;box._animationEnabled=false
+        local oldRGBA=first.GetVertexColor
+        first.GetVertexColor=function() return 1,1,1,.37 end
+        first.SetVertexColor=function(_,_,_,_,a) assert(a==.37,"threshold replaced segment alpha") end
+        M.ClassPowerStackPreview.UpdateSampleThresholds(box)
+        first.GetVertexColor=oldRGBA;first.SetVertexColor=oldPaint
+        power.fill.GetVertexColor=function() return .1,.2,.3,.45 end
+        local powerPaint
+        power.fill.SetVertexColor=function(_,r,g,blue,a) powerPaint={r,g,blue,a} end
+        b.resourceMarks={{target="PRIMARY",resource="MANA",mode="PERCENT",value=50,threshold=true,color={.9,.8,.7}}}
+        power.fill:SetWidth(160)
+        geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
+        assert(powerPaint[1]==.9 and powerPaint[4]==.45,"power threshold/alpha missing")
+        power.fill:SetWidth(40);M.ClassPowerStackPreview.UpdateSampleThresholds(box)
+        assert(powerPaint[1]==.1 and powerPaint[2]==.2 and powerPaint[4]==.45,"power threshold color remained after crossing")
+        -- One eligibility rule: a Protection warrior previewing Arcane Charges
+        -- sees no Arcane window sample (live shows it only for an Arcane mage).
+        geometry.samples(box,b,player,{key="mage_arcane",classToken="MAGE",token="ARCANE_CHARGES",segments=4,value=3},classFrame,power)
+        assert(not box.resourceSamples.ARCANE or not box.resourceSamples.ARCANE:IsShown(),
+            flavor..": Arcane window sample shown for a player who is not an Arcane mage")
+        env.UnitClass=function() return "Mage","MAGE" end;liveSpec=2
+        geometry.samples(box,b,player,{key="mage_arcane",classToken="MAGE",token="ARCANE_CHARGES",segments=4,value=3},classFrame,power)
+        assert(not box.resourceSamples.ARCANE or not box.resourceSamples.ARCANE:IsShown(),
+            flavor..": Arcane window sample shown for a Frost mage")
+        liveSpec=1
+        b.arcaneWindowColor={.11,.22,.33};b.arcaneWindowWarnColor={.44,.55,.66};b.arcaneWindowWarnSeconds=3
+        geometry.samples(box,b,player,{key="mage_arcane",classToken="MAGE",token="ARCANE_CHARGES",segments=4,value=3},classFrame,power)
+        assert((box.resourceSamples.ARCANE and box.resourceSamples.ARCANE:IsShown() or false)==(flavor=="Mainline"),"Arcane window eligibility wrong")
+        assert(not box.resourceSamples.PAIN or not box.resourceSamples.PAIN:IsShown(),"old class sample leaked")
+        if flavor=="Mainline" then
+            -- Live colours (MSUF_CP_ExtraAuras): the window colour on the bar,
+            -- the warning colour on a text below the warning seconds, plain
+            -- text when the warning is off (0 seconds).
+            local function RGB(region, getter) local r,g,bl=region[getter](region);return r,g,bl end
+            local sr,sg,sb=RGB(box.resourceSamples.ARCANE.fill,"GetVertexColor")
+            assert(sr==.11 and sg==.22 and sb==.33,"Arcane window sample bar is not the live window colour")
+            sr,sg,sb=RGB(box.resourceSamples.ARCANE.center,"GetTextColor")
+            assert(sr==.44 and sg==.55 and sb==.66,"Arcane window sample text below the warning seconds is not the live warning colour")
+            b.arcaneWindowWarnSeconds=0
+            geometry.samples(box,b,player,{key="mage_arcane",classToken="MAGE",token="ARCANE_CHARGES",segments=4,value=3},classFrame,power)
+            sr,sg,sb=RGB(box.resourceSamples.ARCANE.center,"GetTextColor")
+            assert(sr==1 and sg==1 and sb==1,"Arcane window sample text keeps the warning colour with the warning off")
+        end
+        b.arcaneWindowColor,b.arcaneWindowWarnColor,b.arcaneWindowWarnSeconds=nil,nil,nil
+        env.UnitClass=function() return "Warrior","WARRIOR" end;liveSpec=3
+        do
+            -- Resource marks on the power bar follow the live target: the
+            -- player's real power type and its maximum for ABSOLUTE marks,
+            -- drawn on OVERLAY sublevel 7 like MSUF_CP_ResourceMarks.
+            player.playerPowerSource="AUTO";env.MSUF_PlayerPowerManaOverrideActive=nil
+            env.UnitPowerType=function(unit) assert(unit=="player");return 1,"RAGE" end
+            env.UnitPowerMax=function(unit,power) assert(unit=="player" and power==1);return 120 end
+            b.resourceMarks={{target="PRIMARY",resource="RAGE",mode="PERCENT",value=50,mark=true,color={.3,.3,.3}},
+                {target="PRIMARY",resource="ENERGY",mode="PERCENT",value=40,mark=true,color={.4,.4,.4}},
+                {target="PRIMARY",mode="ABSOLUTE",value=30,mark=true,color={.5,.5,.5}}}
+            geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
+            local shown=0
+            for _,texture in ipairs(box.resourceSampleMarks) do if texture:IsShown() then shown=shown+1 end end
+            assert(shown==2,flavor..": power marks did not follow the real power type (Rage + an ABSOLUTE mark expected, "..shown.." shown)")
+            local rage,absolute=box.resourceSampleMarks[1],box.resourceSampleMarks[2]
+            local _,_,_,rageX=rage:GetPoint(1)
+            assert(math.abs((tonumber(rageX) or -1)-power:GetWidth()*.5)<.01,flavor..": the Rage mark is not at 50%")
+            local _,_,_,absoluteX=absolute:GetPoint(1)
+            assert(math.abs((tonumber(absoluteX) or -1)-power:GetWidth()*30/120)<.01,flavor..": the ABSOLUTE mark ignored UnitPowerMax")
+            local layer,sublevel=rage:GetDrawLayer()
+            assert(layer=="OVERLAY" and sublevel==7,flavor..": power marks are not on OVERLAY sublevel 7 ("..tostring(layer).." "..tostring(sublevel)..")")
+            env.UnitPowerType,env.UnitPowerMax=nil,nil
+            player.playerPowerSource="MANA";env.MSUF_PlayerPowerManaOverrideActive=true
+        end
+        b.manaUpcomingCost=false;b.manaRegenPause=false;b.manaGainPulse=false;b.showArcaneWindow=false;b.resourceMarks={}
+        geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
+        for _,frame in pairs(box.resourceSamples) do assert(not frame:IsShown(),"disabled sample leaked") end
+        for _,texture in ipairs(box.resourceSampleMarks) do assert(not texture:IsShown(),"removed mark leaked") end
+        do
+            -- Client reads per sample repaint, counted on the APIs themselves.
+            local reads = {}
+            local function Counted(name, fn)
+                return function(...) reads[name] = (reads[name] or 0) + 1; if fn then return fn(...) end end
+            end
+            local function Reads(name) return reads[name] or 0 end
+            local function Clear() for name in pairs(reads) do reads[name] = nil end end
+            local unitClass, specInfo, showPain = env.UnitClass, env.C_SpecializationInfo, b.showIgnorePain
+            env.UnitClass = Counted("class", unitClass)
+            env.C_SpecializationInfo = { GetSpecialization = Counted("spec", specInfo and specInfo.GetSpecialization) }
+            env.UnitPowerType = Counted("powerType", function() return 3, "ENERGY" end)
+            env.UnitPowerMax = Counted("powerMax", function() return 100 end)
+            local warrior = {key="warrior_whirlwind",classToken="WARRIOR",mode="segmented",token="RAGE",segments=100,value=70}
+            -- Both extra samples off (their default): the player's class and
+            -- specialization are not read.
+            b.showIgnorePain, b.showArcaneWindow = false, false
+            Clear(); geometry.samples(box,b,player,warrior,classFrame,power)
+            assert(Reads("class") == 0 and Reads("spec") == 0, string.format(
+                "%s: the extra samples read the class %d and the specialization %d times with both samples off",
+                flavor, Reads("class"), Reads("spec")))
+            -- No mark on the power bar (none, or class marks only): its power
+            -- type and maximum are not read; several power marks read them once.
+            assert(Reads("powerType") + Reads("powerMax") == 0, string.format(
+                "%s: a sample repaint without power marks read the power type %d and maximum %d times",
+                flavor, Reads("powerType"), Reads("powerMax")))
+            b.resourceMarks={{target="CLASS",mode="PERCENT",value=50,mark=true,color={.2,.4,.6}}}
+            Clear(); geometry.samples(box,b,player,warrior,classFrame,power)
+            assert(Reads("powerType") + Reads("powerMax") == 0, flavor..": class-only marks read the power bar's type or maximum")
+            b.resourceMarks={{target="PRIMARY",mode="PERCENT",value=40,mark=true},{target="PRIMARY",mode="ABSOLUTE",value=30,mark=true}}
+            Clear(); geometry.samples(box,b,player,warrior,classFrame,power)
+            assert(Reads("powerMax") == 1, string.format("%s: two power marks read the power maximum %d times (once expected)", flavor, Reads("powerMax")))
+            -- A repaint keeps the marks on the draw layer they were created on
+            -- (MakeTexture: OVERLAY 7) instead of setting it again.
+            local layerWrites = 0
+            for _,texture in ipairs(box.resourceSampleMarks) do
+                rawset(texture, "SetDrawLayer", function(self, ...) layerWrites = layerWrites + 1; return getmetatable(self).__index.SetDrawLayer(self, ...) end)
+            end
+            geometry.samples(box,b,player,warrior,classFrame,power)
+            assert(layerWrites == 0, string.format("%s: a sample repaint set the marks' draw layer %d times", flavor, layerWrites))
+            for _,texture in ipairs(box.resourceSampleMarks) do
+                rawset(texture, "SetDrawLayer", nil)
+                if texture:IsShown() then
+                    local layer, sublevel = texture:GetDrawLayer()
+                    assert(layer == "OVERLAY" and sublevel == 7, flavor..": a power mark left OVERLAY sublevel 7")
+                end
+            end
+            env.UnitClass, env.C_SpecializationInfo, b.showIgnorePain = unitClass, specInfo, showPain
+            env.UnitPowerType, env.UnitPowerMax, b.resourceMarks = nil, nil, {}
+        end
+        b.manaUpcomingCost=true
+        geometry.samples(box,b,player,{key="rogue_combo",classToken="ROGUE"},classFrame,power)
+        assert(box.resourceSamples.COST==cost and cost:IsShown(),"sample was reallocated instead of reused")
+        player.playerPowerSource="AUTO";env.MSUF_PlayerPowerManaOverrideActive=nil;b.manaUpcomingCost=false
+        box:Refresh()
         assert(not box.dragFrame and not box.zoomBar and not box:GetScript("OnKeyDown"),
             flavor .. ": preview still captures movement or manual camera input")
         assert(not box.canvas:GetScript("OnMouseWheel"), "preview wheel still changes the camera")

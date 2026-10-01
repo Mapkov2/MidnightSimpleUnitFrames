@@ -404,15 +404,10 @@ jobs:
             }
           }
 
-      # The authoritative Assistant release gate is part of the local-only
-      # verification suite and no longer runs here. Run it on the dev machine
-      # before tagging a stable release, where the Assistant is promised to be
-      # complete.
-
       - name: Build AddOns zip
         shell: pwsh
         run: |
-          # Fail-closed helper stages MidnightSimpleUnitFrames plus MidnightSimpleUnitFrames_Assistant.
+          # Fail-closed helper stages the Core and Options addons.
           & "./.github/scripts/build_release_package.ps1" -ReleaseVersion $env:RELEASE_VERSION -OutputDirectory "dist"
 
       - name: Write GitHub release notes
@@ -800,3 +795,4 @@ jobs:
           $result = Invoke-RestMethod -Method Post -Uri "https://wow.curseforge.com/api/projects/$projectId/upload-file" -Headers $headers -Form $form
           $fileId = if ($result -and $result.id) { $result.id } else { "(unknown file id)" }
           Write-Host "Uploaded $($zip.FullName) to CurseForge project $projectId as $env:RELEASE_NAME / $env:RELEASE_VERSION ($env:CF_RELEASE_TYPE, retail $retailPatch, file $fileId)."
+

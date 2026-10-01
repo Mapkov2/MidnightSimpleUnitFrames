@@ -36,7 +36,6 @@ _G.MSUF_DB = {
         showBoss = true,
         shared = {
             showWeaponEnchants = true,
-            clickThroughAuras = true,
             showTooltip = true,
             appearanceIconShapes = { buff = "CIRCLE", debuff = "RECTANGLE" },
             appearanceIconStyles = {
@@ -255,9 +254,27 @@ local function FilteredAuraSlots(slots, filter)
     end
     return nil, unpack(out)
 end
+-- Token-filter membership checks C_UnitAuras.GetUnitAuraInstanceIDs against a
+-- GetAuraSlots walk until its filter is verified. While the membership checks
+-- below run, a unit/filter pair they model answers that walk from memberSlots;
+-- every walk is counted per filter.
+local memberSlots, memberScans
+local slotFilterCalls = {}
 _G.C_UnitAuras = {
-    GetAuraSlots = function(_, filter)
+    GetAuraSlots = function(unit, filter)
         scanCalls = scanCalls + 1
+        if filter then slotFilterCalls[filter] = (slotFilterCalls[filter] or 0) + 1 end
+        local members = memberSlots and memberSlots[unit] and memberSlots[unit][filter]
+        if members then
+            local scanKey = unit .. "/" .. filter
+            memberScans[scanKey] = (memberScans[scanKey] or 0) + 1
+            local out = {}
+            for i = 1, #members do
+                out[i] = 60000 + members[i]
+                auraBySlot[out[i]] = { auraInstanceID = members[i] }
+            end
+            return nil, unpack(out)
+        end
         if filter and filter:find("HARMFUL", 1, true) then
             return FilteredAuraSlots(harmfulSlots, filter)
         end
@@ -336,7 +353,12 @@ assert(debuff[1]._msufA3CooldownShown == true and debuff[1].Cooldown._shown == t
     "normal target debuff cooldown was hidden by its compiled dispel visual")
 assert(buff[1]._scripts and type(buff[1]._scripts.OnEnter) == "function",
     "Classic aura button tooltip handler missing")
-assert(buff[1]._mouseClickEnabled == false and buff[1]._mouseMotionEnabled == true,
+-- No click-through setting exists on Classic: aura buttons have no click
+-- action and always pass clicks to the unit button, while hover still drives
+-- the tooltip.
+assert(buff[1]._mouseClickEnabled == false and debuff[1]._mouseClickEnabled == false,
+    "a Classic aura button swallowed clicks meant for its unit button")
+assert(buff[1]._mouseMotionEnabled == true,
     "Classic click-through disabled tooltip hover instead of clicks only")
 buff[1]._scripts.OnEnter(buff[1])
 assert(_G.GameTooltip._owner == buff[1] and _G.GameTooltip._anchor == "ANCHOR_CURSOR"
@@ -437,9 +459,12 @@ assert(buff.config.showStealableMarker == true and buff.config.stealableStyle ==
     and buff[1]._msufA3ClassicStealableIcon
     and buff[1]._msufA3ClassicStealableIcon._shown == true,
     "Classic stealable border + icon marker did not render")
-assert(buff[1].Icon._mask ~= nil and buff[1]._msufA3ShapedStyleBorder
-    and buff[1]._msufA3ShapedStyleBorder._shown == true,
-    "Classic shaped aura icon border/mask did not render")
+do -- A 2 px border on a shaped icon draws one ring per pixel, as on Retail.
+    local rings = buff[1]._msufA3ShapedStyleBorders
+    assert(buff[1].Icon._mask ~= nil and rings and #rings == 2
+        and rings[1]._shown == true and rings[2]._shown == true,
+        "Classic shaped aura icon border/mask did not render")
+end
 assert(debuff.config.showDispelTypeBorder == true and debuff.config.showDispelTypeSymbol == true
     and debuff[1]._msufA3DispelOverlay and debuff[1]._msufA3DispelOverlay._shown == true
     and debuff[1]._msufA3DispelTypeSymbol and debuff[1]._msufA3DispelTypeSymbol._shown == true,
@@ -453,11 +478,27 @@ assert(buff[1]._msufA3DurationBar and buff[1]._msufA3DurationBar._shown == true,
 -- with its own OnUpdate drain. Aura 3003: duration 25, expiration 75, now 50.
 assert(buff[1]._msufA3DurationBar._timerDurationObject == nil,
     "Classic duration bar bound an aura duration object")
-assert(buff[1]._msufA3DurationBar._maximum == 25
-    and buff[1]._msufA3DurationBar._value == 25
-    and buff[1]._msufA3DurationBar._scripts
-    and buff[1]._msufA3DurationBar._scripts.OnUpdate ~= nil,
+-- One shared driver animates every shown bar; a bar owns no OnUpdate of its own.
+local durationBar = buff[1]._msufA3DurationBar
+assert(durationBar._maximum == 25 and durationBar._value == 25
+    and (durationBar._scripts == nil or durationBar._scripts.OnUpdate == nil)
+    and namespace.MSUF_Auras3.ClassicVisuals.TimerTracked(durationBar) == true,
     "Classic duration bar did not drive its plain remaining-time animation")
+do
+    local driver
+    for i = 1, #created do
+        local widget = created[i]
+        if widget ~= durationBar and widget._scripts and widget._scripts.OnUpdate then driver = widget end
+    end
+    assert(driver, "Classic duration bars have no shared timer driver")
+    local savedGetTime = _G.GetTime
+    _G.GetTime = function() return 55 end
+    driver._scripts.OnUpdate(driver, 0.06)
+    _G.GetTime = savedGetTime
+    assert(durationBar._value == 20, "the shared timer driver did not advance the duration bar: "
+        .. tostring(durationBar._value))
+    driver._scripts.OnUpdate(driver, 0.06)
+end
 assert(buff[1].Cooldown._reverse == true, "Classic cooldown reverse setting was not applied")
 assert(frame._msufA3ClassicDispelSymbolsActive == true
     and frame._msufA3ClassicDispelSymbolHost and frame._msufA3ClassicDispelSymbolHost._shown == true,
@@ -542,9 +583,14 @@ do
     assert(not OverlayActive() and frame._msufA3DispelOverlayActive ~= true,
         "Classic DISPEL_TYPE overlay matched a debuff without a dispel type")
     assert(not SymbolsActive(), "Classic DISPEL_TYPE symbols matched a debuff without a dispel type")
-    assert((typelessOverlay == nil or typelessOverlay._shown == false)
-        and (typelessSymbol == nil or typelessSymbol._shown == false),
-        "Classic per-aura dispel border marked a debuff without a dispel type")
+    -- The per-aura type border paints an untyped debuff in the None colour,
+    -- as Blizzard's Classic AuraUtil.SetAuraBorderColor does; no type symbol.
+    local noneColor = typelessOverlay and typelessOverlay._vertexColor
+    assert(typelessOverlay and typelessOverlay._shown == true and noneColor
+        and noneColor[1] == 0.80 and noneColor[2] == 0 and noneColor[3] == 0,
+        "Classic per-aura dispel border lost the None colour of a debuff without a dispel type")
+    assert(typelessSymbol == nil or typelessSymbol._shown == false,
+        "Classic per-aura dispel symbol marked a debuff without a dispel type")
 
     auraBySlot[202] = {
         auraInstanceID = 4302, spellId = 900032, name = "Magic Harmful Target",
@@ -908,6 +954,8 @@ local groupBuff = assert(groupFrame._msufA3State.lanes.buff, "Classic group buff
 local groupDebuff = assert(groupFrame._msufA3State.lanes.debuff, "Classic group debuff lane missing")
 assert(groupBuff.visible == 1 and groupBuff[1].auraInstanceID == 7101,
     "Classic group Only Mine / Hide Permanent filters did not compose")
+assert(groupBuff[1]._mouseClickEnabled == false,
+    "a Classic group aura button swallowed clicks meant for the secure unit button")
 assert(groupDebuff.visible == 1 and groupDebuff[1].auraInstanceID == 8101,
     "Classic group debuff Only Mine / Hide Permanent filters did not compose")
 
@@ -1062,19 +1110,13 @@ auraBySlot[103] = {
 helpfulSlots[2] = 103
 
 _G.MSUF_DB.auras3.perUnit.target.filters = { buffs = { enabled = true, raid = true }, debuffs = { enabled = true } }
-local tokenScans = {}
-_G.C_UnitAuras.GetUnitAuraInstanceIDs = function(_, filter)
-    tokenScans[filter] = (tokenScans[filter] or 0) + 1
-    if filter == "HELPFUL|RAID" then return { 7008 } end
-    return {}
-end
+slotFilterCalls["HELPFUL|RAID"] = nil
 assert(namespace.MSUF_Auras3.RequestScope("target", "render-smoke-cold-retail-filter") == true,
     "Classic dormant Retail filter apply did not run")
 assert(buff.visible == 2 and buff[1].auraInstanceID == 7007 and buff[2].auraInstanceID == 7008,
     "Classic dormant Retail filter changed visibility or player-first ordering")
-assert((tokenScans["HELPFUL|RAID"] or 0) == 0,
+assert((slotFilterCalls["HELPFUL|RAID"] or 0) == 0,
     "Classic runtime still scanned a dormant Retail filter token")
-_G.C_UnitAuras.GetUnitAuraInstanceIDs = nil
 _G.MSUF_DB.auras3.perUnit.target.filters = { buffs = { enabled = true }, debuffs = { enabled = true } }
 helpfulSlots[2] = nil
 auraBySlot[103] = nil
@@ -1223,13 +1265,20 @@ local memberIDs = {
     target = { ["HELPFUL|PLAYER"] = { 7007 }, ["HARMFUL|PLAYER"] = { 7201 } },
     player = { ["HELPFUL|PLAYER"] = { 9101 }, ["HARMFUL|PLAYER"] = { 9201, 9202 } },
 }
-local membershipScans = {}
+local membershipScans, membershipWalks = {}, {}
+memberSlots, memberScans = memberIDs, membershipWalks
+-- Every rebuild asks the instance-ID list once (one membership scan); pairs the
+-- checks do not model answer from the harness slots, so both sources agree.
 _G.C_UnitAuras.GetUnitAuraInstanceIDs = function(unit, filter)
     local scanKey = unit .. "/" .. filter
     membershipScans[scanKey] = (membershipScans[scanKey] or 0) + 1
-    local ids = memberIDs[unit] and memberIDs[unit][filter] or {}
-    local out = {}
-    for i = 1, #ids do out[i] = ids[i] end
+    local ids, out = memberIDs[unit] and memberIDs[unit][filter], {}
+    if ids then
+        for i = 1, #ids do out[i] = ids[i] end
+        return out
+    end
+    local slots = { select(2, FilteredAuraSlots(filter:find("HARMFUL", 1, true) and harmfulSlots or helpfulSlots, filter)) }
+    for i = 1, #slots do out[i] = auraBySlot[slots[i]].auraInstanceID end
     return out
 end
 local MEMBERSHIP_QUERIES = {
@@ -1291,7 +1340,14 @@ AssertMembership({ "7007", "7201", "9101", "9202" }, { 4, 4, 2, 2 }, "token memb
 namespace.MSUF_Auras3.BumpRuntimeConfig()
 registered.Update(frame, "UNIT_AURA", "target", { updatedAuraInstanceIDs = { 7007 } })
 AssertMembership({ "7007", "7201", "9101", "9202" }, { 5, 5, 2, 2 }, "token membership after a target config apply")
+-- Each filter walked its slots once, on its first rebuild, to verify the list;
+-- every later rebuild, on either unit, cost the one list call alone.
+assert(membershipWalks["target/HELPFUL|PLAYER"] == 1 and membershipWalks["target/HARMFUL|PLAYER"] == 1
+    and membershipWalks["player/HELPFUL|PLAYER"] == nil and membershipWalks["player/HARMFUL|PLAYER"] == nil,
+    "Classic token membership kept walking aura slots after its instance-ID list was verified")
 _G.C_UnitAuras.GetUnitAuraInstanceIDs = nil
+memberSlots, memberScans = nil, nil
+for slot in pairs(auraBySlot) do if slot > 60000 then auraBySlot[slot] = nil end end
 
 -- A deferred flush consumes its queue only as work completes. A Lua error while
 -- applying one scope must keep that scope queued and PLAYER_REGEN_ENABLED

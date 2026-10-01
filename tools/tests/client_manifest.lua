@@ -54,7 +54,10 @@ function Manifest.Paths(repo, flavor, locale, gameType)
         local source = file:read("*a"); file:close()
         local directory = assert(path:match("^(.*)/"))
         if path:match("%.xml$") then
-            for child in source:gmatch('<[%w:]+%s+file="([^"]+)"') do visit(directory .. "/" .. child) end
+            for tag, child in source:gmatch('<([%w:]+)%s+file="([^"]+)"') do
+                tag = tag:match("([^:]+)$")
+                if tag == "Script" or tag == "Include" then visit(directory .. "/" .. child) end
+            end
         else
             for line in source:gmatch("[^\r\n]+") do
                 local reference = Manifest.TocReference(line, locale, gameType)

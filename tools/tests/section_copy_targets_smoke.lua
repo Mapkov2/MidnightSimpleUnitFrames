@@ -282,6 +282,29 @@ Check(#captured.targets == 2 and captured.targets[1].value == "party" and captur
 Check(captured.targetOff("raid") == true and captured.targetOff("party") == false, "Group: targetOff must follow the scope's enabled switch")
 Check(captured.sections.sorting.fields:find("sortAlphabeticalWithinRole", 1, true) ~= nil,
     "Group: section copy must include the alphabetical role setting")
+-- A consolidated sizing section must copy/reset the dimensions, percentages,
+-- exact raid overrides and icon resize choices together, without layout rules.
+do
+    local conf = {frameScaleMode="auto",frameScaleManual=110,tier10Width=150,
+        tier20Height=44,tier25Growth="UP",tier40Position=true,tier40X=30}
+    local keys = {}
+    for _, key in ipairs(Shared.SectionFieldKeys(captured.sections.scaling, conf, {})) do keys[key]=true end
+    for _, key in ipairs({"width","height","spacing","frameScaleMode","frameScaleManual",
+        "scaleAt10","scaleAt20","scaleAt25","scaleOver25","layoutTiersEnabled","excludeHiddenGroups",
+        "tier10Width","tier20Height","tier25Growth","tier40Position","tier40X",
+        "autoScaleIndicatorsOnResize","autoScaleAurasOnResize","autoScaleTrackedOnResize"}) do
+        Check(keys[key], "Group sizing copy/reset lost " .. key)
+    end
+    Check(not keys.growth and not keys.centerSolo and not keys.collapseEmptyGroups,
+        "Group sizing copy/reset unexpectedly includes layout behavior")
+    local layout = {}
+    for _, key in ipairs(Shared.SectionFieldKeys(captured.sections.layout_advanced, conf, {})) do layout[key]=true end
+    Check(layout.growth and layout.centerSolo and layout.collapseEmptyGroups and layout.smallRaidAsParty,
+        "Group layout copy/reset lost layout rules")
+    Check(not layout.width and not layout.height and not layout.spacing,
+        "Group layout copy/reset still duplicates sizing")
+end
+
 groupEnabled.raid = nil
 Check(captured.targetOff("raid") == true, "Group: a scope without an enabled value is off, as its page shows it")
 
@@ -312,5 +335,27 @@ groupConfigs.mythicraid.sortAlphabeticalWithinRole = false
 Check(copyGroup("raid", "mythicraid", { health = true }) == true
     and groupConfigs.mythicraid.sortAlphabeticalWithinRole == false,
     "Group Copy To: another category unexpectedly copied role alphabetization")
+
+-- The same shared popup supports action bars selecting several destinations,
+-- while scalar callers retain their existing exclusive selection.
+do
+    function frameMethods:SetActive(on) self.active = on end
+    M.Format = string.format
+    local selection = 2
+    local popup = Shared.MakeScopeCopyPopup(NewFrame(), {
+        targets = { 1, 2, 3 }, targetWidth = 48,
+        sourceKey = function() return 1 end,
+        selectedTarget = function() return selection end,
+    })
+    popup.Show()
+    local buttons = popup.GetPopup()._targetBtns
+    Check(not buttons[1].active and buttons[2].active and not buttons[3].active, "scalar target selection regressed")
+    selection = { [2] = true, [3] = true }
+    popup.Refresh()
+    Check(not buttons[1].active and buttons[2].active and buttons[3].active, "multiple targets did not stay active")
+    selection = {}
+    popup.Refresh()
+    Check(not buttons[2].active and not buttons[3].active, "cleared targets stayed active")
+end
 
 print("section_copy_targets_smoke: ok (popup, " .. #CLIENTS .. " clients, group)")

@@ -252,6 +252,7 @@ end
 manifest.LoadSelected(repo, flavor, namespace, {
     "State/MSUF_FirstLoad.lua",
     "Kernel/MSUF_Require.lua",
+    "Kernel/MSUF_Boundary.lua",
     "State/MSUF_StateHelpers.lua",
     "State/MSUF_ProfileCodec.lua",
 })
@@ -259,6 +260,8 @@ manifest.LoadSelected(repo, flavor, namespace, {
 -- Stub: State/MSUF_Defaults.lua owns MSUF_EnsureDB and pulls in the whole
 -- defaults stack. Imports only need the call to exist.
 function MSUF_EnsureDB() end
+-- The import stages its candidate through the same defaults owner.
+function MSUF_NormalizeProfileDefaults(profile) return profile end
 -- Stub: ProfileRuntime.Apply fans out to live frames. Count the calls instead.
 local runtimeApplies = 0
 namespace.ProfileRuntime = {

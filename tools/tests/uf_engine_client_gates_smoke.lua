@@ -9,9 +9,11 @@
 -- flavor's real load graph and pins both sides of every gate:
 --
 --   PvP context   Classic has no War Mode: the context follows the player's PvP
---                 flag, the driver listens to the flag events and recompiles in
---                 combat. Mainline keeps Retail's War Mode driver, which never
---                 recompiles in combat.
+--                 flag, the driver listens to the flag events, the unit and group
+--                 compilers build the indicator whenever it is configured and a
+--                 context flip repaints it in place, in combat too (a recompile
+--                 would wait for combat to end). Mainline keeps Retail's War Mode
+--                 driver, which never recompiles in combat.
 --   Unit support  Classic compiles a unit its client cannot produce disabled;
 --                 Mainline compiles every unit as configured.
 --   Raid manager  Classic's hidden-by-default manager parents the raid container,
@@ -41,7 +43,11 @@ local function ResetPvP()
     pvp.flagged, pvp.ffa, pvp.timer, pvp.instance, pvp.warMode = false, false, false, "none", false
 end
 ResetPvP()
-env.UnitIsPVP = function(unit) return unit == "player" and pvp.flagged end
+-- Units other than the player that exist and are PvP-flagged (the indicator
+-- section below fills it); the core captures both APIs at load.
+local flaggedUnits = {}
+env.UnitExists = function(unit) return flaggedUnits[unit] == true end
+env.UnitIsPVP = function(unit) return (unit == "player" and pvp.flagged) or flaggedUnits[unit] == true end
 env.UnitIsPVPFreeForAll = function(unit) return unit == "player" and pvp.ffa end
 env.IsPVPTimerRunning = function() return pvp.timer end
 env.IsInInstance = function() return pvp.instance ~= "none", pvp.instance end
@@ -73,6 +79,37 @@ local classic = client.Family == "Classic"
 Check(classic == (world.client.isClassic == true), "client family " .. tostring(client.Family) .. " does not match the matrix")
 local UF = assert(world.core.UF, "no MSUF.UF")
 local Config = assert(UF.Config, "no UF.Config")
+
+---------------------------------------------------------------------------
+-- What a hidden frame misses
+---------------------------------------------------------------------------
+-- A hidden frame's events are suspended, so every element the core routes
+-- frame events for must be reseeded when the frame shows again: by the identity
+-- plan, the forced runtime plan or the OnShow replay (UF.reshowElements). An
+-- element with none of them shows stale state after a hide, as the stance text
+-- did. The exemptions own their reshow themselves.
+do
+    local OWN_RESHOW = {
+        Auras = "native AuraContainer (Mainline) and the Classic OnShow aura refresh",
+        GroupCornerIndicators = "group frames reseed through the lifecycle refresh on OnShow",
+        GroupStatusRuntime = "group frames reseed through the lifecycle refresh on OnShow",
+        GroupVisuals = "group frames reseed through the lifecycle refresh on OnShow",
+        GroupRangeFade = "group frames reseed through the lifecycle refresh on OnShow",
+    }
+    Check(type(UF.EventElementAllowed) == "function" and type(UF.reshowElements) == "table",
+        "the core no longer publishes its event-element predicate or the OnShow replay set")
+    for _, name in ipairs(UF.elementOrder) do
+        if UF.EventElementAllowed(name) and OWN_RESHOW[name] == nil then
+            Check(UF.identityElements[name] == true or UF.forceUpdateElements[name] == true
+                or UF.reshowElements[name] == true,
+                "element " .. name .. " has frame events but nothing reseeds it after a hide")
+        end
+    end
+    for _, name in ipairs({ "StanceIndicator", "RestingIndicator" }) do
+        Check(UF.elements[name] ~= nil and UF.reshowElements[name] == true,
+            name .. " must be registered and replayed on OnShow")
+    end
+end
 
 ---------------------------------------------------------------------------
 -- PvP context driver
@@ -117,10 +154,15 @@ ResetPvP(); pvp.instance = "party"; pvp.flagged = true
 Check(Context() == false, "dungeons must close the PvP context even when flagged")
 
 -- Driver reaction: the flag flips mid-combat on Classic, so its driver
--- recompiles there; Retail's driver never recompiles in combat.
+-- refreshes the context there; Retail's driver never refreshes in combat.
+-- refreshes counts context refreshes that did work.
 local refreshes = 0
-local refreshElements = UF.RefreshElements
-UF.RefreshElements = function() refreshes = refreshes + 1 end
+local refreshContext = UF.RefreshPVPIndicatorContext
+UF.RefreshPVPIndicatorContext = function(...)
+    local didWork = refreshContext(...)
+    if didWork then refreshes = refreshes + 1 end
+    return didWork
+end
 local handler = assert(driver.scripts and driver.scripts.OnEvent, "the PvP context driver has no OnEvent script")
 ResetPvP()
 Context()
@@ -130,7 +172,7 @@ handler(driver, classic and "UNIT_FACTION" or "ZONE_CHANGED_NEW_AREA", classic a
 world.widgets:SetCombat(false)
 if classic then
     Check(refreshes == 1 and UF.PVPIndicatorContextActive() == true,
-        "getting flagged in combat must recompile the Classic PvP context at once")
+        "getting flagged in combat must refresh the Classic PvP context at once")
     refreshes = 0
     pvp.flagged = false
     handler(driver, "PLAYER_FLAGS_CHANGED", "party1")
@@ -138,7 +180,7 @@ if classic then
         "another unit's flag change must not touch the Classic PvP context")
     handler(driver, "PLAYER_FLAGS_CHANGED", "player")
     Check(refreshes == 1 and UF.PVPIndicatorContextActive() == false,
-        "the player's own flag change must recompile the Classic PvP context")
+        "the player's own flag change must refresh the Classic PvP context")
 else
     Check(refreshes == 0, "the Mainline PvP context driver must never recompile in combat")
 end
@@ -168,15 +210,131 @@ if classic then
     handler(driver, "UNIT_FACTION", "party1")
     Check(refreshes == 0, "another unit's UNIT_FACTION must still be ignored")
     handler(driver, "UNIT_FACTION", "player")
-    Check(refreshes == 1, "the player's own UNIT_FACTION must still recompile")
+    Check(refreshes == 1, "the player's own UNIT_FACTION must still refresh the context")
 end
-UF.RefreshElements = refreshElements
+UF.RefreshPVPIndicatorContext = refreshContext
 ResetPvP()
 Context()
 
 ---------------------------------------------------------------------------
+-- PvP indicators on real frames, getting flagged in combat
+---------------------------------------------------------------------------
+-- Real compiled specs applied through the real UF core. The bug: Classic folded
+-- the context into the compile and recompiled through UF.RefreshElements and
+-- GF.RefreshVisuals, which both defer in combat, so a player flagged mid-fight
+-- saw no PvP icon until combat ended.
+do
+    flaggedUnits.target, flaggedUnits.party1 = true, true
+    local refreshElements = UF.RefreshElements
+    local deferred = 0
+    UF.RefreshElements = function(...)
+        if world.widgets:IsInCombat() then deferred = deferred + 1 end
+        return refreshElements(...)
+    end
+    ResetPvP()
+    Context()
+    Config.Refresh()
+    local spec = assert(Config.GetSpec("target"), "no compiled target spec")
+    local target = env.CreateFrame("Button", nil, env.UIParent)
+    target.MSUFUnitKey = "target"
+    UF.ApplySpec(target, spec, nil, { StatusIndicators = true, PVPIndicator = true })
+    local icon = target.pvpIndicatorIcon
+    local pvpSpec = spec.status and spec.status.pvp
+    if classic then
+        Check(pvpSpec and pvpSpec.enabled == true and pvpSpec.contextGated == true,
+            "Classic must compile the target PvP indicator outside the PvP context (context-gated at runtime)")
+        Check(icon ~= nil and icon:IsShown() ~= true, "the target PvP icon must stay hidden outside the PvP context")
+    else
+        Check(pvpSpec and pvpSpec.enabled == false and pvpSpec.contextGated == nil,
+            "Mainline keeps Retail's compile: no PvP indicator outside the PvP context")
+    end
+
+    local GF = world.core.GF
+    local party
+    if classic and GF and type(GF.CompileSpec) == "function" then
+        party = env.CreateFrame("Button", nil, env.UIParent)
+        party.MSUFUnitKey = "party1"
+        local partySpec = GF.CompileSpec("party", party, "party1")
+        local partyPvp = partySpec and partySpec.status and partySpec.status.pvp
+        Check(partyPvp and partyPvp.enabled == true and partyPvp.contextGated == true
+            and partySpec.status.runtimePVP == true,
+            "Classic must compile the party PvP icon outside the PvP context (context-gated at runtime)")
+        UF.ApplySpec(party, partySpec, nil, GF.GROUP_APPLY_MASK)
+    end
+
+    -- PLAYER_REGEN_DISABLED, then lockdown, then the flag flips mid-fight.
+    world.widgets:SetCombat(true)
+    pvp.flagged = true
+    handler(driver, classic and "UNIT_FACTION" or "ZONE_CHANGED_NEW_AREA", classic and "player" or nil)
+    if classic then
+        Check(icon:IsShown() == true, "getting flagged in combat must show the target PvP icon at once")
+        if party then
+            Check(party.pvpIndicatorIcon and party.pvpIndicatorIcon:IsShown() == true,
+                "getting flagged in combat must show the party PvP icon at once")
+        end
+        Check(deferred == 0, "the Classic context flip must not queue a recompile for after combat")
+        pvp.flagged = false
+        handler(driver, "PLAYER_FLAGS_CHANGED", "player")
+        Check(icon:IsShown() ~= true, "losing the flag in combat must hide the target PvP icon at once")
+        if party then
+            Check(party.pvpIndicatorIcon:IsShown() ~= true, "losing the flag in combat must hide the party PvP icon")
+        end
+    end
+    world.widgets:SetCombat(false)
+    UF.RefreshElements = refreshElements
+    flaggedUnits.target, flaggedUnits.party1 = nil, nil
+    ResetPvP()
+    Context()
+end
+
+---------------------------------------------------------------------------
 -- Unit support
 ---------------------------------------------------------------------------
+-- Config.Refresh compiles only the client's managed units, so asking for a
+-- unit the client lacks used to recompile every unit spec on each call.
+do
+    local refresh = Config.Refresh
+    local compiles = 0
+    Config.Refresh = function(...) compiles = compiles + 1; return refresh(...) end
+    refresh()
+    for _, token in ipairs({ "boss1", "arena1", "focus", "arena5" }) do
+        if not UF.IsManagedUnit(token) then
+            Config.GetSpec(token)
+            Config.GetSpec(token)
+            Check(compiles == 0, "Config.GetSpec(\"" .. token .. "\") on a unit this client lacks recompiled "
+                .. compiles .. " times")
+        end
+    end
+    local saved = Config.specs.target
+    Config.specs.target = nil
+    Check(Config.GetSpec("target") ~= nil and compiles == 1,
+        "a managed unit without a spec must compile once, counted " .. compiles)
+    Config.specs.target = Config.specs.target or saved
+    Config.Refresh = refresh
+end
+
+-- The portrait detail compiler is a separate, optional module: a load without
+-- it (a partial graph, a harness) must leave both spec compilers working.
+do
+    local core = world.core
+    local details = core.PortraitDetails
+    core.PortraitDetails = nil
+    local unitOk, unitError = pcall(Config.Refresh)
+    local GF = core.GF
+    local groupOk, groupError = true, nil
+    if GF and type(GF.CompileSpec) == "function" then
+        if type(GF.InvalidateCompiledSpecs) == "function" then GF.InvalidateCompiledSpecs() end
+        local frame = env.CreateFrame("Button", nil, env.UIParent)
+        frame.MSUFUnitKey = "party1"
+        groupOk, groupError = pcall(GF.CompileSpec, "party", frame, "party1")
+    end
+    core.PortraitDetails = details
+    if GF and type(GF.InvalidateCompiledSpecs) == "function" then GF.InvalidateCompiledSpecs() end
+    Check(unitOk, "the unit spec compiler fails without the portrait detail module: " .. tostring(unitError))
+    Check(groupOk, "the group spec compiler fails without the portrait detail module: " .. tostring(groupError))
+    Config.Refresh()
+end
+
 local db = Config.GetDB()
 local order, lookup = UF.unitOrder, UF.unitLookup
 local forced = {}

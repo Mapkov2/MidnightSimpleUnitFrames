@@ -47,6 +47,7 @@ if failure ~= nil then
     if #world.failures > 1 then extra = " (" .. (#world.failures - 1) .. " further failure(s))" end
     error(flavor .. " load failed in " .. failure.file .. extra .. "\n        " .. failure.message, 0)
 end
+Check(world.core.OptionsLODReady == true, flavor .. ": Options readiness failed: " .. tostring(world.core.OptionsLODLoadError))
 Check(#world.corePaths > 200 and #world.optionsPaths > 100,
     flavor .. " load graph is unexpectedly small: " .. #world.corePaths .. " core, "
         .. #world.optionsPaths .. " Options")

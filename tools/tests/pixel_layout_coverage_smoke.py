@@ -13,6 +13,10 @@ from pathlib import Path
 
 ROOT = Path(sys.argv[1]).resolve()
 POLICY = ROOT / "tools/pixel-layout-exclusions.json"
+# Files no TOC loads (listed Retail mirrors and retained owned files) create no UI;
+# the gate proves they stay unloaded.
+UNLOADED = {line.split("\t", 1)[0] for line in
+            (ROOT / "tools/classic-unloaded-addon-lua.tsv").read_text(encoding="utf-8").splitlines()[1:] if line}
 CREATORS = {"CreateFrame", "CreateTexture", "CreateFontString", "CreateLine"}
 SETTERS = {"SetBackdrop", "SetNormalTexture", "SetPushedTexture", "SetHighlightTexture",
            "SetDisabledTexture", "SetThumbTexture"}
@@ -69,7 +73,7 @@ def scan():
     for name in paths:
         if not name.startswith(("MidnightSimpleUnitFrames/", "MidnightSimpleUnitFrames_Options/")):
             continue
-        if "/Locales/" in name or "/tools/" in name:
+        if "/Locales/" in name or "/tools/" in name or name in UNLOADED:
             continue
         if "/Libs/" in name and "/Libs/MSUFUnitFrames/" not in name:
             continue

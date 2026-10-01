@@ -13,8 +13,9 @@
 --    have added its two bookkeeping keys) is completed exactly as a new profile's is; an
 --    owner with any customized key or value, and every complete owner, stays byte-for-byte
 --    as it is, and a profile with nothing to repair is not even stamped.
--- 3. bars.showArcaneSoul has no reader on any client. A fresh profile no longer carries it;
---    a saved one keeps what it has.
+-- 3. bars.showArcaneSoul is a former name: only the class power extras read it, to carry a
+--    saved value to bars.showArcaneWindow (MSUF_CP_ResourceExtras.lua). A fresh profile no
+--    longer carries it; the defaults pass leaves a saved one as it is.
 local repo = assert(arg[1], "repository root is required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg[2], "client flavor required (Vanilla|TBC|Mists)")
 

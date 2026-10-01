@@ -74,6 +74,18 @@ assert(frame.petHappinessIndicatorIcon.texture == "Interface\\PetPaperDollFrame\
 assert(frame.petHappinessIndicatorIcon.width == 24 and frame.petHappinessIndicatorIcon.height == 24, "wrong default size")
 assert(frame.petHappinessIndicatorIcon.point[1] == "RIGHT" and frame.petHappinessIndicatorIcon.point[4] == -7 and frame.petHappinessIndicatorIcon.point[5] == -4, "wrong default right-side placement")
 assert(frame.petHappinessIndicatorIcon.alpha == 0.8, "status alpha was not applied")
+assert(frame.petHappinessIndicatorHolder.parent == frame, "without a visual root the icon lives on the frame")
+-- "Show only below 100% health" fades the frame's visual root; the icon must be
+-- on it, like the status holders, to fade with the pet frame.
+local rooted = {
+    MSUFUnitKey = "pet",
+    MSUFSpec = { status = status },
+    Health = frame.Health,
+    _msufHealthVisualRoot = CreateFrame("Frame"),
+}
+element.Apply(rooted, rooted.MSUFSpec)
+assert(rooted.petHappinessIndicatorHolder and rooted.petHappinessIndicatorHolder.parent == rooted._msufHealthVisualRoot,
+    "the Happiness icon must live on the pet frame's visual root")
 
 local expected = {
     [1] = { 0.375, 0.5625, 0, 0.359375 },
@@ -108,20 +120,6 @@ assert(#lifecycle == 3 and lifecycle[1] == "UNIT_HAPPINESS" and lifecycle[2] == 
 
 assert(MSUF_RequestPetHappinessIndicatorRefresh("pet") == true, "Happiness refresh bridge failed")
 assert(refreshedUnit == "pet" and refreshedElements[1] == "PetHappinessIndicator", "Happiness refresh target drifted")
-
-local function LoadAssistant(client)
-    local ns = { Client = client, MSUF2 = {}, Assistant = { UnitframeRegistryData = {} } }
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Unitframes_StatusData_Classic.lua"))(
-        "MidnightSimpleUnitFrames_Assistant", ns)
-    for _, spec in ipairs(ns.Assistant.UnitframeRegistryData.STATUS_CONTROL_SPECS or {}) do
-        if spec.value == "statusPetHappiness" then return spec end
-    end
-end
-
-local vanillaSpec = LoadAssistant({ IsVanilla = true })
-assert(vanillaSpec and vanillaSpec.units.pet == true, "Vanilla Assistant Happiness setting missing")
-assert(vanillaSpec.size == "petHappinessIndicatorSize" and vanillaSpec.refresh == "MSUF_RequestPetHappinessIndicatorRefresh", "Assistant Happiness contract drifted")
-assert(LoadAssistant({ IsMists = true }) == nil, "Mists must not expose a Happiness Assistant setting")
 
 local function Read(path)
     local file = assert(io.open(root .. "/" .. path, "rb"))
@@ -202,7 +200,8 @@ do
 end
 
 -- The Classic manifests must load the files the cases above exercise.
-local previewManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Classic.xml")
+-- (The Classic Options TOCs name the Retail-named unit preview manifest.)
+local previewManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview.xml")
 local searchManifest = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Classic.xml")
 assert(previewManifest:find('<Script file="MSUF_Menu2_UnitPreview_Specs.lua"/>', 1, true),
     "Classic unit preview manifest must load the shared preview specs")
@@ -226,7 +225,8 @@ assert(options:find("if MSUF.Client ~= nil and MSUF.Client.SupportsPetHappiness 
 -- offers the selector on the Pet page only, and Status Icons Copy To carries the
 -- Happiness keys, exactly where the client supports Pet Happiness.
 local function LoadUnitPage(client)
-    local ns = { Client = client, ExportPublic = function() end, Translate = function(text) return text end,
+    local ns = { Client = client, UF = { GetFrame = function() return nil end },
+        ExportPublic = function() end, Translate = function(text) return text end,
         MSUF2 = { Widgets = {} } }
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua"))(
         "MidnightSimpleUnitFrames_Options", ns)
@@ -288,4 +288,4 @@ local runtimeSource = Read("MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF
 assert(not runtimeSource:find("OnUpdate", 1, true), "Happiness runtime must not poll")
 assert(not runtimeSource:find("NewTicker", 1, true), "Happiness runtime must not use a ticker")
 
-print("Classic Pet Happiness runtime, support matrix, preview, copy, and Assistant smoke passed")
+print("Classic Pet Happiness runtime, support matrix, preview, and copy smoke passed")

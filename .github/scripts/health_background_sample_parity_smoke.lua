@@ -82,6 +82,8 @@ local function Run(sourceRoot)
   local ns={UF={Clamp01=function(v) return math.max(0,math.min(1,v)) end,
     RegisterElement=function(_,element) health=element end}}
   local function Load(path) assert(loadfile(base..path))("MSUF",ns) end
+  Load("Kernel/MSUF_Bootstrap.lua")
+  Load("Libs/MSUFUnitFrames/MSUF_UF_Layers.lua")
   Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
   Load("Kernel/MSUF_Util.lua") -- BarBackgroundRuntime aliases MSUF.Util.EnsureDBSafe
   Load("Runtime/MSUF_BarBackgroundRuntime.lua")

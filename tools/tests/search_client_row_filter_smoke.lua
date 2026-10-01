@@ -77,6 +77,8 @@ Check(unsupportedAt and loopAt and unsupportedAt < loopAt,
 Check(addBody:find("if not covered[identity] and not unsupported[identity]\n", 1, true),
     "the static record loop no longer drops rows the client does not support")
 local _, clientReads = query:gsub("%-%-[^\n]*", ""):gsub("MSUF%.Client", "")
+Check(not query:find("bars.showIgnorePain", 1, true) and not query:find("bars.manaRegenPause", 1, true),
+    "MSUF_Menu2_Search_IndexQuery.lua repeats the resource extras client list")
 Check(clientReads == 1, "MSUF_Menu2_Search_IndexQuery.lua must read MSUF.Client in exactly one place, found "
     .. clientReads)
 
@@ -115,6 +117,7 @@ for _, flavor in ipairs(flavors) do
     local main = world.core
     local client = Check(main.Client, flavor .. ": no MSUF.Client")
     local M = Check(main.MSUF2, flavor .. ": Menu2 did not load")
+    M.frame = { IsShown = function() return true end }
     local api = Check(M.Search and M.Search._CoreAPI, flavor .. ": the search core API did not load")
     local blob = Check(M.Search.StaticIndexBlob, flavor .. ": the static index blob is gone before any search")
     world.env.InCombatLockdown = function() return false end
@@ -195,6 +198,24 @@ for _, flavor in ipairs(flavors) do
             if rec.searchIdentity == identity then found = true end
         end
         Check(found, flavor .. ": search hides universal menu setting " .. control[2])
+    end
+    -- Client-only resource extras (Ignore Pain and the Arcane Surge window on
+    -- Midnight, the regeneration pause and return pulse on Classic Era, TBC and
+    -- WoW Forever) surface exactly where their page builds them; the page owns
+    -- that list, search keeps no copy of it.
+    local extras = Check(M.ResourceExtrasPage and M.ResourceExtrasPage.ClientOnlySettings,
+        flavor .. ": the resource extras page publishes no client-only settings")
+    local allExtras, builtExtras = extras()
+    Check(next(allExtras) ~= nil, flavor .. ": no client-only resource extra is declared")
+    local offeredSettings = {}
+    for _, rec in ipairs(api.GetSearchRecords()) do
+        local settingKey = rec.exactTarget and rec.exactTarget.settingKey
+        if settingKey then offeredSettings[settingKey] = true end
+    end
+    for settingKey in pairs(allExtras) do
+        Check((offeredSettings[settingKey] == true) == (builtExtras[settingKey] == true),
+            flavor .. ": search " .. (offeredSettings[settingKey] and "offers " or "misses ") .. settingKey
+            .. " although its page " .. (builtExtras[settingKey] and "builds" or "does not build") .. " it")
     end
     main.Client = client
 end

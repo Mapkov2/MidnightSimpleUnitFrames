@@ -20,6 +20,7 @@ end
 local inGroup, inRaid = true, false
 local partyUnits = { "player", "party1", "party2" }
 local raidCount = 0
+local rosterGroups = {}
 
 local function NewRegion(parent)
     local frame = { parent = parent, attributes = {}, shown = false, width = 0, height = 0, hooks = {} }
@@ -29,7 +30,7 @@ local function NewRegion(parent)
     function frame:GetWidth() return self.width end
     function frame:GetHeight() return self.height end
     function frame:ClearAllPoints() end
-    function frame:SetPoint() end
+    function frame:SetPoint(...) self.point = {...} end
     function frame:EnableMouse() end
     function frame:SetClampedToScreen() end
     function frame:SetParent(value) self.parent = value end
@@ -154,10 +155,12 @@ local function Load(isForever)
         -- Flat raid headers build a name list, which reads unit tokens.
         UF = { IsUnitToken = function(unit) return type(unit) == "string" and unit ~= "" end },
         GF = {},
+        Secrets = { UnitMissing = function(unit) return unit == "party3" or unit == "party4" end },
     }
     local GF = ns.GF
     GF.GetConf = function(kind) return kind == "party" and conf.party or conf.raid end
-    GF.GetPriorityConf = function() return { spacing = 2, growth = "DOWN", anchorMode = "FREE" } end
+    local priorityConf = { spacing = 2, growth = "DOWN", anchorMode = "FREE" }
+    GF.GetPriorityConf = function() return priorityConf end
     GF.GetScaledFrameMetrics = function(kind)
         local c = GF.GetConf(kind)
         return c.width, c.height, c.spacing
@@ -178,10 +181,10 @@ _G.IsInGroup = function() return inGroup end
 _G.IsInRaid = function() return inRaid end
 _G.GetNumGroupMembers = function() return inRaid and raidCount or #partyUnits end
 _G.GetNumSubgroupMembers = function() return #partyUnits - 1 end
-_G.GetRaidRosterInfo = function(index) return "Member" .. index, nil, 1 end
+_G.GetRaidRosterInfo = function(index) return "Member" .. index, nil, rosterGroups[index] or 1, nil, nil, index == 1 and "PRIEST" or "MAGE" end
 _G.UnitName = function(unit) return tostring(unit) end
 _G.UnitGUID = function(unit) return tostring(unit) .. "-guid" end
-_G.UnitClass = function() return "Priest", "PRIEST" end
+_G.UnitClass = function(unit) return "Class", unit == "party1" and "MAGE" or unit == "party2" and "WARRIOR" or "PRIEST" end
 _G.UnitGroupRolesAssigned = function() return "DAMAGER" end
 _G.issecretvalue = function() return false end
 -- Kernel/MSUF_Util.lua: protected frames refuse the call in combat.
@@ -214,6 +217,24 @@ local function CheckSnippet(header, width, height, label)
     Check(header.hooks.OnShow == nil, label .. " must not hook OnShow to pre-create buttons")
 end
 
+local SecureSort = assert(loadfile(repo .. "/tools/tests/secure_group_sort.lua"))()
+local function RaidRoster()
+    local members = {}
+    for index = 1, raidCount do
+        local name, _, subgroup, _, _, class = GetRaidRosterInfo(index)
+        members[index] = { unit = "raid" .. index, name = name, subgroup = subgroup, class = class, assignedRole = "DAMAGER" }
+    end
+    return { kind = "RAID", members = members }
+end
+local function PartyRoster()
+    local members = {}
+    for index, unit in ipairs(partyUnits) do
+        local _, class = UnitClass(unit)
+        members[index] = { unit = unit, name = UnitName(unit), class = class, assignedRole = "DAMAGER" }
+    end
+    return { kind = "PARTY", members = members }
+end
+
 local function RunClient(isForever)
     local client = isForever and "Forever" or "other clients"
     inGroup, inRaid, raidCount = true, false, 0
@@ -231,19 +252,62 @@ local function RunClient(isForever)
     inRaid, raidCount = true, 12
     local raid = assert(GF.SetupHeader("raid", "raid"), client .. ": raid header did not build")
     CheckSnippet(raid, 80, 32, client .. " raid header")
+    conf.raid.sortClassPriority, conf.raid.classOrder = true, "MAGE,PRIEST"
+    raid = GF.SetupHeader("raid", "raid")
+    -- Class priority is a native CLASS grouping: no frozen name list.
+    local raidShown = SecureSort.Order(raid, RaidRoster())
+    Check(raid:GetAttribute("nameList") == nil and raid:GetAttribute("groupBy") == "CLASS"
+        and raidShown:match("^Member2,") and raidShown:match(",Member1$"),
+        client .. ": class priority did not refine raid index order")
+    conf.raid.sortClassPriority = false
 
     conf.raid.preserveRaidGroups = true
     raid = assert(GF.SetupHeader("raid", "raid"), client .. ": preserved raid headers did not build")
     Check(raid._msufRaidGroupIndex == 1, client .. ": preserved raid groups must build subgroup headers")
     CheckSnippet(raid, 80, 32, client .. " preserved raid header")
+    raidCount = 2; rosterGroups[1], rosterGroups[2] = 1, 3
+    conf.raid.collapseEmptyGroups = true
+    GF.SetupHeader("raid", "raid")
+    local first, third = GF.raidGroupHeaders[1], GF.raidGroupHeaders[3]
+    Check(GF.raidGroupHeaders[2]._msufPreservedGroupAllowed == false, client .. " empty group not collapsed")
+    Check(third.point[4] == 81, client .. " occupied group must move into adjacent slot")
+    conf.raid.collapseEmptyGroups = false
+    GF.SetupHeader("raid", "raid")
+    Check(third.point[4] == 162, client .. " disabling collapse must restore subgroup slot")
+    rosterGroups[2] = 5
+    GF.IsMythicRaidContext = function() return true end
+    conf.raid.hideMythicGroupsFiveToEight = true
+    GF.SetupHeader("raid", "mythicraid")
+    Check(GF.raidGroupHeaders[5]._msufPreservedGroupAllowed == false, client .. " Mythic group 5 not hidden")
+    conf.raid.hideMythicGroupsFiveToEight = false
+    GF.IsMythicRaidContext = function() return false end
+    rosterGroups[1], rosterGroups[2] = nil, nil
     conf.raid.preserveRaidGroups = false
     inRaid, raidCount = false, 0
+
+    conf.party.sortClassPriority = true
+    conf.party.classOrder = "WARRIOR,MAGE,PRIEST"
+    -- Header captures the native UnitClass function at load, so the fixture's
+    -- class lookup below supplies distinct public classes from the start.
+    party = GF.SetupHeader("party", "party")
+    Check(party:GetAttribute("nameList") == nil and party:GetAttribute("groupBy") == "CLASS"
+        and SecureSort.Order(party, PartyRoster()) == "party2,party1,player", client .. ": class priority did not order the party")
+    conf.party.sortClassPriority = false
+    party = GF.SetupHeader("party", "party")
+    Check(party:GetAttribute("nameList") == nil, client .. ": disabling class priority retained filtering name list")
 
     local priority = GF.SetupPriorityHeader("party", "player,party1", 2)
     Check(priority ~= nil, client .. ": Priority header did not build")
     Check(type(priority:GetAttribute("initialConfigFunction")) == "string", client .. " Priority header must carry the secure snippet")
     Check(priority:GetAttribute("_initialAttributeNames") == nil and priority.hooks.OnShow == nil,
         client .. " Priority header must not bring back the snippet-free path")
+    GF.GetPriorityFrameMetrics = function() return 110, 25 end
+    GF.GetPriorityConf().unitsPerColumn = 2
+    priority = GF.SetupPriorityHeader("party", "player,party1,party2,party3,party4", 5)
+    Check(priority:GetAttribute("initial-width") == 110 and priority:GetAttribute("initial-height") == 25,
+        client .. " independent Priority size missing")
+    Check(priority:GetAttribute("unitsPerColumn") == 2 and priority:GetAttribute("maxColumns") == 3,
+        client .. " Priority grid did not wrap into multiple columns")
 end
 
 RunClient(true)

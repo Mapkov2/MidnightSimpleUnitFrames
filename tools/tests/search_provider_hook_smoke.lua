@@ -66,6 +66,7 @@ Check(failure == nil, "Mainline did not boot: " .. tostring(failure and failure.
     .. tostring(failure and failure.message))
 local main = world.core
 local M = Check(main.MSUF2, "Menu2 did not load")
+M.frame = { IsShown = function() return true end }
 local api = Check(M.Search and M.Search._CoreAPI, "the search core API did not load")
 local combat = false
 world.env.InCombatLockdown = function() return combat end
@@ -76,7 +77,10 @@ Check(type(api.GetSearchProviderCache) == "function", "the search core API lost 
 Check(M.RegisterSearchProvider(nil, function() end) == false and M.RegisterSearchProvider("", function() end) == false
     and M.RegisterSearchProvider("x", "not a function") == false, "RegisterSearchProvider accepted a bad argument")
 
--- No provider: searches work and nothing is collected.
+-- No provider: isolate the generic contract from the native profile editor.
+M.RegisterSearchProvider("profile-editors", nil)
+M.RegisterSearchAvailability("profile-editors", nil)
+-- Searches work and nothing is collected.
 local before = api.SearchPages("castbar")
 Check(#before > 0, "baseline search found nothing")
 api.MarkSearchIndexDirty()
@@ -393,6 +397,27 @@ Check(opened and anchored and exact and clicks == 0,
 M.SelectPage, M.cache[PAGE], M.activeKey = oldSelect, oldEntry, oldActive
 M.UnregisterSearchWidget(actionWidget)
 M.RegisterSearchProvider("actions", nil)
+
+---------------------------------------------------------------------------
+-- 11. A merged record keeps the live control's own words
+---------------------------------------------------------------------------
+-- A provider row long enough to fill a record's haystack on its own must not
+-- push the built control's words out when both merge.
+local filler = {}
+for i = 1, 96 do filler[i] = string.format("qzxfiller%03d", i) end
+M.RegisterSearchProvider("long-words", function()
+    return { { pageKey = PAGE, kind = "toggle", label = "Qzx Long Merge", settingKey = "labsuite.lab.longmerge",
+        keywords = filler, help = string.rep("qzxproviderhelp ", 30) } }
+end)
+local longWidget = world.env.CreateFrame("Frame")
+M.RegisterSearchWidget(longWidget, { pageKey = PAGE, kind = "toggle", label = "Qzx Long Merge",
+    settingKey = "labsuite.lab.longmerge", help = "qzxliveonly keeps its own words" })
+local liveHit = Find(api.SearchPages("qzxliveonly"), function(rec) return rec.label == "Qzx Long Merge" end)
+Check(liveHit and not liveHit.provided and liveHit.providerRow, "the merged record lost the live control's own words")
+Check(Find(api.SearchPages("qzxfiller001"), function(rec) return rec == liveHit end),
+    "the merged record lost the provider's words")
+M.UnregisterSearchWidget(longWidget)
+M.RegisterSearchProvider("long-words", nil)
 
 print("search_provider_hook_smoke: ok (" .. VALID .. " rows, " .. MALFORMED .. " malformed skipped; lazy, "
     .. "cached across rebuilds, recollected on language change; live control wins; raising provider isolated; "

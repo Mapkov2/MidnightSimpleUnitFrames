@@ -120,7 +120,7 @@ for i = 1, #ROUTES do
     Check(firstLoad:IsFirstRunPending() == false, method .. "(" .. step .. ") must resolve the first run")
 end
 
--- An Assistant undo can restore the saved status to "pending" after "Not now";
+-- An undo can restore the saved status to "pending" after "Not now";
 -- the welcome stays hidden for that session, and so does the Suite's wait.
 firstLoad = LoadLifecycle(SHOWS, nil)
 firstLoad:DeferForSession("not_now")
@@ -367,7 +367,7 @@ local suiteHeight = Build()
 local kicker = Check(FindFont("MSUF SUITE"), "the Suite card must show its kicker")
 local card = kicker._parent
 Check(suiteHeight == plainHeight + 10 + card._height,
-    "the Suite card must sit between the Assistant hero and the collapsed cards, pushing them down by its height")
+    "the Suite card must sit below the Dashboard search area and above the collapsed cards")
 Check(FindFont("MSUF Suite v1.4.0"), "the Suite card must show the Suite version")
 local status = Check(FindFont("5 of 12 modules on"), "the Suite card must show how many modules are on")
 Check(FindFont(ABOUT), "the Suite card must explain what the Suite is in one line")

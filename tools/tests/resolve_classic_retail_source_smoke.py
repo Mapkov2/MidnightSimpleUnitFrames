@@ -38,9 +38,12 @@ TOOL = ROOT / ".github" / "scripts" / "resolve_classic_retail_source.py"
 CORE = "MidnightSimpleUnitFrames"
 OPTIONS = "MidnightSimpleUnitFrames_Options"
 ASSISTANT = "MidnightSimpleUnitFrames_Assistant"
+TOMBSTONES_MANIFEST = "tools/classic-addon-tombstones.txt"
 CORE_TOC = CORE + "/" + CORE + ".toc"
 OPTIONS_TOC = OPTIONS + "/" + OPTIONS + ".toc"
 ASSISTANT_TOC = ASSISTANT + "/" + ASSISTANT + ".toc"
+ASSISTANT_CLASSIC_TOC = ASSISTANT + "/" + ASSISTANT + "_Mainline.toc"
+BRIDGE = OPTIONS + "/Shell/Menu2/MSUF_AssistantBridge.lua"
 MIRRORED = CORE + "/Kernel/Mirrored.lua"
 PATCHED = CORE + "/Kernel/Patched.lua"
 DELETED = CORE + "/Kernel/Deleted.lua"
@@ -144,6 +147,7 @@ def build_retail(path):
     files = {
         CORE_TOC: "## Version: 1\nKernel\\Mirrored.lua\n",
         OPTIONS_TOC: TOC_ONE,
+        BRIDGE: "assistant bridge\n",
         ASSISTANT_TOC: "## Title: Assistant\n",
         MIRRORED: "a1\n", PATCHED: "p1\n", DELETED: "d1\n", PAGE: "o1\n",
         "README.md": "r1\n",
@@ -194,19 +198,30 @@ def build_classic(path):
     stream = Stream()
     previous = []
 
-    def state(name, mirrored, patched, page, options_toc=TOC_SIX, extra=None):
+    def state(name, mirrored, patched, page, options_toc=TOC_SIX, extra=None,
+              assistant_tombstone=False, omit=(), tombstone_text=None):
         files = {
             # The core TOC is an override: Classic's own copy, pinned to Retail's (never changing) blob.
             CORE + "/" + CORE + "_Mainline.toc": "## Version: 1\nKernel\\Mirrored.lua\nGame\\Classic\\Owned.lua\n",
             OPTIONS + "/" + OPTIONS + "_Mainline.toc": options_toc,
-            ASSISTANT + "/" + ASSISTANT + "_Mainline.toc": "## Title: Assistant\n",
+            ASSISTANT_CLASSIC_TOC: "## Title: Assistant\n",
             MIRRORED: mirrored, PATCHED: "p Classic\n", PAGE: page, OWNED: OWNED_TEXT,
             # CRLF, as a Windows checkout writes the manifests.
             "tools/classic-retail-overrides.tsv": "%s\t%s\r\n%s\t%s\r\n" % (
                 CORE + "/" + CORE + "_Mainline.toc", blob_id("## Version: 1\nKernel\\Mirrored.lua\n"),
                 PATCHED, blob_id(patched)),
             "tools/classic-owned-addon-paths.txt": OWNED + "\r\n",
+            BRIDGE: "assistant bridge\n",
         }
+        if assistant_tombstone:
+            files.pop(BRIDGE)
+            files.pop(ASSISTANT_CLASSIC_TOC)
+            # The addon line retires the folder; the path line retires the one
+            # Retail file of a mirrored addon that went with it.
+            files[TOMBSTONES_MANIFEST] = tombstone_text if tombstone_text is not None else (
+                "# retired\r\n" + ASSISTANT + "\r\n" + ASSISTANT + "\t" + BRIDGE + "\r\n")
+        for relative in omit:
+            files.pop(relative, None)
         files.update(extra or {})
         stream.commit(name, files, tuple(previous[-1:]))
         previous.append(name)
@@ -220,7 +235,20 @@ def build_classic(path):
     state("k11", "a3\n", "p2\n", "o10\n", extra={ADDED: "n11\n"})
     state("kfolder", "a3\n", "p2\n", "oA\n", extra={ADDED: "n11\n", FOLDER_OF_OWNED: "fa\n"})
     state("kbelow", "a3\n", "p2\n", "oB\n", extra={ADDED: "n11\n", BELOW_OWNED: "fb\n"})
-    state("ktoc", "a3\n", "p2\n", "oT\n", extra={ADDED: "n11\n", EXTRA_TOC: "## Title: Extra\n"})
+    state("ktoc", "a3\n", "p2\n", "oT\n", extra={ADDED: "n11\n", EXTRA_TOC: "## Title: Extra\n"},
+          assistant_tombstone=True)
+    state("kbad-addon-tombstone", "a3\n", "p2\n", "o10\n", assistant_tombstone=True,
+          extra={ASSISTANT_CLASSIC_TOC: "## Title: Assistant\n"})
+    state("kbad-bridge-tombstone", "a3\n", "p2\n", "o10\n", assistant_tombstone=True,
+          extra={BRIDGE: "assistant bridge\n"})
+    # Only the addon line: nothing retires the bridge, so its absence is a mismatch.
+    state("ktomb-addon-only", "a3\n", "p2\n", "o10\n", assistant_tombstone=True,
+          tombstone_text=ASSISTANT + "\n")
+    state("ktomb-malformed", "a3\n", "p2\n", "o10\n", assistant_tombstone=True,
+          tombstone_text=CORE + "\n")
+    # Last on purpose: HEAD of the fixture must stay a valid tree for the error cases.
+    state("ktomb-missing-unrelated", "a3\n", "p2\n", "o10\n", assistant_tombstone=True,
+          omit=(PAGE,))
 
     classic = new_repository(path)
     return classic, stream.write(classic)
@@ -286,6 +314,25 @@ def main():
         expect_none("kbelow", "r15", "owned", BELOW_OWNED,
                     "Retail's file lies below a folder named like the owned path")
         expect_none("ktoc", "r16", "TOCs", "(tree)", "Retail carries a fourth TOC")
+
+        print("modern Assistant tombstones")
+        code, output, errors = resolve(classic, retail, states["kbad-addon-tombstone"])
+        check(code == 1 and output == b"" and "tombstoned addon is present" in errors,
+              "a modern Assistant tombstone rejects a still-present Assistant addon")
+        code, output, errors = resolve(classic, retail, states["kbad-bridge-tombstone"])
+        check(code == 1 and output == b"" and "tombstoned Retail path is present" in errors,
+              "a modern Assistant tombstone rejects a still-present Options bridge")
+        code, output, errors = resolve(classic, retail, states["ktomb-missing-unrelated"])
+        check(code == 2 and output == b"" and ", 1 mismatching path:" in errors
+              and re.search(r"^  missing +%s \(" % re.escape(PAGE), errors, re.M) is not None,
+              "a valid modern tombstone suppresses only its exact bridge, not an unrelated missing Retail path")
+        code, output, errors = resolve(classic, retail, states["ktomb-addon-only"])
+        check(code == 2 and output == b"" and ", 1 mismatching path:" in errors
+              and re.search(r"^  missing +%s \(" % re.escape(BRIDGE), errors, re.M) is not None,
+              "the manifest, not a built-in list, retires the bridge: without its path line it is missing")
+        code, output, errors = resolve(classic, retail, states["ktomb-malformed"])
+        check(code == 1 and output == b"" and "retires a shipped addon" in errors,
+              "a manifest that retires a shipped addon is refused (exit 1)")
 
         print("no match")
         code, output, errors = resolve(classic, retail, states["knone"])

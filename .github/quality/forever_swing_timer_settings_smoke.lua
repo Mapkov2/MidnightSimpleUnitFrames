@@ -14,6 +14,7 @@ for _, name in ipairs({
     "SetMovable", "SetClampedToScreen", "RegisterForDrag", "SetAllPoints",
     "SetJustifyH", "SetBackdropBorderColor", "ClearAllPoints", "SetTextColor", "SetWidth",
     "StopMovingOrSizing", "StartMoving", "SetUpdateInterval", "SetExpiredText", "SetZeroDurationText",
+    "SetTexCoord", "SetHeight",
 }) do methods[name] = noop end
 function methods:SetMinMaxValues(a,b) self.minimum,self.maximum=a,b end
 function methods:GetFrameLevel() return self.level or 1 end
@@ -35,6 +36,7 @@ function methods:SetFont(...) self.font = {...}; return true end
 function methods:SetStatusBarColor(...) self.color = {...} end
 function methods:SetStatusBarTexture(v) self.texture = v end
 function methods:SetTexture(v) self.texture = v end
+function methods:SetBlendMode(v) self.blendMode = v end
 function methods:SetVertexColor(...) self.vertexColor = {...} end
 function methods:SetReverseFill(v) self.reverse = v end
 function methods:SetText(v) self.text = v end
@@ -79,6 +81,7 @@ _G.GetTime = function() return now end
 _G.InCombatLockdown = function() return combat end
 _G.UnitAffectingCombat = function() return combat end
 _G.UnitAttackSpeed = function() return 2, offSpeed, rangedSpeed end
+_G.UnitClass = function() return "Warrior", "WARRIOR" end
 _G.STANDARD_TEXT_FONT = "test-font"
 _G.MSUF_GetFontPath = function() return "global-font" end
 _G.GetCVarBool = function(key) assert(key=="showSwingTimer"); return native end
@@ -104,6 +107,16 @@ _G.C_DurationUtil = {
     end,
 }
 _G.C_StringUtil = { CreateNumericRuleFormatter=function() return {SetBreakpoints=noop} end }
+-- Native Forever surfaces used by the range/queued-attack presentation.
+local nativeRangeChecks={}
+_G.C_SwingTimer={
+    EnableRangeCheck=function(hand,enabled) nativeRangeChecks[hand]=enabled end,
+    IsTargetWithinSwingRange=function() return nil end,
+}
+_G.C_Spell={
+    GetSpellName=function(id) return ({[78]="Heroic Strike",[845]="Cleave",[6807]="Maul"})[id] end,
+    IsCurrentSpell=function() return false end,
+}
 local nativeFrames={}
 for _, name in ipairs({"MainHand","OffHand","Ranged"}) do
     local frame=object()
@@ -146,6 +159,7 @@ assert(ns.MSUF_GetModule("SwingTimers").__msufEnabled, "world entry starts the s
 assert(not native, "native manager must stop receiving swings")
 local main,off,ranged=named.MSUF_SwingTimer_main,named.MSUF_SwingTimer_off,named.MSUF_SwingTimer_ranged
 assert(main:IsShown() and off:IsShown() and not ranged:IsShown(), "both hands by default")
+assert(off.Lane == nil, "the off-hand lane is built only when it is chosen")
 for _,frame in ipairs(nativeFrames) do
     assert(not frame:IsShown() and not frame.receivingSwings, "all Blizzard bars suppressed")
     frame:Show()
@@ -312,7 +326,13 @@ ns.MSUF2={
     GlobalPage={FontValues=function() return {} end},
     ValueTextList=function(...) local list={}; local args={...}; for i=1,#args,2 do list[#list+1]={value=args[i],text=args[i+1]} end; return list end,
     BindBoolWidget=bind,BindDropdownWidget=bind,
+    BindTextInputAt=function(ctx,parent,label,x,y,width,get,set,commitOnBlur,meta)
+        local widget=object(nil,parent);widget.label,widget.commitOnBlur=label,commitOnBlur
+        widget:SetPoint("TOPLEFT",parent,"TOPLEFT",x,y);widget:SetWidth(width)
+        bind(ctx,widget,get,set,meta);return widget
+    end,
     BindNumberWidget=function(ctx,widget,get,set,_,meta) bind(ctx,widget,get,set,meta) end,
+    Format=function(text,...) return string.format(text,...) end,
     RegisterPage=function(key,spec) assert(key=="swingtimers"); page=spec end,
     Refresh=noop,
 }
@@ -320,7 +340,7 @@ assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_
 page.build({SetContentHeight=noop})
 for _,hand in ipairs({"main","off","ranged"}) do
     local targets=shortcuts[sections["swing_"..hand]].getTargets()
-    assert(#targets==4, "exactly one context menu with all four colors per hand")
+    assert(#targets==6, "exactly one context menu with all six colors per hand")
     targets[1].setRGB(.2,.4,.6)
     assert(swing.Get(hand,"color")[2]==.4)
     assert(targets[1].getRGB()==.2, "context color roundtrip")
@@ -335,7 +355,28 @@ for _,hand in ipairs({"main","off","ranged"}) do
     assert(background.values()[1].value=="", "foreground-follow choice is retained")
     assert(controls[hand..".display"] and controls[hand..".direction"] and controls[hand..".textAlign"])
 end
-print("PASS Swing menu: one context color menu per hand, real shared media choice paths, number-only and direction controls")
+for _,key in ipairs({"offhandLane","nextSwingCue"}) do
+    local control=assert(controls["main."..key], key .. " control missing")
+    control.set(false);assert(control.get()==false and swing.Get("main",key)==false, key .. " roundtrip")
+    control.set(true);assert(control.get()==true, key .. " roundtrip")
+end
+for _,hand in ipairs({"main","off","ranged"}) do
+    for _,key in ipairs({"reachCheck","reachOpacity"}) do
+        assert(controls[hand.."."..key], hand .. " " .. key .. " control missing")
+    end
+end
+-- The cue text switch and one text per next-swing attack, labelled with the
+-- client's spell name (the attack's spell ID where the client has no name).
+local cueText=assert(controls["main.nextSwingText"], "the cue text switch is missing")
+cueText.set(true);assert(cueText.get()==true and swing.Get("main","nextSwingText")==true, "cue text switch roundtrip")
+cueText.set(false)
+for id,name in pairs({[78]="Heroic Strike",[845]="Cleave",[6807]="Maul",[2973]="2973"}) do
+    local input=assert(controls["main.nextSwingLabel"..id], "the cue text for "..id.." is missing")
+    assert(input.label:find(name,1,true) and input.commitOnBlur==true, "the cue text for "..id.." is not labelled with its attack")
+    input.set("Go");assert(input.get()=="Go" and swing.Get("main","nextSwingLabel"..id)=="Go", "cue text roundtrip "..id)
+    input.set("");assert(swing.Get("main","nextSwingLabel"..id)=="", "clearing a cue text "..id)
+end
+print("PASS Swing menu: one context menu with six colors per hand, real shared media paths, number-only/direction, off-hand lane, reach, next-swing and per-attack cue text controls")
 
 -- A fresh login with the feature disabled must leave no subscriber behind.
 assert(swing.SetEnabled(false))

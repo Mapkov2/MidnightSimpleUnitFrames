@@ -159,7 +159,12 @@ local function Matches(aura, filter)
 end
 _G.C_UnitAuras = {
     GetAuraSlots = function(unit, filter)
-        api.slots = api.slots + 1
+        -- Token-filter membership checks the instance-ID list below against
+        -- this scan pair until a non-empty agreement verifies the list for its
+        -- filter (every set here stays empty, so it keeps checking); that
+        -- membership walk is not a rescan, only lane scans are.
+        local tokenSet = namespace.MSUF_Auras3 and namespace.MSUF_Auras3._ClassicAuraTokenSet
+        if tokenSet == nil or debug.getinfo(2, "f").func ~= tokenSet then api.slots = api.slots + 1 end
         local list, out = UnitList(unit), {}
         for i = 1, #list do if Matches(list[i], filter) then out[#out + 1] = i end end
         return nil, unpack(out)

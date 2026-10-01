@@ -7,7 +7,7 @@ re-check, a fail-closed guard) or because its result was only tested for truth
 (`ok ~= false`, `DetectDirection and DetectDirection(...)`), so nothing ever
 raised at all.
 
-The rule: compile every Lua file of the three addons with `luac -l -p` and read
+The rule: compile every Lua file of the two shipped addons with `luac -l -p` and read
 the GETGLOBAL instructions out of the bytecode listing - the compiler's own
 answer to "which names are read from the global table", with no regex guessing
 about scope. A read is resolved when it is
@@ -46,7 +46,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 ADDONS = (
     "MidnightSimpleUnitFrames",
     "MidnightSimpleUnitFrames_Options",
-    "MidnightSimpleUnitFrames_Assistant",
 )
 ALLOWLIST = os.path.join(ROOT, "tools", "lua-global-reads.tsv")
 KINDS = frozenset("api namespace frame constant table unit luaenv thirdparty defect "
@@ -232,8 +231,8 @@ def main():
     started = time.time()
     luac = resolve_luac()
     paths = lua_files()
-    if len(paths) < 500:
-        fail("only %d Lua files found under %s; the scan must cover all three addons"
+    if len(paths) < 400:
+        fail("only %d Lua files found under %s; the scan must cover Core and Options"
              % (len(paths), ROOT))
     reads, writes = listing(luac, paths)
     defined = writes | table_definitions(paths)

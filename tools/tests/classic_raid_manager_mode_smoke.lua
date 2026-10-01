@@ -47,6 +47,7 @@ _G.MSUF_NS = {
     GF = {
         GetConf = function(kind) return configs[kind] end,
         GetLiveRaidKind = function() return "raid" end,
+        IsSmallRaidPartyContext = function() return false end,
     },
 }
 _G.CreateFrame = function() return eventFrame end
@@ -225,33 +226,54 @@ GF.GetScaledFrameMetrics = function() return 80, 32, 1 end
 local headersPath = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua"
 assert(loadfile(headersPath))("MidnightSimpleUnitFrames", _G.MSUF_NS)
 
+local SecureSort = assert(loadfile(root .. "/tools/tests/secure_group_sort.lua"))()
+-- The order SecureGroupHeader shows from the published attributes, over this
+-- fixture's raid roster.
+local function Shown(target)
+    local members = {}
+    for index = 1, #groups do
+        if raidNames[index] then
+            members[#members + 1] = { unit = "raid" .. index, name = raidNames[index], subgroup = groups[index],
+                class = "PRIEST", assignedRole = roles[index] }
+        end
+    end
+    return SecureSort.Order(target, { kind = "RAID", members = members })
+end
+
 local header = assert(GF.SetupHeader("raid", "raid"), "Classic raid header did not build")
 assert(header:GetAttribute("auraContainerTemplate") == nil,
     "Classic headers must not request CustomAuraContainerTemplate")
 assert(header:GetAttribute("_msufSortMode") == "INDEX",
     "Classic raid header changed INDEX without Preserve raid groups")
-assert(header:GetAttribute("nameList") == "Member1,Member2,Member3,Member4",
-    "Classic INDEX raid order was not stable")
+-- Native orders keep members who join during combat: no frozen name list.
+assert(header:GetAttribute("nameList") == nil and header:GetAttribute("sortMethod") == "INDEX"
+    and Shown(header) == "Member1,Member2,Member3,Member4",
+    "Classic INDEX raid order was not native and stable")
+-- A member who joins during combat (no header rebuild possible) shows at once.
+groups[5], raidNames[5], roles[5] = 1, "Member5", "DAMAGER"
+assert(Shown(header) == "Member1,Member2,Member3,Member4,Member5", "a member joining in combat got no frame")
+groups[5], raidNames[5], roles[5] = nil, nil, nil
 
 headerConf.preserveRaidGroups = true
 header = assert(GF.SetupHeader("raid", "raid"), "preserved Classic raid header did not rebuild")
 assert(header:GetAttribute("_msufSortMode") == "GROUP",
     "Preserve raid groups did not derive GROUP from INDEX")
-assert(header._msufRaidGroupIndex == 1 and header:GetAttribute("nameList") == "Member2,Member4",
-    "Preserve raid groups did not build the physical subgroup-one header")
+assert(header._msufRaidGroupIndex == 1 and header:GetAttribute("nameList") == nil
+    and header:GetAttribute("groupFilter") == "1" and Shown(header) == "Member2,Member4",
+    "Preserve raid groups did not build the native physical subgroup-one header")
 local secondGroup = assert(GF.raidGroupHeaders and GF.raidGroupHeaders[2],
     "Preserve raid groups did not build the physical subgroup-two header")
-assert(secondGroup._msufRaidGroupIndex == 2
-    and secondGroup:GetAttribute("nameList") == "Member1,Member3",
+assert(secondGroup._msufRaidGroupIndex == 2 and secondGroup:GetAttribute("nameList") == nil
+    and Shown(secondGroup) == "Member1,Member3",
     "Preserve raid groups did not keep subgroup-two members together")
 
 headerConf.sortMode = "ROLE"
 header = assert(GF.SetupHeader("raid", "raid"), "group-role Classic raid header did not rebuild")
 assert(header:GetAttribute("_msufSortMode") == "GROUP_ROLE",
     "Preserve raid groups did not derive GROUP_ROLE from ROLE")
-assert(header:GetAttribute("nameList") == "Member4,Member2"
-    and secondGroup:GetAttribute("nameList") == "Member3,Member1",
-    "Preserved physical raid groups did not apply role order inside each subgroup")
+assert(header:GetAttribute("nameList") == nil and header:GetAttribute("groupBy") == "ASSIGNEDROLE"
+    and Shown(header) == "Member4,Member2" and Shown(secondGroup) == "Member3,Member1",
+    "Preserved physical raid groups did not apply native role order inside each subgroup")
 
 headerConf.preserveRaidGroups = false
 header = assert(GF.SetupHeader("raid", "raid"), "restored Classic raid header did not rebuild")
@@ -266,44 +288,53 @@ roles = { "HEALER", "HEALER", "TANK", "HEALER" }
 headerConf.sortRolesAcrossRaid = false
 headerConf.sortAlphabeticalWithinRole = false
 header = assert(GF.SetupHeader("raid", "raid"))
-assert(header:GetAttribute("nameList") == "Alpha,Zara,Maya,Beta",
+assert(header:GetAttribute("nameList") == nil and Shown(header) == "Alpha,Zara,Maya,Beta",
     "disabled alphabetical option changed the default role order")
 
 headerConf.sortAlphabeticalWithinRole = true
 header = assert(GF.SetupHeader("raid", "raid"))
-assert(header:GetAttribute("nameList") == "Alpha,Beta,Maya,Zara",
+assert(header:GetAttribute("nameList") == nil and header:GetAttribute("sortMethod") == "NAME"
+    and Shown(header) == "Alpha,Beta,Maya,Zara",
     "flat raid did not alphabetize names within each role")
 
 headerConf.sortDescending = true
 header = assert(GF.SetupHeader("raid", "raid"))
-assert(header:GetAttribute("nameList") == "Zara,Maya,Beta,Alpha",
-    "descending raid role order did not reverse the alphabetized nameList")
+assert(header:GetAttribute("sortDir") == "DESC" and Shown(header) == "Zara,Maya,Beta,Alpha",
+    "descending raid role order did not reverse the alphabetized order")
 headerConf.sortDescending = false
 
 headerConf.preserveRaidGroups = true
 header = assert(GF.SetupHeader("raid", "raid"))
 secondGroup = assert(GF.raidGroupHeaders and GF.raidGroupHeaders[2])
-assert(header:GetAttribute("nameList") == "Beta,Maya"
-    and secondGroup:GetAttribute("nameList") == "Alpha,Zara",
+assert(header:GetAttribute("nameList") == nil and Shown(header) == "Beta,Maya"
+    and Shown(secondGroup) == "Alpha,Zara",
     "preserved raid groups did not alphabetize independently within each role")
 
+-- The raid-wide role fill slices one raid order into blocks: a name list.
 headerConf.sortRolesAcrossRaid = true
 header = assert(GF.SetupHeader("raid", "raid"))
 assert(header:GetAttribute("_msufSortMode") == "ROLE"
-    and header:GetAttribute("nameList") == "Alpha,Beta,Maya,Zara",
+    and header:GetAttribute("nameList") == "Alpha,Beta,Maya,Zara"
+    and Shown(header) == "Alpha,Beta,Maya,Zara",
     "raid-wide role order did not alphabetize before filling preserved blocks")
 
+-- Player first inside a role has no native form: a name list.
 headerConf.preserveRaidGroups = false
 headerConf.playerFirstInRole = true
 playerRaidIndex = 1
 header = assert(GF.SetupHeader("raid", "raid"))
-assert(header:GetAttribute("nameList") == "Alpha,Zara,Beta,Maya",
+assert(header:GetAttribute("nameList") == "Alpha,Zara,Beta,Maya" and Shown(header) == "Alpha,Zara,Beta,Maya",
     "player-first precedence was lost within the alphabetized healer role")
 
 playerRaidIndex = nil
 header = assert(GF.SetupHeader("raid", "mythicraid"))
-assert(header:GetAttribute("nameList") == "Alpha,Beta,Maya,Zara",
+assert(Shown(header) == "Alpha,Beta,Maya,Zara",
     "Mythic Raid did not use the same alphabetical role order")
+headerConf.playerFirstInRole = false
+header = assert(GF.SetupHeader("raid", "mythicraid"))
+assert(header:GetAttribute("nameList") == nil and Shown(header) == "Alpha,Beta,Maya,Zara",
+    "Mythic Raid alphabetical role order was not native")
+headerConf.playerFirstInRole = true
 
 raidNames[2] = nil
 header = assert(GF.SetupHeader("raid", "raid"))

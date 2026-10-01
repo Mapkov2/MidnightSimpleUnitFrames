@@ -123,6 +123,20 @@ local function InstallFrameFactory()
         function frame:RegisterUnitEvent(event, unit) self.unitEvents[event] = unit end
         function frame:UnregisterAllEvents() self.events, self.unitEvents = {}, {} end
         function frame:SetScript(name, handler) self.scripts[name] = handler end
+        -- Geometry, visibility and the StatusBar surface the threat plate uses.
+        frame.points, frame.shown = {}, true
+        function frame:ClearAllPoints() self.points = {} end
+        function frame:SetPoint(...) self.points[#self.points + 1] = { ... } end
+        function frame:Show() self.shown = true end
+        function frame:Hide() self.shown = false end
+        function frame:SetAlpha(value) self.alpha = value end
+        function frame:SetStatusBarTexture(texture) self.statusBarTexture = texture end
+        function frame:SetStatusBarColor(r, g, b, a) self.statusBarColor = { r, g, b, a } end
+        function frame:SetMinMaxValues(low, high) self.minValue, self.maxValue = low, high end
+        function frame:SetValue(value)
+            self.value = value
+            self.valueWrites = (self.valueWrites or 0) + 1
+        end
         createdFrames[#createdFrames + 1] = frame
         return frame
     end
@@ -657,10 +671,14 @@ do
     Check(#plate.points == 2 and p1[1] == "TOPLEFT" and p1[2] == sample and p1[3] == "TOPLEFT" and p1[4] == -2 and p1[5] == 1
         and p2[1] == "BOTTOMRIGHT" and p2[2] == sample and p2[3] == "BOTTOMRIGHT" and p2[4] == 2 and p2[5] == -1,
         "the plate must wrap the sample with 2 px at the sides and 1 px above and below")
-    Check(plate.layer == "ARTWORK" and fs.drawLayer == "OVERLAY" and plate.parent == sample.parent
-        and fs.parent == sample.parent, "the plate must draw below the number in the same holder")
-    local c = plate.colorTexture
-    Check(c and c[1] == 0 and c[2] == 0 and c[3] == 0 and Near(c[4], 0.75), "the plate must be black at 75%")
+    local holder = frame.threatIndicatorHolder
+    Check(plate.parent == holder and sample.parent == holder and fs.parent == holder and fs.drawLayer == "OVERLAY"
+        and plate.level == holder.level - 1, "the plate must sit one frame level below the holder that draws the number")
+    local c = plate.statusBarColor
+    Check(plate.statusBarTexture == "Interface\\Buttons\\WHITE8X8" and c and c[1] == 0 and c[2] == 0 and c[3] == 0
+        and Near(c[4], 0.75), "the plate must be black at 75%")
+    Check(plate.maxValue == 1 and plate.minValue < 1 and plate.minValue > 0.99,
+        "the plate must fill from 1 and stay empty below it, where a secret value prints as nothing")
     Check(plate.alpha == 0.9, "the plate must follow the status text alpha")
     Check(sample.font and sample.font[1] == "Fonts\\FRIZQT__.TTF" and sample.font[2] == DEFAULTS.size
         and sample.font[3] == "OUTLINE", "the sample must use the number's font")
@@ -668,15 +686,24 @@ do
 
     threatValue = 42
     element.Update(frame)
-    Check(fs.shown and plate.shown, "a shown number must show its plate")
+    Check(fs.shown and plate.shown and plate.value == 1, "a shown number must show its full plate")
+    local plainWrites = plate.valueWrites
+    threatValue = 43
+    element.Update(frame)
+    Check(plate.valueWrites == plainWrites, "a plain number must not rewrite a full plate")
     threatValue = nil
     element.Update(frame)
     Check(not fs.shown and not plate.shown, "a hidden number must hide its plate")
-    threatValue = Secret()
+    local secret = Secret()
+    threatValue = secret
     element.Update(frame)
     Check(fs.shown and plate.shown, "a secret number must show its plate; nothing is measured")
+    -- The secret itself fills the plate, so a secret zero ("" on the number)
+    -- leaves the plate empty too instead of a dark box without a number.
+    Check(plate.value == secret, "a secret number must size the plate fill itself")
     threatValue = 42
     element.Update(frame)
+    Check(plate.value == 1, "a plain number after a secret one must fill the plate again")
 
     -- Off: the number goes back to its corner and the plate stays out of the way.
     cfg.background = false
@@ -852,6 +879,7 @@ local function CompileStatus(configRelative, namespace, db)
     load("Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua")
     load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
     load("UnitFrames/Engine/MSUF_UF_Shared.lua")
+    load("UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua")
     load(configRelative)
     _G.MSUF_DB = db or { general = {}, player = {}, target = {}, focus = {}, boss = {}, pet = {}, targettarget = {} }
     _G.MSUF_EnsureDB = function() return _G.MSUF_DB end
@@ -963,9 +991,11 @@ do
     local defFn = Check(config:match("\n(local function StatusRegionDef%(.-\nend)\n"), "Group_Config lost StatusRegionDef")
     local threatBlock = Check(config:match("\n  (local threat\n  if MSUF%.Client and MSUF%.Client%.SupportsThreatText == true then\n.-\n  end)\n"),
         "Group_Config lost its gated threat compile")
-    local compile = assert(loadstring("local MSUF, conf = ...\n"
+    local compile = assert(loadstring("local MSUF, conf = ...\nlocal floor = math.floor\n"
         .. "local function Num(value, fallback) return tonumber(value) or fallback end\n"
         .. "local function Layer(value, fallback) return tonumber(value) or fallback end\n"
+        -- CompileStatus resolves the indicator resize ratio once for every region.
+        .. "local resize = 1\n"
         .. regionFn .. "\n" .. regions .. "\n" .. defFn .. "\n" .. threatBlock .. "\nreturn threat"))
     local supported = { Client = { SupportsThreatText = true } }
     local entry = compile(supported, party)
@@ -1104,13 +1134,13 @@ do
     Check(PreviewRows(LoadMainlineClient(false)) == nil, "Midnight: the preview specs gained a threat row")
     Check(PreviewRows(LoadClassicClient("Mists")) == nil, "Mists: the preview specs gained a threat row")
 
-    -- Every client loads these Retail-named files: the Classic menu manifests name
-    -- them too (the Classic copies were collapsed into them).
+    -- Every client loads these Retail-named files: the Classic Options TOCs name
+    -- the Retail-named menu manifests (their Classic copies were removed).
     local MENU = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
     for manifest, script in pairs({
-        ["Preview/MSUF_Menu2_UnitPreview_Classic.xml"] = { "MSUF_Menu2_UnitPreview_Status.lua", "MSUF_Menu2_UnitPreview_Render.lua" },
-        ["MSUF_Menu2_AfterUnitPreview_Classic.xml"] = { "Pages\\MSUF_Menu2_UnitStatusSection.lua" },
-        ["MSUF_Menu2_AfterSearch_Classic.xml"] = { "Pages\\MSUF_Menu2_Unit.lua" },
+        ["Preview/MSUF_Menu2_UnitPreview.xml"] = { "MSUF_Menu2_UnitPreview_Status.lua", "MSUF_Menu2_UnitPreview_Render.lua" },
+        ["MSUF_Menu2_AfterUnitPreview.xml"] = { "Pages\\MSUF_Menu2_UnitStatusSection.lua" },
+        ["MSUF_Menu2_AfterSearch.xml"] = { "Pages\\MSUF_Menu2_Unit.lua" },
     }) do
         local xml = Read(MENU .. manifest)
         for _, file in ipairs(script) do

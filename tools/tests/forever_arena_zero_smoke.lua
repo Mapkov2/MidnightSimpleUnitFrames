@@ -59,7 +59,10 @@ local function LoadGraph(toc)
         local source = Read(path)
         local directory = assert(path:match("^(.*)/"))
         if path:match("%.xml$") then
-            for child in source:gmatch('<[%w:]+%s+file="([^"]+)"') do visit(directory .. "/" .. child) end
+            for tag, child in source:gmatch('<([%w:]+)%s+file="([^"]+)"') do
+                tag = tag:match("([^:]+)$")
+                if tag == "Script" or tag == "Include" then visit(directory .. "/" .. child) end
+            end
         else
             for line in source:gmatch("[^\n]+") do
                 local reference = Manifest.TocReference(line, "enUS")

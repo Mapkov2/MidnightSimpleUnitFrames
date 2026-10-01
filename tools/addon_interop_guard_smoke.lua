@@ -205,7 +205,6 @@ assert(not optionalDeps:lower():find("masque", 1, true),
 local shippedRoots = {
     "MidnightSimpleUnitFrames",
     "MidnightSimpleUnitFrames_Options",
-    "MidnightSimpleUnitFrames_Assistant",
 }
 local pipe = assert(io.popen("git ls-files -- " .. table.concat(shippedRoots, " "), "r"),
     "cannot enumerate shipped MSUF sources")
@@ -243,10 +242,6 @@ end
 local pipeOk, pipeReason, pipeCode = pipe:close()
 assert(pipeOk or pipeCode == 0, "git ls-files failed: " .. tostring(pipeReason or pipeCode))
 
-local router = ReadSource("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRouter.lua")
-assert(router:find("does not register its aura buttons with Masque", 1, true),
-    "Assistant must describe Masque as unsupported by MSUF 6.0")
-
 --- ---------------------------------------------------------------------------
 --- 4. Blizzard's Objective Tracker remains Blizzard-owned.
 --- ---------------------------------------------------------------------------
@@ -273,3 +268,4 @@ assert(not groupEditMode:find('hooksecurefunc("MSUF_SetMSUFEditModeDirect"', 1, 
 print(string.format(
     "PASS addon interop guards: boss settled in %d SetParent calls, /rl yielded, Masque absent across %d sources, Objective Tracker delegated",
     setParentCalls, shippedSourceCount))
+

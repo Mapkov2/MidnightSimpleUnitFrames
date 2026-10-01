@@ -1,4 +1,4 @@
--- Pins Arena across the interrupt-ready UI/runtime and Assistant action surfaces.
+-- Pins Arena across the interrupt-ready UI and runtime surfaces.
 -- Run from the repository root: lua tools/arena_interrupt_ready_smoke.lua
 
 local function Read(path)
@@ -21,22 +21,6 @@ assert(Contains(menu, 'ReadGBool("kickReadyShowArena", false)'),
 local bindings = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Bindings_Reset.lua")
 assert(Contains(bindings, "kickReadyShowBoss kickReadyShowArena"),
     "Castbar reset ownership omits the Arena Interrupt Ready setting")
-
-local registry = Read("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Castbars_Appearance_Interrupts.lua")
-assert(Contains(registry, 'RegisterCastbarBoolean("kickReadyShowArena"'),
-    "Assistant Registry omits the Arena Interrupt Ready setting")
-
-local inputs = Read("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_ActionInputs.lua")
-assert(Contains(inputs, '"player", "target", "focus", "boss", "arena"'),
-    "Assistant castbar action input rejects Arena")
-
-local actions = Read("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantRegistry_Castbars_Actions.lua")
-assert(Contains(actions, "arena = true") and Contains(actions, 'MSUF_SetArenaCastbarTestMode'),
-    "Assistant castbar preview/test action omits Arena")
-
-local parser = Read("MidnightSimpleUnitFrames_Assistant/Assistant/MSUF_AssistantParser_Registry.lua")
-assert(Contains(parser, 'key = "general.kickReadyShowArena"'),
-    "Assistant Interrupt Ready shortcut omits Arena")
 
 _G.MSUF_NS = {
     ExportPublic = function(name, value)
@@ -66,3 +50,4 @@ assert(shouldTint({ unit = "arena1" }) == false and shouldTint({ unit = "arena5"
     "Arena Interrupt Ready fill tint ignored backend ownership")
 
 print("arena_interrupt_ready_smoke: ok")
+

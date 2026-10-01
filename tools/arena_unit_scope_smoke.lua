@@ -245,6 +245,13 @@ local searchRouting = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/
 Check(searchRouting:find('uf_arena = "arena",', 1, true),
     "Menu2 search routing cannot prepare deep Arena setting routes")
 
+-- Colors > Castbar text colors: the target-name color applies to every castbar
+-- unit except the player's own, so it stays enabled for Arena castbars. (This
+-- pin lived in the retired Assistant scope smoke until 2026-10-01.)
+local advancedColors = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua")
+Check(advancedColors:find('SetControlEnabled(detailTargetColor, DetailUnit() ~= "player")', 1, true),
+    "Advanced Colors disables the castbar target-name color for Arena castbars again")
+
 local AURAS_RUNTIME = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
 local aurasRuntime = Read(AURAS_RUNTIME)
 -- Reason: the three custom-scope normalizers the chunk returns.

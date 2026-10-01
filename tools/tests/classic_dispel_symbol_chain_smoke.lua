@@ -91,7 +91,13 @@ local body = runtime:match("\nlocal function UpdateFrameAuraVisualState%(frame, 
 Check(body, "UpdateFrameAuraVisualState is no longer recognisable")
 local directBranch = body:match("(if cfg and cfg%.visualDirect == true then.-\n    end)")
 Check(directBranch, "the direct-visual branch is no longer recognisable")
-Check(directBranch:find("HideDispelSymbols", 1, true),
+--- The direct branch hands the host to the unit-walk symbol helper (symbols
+--- reach it only for a lane with a native PLAYER scan), which must hide the
+--- host whenever the symbol is off.
+Check(directBranch:find("A3._UpdateClassicDirectDispelSymbols(frame, visual, unit)", 1, true),
+  "the direct-visual branch no longer owns the dispel symbol host")
+local directSymbols = runtime:match("\nA3%._UpdateClassicDirectDispelSymbols = function%(frame, visual, unit%)\n(.-)\nend\n")
+Check(directSymbols and directSymbols:find("HideDispelSymbols", 1, true),
   "the direct-visual branch leaves a stale dispel symbol on the frame")
 Check(body:find("A3._UpdateClassicDispelSymbols(frame, lane, visual, unit)", 1, true),
   "the lane path no longer updates dispel symbols")

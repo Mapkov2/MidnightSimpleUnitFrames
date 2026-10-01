@@ -11,16 +11,17 @@ commit that reached main through a merge counts) and prints the newest commit
 whose addon tree matches the Classic tree under the gate's own rules:
 
 - Retail's <Folder>/<Base>.toc is Classic's <Folder>/<Base>_Mainline.toc for
-  the three addons (Convert-RetailPath in the gate); every other Retail path
+  the two mirrored addons (Convert-RetailPath in the gate); every other Retail path
   keeps its name;
 - a row of tools/classic-retail-overrides.tsv matches when Retail's blob
   equals the recorded base blob; the Classic file itself may differ;
 - every other mapped Retail path matches when Classic's blob equals Retail's;
 - the Classic addon inventory is the mapped Retail paths plus the paths of
   tools/classic-owned-addon-paths.txt, and no Retail path collides with an
-  owned one;
-- the Retail tree holds exactly the three unsuffixed TOCs, and only regular,
-  non-executable files.
+  owned one; a Retail path that tools/classic-addon-tombstones.txt retires is
+  skipped, and must be absent from the Classic tree;
+- the Retail tree holds exactly one unsuffixed TOC per mirrored addon, and
+  only regular, non-executable files.
 
 Commits that change nothing below the addon folders share their addon tree
 with their parent; the newest of them is printed, and the gate gives the same
@@ -50,16 +51,18 @@ import subprocess
 import sys
 from pathlib import Path
 
+import classic_tombstones
+
 OVERRIDES_MANIFEST = "tools/classic-retail-overrides.tsv"
 OWNED_MANIFEST = "tools/classic-owned-addon-paths.txt"
+TOMBSTONES_MANIFEST = classic_tombstones.MANIFEST
 
-# (Folder, Base) of the three addons, exactly as $targets in
+# (Folder, Base) of the two mirrored addons, exactly as $targets in
 # tools/test-classic-prototype.ps1 and ADDON_TARGETS in
 # tools/rebase-classic-overrides.py.
 ADDON_TARGETS = (
     ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames"),
     ("MidnightSimpleUnitFrames_Options", "MidnightSimpleUnitFrames_Options"),
-    ("MidnightSimpleUnitFrames_Assistant", "MidnightSimpleUnitFrames_Assistant"),
 )
 ADDON_FOLDERS = tuple(folder for folder, _ in ADDON_TARGETS)
 RETAIL_TOCS = {"%s/%s.toc" % target: "%s/%s_Mainline.toc" % target for target in ADDON_TARGETS}
@@ -139,6 +142,29 @@ class ClassicTree:
                 raise ToolError("%s: expected path<TAB>Retail-base-blob, got %r" % (OVERRIDES_MANIFEST, line))
             self.overrides[fields[0]] = fields[1]
         self.owned = set(read_manifest_lines(repo, self.commit, OWNED_MANIFEST))
+        # tools/classic-addon-tombstones.txt came with the Assistant removal.
+        # A Classic commit that predates it retired nothing; once present it is
+        # read under the rules of classic_tombstones.py and fails closed.
+        tombstone_tree = run_git(
+            repo, ["ls-tree", "-r", "--name-only", self.commit, "--", TOMBSTONES_MANIFEST]
+        ).stdout.decode("utf-8").splitlines()
+        if TOMBSTONES_MANIFEST in tombstone_tree:
+            text = "\n".join(read_manifest_lines(repo, self.commit, TOMBSTONES_MANIFEST)) + "\n"
+            try:
+                tombstones = classic_tombstones.parse(text, ADDON_FOLDERS)
+            except classic_tombstones.TombstoneError as error:
+                raise ToolError(str(error))
+        else:
+            tombstones = classic_tombstones.Tombstones()
+        for addon in tombstones.addons:
+            addon_tree = run_git(repo, ["ls-tree", "-r", "--name-only", self.commit, "--", addon])
+            addon_paths = addon_tree.stdout.decode("utf-8").splitlines()
+            if any(path == addon or path.startswith(addon + "/") for path in addon_paths):
+                raise ToolError("tombstoned addon is present in the Classic tree: %s" % addon)
+        for path in tombstones.paths:
+            if path in self.blobs:
+                raise ToolError("tombstoned Retail path is present in the Classic tree: %s" % path)
+        self.tombstoned_paths = set(tombstones.paths)
         self.owned_folded = {path.casefold() for path in self.owned}
         self.owned_folders = {folder for path in self.owned_folded for folder in parent_folders(path)}
 
@@ -176,6 +202,8 @@ def evaluate(entries, classic):
                 or any(folder in classic.owned_folded for folder in parent_folders(folded))):
             problems.append(("owned", path, "Retail has a path that collides with a Classic-owned path"))
         elif path in classic.overrides:
+            continue
+        elif path in classic.tombstoned_paths:
             continue
         elif path not in classic.blobs:
             problems.append(("missing", path, "Retail has it, the Classic tree does not"))

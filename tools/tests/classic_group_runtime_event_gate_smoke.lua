@@ -63,6 +63,7 @@ end
 local function RunCase(label, arena, client, namespace)
   namespace = namespace or {}
   namespace.GF = NewRuntimeGF(arena)
+  if namespace.prepareRuntime then namespace.prepareRuntime(namespace.GF) end
   namespace.UF = { IsUnitToken = function(unit) return type(unit) == "string" and unit ~= "" end }
   namespace.ExportPublic = noop
   namespace.Client = client
@@ -158,6 +159,25 @@ do
   local frame = RunCase("(e) TBC arena", true, client, namespace)
   Check(frame.events[MATCH_EVENT] == nil, "(e) TBC arena registered " .. MATCH_EVENT)
   CheckBaseEvents("(e) TBC arena", frame)
+end
+
+-- Concrete size tiers can change dimensions while the percentage stays one.
+do
+  local width, invalidations = 120, 0
+  local ns = { prepareRuntime = function(gf)
+    gf.ResolveFrameScale = function() return 1 end
+    gf.GetScaledFrameMetrics = function() return width, 40, 1 end
+    gf.InvalidateCompiledSpecs = function() invalidations = invalidations + 1 end
+  end }
+  RunCase("concrete tier resize", false, nil, ns)
+  local before = invalidations
+  ns.GF.RefreshHeaderLayout("party")
+  Check(invalidations == before, "unchanged dimensions must reuse compiled spec")
+  width = 90
+  ns.GF.RefreshHeaderLayout("party")
+  Check(invalidations == before + 1, "concrete width change must invalidate even with unchanged scale")
+  ns.GF.RefreshHeaderLayout("party")
+  Check(invalidations == before + 1, "committed tier dimensions must not invalidate repeatedly")
 end
 
 print("classic group runtime event gate smoke passed")

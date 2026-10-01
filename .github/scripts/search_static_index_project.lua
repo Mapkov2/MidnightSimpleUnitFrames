@@ -6,28 +6,11 @@
 -- found at all. Baking the inventory gives complete coverage without constructing a
 -- single frame and without normalizing any text at runtime.
 --
--- Three sources are merged, in this order of authority:
---   1. RuntimeControlCatalog after the real crosswalk harness builds every page. This
---      is the only source that contains the lazily-built unit-page sections.
---   2. The finite Aura workspace state matrix (a Custom container's Setup, the Ordering
---      tool, a group lane's Style...), rebuilt page by page under the same client facts.
---      Those controls only exist while their view is selected, so the default build
---      never sees them.
---   3. The committed Assistant control schemas, but only for a control 1 or 2 proved
---      this client builds (a schema supplies the label a runtime record lacks) or for a
---      page the harness could not build. A schema was collected for one client at one
---      point in time and the Classic one is older than its pages, so a schema control
---      that never appeared under this client's facts is one the client does not show.
---
--- Determinism: rows are sorted by their encoded identity, so regenerating without a
--- content change produces a byte-identical file and -Check can gate drift.
---
--- Client facts: the crosswalk harness only installs the shared WoW stubs, which have
--- no MSUF.Client and no 12.1 spell API. Every control behind a client gate therefore
--- stayed unbuilt, its row fell back to the Assistant schema and lost the runtime
--- exactSectionId. This generator installs the facts first, then lets the product's own
--- Game/Shared/Initialize.lua derive the client model from them, so nothing is faked
--- beyond the client identity itself (project global, interface, TOC metadata).
+-- The inventory is collected from real menu builders and finite Aura workspace
+-- states. Generation fails if a page cannot build; no historical schema stands
+-- in for a missing runtime control. Rows are sorted by their encoded identity.
+-- The harness installs client facts before loading the menu so capability gates
+-- match each client rather than leaking Mainline controls into Classic.
 --
 -- Flavors: --flavor reads the Menu2 XML manifests from that flavor's Options TOC
 -- instead of assuming the Mainline list, so the Classic index is generated from the
@@ -47,20 +30,16 @@ local MAINLINE_OUTPUT_PATH = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Searc
 local CLASSIC_OUTPUT_PATH = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua"
 local CLIENT_MATRIX_PATH = "tools/classic-client-matrix.tsv"
 local CLIENT_INIT_PATH = "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"
-local ASSISTANT_ROOT = "MidnightSimpleUnitFrames_Assistant"
-local SCHEMA_FILE_PATTERN = "MSUF_AssistantControlSchema_Data[^/]*%.lua$"
 collectgarbage("setpause", 100)
 collectgarbage("setstepmul", 400)
-local HARNESS_PATH = "tools/assistant_v1_catalog_crosswalk.lua"
--- The crosswalk continues into Graphify-backed release gates that need an ignored
--- local build artifact. Everything this generator needs is already in place by then.
-local HARNESS_CUT = "\nlocal function HasExecutableSettingContract"
+local HARNESS_PATH = "tools/search_catalog_harness.lua"
+-- The harness returns its real menu and completed catalog at this boundary.
+local HARNESS_CUT = "\nreturn { menu = M, catalog = Catalog, pageBuildFailures = pageBuildFailures }"
 -- The harness honors a caller-supplied Menu2 manifest list, which is how a flavor
 -- other than Mainline is built. Pinned here so a harness that loses the hook fails
 -- loudly instead of quietly producing a Mainline index under a Classic flavor name.
 local HARNESS_MANIFEST_HOOK = 'local MENU_XML = rawget(_G, "__MSUF_MENU2_XML_MANIFEST") or {'
--- The harness records every page that failed to build; only those pages may fall back
--- to the Assistant schema, so the list has to be in scope where the harness is cut.
+-- The harness records every page that failed to build so generation fails closed.
 local HARNESS_FAILURES_LOCAL = "local pageBuildFailures = {}"
 -- Child runs print their rows and this terminator, so a child that died halfway can
 -- never be mistaken for a complete, shorter index.
@@ -69,17 +48,16 @@ local ROWS_TERMINATOR = "-- end of flavor rows"
 -- Collected rows carry where they came from in a leading field that never reaches the
 -- shipped file; it only decides which client's answer survives a shared identity. A
 -- higher rank wins: the default build knows a control's collapsible section, a workspace
--- view proves the control exists without one, the schema proves nothing about this client.
+-- view proves the control exists without one.
 local ORIGIN_RUNTIME = "runtime"
 local ORIGIN_STATE = "state"
-local ORIGIN_SCHEMA = "schema"
-local ORIGIN_RANK = { [ORIGIN_RUNTIME] = 3, [ORIGIN_STATE] = 2, [ORIGIN_SCHEMA] = 1 }
+local ORIGIN_RANK = { [ORIGIN_RUNTIME] = 3, [ORIGIN_STATE] = 2 }
 
 -- Only these classifications are things a player can change or run. "ephemeral" and
 -- "navigation" controls are menu plumbing and normally stay out of the index. A
 -- reviewed exact-target contract is the narrow exception: release highlights need
 -- its stable control ID to open a selector-owned subcategory without making that
--- selector executable through ordinary Assistant label matching.
+-- selector into an executable command.
 local INDEXED_CLASSIFICATIONS = { setting = true, action = true }
 local SOURCE_SHA256 = tostring(os.getenv("MSUF_SEARCH_SOURCE_SHA256") or "")
 if not SOURCE_SHA256:match("^[A-F0-9][A-F0-9]+$") or #SOURCE_SHA256 ~= 64 then
@@ -204,8 +182,6 @@ local ADDON_TOC_PATTERN = {
     MidnightSimpleUnitFrames = "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_%s.toc",
     MidnightSimpleUnitFrames_Options =
         "MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options_%s.toc",
-    MidnightSimpleUnitFrames_Assistant =
-        "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant_%s.toc",
 }
 
 -- A TOC may repeat a field with different load conditions (the Mainline "## Version"
@@ -238,42 +214,8 @@ local function Menu2Manifests(suffix)
     return manifests
 end
 
--- The Assistant control schema is per flavor too (the Classic runtime XML loads its own
--- smaller file), resolved through the flavor's Assistant TOC.
-local function ControlSchemaPath(suffix)
-    local tocPath = ADDON_TOC_PATTERN.MidnightSimpleUnitFrames_Assistant:format(suffix)
-    for line in Read(tocPath):gmatch("[^\r\n]+") do
-        local entry = Trim(line):gsub("\\", "/")
-        if entry ~= "" and entry:sub(1, 1) ~= "#" and entry:lower():match("%.xml$") then
-            local xmlPath = ASSISTANT_ROOT .. "/" .. entry
-            local xmlDir = xmlPath:match("^(.*)/[^/]+$") or ASSISTANT_ROOT
-            for file in Read(xmlPath):gmatch('<Script%s+file="([^"]+)"') do
-                local relative = file:gsub("\\", "/")
-                if relative:match(SCHEMA_FILE_PATTERN) then return xmlDir .. "/" .. relative end
-            end
-        end
-    end
-    Fail(tocPath .. ": no manifest under it loads a control schema data file")
-end
-
--- A schema only ever describes a control this client's runtime built (see Collect), so
--- a Classic run cannot inherit a Mainline-only control from the Mainline schema, which
--- is where the hand-kept Classic index picked up its rows for controls no Classic page
--- builds. Every committed schema may therefore name such a control; the flavor's own
--- schema answers first. Some controls register without a label (the unit Range Fade
--- opacity slider) and only a schema carries one, and the Classic schema predates the
--- Classic arena page.
-local function ControlSchemaPaths(suffix)
-    local paths, seen = {}, {}
-    local function Add(path)
-        if not seen[path] then seen[path] = true; paths[#paths + 1] = path end
-    end
-    Add(ControlSchemaPath(suffix))
-    for _, other in ipairs(MATRIX_ORDER) do Add(ControlSchemaPath(other)) end
-    return paths
-end
-
 local PANDEMIC_APPLIER_PATH = "MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Appearance.lua"
+local MANA_EXTRAS_PATH = "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ManaExtras.lua"
 
 local function NormalizePath(path)
     local parts = {}
@@ -327,8 +269,11 @@ local function InstallClientFacts(target)
     local suffix = row.Suffix
     -- The harness requires the same stubs; loading them here first only moves that
     -- step earlier, so the client model exists before any Menu2 file is read.
-    package.path = ".github/scripts/?.lua;tools/?.lua;tools/AssistantTraining/?.lua;" .. package.path
+    package.path = ".github/scripts/?.lua;tools/?.lua;tools/MenuTest/?.lua;" .. package.path
     require("wow_stubs")
+    -- Native Classic SharedXML loads its twelve-entry class-color table;
+    -- live/Forever also provide Evoker. Class-priority rows inspect this table.
+    if row.IsClassic == "true" then _G.RAID_CLASS_COLORS.EVOKER = nil end
     -- Project globals are only ever compared for equality, so distinct identities are
     -- enough and no Blizzard project number is invented here.
     for index, name in ipairs(MATRIX_ORDER) do
@@ -409,6 +354,17 @@ local function InstallClientFacts(target)
         Fail(target .. ": the client model placed this build as " .. tostring(client.Flavor)
             .. (client.IsForever and " (WoW Forever)" or ""))
     end
+    -- The regeneration pause and return pulse (MSUF_Menu2_ResourceExtras.lua) follow
+    -- MSUF.CPBuilders.ManaRegenTimersSupported, which this flavor's class power file
+    -- defines (definitions only at load) and which needs C_DurationUtil.CreateDuration.
+    -- Every client has that API (Blizzard_APIDocumentationGenerated/
+    -- DurationUtilDocumentation.lua on each mirror branch); the predicate decides
+    -- which clients have the game rule.
+    _G.C_DurationUtil = _G.C_DurationUtil or {}
+    _G.C_DurationUtil.CreateDuration = _G.C_DurationUtil.CreateDuration or function() return {} end
+    if CoreLoadGraph(suffix)[MANA_EXTRAS_PATH] then
+        assert(loadfile(MANA_EXTRAS_PATH))("MidnightSimpleUnitFrames", namespace)
+    end
     if isForever then
         namespace.MSUF_RegisterModule = namespace.MSUF_RegisterModule or function() end
         _G.GetCVarBool = _G.GetCVarBool or function() return false end
@@ -419,6 +375,7 @@ local function InstallClientFacts(target)
 end
 
 local function Titleize(segment)
+    if segment == "anchoring" then return "Anchor" end
     segment = tostring(segment or ""):gsub("[-_]", " ")
     return (segment:gsub("(%a)([%w]*)", function(first, rest) return first:upper() .. rest end))
 end
@@ -439,38 +396,6 @@ local function HintFromControlPath(controlPath, pageKey)
     while #kept > 2 do table.remove(kept, 1) end
     for i = 1, #kept do kept[i] = Titleize(kept[i]) end
     return table.concat(kept, " > ")
-end
-
-local function LoadSchemaRecords(schemaPath)
-    local MSUF = { Assistant = {} }
-    local chunk, err = loadfile(schemaPath)
-    if not chunk then Fail(schemaPath .. ": " .. tostring(err)) end
-    local ok, result = pcall(chunk, "MidnightSimpleUnitFrames_Assistant", MSUF)
-    if not ok then Fail(schemaPath .. ": " .. tostring(result)) end
-    local data = MSUF.Assistant.ControlSchemaData
-    if type(data) ~= "table" or type(data.records) ~= "table" or type(data.columns) ~= "table" then
-        Fail("control schema data did not expose records/columns")
-    end
-    local col = {}
-    for index, name in ipairs(data.columns) do col[name] = index end
-    for _, required in ipairs({ "controlId", "pageKey", "controlPath", "classification", "kind",
-        "settingKey", "actionKey", "label" }) do
-        if not col[required] then Fail("control schema is missing column " .. required) end
-    end
-    local out = {}
-    for _, record in ipairs(data.records) do
-        out[#out + 1] = {
-            controlId = record[col.controlId],
-            pageKey = record[col.pageKey],
-            label = record[col.label],
-            kind = record[col.kind],
-            settingKey = record[col.settingKey],
-            actionKey = record[col.actionKey],
-            controlPath = record[col.controlPath],
-            classification = record[col.classification],
-        }
-    end
-    return out
 end
 
 --- Exact runtime control IDs are the preferred identity: they are the catalog's
@@ -575,7 +500,7 @@ local function RuntimeExactContract(Catalog, record)
     return sectionId, table.concat(kinds, ","), table.concat(contracts, "|")
 end
 
--- The finite Aura workspace views: the matrix the Assistant control schema is collected
+-- The finite Aura workspace views: the same matrix of selectable views is collected
 -- over (four unit frames x every container tool, three group scopes x every lane tool,
 -- the global Appearance products and their two compatibility landings). A Custom
 -- container is also visited as a Debuff container where its Filters and Ordering tools
@@ -724,13 +649,13 @@ end
 --- Called from inside the crosswalk harness, where every page has been built with the
 --- real product builders and the real search text utilities are loaded. Returns this
 --- flavor's encoded rows; the caller merges and writes them.
-local function Collect(M, Catalog, schemaPaths, buildFailures)
+local function Collect(M, Catalog, buildFailures)
     local Normalize = M.Search and M.Search.Text and M.Search.Text.NormalizeSearchText
     if type(Normalize) ~= "function" then Fail("NormalizeSearchText did not load") end
 
     -- Where a record came from decides which client wins a shared row below: only the
     -- runtime catalog knows the collapsible section a control actually sits in, so a
-    -- client that builds the page beats one that only inherits the schema fallback.
+    -- client that builds the page beats one that exposes only a workspace view.
     local sources, origin, built = {}, {}, {}
     local function BuiltKey(record)
         return tostring(record.pageKey or "") .. "\031" .. tostring(record.controlId or "")
@@ -743,7 +668,7 @@ local function Collect(M, Catalog, schemaPaths, buildFailures)
     end
     -- A workspace view's controls carry no exact section: one identity serves every
     -- Custom container, so the collapsible that holds it differs per view, and search
-    -- routes these rows by the query instead (exactly as it did for the schema rows).
+    -- routes these rows through the menu selection metadata.
     local views = VisitWorkspaceStates(M, function()
         for _, record in ipairs(Catalog.GetRecords()) do
             local key = BuiltKey(record)
@@ -754,39 +679,16 @@ local function Collect(M, Catalog, schemaPaths, buildFailures)
             end
         end
     end)
-    -- A schema record is used only for a control this client actually builds: one the
-    -- runtime registered (the schema may still supply the label a runtime record lacks),
-    -- or, from the flavor's own schema, one on a page that could not be built here at all.
-    -- Every other page was built in its default view and in every workspace view under
-    -- this client's facts, so a schema control that never appeared is one the client does
-    -- not show (Classic has no GCD bar and no Empowered casts; the Classic Aura page
-    -- builds no lane Full-Frame effect).
-    local unbuiltPages, schemaUsed, schemaDropped = {}, 0, 0
-    for _, failure in ipairs(buildFailures or {}) do unbuiltPages[tostring(failure.key or "")] = true end
-    for index, schemaPath in ipairs(schemaPaths) do
-        local own = index == 1
-        for _, record in ipairs(LoadSchemaRecords(schemaPath)) do
-            if built[BuiltKey(record)] or (own and unbuiltPages[tostring(record.pageKey or "")]) then
-                sources[#sources + 1] = record
-                origin[record] = ORIGIN_SCHEMA
-                if own then schemaUsed = schemaUsed + 1 end
-            elseif own then
-                schemaDropped = schemaDropped + 1
-            end
-        end
-    end
     for _, failure in ipairs(buildFailures or {}) do
-        io.stderr:write(string.format("search static index: page %s did not build (%s); its schema rows stand in\n",
-            tostring(failure.key), tostring(failure.error)))
+        Fail(string.format("page %s did not build: %s", tostring(failure.key), tostring(failure.error)))
     end
-    io.stderr:write(string.format("search static index: %d workspace views built; %d schema records name built "
-        .. "controls, %d name controls this client does not build\n", views, schemaUsed, schemaDropped))
+    io.stderr:write(string.format("search static index: %d workspace views built from current menu controls\n", views))
 
     local rows, seen = {}, {}
     for _, record in ipairs(sources) do
         local hasExactTarget = tostring(record.exactTargetKinds or "") ~= ""
             and tostring(record.exactTargetContracts or "") ~= ""
-        if INDEXED_CLASSIFICATIONS[tostring(record.classification or "")] or hasExactTarget then
+        if INDEXED_CLASSIFICATIONS[tostring(record.classification or "")] or record.searchIndexed == true or hasExactTarget then
             local pageKey = tostring(record.pageKey or "")
             local label = tostring(record.label or "")
             if pageKey ~= "" and pageKey ~= "search" and label ~= "" then
@@ -795,6 +697,12 @@ local function Collect(M, Catalog, schemaPaths, buildFailures)
                 local actionKey = tostring(record.actionKey or "")
                 local kind = tostring(record.kind or "control")
                 local hint = HintFromControlPath(controlPath, pageKey)
+                if pageKey == "gf_layout" and record.exactSectionId == "scaling" then
+                    local tab = tostring(record.exactTargetContracts or ""):match("groupSizingTab=([^=|]+)=")
+                    local tabLabel = ({ general = "General", tier10 = "1-10 players", tier20 = "11-20 players",
+                        tier25 = "21-25 players", tier40 = "26+ players" })[tab]
+                    hint = tabLabel and ("Size & Scaling > " .. tabLabel) or "Size & Scaling"
+                end
                 local labelNorm = Normalize(label)
                 if labelNorm ~= "" then
                     local identity = SearchRouteIdentity(record, pageKey, labelNorm, kind, hint)
@@ -832,7 +740,7 @@ end
 --- carries its origin in field 1 and its search identity in field 9. Clients that share
 --- an index file can answer the same identity differently: a client that builds a
 --- control only in a workspace view knows no collapsible section for it, a client that
---- could not build a page only has the Assistant schema, and WoW Forever's pet frame
+--- builds a different view, and WoW Forever's pet frame
 --- adds a pet-happiness exact target Midnight has no subcategory for. The higher origin
 --- rank therefore wins, two rows of one rank are resolved in matrix order, and every
 --- unresolved disagreement is named on stderr instead of being silent. Sorting the
@@ -930,15 +838,23 @@ local function BuildFlavor(target)
     -- WoW Forever reads the Mainline TOCs, so every manifest follows the matrix row,
     -- not the build target name.
     local suffix = (TargetRow(target)).Suffix
-    local schemaPaths = ControlSchemaPaths(suffix)
     local collected
     _G.__MSUF_EmitSearchStaticIndex = function(M, Catalog, buildFailures)
-        collected = Collect(M, Catalog, schemaPaths, buildFailures)
+        collected = Collect(M, Catalog, buildFailures)
     end
     local client = InstallClientFacts(target)
     _G.__MSUF_MENU2_XML_MANIFEST = Menu2Manifests(suffix)
 
     local harness = Read(HARNESS_PATH)
+    local profileHook = 'local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")'
+    local profileAt = harness:find(profileHook, 1, true)
+    if not profileAt then Fail("profile data bootstrap hook moved") end
+    local profileBootstrap = "\n"
+    for _, name in ipairs({"ProfileFields", "ProfileVariants", "ProfileVariantEditor", "ProfileSync"}) do
+        local path = "MidnightSimpleUnitFrames/State/MSUF_" .. name .. ".lua"
+        profileBootstrap = profileBootstrap .. 'assert(loadfile("' .. path .. '"))("MidnightSimpleUnitFrames", MSUF)\n'
+    end
+    harness = harness:sub(1, profileAt + #profileHook - 1) .. profileBootstrap .. harness:sub(profileAt + #profileHook)
     -- The appearance hook is a direct TOC Lua entry before the XML manifests.
     -- Load it into the same namespace before tokens, just as Options does in game.
     local hookAt = harness:find(HARNESS_MANIFEST_HOOK, 1, true)

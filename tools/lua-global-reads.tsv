@@ -1,4 +1,4 @@
-# Globals the three addons read by bare name that this source tree does not
+# Globals the two shipped addons read by bare name that this source tree does not
 # define. tools/tests/unresolved_global_reads_smoke.py compiles every shipped
 # Lua file, reads the GETGLOBAL instructions out of the bytecode and requires
 # each name to be Lua 5.1, defined here, or reviewed below: a new unresolved
@@ -14,6 +14,8 @@ BackdropTemplateMixin	constant	Blizzard UI constant, enum or shared string
 CANCEL	constant	Blizzard UI constant, enum or shared string
 C_AddOns	namespace	Blizzard C_* namespace
 C_ChatInfo	namespace	Blizzard C_* namespace
+C_CurveUtil	namespace	Blizzard native curve namespace; upstream/live:Blizzard_APIDocumentationGenerated/CurveUtilDocumentation.lua:5,11 (CreateColorCurve); ResourceMarks probes namespace/method and falls back to public values
+C_DurationUtil	namespace	Blizzard native duration namespace; upstream/live and upstream/forever:Blizzard_APIDocumentationGenerated/DurationUtilDocumentation.lua:5,11 (CreateDuration); ManaExtras probes namespace/method before use
 C_IncomingSummon	namespace	Blizzard C_* namespace
 C_Secrets	namespace	Blizzard C_* namespace
 C_SpecializationInfo	namespace	Blizzard C_* namespace
@@ -27,6 +29,7 @@ ClearOverrideBindings	api	Blizzard client API
 ColorPickerFrame	frame	Blizzard UI frame or object MSUF reads
 Constants	constant	Blizzard UI constant, enum or shared string
 CopyTable	api	Blizzard client API
+CreateColor	api	Blizzard SharedXML color constructor; upstream/live:Blizzard_SharedXMLBase/Color.lua:3, used for native curve color points
 CreateFrame	api	Blizzard client API
 DEFAULT_CHAT_FRAME	frame	Blizzard UI frame or object MSUF reads
 DELETE	constant	Blizzard UI constant, enum or shared string
@@ -47,6 +50,8 @@ GetCursorPosition	api	Blizzard client API the harness does not model
 GetInstanceInfo	api	Blizzard client API the harness does not model
 GetLocale	api	Blizzard client API
 GetMaxLevelForExpansionLevel	api	Blizzard client API the harness does not model
+GetMaxLevelForPlayerExpansion	api	Blizzard client API the harness does not model
+GetMaxPlayerLevel	api	Blizzard client API the harness does not model
 GetMaximumExpansionLevel	api	Blizzard client API the harness does not model
 GetMouseFoci	api	Blizzard client API
 GetMouseFocus	api	Blizzard client API
@@ -71,6 +76,7 @@ GetShapeshiftFormInfo	api	Blizzard client API the harness does not model
 GetSpecialization	api	Blizzard client API the harness does not model
 GetSpecializationInfo	api	Blizzard client API the harness does not model
 GetSpellInfo	api	Blizzard client API the harness does not model
+GetSpellPowerCost	api	Guarded legacy Blizzard spell-cost API; upstream/live:Blizzard_Deprecated/11_0_0_SpellBookAPITransitionGuide.lua:67 maps it to C_Spell.GetSpellPowerCost; ManaExtras prefers the modern API and probes this optional fallback
 GetSpellTexture	api	Blizzard client API
 GetSubZoneText	api	Blizzard client API
 GetTalentTabInfo	api	Blizzard client API
@@ -93,6 +99,7 @@ IsResting	api	Blizzard client API the harness does not model
 IsShiftKeyDown	api	Blizzard client API the harness does not model
 LE_PARTY_CATEGORY_HOME	constant	Blizzard UI constant, enum or shared string
 LE_PARTY_CATEGORY_INSTANCE	constant	Blizzard UI constant, enum or shared string
+LOCALIZED_CLASS_NAMES_MALE	constant	Blizzard FrameXMLBase/Constants.lua defines native LocalizedClassList(false); used for localized class-priority labels
 LibStub	thirdparty	LibStub, the embedded library registry every Ace-style library asks for
 MSUF_BeginEditModeTransaction	vestigial	no file defines this global any more; the read is type-guarded, so Edit Mode entry simply starts no undo transaction
 MSUF_EditModeSizing	vestigial	no file defines this global any more; both reads are truth tests, so the castbar preview drag never enters its SIZE mode
@@ -175,18 +182,19 @@ UnitSex	api	Blizzard client API
 UnitStagger	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitThreatSituation	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitWatchRegistered	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnregisterStateDriver	api	Blizzard client API
 UnregisterUnitWatch	api	Blizzard client API
 WagoAnalytics	thirdparty	Wago's analytics global, probed by the shipped shim
 WorldFrame	frame	Blizzard UI frame or object MSUF reads
 YES	constant	Blizzard UI constant, enum or shared string
-date	luaenv	WoW's date() global (there is no os table in the client)
+canaccesstable	luaenv	Blizzard secret-table access predicate; upstream/live:Blizzard_APIDocumentationGenerated/FrameScriptDocumentation.lua:48; ManaExtras probes availability and checks the cost table and entries before indexing
 floor	luaenv	math.floor, which WoW also publishes as a global
 geterrorhandler	luaenv	WoW's error-handler accessor, read by an embedded library
 hooksecurefunc	luaenv	WoW's secure post-hook global
 issecretvalue	luaenv	12.x global that reports a secret value
 max	luaenv	math.max, which WoW also publishes as a global
 min	luaenv	math.min, which WoW also publishes as a global
-norm	defect	DEFECT MSUF_AssistantRouter.lua:1089: ExactLabelSingleChange reads norm where its parameter is text, so the scoped-twin swap never runs; enabling it changes which setting an exact-label command writes and no Assistant corpus ships here to validate that
+secureexecuterange	api	Blizzard client API (Blizzard_SharedXMLBase CallbackRegistry dispatches with it on every client)
 strmatch	luaenv	string.match, which WoW also publishes as a global
 time	luaenv	WoW's time() global (there is no os table in the client)
 wipe	luaenv	WoW's table-clearing global

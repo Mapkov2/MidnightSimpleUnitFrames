@@ -1,21 +1,22 @@
 -- classic_unit_preview_texture_layer_order_smoke.lua <repoRoot> <flavor>
 --
--- Vanilla, TBC and Mists load the Retail-named unit preview render
--- (Preview/MSUF_Menu2_UnitPreview_Render.lua). On these clients Preview.Refresh
--- stamps texture layers once the health bar, the power bar and the portrait
--- have their geometry for this refresh, as Factory.Apply does on live frames.
--- A layer anchored to Player Power or to the Portrait must therefore follow
--- what this refresh shows, not what the previous refresh left behind.
+-- Every client (Midnight, WoW Forever, Vanilla, TBC and Mists) loads the
+-- Retail-named unit preview render (Preview/MSUF_Menu2_UnitPreview_Render.lua).
+-- Preview.Refresh stamps texture layers once the health bar, the power bar and
+-- the portrait have their geometry for this refresh, as Factory.Apply does on
+-- live frames. A layer anchored to Player Power or to the Portrait must
+-- therefore follow what this refresh shows, not what the previous refresh left
+-- behind. (The file name predates the Mainline fix; it runs on clients+Forever.)
 --
 -- The smoke boots the flavor's whole shipped core and Options graph through
 -- tools/tests/client_world.lua, builds the real unit preview and drives its
 -- real Refresh twice per case: the first refresh shows the opposite power bar
 -- and portrait state, the second one is measured.
 --
--- Plain Lua 5.1 with the repo root and a Classic flavor as arguments.
+-- Plain Lua 5.1 with the repo root and a client matrix Suffix (or Forever) as arguments.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
-local flavor = assert(arg and arg[2], "flavor required (a Classic matrix Suffix)")
+local flavor = assert(arg and arg[2], "flavor required (a client matrix Suffix or Forever)")
 assert(rawget(_G, "MSUF_Auras3TestLoader") == nil,
     "classic_unit_preview_texture_layer_order_smoke boots the real TOC graph; run it with plain Lua 5.1")
 
@@ -27,7 +28,6 @@ local function Check(condition, message)
 end
 
 local world = World.New(root, flavor)
-Check(world.client.isClassic == true, "is not a Classic flavor")
 world:Boot()
 local failure = world:FirstFailure()
 Check(failure == nil, "load failed in " .. tostring(failure and failure.file) .. ": " .. tostring(failure and failure.message))

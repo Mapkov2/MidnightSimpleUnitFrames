@@ -14,102 +14,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
-$assistantManifestName = "MSUF_AssistantRuntime.xml"
-$assistantScriptCount = 330
-$assistantOrderSha256 = "3F4E361398727386DB985B15CBD973ACEB56E40A7C8BDED9A95ADDDD58D3F8E0"
+Import-Module (Join-Path $PSScriptRoot "ClassicGate.Common.psm1") -Force
 $optionsAddonName = "MidnightSimpleUnitFrames_Options"
-
-function Normalize-AssistantReference {
-    param([Parameter(Mandatory = $true)][string]$Path)
-    return $Path.Trim().Replace('\', '/')
-}
-
-function Get-AssistantReferenceHash {
-    param([Parameter(Mandatory = $true)][string[]]$References)
-
-    $payload = (@($References | ForEach-Object { Normalize-AssistantReference $_ }) -join "`n")
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($payload)
-        return ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '')
-    } finally {
-        $sha.Dispose()
-    }
-}
-
-function Get-AssistantManifestReferences {
-    param([Parameter(Mandatory = $true)][string]$ManifestText)
-
-    return @([regex]::Matches($ManifestText, '<Script\s+file="([^"]+)"') | ForEach-Object {
-        Normalize-AssistantReference $_.Groups[1].Value
-    })
-}
-
-function Assert-AssistantDirectoryContract {
-    param([Parameter(Mandatory = $true)][string]$AssistantRoot)
-
-    $root = [System.IO.Path]::GetFullPath($AssistantRoot)
-    $tocPath = Join-Path $root "MidnightSimpleUnitFrames_Assistant.toc"
-    $manifestPath = Join-Path $root $assistantManifestName
-    foreach ($path in @($tocPath, $manifestPath)) {
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-            throw "Assistant V1 companion contract is missing: $path"
-        }
-    }
-
-    $toc = Get-Content -LiteralPath $tocPath -Raw
-    foreach ($marker in @('## LoadOnDemand: 1', '## Dependencies: MidnightSimpleUnitFrames')) {
-        if ($toc.IndexOf($marker, [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Assistant companion TOC is missing required marker: $marker"
-        }
-    }
-    if ($toc -match '(?:\.\.[\\/])') { throw "Assistant companion TOC must load only its local manifest." }
-    $tocPayload = @($toc -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object {
-        $_ -and -not $_.StartsWith('##') -and -not $_.StartsWith('#')
-    })
-    if (($tocPayload -join "`n") -ne $assistantManifestName) {
-        throw "Assistant companion TOC must load exactly '$assistantManifestName'. Got: $($tocPayload -join ', ')"
-    }
-
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw
-    $refs = Get-AssistantManifestReferences -ManifestText $manifest
-    if ($refs.Count -ne $assistantScriptCount) {
-        throw "Assistant V1 manifest must contain exactly $assistantScriptCount scripts; found $($refs.Count)."
-    }
-    if (($refs | Sort-Object -Unique).Count -ne $refs.Count) {
-        throw "Assistant V1 manifest contains duplicate script references."
-    }
-    $hash = Get-AssistantReferenceHash -References $refs
-    if ($hash -ne $assistantOrderSha256) {
-        throw "Assistant V1 manifest inventory/load-order hash mismatch. Expected $assistantOrderSha256, got $hash."
-    }
-
-    $prefix = $root.TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-    foreach ($ref in $refs) {
-        if ($ref -notmatch '(?i)\.lua$' -or $ref -match '(^|/)\.\.(/|$)' -or [System.IO.Path]::IsPathRooted($ref)) {
-            throw "Unsafe or non-Lua Assistant manifest reference: $ref"
-        }
-        $full = [System.IO.Path]::GetFullPath((Join-Path $root ($ref.Replace('/', [System.IO.Path]::DirectorySeparatorChar))))
-        if (-not $full.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "Assistant manifest reference escapes the companion: $ref"
-        }
-        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
-            throw "Assistant manifest references a missing runtime file: $ref"
-        }
-    }
-
-    $actual = @(Get-ChildItem -LiteralPath $root -File -Force -Recurse | ForEach-Object {
-        $_.FullName.Substring($prefix.Length).Replace('\', '/')
-    } | Sort-Object)
-    $expected = @(@("MidnightSimpleUnitFrames_Assistant.toc", $assistantManifestName) + @($refs) | Sort-Object)
-    if (($actual -join "`n") -ne ($expected -join "`n")) {
-        $unexpected = @($actual | Where-Object { $_ -notin $expected })
-        $missing = @($expected | Where-Object { $_ -notin $actual })
-        throw "Assistant companion inventory mismatch. Unexpected: [$($unexpected -join ', ')]. Missing: [$($missing -join ', ')]."
-    }
-    return $refs
-}
-
 function Assert-OptionsDirectoryContract {
     param([Parameter(Mandatory = $true)][string]$OptionsRoot)
 
@@ -295,7 +201,7 @@ function Install-StageToPtr {
         }
     }
 
-    Write-Host "Installed the validated core and LoD Assistant companion into $AddOnsRoot"
+    Write-Host "Installed the validated core and Options addons into $AddOnsRoot"
 }
 
 function Read-ZipEntryText {
@@ -328,55 +234,53 @@ if ([string]::IsNullOrWhiteSpace($release)) {
 
 $addonNames = @(
     "MidnightSimpleUnitFrames",
-    "MidnightSimpleUnitFrames_Assistant",
     $optionsAddonName
 )
 $tocRelativePaths = @(
     "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc",
-    "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant.toc",
     "$optionsAddonName/$optionsAddonName.toc"
 )
 $requiredSourcePaths = @(
     "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc",
     "MidnightSimpleUnitFrames/Locales/deDE.lua",
-    "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant.toc",
-    "MidnightSimpleUnitFrames_Assistant/$assistantManifestName",
     "$optionsAddonName/$optionsAddonName.toc",
     "$optionsAddonName/Shell/Menu2/MSUF_Menu2.xml"
 )
-
 foreach ($relativePath in $requiredSourcePaths) {
     $sourcePath = Join-Path $repoRoot ($relativePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar))
     if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
         throw "Required release source is missing: $relativePath"
     }
 }
-$assistantSourceRoot = Join-Path $repoRoot "MidnightSimpleUnitFrames_Assistant"
-$assistantManifestRefs = @(Assert-AssistantDirectoryContract -AssistantRoot $assistantSourceRoot)
+# tools/classic-addon-tombstones.txt names the retired addons and the retired
+# files of the shipped ones; git, not a folder test, decides what is present.
+$tombstones = Import-MsufAddonTombstones -Path (Join-Path $repoRoot "tools/classic-addon-tombstones.txt") -ShippedAddons $addonNames
+$sourceLoadedPaths = @(foreach ($relativePath in $tocRelativePaths) {
+    (Get-MsufLoadGraph -Path (Join-Path $repoRoot $relativePath) -Duplicates Skip).AllPaths
+})
+Assert-MsufAddonTombstones -Root $repoRoot -Tombstones $tombstones -LoadedPaths ([string[]]$sourceLoadedPaths)
 $optionsSourceRoot = Join-Path $repoRoot $optionsAddonName
 $optionsTocPayload = @(Assert-OptionsDirectoryContract -OptionsRoot $optionsSourceRoot)
 $coreMenuRoot = Join-Path $repoRoot "MidnightSimpleUnitFrames\Shell\Menu2"
 if (Test-Path -LiteralPath $coreMenuRoot) {
     throw "Menu2 must be physically owned by the Options companion; core tree found: $coreMenuRoot"
 }
-$sourceMenuRoot = Join-Path $optionsSourceRoot "Shell\Menu2"
-foreach ($forbiddenCorePath in @(
-    (Join-Path $sourceMenuRoot "Assistant"),
-    (Join-Path $sourceMenuRoot "MSUF_Menu2_AssistantRuntime.xml"),
-    (Join-Path $sourceMenuRoot "MSUF_Menu2_AssistantDialogLocale.lua"),
-    (Join-Path $sourceMenuRoot "MSUF_Menu2_AssistantDialogLocale_Data.lua")
-)) {
-    if (Test-Path -LiteralPath $forbiddenCorePath) {
-        throw "Assistant V1 must be owned only by the companion; core artifact found: $forbiddenCorePath"
+function Test-RetiredReference {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text)
+    foreach ($addon in $tombstones.Addons) {
+        if ($Text.IndexOf($addon, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { return $addon }
     }
+    foreach ($retiredPath in $tombstones.Paths) {
+        $leaf = [System.IO.Path]::GetFileName($retiredPath)
+        if ($Text.IndexOf($leaf, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { return $retiredPath }
+    }
+    return $null
 }
-
-$sourceV2Artifacts = @(Get-ChildItem -LiteralPath (Join-Path $repoRoot "MidnightSimpleUnitFrames"), $assistantSourceRoot, $optionsSourceRoot -Recurse -Force |
-    Where-Object { $_.Name -match '(?i)AssistantV2' })
-if ($sourceV2Artifacts.Count -gt 0) {
-    throw "Assistant V2 runtime artifacts are forbidden: $($sourceV2Artifacts.FullName -join ', ')"
+$menuXml = Get-Content -LiteralPath (Join-Path $optionsSourceRoot "Shell\Menu2\MSUF_Menu2.xml") -Raw
+$retiredReference = Test-RetiredReference -Text $menuXml
+if ($retiredReference) {
+    throw "Options Menu2 still names a retired addon or file: $retiredReference"
 }
-
 $outputPath = Assert-WithinRepo (Join-Path $repoRoot $OutputDirectory) "Output directory"
 $stagePath = Assert-WithinRepo (Join-Path $outputPath "package") "Package stage"
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
@@ -389,34 +293,23 @@ foreach ($addonName in $addonNames) {
     Copy-Item -LiteralPath (Join-Path $repoRoot $addonName) -Destination $stagePath -Recurse -Force
 }
 
-# Assistant V1 is physically owned by the LoadOnDemand companion. Any copy
-# below the core addon would silently defeat that ownership contract.
+# Keep local files out of the addon package.
 $explicitExclusions = @(
-    "MidnightSimpleUnitFrames/.codex-remote-attachments",
     "MidnightSimpleUnitFrames/docs",
     "MidnightSimpleUnitFrames/scripts",
     "MidnightSimpleUnitFrames/tools",
     "MidnightSimpleUnitFrames/.gitignore",
     "MidnightSimpleUnitFrames/luac.out",
     "MidnightSimpleUnitFrames/MSUF_PerfyHook.lua",
-    "MidnightSimpleUnitFrames/Shell/Menu2",
-    "$optionsAddonName/Shell/Menu2/Assistant",
-    "$optionsAddonName/Shell/Menu2/MSUF_Menu2_AssistantRuntime.xml",
-    "$optionsAddonName/Shell/Menu2/MSUF_Menu2_AssistantDialogLocale.lua",
-    "$optionsAddonName/Shell/Menu2/MSUF_Menu2_AssistantDialogLocale_Data.lua"
+    "MidnightSimpleUnitFrames/Shell/Menu2"
 )
 foreach ($relativePath in $explicitExclusions) {
     Remove-StagedItem -StageRoot $stagePath -Path (Join-Path $stagePath ($relativePath.Replace('/', [System.IO.Path]::DirectorySeparatorChar)))
 }
 
+# Hidden folders (version control, editor and tool state) never ship, whatever
+# tool created them; the named ones are local work folders.
 $localDirectoryNames = @(
-    ".codex-remote-attachments",
-    ".agents",
-    ".codex",
-    ".git",
-    ".github",
-    ".idea",
-    ".vscode",
     "_local_workflows",
     "graphify-out",
     "__pycache__",
@@ -427,7 +320,7 @@ $localDirectoryNames = @(
     "tools"
 )
 $localDirectories = @(Get-ChildItem -LiteralPath $stagePath -Directory -Force -Recurse | Where-Object {
-    ($localDirectoryNames -contains $_.Name) -or ($_.Name -match '(?i)^graphify(?:[-_.].*)?$')
+    $_.Name.StartsWith('.') -or ($localDirectoryNames -contains $_.Name) -or ($_.Name -match '(?i)^graphify(?:[-_.].*)?$')
 } | Sort-Object { $_.FullName.Length } -Descending)
 foreach ($directory in $localDirectories) {
     Remove-StagedItem -StageRoot $stagePath -Path $directory.FullName
@@ -440,11 +333,6 @@ foreach ($file in $localFiles) {
     Remove-StagedItem -StageRoot $stagePath -Path $file.FullName
 }
 
-$stagedAssistantRoot = Join-Path $stagePath "MidnightSimpleUnitFrames_Assistant"
-$stagedManifestRefs = @(Assert-AssistantDirectoryContract -AssistantRoot $stagedAssistantRoot)
-if (($stagedManifestRefs -join "`n") -ne ($assistantManifestRefs -join "`n")) {
-    throw "Staged Assistant V1 manifest differs from the validated source manifest."
-}
 $stagedOptionsRoot = Join-Path $stagePath $optionsAddonName
 $stagedOptionsTocPayload = @(Assert-OptionsDirectoryContract -OptionsRoot $stagedOptionsRoot)
 if (($stagedOptionsTocPayload -join "`n") -ne ($optionsTocPayload -join "`n")) {
@@ -457,7 +345,7 @@ $actualTocRelativePaths = @($actualTocPaths | ForEach-Object {
 } | Sort-Object)
 $expectedTocRelativePaths = @($tocRelativePaths | Sort-Object)
 if (($actualTocRelativePaths -join "`n") -ne ($expectedTocRelativePaths -join "`n")) {
-    throw "Release stage TOCs do not match the three-addon contract. Expected [$($expectedTocRelativePaths -join ', ')], got [$($actualTocRelativePaths -join ', ')]."
+    throw "Release stage TOCs do not match the two-addon contract. Expected [$($expectedTocRelativePaths -join ', ')], got [$($actualTocRelativePaths -join ', ')]."
 }
 
 $versionPattern = New-Object System.Text.RegularExpressions.Regex('(?m)^##\s*Version:\s*.*$')
@@ -483,9 +371,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
 try {
     $entries = @($zip.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
-    $requiredZipEntries = @($requiredSourcePaths) + @($assistantManifestRefs | ForEach-Object {
-        "MidnightSimpleUnitFrames_Assistant/$_"
-    })
+    $requiredZipEntries = @($requiredSourcePaths)
     foreach ($requiredEntry in $requiredZipEntries) {
         if ($entries -notcontains $requiredEntry) {
             throw "Release zip is missing required path: $requiredEntry"
@@ -496,18 +382,23 @@ try {
     if (($topLevelDirectories -join "`n") -ne (@($addonNames | Sort-Object) -join "`n")) {
         throw "Release zip contains unexpected top-level paths: $($topLevelDirectories -join ', ')"
     }
+    $retiredEntry = $entries | Where-Object {
+        $entry = $_
+        @($tombstones.Addons | Where-Object { $entry.StartsWith($_ + '/', [System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0 -or
+            @($tombstones.Paths | Where-Object { $entry -ieq $_ }).Count -gt 0
+    } | Select-Object -First 1
+    if ($retiredEntry) {
+        throw "Release zip contains a retired addon or file: $retiredEntry"
+    }
 
     $forbiddenEntry = $entries | Where-Object {
-        ($_ -match '(?i)(^|/)(?:\.codex-remote-attachments|\.agents|\.codex|\.git|\.github|\.idea|\.vscode|docs|scripts|tools|_local_workflows|graphify(?:[-_.][^/]*)?|__pycache__|_?backups)(?:/|$)') -or
+        ($_ -match '(?i)(^|/)(?:\.[^/]+|docs|scripts|tools|_local_workflows|graphify(?:[-_.][^/]*)?|__pycache__|_?backups)(?:/|$)') -or
         ($_ -match '(?i)(^|/)MSUF_Perfy(?:Hook|FPS)?\.lua$') -or
-        ($_ -match '(?i)(^|/)[^/]*AssistantV2[^/]*(?:/|$)') -or
         ($_ -match '(?i)^MidnightSimpleUnitFrames/Shell/Menu2(?:/|$)') -or
-        ($_ -match "(?i)^$([regex]::Escape($optionsAddonName))/Shell/Menu2/Assistant/") -or
-        ($_ -match "(?i)^$([regex]::Escape($optionsAddonName))/Shell/Menu2/MSUF_Menu2_Assistant(?:Runtime\.xml|DialogLocale(?:_Data)?\.lua)$") -or
         ($_ -match '(?i)(?:^|/)(?:\.DS_Store|\.gitignore|\.pkgmeta|Thumbs\.db|desktop\.ini|luac\.out|graph\.json|GRAPH_REPORT\.md|\.graphify.*|.*\.(?:html?|md)|.*\.py[co])$')
     } | Select-Object -First 1
     if ($forbiddenEntry) {
-        throw "Release zip contains a forbidden core-owned Menu2, Options-owned Assistant runtime, V2, profiling, Graphify, backup, documentation, mockup, or local-only path: $forbiddenEntry"
+        throw "Release zip contains a forbidden profiling, Graphify, backup, documentation, mockup, or local-only path: $forbiddenEntry"
     }
 
     foreach ($tocEntry in $tocRelativePaths) {
@@ -539,39 +430,12 @@ try {
     if (($packagedOptionsTocPayload -join "`n") -ne ($optionsTocPayload -join "`n")) {
         throw "Packaged Options TOC payload differs from the validated source TOC."
     }
-
-    $assistantToc = Read-ZipEntryText -Zip $zip -EntryName "MidnightSimpleUnitFrames_Assistant/MidnightSimpleUnitFrames_Assistant.toc"
-    foreach ($requiredMarker in @(
-        '## LoadOnDemand: 1',
-        '## Dependencies: MidnightSimpleUnitFrames'
-    )) {
-        if ($assistantToc.IndexOf($requiredMarker, [System.StringComparison]::Ordinal) -lt 0) {
-            throw "Assistant companion TOC is missing required LoD marker: $requiredMarker"
-        }
-    }
-    $assistantTocPayload = @($assistantToc -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object {
-        $_ -and -not $_.StartsWith('##') -and -not $_.StartsWith('#')
-    })
-    if (($assistantTocPayload -join "`n") -ne $assistantManifestName) {
-        throw "Assistant companion TOC must load exactly its local $assistantManifestName. Got: $($assistantTocPayload -join ', ')"
+    $packagedMenuXml = Read-ZipEntryText -Zip $zip -EntryName "$optionsAddonName/Shell/Menu2/MSUF_Menu2.xml"
+    $retiredReference = Test-RetiredReference -Text $packagedMenuXml
+    if ($retiredReference) {
+        throw "Packaged Options menu still names a retired addon or file: $retiredReference"
     }
 
-    $assistantXml = Read-ZipEntryText -Zip $zip -EntryName "MidnightSimpleUnitFrames_Assistant/$assistantManifestName"
-    $scriptRefs = @(Get-AssistantManifestReferences -ManifestText $assistantXml)
-    if ($scriptRefs.Count -ne $assistantScriptCount -or (Get-AssistantReferenceHash -References $scriptRefs) -ne $assistantOrderSha256) {
-        throw "Packaged Assistant V1 manifest inventory/load order differs from the validated $assistantScriptCount-script contract."
-    }
-    if (($scriptRefs -join "`n") -ne ($assistantManifestRefs -join "`n")) {
-        throw "Packaged Assistant V1 manifest differs from the validated source manifest."
-    }
-
-    $assistantFiles = @($entries | Where-Object {
-        $_.StartsWith('MidnightSimpleUnitFrames_Assistant/', [System.StringComparison]::Ordinal) -and -not $_.EndsWith('/')
-    } | ForEach-Object { $_.Substring('MidnightSimpleUnitFrames_Assistant/'.Length) } | Sort-Object)
-    $expectedAssistantFiles = @(@("MidnightSimpleUnitFrames_Assistant.toc", $assistantManifestName) + @($assistantManifestRefs) | Sort-Object)
-    if (($assistantFiles -join "`n") -ne ($expectedAssistantFiles -join "`n")) {
-        throw "Assistant companion inventory differs from its exact V1 manifest contract. Got: $($assistantFiles -join ', ')"
-    }
 } finally {
     $zip.Dispose()
 }
@@ -585,5 +449,5 @@ if (-not $KeepStage) {
     Remove-StagedItem -StageRoot $outputPath -Path $stagePath
 }
 
-Write-Host "Validated ${zipPath}: three addons, three stamped TOCs, Options LoD ownership, exact $assistantScriptCount-script Assistant V1 LoD manifest, and no core Menu2/Assistant/V2/Graphify/backup/local artifacts."
+Write-Host "Validated ${zipPath}: two addons, two stamped TOCs, Options LoD ownership, and no retired addon, retired file or local artifact."
 Write-Output $zipPath

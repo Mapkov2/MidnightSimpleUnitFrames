@@ -198,3 +198,4 @@ canaccesstable	*	secret	12.x secret-value API the harness does not model
 hasanysecretvalues	*	secret	12.x secret-value API the harness does not model
 hash_SlashCmdList	*	table	Blizzard slash-token hash; MSUF probes it before claiming /rl
 issecure	*	secret	12.x secret-value API the harness does not model
+secureexecuterange	*	api	Blizzard client API the harness does not model; the EventBus and the Scheduler isolate every callback with it

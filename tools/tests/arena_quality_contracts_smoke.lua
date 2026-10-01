@@ -409,7 +409,7 @@ local function LoadArenaCastbars(options)
         return frame
     end
 
-    assert(loadfile(CASTBARS))("MidnightSimpleUnitFrames", Namespace(nil))
+    assert(loadfile(CASTBARS))("MidnightSimpleUnitFrames", Namespace(options.client))
     return W
 end
 
@@ -537,6 +537,19 @@ Contract("arena castbar lifecycle survives an EventBus refusal", function()
     assert(#frames == 1 and CountKeys(frames[1].events) == 4 and frames[1].events.PVP_MATCH_STATE_CHANGED == nil
         and classic.registerCalls.PVP_MATCH_STATE_CHANGED == nil,
         "the fallback registered PVP_MATCH_STATE_CHANGED on a client without it")
+
+    -- The client model decides where it exists: its Classic denylist names
+    -- PVP_MATCH_STATE_CHANGED although the event table may still know it.
+    local denylisted = LoadArenaCastbars({ client = { SupportsEvent = function(event)
+        return event ~= "PVP_MATCH_STATE_CHANGED"
+    end } })
+    denylisted.refusals.PLAYER_ENTERING_WORLD = true
+    denylisted.registerCalls = {}
+    _G.MSUF_ArenaCastbars_SyncLifecycle(true)
+    frames = denylisted.EventFrames()
+    assert(#frames == 1 and frames[1].events.PVP_MATCH_STATE_CHANGED == nil
+        and denylisted.registerCalls.PVP_MATCH_STATE_CHANGED == nil,
+        "the arena lifecycle asked the event table instead of MSUF.Client.SupportsEvent")
 
     -- No EventBus at all keeps the private frame, as before.
     local busless = LoadArenaCastbars({ bus = false })

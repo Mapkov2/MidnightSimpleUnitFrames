@@ -149,6 +149,10 @@ local function LoadElement(client)
     local commonChunk, commonError = loadfile(commonPath)
     assert(commonChunk, commonError)
     commonChunk("MidnightSimpleUnitFrames", MSUF)
+    assert(loadfile(ResolvePath(
+        "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua",
+        "UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"
+    )))("MidnightSimpleUnitFrames", MSUF)
     local portraitChunk, portraitError = loadfile(portraitPath)
     assert(portraitChunk, portraitError)
     portraitChunk("MidnightSimpleUnitFrames", MSUF)

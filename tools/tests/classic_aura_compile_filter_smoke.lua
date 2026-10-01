@@ -651,7 +651,9 @@ do
 
     local function LaneFrame(trigger)
         -- Hide permanent is filter work, so the border is resolved from the
-        -- lane's visible debuffs instead of a direct query. Instance-ID order
+        -- lane's scan instead of a direct query. The icon filter never reaches
+        -- it: a debuff Hide permanent drops from the icons still lights the
+        -- cleanse border, as Retail's independent sensors do. Instance-ID order
         -- leaves the trigger as the only reason to resolve aura ownership.
         SetTargetDB({ debuffFilters = { hidePermanent = true }, debuffSort = "INSTANCE_ID", buffSort = "INSTANCE_ID" })
         local frame = NewFrame("target", { border = { dispel = true, dispelTrigger = trigger } })
@@ -677,7 +679,7 @@ do
             World.Set("target", { untypedForeign, permanentByType[dispelType] })
             frame = LaneFrame("BY_ME")
             ExpectVisible(frame, "debuff", IDs(untypedForeign.id), label)
-            ExpectBorder(frame, false, nil, label)
+            ExpectBorder(frame, class.removable[dispelType] == true, permanentByType[dispelType].id, label)
         end
     end
 
@@ -704,7 +706,8 @@ do
     ExpectBorder(frame, true, untypedForeign.id, "lane ANY_DEBUFF")
     World.Set("target", { permanentByType.Magic })
     frame = LaneFrame("ANY_DEBUFF")
-    ExpectBorder(frame, false, nil, "lane ANY_DEBUFF with only a hidden permanent debuff")
+    ExpectVisible(frame, "debuff", "", "lane ANY_DEBUFF with only a hidden permanent debuff")
+    ExpectBorder(frame, true, permanentByType.Magic.id, "lane ANY_DEBUFF with only a hidden permanent debuff")
     ExpectNoUnknownFilters("lane dispel visuals")
 end
 
@@ -747,7 +750,10 @@ do
         local label = "group party1 for " .. class.name
         ExpectVisible(frame, "buff", IDs(buffOwn.id, buffPet.id), label)
         ExpectVisible(frame, "debuff", IDs(untypedForeign.id, curse.id), label)
-        ExpectBorder(frame, class.removable.Curse == true, curse.id, label)
+        -- Hide permanent drops the permanent Magic debuff from the icons only:
+        -- the cleanse border still sees it (no class here removes both types).
+        local cleansed = class.removable.Curse and curse or (class.removable.Magic and magicPermanent) or nil
+        ExpectBorder(frame, cleansed ~= nil, cleansed and cleansed.id, label)
         ExpectNoUnknownFilters(label)
     end
 end

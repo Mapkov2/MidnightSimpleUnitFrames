@@ -3,18 +3,19 @@
 -- Every client loads the Retail-named Preview/MSUF_Menu2_UnitPreview_Render.lua.
 -- Its Classic override hunks are gated on client facts read once at load
 -- (PREVIEW_CLASSIC, LEGACY_BLIZZARD_PORTRAIT): on Vanilla, TBC and Mists the
--- texture layers stamp after the portrait instead of inside Stage.RenderHealth,
--- and the Blizzard portrait shape gets a gold fallback ring where the stock atlas
--- is missing; Era also skips the modern atlases. Midnight and WoW Forever must
--- keep Retail's preview exactly. The Classic side is pinned by
+-- Blizzard portrait shape gets a gold fallback ring where the stock atlas is
+-- missing; Era also skips the modern atlases. Midnight and WoW Forever keep
+-- Retail's portrait preview exactly. Texture layers stamp after the portrait on
+-- every client (the Retail order stamped them inside Stage.RenderHealth, before
+-- power and portrait had this refresh's geometry). The Classic side is pinned by
 -- classic_unit_preview_parity_smoke and classic_unit_preview_texture_layer_order_smoke.
 --
 -- This smoke boots the flavor's whole shipped core and Options graph through
 -- tools/tests/client_world.lua, builds the real unit preview and drives its real
 -- Refresh from MSUF_DB:
---   * Retail's stamp order: RenderTextureLayerPreview runs once per refresh,
---     from Stage.RenderHealth, and Preview.Refresh never runs it again after
---     Stage.RenderPortrait (a call hook records who calls it);
+--   * the stamp order: RenderTextureLayerPreview runs once per refresh, from
+--     Preview.Refresh after Stage.RenderPortrait, never from Stage.RenderHealth
+--     (a call hook records who calls it);
 --   * the Blizzard portrait shape: the standalone contour ring and atlas mask while the
 --     atlases exist, and no gold fallback ring when they do not.
 --
@@ -116,7 +117,7 @@ local function Refresh(key)
 end
 local function Shown(region) return region ~= nil and region:IsShown() == true end
 
--- 1. Retail's stamp order ---------------------------------------------------
+-- 1. Stamp order ------------------------------------------------------------
 -- A layer on Player Power and one on the Portrait, both previewed, so the
 -- stamp has real targets; the order is what is measured.
 player.showPowerBar = true
@@ -136,9 +137,9 @@ Refresh("player")
 debug.sethook()
 Check(#callers > 0, "the refresh never stamps the texture layers")
 Check(#callers == 1, "a refresh stamps the texture layers " .. #callers .. " times instead of once")
-Check(callers[1] == HEALTH_LINE, "the texture layers are stamped by the function at line " .. tostring(callers[1])
-    .. (callers[1] == REFRESH_LINE and " (Preview.Refresh after Stage.RenderPortrait, the Classic order)" or "")
-    .. " instead of Stage.RenderHealth")
+Check(callers[1] == REFRESH_LINE, "the texture layers are stamped by the function at line " .. tostring(callers[1])
+    .. (callers[1] == HEALTH_LINE and " (Stage.RenderHealth, before power and portrait have this refresh's geometry)" or "")
+    .. " instead of Preview.Refresh after Stage.RenderPortrait")
 Check(Shown(mock.powerBG) and Shown(mock.portrait), "harness: the measured refresh shows no power bar or portrait")
 Check(Shown(mock.texLayers[1]), "the texture layer on Player Power is not previewed")
 for _, prefix in ipairs({ "texLayer", "texLayer2" }) do
