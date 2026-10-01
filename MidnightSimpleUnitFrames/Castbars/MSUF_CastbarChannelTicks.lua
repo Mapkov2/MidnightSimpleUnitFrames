@@ -376,9 +376,40 @@ UpdatePlayerChannelHasteMarkers = function(frame, force)
         HideExtraMarkers(frame, tickCount + 1)
     end
 
+    -- The accent marks the tick the moving fill edge reaches last. Positions
+    -- run from the fill anchor: a filling bar reaches the farthest marker last,
+    -- a draining channel (the default, non-unified direction) the nearest one.
+    -- The runtime records the direction the running bar was bound with; a
+    -- frame without one (a preview) asks the same cast-type rule.
+    local countsDown = frame._msufCountsDown
+    if type(countsDown) ~= "boolean" then
+        local getCountsDown = _G.MSUF_GetCastbarCountsDown
+        if type(getCountsDown) == "function" then
+            countsDown = getCountsDown(frame, true) == true
+        else
+            local general = MSUF_DB and MSUF_DB.general
+            countsDown = not (general and general.castbarUnifiedDirection == true)
+        end
+    end
+    local lastIndex, lastPosition = countsDown and 1 or tickCount, nil
+    if useCustom and type(customPositions) == "table" then
+        for index = 1, tickCount do
+            local position = customPositions[index]
+            if type(position) ~= "number" then position = index / (divisor or tickCount + 1) * 100 end
+            position = math.max(0, math.min(100, position))
+            if lastPosition == nil or (countsDown and position < lastPosition)
+                or (not countsDown and position >= lastPosition) then
+                lastIndex, lastPosition = index, position
+            end
+        end
+    end
+    local accentLast = MSUF_DB and MSUF_DB.general and MSUF_DB.general.castbarAccentLastTick == true
     for index = 1, tickCount do
         local marker = markers[index]
         if marker then
+            local accent = accentLast and index == lastIndex
+            marker:SetWidth(accent and 3 or 2)
+            marker:SetColorTexture(1, accent and .72 or 1, accent and .2 or 1, 1)
             if marker.SetAlpha then
                 marker:SetAlpha(1)
             end

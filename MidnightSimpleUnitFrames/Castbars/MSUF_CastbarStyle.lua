@@ -19,8 +19,8 @@ local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local OUTLINE_BACKDROPS = {}
 
 local function GeneralDB()
-    if type(EnsureDB) == "function" then
-        EnsureDB()
+    if type(_G.MSUF_EnsureDB) == "function" then
+        _G.MSUF_EnsureDB()
     end
 
     return (_G.MSUF_DB and _G.MSUF_DB.general) or {}

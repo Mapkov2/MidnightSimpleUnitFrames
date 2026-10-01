@@ -672,6 +672,14 @@ local function UpdatePlayerCastbarPreview()
     if type(_G.MSUF_UpdateCastbarTextures) == "function" then _G.MSUF_UpdateCastbarTextures() end
 end
 
+--- Boss and arena castbar drags position their previews every tick: one
+--- shared callback instead of a new closure per call.
+local previewPositioner, previewPositioned
+local function PositionPreviewFrame(frame, index)
+    previewPositioner(frame, index)
+    previewPositioned = true
+end
+
 local function PositionCastbarPreviewUnit(unit)
     if _G.MSUF_UnitEditModeActive ~= true or not EnsureGeneralDB().castbarPlayerPreviewEnabled then
         return false
@@ -692,10 +700,9 @@ local function PositionCastbarPreviewUnit(unit)
         local positioned = false
         local positionBoss = _G.MSUF_PositionBossCastbarPreview
         if type(positionBoss) == "function" then
-            ForEachBossPreview(function(frame, index)
-                positionBoss(frame, index)
-                positioned = true
-            end)
+            previewPositioner, previewPositioned = positionBoss, false
+            ForEachBossPreview(PositionPreviewFrame)
+            positioned, previewPositioner = previewPositioned, nil
         end
         if positioned then return true end
         if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
@@ -710,10 +717,9 @@ local function PositionCastbarPreviewUnit(unit)
         local positioned = false
         local positionArena = _G.MSUF_PositionArenaCastbarPreview
         if type(positionArena) == "function" then
-            ForEachArenaPreview(function(frame, index)
-                positionArena(frame, index)
-                positioned = true
-            end)
+            previewPositioner, previewPositioned = positionArena, false
+            ForEachArenaPreview(PositionPreviewFrame)
+            positioned, previewPositioner = previewPositioned, nil
         end
         if positioned then return true end
         if type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then

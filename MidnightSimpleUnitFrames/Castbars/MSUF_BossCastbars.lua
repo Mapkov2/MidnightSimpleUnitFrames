@@ -54,8 +54,8 @@ local CAST_EVENTS = {
 }
 
 local function EnsureDB()
-    if type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
+    if type(_G.MSUF_EnsureDB) == "function" then
+        _G.MSUF_EnsureDB()
     end
 end
 

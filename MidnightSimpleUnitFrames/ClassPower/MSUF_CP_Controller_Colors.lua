@@ -90,10 +90,11 @@ builders.CONTROLLER_COLORS = function(E)
             end
         end
 
-        --- Fallback: Blizzard PowerBarColor
+        --- Fallback: MSUF's own resource defaults, then Blizzard PowerBarColor
         local pbc = _G.PowerBarColor
-        if pbc then
-            local c = (token and pbc[token]) or pbc[powerType]
+        local own = MSUF._PBCSnap
+        if pbc or own then
+            local c = (token and own and own[token]) or (pbc and ((token and pbc[token]) or pbc[powerType]))
             if c then
                 local r = c.r or c[1]
                 local g = c.g or c[2]

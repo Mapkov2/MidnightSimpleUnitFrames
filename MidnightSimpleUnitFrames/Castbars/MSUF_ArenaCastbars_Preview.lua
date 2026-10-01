@@ -28,8 +28,8 @@ end
 local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)))
 
 local function GeneralDB()
-    if type(EnsureDB) == "function" then
-        EnsureDB()
+    if type(_G.MSUF_EnsureDB) == "function" then
+        _G.MSUF_EnsureDB()
     end
 
     MSUF_DB = MSUF_DB or {}

@@ -136,7 +136,9 @@ builders.CONTROLLER_CONFIG = function(E)
     local function CP_ConfigAnyFeatureEnabled(playerManaEnabled)
         local db = MSUF_DB
         local b = db and db.bars
+        local extrasWanted = MSUF.CPBuilders and MSUF.CPBuilders.ResourceExtrasWanted
         return not b or b.showClassPower ~= false or b.showAltMana == true
+            or (extrasWanted ~= nil and extrasWanted(b))
             or b.playerHPBarEnabled == true or playerManaEnabled == true
             or (playerManaEnabled == nil and CP_ConfigPlayerManaOverrideEnabled())
     end

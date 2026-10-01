@@ -1290,8 +1290,8 @@ local function InstallDriverColorMethod(frame)
             return
         end
 
-        if not _G.MSUF_DB and type(_G.EnsureDB) == "function" then
-            _G.EnsureDB()
+        if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
+            _G.MSUF_EnsureDB()
         end
 
         local forcedNotInterruptible = self.isNotInterruptible == true

@@ -1,3 +1,4 @@
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Castbars/MSUF_PlayerCastbarRuntime.lua
 --- Player castbar runtime.
 ---
@@ -173,7 +174,8 @@ local function UpdateLatencyZone(frame, isChanneled, durationSeconds)
     EnsureDBLazy()
 
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-    if general.castbarShowLatency == false then
+    if frame.latencyText then frame.latencyText:Hide() end
+    if general.castbarShowLatency == false and not general.castbarShowLatencyText then
         frame.latencyBar:Hide()
         return
     end
@@ -188,6 +190,20 @@ local function UpdateLatencyZone(frame, isChanneled, durationSeconds)
 
     local _, _, homeMS, worldMS = GetNetStats()
     local networkMS = math_max(homeMS or 0, worldMS or 0)
+    if general.castbarShowLatencyText then
+        local text = frame.latencyText
+        if not text then
+            text = PixelLayoutRegion(frame.statusBar:CreateFontString(nil, "OVERLAY"))
+            frame.latencyText = text
+            text:SetPoint("TOPRIGHT", frame.statusBar, "BOTTOMRIGHT", 0, -2)
+        end
+        local font, size, flags = frame.timeText:GetFont()
+        text:SetFont(font, size, flags)
+        text:SetTextColor(1, 1, 1)
+        text:SetFormattedText("%d ms", math.floor(networkMS + .5))
+        text:Show()
+    end
+    if general.castbarShowLatency == false then frame.latencyBar:Hide(); return end
     local queueWindowMS = tonumber(GetCVar("SpellQueueWindow") or "0") or 0
     local latencyMS = math_max(networkMS, queueWindowMS)
     local durationMS = durationSeconds * 1000
@@ -710,6 +726,7 @@ local function StopPlayerCastbar(frame)
         DisableFrameOnUpdate(frame)
         if _G.MSUF_UnregisterCastbar then _G.MSUF_UnregisterCastbar(frame) end
         if frame.latencyBar then frame.latencyBar:Hide() end
+        if frame.latencyText then frame.latencyText:Hide() end
         if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
         frame:Hide()
     end
@@ -937,6 +954,7 @@ local function DisablePlayerCastbar(frame)
     ClearPendingPlayerInterrupt(frame)
     if frame.timeText then _G.MSUF_SetTextIfChanged(frame.timeText, "") end
     if frame.latencyBar then frame.latencyBar:Hide() end
+    if frame.latencyText then frame.latencyText:Hide() end
     frame:Hide()
 end
 

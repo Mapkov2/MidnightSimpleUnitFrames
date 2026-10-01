@@ -128,8 +128,6 @@ end
 local function GeneralDB()
     if type(_G.MSUF_EnsureDB) == "function" then
         _G.MSUF_EnsureDB()
-    elseif type(EnsureDB) == "function" then
-        EnsureDB()
     end
 
     return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
@@ -291,11 +289,51 @@ local function NeedsInterruptCooldownUpdate(spellID, baseSpellID)
         and (spellID == previousSecondarySpellID or baseSpellID == previousSecondarySpellID)
 end
 
+-- A client build without the Duration API reads the plain cooldown table:
+-- C_Spell.GetSpellCooldown is what Blizzard's Classic action buttons call
+-- (Blizzard_ActionBar/Shared/ActionButton.lua on every Classic branch), and
+-- no Classic cooldown value is restricted. One reused view per slot answers
+-- the Duration methods this module reads. Like the ignoreGCD argument of the
+-- Duration API it ignores the global cooldown: no interrupt recovers in 1.5 s
+-- or less, the longest Classic global cooldown. A held cooldown (isEnabled
+-- false) never reports ready.
+local CLASSIC_GCD_MAX = 1.5
+local PlainCooldownView = {}
+PlainCooldownView.__index = PlainCooldownView
+function PlainCooldownView:GetEndTime() return self.endTime end
+function PlainCooldownView:GetStartTime() return self.startTime end
+function PlainCooldownView:GetRemainingDuration()
+    if self.held then return plainHuge end
+    local remaining = self.endTime - GetTime()
+    return remaining > 0 and remaining or 0
+end
+function PlainCooldownView:IsZero() return not self.held and self:GetRemainingDuration() <= 0 end
+
+local function PlainSlotCooldown(slot, spellID)
+    local read = SpellAPI.GetSpellCooldown
+    local info = type(read) == "function" and read(spellID)
+    if type(info) ~= "table" then return nil end
+    local view = slot.plainCooldown
+    if not view then
+        view = setmetatable({}, PlainCooldownView)
+        slot.plainCooldown = view
+    end
+    local start, duration, rate = PlainNumber(info.startTime) or 0, PlainNumber(info.duration) or 0, PlainNumber(info.modRate)
+    view.held = info.isEnabled == false
+    if duration <= CLASSIC_GCD_MAX or start <= 0 then
+        view.startTime, view.endTime = 0, 0
+    else
+        view.startTime, view.endTime = start, start + duration / ((rate and rate > 0) and rate or 1)
+    end
+    if view.held then view.endTime = plainHuge end
+    return view
+end
+
 -- Share each Duration only within this rendered frame. Relevant events must
 -- invalidate before reading, including multiple resets within the same frame.
 local function SlotCooldown(slot)
     local spellID = slot.spellID
-    if not (spellID and SpellAPI and SpellAPI.GetSpellCooldownDuration) then
+    if not (spellID and SpellAPI and (SpellAPI.GetSpellCooldownDuration or SpellAPI.GetSpellCooldown)) then
         return nil
     end
     local frameStamp = _G.GetTime and _G.GetTime()
@@ -305,7 +343,12 @@ local function SlotCooldown(slot)
     then
         return slot.snapshot
     end
-    local cooldown = SpellAPI.GetSpellCooldownDuration(spellID, true)
+    local cooldown
+    if SpellAPI.GetSpellCooldownDuration then
+        cooldown = SpellAPI.GetSpellCooldownDuration(spellID, true)
+    else
+        cooldown = PlainSlotCooldown(slot, spellID)
+    end
     if frameStamp ~= nil then
         slot.snapshot = cooldown
         slot.snapshotFrameStamp = frameStamp
@@ -855,7 +898,177 @@ local function HideIndicatorVisual(frame)
     RestoreOutline(frame)
 end
 
+local function HideProjection(projection)
+    if not projection._msufShown then return end
+    projection._msufShown = nil
+    projection:Hide()
+    projection.marker:Hide()
+    projection.segment:Hide()
+end
+
+local function HideTimeProjection(frame)
+    local list = frame and frame._msufKickTimeProjections
+    if list then for i = 1, #list do HideProjection(list[i]) end end
+end
+
+-- The marker and shade are regions of the castbar's own status bar, drawn on
+-- ARTWORK below its OVERLAY cast/time text. A mask covering exactly the bar
+-- clips the marker, and the fill's own masks (rounded or slanted bars) are
+-- borrowed by both, so they keep the bar's shape. Borrowed references are only re-attached
+-- when the fill's mask set changes.
+local function SyncProjectionMasks(frame, projection)
+    local statusBar = frame.statusBar
+    local fill = statusBar.GetStatusBarTexture and statusBar:GetStatusBarTexture()
+    local count = fill and fill.GetNumMaskTextures and fill:GetNumMaskTextures() or 0
+    if plainIsSecret(count) == true or type(count) ~= "number" then count = 0 end
+    local borrowed = projection._msufBorrowedMasks
+    local same = #borrowed == count
+    for index = 1, count do
+        if same and borrowed[index] ~= fill:GetMaskTexture(index) then same = false end
+    end
+    if same then return end
+    local marker, segment = projection.marker, projection.segment
+    for index = #borrowed, 1, -1 do
+        marker:RemoveMaskTexture(borrowed[index]); segment:RemoveMaskTexture(borrowed[index])
+        borrowed[index] = nil
+    end
+    for index = 1, count do
+        local mask = fill:GetMaskTexture(index)
+        if mask and plainIsSecret(mask) ~= true then
+            marker:AddMaskTexture(mask); segment:AddMaskTexture(mask)
+            borrowed[#borrowed + 1] = mask
+        end
+    end
+end
+
+local function EnsureProjection(frame, list, index)
+    local projection = list[index]
+    if projection then return projection end
+    local statusBar = frame.statusBar
+    -- An invisible native bar locates the cooldown end on the cast interval.
+    projection = PixelLayoutRegion(_G.CreateFrame("StatusBar", nil, statusBar))
+    projection:SetAllPoints(statusBar)
+    projection:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    projection:SetStatusBarColor(0, 0, 0, 0)
+    projection:Hide()
+    local clip = frame._msufKickProjectionClip
+    if not clip then
+        clip = PixelLayoutRegion(statusBar:CreateMaskTexture(nil, "ARTWORK"))
+        clip:SetTexture("Interface\\Buttons\\WHITE8X8", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        clip:SetAllPoints(statusBar)
+        frame._msufKickProjectionClip = clip
+    end
+    projection.marker = PixelLayoutRegion(statusBar:CreateTexture(nil, "ARTWORK", nil, 7))
+    projection.marker:SetWidth(2)
+    projection.marker:AddMaskTexture(clip)
+    projection.marker:Hide()
+    -- The shade spans from the fill edge to the bar end and never leaves it.
+    projection.segment = PixelLayoutRegion(statusBar:CreateTexture(nil, "ARTWORK", nil, 6))
+    projection.segment:Hide()
+    projection._msufBorrowedMasks = {}
+    list[index] = projection
+    return projection
+end
+
+-- Absolute timestamps go directly into native StatusBar sinks. Its fill
+-- texture locates the cooldown end within the cast interval without Lua
+-- arithmetic or comparisons on possibly restricted times. Each interrupt
+-- keeps its own marker; two restricted cooldowns are never sorted in Lua.
+-- Only the three value sinks are written per refresh; anchors, colours and
+-- masks are rewritten when the direction, options or ready colour change.
+local function RefreshTimeProjection(frame, castState, general, active)
+    if not active or frame.isNotInterruptible == true or frame.MSUF_kickInterruptibleConfirmed == false
+        or (castState and castState.isNotInterruptible == true) or not ShouldShow(general, frame.unit)
+        or not (general.kickReadyTimeMarker or general.kickReadyTimeSegment) then
+        HideTimeProjection(frame); return
+    end
+    local duration = frame.MSUF_durationObj or (castState and castState.durationObj)
+    if not duration or not duration.GetStartTime or not duration.GetEndTime then
+        HideTimeProjection(frame); return
+    end
+    if state.spellID == nil then ResolveInterruptSpellID() end
+    local list = frame._msufKickTimeProjections
+    if not list then list = {}; frame._msufKickTimeProjections = list end
+    local raw = ResolveRawNotInterruptible(frame, castState)
+    local rawSecret = plainIsSecret(raw) == true
+    -- The shade marks the time left after the interrupt recovers, so the
+    -- projection fills the way the bar's moving edge travels: a draining
+    -- channel runs from the far side of its anchor.
+    local reverse = (frame._msufStripeReverseFill == true) ~= (frame._msufCountsDown == true)
+    local showMarker, showSegment = general.kickReadyTimeMarker == true, general.kickReadyTimeSegment == true
+    local r, g, b, a = RGBAForReady(true, general)
+    for index = 1, slotCount do
+        local cooldown = SlotCooldown(slots[index])
+        if cooldown and cooldown.GetEndTime then
+            local projection = EnsureProjection(frame, list, index)
+            local marker, segment = projection.marker, projection.segment
+            if projection._msufReverse ~= reverse then
+                projection._msufReverse = reverse
+                projection:SetReverseFill(reverse)
+                local fill = projection:GetStatusBarTexture()
+                marker:ClearAllPoints()
+                segment:ClearAllPoints()
+                -- The marker sits just past the fill edge; when the interrupt
+                -- recovers only after the cast ends, the full fill pushes it
+                -- outside the bar and the clip mask hides it.
+                if reverse then
+                    marker:SetPoint("TOPRIGHT", fill, "TOPLEFT", 0, 0)
+                    marker:SetPoint("BOTTOMRIGHT", fill, "BOTTOMLEFT", 0, 0)
+                    segment:SetPoint("TOPLEFT", projection, "TOPLEFT", 0, 0)
+                    segment:SetPoint("BOTTOMRIGHT", fill, "BOTTOMLEFT", 0, 0)
+                else
+                    marker:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
+                    marker:SetPoint("BOTTOMLEFT", fill, "BOTTOMRIGHT", 0, 0)
+                    segment:SetPoint("TOPLEFT", fill, "TOPRIGHT", 0, 0)
+                    segment:SetPoint("BOTTOMRIGHT", projection, "BOTTOMRIGHT", 0, 0)
+                end
+            end
+            if projection._msufR ~= r or projection._msufG ~= g or projection._msufB ~= b or projection._msufA ~= a then
+                projection._msufR, projection._msufG, projection._msufB, projection._msufA = r, g, b, a
+                marker:SetColorTexture(r, g, b, a)
+                segment:SetColorTexture(r, g, b, .25 * a)
+            end
+            SyncProjectionMasks(frame, projection)
+            projection:SetMinMaxValues(duration:GetStartTime(), duration:GetEndTime())
+            projection:SetValue(cooldown:GetEndTime())
+            if rawSecret then
+                -- Restricted interruptibility hides both natively.
+                marker:SetAlphaFromBoolean(raw, 0, 1)
+                segment:SetAlphaFromBoolean(raw, 0, 1)
+                projection._msufAlpha = nil
+            else
+                local alpha = raw == true and 0 or 1
+                if projection._msufAlpha ~= alpha then
+                    projection._msufAlpha = alpha
+                    marker:SetAlpha(alpha); segment:SetAlpha(alpha)
+                end
+            end
+            if not projection._msufShown or projection._msufMarker ~= showMarker or projection._msufSegment ~= showSegment then
+                projection._msufShown, projection._msufMarker, projection._msufSegment = true, showMarker, showSegment
+                projection:Show()
+                marker:SetShown(showMarker)
+                segment:SetShown(showSegment)
+            end
+        elseif list[index] then HideProjection(list[index]) end
+    end
+    for index = slotCount + 1, #list do HideProjection(list[index]) end
+end
+
+-- A cooldown reset or reduction moves the recovery point without changing
+-- the displayed readiness; re-seat the projections of active casts only.
+local function RefreshActiveProjections()
+    local general = GeneralDB()
+    if not (general.kickReadyTimeMarker or general.kickReadyTimeSegment) then return end
+    for frame in pairs(activeIndicatorFrames) do
+        RefreshTimeProjection(frame, nil, general, frame.MSUF_castActive)
+    end
+    for frame in pairs(fillActiveFrames) do
+        RefreshTimeProjection(frame, nil, general, frame.MSUF_castActive)
+    end
+end
+
 local function HideIndicator(frame)
+    HideTimeProjection(frame)
     MarkInactiveIndicatorFrame(frame)
     MarkInactiveFillFrame(frame)
     HideIndicatorVisual(frame)
@@ -878,6 +1091,7 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
     local castStateTable = type(castState) == "table" and castState or nil
     local active = frame.MSUF_castActive or (castStateTable and castStateTable.active)
     local style = IndicatorStyle(general)
+    RefreshTimeProjection(frame, castStateTable, general, active)
 
     if style == "fill" then
         MarkInactiveIndicatorFrame(frame)
@@ -1160,7 +1374,9 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved, cooldown, c
             -- Keep wakes through the final 50 ms: visual readiness has a
             -- tolerance, but native completion fires only at actual zero.
             local slotRunning = slotRemaining == nil or slotRemaining > 0
-            local wakeFrame = slotRunning and EnsureCooldownWakeFrame(slot) or nil
+            -- Only a native Duration object can arm the completion frame; the
+            -- plain Classic view takes the timer below.
+            local wakeFrame = slotRunning and slotCooldown ~= slot.plainCooldown and EnsureCooldownWakeFrame(slot) or nil
             if wakeFrame then
                 if not armed then
                     cooldownTimerGeneration = cooldownTimerGeneration + 1
@@ -1411,6 +1627,7 @@ eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID)
 
         local alreadyDisplayed, ready, remaining, cooldown, cooldownResolved = CooldownEventAlreadyDisplayed()
         if alreadyDisplayed then
+            RefreshActiveProjections()
             ScheduleCooldownRefresh(remaining, true, cooldown, cooldownResolved)
             UpdateCooldownEventRegistration()
             return

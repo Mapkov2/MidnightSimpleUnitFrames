@@ -21,8 +21,6 @@ local IsSecretValue = _G.issecretvalue
 local function GeneralDB()
     if type(_G.MSUF_EnsureDB) == "function" and not _G.MSUF_DB then
         _G.MSUF_EnsureDB()
-    elseif type(_G.EnsureDB) == "function" and not _G.MSUF_DB then
-        _G.EnsureDB()
     end
     ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}

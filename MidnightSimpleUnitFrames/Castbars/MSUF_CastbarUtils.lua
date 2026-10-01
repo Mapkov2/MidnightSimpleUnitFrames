@@ -90,8 +90,8 @@ if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
 end
 
 local function EnsureDBLazy()
-    if not _G.MSUF_DB and type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
+    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
+        _G.MSUF_EnsureDB()
     end
 end
 ExportPublic("MSUF_EnsureDBLazy", EnsureDBLazy)
@@ -1155,7 +1155,7 @@ end
 ExportPublic("MSUF_ClearEmpowerState", ClearEmpowerState)
 
 local function EnsureGeneralDB()
-    local ensure = _G.MSUF_EnsureDB or _G.EnsureDB
+    local ensure = _G.MSUF_EnsureDB
     if type(ensure) == "function" then ensure() end
 
     local db = _G.MSUF_DB

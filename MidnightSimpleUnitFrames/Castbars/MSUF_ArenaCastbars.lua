@@ -20,9 +20,16 @@ local MAX_ARENA_FRAMES = math.max(0, math.min(5, math.floor(tonumber(_G.MSUF_MAX
 -- Classic Era and WoW Forever load this file without arena units
 -- (MSUF.Client.SupportsUnit). The answer is fixed for the session, so read it once.
 local HAS_ARENA_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit and not MSUF.Client.SupportsUnit("arena"))
-local HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
-    and type(_G.C_EventUtils.IsEventValid) == "function"
-    and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
+-- The client model's answer includes its Classic event denylist; a partial
+-- load without the client model asks the event table directly.
+local HAS_PVP_MATCH_STATE_CHANGED
+if MSUF.Client and type(MSUF.Client.SupportsEvent) == "function" then
+    HAS_PVP_MATCH_STATE_CHANGED = MSUF.Client.SupportsEvent("PVP_MATCH_STATE_CHANGED") == true
+else
+    HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
+        and type(_G.C_EventUtils.IsEventValid) == "function"
+        and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
+end
 local UnitExists = _G.UnitExists
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local UnitIsUnconscious = _G.UnitIsUnconscious
@@ -45,8 +52,8 @@ local CAST_EVENTS = {
 }
 
 local function EnsureDB()
-    if type(_G.EnsureDB) == "function" then
-        _G.EnsureDB()
+    if type(_G.MSUF_EnsureDB) == "function" then
+        _G.MSUF_EnsureDB()
     end
 end
 

@@ -93,7 +93,7 @@ local function Round(value)
 end
 
 local function GeneralDB()
-    if type(EnsureDB) == "function" then EnsureDB() end
+    if type(_G.MSUF_EnsureDB) == "function" then _G.MSUF_EnsureDB() end
     return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 end
 
@@ -1196,7 +1196,7 @@ end
 
 -- Shared re-anchor for the Target and Focus castbars.
 local function ReanchorTargetOrFocusCastbarBase(unit)
-    EnsureDB()
+    _G.MSUF_EnsureDB()
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
     local frame = (unit == "target"
         and (_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)))
@@ -1273,7 +1273,7 @@ function MSUF_ReanchorFocusCastBar()
 end
 
 local function ReanchorPlayerCastBarBase()
-    EnsureDB()
+    _G.MSUF_EnsureDB()
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
 
     if not (_G.MSUF_ShouldUseBlizzardCastbar and _G.MSUF_ShouldUseBlizzardCastbar("player", g))

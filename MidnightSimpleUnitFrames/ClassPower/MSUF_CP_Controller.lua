@@ -1627,6 +1627,10 @@ function Refresh.VisibleTextures()
 end
 
 local CP_SetStructuralEventsBound = CP_Noop
+local CP_ShouldUseFrequentPowerEvents
+local function ClassPowerUnit()
+    return IS_CLASSIC and CP.isVehicle == true and CP.powerType == PT.ComboPoints and "vehicle" or "player"
+end
 local function FullRefresh()
     if not MSUF_DB then return end
     CPConfig.RefreshConfig()  --- P0: rebuild cached config
@@ -1695,6 +1699,20 @@ local function FullRefresh()
     end
 
     Refresh.ApplyAltMana(playerFrame, amEnabled, inEditMode)
+
+    if not CP.resourceExtras and MSUF.CPBuilders and MSUF.CPBuilders.ResourceExtras
+        and MSUF.CPBuilders.ResourceExtrasWanted(b) then
+        CP.resourceExtras=MSUF.CPBuilders.ResourceExtras({db=_cpDB,CP=CP,AM=AM,
+            GetPlayerFrame=GetPlayerFrame,GetSpec=GetSpec,PLAYER_CLASS=PLAYER_CLASS,
+            ClassPowerReader=ClientCP and ClientCP.UnitPower,
+            ClassPowerUnit=ClassPowerUnit,
+            ClassPowerEvent=function() return CP_ShouldUseFrequentPowerEvents(true) and "UNIT_POWER_FREQUENT" or "UNIT_POWER_UPDATE" end,
+            ClassNeedsTargetChanged=ClientCP and ClientCP.Client and ClientCP.Client.NeedsTargetChanged,
+            AcceptPowerToken=ClientCP and ClientCP.AcceptPowerToken,
+            SupportsEvent=MSUF.Client and MSUF.Client.SupportsEvent,
+            NotSecret=NotSecret,Texture=function(key) return CPConfig.ResolveTexture(key) end})
+    end
+    if CP.resourceExtras then CP.resourceExtras.Refresh() end
 
     if CP_PlayerHPNeedsRefresh() then
         CP_PlayerHPRefresh(playerFrame)
@@ -1927,7 +1945,7 @@ if IS_CLASSIC then
         end
         local unitKey = unit
         if unit == "player" and event == "UNIT_POWER_FREQUENT"
-            and CP.isVehicle == true and CP.powerType == PT.ComboPoints then
+            and ClassPowerUnit() == "vehicle" then
             unitKey = "player+vehicle"
         end
         if _cpBoundEvents[event] == want and _cpBoundUnits[event] == unitKey then return end
@@ -1983,8 +2001,8 @@ local function CP_ShouldUseMaxPowerEvent()
     return CP.visible and profile and profile.maxPower == true or false
 end
 
-local function CP_ShouldUseFrequentPowerEvents()
-    if AM.visible then return true end
+CP_ShouldUseFrequentPowerEvents = function(classOnly)
+    if not classOnly and AM.visible then return true end
     if not CP.visible then return false end
     local mode = CP.renderMode
     if IS_CLASSIC then
@@ -2478,6 +2496,7 @@ ExportPublic("MSUF_ClassPower_PlayerHP_RefreshTextures", CP.PlayerHPRefreshTextu
 CP.RefreshTexturesPublic = function()
     CPConfig.RefreshConfig()
     Refresh.VisibleTextures()
+    if CP.resourceExtras then CP.resourceExtras.Refresh() end
 end
 ExportPublic("MSUF_ClassPower_RefreshTextures", CP.RefreshTexturesPublic)
 
@@ -2504,6 +2523,7 @@ CP.RefreshLayoutCurrent = function()
     CP._pf = playerFrame
     CP._layoutH = cpHeight
     CP.SyncNativeAuras()
+    if CP.resourceExtras then CP.resourceExtras.Refresh() end
     return true
 end
 
@@ -2559,6 +2579,7 @@ CP.ApplyFontsPublic = function()
         PHP._fontStamp = nil
         CP_PlayerHPApplyFont()
     end
+    if CP.resourceExtras then CP.resourceExtras.Refresh() end
 end
 ExportPublic("MSUF_ClassPower_ApplyFonts", CP.ApplyFontsPublic)
 
@@ -2583,6 +2604,7 @@ CP.RefreshVisualsPublic = function()
         PHP._fontStamp = nil
         CP_PlayerHPRefresh(GetPlayerFrame())
     end
+    if CP.resourceExtras then CP.resourceExtras.Refresh() end
 end
 ExportPublic("MSUF_ClassPower_RefreshVisuals", CP.RefreshVisualsPublic)
 
@@ -2734,6 +2756,7 @@ function CP.DisableNow()
     CPSurface.ClearAugCompositeState()
     CP.SetEbonSensorActive(false)
     if CP.nativeAuras then CP.nativeAuras.Disable() end
+    if CP.resourceExtras then CP.resourceExtras.Disable() end
     if CP.container then CP.container:Hide() end
     if AM.container then AM.container:Hide() end
     if PHP.container then PHP.container:Hide() end
