@@ -293,4 +293,57 @@ do
     end
 end
 
+---------------------------------------------------------------------------
+-- 3. The interrupt label is Blizzard's localized INTERRUPTED GlobalString
+--    (CastingBarMixin:GetInterruptText returns INTERRUPTED on every branch of
+--    the UI source mirror). Before the fix four sites wrote the English
+--    literal "Interrupted": the driver's label resolver fallback and
+--    frame:SetInterrupted, the runtime's interrupt visuals and the player's
+--    empowered-cast interrupt.
+---------------------------------------------------------------------------
+do
+    local LOCALIZED = "Unterbrochen"
+    local world = World.New(root, "timer")
+    _G.INTERRUPTED = LOCALIZED
+
+    -- Label resolver fallback (no interrupter, toggle off).
+    Equal(_G.MSUF_Castbar_ResolveInterruptLabel(nil, "target"), LOCALIZED,
+        "interrupt label resolver fallback")
+    Equal(_G.MSUF_Castbar_ResolveInterruptLabel("Player-1-0001", "target"), LOCALIZED,
+        "interrupt label without showInterruptSource")
+
+    -- Target/focus driver: frame:SetInterrupted.
+    local bar = world:Driver("target")
+    world:StartCast("target", "Fireball", 3, 81)
+    world:Fire(bar, "UNIT_SPELLCAST_START")
+    world.casting.target = nil
+    world:Fire(bar, "UNIT_SPELLCAST_INTERRUPTED", "Fireball-guid", 133, nil, 81)
+    Check(bar.interrupted == true, "driver interrupt not shown")
+    Equal(bar.castText.text, LOCALIZED, "driver interrupt label")
+    world:Advance(1.0)
+
+    -- Runtime interrupt visuals without a label.
+    local runtime = assert(_G.MSUF_CastbarRuntime, "castbar runtime missing")
+    local frame = world.NewWidget("Frame")
+    frame.statusBar = world.NewWidget("StatusBar")
+    frame.castText = world.NewWidget("FontString")
+    frame.timeText = world.NewWidget("FontString")
+    runtime:ApplyInterruptValues(frame, 1, false, nil, nil, nil, nil, true)
+    Equal(frame.castText.text, LOCALIZED, "runtime interrupt default label")
+
+    -- Player castbar: an interrupted empowered cast.
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua"))(
+        "MidnightSimpleUnitFrames", world.ns)
+    _G.MSUF_IsCastbarEnabledForUnit = function() return true end
+    local player = world.NewWidget("StatusBar", "MSUF_PlayerSmokeCastBar")
+    player.unit = "player"
+    player.statusBar = world.NewWidget("StatusBar")
+    player.castText = world.NewWidget("FontString")
+    player.timeText = world.NewWidget("FontString")
+    player.isEmpower = true
+    _G.MSUF_PlayerCastbar_OnEvent(player, "UNIT_SPELLCAST_INTERRUPTED", "player", "Fire Breath-guid", 357208, nil, 91)
+    Equal(player.castText.text, LOCALIZED, "player empowered-cast interrupt label")
+    _G.INTERRUPTED = nil
+end
+
 print("castbar correctness smoke: ok")

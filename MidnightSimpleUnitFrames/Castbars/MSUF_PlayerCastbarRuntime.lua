@@ -977,7 +977,7 @@ local function HandleActiveEmpowerEvent(frame, event, ...)
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
         if type(_G.MSUF_PlayerCastbar_ShowInterruptFeedback) == "function" then
-            local label = "Interrupted"
+            local label = INTERRUPTED
             if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
                 label = _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", label)
             end

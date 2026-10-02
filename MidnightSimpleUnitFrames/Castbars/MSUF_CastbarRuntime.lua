@@ -1093,7 +1093,7 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
         statusBar:SetStatusBarColor(red, green, blue, 1)
     end
 
-    SetText(frame, "castText", label or "Interrupted")
+    SetText(frame, "castText", label or _G.INTERRUPTED)
     SetText(frame, "timeText", "")
 
     if frame.Show then
@@ -1114,7 +1114,7 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
 end
 
 --- Public table-argument form. It only unpacks the options table; every
---- default (barValue 1, "Interrupted" label, resolved feedback color, shake
+--- default (barValue 1, the INTERRUPTED label, resolved feedback color, shake
 --- unless skipped) is applied by ApplyInterruptValues.
 function Runtime:ApplyInterrupt(frame, options)
     if not frame then

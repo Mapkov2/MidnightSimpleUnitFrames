@@ -1120,7 +1120,7 @@ end
 --- per-unit toggle is off or identity is restricted (secret GUID/name), so a
 --- PvP-restricted interrupter can never raise.
 function _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
-    fallback = fallback or "Interrupted"
+    fallback = fallback or _G.INTERRUPTED
     local issecret = _G.issecretvalue
     if interruptedBy == nil or (issecret and issecret(interruptedBy) == true) then
         return fallback
@@ -1564,7 +1564,7 @@ local function InstallDriverCastMethods(frame)
         end
 
         local reverseFill = _G.MSUF_GetReverseFillSafe(self, false)
-        local interruptLabel = "Interrupted"
+        local interruptLabel = _G.INTERRUPTED
         if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
             interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, self.unit, interruptLabel)
         end

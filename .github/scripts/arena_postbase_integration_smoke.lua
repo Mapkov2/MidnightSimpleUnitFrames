@@ -63,6 +63,7 @@ local interruptLabelSource = Slice(driver, { "function _G.MSUF_Castbar_ResolveIn
 _G.UnitNameFromGUID = function(guid) return guid == "arena-guid" and "Arena Kicker" or "Boss Kicker" end
 _G.UnitClassFromGUID = nil
 _G.SPELL_INTERRUPTED_BY = "Interrupted by %s"
+_G.INTERRUPTED = "Interrupted" -- Blizzard GlobalString; the label falls back to it
 Compile(configHelpers .. interruptLabelSource, "Arena interrupt-label harness")()
 assert(_G.MSUF_Castbar_ResolveInterruptLabel("arena-guid", "arena2") == "Interrupted by Arena Kicker",
     "Arena interrupter-source label does not read the Arena settings root")
