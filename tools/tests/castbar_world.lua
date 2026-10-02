@@ -33,6 +33,7 @@ end
 -- The castbar stack every world loads, by file name; options.pools adds every
 -- boss/arena pool file the TOC lists (live pools only, no previews).
 local BASE_FILES = {
+    ["MSUF_Require.lua"] = true,
     ["MSUF_Scheduler.lua"] = true,
     ["MSUF_CastbarUtils.lua"] = true,
     ["MSUF_CastbarRuntime.lua"] = true,

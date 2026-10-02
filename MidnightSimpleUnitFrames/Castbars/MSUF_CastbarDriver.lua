@@ -10,6 +10,19 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
+--- The castbar Utils load before this file in every client TOC; a missing
+--- helper is a load-order bug, so it fails here, loudly, and the cast paths
+--- call the resolved function instead of a guarded global.
+local FILE = "Castbars/MSUF_CastbarDriver.lua"
+local Require = MSUF.Require
+local EnsureDBLazy = Require("MSUF_EnsureDBLazy", FILE)
+local ApplyCastbarTexts = Require("MSUF_CB_ApplyTexts", FILE)
+local GetReverseFillSafe = Require("MSUF_GetReverseFillSafe", FILE)
+local GetCastbarCountsDown = Require("MSUF_GetCastbarCountsDown", FILE)
+local RefreshCastbarSpellNameText = Require("MSUF_RefreshCastbarSpellNameText", FILE)
+local GetInterruptUnavailableTintArgs = Require("MSUF_Castbar_GetInterruptUnavailableTintArgs", FILE)
+local ApplyNonInterruptibleTint = Require("MSUF_Castbar_ApplyNonInterruptibleTint", FILE)
+
 local ExportPublic = MSUF.ExportPublic
 
 local C_Timer = _G.C_Timer
@@ -75,11 +88,7 @@ local function IsCastbarEnabledForUnit(unit)
         end
     end
 
-    if type(_G.MSUF_EnsureDBLazy) == "function" then
-        _G.MSUF_EnsureDBLazy()
-    elseif type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-    end
+    EnsureDBLazy()
 
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     if not general then
@@ -359,7 +368,7 @@ local function MSUF_UpdateCastTimeText_FromStatusBar(frame)
     if not (frame and frame.timeText) then return end
     if frame._msufNativeTimeBound == true then return end
 
-    if not (type(_G.MSUF_IsCastTimeEnabled) == "function" and _G.MSUF_IsCastTimeEnabled(frame)) then
+    if not Require("MSUF_IsCastTimeEnabled", FILE)(frame) then
         _G.MSUF_SetTextIfChanged(frame.timeText, "")
         return
     end
@@ -508,20 +517,15 @@ local function ApplyFallbackActiveDuration(frame, state, isChannel)
     if frame.icon and state.icon then
         frame.icon:SetTexture(state.icon)
     end
-    if type(_G.MSUF_CB_ApplyTexts) == "function" then
-        _G.MSUF_CB_ApplyTexts(frame, nil, state.text or state.spellName or "", nil)
-    elseif frame.castText and frame.castText.SetText then
-        frame.castText:SetText(state.text or state.spellName or "")
-    end
+    ApplyCastbarTexts(frame, nil, state.text or state.spellName or "", nil)
 
     local reverseFill = state.reverseFill
-    if reverseFill == nil and type(_G.MSUF_GetReverseFillSafe) == "function" then
-        reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChannel)
+    if reverseFill == nil then
+        reverseFill = GetReverseFillSafe(frame, isChannel)
     end
     reverseFill = reverseFill == true
     frame._msufStripeReverseFill = reverseFill
-    local countsDown = type(_G.MSUF_GetCastbarCountsDown) == "function"
-        and _G.MSUF_GetCastbarCountsDown(frame, isChannel and true or false) == true
+    local countsDown = GetCastbarCountsDown(frame, isChannel and true or false) == true
     frame._msufCountsDown = countsDown
     local resolvePushback = _G.MSUF_Castbar_ResolvePushbackMS
     if type(resolvePushback) == "function" then
@@ -534,9 +538,8 @@ local function ApplyFallbackActiveDuration(frame, state, isChannel)
     if state.delayTimeMS == nil
         and frame._msufPushbackMS ~= nil
         and frame.castText
-        and type(_G.MSUF_RefreshCastbarSpellNameText) == "function"
     then
-        _G.MSUF_RefreshCastbarSpellNameText(frame)
+        RefreshCastbarSpellNameText(frame)
     end
     if not SetFallbackStatusBar(frame, remaining, total, reverseFill, countsDown) then
         return false
@@ -1336,9 +1339,7 @@ local function InstallDriverColorMethod(frame)
             return
         end
 
-        if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
-            _G.MSUF_EnsureDB()
-        end
+        EnsureDBLazy()
 
         local forcedNotInterruptible = self.isNotInterruptible == true
         local castR, castG, castB, nonR, nonG, nonB = _G.MSUF_ResolveCastbarColors()
@@ -1347,37 +1348,28 @@ local function InstallDriverColorMethod(frame)
             rawApiNotInterruptible = true
         end
 
-        local unavailableR, unavailableG, unavailableB, unavailableA, interruptReadyBool, useUnavailableColor
-        if type(_G.MSUF_Castbar_GetInterruptUnavailableTintArgs) == "function" then
-            unavailableR, unavailableG, unavailableB, unavailableA, interruptReadyBool, useUnavailableColor =
-                _G.MSUF_Castbar_GetInterruptUnavailableTintArgs(self)
-        end
+        local unavailableR, unavailableG, unavailableB, unavailableA, interruptReadyBool, useUnavailableColor =
+            GetInterruptUnavailableTintArgs(self)
 
-        if type(_G.MSUF_Castbar_ApplyNonInterruptibleTint) == "function" then
-            _G.MSUF_Castbar_ApplyNonInterruptibleTint(
-                self,
-                rawApiNotInterruptible,
-                nonR,
-                nonG,
-                nonB,
-                1,
-                castR,
-                castG,
-                castB,
-                1,
-                forcedNotInterruptible,
-                unavailableR,
-                unavailableG,
-                unavailableB,
-                unavailableA,
-                interruptReadyBool,
-                useUnavailableColor
-            )
-        elseif forcedNotInterruptible then
-            _G.MSUF_SetStatusBarColorIfChanged(self.statusBar, nonR, nonG, nonB, 1)
-        else
-            _G.MSUF_SetStatusBarColorIfChanged(self.statusBar, castR, castG, castB, 1)
-        end
+        ApplyNonInterruptibleTint(
+            self,
+            rawApiNotInterruptible,
+            nonR,
+            nonG,
+            nonB,
+            1,
+            castR,
+            castG,
+            castB,
+            1,
+            forcedNotInterruptible,
+            unavailableR,
+            unavailableG,
+            unavailableB,
+            unavailableA,
+            interruptReadyBool,
+            useUnavailableColor
+        )
     end
 end
 
@@ -1542,7 +1534,7 @@ local function InstallDriverCastMethods(frame)
         self.MSUF_kickInterruptibleConfirmed = nil
         if self.kickReadyBox then self.kickReadyBox:Hide() end
         if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
-        if type(_G.MSUF_EnsureDBLazy) == "function" then _G.MSUF_EnsureDBLazy() end
+        EnsureDBLazy()
 
         local configUnit = CastbarConfigUnitKey(self.unit)
         local unitDB = (configUnit and _G.MSUF_DB and _G.MSUF_DB[configUnit]) or nil
@@ -1559,10 +1551,7 @@ local function InstallDriverCastMethods(frame)
         end
 
         local reverseFill = _G.MSUF_GetReverseFillSafe(self, false)
-        local interruptLabel = _G.INTERRUPTED
-        if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
-            interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, self.unit, interruptLabel)
-        end
+        local interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, self.unit, _G.INTERRUPTED)
         if ApplyInterruptValues then
             ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, interruptLabel)
         else

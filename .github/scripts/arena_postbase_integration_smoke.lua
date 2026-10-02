@@ -89,6 +89,8 @@ local ApplyInterruptValues
 local GetTime = function() return 0 end
 local C_Timer = { After = function() end }
 local function EnsureDriverCallbacks() end
+-- The driver resolves the castbar Utils' lazy DB bootstrap at load.
+local function EnsureDBLazy() end
 _G.MSUF_CB_ResetStateOnStop = function() end
 function frame:Hide() self.hidden = true end
 ]] .. setInterruptedSource .. [[
