@@ -80,7 +80,7 @@ function Loader.Group(path)
     local entry = path:match("([^/]+)$")
     local directory = path:match("^(.*)/")
     if entry == "MSUF_Profiles.lua" or entry == "MSUF_Menu2_Window.lua"
-        or entry == "MSUF_Menu2_ClassPowerPreview.lua" then
+        or entry == "MSUF_Menu2_ClassPowerPreview.lua" or entry == "MSUF_Menu2_Widgets.lua" then
         local file = originalOpen(path, "rb")
         if not file then return nil end
         file:close()
@@ -89,6 +89,9 @@ function Loader.Group(path)
         return { directory .. "/MSUF_ProfileRuntime.lua", directory .. "/MSUF_ProfileNormalize.lua", path }
     elseif entry == "MSUF_Menu2_Window.lua" then
         return { directory .. "/MSUF_Menu2_PageLifecycle.lua", path }
+    elseif entry == "MSUF_Menu2_Widgets.lua" then
+        -- W.Color and W.ParseHexColor: the color picker module loads right after.
+        return { path, directory .. "/MSUF_Menu2_ColorPicker.lua" }
     elseif entry == "MSUF_Menu2_ClassPowerPreview.lua" then
         return { directory .. "/MSUF_Menu2_ClassPowerPreview_Lifecycle.lua",
             directory .. "/MSUF_Menu2_ClassPowerPreview_Interaction.lua", path }
@@ -324,9 +327,6 @@ local function PrepareDirectContracts(source, namespace)
     end
     if Uses("local Shape = A3.IconShape") then
         assert(originalLoadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
-    end
-    if Uses("M.InstallColorPicker({") then
-        assert(originalLoadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua"))("MidnightSimpleUnitFrames", namespace)
     end
     if Uses("A3.NormalizeProfileDB") and not namespace.MSUF_MaterializeUnitAuraLaneOwners then
         assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/State/MSUF_StateHelpers.lua")))("MSUF", namespace)

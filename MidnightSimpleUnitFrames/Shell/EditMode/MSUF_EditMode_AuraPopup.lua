@@ -271,9 +271,7 @@ local function ApplyBossTogether()
     if Quick.BlockConfigCombatLocked() or not (pf and IsBoss(pf.unit)) then return end
     local sh = Shared(true)
     if not sh then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-        _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
-    end
+    _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
     sh.bossEditTogether = pf.bossTogetherBtn and pf.bossTogetherBtn._checked == true or false
     if pf and pf:IsShown() then Sync() end
 end
@@ -282,9 +280,7 @@ local function ApplyArenaTogether()
     if Quick.BlockConfigCombatLocked() or not (pf and IsArena(pf.unit)) then return end
     local sh = Shared(true)
     if not sh then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-        _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
-    end
+    _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
     sh.arenaEditTogether = pf.arenaTogetherBtn and pf.arenaTogetherBtn._checked == true or false
     if pf and pf:IsShown() then Sync() end
 end
@@ -308,9 +304,7 @@ local function ApplyCustom(unit, activeGroup, spec, shared)
     end
     if not geometryChanged and not positionChanged then return end
 
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-        _G.MSUF_EM_UndoBeforeChange("aura", unit)
-    end
+    _G.MSUF_EM_UndoBeforeChange("aura", unit)
 
     if geometryChanged then
         for i = 1, #units do
@@ -350,7 +344,7 @@ local function Apply()
     local sh = Shared(true)
     if not (a2 and sh) then return end
 
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("aura", pf.unit) end
+    _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
 
     local units = AffectedUnits(pf.unit, sh)
     local sourceLayout = RuntimeLayout(pf.unit)
@@ -451,9 +445,7 @@ local function ResetPosition()
         local currentX = ReadSpecValue(pf.unit, activeSpec, "x", shared)
         local currentY = ReadSpecValue(pf.unit, activeSpec, "y", shared)
         if currentX == activeSpec.defaultX and currentY == activeSpec.defaultY then return end
-        if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-            _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
-        end
+        _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
         local units = AffectedUnits(pf.unit, shared)
         for i = 1, #units do
             local placed = CustomPlaced(units[i], activeSpec, true)
@@ -468,7 +460,7 @@ local function ResetPosition()
     end
     local a2 = AurasDB(true)
     if not a2 then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("aura", pf.unit) end
+    _G.MSUF_EM_UndoBeforeChange("aura", pf.unit)
     local sh = Shared(true)
     local units = AffectedUnits(pf.unit, sh)
     local _, spec = ActiveGroup()

@@ -84,7 +84,6 @@ local function RefreshTooltipPreview()
     local tooltips = MSUF and MSUF.Tooltips
     if tooltips and type(tooltips.Refresh) == "function" then tooltips.Refresh() end
     local editActive = (_G.MSUF_UnitEditModeActive == true)
-    if not editActive and type(_G.MSUF_IsMSUFEditModeActive) == "function" then editActive = _G.MSUF_IsMSUFEditModeActive() and true or false end
     if editActive and type(_G.MSUF_Tooltip_ShowEditPreview) == "function" then _G.MSUF_Tooltip_ShowEditPreview() end
 end
 local function RefreshAuraTooltipSettings(reason)
@@ -229,7 +228,8 @@ local function BuildMisc(ctx)
     if menuSnapHelp.SetWordWrap then menuSnapHelp:SetWordWrap(true) end
     BindMiscToggle(menuBehavior, "Hide Advanced menu section", "hideAdvancedMenu", true, "MSUF2_ADVANCED_MENU_VISIBILITY", 14, -118, 280, MENU_WRITE_OPTS,
         function() M.RefreshAdvancedNavVisibility() end)
-    BindMiscToggle(menuBehavior, "Show navigation icons", "showNavigationIcons", false, "MSUF2_NAV_ICONS", 14, -148, 280, MENU_WRITE_OPTS,
+    -- Defaults_Shell turns navigation icons on; an unset key reads the same.
+    BindMiscToggle(menuBehavior, "Show navigation icons", "showNavigationIcons", true, "MSUF2_NAV_ICONS", 14, -148, 280, MENU_WRITE_OPTS,
         function() M.RefreshNavIconVisibility() end)
     BindMiscToggle(menuBehavior, "Show MSUF button in game menu", "showGameMenuButton", true, "MSUF2_GAME_MENU_BUTTON", 14, -178, 320, MENU_WRITE_OPTS,
         function(v)

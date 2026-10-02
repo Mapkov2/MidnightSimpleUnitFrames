@@ -217,6 +217,10 @@ MSUF_EM2.QuickPopup = {
     SetBoxText = function(box, value) box:SetText(value) end,
     AddFooterControls = function() end,
 }
+-- EditMode_Undo loads before the popups on every client and publishes the
+-- history entry point they call; record it instead of loading the history.
+local historyCalls = {}
+MSUF_EM_UndoBeforeChange = function(category, key) historyCalls[#historyCalls + 1] = { category, key } end
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Popups.lua"))("MSUF", namespace)
 local popups = MSUF_EM2.Popups
 assert(popups.Open("classpower") == true, "Class Resource quick popup did not open")
@@ -225,6 +229,8 @@ popup.wBox:SetText("300")
 popup.callbacks.wBox()
 assert(MSUF_DB.bars.classPowerWidth == 300 and MSUF_DB.bars.classPowerWidthMode == "custom",
     "Class Resource width edit did not switch to manual size")
+assert(#historyCalls == 1 and historyCalls[1][1] == "classpower",
+    "Class Resource width edit did not open its undo entry first")
 popup.hBox:SetText("12")
 popup.callbacks.hBox()
 assert(MSUF_DB.bars.classPowerHeight == 12, "Class Resource height edit was not saved")

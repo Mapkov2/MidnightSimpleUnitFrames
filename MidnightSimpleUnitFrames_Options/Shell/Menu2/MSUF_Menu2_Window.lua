@@ -65,9 +65,8 @@ local function RaiseForeverPadCursor()
         _G.SetGamePadCursorControl(true)
     end
 end
-local L_PROFILE, L_EDIT_ON, L_EDIT_OFF, L_EDIT_MODE_ON, L_EDIT_MODE_OFF, L_EDIT_MODE_OFF_COMBAT, L_IN_COMBAT, L_OUT_OF_COMBAT
+local L_EDIT_ON, L_EDIT_OFF, L_EDIT_MODE_ON, L_EDIT_MODE_OFF, L_EDIT_MODE_OFF_COMBAT, L_IN_COMBAT, L_OUT_OF_COMBAT
 local function RefreshLocaleCache()
-    L_PROFILE = M.Tr("Profile:")
     L_EDIT_ON = M.Tr("Edit: On")
     L_EDIT_OFF = M.Tr("Edit: Off")
     L_EDIT_MODE_ON = M.Tr("Edit Mode: On")
@@ -95,9 +94,10 @@ local function GetAddonVersion()
     local getVersion = MSUF.GetAddonVersion
     return type(getVersion) == "function" and getVersion() or nil
 end
+-- The status line shows composed text that is translated already.
 local function SetCachedText(owner, cacheKey, region, text)
     if owner[cacheKey] == text then return end
-    region:SetText(text)
+    T.SetTranslatedText(region, text)
     owner[cacheKey] = text
 end
 local FEEDBACK_COLOR_KEYS = {
@@ -1657,14 +1657,16 @@ local function BuildWindowToolbar(state)
         feedback:SetText("")
     end
     MenuRuntime:SetQuiesceSettler("status-feedback", ClearStatusFeedback)
-    function M.ShowStatusFeedback(text, kind, seconds)
+    --- translated = true marks text the caller translated already (a formatted
+    --- message); it is shown as it is.
+    function M.ShowStatusFeedback(text, kind, seconds, translated)
         if not (f and f.status and f.status.feedbackText and text and text ~= "") then return end
         local feedback = f.status.feedbackText
         local colorKey = FEEDBACK_COLOR_KEYS[kind]
         local color = colorKey and T.colors[colorKey] or T.colors.muted
         f.status._msuf2FeedbackSerial = (f.status._msuf2FeedbackSerial or 0) + 1
         local serial = f.status._msuf2FeedbackSerial
-        T.SetTranslatedText(feedback, M.Tr(tostring(text)))
+        T.SetTranslatedText(feedback, translated == true and tostring(text) or M.Tr(tostring(text)))
         if feedback.SetTextColor then feedback:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
         feedback:SetAlpha(1)
         if T.PlayMotion then T.PlayMotion(feedback, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 }) end
@@ -1699,7 +1701,7 @@ local function InstallWindowStatusRuntime(state)
     local RefreshSeeNewFeaturesBadge = M.RefreshSeeNewFeaturesBadge
     function f:RefreshStatus()
         local profile = tostring(_G.MSUF_ActiveProfile or "Default")
-        local profileText = L_PROFILE .. " " .. profile
+        local profileText = M.Format("Profile: %s", profile)
         SetCachedText(status, "_msuf2ProfileText", sbProfile, profileText)
         -- The Edit Mode button already owns its current state. Reserve status
         -- emphasis for a condition that actually limits the user's next action.

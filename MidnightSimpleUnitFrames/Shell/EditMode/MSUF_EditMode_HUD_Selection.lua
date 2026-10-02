@@ -44,49 +44,9 @@ local GROUP_KEY_TO_KIND = {
     gf_priority = "priority",
 }
 
-local function GroupGeometryMask(gf)
-    return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
-end
-
-local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
-
+--- Settings and Reset re-apply a group kind's geometry (EditMode_Core Util).
 local function RefreshGroupGeometryScoped(kind)
-    if not kind then return false end
-    if RequestGroupGeometryApply(kind, "EM2_HUD_GROUP_GEOMETRY") then
-        return true
-    end
-    local gf = MSUF and MSUF.GF
-    if gf and type(gf.RefreshGeometry) == "function" then
-        gf.RefreshGeometry(kind)
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshGeometry) == "function" then
-        _G.MSUF_GF_RefreshGeometry(kind)
-        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
-            _G.MSUF_GF_RefreshUnitBindings(kind)
-        end
-        if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-            _G.MSUF_GF_RefreshVisuals(kind, GroupGeometryMask(gf))
-        end
-        return true
-    end
-    if gf and type(gf.RefreshVisuals) == "function" then
-        gf.RefreshVisuals(kind, GroupGeometryMask(gf))
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-        _G.MSUF_GF_RefreshVisuals(kind)
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshAll) == "function" then
-        _G.MSUF_GF_RefreshAll()
-        return true
-    end
-    if type(_G.MSUF_GF_Refresh) == "function" then
-        _G.MSUF_GF_Refresh()
-        return true
-    end
-    return false
+    return U.RefreshGroupGeometryScoped(kind, "EM2_HUD_GROUP_GEOMETRY")
 end
 
 local LABEL_BY_KEY = {
@@ -281,9 +241,7 @@ function HUD.ResetCurrentPosition()
             local db = _G.MSUF_DB
             local conf = db and db[key]
             if conf then
-                if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-                    _G.MSUF_EM_UndoBeforeChange("gf", groupKind)
-                end
+                _G.MSUF_EM_UndoBeforeChange("gf", groupKind)
                 conf.offsetX = groupKind == "party" and -400 or groupKind == "priority" and -120 or -500
                 conf.offsetY = 0
                 if groupKind == "priority" then
@@ -309,9 +267,7 @@ function HUD.ResetCurrentPosition()
     local db = _G.MSUF_DB
     local conf = db and db[key]
     if not conf then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-        _G.MSUF_EM_UndoBeforeChange("unit", key)
-    end
+    _G.MSUF_EM_UndoBeforeChange("unit", key)
     local defaultX, defaultY = 0, 0
     if type(_G.MSUF_GetDefaultUnitOffsets) == "function" then defaultX, defaultY = _G.MSUF_GetDefaultUnitOffsets(key) end
     conf.offsetX = defaultX

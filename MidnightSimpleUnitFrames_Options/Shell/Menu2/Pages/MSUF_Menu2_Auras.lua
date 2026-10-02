@@ -1505,7 +1505,7 @@ local function CreateHidePermanentWriter(ctx, unit, lane)
 end
 
 local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
-    local section = b:Section((lane == "debuff" and "Debuff" or "Buff") .. " Filters",
+    local section = b:Section(lane == "debuff" and "Debuff Filters" or "Buff Filters",
         M.CLASSIC_AURA_FILTERS_REDUCED == true and 118 or 256)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
@@ -2280,13 +2280,12 @@ local function BuildUnitBlacklistPresetsAndList(B)
     M.TrackRefresh(ctx, refreshList)
 end
 local function BuildCompactUnitAuraBlacklist(ctx, b, unit, lane)
-    local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local isDebuff = lane == "debuff"
     local enemyDebuff = isDebuff and unit ~= "player"
     local showPresets = not isDebuff or type(Model.UnitBlacklistPresetValues) ~= "function"
         or #Model.UnitBlacklistPresetValues(unit, lane) > 0
     local combinedManualAndPresets = (not isDebuff or enemyDebuff) and showPresets
-    local section = b:Section(laneTitle .. " Blacklist",
+    local section = b:Section(isDebuff and "Debuff Blacklist" or "Buff Blacklist",
         combinedManualAndPresets and 620 or ((not isDebuff or enemyDebuff) and 538 or 446))
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48

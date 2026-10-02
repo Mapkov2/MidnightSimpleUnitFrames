@@ -478,17 +478,7 @@ function W.PreviewImage(parent, spec, x, y, width)
     well.image = image
     return well, frameHeight
 end
-local HexColor = M.InstallColorPicker({
-    M = M,
-    NextRow = NextRow,
-    RegisterSearchObject = RegisterSearchObject,
-    SetSearchText = SetSearchText,
-    T = T,
-    Tr = Tr,
-    W = W,
-})
-
-W.ParseHexColor = HexColor
+-- W.Color and W.ParseHexColor: MSUF_Menu2_ColorPicker.lua, loaded next.
 
 local function SetTileVisual(btn, active, hover)
     if not btn then return end

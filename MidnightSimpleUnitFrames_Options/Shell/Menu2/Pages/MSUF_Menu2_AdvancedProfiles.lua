@@ -142,11 +142,13 @@ end
 local function ActiveProfileName() return _G.MSUF_ActiveProfile or "Default" end
 
 local function ClearProfileHistory() if M.ClearHistory then M.ClearHistory() end end
-local function PrintProfileMessage(color, message)
-    message = M.Tr(tostring(message or ""))
+--- message is an English key, or a format key followed by its arguments; it is
+--- translated exactly once here (the status line gets the translated text).
+local function PrintProfileMessage(color, message, ...)
+    message = M.Format(tostring(message or ""), ...)
     if M.ShowStatusFeedback then
         local kind = tostring(color or ""):find("ff0000", 1, true) and "danger" or "info"
-        M.ShowStatusFeedback(message, kind, kind == "danger" and 2.0 or 1.7)
+        M.ShowStatusFeedback(message, kind, kind == "danger" and 2.0 or 1.7, true)
     end
     print((color or "|cffffd700") .. "MSUF:|r " .. message)
 end
@@ -314,24 +316,24 @@ end
 local function ShowProfileSwitchReloadPrompt(profileName)
     local name = tostring(profileName or ActiveProfileName())
     if _G.InCombatLockdown and _G.InCombatLockdown() then
-        PrintProfileMessage("|cffffd700", M.Format("Switched to profile '%s'. Reload after combat with /reload.", name))
+        PrintProfileMessage("|cffffd700", "Switched to profile '%s'. Reload after combat with /reload.", name)
         return
     end
     if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_PROFILE_SWITCH_RELOAD then
         _G.StaticPopup_Show("MSUF2_PROFILE_SWITCH_RELOAD", name)
         return
     end
-    PrintProfileMessage("|cffffd700", M.Format("Switched to profile '%s'. Reload the UI with /reload.", name))
+    PrintProfileMessage("|cffffd700", "Switched to profile '%s'. Reload the UI with /reload.", name)
 end
 local function ReloadAfterNewProfileImport(profileName)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
-        PrintProfileMessage("|cffffd700", M.Format("Imported profile '%s'. Reload after combat with /reload.", tostring(profileName)))
+        PrintProfileMessage("|cffffd700", "Imported profile '%s'. Reload after combat with /reload.", tostring(profileName))
         return
     end
     if type(_G.ReloadUI) == "function" then
         _G.ReloadUI()
     else
-        PrintProfileMessage("|cffffd700", M.Format("Imported profile '%s'. Reload the UI with /reload.", tostring(profileName)))
+        PrintProfileMessage("|cffffd700", "Imported profile '%s'. Reload the UI with /reload.", tostring(profileName))
     end
 end
 local function ProfileExists(name)
@@ -404,7 +406,7 @@ function ProfilesPage.Prepare(ctx)
         if suiteKind then value, reason = SuiteExport(kind)
         else value = _G.MSUF_ExportSelectionToString(kind, selected) end
         if type(value) ~= "string" then
-            if reason then PrintProfileMessage("|cffff0000", "Export failed: " .. tostring(reason)) end
+            if reason then PrintProfileMessage("|cffff0000", "Export failed: %s", tostring(reason)) end
             if M.ShowStatusFeedback then M.ShowStatusFeedback("Export failed", "danger", 1.8) end
             return false
         end
@@ -1057,7 +1059,7 @@ function ProfilesPage.ImportActions(state)
             local suite = SuiteProfiles()
             if not suite then PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this module."); return false end
             local ok, reason = suite.ImportModule(text)
-            if not ok then PrintProfileMessage("|cffff0000", "Module import failed: " .. tostring(reason)); return false end
+            if not ok then PrintProfileMessage("|cffff0000", "Module import failed: %s", tostring(reason)); return false end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
             return true
@@ -1084,7 +1086,7 @@ function ProfilesPage.ImportActions(state)
             return false
         end
         if ProfileExists(name) then
-            PrintProfileMessage("|cffff0000", M.Format("Profile '%s' already exists.", name))
+            PrintProfileMessage("|cffff0000", "Profile '%s' already exists.", name)
             return false
         end
         local suiteKind = SuiteImportKind(text)
@@ -1094,7 +1096,7 @@ function ProfilesPage.ImportActions(state)
             local ok, reason
             if suiteKind == "full" then ok, reason = suite.Import(name, text)
             else ok, reason = suite.ImportModuleIntoNew(name, text) end
-            if not ok then PrintProfileMessage("|cffff0000", "Suite import failed: " .. tostring(reason)); return false end
+            if not ok then PrintProfileMessage("|cffff0000", "Suite import failed: %s", tostring(reason)); return false end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
             M.profileImportNewName = ""
@@ -1112,15 +1114,15 @@ function ProfilesPage.ImportActions(state)
         local ok, _, stage = _G.MSUF_ImportIntoNewProfile(name, text)
         if ok ~= true then
             if stage == "create" then
-                PrintProfileMessage("|cffff0000", M.Format("Import failed: could not create profile '%s'.", name))
+                PrintProfileMessage("|cffff0000", "Import failed: could not create profile '%s'.", name)
                 RefreshAfterProfileChange(ctx)
             elseif stage == "switch" then
-                PrintProfileMessage("|cffff0000", M.Format("Import failed: could not switch to profile '%s'.", name))
+                PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '%s'.", name)
                 RefreshAfterProfileChange(ctx)
             elseif stage == "exists" then
-                PrintProfileMessage("|cffff0000", M.Format("Profile '%s' already exists.", name))
+                PrintProfileMessage("|cffff0000", "Profile '%s' already exists.", name)
             else
-                PrintProfileMessage("|cffff0000", M.Tr("Import failed."))
+                PrintProfileMessage("|cffff0000", "Import failed.")
             end
             return false
         end

@@ -506,7 +506,8 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
             local class = order[i]
             local spells = A3.TargetDotData and A3.TargetDotData[class]
             if type(spells) == "table" and #spells > 0 then
-                values[#values + 1] = { text = TARGET_DOT_CLASS_LABELS[class] or class, header = true, disabled = true, translate = false }
+                -- Class headers are English keys; the dropdown translates them.
+                values[#values + 1] = { text = TARGET_DOT_CLASS_LABELS[class] or class, header = true, disabled = true }
                 for j = 1, #spells do
                     local spellID, fallback = tonumber(spells[j][1]), spells[j][2]
                     local id, name, icon = SpellInfo(spellID)
@@ -617,7 +618,7 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
             if type(spells) == "table" and #spells > 0 then
                 values[#values + 1] = {
                     text = TARGET_DOT_CLASS_LABELS[class] or class,
-                    header = true, disabled = true, translate = false,
+                    header = true, disabled = true,
                 }
                 for j = 1, #spells do
                     values[#values + 1] = DefensiveEntry(tonumber(spells[j][1]), spells[j][2], class)

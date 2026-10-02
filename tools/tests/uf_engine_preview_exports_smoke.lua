@@ -105,4 +105,58 @@ Check(#snapped == 2 and snapped[1][1] == region and snapped[1][2] == 3 and snapp
 snapped = {}
 Check(AutoFit(2, 10, 0, Snap, region) == 21 and #snapped == 1, "a zero gap must not be snapped")
 
-print(string.format("uf_engine_preview_exports_smoke: ok (%s, %d unit specs)", flavor, units))
+-- The unit preview sizes an auto_pips class resource with this export too
+-- (review R7: its own copy capped the count at 10, so an 18-pip Sweeping
+-- Strikes preview was narrower than the live bar). The preview's width helper
+-- is a file local; it is reached through the preview refresh's upvalues.
+local Preview = world.core.UFPreview
+Check(type(Preview) == "table" and type(Preview.Refresh) == "function", "the unit preview did not install")
+local seen = {}
+local function FindUpvalue(value, name, depth)
+    if depth > 8 or seen[value] then return nil end
+    seen[value] = true
+    if type(value) == "function" then
+        local i = 1
+        while true do
+            local upName, upValue = debug.getupvalue(value, i)
+            if not upName then break end
+            if upName == name and type(upValue) == "function" then return upValue end
+            if type(upValue) == "function" or type(upValue) == "table" then
+                local found = FindUpvalue(upValue, name, depth + 1)
+                if found then return found end
+            end
+            i = i + 1
+        end
+    elseif type(value) == "table" then
+        for _, item in pairs(value) do
+            if type(item) == "function" or (type(item) == "table" and depth < 3) then
+                local found = FindUpvalue(item, name, depth + 1)
+                if found then return found end
+            end
+        end
+    end
+    return nil
+end
+local PreviewWidth = FindUpvalue(Preview.Refresh, "PreviewClassPowerWidth", 0)
+Check(type(PreviewWidth) == "function", "the preview class resource width helper was not found")
+local previewChecks = 0
+for _, shape in ipairs({ "CIRCLE", "DIAMOND", "HEX" }) do
+    for count = 1, 18 do
+        for _, height in ipairs({ 2, 7, 12, 30 }) do
+            for _, gap in ipairs({ -2, 0, 3, 8, 12 }) do
+                local bars = { classPowerShape = shape, classPowerWidthMode = "auto_pips", classPowerGap = gap }
+                local wanted = AutoFit(count, height, gap)
+                if wanted < 1 then wanted = 1 elseif wanted > 800 then wanted = 800 end
+                local got = PreviewWidth(bars, 240, height, count)
+                Check(got == wanted, string.format("preview auto-fit for %d %s pips of %d px, gap %d is %s, live %s",
+                    count, shape, height, gap, tostring(got), tostring(wanted)))
+                previewChecks = previewChecks + 1
+            end
+        end
+    end
+end
+Check(PreviewWidth({ classPowerShape = "CIRCLE", classPowerWidthMode = "auto_pips", classPowerGap = 2 }, 240, 10, 18)
+    == 18 * 10 + 17 * 2, "an 18-pip preview is not as wide as the live bar")
+
+print(string.format("uf_engine_preview_exports_smoke: ok (%s, %d unit specs, %d preview auto-fit widths)",
+    flavor, units, previewChecks))

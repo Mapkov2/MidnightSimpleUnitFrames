@@ -440,7 +440,7 @@ function Nudge.Enable()
 end
 
 function Nudge.Disable()
-    if type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
+    MSUF_EM2_SetPreviewNudgeTarget(nil)
     if not owner then return end
     if IsConfigCombatLocked() then
         owner.__msufPendingClear = true

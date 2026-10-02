@@ -551,14 +551,6 @@ local function SetWidgetEnabled(w, enabled)
     if type(w.Refresh) == "function" then w:Refresh() end
     if type(w._msufToggleUpdate) == "function" then w._msufToggleUpdate() end
 end
-local function AddPlainCheck(parent, name, label, x, y)
-    local cb = PixelLayoutRegion(CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate"))
-    cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 12, y or -8)
-    if cb.Text then cb.Text:SetText(TR(label or "")) end
-    if MSUF.UI and MSUF.UI.StyleCheckmark then MSUF.UI.StyleCheckmark(cb) end
-    if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(cb, 180) end
-    return cb
-end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 local function EnsureUnitPortraitStyle(key)
     local u = UnitDB(key)
@@ -1075,7 +1067,7 @@ M.Assign(Model, {
     ShortenPreviewName = ShortenPreviewName, TextScopeSet = TextScopeSet, ForceTextUnit = ForceTextUnit,
     ApplyPanelUnit = ApplyPanelUnit, RefreshAllControls = RefreshAllControls, Label = Label,
     PlaceTopLeft = PlaceTopLeft, SetOptionWidth = SetOptionWidth, AddOptionDivider = AddOptionDivider,
-    SetWidgetEnabled = SetWidgetEnabled, AddPlainCheck = AddPlainCheck,
+    SetWidgetEnabled = SetWidgetEnabled,
     NormalizePortraitClassStyle = NormalizePortraitClassStyle, EnsureUnitPortraitStyle = EnsureUnitPortraitStyle,
 })
 M.Assign(Model, {

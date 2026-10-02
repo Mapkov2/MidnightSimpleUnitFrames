@@ -6,7 +6,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- It never copies settings into a second wizard and never mutates a value when
 --- the user deliberately chooses Keep unchanged or Skip.
 
-local _, MSUF = ...
+local MSUF = select(2, ...)
 MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
@@ -289,11 +289,15 @@ local LEGACY_STAGE_TARGET = {
     opt_castbar = "opt_bars", opt_colors = "opt_bars", auras3_styling = "power_moves",
 }
 
-local STAGE_BY_ID = {}
-for i = 1, #STAGES do
-    STAGES[i].index = i
-    STAGE_BY_ID[STAGES[i].id] = STAGES[i]
+local function IndexStagesById(stages)
+    local byId = {}
+    for i = 1, #stages do
+        stages[i].index = i
+        byId[stages[i].id] = stages[i]
+    end
+    return byId
 end
+local STAGE_BY_ID = IndexStagesById(STAGES)
 M.guidedTourStageCount = #STAGES
 
 local Tour, Invoke, CurrentStage
@@ -2328,6 +2332,43 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
     end
 end
 
+--- The chrome's title and section line for the current stage and position.
+local function PaintChromeHeadings(chrome, stage, position, profileMismatch, manualAway, tourProfile, activeProfile)
+    if profileMismatch then
+        M.Theme.SetTranslatedText(chrome.title, Tr("Active profile changed"))
+        M.Theme.SetTranslatedText(chrome.section, format(Tr("Tour profile: %s - Active profile: %s"), tourProfile, activeProfile))
+    elseif manualAway then
+        M.Theme.SetTranslatedText(chrome.title, format(Tr("Tour paused - %s"), PersonalizedTitle(stage)))
+        M.Theme.SetTranslatedText(chrome.section, Tr("Progress is saved while you use another page."))
+    else
+        chrome.title:SetText(PersonalizedTitle(stage))
+        if stage.special then
+            local labels = {
+                menu_basics = "QUICK START",
+                unit_intro = "PART 1 - UNITFRAMES",
+                edit_mode = "MOVE VS SIZE",
+                group_intro = "PART 2 - GROUP FRAMES",
+                group_edit_mode = "MOVE VS SIZE",
+                class_intro = "PART 3 - CLASS RESOURCES",
+                power_moves = "MSUF POWER MOVES",
+                final_review = "READY TO PLAY",
+            }
+            M.Theme.SetTranslatedText(chrome.section, Tr(labels[stage.id] or "GUIDED SETUP"))
+        elseif position.overview then
+            local controls = AllStageControls(stage, position.sections)
+            M.Theme.SetTranslatedText(chrome.section, format(Tr("MISSION BRIEF - %d checkpoints - %d settings"), #position.sections, #controls))
+        elseif position.control then
+            if ControlIsAction(position.control) then
+                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - ACTION %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
+            else
+                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - SETTING %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
+            end
+        elseif position.section then
+            M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - %s - %d settings"), position.index, #position.sections, Tr(position.section.label), #position.controls))
+        end
+    end
+end
+
 function M.RefreshGuidedTourChrome(reason)
     local chrome = Runtime.chrome
     if not chrome then return false end
@@ -2392,42 +2433,8 @@ function M.RefreshGuidedTourChrome(reason)
     local stagePosition, stageTotal = ActiveStagePosition(stage)
     M.Theme.SetTranslatedText(chrome.step, format(Tr("MISSION %d/%d - %d XP"), stagePosition, stageTotal, TourExperience()))
 
-    if profileMismatch then
-        M.Theme.SetTranslatedText(chrome.title, Tr("Active profile changed"))
-        M.Theme.SetTranslatedText(chrome.section, format(Tr("Tour profile: %s - Active profile: %s"), tourProfile, activeProfile))
-        chrome.help:SetText(displayHelp)
-    elseif manualAway then
-        M.Theme.SetTranslatedText(chrome.title, format(Tr("Tour paused - %s"), PersonalizedTitle(stage)))
-        M.Theme.SetTranslatedText(chrome.section, Tr("Progress is saved while you use another page."))
-        chrome.help:SetText(displayHelp)
-    else
-        chrome.title:SetText(PersonalizedTitle(stage))
-        if stage.special then
-            local labels = {
-                menu_basics = "QUICK START",
-                unit_intro = "PART 1 - UNITFRAMES",
-                edit_mode = "MOVE VS SIZE",
-                group_intro = "PART 2 - GROUP FRAMES",
-                group_edit_mode = "MOVE VS SIZE",
-                class_intro = "PART 3 - CLASS RESOURCES",
-                power_moves = "MSUF POWER MOVES",
-                final_review = "READY TO PLAY",
-            }
-            M.Theme.SetTranslatedText(chrome.section, Tr(labels[stage.id] or "GUIDED SETUP"))
-        elseif position.overview then
-            local controls = AllStageControls(stage, position.sections)
-            M.Theme.SetTranslatedText(chrome.section, format(Tr("MISSION BRIEF - %d checkpoints - %d settings"), #position.sections, #controls))
-        elseif position.control then
-            if ControlIsAction(position.control) then
-                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - ACTION %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
-            else
-                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - SETTING %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
-            end
-        elseif position.section then
-            M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - %s - %d settings"), position.index, #position.sections, Tr(position.section.label), #position.controls))
-        end
-        chrome.help:SetText(displayHelp)
-    end
+    PaintChromeHeadings(chrome, stage, position, profileMismatch, manualAway, tourProfile, activeProfile)
+    chrome.help:SetText(displayHelp)
     local alert = profileMismatch or warning
     local controlCue = not alert and not stage.special and position.control ~= nil
     local guidedGreen = M.Theme.colors.ok or { 0.24, 0.88, 0.40, 1 }
@@ -3055,11 +3062,12 @@ local function BuildEditModePage(ctx, T, W)
     if decisionCard.title then decisionCard.title:SetText("") end
     local decision
     if cooldownSupported then
+        -- W.Segment translates its label and option texts itself.
         local decisionValues = {
-            { value = "cooldown", text = Tr("Follow Blizzard's Essential Cooldowns") },
-            { value = "independent", text = Tr("Independent placement") },
+            { value = "cooldown", text = "Follow Blizzard's Essential Cooldowns" },
+            { value = "independent", text = "Independent placement" },
         }
-        decision = W.Segment(decisionCard, Tr("Should all Unitframes follow the Cooldown Manager?"), decisionValues, max(240, b.width - 32))
+        decision = W.Segment(decisionCard, "Should all Unitframes follow the Cooldown Manager?", decisionValues, max(240, b.width - 32))
         RegisterSpecialClickTargets("edit_mode", "anchor", decision.buttons)
         if type(W.MoveWidget) == "function" then W.MoveWidget(decision, decisionCard, 16, -18, max(240, b.width - 32), "LEFT") end
     end
@@ -3097,7 +3105,7 @@ local function BuildEditModePage(ctx, T, W)
                 SetButtonEnabled(decision.buttons[i], true)
             end
             if decision._msuf2Title and decision._msuf2Title.SetText then
-                decision._msuf2Title:SetText(automaticProviderLabel
+                M.Theme.SetTranslatedText(decision._msuf2Title, automaticProviderLabel
                     and M.Format("Cooldown Manager anchoring (%s)", automaticProviderLabel)
                     or Tr("Should all Unitframes follow the Cooldown Manager?"))
             end

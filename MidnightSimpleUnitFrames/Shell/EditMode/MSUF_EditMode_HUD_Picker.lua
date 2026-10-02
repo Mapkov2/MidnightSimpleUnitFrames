@@ -57,7 +57,7 @@ local function SelectFrameFromPicker(key)
         EM2.Focus.Pulse(key, "frame", nil, { source = "hud-picker", duration = 0.32 })
     end
     local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key) or nil
-    HUD.SetStatus(HelpText("Selected") .. " " .. HelpText((cfg and cfg.label) or LABEL_BY_KEY[key] or key), "ok")
+    HUD.SetStatus(string.format(HelpText("Selected %s"), HelpText((cfg and cfg.label) or LABEL_BY_KEY[key] or key)), "ok")
     HUD.RefreshControls()
 end
 

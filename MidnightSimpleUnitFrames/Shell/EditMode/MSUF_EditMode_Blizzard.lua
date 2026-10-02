@@ -260,7 +260,8 @@ end
 
 local function ReportLayoutFailure(reason)
     if type(_G.print) == "function" then
-        _G.print("MSUF Edit Mode: Blizzard layout is not editable (" .. tostring(reason) .. ")")
+        local translate = MSUF.Translate or tostring
+        _G.print(string.format(translate("MSUF Edit Mode: Blizzard layout is not editable (%s)"), tostring(reason)))
     end
 end
 
@@ -467,6 +468,21 @@ local function ApplyAnchorVisual(systemId, point, relativeTo, relativePoint, x, 
     return true
 end
 
+--- Micro Menu orientation and order and the Bags orientation, direction and
+--- slot padding have no Blizzard setter: the game's own system mixin assigns
+--- these plain fields before Layout() reads them (EditModeSystemTemplates,
+--- EditModeMicroMenuSystemMixin:UpdateSystemSettingOrientation/Order and
+--- EditModeBagsSystemMixin:UpdateSystemSettingOrientation/Direction/
+--- BagSlotPadding, live and forever). Calling those mixin methods from here
+--- would run the same assignments with MSUF taint, so no taint-free path
+--- exists. The mixin assigns only dirty settings; this does the same and
+--- writes a field only when its value changes, so a size change, a repeated
+--- click or an unchanged profile snapshot leaves MicroMenu and BagsBar alone.
+local function AssignLayoutField(frame, key, value)
+    if frame[key] == value then return end
+    frame[key] = value
+end
+
 --- SaveLayouts persists the layout but applies nothing on its own, and
 --- SetActiveLayout on the unchanged index is a no-op (both field-verified).
 --- Settings therefore apply visually right here, through the same plain
@@ -523,13 +539,14 @@ local function ApplyVisual(systemId, entry)
             local orientationEnum = _G.Enum.MicroMenuOrientation or {}
             local orientation = map[setting.Orientation or 0]
             if orientation ~= nil then
-                micro.isHorizontal = orientation == (orientationEnum.Horizontal or 0)
+                AssignLayoutField(micro, "isHorizontal", orientation == (orientationEnum.Horizontal or 0))
             end
             local orderEnum = _G.Enum.MicroMenuOrder or {}
             local order = map[setting.Order or 1]
             if order ~= nil then
-                micro.layoutFramesGoingRight = order == (orderEnum.Default or 0)
-                micro.layoutFramesGoingUp = order ~= (orderEnum.Default or 0)
+                local defaultOrder = order == (orderEnum.Default or 0)
+                AssignLayoutField(micro, "layoutFramesGoingRight", defaultOrder)
+                AssignLayoutField(micro, "layoutFramesGoingUp", not defaultOrder)
             end
         end
         if type(frame.Layout) == "function" then frame:Layout() end
@@ -542,12 +559,12 @@ local function ApplyVisual(systemId, entry)
         local orientationEnum = _G.Enum.BagsOrientation or {}
         local orientation = map[setting.Orientation or 0]
         if orientation ~= nil then
-            frame.isHorizontal = orientation == (orientationEnum.Horizontal or 0)
+            AssignLayoutField(frame, "isHorizontal", orientation == (orientationEnum.Horizontal or 0))
         end
         local direction = map[setting.Direction or 1]
-        if direction ~= nil then frame.direction = direction end
+        if direction ~= nil then AssignLayoutField(frame, "direction", direction) end
         local padding = map[setting.BagSlotPadding or 3]
-        if padding ~= nil then frame.bagPadding = padding end
+        if padding ~= nil then AssignLayoutField(frame, "bagPadding", padding) end
         if type(frame.Layout) == "function" then frame:Layout() end
     elseif systemId == systemEnum.DamageMeter then
         --- Every damage meter setting applies through a plain method on the

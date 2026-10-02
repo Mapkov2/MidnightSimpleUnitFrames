@@ -116,8 +116,10 @@ for client in client_suffixes():
     menu = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
     # Every client loads the Forever menu skin; the file applies it only on WoW Forever.
     check(options.index(menu + "MSUF_Menu2_Theme_Forever.lua") < options.index(menu + "MSUF_Menu2_Theme_Tokens.lua") < options.index(menu + "MSUF_Menu2_Theme.lua"), client, "the Forever menu skin must precede theme capture")
-    check(options.index(menu + "MSUF_Menu2_ColorPicker.lua") < options.index(menu + "MSUF_Menu2_Widgets.lua"),
-          client, "Menu2 color picker must load before the widgets")
+    # The color picker module reads the row cursor and search helpers Widgets publishes.
+    check(options.index(menu + "MSUF_Menu2_Widgets.lua") < options.index(menu + "MSUF_Menu2_ColorPicker.lua")
+          < options.index(menu + "MSUF_Menu2_Widgets_PageBuilder.lua"),
+          client, "Menu2 color picker must load right after the widgets")
     suffix = "" if client == "Mainline" else "_Classic"
     # Every client loads the Retail aura page and its Group and Preview siblings:
     # the siblings read M.AurasPage, and the preview reads M.AuraGroupSettings.

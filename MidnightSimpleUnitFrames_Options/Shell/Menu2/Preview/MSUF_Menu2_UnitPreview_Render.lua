@@ -201,20 +201,15 @@ local UNIT_CP_ROUNDED_OPTS = {
 }
 local NormalizePreviewClassPowerShape = CPPreview.NormalizeClassShape
 local NormalizePreviewClassPowerShapeAlign = _G.MSUF_UF_NormalizeShapeAlign
-local function PreviewClassPowerAutoFitWidth(segCount, height, gap)
-    segCount = math.floor(tonumber(segCount) or 1)
-    if segCount < 1 then segCount = 1 elseif segCount > 10 then segCount = 10 end
-    height = math.floor(tonumber(height) or 1)
-    if height < 1 then height = 1 end
-    gap = math.floor(tonumber(gap) or 0)
-    if gap < 0 then gap = 0 elseif gap > 8 then gap = 8 end
-    return (segCount * height) + ((segCount - 1) * gap)
-end
+-- The pip auto-fit width is the engine's own rule, the one the live class
+-- resource layout applies (up to 18 Sweeping Strikes pips); a preview passes no
+-- pixel snap. A copy here capped the count at 10.
+local UFShared = MSUF.UF and MSUF.UF.Shared or {}
 local function PreviewClassPowerWidth(bars, frameW, cpH, segCount)
     bars = bars or {}
     local shape = NormalizePreviewClassPowerShape(bars.classPowerShape)
     if PREVIEW_CLASS_POWER_SHAPES[shape] and bars.classPowerWidthMode == "auto_pips" then
-        local w = PreviewClassPowerAutoFitWidth(segCount, cpH, bars.classPowerGap)
+        local w = UFShared.ClassPowerAutoFitWidth(segCount, cpH, bars.classPowerGap)
         if w < 1 then w = 1 elseif w > 800 then w = 800 end
         return w
     end

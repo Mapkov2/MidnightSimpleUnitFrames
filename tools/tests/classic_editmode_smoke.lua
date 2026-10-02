@@ -638,6 +638,70 @@ do
     assert(Count() == loaded, "Blizzard elements did not register again after the second on")
 end
 
+
+-- Review R7 P2: MicroMenu and BagsBar have no Blizzard setter for orientation,
+-- order, direction or slot padding. Blizzard's own system mixin assigns these
+-- plain fields and only for dirty settings (EditModeSystemTemplates), and its
+-- Layout reads them back. The adapter writes a field only when its value
+-- changes: a size change, a repeated click or an unchanged profile snapshot
+-- leaves both frames untouched; a real change still applies.
+do
+    local ctx = LoadAdapter({ microSetting = { Orientation = 0, Order = 1, Size = 2, EyeSize = 3 }, snapshot = {} })
+    -- Only the layout fields count; the stub frame records its own calls too.
+    local LAYOUT_FIELDS = { isHorizontal = true, layoutFramesGoingRight = true, layoutFramesGoingUp = true,
+        direction = true, bagPadding = true }
+    local writes = {}
+    local function Record(label, target, defaults)
+        local store = {}
+        for key, value in pairs(defaults) do store[key] = value end
+        return setmetatable(target, {
+            __index = store,
+            __newindex = function(_, key, value)
+                if LAYOUT_FIELDS[key] then writes[#writes + 1] = label .. "." .. tostring(key) end
+                store[key] = value
+            end,
+        })
+    end
+    -- MicroMenuContainer.xml and MainMenuBarBagButtons.xml seed these values.
+    MicroMenu = Record("MicroMenu", { SetNormalScale = function() end, SetQueueStatusScale = function() end },
+        { isHorizontal = true, layoutFramesGoingRight = true, layoutFramesGoingUp = false })
+    local bags = Record("BagsBar", ctx.registered.bags.getFrame(), { isHorizontal = true })
+    local function Control(element, id)
+        for _, control in ipairs(ctx.registered[element].extraControls) do
+            if control.id == id then return control end
+        end
+        error("missing " .. element .. " control " .. id)
+    end
+    local function Expect(label, wanted)
+        local got = table.concat(writes, ",")
+        assert(got == wanted, label .. ": wrote '" .. got .. "', expected '" .. wanted .. "'")
+        for i = #writes, 1, -1 do writes[i] = nil end
+    end
+    assert(Control("micromenu", "vertical").set(true) == true, "Micro Menu vertical did not commit")
+    Expect("Micro Menu vertical", "MicroMenu.isHorizontal")
+    assert(MicroMenu.isHorizontal == false, "Micro Menu vertical did not apply")
+    assert(Control("micromenu", "size").set(110) == true, "Micro Menu size did not commit")
+    Expect("Micro Menu size", "")
+    assert(Control("micromenu", "vertical").set(true) == true, "repeated Micro Menu vertical did not commit")
+    Expect("repeated Micro Menu vertical", "")
+    assert(Control("micromenu", "reverse").set(true) == true, "Micro Menu reverse did not commit")
+    Expect("Micro Menu reverse", "MicroMenu.layoutFramesGoingRight,MicroMenu.layoutFramesGoingUp")
+    assert(MicroMenu.layoutFramesGoingRight == false and MicroMenu.layoutFramesGoingUp == true,
+        "Micro Menu reverse did not apply")
+    assert(Control("bags", "vertical").set(true) == true, "Bags vertical did not commit")
+    Expect("Bags vertical", "BagsBar.isHorizontal")
+    assert(Control("bags", "padding").set(4) == true, "Bags padding did not commit")
+    Expect("Bags padding", "BagsBar.bagPadding")
+    assert(bags.bagPadding == 2 and bags.isHorizontal == false, "Bags padding or orientation did not apply")
+    assert(Control("bags", "size").set(100) == true, "Bags size did not commit")
+    Expect("Bags size", "")
+    assert(Control("bags", "reversedir").set(true) == true, "Bags direction did not commit")
+    Expect("Bags direction", "BagsBar.direction")
+    assert(bags.direction == 1, "Bags direction did not apply")
+    assert(MSUF_BlizzardEditMode_ApplyProfileSnapshot() == true, "the unchanged profile snapshot did not apply")
+    Expect("unchanged profile snapshot", "")
+    setmetatable(bags, nil)
+end
 local function Read(relativePath)
     local file = assert(io.open(root .. "/" .. relativePath, "rb"))
     local source = file:read("*a")

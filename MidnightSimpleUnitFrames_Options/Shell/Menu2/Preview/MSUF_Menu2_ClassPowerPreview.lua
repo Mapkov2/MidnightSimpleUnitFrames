@@ -3,15 +3,13 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Menu-only composition for ClassPower, detached Player Power, and the
 --- optional Class Resources Player HP bar. Edit Mode owns movement; this
 --- surface only displays the configured layout and opens element settings.
-local addonName, MSUF = ...
+local MSUF = select(2, ...)
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
 local Preview = M.ClassPowerStackPreview or {}
 M.ClassPowerStackPreview = Preview
-local ClassPowerSurfaceShown = Preview.SurfaceShown
 local ActivateClassPowerSurface = Preview.ActivateSurface
 local RequestClassPowerPreviewRefresh = Preview.RequestRefresh
 local W = M.Widgets

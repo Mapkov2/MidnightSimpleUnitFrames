@@ -185,6 +185,7 @@ clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/editmode_shell_locale_smoke.lua	{root}	Edit Mode shell locale smoke failed
 -	lua	tools/tests/editmode_popup_focus_combat_smoke.lua	{root}	Edit Mode popup focus and combat smoke failed
 -	lua	tools/tests/editmode_hud_toolbar_smoke.lua	{root}	Edit Mode toolbar wiring smoke failed
+-	lua	tools/tests/editmode_group_geometry_util_smoke.lua	{root}	Edit Mode group geometry refresh lost its single Util owner
 -	lua	tools/tests/editmode_castbar_edit_info_smoke.lua	{root}	Edit Mode castbar mover and readout refresh smoke failed
 -	lua	tools/tests/classic_resource_editmode_smoke.lua	{root/}	Class Resource and detached Power Edit Mode smoke failed
 -	lua+driver	tools/tests/arena_editmode_exit_restore_smoke.lua	{root/}	Arena Edit Mode exit restore smoke failed
@@ -203,6 +204,8 @@ clients+Forever	lua	tools/tests/menu_core_text_smoke.lua	{root} {flavor}	Menu co
 clients+Forever	lua	tools/tests/menu_pages_translate_once_smoke.lua	{root} {flavor}	Menu pages and previews translate their text once: {flavor}
 clients+Forever	lua	tools/tests/menu_button_history_smoke.lua	{root} {flavor}	Menu button history checkpoint is opt-in and keeps undo: {flavor}
 clients+Forever	lua	tools/tests/menu_page_rebuild_leak_smoke.lua	{root} {flavor}	Undo, reset and view switches repaint pages without new frames: {flavor}
+clients+Forever	lua	tools/tests/search_results_repaint_smoke.lua	{root} {flavor}	Search results repaint in place without new frames: {flavor}
+clients+Forever	lua	tools/tests/menu_default_drift_smoke.lua	{root} {flavor}	Menu fallbacks drifted from the seeded defaults: {flavor}
 clients+Forever	lua	tools/tests/menu_preview_focus_clear_smoke.lua	{root} {flavor}	Leaving a text control clears the unit preview text focus: {flavor}
 -	lua	tools/tests/menu_search_page_side_effects_smoke.lua	{root} Mainline	Search keeps the page on screen and filters deleted variants: Mainline
 -	lua	tools/tests/menu_search_page_side_effects_smoke.lua	{root} Vanilla	Search keeps the page on screen and filters deleted variants: Vanilla
@@ -215,6 +218,7 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua+driver	tools/tests/classic_aura_render_smoke.lua	{root/} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua} {p/:MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua}	Classic aura live-render smoke failed
 -	lua	tools/tests/startup_locale_manifest_smoke.lua	{root/}	Startup client-language manifest parity failed
 -	lua	tools/tests/locale_key_coverage_smoke.lua	{root/}	Locale key coverage smoke failed
+-	lua	tools/tests/menu_i18n_composed_labels_smoke.lua	{root}	Composed menu and Edit Mode labels are back or lost a translation
 -	lua	tools/tests/locale_english_overwrite_smoke.lua	{root}	Translated packs turned translations back into English
 -	lua	tools/tests/keybind_labels_locale_smoke.lua	{root}	Key binding labels ignore the menu language
 -	lua	tools/tests/classpower_client_resource_gates_smoke.lua	{root/}	Class resource client gates failed
@@ -320,6 +324,8 @@ clients	lua	tools/tests/defaults_pass_trust_smoke.lua	{root} {flavor}	Defaults p
 -	lua	tools/tests/profile_suite_notify_combat_smoke.lua	{root}	Profile Suite notification combat smoke failed
 -	lua	tools/tests/blizzard_aura_visibility_load_smoke.lua	{root}	Blizzard aura visibility load smoke failed
 -	lua	tools/tests/global_links_smoke.lua	{root}	Global link smoke failed (a _G.MSUF_* name is read but defined nowhere)
+-	lua	tools/tests/menu_theme_names_smoke.lua	{root}	Menu theme or UI kit field is read but set nowhere
+-	lua	tools/tests/color_power_token_contexts_smoke.lua	{root}	Group power color contexts drifted from the Colors page power list
 -	lua	tools/tests/deprecated_aliases_smoke.lua	{root}	Deprecated alias smoke failed
 clients+Forever	lua	tools/tests/bugreport_layout_smoke.lua	{root} {flavor}	Bug report menu geometry regression: {flavor}
 clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game menu cold Options open boundary: {flavor}
