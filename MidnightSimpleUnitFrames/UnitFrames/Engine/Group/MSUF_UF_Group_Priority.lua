@@ -289,15 +289,20 @@ local function PartyUnitName(unit)
   return realm and (name .. "-" .. realm) or name
 end
 
-local function AddRosterUnit(unit, name)
-  name = PlainString(name)
-  if not name then return end
+local function UnitGUIDAndRole(unit)
   local guid
   if UnitGUID then guid = UnitGUID(unit) end
   guid = PlainString(guid)
   local role
   if UnitGroupRolesAssigned then role = UnitGroupRolesAssigned(unit) end
   if issecretvalue(role) == true then role = nil end
+  return guid, role
+end
+
+local function AddRosterUnit(unit, name)
+  name = PlainString(name)
+  if not name then return end
+  local guid, role = UnitGUIDAndRole(unit)
   rosterCount = rosterCount + 1
   local entry = rosterEntries[rosterCount]
   if not entry then
@@ -484,12 +489,7 @@ local function UnitRosterIdentity(unit)
   end
   name = PlainString(name)
   if not name then return nil end
-  local guid
-  if UnitGUID then guid = UnitGUID(unit) end
-  guid = PlainString(guid)
-  local role
-  if UnitGroupRolesAssigned then role = UnitGroupRolesAssigned(unit) end
-  if issecretvalue(role) == true then role = nil end
+  local guid, role = UnitGUIDAndRole(unit)
   return guid, name, role
 end
 
