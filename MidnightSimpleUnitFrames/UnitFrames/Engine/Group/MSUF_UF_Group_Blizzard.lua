@@ -267,9 +267,10 @@ end
 --- while MSUF owns the frames" behavior.
 local function HideRaidFrames()
   -- All generated CompactRaidGroup/CompactRaidFrame unit buttons are children
-  -- of CompactRaidFrameContainer. Hide only the owners and leave Blizzard's
+  -- of CompactRaidFrameContainer. Hide only the owner and leave Blizzard's
   -- unit-button scripts, events, colors and secret values completely untouched.
-  HideFrame(_G.CompactRaidFrameReservationManager)
+  -- (Blizzard_CompactRaidFrameReservationManager.lua is a file of reservation
+  -- helpers, CompactRaidFrameReservation_NewManager; it creates no frame.)
   HideFrame(_G.CompactRaidFrameContainer)
 end
 
@@ -567,10 +568,6 @@ function GF.ApplyBlizzardRaidManagerMode()
   return raidManagerMode
 end
 
-function GF.GetBlizzardRaidManagerMode()
-  return ResolveRaidManagerMode()
-end
-
 local BASE_EVENTS = {
   "ADDON_LOADED",
   "PLAYER_LOGIN",
@@ -665,14 +662,6 @@ BlizzardRosterEventWanted = function()
   local raid = GF.GetConf and GF.GetConf(LiveRaidKind()) or {}
   return NormalizeBlizzardFallbackMode(party.blizzardFallbackMode) == "NONE"
     or NormalizeBlizzardFallbackMode(raid.blizzardFallbackMode) == "NONE"
-end
-
-function GF.HideBlizzardPartyFrames()
-  HidePartyFrames()
-end
-
-function GF.HideBlizzardRaidFrames()
-  HideRaidFrames()
 end
 
 function GF.RestoreBlizzardGroupFrames()

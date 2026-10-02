@@ -94,10 +94,6 @@ local function PriorityBaseKind(groupType)
   return nil
 end
 
-function GF.GetPriorityGroupType()
-  return CurrentGroupType()
-end
-
 function GF.GetPriorityBaseKind()
   return PriorityBaseKind()
 end
@@ -186,10 +182,6 @@ end
 
 function GF.GetPriorityPins()
   return Pins(false)
-end
-
-function GF.GetPriorityPinCount()
-  return #Pins(false)
 end
 
 local function BaseFramesEnabled(groupType)
@@ -611,7 +603,6 @@ function GF.ToggleHoveredPriorityFrame()
   Notify(code, name, limit)
   return ok, code
 end
-GF.TogglePriorityMouseover = GF.ToggleHoveredPriorityFrame
 
 function GF.RequestPriorityApply(_, reason)
   return RequestRefresh(reason or "menu")

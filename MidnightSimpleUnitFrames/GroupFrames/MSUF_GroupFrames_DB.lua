@@ -41,10 +41,8 @@ local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 --       _RefreshVisuals, _RefreshGeometry, _RefreshOverlays, _RefreshBorder,
 --       _RefreshOutlineGeometry, _RefreshColors, _RefreshFonts,
 --       _UpdateGroupVisibility, _EM2_SetActivePreviewKind, _EM2_NudgePreview,
---       _InvalidateCooldownTextCurve, _ForceCooldownTextRecolor,
---       _ForceAuraTextColorRefresh   (EM2 re-wraps _RefreshVisuals/_RebuildAll
---       in-place to add edit-mode preview sync -- that re-assignment is
---       intentional, not a duplicate definition).
+--       _ForceAuraTextColorRefresh. EM2 follows runtime mutations through
+--       GF.RegisterRuntimeObserver; nothing re-wraps these bridges.
 --   Preview (Preview):  MSUF_GF_ShowPreview, _HidePreview, _SetPreviewAnchor,
 --       _RefreshPreviewLayout, _RefreshPreviewBox.  NOTE: Preview.lua loads
 --       after Runtime.lua and OWNS the real preview implementation -- Runtime
@@ -1067,7 +1065,10 @@ function GF.DetectRaidSituation()
     return "openworld"
 end
 
---- Auto-switch handler (called on PLAYER_ENTERING_WORLD)
+--- Auto-switch handler. Nothing calls it: no setting, menu control, default or
+--- changelog has ever enabled raidLayoutMode (none since 6.0 alpha 1), so the
+--- situation layouts are not user-visible. Kept for an owner decision (quality
+--- program wave 3); wire it to PLAYER_ENTERING_WORLD only together with a control.
 function GF.AutoSwitchRaidLayout(kind)
     kind = kind or (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
     local conf = GF.GetConf(kind)

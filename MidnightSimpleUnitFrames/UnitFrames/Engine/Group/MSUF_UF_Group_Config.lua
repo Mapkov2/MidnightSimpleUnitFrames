@@ -67,10 +67,6 @@ local function CachedGroupSize()
   return _groupSizeCacheValue
 end
 
-function GF.InvalidateGroupSizeCache()
-  _groupSizeCacheAt = 0
-end
-
 local function DynamicAuraScale(root)
   if not (root and root.dynamicScale == true) then return 1 end
   local n = CachedGroupSize()
@@ -861,13 +857,6 @@ local function IsBlizzardAuraTypeEnabled(confOrRoot, nativeKey)
   local value = types and types[nativeKey]
   if value ~= nil then return value == true end
   return true
-end
-
-function GF.GetBlizzardAuraTypeFlags(conf)
-  return IsBlizzardAuraTypeEnabled(conf, "buffs"),
-    IsBlizzardAuraTypeEnabled(conf, "debuffs"),
-    IsBlizzardAuraTypeEnabled(conf, "dispels"),
-    IsBlizzardAuraTypeEnabled(conf, "externals")
 end
 
 local NATIVE_AURA_BLACKLIST_HASHES_ENABLED = true
@@ -2089,14 +2078,6 @@ function GF.GetCompiledSpecRevision(kind)
     .. ":" .. tostring(base and base._msufTextColorRevision or 0)
     .. ":" .. tostring(base and base._msufPowerVisualRevision or 0)
     .. ":" .. tostring(base and base._msufBorderVisualRevision or 0)
-end
-
-function GF.DropCompiledSpecs(kind)
-  if kind then
-    compiledSpecCache[kind] = nil
-  else
-    wipe(compiledSpecCache)
-  end
 end
 
 local function CompiledSpecSettingsToken(kind)

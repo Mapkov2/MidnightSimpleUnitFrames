@@ -122,12 +122,6 @@ GF.DELIMITER_OPTIONS = {
 
 
 --- Resolve font path (global MSUF font family)
---- Check if GF scope has font override active
-function GF.HasFontOverride(kind)
-    local conf = GF.GetConf(kind)
-    return conf.fontOverride == true
-end
-
 function GF.ResolveFontPath(kind)
     return _G.MSUF_GetFontPath()
 end
@@ -415,9 +409,6 @@ local function _GF_Abbrev(val, shortNumbers)
     return tostring(n)
 end
 
---- Expose for callers that still reference GF._AbbrevNumber
-GF._AbbrevNumber = _GF_Abbrev
-
 ---
 --- Percent helpers. UnitHealthPercent is SecretReturns and UnitPowerPercent
 --- SecretWhenUnitPowerRestricted (UnitDocumentation.lua): a secret percent goes
@@ -650,15 +641,6 @@ function GF.TruncateName(name, maxChars, noEllipsis, clipSide)
     return truncated .. ".."
 end
 
---- Check if any text slot is active (not NONE)
-function GF.HasActiveTextSlot(kind)
-    local conf = GF.GetConf(kind)
-    local tl = conf.textLeft  or "NONE"
-    local tc = conf.textCenter or "NONE"
-    local tr = conf.textRight or "NONE"
-    return tl ~= "NONE" or tc ~= "NONE" or tr ~= "NONE"
-end
-
 ---
 --- FormatPowerText(mode, pw, pwMax, delimiter [, unit [, hidePercentSymbol]])
 --- Same modes as health text. Secret-safe via C-side abbreviators.
@@ -693,14 +675,4 @@ function GF.FormatPowerText(mode, pw, pwMax, delimiter, unit, hidePercentSymbol)
     end
 
     return _GF_FormatByMode(mode, sCur, sMax, delim, pctStr, hasPct, missingVal)
-end
-
---- Check if any power text slot is active
-function GF.HasActivePowerTextSlot(kind, conf)
-    conf = conf or GF.GetConf(kind)
-    if not (GF.IsPowerTextEnabled and GF.IsPowerTextEnabled(kind, conf)) then return false end
-    local tl = conf.powerTextLeft   or "NONE"
-    local tc = conf.powerTextCenter or "NONE"
-    local tr = conf.powerTextRight  or "NONE"
-    return tl ~= "NONE" or tc ~= "NONE" or tr ~= "NONE"
 end

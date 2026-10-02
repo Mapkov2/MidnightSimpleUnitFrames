@@ -419,10 +419,11 @@ sandbox.CompactRaidFrameManagerToggleButton = toggle
 sandbox.CompactRaidFrameContainer = container
 
 local party = { enabled = false, showSolo = false, raidManagerMode = "HIDDEN" }
+local raid = {}
 local namespace = {
     Client = client,
     ExportPublic = function(name, value) sandbox[name] = value; return value end,
-    GF = { GetConf = function(kind) return kind == "party" and party or {} end },
+    GF = { GetConf = function(kind) return kind == "party" and party or raid end },
 }
 local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"))
 setfenv(chunk, sandbox)
@@ -439,7 +440,10 @@ else
         "Mainline must never touch a legacy toggle button")
 end
 
-GF.HideBlizzardRaidFrames()
+-- The ownership pass hides the raid container while MSUF owns the raid frames.
+raid.enabled = true
+GF.ApplyBlizzardGroupFrameOwnership("addon-loaded:client-gates")
+raid.enabled = nil
 Check(hiddenParent ~= nil, "the hidden parent was never created")
 if classic then
     Check(container.parent == hiddenParent and container.shown == false,

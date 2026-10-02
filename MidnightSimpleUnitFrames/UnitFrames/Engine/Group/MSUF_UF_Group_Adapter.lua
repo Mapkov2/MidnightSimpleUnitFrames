@@ -201,10 +201,6 @@ function GF.UnregisterClickCastFrame(frame)
   return true
 end
 
-function GF.RefreshClickCastFrames()
-  return false
-end
-
 local function NormalizeAttrUnit(value)
   if type(value) == "string" and value ~= "" then return value end
   return NO_UNIT
@@ -491,11 +487,6 @@ function GF.ResolveLifecycleFrame(unit)
     end
   end
   return exact, exact ~= nil
-end
-
-function GF.ValidateUnitFrameMap(frame, unit)
-  local visual = VisualFrame(frame)
-  return IsUnitToken(unit) and visual ~= nil and GF.unitFrames[unit] == visual and visual.MSUFUnitKey == unit
 end
 
 local function MarkApplied(frame, kind, unit, spec)
