@@ -1201,7 +1201,10 @@ local function ApplySortAttributes(header, state)
   return changed
 end
 
-local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
+--- SecureUnitButtonTemplate + PingableUnitFrameTemplate with registerForClicks="AnyUp"
+--- (GroupFrames/MSUF_GroupFrames_Additional.xml). The header births children in
+--- combat too and RegisterForClicks is protected, so the template carries it.
+local SECURE_UNIT_BUTTON_TEMPLATE = "MSUF_GroupHeaderUnitButtonTemplate"
 -- Mainline 12.1 births native AuraContainers inside the restricted header.
 -- Classic has no such template; its addon-owned UNIT_AURA backend attaches
 -- after the secure child exists, so keep this header attribute cleared.
@@ -1210,13 +1213,6 @@ local SECURE_AURA_CONTAINER_TEMPLATE = not (MSUF.Client and MSUF.Client.IsClassi
 local SECURE_INIT_VERSION = 9
 --- Insecure header method the secure snippet calls for every child it births.
 local CHILD_INIT_METHOD = "MSUFGFInitChild"
-
-local function ButtonTemplate()
-  if UF and type(UF.GetSecureHeaderUnitButtonTemplate) == "function" then
-    return UF.GetSecureHeaderUnitButtonTemplate()
-  end
-  return SECURE_UNIT_BUTTON_TEMPLATE
-end
 
 --- SecureGroupHeader runs this snippet once per child it creates, in combat as
 --- well (SecureGroupHeaders.lua configureChildren -> SetupUnitButtonConfiguration),
@@ -1553,7 +1549,7 @@ local function ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW,
 end
 
 local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex, preservedSortSnapshot)
-  local buttonTemplate = ButtonTemplate()
+  local buttonTemplate = SECURE_UNIT_BUTTON_TEMPLATE
   local growth = GF.ResolveLayoutGrowth and GF.ResolveLayoutGrowth(kind, conf) or conf.growth
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(growth, spacing, conf.groupGrowth)
   local upc = ClampInt(conf.unitsPerColumn, 5, 1, preservedGroupIndex and 5 or 40)
@@ -1801,7 +1797,7 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
   local shouldHide = header.IsShown and header:IsShown()
     and (kindChanged or sizeChanged or secureInitChanged or topologyChanged
       or AttrChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE)
-      or AttrChanged(header, "template", ButtonTemplate())
+      or AttrChanged(header, "template", SECURE_UNIT_BUTTON_TEMPLATE)
       or AttrChanged(header, "nameList", nameList))
 
   if shouldHide then header:Hide() end
@@ -1809,7 +1805,7 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
 
   local changed = kindChanged
   changed = SetAttrIfChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE) or changed
-  changed = SetAttrIfChanged(header, "template", ButtonTemplate()) or changed
+  changed = SetAttrIfChanged(header, "template", SECURE_UNIT_BUTTON_TEMPLATE) or changed
   changed = SetAttrIfChanged(header, "templateType", "Button") or changed
   changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
   changed = SetAttrIfChanged(header, "initial-height", initialHeight) or changed

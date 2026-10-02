@@ -193,6 +193,31 @@ function Harness.New(root, flavor, options)
         return handle
     end
 
+    -- XML virtual templates MSUF ships for header children. The client applies a
+    -- template's registerForClicks when it creates the button, so a child born in
+    -- lockdown carries it without a (protected) RegisterForClicks call.
+    local templateClicks
+    local function TemplateClicks(template)
+        if not templateClicks then
+            templateClicks = {}
+            local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.xml", "rb"))
+            local xml = file:read("*a")
+            file:close()
+            for tag in xml:gmatch("<Button%s[^>]*>") do
+                local name, clicks = tag:match('name="([%w_]+)"'), tag:match('registerForClicks="([^"]+)"')
+                if name and clicks then
+                    local list = {}
+                    for button in clicks:gmatch("[^,%s]+") do list[#list + 1] = button end
+                    templateClicks[name] = list
+                end
+            end
+        end
+        for name in tostring(template or ""):gmatch("[^,%s]+") do
+            if templateClicks[name] then return templateClicks[name] end
+        end
+        return nil
+    end
+
     local function RunSnippet(code, owner)
         if type(code) ~= "string" then return end
         local chunk = assert(loadstring(code, "=initialConfigFunction"))
@@ -255,6 +280,8 @@ function Harness.New(root, flavor, options)
                         child.SetRoundLayoutToNearestPixel = function(self, enabled) self.roundLayout = enabled end
                     end
                     if childName then env[childName] = child end
+                    local clicks = TemplateClicks(attributes.template)
+                    if clicks then child.forClicks = { unpack(clicks) } end
                     Protect(child)
                     header[index] = child
                     if attributes.auraContainerTemplate then

@@ -832,8 +832,8 @@ end
 --- lost them when PLAYER_REGEN_DISABLED landed in between: the settle then ran in
 --- lockdown, deferred, and the child stayed an unstyled, clickable slot for the
 --- whole fight. The settle scan still runs and finds these children applied.
---- The protected half (secure click attributes) comes with the regen rescan
---- that the roster change behind every birth defers.
+--- The child template carries registerForClicks="AnyUp", and the snippet sets the
+--- secure click attributes; the regen rescan re-asserts both.
 function GF.AdoptHeaderChild(child, header)
   if not child then return false end
   local kind = header and header._msufGFKind

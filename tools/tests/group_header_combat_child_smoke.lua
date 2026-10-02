@@ -64,6 +64,10 @@ local function AssertStyled(child, unit, label)
     Check(child._msufActiveElements and child._msufActiveElements.Health == true,
         label .. ": the Health element is not active")
     Check(env.ClickCastFrames[child] == true, label .. ": child is not registered with ClickCastFrames")
+    -- RegisterForClicks is protected and a restricted handle has none, so only the
+    -- child template (registerForClicks="AnyUp") can give a lockdown birth every button.
+    Check(child.forClicks and child.forClicks[1] == "AnyUp",
+        label .. ": child answers LeftButtonUp only (no right-click menu, no click-cast)")
 end
 
 local function AssertRegenFinished(child)
@@ -90,7 +94,6 @@ Check(#h.callMethodErrors == 0, "CallMethod raised in combat: " .. tostring(h.ca
 Check(#h.violations == 0, #h.violations .. " protected write(s) from insecure code in lockdown; first:\n"
     .. tostring(h.violations[1]))
 -- The protected half waits for the regen edge.
-Check(late.forClicks == nil, "RegisterForClicks ran in lockdown")
 h:LeaveCombat()
 Check(#h.violations == 0, "protected write in combat during the regen edge?\n" .. tostring(h.violations[1]))
 AssertRegenFinished(late)
@@ -142,6 +145,16 @@ Check(#h.violations == 0, "protected write while combat overtook a settle:\n" ..
 h:LeaveCombat()
 AssertRegenFinished(overtaken)
 raidConf.enabled = false
+
+-- SecureGroupPetHeader births the Additional pet buttons in combat as well, from
+-- MSUF_GroupAdditionalUnitTemplate; their OnLoad cannot register clicks in lockdown.
+do
+    local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.xml", "rb"))
+    local xml = file:read("*a")
+    file:close()
+    local tag = assert(xml:match('<Button%s[^>]*name="MSUF_GroupAdditionalUnitTemplate"[^>]*>'), "pet template moved")
+    Check(tag:find('registerForClicks="AnyUp"', 1, true), "pet buttons born in combat never get RegisterForClicks(\"AnyUp\")")
+end
 
 print(string.format("group_header_combat_child_smoke: ok (%s: %d children, %d born in lockdown, 0 protected writes)",
     flavor, #h:Children(header), (function()
