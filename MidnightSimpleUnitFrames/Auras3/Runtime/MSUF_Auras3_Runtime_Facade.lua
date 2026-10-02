@@ -122,7 +122,6 @@ end
 A3.OnFrameUnitChanged = A3.RenderUnitChangedFrame
 
 A3.ForceUpdateFrame = A3.RenderFrame
-A3.RenderCachedFrame = A3.RenderFrame
 
 function A3.RuntimeOwnsUnit(unit)
     unit = NormalizeRuntimeUnit(unit)

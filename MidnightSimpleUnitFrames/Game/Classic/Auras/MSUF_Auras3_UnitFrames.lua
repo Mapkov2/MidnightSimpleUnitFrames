@@ -415,7 +415,6 @@ function A3.RenderFrame(frame)
 end
 
 A3.ForceUpdateFrame = A3.RenderFrame
-A3.RenderCachedFrame = RenderCachedAuras
 
 function A3.HandleUnitAura(frame, event, unit, updateInfo)
     return UpdateAuras(frame, event, unit, updateInfo, false)

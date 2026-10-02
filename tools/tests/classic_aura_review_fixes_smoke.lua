@@ -1154,6 +1154,8 @@ do
     -- (A3._HideLane is called only by Retail's NativeApply, which defines its own).
     assert(A3._HideLane == nil and A3.UnitFrameOwnsUnitAura == nil and A3.IconStylePreviewForScope == nil,
         "F14: an uncalled Classic aura export (_HideLane, UnitFrameOwnsUnitAura, IconStylePreviewForScope) is back")
+    -- Review 2026-10-02: A3.RenderCachedFrame had no caller on any client.
+    assert(A3.RenderCachedFrame == nil, "F14: the uncalled A3.RenderCachedFrame export is back")
     local source = ""
     for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
         local relative = "Game/Classic/Auras/MSUF_Auras3_" .. module .. ".lua"
