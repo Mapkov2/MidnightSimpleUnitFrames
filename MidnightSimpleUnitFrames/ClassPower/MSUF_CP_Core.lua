@@ -871,7 +871,10 @@ builders.PRESENTATION = function(E)
     local tonumber = E.tonumber or tonumber
 
     local CP_ResolveTexture = E.CP_ResolveTexture
-    local GetUpdateFn = E.GetUpdateFn
+    --- The controller's active-mode dispatch (CP_RunActiveUpdate): Stagger,
+    --- runes, aura, continuous and native modes each repaint with their own
+    --- painter, never the segmented one.
+    local RunActiveUpdate = E.RunActiveUpdate
 
     local _cpFontRev = 0
 
@@ -1031,10 +1034,7 @@ builders.PRESENTATION = function(E)
     end
 
     local function CP_ApplyColors(powerType)
-        local updateFn = GetUpdateFn and GetUpdateFn() or nil
-        if type(updateFn) == "function" then
-            updateFn(powerType, CP.currentMax)
-        end
+        if RunActiveUpdate then RunActiveUpdate(powerType, CP.currentMax) end
     end
 
     --- Texture refresh is shared by bar and shape modes. Layout decides sizes;

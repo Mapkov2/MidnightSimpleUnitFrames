@@ -12,9 +12,20 @@
 --   S.auraStacks     tracked player aura applications
 --   S.auraVariant    0/1: a second aura table with the same applications
 --   S.stagger        UnitStagger
+--   S.health         UnitHealth (default 500)
+--   S.healthMax      UnitHealthMax (default 1000)
+--   S.vehicle        UnitHasVehicleUI and PlayerVehicleHasComboPoints
+--   S.form           GetShapeshiftFormID
+--
+-- UnitPower and UnitPowerMax take an Enum.PowerType number (or nil), exactly
+-- like the client binding: a string token raises "bad argument #2".
 --
 --   local World = assert(loadfile(root .. "/tools/tests/classpower_world.lua"))()
 --   local t = World.Start(root, "Mainline", "ROGUE", 1, World.PT.ENERGY, { classPowerTextMode = "CURMAX" })
+--
+-- An optional seventh argument { beforeLoad = function(env, S) end } runs after
+-- the stubs are installed and before the first addon file loads, so a smoke can
+-- swap in stricter globals (classpower_secrets.lua) that the files capture.
 --
 -- Plain Lua 5.1.
 
@@ -62,7 +73,13 @@ local function InstallClient(S)
     local secret = { __secret = true }
     function UnitClass() return S.class, S.class end
     function UnitPowerType() return S.primary end
+    local function CheckPowerType(api, powerType)
+        if powerType ~= nil and type(powerType) ~= "number" then
+            error(("bad argument #2 to '%s' (number expected, got %s)"):format(api, type(powerType)), 3)
+        end
+    end
     function UnitPower(_, powerType, unmodified)
+        CheckPowerType("UnitPower", powerType)
         if powerType == S.primary then return 50 end
         if S.secretPower then return secret end
         if powerType == PT_COMBO then return S.combo end
@@ -70,15 +87,16 @@ local function InstallClient(S)
         return S.shards
     end
     function UnitPowerMax(_, powerType)
+        CheckPowerType("UnitPowerMax", powerType)
         if powerType == S.primary then return 100 end
         return 5
     end
     function UnitPartialPower() return 0 end
     function UnitPowerDisplayMod() return S.displayMod end
     function GetComboPoints() return S.combo end
-    function UnitHasVehicleUI() return false end
-    function PlayerVehicleHasComboPoints() return false end
-    function GetShapeshiftFormID() return nil end
+    function UnitHasVehicleUI() return S.vehicle == true end
+    function PlayerVehicleHasComboPoints() return S.vehicle == true end
+    function GetShapeshiftFormID() return S.form end
     function GetSpecialization() return S.spec end
     function GetRuneCooldown(runeID)
         if runeID <= 3 then return 0, 10, true end
@@ -87,8 +105,8 @@ local function InstallClient(S)
     function GetRuneType() return 1 end
     function GetUnitChargedPowerPoints() return nil end
     function UnitStagger() return S.stagger end
-    function UnitHealth() return 500 end
-    function UnitHealthMax() return 1000 end
+    function UnitHealth() return S.health end
+    function UnitHealthMax() return S.healthMax end
     function UnitAffectingCombat() return true end
     function InCombatLockdown() return false end
     function GetPowerRegenForPowerType() return 0, 0 end
@@ -139,7 +157,7 @@ end
 
 --- Loads toc's ClassPower stack for one class and spec, with MSUF_DB.bars
 --- overrides, and enables the module.
-function World.Start(repo, toc, class, spec, primary, bars)
+function World.Start(repo, toc, class, spec, primary, bars, hooks)
     local Stubs = assert(loadfile(repo .. "/.github/scripts/msuf_test_stubs.lua"))()
     local env = Stubs.New({ timer = "queue", registerGlobalNames = true, time = 1000 })
     env:InstallGlobals({ secretValue = true, time = true })
@@ -167,8 +185,10 @@ function World.Start(repo, toc, class, spec, primary, bars)
     local S = {
         class = class, spec = spec, primary = primary,
         combo = 3, shards = 3, displayMod = 1, auraStacks = 2, auraVariant = 0, stagger = 400,
+        health = 500, healthMax = 1000,
     }
     InstallClient(S)
+    if hooks and hooks.beforeLoad then hooks.beforeLoad(env, S) end
     MSUF_DB = {
         general = {},
         bars = { showClassPower = true, showAltMana = false, playerHPBarEnabled = false },

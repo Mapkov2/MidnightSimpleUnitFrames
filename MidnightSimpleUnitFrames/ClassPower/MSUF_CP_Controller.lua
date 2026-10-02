@@ -361,6 +361,9 @@ end
 --- builder of ClassPower/MSUF_CP_Core.lua.
 local CP_ApplyFont
 local CP_ApplyColors
+--- Active-mode dispatch (assigned below MODE_UPDATE_FN); forward-declared so
+--- the presentation builder's colour refresh can reach it.
+local CP_RunActiveUpdate
 local CP_RefreshTexture
 
 --- Auto-Hide: visibility check after each update (OOC / Full / Empty)
@@ -560,7 +563,7 @@ do
             tonumber = tonumber,
             ResolveClassPowerColor = CPColors.ResolveClassPowerColor,
             CP_ResolveTexture = CPConfig.ResolveTexture,
-            GetUpdateFn = function() return CP_UpdateValues end,
+            RunActiveUpdate = function(powerType, maxP) return CP_RunActiveUpdate(powerType, maxP) end,
         })
     if presentation then
         CDM_GetScaledWidth = presentation.CDM_GetScaledWidth or CDM_GetScaledWidth
@@ -673,7 +676,6 @@ local CPTicker = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_TICKER, {
 local CP_StopCentralTick = CPTicker.Stop
 local CP_SyncRuntimeOnUpdates = CPTicker.SyncRuntimeOnUpdates
 
-local CP_RunActiveUpdate
 
 --- Phase 5 CP split: class/resource specials now live in the SPECIALS builder
 --- of ClassPower/MSUF_CP_Core.lua. The core builds the handlers from a
