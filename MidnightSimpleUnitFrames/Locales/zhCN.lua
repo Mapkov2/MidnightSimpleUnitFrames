@@ -6674,6 +6674,7 @@ L["Import warning: %d more missing media item(s)."] = "导入警告：另有 %d 
 L["Imported %s settings into the active profile."] = "已将%s设置导入当前配置文件。"
 L["Profile imported into the active profile."] = "已将配置文件导入当前配置文件。"
 L["Import failed: %s."] = "导入失败：%s。"
+L["Import failed: could not decode compact profile string (%s)."] = "导入失败：无法解码压缩的配置文件字符串（%s）。"
 L["Profile import failed: %s"] = "配置文件导入失败：%s"
 L["Menu language changed with the profile. Reload the UI to apply it."] = "菜单语言已随配置文件更改。重新加载 UI 以应用。"
 L["A unit frame was enabled. Reload the UI with /reload to apply it."] = "已启用一个单位框体。使用/reload重新加载 UI 以应用。"
