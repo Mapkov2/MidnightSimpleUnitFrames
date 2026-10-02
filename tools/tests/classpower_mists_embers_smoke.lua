@@ -51,7 +51,27 @@ for _, case in ipairs({ { raw = 30, embers = 3 }, { raw = 40, embers = 4 } }) do
         "the embers do not fill from the unmodified power")
 end
 
+-- Shard prediction on Mists Destruction. The two cast-time ember spells keep
+-- their Midnight IDs on Mists (Blizzard_TalentUI/Mists SPEC_SPELLS_DISPLAY[267]
+-- and Mists SpellBookFrame.lua SPEC_CORE_ABILITY_DISPLAY[267] list Incinerate
+-- 29722 and Chaos Bolt 116858). Only the sign of a WL_SHARD_DELTAS entry is
+-- read (the "*" marker), never its size, so the shared table marks them right.
+do
+    local t = Start(30, 20)
+    local CP = t.CP
+    MSUF_DB.bars.classPowerShowText = true
+    CP.RefreshPublic()
+    t.env:RunTimers()
+    for _, spellID in ipairs({ 29722, 116858 }) do
+        t.onEvent(t.eventFrame, "UNIT_SPELLCAST_START", "player", "Cast-1", spellID)
+        Check(CP.text and CP.text.text == "2*", ("Mists Destruction cast %d shows no prediction marker (text %s)")
+            :format(spellID, tostring(CP.text and CP.text.text)))
+        t.onEvent(t.eventFrame, "UNIT_SPELLCAST_STOP", "player", "Cast-1", spellID)
+        Check(CP.wlPredDelta == 0 and CP.text.text == 2, "the Mists ember prediction outlived its cast")
+    end
+end
+
 if #failures > 0 then
     error("classpower_mists_embers_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_mists_embers_smoke: ok (ember count and fill from the unmodified maximum)")
+print("classpower_mists_embers_smoke: ok (ember count and fill from the unmodified maximum, Destruction prediction)")

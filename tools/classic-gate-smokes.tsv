@@ -234,6 +234,7 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua	tools/tests/classpower_mists_embers_smoke.lua	{root}	ClassPower Mists Burning Embers smoke failed
 -	lua	tools/tests/classpower_ebon_slot_smoke.lua	{root}	ClassPower Ebon Might sealed slot smoke failed
 -	lua	tools/tests/classpower_max_resolution_smoke.lua	{root}	ClassPower max resolution smoke failed
+-	lua	tools/tests/classpower_strict_secrets_smoke.lua	{root}	ClassPower strict secrets across every mode failed
 -	lua	tools/tests/resource_extra_aura_names_smoke.lua	{root}	Resource extra aura fallback names smoke failed
 -	lua	tools/tests/pixel_layout_profile_smoke.lua	{root}	Pixel layout profile preservation smoke failed
 -	python	tools/tests/pixel_layout_coverage_smoke.py	{root}	Pixel layout creation coverage failed

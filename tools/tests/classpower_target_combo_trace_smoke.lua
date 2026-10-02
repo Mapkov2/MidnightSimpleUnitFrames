@@ -399,6 +399,7 @@ local function Start(client, class)
     function MSUF_RegisterModule(name, callbacks)
         if name == "ClassPower" then module = callbacks end
     end
+    assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().Install(repo, ns)
     local order = ClassPowerLoadOrder(client.toc)
     for index = 1, #order do
         local path = repo .. "/MidnightSimpleUnitFrames/" .. order[index]

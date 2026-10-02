@@ -1,9 +1,14 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 --- ClassPower/MSUF_CP_Core.lua
---- Builder bundle for the ClassPower controller.
+--- Module bundle for the ClassPower controller.
 ---
---- The controller owns events and live state; this file contributes closures for
---- build, layout, presentation, runtime routing, and class-specific prediction.
+--- The controller owns events and live state; this file contributes five
+--- modules for build, layout, presentation, runtime routing and class-specific
+--- prediction. Each is a do-block whose functions are defined once at load; its
+--- builder binds the controller's environment once and returns the module API.
 --- Keep the split intact when extending ClassPower: frame creation belongs in
 --- BUILD, anchoring and sizing in LAYOUT, texture/font refresh in PRESENTATION,
 --- event handlers in RUNTIME, and speculative class mechanics in SPECIALS.
@@ -28,6 +33,20 @@ local math_floor, math_max, math_abs = math.floor, math.max, math.abs
 --- which bind the exported function instead of carrying their own copy.
 local CoreUnitFrame = MSUF.UF.GetFrame
 ExportPublic("MSUF_CP_CoreUnitFrame", CoreUnitFrame)
+
+--- Cross-file collaborators. Every provider loads before ClassPower in each
+--- client TOC (Kernel, Runtime, the unit-frame runtime, Castbars), so a missing
+--- one is a load-order break and fails loudly here.
+local FILE = "ClassPower/MSUF_CP_Core.lua"
+local Require = MSUF.Require
+local GetProfileScopedCache = Require("MSUF_GetProfileScopedCache", FILE)
+local GetEffectiveCooldownFrame = Require("MSUF_GetEffectiveCooldownFrame", FILE)
+local ApplyCachedScreenPosition = Require("MSUF_ApplyCachedUnitFrameScreenPosition", FILE)
+local CacheScreenPosition = Require("MSUF_CacheUnitFrameScreenPosition", FILE)
+local ApplyPowerBarEmbedLayout = Require("MSUF_ApplyPowerBarEmbedLayout", FILE)
+local FontPathEquals = Require("MSUF_FontPathEquals", FILE)
+local MarkFontApplyFailed = Require("MSUF_MarkFontApplyFailed", FILE)
+local GetGlobalFontSettings = Require("MSUF_GetGlobalFontSettings", FILE)
 
 local function CP_IsUsableCooldownAnchorFrame(frame)
     local getSize = _G.MSUF_GetUsableCooldownAnchorSize
@@ -136,6 +155,21 @@ local function ClearShapeEdge(bar)
     end
 end
 
+--- Layout paints the pip backgrounds and the pip/separator visibility
+--- directly. The mode painters (MSUF_CP_Modes.lua) skip the same writes when
+--- the widget's _msufCP* stamp already holds the value, so every direct write
+--- here records what it wrote: a charged pip's dimmed background or a pip a
+--- single-bar mode hid is repainted by the next update after a relayout.
+local function CP_LayoutBackground(bg, r, g, b, a)
+    bg:SetVertexColor(r, g, b, a)
+    bg._msufCPR, bg._msufCPG, bg._msufCPB, bg._msufCPA = r, g, b, a
+end
+
+local function CP_LayoutShown(region, shown)
+    if shown then region:Show() else region:Hide() end
+    region._msufCPShown = shown
+end
+
 local function CP_ResolveTextLayerLevel(frame, bars)
     local textLayer = tonumber(bars and bars.classPowerTextLayer) or 5
     if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
@@ -153,12 +187,9 @@ end
 
 --- BUILD is the only block that creates ClassPower frames. It is cold-path code:
 --- create reusable bars and text once, then let layout/runtime reuse them.
-builders.BUILD = function(E)
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local CreateFrame = E.CreateFrame
-    local CP_ResolveTexture = E.CP_ResolveTexture
-    local math_floor = E.math_floor or math_floor
+do
+    --- Bound once by BUILD at controller load.
+    local CP, _cpDB, CreateFrame, CP_ResolveTexture
 
     local function CP_EnsureTextFrame()
         if CP.textFrame then return CP.textFrame end
@@ -300,30 +331,30 @@ builders.BUILD = function(E)
 
     end
 
-    return {
+    local API = {
         CP_EnsureBars = CP_EnsureBars,
         CP_Create = CP_Create,
         CP_EnsureRuneText = CP_EnsureRuneText,
         CP_EnsureMainText = CP_EnsureMainText,
     }
+
+    builders.BUILD = function(E)
+        CP, _cpDB = E.CP, E._cpDB
+        CreateFrame, CP_ResolveTexture = E.CreateFrame, E.CP_ResolveTexture
+        return API
+    end
 end
 
 --- LAYOUT computes geometry and anchoring for the already-created bars.
 --- The function also coordinates with detached power bars and external cooldown
 --- anchors, so keep combat-deferred work here rather than in value updates.
 
-builders.LAYOUT = function(E)
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local CPConst = E.CPConst
-    local math_floor = E.math_floor or math_floor
-    local tonumber = E.tonumber or tonumber
-    local CreateFrame = E.CreateFrame or CreateFrame
-    local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
-    local GetCDMScaledWidth = E.GetCDMScaledWidth
-    local SetFilledAlpha = E.SetFilledAlpha
-    local SetEmptyAlpha = E.SetEmptyAlpha
-    local SetAutoHideActive = E.SetAutoHideActive
+do
+    --- Bound once by LAYOUT at controller load: the shared state, the cached
+    --- config and the controller's alpha/auto-hide setters.
+    local CP, _cpDB, CPConst, CreateFrame
+    local ResolveClassPowerBgColor, GetCDMScaledWidth
+    local SetFilledAlpha, SetEmptyAlpha, SetAutoHideActive
 
     --- CP_Layout runs as a fixed sequence of named stages. They share one
     --- pass-state table that is allocated once here, so a layout pass adds no
@@ -364,7 +395,7 @@ builders.LAYOUT = function(E)
         local playerFrame, powerType = pass.playerFrame, pass.powerType
         local b = _cpDB.bars or {}
         pass.b = b
-        pass.layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
+        pass.layoutCache = GetProfileScopedCache("classPowerLayoutCache") or nil
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
         levelOffset = math_floor(levelOffset + 0.5)
@@ -432,7 +463,7 @@ builders.LAYOUT = function(E)
             if inLockdown and cachedW and cachedW >= 30 then
                 userW = cachedW
             else
-                local cdmFrame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
+                local cdmFrame = GetEffectiveCooldownFrame(cdmName) or _G[cdmName]
                 local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
                 if type(cdmWidthFn) == "function" then
                     userW = cdmWidthFn(cdmFrame, CP.container)
@@ -488,9 +519,7 @@ builders.LAYOUT = function(E)
         CP.container:SetSize(userW, h)
         if inLockdown and CP.container._msufPositionInitialized ~= true
             and b.classPowerAnchorToCooldown == true then
-            if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
-                and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
-            then
+            if ApplyCachedScreenPosition(CP.container, "classpower", "classpower") then
                 CP.container._msufDirectCooldownAnchor = true
                 CP.container._msufHardLockPoint = IS_CLASSIC
                     and (CP.container._msufHardLockPoint or "TOP") or "BOTTOM"
@@ -508,8 +537,7 @@ builders.LAYOUT = function(E)
         if not positionFrozen then CP.container:ClearAllPoints() end
         if b.classPowerAnchorToCooldown == true and not positionFrozen then
             local ecv = not inLockdown and (
-                (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
-                or _G["EssentialCooldownViewer"]
+                GetEffectiveCooldownFrame("EssentialCooldownViewer") or _G["EssentialCooldownViewer"]
             ) or nil
             local anchorFrame = nil
             if CP_IsUsableCooldownAnchorFrame(ecv) then
@@ -533,9 +561,7 @@ builders.LAYOUT = function(E)
                     CP.container._msufDirectCooldownAnchor = true
                     CP.container._msufHardLockPoint = lockPoint
                     CP.container._msufStableExternalAnchor = anchorFrame
-                    if type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
-                        _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", lockPoint)
-                    end
+                    CacheScreenPosition(CP.container, "classpower", "classpower", lockPoint)
                 else
                     CP.container:ClearAllPoints()
                     CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", insetX + oX, -(2 - oY))
@@ -544,9 +570,7 @@ builders.LAYOUT = function(E)
                     CP.container._msufStableExternalAnchor = nil
                 end
             else
-                if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
-                    and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
-                then
+                if ApplyCachedScreenPosition(CP.container, "classpower", "classpower") then
                     CP.container._msufDirectCooldownAnchor = true
                     CP.container._msufHardLockPoint = IS_CLASSIC
                         and (CP.container._msufHardLockPoint or "TOP") or "BOTTOM"
@@ -719,7 +743,7 @@ builders.LAYOUT = function(E)
                             bar._bg:SetTexture(shapeBg)
                             bar._bg._msufCPTexturePath = shapeBg
                         end
-                        bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
+                        CP_LayoutBackground(bar._bg, bgR, bgG, bgB, bgA)
                     end
                     if fillReverse then
                         bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -(rightInset + xPos), 0)
@@ -728,12 +752,12 @@ builders.LAYOUT = function(E)
                     end
                     bar:SetSize(slot, h)
                     ClearShapeEdge(bar)
-                    bar:Show()
+                    CP_LayoutShown(bar, true)
                     xPos = xPos + slot + snapGap
                 end
             end
             for i = 1, #CP.ticks do
-                if CP.ticks[i] then CP.ticks[i]:Hide() end
+                if CP.ticks[i] then CP_LayoutShown(CP.ticks[i], false) end
             end
         else
             local xPos = 0
@@ -753,8 +777,8 @@ builders.LAYOUT = function(E)
                         bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", xPos, 0)
                     end
                     bar:SetSize(thisW, h)
-                    bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
-                    bar:Show()
+                    CP_LayoutBackground(bar._bg, bgR, bgG, bgB, bgA)
+                    CP_LayoutShown(bar, true)
                     if snapTickW > 0 and i < maxPower then
                         local tick = CP.ticks[i]
                         if tick then
@@ -766,7 +790,7 @@ builders.LAYOUT = function(E)
                                 tick:SetPoint("TOPLEFT", CP.container, "TOPLEFT", tickX, 0)
                             end
                             tick:SetSize(snapTickW, h)
-                            tick:Show()
+                            CP_LayoutShown(tick, true)
                         end
                     end
                     xPos = xPos + thisW + sepW
@@ -778,14 +802,14 @@ builders.LAYOUT = function(E)
         for i = maxPower + 1, CP.maxBars do
             if CP.bars[i] then
                 ClearShapeEdge(CP.bars[i])
-                CP.bars[i]:Hide()
+                CP_LayoutShown(CP.bars[i], false)
             end
         end
 
         if not shapeMode then
             local hideFrom = (snapTickW > 0) and maxPower or 1
             for i = hideFrom, #CP.ticks do
-                if CP.ticks[i] then CP.ticks[i]:Hide() end
+                if CP.ticks[i] then CP_LayoutShown(CP.ticks[i], false) end
             end
         end
     end
@@ -826,14 +850,14 @@ builders.LAYOUT = function(E)
                 needPBRefresh = true
             end
         end
-        if needPBRefresh and type(_G.MSUF_ApplyPowerBarEmbedLayout) == "function" then
+        if needPBRefresh then
             if pf and pf.targetPowerBar then
                 local sc = pf._msufStampCache
                 if sc then sc["PBEmbedLayout"] = nil end
                 --- The detached power bar is an insecure child StatusBar; the
                 --- element pipeline applies combat-safe elements immediately
                 --- and queues anything secure for the regen driver itself.
-                _G.MSUF_ApplyPowerBarEmbedLayout(pf)
+                ApplyPowerBarEmbedLayout(pf)
             end
         end
     end
@@ -854,28 +878,31 @@ builders.LAYOUT = function(E)
         Layout.Finish()
     end
 
-    return {
+    local API = {
         CP_Layout = CP_Layout,
     }
+
+    builders.LAYOUT = function(E)
+        CP, _cpDB, CPConst = E.CP, E._cpDB, E.CPConst
+        CreateFrame = E.CreateFrame or _G.CreateFrame
+        ResolveClassPowerBgColor, GetCDMScaledWidth = E.ResolveClassPowerBgColor, E.GetCDMScaledWidth
+        SetFilledAlpha, SetEmptyAlpha = E.SetFilledAlpha, E.SetEmptyAlpha
+        SetAutoHideActive = E.SetAutoHideActive
+        return API
+    end
 end
 
 --- PRESENTATION owns visual refresh that does not change geometry or values:
 --- fonts, text offsets, colors, textures, and media swaps.
 
-builders.PRESENTATION = function(E)
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local PT = E.PT
-    local math_floor = E.math_floor or math_floor
-    local tonumber = E.tonumber or tonumber
+do
+    --- Bound once by PRESENTATION at controller load. RunActiveUpdate is the
+    --- controller's active-mode dispatch (CP_RunActiveUpdate): Stagger, runes,
+    --- aura, continuous and native modes each repaint with their own painter,
+    --- never the segmented one.
+    local CP, _cpDB, PT, CP_ResolveTexture, RunActiveUpdate
 
-    local CP_ResolveTexture = E.CP_ResolveTexture
-    --- The controller's active-mode dispatch (CP_RunActiveUpdate): Stagger,
-    --- runes, aura, continuous and native modes each repaint with their own
-    --- painter, never the segmented one.
-    local RunActiveUpdate = E.RunActiveUpdate
-
-    local _cpFontRev = 0
+    local _cpFontRev
 
     local function CDM_GetScaledWidth(cdmFrame, targetFrame)
         local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
@@ -934,8 +961,7 @@ builders.PRESENTATION = function(E)
         if actualSize and math_abs((tonumber(actualSize) or 0) - size) > 0.01 then return false end
         if (actualFlags or "") ~= (fontFlags or "") then return false end
         if actual == fontPath then return true end
-        if type(_G.MSUF_FontPathMatches) == "function" and _G.MSUF_FontPathMatches(fontPath, actual) == true then return true end
-        if type(_G.MSUF_FontPathEquals) == "function" and _G.MSUF_FontPathEquals(fontPath, actual) == true then return true end
+        if FontPathEquals(fontPath, actual) == true then return true end
         return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(fontPath or ""):gsub("/", "\\"):lower()
     end
 
@@ -949,7 +975,7 @@ builders.PRESENTATION = function(E)
         if _G.MSUF_SetFontChecked(region, fontPath, size, fontFlags) and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
         local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
         _G.MSUF_SetFontChecked(region, fallback, size, fontFlags)
-        if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
+        MarkFontApplyFailed()
         return false
     end
 
@@ -960,9 +986,7 @@ builders.PRESENTATION = function(E)
         local fs = CP.text
 
         local path, flags, fr, fg, fb, baseSize, useShadow
-        if type(_G.MSUF_GetGlobalFontSettings) == "function" then
-            path, flags, fr, fg, fb, baseSize, useShadow = _G.MSUF_GetGlobalFontSettings()
-        end
+        path, flags, fr, fg, fb, baseSize, useShadow = GetGlobalFontSettings()
         path     = path or "Fonts\\FRIZQT__.TTF"
         flags    = flags or "OUTLINE"
         fr       = fr or 1
@@ -1075,13 +1099,20 @@ builders.PRESENTATION = function(E)
         if type(applyRounded) == "function" then applyRounded() end
     end
 
-    return {
+    local API = {
         CDM_GetScaledWidth = CDM_GetScaledWidth,
         CP_ApplyTextOffset = CP_ApplyTextOffset,
         CP_ApplyFont = CP_ApplyFont,
         CP_ApplyColors = CP_ApplyColors,
         CP_RefreshTexture = CP_RefreshTexture,
     }
+
+    builders.PRESENTATION = function(E)
+        CP, _cpDB, PT = E.CP, E._cpDB, E.PT
+        CP_ResolveTexture, RunActiveUpdate = E.CP_ResolveTexture, E.RunActiveUpdate
+        _cpFontRev = 0
+        return API
+    end
 end
 
 --- RUNTIME exposes hot-path event handlers back to the controller. These
@@ -1093,40 +1124,21 @@ if type(builders) ~= "table" then
     ExportPublic("MSUF_CP_FEATURE_BUILDERS", builders)
 end
 
-builders.RUNTIME = function(env)
-    local CP = env.CP
-    local AM = env.AM
-    local CPK = env.CPK
-    local PT = env.PT
-    local POWER_TYPE_TOKENS = env.POWER_TYPE_TOKENS
-    local PLAYER_CLASS = env.PLAYER_CLASS
-    local UnitPower = env.UnitPower
-    local NotSecret = env.NotSecret
-    local tonumber = env.tonumber
-    local C_Timer = env.C_Timer
-
-    local GetPlayerFrame = env.GetPlayerFrame
-    local CP_EnsureBars = env.CP_EnsureBars
-    local CP_Layout = env.CP_Layout
-    local RefreshChargedPoints = env.RefreshChargedPoints
-    local RunActiveUpdate = env.RunActiveUpdate
-    local RunAuraSegmentedUpdate = env.RunAuraSegmentedUpdate
-    local ResolveMaxPower = env.ResolveMaxPower
-    local AM_UpdateValue = env.AM_UpdateValue
-    local CP_ComputeStructuralSignature = env.CP_ComputeStructuralSignature
-    local CP_RefreshEventBindings = env.CP_RefreshEventBindings
-    local ThrottledFullRefresh = env.ThrottledFullRefresh
-    local FullRefresh = env.FullRefresh
-    local CP_SyncRuntimeOnUpdates = env.CP_SyncRuntimeOnUpdates
-    local CP_ShouldUseLiteBindings = env.CP_ShouldUseLiteBindings
-
-    local OnWarlockCastStart = env.OnWarlockCastStart
-    local OnWarlockCastEnd = env.OnWarlockCastEnd
-    local OnTipOfTheSpearSpellCast = env.OnTipOfTheSpearSpellCast
-    local OnSpellTrackerReset = env.OnSpellTrackerReset
-    --- WoW Forever and the Classic flavors pass it (target-owned combo points);
-    --- nil on Midnight.
-    local AcceptPowerToken = env.AcceptPowerToken
+do
+    --- Bound once by RUNTIME at controller load: the controller's state, its
+    --- class facts and the entry points the handlers call back into.
+    --- AcceptPowerToken: WoW Forever and the Classic flavors pass it
+    --- (target-owned combo points); nil on Midnight.
+    local CP, AM, CPK, PT, POWER_TYPE_TOKENS, PLAYER_CLASS
+    local UnitPower, NotSecret, tonumber, C_Timer
+    local GetPlayerFrame, CP_EnsureBars, CP_Layout, RefreshChargedPoints
+    local RunActiveUpdate, RunAuraSegmentedUpdate, ResolveMaxPower, AM_UpdateValue
+    local CP_ComputeStructuralSignature, CP_RefreshEventBindings
+    local ThrottledFullRefresh, FullRefresh, CP_SyncRuntimeOnUpdates, CP_ShouldUseLiteBindings
+    local OnWarlockCastStart, OnWarlockCastEnd, OnTipOfTheSpearSpellCast, OnSpellTrackerReset
+    local AcceptPowerToken
+    --- The whole env, for the two values the handlers read late.
+    local runtimeEnv
 
     --- The visible segment count for the active render mode comes from the
     --- controller's one resolver (Refresh.ResolveMaxPower); it is separate
@@ -1148,7 +1160,8 @@ builders.RUNTIME = function(env)
             local pf = CP._pf or GetPlayerFrame()
             if pf then
                 CP_EnsureBars(pf, maxP)
-                CP_Layout(pf, maxP, CP._layoutH or ((env._cpDB.bars and env._cpDB.bars.classPowerHeight) or 4), CP.powerType)
+                CP_Layout(pf, maxP, CP._layoutH or ((runtimeEnv._cpDB.bars and runtimeEnv._cpDB.bars.classPowerHeight) or 4),
+                    CP.powerType)
             else
                 CP.currentMax = maxP
             end
@@ -1207,15 +1220,15 @@ builders.RUNTIME = function(env)
     --- UNIT_DISPLAYPOWER together and the display-power path usually rebuilds
     --- first, so the deferred rebuild re-checks the signature instead of
     --- rebuilding twice. Mainline defers FullRefresh itself.
-    local DeferredStructuralRefresh = FullRefresh
-    if IS_CLASSIC then
-        DeferredStructuralRefresh = function()
-            local flags, powerType, renderMode = CP_ComputeStructuralSignature()
-            if flags ~= CP.structuralFlags
-                or powerType ~= CP.structuralPowerType
-                or renderMode ~= CP.structuralRenderMode then
-                FullRefresh()
-            end
+    --- The Classic clients refresh a deferred structural change only when the
+    --- structural signature really moved; Midnight always refreshes.
+    local DeferredStructuralRefresh
+    local function ClassicDeferredStructuralRefresh()
+        local flags, powerType, renderMode = CP_ComputeStructuralSignature()
+        if flags ~= CP.structuralFlags
+            or powerType ~= CP.structuralPowerType
+            or renderMode ~= CP.structuralRenderMode then
+            FullRefresh()
         end
     end
 
@@ -1294,8 +1307,8 @@ builders.RUNTIME = function(env)
         if not CP.visible or CP.renderMode ~= CPK.MODE.RUNE_CD then return end
         if RunActiveUpdate then
             RunActiveUpdate(CP.powerType, CP.currentMax)
-        elseif env.CP_UpdateValues_RuneCD then
-            env.CP_UpdateValues_RuneCD(CP.powerType, CP.currentMax)
+        elseif runtimeEnv.CP_UpdateValues_RuneCD then
+            runtimeEnv.CP_UpdateValues_RuneCD(CP.powerType, CP.currentMax)
             if CP_SyncRuntimeOnUpdates then CP_SyncRuntimeOnUpdates(false) end
         end
     end
@@ -1314,7 +1327,7 @@ builders.RUNTIME = function(env)
         end
     end
 
-    return {
+    local API = {
         GetResolvedVisibleMax = GetResolvedVisibleMax,
         RefreshVisibleModeLight = RefreshVisibleModeLight,
         OnManaUpdate = OnManaUpdate,
@@ -1327,25 +1340,35 @@ builders.RUNTIME = function(env)
         OnSpellcastStart = OnSpellcastStart,
         OnSpellcastEnd = OnSpellcastEnd,
     }
+
+    builders.RUNTIME = function(env)
+        CP, AM, CPK, PT = env.CP, env.AM, env.CPK, env.PT
+        POWER_TYPE_TOKENS, PLAYER_CLASS = env.POWER_TYPE_TOKENS, env.PLAYER_CLASS
+        UnitPower, NotSecret, tonumber, C_Timer = env.UnitPower, env.NotSecret, env.tonumber, env.C_Timer
+        GetPlayerFrame, CP_EnsureBars, CP_Layout = env.GetPlayerFrame, env.CP_EnsureBars, env.CP_Layout
+        RefreshChargedPoints, RunActiveUpdate = env.RefreshChargedPoints, env.RunActiveUpdate
+        RunAuraSegmentedUpdate, ResolveMaxPower = env.RunAuraSegmentedUpdate, env.ResolveMaxPower
+        AM_UpdateValue, CP_ComputeStructuralSignature = env.AM_UpdateValue, env.CP_ComputeStructuralSignature
+        CP_RefreshEventBindings, ThrottledFullRefresh = env.CP_RefreshEventBindings, env.ThrottledFullRefresh
+        FullRefresh, CP_SyncRuntimeOnUpdates = env.FullRefresh, env.CP_SyncRuntimeOnUpdates
+        CP_ShouldUseLiteBindings = env.CP_ShouldUseLiteBindings
+        OnWarlockCastStart, OnWarlockCastEnd = env.OnWarlockCastStart, env.OnWarlockCastEnd
+        OnTipOfTheSpearSpellCast, OnSpellTrackerReset = env.OnTipOfTheSpearSpellCast, env.OnSpellTrackerReset
+        AcceptPowerToken = env.AcceptPowerToken
+        runtimeEnv = env
+        DeferredStructuralRefresh = IS_CLASSIC and ClassicDeferredStructuralRefresh or FullRefresh
+        return API
+    end
 end
 
 --- SPECIALS contains class-specific prediction/state that is not a generic
 --- power-token event. Keeping these rules isolated prevents RUNTIME from turning
 --- into a spec-by-spec rules table.
-builders.SPECIALS = function(env)
-    local CP = env.CP
-    local _cpDB = env._cpDB
-    local CPConst = env.CPConst
-    local TIP = env.TIP
-    local PLAYER_CLASS = env.PLAYER_CLASS
-    local GetSpec = env.GetSpec
-    local GetTime = env.GetTime
-    local math_min = env.math_min
-    local C_SpellBook = env.C_SpellBook
-    local C_Timer = env.C_Timer
-    local RunActiveUpdate = env.RunActiveUpdate
-    local RunAuraSegmentedUpdate = env.RunAuraSegmentedUpdate
-    local tipExpiryGeneration = 0
+do
+    --- Bound once by SPECIALS at controller load.
+    local CP, _cpDB, CPConst, TIP, PLAYER_CLASS, GetSpec, GetTime, math_min
+    local C_SpellBook, C_Timer, RunActiveUpdate, RunAuraSegmentedUpdate
+    local tipExpiryGeneration
 
     --- Warlock shard prediction is speculative UI only; it is cleared on cast
     --- end and never writes profile/runtime structure.
@@ -1438,10 +1461,19 @@ builders.SPECIALS = function(env)
         ResetTipState(false)
     end
 
-    return {
+    local API = {
         OnWarlockCastStart = OnWarlockCastStart,
         OnWarlockCastEnd = OnWarlockCastEnd,
         OnTipOfTheSpearSpellCast = OnTipOfTheSpearSpellCast,
         OnSpellTrackerReset = OnSpellTrackerReset,
     }
+
+    builders.SPECIALS = function(env)
+        CP, _cpDB, CPConst, TIP = env.CP, env._cpDB, env.CPConst, env.TIP
+        PLAYER_CLASS, GetSpec, GetTime = env.PLAYER_CLASS, env.GetSpec, env.GetTime
+        math_min, C_SpellBook, C_Timer = env.math_min, env.C_SpellBook, env.C_Timer
+        RunActiveUpdate, RunAuraSegmentedUpdate = env.RunActiveUpdate, env.RunAuraSegmentedUpdate
+        tipExpiryGeneration = 0
+        return API
+    end
 end

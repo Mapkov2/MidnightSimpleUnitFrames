@@ -1,4 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 --- MSUF_CP_BalanceDruid.lua
 --- Balance Druid Astral Power prediction and eclipse coloring runtime.
 --- Kept out of the controller because it owns its own events and class gate.
@@ -132,7 +135,7 @@ local _balAuras = {
 }
 
 local function _AuraID(value)
-    if value == nil or not NotSecret(value) then return nil end
+    if not NotSecret(value) or value == nil then return nil end
     return tonumber(value)
 end
 
@@ -567,7 +570,9 @@ end
         _updateOverlay()
         return
     end
-    if (event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_FAILED" or event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_SUCCEEDED") and arg1 == "player" then
+    if (event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_FAILED"
+        or event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_SUCCEEDED")
+        and arg1 == "player" then
         _clearPrediction()
         _updateOverlay()
         return

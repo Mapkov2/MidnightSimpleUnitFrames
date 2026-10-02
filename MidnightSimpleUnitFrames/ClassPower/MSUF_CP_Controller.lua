@@ -1,4 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 --- ClassPower/MSUF_CP_Controller.lua - class resource controller
 --- Features:
 --- 1. ClassPower (segmented): Combo Points, Holy Power, Soul Shards (incl.
@@ -88,7 +91,11 @@ end
 --- Phase 1 CP split: shared constants / profiles now live in ClassPower/*.lua
 --- Keeps the core chunk smaller and reduces WoW's top-level local pressure.
 local CPConst = _G.MSUF_CP_CONST or {}
-local CPK = CPConst.CPK or { MODE = { NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4, AURA_SINGLE = 5, CONTINUOUS = 6, TIMER_BAR = 8, STAGGER = 9, IRONFUR = 10, NATIVE_AURA = 11 }, SPEC = {}, SPELL = {}, BAL = {}, THRESH = {} }
+local CPK = CPConst.CPK or {
+    MODE = { NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4, AURA_SINGLE = 5,
+        CONTINUOUS = 6, TIMER_BAR = 8, STAGGER = 9, IRONFUR = 10, NATIVE_AURA = 11 },
+    SPEC = {}, SPELL = {}, BAL = {}, THRESH = {},
+}
 local TIP = CPConst.TIP or {}
 local PT = CPConst.PT or {}
 local POWER_TYPE_TOKENS = CPConst.POWER_TYPE_TOKENS or {}
@@ -1335,9 +1342,9 @@ local function FullRefresh()
     local anyFeatureEnabled = CPConfig.AnyFeatureEnabled(playerManaEnabled)
     CP_SetStructuralEventsBound(anyFeatureEnabled)
     if CP.SyncControllerEvents then CP.SyncControllerEvents(anyFeatureEnabled) end
-    if type(_G.MSUF_BAL_RefreshRuntime) == "function" then
-        _G.MSUF_BAL_RefreshRuntime()
-    end
+    --- The Balance runtime loads for Druids on Midnight only.
+    local refreshBalance = MSUF.Optional("MSUF_BAL_RefreshRuntime")
+    if refreshBalance then refreshBalance() end
 end
 
 --- Event-driven updates (hot path: minimal work)
@@ -2012,8 +2019,8 @@ CP.ApplyPublic = function(opts)
 end
 ExportPublic("MSUF_ClassPower_Apply", CP.ApplyPublic)
 
-if type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
-    _G.MSUF_RegisterAnyEditModeListener(function(active)
+do
+    MSUF.Require("MSUF_RegisterAnyEditModeListener", "ClassPower/MSUF_CP_Controller.lua")(function(active)
         if not (CP.visible and CP.container) then return end
         if active == true then
             CP.container:SetAlpha(1)
@@ -2091,8 +2098,8 @@ end
 
 --- Phase 4: Module Registration
 do
-    if type(_G.MSUF_RegisterModule) == "function" then
-        _G.MSUF_RegisterModule("ClassPower", {
+    do
+        MSUF.Require("MSUF_RegisterModule", "ClassPower/MSUF_CP_Controller.lua")("ClassPower", {
             order = 30,
             IsEnabled = function()
                 return CPConfig.AnyFeatureEnabled()

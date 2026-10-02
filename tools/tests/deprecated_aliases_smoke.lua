@@ -35,11 +35,9 @@ local EXPECTED = {
 }
 
 -- Callers outside the engine and state area that still use an alias name.
--- Owners: ClassPower (A-C2), Edit Mode (A-C6, the preview wrapper list names
--- both spellings on purpose), Menu2 theme (A-C5).
+-- Owners: Edit Mode (A-C6, the preview wrapper list names both spellings on
+-- purpose), Menu2 theme (A-C5). ClassPower calls MSUF_FontPathEquals.
 local KNOWN_CALLERS = {
-    ["MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Core.lua"] = { MSUF_FontPathMatches = true },
-    ["MidnightSimpleUnitFrames/ClassPower/MSUF_CP_PlayerHP.lua"] = { MSUF_FontPathMatches = true },
     ["MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Compat.lua"] = {
         MSUF_ApplyPowerBarBorder_All = true, MSUF_ApplyAllAlpha = true },
     ["MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua"] = { MSUF_FontPathMatches = true },

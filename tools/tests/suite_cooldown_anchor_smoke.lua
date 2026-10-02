@@ -570,6 +570,7 @@ local function StartClassPower(provider, bars)
     function MSUF_RegisterModule(name, callbacks)
         if name == "ClassPower" then module = callbacks end
     end
+    assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().Install(root, ns)
     for i = 1, #CP_LOAD_ORDER do
         assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. CP_LOAD_ORDER[i]))("MidnightSimpleUnitFrames", ns)
     end

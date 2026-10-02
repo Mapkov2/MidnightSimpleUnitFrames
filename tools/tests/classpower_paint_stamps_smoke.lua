@@ -10,7 +10,10 @@
 --     Brewmaster repaints it;
 --   * Balance eclipse colours the Power element's bar: the end of an eclipse
 --     restores the colour the element's _msufR stamp records;
---   * native aura modes hide the count text: a vehicle's combo points show it.
+--   * native aura modes hide the count text: a vehicle's combo points show it;
+--   * a relayout paints the pip backgrounds and visibility directly: a
+--     charged pip keeps its dimmed background on the next update;
+--   * an eclipse that ends early is not handed back by the controller cache.
 -- Also: a structural refresh inside the 150 ms throttle gets a trailing one,
 -- and the one colour-override reader (MSUF_CP_CONST.OverrideRGB).
 --
@@ -131,7 +134,51 @@ do
         Aura()
         Check(SameColor(bar.color, BASE), "the Player Power bar kept the eclipse colour after the eclipse ended")
         Check(bar._msufR == BASE[1] and bar._msufB == BASE[3], "the Power element's colour stamp no longer matches the bar")
+
+        -- An eclipse that ends early (death, a dispel, a cancel) is gone before
+        -- its expiration time. The controller does not follow UNIT_AURA for a
+        -- Balance Druid, so its player-aura cache must not hand the ended
+        -- aura back to the Balance runtime (MSUF_CP_GetTrackedPlayerAura).
+        for _, payload in ipairs({ { isFullUpdate = true }, { removedAuraInstanceIDs = { 77 } } }) do
+            solarUntil = GetTime() + 15
+            Aura()
+            Check(not SameColor(bar.color, BASE), "a second Solar Eclipse did not colour the Player Power bar")
+            solarUntil = nil
+            balanceFrame.scripts.OnEvent(balanceFrame, "UNIT_AURA", "player", payload)
+            t.env:RunTimers()
+            Check(SameColor(bar.color, BASE), "the Player Power bar kept the colour of an eclipse that ended early ("
+                .. (payload.isFullUpdate and "full update" or "removed instance") .. ")")
+        end
     end
+end
+
+-- A charged combo point that is not filled dims its background to the charged
+-- colour. A relayout (a width or height edit: MSUF_ClassPower_RefreshLayout)
+-- repaints every background with the plain colour; the stamps must say so, or
+-- the next power update skips the dim write and the charged pip looks plain.
+do
+    local charged = { 3 }
+    local t = World.Start(repo, "Mainline", "ROGUE", 1, PT.ENERGY, nil, { beforeLoad = function()
+        _G.GetUnitChargedPowerPoints = function() return charged end
+    end })
+    local CP = t.CP
+    t.S.combo = 1
+    World.Dispatcher(t, "UNIT_POWER_POINT_CHARGE", "player")()
+    World.Dispatcher(t, "UNIT_POWER_UPDATE", "player", "COMBO_POINTS")()
+    t.env:RunTimers()
+    local plainBg = CP.bars[2]._bg.vertexColor
+    local dimBg = CP.bars[3]._bg.vertexColor
+    Check(CP.visible and CP.powerType == PT.COMBO, "Rogue did not route combo points")
+    Check(dimBg and plainBg and not SameColor(dimBg, plainBg), "the unfilled charged pip has no dimmed background")
+    local dim = dimBg and { dimBg[1], dimBg[2], dimBg[3], dimBg[4] }
+
+    _G.MSUF_ClassPower_RefreshLayout()
+    t.S.combo = 2
+    World.Dispatcher(t, "UNIT_POWER_UPDATE", "player", "COMBO_POINTS")()
+    t.env:RunTimers()
+    Check(SameColor(CP.bars[3]._bg.vertexColor, dim) and CP.bars[3]._bg.vertexColor[4] == dim[4],
+        "the charged pip lost its dimmed background after a relayout")
+    Check(SameColor(CP.bars[2]._bg.vertexColor, plainBg), "a filled pip did not keep the plain background")
 end
 
 -- Native aura modes (Fury Whirlwind) hide the count text directly. A vehicle
@@ -191,4 +238,4 @@ end
 if #failures > 0 then
     error("classpower_paint_stamps_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour, native aura text, throttle)")
+print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour, charged relayout, native aura text, throttle)")
