@@ -1,4 +1,4 @@
-local addonName, MSUF = ...
+local MSUF = select(2, ...)
 MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
@@ -41,12 +41,24 @@ local function DropUnsupportedUnits(units)
     return units
 end
 UNIT_PAGES = DropUnsupportedUnits(UNIT_PAGES)
-local POWER_UNITS = {}
 local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
-for _, page in pairs(UNIT_PAGES) do
-    if type(CanDetachUnitPowerBar) ~= "function" or CanDetachUnitPowerBar(page.unit) then
-        POWER_UNITS[page.unit] = true
+-- Built in a function: a loop here would keep its control variables as
+-- main-chunk locals (the chunk has a local budget).
+local POWER_UNITS = (function()
+    local units = {}
+    for _, page in pairs(UNIT_PAGES) do
+        if type(CanDetachUnitPowerBar) ~= "function" or CanDetachUnitPowerBar(page.unit) then
+            units[page.unit] = true
+        end
     end
+    return units
+end)()
+--- Appends lead .. prefix .. suffix for every prefix and suffix, in order.
+local function AppendCombinedFields(list, lead, prefixes, suffixes)
+    for _, prefix in ipairs(prefixes) do
+        for _, suffix in ipairs(suffixes) do list[#list + 1] = lead .. prefix .. suffix end
+    end
+    return list
 end
 local CASTBAR_FIELDS = {
     -- Castbar settings live in general DB rather than each unit DB. Keep this map as the one
@@ -292,11 +304,8 @@ local COPY_TEXT_FIELDS = WL [[
 --- and takes the name color from directNameColor. Skipping them left the destination
 --- on its own placement, so a Text copy appeared to do nothing at all.
 --- Mirrors DIRECT_TEXT_LAYOUTS in UnitFrames/Engine/MSUF_UF_Config.lua.
-for _, slot in ipairs(WL [[Name HealthLeft HealthCenter HealthRight PowerLeft PowerCenter PowerRight]]) do
-    for _, suffix in ipairs(WL [[Point RelativePoint OffsetX OffsetY Color]]) do
-        COPY_TEXT_FIELDS[#COPY_TEXT_FIELDS + 1] = "direct" .. slot .. suffix
-    end
-end
+AppendCombinedFields(COPY_TEXT_FIELDS, "direct", WL [[Name HealthLeft HealthCenter HealthRight PowerLeft PowerCenter PowerRight]],
+    WL [[Point RelativePoint OffsetX OffsetY Color]])
 local COPY_INDICATOR_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "leader assist raidmarker raidgroupname eliteicon", nil, "show iconStyle customIcon x y anchor size layer symbol")
 local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level raceText classText statusText statusGhostText statusAFKText statusAFKTimer statusDNDText statusCombat statusResting statusIncomingRes statusPvp statusPetHappiness statusThreat stance", "statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled levelIndicatorDifficultyColor levelIndicatorForeverBadge threatIndicatorColorCurve threatIndicatorBackground", "show iconStyle customIcon x y anchor size layer symbol")
 --- Most fields below "healthColorMode" are the per-unit Bars override scope (gated by
@@ -328,11 +337,8 @@ local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha powerBarAlpha hpBgAlpha powerBa
 -- Keep this as a WL literal (even though the shared prefix list is empty) so
 -- unit_copy_coverage_smoke.lua can audit the dynamically-prefixed suffix set.
 local COPY_TEXLAYER_FIELDS = WL [[]]
-for _, texP in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
-    for _, texBase in ipairs(WL [[Enabled SourceMode Atlas Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY ResponsiveSize SizeMode EdgeAttach Width Height ColorMode ColorTreatment ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV CropMode EdgeSoftness Visibility RoundedClip]]) do
-        COPY_TEXLAYER_FIELDS[#COPY_TEXLAYER_FIELDS + 1] = texP .. texBase
-    end
-end
+AppendCombinedFields(COPY_TEXLAYER_FIELDS, "", { "texLayer", "texLayer2", "texLayer3" },
+    WL [[Enabled SourceMode Atlas Texture CustomTexturePath Alpha FollowFrameAlpha Strata Level AnchorTarget Anchor OffsetX OffsetY ResponsiveSize SizeMode EdgeAttach Width Height ColorMode ColorTreatment ColorR ColorG ColorB GradientEnabled Gradient2R Gradient2G Gradient2B GradientDirRight GradientDirLeft GradientDirUp GradientDirDown BlendMode MirrorH MirrorV CropMode EdgeSoftness Visibility RoundedClip]])
 local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideInHousing loadCondHideInCombat loadCondHideInGroup loadCondHideInInstance loadCondHideInVehicle loadCondHideMounted loadCondHideNoTarget loadCondHideOutOfCombat loadCondHideOutOfCombatNoTarget loadCondHideResting loadCondHideSolo loadCondHideStealthed loadCondShowWhenInjured loadCondActive]]
 --- Size only. Placement (offsetX/offsetY, point/relativePoint, anchorFrameName and
 --- anchorToUnitframe) must never travel through Copy To: two unit frames sharing a
@@ -345,12 +351,15 @@ local COPY_LAYOUT_FIELDS = WL [[width height]]
 local AURA_COPY_UNITS = DropUnsupportedUnits(KSW("player pet target focus boss arena"))
 local AURA_COPY_FLAGS = { player = "showPlayer", pet = "showPet", target = "showTarget", focus = "showFocus", boss = "showBoss", arena = "showArena" }
 local AURA_BOSS_RUNTIME_UNITS = WL("boss1 boss2 boss3 boss4 boss5")
-local AURA_ARENA_RUNTIME_UNITS = WL("arena1 arena2 arena3")
 -- TBC and Mists field five arena opponents, Classic Era and WoW Forever none,
 -- Midnight three (MSUF.Client.MaxArenaOpponents, published as MSUF_MAX_ARENA_FRAMES).
 local ARENA_SLOTS = tonumber(MSUF.Client and MSUF.Client.MaxArenaOpponents)
     or (IS_CLASSIC_FAMILY and tonumber(_G.MSUF_MAX_ARENA_FRAMES)) or 3
-for arenaIndex = 4, ARENA_SLOTS do AURA_ARENA_RUNTIME_UNITS[#AURA_ARENA_RUNTIME_UNITS + 1] = "arena" .. arenaIndex end
+local AURA_ARENA_RUNTIME_UNITS = (function()
+    local units = WL("arena1 arena2 arena3")
+    for arenaIndex = 4, ARENA_SLOTS do units[#units + 1] = "arena" .. arenaIndex end
+    return units
+end)()
 local UF_COPY_CATEGORIES = {
     { key = "basics",       label = "Basics",     default = true, description = "Copies the frame toggle, fill direction and health coloring, plus this unit's Bars overrides: bar textures, outline, highlight priority, gradient, absorb and heal prediction." },
     { key = "text",         label = "Text",             default = true, description = "Copies every text slot with its content, size and position, plus this unit's font overrides: font, outline, shadow, text color and name shortening." },

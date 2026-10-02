@@ -4,7 +4,7 @@
 --- Owns: search registry, background index construction, query matching,
 --- route resolution, and anchor scrolling. Result UI rendering lives in
 --- MSUF_Menu2_Search_Render.lua; public wrappers live in Search_API.lua.
-local addonName, MSUF = ...
+local MSUF = select(2, ...)
 MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
@@ -228,7 +228,14 @@ local function AddPageLocalizedSearchKeywords(parts, pageKey)
     for i = 1, #list do AddSearchText(parts, list[i]) end
 end
 
-for _, row in ipairs({
+-- Loops at chunk level would hold their control variables as chunk locals
+-- (the chunk has a local budget), so each table fill runs in a function.
+local function AppendPageKeywordRows(rows)
+    for _, row in ipairs(rows) do
+        for i = 2, #row do AppendSearchKeywords(row[1], row[i]) end
+    end
+end
+AppendPageKeywordRows({
     { "gf_bars", SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS },
     { "gf_auras", SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS },
     { "gf_indicators", SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_HIGHLIGHT_BORDER_KEYWORDS },
@@ -240,9 +247,7 @@ for _, row in ipairs({
     { "uf_arena", SEARCH_UNIT_AURA_DISPEL_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS },
     { "home", SEARCH_DASHBOARD_RECOVERY_KEYWORDS, SEARCH_DASHBOARD_SUPPORT_KEYWORDS, SEARCH_DASHBOARD_WAGO_KEYWORDS, SEARCH_DASHBOARD_SCALING_KEYWORDS },
     { "changelog", SEARCH_DASHBOARD_CHANGELOG_KEYWORDS },
-}) do
-    for i = 2, #row do AppendSearchKeywords(row[1], row[i]) end
-end
+})
 
 local DASHBOARD_ROUTE_RECOVERY = { state = { dashboardRecoveryOpen = true } }
 local DASHBOARD_ROUTE_SCALING = { state = { dashboardScalingOpen = true } }
@@ -507,7 +512,14 @@ local function AddSearchCanonicalPairs(result, firstWords, secondWords)
     end
 end
 
-for row in ([[
+local function AddSearchCanonicalRows(text)
+    for row in text:gmatch("[^;]+") do
+        row = row:match("^%s*(.-)%s*$")
+        local result, firstWords, secondWords = row:match("^([^|]*)|([^|]*)|(.+)$")
+        if result then AddSearchCanonicalPairs(result, firstWords, secondWords) end
+    end
+end
+AddSearchCanonicalRows([[
 demonhunter|demon|hunter;deathknight|death|knight;windshear|wind|shear;castbar|cast|bar;healthbar|health|bar;powerbar|power|bar;showbuffs|show|buffs;maxbuffs|max|buffs;customcaps|custom|caps
 smoothfill|smooth soft fluid|fill;smoothfill|weiche weichen sanfte fluessige|fuellung;smoothfill|relleno llenado|suave fluido;smoothfill|remplissage|doux fluide;smoothfill|riempimento|fluido morbido;smoothfill|preenchimento|suave fluido
 classpower|class|resource resources power;clickcast|click|cast casting;clickthrough|click|through;editmode|edit|mode;loadconditions|load|condition conditions;readycheck|ready|check;raidmarker|raid|marker;groupnumber|group|number
@@ -515,11 +527,7 @@ nameshortening|name|shortening;globalcooldown|global|cooldown;fokuskick|focus|ki
 onoff|turn|off;minimapicon|minimap|icon button;kofi|ko|fi;menuscale|menu|scale;uiscale|ui|scale;targetsound|target|sound sounds;unitauras|unit|aura auras;globalstyle|global|style;spellid|spell|id
 healthtext|health|text;powertext|power|text;nametext|name|text;classcolor|class|color;rangecheck|range|check checker checking;distancecheck|distance|check checker checking;outofrange|out|range;unitframe|unit|frame frames
 playerframe|player|frame;targetframe|target|frame;focusframe|focus|frame;petframe|pet|frame;bossframes|boss|frame frames;arenaframes|arena|frame frames;partyframes|party|frame frames;raidframes|raid|frame frames
-]]):gmatch("[^;]+") do
-    row = row:match("^%s*(.-)%s*$")
-    local result, firstWords, secondWords = row:match("^([^|]*)|([^|]*)|(.+)$")
-    if result then AddSearchCanonicalPairs(result, firstWords, secondWords) end
-end
+]])
 
 local function SearchCanonicalWords(raw)
     local words = {}

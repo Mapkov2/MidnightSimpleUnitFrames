@@ -689,8 +689,6 @@ local GF_PREVIEW_ROUNDED_MASK = Specs.ROUNDED_MASK or (maskRoot .. "rounded_clea
 local GF_PREVIEW_ROUNDED_EDGE = Specs.ROUNDED_EDGE or (maskRoot .. "rounded_clean_edge_s3.png")
 local GF_PREVIEW_MIN_W = Specs.MIN_W or 380
 local GF_PREVIEW_MIN_H = Specs.MIN_H or 130
-local GF_PREVIEW_ZOOM_MIN = Specs.ZOOM_MIN or 0.35
-local GF_PREVIEW_ZOOM_MAX = Specs.ZOOM_MAX or 4.0
 local Tr = M.Tr
 local function ClassColor(classToken, dr, dg, db)
     if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
