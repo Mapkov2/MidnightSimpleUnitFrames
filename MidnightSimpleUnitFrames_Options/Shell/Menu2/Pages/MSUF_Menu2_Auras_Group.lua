@@ -1082,42 +1082,14 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     end
     local emptyText = isDebuff and "No blocked spells. Add one from the presets above."
         or "No blocked spells. Add one above or use a preset."
-    local empty = W.Text(section, emptyText, 24, -284 + curatedOffset, inner, T.colors.muted)
-    local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, section))
-    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + curatedOffset)
-    listScroll:SetSize(inner - 20, 150)
-    local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
-    listChild:SetSize(inner - 44, 150)
-    listScroll:SetScrollChild(listChild)
-    M._StyleNestedAuraScrollFrame(listScroll, section, 44)
-    local rows = {}
-    local function EnsureRow(i)
-        local row = rows[i]
-        if row then return row end
-        row = PixelLayoutRegion(CreateFrame("Frame", nil, listChild))
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
-        row:SetHeight(40)
-        if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
-        row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
-        row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
-        row.icon:SetSize(28, 28)
-        row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-        row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
-        row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
-        row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
-        row.remove = ActionButton(row, "Remove", 80)
-        row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-        row.remove:SetScript("OnClick", function()
-            if row._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, row._spellID) then
-                QueueGroupScope(scope, blacklistApplyMode)
-                Rebuild(ctx)
-            end
-        end)
-        AddTooltip(row.remove, "Remove from blacklist", "Stops blocking this aura.")
-        rows[i] = row
-        return row
-    end
+    local blockedList = M.AuraControls.BlockedSpellList(ctx, section, inner, curatedOffset, emptyText, {
+        remove = function(spellID)
+            if not Model.RemoveGroupBlacklistSpell(scope, lane, spellID) then return end
+            QueueGroupScope(scope, blacklistApplyMode)
+            Rebuild(ctx)
+        end,
+        removePath = function(value) return groupActionPath .. ".entry." .. AuraCatalogToken(value) .. ".remove" end,
+    })
     refreshList = function()
         local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
         local blocked = {}
@@ -1131,33 +1103,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         W.SetControlEnabled(addSet, missing > 0)
         local selectedSpell = CurrentSpell()
         W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
-        local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-        local visible = {}
-        for i = 1, #entries do
-            local entry = entries[i]
-            local haystack = (tostring(entry.text or "") .. " "
-                .. tostring(entry.spellID or entry.value or "")):lower()
-            if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-        end
-        T.SetTranslatedText(prepared, M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
-        T.SetTranslatedText(empty, #entries == 0 and Tr(emptyText) or M.Format("No results for \"%s\".", query))
-        empty:SetShown(#visible == 0)
-        listScroll:SetShown(#visible > 0)
-        listChild:SetHeight(max(150, #visible * 44))
-        for i = 1, max(#rows, #visible) do
-            local row, entry = rows[i], visible[i]
-            if entry then
-                row = EnsureRow(i)
-                row._spellID = entry.value
-                row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                local name = tostring(entry.text or entry.value or "Spell"):gsub("%s*%(#%d+%)$", "")
-                row.name:SetText(name)
-                row.id:SetText(entry.spellID and (tostring("Spell ID ") .. tostring(entry.spellID)) or tostring(entry.value or ""))
-                RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button",
-                    groupActionPath .. ".entry." .. AuraCatalogToken(entry.value) .. ".remove", "action")
-                row:Show()
-            elseif row then row._spellID = nil; row:Hide() end
-        end
+        blockedList.Paint(entries, searchValue, prepared)
     end
     M.TrackRefresh(ctx, refreshList)
     if lane == "debuff" then
