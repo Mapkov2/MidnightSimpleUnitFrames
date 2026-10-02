@@ -438,9 +438,18 @@ local function ReadPublicMouseFlag(frame, methodName)
     return value == true
 end
 
+--- A frame Edit Mode may rewire right now. Ask an access-restricted object
+--- first, as the Spell Indicator effects do (CanWriteEffectSurface in
+--- MSUF_Auras3_SpellIndicators_Effects.lua); a secret or false answer fails
+--- closed and the restore is retried later.
 local function CanChangeAuraMouse(frame)
     if not frame or (frame.IsForbidden and frame:IsForbidden()) then return false end
-    return not (InCombatLockdown and InCombatLockdown())
+    if InCombatLockdown and InCombatLockdown() then return false end
+    local canAccess = frame.CanBeAccessedInContext
+    if type(canAccess) ~= "function" then return true end
+    local allowed = canAccess(frame)
+    if IsSecretValue(allowed) then return false end
+    return allowed == true
 end
 
 -- Track only frames whose input MSUF actually changed. A forbidden frame
@@ -556,65 +565,30 @@ local function WireNativeAuraEditForward(frame, container)
     return frame._msufA3EditDragForwardHooked == true
 end
 
-local function SetLaneMouseSuppressed(element, container, suppressed)
+local function SetLaneMouseSuppressed(container, suppressed)
     if not container then return true end
     if container.IsForbidden and container:IsForbidden() then return suppressed == true end
     local restored = true
-    local laneKind = container._msufA3NativeLane
-    local forwardKind = laneKind
+    local forwardKind = container._msufA3NativeLane
     if forwardKind == "buffs" then forwardKind = "buff" end
     if forwardKind == "debuffs" then forwardKind = "debuff" end
     local canForward = forwardKind == "buff" or forwardKind == "debuff"
-    local laneCfg = element and element._msufA3Config and element._msufA3Config.lanes and element._msufA3Config.lanes[laneKind]
-    local motionEnabled = not laneCfg or laneCfg.showTooltip ~= false
-    local nativeLaneCfg = container._msufA3NativeLaneConfig or laneCfg
-    local cancelablePlayerBuff = forwardKind == "buff"
-        and nativeLaneCfg and nativeLaneCfg.unit == "player"
     if suppressed then
         if canForward then WireNativeAuraEditForward(container, container) end
         SuppressAuraMouse(container, canForward)
     else
         if not RestoreAuraMouse(container, nil, false) then restored = false end
     end
-
-    -- Flow buttons belong to Blizzard's frame provider, not container[index].
-    -- Enumerate its public group API after MSUF's fixed slots; this also covers
-    -- mixed Unit owners without retaining a second button registry.
-    local groupKey = container._msufA3ManagedGroupKey
-    local groupCount = groupKey and container.GetAuraGroupFrameCount and container:GetAuraGroupFrameCount(groupKey)
-    local fixedCount = container._msufA3FixedButtonCount or 0
-    local count = groupCount and (fixedCount + groupCount)
-        or (type(container.GetAuraFrameCount) == "function" and container:GetAuraFrameCount())
-        or tonumber(container.createdButtons) or 0
-    for i = 1, count do
-        local button
-        if groupCount and i > fixedCount then
-            button = container.GetAuraGroupFrame(container, groupKey, i - fixedCount)
-        elseif type(container.GetAuraFrame) == "function" then
-            button = container.GetAuraFrame(container, i)
-        end
-        if not button then button = container[i] end
-        if container._msufA3GroupSlotsRoot == true and button then
-            -- A mixed owner also contains click-through Dispel slots. Restore
-            -- input per actual Aura lane, never from the owner's sensor kind.
-            laneKind = button._msufA3LaneKind
-            canForward = laneKind == "buff" or laneKind == "debuff"
-            laneCfg = element._msufA3Config.lanes[laneKind]
-            motionEnabled = laneCfg and laneCfg.showTooltip ~= false or false
-            cancelablePlayerBuff = laneKind == "buff" and laneCfg and laneCfg.unit == "player"
-        end
-        if button then
-            if suppressed then
-                if canForward then WireNativeAuraEditForward(button, container) end
-                SuppressAuraMouse(button, canForward)
-            else
-                -- Forbidden buttons can hide their stored input state. Restore
-                -- the sole runtime exception (Player Buff RightButtonUp cancel)
-                -- and keep every other AuraButton click-through.
-                if not RestoreAuraMouse(button, motionEnabled, cancelablePlayerBuff) then restored = false end
-            end
-        end
-    end
+    -- The lane's buttons are never rewired. A native AuraButton is sealed once
+    -- initializeFrame returns: its frame provider applies the access
+    -- restrictions right after that callback
+    -- (Blizzard_AuraContainerFrameProviders.lua), the AuraButton intrinsic
+    -- forbids untrusted scripts and AlwaysPropagateInput (Blizzard_AuraButton.xml),
+    -- and a SetScript or HookScript on it then raises "blocked by secret
+    -- aspects". Its input is final from initializeFrame (PrepareStage
+    -- BindLaneIdentity and BindPandemicAndTooltip, Runtime_ButtonVisuals). An
+    -- MSUF-built Classic lane keeps its buttons on the lane table, not on this
+    -- frame, so the container is the only surface either backend rewires.
     return restored
 end
 
@@ -625,7 +599,7 @@ local function SetRuntimeAuraMouse(element, suppressed)
     for i = 1, #RUNTIME_MOUSE_ROOTS do
         local container = element[RUNTIME_MOUSE_ROOTS[i]]
         if i <= 3 or container and container._msufA3GroupSlotsRoot == true then
-            if not SetLaneMouseSuppressed(element, container, suppressed) then restored = false end
+            if not SetLaneMouseSuppressed(container, suppressed) then restored = false end
         end
     end
     return restored
