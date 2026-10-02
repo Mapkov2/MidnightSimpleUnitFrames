@@ -8,7 +8,10 @@
 --     so the addon files capture the strict type/tonumber/tostring;
 --   * every unit API one health tick reaches, as a counted wrapper over one
 --     switchable unit model (world.S): health fraction, absorb, incoming
---     heals, dead, connected, and whether the client returns secrets;
+--     heals, dead, connected, and whether the client returns secrets. The
+--     calculator's (current) health and the predicted health that
+--     UnitHealthPercent/UnitHealth return with usePredicted are separate
+--     (S.pct / S.predicted), because the client does not document them equal;
 --   * a prediction calculator, LuaCurves (linear and step) and the
 --     CurveConstants curves, counted per method;
 --   * counted widget sinks (SetValue, SetVertexColor, SetAlpha,
@@ -178,10 +181,12 @@ function World.New(root, flavor, options)
 
     local w = setmetatable({ root = root, flavor = flavor, Secrets = Secrets, calls = {}, counting = false },
         Methods)
-    -- The unit every frame shows. pct is current/max health (0..1); absorb
-    -- and incoming are fractions of max health.
+    -- The unit every frame shows. pct is the calculator's current/max health
+    -- (0..1); predicted is the usePredicted health of the unit APIs (nil: the
+    -- same); absorb and incoming are fractions of max health.
     local S = { secret = false, pct = 0.6, absorb = 0, incoming = 0, dead = false, connected = true }
     w.S = S
+    local function Predicted() return S.predicted or S.pct end
     local calls = w.calls
     local function Count(name)
         if w.counting then calls[name] = (calls[name] or 0) + 1 end
@@ -229,12 +234,12 @@ function World.New(root, flavor, options)
             if not S.connected then return false end
             return unit == "target" or rosterConnected(unit)
         end)
-        Wrap("UnitHealth", function() return Number(S.pct * MAX_HEALTH) end)
+        Wrap("UnitHealth", function() return Number(Predicted() * MAX_HEALTH) end)
         Wrap("UnitHealthMax", function() return Number(MAX_HEALTH) end)
         Wrap("UnitHealthPercent", function(_, _, curve)
             if S.secret then return Secrets.New("number") end
-            if curve then return curve:Evaluate(S.pct) end
-            return S.pct
+            if curve then return curve:Evaluate(Predicted()) end
+            return Predicted()
         end)
         Wrap("UnitGetTotalAbsorbs", function() return Number(S.absorb * MAX_HEALTH) end)
         Wrap("UnitGetIncomingHeals", function() return Number(S.incoming * MAX_HEALTH) end)

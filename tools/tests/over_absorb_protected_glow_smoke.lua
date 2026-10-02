@@ -9,16 +9,18 @@
 --
 -- The 2026-10-02 raid trace measured this path at about 30 % of core CPU
 -- (six native calls per health tick). Since W4-C1 one tick fills the
--- calculator once, evaluates the step curve on that calculator
--- (EvaluateCurrentHealthPercent) and hands the result to the one flag sink
--- as its alphaIfTrue: SetAlphaFromBoolean(clamped, partial, 0) on the cached
--- glow texture, with the holder at full alpha.
+-- calculator once and hands the step curve's result to the one flag sink as
+-- its alphaIfTrue: SetAlphaFromBoolean(clamped, partial, 0) on the cached glow
+-- texture, with the holder at full alpha. The curve reads PREDICTED health
+-- (UnitHealthPercent usePredicted), like the plain path and the stripe; the
+-- calculator's own health source is undocumented and only feeds the flag. The
+-- model below keeps the two health values apart so it can tell them apart.
 --
 -- The real element loads with values as strict as the client (a secret
 -- refuses comparison, arithmetic, concatenation and indexing). Pinned:
 --   1. overlay only: protected values render through the calculator flag and
---      the calculator's partial-health curve, without Lua touching a secret,
---      with one calculator read and no unit health query;
+--      the predicted-health partial curve, without Lua touching a secret, with
+--      one calculator read and one curve read;
 --   2. overlay plus stripe: the flag alone, at full alpha;
 --   3. a following plain update clears the flag gate on the glow;
 --   4. the health follower opens for a protected absorb with the overlay on;
@@ -27,7 +29,12 @@
 --      value behind it renders the glow for a grid of health, absorb and
 --      incoming heals, protected and plain, overlay with and without the
 --      stripe, and checks it against the plain rule (partial health:
---      hp + incoming + absorb >= max; full health: only with the stripe).
+--      hp + incoming + absorb >= max, the rule of Blizzard's CompactUnitFrame;
+--      full health: only with the stripe), including predicted health ahead
+--      of or behind the calculator's, and the exact absorb boundary, where the
+--      protected path follows the calculator ("in excess", strictly above)
+--      and the plain path the >= rule: that one documented difference has no
+--      secret-safe native to close it.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -106,7 +113,10 @@ function Region:SetScript() end
 function Region:CreateTexture() return NewRegion("Texture", self) end
 
 -- The unit the calculator and the unit APIs read (fractions of max health).
+-- hp is the calculator's (current) health; predicted is what UnitHealthPercent
+-- returns with usePredicted (nil: the same as hp).
 local unitState = { hp = 0.5, absorb = 0.6, incoming = 0, protected = true }
+local function Predicted() return unitState.predicted or unitState.hp end
 local function UnitValue(label, value)
     if unitState.protected then return Secret(label, value) end
     return value
@@ -129,10 +139,13 @@ _G.UnitExists = function() return true end
 _G.UnitIsConnected = function() return true end
 _G.UnitHealth = function() return UnitValue("health", unitState.hp * 1000) end
 _G.UnitHealthMax = function() return UnitValue("max", 1000) end
-local curveReads = {}
-_G.UnitHealthPercent = function(unit, _, curve)
+local curveReads, curveResults = {}, {}
+_G.UnitHealthPercent = function(unit, usePredicted, curve)
+    assert(usePredicted == true, "UnitHealthPercent without predicted health")
     curveReads[#curveReads + 1] = curve
-    return UnitValue("curve alpha", curve and Evaluate(curve, unitState.hp) or unitState.hp)
+    local result = UnitValue("curve alpha", curve and Evaluate(curve, Predicted()) or Predicted())
+    curveResults[#curveResults + 1] = result
+    return result
 end
 _G.UnitGetIncomingHeals = function() return UnitValue("incoming", unitState.incoming * 1000) end
 _G.UnitGetTotalAbsorbs = function() return UnitValue("absorb", unitState.absorb * 1000) end
@@ -237,13 +250,13 @@ Run("overlay only", function()
     Check(calc and calc.lastUnit == "target" and calc.lastHealer == "player",
         "overlay only: the calculator did not read the frame's unit for the player's heals")
     Check(detailedReads == reads + 1, "overlay only: one tick did not read the calculator exactly once")
-    Check(#curveReads == curveCalls, "overlay only: the partial-health gate asked UnitHealthPercent again")
+    Check(#curveReads == curveCalls + 1, "overlay only: one tick did not read the partial-health curve exactly once")
     local glow = holder and holder.fill
     Check(glow and glow.alphaBoolean == calc.clamped and glow.alphaIfFalse == 0,
         "overlay only: the glow is not gated by the calculator's clamped flag")
-    Check(glow and glow.alphaIfTrue == calc.evaluated,
-        "overlay only: the flag's alpha does not come from the calculator's partial-health curve")
-    local curve = calc and calc.evaluatedCurve
+    Check(glow and glow.alphaIfTrue == curveResults[#curveResults] and calc.evaluated == nil,
+        "overlay only: the flag's alpha does not come from the predicted-health curve")
+    local curve = curveReads[#curveReads]
     Check(curve and curve.kind == 1 and #curve.points == 2 and curve.points[1][1] == 0 and curve.points[1][2] == 1
         and curve.points[2][1] == 1 and curve.points[2][2] == 0,
         "overlay only: full health is not kept off by a partial-health step curve")
@@ -354,44 +367,98 @@ Run("no calculator", function()
 end)
 
 -- 6. What the client draws, against the plain rule (Drawn is above).
-local function Rule(hp, absorb, incoming, overlay, stripe)
+-- The intended rule. `current` is the calculator's health, `predicted` the
+-- health bar's (UnitHealthPercent usePredicted). The plain path knows only the
+-- predicted value and uses Blizzard's CompactUnitFrame overflow rule
+-- (health + incoming + absorb >= max, CompactUnitFrame.lua
+-- CompactUnitFrame_UpdateHealPrediction). The protected path cannot compare:
+-- predicted health gates full health through the step curve, and the overflow
+-- is the calculator's MissingHealth flag, documented as "in excess of the
+-- clamp boundary" (UnitHealPredictionCalculatorAPIDocumentation). At the exact
+-- boundary (absorb == missing - incoming) that flag stays off while the plain
+-- rule shows: the one documented difference (no secret-safe API reports >=).
+local function Rule(protected, current, predicted, absorb, incoming, overlay, stripe)
     if absorb <= 0 then return false end
-    if hp >= 1 then return stripe end
-    if not overlay then return false end
-    -- The calculator reports an overflow strictly beyond the boundary; the
-    -- grid avoids the exact edge, where the plain rule's >= differs.
-    return hp + incoming + absorb >= 1
+    if not protected then
+        if predicted >= 1 then return stripe end
+        if not overlay then return false end
+        return predicted + incoming + absorb >= 1
+    end
+    local boundary = (1 - current) - incoming
+    if boundary < 0 then boundary = 0 end
+    local overflow = absorb > boundary
+    if overlay and stripe then return overflow end
+    if overlay then return overflow and predicted < 1 end
+    -- The stripe alone: the full-health curve on predicted health.
+    return predicted >= 1
 end
 
-local HEALTH = { 0.2, 0.55, 0.9, 1 }
-local ABSORB = { 0, 0.05, 0.3, 0.6 }
+local HEALTH = { 0.2, 0.5, 0.55, 0.75, 0.9, 1 }
+local ABSORB = { 0, 0.05, 0.25, 0.3, 0.5, 0.6 }
 local INCOMING = { 0, 0.25 }
+-- Predicted health ahead of, equal to, and behind the calculator's.
+local PREDICTED_SHIFT = { 0, 0.1, -0.1 }
+local function Render(protected, current, predicted, absorb, incoming, overlay, stripe)
+    unitState.protected, unitState.hp, unitState.predicted, unitState.absorb, unitState.incoming =
+        protected, current, predicted, absorb, incoming
+    local frame = NewFrame(overlay, stripe)
+    frame._msufPredictionIncoming = incoming * 1000
+    -- The plain path's health seed is the health bar's (predicted) value.
+    local hpValue, maxValue, absorbValue = UnitValue("hp", predicted * 1000), UnitValue("max", 1000),
+        UnitValue("absorb", absorb * 1000)
+    UpdateOverAbsorbGlow(frame, {}, "target", hpValue, maxValue, absorbValue, true, true, protected)
+    -- A second tick on the same frame must agree with the first.
+    UpdateOverAbsorbGlow(frame, {}, "target", hpValue, maxValue, absorbValue, true, nil, protected)
+    unitState.predicted = nil
+    return Drawn(frame)
+end
+
 Run("rendered visibility", function()
     for _, protected in ipairs({ true, false }) do
         for _, shape in ipairs({ { true, false }, { true, true }, { false, true } }) do
             local overlay, stripe = shape[1], shape[2]
             for _, hp in ipairs(HEALTH) do
-                for _, absorb in ipairs(ABSORB) do
-                    for _, incoming in ipairs(INCOMING) do
-                        unitState.protected, unitState.hp, unitState.absorb, unitState.incoming =
-                            protected, hp, absorb, incoming
-                        local frame = NewFrame(overlay, stripe)
-                        frame._msufPredictionIncoming = incoming * 1000
-                        local hpValue, maxValue, absorbValue = UnitValue("hp", hp * 1000), UnitValue("max", 1000),
-                            UnitValue("absorb", absorb * 1000)
-                        UpdateOverAbsorbGlow(frame, {}, "target", hpValue, maxValue, absorbValue, true, true, protected)
-                        -- A second tick on the same frame must agree with the first.
-                        UpdateOverAbsorbGlow(frame, {}, "target", hpValue, maxValue, absorbValue, true, nil, protected)
-                        local want = Rule(hp, absorb, incoming, overlay, stripe)
-                        Check(Drawn(frame) == want, string.format(
-                            "rendered visibility: %s, overlay %s, stripe %s, health %.2f, absorb %.2f, incoming %.2f draws %s, the rule says %s",
-                            protected and "protected" or "plain", tostring(overlay), tostring(stripe), hp, absorb, incoming,
-                            tostring(Drawn(frame)), tostring(want)))
+                for _, shift in ipairs(PREDICTED_SHIFT) do
+                    local predicted = math.floor((hp + shift) * 100 + 0.5) / 100
+                    if predicted > 1 then predicted = 1 elseif predicted < 0 then predicted = 0 end
+                    for _, absorb in ipairs(ABSORB) do
+                        for _, incoming in ipairs(INCOMING) do
+                            local drawn = Render(protected, hp, predicted, absorb, incoming, overlay, stripe)
+                            local want = Rule(protected, hp, predicted, absorb, incoming, overlay, stripe)
+                            Check(drawn == want, string.format(
+                                "rendered visibility: %s, overlay %s, stripe %s, health %.2f (predicted %.2f), "
+                                    .. "absorb %.2f, incoming %.2f draws %s, the rule says %s",
+                                protected and "protected" or "plain", tostring(overlay), tostring(stripe), hp,
+                                predicted, absorb, incoming, tostring(drawn), tostring(want)))
+                        end
                     end
                 end
             end
         end
     end
+end)
+
+-- The documented edge, spelled out: an absorb that exactly fills the missing
+-- health (incoming heals counted) shows by the plain >= rule, but not through
+-- the calculator flag ("in excess of the clamp boundary").
+Run("exact absorb boundary", function()
+    for _, case in ipairs({ { 0.5, 0.5, 0 }, { 0.75, 0.25, 0 }, { 0.5, 0.25, 0.25 } }) do
+        local hp, absorb, incoming = case[1], case[2], case[3]
+        Check(Render(false, hp, hp, absorb, incoming, true, false) == true, string.format(
+            "exact absorb boundary: plain health %.2f, absorb %.2f, incoming %.2f does not show", hp, absorb, incoming))
+        Check(Render(true, hp, hp, absorb, incoming, true, false) == false, string.format(
+            "exact absorb boundary: protected health %.2f, absorb %.2f, incoming %.2f no longer follows the "
+                .. "calculator's strict flag; update the documented difference", hp, absorb, incoming))
+    end
+end)
+
+-- Predicted health at full while the calculator still sees partial health:
+-- the partial glow keeps to the health bar and stays hidden.
+Run("predicted full health", function()
+    Check(Render(true, 0.9, 1, 0.6, 0, true, false) == false,
+        "predicted full health: the partial glow shows while the health bar is full")
+    Check(Render(true, 1, 0.9, 0.6, 0, true, false) == true,
+        "predicted full health: the partial glow hides while the health bar is partial")
 end)
 
 -- The stripe alone gates full health on the holder alpha. Switching the

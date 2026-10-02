@@ -640,21 +640,23 @@ end
 -- are secret). The prediction calculator's MissingHealth clamp reports whether
 -- the absorb overflows the missing health, incoming heals counted: `clamped`,
 -- the plain rule (hp + incoming + absorb >= max) as a possibly secret boolean.
--- Without the full-health stripe a step curve keeps the plain rule that full
--- health shows no partial glow; with the stripe, `clamped` is already the
--- union of both, because at full health every positive absorb is clamped.
+-- The calculator documents it as "in excess of the clamp boundary"
+-- (UnitHealPredictionCalculatorAPIDocumentation), so an absorb that exactly
+-- fills the missing health is the one case where it can differ from the plain
+-- rule's >=; no secret-safe API reports that edge. Without the full-health
+-- stripe a step curve keeps the plain rule that full health shows no partial
+-- glow; with the stripe, `clamped` is already the union of both, because at
+-- full health every positive absorb is clamped.
 --
--- One query renders a health tick (2026-10-02 raid trace: this was about 30 %
--- of core CPU at six native calls per tick):
---   * UnitGetDetailedHealPrediction fills the frame's calculator once;
---   * the step curve is evaluated on that calculator's health
---     (EvaluateCurrentHealthPercent, UnitHealPredictionCalculatorAPIDocumentation),
---     the same snapshot `clamped` came from, instead of a second unit query;
---   * SetAlphaFromBoolean takes the evaluated alpha as its alphaIfTrue
---     (SecretArguments AllowedWhenTainted, SimpleRegionAPIDocumentation), so
---     the texture alpha is clamped AND partial in one sink and the holder
---     stays at full alpha;
---   * the glow texture handle is the one EnsureOverAbsorbGlow created.
+-- The step curve reads PREDICTED health, like the plain path, the stripe and
+-- the health bar (UnitHealthPercent usePredicted): the calculator's own health
+-- source is undocumented, so it supplies only the overflow flag. A health tick
+-- costs four native calls (2026-10-02 raid trace: six, about 30 % of core CPU):
+-- one calculator fill, its flag, the curve, and one SetAlphaFromBoolean that
+-- takes the curve result as its alphaIfTrue (SecretArguments
+-- AllowedWhenTainted, SimpleRegionAPIDocumentation), so the texture alpha is
+-- clamped AND partial in one sink and the holder stays at full alpha. The glow
+-- texture handle is the one EnsureOverAbsorbGlow created.
 -- Lua never compares, adds or branches on a protected value here.
 local overAbsorbPartialCurve
 local function UngateOverAbsorbGlow(holder)
@@ -670,10 +672,7 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
   local calc = frame._msufPredictionOverAbsorbCalc
   if not calc then
     calc = CreateUnitHealPredictionCalculator and CreateUnitHealPredictionCalculator()
-    if not (calc and calc.SetDamageAbsorbClampMode and calc.GetDamageAbsorbs
-        and calc.EvaluateCurrentHealthPercent) then
-      return false
-    end
+    if not (calc and calc.SetDamageAbsorbClampMode and calc.GetDamageAbsorbs) then return false end
     calc:SetDamageAbsorbClampMode(UnitDamageAbsorbClampMode and UnitDamageAbsorbClampMode.MissingHealth or 0)
     frame._msufPredictionOverAbsorbCalc = calc
   end
@@ -683,7 +682,7 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
   if not stripeEnabled then
     curve = overAbsorbPartialCurve
     if not curve then
-      if not (CurveAPI and CurveAPI.CreateCurve) then return false end
+      if not (CurveAPI and CurveAPI.CreateCurve and UnitHealthPercent) then return false end
       curve = CurveAPI.CreateCurve()
       if not curve then return false end
       if curve.SetType then curve:SetType(LuaCurveType and LuaCurveType.Step or 1) end
@@ -700,7 +699,7 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
   end
   local _, clamped = calc:GetDamageAbsorbs()
   if curve then
-    glow:SetAlphaFromBoolean(clamped, calc:EvaluateCurrentHealthPercent(curve), 0)
+    glow:SetAlphaFromBoolean(clamped, UnitHealthPercent(unit, true, curve), 0)
   else
     glow:SetAlphaFromBoolean(clamped, 1, 0)
   end

@@ -62,16 +62,16 @@ local PLAIN_BUDGETS = {
 }
 local BUDGETS = {
     Mainline = {
-        -- W4-C1 glow: one calculator read, the step curve on that calculator,
-        -- one flag sink, the cached texture (6 glow natives -> 4); the health
-        -- follower renders a warm protected tick directly; ReadDeadCached
-        -- reads UnitIsDeadOrGhost once; the group gone state resolves a
-        -- health tick in Health's sink.
-        ["group protected"] = { natives = { UnitHealthPercent = 4, UnitGetDetailedHealPrediction = 1,
-            ["calc:GetDamageAbsorbs"] = 1, ["calc:EvaluateCurrentHealthPercent"] = 1, SetAlphaFromBoolean = 1,
+        -- W4-C1 glow: one calculator read, the predicted-health step curve
+        -- fed straight into the one flag sink, the cached texture (6 glow
+        -- natives -> 4); the health follower renders a warm protected tick
+        -- directly; ReadDeadCached reads UnitIsDeadOrGhost once; the group
+        -- gone state resolves a health tick in Health's sink.
+        ["group protected"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
+            ["calc:GetDamageAbsorbs"] = 1, SetAlphaFromBoolean = 1,
             SetValue = 2, SetVertexColor = 1, UnitIsDeadOrGhost = 1 }, predicates = 8, k = 399 },
-        ["unit protected"] = { natives = { UnitHealthPercent = 4, UnitGetDetailedHealPrediction = 1,
-            ["calc:GetDamageAbsorbs"] = 1, ["calc:EvaluateCurrentHealthPercent"] = 1, SetAlphaFromBoolean = 1,
+        ["unit protected"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
+            ["calc:GetDamageAbsorbs"] = 1, SetAlphaFromBoolean = 1,
             SetValue = 2, SetVertexColor = 1 }, predicates = 4, k = 322 },
     },
     Vanilla = {},
