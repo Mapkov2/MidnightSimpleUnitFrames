@@ -1115,7 +1115,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local x = ReadNumber(layout, nil, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)
     local y = ReadNumber(layout, nil, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)
     local anchor = ReadAnchor(layout, nil, spec.anchorKey, spec.defaultAnchor)
-    local layer = ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 1, 15)
+    local layer = ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 0, 30)
     local filters = FilterTable(filtersRoot, spec.dbKey)
     local nonPlayerFilter = kind == "debuff" and filters and filters.nonPlayer == true or false
     local explicitLaneBlacklist = type(blacklist) == "table"
@@ -1294,7 +1294,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local x = ClampNumber(source[spec.xKey], 0, -4096, 4096)
     local y = ClampNumber(source[spec.yKey], 0, -4096, 4096)
     local anchor = ReadAnchor(source, nil, spec.anchorKey, spec.defaultAnchor)
-    local layer = ClampNumber(source[spec.layerKey], spec.defaultLayer, 1, 15)
+    local layer = ClampNumber(source[spec.layerKey], spec.defaultLayer, 0, 30)
     local alpha = ClampNumber(source[spec.alphaKey], 1, 0, 1)
     local rawFilter = GroupLaneRawFilter(kind, spec, source[spec.filterKey] or spec.filter)
     local filterPlan = Features.CompileRawFilter(rawFilter, spec.harmful ~= true) or nil

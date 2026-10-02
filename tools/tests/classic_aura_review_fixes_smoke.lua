@@ -1585,6 +1585,29 @@ do
     _G.MSUF_DB.auras3.customContainers = nil
 end
 
+-- W3.3 (re-review 2026-10-02). Lane Layer follows the menu's 0..30 slider ---------------
+-- The lane Layer control writes 0..30 (Model.ReadLaneLayer, the Layer
+-- overview); Classic clamped unit and group lanes to 1..15.
+do
+    for _, layer in ipairs({ 0, 25, 30 }) do
+        LoadProfile(Profile({ target = {
+            layout = { buffLayer = layer }, layoutShared = { showBuffs = true, maxBuffs = 4 }, filters = {},
+        } }))
+        A3.BumpRuntimeConfig()
+        world.target = { Aura(true) }
+        local target = NewFrame("target", {})
+        local lane = Lane(target, "buff")
+        assert(lane.config.layer == layer, "W3.3: a target lane clamped Layer " .. layer .. " to " .. tostring(lane.config.layer))
+        assert(lane.frame._frameLevel == lane.root:GetFrameLevel() + layer,
+            "W3.3: the target lane frame is not on Layer " .. layer)
+        local party = NewFrame("party3", { scope = "group", auras = {
+            enabled = true, showBuffs = true, maxBuffs = 4, buffLayer = layer,
+        } }, GroupFields("party"))
+        assert(Lane(party, "buff").config.layer == layer,
+            "W3.3: a group lane clamped Layer " .. layer .. " to " .. tostring(Lane(party, "buff").config.layer))
+    end
+end
+
 -- F6. Edit Mode and menu group test frames never run the live backend -------------------
 do
     world.player = {
