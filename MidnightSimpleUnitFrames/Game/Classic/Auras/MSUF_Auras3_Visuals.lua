@@ -659,7 +659,13 @@ local function EnsureStealableTexture(button, key, subLevel)
 end
 
 local function UpdateStealableMarker(button, cfg, data)
-    local active = cfg.showStealableMarker == true and data and data.isStealable == true or false
+    local active = false
+    if cfg.showStealableMarker == true and data then
+        -- A secret stealable flag reads as unknown: no marker.
+        local stealable = data.isStealable
+        if IsSecret(stealable) then stealable = nil end
+        active = stealable == true
+    end
     -- Drawn once per config and stealable state.
     if button._msufA3StealableConfig == cfg and button._msufA3StealableActive == active then return end
     button._msufA3StealableConfig, button._msufA3StealableActive = cfg, active
