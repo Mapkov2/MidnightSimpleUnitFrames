@@ -338,17 +338,12 @@ end
 M.ApplyTextureLayerPackConfig = ApplyTexturePackConfig
 M.TextureLayerPackItems = TEXLAYER_PACK_ITEMS
 
-local function BuildTextureLayer(ctx, builder, unit)
-    local ReadBool = UP.ReadBool
-    local SetBool = UP.SetBool
-    local ReadNumber = UP.ReadNumber
-    local SetNumber = UP.SetNumber
-    local SetString = UP.SetString
-    local SetControlEnabled = UP.SetControlEnabled
-    local GetConf = UP.GetConf
-    local ReviewedMeta = UP.ReviewedMeta
-    assert(ReadBool and SetBool and ReadNumber and SetNumber and SetString and SetControlEnabled and GetConf and ReviewedMeta,
-        "Texture Layer requires the UnitPage settings API")
+-- Texture Layer section. BuildTextureLayer runs a sequence of stages that share one state table (`s`):
+-- slot actions, shell and cards, binders, then the Setup, Advanced and HP & Visibility cards, the
+-- conditional refresh, the slot and category bars and the refresh. The stages create their widgets in
+-- the order the single builder did, so the layout is unchanged.
+local function TextureLayerActions(ctx, unit, s)
+    local SetBool, SetString, GetConf = s.SetBool, s.SetString, s.GetConf
 
     M.unitTexLayerSlot = M.unitTexLayerSlot or {}
     M.unitTexLayerTab = M.unitTexLayerTab or {}
@@ -439,7 +434,12 @@ local function BuildTextureLayer(ctx, builder, unit)
         SetBool(unit, Key("ResponsiveSize"), false, "MSUF2_TEXLAYER", { preview = true })
         RefreshLayer()
     end
-
+    s.NormalizeSlot, s.CurrentSlot, s.boundSlot, s.Key = NormalizeSlot, CurrentSlot, boundSlot, Key
+    s.RefreshLayer, s.ApplyPreset, s.SetHighlightTextureEnabled = RefreshLayer, ApplyPreset, SetHighlightTextureEnabled
+    s.CurrentPackValue, s.ApplyPackTexture, s.KeepManualSize = CurrentPackValue, ApplyPackTexture, KeepManualSize
+end
+local function TextureLayerShell(ctx, builder, s)
+    local unit, boundSlot, Key, GetConf = s.unit, s.boundSlot, s.Key, s.GetConf
     local sec = builder:CollapsibleSection("texture_layer", "Texture Layer", TEXLAYER_SECTION_H, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 20
@@ -472,6 +472,13 @@ local function BuildTextureLayer(ctx, builder, unit)
         W.AttachContextColorReferences(setupCard, TextureLayerColorRefs, colorRefOptions)
         W.AttachContextColorReferences(advancedCard, TextureLayerColorRefs, colorRefOptions)
     end
+    s.sec, s.sectionW, s.leftX, s.innerW, s.colW, s.colX = sec, sectionW, leftX, innerW, colW, colX
+    s.setupCard, s.rulesCard, s.advancedCard, s.cardsByTab = setupCard, rulesCard, advancedCard, cardsByTab
+end
+local function TextureLayerBinders(ctx, s)
+    local unit, Key, RefreshLayer = s.unit, s.Key, s.RefreshLayer
+    local ReadBool, ReadNumber, SetBool, SetNumber, SetString = s.ReadBool, s.ReadNumber, s.SetBool, s.SetNumber, s.SetString
+    local GetConf, ReviewedMeta = s.GetConf, s.ReviewedMeta
 
     local dependentControls = {}
     local function Track(control)
@@ -537,6 +544,16 @@ local function BuildTextureLayer(ctx, builder, unit)
         W.MoveWidget(control, parent, x, y, width, "LEFT")
         return control
     end
+    s.dependentControls, s.Track, s.LayerMeta = dependentControls, Track, LayerMeta
+    s.BindLayerToggle, s.BindLayerSlider, s.BindLayerDropdown = BindLayerToggle, BindLayerSlider, BindLayerDropdown
+end
+local function TextureLayerSetupCard(ctx, s)
+    local unit, Key, RefreshLayer, colW, colX, setupCard = s.unit, s.Key, s.RefreshLayer, s.colW, s.colX, s.setupCard
+    local SetString, GetConf = s.SetString, s.GetConf
+    local ApplyPreset, SetHighlightTextureEnabled = s.ApplyPreset, s.SetHighlightTextureEnabled
+    local CurrentPackValue, ApplyPackTexture, KeepManualSize = s.CurrentPackValue, s.ApplyPackTexture, s.KeepManualSize
+    local Track, LayerMeta = s.Track, s.LayerMeta
+    local BindLayerToggle, BindLayerSlider, BindLayerDropdown = s.BindLayerToggle, s.BindLayerSlider, s.BindLayerDropdown
 
     -- Setup: the common path stays on one page. Presets are explicit actions;
     -- merely opening this section never rewrites an existing profile.
@@ -613,10 +630,9 @@ local function BuildTextureLayer(ctx, builder, unit)
         LayerMeta("CustomTexturePath"))
     W.MoveWidget(customPath, setupCard, 16, -240, colW - 16, "LEFT")
     Track(customPath)
-    local RefreshConditionalControls
     local colorMode = Track(BindLayerDropdown(setupCard, "Color mode", 16, -316, colW - 16,
         TEXLAYER_COLOR_MODES, "ColorMode", "CUSTOM", function()
-            if RefreshConditionalControls then RefreshConditionalControls() end
+            if s.RefreshConditional then s.RefreshConditional() end
         end))
     Track(BindLayerDropdown(setupCard, "Source color", 16, -392, colW - 16,
         TEXLAYER_COLOR_TREATMENTS, "ColorTreatment", "ORIGINAL"))
@@ -633,6 +649,14 @@ local function BuildTextureLayer(ctx, builder, unit)
         M.AddTooltip(texturePackPreset, "MSUF textures", "Choose one of the bundled MSUF textures for this texture slot. Frames fit around the unit frame on their own.", { hook = true })
         M.AddTooltip(colorMode, "Color mode", "Single color uses this layer's configured tint. HP gradient follows the shared low, mid and high HP colors.", { hook = true })
     end
+    s.customPath = customPath
+end
+local function TextureLayerAdvancedCard(ctx, s)
+    local unit, Key, RefreshLayer, colW, colX, advancedCard = s.unit, s.Key, s.RefreshLayer, s.colW, s.colX, s.advancedCard
+    local ReadBool, SetBool, SetString = s.ReadBool, s.SetBool, s.SetString
+    local SetControlEnabled, GetConf = s.SetControlEnabled, s.GetConf
+    local Track, LayerMeta = s.Track, s.LayerMeta
+    local BindLayerToggle, BindLayerSlider, BindLayerDropdown = s.BindLayerToggle, s.BindLayerSlider, s.BindLayerDropdown
 
     -- Advanced: rendering and source-treatment details that are unnecessary
     -- for the common "texture behind text" path.
@@ -715,6 +739,13 @@ local function BuildTextureLayer(ctx, builder, unit)
     Track(BindLayerSlider(advancedCard, "Edge softness", colX, -360, colW, 0, 0.30, 0.02, "EdgeSoftness", 0, true))
     W.LabelAt(advancedCard, "Fades all four outer edges; 0% keeps the original texture.", colX, -410,
         colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
+    s.RefreshGradientControls = RefreshGradientControls
+end
+local function TextureLayerRulesCard(ctx, s)
+    local unit, Key, RefreshLayer, colW, colX, rulesCard = s.unit, s.Key, s.RefreshLayer, s.colW, s.colX, s.rulesCard
+    local SetBool, SetString, GetConf = s.SetBool, s.SetString, s.GetConf
+    local Track, LayerMeta = s.Track, s.LayerMeta
+    local BindLayerToggle, BindLayerSlider, BindLayerDropdown = s.BindLayerToggle, s.BindLayerSlider, s.BindLayerDropdown
 
     -- HP response and visibility live together because the same threshold can
     -- drive color, opacity, and whether the texture is shown. Existing fields
@@ -722,19 +753,19 @@ local function BuildTextureLayer(ctx, builder, unit)
     W.LabelAt(rulesCard, "Health behavior", 16, -48, colW - 16, "GameFontNormalSmall", T.colors and T.colors.accent)
     local healthCondition = Track(BindLayerDropdown(rulesCard, "Show by health", 16, -70, colW - 16,
         TEXLAYER_HEALTH_CONDITIONS, "HealthCondition", "ANY", function()
-            if RefreshConditionalControls then RefreshConditionalControls() end
+            if s.RefreshConditional then s.RefreshConditional() end
         end))
     local healthThreshold = Track(BindLayerSlider(rulesCard, "HP threshold", 16, -154, colW,
         0.01, 1, 0.01, "HealthThreshold", 0.35, true, function()
-            if RefreshConditionalControls then RefreshConditionalControls() end
+            if s.RefreshConditional then s.RefreshConditional() end
         end))
     local aboveThreshold = Track(BindLayerDropdown(rulesCard, "Color above threshold", 16, -238, colW - 16,
         TEXLAYER_ABOVE_THRESHOLD_MODES, "HealthAboveMode", "HEALTH", function()
-            if RefreshConditionalControls then RefreshConditionalControls() end
+            if s.RefreshConditional then s.RefreshConditional() end
         end))
     local lowAlphaEnabled = Track(BindLayerToggle(rulesCard, "Change opacity below threshold", 16, -314,
         colW - 16, "HealthLowAlphaEnabled", false, function()
-            if RefreshConditionalControls then RefreshConditionalControls() end
+            if s.RefreshConditional then s.RefreshConditional() end
         end))
     local lowAlpha = Track(BindLayerSlider(rulesCard, "Opacity below threshold", 16, -382, colW,
         0, 1, 0.05, "HealthLowAlpha", 1, true))
@@ -755,7 +786,7 @@ local function BuildTextureLayer(ctx, builder, unit)
             end
             SetString(unit, Key("Visibility"), value or "ALWAYS", "MSUF2_TEXLAYER", { preview = true })
             RefreshLayer()
-            if RefreshConditionalControls then RefreshConditionalControls() end
+            if s.RefreshConditional then s.RefreshConditional() end
         end,
         LayerMeta("Visibility", "combat_state"))
     W.MoveWidget(combatState, rulesCard, colX, -70, colW - 16, "LEFT")
@@ -774,7 +805,7 @@ local function BuildTextureLayer(ctx, builder, unit)
             end
             SetBool(unit, Key("TargetOnly"), enabled, "MSUF2_TEXLAYER", { preview = true })
             RefreshLayer()
-            if RefreshConditionalControls then RefreshConditionalControls() end
+            if s.RefreshConditional then s.RefreshConditional() end
         end,
         LayerMeta("TargetOnly", "current_target_only"))
     Track(currentTargetOnly)
@@ -790,8 +821,15 @@ local function BuildTextureLayer(ctx, builder, unit)
         M.AddTooltip(aboveThreshold, "Color above threshold", "With HP gradient selected, choose what the texture uses after it passes the threshold.", { hook = true })
         M.AddTooltip(lowAlphaEnabled, "Change opacity below threshold", "Uses a separate texture opacity below the HP threshold. The normal Opacity from Setup remains active above it.", { hook = true })
     end
-
-    RefreshConditionalControls = function()
+    s.healthThreshold, s.aboveThreshold, s.lowAlpha = healthThreshold, aboveThreshold, lowAlpha
+    s.conditionSummary, s.healthBehaviorSummary = conditionSummary, healthBehaviorSummary
+end
+local function TextureLayerRefreshConditional(s)
+    local unit, Key = s.unit, s.Key
+    local ReadBool, ReadNumber, SetControlEnabled, GetConf = s.ReadBool, s.ReadNumber, s.SetControlEnabled, s.GetConf
+    local aboveThreshold, healthThreshold, lowAlpha = s.aboveThreshold, s.healthThreshold, s.lowAlpha
+    local conditionSummary, healthBehaviorSummary = s.conditionSummary, s.healthBehaviorSummary
+    s.RefreshConditional = function()
         local conf = GetConf(unit)
         local layerOn = ReadBool(unit, Key("Enabled"), false)
         local mode = conf[Key("ColorMode")] or "CUSTOM"
@@ -833,7 +871,10 @@ local function BuildTextureLayer(ctx, builder, unit)
         if #parts == 0 then parts[1] = Tr("Always") end
         conditionSummary:SetText(string.format(Tr("Active: %s"), table.concat(parts, " + ")))
     end
-
+end
+local function TextureLayerSelectors(ctx, s)
+    local unit, sec, sectionW, leftX, cardsByTab = s.unit, s.sec, s.sectionW, s.leftX, s.cardsByTab
+    local NormalizeSlot, CurrentSlot, customPath = s.NormalizeSlot, s.CurrentSlot, s.customPath
     -- Slot + category bars. Both are menu-session state, never persisted.
     local function NormalizeTab(tab)
         tab = TEXLAYER_TAB_ALIASES[tab] or tab
@@ -901,7 +942,11 @@ local function BuildTextureLayer(ctx, builder, unit)
         UP.RegisterControl(tabBar, ctx, "texture_layer.category_selector", "Options", "segment", "ephemeral")
     end
     ApplyTab()
-
+end
+local function TextureLayerRefresh(ctx, s)
+    local unit, Key = s.unit, s.Key
+    local ReadBool, SetControlEnabled = s.ReadBool, s.SetControlEnabled
+    local dependentControls, RefreshGradientControls, RefreshConditionalControls = s.dependentControls, s.RefreshGradientControls, s.RefreshConditional
     local function RefreshLayerControls()
         local on = ReadBool(unit, Key("Enabled"), false)
         for i = 1, #dependentControls do SetControlEnabled(dependentControls[i], on) end
@@ -910,6 +955,33 @@ local function BuildTextureLayer(ctx, builder, unit)
     end
     RefreshLayerControls()
     M.TrackRefresh(ctx, RefreshLayerControls)
+end
+
+local function BuildTextureLayer(ctx, builder, unit)
+    local ReadBool = UP.ReadBool
+    local SetBool = UP.SetBool
+    local ReadNumber = UP.ReadNumber
+    local SetNumber = UP.SetNumber
+    local SetString = UP.SetString
+    local SetControlEnabled = UP.SetControlEnabled
+    local GetConf = UP.GetConf
+    local ReviewedMeta = UP.ReviewedMeta
+    assert(ReadBool and SetBool and ReadNumber and SetNumber and SetString and SetControlEnabled and GetConf and ReviewedMeta,
+        "Texture Layer requires the UnitPage settings API")
+    local s = {
+        unit = unit,
+        ReadBool = ReadBool, SetBool = SetBool, ReadNumber = ReadNumber, SetNumber = SetNumber, SetString = SetString,
+        SetControlEnabled = SetControlEnabled, GetConf = GetConf, ReviewedMeta = ReviewedMeta,
+    }
+    TextureLayerActions(ctx, unit, s)
+    TextureLayerShell(ctx, builder, s)
+    TextureLayerBinders(ctx, s)
+    TextureLayerSetupCard(ctx, s)
+    TextureLayerAdvancedCard(ctx, s)
+    TextureLayerRulesCard(ctx, s)
+    TextureLayerRefreshConditional(s)
+    TextureLayerSelectors(ctx, s)
+    TextureLayerRefresh(ctx, s)
 end
 if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({
