@@ -337,10 +337,9 @@ local function MenuGeneralDB()
 end
 local function ResolveMenuFontPath(size, flags, role)
     local g = MenuGeneralDB()
+    -- No theme sets a heading font: the Classic Glass preset keeps the user's
+    -- readable menu font, so headings follow menuFontKey like every role.
     local key = type(g) == "table" and g.menuFontKey or nil
-    if (key == nil or key == "") and (role == "heading" or role == "hero" or role == "section" or role == "accordion") then
-        key = T.headingFont
-    end
     if type(key) ~= "string" or key == "" then return nil end
     size = tonumber(size) or 14
     flags = flags or ""
@@ -701,7 +700,6 @@ local function ClampMotionDuration(value, fallback)
     return value
 end
 function T.ReducedMotionEnabled()
-    if T.reduceMotion == true or T.reducedMotion == true then return true end
     local db = _G.MSUF_DB
     local general = type(db) == "table" and db.general or nil
     return type(general) == "table" and (general.reduceMotion == true or general.reducedMotion == true) or false

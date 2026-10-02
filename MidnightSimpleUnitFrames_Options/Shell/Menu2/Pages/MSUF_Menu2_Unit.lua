@@ -894,11 +894,11 @@ local function ToggleEditMode(unit)
         if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
         return
     end
-    local active = (_G.MSUF_IsMSUFEditModeActive and _G.MSUF_IsMSUFEditModeActive()) or _G.MSUF_UnitEditModeActive
+    local active = _G.MSUF_UnitEditModeActive == true
     if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then _G.MSUF_SetMSUFEditModeDirect(not active, CanonUnitKey(unit)) end
 end
 local function IsEditModeActive()
-    return ((_G.MSUF_IsMSUFEditModeActive and _G.MSUF_IsMSUFEditModeActive()) or _G.MSUF_UnitEditModeActive) and true or false
+    return _G.MSUF_UnitEditModeActive == true
 end
 local bossPagePreviewEvents
 local bossPagePreviewPendingCleanup

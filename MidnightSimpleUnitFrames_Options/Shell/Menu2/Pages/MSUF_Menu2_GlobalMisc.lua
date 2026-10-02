@@ -84,7 +84,6 @@ local function RefreshTooltipPreview()
     local tooltips = MSUF and MSUF.Tooltips
     if tooltips and type(tooltips.Refresh) == "function" then tooltips.Refresh() end
     local editActive = (_G.MSUF_UnitEditModeActive == true)
-    if not editActive and type(_G.MSUF_IsMSUFEditModeActive) == "function" then editActive = _G.MSUF_IsMSUFEditModeActive() and true or false end
     if editActive and type(_G.MSUF_Tooltip_ShowEditPreview) == "function" then _G.MSUF_Tooltip_ShowEditPreview() end
 end
 local function RefreshAuraTooltipSettings(reason)
