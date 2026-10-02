@@ -780,17 +780,18 @@ MSUF.ProfileIOValidateImportValue = function(root)
             return true
         end
         if valueType == "nil" or valueType == "boolean" then return true end
-        if valueType ~= "table" then return false, "profile contains unsupported " .. valueType end
+        -- The template and the type name ride along, so the chat line translates the sentence first.
+        if valueType ~= "table" then return false, "profile contains unsupported " .. valueType, "profile contains unsupported %s", valueType end
         if depth > MSUF_PROFILE_IMPORT_LIMITS.depth then return false, "profile is too deep" end
         if seen[value] then return false, "profile contains a cyclic or shared table" end
         seen[value] = true
         for key, child in pairs(value) do
             local keyType = type(key)
             if keyType ~= "string" and keyType ~= "number" then return false, "profile contains an unsupported table key" end
-            local ok, why = Walk(key, depth + 1)
-            if not ok then return false, why end
-            ok, why = Walk(child, depth + 1)
-            if not ok then return false, why end
+            local ok, why, template, inserted = Walk(key, depth + 1)
+            if not ok then return false, why, template, inserted end
+            ok, why, template, inserted = Walk(child, depth + 1)
+            if not ok then return false, why, template, inserted end
         end
         return true
     end
@@ -1718,17 +1719,23 @@ function UnitSelection.Copy(profile, selected)
     if next(out.perUnit) then payload.auras3 = out end
     return payload
 end
+--- A rejection returns the English reason plus its template and the inserted
+--- key, so the import chat line can translate the whole sentence first.
+function UnitSelection.Reject(template, key)
+    key = tostring(key)
+    return nil, template:format(key), template, key
+end
 function UnitSelection.Validate(payload)
     local selected = {}
     for key, value in pairs(payload) do
         if UnitSelection.units[key] then
-            if not UnitSelection.Supported(key) then return nil, "unsupported unitframe: " .. key end
-            if type(value) ~= "table" then return nil, "invalid unitframe: " .. key end
+            if not UnitSelection.Supported(key) then return UnitSelection.Reject("unsupported unitframe: %s", key) end
+            if type(value) ~= "table" then return UnitSelection.Reject("invalid unitframe: %s", key) end
             selected[key] = true
         elseif key ~= "general" and key ~= "bars" and key ~= "auras3" then
-            return nil, "unexpected selected-frame setting: " .. tostring(key)
+            return UnitSelection.Reject("unexpected selected-frame setting: %s", key)
         elseif type(value) ~= "table" then
-            return nil, "invalid selected-frame settings: " .. key
+            return UnitSelection.Reject("invalid selected-frame settings: %s", key)
         end
     end
     if not next(selected) then return nil, "select at least one unitframe" end
@@ -1737,7 +1744,7 @@ function UnitSelection.Validate(payload)
         for key in pairs(payload[spec[1]] or {}) do
             local owner = spec[2](key)
             if not owner or not selected[owner] then
-                return nil, "setting outside selected unitframes: " .. tostring(key)
+                return UnitSelection.Reject("setting outside selected unitframes: %s", key)
             end
         end
     end
@@ -1746,12 +1753,12 @@ function UnitSelection.Validate(payload)
             for unit, conf in pairs(value) do
                 local owner = UnitSelection.AuraOwner(unit)
                 if not owner or not selected[owner] or type(conf) ~= "table" then
-                    return nil, "aura settings outside selected unitframes: " .. tostring(unit)
+                    return UnitSelection.Reject("aura settings outside selected unitframes: %s", unit)
                 end
             end
         elseif not UnitSelection.auraFlags[key] or not selected[UnitSelection.auraFlags[key]]
             or type(value) ~= "boolean" then
-            return nil, "unexpected selected-frame aura setting: " .. tostring(key)
+            return UnitSelection.Reject("unexpected selected-frame aura setting: %s", key)
         end
     end
     return selected
@@ -2038,6 +2045,69 @@ local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
         end
     end
 end
+--- Import failure chat lines. Every fixed reason the import path prints has a
+--- full-sentence key in the language packs: the sentence is translated whole,
+--- a frame key or value type goes in after, and the chat tag goes in front.
+--- Callers keep receiving the English reason. Any other reason keeps the
+--- translated-reason route: the profile variant reasons have their own keys,
+--- and the parser's byte-position errors are built at runtime and stay English.
+local IMPORT_FAILED_SENTENCES = {}
+for _, sentence in ipairs({
+    "Import failed: could not decode compact profile string (%s).",
+    -- the table-literal parser (State/MSUF_ProfileCodec.lua)
+    "Import failed: profile import is too large",
+    "Import failed: unterminated comment",
+    "Import failed: profile table has too many values",
+    "Import failed: unterminated string",
+    "Import failed: unterminated escape",
+    "Import failed: invalid decimal escape",
+    "Import failed: unsupported string escape",
+    "Import failed: invalid number",
+    "Import failed: profile table is too deep",
+    "Import failed: unterminated table",
+    "Import failed: unsupported table key",
+    "Import failed: unsupported value",
+    "Import failed: profile import must contain a table",
+    -- the schema stamp and the snapshot kind
+    "Import failed: MSUF 6.x profile required (schema 600).",
+    "Import failed: unknown kind",
+    -- the value validator: snapshot, then full profile
+    "Import failed: profile has too many values",
+    "Profile import failed: profile has too many values",
+    "Import failed: profile strings are too large",
+    "Profile import failed: profile strings are too large",
+    "Import failed: profile contains an invalid number",
+    "Profile import failed: profile contains an invalid number",
+    "Import failed: profile contains unsupported %s",
+    "Profile import failed: profile contains unsupported %s",
+    "Import failed: profile is too deep",
+    "Profile import failed: profile is too deep",
+    "Import failed: profile contains a cyclic or shared table",
+    "Profile import failed: profile contains a cyclic or shared table",
+    "Import failed: profile contains an unsupported table key",
+    "Profile import failed: profile contains an unsupported table key",
+    -- UnitSelection.Validate
+    "Import failed: unsupported unitframe: %s.",
+    "Import failed: invalid unitframe: %s.",
+    "Import failed: unexpected selected-frame setting: %s.",
+    "Import failed: invalid selected-frame settings: %s.",
+    "Import failed: select at least one unitframe.",
+    "Import failed: setting outside selected unitframes: %s.",
+    "Import failed: aura settings outside selected unitframes: %s.",
+    "Import failed: unexpected selected-frame aura setting: %s.",
+    -- the live profile's base snapshot (Variants.BaseSnapshot)
+    "Import failed: profile contains a value that cannot be saved",
+    "Import failed: profile contains a table that refers to itself",
+    "Import failed: profile exceeds snapshot limits",
+    "Import failed: an add-on part of the profile could not be copied",
+}) do IMPORT_FAILED_SENTENCES[sentence] = true end
+local function ImportFailedLine(text, reason, template, inserted)
+    local sentence = text:format(tostring(template or reason))
+    if IMPORT_FAILED_SENTENCES[sentence] then
+        return ProfileChatLine("error", sentence, inserted ~= nil and tostring(inserted) or nil)
+    end
+    return ProfileChatLine("error", text, Translate(tostring(reason)))
+end
 --- Import transaction, step 1 of 3: decode, select, validate and stage.
 --- Runs before anything is written. It performs no SavedVariables writes, no
 --- ExportPublic and no prints, so every rejection (including a truncated
@@ -2064,14 +2134,13 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
         local prefix = str:match("^%s*(MSUF%d+):")
         if prefix == "MSUF2" or prefix == "MSUF3" or prefix == "MSUF4" then
             why = "could not decode compact profile string (" .. prefix .. ")"
-            -- The chat line translates the whole sentence first and inserts the prefix after;
-            -- `why` stays the English reason the callers receive.
-            return nil, why, ProfileChatLine("error", "Import failed: could not decode compact profile string (%s).", prefix)
+            return nil, why, ImportFailedLine("Import failed: %s.", why, "could not decode compact profile string (%s)", prefix)
         end
         decoded, why = MSUF.ProfileIOParseTableLiteral(str)
         if type(decoded) ~= "table" then
             if external then return nil, "invalid lua table string" end
-            return nil, tostring(why), ProfileChatLine("error", "Import failed: %s", Translate(tostring(why)))
+            -- Byte-position parse errors ("expected = at byte 12") are built at runtime and stay English.
+            return nil, tostring(why), ImportFailedLine("Import failed: %s", why)
         end
     end
     --- Source-client stamp: `decoded` is still the raw decoded envelope here.
@@ -2080,7 +2149,7 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     local selected = MSUF_ProfileIO_SelectSupportedProfile(decoded)
     local schemaWhy = "MSUF 6.x profile required (schema 600)"
     if type(selected) ~= "table" then
-        return nil, schemaWhy, ProfileChatLine("error", "Import failed: %s.", Translate(schemaWhy))
+        return nil, schemaWhy, ImportFailedLine("Import failed: %s.", schemaWhy)
     end
     local isSnapshot = selected.addon == "MSUF" and tonumber(selected.fmt) == 2
         and type(selected.payload) == "table" and type(selected.kind) == "string"
@@ -2092,12 +2161,12 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     end
     if not isSnapshot and not external
         and tonumber(selected._msufProfileSchema) ~= MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
-        return nil, schemaWhy, ProfileChatLine("error", "Import failed: %s.", Translate(schemaWhy))
+        return nil, schemaWhy, ImportFailedLine("Import failed: %s.", schemaWhy)
     end
-    local valid, validationError = MSUF.ProfileIOValidateImportValue(selected)
+    local valid, validationError, validationTemplate, validationType = MSUF.ProfileIOValidateImportValue(selected)
     if not valid then
-        return nil, validationError, ProfileChatLine("error", isSnapshot and "Import failed: %s"
-            or "Profile import failed: %s", Translate(tostring(validationError)))
+        return nil, validationError, ImportFailedLine(isSnapshot and "Import failed: %s" or "Profile import failed: %s",
+            validationError, validationTemplate, validationType)
     end
     local staged = MSUF_DeepCopy(selected)
     local plan = {
@@ -2112,7 +2181,7 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
         end
         if kind ~= "unitselection" and kind ~= "unitframe" and kind ~= "groupframe" and kind ~= "castbar"
             and kind ~= "colors" and kind ~= "gameplay" and kind ~= "all" then
-            return nil, "unknown kind", ProfileChatLine("error", "Import failed: %s", Translate("unknown kind"))
+            return nil, "unknown kind", ImportFailedLine("Import failed: %s", "unknown kind")
         end
         plan.snapshotKind, plan.payload = staged.kind, staged.payload
     else
@@ -2129,14 +2198,14 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     if payload.profileVariants~=nil and Variants then
         local clean,variantError=Variants.ValidateForProfile(payload,payload.profileVariants)
         if not clean then
-            return nil, variantError, ProfileChatLine("error", "Import failed: %s", Translate(variantError))
+            return nil, variantError, ImportFailedLine("Import failed: %s", variantError)
         end
         payload.profileVariants=clean
     end
     if kind == "unitselection" then
-        local selectedUnits, selectionError = UnitSelection.Validate(payload)
+        local selectedUnits, selectionError, selectionTemplate, selectionKey = UnitSelection.Validate(payload)
         if not selectedUnits then
-            return nil, selectionError, ProfileChatLine("error", "Import failed: %s.", Translate(selectionError))
+            return nil, selectionError, ImportFailedLine("Import failed: %s.", selectionError, selectionTemplate, selectionKey)
         end
         -- Normalize untrusted frame data, then project it back onto its explicit
         -- owners. Normalizers may seed shared defaults; those must never travel.
@@ -2433,7 +2502,8 @@ function MSUF_ImportFromString(str)
     end
     local base, baseWhy = ImportTx.LiveBase(plan)
     if not base then
-        ProfileChat("error", "Import failed: %s", tostring(baseWhy))
+        chatLine = ImportFailedLine("Import failed: %s", baseWhy)
+        print(chatLine)
         return false, baseWhy
     end
     ImportTx.Stage(plan, base)
