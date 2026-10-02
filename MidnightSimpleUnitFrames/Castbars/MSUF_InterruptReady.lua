@@ -1680,4 +1680,7 @@ UpdateLifecycleEventRegistration = function(enabled)
     UpdateCooldownEventRegistration()
     return true
 end
-UpdateLifecycleEventRegistration(FeatureEnabled())
+-- No registration at file load: the SavedVariables are not loaded yet, so it
+-- read a throwaway profile (the indicator off, nothing to register). The unit
+-- frame spawn at PLAYER_LOGIN (Factory.SpawnAll) runs MSUF_KickReady_RefreshAll
+-- with the saved profile, and every settings change after it does too.

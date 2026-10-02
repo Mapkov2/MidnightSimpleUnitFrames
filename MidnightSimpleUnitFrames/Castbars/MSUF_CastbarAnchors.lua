@@ -855,6 +855,13 @@ end
 do
     widthSourceBoot = CreateFrame("Frame")
     widthSourceBoot:SetScript("OnEvent", function(_, event, addon)
+        -- The first event with the saved profile: start the lifecycle the
+        -- profile asks for (its PLAYER_ENTERING_WORLD pass then syncs).
+        if event == "PLAYER_LOGIN" then
+            widthSourceBoot:UnregisterEvent("PLAYER_LOGIN")
+            SyncWidthSourceLifecycle(GeneralDB())
+            return
+        end
         if event == "ADDON_LOADED" and addon ~= "Blizzard_CooldownViewer" and addon ~= "Blizzard_EditMode" then
             return
         end
@@ -897,7 +904,10 @@ do
         end
         return wanted
     end
-    SyncWidthSourceLifecycle(GeneralDB())
+    -- Not at file load: the client loads the SavedVariables after every file
+    -- ran, so a read here builds a throwaway profile (no width source) and
+    -- the castbar login passes only sync a unit whose unit frame exists.
+    widthSourceBoot:RegisterEvent("PLAYER_LOGIN")
 end
 
 ------------------------------------------------------------------------

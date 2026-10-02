@@ -956,6 +956,12 @@ function Pools.Define(desc)
     pool.RefreshFromUnit = RefreshFromUnit
     pool.Stop = StopCastbar
 
-    SyncLifecycle(Enabled())
+    -- The lifecycle listens wherever the client has the kind's units: its
+    -- PLAYER_LOGIN row builds the pool only when the saved profile enables it
+    -- (EnsureCastbars asks Enabled() then). Not Enabled() here: the client
+    -- loads the SavedVariables after every file ran, so this read built a
+    -- throwaway profile, and only its default (enabled) let the login row
+    -- register at all.
+    SyncLifecycle(HAS_UNITS)
     return pool
 end
