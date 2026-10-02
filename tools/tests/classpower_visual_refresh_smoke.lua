@@ -13,6 +13,7 @@
 local repo = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
 local World = assert(loadfile(repo .. "/tools/tests/classpower_world.lua"))()
 local PT = World.PT
+local STRICT = { beforeLoad = function() World.StrictPowerTypes() end }
 
 local failures = {}
 local function Check(condition, message)
@@ -26,7 +27,7 @@ end
 
 -- Brewmaster Stagger: one bar, max = UnitHealthMax, value = UnitStagger.
 do
-    local t = World.Start(repo, "Mainline", "MONK", 1, PT.ENERGY)
+    local t = World.Start(repo, "Mainline", "MONK", 1, PT.ENERGY, nil, STRICT)
     local bar = t.CP.bars[1]
     Check(t.CP.visible and t.CP.powerType == -1, "Brewmaster did not route Stagger")
     Check(bar and bar.maximum == 1000 and bar.value == 400, "Stagger did not paint its first update")
@@ -40,7 +41,7 @@ end
 
 -- Elemental Maelstrom (continuous): one bar over UnitPowerMax.
 do
-    local t = World.Start(repo, "Mainline", "SHAMAN", 1, PT.MANA, { showEleMaelstrom = true })
+    local t = World.Start(repo, "Mainline", "SHAMAN", 1, PT.MANA, { showEleMaelstrom = true }, STRICT)
     local bar = t.CP.bars[1]
     Check(t.CP.visible and t.CP.renderMode == t.CP.visual.renderMode, "Elemental did not route Maelstrom")
     Check(bar and bar.maximum == 5 and bar.value == 3, "Maelstrom did not paint its first update")
@@ -54,7 +55,7 @@ end
 
 -- Enhancement Maelstrom Weapon (aura segmented): its token is a string.
 do
-    local t = World.Start(repo, "Mainline", "SHAMAN", 2, PT.MANA)
+    local t = World.Start(repo, "Mainline", "SHAMAN", 2, PT.MANA, nil, STRICT)
     Check(t.CP.visible and t.CP.powerType == "MAELSTROM_WEAPON", "Enhancement did not route Maelstrom Weapon")
     -- The aura painter repaints the cached stacks (2 of 10); no UNIT_AURA ran.
     t.CP.bars[2].value, t.CP.bars[2]._msufCPValue = nil, nil
@@ -66,7 +67,7 @@ end
 
 -- Segmented resources keep their painter.
 do
-    local t = World.Start(repo, "Mainline", "ROGUE", 1, PT.ENERGY)
+    local t = World.Start(repo, "Mainline", "ROGUE", 1, PT.ENERGY, nil, STRICT)
     t.S.combo = 4
     local ok, err = Refresh(t)
     Check(ok, "a visual refresh in segmented mode raised: " .. tostring(err))

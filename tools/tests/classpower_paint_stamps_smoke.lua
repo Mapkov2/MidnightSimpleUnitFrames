@@ -53,7 +53,34 @@ do
     Check(text.shown == true and text.text == 3, "the combo count stayed hidden or stale after Bear -> Cat")
 end
 
+-- Stagger caches its colour tier. A colour edit or a return to Brewmaster
+-- compiles a new visual and must repaint the tier colour.
+do
+    local t = World.Start(repo, "Mainline", "MONK", 1, PT.ENERGY)
+    local CP, bar = t.CP, t.CP.bars[1]
+    Check(CP.visible and CP.powerType == -1, "Brewmaster did not route Stagger")
+    local yellow = bar.color and { bar.color[1], bar.color[2], bar.color[3] }
+    Check(SameColor(yellow, { 1.00, 0.98, 0.72 }), "40 % Stagger is not the yellow tier")
+
+    MSUF_DB.general.classPowerColorOverrides = { STAGGER_YELLOW = { 0.1, 0.2, 0.3 } }
+    _G.MSUF_ClassPower_InvalidateColors()
+    t.env:RunTimers()
+    Check(SameColor(bar.color, { 0.1, 0.2, 0.3 }), "a Stagger colour edit did not repaint the current tier")
+
+    MSUF_DB.general.classPowerColorOverrides = nil
+    t.S.spec = 3
+    CP.RefreshPublic()
+    t.env:RunTimers()
+    Check(CP.powerType == PT.CHI or CP.powerType == 12, "Windwalker did not route Chi")
+    Check(not SameColor(bar.color, yellow), "Chi did not repaint pip 1")
+    t.S.spec = 1
+    CP.RefreshPublic()
+    t.env:RunTimers()
+    Check(CP.powerType == -1, "Brewmaster did not route Stagger again")
+    Check(SameColor(bar.color, yellow), "returning to Brewmaster kept the Chi colour on the Stagger bar")
+end
+
 if #failures > 0 then
     error("classpower_paint_stamps_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_paint_stamps_smoke: ok (Ironfur)")
+print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier)")

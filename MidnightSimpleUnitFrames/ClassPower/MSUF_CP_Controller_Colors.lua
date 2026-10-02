@@ -30,7 +30,6 @@ builders.CONTROLLER_COLORS = function(E)
     local _cachedColorToken = nil
     local _cachedBgColorToken = nil
     local _cachedBgColorR, _cachedBgColorG, _cachedBgColorB = 0, 0, 0
-    local _staggerCachedTier = 0  --- Stagger: avoid redundant SetStatusBarColor when tier unchanged
     local _cachedChargedR, _cachedChargedG, _cachedChargedB
 
     --- Maelstrom Weapon 5+ threshold color (cached independently)
@@ -149,7 +148,6 @@ builders.CONTROLLER_COLORS = function(E)
         _cachedChargedR = nil
         _cachedChargedG = nil
         _cachedChargedB = nil
-        _staggerCachedTier = 0
         _mwAbove5Resolved = false
     end
 

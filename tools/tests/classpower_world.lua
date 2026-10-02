@@ -17,8 +17,10 @@
 --   S.vehicle        UnitHasVehicleUI and PlayerVehicleHasComboPoints
 --   S.form           GetShapeshiftFormID
 --
--- UnitPower and UnitPowerMax take an Enum.PowerType number (or nil), exactly
--- like the client binding: a string token raises "bad argument #2".
+-- World.StrictPowerTypes() (from a beforeLoad hook) makes UnitPower and
+-- UnitPowerMax take an Enum.PowerType number (or nil) only, exactly like the
+-- client binding: a string token raises "bad argument #2". It is opt-in so the
+-- budget smoke's instruction counts keep measuring the addon, not the stub.
 --
 --   local World = assert(loadfile(root .. "/tools/tests/classpower_world.lua"))()
 --   local t = World.Start(root, "Mainline", "ROGUE", 1, World.PT.ENERGY, { classPowerTextMode = "CURMAX" })
@@ -73,13 +75,7 @@ local function InstallClient(S)
     local secret = { __secret = true }
     function UnitClass() return S.class, S.class end
     function UnitPowerType() return S.primary end
-    local function CheckPowerType(api, powerType)
-        if powerType ~= nil and type(powerType) ~= "number" then
-            error(("bad argument #2 to '%s' (number expected, got %s)"):format(api, type(powerType)), 3)
-        end
-    end
     function UnitPower(_, powerType, unmodified)
-        CheckPowerType("UnitPower", powerType)
         if powerType == S.primary then return 50 end
         if S.secretPower then return secret end
         if powerType == PT_COMBO then return S.combo end
@@ -87,7 +83,6 @@ local function InstallClient(S)
         return S.shards
     end
     function UnitPowerMax(_, powerType)
-        CheckPowerType("UnitPowerMax", powerType)
         if powerType == S.primary then return 100 end
         return 5
     end
@@ -153,6 +148,20 @@ local function InstallClient(S)
         end,
         GetAuraDataBySpellName = function() return nil end,
     }
+end
+
+--- Wraps UnitPower and UnitPowerMax with the client's argument check. Call it
+--- from a beforeLoad hook: the addon files capture the APIs at load.
+function World.StrictPowerTypes()
+    for _, api in ipairs({ "UnitPower", "UnitPowerMax" }) do
+        local inner = _G[api]
+        _G[api] = function(unit, powerType, ...)
+            if powerType ~= nil and type(powerType) ~= "number" then
+                error(("bad argument #2 to '%s' (number expected, got %s)"):format(api, type(powerType)), 2)
+            end
+            return inner(unit, powerType, ...)
+        end
+    end
 end
 
 --- Loads toc's ClassPower stack for one class and spec, with MSUF_DB.bars

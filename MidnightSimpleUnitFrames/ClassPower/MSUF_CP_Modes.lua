@@ -1813,7 +1813,10 @@ modeBuilders.STAGGER = function(E)
     local STAGGER_CONST = E.STAGGER_CONST or {}
     local GetFilledAlpha = E.GetFilledAlpha
 
-    local staggerCachedTier = 0
+    --- The tier colour is resolved once per tier and compiled visual: every
+    --- FullRefresh, mode entry and colour edit compiles a new visual version,
+    --- so a colour edit or a return to Brewmaster repaints the current tier.
+    local staggerCachedTier, staggerCachedVersion = 0, nil
 
     local function ResolveStaggerColor(tier)
         local ov = _cpDB.colorOverrides
@@ -1870,6 +1873,7 @@ modeBuilders.STAGGER = function(E)
         local visual = CP_GetVisual(E)
         CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
         CP_StampShown(bar, true)
+        local visualVersion = visual and visual.version or 0
 
         if curSafe and mxSafe then
             local perc = cur / mx
@@ -1878,14 +1882,13 @@ modeBuilders.STAGGER = function(E)
             elseif perc >= (STAGGER_CONST.YELLOW_TRANSITION or 0.3) then tier = 2
             else tier = 1 end
 
-            if tier ~= staggerCachedTier then
-                staggerCachedTier = tier
+            if tier ~= staggerCachedTier or visualVersion ~= staggerCachedVersion then
+                staggerCachedTier, staggerCachedVersion = tier, visualVersion
                 local r, g, b = ResolveStaggerColor(tier)
                 CP_StampStatusBarColor(bar, r, g, b, 1)
             end
         end
 
-        local visualVersion = visual and visual.version or 0
         if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
             CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
             for i = 2, CP.maxBars do
