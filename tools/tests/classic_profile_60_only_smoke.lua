@@ -27,10 +27,18 @@ local namespace = {
     Public = {},
 }
 
+-- The client runs the addon's files first, then loads its SavedVariables and
+-- fires ADDON_LOADED; the 6.0-only archive runs there.
+local Stubs = assert(loadfile(repo .. "/.github/scripts/msuf_test_stubs.lua"))()
+local widgets = Stubs.Install()
+local savedGlobalDB, savedProfileDB = MSUF_GlobalDB, MSUF_DB
+MSUF_GlobalDB, MSUF_DB = nil, nil
 local init = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Classic/Initialize.lua"))
 init("MidnightSimpleUnitFrames", namespace)
 local policyChunk = assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua"))
 policyChunk("MidnightSimpleUnitFrames", namespace)
+MSUF_GlobalDB, MSUF_DB = savedGlobalDB, savedProfileDB
+widgets:FireEvent("ADDON_LOADED", "MidnightSimpleUnitFrames", false)
 
 assert(MSUF_GlobalDB.profiles.Current == currentProfile, "schema-600 profile was not preserved")
 assert(MSUF_GlobalDB.profiles.Legacy == nil, "unversioned 5.x profile remained active")

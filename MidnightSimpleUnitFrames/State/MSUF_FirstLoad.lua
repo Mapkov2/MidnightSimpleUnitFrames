@@ -1,8 +1,9 @@
 --- MidnightSimpleUnitFrames 6.0 first-load lifecycle.
 ---
---- This file intentionally loads before any code that normalizes the SavedVariables.
---- Raw SavedVariable presence is the only reliable way to distinguish a clean install
---- from an upgrade without touching the active profile.
+--- This file loads before any code that normalizes the SavedVariables and settles
+--- on the addon's ADDON_LOADED, the first moment they exist. Raw SavedVariable
+--- presence is the only reliable way to distinguish a clean install from an
+--- upgrade without touching the active profile.
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -76,13 +77,35 @@ local TERMINAL_STATUS = {
     dismissed = true,
 }
 
--- SavedVariables are available before the first addon Lua file runs. Capture
--- their untouched shape before Defaults/Profiles create or migrate anything.
--- MSUF 5.71 and older use the same MSUF_DB/MSUF_GlobalDB names as 6.0, so this
--- is the authoritative upgrade/profile signal.
-local rawProfileDB = rawget(_G, "MSUF_DB")
-local rawGlobalDB = rawget(_G, "MSUF_GlobalDB")
-local hadSavedState = rawProfileDB ~= nil or rawGlobalDB ~= nil
+-- The client loads SavedVariables after every Lua file of the addon ran and
+-- right before it fires ADDON_LOADED for the addon, so MSUF_DB and
+-- MSUF_GlobalDB are nil here even on an upgrade. The install evidence, the
+-- pre-6 archive and the lifecycle state settle on ADDON_LOADED, before any
+-- PLAYER_LOGIN work creates or normalizes a profile. MSUF 5.71 and older use
+-- the same MSUF_DB/MSUF_GlobalDB names as 6.0, so their untouched shape is the
+-- authoritative upgrade/profile signal.
+--
+-- Until then the early State files share one MSUF_GlobalDB root. A clean
+-- install keeps it; on an upgrade the client replaces it with the saved one.
+local globalDB = rawget(_G, "MSUF_GlobalDB")
+-- What already existed when this file ran. In game that is nothing; a test
+-- harness that seeds the SavedVariables first counts as saved data.
+local preloadGlobalDB, preloadProfileDB = globalDB, rawget(_G, "MSUF_DB")
+local placeholderGlobalDB
+if type(globalDB) ~= "table" then
+    globalDB = {}
+    placeholderGlobalDB = globalDB
+    _G.MSUF_GlobalDB = globalDB
+end
+if type(globalDB.global) ~= "table" then
+    globalDB.global = {}
+end
+
+local rawProfileDB, rawGlobalDB, hadSavedState
+-- MSUF_DB as State/MSUF_Defaults.lua created it while the addon loaded (a
+-- file read a setting before the SavedVariables existed). On a clean install
+-- the client leaves it in place, so it is no evidence of saved data.
+local sessionProfileDB
 
 local function TableHasEntries(value)
     return type(value) == "table" and next(value) ~= nil
@@ -125,73 +148,73 @@ local function DetectInstallEvidence()
     }
 end
 
-local installEvidence = DetectInstallEvidence()
+local installEvidence, state
+ProfilePolicy.ArchivedThisLoad = 0
+local settled, savedVariablesLoaded = false, false
 
-local globalDB = rawget(_G, "MSUF_GlobalDB")
-if type(globalDB) ~= "table" then
-    globalDB = {}
-    _G.MSUF_GlobalDB = globalDB
-end
-if type(globalDB.global) ~= "table" then
-    globalDB.global = {}
+function ProfilePolicy.NoteSessionProfileDB(profile)
+    if not savedVariablesLoaded then sessionProfileDB = profile end
 end
 
 -- Schema 600 is the profile contract for every MSUF 6.x release. Archive old
 -- or unversioned profiles before Defaults/Profiles can normalize them.
-local retiredNames
-local archivedCount = 0
 local function EnsurePre6Archive()
     if type(globalDB.ignoredPre6Profiles) ~= "table" then
         globalDB.ignoredPre6Profiles = {}
     end
     return globalDB.ignoredPre6Profiles
 end
-if type(globalDB.profiles) == "table" then
-    for name, profile in pairs(globalDB.profiles) do
-        if not ProfilePolicy.AcceptsProfile(profile) then
-            local archive = EnsurePre6Archive()
-            if archive[name] == nil then archive[name] = profile end
-            globalDB.profiles[name] = nil
-            retiredNames = retiredNames or {}
-            retiredNames[name] = true
-            archivedCount = archivedCount + 1
+
+local function ArchivePre6Profiles()
+    local retiredNames
+    local archivedCount = 0
+    if type(globalDB.profiles) == "table" then
+        for name, profile in pairs(globalDB.profiles) do
+            if not ProfilePolicy.AcceptsProfile(profile) then
+                local archive = EnsurePre6Archive()
+                if archive[name] == nil then archive[name] = profile end
+                globalDB.profiles[name] = nil
+                retiredNames = retiredNames or {}
+                retiredNames[name] = true
+                archivedCount = archivedCount + 1
+            end
         end
     end
-end
-if rawProfileDB ~= nil and not ProfilePolicy.AcceptsProfile(rawProfileDB) then
-    local archive = EnsurePre6Archive()
-    if archive.__standalone == nil then archive.__standalone = rawProfileDB end
-    _G.MSUF_DB = nil
-    archivedCount = archivedCount + 1
-end
-if retiredNames then
-    if type(globalDB.char) == "table" then
-        for _, binding in pairs(globalDB.char) do
-            if type(binding) == "table" then
-                if retiredNames[binding.activeProfile] then binding.activeProfile = nil end
-                if type(binding.specProfileMap) == "table" then
-                    for specID, profileName in pairs(binding.specProfileMap) do
-                        if retiredNames[profileName] then binding.specProfileMap[specID] = nil end
+    if rawProfileDB ~= nil and not ProfilePolicy.AcceptsProfile(rawProfileDB) then
+        local archive = EnsurePre6Archive()
+        if archive.__standalone == nil then archive.__standalone = rawProfileDB end
+        _G.MSUF_DB = nil
+        archivedCount = archivedCount + 1
+    end
+    if retiredNames then
+        if type(globalDB.char) == "table" then
+            for _, binding in pairs(globalDB.char) do
+                if type(binding) == "table" then
+                    if retiredNames[binding.activeProfile] then binding.activeProfile = nil end
+                    if type(binding.specProfileMap) == "table" then
+                        for specID, profileName in pairs(binding.specProfileMap) do
+                            if retiredNames[profileName] then binding.specProfileMap[specID] = nil end
+                        end
                     end
                 end
             end
         end
-    end
-    if retiredNames[globalDB.global.defaultProfileForNewChars] then
-        globalDB.global.defaultProfileForNewChars = nil
-    end
-    -- An archived profile is no sync member any more; a stale name would
-    -- later claim a module a new profile of that name joins.
-    local syncGroups = globalDB.global.profileSyncGroups
-    if type(syncGroups) == "table" then
-        for _, group in pairs(syncGroups) do
-            if type(group) == "table" and type(group.members) == "table" then
-                for name in pairs(retiredNames) do group.members[name] = nil end
+        if retiredNames[globalDB.global.defaultProfileForNewChars] then
+            globalDB.global.defaultProfileForNewChars = nil
+        end
+        -- An archived profile is no sync member any more; a stale name would
+        -- later claim a module a new profile of that name joins.
+        local syncGroups = globalDB.global.profileSyncGroups
+        if type(syncGroups) == "table" then
+            for _, group in pairs(syncGroups) do
+                if type(group) == "table" and type(group.members) == "table" then
+                    for name in pairs(retiredNames) do group.members[name] = nil end
+                end
             end
         end
     end
+    ProfilePolicy.ArchivedThisLoad = archivedCount
 end
-ProfilePolicy.ArchivedThisLoad = archivedCount
 
 local function Now()
     return type(time) == "function" and time() or 0
@@ -207,56 +230,102 @@ local function AddonVersion()
     return "6.0"
 end
 
-local state = globalDB.global.firstLoad6
-if type(state) ~= "table" or state.revision ~= REVISION then
-    state = {
-        schema = 1,
-        revision = REVISION,
-        installKind = hadSavedState and "upgrade" or "fresh",
-        status = "pending",
-        step = "welcome",
-        firstSeenVersion = AddonVersion(),
-        firstSeenAt = Now(),
-        installReason = installEvidence.reason,
-        existingProfileDetected = installEvidence.hasProfile,
-        legacyProfileDetected = installEvidence.legacyProfile,
-        detectedProfileSchema = installEvidence.profileSchema,
-    }
-    globalDB.global.firstLoad6 = state
-else
-    state.schema = 1
-    state.installKind = state.installKind == "fresh" and "fresh" or "upgrade"
-    if not VALID_STATUS[state.status] then
-        state.status = "pending"
+local function SettleLifecycleState()
+    state = globalDB.global.firstLoad6
+    if type(state) ~= "table" or state.revision ~= REVISION then
+        state = {
+            schema = 1,
+            revision = REVISION,
+            installKind = hadSavedState and "upgrade" or "fresh",
+            status = "pending",
+            step = "welcome",
+            firstSeenVersion = AddonVersion(),
+            firstSeenAt = Now(),
+            installReason = installEvidence.reason,
+            existingProfileDetected = installEvidence.hasProfile,
+            legacyProfileDetected = installEvidence.legacyProfile,
+            detectedProfileSchema = installEvidence.profileSchema,
+        }
+        globalDB.global.firstLoad6 = state
+    else
+        state.schema = 1
+        state.installKind = state.installKind == "fresh" and "fresh" or "upgrade"
+        if not VALID_STATUS[state.status] then
+            state.status = "pending"
+        end
+        -- A stale beta/debug lifecycle must not overrule untouched 5.71-or-older
+        -- profile data. Current 6.0 profiles carry schema 600, so this correction
+        -- is narrow and cannot turn a real new 6.0 default profile into an upgrade.
+        if state.status == "pending" and state.installKind == "fresh" and installEvidence.legacyProfile then
+            state.installKind = "upgrade"
+            state.installReason = "reclassified_" .. tostring(installEvidence.reason)
+            state.existingProfileDetected = true
+            state.legacyProfileDetected = true
+            state.detectedProfileSchema = installEvidence.profileSchema
+        end
+        if type(state.step) ~= "string" or state.step == "" then
+            state.step = "welcome"
+        end
+        if type(state.firstSeenVersion) ~= "string" or state.firstSeenVersion == "" then
+            state.firstSeenVersion = AddonVersion()
+        end
+        if type(state.installReason) ~= "string" or state.installReason == "" then
+            state.installReason = state.installKind == "upgrade" and installEvidence.reason or "persisted_fresh_install"
+        end
+        if state.existingProfileDetected == nil and state.installKind == "upgrade" then
+            state.existingProfileDetected = installEvidence.hasProfile
+        end
+        if state.legacyProfileDetected == nil and state.installKind == "upgrade" then
+            state.legacyProfileDetected = installEvidence.legacyProfile
+        end
+        if state.detectedProfileSchema == nil and state.installKind == "upgrade" then
+            state.detectedProfileSchema = installEvidence.profileSchema
+        end
     end
-    -- A stale beta/debug lifecycle must not overrule untouched 5.71-or-older
-    -- profile data. Current 6.0 profiles carry schema 600, so this correction
-    -- is narrow and cannot turn a real new 6.0 default profile into an upgrade.
-    if state.status == "pending" and state.installKind == "fresh" and installEvidence.legacyProfile then
-        state.installKind = "upgrade"
-        state.installReason = "reclassified_" .. tostring(installEvidence.reason)
-        state.existingProfileDetected = true
-        state.legacyProfileDetected = true
-        state.detectedProfileSchema = installEvidence.profileSchema
+end
+
+-- Settles on the addon's ADDON_LOADED in game (loadedNow). A caller that asks
+-- for the lifecycle before that event (a harness without it) gets a lifecycle
+-- from what existed when this file ran; the event, when it comes, settles again
+-- from the SavedVariables.
+local function SettleSavedVariables(loadedNow)
+    if loadedNow then
+        if savedVariablesLoaded then return end
+        savedVariablesLoaded = true
+        rawProfileDB = rawget(_G, "MSUF_DB")
+        rawGlobalDB = rawget(_G, "MSUF_GlobalDB")
+        -- Still the load-time tables: the client found nothing to load.
+        if rawProfileDB == sessionProfileDB then rawProfileDB = nil end
+        if rawGlobalDB == placeholderGlobalDB then rawGlobalDB = nil end
+        sessionProfileDB = nil
+    else
+        if settled then return end
+        rawProfileDB, rawGlobalDB = preloadProfileDB, preloadGlobalDB
     end
-    if type(state.step) ~= "string" or state.step == "" then
-        state.step = "welcome"
+    settled = true
+    hadSavedState = rawProfileDB ~= nil or rawGlobalDB ~= nil
+    installEvidence = DetectInstallEvidence()
+    local live = rawget(_G, "MSUF_GlobalDB")
+    if type(live) ~= "table" then
+        live = globalDB
+        _G.MSUF_GlobalDB = live
     end
-    if type(state.firstSeenVersion) ~= "string" or state.firstSeenVersion == "" then
-        state.firstSeenVersion = AddonVersion()
+    globalDB = live
+    if type(globalDB.global) ~= "table" then
+        globalDB.global = {}
     end
-    if type(state.installReason) ~= "string" or state.installReason == "" then
-        state.installReason = state.installKind == "upgrade" and installEvidence.reason or "persisted_fresh_install"
-    end
-    if state.existingProfileDetected == nil and state.installKind == "upgrade" then
-        state.existingProfileDetected = installEvidence.hasProfile
-    end
-    if state.legacyProfileDetected == nil and state.installKind == "upgrade" then
-        state.legacyProfileDetected = installEvidence.legacyProfile
-    end
-    if state.detectedProfileSchema == nil and state.installKind == "upgrade" then
-        state.detectedProfileSchema = installEvidence.profileSchema
-    end
+    ArchivePre6Profiles()
+    SettleLifecycleState()
+end
+
+if type(_G.CreateFrame) == "function" then
+    local loader = _G.CreateFrame("Frame")
+    loader:RegisterEvent("ADDON_LOADED")
+    loader:SetScript("OnEvent", function(self, _, loaded)
+        if loaded ~= addonName then return end
+        self:UnregisterEvent("ADDON_LOADED")
+        SettleSavedVariables(true)
+    end)
 end
 
 local FirstLoad = MSUF.FirstLoad6 or {}
@@ -272,6 +341,7 @@ FirstLoad.deferredThisSession = false
 -- root before reading or mutating onboarding state, otherwise the menu can
 -- render a stale `pending` table even though the saved state is completed.
 local function SyncLiveState()
+    if not settled then SettleSavedVariables() end
     local liveDB = rawget(_G, "MSUF_GlobalDB")
     if type(liveDB) ~= "table" then
         _G.MSUF_GlobalDB = globalDB

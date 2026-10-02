@@ -241,6 +241,8 @@ manifest.LoadSelected(repo, manifestFlavor, namespace, {
     "Kernel/MSUF_Boundary.lua",
     "State/MSUF_StateHelpers.lua",
     "State/MSUF_ProfileCodec.lua",
+    -- The general key owner registry every partial export and import asks.
+    "State/MSUF_ProfileFields.lua",
 })
 
 -- Stub: State/MSUF_Defaults.lua owns MSUF_EnsureDB and the factory profile.

@@ -20,6 +20,8 @@ local ExportPublic = MSUF.ExportPublic
 local CreateFrame = CreateFrame
 local CreateColor = _G.CreateColor
 local InCombatLockdown = _G.InCombatLockdown
+-- COMBAT/OOC layers ask the one combat-state source (Kernel/MSUF_Util.lua).
+local InCombat = MSUF.Util.InCombat
 local UnitIsUnit = _G.UnitIsUnit
 local UnitHealth = _G.UnitHealth
 local UnitHealthMax = _G.UnitHealthMax
@@ -342,7 +344,8 @@ end
 
 local function DriverOnEvent(_, event, unit)
   if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
-    RefreshDynamicTextureLayers("_msufTexLayerRegenMask")
+    -- The lockdown lags both edges; the event carries the new combat state.
+    RefreshDynamicTextureLayers("_msufTexLayerRegenMask", nil, event)
   elseif event == "PLAYER_TARGET_CHANGED" then
     RefreshDynamicTextureLayers("_msufTexLayerTargetMask", "_msufTexLayerTargetColorMask")
   elseif event == "PLAYER_FOCUS_CHANGED" then
@@ -727,7 +730,8 @@ local function ApplyClip(frame, holder, tex, clipWanted)
   end
 end
 
-local function LayerVisible(conf, prefix, frame, unitKey, keys)
+-- `event` is the PLAYER_REGEN_* edge being dispatched, nil everywhere else.
+local function LayerVisible(conf, prefix, frame, unitKey, keys, event)
   if _G.MSUF_UnitEditModeActive == true then return true end
   local visibility = conf[keys and keys.Visibility or (prefix .. "Visibility")]
   local targetOnly = conf[keys and keys.TargetOnly or (prefix .. "TargetOnly")] == true
@@ -744,7 +748,7 @@ local function LayerVisible(conf, prefix, frame, unitKey, keys)
   end
   if visibility == "TARGET" then visibility = "ALWAYS" end
   if visibility ~= "COMBAT" and visibility ~= "OOC" then return true end
-  local inCombat = type(InCombatLockdown) == "function" and InCombatLockdown() == true
+  local inCombat = InCombat(event) == true
   if visibility == "COMBAT" then return inCombat end
   return not inCombat
 end
@@ -1000,12 +1004,12 @@ local function ResolveHealthRGB(holder, frame, conf, keys, unit, hp, maxHP, r, g
   return ResolveAboveThresholdRGB(conf, keys, unit)
 end
 
-local function ApplySlot(frame, conf, unitKey, slot)
+local function ApplySlot(frame, conf, unitKey, slot, event)
   local keys = SLOT_KEYS[slot]
   local prefix = keys.prefix
   local holders = frame._msufTexLayers
   local holder = holders and holders[slot]
-  if conf[keys.Enabled] ~= true or not LayerVisible(conf, prefix, frame, unitKey, keys) then
+  if conf[keys.Enabled] ~= true or not LayerVisible(conf, prefix, frame, unitKey, keys, event) then
     if holder then
       ClearSoftEdgeMask(holder)
       holder:Hide()
@@ -1176,26 +1180,26 @@ local function ApplyToUnitFrame(frame)
 end
 TextureLayer.ApplyToUnitFrame = ApplyToUnitFrame
 
-local function ApplyMask(frame, conf, unitKey, mask, apply)
+local function ApplyMask(frame, conf, unitKey, mask, apply, event)
   if mask == 1 then
-    apply(frame, conf, unitKey, 1)
+    apply(frame, conf, unitKey, 1, event)
   elseif mask == 2 then
-    apply(frame, conf, unitKey, 2)
+    apply(frame, conf, unitKey, 2, event)
   elseif mask == 3 then
-    apply(frame, conf, unitKey, 1)
-    apply(frame, conf, unitKey, 2)
+    apply(frame, conf, unitKey, 1, event)
+    apply(frame, conf, unitKey, 2, event)
   elseif mask == 4 then
-    apply(frame, conf, unitKey, 3)
+    apply(frame, conf, unitKey, 3, event)
   elseif mask == 5 then
-    apply(frame, conf, unitKey, 1)
-    apply(frame, conf, unitKey, 3)
+    apply(frame, conf, unitKey, 1, event)
+    apply(frame, conf, unitKey, 3, event)
   elseif mask == 6 then
-    apply(frame, conf, unitKey, 2)
-    apply(frame, conf, unitKey, 3)
+    apply(frame, conf, unitKey, 2, event)
+    apply(frame, conf, unitKey, 3, event)
   elseif mask == 7 then
-    apply(frame, conf, unitKey, 1)
-    apply(frame, conf, unitKey, 2)
-    apply(frame, conf, unitKey, 3)
+    apply(frame, conf, unitKey, 1, event)
+    apply(frame, conf, unitKey, 2, event)
+    apply(frame, conf, unitKey, 3, event)
   end
 end
 
@@ -1331,7 +1335,7 @@ local function RecomputeDriverNeeds(frames)
   SyncDriverEvents()
 end
 
-local function RefreshDynamicMask(maskField, colorOnly)
+local function RefreshDynamicMask(maskField, colorOnly, event)
   local frames = dynamicFrameLists[maskField]
   local count = dynamicFrameCounts[maskField] or 0
   if not frames or count == 0 then return false end
@@ -1345,7 +1349,7 @@ local function RefreshDynamicMask(maskField, colorOnly)
         if colorOnly then
           ApplyMask(frame, conf, unitKey, mask, ApplyClassColorSlot)
         else
-          ApplyMask(frame, conf, unitKey, mask, ApplySlot)
+          ApplyMask(frame, conf, unitKey, mask, ApplySlot, event)
         end
       end
     end
@@ -1353,8 +1357,8 @@ local function RefreshDynamicMask(maskField, colorOnly)
   return true
 end
 
-RefreshDynamicTextureLayers = function(maskField, colorMaskField)
-  local refreshed = RefreshDynamicMask(maskField, false)
+RefreshDynamicTextureLayers = function(maskField, colorMaskField, event)
+  local refreshed = RefreshDynamicMask(maskField, false, event)
   if colorMaskField and RefreshDynamicMask(colorMaskField, true) then refreshed = true end
   return refreshed
 end

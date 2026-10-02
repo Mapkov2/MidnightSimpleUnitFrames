@@ -782,8 +782,30 @@ local function EnsureDBSafe()
     end
 end
 
-local function InCombat()
-    return InCombatLockdown and InCombatLockdown()
+--- The one combat-state question for visibility and fast-path decisions. The
+--- client sends PLAYER_REGEN_DISABLED while InCombatLockdown() still answers
+--- false (the lockdown starts after that dispatch) and PLAYER_REGEN_ENABLED
+--- after the lockdown ended. A handler running for one of those events passes
+--- the event and reads the state the event announces. The combat edge is also
+--- remembered for the rest of its frame (GetTime() does not change within a
+--- frame), so work that handler starts under a synthetic event name
+--- ("MSUF_OOC", "MSUF_APPLY") during the same dispatch sees combat too; the
+--- memory ends by itself on the next frame, when the lockdown answers. Every
+--- other caller passes nothing. A guard in front of a protected write keeps
+--- asking InCombatLockdown() itself: at PLAYER_REGEN_DISABLED those writes are
+--- still allowed.
+local combatEdgeTime
+local function InCombat(event)
+    if event == "PLAYER_REGEN_DISABLED" then
+        combatEdgeTime = GetTime and GetTime() or nil
+        return true
+    end
+    if event == "PLAYER_REGEN_ENABLED" then
+        combatEdgeTime = nil
+        return false
+    end
+    if InCombatLockdown and InCombatLockdown() then return true end
+    return combatEdgeTime ~= nil and combatEdgeTime == GetTime()
 end
 
 --- Read a per-unit setting with the documented fallback chain: the unit's own

@@ -1078,46 +1078,23 @@ local MSUF_ProfileIO_NormalizeGFAuraFilterToken = Normalize.NormalizeGFAuraFilte
 
 --- Deterministic-ish Lua serializer (good enough for UI copy/paste strings).
 
---- Key classification for general settings.
-local function MSUF_IsColorKey(k)
-    if type(k) ~= "string" then  return false end
-    local lk = string.lower(k)
-    --- Obvious markers
-    if lk:find("color", 1, true) then  return true end
-    --- Global theme/mode keys
-    if lk == "barmode" or lk == "darkmode" or lk == "darkbartone" or lk == "darkbgbrightness" then  return true end
-    if lk == "useclasscolors" or lk == "enablehealthgradient" or lk == "gradientstrength" then  return true end
-    --- Font/Highlight naming
-    if lk == "fontcolor" or lk == "highlightcolor" or lk == "usecustomfontcolor" then  return true end
-    if lk == "nameclasscolor" or lk == "npcnamered" then  return true end
-    --- Common RGB/A suffix patterns used for colors.
-    local last = lk:sub(-1)
-    if last == "r" or last == "g" or last == "b" or last == "a" then
-        --- Avoid false positives like "offsetx/offsety".
-        if lk:find("color", 1, true) or lk:find("font", 1, true) or lk:find("bg", 1, true) or lk:find("border", 1, true) or lk:find("outline", 1, true) or lk:find("gradient", 1, true) then
-             return true
-        end
-        --- Explicit known custom font color fields
-        if lk == "fontcolorcustomr" or lk == "fontcolorcustomg" or lk == "fontcolorcustomb" then
-             return true
-        end
-    end
-     return false
+--- Key ownership for general settings lives in one registry
+--- (State/MSUF_ProfileFields.lua, F.GeneralOwner): partial exports and imports
+--- carry exactly the keys their kind owns, and profile sync asks the same owner.
+local function MSUF_GeneralKeysOfKind(kind)
+    local fields = MSUF.ProfileFields
+    return function(key) return fields.GeneralKeyInKind(key, kind) end
 end
---- Aura-related general keys that should travel with Auras settings (even though they are 'color keys').
+--- Aura colour keys in general (owner auraColors in the registry); an import
+--- that carries one refreshes every aura scope.
 local MSUF_AURA_GENERAL_KEYS = {
 aurasOwnBuffHighlightColor = true,
     aurasOwnDebuffHighlightColor = true,
     aurasStackCountColor = true,
 }
-local function MSUF_IsAuraGeneralKey(key)
-    return (type(key) == "string") and (MSUF_AURA_GENERAL_KEYS[key] == true)
-end
 -- Unified, coldpath alpha keys: HP fill opacity, power fill opacity, background
--- opacity, and opt-in exclusions for informational elements. Note hpBarAlpha,
--- powerBarAlpha, hpBgAlpha, and powerBarBgAlpha are NOT colour keys here
--- (MSUF_IsColorKey matches "bg"); listing them keeps them travelling with unitframe
--- settings rather than colour settings.
+-- opacity, and opt-in exclusions for informational elements. They are unit
+-- frame settings, not colours (the registry declares them unitframes).
 local MSUF_UNITFRAME_ALPHA_KEYS = {
     hpBarAlpha = true,
     powerBarAlpha = true,
@@ -1135,36 +1112,6 @@ local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
     alphaExcludePredictionBars = false,
 }
 local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }
-local function MSUF_IsUnitframeAlphaKey(key)
-    return (type(key) == "string") and (MSUF_UNITFRAME_ALPHA_KEYS[key] == true)
-end
-local function MSUF_IsCastbarKey(k)
-    if type(k) ~= "string" then  return false end
-    local lk = string.lower(k)
-    --- Core castbar markers
-    if lk:find("castbar", 1, true) then  return true end
-    if lk:find("bosscast", 1, true) then  return true end
-    if lk:find("arenacast", 1, true) then  return true end
-    if lk:find("empower", 1, true) then  return true end
-    --- Enable toggles / timing
-    if lk == "enableplayercastbar" or lk == "enabletargetcastbar" or lk == "enablefocuscastbar" then  return true end
-    if lk == "castbarupdateinterval" then  return true end
-    --- Per-castbar font override fields (global storage)
-    if lk:find("spellnamefontsize", 1, true) or lk:find("timefontsize", 1, true) then  return true end
-     return false
-end
-local function MSUF_IsUnitframeGeneralKey(key)
-    return (MSUF_IsUnitframeAlphaKey(key) or (not MSUF_IsColorKey(key)) or MSUF_IsAuraGeneralKey(key)) and (not MSUF_IsCastbarKey(key))
-end
-MSUF.ProfileGeneralOwner = function(key)
-    local lower=key:lower()
-    if lower:find("menu",1,true) or lower:find("slash",1,true) or lower:find("integration",1,true)
-        or lower:find("blizzardeditmode",1,true) or key=="UIScale" or key=="locale" then return end
-    if MSUF_IsAuraGeneralKey(key) then return "auras" end
-    if MSUF_IsCastbarKey(key) then return "castbars" end
-    if MSUF_IsColorKey(key) then return "colors" end
-    return "unitframes"
-end
 local function MSUF_CopyGeneralSubset(filterFn, profile)
     local out = {}
     local g = ((profile or MSUF_DB) and (profile or MSUF_DB).general) or {}
@@ -1187,14 +1134,19 @@ local function MSUF_WipeGeneralSubset(filterFn, db)
         end
     end
  end
-local function MSUF_ApplyGeneralSubset(tbl, db)
+--- Only the keys the import kind owns land: a payload that carries more (an
+--- export from a build that guessed ownership by name) cannot overwrite keys
+--- another kind or the receiving profile owns.
+local function MSUF_ApplyGeneralSubset(tbl, db, filterFn)
     if not tbl then  return end
     if type(db.general) ~= "table" then
         db.general = {}
     end
     local g = db.general
     for k, v in pairs(tbl) do
-        g[k] = MSUF_DeepCopy(v)
+        if filterFn(k, v) then
+            g[k] = MSUF_DeepCopy(v)
+        end
     end
  end
 --- Legacy combat/layered alpha keys retired by the unified alpha rewrite. Imported
@@ -1852,7 +1804,7 @@ local function MSUF_SnapshotForKind(kind, selectedUnits)
         --- Everything EXCEPT: gameplay, colors, castbars
         for k, v in pairs(MSUF_DB or {}) do
             if k == "general" then
-                payload.general = MSUF_CopyGeneralSubset(MSUF_IsUnitframeGeneralKey, MSUF_DB)
+                payload.general = MSUF_CopyGeneralSubset(MSUF_GeneralKeysOfKind("unitframe"), MSUF_DB)
             elseif k == "classColors" or k == "npcColors" or k == "gameplay" then
                 --- exclude
             else
@@ -1861,13 +1813,9 @@ local function MSUF_SnapshotForKind(kind, selectedUnits)
         end
         MSUF_ProfileIO_NormalizeGroupFramePayloadForExport(payload)
     elseif kind == "castbar" then
-        payload.general = MSUF_CopyGeneralSubset(function(key)
-            return MSUF_IsCastbarKey(key) and (not MSUF_IsColorKey(key))
-        end, MSUF_DB)
+        payload.general = MSUF_CopyGeneralSubset(MSUF_GeneralKeysOfKind("castbar"), MSUF_DB)
     elseif kind == "colors" then
-        payload.general = MSUF_CopyGeneralSubset(function(key)
-            return MSUF_IsColorKey(key)
-        end, MSUF_DB)
+        payload.general = MSUF_CopyGeneralSubset(MSUF_GeneralKeysOfKind("colors"), MSUF_DB)
         payload.classColors = MSUF_DeepCopy((MSUF_DB and MSUF_DB.classColors) or {})
         payload.npcColors   = MSUF_DeepCopy((MSUF_DB and MSUF_DB.npcColors) or {})
     elseif kind == "gameplay" then
@@ -2259,9 +2207,10 @@ local ImportTx = {}
 function ImportTx.Merge(kind, payload, db)
     if kind == "unitframe" then
         --- Wipe & replace the same general-key set that Unitframes export.
-        MSUF_WipeGeneralSubset(MSUF_IsUnitframeGeneralKey, db)
+        local owned = MSUF_GeneralKeysOfKind("unitframe")
+        MSUF_WipeGeneralSubset(owned, db)
         if type(payload.general) == "table" then
-            MSUF_ApplyGeneralSubset(payload.general, db)
+            MSUF_ApplyGeneralSubset(payload.general, db, owned)
         end
         for k, v in pairs(payload) do
             if k ~= "general" then
@@ -2294,18 +2243,16 @@ function ImportTx.Merge(kind, payload, db)
             end
         end
     elseif kind == "castbar" then
-        MSUF_WipeGeneralSubset(function(key)
-            return MSUF_IsCastbarKey(key) and (not MSUF_IsColorKey(key))
-        end, db)
+        local owned = MSUF_GeneralKeysOfKind("castbar")
+        MSUF_WipeGeneralSubset(owned, db)
         if type(payload.general) == "table" then
-            MSUF_ApplyGeneralSubset(payload.general, db)
+            MSUF_ApplyGeneralSubset(payload.general, db, owned)
         end
     elseif kind == "colors" then
-        MSUF_WipeGeneralSubset(function(key)
-            return MSUF_IsColorKey(key)
-        end, db)
+        local owned = MSUF_GeneralKeysOfKind("colors")
+        MSUF_WipeGeneralSubset(owned, db)
         if type(payload.general) == "table" then
-            MSUF_ApplyGeneralSubset(payload.general, db)
+            MSUF_ApplyGeneralSubset(payload.general, db, owned)
         end
         if type(db.classColors) ~= "table" then db.classColors = {} end
         if type(db.npcColors) ~= "table" then db.npcColors = {} end

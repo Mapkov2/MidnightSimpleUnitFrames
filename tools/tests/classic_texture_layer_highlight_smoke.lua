@@ -26,7 +26,10 @@ local namespace = {
         WordList = function() return {} end,
     },
 }
+-- Kernel/MSUF_Util.lua loads before the runtime in every TOC and provides the
+-- combat-state source the layer visibility asks.
 for _, relative in ipairs({
+    "MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer.lua",
 }) do

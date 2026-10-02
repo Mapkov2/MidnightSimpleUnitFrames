@@ -89,7 +89,23 @@ MSUF_GlobalDB = {
 MSUF_DB = MSUF_GlobalDB.profiles.Default
 time = os.time
 local ns = { ExportPublic = function(n, v) _G[n] = v end, GetAddonVersion = function() return "6.5" end, Client = {} }
+-- The client runs the files first, then loads the SavedVariables and fires
+-- ADDON_LOADED; the login archive runs there.
+local savedGlobalDB, savedProfileDB = MSUF_GlobalDB, MSUF_DB
+MSUF_GlobalDB, MSUF_DB = nil, nil
+local loader
+CreateFrame = function()
+    local frame = {}
+    function frame:RegisterEvent() end
+    function frame:UnregisterEvent() end
+    function frame:SetScript(_, handler) loader = function(...) handler(frame, ...) end end
+    return frame
+end
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua"))("MidnightSimpleUnitFrames", ns)
+CreateFrame = nil
+MSUF_GlobalDB, MSUF_DB = savedGlobalDB, savedProfileDB
+assert(loader, "State/MSUF_FirstLoad.lua registered no ADDON_LOADED driver")
+loader("ADDON_LOADED", "MidnightSimpleUnitFrames", false)
 assert(MSUF_GlobalDB.profiles.Legacy == nil, "the pre-6.0 profile was not archived")
 local members = MSUF_GlobalDB.global.profileSyncGroups[1].members
 assert(members.Default and not members.Legacy, "an archived profile stayed a sync member")

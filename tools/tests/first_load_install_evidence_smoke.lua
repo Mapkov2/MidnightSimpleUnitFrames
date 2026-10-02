@@ -8,10 +8,25 @@
 -- Plain Lua 5.1, repo root as arg 1.
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
 
+-- The client runs the addon's files before it loads the SavedVariables; it
+-- then fires ADDON_LOADED, where the install is classified.
 local function Classify(globalDB, profileDB)
-    MSUF_GlobalDB, MSUF_DB = globalDB, profileDB
+    MSUF_GlobalDB, MSUF_DB = nil, nil
+    local loader
+    CreateFrame = function()
+        local frame = {}
+        function frame:RegisterEvent() end
+        function frame:UnregisterEvent() end
+        function frame:SetScript(_, handler) loader = function(...) handler(frame, ...) end end
+        return frame
+    end
     local namespace = { Client = { IsClassic = true }, Compat = {}, Public = {} }
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua"))("MidnightSimpleUnitFrames", namespace)
+    CreateFrame = nil
+    if globalDB ~= nil then MSUF_GlobalDB = globalDB end
+    if profileDB ~= nil then MSUF_DB = profileDB end
+    assert(loader, "State/MSUF_FirstLoad.lua registered no ADDON_LOADED driver")
+    loader("ADDON_LOADED", "MidnightSimpleUnitFrames", false)
     return MSUF_GlobalDB.global.firstLoad6
 end
 

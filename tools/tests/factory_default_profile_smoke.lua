@@ -82,6 +82,8 @@ manifest.LoadSelected(repo, flavor, ns, {
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua",
     "State/MSUF_Defaults.lua",
+    -- The general key owner registry every partial export asks.
+    "State/MSUF_ProfileFields.lua",
 })
 Check(_G.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT == factory, "the loaded defaults publish a different factory string")
 

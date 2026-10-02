@@ -82,12 +82,17 @@ Check(stored.general.showNavigationIcons == false
     and stored._msufDefaultsRevision == defaultsStamp,
     "the aura normalize treated a stored profile as an import payload")
 
--- 3. Imports stay untrusted: copied stamps and an old navigation choice are normalized away.
+-- 3. Imports stay untrusted: a copied defaults revision and an old navigation
+-- choice are normalized away. The dispel priority stamp is the payload's
+-- data-format version: the payload is migrated from it at once (every
+-- idempotent normalization runs) and carries the current stamp afterwards.
 local payload = { general = { showNavigationIcons = false }, auras2 = { enabled = true },
-    _msufDispelPriorityMigration = dispelStamp, _msufDefaultsRevision = 999 }
+    _msufDispelPriorityMigration = 4, _msufDefaultsRevision = 999 }
 translate(payload, { source = "profile_import", markProfile = true })
-Check(payload._msufDispelPriorityMigration == nil and payload._msufDefaultsRevision == nil,
-    "an import payload kept its copied migration stamps")
+Check(payload._msufDefaultsRevision == nil, "an import payload kept its copied defaults revision")
+Check(payload._msufDispelPriorityMigration == dispelStamp,
+    "an import payload was not migrated from its own dispel priority version (stamp "
+    .. tostring(payload._msufDispelPriorityMigration) .. ")")
 Check(payload.general.showNavigationIcons == true, "an import payload kept showNavigationIcons = false")
 
 print(string.format("auras3_normalize_trust_smoke: ok (%s)", flavor))
