@@ -1857,6 +1857,8 @@ local function ClearFrameEvents(frame)
     frame._msufElementEventRoutes = nil
     frame._msufEventRouteUnit = nil
     frame._msufEventRouteNeedsIdentity = nil
+    frame._msufEventRouteSelections = nil
+    frame._msufEventRouteScope = nil
     frame._msufCoreRangeEventConfigured = nil
     frame._msufCoreRangeEventUnitless = nil
     frame._msufCoreRangeEventSuspended = nil
@@ -2390,8 +2392,16 @@ local function InternRuntimeRoutePlan(routes)
   return routes
 end
 
+-- Every SelectElementEventUpdate result of a compile, in AddEventHandler order.
+-- With the route snapshots it is the complete per-frame input of the compiled
+-- event paths, so RetargetFrameUnitEvents can prove a unit shift needs no
+-- recompile. The scratch list is cleared after each compile, so it retains no
+-- update function.
+local eventRouteSelectionScratch = {}
+
 local function RebuildFrameEvents(frame)
   if not frame then return false end
+  local previousSelections = frame._msufEventRouteSelections
   ClearFrameEvents(frame)
   local routes = {}
   frame._msufElementEventRoutes = routes
@@ -2405,6 +2415,8 @@ local function RebuildFrameEvents(frame)
     if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
     return true
   end
+  local selections = eventRouteSelectionScratch
+  local selectionCount = 0
   for i = 1, #UF.elementOrder do
     local name = UF.elementOrder[i]
     if active[name] == true and EventElementAllowed(name) == true then
@@ -2419,18 +2431,55 @@ local function RebuildFrameEvents(frame)
         if type(events) == "table" then
           for j = 1, #events do
             local event = events[j]
-            AddEventHandler(frame, event, SelectElementEventUpdate(element, frame, event, update), false)
+            local selected = SelectElementEventUpdate(element, frame, event, update)
+            selectionCount = selectionCount + 1
+            selections[selectionCount] = selected
+            AddEventHandler(frame, event, selected, false)
           end
         end
         if type(unitlessEvents) == "table" then
           for j = 1, #unitlessEvents do
             local event = unitlessEvents[j]
-            AddEventHandler(frame, event, SelectElementEventUpdate(element, frame, event, update), true)
+            local selected = SelectElementEventUpdate(element, frame, event, update)
+            selectionCount = selectionCount + 1
+            selections[selectionCount] = selected
+            AddEventHandler(frame, event, selected, true)
           end
         end
       end
     end
   end
+  -- An aborted earlier compile may have left entries past this one.
+  local stale = selectionCount + 1
+  while selections[stale] ~= nil do
+    selections[stale] = nil
+    stale = stale + 1
+  end
+  -- Keep the previous list when this compile selected the same updates.
+  -- Otherwise the frame takes the filled scratch list and the list it drops
+  -- becomes the next scratch, so recompiles allocate no list once warm.
+  local keptSelections = previousSelections
+  if keptSelections and #keptSelections == selectionCount then
+    for i = 1, selectionCount do
+      if keptSelections[i] ~= selections[i] then keptSelections = nil break end
+    end
+  else
+    keptSelections = nil
+  end
+  if keptSelections then
+    for i = 1, selectionCount do selections[i] = nil end
+  else
+    keptSelections = selections
+    local recycled = previousSelections
+    if recycled then
+      for i = #recycled, 1, -1 do recycled[i] = nil end
+    else
+      recycled = {}
+    end
+    eventRouteSelectionScratch = recycled
+  end
+  frame._msufEventRouteSelections = keptSelections
+  frame._msufEventRouteScope = frame._msufCoreScope
   frame._msufEventRouteNeedsIdentity = FrameNeedsIdentityLifecycle(frame)
   AddIdentityLifecycleHandlers(frame)
   local events = frame._msufEvents
@@ -2518,6 +2567,127 @@ local function FrameEventRoutingMatches(frame)
   return frame._msufEventRouteNeedsIdentity == FrameNeedsIdentityLifecycle(frame)
 end
 UF.FrameEventRoutingMatches = FrameEventRoutingMatches
+
+-- Secure group children shift between tokens of one family on every roster
+-- change. Tokens of one family compile the same identity handlers
+-- (PLAYER_ENTERING_WORLD only, see AddIdentityLifecycleHandlers) and have no
+-- dependent event source (DependentSource), so only the unit filter of their
+-- registrations names the index.
+local INDEXED_ROUTE_UNIT_FAMILY = {}
+do
+  local index = 1
+  while index <= 40 do
+    INDEXED_ROUTE_UNIT_FAMILY["raid" .. index] = "raid"
+    INDEXED_ROUTE_UNIT_FAMILY["raidpet" .. index] = "raidpet"
+    if index <= 4 then
+      INDEXED_ROUTE_UNIT_FAMILY["party" .. index] = "party"
+      INDEXED_ROUTE_UNIT_FAMILY["partypet" .. index] = "partypet"
+    end
+    index = index + 1
+  end
+end
+
+--- Re-read every input RebuildFrameEvents compiles from (each element's update
+--- function, event lists and selected event updates, the frame scope and the
+--- identity lifecycle need) and compare it with the inputs of the current
+--- compile. Getters and selectors run exactly as often as a rebuild runs them.
+local function FrameEventRouteInputsMatch(frame)
+  local routes = frame._msufElementEventRoutes
+  local selections = frame._msufEventRouteSelections
+  local active = frame._msufActiveElements
+  if type(routes) ~= "table" or not selections or not active
+    or frame._msufEventRouteScope ~= frame._msufCoreScope then
+    return false
+  end
+  local spec = frame.MSUFSpec
+  local count = 0
+  for i = 1, #UF.elementOrder do
+    local name = UF.elementOrder[i]
+    if EventElementAllowed(name) == true then
+      local route = routes[name]
+      local element = active[name] == true and UF.elements[name] or nil
+      local update = element and ElementUpdateFunction(frame, name) or nil
+      if update then
+        if not route or route.update ~= update then return false end
+        local events = ElementEvents(element, false, frame, spec)
+        if not EventListsMatch(route.events, events) then return false end
+        local unitlessEvents = ElementEvents(element, true, frame, spec)
+        if not EventListsMatch(route.unitlessEvents, unitlessEvents) then return false end
+        if type(events) == "table" then
+          for j = 1, #events do
+            count = count + 1
+            if selections[count] ~= SelectElementEventUpdate(element, frame, events[j], update) then
+              return false
+            end
+          end
+        end
+        if type(unitlessEvents) == "table" then
+          for j = 1, #unitlessEvents do
+            count = count + 1
+            if selections[count] ~= SelectElementEventUpdate(element, frame, unitlessEvents[j], update) then
+              return false
+            end
+          end
+        end
+      elseif route then
+        return false
+      end
+    end
+  end
+  return count == #selections
+    and frame._msufEventRouteNeedsIdentity == FrameNeedsIdentityLifecycle(frame)
+end
+
+--- A unit shift inside one token family with unchanged compile inputs
+--- produces the routes the frame already has. Move the unit filters instead:
+--- RegisterUnitEvent on a registered event replaces its units, as Blizzard's
+--- CompactUnitFrame_UpdateUnitEvents relies on. Registration, suspension and
+--- runtime state end exactly where RebuildFrameEvents would leave them.
+--- Returns false, changing nothing, when a full rebuild is needed. Code that
+--- unregisters a frame's events outside the core clears _msufEventRouteUnit
+--- (the group adapter's SuspendUnitBinding does), which forces that rebuild.
+local function RetargetFrameUnitEvents(frame)
+  local unit = frame.MSUFUnitKey
+  local routeUnit = frame._msufEventRouteUnit
+  if not (IsUnitToken(unit) and IsUnitToken(routeUnit)) then return false end
+  local family = INDEXED_ROUTE_UNIT_FAMILY[unit]
+  if family == nil or INDEXED_ROUTE_UNIT_FAMILY[routeUnit] ~= family then return false end
+  local names = frame._msufEventNames
+  local reg = frame._msufEventReg
+  if not (names and reg) or frame._msufFrameUnitEvents ~= nil then return false end
+  local suspended = frame._msufCoreEventsSuspended == true
+  local hidden = frame._msufCoreVisible == false
+  if suspended and not hidden then return false end
+  if not FrameEventRouteInputsMatch(frame) then return false end
+
+  frame._msufEventRouteUnit = unit
+  -- A suspended frame has nothing registered, and its unit-free recipe is what
+  -- FrameOnShow re-registers for the then current unit.
+  if not suspended then
+    for i = 1, #names do
+      local event = names[i]
+      if event == "UNIT_IN_RANGE_UPDATE" then
+        if hidden then
+          if frame._msufCoreRangeEventSuspended ~= true and frame.UnregisterEvent then
+            frame:UnregisterEvent(event)
+          end
+          reg[event] = nil
+          frame._msufCoreRangeEventSuspended = true
+        else
+          RegisterFrameEvent(frame, event, frame._msufCoreRangeEventUnitless == true)
+          frame._msufCoreRangeEventSuspended = nil
+        end
+      else
+        RegisterFrameEvent(frame, event, reg[event] == true)
+      end
+    end
+    if hidden then SuspendHiddenFrameEvents(frame) end
+  end
+  if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
+  UF.RebuildRuntimeStatusState(frame)
+  if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
+  return true
+end
 
 local function RefreshFrameRoutingAfterElementApply(frame)
   if not frame then return false end
@@ -2731,7 +2901,7 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
     frame.unitKey = newUnit
   end
   frame._msufUnitState = nil
-  RebuildFrameEvents(frame)
+  if not RetargetFrameUnitEvents(frame) then RebuildFrameEvents(frame) end
   if frame._msufCoreScope == "group" then
     RefreshGroupFrameState(frame, "MSUF_GF_UNIT_IDENTITY")
     RefreshIdentityHealthBackground(frame)
@@ -2925,13 +3095,12 @@ local function ApplyElementSelection(frame, selection, spec, updateReason, selec
   -- funnel both full spec applies (UF.ApplySpec) and targeted element refreshes
   -- (UF.ApplyElementsToFrame, which is how unit-frame aura settings apply) pass
   -- through. A single boolean read whenever no preview is active.
-  if _G.MSUF_DispelOverlayPreviewMode == true
-    and type(_G.MSUF_ApplyDispelOverlayPreviewToFrame) == "function" then
-    _G.MSUF_ApplyDispelOverlayPreviewToFrame(frame)
+  -- Both preview painters belong to the aura preview, which loads after the core.
+  if _G.MSUF_DispelOverlayPreviewMode == true then
+    MSUF.Require("MSUF_ApplyDispelOverlayPreviewToFrame", "Libs/MSUFUnitFrames/MSUF_UF_Core.lua")(frame)
   end
-  if _G.MSUF_DispelSymbolPreviewMode == true
-    and type(_G.MSUF_ApplyDispelSymbolPreviewToFrame) == "function" then
-    _G.MSUF_ApplyDispelSymbolPreviewToFrame(frame)
+  if _G.MSUF_DispelSymbolPreviewMode == true then
+    MSUF.Require("MSUF_ApplyDispelSymbolPreviewToFrame", "Libs/MSUFUnitFrames/MSUF_UF_Core.lua")(frame)
   end
   return true
 end

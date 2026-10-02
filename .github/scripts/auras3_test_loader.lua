@@ -702,7 +702,7 @@ function Loader.Install()
         { "Kernel/MSUF_Util.lua", "RoundOffset", "MSUF_RoundOffset" },
         { "Castbars/MSUF_CastbarAnchors.lua", "CastbarFrameInset", "MSUF_CastbarFrameInset" },
         { "Castbars/MSUF_CastbarUtils.lua", "CastTimeUnitKey", "MSUF_CastTimeUnitKey" },
-        { "UnitFrames/Effects/MSUF_UF_RoundedFrames.lua", "ClampEdgeSize", "MSUF_ClampRoundedEdgeSize" },
+        { "UnitFrames/Effects/MSUF_UF_RoundedSurface.lua", "ClampEdgeSize", "MSUF_ClampRoundedEdgeSize" },
         { "UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua", "NormalizeRaidManagerMode", "MSUF_NormalizeRaidManagerMode" },
         { "UnitFrames/Engine/MSUF_UF_Shared.lua", "NormalizePlayerHPShape", "MSUF_UF_NormalizePlayerHPShape" },
         { "UnitFrames/Engine/MSUF_UF_Shared.lua", "NormalizeDetachedPowerShape", "MSUF_UF_NormalizeDetachedPowerShape" },

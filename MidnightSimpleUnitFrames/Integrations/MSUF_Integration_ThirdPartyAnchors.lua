@@ -55,6 +55,14 @@ local InCombatLockdown = InCombatLockdown
 local UIParent = UIParent
 local type = type
 local issecretvalue = _G.issecretvalue
+--- MSUF owners that load after this file (UnitFrames/Engine/MSUF_UF_Factory.lua,
+--- ClassPower/MSUF_CP_Controller.lua). A provider that is already present
+--- (the Suite loading first) is acquired while this file loads, before they
+--- exist; their own first apply then covers that acquisition.
+local function RunOptional(name, ...)
+    local fn = MSUF.Optional(name)
+    if fn then return fn(...) end
+end
 -- Every provider frame and CVar accessor here is foreign. The probes check
 -- types first; one that still raises reaches the client error handler (there
 -- is no protected boundary here).
@@ -335,12 +343,8 @@ end
 --- The Class Resource page's own source refresh: re-arm the cooldown observers
 --- for the new width/anchor mask, then one full class power apply.
 local function RefreshAdoptedSuiteClassPower()
-    if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
-        _G.MSUF_EnsureCooldownWidthObservers()
-    end
-    if type(_G.MSUF_ClassPower_Apply) == "function" then
-        _G.MSUF_ClassPower_Apply({ full = true, cdm = true })
-    end
+    RunOptional("MSUF_EnsureCooldownWidthObservers")
+    RunOptional("MSUF_ClassPower_Apply", { full = true, cdm = true })
 end
 
 local function ResolveCooldownConsent(data, enabled)
@@ -1004,9 +1008,8 @@ local function RefreshEssentialCooldownAnchorConsumers(transition)
 
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars
     if not factoryHandled and bars and bars.classPowerAnchorToCooldown == true
-        and bars.classPowerWidthMode ~= "cooldown"
-        and type(_G.MSUF_ClassPower_RefreshLayout) == "function" then
-        _G.MSUF_ClassPower_RefreshLayout()
+        and bars.classPowerWidthMode ~= "cooldown" then
+        RunOptional("MSUF_ClassPower_RefreshLayout")
     end
 end
 
@@ -1016,15 +1019,13 @@ end
 -- snapshot instead, and either schedules the shared cooldown width refresh.
 local function NotifyCooldownAnchorTransition(changed, transition, sizeChanged)
     if changed then
-        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
-            _G.MSUF_EnsureCooldownWidthObservers(true)
-        end
+        RunOptional("MSUF_EnsureCooldownWidthObservers", true)
         RefreshEssentialCooldownAnchorConsumers(transition)
     elseif sizeChanged == true then
         RefreshEssentialCooldownAnchorConsumers("changed")
     end
-    if (changed or sizeChanged == true) and type(_G.MSUF_ScheduleCooldownWidthRefresh) == "function" then
-        _G.MSUF_ScheduleCooldownWidthRefresh("EssentialCooldownViewer", false, true)
+    if changed or sizeChanged == true then
+        RunOptional("MSUF_ScheduleCooldownWidthRefresh", "EssentialCooldownViewer", false, true)
     end
 end
 

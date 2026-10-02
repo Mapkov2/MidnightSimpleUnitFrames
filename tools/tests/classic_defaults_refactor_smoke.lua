@@ -10,6 +10,8 @@ function UnitName() return "Tester" end
 function GetRealmName() return "TestRealm" end
 function InCombatLockdown() return false end
 local function load(path) assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MSUF", ns) end
+-- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+load("Kernel/MSUF_Require.lua")
 load("State/MSUF_StateHelpers.lua")
 load("State/MSUF_ProfileCodec.lua")
 local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()

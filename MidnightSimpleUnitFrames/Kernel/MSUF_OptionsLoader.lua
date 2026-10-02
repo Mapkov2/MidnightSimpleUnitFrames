@@ -43,10 +43,9 @@ end
 
 local ConfigurationLocked = _G.InCombatLockdown
 
+-- Kernel/MSUF_Util.lua owns the combat lock message.
 local function ShowCombatLock()
-    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-        _G.MSUF_ShowConfigCombatLockMessage()
-    end
+    MSUF.Require("MSUF_ShowConfigCombatLockMessage", "Kernel/MSUF_OptionsLoader.lua")()
 end
 
 local function EnsureOptionsLoaded(reason)

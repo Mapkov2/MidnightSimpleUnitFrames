@@ -6,79 +6,48 @@ local ExportPublic = MSUF.ExportPublic
 -- Rounded bar mask/edge runtime.
 -- Adds optional mask textures and edge overlays to MSUF bars while respecting combat lockdown:
 -- existing regions can be updated in combat, but new rounded regions are deferred.
-local MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
-local CLEAN_MASK_PATHS = {
-  MASK_ROOT .. "rounded_clean_mask_s1.png",
-  MASK_ROOT .. "rounded_clean_mask_s2.png",
-  MASK_ROOT .. "rounded_clean_mask_s3.png",
-  MASK_ROOT .. "rounded_clean_mask_s4.png",
-  MASK_ROOT .. "rounded_clean_mask_s5.png",
-}
-local CLEAN_EDGE_PATHS = {
-  MASK_ROOT .. "rounded_clean_edge_s1.png",
-  MASK_ROOT .. "rounded_clean_edge_s2.png",
-  MASK_ROOT .. "rounded_clean_edge_s3.png",
-  MASK_ROOT .. "rounded_clean_edge_s4.png",
-  MASK_ROOT .. "rounded_clean_edge_s5.png",
-}
-local CLEAN_MEDIA_PATHS = {}
-for i = 1, #CLEAN_MASK_PATHS do
-  CLEAN_MEDIA_PATHS[CLEAN_MASK_PATHS[i]] = true
-  CLEAN_MEDIA_PATHS[CLEAN_EDGE_PATHS[i]] = true
+--
+-- Media, frame shape, the combat gate and the mask and edge-stack primitives
+-- live in MSUF_UF_RoundedSurface.lua, the class resource renderers in
+-- MSUF_UF_RoundedResources.lua; both load before this file, which applies the
+-- surfaces to unit and group frames.
+local Kit = MSUF.RoundedSurfaceKit
+if type(Kit) ~= "table" then
+  error("UnitFrames/Effects/MSUF_UF_RoundedSurface.lua must load before UnitFrames/Effects/MSUF_UF_RoundedFrames.lua")
 end
-local MASK_PATH_1X = MASK_ROOT .. "rounded_bar_1x.tga"
-local SLANTED_MASK_PATHS = {
-  RIGHT_DOWN = MASK_ROOT .. "slanted_bar_mask.png",
-  RIGHT_UP = MASK_ROOT .. "slanted_bar_mask_right_up.png",
-  LEFT_DOWN = MASK_ROOT .. "slanted_bar_mask_left_down.png",
-  LEFT_UP = MASK_ROOT .. "slanted_bar_mask_left_up.png",
-  BOTH_DOWN = MASK_ROOT .. "slanted_bar_mask_both_down.png",
-  BOTH_UP = MASK_ROOT .. "slanted_bar_mask_both_up.png",
-}
-local SLANTED_EDGE_PATHS = {
-  RIGHT_DOWN = MASK_ROOT .. "slanted_bar_edge.png",
-  RIGHT_UP = MASK_ROOT .. "slanted_bar_edge_right_up.png",
-  LEFT_DOWN = MASK_ROOT .. "slanted_bar_edge_left_down.png",
-  LEFT_UP = MASK_ROOT .. "slanted_bar_edge_left_up.png",
-  BOTH_DOWN = MASK_ROOT .. "slanted_bar_edge_both_down.png",
-  BOTH_UP = MASK_ROOT .. "slanted_bar_edge_both_up.png",
-}
+local MAX_HIGHLIGHT_BORDER_THICKNESS = Kit.MAX_HIGHLIGHT_BORDER_THICKNESS
+local IsCombatLocked, DeferApply, CanCreateRoundedRegion = Kit.IsCombatLocked, Kit.DeferApply, Kit.CanCreateRoundedRegion
+local BarsDB, ReadRoundedBool, IsEnabled = Kit.BarsDB, Kit.ReadRoundedBool, Kit.IsEnabled
+local UpdateSlantedBarState, UpdateRoundedMediaState = Kit.UpdateSlantedBarState, Kit.UpdateRoundedMediaState
+local RoundedUnitFramesEnabled, RoundedGroupFramesEnabled = Kit.RoundedUnitFramesEnabled, Kit.RoundedGroupFramesEnabled
+local RoundedPowerBarsEnabled, RoundedMouseoverEnabled = Kit.RoundedPowerBarsEnabled, Kit.RoundedMouseoverEnabled
+local FrameIsGroup, RoundedFrameEnabled = Kit.FrameIsGroup, Kit.RoundedFrameEnabled
+local SurfaceMaskPath, SurfaceEdgePath = Kit.SurfaceMaskPath, Kit.SurfaceEdgePath
+local ClampEdgeSize, LayoutRoundedEdge, SE_SnapOff = Kit.ClampEdgeSize, Kit.LayoutRoundedEdge, Kit.SE_SnapOff
+local ApplyRoundedMediaSlice, SetRoundedEdgeTexture = Kit.ApplyRoundedMediaSlice, Kit.SetRoundedEdgeTexture
+local BeginMaskRefresh, EndMaskRefresh = Kit.BeginMaskRefresh, Kit.EndMaskRefresh
+local ClearAllMasks, MaskTexture = Kit.ClearAllMasks, Kit.MaskTexture
+local ClearGroupMasks, MaskGroupTexture = Kit.ClearGroupMasks, Kit.MaskGroupTexture
+local ClearMaskForTexture = Kit.ClearMaskForTexture
+local HideRoundedEdgeStack, ShowRoundedEdgeStack = Kit.HideRoundedEdgeStack, Kit.ShowRoundedEdgeStack
+local SetRoundedEdgeStackAlpha = Kit.SetRoundedEdgeStackAlpha
+local SetRoundedEdgeStackAlphaFromBoolean = Kit.SetRoundedEdgeStackAlphaFromBoolean
+local SetRoundedEdgeStackColor, EnsureRoundedHoverContainer = Kit.SetRoundedEdgeStackColor, Kit.EnsureRoundedHoverContainer
+local ApplyRoundedEdgeStack = Kit.ApplyRoundedEdgeStack
+
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
-local ROUNDED_MEDIA_SLICE_MARGIN = 9.5
-local DEFAULT_ROUNDED_STRENGTH = 3
-local MAX_HIGHLIGHT_BORDER_THICKNESS = 30
 
 local CreateFrame = _G.CreateFrame
-local InCombatLockdown = _G.InCombatLockdown
 local issecretvalue = _G.issecretvalue
-local STRETCHED_SLICE_MODE = _G.Enum and _G.Enum.UITextureSliceMode
-  and _G.Enum.UITextureSliceMode.Stretched
 
 local BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A = 0, 0, 0, 1
 local ACTIVE_BORDER_A = 1.00
 
-local forceDisabled = false
 local unitMouseoverHotEnabled = false
 local groupMouseoverHotEnabled = false
 local groupIndicatorHotEnabled = false
-local UNIT_SHAPE_KEYS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "pettarget", "boss", "arena" }
-local GROUP_SHAPE_KEYS = { "gf_party", "gf_raid", "gf_mythicraid" }
 local roundedGroupBlockHosts = setmetatable({}, { __mode = "k" })
-local roundedMediaStrength = DEFAULT_ROUNDED_STRENGTH
-local roundedMaskPath = CLEAN_MASK_PATHS[DEFAULT_ROUNDED_STRENGTH]
-local roundedEdgePath = CLEAN_EDGE_PATHS[DEFAULT_ROUNDED_STRENGTH]
-local slantedBarsEnabled = true
-local slantedUnitFramesEnabled = true
-local slantedGroupFramesEnabled = true
-local slantedPowerBarsEnabled = true
-local slantedMouseoverEnabled = true
-local slantedExtraSurfacesEnabled = false
-
 local SUPPRESS_NATIVE_OUTLINE = true
-
-local function IsCombatLocked()
-  return InCombatLockdown and InCombatLockdown()
-end
 
 local function ResolveBaseEdgeColor(f)
   local border = f and f.MSUFSpec and f.MSUFSpec.border
@@ -106,196 +75,11 @@ local function ResolveBaseEdgeColor(f)
   return BASE_BORDER_R, BASE_BORDER_G, BASE_BORDER_B, BASE_BORDER_A
 end
 
-local function DeferApply()
-  MSUF.__msufRoundedPending = true
-end
-
-local function CanCreateRoundedRegion(existing)
-  -- Creating new regions during combat can taint protected layouts. Existing regions are safe
-  -- to recolor/reanchor; missing regions wait for the next non-combat apply.
-  if existing then return true end
-  if IsCombatLocked() then
-    DeferApply()
-    return false
-  end
-  return true
-end
-
 local function EnsureDB()
   local ensureDB = _G.MSUF_EnsureDB
   if ensureDB then
     ensureDB()
   end
-end
-
-local function BarsDB()
-  local db = _G.MSUF_DB
-  return db and db.bars or nil
-end
-
-local function ReadRoundedBool(key, default)
-  local bars = BarsDB()
-  local value = bars and bars[key]
-  if value == nil then return default and true or false end
-  return value and true or false
-end
-
-local function UpdateSlantedBarState()
-  slantedBarsEnabled = ReadRoundedBool("slantedBarsEnabled", true)
-  slantedUnitFramesEnabled = ReadRoundedBool("slantedUnitFrames", true)
-  slantedGroupFramesEnabled = ReadRoundedBool("slantedGroupFrames", true)
-  slantedPowerBarsEnabled = ReadRoundedBool("slantedPowerBars", true)
-  slantedMouseoverEnabled = ReadRoundedBool("slantedMouseover", true)
-  slantedExtraSurfacesEnabled = slantedBarsEnabled and (ReadRoundedBool("slantedCastbars", false)
-    or ReadRoundedBool("slantedClassResources", false))
-end
-
-local function UpdateRoundedMediaState()
-  local bars = BarsDB()
-  local strength = math.floor((tonumber(bars and bars.roundedCornerStrength) or DEFAULT_ROUNDED_STRENGTH) + 0.5)
-  if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
-  roundedMediaStrength = strength
-  roundedMaskPath = CLEAN_MASK_PATHS[strength]
-  roundedEdgePath = CLEAN_EDGE_PATHS[strength]
-end
-
-local function IsConfiguredEnabled()
-  if ReadRoundedBool("roundedFramesEnabled", false) then return true end
-  local db = _G.MSUF_DB
-  if not db then return false end
-  if slantedExtraSurfacesEnabled then return true end
-  for _, key in ipairs(UNIT_SHAPE_KEYS) do
-    local conf = db[key]
-    if conf and (conf.frameBarShape == "ROUNDED" or (slantedBarsEnabled and slantedUnitFramesEnabled
-      and conf.frameBarShape == "SLANTED")) then return true end
-  end
-  for _, key in ipairs(GROUP_SHAPE_KEYS) do
-    local conf = db[key]
-    if conf and (conf.frameBarShape == "ROUNDED" or (slantedBarsEnabled and slantedGroupFramesEnabled
-      and conf.frameBarShape == "SLANTED")) then return true end
-  end
-  return false
-end
-
-local function IsEnabled()
-  return forceDisabled ~= true and IsConfiguredEnabled()
-end
-
-local function RoundedUnitFramesEnabled()
-  if not IsEnabled() then return false end
-  if ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedUnitFrames", true) then return true end
-  local db = _G.MSUF_DB
-  for _, key in ipairs(UNIT_SHAPE_KEYS) do
-    local style = db and db[key] and db[key].frameBarShape
-    if style == "ROUNDED" or (slantedBarsEnabled and slantedUnitFramesEnabled and style == "SLANTED") then return true end
-  end
-  return false
-end
-
-local function RoundedGroupFramesEnabled()
-  if not IsEnabled() then return false end
-  if ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedGroupFrames", true) then return true end
-  local db = _G.MSUF_DB
-  for _, key in ipairs(GROUP_SHAPE_KEYS) do
-    local style = db and db[key] and db[key].frameBarShape
-    if style == "ROUNDED" or (slantedBarsEnabled and slantedGroupFramesEnabled and style == "SLANTED") then return true end
-  end
-  return false
-end
-
-local ResolveFrameStyle
-local function RoundedPowerBarsEnabled(f)
-  if f then
-    local style, explicit = ResolveFrameStyle(f)
-    if style == "SLANTED" then return slantedPowerBarsEnabled end
-    if explicit and style == "ROUNDED" then return true end
-    if style == "SQUARE" then return false end
-  end
-  return IsEnabled() and ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedPowerBars", true)
-end
-
-local function FrameIsGroup(f)
-  if not f then return false end
-  if f._msufIsGroupFrame == true or f._msufCoreScope == "group" then return true end
-  local spec = f.MSUFSpec
-  if spec and spec.scope == "group" then return true end
-  return f.barGroup ~= nil and f.health ~= nil
-end
-
-local function SlantedScopeEnabled(group)
-  return slantedBarsEnabled and ((group and slantedGroupFramesEnabled)
-    or (not group and slantedUnitFramesEnabled))
-end
-
-ResolveFrameStyle = function(f)
-  if not f then return "SQUARE" end
-  local group = FrameIsGroup(f)
-  if f._msufRUFForcedStyle then
-    if f._msufRUFForcedStyle == "SLANTED" and not SlantedScopeEnabled(group) then
-      if ReadRoundedBool("roundedFramesEnabled", false)
-        and ReadRoundedBool(group and "roundedGroupFrames" or "roundedUnitFrames", true) then
-        return "ROUNDED", false
-      end
-      return "SQUARE", true
-    end
-    return f._msufRUFForcedStyle, true
-  end
-  local db = _G.MSUF_DB
-  local spec = f.MSUFSpec
-  local unitKey = spec and spec.key or f.configKey
-  if not group and not unitKey then
-    local UF = MSUF and MSUF.UF
-    unitKey = (UF and UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(f.MSUFUnitKey)) or f.MSUFUnitKey
-  end
-  local groupKind = group and (f._msufGFKind or (spec and spec.groupKind)
-    or (MSUF.GF and MSUF.GF.frames and MSUF.GF.frames[f]))
-  local key = group and ("gf_" .. tostring(groupKind or "party"))
-    or unitKey
-  local conf = db and key and db[key]
-  local explicit = conf and conf.frameBarShape
-  if explicit == "SLANTED" and SlantedScopeEnabled(group) then return "SLANTED", true end
-  if explicit == "ROUNDED" or explicit == "SQUARE" then return explicit, true end
-  if forceDisabled ~= true and ReadRoundedBool("roundedFramesEnabled", false)
-    and ReadRoundedBool(group and "roundedGroupFrames" or "roundedUnitFrames", true) then
-    return "ROUNDED", false
-  end
-  return "SQUARE", explicit == "SLANTED"
-end
-
-local function RoundedFrameEnabled(f)
-  return forceDisabled ~= true and ResolveFrameStyle(f) ~= "SQUARE"
-end
-
-local function SlantedDirection()
-  local bars = _G.MSUF_DB and _G.MSUF_DB.bars
-  local direction = bars and bars.slantedBarDirection
-  return SLANTED_MASK_PATHS[direction] and direction or "RIGHT_DOWN"
-end
-
-local function SurfaceMaskPath(f)
-  return f and ResolveFrameStyle(f) == "SLANTED" and SLANTED_MASK_PATHS[SlantedDirection()] or roundedMaskPath
-end
-
-local function SurfaceEdgePath(f)
-  return f and ResolveFrameStyle(f) == "SLANTED" and SLANTED_EDGE_PATHS[SlantedDirection()] or roundedEdgePath
-end
-
-local function MouseoverHighlightEnabled()
-  local gen = _G.MSUF_DB and _G.MSUF_DB.general
-  if gen and gen.highlightEnabled == nil and gen.enableHighlightOnHover ~= nil then
-    return gen.enableHighlightOnHover == true
-  end
-  return not (gen and gen.highlightEnabled == false)
-end
-
-local function RoundedMouseoverEnabled(f)
-  if not IsEnabled() or not MouseoverHighlightEnabled() then return false end
-  if f then
-    local style = ResolveFrameStyle(f)
-    if style == "SLANTED" then return slantedMouseoverEnabled end
-    return style == "ROUNDED" and ReadRoundedBool("roundedMouseover", true)
-  end
-  return ReadRoundedBool("roundedMouseover", true) or (slantedBarsEnabled and slantedMouseoverEnabled)
 end
 
 local _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = 1, 1, 1, 0.78
@@ -330,22 +114,6 @@ local function ResolveMouseoverEdgeColor()
   return _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA
 end
 
-local function ClampEdgeSize(value, fallback, maxValue)
-  local n = tonumber(value)
-  if n == nil then n = tonumber(fallback) or 0 end
-  n = math.floor(n + 0.5)
-  if n < 0 then n = 0 end
-  maxValue = tonumber(maxValue) or 8
-  if n > maxValue then n = maxValue end
-  return n
-end
-
-local function RoundedEdgeLayoutPad(thickness, fallback)
-  local pad = ClampEdgeSize(thickness, fallback, 30)
-  if pad > 2 then pad = 2 end
-  return pad
-end
-
 --- The compiled spec carries the frame's own outline thickness: the unit
 --- override (hlOverride + barOutlineThickness, MSUF_UF_Config
 --- CompileUnitBorder) or the group scope (Group_Config CompileBorderSpec).
@@ -358,37 +126,6 @@ local function ResolveUnitOutlineThickness(f)
     thickness = bars and bars.barOutlineThickness or 1
   end
   return ClampEdgeSize(thickness, 0, 8)
-end
-
-local function LayoutRoundedEdge(edge, anchor, thickness, padOverride)
-  if not (edge and anchor) then return false end
-  local pad = padOverride and ClampEdgeSize(padOverride, 1, MAX_HIGHLIGHT_BORDER_THICKNESS) or RoundedEdgeLayoutPad(thickness, 1)
-  if pad <= 0 then
-    edge:Hide()
-    return false
-  end
-  if edge._msufRUFEdgeLayoutReady and edge._msufRUFEdgeAnchor == anchor and edge._msufRUFEdgePad == pad then
-    return true
-  end
-  if IsCombatLocked() then
-    DeferApply()
-    return edge._msufRUFEdgeLayoutReady == true
-  end
-  edge:ClearAllPoints()
-  edge:SetPoint("TOPLEFT", anchor, "TOPLEFT", -pad, pad)
-  edge:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", pad, -pad)
-  edge._msufRUFEdgeLayoutReady = true
-  edge._msufRUFEdgeAnchor = anchor
-  edge._msufRUFEdgePad = pad
-  return true
-end
-
-local function SE_SnapOff(tex)
-  if tex and tex.SetSnapToPixelGrid then
-    PixelLayoutRegion(tex, true)
-    tex:SetSnapToPixelGrid(false)
-    if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
-  end
 end
 
 local function HideLegacyShell(shell)
@@ -405,303 +142,6 @@ local function SE_ApplyGroupFrameShellVisuals(f)
   HideLegacyShell(f and f._msufRoundedGFShell)
 end
 
-local function ResolveMaskPath(maskPath)
-  return maskPath or roundedMaskPath
-end
-
-local function ApplyRoundedMediaSlice(region, path)
-  if not region then return end
-  local clean = CLEAN_MEDIA_PATHS[path] == true
-  local sliceKey = clean and roundedMediaStrength or 0
-  if region._msufRoundedMediaSliceKey == sliceKey then return end
-  region._msufRoundedMediaSliceKey = sliceKey
-  if type(region.SetTextureSliceMargins) == "function" then
-    local margin = clean and ROUNDED_MEDIA_SLICE_MARGIN or 0
-    region:SetTextureSliceMargins(margin, margin, margin, margin)
-  end
-  if clean and STRETCHED_SLICE_MODE ~= nil and type(region.SetTextureSliceMode) == "function" then
-    region:SetTextureSliceMode(STRETCHED_SLICE_MODE)
-  end
-end
-
--- Narrow shared surface contract for optional cold-path renderers. Callers own
--- their state keys and regions; these helpers only share media/combat behavior
--- and the mask lifecycle.
-local RoundedSurface = MSUF.RoundedSurface or {}
-MSUF.RoundedSurface = RoundedSurface
-RoundedSurface.ResolveMedia = function()
-  UpdateRoundedMediaState()
-  return roundedMaskPath, roundedEdgePath, roundedMediaStrength
-end
-RoundedSurface.ResolveSlantedMedia = function()
-  local direction = SlantedDirection()
-  return SLANTED_MASK_PATHS[direction], SLANTED_EDGE_PATHS[direction], 0
-end
-RoundedSurface.ApplyMediaSlice = ApplyRoundedMediaSlice
-RoundedSurface.CanCreateRegion = CanCreateRoundedRegion
-RoundedSurface.IsCombatLocked = IsCombatLocked
-RoundedSurface.DeferApply = DeferApply
-RoundedSurface.SnapOff = SE_SnapOff
-
-local function ResolveMaskOwner(f, tex, anchor)
-  local owner = tex and tex.GetParent and tex:GetParent() or nil
-  if owner and type(owner.CreateMaskTexture) == "function" then return owner end
-  if anchor and type(anchor.CreateMaskTexture) == "function" then return anchor end
-  return f
-end
-
-local function EnsureMaskForAnchor(f, maskKey, anchor, tex, maskPath)
-  if not (f and type(f.CreateMaskTexture) == "function") then return nil end
-  anchor = anchor or f
-  local owner = ResolveMaskOwner(f, tex, anchor)
-  if not (owner and type(owner.CreateMaskTexture) == "function") then return nil end
-  -- Masks belong to the texture's owning frame, not necessarily the unit frame.
-  -- Cache per owner/texture so detached bars and group children do not fight for
-  -- one mask object with different parents.
-  local cacheKey = tex or owner
-
-  local masksByOwner = f[maskKey .. "ByOwner"]
-  if not masksByOwner then
-    masksByOwner = {}
-    f[maskKey .. "ByOwner"] = masksByOwner
-  end
-
-  local m = masksByOwner[cacheKey]
-  if not m then
-    if not CanCreateRoundedRegion(m) then return nil end
-    m = owner:CreateMaskTexture(nil, "ARTWORK")
-    SE_SnapOff(m)
-    masksByOwner[cacheKey] = m
-  end
-
-  local anchorByOwner = f[maskKey .. "AnchorByOwner"]
-  if not anchorByOwner then
-    anchorByOwner = {}
-    f[maskKey .. "AnchorByOwner"] = anchorByOwner
-  end
-  local pathByOwner = f[maskKey .. "PathByOwner"]
-  if not pathByOwner then
-    pathByOwner = {}
-    f[maskKey .. "PathByOwner"] = pathByOwner
-  end
-
-  local path = ResolveMaskPath(maskPath)
-  if anchorByOwner[cacheKey] ~= anchor or pathByOwner[cacheKey] ~= path then
-    if IsCombatLocked() then
-      DeferApply()
-      return nil
-    end
-    anchorByOwner[cacheKey] = anchor
-    pathByOwner[cacheKey] = path
-    if m.ClearAllPoints then m:ClearAllPoints() end
-    m:SetTexture(path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    m:SetAllPoints(anchor)
-    m._msufRoundedNeedsRebind = true
-  end
-  ApplyRoundedMediaSlice(m, path)
-  return m
-end
-
-local function ClearMasks(f, maskKey, maskedKey)
-  if not f then return end
-  local masked = f[maskedKey]
-  if masked then
-    for tex, mask in pairs(masked) do
-      if tex and type(tex.RemoveMaskTexture) == "function" then
-        if mask and mask ~= true then
-          tex:RemoveMaskTexture(mask)
-        elseif f[maskKey] then
-          tex:RemoveMaskTexture(f[maskKey])
-        end
-      end
-    end
-  end
-  f[maskedKey] = nil
-end
-
-local function BeginMaskRefresh(f, maskedKey)
-  if not f then return nil end
-  local seenKey = maskedKey .. "RefreshSeen"
-  local seen = f[seenKey]
-  if not seen then
-    seen = {}
-    f[seenKey] = seen
-  else
-    for tex in pairs(seen) do seen[tex] = nil end
-  end
-  f[maskedKey .. "Refreshing"] = seen
-  return seen
-end
-
-local function EndMaskRefresh(f, maskKey, maskedKey)
-  if not f then return end
-  local refreshKey = maskedKey .. "Refreshing"
-  local seen = f[refreshKey]
-  f[refreshKey] = nil
-  local masked = f[maskedKey]
-  if masked then
-    for tex, mask in pairs(masked) do
-      if not (seen and seen[tex]) then
-        if tex and type(tex.RemoveMaskTexture) == "function" then
-          if mask and mask ~= true then
-            tex:RemoveMaskTexture(mask)
-          elseif f[maskKey] then
-            tex:RemoveMaskTexture(f[maskKey])
-          end
-        end
-        masked[tex] = nil
-      end
-    end
-    if not next(masked) then f[maskedKey] = nil end
-  end
-  if seen then
-    for tex in pairs(seen) do seen[tex] = nil end
-  end
-end
-
-local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
-  if not (f and tex) then return false end
-  if type(tex.AddMaskTexture) ~= "function" then return false end
-
-  local masked = f[maskedKey]
-  -- Adding a first mask can allocate protected regions on secure frames. If the
-  -- texture was already masked, re-applying is safe; otherwise defer to regen.
-  if IsCombatLocked() and not (masked and masked[tex]) then
-    DeferApply()
-    return false
-  end
-
-  local m = EnsureMaskForAnchor(f, maskKey, anchor, tex, maskPath)
-  if not m then return false end
-
-  f[maskedKey] = f[maskedKey] or {}
-  local seen = f[maskedKey .. "Refreshing"]
-  if seen then seen[tex] = true end
-
-  local old = f[maskedKey][tex]
-  local needsRebind = m._msufRoundedNeedsRebind == true
-  m._msufRoundedNeedsRebind = nil
-  if old == m and not needsRebind then return true end
-  if old and tex.RemoveMaskTexture then
-    if old ~= true then
-      tex:RemoveMaskTexture(old)
-    elseif f[maskKey] then
-      tex:RemoveMaskTexture(f[maskKey])
-    end
-  end
-
-  tex:AddMaskTexture(m)
-  f[maskedKey][tex] = m
-  -- The engine masks the rounded surface after Health has applied, so a health
-  -- background clip mask can already sit on this exact texture. Two masks on
-  -- one texture render the missing-health background wrong (issue #146): retire
-  -- the clip mask and let Health fall back to its value-driven fill.
-  if f._msufHealthBackgroundMaskActive == true and f._msufHealthBackgroundMaskTexture == tex then
-    local Elements = MSUF and MSUF.UF and MSUF.UF.Elements
-    local Health = Elements and Elements.Health
-    if Health and type(Health.SyncBackgroundPlan) == "function" then
-      Health.SyncBackgroundPlan(f, true)
-    end
-  end
-  return true
-end
-
-RoundedSurface.ClearMasks = ClearMasks
-RoundedSurface.BeginMaskRefresh = BeginMaskRefresh
-RoundedSurface.EndMaskRefresh = EndMaskRefresh
-RoundedSurface.MaskTextureWith = MaskTextureWith
-
-local function ClearAllMasks(f)
-  ClearMasks(f, "_msufRUF_Mask", "_msufRUF_MaskedTextures")
-end
-
-local function MaskTexture(f, tex, anchor, maskPath)
-  MaskTextureWith(f, tex, "_msufRUF_Mask", "_msufRUF_MaskedTextures", anchor or (f and (f.bg or f) or nil), maskPath or SurfaceMaskPath(f))
-end
-
-local function ClearGroupMasks(f)
-  ClearMasks(f, "_msufRGF_Mask", "_msufRGF_MaskedTextures")
-end
-
-local function MaskGroupTexture(f, tex, anchor, maskPath)
-  MaskTextureWith(f, tex, "_msufRGF_Mask", "_msufRGF_MaskedTextures", anchor or (f and (f.barGroup or f) or nil), maskPath or SurfaceMaskPath(f))
-end
-
-local function ClearMaskForTexture(f, maskedKey, tex)
-  local masked = f and f[maskedKey]
-  local mask = masked and tex and masked[tex]
-  if mask and tex.RemoveMaskTexture then
-    tex:RemoveMaskTexture(mask)
-    masked[tex] = nil
-  end
-end
-
-local function SetRoundedEdgeTexture(edge, path)
-  if edge and edge._msufRUF_EdgeTexture ~= path then
-    edge._msufRUF_EdgeTexture = path
-    edge:SetTexture(path, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-  end
-  ApplyRoundedMediaSlice(edge, path)
-end
-
-local function HideRoundedEdgeStack(owner, baseEdge, poolKey)
-  if baseEdge then baseEdge:Hide() end
-  local stack = owner and owner[poolKey]
-  if type(stack) ~= "table" then return end
-  for i = 2, #stack do
-    local edge = stack[i]
-    if edge and edge.Hide then edge:Hide() end
-  end
-end
-
-local function ShowRoundedEdgeStack(owner, baseEdge, poolKey)
-  local stack = owner and owner[poolKey]
-  if type(stack) ~= "table" then
-    if baseEdge then baseEdge:Show() end
-    return
-  end
-  local count = ClampEdgeSize(stack._msufCount, 1, MAX_HIGHLIGHT_BORDER_THICKNESS)
-  for i = 1, count do
-    local edge = (i == 1) and baseEdge or stack[i]
-    if edge and edge.Show then edge:Show() end
-  end
-end
-
-local function SetRoundedEdgeStackAlpha(owner, baseEdge, poolKey, alpha)
-  local stack = owner and owner[poolKey]
-  local count = ClampEdgeSize(stack and stack._msufCount, 1, MAX_HIGHLIGHT_BORDER_THICKNESS)
-  for i = 1, count do
-    local edge = (i == 1) and baseEdge or stack and stack[i]
-    if edge and edge.SetAlpha then
-      edge:SetAlpha(alpha)
-    end
-  end
-end
-
-local function SetRoundedEdgeStackAlphaFromBoolean(owner, baseEdge, poolKey, value)
-  if not (baseEdge and baseEdge.SetAlphaFromBoolean) then return false end
-  local stack = owner and owner[poolKey]
-  local count = ClampEdgeSize(stack and stack._msufCount, 1, MAX_HIGHLIGHT_BORDER_THICKNESS)
-  for i = 1, count do
-    local edge = (i == 1) and baseEdge or stack and stack[i]
-    if edge then
-      edge:Show()
-      edge:SetAlphaFromBoolean(value, 1, 0)
-    end
-  end
-  return true
-end
-
-local function SetRoundedEdgeStackColor(owner, baseEdge, poolKey, r, g, b, a)
-  if baseEdge and baseEdge.SetVertexColor then baseEdge:SetVertexColor(r, g, b, a) end
-  local stack = owner and owner[poolKey]
-  if type(stack) ~= "table" then return end
-  for i = 2, #stack do
-    local edge = stack[i]
-    if edge and edge.SetVertexColor then edge:SetVertexColor(r, g, b, a) end
-  end
-end
-
 local function SetRoundedMouseoverStackColor(owner, baseEdge, poolKey, r, g, b, a)
   if _mouseoverStyle ~= "GRADIENT" then
     return SetRoundedEdgeStackColor(owner, baseEdge, poolKey, r, g, b, a)
@@ -715,329 +155,6 @@ local function SetRoundedMouseoverStackColor(owner, baseEdge, poolKey, r, g, b, 
     end
   end
 end
-
-local function EnsureRoundedHoverContainer(owner, parent, key)
-  if not (owner and parent) then return nil end
-  local container = owner[key]
-  if not container then
-    if not (CreateFrame and CanCreateRoundedRegion(container)) then return nil end
-    container = PixelLayoutRegion(CreateFrame("Frame", nil, parent._msufHealthVisualRoot or parent))
-    container:SetAllPoints(parent)
-    if container.EnableMouse then container:EnableMouse(false) end
-    container:Hide()
-    owner[key] = container
-  end
-  -- Match Highlight.EnsureHighlight's owner + 5 band. A newly-created child
-  -- otherwise inherits only parent + 1 and can sit below the health surfaces.
-  -- Hover events only show/hide this prewarmed container during combat.
-  if not IsCombatLocked() and owner.GetFrameLevel and container.SetFrameLevel then
-    local level = owner:GetFrameLevel()
-    if not issecretvalue(level) then
-      level = (level or 0) + 5
-      if container._msufRoundedHoverLevel ~= level then
-        container:SetFrameLevel(level)
-        container._msufRoundedHoverLevel = level
-      end
-    end
-  end
-  return container
-end
-
-local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness, poolKey, maskedKey, layer, subLevel, edgeOverride)
-  if not (owner and parent and baseEdge and anchor) then return false end
-  local count = ClampEdgeSize(thickness, 0, MAX_HIGHLIGHT_BORDER_THICKNESS)
-  if count <= 0 then
-    HideRoundedEdgeStack(owner, baseEdge, poolKey)
-    return false
-  end
-
-  local stack = owner[poolKey]
-  if not stack then
-    stack = {}
-    owner[poolKey] = stack
-  end
-  stack[1] = baseEdge
-  stack._msufCount = count
-  local edgePath = edgeOverride or SurfaceEdgePath(owner._msufRUFStyleOwner or owner)
-
-  -- Edge thickness is rendered as a tiny texture stack. Reuse existing textures
-  -- whenever possible; only missing stack entries are gated by combat lockdown.
-  for i = 1, count do
-    local edge = (i == 1) and baseEdge or stack[i]
-    if not edge then
-      if not CanCreateRoundedRegion(edge) then return false end
-      edge = PixelLayoutRegion((parent._msufHealthVisualRoot or parent):CreateTexture(nil, layer, nil, subLevel or 0), true)
-      SE_SnapOff(edge)
-      stack[i] = edge
-    end
-    ClearMaskForTexture(owner, maskedKey, edge)
-    SetRoundedEdgeTexture(edge, edgePath)
-    if not LayoutRoundedEdge(edge, anchor, i, i) then return false end
-    edge:Show()
-  end
-
-  for i = count + 1, #stack do
-    local edge = stack[i]
-    if edge and edge.Hide then edge:Hide() end
-  end
-
-  return true
-end
-
-local function RestoreClassPowerOutline(CP, shape)
-  if not CP then return end
-  CP._msufRoundedOutlineSuppressed = nil
-  local host = CP._msufRCPOutlineHost
-  local edge = CP._msufRCPOutlineEdge
-  if host then host:Hide() end
-  HideRoundedEdgeStack(CP, edge, "_msufRCPOutlineEdgeStack")
-
-  local outline = CP._outline
-  if outline then
-    local bars = BarsDB()
-    local thickness = tonumber(bars and bars.classPowerOutline) or 1
-    if shape == "BAR" and thickness > 0 then outline:Show() else outline:Hide() end
-  end
-end
-
-local function EnsureClassPowerRoundedOutline(CP)
-  local container = CP and CP.container
-  if not container then return nil, nil end
-  local host = CP._msufRCPOutlineHost
-  if not host then
-    if not (CreateFrame and CanCreateRoundedRegion(host)) then return nil, nil end
-    host = PixelLayoutRegion(CreateFrame("Frame", nil, container))
-    host:SetAllPoints(container)
-    if host.EnableMouse then host:EnableMouse(false) end
-    CP._msufRCPOutlineHost = host
-  end
-  local hostLevel = container:GetFrameLevel() + 3
-  if CP._msufRCPOutlineHostLevel ~= hostLevel then
-    CP._msufRCPOutlineHostLevel = hostLevel
-    host:SetFrameLevel(hostLevel)
-  end
-
-  local edge = CP._msufRCPOutlineEdge
-  if not edge then
-    if not CanCreateRoundedRegion(edge) then return host, nil end
-    edge = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 0), true)
-    SE_SnapOff(edge)
-    CP._msufRCPOutlineEdge = edge
-  end
-  return host, edge
-end
-
-local function ClassPowerBoundaryRefs(bar)
-  if not bar then return nil, nil end
-  local fill = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
-  return fill, bar._bg
-end
-
-local function MaskClassPowerBoundary(container, bar, maskPath)
-  local fill, bg = ClassPowerBoundaryRefs(bar)
-  local fillApplied = MaskTextureWith(container, fill, "_msufRCPMask", "_msufRCPMaskedTextures", container, maskPath)
-  local bgApplied = MaskTextureWith(container, bg, "_msufRCPMask", "_msufRCPMaskedTextures", container, maskPath)
-  return fillApplied == true and bgApplied == true
-end
-
-local function ClassPowerRoundedStampMatches(stamp, active, shape, thickness, count, level,
-    maskPath, edgePath, bgTex, firstFill, firstBg, lastFill, lastBg)
-  if not stamp or stamp.active ~= active or stamp.shape ~= shape or stamp.thickness ~= thickness then
-    return false
-  end
-  if not active then return true end
-  return stamp.count == count and stamp.level == level
-    and stamp.maskPath == maskPath and stamp.edgePath == edgePath
-    and stamp.bgTex == bgTex and stamp.firstFill == firstFill and stamp.firstBg == firstBg
-    and stamp.lastFill == lastFill and stamp.lastBg == lastBg
-end
-
-local function StampClassPowerRounded(CP, active, shape, thickness, count, level,
-    maskPath, edgePath, bgTex, firstFill, firstBg, lastFill, lastBg)
-  local stamp = CP._msufRCPApplyStamp
-  if not stamp then
-    stamp = {}
-    CP._msufRCPApplyStamp = stamp
-  end
-  stamp.active, stamp.shape, stamp.thickness = active, shape, thickness
-  stamp.count, stamp.level = count, level
-  stamp.maskPath, stamp.edgePath = active and maskPath or nil, active and edgePath or nil
-  stamp.bgTex = active and bgTex or nil
-  stamp.firstFill, stamp.firstBg = active and firstFill or nil, active and firstBg or nil
-  stamp.lastFill, stamp.lastBg = active and lastFill or nil, active and lastBg or nil
-end
-
--- Class resources are segmented StatusBars, not unit-frame bars. Round only the
--- outer contour of rectangular BAR mode: the shared background plus the first
--- and last segment textures. Interior separators and all pip shapes stay native.
-local function ApplyClassPowerRounded(CP, masterEnabled)
-  local container = CP and CP.container
-  if not container then return false end
-  local bars = BarsDB()
-  local shape = tostring(bars and bars.classPowerShape or "BAR"):upper()
-  if shape ~= "CIRCLE" and shape ~= "DIAMOND" and shape ~= "HEX" then shape = "BAR" end
-  local master = masterEnabled
-  if master == nil then master = IsEnabled() end
-  local slanted = slantedBarsEnabled and ReadRoundedBool("slantedClassResources", false)
-  local rounded = ReadRoundedBool("roundedClassResources", false)
-  local active = master == true and (slanted or rounded) and shape == "BAR"
-  local direction = slanted and SlantedDirection()
-  local maskPath = direction and SLANTED_MASK_PATHS[direction] or roundedMaskPath
-  local edgePath = direction and SLANTED_EDGE_PATHS[direction] or roundedEdgePath
-  local thickness = ClampEdgeSize(bars and bars.classPowerOutline, 1, 4)
-
-  local cpBars = CP.bars
-  local available = type(cpBars) == "table" and #cpBars or 0
-  local count = math.floor((tonumber(CP.currentMax) or 0) + 0.5)
-  if count < 1 then count = available > 0 and 1 or 0 end
-  if count > available then count = available end
-  local first = count > 0 and cpBars[1] or nil
-  local last = count > 0 and cpBars[count] or nil
-  local firstFill, firstBg = ClassPowerBoundaryRefs(first)
-  local lastFill, lastBg = ClassPowerBoundaryRefs(last)
-  local level = container.GetFrameLevel and container:GetFrameLevel() or 0
-
-  if active and not slanted then
-    UpdateRoundedMediaState()
-    maskPath, edgePath = roundedMaskPath, roundedEdgePath
-  end
-  if ClassPowerRoundedStampMatches(CP._msufRCPApplyStamp, active, shape, thickness, count, level,
-      maskPath, edgePath, CP.bgTex, firstFill, firstBg, lastFill, lastBg)
-      and (not active or CP._msufRoundedClassResourcesActive == true
-        and CP._msufRoundedOutlineSuppressed == true) then
-    -- CP_Layout owns the legacy rectangular outline and may run independently
-    -- of this stamped surface pass. Reassert the rounded ownership invariant
-    -- before taking the cache hit so a square outline can never sit on top of
-    -- the rounded edge after a later layout refresh.
-    if active and CP._outline
-        and (type(CP._outline.IsShown) ~= "function" or CP._outline:IsShown()) then
-      CP._outline:Hide()
-    end
-    return active
-  end
-
-  if IsCombatLocked() then
-    DeferApply()
-    return CP._msufRoundedClassResourcesActive == true
-  end
-
-  if not active then
-    ClearMasks(container, "_msufRCPMask", "_msufRCPMaskedTextures")
-    CP._msufRoundedClassResourcesActive = nil
-    RestoreClassPowerOutline(CP, shape)
-    StampClassPowerRounded(CP, false, shape, thickness, count, level)
-    return false
-  end
-
-  BeginMaskRefresh(container, "_msufRCPMaskedTextures")
-  local masksApplied = MaskTextureWith(container, CP.bgTex, "_msufRCPMask", "_msufRCPMaskedTextures", container, maskPath) == true
-  masksApplied = MaskClassPowerBoundary(container, first, maskPath) and masksApplied
-  if last ~= first then masksApplied = MaskClassPowerBoundary(container, last, maskPath) and masksApplied end
-  EndMaskRefresh(container, "_msufRCPMask", "_msufRCPMaskedTextures")
-
-  local outlineApplied = thickness <= 0
-  if thickness > 0 then
-    local host, edge = EnsureClassPowerRoundedOutline(CP)
-    if host and edge and ApplyRoundedEdgeStack(CP, host, edge, container, thickness,
-        "_msufRCPOutlineEdgeStack", "_msufRCPOutlineMaskedTextures", "OVERLAY", 0, edgePath) then
-      SetRoundedEdgeStackColor(CP, edge, "_msufRCPOutlineEdgeStack", 0, 0, 0, 1)
-      host:Show()
-      outlineApplied = true
-    end
-  else
-    local host = CP._msufRCPOutlineHost
-    if host then host:Hide() end
-    HideRoundedEdgeStack(CP, CP._msufRCPOutlineEdge, "_msufRCPOutlineEdgeStack")
-  end
-
-  CP._msufRoundedClassResourcesActive = true
-  CP._msufRoundedOutlineSuppressed = true
-  if CP._outline then CP._outline:Hide() end
-  if masksApplied and outlineApplied then
-    StampClassPowerRounded(CP, true, shape, thickness, count, level,
-      maskPath, edgePath, CP.bgTex, firstFill, firstBg, lastFill, lastBg)
-  end
-  return true
-end
-
-RoundedSurface.ApplyClassPower = ApplyClassPowerRounded
-
-local function ClearAltManaRounded(AM)
-  local container = AM and AM.container
-  if not container then return end
-  ClearMasks(container, "_msufRAMMask", "_msufRAMMaskedTextures")
-  local edge = AM._msufRAMOutlineEdge
-  if edge and edge._msufRAMActive then
-    edge._msufRAMActive = nil
-    edge:Hide()
-    AM._border:SetBackdropBorderColor(0, 0, 0, 1)
-    AM._border:Show()
-  end
-end
-
--- Alternative Mana follows the effective Player power-bar surface.
-local function ApplyAltManaRounded(AM, masterEnabled)
-  local container = AM and AM.container
-  if not container then return false end
-  local master = masterEnabled
-  if master == nil then master = IsEnabled() end
-  local db = _G.MSUF_DB
-  local explicit = db and db.player and db.player.frameBarShape
-  local selectedSlanted = explicit == "SLANTED" and SlantedScopeEnabled(false)
-  local slanted = selectedSlanted and slantedPowerBarsEnabled
-  local rounded = explicit == "ROUNDED" or ((explicit == nil or explicit == "SLANTED" and not selectedSlanted)
-    and ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedUnitFrames", true))
-  local active = master == true and (slanted or (rounded and ReadRoundedBool("roundedPowerBars", true)))
-  if IsCombatLocked() then
-    DeferApply()
-    local edge = AM._msufRAMOutlineEdge
-    return edge and edge._msufRAMActive == true or false
-  end
-  if not active then
-    ClearAltManaRounded(AM)
-    return false
-  end
-
-  if not slanted then UpdateRoundedMediaState() end
-  local direction = slanted and SlantedDirection()
-  local maskPath = direction and SLANTED_MASK_PATHS[direction] or roundedMaskPath
-  local edgePath = direction and SLANTED_EDGE_PATHS[direction] or roundedEdgePath
-  local bar = AM.bar
-  local fill = bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
-  BeginMaskRefresh(container, "_msufRAMMaskedTextures")
-  local bgApplied = MaskTextureWith(container, AM.bgTex, "_msufRAMMask",
-    "_msufRAMMaskedTextures", container, maskPath) == true
-  local fillApplied = MaskTextureWith(container, fill, "_msufRAMMask",
-    "_msufRAMMaskedTextures", container, maskPath) == true
-  EndMaskRefresh(container, "_msufRAMMask", "_msufRAMMaskedTextures")
-
-  local border = AM._border
-  local edge = AM._msufRAMOutlineEdge
-  if bgApplied and fillApplied and border then
-    if not edge and CanCreateRoundedRegion(edge) then
-      edge = PixelLayoutRegion(border:CreateTexture(nil, "OVERLAY", nil, 0), true)
-      SE_SnapOff(edge)
-      AM._msufRAMOutlineEdge = edge
-    end
-    if edge then
-      SetRoundedEdgeTexture(edge, edgePath)
-      if LayoutRoundedEdge(edge, container, 1, 1) then
-        if edge._msufRAMActive ~= true then
-          edge._msufRAMActive = true
-          edge:SetVertexColor(0, 0, 0, 1)
-          edge:Show()
-          border:SetBackdropBorderColor(0, 0, 0, 0)
-          border:Show()
-        end
-        return true
-      end
-    end
-  end
-  ClearAltManaRounded(AM)
-  return false
-end
-
-RoundedSurface.ApplyAltMana = ApplyAltManaRounded
 
 local function ResolveUnitEdgeColor(f)
   local key = f and tonumber(f._msufHighlightActiveKey or f._msufHighlightColorKey) or 0
@@ -1509,7 +626,7 @@ end
 local function ApplyGroupBlockRoundedBorder(host, conf, enabled)
   if not host then return false end
   local requested = conf and conf.frameBarShape
-  host._msufRUFForcedStyle = requested == "SLANTED" and (slantedBarsEnabled and slantedGroupFramesEnabled and "SLANTED"
+  host._msufRUFForcedStyle = requested == "SLANTED" and (Kit.SlantedScopeEnabled(true) and "SLANTED"
     or ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedGroupFrames", true) and "ROUNDED" or "SQUARE")
     or requested == "ROUNDED" and "ROUNDED"
     or requested == "SQUARE" and "SQUARE"
@@ -2222,7 +1339,7 @@ local function ApplyToUnitFrame(f)
   end
 
   if f.portrait then
-    MaskTexture(f, f.portrait, f.portrait, MASK_PATH_1X)
+    MaskTexture(f, f.portrait, f.portrait, Kit.MASK_PATH_1X)
   end
   EndMaskRefresh(f, "_msufRUF_Mask", "_msufRUF_MaskedTextures")
 end
@@ -2643,25 +1760,25 @@ local Module = {
 
   IsEnabled = function()
     UpdateSlantedBarState()
-    return IsConfiguredEnabled()
+    return Kit.IsConfiguredEnabled()
   end,
 
   Enable = function()
-    forceDisabled = false
+    Kit.SetForceDisabled(false)
     UpdateSlantedBarState()
     SetRoundedCallbacksActive(true)
     ApplyAll()
   end,
 
   Disable = function()
-    forceDisabled = true
+    Kit.SetForceDisabled(true)
     ApplyAll()
     SetRoundedCallbacksActive(false)
     RefreshFrozenDispelOverlayMasks()
   end,
 
   Apply = function()
-    forceDisabled = false
+    Kit.SetForceDisabled(false)
     UpdateSlantedBarState()
     SetRoundedCallbacksActive(true)
     ApplyAll()
@@ -2670,7 +1787,7 @@ local Module = {
 }
 
 local function ApplyRoundedUnitframes()
-  forceDisabled = false
+  Kit.SetForceDisabled(false)
   UpdateSlantedBarState()
   if IsEnabled() then
     SetRoundedCallbacksActive(true)
@@ -2735,4 +1852,3 @@ end
 
 ExportPublic("MSUF_ApplyRoundedUnitframes", ApplyRoundedUnitframes)
 
-ExportPublic("MSUF_ClampRoundedEdgeSize", ClampEdgeSize)

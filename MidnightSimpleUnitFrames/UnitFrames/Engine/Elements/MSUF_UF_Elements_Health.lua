@@ -479,9 +479,9 @@ function Health.Apply(frame, spec)
   -- let that cache suppress the saved background opacity here.
   if ApplyBackgrounds then ApplyBackgrounds(frame, true, false, true) end
   ApplyRuntimeColor(frame, "MSUF_COLOR_CHANGE", frame.MSUFUnitKey, nil, nil, true)
-  if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
-    _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
-  end
+  -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry and loads
+  -- after the elements; a spec applies only once the core has loaded.
+  MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua")(frame)
   -- The fill-mode apply seeded the value; reassert the full masked texture
   -- even when this frame's mask and orientation did not change.
   if Health.SyncBackgroundPlan then Health.SyncBackgroundPlan(frame, true) end

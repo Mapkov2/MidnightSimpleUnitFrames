@@ -8,6 +8,8 @@ ns.ExportPublic = function(name, value) _G[name] = value end
 local function load(path)
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", ns)
 end
+-- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+load("Kernel/MSUF_Require.lua")
 load("Kernel/MSUF_Libs.lua")
 load("UnitFrames/Engine/MSUF_UF_Shared.lua")
 local path = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Bold.ttf"

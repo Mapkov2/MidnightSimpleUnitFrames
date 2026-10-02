@@ -329,11 +329,9 @@ G.MSUF_GetPowerBarColor = MSUF_GetPowerBarColor
 
 local function MSUF_GetResolvedPowerColor(powerType, powerToken)
     powerToken = NormalizePowerToken(powerType, powerToken)
-    if type(MSUF_GetPowerBarColor) == "function" then
-        local r, g, b = MSUF_GetPowerBarColor(powerType, powerToken)
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return r, g, b
-        end
+    local r, g, b = MSUF_GetPowerBarColor(powerType, powerToken)
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+        return r, g, b
     end
 
     local snap = MSUF._PBCSnap

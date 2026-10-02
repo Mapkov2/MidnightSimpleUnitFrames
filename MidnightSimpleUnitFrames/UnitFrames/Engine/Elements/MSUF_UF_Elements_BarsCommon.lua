@@ -825,9 +825,10 @@ local function UpdateAllBarGradients(unit, skipUnitFrames)
       refreshed = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL) or refreshed
     end
   end
-  if not unitScope and _G.MSUF_RoundedUF_Active == true and type(_G.MSUF_RoundedUF_OnApplyAll) == "function" then
-    _G.MSUF_RoundedUF_OnApplyAll()
-  end
+  -- RoundedFrames exports its apply hook only while the module is active.
+  local applyRounded = not unitScope and _G.MSUF_RoundedUF_Active == true
+    and MSUF.Optional("MSUF_RoundedUF_OnApplyAll")
+  if applyRounded then applyRounded() end
   return refreshed
 end
 
@@ -845,7 +846,10 @@ local function ExternalFrameWidth(frameName, relativeTo)
   if not frameName then
     return nil
   end
-  local frame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(frameName)) or _G[frameName]
+  -- Runtime/MSUF_BarBackgroundRuntime.lua resolves the cooldown frame a layout
+  -- addon may stand in for; the Blizzard frame is the fallback it returns nil for.
+  local frame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", "UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")(frameName)
+    or _G[frameName]
   local widthFn = _G.MSUF_CDM_GetScaledWidth
   local width = type(widthFn) == "function" and widthFn(frame, relativeTo) or nil
   if issecretvalue(width) == true then return nil end

@@ -1,6 +1,6 @@
 -- Exercise per-frame shape precedence without a live WoW client.
 local Slice = assert(loadfile(".github/scripts/msuf_source_slice.lua"))()
-local path = "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua"
+local path = "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedSurface.lua"
 local source = Slice.Read(path)
 local declarations = {
     "local function UpdateSlantedBarState",

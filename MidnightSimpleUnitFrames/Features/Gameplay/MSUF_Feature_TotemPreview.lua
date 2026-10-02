@@ -122,10 +122,7 @@ do
         if spellID and C_Spell and C_Spell.GetSpellTexture then
             local icon = C_Spell.GetSpellTexture(spellID)
             if icon then
-                if type(MSUF_ResolveIconTexturePath) == "function" then
-                    icon = MSUF_ResolveIconTexturePath(icon)
-                end
-                return icon
+                return MSUF.Require("MSUF_ResolveIconTexturePath", "Features/Gameplay/MSUF_Feature_TotemPreview.lua")(icon)
             end
         end
 

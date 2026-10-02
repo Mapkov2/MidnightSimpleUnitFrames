@@ -980,9 +980,9 @@ function Power.Apply(frame, spec)
     local mount = _G.MSUF_ClassPower_MountEbonMight
     if type(mount) == "function" then mount(bar) end
   end
-  if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
-    _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
-  end
+  -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry and loads
+  -- after the elements; a spec applies only once the core has loaded.
+  MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua")(frame)
   NotifyRoundedPowerBorder(frame, enabled)
   if spec and spec.key == "player" then
     Power.SetClassResourceOocHidden(frame, frame._msufClassPowerOocHidden == true)

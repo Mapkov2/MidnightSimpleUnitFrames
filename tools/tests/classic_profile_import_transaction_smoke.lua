@@ -246,6 +246,9 @@ manifest.LoadSelected(repo, manifestFlavor, namespace, {
 -- Stub: State/MSUF_Defaults.lua owns MSUF_EnsureDB and the factory profile.
 function MSUF_EnsureDB() end
 function MSUF_NormalizeProfileDefaults(profile) return profile end
+-- Its portrait render and dispel priority migrations, which an external import runs.
+function MSUF_NormalizePortraitRenderDB(profile) return profile end
+function MSUF_MigrateDispelPriorityProfile(profile) return profile end
 function MSUF_CreateFactoryDefaultProfile()
     return { _msufProfileSchema = 600, general = { marker = "factory" } }
 end

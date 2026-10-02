@@ -9,6 +9,11 @@ local ExportPublic = MSUF.ExportPublic
 -- UnitFrame element bridge helpers.
 -- Queues cross-module refreshes from unitframe events into castbar/classpower/aura runtimes
 -- without making those runtimes direct dependencies of every element file.
+-- The castbar and class power owners load after the elements, so each one is
+-- resolved when a spec applies or a queued refresh runs, after the core loaded.
+local function Dep(name)
+  return MSUF.Require(name, "UnitFrames/Engine/Elements/MSUF_UF_Elements_Bridges.lua")
+end
 local function CastbarUnit(unit)
   if type(unit) == "string" and unit:match("^boss%d+$") then
     return "boss"
@@ -56,25 +61,15 @@ end
 local function QueueCastbarRefresh(unit)
   unit = CastbarUnit(unit)
   Queue(function()
-    local refreshed = false
-    if unit and type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-      _G.MSUF_ApplyCastbarUnitAndSync(unit)
-      refreshed = true
-    elseif unit and type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-      _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-      refreshed = true
-    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-      _G.MSUF_UpdateCastbarVisuals(unit)
-      refreshed = true
+    -- Castbars/MSUF_Castbars_Core.lua is part of every core TOC, so the boss
+    -- and arena preview refresh that stood in for a missing owner never ran.
+    if unit then
+      Dep("MSUF_ApplyCastbarUnitAndSync")(unit)
+    else
+      Dep("MSUF_UpdateCastbarVisuals")(unit)
     end
-    if (not unit or unit == "player") and type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
-      _G.MSUF_ApplyPlayerChannelTickMarkers()
-    end
-    if not refreshed and (not unit or unit == "boss") and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-      _G.MSUF_UpdateBossCastbarPreview()
-    end
-    if not refreshed and (not unit or unit == "arena") and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
-      _G.MSUF_UpdateArenaCastbarPreview()
+    if not unit or unit == "player" then
+      Dep("MSUF_ApplyPlayerChannelTickMarkers")()
     end
   end, "_msufCastbarRefreshQueued_" .. tostring(unit or "all"))
 end
@@ -119,8 +114,8 @@ function Castbars.Enable(frame)
   if type(UF.ClaimBlizzardCastbarOwnership) == "function" then
     UF.ClaimBlizzardCastbarOwnership("MSUF", unit)
   end
-  if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then
-    _G.MSUF_SuppressBlizzardPlayerCastbars()
+  if unit == "player" then
+    Dep("MSUF_SuppressBlizzardPlayerCastbars")()
   end
   QueueCastbarRefresh(unit)
 end
@@ -160,18 +155,8 @@ function ClassPower.IsEnabled(frame, spec)
 end
 
 local function ApplyClassPowerCold(opts)
-  if type(_G.MSUF_ClassPower_Apply) == "function" then
-    _G.MSUF_ClassPower_Apply(opts)
-    return true
-  end
-  if type(_G.MSUF_ClassPower_Refresh) == "function" then
-    _G.MSUF_ClassPower_Refresh()
-    if type(_G.MSUF_ClassPower_RefreshCDMWidthBindings) == "function" then
-      _G.MSUF_ClassPower_RefreshCDMWidthBindings(false)
-    end
-    return true
-  end
-  return false
+  Dep("MSUF_ClassPower_Apply")(opts)
+  return true
 end
 
 function ClassPower.Enable(frame, full)
@@ -180,9 +165,7 @@ function ClassPower.Enable(frame, full)
   end
   Queue(function()
     ApplyClassPowerCold(full and { full = true, cdm = true, syncNow = false } or { anchor = true, syncNow = false })
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
-      _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player")
-    end
+    Dep("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey")("player")
   end, "_msufClassPowerRefreshQueued")
 end
 
@@ -191,7 +174,7 @@ function ClassPower.Disable(frame)
     return
   end
   HideFrame(_G.MSUF_ClassPowerContainer)
-  if type(_G.MSUF_ClassPower_IsRuntimeActive) == "function" and not _G.MSUF_ClassPower_IsRuntimeActive() then
+  if not Dep("MSUF_ClassPower_IsRuntimeActive")() then
     return
   end
   Queue(function()

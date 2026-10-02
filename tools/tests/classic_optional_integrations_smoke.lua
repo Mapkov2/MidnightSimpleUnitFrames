@@ -28,6 +28,8 @@ end
 toc:close()
 assert(initialized and ns.Client, "TOC must initialize Client before bootstrap")
 ns.ExportPublic = function(name, value) _G[name] = value end
+-- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+load("Kernel/MSUF_Require.lua")
 MSUF_DB = { general = {} }
 MSUF_GetGeneralDB = function() return MSUF_DB.general end
 MSUF_EM2 = {}
@@ -60,7 +62,7 @@ for name in ([[MSUF_ApplyMsufScale MSUF_TargetSoundDriver_ApplySetting MSUF_NSRT
 MSUF_GF_InvalidateConfCache MSUF_UFCore_NotifyConfigChanged MSUF_ApplyModules MSUF_GF_RebuildAll
 MSUF_ClassPower_Apply MSUF_ApplyPowerBarEmbedLayout_All MSUF_Castbars_OnSettingsChanged
 MSUF_ApplyAllCastbarsAndSync MSUF_UpdateAllFonts_Immediate MSUF_UpdateCastbarVisuals_Immediate
-MSUF_ApplyCastbarVisualsForUnit]]):gmatch("%S+") do
+MSUF_ApplyCastbarVisualsForUnit MSUF_ApplyCurrentProfileGlobalUiScale]]):gmatch("%S+") do
     local key = name
     _G[key] = function() calls[key] = true end
 end

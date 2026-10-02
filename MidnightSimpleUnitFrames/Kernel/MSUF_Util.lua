@@ -773,10 +773,12 @@ MSUF.Util = MSUF.Util or {}
 local Util = MSUF.Util
 
 --- Run the full DB bootstrap only while MSUF_DB does not exist yet. The lookup
---- stays late-bound because State/MSUF_Defaults.lua loads after this file.
+--- stays late-bound because State/MSUF_Defaults.lua loads after this file: a
+--- call while the core is still loading, before Defaults, does nothing.
 local function EnsureDBSafe()
-    if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
-        (_G.MSUF_EnsureDB)()
+    if not _G.MSUF_DB then
+        local ensureDB = MSUF.Optional("MSUF_EnsureDB")
+        if ensureDB then ensureDB() end
     end
 end
 

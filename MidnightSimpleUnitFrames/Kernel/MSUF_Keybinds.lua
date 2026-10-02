@@ -158,18 +158,19 @@ function MSUF.OpenOptionsFromLauncher(pageKey)
     return OpenLoadedOptionsFromLauncher()
 end
 
+--- Kernel/MSUF_OptionsLoader.lua publishes the options entry points as cold
+--- forwarders until the load-on-demand menu replaces them, so the window
+--- controls exist whenever a key is pressed.
 function MSUF_Keybind_ToggleOptions()
-    if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-        local win = _G.MSUF_StandaloneOptionsWindow
-        if win and win.IsShown and win:IsShown() then
-            if _G.MSUF_HideStandaloneOptionsWindow then
-                _G.MSUF_HideStandaloneOptionsWindow()
-            elseif win.Hide then
-                win:Hide()
-            end
-        else
-            MSUF.OpenOptionsFromLauncher()
+    local win = _G.MSUF_StandaloneOptionsWindow
+    if win and win.IsShown and win:IsShown() then
+        if _G.MSUF_HideStandaloneOptionsWindow then
+            _G.MSUF_HideStandaloneOptionsWindow()
+        elseif win.Hide then
+            win:Hide()
         end
+    else
+        MSUF.OpenOptionsFromLauncher()
     end
 end
 
@@ -254,10 +255,9 @@ local function MSUF_ClearManagedBinding(command)
 end
 ExportPublic("MSUF_ClearManagedBinding", MSUF_ClearManagedBinding)
 
+--- Group frames (every core TOC) publish the toggle after this file loads.
 function MSUF_Keybind_TogglePriorityFrame()
-    if type(_G.MSUF_GF_ToggleHoveredPriority) == "function" then
-        return _G.MSUF_GF_ToggleHoveredPriority()
-    end
+    return MSUF.Require("MSUF_GF_ToggleHoveredPriority", "Kernel/MSUF_Keybinds.lua")()
 end
 
 do

@@ -225,6 +225,12 @@ local function NumberWithFallback(value, fallback)
 end
 UF.NumberWithFallback = NumberWithFallback
 
+local function BoolWithFallback(value, fallback)
+  if value == nil then return fallback end
+  return value == true
+end
+UF.BoolWithFallback = BoolWithFallback
+
 local function NormalizeDispelDetectTrigger(value)
   value = tostring(value or ""):upper()
   if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then

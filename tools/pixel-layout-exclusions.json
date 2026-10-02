@@ -420,7 +420,7 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
-    "path": "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config.lua",
+    "path": "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config_Status.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 2,
     "reason": "Unparented event/dispatch driver"
@@ -438,7 +438,7 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
-    "path": "MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade.lua",
+    "path": "MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade_Driver.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 2,
     "reason": "Unparented event/dispatch driver"

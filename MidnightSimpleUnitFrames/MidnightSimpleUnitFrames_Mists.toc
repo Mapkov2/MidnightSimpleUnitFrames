@@ -117,6 +117,7 @@ Runtime\MSUF_UnitTooltips.lua
 Runtime\MSUF_BlizzEditModeBridge.lua
 Libs\MSUFUnitFrames\MSUFUnitFrames.xml
 UnitFrames\Engine\MSUF_UF_Shared.lua
+UnitFrames\Engine\MSUF_UF_Config_Status.lua
 UnitFrames\Engine\MSUF_UF_Config.lua
 UnitFrames\Engine\MSUF_UF_PreviewAnimation.lua
 Runtime\MSUF_Colors.lua
@@ -221,6 +222,8 @@ Kernel\MSUF_OptionsLoader.lua
 # ---------------------------------------------------------------
 Castbars\MSUF_InterruptReady.lua
 Castbars\MSUF_FocusKickIcon.lua
+UnitFrames\Effects\MSUF_UF_RoundedSurface.lua
+UnitFrames\Effects\MSUF_UF_RoundedResources.lua
 UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
 Castbars\MSUF_CastbarRounded.lua
 Game\Classic\Castbars\MSUF_CastbarVisualCompat.lua

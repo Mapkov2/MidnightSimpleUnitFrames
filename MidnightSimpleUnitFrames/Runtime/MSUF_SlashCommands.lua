@@ -378,7 +378,8 @@ Commands.Register({
     help = "Print the addon version, the active profile and the Edit Mode state.",
     run = function()
         local list = CommandsProfileList()
-        local editing = type(_G.MSUF_IsInEditMode) == "function" and _G.MSUF_IsInEditMode() == true
+        -- Shell/EditMode/MSUF_EditMode_Movers.lua publishes the Edit Mode state.
+        local editing = MSUF.Require("MSUF_IsInEditMode", "Runtime/MSUF_SlashCommands.lua")() == true
         print("|cff00b7ebMSUF|r " .. CommandsAddonVersion())
         print(string.format(Tr("  Profile: %s (%d saved)"),
             tostring(_G.MSUF_ActiveProfile or "?"), list and #list or 0))
@@ -587,9 +588,8 @@ Commands.Register({
             MSUF_ResetPositionAnchorsToScreen()
         end
         MSUF_Chat_RunApplyAllSettings()
-        if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
-            _G.MSUF_ForceReanchorAllUnitFrames_Once()
-        end
+        -- UnitFrames/Engine/MSUF_UF_Factory.lua loads after this file.
+        MSUF.Require("MSUF_ForceReanchorAllUnitFrames_Once", "Runtime/MSUF_SlashCommands.lua")()
         local updateFonts = _G.MSUF_UpdateAllFonts
         if type(updateFonts) == "function" then
             updateFonts()
@@ -661,8 +661,10 @@ Commands.Register({
     usage = "/msuf analytics on/off/status",
     help = "Turn the Wago Analytics beta telemetry on or off.",
     run = function(rest)
-        if type(_G.MSUF_Analytics_HandleSlash) == "function" then
-            _G.MSUF_Analytics_HandleSlash(rest)
+        -- The telemetry module is optional by design; say so when it is absent.
+        local handleSlash = MSUF.Optional("MSUF_Analytics_HandleSlash")
+        if handleSlash then
+            handleSlash(rest)
         else
             print(Tr("|cffff0000MSUF:|r Analytics module not loaded."))
         end

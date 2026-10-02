@@ -179,6 +179,11 @@ function MSUF.ExportPublic(name, value)
   return value
 end
 _G.MSUF_NS = MSUF
+-- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+assert(loadfile('MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua'))('MidnightSimpleUnitFrames', MSUF)
+-- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry each border
+-- apply calls; this harness builds no boss frames.
+_G.MSUF_ApplyBossPhysicalBarGeometry = function() end
 
 local engineRoot = "MidnightSimpleUnitFrames/UnitFrames/Engine/"
 local libraryRoot = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/"
@@ -327,6 +332,10 @@ local startupFrames = {
  NewStartupFrame('target'), NewStartupFrame('pet'), NewStartupFrame('pettarget'),
  NewStartupFrame('party1','party'),
 }
+-- The rounded surface layer and the class resource renderers load before the
+-- frame controller, exactly as the TOC lists them.
+assert(loadfile('MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedSurface.lua'))('MidnightSimpleUnitFrames',MSUF)
+assert(loadfile('MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedResources.lua'))('MidnightSimpleUnitFrames',MSUF)
 assert(loadfile(arg and arg[2] or 'MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua'))('MidnightSimpleUnitFrames',MSUF)
 MSUF.__msufRoundedEventFrame:Fire('ADDON_LOADED','MidnightSimpleUnitFrames')
 Check(module ~= nil, 'rounded module was not registered')

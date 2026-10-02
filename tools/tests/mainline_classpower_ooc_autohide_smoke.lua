@@ -105,6 +105,11 @@ local function Start(spec)
     _G.MSUF_NS = ns
     t.ns = ns
     t.player = player
+    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", ns)
+    -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry the Power
+    -- apply calls; this harness has no boss frames.
+    _G.MSUF_ApplyBossPhysicalBarGeometry = function() end
 
     -- The actual Power element owns all surfaces. The text layout module owns
     -- the independent hover overlay, which must not reveal hidden power text.

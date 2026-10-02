@@ -484,10 +484,13 @@ local function MSUF_Defaults_Stage_SeedBarTextureDefaults(g)
     end
     --- Best-effort validation: if we can confidently resolve a statusbar key and it fails,
     --- fall back to nil ("follow foreground") so users don't get broken textures after removing SharedMedia packs.
+    --- The castbar texture resolver loads after the defaults; a defaults pass
+    --- that runs during the core load validates through LibSharedMedia below.
     local function _MSUF_IsValidStatusbarKey(key)
         if type(key) ~= "string" or key == "" then  return false end
-        if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
-            local tex = _G.MSUF_ResolveStatusbarTextureKey(key)
+        local resolveKey = MSUF.Optional("MSUF_ResolveStatusbarTextureKey")
+        if resolveKey then
+            local tex = resolveKey(key)
             if type(tex) == "string" and tex ~= "" then
                 return true
             end

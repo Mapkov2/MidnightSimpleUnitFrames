@@ -486,6 +486,22 @@ end
 Shared.NormalizeClassPowerShape = NormalizeClassPowerShape
 ExportPublic("MSUF_UF_NormalizeClassPowerShape", NormalizeClassPowerShape)
 
+--- Width of a class resource bar in the "auto_pips" width mode: `count` pips
+--- of `slot` pixels (at least 1) with `gap` pixels (0..8) between them. With a
+--- `snap(region, value)` function, slot and gap are snapped to `region`'s pixel
+--- grid first, as the live bar's layout does; a preview passes no snap.
+function Shared.ClassPowerAutoFitWidth(count, slot, gap, snap, region)
+  count = tonumber(count) or 1
+  local autoGap = tonumber(gap) or 0
+  if autoGap < 0 then autoGap = 0 elseif autoGap > 8 then autoGap = 8 end
+  if autoGap > 0 and type(snap) == "function" then autoGap = snap(region, autoGap) or autoGap end
+  local size = tonumber(slot) or 1
+  if size < 1 then size = 1 end
+  if type(snap) == "function" then size = snap(region, size) or size end
+  if size < 1 then size = 1 end
+  return (size * count) + ((count - 1) * autoGap)
+end
+
 local function MaskHas(mask, flag)
   mask = tonumber(mask) or 0
   flag = tonumber(flag) or 0

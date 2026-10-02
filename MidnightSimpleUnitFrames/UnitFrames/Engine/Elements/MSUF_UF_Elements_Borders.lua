@@ -883,9 +883,9 @@ function Borders.Create(frame)
 end
 
 function Borders.Apply(frame, spec)
-  if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
-    _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
-  end
+  -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry and loads
+  -- after the elements; a spec applies only once the core has loaded.
+  MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua")(frame)
   local cfg = spec and spec.border
   if frame then
     local customPriority = cfg and cfg.prioEnabled == true and type(cfg.prioOrder) == "table"
