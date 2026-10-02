@@ -2110,17 +2110,8 @@ local function BuildUnitBlacklistPresetsAndList(B)
         local values = type(Model.UnitBlacklistSpellValues) == "function"
             and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
             or Model.BlacklistSpellValues(CurrentPreset())
-        local selected = M.auraBlacklistSpell
-        local entries = Model.BlacklistEntries(unit, lane)
-        local blocked = {}
-        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
-        for i = 1, #values do
-            if values[i].value == selected and not blocked[tostring(selected)] then return selected end
-        end
-        for i = 1, #values do
-            if values[i].value ~= nil and not blocked[tostring(values[i].value)] then return values[i].value end
-        end
-        return nil
+        local blocked = M.AuraControls.BlockedSet(Model.BlacklistEntries(unit, lane))
+        return M.AuraControls.FirstUnblockedSpell(values, M.auraBlacklistSpell, blocked)
     end
     local selectedSummary, addSet, addSpell
     if showPresets then
@@ -2210,21 +2201,13 @@ local function BuildUnitBlacklistPresetsAndList(B)
     })
     refreshList = function()
         local entries = Model.BlacklistEntries(unit, lane)
-        local blocked = {}
-        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+        local blocked = M.AuraControls.BlockedSet(entries)
         if B.refreshLiveBlock then B.refreshLiveBlock(blocked) end
         if showPresets then
             local setSpells = type(Model.UnitBlacklistSpellValues) == "function"
                 and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
                 or Model.BlacklistSpellValues(CurrentPreset())
-            local missing = 0
-            for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
-            T.SetTranslatedText(selectedSummary, missing == 0
-                and M.Format("%d spells in this set - all already blocked", #setSpells)
-                or M.Format("%d spells in this set - %d can still be added", #setSpells, missing))
-            W.SetControlEnabled(addSet, missing > 0)
-            local selectedSpell = CurrentSpell()
-            W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
+            M.AuraControls.PaintPresetSummary(selectedSummary, addSet, addSpell, setSpells, blocked, CurrentSpell)
         end
         blockedList.Paint(entries, searchValue, prepared)
         if B.renderVerify then B.renderVerify() end

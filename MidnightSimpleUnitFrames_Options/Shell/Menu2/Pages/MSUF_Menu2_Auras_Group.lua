@@ -1010,15 +1010,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         local values, selected = PresetSpellValues(), M.auraBlacklistSpell
         local entries = type(Model.GroupBlacklistEntries) == "function"
             and Model.GroupBlacklistEntries(scope, lane) or {}
-        local blocked = {}
-        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
-        for i = 1, #values do
-            if values[i].value == selected and not blocked[tostring(selected)] then return selected end
-        end
-        for i = 1, #values do
-            if values[i].value ~= nil and not blocked[tostring(values[i].value)] then return values[i].value end
-        end
-        return nil
+        return M.AuraControls.FirstUnblockedSpell(values, selected, M.AuraControls.BlockedSet(entries))
     end
     local preset = W.Dropdown(section, "Preset", PresetValues, presetW)
     W.MoveWidget(preset, section, 24, -36 + curatedOffset, presetW)
@@ -1092,17 +1084,8 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     })
     refreshList = function()
         local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
-        local blocked = {}
-        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
-        local setSpells = PresetSpellValues()
-        local missing = 0
-        for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
-        T.SetTranslatedText(selectedSummary, missing == 0
-            and M.Format("%d spells in this set - all already blocked", #setSpells)
-            or M.Format("%d spells in this set - %d can still be added", #setSpells, missing))
-        W.SetControlEnabled(addSet, missing > 0)
-        local selectedSpell = CurrentSpell()
-        W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
+        local blocked = M.AuraControls.BlockedSet(entries)
+        M.AuraControls.PaintPresetSummary(selectedSummary, addSet, addSpell, PresetSpellValues(), blocked, CurrentSpell)
         blockedList.Paint(entries, searchValue, prepared)
     end
     M.TrackRefresh(ctx, refreshList)

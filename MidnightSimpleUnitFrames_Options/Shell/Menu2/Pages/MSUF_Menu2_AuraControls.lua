@@ -398,6 +398,36 @@ local function BlockedSpellList(ctx, section, inner, offsetY, emptyText, opts)
     return list
 end
 
+--- A blacklist's blocked spells as a set keyed by tostring(spell id).
+local function BlockedSet(entries)
+    local blocked = {}
+    for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+    return blocked
+end
+--- The spell a blacklist's "Add spell" button adds: the selected preset
+--- spell while it is not blocked yet, otherwise the first one that is not.
+local function FirstUnblockedSpell(values, selected, blocked)
+    for i = 1, #values do
+        if values[i].value == selected and not blocked[tostring(selected)] then return selected end
+    end
+    for i = 1, #values do
+        if values[i].value ~= nil and not blocked[tostring(values[i].value)] then return values[i].value end
+    end
+    return nil
+end
+--- The preset summary line ("n spells in this set - ...") and the enabled
+--- state of the "Add set" and "Add spell" buttons for the blocked set.
+local function PaintPresetSummary(selectedSummary, addSet, addSpell, setSpells, blocked, CurrentSpell)
+    local missing = 0
+    for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
+    T.SetTranslatedText(selectedSummary, missing == 0
+        and M.Format("%d spells in this set - all already blocked", #setSpells)
+        or M.Format("%d spells in this set - %d can still be added", #setSpells, missing))
+    W.SetControlEnabled(addSet, missing > 0)
+    local selectedSpell = CurrentSpell()
+    W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
+end
+
 local function BuildLaneTabs(ctx, parent, stateKey, x, y, width)
     BuildActionTabs(ctx, parent, LANE_VALUES, x, y, width, function() return CurrentLane(stateKey, "debuff") end, function(value)
         SetCurrentLane(stateKey, value)
@@ -413,9 +443,12 @@ M.AuraControls = {
     AuraCatalogToken = AuraCatalogToken,
     AuraControlMeta = AuraControlMeta,
     AuraControlMetaAtVisiblePath = AuraControlMetaAtVisiblePath,
+    BlockedSet = BlockedSet,
     BlockedSpellList = BlockedSpellList,
     BuildLaneTabs = BuildLaneTabs,
     Card = Card,
+    FirstUnblockedSpell = FirstUnblockedSpell,
+    PaintPresetSummary = PaintPresetSummary,
     ConfigureAuraSpellPriorityDrag = ConfigureAuraSpellPriorityDrag,
     ConfigureMaxDurationSlider = ConfigureMaxDurationSlider,
     LANE_VALUES = LANE_VALUES,
