@@ -179,6 +179,11 @@ local function NewWorld(arenaSlots)
         _G.MSUF_GetCastbarTextColor = function() return 1, 1, 1 end
         _G.MSUF_GetConfiguredFontColor = function() return 1, 1, 1 end
         _G.MSUF_GetCastbarBackgroundColor = function() return 0.176, 0.176, 0.176, 1 end
+        _G.MSUF_NormalizeFontPath = function(path) return path end
+        _G.MSUF_GetInternalFontPathByKey = function() return nil end
+        -- Shell/EditMode/MSUF_EditMode_Compat.lua: the open castbar popup.
+        _G.MSUF_UpdateCastbarEditInfo = function() end
+        _G.MSUF_SyncCastbarPositionPopup = function() end
     end
     local world = World.New(root, "timer", { pools = true, extra = EXTRA, arenaSlots = arenaSlots, setup = Setup, richWidgets = true })
     world.unitFrames = unitFrames

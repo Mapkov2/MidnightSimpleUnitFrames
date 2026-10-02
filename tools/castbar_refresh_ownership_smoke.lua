@@ -110,12 +110,13 @@ assert(contains(spawnBody, "MSUF_FocusKickDriver_ForceUpdate")
 local coldStart = assert(core:find("local function ApplyCastbarVisualFrameCold", 1, true))
 local coldEnd = assert(core:find("local function BumpCastbarVisualRevisions", coldStart, true))
 local coldBody = core:sub(coldStart, coldEnd - 1)
-local _, coldRefreshCount = coldBody:gsub("MSUF_RefreshCastbarFrame%(", "")
+-- Core resolves the Visuals follower when it runs (Visuals loads later).
+local _, coldRefreshCount = coldBody:gsub('Later%("MSUF_RefreshCastbarFrame"%)%(', "")
 assert(coldRefreshCount == 1, "each Core frame pass must invoke exactly one Visuals follower")
 assert(contains(coldBody, "ApplyCastbarBaseGeometry(frame, general, forcedUnit)"))
 assert(contains(coldBody, "frame._msufCastbarColdGlobalRev == globalRevision"),
     "cold visual pass must skip an already-applied revision and geometry")
-assert(contains(coldBody, "MSUF_RefreshCastbarFrame(frame, forcedUnit, general)"))
+assert(contains(coldBody, 'Later("MSUF_RefreshCastbarFrame")(frame, forcedUnit, general)'))
 assert(contains(coldBody, "ApplyCastbarSparkVisual(frame, general)"))
 assert(contains(core, "spark:SetShown(enabled)"),
     "cold castbar style pass must own spark visibility")
@@ -243,9 +244,10 @@ assert(contains(driver, "frame:RegisterUnitEvent(ACTIVE_LIFECYCLE_EVENTS[index],
 assert(contains(anchors, 'ExportPublic("MSUF_ReanchorPlayerCastBarBase", ReanchorPlayerCastBarBase)'))
 assert(contains(anchors, 'ExportPublic("MSUF_ReanchorTargetCastBarBase", ReanchorTargetCastBarBase)'))
 assert(contains(anchors, 'ExportPublic("MSUF_ReanchorFocusCastBarBase", ReanchorFocusCastBarBase)'))
-assert(contains(core, "_G.MSUF_ReanchorPlayerCastBarBase()"))
-assert(contains(core, "_G.MSUF_ReanchorTargetCastBarBase()"))
-assert(contains(core, "_G.MSUF_ReanchorFocusCastBarBase()"))
+-- Core resolves the Anchors re-anchors when it runs (Anchors loads later).
+assert(contains(core, 'Later("MSUF_ReanchorPlayerCastBarBase")()'))
+assert(contains(core, 'Later("MSUF_ReanchorTargetCastBarBase")()'))
+assert(contains(core, 'Later("MSUF_ReanchorFocusCastBarBase")()'))
 assert(not contains(visuals, 'ExportPublic("MSUF_ReanchorPlayerCastBar",'))
 
 local sizeStart = assert(anchors:find("local function ApplyPlayerCastbarSizeAndLayout", 1, true))

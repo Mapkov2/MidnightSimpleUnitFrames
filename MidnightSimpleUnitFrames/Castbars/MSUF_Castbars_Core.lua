@@ -38,15 +38,30 @@ local function IsKnownAsset(path)
     return true
 end
 
+--- Providers that load before this file in every client TOC (State defaults,
+--- Kernel, the Runtime font registry, the Edit Mode castbar popup). A missing
+--- one is a load-order bug, so it fails here, loudly.
+local FILE = "Castbars/MSUF_Castbars_Core.lua"
+local Require = MSUF.Require
+local EnsureDBProvider = Require("MSUF_EnsureDB", FILE)
+local NormalizeFontPath = Require("MSUF_NormalizeFontPath", FILE)
+local GetInternalFontPathByKey = Require("MSUF_GetInternalFontPathByKey", FILE)
+local UpdateCastbarEditInfo = Require("MSUF_UpdateCastbarEditInfo", FILE)
+local SyncCastbarPositionPopup = Require("MSUF_SyncCastbarPositionPopup", FILE)
+
+--- Providers that load after this file (Utils, Anchors, Visuals; the Classic
+--- visual compat wraps MSUF_RefreshCastbarFrame), resolved when they are
+--- used: every caller runs after the core finished loading.
+local function Later(name)
+    return Require(name, FILE)
+end
+
 local function ResolveFontPath(path, size, flags)
     local resolver = _G.MSUF_ResolveFontPath
     if type(resolver) == "function" then
         return resolver(path, size, flags)
     end
-    if type(_G.MSUF_NormalizeFontPath) == "function" then
-        return _G.MSUF_NormalizeFontPath(path)
-    end
-    return path
+    return NormalizeFontPath(path)
 end
 
 local IsInCombat = _G.MSUF_IsPlayerInCombat
@@ -187,17 +202,17 @@ local function ApplyCastbarUnitAndSync(unit)
         elseif _G.MSUF_UpdateCastbarVisuals then
             _G.MSUF_UpdateCastbarVisuals(poolKind)
         end
-        if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo(poolKind) end
-        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup(poolKind) end
+        UpdateCastbarEditInfo(poolKind)
+        SyncCastbarPositionPopup(poolKind)
         return
     end
 
-    if unit == "player" and type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then
-        _G.MSUF_ReanchorPlayerCastBarBase()
-    elseif unit == "target" and type(_G.MSUF_ReanchorTargetCastBarBase) == "function" then
-        _G.MSUF_ReanchorTargetCastBarBase()
-    elseif unit == "focus" and type(_G.MSUF_ReanchorFocusCastBarBase) == "function" then
-        _G.MSUF_ReanchorFocusCastBarBase()
+    if unit == "player" then
+        Later("MSUF_ReanchorPlayerCastBarBase")()
+    elseif unit == "target" then
+        Later("MSUF_ReanchorTargetCastBarBase")()
+    elseif unit == "focus" then
+        Later("MSUF_ReanchorFocusCastBarBase")()
     end
 
     if ApplyCastbarVisualsForUnit then
@@ -205,8 +220,8 @@ local function ApplyCastbarUnitAndSync(unit)
     elseif _G.MSUF_UpdateCastbarVisuals then
         _G.MSUF_UpdateCastbarVisuals(unit)
     end
-    if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo(unit) end
-    if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup(unit) end
+    UpdateCastbarEditInfo(unit)
+    SyncCastbarPositionPopup(unit)
 end
 ExportPublic("MSUF_ApplyCastbarUnitAndSync", ApplyCastbarUnitAndSync)
 
@@ -214,8 +229,8 @@ local GetGlobalFontFlags
 
 local function EnsureDB()
     local db = _G.MSUF_DB
-    if not db and type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
+    if not db then
+        EnsureDBProvider()
         db = _G.MSUF_DB
     end
     if not db then
@@ -237,10 +252,7 @@ local function GetFontPath()
         if path then return ResolveFontPath(path, general.fontSize or 14, GetGlobalFontFlags()) end
     end
 
-    local internalPath
-    if type(_G.MSUF_GetInternalFontPathByKey) == "function" then
-        internalPath = _G.MSUF_GetInternalFontPathByKey(fontKey)
-    end
+    local internalPath = GetInternalFontPathByKey(fontKey)
     if internalPath then return ResolveFontPath(internalPath, general.fontSize or 14, GetGlobalFontFlags()) end
 
     local media = lsm or (MSUF and MSUF.LSM) or _G.MSUF_LSM
@@ -353,6 +365,8 @@ local function GetCastbarTexture()
 end
 ExportPublic("MSUF_GetCastbarTexture", GetCastbarTexture)
 
+local ResolveStatusbarTextureKey
+
 local function GetCastbarBackgroundTexture()
     local db = EnsureDB()
     local general = db.general
@@ -370,10 +384,7 @@ local function GetCastbarBackgroundTexture()
     local cached = cache[cacheKey]
     if cached then return cached end
 
-    local texture
-    if type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
-        texture = _G.MSUF_ResolveStatusbarTextureKey(key)
-    end
+    local texture = ResolveStatusbarTextureKey(key)
     if not texture or texture == "" then texture = "Interface\\TARGETINGFRAME\\UI-StatusBar" end
     cache[cacheKey] = texture
     return texture
@@ -534,7 +545,7 @@ local function ClearResolvedStatusbarTextureCache()
 end
 ExportPublic("MSUF_ClearResolvedStatusbarTextureCache", ClearResolvedStatusbarTextureCache)
 
-local function ResolveStatusbarTextureKey(key)
+function ResolveStatusbarTextureKey(key)
     if type(key) ~= "string" or key == "" then return "Interface\\TargetingFrame\\UI-StatusBar" end
 
     local cached = resolvedStatusbarTextureCache[key]
@@ -632,12 +643,7 @@ local function ApplySparkLayout(frame, statusBar, general, height)
         if texture then
             -- Moving edge = side opposite the fill anchor: LEFT when
             -- reverse-filled, RIGHT otherwise (fill and drain alike).
-            local reversed = false
-            if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-                reversed = _G.MSUF_GetCastbarReverseFillForFrame(frame, false) == true
-            elseif statusBar.GetReverseFill then
-                reversed = statusBar:GetReverseFill() and true or false
-            end
+            local reversed = Later("MSUF_GetCastbarReverseFillForFrame")(frame, false) == true
             spark:ClearAllPoints()
             spark:SetPoint("CENTER", texture, reversed and "LEFT" or "RIGHT", 0, 0)
         end
@@ -692,8 +698,8 @@ local function ApplyCastbarBaseGeometry(frame, general, forcedUnit)
         -- and overwrites the boss-specific geometry from the preceding anchor
         -- pass. Auto Width only masks the width half of that bug. Resolve both
         -- dimensions from the real boss settings in every width-source mode.
-        if (unit == "boss" or unit == "arena") and type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-            local desiredWidth, desiredHeight = _G.MSUF_GetCastbarDesiredSize(
+        if unit == "boss" or unit == "arena" then
+            local desiredWidth, desiredHeight = Later("MSUF_GetCastbarDesiredSize")(
                 unit, general, frame, width, height)
             if desiredWidth and desiredWidth > 0 then width = desiredWidth end
             if desiredHeight and desiredHeight > 0 then height = desiredHeight end
@@ -826,9 +832,7 @@ local function ApplyCastbarVisualFrameCold(frame, general, forcedUnit)
         and frame._msufCastbarColdHeight == height then
         return true
     end
-    if type(_G.MSUF_RefreshCastbarFrame) == "function" then
-        _G.MSUF_RefreshCastbarFrame(frame, forcedUnit, general)
-    end
+    Later("MSUF_RefreshCastbarFrame")(frame, forcedUnit, general)
     ApplyCastbarSparkVisual(frame, general)
     frame._msufCastbarStyleRev = globalRevision
     frame._msufCastbarColdGlobalRev = globalRevision
@@ -951,15 +955,13 @@ local function UpdateCastbarVisuals(unit)
     BumpCastbarVisualRevisions()
     local general = EnsureDB().general or {}
     if unit then
-        if unit == "player" and type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then
-            _G.MSUF_ReanchorPlayerCastBarBase()
+        if unit == "player" then
+            Later("MSUF_ReanchorPlayerCastBarBase")()
         end
         return ApplyCastbarVisualsForUnit(unit, true, general)
     end
 
-    if type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then
-        _G.MSUF_ReanchorPlayerCastBarBase()
-    end
+    Later("MSUF_ReanchorPlayerCastBarBase")()
 
     ApplyAllCastbarVisuals(general)
 end
@@ -970,9 +972,9 @@ local CASTBAR_SYNC_UNITS = { "player", "target", "focus", "boss", "arena" }
 
 local function ApplyAllCastbarsAndSync()
     local general = EnsureDB().general or {}
-    if type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then _G.MSUF_ReanchorPlayerCastBarBase() end
-    if type(_G.MSUF_ReanchorTargetCastBarBase) == "function" then _G.MSUF_ReanchorTargetCastBarBase() end
-    if type(_G.MSUF_ReanchorFocusCastBarBase) == "function" then _G.MSUF_ReanchorFocusCastBarBase() end
+    Later("MSUF_ReanchorPlayerCastBarBase")()
+    Later("MSUF_ReanchorTargetCastBarBase")()
+    Later("MSUF_ReanchorFocusCastBarBase")()
     local pools = CastbarPools()
     for index = 1, #pools do
         pools[index].ApplyPositionSetting(nil, true, true)
