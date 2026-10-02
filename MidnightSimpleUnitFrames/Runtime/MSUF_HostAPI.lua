@@ -7,9 +7,11 @@
 --                global = nil | { preset = "pixel" | "custom", scale = number } }
 --       reason: "combat", "unavailable" (no scale owner or settings) or
 --       "invalid" (a malformed spec); a refusal writes nothing.
---   MSUF_HostAPI.SetResourceStack(mode)       -> changed
+--   MSUF_HostAPI.SetResourceStack(mode, force) -> changed, applied
 --       mode "cooldown": class resource and detached player power bar on the
---       cooldown manager. Unknown modes and a missing database change nothing.
+--       cooldown manager. changed: a stack value was written; applied: the four
+--       appliers ran (always when changed, and with force also when nothing
+--       changed). Unknown modes and a missing database change nothing.
 --   MSUF_HostAPI.GetResourceStack()           -> "cooldown" | nil
 --
 -- The same table is MSUF.HostAPI, and its functions are on the addon
@@ -17,7 +19,8 @@
 -- once, at the first call (after the whole core has loaded), and kept here.
 local _, MSUF = ...
 local type = type
-local InCombatLockdown = InCombatLockdown
+local UtilInCombat = MSUF.Util.InCombat
+local UnitAffectingCombat = UnitAffectingCombat
 
 local HOST_API_FILE = "Runtime/MSUF_HostAPI.lua"
 -- The clamps of ApplyMsufScale and SetGlobalUiScale (Runtime/MSUF_UIScaleRuntime.lua).
@@ -61,8 +64,19 @@ local function InRange(value, minimum, maximum)
     return type(value) == "number" and value >= minimum and value <= maximum
 end
 
+-- The host API's combat question for its refusals; Menu2's page-reset
+-- providers ask it too. The shared helper answers from the lockdown (and, on
+-- clients that track it, this frame's combat edge). The player's combat flag
+-- closes the gap while PLAYER_REGEN_DISABLED is dispatched, when
+-- InCombatLockdown() still answers false: Blizzard's AssistedCombatManager
+-- reads UnitAffectingCombat("player") in that handler as the new state. Not a
+-- guard for protected writes, which still ask InCombatLockdown().
+local function PlayerInCombat()
+    return UtilInCombat() == true or UnitAffectingCombat("player") == true
+end
+
 local function ApplyUIScaleProfile(spec)
-    if InCombatLockdown() then return false, "combat" end
+    if PlayerInCombat() then return false, "combat" end
     if not scaleResolved then ResolveScale() end
     local db = _G.MSUF_DB
     local general = type(db) == "table" and db.general
@@ -122,14 +136,15 @@ local function GetResourceStack()
 end
 
 -- The appliers keep their own combat deferral of protected work; this setter
--- adds no combat rule. A stack that is already complete changes nothing and
--- runs no applier.
-local function SetResourceStack(mode)
-    if mode ~= RESOURCE_STACK_COOLDOWN then return false end
+-- adds no combat rule. A stack that is already complete writes nothing and,
+-- unless forced (the Suite's installer re-applies its stack), runs no applier.
+local function SetResourceStack(mode, force)
+    if mode ~= RESOURCE_STACK_COOLDOWN then return false, false end
     local db = _G.MSUF_DB
-    if type(db) ~= "table" or type(db.bars) ~= "table" or type(db.player) ~= "table" then return false end
+    if type(db) ~= "table" or type(db.bars) ~= "table" or type(db.player) ~= "table" then return false, false end
     local bars, player = db.bars, db.player
-    if CooldownStackComplete(bars, player) then return false end
+    local changed = not CooldownStackComplete(bars, player)
+    if not changed and force ~= true then return false, false end
     if not resourcesResolved then ResolveResources() end
     -- The fields and the applier order of the Suite's former Profiles code.
     bars.showClassPower = true
@@ -148,7 +163,7 @@ local function SetResourceStack(mode)
     applyPowerLayout("player", true)
     applyClassPower(CLASS_POWER_PLAYER_HP)
     notifyConfigChanged("player", false, true, "SuiteResourceStack")
-    return true
+    return changed, true
 end
 
 local API = {
@@ -158,6 +173,7 @@ local API = {
     GetResourceStack = GetResourceStack,
 }
 MSUF.HostAPI = API
+MSUF.HostAPIPlayerInCombat = PlayerInCombat
 MSUF.ApplyUIScaleProfile = ApplyUIScaleProfile
 MSUF.SetResourceStack = SetResourceStack
 MSUF.GetResourceStack = GetResourceStack

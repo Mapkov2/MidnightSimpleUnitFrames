@@ -10,10 +10,13 @@
 -- resulting MSUF_DB, applier call, argument and the database at each applier
 -- call must match.
 --
--- Also pinned: the refusals (combat, unavailable, invalid) write nothing;
--- SetResourceStack keeps no combat rule of its own; GetResourceStack round-
--- trips; the owners resolve once (capability lookups counted over 1010 calls of
--- each setter); a repeated call allocates 0 KB.
+-- Also pinned: the refusals (combat, also during the PLAYER_REGEN_DISABLED
+-- dispatch before the lockdown starts; unavailable; invalid) write nothing;
+-- SetResourceStack(mode, force) returns changed, applied, and a forced apply
+-- equals the legacy write on every state, a complete stack included; it keeps
+-- no combat rule of its own; GetResourceStack round-trips; the owners resolve
+-- once (capability lookups counted over 1010 calls of each setter); a repeated
+-- call allocates 0 KB.
 --
 -- Plain Lua 5.1 (loadstring, setfenv). Repo root as arg 1, default ".".
 
@@ -73,7 +76,10 @@ local PIXEL_PERFECT = 768 / 1080
 -- One recording host. options.missing names appliers the host lacks.
 local function NewHost(db, options)
     options = options or {}
-    local host = { log = {}, reads = {}, combat = false, record = true, requires = 0 }
+    -- combat: the lockdown. regenEdge: PLAYER_REGEN_DISABLED is being
+    -- dispatched; the client already flags the player in combat, the
+    -- lockdown starts after that dispatch.
+    local host = { log = {}, reads = {}, combat = false, regenEdge = false, record = true, requires = 0 }
     local globals = {}
     for _, name in ipairs({ "type", "tonumber", "tostring", "pairs", "ipairs", "next", "error", "select",
         "string", "table", "math", "assert", "rawget", "rawset", "setmetatable", "unpack" }) do
@@ -81,6 +87,7 @@ local function NewHost(db, options)
     end
     globals.MSUF_DB = db
     globals.InCombatLockdown = function() return host.combat end
+    globals.UnitAffectingCombat = function(unit) return unit == "player" and (host.combat or host.regenEdge) end
     globals.MSUF_GetPixelPerfectScale = function() return PIXEL_PERFECT end
     for name, section in pairs(CAPABILITIES) do
         globals[name] = function(...)
@@ -106,9 +113,11 @@ end
 
 local function DB(host) return host.globals.MSUF_DB end
 
--- The real MSUF_HostAPI.lua, with the real MSUF.Require, in a host.
+-- The real MSUF_HostAPI.lua, with the real MSUF.Require, in a host. The shared
+-- combat helper (Kernel/MSUF_Util.lua Util.InCombat) answers from the lockdown,
+-- as Retail's does; Classic's also remembers a combat edge a handler passed it.
 local function BootV1(host)
-    local ns = {}
+    local ns = { Util = { InCombat = function() return host.combat end } }
     ns.ExportPublic = function(name, value)
         host.env[name] = value
         return value
@@ -128,6 +137,8 @@ local function BootV1(host)
     Check(ns.ApplyUIScaleProfile == api.ApplyUIScaleProfile and ns.SetResourceStack == api.SetResourceStack
         and ns.GetResourceStack == api.GetResourceStack, "the addon namespace must carry the same functions")
     Check(next(host.reads) == nil and host.requires == 0, "the owners must resolve at the first call, not at load")
+    Check(type(ns.HostAPIPlayerInCombat) == "function", "the host API's combat question is not published for Menu2")
+    host.ns = ns
     return api
 end
 
@@ -296,6 +307,15 @@ do
     Check(ok == false and reason == "combat" and Equal(before, DB(host)) and #host.log == 0,
         "ApplyUIScaleProfile must refuse in combat without a write")
     host.combat = false
+    -- Inside PLAYER_REGEN_DISABLED the lockdown has not started yet, but the
+    -- player is in combat: refuse there too, without a write.
+    host.regenEdge = true
+    ok, reason = api.ApplyUIScaleProfile(SpecFor(true, 0.75, "custom"))
+    Check(ok == false and reason == "combat" and Equal(before, DB(host)) and #host.log == 0,
+        "ApplyUIScaleProfile must refuse during the PLAYER_REGEN_DISABLED dispatch without a write")
+    Check(host.ns.HostAPIPlayerInCombat() == true, "the host API's combat question missed the combat edge")
+    host.regenEdge = false
+    Check(host.ns.HostAPIPlayerInCombat() == false, "the host API's combat question reports combat out of combat")
     local INVALID = { false, 7, "scale", { msufScale = false }, { msufScale = "1" }, { msufScale = 0 / 0 },
         { msufScale = math.huge }, { msufScale = -math.huge }, { msufScale = 0.249 }, { msufScale = 2.001 },
         { global = false }, { global = {} }, { global = { preset = "custom", scale = 0.299 } },
@@ -365,7 +385,8 @@ for index, state in ipairs(STATES) do
     local host = NewHost(state())
     local api = BootV1(host)
     local label = "state " .. index .. " " .. Show(state())
-    Check(api.SetResourceStack("cooldown") == true, "SetResourceStack did not report a change for " .. label)
+    local changed, applied = api.SetResourceStack("cooldown")
+    Check(changed == true and applied == true, "SetResourceStack did not report a change for " .. label)
     Check(Equal(DB(legacy), DB(host)), "MSUF_DB differs from the legacy Profiles write for " .. label)
     Check(table.concat(legacy.log, "\n") == table.concat(host.log, "\n"),
         "applier calls differ from the legacy Profiles write for " .. label
@@ -373,15 +394,37 @@ for index, state in ipairs(STATES) do
     Check(api.GetResourceStack() == "cooldown", "GetResourceStack did not round-trip for " .. label)
     compared = compared + 1
 end
+-- A forced apply (the Suite's installer, EnsureRetailResourceStack(true)) runs
+-- the legacy writes and all four appliers on every state, a complete one too.
+local FORCED = { CompleteStack }
+for index = 1, 3 do FORCED[#FORCED + 1] = STATES[index] end
+for index, state in ipairs(FORCED) do
+    local legacy = NewHost(state())
+    Check(LegacyStack(legacy) == true, "legacy oracle did not write")
+    local host = NewHost(state())
+    local api = BootV1(host)
+    local label = "forced state " .. index .. " " .. Show(state())
+    local changed, applied = api.SetResourceStack("cooldown", true)
+    Check(changed == (index ~= 1) and applied == true, "a forced apply reported " .. tostring(changed) .. ", "
+        .. tostring(applied) .. " for " .. label)
+    Check(Equal(DB(legacy), DB(host)), "MSUF_DB differs from the legacy forced write for " .. label)
+    Check(table.concat(legacy.log, "\n") == table.concat(host.log, "\n"),
+        "applier calls differ from the legacy forced write for " .. label
+        .. "\n  legacy:\n" .. table.concat(legacy.log, "\n") .. "\n  v1:\n" .. table.concat(host.log, "\n"))
+    compared = compared + 1
+end
 do
-    -- A complete stack is the same database either way; v1 reports no change
-    -- and runs no applier (the legacy code re-ran them on unchanged settings).
+    -- Without force a complete stack is the same database either way; v1
+    -- reports no change and runs no applier.
     local legacy = NewHost(CompleteStack())
     LegacyStack(legacy)
     local host = NewHost(CompleteStack())
     local api = BootV1(host)
-    Check(api.SetResourceStack("cooldown") == false and #host.log == 0 and Equal(DB(legacy), DB(host)),
+    local changed, applied = api.SetResourceStack("cooldown")
+    Check(changed == false and applied == false and #host.log == 0 and Equal(DB(legacy), DB(host)),
         "an already complete stack must change nothing and apply nothing")
+    changed, applied = api.SetResourceStack("cooldown", 1)
+    Check(changed == false and applied == false and #host.log == 0, "force must be exactly true")
     -- No combat rule of its own: the appliers defer protected work.
     host.combat = true
     DB(host).bars.classPowerOffsetY = 12
@@ -394,7 +437,8 @@ do
     local before = Copy(DB(host))
     local count = #host.log
     for _, mode in ipairs({ "unknown", "", false, 1 }) do
-        Check(api.SetResourceStack(mode) == false, "an unknown mode was accepted: " .. tostring(mode))
+        local changed, applied = api.SetResourceStack(mode, true)
+        Check(changed == false and applied == false, "an unknown mode was accepted: " .. tostring(mode))
     end
     Check(api.SetResourceStack() == false and Equal(before, DB(host)) and #host.log == count,
         "an unknown mode wrote or applied something")
@@ -402,15 +446,17 @@ end
 for _, db in ipairs({ false, { player = {} }, { bars = {} }, { bars = {}, player = "broken" } }) do
     local host = NewHost(db or nil)
     local api = BootV1(host)
-    Check(api.SetResourceStack("cooldown") == false and #host.log == 0, "a missing database section was written")
+    local changed, applied = api.SetResourceStack("cooldown", true)
+    Check(changed == false and applied == false and #host.log == 0, "a missing database section was written")
     Check(api.GetResourceStack() == nil, "GetResourceStack answered without a database")
 end
 do
-    -- A host without one of its own appliers fails loudly, before any write.
+    -- A host without one of its own appliers fails loudly, before any write
+    -- (forced or not).
     local host = NewHost({ bars = {}, player = {} }, { missing = { "MSUF_ClassPower_Apply" } })
     local api = BootV1(host)
     for attempt = 1, 2 do
-        local ok, message = pcall(api.SetResourceStack, "cooldown")
+        local ok, message = pcall(api.SetResourceStack, "cooldown", attempt == 2)
         Check(not ok and tostring(message):find("MSUF_ClassPower_Apply", 1, true) ~= nil,
             "a missing host applier must raise with its name (call " .. attempt .. ")")
         Check(Equal(DB(host), { bars = {}, player = {} }) and #host.log == 0,
