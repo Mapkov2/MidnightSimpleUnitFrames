@@ -171,27 +171,6 @@ local function InvalidateAllFrameCaches()
     end
 end
 
-local function FlushPendingCommits()
-    local st = _G.MSUF_ApplyCommitState
-    if st then
-        st.pending = false
-        st.queued  = false
-        st.fonts   = false
-        st.fontKey = nil
-        st.bars    = false
-        st.castbars  = false
-        st.tickers   = false
-        st.bossPreview = false
-    end
-    local ufSt = _G.MSUF_UnitFrameApplyState
-    if ufSt then
-        if ufSt.dirty then
-            for k in pairs(ufSt.dirty) do ufSt.dirty[k] = nil end
-        end
-        ufSt.queued = false
-    end
-end
-
 local function HardHideEditModePreviews()
     PublishCompat("MSUF_UnitPreviewActive", false)
     PublishCompat("MSUF_PreviewTestMode", false)
@@ -537,9 +516,6 @@ function State.CancelAll()
     --- Stop ticker FIRST so no OnUpdate can write offsets after restore.
     if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
 
-    --- Kill any pending async commits - they would re-apply dragged offsets
-    --- after we restore the snapshot, overwriting our restore.
-    FlushPendingCommits()
     if EM2.Undo and EM2.Undo.CancelChange then EM2.Undo.CancelChange() end
 
     local history = SharedHistoryService()

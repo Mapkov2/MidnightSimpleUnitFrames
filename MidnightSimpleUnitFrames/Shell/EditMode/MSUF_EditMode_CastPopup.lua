@@ -98,11 +98,6 @@ local function WidthSourceKey(unit)
 end
 
 local function DetachedKey(unit)
-    local fn = _G.MSUF_GetCastbarDetachedKey
-    if type(fn) == "function" then
-        local key = fn(unit)
-        if key then return key end
-    end
     if unit == "player" then return "castbarPlayerDetached" end
     if unit == "target" then return "castbarTargetDetached" end
     if unit == "focus" then return "castbarFocusDetached" end

@@ -41,15 +41,6 @@ local function ToggleEditMode()
             nextActive = not st.active
         end
         _G.MSUF_SetMSUFEditModeDirect(nextActive, nil)
-        return
-    end
-    if type(_G.MSUF_ToggleEditMode) == "function" then
-        _G.MSUF_ToggleEditMode()
-        return
-    end
-    if type(_G.MSUF_EditMode_Toggle) == "function" then
-        _G.MSUF_EditMode_Toggle()
-        return
     end
 end
 
