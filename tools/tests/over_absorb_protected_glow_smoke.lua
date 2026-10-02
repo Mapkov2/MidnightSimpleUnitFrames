@@ -2,21 +2,32 @@
 --
 -- The partial-health over-absorb glow (Bars > Prediction "over-absorb overlay")
 -- shows when the absorb overflows the missing health. On Midnight
--- UnitGetTotalAbsorbs returns a secret, and health often is one too: the
--- element had no secret-safe path and hid the glow for every protected
--- operand, so it never rendered there.
+-- UnitGetTotalAbsorbs returns a secret, and health often is one too, so the
+-- glow renders through the prediction calculator: its MissingHealth clamp
+-- reports the overflow as `clamped`, and a step curve keeps full health to
+-- the full-health stripe.
 --
--- The prediction calculator's MissingHealth clamp reports that overflow as
--- `clamped`; SetAlphaFromBoolean consumes it on the glow texture, a step curve
--- on the holder keeps full health to the full-health stripe. This smoke loads
--- the real element with values as strict as the client (a secret refuses
--- comparison, arithmetic, concatenation and indexing) and pins:
+-- The 2026-10-02 raid trace measured this path at about 30 % of core CPU
+-- (six native calls per health tick). Since W4-C1 one tick fills the
+-- calculator once, evaluates the step curve on that calculator
+-- (EvaluateCurrentHealthPercent) and hands the result to the one flag sink
+-- as its alphaIfTrue: SetAlphaFromBoolean(clamped, partial, 0) on the cached
+-- glow texture, with the holder at full alpha.
+--
+-- The real element loads with values as strict as the client (a secret
+-- refuses comparison, arithmetic, concatenation and indexing). Pinned:
 --   1. overlay only: protected values render through the calculator flag and
---      the partial-health curve, without Lua touching a secret;
---   2. overlay plus stripe: the flag alone, holder at full alpha;
+--      the calculator's partial-health curve, without Lua touching a secret,
+--      with one calculator read and no unit health query;
+--   2. overlay plus stripe: the flag alone, at full alpha;
 --   3. a following plain update clears the flag gate on the glow;
 --   4. the health follower opens for a protected absorb with the overlay on;
---   5. without the calculator the glow still hides (no guessing).
+--   5. without the calculator the glow still hides (no guessing);
+--   6. what the client draws: a model that resolves each secret to the plain
+--      value behind it renders the glow for a grid of health, absorb and
+--      incoming heals, protected and plain, overlay with and without the
+--      stripe, and checks it against the plain rule (partial health:
+--      hp + incoming + absorb >= max; full health: only with the stripe).
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -26,13 +37,19 @@ local function Forbidden() error("restricted prediction value inspected", 2) end
 local SECRET_META = { __eq = Forbidden, __lt = Forbidden, __le = Forbidden, __add = Forbidden,
     __sub = Forbidden, __mul = Forbidden, __div = Forbidden, __concat = Forbidden,
     __index = Forbidden, __len = Forbidden }
+-- secret -> { label, plain value the client would hold behind it }
 local secrets = {}
-local function Secret(label)
+local function Secret(label, payload)
     local value = setmetatable({}, SECRET_META)
-    secrets[value] = label
+    secrets[value] = { label, payload }
     return value
 end
 local function IsSecret(value) return secrets[value] ~= nil end
+local function Plain(value)
+    local entry = secrets[value]
+    if entry then return entry[2] end
+    return value
+end
 _G.issecretvalue = IsSecret
 
 local log = {}
@@ -43,7 +60,8 @@ Region.__index = Region
 local function NewRegion(kind, parent)
     return setmetatable({ kind = kind, parent = parent, shown = true, alpha = 1 }, Region)
 end
-function Region:SetAlpha(alpha) self.alpha = alpha end
+local textureReads = 0
+function Region:SetAlpha(alpha) self.alpha = alpha; Record("SetAlpha") end
 function Region:SetAlphaFromBoolean(value, alphaIfTrue, alphaIfFalse)
     self.alphaBoolean, self.alphaIfTrue, self.alphaIfFalse = value, alphaIfTrue, alphaIfFalse
     -- The rendered alpha now follows the (possibly secret) flag.
@@ -68,7 +86,11 @@ function Region:EnableMouse() end
 function Region:SetMinMaxValues() end
 function Region:SetValue(value) self.value = value end
 function Region:SetStatusBarTexture() self.fill = self.fill or NewRegion("Texture", self) end
-function Region:GetStatusBarTexture() self.fill = self.fill or NewRegion("Texture", self); return self.fill end
+function Region:GetStatusBarTexture()
+    textureReads = textureReads + 1
+    self.fill = self.fill or NewRegion("Texture", self)
+    return self.fill
+end
 function Region:SetStatusBarColor() end
 function Region:SetReverseFill() end
 function Region:SetOrientation() end
@@ -83,26 +105,56 @@ function Region:HookScript() end
 function Region:SetScript() end
 function Region:CreateTexture() return NewRegion("Texture", self) end
 
+-- The unit the calculator and the unit APIs read (fractions of max health).
+local unitState = { hp = 0.5, absorb = 0.6, incoming = 0, protected = true }
+local function UnitValue(label, value)
+    if unitState.protected then return Secret(label, value) end
+    return value
+end
+
+local function Evaluate(curve, x)
+    local p = curve.points
+    if x <= p[1][1] then return p[1][2] end
+    for index = 2, #p do
+        if x <= p[index][1] then
+            if curve.kind == 1 then return x < p[index][1] and p[index - 1][2] or p[index][2] end
+            return p[index - 1][2] + (p[index][2] - p[index - 1][2]) * (x - p[index - 1][1]) / (p[index][1] - p[index - 1][1])
+        end
+    end
+    return p[#p][2]
+end
+
 _G.CreateFrame = function(kind, _, parent) return NewRegion(kind, parent) end
 _G.UnitExists = function() return true end
 _G.UnitIsConnected = function() return true end
-_G.UnitHealth = function() return Secret("health") end
-_G.UnitHealthMax = function() return Secret("max") end
+_G.UnitHealth = function() return UnitValue("health", unitState.hp * 1000) end
+_G.UnitHealthMax = function() return UnitValue("max", 1000) end
 local curveReads = {}
 _G.UnitHealthPercent = function(unit, _, curve)
     curveReads[#curveReads + 1] = curve
-    return Secret("curve alpha")
+    return UnitValue("curve alpha", curve and Evaluate(curve, unitState.hp) or unitState.hp)
 end
-_G.UnitGetIncomingHeals = function() return Secret("incoming") end
-_G.UnitGetTotalAbsorbs = function() return Secret("absorb") end
-_G.UnitGetTotalHealAbsorbs = function() return Secret("heal absorb") end
+_G.UnitGetIncomingHeals = function() return UnitValue("incoming", unitState.incoming * 1000) end
+_G.UnitGetTotalAbsorbs = function() return UnitValue("absorb", unitState.absorb * 1000) end
+_G.UnitGetTotalHealAbsorbs = function() return UnitValue("heal absorb", 0) end
 local calculators = {}
 local calculatorAvailable = true
 _G.CreateUnitHealPredictionCalculator = function()
     if not calculatorAvailable then return nil end
-    local calc = { clamped = Secret("clamped") }
+    local calc = {}
     function calc:SetDamageAbsorbClampMode(mode) self.mode = mode end
-    function calc:GetDamageAbsorbs() return Secret("clamped amount"), self.clamped end
+    -- MissingHealth: in excess of the missing health less the incoming heals.
+    function calc:GetDamageAbsorbs()
+        local boundary = (1 - self.hp) - self.incoming
+        if boundary < 0 then boundary = 0 end
+        self.clamped = Secret("clamped", self.absorb > boundary)
+        return Secret("clamped amount", self.absorb), self.clamped
+    end
+    function calc:EvaluateCurrentHealthPercent(curve)
+        self.evaluated = Secret("calculator curve", Evaluate(curve, self.hp))
+        self.evaluatedCurve = curve
+        return self.evaluated
+    end
     calculators[#calculators + 1] = calc
     return calc
 end
@@ -110,6 +162,7 @@ local detailedReads = 0
 _G.UnitGetDetailedHealPrediction = function(unit, healer, calc)
     detailedReads = detailedReads + 1
     calc.lastUnit, calc.lastHealer = unit, healer
+    calc.hp, calc.absorb, calc.incoming = unitState.hp, unitState.absorb, unitState.incoming
 end
 _G.Enum = { UnitDamageAbsorbClampMode = { MissingHealth = 0, MissingHealthWithoutIncomingHeals = 1 },
     LuaCurveType = { Linear = 0, Step = 1 } }
@@ -157,47 +210,62 @@ end
 
 -- 1. Overlay only, protected absorb and health.
 Run("overlay only", function()
+    unitState.protected, unitState.hp, unitState.absorb, unitState.incoming = true, 0.5, 0.6, 0
     local frame = NewFrame(true, false)
-    local absorb = Secret("absorb")
-    UpdateOverAbsorbGlow(frame, {}, "target", Secret("hp"), Secret("max"), absorb, true, true, true)
+    local reads, curveCalls = detailedReads, #curveReads
+    UpdateOverAbsorbGlow(frame, {}, "target", Secret("hp"), Secret("max"), Secret("absorb"), true, true, true)
     local holder = frame.overAbsorbGlowBar
     Check(holder and holder:IsShown(), "overlay only: the protected over-absorb glow does not render")
     local calc = calculators[#calculators]
     Check(calc and calc.mode == 0, "overlay only: the calculator does not clamp to the missing health")
     Check(calc and calc.lastUnit == "target" and calc.lastHealer == "player",
         "overlay only: the calculator did not read the frame's unit for the player's heals")
-    local glow = holder and holder:GetStatusBarTexture()
-    Check(glow and glow.alphaBoolean == calc.clamped and glow.alphaIfTrue == 1 and glow.alphaIfFalse == 0,
+    Check(detailedReads == reads + 1, "overlay only: one tick did not read the calculator exactly once")
+    Check(#curveReads == curveCalls, "overlay only: the partial-health gate asked UnitHealthPercent again")
+    local glow = holder and holder.fill
+    Check(glow and glow.alphaBoolean == calc.clamped and glow.alphaIfFalse == 0,
         "overlay only: the glow is not gated by the calculator's clamped flag")
-    local curve = curveReads[#curveReads]
+    Check(glow and glow.alphaIfTrue == calc.evaluated,
+        "overlay only: the flag's alpha does not come from the calculator's partial-health curve")
+    local curve = calc and calc.evaluatedCurve
     Check(curve and curve.kind == 1 and #curve.points == 2 and curve.points[1][1] == 0 and curve.points[1][2] == 1
         and curve.points[2][1] == 1 and curve.points[2][2] == 0,
         "overlay only: full health is not kept off by a partial-health step curve")
-    Check(IsSecret(holder.alpha), "overlay only: the holder alpha does not come from the health curve")
+    Check(holder and holder.alpha == 1, "overlay only: the holder is not at full alpha")
+
+    -- The glow texture handle is cached: health ticks do not ask for it.
+    local textureCalls = textureReads
+    UpdateOverAbsorbGlow(frame, {}, "target", Secret("hp"), Secret("max"), Secret("absorb"), true, nil, true)
+    Check(textureReads == textureCalls, "overlay only: a protected tick looked the glow texture up again")
 
     -- 3. A plain update afterwards clears the flag gate.
+    unitState.protected = false
     local before = #log
     UpdateOverAbsorbGlow(frame, {}, "target", 600, 1000, 500, true, true, false)
     Check(holder:IsShown() and glow.alpha == 1 and holder.alpha == 1,
         "overlay only: a plain overflow after a protected one stays gated by the old flag")
-    Check(#log == before, "overlay only: the plain path asked the calculator")
+    for index = before + 1, #log do
+        Check(log[index] ~= "SetAlphaFromBoolean", "overlay only: the plain path asked the calculator")
+    end
 end)
 
 -- 2. Overlay plus stripe: the flag alone is the union.
 Run("overlay and stripe", function()
+    unitState.protected = true
     local frame = NewFrame(true, true)
     local reads = #curveReads
     UpdateOverAbsorbGlow(frame, {}, "target", Secret("hp"), Secret("max"), Secret("absorb"), true, true, true)
     local holder = frame.overAbsorbGlowBar
-    local glow = holder and holder:GetStatusBarTexture()
-    Check(holder and holder:IsShown() and glow and IsSecret(glow.alphaBoolean),
-        "overlay and stripe: the protected glow does not render through the clamped flag")
+    local glow = holder and holder.fill
+    Check(holder and holder:IsShown() and glow and IsSecret(glow.alphaBoolean) and glow.alphaIfTrue == 1,
+        "overlay and stripe: the protected glow does not render through the clamped flag alone")
     Check(holder and holder.alpha == 1 and #curveReads == reads,
         "overlay and stripe: the holder is not at full alpha (the flag covers full health)")
 end)
 
 -- 4. The health follower opens for a protected absorb with the overlay on.
 Run("health follower", function()
+    unitState.protected = true
     local source = io.open(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua", "rb")
     local text = source:read("*a"):gsub("\r\n", "\n")
     source:close()
@@ -221,12 +289,82 @@ end)
 
 -- 5. Without the calculator nothing is guessed.
 Run("no calculator", function()
+    unitState.protected = true
     calculatorAvailable = false
     local frame = NewFrame(true, false)
     UpdateOverAbsorbGlow(frame, {}, "target", Secret("hp"), Secret("max"), Secret("absorb"), true, true, true)
     Check(not (frame.overAbsorbGlowBar and frame.overAbsorbGlowBar:IsShown()),
         "no calculator: the glow showed without a clamped flag")
     calculatorAvailable = true
+end)
+
+-- 6. What the client draws, against the plain rule.
+local function Drawn(frame)
+    local holder = frame.overAbsorbGlowBar
+    if not (holder and holder.shown) then return false end
+    -- The holder is a 0..1 StatusBar fed the raw absorb: a zero draws no fill.
+    if holder.value ~= nil and not (Plain(holder.value) > 0) then return false end
+    local holderAlpha = Plain(holder.alpha)
+    local glow = holder.fill
+    local glowAlpha = glow and glow.alpha or 1
+    if glow and glowAlpha == "from flag" then
+        if Plain(glow.alphaBoolean) == true then glowAlpha = Plain(glow.alphaIfTrue) else glowAlpha = Plain(glow.alphaIfFalse) end
+    end
+    return (holderAlpha or 0) * (glowAlpha or 0) > 0
+end
+
+local function Rule(hp, absorb, incoming, overlay, stripe)
+    if absorb <= 0 then return false end
+    if hp >= 1 then return stripe end
+    if not overlay then return false end
+    -- The calculator reports an overflow strictly beyond the boundary; the
+    -- grid avoids the exact edge, where the plain rule's >= differs.
+    return hp + incoming + absorb >= 1
+end
+
+local HEALTH = { 0.2, 0.55, 0.9, 1 }
+local ABSORB = { 0, 0.05, 0.3, 0.6 }
+local INCOMING = { 0, 0.25 }
+Run("rendered visibility", function()
+    for _, protected in ipairs({ true, false }) do
+        for _, shape in ipairs({ { true, false }, { true, true }, { false, true } }) do
+            local overlay, stripe = shape[1], shape[2]
+            for _, hp in ipairs(HEALTH) do
+                for _, absorb in ipairs(ABSORB) do
+                    for _, incoming in ipairs(INCOMING) do
+                        unitState.protected, unitState.hp, unitState.absorb, unitState.incoming =
+                            protected, hp, absorb, incoming
+                        local frame = NewFrame(overlay, stripe)
+                        frame._msufPredictionIncoming = incoming * 1000
+                        local hpValue, maxValue, absorbValue = UnitValue("hp", hp * 1000), UnitValue("max", 1000),
+                            UnitValue("absorb", absorb * 1000)
+                        UpdateOverAbsorbGlow(frame, {}, "target", hpValue, maxValue, absorbValue, true, true, protected)
+                        -- A second tick on the same frame must agree with the first.
+                        UpdateOverAbsorbGlow(frame, {}, "target", hpValue, maxValue, absorbValue, true, nil, protected)
+                        local want = Rule(hp, absorb, incoming, overlay, stripe)
+                        Check(Drawn(frame) == want, string.format(
+                            "rendered visibility: %s, overlay %s, stripe %s, health %.2f, absorb %.2f, incoming %.2f draws %s, the rule says %s",
+                            protected and "protected" or "plain", tostring(overlay), tostring(stripe), hp, absorb, incoming,
+                            tostring(Drawn(frame)), tostring(want)))
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- The stripe alone gates full health on the holder alpha. Switching the
+-- overlay on afterwards must not leave that gate on the holder.
+Run("stripe then overlay", function()
+    unitState.protected, unitState.hp, unitState.absorb, unitState.incoming = true, 0.55, 0.6, 0
+    local frame = NewFrame(false, true)
+    UpdateOverAbsorbGlow(frame, {}, "target", Secret("hp", 550), Secret("max", 1000), Secret("absorb", 600),
+        true, true, true)
+    Check(not Drawn(frame), "stripe then overlay: the stripe alone drew at partial health")
+    frame._msufPredictionOverAbsorbOverlay = true
+    UpdateOverAbsorbGlow(frame, {}, "target", Secret("hp", 550), Secret("max", 1000), Secret("absorb", 600),
+        true, nil, true)
+    Check(Drawn(frame), "stripe then overlay: the overflow stays hidden behind the stripe's full-health gate")
 end)
 
 if #failures > 0 then

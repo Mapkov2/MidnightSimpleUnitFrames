@@ -521,6 +521,9 @@ local function EnsureOverAbsorbGlow(frame)
   holder:Hide()
   local oldGlow = frame.overAbsorbGlow
   if oldGlow and oldGlow ~= glow and oldGlow.Hide then oldGlow:Hide() end
+  -- Only this function sets the holder's status texture, so the handle stays
+  -- valid for the holder's life; the health-tick sinks reuse it.
+  holder._msufOverAbsorbGlowTexture = glow
   frame.overAbsorbGlowBar = holder
   frame.overAbsorbGlow = glow
   return holder
@@ -636,16 +639,27 @@ end
 -- Over-absorb glow with protected values (Midnight absorbs, and often health,
 -- are secret). The prediction calculator's MissingHealth clamp reports whether
 -- the absorb overflows the missing health, incoming heals counted: `clamped`,
--- the plain rule (hp + incoming + absorb >= max) as a possibly secret boolean,
--- which SetAlphaFromBoolean consumes on the glow texture. Without the
--- full-health stripe a step curve on the holder alpha keeps the plain rule that
--- full health shows no partial glow; with the stripe, `clamped` is already the
--- union of both, because at full health every positive absorb is clamped. Lua
--- never compares, adds or branches on a protected value here.
+-- the plain rule (hp + incoming + absorb >= max) as a possibly secret boolean.
+-- Without the full-health stripe a step curve keeps the plain rule that full
+-- health shows no partial glow; with the stripe, `clamped` is already the
+-- union of both, because at full health every positive absorb is clamped.
+--
+-- One query renders a health tick (2026-10-02 raid trace: this was about 30 %
+-- of core CPU at six native calls per tick):
+--   * UnitGetDetailedHealPrediction fills the frame's calculator once;
+--   * the step curve is evaluated on that calculator's health
+--     (EvaluateCurrentHealthPercent, UnitHealPredictionCalculatorAPIDocumentation),
+--     the same snapshot `clamped` came from, instead of a second unit query;
+--   * SetAlphaFromBoolean takes the evaluated alpha as its alphaIfTrue
+--     (SecretArguments AllowedWhenTainted, SimpleRegionAPIDocumentation), so
+--     the texture alpha is clamped AND partial in one sink and the holder
+--     stays at full alpha;
+--   * the glow texture handle is the one EnsureOverAbsorbGlow created.
+-- Lua never compares, adds or branches on a protected value here.
 local overAbsorbPartialCurve
 local function UngateOverAbsorbGlow(holder)
   if holder._msufOverAbsorbGlowGated == true then
-    local glow = holder:GetStatusBarTexture()
+    local glow = holder._msufOverAbsorbGlowTexture
     if glow then glow:SetAlpha(1) end
     holder._msufOverAbsorbGlowGated = nil
   end
@@ -656,17 +670,20 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
   local calc = frame._msufPredictionOverAbsorbCalc
   if not calc then
     calc = CreateUnitHealPredictionCalculator and CreateUnitHealPredictionCalculator()
-    if not (calc and calc.SetDamageAbsorbClampMode and calc.GetDamageAbsorbs) then return false end
+    if not (calc and calc.SetDamageAbsorbClampMode and calc.GetDamageAbsorbs
+        and calc.EvaluateCurrentHealthPercent) then
+      return false
+    end
     calc:SetDamageAbsorbClampMode(UnitDamageAbsorbClampMode and UnitDamageAbsorbClampMode.MissingHealth or 0)
     frame._msufPredictionOverAbsorbCalc = calc
   end
-  local glow = holder:GetStatusBarTexture()
+  local glow = holder._msufOverAbsorbGlowTexture
   if not (glow and glow.SetAlphaFromBoolean) then return false end
   local curve
   if not stripeEnabled then
     curve = overAbsorbPartialCurve
     if not curve then
-      if not (CurveAPI and CurveAPI.CreateCurve and UnitHealthPercent) then return false end
+      if not (CurveAPI and CurveAPI.CreateCurve) then return false end
       curve = CurveAPI.CreateCurve()
       if not curve then return false end
       if curve.SetType then curve:SetType(LuaCurveType and LuaCurveType.Step or 1) end
@@ -682,15 +699,15 @@ local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
     UnitGetDetailedHealPrediction(unit, PREDICTION_HEALER_UNIT, calc)
   end
   local _, clamped = calc:GetDamageAbsorbs()
-  glow:SetAlphaFromBoolean(clamped, 1, 0)
-  holder._msufOverAbsorbGlowGated = true
   if curve then
-    local alpha = UnitHealthPercent(unit, true, curve)
-    SetOverAbsorbAlpha(holder, alpha, issecretvalue(alpha) == true)
+    glow:SetAlphaFromBoolean(clamped, calc:EvaluateCurrentHealthPercent(curve), 0)
   else
-    SetOverAbsorbAlpha(holder, 1, false)
+    glow:SetAlphaFromBoolean(clamped, 1, 0)
   end
-  -- The holder alpha no longer carries the stripe's full-health gate.
+  holder._msufOverAbsorbGlowGated = true
+  -- The flag sink carries both gates; the holder itself stays opaque, which
+  -- also retires the stripe's full-health gate on it.
+  SetOverAbsorbAlpha(holder, 1, false)
   frame._msufPredictionFullHealthAlphaReady = nil
   if holder._msufOverAbsorbShown ~= true then
     holder:SetShown(true)

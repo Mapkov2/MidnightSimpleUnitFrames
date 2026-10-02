@@ -81,12 +81,14 @@ local PLAIN_BUDGETS = {
 }
 local BUDGETS = {
     Mainline = {
-        ["group protected"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
-            ["calc:GetDamageAbsorbs"] = 1, GetStatusBarTexture = 1, SetAlphaFromBoolean = 1, SetAlpha = 1,
-            SetValue = 2, SetVertexColor = 1, UnitIsDeadOrGhost = 1, UnitIsDead = 1 }, predicates = 9, k = 941 },
-        ["unit protected"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
-            ["calc:GetDamageAbsorbs"] = 1, GetStatusBarTexture = 1, SetAlphaFromBoolean = 1, SetAlpha = 1,
-            SetValue = 2, SetVertexColor = 1 }, predicates = 5, k = 741 },
+        -- W4-C1 glow: one calculator read, the step curve on that calculator,
+        -- one flag sink, the cached texture (6 glow natives -> 4).
+        ["group protected"] = { natives = { UnitHealthPercent = 4, UnitGetDetailedHealPrediction = 1,
+            ["calc:GetDamageAbsorbs"] = 1, ["calc:EvaluateCurrentHealthPercent"] = 1, SetAlphaFromBoolean = 1,
+            SetValue = 2, SetVertexColor = 1, UnitIsDeadOrGhost = 1, UnitIsDead = 1 }, predicates = 8, k = 893 },
+        ["unit protected"] = { natives = { UnitHealthPercent = 4, UnitGetDetailedHealPrediction = 1,
+            ["calc:GetDamageAbsorbs"] = 1, ["calc:EvaluateCurrentHealthPercent"] = 1, SetAlphaFromBoolean = 1,
+            SetValue = 2, SetVertexColor = 1 }, predicates = 4, k = 692 },
     },
     Vanilla = {},
 }
