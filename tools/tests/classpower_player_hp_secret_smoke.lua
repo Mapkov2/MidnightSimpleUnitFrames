@@ -88,7 +88,7 @@ local function RecordFormatted(fs)
 end
 
 local function Watched(fn)
-    local stop = Secrets.Watch(PLAYER_HP)
+    local stop = Secrets.Watch(PLAYER_HP, { strict = true })
     local ok, err = pcall(fn)
     local violations = stop()
     return ok, err, violations

@@ -139,8 +139,16 @@ local function _AuraID(value)
     return tonumber(value)
 end
 
+--- A restricted spell ID is never boolean-tested (see CPAuras.AuraSpellID).
 local function _AuraSpellID(aura)
-    return aura and _AuraID(aura.spellId or aura.spellID or aura.id) or nil
+    if not aura then return nil end
+    local id = aura.spellId
+    if not NotSecret(id) then return nil end
+    if id ~= nil then return tonumber(id) end
+    id = aura.spellID
+    if not NotSecret(id) then return nil end
+    if id == nil then id = aura.id end
+    return _AuraID(id)
 end
 
 local function _AuraInstanceID(aura)

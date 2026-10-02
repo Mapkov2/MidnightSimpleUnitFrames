@@ -19,8 +19,8 @@
 -- mode with every source already secret. Secrets come from
 -- tools/tests/classpower_secrets.lua: type() answers the secret's kind, every
 -- operation raises, and a line hook over every ClassPower file the TOC loads
--- records == / ~= / not on a local that holds a secret. A mode passes when
--- nothing raised and no line was recorded.
+-- records a comparison or boolean test of a secret local or of a secret field
+-- of a local table. A mode passes when nothing raised and no line was recorded.
 --
 -- Runs the real ClassPower stack (tools/tests/classpower_world.lua).
 -- Plain Lua 5.1, repo root as arg 1.
@@ -50,6 +50,9 @@ local function WatchedFiles()
     return paths
 end
 local WATCHED = WatchedFiles()
+--- Every boolean test of a secret local and every comparison of a secret field
+--- count as well (classpower_secrets.lua strict mode).
+local STRICT = { strict = true }
 
 local SPELL = {
     MAELSTROM_WEAPON = 344179, MAELSTROM_WEAPON_TALENT = 187880, ICICLES = 205473,
@@ -219,7 +222,7 @@ local function Run(case, coldSecret)
                 if case.forever then MSUF_NS.Client.IsForever = true end
                 if case.setup then case.setup(env, S) end
                 InstallSecretSources(env, S, strict)
-                if coldSecret then stop = Secrets.Watch(WATCHED) end
+                if coldSecret then stop = Secrets.Watch(WATCHED, STRICT) end
             end,
         })
         if case.route then
@@ -227,7 +230,7 @@ local function Run(case, coldSecret)
         end
         if not coldSecret then
             strict.on = true
-            stop = Secrets.Watch(WATCHED)
+            stop = Secrets.Watch(WATCHED, STRICT)
         end
         t.castSpell = case.cast
         Drive(t)
@@ -330,6 +333,10 @@ local CASES = {
         bars = { classPowerShowText = true }, route = Is("MAELSTROM_WEAPON") },
     { name = "Enhancement Maelstrom Weapon with secret aura IDs", class = "SHAMAN", spec = 2,
         primary = PT.MANA, bars = { classPowerShowText = true }, secretIDs = true },
+    { name = "Frost icicles with secret aura IDs", class = "MAGE", spec = 3, primary = PT.MANA,
+        bars = { classPowerShowText = true }, secretIDs = true },
+    { name = "Devourer soul fragments with secret aura IDs", class = "DEMONHUNTER", spec = 3, primary = 17,
+        bars = { classPowerShowText = true }, secretIDs = true },
     { name = "Elemental Maelstrom (continuous)", class = "SHAMAN", spec = 1, primary = PT.MANA,
         bars = { classPowerShowText = true, showEleMaelstrom = true }, route = Is(11) },
     { name = "Shadow Insanity (continuous) and alt mana", class = "PRIEST", spec = 3, primary = PT.MANA,
