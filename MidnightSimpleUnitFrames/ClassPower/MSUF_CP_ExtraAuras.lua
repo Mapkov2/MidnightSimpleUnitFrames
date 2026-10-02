@@ -247,7 +247,10 @@ function MSUF.CPBuilders.ExtraAuras(E)
         bar.text:SetFont(Font())
         local spellAPI = _G.C_Spell
         local name = spellAPI and spellAPI.GetSpellName and spellAPI.GetSpellName(pain and IGNORE_PAIN or ARCANE_SURGE)
-        if type(name) ~= "string" then name = pain and "Ignore Pain" or "Arcane Surge" end
+        if type(name) ~= "string" then
+            local translate = MSUF.Translate or function(text) return text end
+            name = translate(pain and "Ignore Pain" or "Arcane Surge")
+        end
         bar.text:SetText(name)
         bar:Show()
         previewHost:Show(); previewShown = true
