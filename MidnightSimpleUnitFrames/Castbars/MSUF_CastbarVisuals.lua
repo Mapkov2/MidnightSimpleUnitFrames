@@ -106,10 +106,19 @@ local function DetailString(g, prefix, suffix, globalKey, fallback)
     return tostring(value or fallback or "")
 end
 
+--- Boss and arena castbars keep their show toggles in flat keys (the Unit
+--- page castbar keys and Defaults_Bars.lua), not in the per-prefix
+--- <prefix>ShowIcon / <prefix>ShowSpellName family the other units use.
+local POOL_SHOW_KEYS = {
+    boss = { icon = "showBossCastIcon", name = "showBossCastName", time = "showBossCastTime" },
+    arena = { icon = "showArenaCastIcon", name = "showArenaCastName", time = "showArenaCastTime" },
+}
+
 local function ShowIconForUnit(g, unit, prefix)
     local show = g.castbarShowIcon ~= false
-    if unit == "boss" then
-        if g.showBossCastIcon ~= nil then show = g.showBossCastIcon ~= false end
+    local poolKeys = POOL_SHOW_KEYS[unit]
+    if poolKeys then
+        if g[poolKeys.icon] ~= nil then show = g[poolKeys.icon] ~= false end
     elseif prefix and g[prefix .. "ShowIcon"] ~= nil then
         show = g[prefix .. "ShowIcon"] ~= false
     end
@@ -118,8 +127,9 @@ end
 
 local function ShowSpellForUnit(g, unit, prefix)
     local show = g.castbarShowSpellName ~= false
-    if unit == "boss" then
-        if g.showBossCastName ~= nil then show = g.showBossCastName ~= false end
+    local poolKeys = POOL_SHOW_KEYS[unit]
+    if poolKeys then
+        if g[poolKeys.name] ~= nil then show = g[poolKeys.name] ~= false end
     elseif prefix and g[prefix .. "ShowSpellName"] ~= nil then
         show = g[prefix .. "ShowSpellName"] ~= false
     end
@@ -130,7 +140,8 @@ local function ShowTimeForUnit(g, unit)
     if unit == "player" then return g.showPlayerCastTime ~= false end
     if unit == "target" then return g.showTargetCastTime ~= false end
     if unit == "focus" then return g.showFocusCastTime ~= false end
-    if unit == "boss" then return g.showBossCastTime ~= false end
+    local poolKeys = POOL_SHOW_KEYS[unit]
+    if poolKeys then return g[poolKeys.time] ~= false end
     return true
 end
 
