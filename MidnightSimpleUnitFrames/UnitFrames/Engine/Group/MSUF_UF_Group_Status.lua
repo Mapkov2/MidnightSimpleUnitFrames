@@ -375,6 +375,9 @@ local function EnsureUnitlessDriver()
       return
     elseif event == "PLAYER_REGEN_ENABLED" then
       combatActive = false
+      -- The deferred pass repaints through RunStatusApply, which never clears
+      -- the flag; left set, the next fight's roster change deferred nothing.
+      raidGroupDeferred = false
       ResumeRosterAfterCombat()
       return
     end
