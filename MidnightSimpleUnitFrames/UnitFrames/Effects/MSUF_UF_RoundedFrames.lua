@@ -1166,6 +1166,12 @@ end
 
 -- MSUF-owned overlays and previews never enter Blizzard's forbidden native
 -- display-element path, so they continue using the normal mutable mask cache.
+-- The surface mask anchor for a texture another module asks to clip.
+local function UnitClipRequestAnchor(f)
+  local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and f or nil
+  return shared or f.hpBar or f.bg or f
+end
+
 local function ApplyDispelOverlayMask(f, region)
   if not (f and region) then return false end
   if IsCombatLocked() then
@@ -1178,9 +1184,17 @@ local function ApplyDispelOverlayMask(f, region)
     local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and (f.barGroup or f) or nil
     MaskGroupTexture(f, region, shared or f.health or f.barGroup or f)
   else
+    -- Remember the request: ApplyToUnitFrame's mask refresh drops every mask
+    -- its own pass does not repeat, and texture layer clips and live dispel
+    -- overlays are not part of that pass otherwise.
+    local requests = f._msufRUF_ClipRequests
+    if not requests then
+      requests = setmetatable({}, { __mode = "k" })
+      f._msufRUF_ClipRequests = requests
+    end
+    requests[region] = true
     if not RoundedFrameEnabled(f) then return false end
-    local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and f or nil
-    MaskTexture(f, region, shared or f.hpBar or f.bg or f)
+    MaskTexture(f, region, UnitClipRequestAnchor(f))
   end
   return true
 end
@@ -1344,6 +1358,11 @@ local function ApplyToUnitFrame(f)
 
   if f.portrait then
     MaskTexture(f, f.portrait, f.portrait, Kit.MASK_PATH_1X)
+  end
+  local clipRequests = f._msufRUF_ClipRequests
+  if clipRequests then
+    local clipAnchor = UnitClipRequestAnchor(f)
+    for region in pairs(clipRequests) do MaskTexture(f, region, clipAnchor) end
   end
   EndMaskRefresh(f, "_msufRUF_Mask", "_msufRUF_MaskedTextures")
 end
