@@ -119,6 +119,7 @@ SetRaidTargetIconTexture	api	Blizzard client API the harness does not model
 ShowUIPanel	api	Blizzard client API
 StaticPopup_Hide	api	Blizzard client API
 StaticPopup_Show	api	Blizzard client API
+StaticPopup_ShowCustomGenericConfirmation	api	Blizzard client API
 StaticPopup_Visible	api	Blizzard client API
 TextureKitConstants	constant	Blizzard UI constant, enum or shared string
 UIErrorsFrame	frame	Blizzard UI frame or object MSUF reads

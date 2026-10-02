@@ -23,6 +23,7 @@
     <Script file="MSUF_Menu2_Bindings.lua"/>
     <Script file="MSUF_Menu2_Bindings_History.lua"/>
     <Script file="MSUF_Menu2_Bindings_Reset.lua"/>
+    <Script file="MSUF_Menu2_PageResetProviders.lua"/>
     <Script file="MSUF_Menu2_SearchBridge.lua"/>
     <Script file="MSUF_Menu2_SearchPalette.lua"/>
     <Script file="MSUF_Menu2_PagePreviews.lua"/>

@@ -654,10 +654,19 @@ local function ResetPageImpl(pageKey)
     end
     return true
 end
+-- Host API v1: the provider that owns a page key, registered through
+-- MSUF_Menu2_PageResetProviders.lua. A key without one keeps the code below.
+local PageResetProviders = {}
+M.PageResetProviders = PageResetProviders
 function M.PageHasReset(pageKey)
+    local provider = PageResetProviders[pageKey]
+    if provider then return provider.canReset(pageKey) == true end
     return PAGE_RESET_INFO[pageKey or ""] ~= nil
 end
 function M.BuildPageResetWarning(pageKey)
+    local provider = PageResetProviders[pageKey]
+    local providerWarning = provider and M.ProviderPageResetWarning(pageKey, provider, PAGE_RESET_INFO[pageKey] ~= nil)
+    if providerWarning ~= nil then return providerWarning end
     local info = ResolvePageResetInfo(pageKey)
     if not info then return nil end
     local title = info.label or ((M.pages and M.pages[pageKey] and M.pages[pageKey].title) or pageKey or "this menu")
@@ -678,6 +687,8 @@ function M.BuildPageResetWarning(pageKey)
     )
 end
 function M.ResetPageToDefaults(pageKey)
+    local provider = PageResetProviders[pageKey]
+    if provider then return M.ResetProviderPage(pageKey, provider) end
     if M.BlockCombatAction() then return false end
     local info = ResolvePageResetInfo(pageKey)
     if not info then return false end
@@ -687,6 +698,8 @@ function M.ResetPageToDefaults(pageKey)
     end)
 end
 function M.ShowPageResetConfirm(pageKey)
+    local provider = PageResetProviders[pageKey]
+    if provider then return M.ShowProviderPageResetConfirm(pageKey, provider) end
     if M.BlockCombatAction() then return false end
     if not M.PageHasReset(pageKey) then return false end
     local message = M.BuildPageResetWarning(pageKey)
