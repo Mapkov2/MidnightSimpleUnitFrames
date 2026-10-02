@@ -1103,8 +1103,8 @@ end
 -- Health's gone-state sink (NotifyHealthState, UpdateGroupPercentLean). A
 -- UNIT_HEALTH tick can flip only death, and ResolveGone's health rule decides
 -- it: a plain seed by itself, a protected one through the never-secret
--- UnitIsDeadOrGhost read (Blizzard's CompactUnitFrame reads it on every
--- UNIT_HEALTH too, CompactUnitFrame.lua:112, 1103). A tick that leaves the
+-- UnitIsDeadOrGhost read (Blizzard reads it on every UNIT_HEALTH too,
+-- Blizzard_UnitFrame/Shared/CompactUnitFrame.lua:112, 1103). A tick that leaves the
 -- state as it is returns here, before the generic chain (the 2026-10-02 raid
 -- trace: UpdateGoneState, UpdateDeadBg and ResolveGone 45 ms per 13.7k group
 -- ticks). Connection and lifecycle events keep the full resolver.
@@ -1340,12 +1340,7 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP, percentReady)
   end
 end
 
-function GroupVisuals.UpdateGoneState(frame, event, unit, seedHP)
-  local fn = frame and frame._msufGFVisualRuntimeGone
-  if fn then
-    fn(frame, frame._msufGFVisualRuntimeGroup, seedHP, event)
-  end
-end
+GroupVisuals.UpdateGoneState = UpdateGoneStateFromHealth
 
 local function ApplyNameBar(frame, cfg)
   local bar = frame and frame.MSUFGFNameBar
