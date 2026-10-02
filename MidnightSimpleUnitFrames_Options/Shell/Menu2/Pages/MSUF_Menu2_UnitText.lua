@@ -329,20 +329,10 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
         else value = cur end
         return absorbBase and (value .. " + " .. absorbText) or value
     end
+    -- The reversed-order mapping is the engine's (the group text DB and the
+    -- unit bar element carry the same table); the preview reads it there.
     local function ReversePreviewHealthMode(mode)
-        local rev = {
-            CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT",
-            CURMAX = "MAXCUR", MAXCUR = "CURMAX",
-            CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
-            MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
-            PERCENTCURMAX = "CURMAXPERCENT",
-            CURPERCENTABSORB = "PERCENTCURABSORB", PERCENTCURABSORB = "CURPERCENTABSORB",
-            CURMAXABSORB = "MAXCURABSORB", MAXCURABSORB = "CURMAXABSORB",
-            CURMAXPERCENTABSORB = "PERCENTMAXCURABSORB", PERCENTMAXCURABSORB = "CURMAXPERCENTABSORB",
-            MAXPERCENTABSORB = "PERCENTMAXABSORB", PERCENTMAXABSORB = "MAXPERCENTABSORB",
-            PERCENTCURMAXABSORB = "CURMAXPERCENTABSORB",
-        }
-        return rev[mode] or mode
+        return MSUF.GF.ReverseHealthTextMode(mode)
     end
     state.tabFrames, state.TextCard, state.mouseoverFadeControls, state.MouseoverControl, state.PlaceDropdown, state.PlaceSlider =
         tabFrames, TextCard, mouseoverFadeControls, MouseoverControl, PlaceDropdown, PlaceSlider

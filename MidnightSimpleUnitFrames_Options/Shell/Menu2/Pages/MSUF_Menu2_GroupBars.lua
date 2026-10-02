@@ -463,22 +463,10 @@ end
 local function TextModeHasPercent(mode)
     return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
 end
+-- The group text DB owns the reversed-order mapping (GroupFrames/
+-- MSUF_GroupFrames_DB_Text.lua), loaded with the core on every client.
 local function ReverseHpPreviewMode(mode)
-    local gf = MSUF and MSUF.GF
-    if gf and gf.ReverseHealthTextMode then return gf.ReverseHealthTextMode(mode) end
-    local rev = {
-        CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT",
-        CURMAX = "MAXCUR", MAXCUR = "CURMAX",
-        CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
-        MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
-        PERCENTCURMAX = "CURMAXPERCENT",
-        CURPERCENTABSORB = "PERCENTCURABSORB", PERCENTCURABSORB = "CURPERCENTABSORB",
-        CURMAXABSORB = "MAXCURABSORB", MAXCURABSORB = "CURMAXABSORB",
-        CURMAXPERCENTABSORB = "PERCENTMAXCURABSORB", PERCENTMAXCURABSORB = "CURMAXPERCENTABSORB",
-        MAXPERCENTABSORB = "PERCENTMAXABSORB", PERCENTMAXABSORB = "MAXPERCENTABSORB",
-        PERCENTCURMAXABSORB = "CURMAXPERCENTABSORB",
-    }
-    return rev[mode] or mode
+    return MSUF.GF.ReverseHealthTextMode(mode)
 end
 local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, shortNumbers, hideLeft, hideCenter, hideRight, absorbIconLeft, absorbIconCenter, absorbIconRight)
     if reverse and not isPower then
