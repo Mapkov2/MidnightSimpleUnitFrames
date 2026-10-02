@@ -322,8 +322,10 @@ local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMu
         fill:SetVertexColor(baseColor[1], baseColor[2], baseColor[3], (baseColor[4] or 1) * (alphaMul or 1))
     end
 end
-M.AssignNamedValues(T, "Tr Template SetColor ShadeColor ApplyTextureGradient SetFillGradient",
-    M.Tr, Template, SetColor, ShadeColor, ApplyTextureGradient, SetFillGradient)
+M.Assign(T, {
+    Tr = M.Tr, Template = Template, SetColor = SetColor, ShadeColor = ShadeColor,
+    ApplyTextureGradient = ApplyTextureGradient, SetFillGradient = SetFillGradient,
+})
 local NO_MENU_FONT = {}
 local menuFontCache = {}
 local function MenuGeneralDB()

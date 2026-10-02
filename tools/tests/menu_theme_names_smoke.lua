@@ -8,7 +8,8 @@
 -- Every field the menu reads from the theme table T or the core UI kit
 -- MSUF.UI must have a writer:
 --   T:       `T.name = ...`, `function T.name` / `T:name`, or a name list of
---            M.AssignNamedValues(T, ...), anywhere in the menu and shell files;
+--            M.AssignNamedValues(T, ...) or the keys of M.Assign(T, { ... }),
+--            anywhere in the menu and shell files;
 --   MSUF.UI: `UI.name = ...`, `function UI.name` or `MSUF.UI.name = ...` in
 --            the UI kit files (Shell/UI, Kernel).
 -- A table named T in another file counts as the theme; that reads stricter,
@@ -52,6 +53,10 @@ for _, path in ipairs(menuFiles) do
     end
     for names in text:gmatch("AssignNamedValues%(T,%s*%[%[(.-)%]%]") do
         for name in names:gmatch("%S+") do themeWrites[name] = true end
+    end
+    -- M.Assign(T, { Name = value, ... }) writes each key of its table.
+    for block in text:gmatch("Assign%(T,%s*(%b{})") do
+        for name in block:gmatch("([%a_][%w_]*)%s*=[^=]") do themeWrites[name] = true end
     end
 end
 for _, path in ipairs(Files('"MidnightSimpleUnitFrames_Options/*.lua" "MidnightSimpleUnitFrames/*.lua"')) do

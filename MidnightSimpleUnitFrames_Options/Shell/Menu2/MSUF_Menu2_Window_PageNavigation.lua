@@ -299,6 +299,7 @@ function M.RecordPageNavigation(fromKey, toKey)
     if suppressPageHistory then return end
     return RecordPageNavigation(fromKey, toKey)
 end
-M.AssignNamedValues(M, [[
-    HideAllCachedPages SetTitle UpdateNav RememberPrimaryNavPage RunEntryRefreshers
-]], HideAllCachedPages, SetTitle, UpdateNav, RememberPrimaryNavPage, RunRefreshers)
+M.Assign(M, {
+    HideAllCachedPages = HideAllCachedPages, SetTitle = SetTitle, UpdateNav = UpdateNav,
+    RememberPrimaryNavPage = RememberPrimaryNavPage, RunEntryRefreshers = RunRefreshers,
+})

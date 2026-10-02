@@ -115,8 +115,10 @@ end
 local function StyleTopSuccessButton(btn)
     return StyleTopButton(btn, TOP_SUCCESS_BUTTON_STYLE)
 end
-M.AssignNamedValues(W, "StyleTopActionButton StyleTopDangerButton StyleTopSuccessButton",
-    StyleTopActionButton, StyleTopDangerButton, StyleTopSuccessButton)
+M.Assign(W, {
+    StyleTopActionButton = StyleTopActionButton, StyleTopDangerButton = StyleTopDangerButton,
+    StyleTopSuccessButton = StyleTopSuccessButton,
+})
 function W.RoleButton(parent, label, role, width, height)
     local btn = (T.RoleButton and T.RoleButton(parent, label, role, width, height)) or T.Button(parent, label, width, height)
     role = tostring(role or "normal")

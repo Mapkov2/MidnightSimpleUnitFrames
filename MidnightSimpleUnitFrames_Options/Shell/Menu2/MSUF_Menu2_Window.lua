@@ -2121,11 +2121,11 @@ ApplyMenuFrameScale = function(frame)
     end
     if type(frame.RefreshMenuScaleControl) == "function" then frame:RefreshMenuScaleControl() end
 end
-M.AssignNamedValues(M, [[
-    RefreshDashboardEditModeButton BuildPageEntry
-    GetEffectiveMenuScale ApplyMenuFrameScale HideSlashMenuAndMinibar ALIASES
-]], RefreshDashboardEditModeButton, BuildPageEntry,
-    EffectiveMenuScale, ApplyMenuFrameScale, HideSlashMenuAndMinibar, ALIASES)
+M.Assign(M, {
+    RefreshDashboardEditModeButton = RefreshDashboardEditModeButton, BuildPageEntry = BuildPageEntry,
+    GetEffectiveMenuScale = EffectiveMenuScale, ApplyMenuFrameScale = ApplyMenuFrameScale,
+    HideSlashMenuAndMinibar = HideSlashMenuAndMinibar, ALIASES = ALIASES,
+})
 function M.MinimizeSlashMenuWindow(frame)
     return MinimizeSlashMenuWindow(frame or M.frame)
 end
