@@ -178,3 +178,14 @@ Refresh(nil)
 Check(boxPaints == 2, "box readiness change did not repaint")
 
 print("interrupt_ready_visual_cache_smoke: ok")
+
+-- A secret readiness (Midnight, cooldown restricted in combat) must never be
+-- compared: the client raised "attempt to compare local 'isReady' (a secret
+-- boolean value)" from RefreshFrame. Lua 5.1 cannot raise on `secret == true`,
+-- so this pins the source order: ready is read only behind the plain-inputs flag.
+local sourceFile = assert(io.open(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua", "rb"))
+local source = sourceFile:read("*a"); sourceFile:close()
+Check(source:find("local remember = rawKey ~= nil", 1, true)
+    and source:find("local ready = remember and isReady == true", 1, true)
+    and not source:find("local ready = isReady == true", 1, true),
+    "RefreshFrame compares a possibly secret isReady outside the plain-inputs guard")

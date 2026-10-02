@@ -1126,11 +1126,14 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
     local rawNotInterruptible = ResolveRawNotInterruptible(frame, castStateTable)
     local red, green, blue, alpha, cacheable = EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
     local rawKey = cacheable and RawInterruptibleKey(rawNotInterruptible) or nil
-    local ready = isReady == true
+    -- rawKey is nil for anything secret (a secret readiness in combat), so the
+    -- cache and ready below only ever read plain values.
+    local remember = rawKey ~= nil
+    local ready = remember and isReady == true
     -- The last painted visual, field by field (plain values only: rawKey is nil
     -- for anything secret). _msufKickReadyVisualKey is its validity flag; the
     -- outline and layout owners reset it to nil to force the next paint.
-    if rawKey ~= nil
+    if remember
         and frame._msufKickReadyVisualKey == true
         and frame._msufKickReadyVisualStyle == style
         and frame._msufKickReadyVisualReady == ready
@@ -1142,7 +1145,6 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
     then
         return
     end
-    local remember = rawKey ~= nil
     if remember then
         frame._msufKickReadyVisualStyle = style
         frame._msufKickReadyVisualReady = ready
