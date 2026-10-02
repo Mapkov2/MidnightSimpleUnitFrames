@@ -6,8 +6,9 @@
 -- comparison of a secret never fails offline. This smoke uses the
 -- client-strict helper (tools/tests/classpower_secrets.lua): type() answers
 -- the secret's kind, and arithmetic, ordering, concatenation, length,
--- indexing and calls raise, while a line watcher records every executed line
--- that compares a local holding a secret or truth-tests it with `not`.
+-- indexing and calls raise, while a line watcher in strict mode records every
+-- executed line that compares or boolean-tests a local or a field holding a
+-- secret before a secret predicate (IsSecret) has ruled it out.
 --
 -- Every AuraData field the backend can read is a secret except
 -- auraInstanceID, as for a restricted unit on 12.x; so are the documented
@@ -271,7 +272,7 @@ local function Run(watchedPath)
     local A3 = namespace.MSUF_Auras3
     assert(registered, "Classic aura element did not register")
 
-    local stop = Secrets.Watch(ChunkPath(watchedPath))
+    local stop = Secrets.Watch(ChunkPath(watchedPath), { strict = true })
     local failures = {}
     local function Step(label, fn, ...)
         local ok, message = pcall(fn, ...)

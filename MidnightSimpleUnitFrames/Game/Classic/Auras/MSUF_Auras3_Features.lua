@@ -240,8 +240,15 @@ function Features.MatchFilterRequirements(plan, unit, data, matchFilter, mine)
     if req.player == true and mine ~= true then return false end
     if req.notPlayer == true and mine == true then return false end
     if req.important == true and not Features.IsImportantAura(data) then return false end
-    if req.stealable == true and data.isStealable ~= true then return false end
-    if req.boss == true and data.isBossAura ~= true then return false end
+    -- A secret flag cannot prove the requirement.
+    if req.stealable == true then
+        local stealable = data.isStealable
+        if IsSecret(stealable) or stealable ~= true then return false end
+    end
+    if req.boss == true then
+        local boss = data.isBossAura
+        if IsSecret(boss) or boss ~= true then return false end
+    end
     if req.dispellableAny == true then
         local dispelName = not IsSecret(data.dispelName) and data.dispelName or nil
         if type(dispelName) ~= "string" or dispelName == "" then return false end
@@ -275,6 +282,8 @@ end
 local function PlayerClass()
     if type(UnitClass) ~= "function" then return nil end
     local _, class = UnitClass("player")
+    -- UnitClass is SecretWhenUnitIdentityRestricted on 12.x engines.
+    if IsSecret(class) then return nil end
     return class
 end
 
