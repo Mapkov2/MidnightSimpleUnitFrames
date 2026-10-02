@@ -972,7 +972,17 @@ local function ShortenCastbarSpellName(frame, text)
     if text == nil then return text end
 
     local isSecret = _G.issecretvalue
-    if type(isSecret) == "function" and isSecret(text) == true then return text end
+    if type(isSecret) == "function" and isSecret(text) == true then
+        -- A secret name is neither measured nor cached, but the previous plain
+        -- name must go too: RefreshCastbarSpellNameText (the cold re-layout)
+        -- would otherwise repaint it over the current secret one.
+        if frame then
+            frame._msufRawCastText = nil
+            frame._msufShortCastText = nil
+            frame._msufShortCastTextKey = false
+        end
+        return text
+    end
 
     local valueType = type(text)
     if valueType ~= "string" and valueType ~= "number" and valueType ~= "boolean" then return text end

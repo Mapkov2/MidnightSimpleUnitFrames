@@ -346,4 +346,41 @@ do
     _G.INTERRUPTED = nil
 end
 
+---------------------------------------------------------------------------
+-- 4. A secret spell name (restricted units: UnitCastingInfo is
+--    SecretWhenUnitSpellCastRestricted) cannot be measured or cached, but it
+--    must also forget the previous plain name. Before the fix the shortener
+--    returned the secret early and left _msufRawCastText on the last plain
+--    name, so a cold re-layout mid-cast (Visuals ApplySpellTextLayout ->
+--    MSUF_RefreshCastbarSpellNameText) repainted that old name over the
+--    current secret one.
+---------------------------------------------------------------------------
+do
+    WipeAddonGlobals()
+    local SECRET = setmetatable({}, { __tostring = function() return "<secret spell name>" end })
+    _G.issecretvalue = function(value) return rawequal(value, SECRET) end
+    _G.C_Timer = { After = function() end }
+    _G.MSUF_DB = { general = {} }
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", NewNamespace())
+    local applyTexts = assert(_G.MSUF_CB_ApplyTexts, "MSUF_CB_ApplyTexts missing")
+    local refresh = assert(_G.MSUF_RefreshCastbarSpellNameText, "MSUF_RefreshCastbarSpellNameText missing")
+
+    for _, mode in ipairs({ 0, 1 }) do
+        _G.MSUF_DB.general.castbarSpellNameShortening = mode
+        local label = "shortening " .. mode .. ": "
+        local frame = { unit = "arena1", castText = NewWidget("FontString", FONTSTRING, {}) }
+        applyTexts(frame, nil, "Fireball")
+        Equal(frame.castText.text, "Fireball", label .. "plain name")
+        applyTexts(frame, nil, SECRET)
+        Check(rawequal(frame.castText.text, SECRET), label .. "secret name not written")
+        refresh(frame)
+        Check(rawequal(frame.castText.text, SECRET),
+            label .. "cold re-layout repainted " .. tostring(frame.castText.text) .. " over the secret name")
+        -- The next plain cast is measured and cached again.
+        applyTexts(frame, nil, "Frostbolt")
+        refresh(frame)
+        Equal(frame.castText.text, "Frostbolt", label .. "plain name after a secret one")
+    end
+end
+
 print("castbar correctness smoke: ok")
