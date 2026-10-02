@@ -30,6 +30,7 @@ if type(GF.PARTY_DEFAULTS) ~= "table"
     error("MSUF_GroupFrames_DB_Migrations.lua loaded before MSUF_GroupFrames_DB.lua.", 2)
 end
 
+local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
 local PARTY_DEFAULTS = GF.PARTY_DEFAULTS
 local MIGRATIONS_FILE = "GroupFrames/MSUF_GroupFrames_DB_Migrations.lua"
 local RAID_DEFAULTS = GF.RAID_DEFAULTS
@@ -135,14 +136,16 @@ local function RemoveLayoutPresetState(conf)
 end
 
 local function NormalizeHealPredictionAnchorMode(value, fallback)
-    local mode = tonumber(value) or fallback or 3
-    if mode < 1 or mode > 5 then mode = fallback or 3 end
+    local mode = tonumber(value) or fallback or PREDICTION_ANCHOR.FOLLOW_HEALTH
+    if mode < PREDICTION_ANCHOR.LEFT or mode > PREDICTION_ANCHOR.REVERSE_FROM_MAX then
+        mode = fallback or PREDICTION_ANCHOR.FOLLOW_HEALTH
+    end
     return mode
 end
 
 local function ResolveSharedHealPredictionAnchorMode(db)
     local gen = db.general
-    return NormalizeHealPredictionAnchorMode(gen and gen.healPredAnchorMode, 3)
+    return NormalizeHealPredictionAnchorMode(gen and gen.healPredAnchorMode, PREDICTION_ANCHOR.FOLLOW_HEALTH)
 end
 
 local function MigrateHealPredictionOwnership(conf, scope, db)
@@ -153,12 +156,12 @@ local function MigrateHealPredictionOwnership(conf, scope, db)
     if conf.healPredEnabled == nil then
         conf.healPredEnabled = ResolveLegacyHealPredictionEnabled(db)
     end
-    conf.healPredAnchorMode = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, 3)
+    conf.healPredAnchorMode = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, PREDICTION_ANCHOR.FOLLOW_HEALTH)
     if conf._healPredBarsScopeMigrated ~= true then
         local sharedEnabled = ResolveLegacyHealPredictionEnabled(db)
         local localEnabled = conf.healPredEnabled == true
         local sharedAnchor = ResolveSharedHealPredictionAnchorMode(db)
-        local localAnchor = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, 3)
+        local localAnchor = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, PREDICTION_ANCHOR.FOLLOW_HEALTH)
         if localEnabled ~= sharedEnabled or (localEnabled and localAnchor ~= sharedAnchor) then
             conf.hlOverride = true
         end

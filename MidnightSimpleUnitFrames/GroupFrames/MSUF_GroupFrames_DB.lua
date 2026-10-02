@@ -84,6 +84,17 @@ GF.PRIORITY_ANCHOR_MODES = {
     FREE = "FREE",
 }
 
+-- Numeric values are saved in profiles and shared with the unit-frame renderer.
+GF.PREDICTION_ANCHOR_MODES = {
+    LEFT = 1,
+    RIGHT = 2,
+    FOLLOW_HEALTH = 3,
+    FOLLOW_HEALTH_OVERFLOW = 4,
+    REVERSE_FROM_MAX = 5,
+}
+GF.ABSORB_DISPLAY_MODES = { BAR = 2, LEGACY_BAR_AND_TEXT = 3 }
+local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
+
 ---
 --- Defaults
 ---
@@ -445,20 +456,20 @@ local PARTY_DEFAULTS = {
     tempMaxHealthColorB  = 0.10,
     tempMaxHealthOpacity = 1,
     tempMaxHealthBackgroundOpacity = 0.65,
-    healPredAnchorMode   = 3,
+    healPredAnchorMode   = PREDICTION_ANCHOR.FOLLOW_HEALTH,
     healPredictionBarHeight = 0,
     healPredictionBarOffsetY = 0,
     healPredictionBarOpacity = 0.45,
     healPredictionBarTexture = "",
     enableAbsorbBar      = true,
     healAbsorbEnabled    = true,
-    absorbTextMode       = 2,
-    absorbAnchorMode     = 5,
+    absorbTextMode       = GF.ABSORB_DISPLAY_MODES.BAR,
+    absorbAnchorMode     = PREDICTION_ANCHOR.REVERSE_FROM_MAX,
     absorbBarHeight      = 0,
     absorbBarOffsetY     = 0,
     absorbBarOpacity     = 1,
     absorbBarTexture     = "MSUF Smooth v2",
-    healAbsorbAnchorMode = 3,
+    healAbsorbAnchorMode = PREDICTION_ANCHOR.FOLLOW_HEALTH,
     healAbsorbBarHeight  = 0,
     healAbsorbBarOffsetY = 0,
     healAbsorbBarOpacity = 1,

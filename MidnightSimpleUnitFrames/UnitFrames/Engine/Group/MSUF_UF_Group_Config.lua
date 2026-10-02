@@ -38,6 +38,8 @@ local FillPredictionColors = UF.FillPredictionColors
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local EMPTY_EVENTS = {}
+local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
+local ABSORB_DISPLAY = GF.ABSORB_DISPLAY_MODES
 
 local function PVPIndicatorContextActive()
   return UF and type(UF.PVPIndicatorContextActive) == "function" and UF.PVPIndicatorContextActive() == true
@@ -644,7 +646,7 @@ local function CompilePrediction(kind, conf, texture)
   end
   if absorbEnabled == nil then
     local absorbMode = Num(ScopedValue(conf, general, "absorbTextMode", nil), nil)
-    absorbEnabled = absorbMode == nil or absorbMode == 2 or absorbMode == 3
+    absorbEnabled = absorbMode == nil or absorbMode == ABSORB_DISPLAY.BAR or absorbMode == ABSORB_DISPLAY.LEGACY_BAR_AND_TEXT
   end
   local absorb = absorbEnabled ~= false
   local heal = GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf) or conf.healPredEnabled == true
@@ -672,9 +674,9 @@ local function CompilePrediction(kind, conf, texture)
     healTest = healTest == true,
     absorbTest = absorbTest == true,
     healAbsorbTest = healAbsorbTest == true,
-    healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", 3), 3),
-    absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", 2), 2),
-    healAbsorbAnchorMode = Num(ScopedValue(conf, general, "healAbsorbAnchorMode", 3), 3),
+    healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH),
+    absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", PREDICTION_ANCHOR.RIGHT), PREDICTION_ANCHOR.RIGHT),
+    healAbsorbAnchorMode = Num(ScopedValue(conf, general, "healAbsorbAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH),
     healHeight = Geometry("healPredictionBarHeight", 0, 0, 100),
     healOffsetY = Geometry("healPredictionBarOffsetY", 0, -100, 100),
     absorbHeight = Geometry("absorbBarHeight", 0, 0, 100),
