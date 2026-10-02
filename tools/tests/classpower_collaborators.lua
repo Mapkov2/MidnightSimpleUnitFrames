@@ -34,6 +34,12 @@ Collaborators.STANDINS = {
     MSUF_GetFontPath = function() return nil end,
     MSUF_GetFontFlags = function() return nil end,
     MSUF_RegisterAnyEditModeListener = function() end,
+    -- Kernel/MSUF_Util.lua outside the Mainline pixel-layout path: a policy
+    -- string calls that method, anything else hands the region back.
+    MSUF_PixelLayoutRegion = function(region, policy, ...)
+        if type(policy) == "string" then return region[policy](region, ...) end
+        return region
+    end,
 }
 
 --- Gives ns the real MSUF.Require / MSUF.Optional and defines every stand-in

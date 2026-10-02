@@ -1,7 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
 --- ClassPower/MSUF_CP_Controller.lua - class resource controller
 --- Features:
 --- 1. ClassPower (segmented): Combo Points, Holy Power, Soul Shards (incl.
@@ -32,6 +28,7 @@ _G.__MSUF_ClassPower_Loaded = true
 
 local MSUF = select(2, ...)
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Controller.lua")
 local ExportPublic = MSUF.ExportPublic
 
 --- The player-frame resolver is owned by ClassPower/MSUF_CP_Core.lua, which

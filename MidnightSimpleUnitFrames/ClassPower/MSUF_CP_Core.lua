@@ -1,7 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
 --- ClassPower/MSUF_CP_Core.lua
 --- Module bundle for the ClassPower controller.
 ---
@@ -15,6 +11,7 @@ end
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Core.lua")
 local ExportPublic = MSUF.ExportPublic
 
 --- Classic flavors (Vanilla, TBC, Mists) load this file too; read once.
@@ -100,11 +97,7 @@ local function CP_CooldownAnchorStacksAbove(anchorFrame)
     return provider == "MSUF_Suite_CooldownManager" and source == anchorFrame
 end
 
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
+local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 --- Layout can be blocked while unit frames are protected. Queue the shared
 --- unit-frame reanchor instead of attempting to move ClassPower immediately.
@@ -1122,11 +1115,7 @@ end
 --- RUNTIME exposes hot-path event handlers back to the controller. These
 --- handlers should update values or request a throttled structural refresh; they
 --- should not allocate frames or perform full option normalization.
-local builders = _G.MSUF_CP_FEATURE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_FEATURE_BUILDERS", builders)
-end
+local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
 
 do
     --- Bound once by RUNTIME at controller load: the controller's state, its

@@ -50,6 +50,8 @@ local function Build(bars, player)
     end
     local ns = { ExportPublic = function(name, value) _G[name] = value return value end }
     assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().Install(repo, ns)
+    _G.MSUF_CP_CONST = nil
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Constants.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(PLAYER_HP))("MidnightSimpleUnitFrames", ns)
 
     local b = { playerHPBarEnabled = true, playerHPBarWidthMode = "custom", playerHPBarWidth = 180,

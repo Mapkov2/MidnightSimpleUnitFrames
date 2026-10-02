@@ -1,7 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
 --- ClassPower/MSUF_CP_EbonMight.lua
 --- Native 12.1 Ebon Might duration bar and text.
 ---
@@ -13,17 +9,14 @@ end
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_EbonMight.lua")
 
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
+local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 --- Bound once by EBON_MIGHT at controller load: the controller's state, the
 --- Ebon Might constants and the host, style and text-level resolvers.
-local CP, EBON, CreateFrame, GetHost, GetStyle, GetTextLevel
+local CP, EBON, GetHost, GetStyle, GetTextLevel
+local CreateFrame = CreateFrame
 --- Native option tables, resolved on first use in each build.
 local durationTextOptions
 local durationBarOptions
@@ -328,7 +321,7 @@ end
 builders.EBON_MIGHT = function(E)
     CP = E.CP
     EBON = E.EBON or {}
-    CreateFrame = E.CreateFrame or _G.CreateFrame
+    CreateFrame = E.CreateFrame or CreateFrame
     GetHost, GetStyle, GetTextLevel = E.GetHost, E.GetStyle, E.GetTextLevel
     durationTextOptions, durationBarOptions = nil, nil
     CP.ApplyEbonTextStyle = ApplyTextStyle

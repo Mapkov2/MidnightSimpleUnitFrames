@@ -1,12 +1,9 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
 -- Native class-resource displays. Blizzard owns aura values and countdowns;
 -- this module only configures their display on structural/settings changes.
 -- Contract: upstream/live Blizzard_CustomAuraButton.lua (12.1): bound regions
 -- must belong to the slot button. Never inspect their values or visibility.
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_NativeAuras.lua")
 MSUF.CPBuilders = MSUF.CPBuilders or {}
 
 -- Bound by MSUF.CPBuilders.NativeAuras: the controller's environment (its

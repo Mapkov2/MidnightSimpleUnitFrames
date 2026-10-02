@@ -122,6 +122,7 @@ MSUF_Auras3={CreateClassPowerAuraSensor=function(host,key,spells,initialize)
     local sensor={host=host,spells=spells,SetEnabled=function(self,value) self.enabled=value end}
     sensor.button=CreateFrame("Frame",nil,host);initialize(sensor.button);sensors[#sensors+1]=sensor;return sensor
 end}
+assert(loadfile(root.."/tools/tests/classpower_collaborators.lua"))().Install(root,ns)
 for _,name in ipairs({"ExtraAuras","ManaExtras","ResourceMarks","ResourceExtras"}) do
     assert(loadfile(root.."/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_"..name..".lua"))("MSUF",ns)
 end

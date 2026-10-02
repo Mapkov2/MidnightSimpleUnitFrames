@@ -9,6 +9,21 @@ local ExportPublic = MSUF.ExportPublic
 ExportPublic("MSUF_CP_CONST", _G.MSUF_CP_CONST or {})
 local K = _G.MSUF_CP_CONST
 
+--- The builder registries the ClassPower files add their builders to. This
+--- file loads first in every client TOC, so it publishes all three; a file
+--- reads its registry with K.BuilderRegistry(name).
+local builderRegistries = {
+    MSUF_CP_CORE_BUILDERS = {},
+    MSUF_CP_MODE_BUILDERS = {},
+    MSUF_CP_FEATURE_BUILDERS = {},
+}
+ExportPublic("MSUF_CP_CORE_BUILDERS", builderRegistries.MSUF_CP_CORE_BUILDERS)
+ExportPublic("MSUF_CP_MODE_BUILDERS", builderRegistries.MSUF_CP_MODE_BUILDERS)
+ExportPublic("MSUF_CP_FEATURE_BUILDERS", builderRegistries.MSUF_CP_FEATURE_BUILDERS)
+function K.BuilderRegistry(name)
+    return builderRegistries[name]
+end
+
 --- The one reader of a class resource colour override: map[token] as
 --- { r, g, b } or { r = , g = , b = }. Returns r, g, b, or nothing unless all
 --- three are numbers. Every Colors panel override (class power, background,

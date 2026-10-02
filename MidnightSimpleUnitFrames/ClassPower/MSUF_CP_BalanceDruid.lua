@@ -1,7 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
 --- MSUF_CP_BalanceDruid.lua
 --- Balance Druid Astral Power prediction and eclipse coloring runtime.
 --- Kept out of the controller because it owns its own events and class gate.
@@ -14,15 +10,12 @@ end
 do
     local _, MSUF = ...
     MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+    local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_BalanceDruid.lua")
     local ExportPublic = MSUF.ExportPublic
 
     local CoreUnitFrame = MSUF.UF.GetFrame
 
-    local balanceBuilders = _G.MSUF_CP_FEATURE_BUILDERS
-    if type(balanceBuilders) ~= "table" then
-        balanceBuilders = {}
-        ExportPublic("MSUF_CP_FEATURE_BUILDERS", balanceBuilders)
-    end
+    local balanceBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
 
     --- Class gate: Balance-specific runtime setup only applies to Druids.
     --- Everything inside this do-block is cold-dead code for other classes

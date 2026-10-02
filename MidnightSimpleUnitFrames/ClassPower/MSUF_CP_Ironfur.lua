@@ -1,20 +1,12 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
 --- Guardian Druid Ironfur duration tracker.
 --- Each successful Ironfur cast owns one estimated lifetime marker. The
 --- moving display is active-only and never reads restricted aura durations.
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Ironfur.lua")
 
-local modeBuilders = _G.MSUF_CP_MODE_BUILDERS
-if type(modeBuilders) ~= "table" then
-    modeBuilders = {}
-    ExportPublic("MSUF_CP_MODE_BUILDERS", modeBuilders)
-end
+local modeBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_MODE_BUILDERS")
 
 local IRONFUR_SPELL = 192081
 local URSOCS_ENDURANCE = 393611
@@ -29,8 +21,8 @@ local HASH_WIDTH = 2
 
 --- Bound by IRONFUR (Druids only, built on the first Guardian refresh): the
 --- controller's state and helpers.
-local CP, CPK, GetTime, CP_CheckAutoHide, EnsureMainText, ApplyFont, GetVisual, _cpDB
-local C_SpellBook
+local CP, CPK, CP_CheckAutoHide, EnsureMainText, ApplyFont, GetVisual, _cpDB
+local GetTime, C_SpellBook = GetTime, C_SpellBook
 local tostring, type = tostring, type
 
 --- Tracker state. ResetTrackerState gives every build a fresh copy.
@@ -367,10 +359,9 @@ local API = {
 modeBuilders.IRONFUR = function(E)
     if E.PLAYER_CLASS ~= "DRUID" then return nil end
     CP, CPK, _cpDB = E.CP, E.CPK, E._cpDB
-    GetTime = E.GetTime or _G.GetTime
+    GetTime = E.GetTime or GetTime
     CP_CheckAutoHide, EnsureMainText = E.CP_CheckAutoHide, E.EnsureMainText
     ApplyFont, GetVisual = E.ApplyFont, E.GetVisual
-    C_SpellBook = _G.C_SpellBook
     ResetTrackerState()
     eventFrame = CreateFrame("Frame")
     motionFrame = CreateFrame("Frame")

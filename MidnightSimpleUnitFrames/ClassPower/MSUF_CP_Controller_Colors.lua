@@ -11,11 +11,7 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
+local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 local type, tonumber, tostring = type, tonumber, tostring
 local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
