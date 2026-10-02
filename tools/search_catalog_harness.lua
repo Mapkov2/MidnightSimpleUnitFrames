@@ -61,6 +61,11 @@ local CORE = Join(ROOT, "MidnightSimpleUnitFrames")
 local OPTIONS = Join(ROOT, "MidnightSimpleUnitFrames_Options")
 local MSUF = assert(_G.MSUF_NS, "WoW stubs did not create MSUF_NS")
 local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")
+-- The shipped core loads its dependency resolver (MSUF.Require/Optional) before
+-- any defaults or engine file that resolves a provider through it.
+if not MSUF.Require then
+    assert(loadfile(Join(CORE, "Kernel/MSUF_Require.lua")))("MidnightSimpleUnitFrames", MSUF)
+end
 -- The synchronization selector reads actual named profile storage. Reuse the
 -- pure shipped accessor rather than introducing a generator-only replacement.
 local ProfileSlice = require("msuf_source_slice")

@@ -33,7 +33,10 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- addon), not for ordinary growth: every pack carries each new menu label.
         -- 2026-10-01: 16,000,000 -> 16,050,000 for the review fixes plus the
         -- restored options (largest selection koKR/standard 16,004,468).
-        assert(bytes < (suffix == "Mainline" and 16050000 or 14000000),
+        -- 2026-10-02: 16,050,000 -> 16,150,000 for the wave-2 quality splits
+        -- (Edit Mode, engine and class power modules: file headers and imports)
+        -- plus translated group and Edit Mode feedback; no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16150000 or 14000000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
