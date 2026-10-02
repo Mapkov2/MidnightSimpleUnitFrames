@@ -1,4 +1,4 @@
-"""Quality ratchet: per-file code metrics that may only get better (N3).
+"""Quality ratchet: per-file code metrics where defects may only shrink and size stays under its limit (N3).
 
 Usage (from the repo root; Python 3.12 and the Lua 5.1 luac):
   python tools/quality_ratchet.py                 # check (the default)
@@ -15,12 +15,23 @@ still on disk but no longer measured fails the check (and blocks --update) until
 is removed or --accept-regressions says the move is deliberate. The repo profile is picked from
 the folders under the root; --profile suite|classic forces it.
 
-Metrics per file (lower is better for every one):
+Metrics per file (lower is better for every one). Two kinds:
+
+SIZE metrics measure how much a file holds. Ordinary work grows them, so they have headroom:
   lines            line count
   max_function     longest function in lines (luac 5.1 listing)
   main_locals      locals in the main chunk (luac 5.1 listing; Lua caps it at 200)
   max_upvalues     most upvalues of any function (Lua caps it at 60)
-  g_reads          `_G.name`, `_G[...]` and rawget(_G, ...) reads (writes are not counted)
+  A size metric with a profile limit (Suite: lines 810, max_function 72, main_locals 150;
+  Classic: main_locals 160, max_upvalues 45, max_function 150) fails an existing file only when
+  the new value is above max(baseline, limit): a file under its limit may grow up to it, a file
+  already over its limit may not grow past its baseline. A size metric without a profile limit
+  (Suite max_upvalues, Classic lines) is report-only: measured, printed and baselined, never a
+  failure. The limits apply to every measured file (Classic: owned or not).
+
+DEFECT metrics count things that are always worth removing, so they stay strict ratchets: any
+increase over the baseline fails.
+  g_reads         `_G.name`, `_G[...]` and rawget(_G, ...) reads (writes are not counted)
   type_guards      `type(x) == "function"` and `~=` guards
   semicolon_lines  lines holding a statement-level `;` (a table field `;` is not one)
   long_lines       lines longer than 160 characters
@@ -29,14 +40,16 @@ Metrics per file (lower is better for every one):
                    also occur elsewhere in the measured files
 Strings and comments never count: code inside them is blanked before matching.
 
-Check. A file fails when any metric is worse than tools/quality_ratchet_baseline.json,
-unless tools/quality_ratchet_allowlist.json has an "allowed" entry for that file
+Check. A file fails when a defect metric is worse than tools/quality_ratchet_baseline.json or a
+size metric is above max(baseline, limit) (see above), unless
+tools/quality_ratchet_allowlist.json has an "allowed" entry for that file
 and metric whose "max" covers the new value, with a "reason" and a "date". A file
 the baseline does not know is measured against the limits of the repo profile
 (Suite: 810 lines, 72-line functions, 150 locals; Classic owned files: 160 locals,
 45 upvalues, 150-line functions; both: no `;` statements, no line over 160
 characters, clone share at most 1 percent). An entry covers a new file the same way.
-Improvements pass and are counted. Check exits 1 on any failure and always ends
+Improvements pass and are counted: a defect metric that shrank, or a size metric that fell
+below a baseline that was over its limit. Check exits 1 on any failure and always ends
 with one summary line.
 
 Update. Recomputes every metric and rewrites the baseline. It refuses while a
@@ -75,6 +88,8 @@ WINDOW = 6
 CLONE_SHARE_NEW_FILE = 0.01
 METRICS = ("lines", "max_function", "main_locals", "max_upvalues", "g_reads", "type_guards",
            "semicolon_lines", "long_lines", "long_functions", "clone_windows")
+SIZE_METRICS = ("lines", "max_function", "main_locals", "max_upvalues")
+DEFECT_METRICS = tuple(metric for metric in METRICS if metric not in SIZE_METRICS)
 PROFILES = {
     "suite": {
         "marker": "MSUF_Suite",
@@ -457,6 +472,11 @@ def owned_paths(root, profile):
             if line.strip() and not line.startswith("#")}
 
 
+def size_limit(profile, metric):
+    """The profile limit of a size metric, or None when the metric is report-only (or a defect metric)."""
+    return profile["limits"].get(metric) if metric in SIZE_METRICS else None
+
+
 def evaluate(results, window_counts, baseline, allowlist, profile, owned, locations=None):
     """(failures, improved files, new files, stale entries) of one check."""
     allowed = {(e["file"], e["metric"]): e["max"] for e in allowlist.get("allowed", [])
@@ -491,7 +511,21 @@ def evaluate(results, window_counts, baseline, allowlist, profile, owned, locati
             continue
         better = False
         for metric in METRICS:
-            if values[metric] > before[metric]:
+            limit = size_limit(profile, metric)
+            if metric in SIZE_METRICS:
+                # A size metric may grow up to its limit; it fails above max(baseline, limit). One
+                # without a limit is report-only. It counts as better only when it left an over-limit
+                # baseline behind.
+                if limit is None:
+                    continue
+                if values[metric] > max(before[metric], limit):
+                    if not covered(rel, metric, values[metric]):
+                        failures.append("%s: %s %d is worse than the baseline %d (+%d) and above the limit %d"
+                                        % (rel, metric, values[metric], before[metric],
+                                           values[metric] - before[metric], limit))
+                elif values[metric] < before[metric] and before[metric] > limit:
+                    better = True
+            elif values[metric] > before[metric]:
                 if not covered(rel, metric, values[metric]):
                     failures.append("%s: %s %d is worse than the baseline %d (+%d)%s"
                                     % (rel, metric, values[metric], before[metric], values[metric] - before[metric],
@@ -532,7 +566,9 @@ def print_report(results, excluded, top, profile, tags):
     print("totals: " + ", ".join("%s=%d" % (metric, summed[metric]) for metric in METRICS if metric != "max_function"
                                  and metric != "max_upvalues" and metric != "main_locals"))
     mark = (lambda rel: " [%s]" % tags[rel] if rel in tags else "")
-    print("files above the new-file limits%s:" % (" (O owned, P override, M Retail mirror)" if tags else ""))
+    report_only = [metric for metric in SIZE_METRICS if metric not in profile["limits"]]
+    print("report-only size metrics (measured and baselined, never a failure): %s" % (", ".join(report_only) or "none"))
+    print("files above the limits%s:" % (" (O owned, P override, M Retail mirror)" if tags else ""))
     for metric, limit in profile["limits"].items():
         over = sorted(rel for rel, values in results.items() if values[metric] > limit)
         owned_over = [rel for rel in over if tags.get(rel) == "O"] if tags else over
