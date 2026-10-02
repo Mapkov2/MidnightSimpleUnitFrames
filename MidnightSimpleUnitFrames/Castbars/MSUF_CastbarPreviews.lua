@@ -641,27 +641,6 @@ local function PositionCastbarPreviewUnit(unit)
     return false
 end
 
-local function SyncBossCastbarSliders()
-    local general = EnsureGeneralDB()
-    local values = {
-        MSUF_CastbarBossXOffsetSlider = general.bossCastbarOffsetX or 0,
-        MSUF_CastbarBossYOffsetSlider = general.bossCastbarOffsetY or 0,
-        MSUF_CastbarBossWidthSlider = general.bossCastbarWidth or 240,
-        MSUF_CastbarBossHeightSlider = general.bossCastbarHeight or 18,
-    }
-
-    local setSilent = _G.MSUF_SetSliderValueSilent
-    local clamp = _G.MSUF_ClampToSlider
-    if type(setSilent) ~= "function" or type(clamp) ~= "function" then return end
-
-    for sliderName, value in pairs(values) do
-        local slider = _G[sliderName]
-        if slider then
-            setSilent(slider, clamp(slider, tonumber(value) or 0))
-        end
-    end
-end
-
 ExportPublic("MSUF_HideBlizzardPlayerCastbar", HideBlizzardPlayerCastbar)
 ExportPublic("MSUF_PositionPlayerCastbarPreview", PositionPlayerCastbarPreview)
 ExportPublic("MSUF_PositionTargetCastbarPreview", PositionTargetCastbarPreview)
@@ -670,19 +649,8 @@ ExportPublic("MSUF_PositionCastbarPreviewUnit", PositionCastbarPreviewUnit)
 ExportPublic("MSUF_UpdatePlayerCastbarPreview", UpdatePlayerCastbarPreview)
 ExportPublic("MSUF_SetupBossCastbarPreviewEditMode", SetupBossCastbarPreviewEditMode)
 ExportPublic("MSUF_SetupArenaCastbarPreviewEditMode", SetupArenaCastbarPreviewEditMode)
-ExportPublic("MSUF_SyncBossCastbarSliders", SyncBossCastbarSliders)
 
 InstallPoolPreviewEventDriver()
-
-if hooksecurefunc
-    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
-    and not _G.MSUF_BossPreviewSetupHooked
-then
-    ExportPublic("MSUF_BossPreviewSetupHooked", true)
-    hooksecurefunc("MSUF_UpdateBossCastbarPreview", function()
-        if not IsInCombat() then SetupBossCastbarPreviewEditMode() end
-    end)
-end
 
 local function HideCastbarPreviewFrame(frame)
     if not frame then return end

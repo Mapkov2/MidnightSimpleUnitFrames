@@ -1208,9 +1208,6 @@ local function ReanchorPoolCastBar(kind)
     if not InCombat() and pool and pool.preview then
         pool.preview:Update()
     end
-    if kind == "boss" and type(MSUF_SyncBossCastbarSliders) == "function" then
-        MSUF_SyncBossCastbarSliders()
-    end
     if type(MSUF_SyncCastbarPositionPopup) == "function" then
         MSUF_SyncCastbarPositionPopup(kind)
     end
