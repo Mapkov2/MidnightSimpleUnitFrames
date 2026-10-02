@@ -3437,6 +3437,45 @@ function H.PaintDispelOverlayRegion(region, target, style, thickness, a3, dispel
     end
 end
 
+--- The header shade and separator line a pinned (docked) unit or group
+--- preview draws over its title row; built on first use.
+function H.EnsurePinnedHeader(box)
+    local shade = box._msuf2PinnedHeaderShade
+    if not shade and box.CreateTexture then
+        shade = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, -1))
+        shade:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
+        shade:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1)
+        shade:SetHeight(29)
+        shade:SetTexture("Interface\\Buttons\\WHITE8X8")
+        box._msuf2PinnedHeaderShade = shade
+    end
+    local line = box._msuf2PinnedHeaderLine
+    if not line and box.CreateTexture then
+        line = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, 0))
+        line:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -29)
+        line:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -29)
+        line:SetHeight(1)
+        line:SetTexture("Interface\\Buttons\\WHITE8X8")
+        box._msuf2PinnedHeaderLine = line
+    end
+    return shade, line
+end
+
+--- Shows the pinned header in the theme's shadow and soft border colours,
+--- or hides it when the preview is not pinned.
+function H.PaintPinnedHeader(shade, line, colors, pinned)
+    if shade then
+        local bg = colors.coreShadow or { 0.006, 0.016, 0.032, 1 }
+        shade:SetColorTexture(bg[1], bg[2], bg[3], pinned and 0.92 or 0)
+        shade:SetShown(pinned)
+    end
+    if line then
+        local border = colors.borderSoft or colors.border or { 0.070, 0.260, 0.390, 1 }
+        line:SetColorTexture(border[1], border[2], border[3], pinned and 0.52 or 0)
+        line:SetShown(pinned)
+    end
+end
+
 function H.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
     return function(box)
         if not (box and box._animationEnabled == true) then return end
