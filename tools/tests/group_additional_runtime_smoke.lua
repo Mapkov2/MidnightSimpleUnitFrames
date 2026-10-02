@@ -100,6 +100,12 @@ function methods:EnableMouse() end
 
 UIParent = Frame("Frame", "UIParent")
 local MSUF = { GF = {} }
+local startingCombat = false
+MSUF.Util = { InCombat = function(event)
+    if event == "PLAYER_REGEN_DISABLED" then startingCombat = true end
+    if event == "PLAYER_REGEN_ENABLED" then startingCombat = false end
+    return startingCombat or combat
+end }
 local GF = MSUF.GF
 local XML = Read("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.xml")
 local ONLOAD = assert(XML:match('<OnLoad function="([%w_]+)"/>'))
@@ -355,6 +361,20 @@ combat = false
 for _, f in ipairs(frames) do if f.events.PLAYER_REGEN_ENABLED and f.scripts.OnEvent then f.scripts.OnEvent(f, "PLAYER_REGEN_ENABLED") end end
 
 ---------------------------------------------------------------------------
+-- The combat edge precedes InCombatLockdown. A synchronous settings refresh
+-- during that edge must defer protected changes until regen as well.
+local runtimeEvents
+for _, f in ipairs(frames) do if f.events.PLAYER_REGEN_DISABLED then runtimeEvents = f; break end end
+conf.targetsEnabled = true
+GF.RefreshAdditionalGroups()
+runtimeEvents.scripts.OnEvent(runtimeEvents, "PLAYER_REGEN_DISABLED")
+conf.targetsEnabled = false
+GF.RefreshAdditionalGroups()
+assert(MSUF_GroupAdditional_Targets.shown, "combat-start settings refresh hid a protected holder")
+runtimeEvents.scripts.OnEvent(runtimeEvents, "PLAYER_REGEN_ENABLED")
+assert(not MSUF_GroupAdditional_Targets.shown, "regen did not replay the protected holder change")
+conf.targetsEnabled = true
+
 -- Allied bosses: drivers released on disable; none without boss units (P2-15, P3-2)
 ---------------------------------------------------------------------------
 local bosses = {}

@@ -18,6 +18,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 local GF = MSUF.GF
 local Client = MSUF.Client
+local InCombat = MSUF.Util.InCombat
 local floor, min, max = math.floor, math.min, math.max
 local UnitHealth, UnitHealthMax, UnitName, UnitPower, UnitPowerMax = UnitHealth, UnitHealthMax, UnitName, UnitPower, UnitPowerMax
 local issecretvalue = _G.issecretvalue or function() return false end
@@ -261,7 +262,7 @@ function GF.RenderAdditionalPreview(parent, kind, prefix, count, options)
     if not parent then return nil end
     local spec = GF.GetAdditionalPreviewSpec(kind, prefix, count, options)
     if not spec then return nil end
-    if InCombatLockdown() or not spec.enabled then GF.HideAdditionalPreview(parent, prefix); return nil, spec end
+    if InCombat() or not spec.enabled then GF.HideAdditionalPreview(parent, prefix); return nil, spec end
     local pools = previewPools[parent]
     if not pools then pools = {}; previewPools[parent] = pools end
     local holder = pools[prefix]
@@ -339,7 +340,7 @@ end
 -- Samples only: showing or hiding them never touches the secure live blocks.
 function GF.ShowAdditionalGroupPreview(kind, count)
     if kind ~= "party" and kind ~= "raid" and kind ~= "mythicraid" then return false end
-    if InCombatLockdown() then return false end
+    if InCombat() then return false end
     previewRequests[kind] = count or (kind == "party" and 5 or 20)
     RefreshScreenPreviews()
     return true
@@ -645,7 +646,7 @@ local function ApplyMana(kind, conf, enabled, refreshIdentity)
     holder:SetShown(rows > 0)
 end
 function GF.RefreshAdditionalGroups(refreshIdentity)
-    local combat = InCombatLockdown()
+    local combat = InCombat()
     if not combat then GF.EnsureDB() end
     local kind = GF.GetLiveGroupKind() or "party"
     local conf = GF.GetConf(kind)
@@ -678,6 +679,7 @@ local function RequestRefresh(refreshIdentity)
 end
 GF.RequestAdditionalGroupsRefresh = RequestRefresh
 local function OnEvent(_, event)
+    InCombat(event)
     if event == "PLAYER_REGEN_DISABLED" then
         for parent in pairs(previewPools) do GF.HideAdditionalPreview(parent) end
         pending = true
