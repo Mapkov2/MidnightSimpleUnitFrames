@@ -1,7 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
 --- ClassPower/MSUF_CP_PlayerHP.lua
 --- Optional second Player HP bar owned by Class Resources.
 --- Loaded before the controller; exposes a small builder so the controller does
@@ -14,13 +10,9 @@ end
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_PlayerHP.lua")
 
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
+local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 --- Font collaborators; Kernel and Castbars load before ClassPower in each
 --- client TOC, so a missing one fails here.

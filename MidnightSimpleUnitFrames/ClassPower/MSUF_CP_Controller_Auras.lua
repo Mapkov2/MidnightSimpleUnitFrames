@@ -18,13 +18,8 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
 
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
+local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 local type, tonumber, pairs = type, tonumber, pairs
 
@@ -51,8 +46,19 @@ function CPAuras.AddSpell(spellID)
     if spellID then CPAuras.watched[spellID] = true end
 end
 
+--- The aura's spell ID. A restricted ID is never boolean-tested: the first
+--- field is read once, a secret one answers nil, and the other spellings are
+--- read only when it is a plain nil. UNIT_AURA payloads run through here, so
+--- the usual spelling returns after one secret check.
 function CPAuras.AuraSpellID(aura)
-    return aura and CPAuras.NormalizeID(aura.spellId or aura.spellID or aura.id) or nil
+    if not aura then return nil end
+    local id = aura.spellId
+    if NotSecret(id) == false then return nil end
+    if id ~= nil then return tonumber(id) end
+    id = aura.spellID
+    if NotSecret(id) == false then return nil end
+    if id == nil then id = aura.id end
+    return CPAuras.NormalizeID(id)
 end
 
 function CPAuras.AuraInstanceID(aura)

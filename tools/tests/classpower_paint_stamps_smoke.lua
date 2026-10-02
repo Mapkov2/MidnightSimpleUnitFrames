@@ -15,7 +15,8 @@
 --     charged pip keeps its dimmed background on the next update;
 --   * an eclipse that ends early is not handed back by the controller cache;
 --   * rune pips paint the configured background on the first paint, after a
---     relayout and on the rune events that follow.
+--     relayout and on the rune events that follow;
+--   * a pip a painter hid stays hidden after a relayout shows it.
 -- Also: a structural refresh inside the 150 ms throttle gets a trailing one,
 -- and the one colour-override reader (MSUF_CP_CONST.OverrideRGB).
 --
@@ -220,6 +221,24 @@ do
     Check(SameColor(CP.bars[1]._bg.vertexColor, { 0, 0, 0 }), "clearing the rune background override kept the colour")
 end
 
+-- A painter hides a pip through its shown stamp (runes while a vehicle UI is
+-- up, before the vehicle refresh routes the bar away). A relayout shows every
+-- pip directly and must record that in the stamp, or the next rune update
+-- skips the Hide it needs and the pip stays visible.
+do
+    local t = World.Start(repo, "Mainline", "DEATHKNIGHT", 3, 6)
+    local CP = t.CP
+    Check(CP.visible and CP.powerType == 5, "Unholy did not route runes")
+    t.S.vehicle = true
+    t.onEvent(t.eventFrame, "RUNE_POWER_UPDATE", 1, false)
+    Check(CP.bars[1].shown == false, "a rune update under a vehicle UI did not hide the pips")
+    _G.MSUF_ClassPower_RefreshLayout()
+    Check(CP.bars[1].shown == true, "the relayout did not show the pips")
+    t.onEvent(t.eventFrame, "RUNE_POWER_UPDATE", 1, false)
+    Check(CP.bars[1].shown == false and CP.bars[6].shown == false,
+        "a rune update after a relayout left the hidden pips visible")
+end
+
 -- Native aura modes (Fury Whirlwind) hide the count text directly. A vehicle
 -- with combo points hands the bar to the segmented painter, whose shown stamp
 -- must not still say "shown" from the previous vehicle.
@@ -277,4 +296,4 @@ end
 if #failures > 0 then
     error("classpower_paint_stamps_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour, charged relayout, rune background, native aura text, throttle)")
+print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour, charged relayout, rune background, relayout shown stamp, native aura text, throttle)")

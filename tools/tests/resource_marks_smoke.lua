@@ -110,6 +110,7 @@ end
 
 MSUF_CP_CONST = { CPK = { MODE = { SIGNED_CONTINUOUS = 12 } } }
 local ns = { CPBuilders = {} }
+assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().Install(root, ns)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceMarks.lua"))("MSUF", ns)
 
 local player = NewObject("Frame")

@@ -1,7 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
 --- MSUF_CP_BalanceDruid.lua
 --- Balance Druid Astral Power prediction and eclipse coloring runtime.
 --- Kept out of the controller because it owns its own events and class gate.
@@ -14,15 +10,12 @@ end
 do
     local _, MSUF = ...
     MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+    local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_BalanceDruid.lua")
     local ExportPublic = MSUF.ExportPublic
 
     local CoreUnitFrame = MSUF.UF.GetFrame
 
-    local balanceBuilders = _G.MSUF_CP_FEATURE_BUILDERS
-    if type(balanceBuilders) ~= "table" then
-        balanceBuilders = {}
-        ExportPublic("MSUF_CP_FEATURE_BUILDERS", balanceBuilders)
-    end
+    local balanceBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
 
     --- Class gate: Balance-specific runtime setup only applies to Druids.
     --- Everything inside this do-block is cold-dead code for other classes
@@ -132,15 +125,28 @@ local _balAuras = {
     watched = {},
     bySpell = {},
     spellByInstance = {},
+    --- Eclipse spells the last rebuild found missing. Valid only for the
+    --- eclipse refresh that follows that rebuild (_absentFresh): a later aura
+    --- event or the refresh itself ends it.
+    absent = {},
 }
+local _absentFresh = false
 
 local function _AuraID(value)
     if not NotSecret(value) or value == nil then return nil end
     return tonumber(value)
 end
 
+--- A restricted spell ID is never boolean-tested (see CPAuras.AuraSpellID).
 local function _AuraSpellID(aura)
-    return aura and _AuraID(aura.spellId or aura.spellID or aura.id) or nil
+    if not aura then return nil end
+    local id = aura.spellId
+    if not NotSecret(id) then return nil end
+    if id ~= nil then return tonumber(id) end
+    id = aura.spellID
+    if not NotSecret(id) then return nil end
+    if id == nil then id = aura.id end
+    return _AuraID(id)
 end
 
 local function _AuraInstanceID(aura)
@@ -166,6 +172,7 @@ local function _StoreTrackedAura(aura)
     local auraInstanceID = _AuraInstanceID(aura)
     if auraInstanceID then _balAuras.spellByInstance[auraInstanceID] = spellID end
     _balAuras.bySpell[spellID] = aura
+    _balAuras.absent[spellID] = nil
     return true
 end
 
@@ -173,21 +180,29 @@ local function _FetchTrackedAura(spellID)
     spellID = _AuraID(spellID)
     if not spellID then return nil end
 
+    --- The controller's getter reads an eclipse live: one
+    --- GetPlayerAuraBySpellID, or GetUnitAuraBySpellID where the first is
+    --- missing (MSUF_CP_Controller_Auras.lua CPAuras.Fetch). When it answers
+    --- nothing usable, only the query it did not make is left to ask.
     local shared = _G.MSUF_CP_GetTrackedPlayerAura
+    local askedPlayer = false
     if type(shared) == "function" then
         local aura = shared(spellID)
         if CanAccessTableValue(aura) then
             _StoreTrackedAura(aura)
             return aura
         end
+        askedPlayer = true
     end
 
     if not C_UnitAuras then return nil end
     local aura
-    if type(C_UnitAuras.GetPlayerAuraBySpellID) == "function" then
+    local hasPlayerGetter = type(C_UnitAuras.GetPlayerAuraBySpellID) == "function"
+    if hasPlayerGetter and not askedPlayer then
         aura = C_UnitAuras.GetPlayerAuraBySpellID(spellID)
     end
-    if (not CanAccessTableValue(aura)) and type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
+    if (not CanAccessTableValue(aura)) and type(C_UnitAuras.GetUnitAuraBySpellID) == "function"
+        and (hasPlayerGetter or not askedPlayer) then
         aura = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
     end
     if CanAccessTableValue(aura) then
@@ -210,6 +225,7 @@ local function _GetTrackedAura(spellID)
             aura = nil
         end
     end
+    if not aura and _absentFresh and _balAuras.absent[spellID] then return nil end
     return aura or _FetchTrackedAura(spellID)
 end
 
@@ -223,6 +239,7 @@ end
 local function _RebuildTrackedAuras()
     for k in pairs(_balAuras.bySpell) do _balAuras.bySpell[k] = nil end
     for k in pairs(_balAuras.spellByInstance) do _balAuras.spellByInstance[k] = nil end
+    for k in pairs(_balAuras.absent) do _balAuras.absent[k] = nil end
     for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
         _balAuras.watched[auraID] = true
     end
@@ -232,11 +249,17 @@ local function _RebuildTrackedAuras()
     )
     if canFetchBySpell then
         for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
-            _FetchTrackedAura(auraID)
+            if not _FetchTrackedAura(auraID) then _balAuras.absent[auraID] = true end
         end
     else
         _ScanUnitAuras()
+        for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
+            if not _balAuras.bySpell[auraID] then _balAuras.absent[auraID] = true end
+        end
     end
+    --- The eclipse refresh right after this rebuild need not ask again for an
+    --- eclipse it just found missing.
+    _absentFresh = true
 end
 
 local function _CanProcessIncrementalAuraUpdate(unitAuraUpdateInfo)
@@ -254,6 +277,7 @@ local function _CanProcessIncrementalAuraUpdate(unitAuraUpdateInfo)
 end
 
 local function _ProcessAuraUpdate(unitAuraUpdateInfo)
+    _absentFresh = false
     if not _CanProcessIncrementalAuraUpdate(unitAuraUpdateInfo) then
         _RebuildTrackedAuras()
         return
@@ -315,6 +339,7 @@ local function _refreshEclipses()
     else
         _eclColor = nil
     end
+    _absentFresh = false
 end
 
 local function _computeAP(spellID)

@@ -30,7 +30,7 @@ Check(CP.visible and CP.powerType == -1, "Brewmaster did not route Stagger")
 Check(bar.maximum == 1000, "plain Stagger maximum not painted")
 
 local function Tick()
-    local stop = Secrets.Watch(MODES)
+    local stop = Secrets.Watch(MODES, { strict = true })
     local ok, err = pcall(CP.RefreshPublic)
     local violations = stop()
     return ok, err, violations

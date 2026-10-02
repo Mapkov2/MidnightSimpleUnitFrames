@@ -16,11 +16,7 @@ local ExportPublic = MSUF.ExportPublic
 --- the TOC loads before this file.
 local CoreUnitFrame = _G.MSUF_CP_CoreUnitFrame
 
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
+local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 local type, tonumber = type, tonumber
 local math_floor = math.floor

@@ -54,6 +54,9 @@ _G.MSUF_Auras3 = {
 
 _G.MSUF_CP_CORE_BUILDERS = nil
 local ns = { ExportPublic = function(name, value) _G[name] = value return value end }
+assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().Install(repo, ns)
+_G.MSUF_CP_CONST = nil
+assert(loadfile(repo .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Constants.lua"))("MidnightSimpleUnitFrames", ns)
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_EbonMight.lua"))("MidnightSimpleUnitFrames", ns)
 
 local CP = {}

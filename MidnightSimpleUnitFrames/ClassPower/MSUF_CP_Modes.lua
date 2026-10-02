@@ -1,7 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
-    if type(policy) == "string" then return region[policy](region, ...) end
-    return region
-end
 --- ClassPower/MSUF_CP_Modes.lua - class power render modes
 
 --- MSUF_CP_Mode_Segmented.lua
@@ -10,10 +6,9 @@ end
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Modes.lua")
 
-local modeBuilders = _G.MSUF_CP_MODE_BUILDERS or {}
-ExportPublic("MSUF_CP_MODE_BUILDERS", modeBuilders)
+local modeBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_MODE_BUILDERS")
 
 --- Classic flavors (Vanilla, TBC, Mists) load this file too; read once.
 local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
