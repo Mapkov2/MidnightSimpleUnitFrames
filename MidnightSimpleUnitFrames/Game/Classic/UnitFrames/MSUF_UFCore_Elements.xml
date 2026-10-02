@@ -14,6 +14,7 @@
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Borders.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Elements_Alpha.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Highlight.lua"/>
+  <Script file="..\..\..\UnitFrames\Range\MSUF_UF_RangeFade_Driver.lua"/>
   <Script file="..\..\..\UnitFrames\Range\MSUF_UF_RangeFade.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Text_Common.lua"/>
   <Script file="..\..\..\UnitFrames\Engine\Elements\MSUF_UF_Text_Format.lua"/>

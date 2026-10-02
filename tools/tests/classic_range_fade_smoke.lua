@@ -1,11 +1,13 @@
 -- Classic range fade: the target frame must fade without SPELL_RANGE_CHECK_UPDATE,
 -- even when C_Spell.EnableSpellRangeCheck exists (Classic never arms target spells).
--- Loads the real UnitFrames/Range/MSUF_UF_RangeFade.lua with a fresh namespace per
+-- Loads the real UnitFrames/Range/MSUF_UF_RangeFade_Driver.lua and
+-- UnitFrames/Range/MSUF_UF_RangeFade.lua with a fresh namespace per
 -- scenario and asserts the alpha multiplier it hands to UF.ApplyRangeModifier.
 -- Usage (cwd = repo root): lua tools/tests/classic_range_fade_smoke.lua <repoRoot>
 local root = arg and arg[1]
 assert(type(root) == "string" and root ~= "", "usage: lua classic_range_fade_smoke.lua <repoRoot>")
 root = root:gsub("\\", "/"):gsub("/+$", "")
+local DRIVER = root .. "/MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade_Driver.lua"
 local ELEMENT = root .. "/MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade.lua"
 local OUT_ALPHA = 0.35
 
@@ -127,6 +129,7 @@ local function Load(opts)
     Secrets = { PlainBool = PlainBool },
     ExportPublic = function() end,
   }
+  assert(loadfile(DRIVER))("MidnightSimpleUnitFrames", ns)
   assert(loadfile(ELEMENT))("MidnightSimpleUnitFrames", ns)
   assert(elements.RangeFade, "RangeFade element was not registered")
 
@@ -486,13 +489,16 @@ local function FunctionAt(path, marker)
   return assert(Find(ReadFunctions(path)), "no compiled function at line " .. line .. " of " .. path)
 end
 
-scenarios[#scenarios + 1] = { "O the main chunk keeps headroom under the gate's 190 locals", function()
-  local locals = MainChunkLocals(ELEMENT)
-  -- Retail's own copy sits at about 178. Keep at least 6 of the budget for the
-  -- next Retail sync: fold further Classic additions into the unit-table
-  -- builder or a table instead of new file-level locals.
-  assert(locals <= 184, "O MSUF_UF_RangeFade.lua main chunk has " .. locals
-    .. " locals; keep at least 6 of the gate's 190 free for Retail syncs")
+scenarios[#scenarios + 1] = { "O both range chunks keep 40 locals of headroom under the gate's 190", function()
+  -- 2026-10-02: the unit catalog and the driver subscriptions moved into
+  -- MSUF_UF_RangeFade_Driver.lua (main chunk 182 -> 149 locals). Keep both
+  -- files at least 40 under the budget: put new state into the file whose
+  -- concern it is, or into a table, instead of new file-level locals.
+  for _, path in ipairs({ ELEMENT, DRIVER }) do
+    local locals = MainChunkLocals(path)
+    assert(locals <= 150, "O " .. path:match("[^/]+$") .. " main chunk has " .. locals
+      .. " locals; keep at least 40 of the gate's 190 free")
+  end
 end }
 
 scenarios[#scenarios + 1] = { "P the group range health alpha builds no string per change", function()

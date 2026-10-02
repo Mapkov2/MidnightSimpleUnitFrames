@@ -226,6 +226,7 @@ MidnightSimpleUnitFrames/State/MSUF_RetiredData.lua
 MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore/MSUF_UFCore_Auras.xml
 MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua
 MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config_Status.lua
+MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade_Driver.lua
 MidnightSimpleUnitFrames_Options/Media/PreviewBackgrounds/bright_stone.blp
 MidnightSimpleUnitFrames_Options/Media/PreviewBackgrounds/city_scene.blp
 MidnightSimpleUnitFrames_Options/Media/PreviewBackgrounds/dark_stone.blp

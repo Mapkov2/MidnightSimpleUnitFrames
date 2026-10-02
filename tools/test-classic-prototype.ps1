@@ -1212,6 +1212,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Textures.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua",
     "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config_Status.lua",
+    "MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade_Driver.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayoutAdditional.lua",
     "MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimers.lua",
