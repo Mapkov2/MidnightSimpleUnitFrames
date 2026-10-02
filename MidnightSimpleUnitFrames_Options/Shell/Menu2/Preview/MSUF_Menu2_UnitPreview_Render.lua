@@ -37,6 +37,23 @@ local function Slot(conf, g, prefix, side, axis)
     return NumField(conf, g, primary, legacy, primary, legacy, 0)
 end
 
+--- A bar's three text slot offsets from the stored settings: the bar's base
+--- offset (plus the font baseline) and each slot's own. leftSide/rightSide
+--- name the configured slot drawn on that physical side, so reverse order
+--- passes them mirrored.
+local function ConfiguredSlotOffsets(conf, g, prefix, fallbackY, baseline, leftSide, rightSide)
+    local baseX = NumField(conf, g, prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
+    local baseY = NumField(conf, g, prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + baseline
+    return {
+        leftX = baseX + Slot(conf, g, prefix, leftSide, "X"),
+        leftY = baseY + Slot(conf, g, prefix, leftSide, "Y"),
+        centerX = baseX + Slot(conf, g, prefix, "Center", "X"),
+        centerY = baseY + Slot(conf, g, prefix, "Center", "Y"),
+        rightX = baseX + Slot(conf, g, prefix, rightSide, "X"),
+        rightY = baseY + Slot(conf, g, prefix, rightSide, "Y"),
+    }
+end
+
 local PreviewBackgroundColorMode = MenuState.PreviewHelpers.HealthBackgroundColorMode
 local NO_LIVE_DATA = {}
 
@@ -404,6 +421,28 @@ local function PreviewLiveStatusText(key)
     end
     return nil
 end
+--- Whether a status indicator shows in the preview: the compiled runtime
+--- switch when there is one (PvP also previews while only its context is
+--- off), otherwise the stored or default switch. Units the indicator does
+--- not support never show it; outside "all" mode only the selected one does.
+local function StatusPreviewShown(R, Preview, spec, statusCfg, conf, g, key)
+    local show
+    if statusCfg then
+        show = statusCfg.enabled == true
+        if not show and spec.id == "statusPvp" and statusCfg.contextDisabled == true then show = true end
+    else
+        local showVal = conf[spec.show]
+        if showVal == nil then showVal = g[spec.show] end
+        show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
+    end
+    if spec.allowed and not spec.allowed(key) then show = false end
+    if Preview.GetStatusPreviewMode() ~= "all" then
+        local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
+        if selected == "" then selected = "raidmarker" end
+        show = show and (spec.id == selected)
+    end
+    return show
+end
 local function PreviewLivePowerBar(key)
     local frame = PreviewLiveFrame(key)
     return frame and (frame.targetPowerBar or frame.powerBar or frame.Power) or nil
@@ -512,14 +551,20 @@ local function PreviewDirectTextPoint(value, fallback)
     if value and PREVIEW_DIRECT_TEXT_POINTS[value] then return value end
     return fallback or "CENTER"
 end
-local function PlaceDirectPreviewText(fs, parent, text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY, fallbackJustify, S)
-    if not fs then return end
+--- A direct-layout text's anchor from the compiled runtime text, with the
+--- caller's fallbacks for fields the runtime left out.
+local function DirectTextAnchor(text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY)
     local point = PreviewDirectTextPoint(text and text[prefix .. "Point"], fallbackPoint)
     local relPoint = PreviewDirectTextPoint(text and text[prefix .. "RelativePoint"], fallbackRelPoint or point)
     local x = tonumber(text and text[prefix .. "X"])
     local y = tonumber(text and text[prefix .. "Y"])
     if x == nil then x = fallbackX or 0 end
     if y == nil then y = fallbackY or 0 end
+    return point, relPoint, x, y
+end
+local function PlaceDirectPreviewText(fs, parent, text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY, fallbackJustify, S)
+    if not fs then return end
+    local point, relPoint, x, y = DirectTextAnchor(text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY)
     local justify = fallbackJustify or "CENTER"
     if point:find("LEFT", 1, true) then
         justify = "LEFT"
@@ -566,12 +611,7 @@ local function ExpandAnchoredRect(minX, maxX, minY, maxY, point, relPoint, x, y,
     return ExpandRect(minX, maxX, minY, maxY, left, bottom, left + rw, bottom + rh)
 end
 local function ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY, rw, rh, targetW, targetH)
-    local point = PreviewDirectTextPoint(text and text[prefix .. "Point"], fallbackPoint)
-    local relPoint = PreviewDirectTextPoint(text and text[prefix .. "RelativePoint"], fallbackRelPoint or point)
-    local x = tonumber(text and text[prefix .. "X"])
-    local y = tonumber(text and text[prefix .. "Y"])
-    if x == nil then x = fallbackX or 0 end
-    if y == nil then y = fallbackY or 0 end
+    local point, relPoint, x, y = DirectTextAnchor(text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY)
     return ExpandAnchoredRect(minX, maxX, minY, maxY, point, relPoint, x, y, rw, rh, targetW, targetH)
 end
 local function ExpandRuntimeAnchorRect(minX, maxX, minY, maxY, anchor, x, y, rw, rh, targetW, targetH)
@@ -1715,21 +1755,11 @@ function Stage.MeasureTextFootprint(st, Preview)
         end
 
         local function TextOffsets(prefix, fallbackY, mirrorSlots)
-            local baseX = NumField(conf, g, prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
-            local baseY = NumField(conf, g, prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + rawBaseline
-
             -- Reverse order renders the configured Right slot on the physical
             -- left side (and vice versa); its offsets follow the content.
             local leftSide = mirrorSlots and "Right" or "Left"
             local rightSide = mirrorSlots and "Left" or "Right"
-            return {
-                leftX = baseX + Slot(conf, g, prefix, leftSide, "X"),
-                leftY = baseY + Slot(conf, g, prefix, leftSide, "Y"),
-                centerX = baseX + Slot(conf, g, prefix, "Center", "X"),
-                centerY = baseY + Slot(conf, g, prefix, "Center", "Y"),
-                rightX = baseX + Slot(conf, g, prefix, rightSide, "X"),
-                rightY = baseY + Slot(conf, g, prefix, rightSide, "Y"),
-            }
+            return ConfiguredSlotOffsets(conf, g, prefix, fallbackY, rawBaseline, leftSide, rightSide)
         end
         local hpTextVisible = PreviewLayerWanted(box, "hpText") and conf.showHP ~= false and (not runtimeSpec or runtimeSpec.showHealthText ~= false)
         if hpTextVisible then
@@ -1767,21 +1797,7 @@ function Stage.MeasureTextFootprint(st, Preview)
             for i = 1, #(D.STATUS_PREVIEW or {}) do
                 local spec = D.STATUS_PREVIEW[i]
                 local statusCfg = runtimeStatus and runtimeStatus[R.STATUS_RUNTIME_KEYS[spec.id]]
-                local show
-                if statusCfg then
-                    show = statusCfg.enabled == true
-                    if not show and spec.id == "statusPvp" and statusCfg.contextDisabled == true then show = true end
-                else
-                    local showVal = conf[spec.show]
-                    if showVal == nil then showVal = g[spec.show] end
-                    show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
-                end
-                if spec.allowed and not spec.allowed(key) then show = false end
-                if Preview.GetStatusPreviewMode() ~= "all" then
-                    local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
-                    if selected == "" then selected = "raidmarker" end
-                    show = show and (spec.id == selected)
-                end
+                local show = StatusPreviewShown(R, Preview, spec, statusCfg, conf, g, key)
                 if show then
                     box._statusFootprintVisible = true
                     local isIdentityText = R.PreviewStatus.IsIdentityText and R.PreviewStatus.IsIdentityText(spec)
@@ -3210,18 +3226,8 @@ function Stage.LayoutTextSlots(st)
                 }
             end
         end
-        local baseX = NumField(conf, g, prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
-        local baseY = NumField(conf, g, prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + box._fontPreviewBaselineOffset
-
         -- Reverse order: the mirrored physical sides read the other slot's offsets.
-        return {
-            leftX = baseX + Slot(conf, g, prefix, leftSide, "X"),
-            leftY = baseY + Slot(conf, g, prefix, leftSide, "Y"),
-            centerX = baseX + Slot(conf, g, prefix, "Center", "X"),
-            centerY = baseY + Slot(conf, g, prefix, "Center", "Y"),
-            rightX = baseX + Slot(conf, g, prefix, rightSide, "X"),
-            rightY = baseY + Slot(conf, g, prefix, rightSide, "Y"),
-        }
+        return ConfiguredSlotOffsets(conf, g, prefix, fallbackY, box._fontPreviewBaselineOffset, leftSide, rightSide)
     end
     local function PlaceTextSet(left, center, right, pct, parent, lPoint, lRel, cPoint, cRel, rPoint, rRel, offsets, coordinate)
         coordinate = coordinate or RuntimeTextCoordinate
@@ -3559,21 +3565,7 @@ function Stage.RenderAurasAndStatus(st, Preview)
         local icon = mock.icons[spec.id]
         local handle = box.statusHandles[spec.id]
         local statusCfg = runtimeStatus and runtimeStatus[R.STATUS_RUNTIME_KEYS[spec.id]]
-        local show
-        if statusCfg then
-            show = statusCfg.enabled == true
-            if not show and spec.id == "statusPvp" and statusCfg.contextDisabled == true then show = true end
-        else
-            local showVal = conf[spec.show]
-            if showVal == nil then showVal = g[spec.show] end
-            show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
-        end
-        if spec.allowed and not spec.allowed(key) then show = false end
-        if Preview.GetStatusPreviewMode() ~= "all" then
-            local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
-            if selected == "" then selected = "raidmarker" end
-            show = show and (spec.id == selected)
-        end
+        local show = StatusPreviewShown(R, Preview, spec, statusCfg, conf, g, key)
         icon:SetShown(show)
         if show then
             statusLayerAvailable = true
