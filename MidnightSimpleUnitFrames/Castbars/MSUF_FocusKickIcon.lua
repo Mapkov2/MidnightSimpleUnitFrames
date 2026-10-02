@@ -96,7 +96,6 @@ local function DetachTimeDriver()
 
         if source.MSUF_castActive == true
             and runtime and runtime.PrepareWork
-            and type(_G.MSUF_RegisterCastbar) == "function"
         then
             runtime:PrepareWork(source)
             _G.MSUF_RegisterCastbar(source)
@@ -116,10 +115,8 @@ local function AttachTimeDriver(state)
     end
 
     iconFrame.timeText:SetAlpha(1)
-    local format = "CURRENT"
-    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
-        format = _G.MSUF_GetCastbarTimeFormat("focus", general) or format
-    end
+    -- Kernel/MSUF_Util.lua owns the castbar time format.
+    local format = _G.MSUF_GetCastbarTimeFormat("focus", general) or "CURRENT"
 
     local runtime = _G.MSUF_CastbarRuntime
     local source = FocusSourceCastbar()
@@ -160,7 +157,7 @@ local function AttachTimeDriver(state)
     source._msufForceLuaTimeTextFollower = true
     iconFrame._msufTimeFollowerSource = source
     if runtime and runtime.PrepareWork then runtime:PrepareWork(source) end
-    if type(_G.MSUF_RegisterCastbar) == "function" then _G.MSUF_RegisterCastbar(source) end
+    _G.MSUF_RegisterCastbar(source)
 
     local text = source.timeText:GetText()
     if _G.issecretvalue and _G.issecretvalue(text) == true then
@@ -180,17 +177,15 @@ local function ApplyTimeTextFontTo(fs, applyResolved, fontPath, fontSize, fontFl
     local ready = _G.MSUF_SetFontChecked(fs, fontPath, fontSize, fontFlags)
     local matches = _G.MSUF_FontApplicationMatches
     if ready and type(matches) == "function" then ready = matches(fs, fontPath, fontSize) == true end
-    if not ready and type(_G.MSUF_MarkFontApplyFailed) == "function" then
+    if not ready then
         _G.MSUF_MarkFontApplyFailed()
     end
 end
 
 local function ApplyTimeTextFont()
     local general = EnsureOptions()
-    local fontPath = (type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath())
-        or STANDARD_TEXT_FONT
-        or "Fonts\\FRIZQT__.TTF"
-    local fontFlags = (type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags()) or "OUTLINE"
+    local fontPath = _G.MSUF_GetFontPath() or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local fontFlags = _G.MSUF_GetFontFlags() or "OUTLINE"
     local fontSize = ResolveTextSize(general)
     local resolveSafe = _G.MSUF_ResolveSafeFontPath
     if type(resolveSafe) == "function" then
@@ -204,12 +199,10 @@ local function ApplyTimeTextFont()
     ApplyTimeTextFontTo(iconFrame and iconFrame.timeText, applyResolved, fontPath, fontSize, fontFlags, fontKey)
     ApplyTimeTextFontTo(previewFrame and previewFrame.timeText, applyResolved, fontPath, fontSize, fontFlags, fontKey)
 
-    if type(_G.MSUF_GetConfiguredFontColor) == "function" then
-        local red, green, blue = _G.MSUF_GetConfiguredFontColor()
-        if red and green and blue then
-            if iconFrame and iconFrame.timeText then iconFrame.timeText:SetTextColor(red, green, blue, 1) end
-            if previewFrame and previewFrame.timeText then previewFrame.timeText:SetTextColor(red, green, blue, 1) end
-        end
+    local red, green, blue = _G.MSUF_GetConfiguredFontColor()
+    if red and green and blue then
+        if iconFrame and iconFrame.timeText then iconFrame.timeText:SetTextColor(red, green, blue, 1) end
+        if previewFrame and previewFrame.timeText then previewFrame.timeText:SetTextColor(red, green, blue, 1) end
     end
 end
 
@@ -224,7 +217,7 @@ end
 
 local function ApplyInterruptibilityColor(isNotInterruptible, apiNotInterruptibleRaw)
     if not iconFrame then return end
-    if type(_G.MSUF_KickReady_Init) == "function" then _G.MSUF_KickReady_Init() end
+    _G.MSUF_KickReady_Init()
 
     if iconFrame.icon and iconFrame.icon.SetDesaturated then
         iconFrame.icon:SetDesaturated(isNotInterruptible == true)
@@ -235,23 +228,7 @@ local function ApplyInterruptibilityColor(isNotInterruptible, apiNotInterruptibl
         return
     end
 
-    local red, green, blue, alpha
-    local hasColor = false
-    if type(_G.MSUF_KickReady_IsReady) == "function"
-        and type(_G.MSUF_KickReady_EvaluateRGBA) == "function"
-    then
-        red, green, blue, alpha = _G.MSUF_KickReady_EvaluateRGBA(
-            _G.MSUF_KickReady_IsReady(),
-            apiNotInterruptibleRaw
-        )
-        hasColor = true
-    end
-
-    if hasColor then
-        SetBorderColor(red, green, blue, alpha)
-    else
-        SetBorderColor(1, 0.2, 0.2, 1)
-    end
+    SetBorderColor(_G.MSUF_KickReady_EvaluateRGBA(_G.MSUF_KickReady_IsReady(), apiNotInterruptibleRaw))
 end
 
 local function LayoutBorderEdges()
@@ -624,17 +601,13 @@ end
 
 local function InitFocusKickIcon()
     EnsureInitialized(IsFocusKickEnabled())
-    if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then
-        _G.MSUF_FocusKickDriver_ForceUpdate()
-    end
+    _G.MSUF_FocusKickDriver_ForceUpdate()
 end
 
 local function UpdateFocusKickIconOptions()
     EnsureInitialized(IsFocusKickEnabled())
     if iconFrame then ApplyIconLayout() end
-    if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then
-        _G.MSUF_FocusKickDriver_ForceUpdate()
-    end
+    _G.MSUF_FocusKickDriver_ForceUpdate()
     if refreshPreviewLayout then refreshPreviewLayout() end
 end
 
@@ -667,11 +640,7 @@ local function ApplyCastState(state)
     end
 
     if iconFrame.icon and state.icon then
-        if type(_G.MSUF_SetIconTexture) == "function" then
-            _G.MSUF_SetIconTexture(iconFrame.icon, state.icon, "")
-        else
-            iconFrame.icon:SetTexture(state.icon)
-        end
+        _G.MSUF_SetIconTexture(iconFrame.icon, state.icon, "")
     end
 
     iconFrame.MSUF_sourceCastBar = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar

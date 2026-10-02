@@ -22,6 +22,13 @@ local GetCastbarCountsDown = Require("MSUF_GetCastbarCountsDown", FILE)
 local RefreshCastbarSpellNameText = Require("MSUF_RefreshCastbarSpellNameText", FILE)
 local GetInterruptUnavailableTintArgs = Require("MSUF_Castbar_GetInterruptUnavailableTintArgs", FILE)
 local ApplyNonInterruptibleTint = Require("MSUF_Castbar_ApplyNonInterruptibleTint", FILE)
+-- Kernel/MSUF_Util.lua loads before every castbar file. Resolved on the first
+-- cast target text write (castbar harnesses without that text skip it).
+local setTextIfChanged
+local function SetTextIfChanged(fontString, text)
+    setTextIfChanged = setTextIfChanged or Require("MSUF_SetTextIfChanged", FILE)
+    setTextIfChanged(fontString, text)
+end
 
 local ExportPublic = MSUF.ExportPublic
 
@@ -317,7 +324,9 @@ local function CastStateActive(state)
 end
 
 local function CastStateHasSpell(state)
-    return CastStateActive(state) and state.spellName ~= nil
+    -- The name is SecretWhenUnitSpellCastRestricted: a secret name is a cast
+    -- with a spell and is never compared, not even with nil.
+    return CastStateActive(state) and (toPlainIsSecret(state.spellName) or state.spellName ~= nil)
 end
 
 local function GetRemainingFromStatusBar(frame)
@@ -615,6 +624,18 @@ local function ShowActiveState(frame, state)
     PublishState(frame, state)
 end
 
+--- The driver's entry for code that shows a unit's state outside the driver's
+--- own events: the boss and arena pool lifecycle (encounter, opponent and
+--- settings passes). It stores the shown cast's identity and publishes it like
+--- every driver path, so an engine subscriber of a pool unit sees those casts
+--- too. state nil reads the unit's state.
+MSUF.Castbars = MSUF.Castbars or {}
+local Driver = MSUF.Castbars.Driver or {}
+MSUF.Castbars.Driver = Driver
+function Driver.ShowState(frame, state)
+    ShowActiveState(frame, state or BuildState(frame))
+end
+
 local function RefreshFromEngine(frame, event)
     if frame.interrupted then return end
 
@@ -658,11 +679,7 @@ local function StopDriverFrame(frame, reason)
     ClearStartRetry(frame)
     HideChannelHasteMarkers(frame)
     if frame.castTargetText then
-        if type(_G.MSUF_SetTextIfChanged) == "function" then
-            _G.MSUF_SetTextIfChanged(frame.castTargetText, "")
-        else
-            frame.castTargetText:SetText("")
-        end
+        SetTextIfChanged(frame.castTargetText, "")
         frame.castTargetText:Hide()
     end
     _G.MSUF_CB_ResetStateOnStop(frame, reason)
@@ -842,11 +859,7 @@ end
 local function SetCastTargetText(frame, text)
     local fs = frame and frame.castTargetText
     if not fs then return end
-    if type(_G.MSUF_SetTextIfChanged) == "function" then
-        _G.MSUF_SetTextIfChanged(fs, text)
-    else
-        fs:SetText(text)
-    end
+    SetTextIfChanged(fs, text)
 end
 
 local function SetCastTargetTextPlainColorIfChanged(fs, red, green, blue)
@@ -861,10 +874,17 @@ local function SetCastTargetTextPlainColorIfChanged(fs, red, green, blue)
     fs._msufCastTargetColorR = red
     fs._msufCastTargetColorG = green
     fs._msufCastTargetColorB = blue
+    fs._msufCastTargetClassSequence = false
     fs:SetTextColor(red, green, blue)
 end
 
-local function ApplyCastTargetTextColor(frame, classFilename)
+--- sequenceID and generation (optional) name the cast whose spell target is
+--- being coloured: its castBarID-or-generation sequence and the engine
+--- generation its START advanced. UnitSpellTargetClass is SecretReturns, so
+--- the class colour comes from C_ClassColor.GetClassColor, which builds a new
+--- ColorMixin table per call; a cast's spell target does not change, so one
+--- cast asks for it once (pushback and interruptibility repaints reuse it).
+local function ApplyCastTargetTextColor(frame, classFilename, sequenceID, generation)
     local fs = frame and frame.castTargetText
     if not fs then return end
     -- A per-castbar target-name color is the most specific choice the user can
@@ -888,6 +908,10 @@ local function ApplyCastTargetTextColor(frame, classFilename)
         end
     end
     if classFilename and type(C_ClassColor_GetClassColor) == "function" then
+        if sequenceID ~= nil and fs._msufCastTargetClassSequence == sequenceID
+            and fs._msufCastTargetClassGeneration == generation then
+            return
+        end
         -- UnitSpellTargetClass returns a secret value. Passing it directly to
         -- C_ClassColor is allowed for tainted callers; indexing any Lua table
         -- with it is not.
@@ -896,7 +920,9 @@ local function ApplyCastTargetTextColor(frame, classFilename)
             -- GetRGB may return secret numbers. SetTextColor explicitly accepts
             -- them, but Lua comparisons do not. Mark the plain cache invalid
             -- and forward the tuple without retaining or inspecting it.
-            fs._msufCastTargetColorPlain = nil
+            fs._msufCastTargetColorPlain = false
+            fs._msufCastTargetClassSequence = sequenceID ~= nil and sequenceID or false
+            fs._msufCastTargetClassGeneration = generation ~= nil and generation or false
             fs:SetTextColor(classColor:GetRGB())
             return
         end
@@ -939,6 +965,8 @@ local function UpdateCastTargetText(frame, state)
     local fs = frame and frame.castTargetText
     if not fs then return end
     if not CastTargetTextEnabled(frame) or not CastStateHasSpell(state) then
+        -- The cast is over: the next one asks for its target's class again.
+        if fs._msufCastTargetClassSequence then fs._msufCastTargetClassSequence = false end
         SetCastTargetText(frame, "")
         fs:Hide()
         return
@@ -946,13 +974,15 @@ local function UpdateCastTargetText(frame, state)
 
     local targetName, targetClass, targetNameAllowed = ResolveCastTargetInfo(state)
     if targetNameAllowed ~= true then
+        if fs._msufCastTargetClassSequence then fs._msufCastTargetClassSequence = false end
         SetCastTargetText(frame, "")
         fs:Hide()
         return
     end
 
     SetCastTargetText(frame, targetName)
-    ApplyCastTargetTextColor(frame, targetClass)
+    local identity = state.identity
+    ApplyCastTargetTextColor(frame, targetClass, state.spellSequenceID, identity and identity.generation)
     fs:Show()
 end
 
@@ -1156,6 +1186,132 @@ function _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
     return fallback
 end
 
+-- Unit spellcast events by kind. Each handler takes (frame, event, eventUnit,
+-- interruptedBy, castBarID); the payload positions follow the INTERRUPTED and
+-- CHANNEL_STOP events (UnitDocumentation.lua), the others ignore them.
+
+--- A cast, channel or (another unit's) empower started.
+local function OnCastStart(frame, event)
+    ClearStopExpectation(frame)
+    ClearStartRetry(frame)
+    AdvanceBuildStateGeneration(frame.unit)
+    local token = AdvanceCastToken(frame)
+    -- A new cast ends the interrupt feedback hold at once, as in Blizzard's
+    -- CastingBarMixin:HandleCastStart; Cast() retires the pending hide.
+    frame.interrupted = nil
+    frame.isNotInterruptible = false
+    frame.MSUF_kickInterruptibleConfirmed = nil
+    local state = RefreshFromEngine(frame, event)
+
+    if not CastStateHasSpell(state) then
+        EnsureDriverCallbacks(frame)
+        frame._msufStartRetryToken = token
+        if not frame._msufStartRetryPending then
+            frame._msufStartRetryPending = true
+            frame._msufStartRetryTimer = true
+            ScheduleDelayed(frame._msufStartRetryCB, 0.05)
+        end
+    end
+end
+
+--- Pushback, a channel's new end, an empower stage.
+local function OnCastUpdate(frame, event)
+    InvalidateBuildState(frame.unit)
+    if event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
+        and (frame._msufStopTimer1 or frame._msufStopTimer2 or frame._msufStopTimer3) then
+        ClearStopExpectation(frame)
+        AdvanceCastToken(frame)
+    end
+    RefreshFromEngine(frame, event)
+end
+
+--- STOP, EMPOWER_STOP and FAILED: the stop re-checks decide.
+local function OnCastStop(frame)
+    frame.MSUF_kickInterruptibleConfirmed = nil
+    ScheduleStopConfirmation(frame, "CAST")
+end
+
+local function OnChannelStop(frame, _, eventUnit, interruptedBy, castBarID)
+    frame.MSUF_kickInterruptibleConfirmed = nil
+    -- A kicked channel ends with its interrupter on CHANNEL_STOP, not with
+    -- UNIT_SPELLCAST_INTERRUPTED (CastingBarFrame.lua: complete =
+    -- interruptedBy == nil). A secret interrupter is still an interrupter,
+    -- so it is tested before the nil comparison.
+    local kicked = toPlainIsSecret(interruptedBy) or interruptedBy ~= nil
+    if kicked and eventUnit == frame.unit and frame.MSUF_isChanneled == true
+        and frame.MSUF_castActive == true and not frame.interrupted
+        and not NamesOtherCastBar(frame, castBarID) then
+        ClearStopExpectation(frame)
+        frame:SetInterrupted(interruptedBy)
+        -- Subscribers (the focus-kick icon) play one interrupt feedback.
+        PublishState(frame, nil, "UNIT_SPELLCAST_INTERRUPTED")
+        return
+    end
+    ScheduleStopConfirmation(frame, "CHANNEL")
+end
+
+local function OnCastSucceeded(frame, event)
+    InvalidateBuildState(frame.unit)
+    if frame.unit ~= "player" then
+        RefreshFromEngine(frame, event)
+        return
+    end
+
+    local state = BuildState(frame)
+    if CastStateActive(state) then
+        ShowActiveState(frame, state)
+    end
+end
+
+--- INTERRUPTIBLE / NOT_INTERRUPTIBLE: the bar tint and the published state.
+local function SetInterruptibility(frame, event, eventUnit, notInterruptible)
+    if eventUnit ~= frame.unit then return end
+    frame.isNotInterruptible = notInterruptible
+    frame.MSUF_kickInterruptibleConfirmed = not notInterruptible
+    frame._msufApiNotInterruptibleRaw = notInterruptible
+    if frame.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(frame) end
+    local state = frame._msufCastState
+    if state then
+        state.isNotInterruptible = notInterruptible
+        state.apiNotInterruptibleRaw = notInterruptible
+    end
+    PublishState(frame, state, event)
+end
+
+local function OnInterruptible(frame, event, eventUnit) SetInterruptibility(frame, event, eventUnit, false) end
+local function OnNotInterruptible(frame, event, eventUnit) SetInterruptibility(frame, event, eventUnit, true) end
+
+local function OnCastInterrupted(frame, event, eventUnit, interruptedBy, castBarID)
+    if eventUnit ~= frame.unit or NamesOtherCastBar(frame, castBarID) then return end
+    -- A kicked channel may already show its feedback from CHANNEL_STOP.
+    if frame.interrupted then return end
+    -- Only a cast this bar shows gets feedback (as CHANNEL_STOP above and
+    -- CastingBarMixin:HandleInterruptOrSpellFailed: IsShown and casting).
+    -- A profession cast hidden by castbarHideTradeSkills never showed it.
+    if frame.MSUF_castActive ~= true then return end
+    ClearStopExpectation(frame)
+    frame.MSUF_kickInterruptibleConfirmed = nil
+    frame:SetInterrupted(interruptedBy)
+    PublishState(frame, nil, event)
+end
+
+local CAST_EVENT_HANDLERS = {
+    UNIT_SPELLCAST_START = OnCastStart,
+    UNIT_SPELLCAST_CHANNEL_START = OnCastStart,
+    UNIT_SPELLCAST_EMPOWER_START = OnCastStart,
+    UNIT_SPELLCAST_DELAYED = OnCastUpdate,
+    UNIT_SPELLCAST_CHANNEL_UPDATE = OnCastUpdate,
+    UNIT_SPELLCAST_EMPOWER_UPDATE = OnCastUpdate,
+    UNIT_SPELLCAST_STOP = OnCastStop,
+    UNIT_SPELLCAST_EMPOWER_STOP = OnCastStop,
+    UNIT_SPELLCAST_FAILED = OnCastStop,
+    UNIT_SPELLCAST_CHANNEL_STOP = OnChannelStop,
+    UNIT_SPELLCAST_SUCCEEDED = OnCastSucceeded,
+    UNIT_SPELLCAST_INTERRUPTIBLE = OnInterruptible,
+    UNIT_SPELLCAST_NOT_INTERRUPTIBLE = OnNotInterruptible,
+    UNIT_SPELLCAST_INTERRUPTED = OnCastInterrupted,
+}
+
 local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, interruptedBy, castBarID)
     if frame._msufDriverBackendEnabled ~= true then
         if frame.unit == "target" or frame.unit == "focus" then
@@ -1177,144 +1333,14 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
     end
 
     event = NormalizeEventForUnit(frame, event)
-
-    if event == "UNIT_SPELLCAST_START"
-        or event == "UNIT_SPELLCAST_CHANNEL_START"
-        or event == "UNIT_SPELLCAST_EMPOWER_START" then
-        ClearStopExpectation(frame)
-        ClearStartRetry(frame)
-        AdvanceBuildStateGeneration(frame.unit)
-        local token = AdvanceCastToken(frame)
-        -- A new cast ends the interrupt feedback hold at once, as in Blizzard's
-        -- CastingBarMixin:HandleCastStart; Cast() retires the pending hide.
-        frame.interrupted = nil
-        frame.isNotInterruptible = false
-        frame.MSUF_kickInterruptibleConfirmed = nil
-        local state = RefreshFromEngine(frame, event)
-
-        if not CastStateHasSpell(state) then
-            EnsureDriverCallbacks(frame)
-            frame._msufStartRetryToken = token
-            if not frame._msufStartRetryPending then
-                frame._msufStartRetryPending = true
-                frame._msufStartRetryTimer = true
-                ScheduleDelayed(frame._msufStartRetryCB, 0.05)
-            end
-        end
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_DELAYED"
-        or event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
-        or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
-        InvalidateBuildState(frame.unit)
-        if event == "UNIT_SPELLCAST_CHANNEL_UPDATE"
-            and (frame._msufStopTimer1 or frame._msufStopTimer2 or frame._msufStopTimer3) then
-            ClearStopExpectation(frame)
-            AdvanceCastToken(frame)
-        end
-        RefreshFromEngine(frame, event)
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_EMPOWER_STOP" then
-        frame.MSUF_kickInterruptibleConfirmed = nil
-        ScheduleStopConfirmation(frame, "CAST")
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_CHANNEL_STOP" then
-        frame.MSUF_kickInterruptibleConfirmed = nil
-        -- A kicked channel ends with its interrupter on CHANNEL_STOP, not with
-        -- UNIT_SPELLCAST_INTERRUPTED (CastingBarFrame.lua: complete =
-        -- interruptedBy == nil). A secret interrupter is still an interrupter,
-        -- so it is tested before the nil comparison.
-        local kicked = toPlainIsSecret(interruptedBy) or interruptedBy ~= nil
-        if kicked and eventUnit == frame.unit and frame.MSUF_isChanneled == true
-            and frame.MSUF_castActive == true and not frame.interrupted
-            and not NamesOtherCastBar(frame, castBarID) then
-            ClearStopExpectation(frame)
-            frame:SetInterrupted(interruptedBy)
-            -- Subscribers (the focus-kick icon) play one interrupt feedback.
-            PublishState(frame, nil, "UNIT_SPELLCAST_INTERRUPTED")
-            return
-        end
-        ScheduleStopConfirmation(frame, "CHANNEL")
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_FAILED" then
-        frame.MSUF_kickInterruptibleConfirmed = nil
-        ScheduleStopConfirmation(frame, "CAST")
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_SUCCEEDED" then
-        InvalidateBuildState(frame.unit)
-        if frame.unit ~= "player" then
-            RefreshFromEngine(frame, event)
-            return
-        end
-
-        local state = BuildState(frame)
-        if CastStateActive(state) then
-            ShowActiveState(frame, state)
-        end
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_INTERRUPTIBLE" then
-        if eventUnit ~= frame.unit then return end
-        frame.isNotInterruptible = false
-        frame.MSUF_kickInterruptibleConfirmed = true
-        frame._msufApiNotInterruptibleRaw = false
-        if frame.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(frame) end
-        local state = frame._msufCastState
-        if state then
-            state.isNotInterruptible = false
-            state.apiNotInterruptibleRaw = false
-        end
-        PublishState(frame, state, event)
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
-        if eventUnit ~= frame.unit then return end
-        frame.isNotInterruptible = true
-        frame.MSUF_kickInterruptibleConfirmed = false
-        frame._msufApiNotInterruptibleRaw = true
-        if frame.UpdateColorForInterruptible then _G.MSUF_CB_ApplyColor(frame) end
-        local state = frame._msufCastState
-        if state then
-            state.isNotInterruptible = true
-            state.apiNotInterruptibleRaw = true
-        end
-        PublishState(frame, state, event)
-        return
-    end
-
-    if event == "UNIT_SPELLCAST_INTERRUPTED" then
-        if eventUnit ~= frame.unit or NamesOtherCastBar(frame, castBarID) then return end
-        -- A kicked channel may already show its feedback from CHANNEL_STOP.
-        if frame.interrupted then return end
-        -- Only a cast this bar shows gets feedback (as CHANNEL_STOP above and
-        -- CastingBarMixin:HandleInterruptOrSpellFailed: IsShown and casting).
-        -- A profession cast hidden by castbarHideTradeSkills never showed it.
-        if frame.MSUF_castActive ~= true then return end
-        ClearStopExpectation(frame)
-        frame.MSUF_kickInterruptibleConfirmed = nil
-        frame:SetInterrupted(interruptedBy)
-        PublishState(frame, nil, event)
-        return
-    end
-
+    local handler = CAST_EVENT_HANDLERS[event]
+    if handler then handler(frame, event, eventUnit, interruptedBy, castBarID) end
 end
 
+--- Castbars/MSUF_CastbarFrames.lua (loaded before this file) builds the
+--- regions; resolved when a castbar is built, a cold path.
 local function BuildCastbarFrameElements(frame)
-    if type(_G.MSUF_BuildCastbarFrameElements) == "function" then
-        return _G.MSUF_BuildCastbarFrameElements(frame)
-    end
-    return nil
+    return Require("MSUF_BuildCastbarFrameElements", FILE)(frame)
 end
 
 --- CreateCastBar build stage 1: the driver frame plus the identity fields the
@@ -1382,34 +1408,144 @@ local function WireDriverEventScript(frame)
     end)
 end
 
+--- frame:Cast stage 1: the state to show (a missing, empty or other unit's
+--- state is read again), the frame's view of that cast (its NeverSecret
+--- castBarID and the raw interruptibility) and the cast's duration object: a
+--- re-read of the same cast (same sequence) may come without one, the frame
+--- keeps it per sequence. Returns state, hasSpell, durationObj.
+local function ResolveCastState(frame, state)
+    local hasSpell = CastStateHasSpell(state)
+    if not (hasSpell and state.unit == frame.unit) then
+        state = BuildState(frame)
+        hasSpell = CastStateHasSpell(state)
+    end
+    if hasSpell then FillEmpoweredLikeCast(state) end
+    local stateActive = CastStateActive(state)
+    local castBarID = stateActive and state.castBarID or nil
+    frame._msufActiveCastBarID = (type(castBarID) == "number" and not toPlainIsSecret(castBarID))
+        and castBarID or nil
+
+    if state ~= nil then
+        frame._msufApiNotInterruptibleRaw = state.apiNotInterruptibleRaw
+    else
+        frame._msufApiNotInterruptibleRaw = nil
+    end
+
+    local durationObj = (state and state.durationObj ~= nil) and state.durationObj or nil
+    if durationObj == nil and stateActive then
+        local sequenceID = state.spellSequenceID
+        if type(sequenceID) == "number"
+            and frame._msufLastDurationSeq == sequenceID
+            and frame._msufLastDurationObj ~= nil then
+            durationObj = frame._msufLastDurationObj
+            state.durationObj = durationObj
+        end
+    end
+
+    if stateActive and durationObj ~= nil then
+        local sequenceID = state.spellSequenceID
+        if type(sequenceID) == "number" then
+            frame._msufLastDurationSeq = sequenceID
+            frame._msufLastDurationObj = durationObj
+        end
+    elseif not stateActive then
+        frame._msufApiNotInterruptibleRaw = nil
+        frame._msufLastDurationSeq = nil
+        frame._msufLastDurationObj = nil
+    end
+    return state, hasSpell, durationObj
+end
+
+--- frame:Cast stage 2: show the active cast (native duration or the plain
+--- end-time fallback, which the caller already applied).
+local function ShowActiveCast(frame, state, durationObj, isChannel, spellName, label, icon)
+    if frame.PrepareForCast then frame:PrepareForCast() end
+    SetCastLifecycleActive(frame, true)
+    if durationObj then
+        state.durationObj = durationObj
+        state.text = label or spellName
+        state.icon = icon
+        _G.MSUF_Castbar_ApplyActiveDuration(frame, state, ACTIVE_DURATION_OPTIONS)
+    end
+
+    -- ApplyActive already resolved and installed reverse fill for the
+    -- native-duration path. Only the legacy fallback still needs the
+    -- global resolver.
+    local reverseFill
+    if durationObj then reverseFill = frame._msufStripeReverseFill end
+    if reverseFill == nil then
+        reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChannel)
+    end
+    reverseFill = reverseFill == true
+    frame._msufStripeReverseFill = reverseFill
+    UpdateChannelHasteMarkers(frame, true)
+
+    if frame.UpdateColorForInterruptible then
+        -- ApplyColor owns the single KickReady refresh; pass the state
+        -- through so the decorator does not have to infer it again.
+        _G.MSUF_CB_ApplyColor(frame, state)
+    end
+    frame:Show()
+    frame.MSUF_castActive = true
+    if _G.MSUF_RegisterCastbar then
+        _G.MSUF_RegisterCastbar(frame)
+    end
+    if frame.timeText
+        and frame._msufNativeTimeBound ~= true
+        and frame._msufCastTimeEnabled ~= false
+    then
+        _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
+    end
+    UpdateCastTargetText(frame, state)
+
+    if frame.unit ~= "player" then
+        frame._msufZeroCount = nil
+        ClearFrameOnUpdate(frame)
+    end
+end
+
+--- frame:Cast stage 2, nothing to show: end the cast's lifecycle and confirm
+--- the idle state on the next frame (a follow-up cast may not be visible yet).
+local function ShowNoCast(frame)
+    SetCastLifecycleActive(frame, false)
+    ClearFrameOnUpdate(frame)
+    frame.MSUF_castActive = false
+    frame.MSUF_kickInterruptibleConfirmed = nil
+    UpdateCastTargetText(frame, nil)
+    if frame.kickReadyBox then frame.kickReadyBox:Hide() end
+    if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(frame, nil) end
+
+    if frame.hideTimer then
+        frame._msufHideToken = (frame._msufHideToken or 0) + 1
+    end
+    frame.hideTimer = true
+    frame._msufHideToken = (frame._msufHideToken or 0) + 1
+    EnsureDriverCallbacks(frame)
+    frame._msufInactiveRecheckToken = frame._msufHideToken
+    if not frame._msufInactiveRecheckPending then
+        frame._msufInactiveRecheckPending = true
+        if type(RunNextFrame) == "function" then
+            RunNextFrame(frame._msufInactiveRecheckCB)
+        else
+            C_Timer.After(0, frame._msufInactiveRecheckCB)
+        end
+    end
+end
+
 --- CreateCastBar build stage 4: cast lifecycle methods.
 local function InstallDriverCastMethods(frame)
     function frame:Cast(state)
-        local hasSpell = CastStateHasSpell(state)
-        if not (hasSpell and state.unit == self.unit) then
-            state = BuildState(self)
-            hasSpell = CastStateHasSpell(state)
-        end
-        if hasSpell then FillEmpoweredLikeCast(state) end
-        local stateActive = CastStateActive(state)
-        local castBarID = stateActive and state.castBarID or nil
-        self._msufActiveCastBarID = (type(castBarID) == "number" and not toPlainIsSecret(castBarID))
-            and castBarID or nil
+        -- The timer resets below touch only their own plain fields, so the
+        -- resolve stage may take the duration bookkeeping ahead of them.
+        local hasSpell, durationObj
+        state, hasSpell, durationObj = ResolveCastState(self, state)
 
-        if state ~= nil then
-            self._msufApiNotInterruptibleRaw = state.apiNotInterruptibleRaw
-        else
-            self._msufApiNotInterruptibleRaw = nil
-        end
-
-        local spellName, label, icon, startTimeMS, endTimeMS
+        local spellName, label, icon
         local isChannel = false
         if hasSpell then
             spellName = state.spellName
             label = state.text or state.spellName
             icon = state.icon
-            startTimeMS = state.startTimeMS
-            endTimeMS = state.endTimeMS
             isChannel = state.castType == "CHANNEL"
         end
 
@@ -1421,103 +1557,15 @@ local function InstallDriverCastMethods(frame)
             self.succeededTimer = nil
         end
 
-        local durationObj = (state and state.durationObj ~= nil) and state.durationObj or nil
-        if durationObj == nil and stateActive then
-            local sequenceID = state.spellSequenceID
-            if type(sequenceID) == "number"
-                and self._msufLastDurationSeq == sequenceID
-                and self._msufLastDurationObj ~= nil then
-                durationObj = self._msufLastDurationObj
-                state.durationObj = durationObj
-            end
-        end
-
-        if stateActive and durationObj ~= nil then
-            local sequenceID = state.spellSequenceID
-            if type(sequenceID) == "number" then
-                self._msufLastDurationSeq = sequenceID
-                self._msufLastDurationObj = durationObj
-            end
-        elseif not stateActive then
-            self._msufApiNotInterruptibleRaw = nil
-            self._msufLastDurationSeq = nil
-            self._msufLastDurationObj = nil
-        end
-
         if self.isEmpower then
             ClearEmpowerState(self)
         end
 
         if spellName and (durationObj or ApplyFallbackActiveDuration(self, state, isChannel)) then
-            if self.PrepareForCast then self:PrepareForCast() end
-            SetCastLifecycleActive(self, true)
-            if durationObj then
-                state.durationObj = durationObj
-                state.text = label or spellName
-                state.icon = icon
-                _G.MSUF_Castbar_ApplyActiveDuration(self, state, ACTIVE_DURATION_OPTIONS)
-            end
-
-            -- ApplyActive already resolved and installed reverse fill for the
-            -- native-duration path. Only the legacy fallback still needs the
-            -- global resolver.
-            local reverseFill
-            if durationObj then reverseFill = self._msufStripeReverseFill end
-            if reverseFill == nil then
-                reverseFill = _G.MSUF_GetReverseFillSafe(self, isChannel)
-            end
-            reverseFill = reverseFill == true
-            self._msufStripeReverseFill = reverseFill
-            UpdateChannelHasteMarkers(self, true)
-
-            if self.UpdateColorForInterruptible then
-                -- ApplyColor owns the single KickReady refresh; pass the state
-                -- through so the decorator does not have to infer it again.
-                _G.MSUF_CB_ApplyColor(self, state)
-            end
-            self:Show()
-            self.MSUF_castActive = true
-            if _G.MSUF_RegisterCastbar then
-                _G.MSUF_RegisterCastbar(self)
-            end
-            if self.timeText
-                and self._msufNativeTimeBound ~= true
-                and self._msufCastTimeEnabled ~= false
-            then
-                _G.MSUF_UpdateCastTimeText_FromStatusBar(self)
-            end
-            UpdateCastTargetText(self, state)
-
-            if self.unit ~= "player" then
-                self._msufZeroCount = nil
-                ClearFrameOnUpdate(self)
-            end
+            ShowActiveCast(self, state, durationObj, isChannel, spellName, label, icon)
         else
-            SetCastLifecycleActive(self, false)
-            ClearFrameOnUpdate(self)
-            self.MSUF_castActive = false
-            self.MSUF_kickInterruptibleConfirmed = nil
-            UpdateCastTargetText(self, nil)
-            if self.kickReadyBox then self.kickReadyBox:Hide() end
-            if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
-
-            if self.hideTimer then
-                self._msufHideToken = (self._msufHideToken or 0) + 1
-            end
-            self.hideTimer = true
-            self._msufHideToken = (self._msufHideToken or 0) + 1
-            EnsureDriverCallbacks(self)
-            self._msufInactiveRecheckToken = self._msufHideToken
-            if not self._msufInactiveRecheckPending then
-                self._msufInactiveRecheckPending = true
-                if type(RunNextFrame) == "function" then
-                    RunNextFrame(self._msufInactiveRecheckCB)
-                else
-                C_Timer.After(0, self._msufInactiveRecheckCB)
-                end
-            end
+            ShowNoCast(self)
         end
-
     end
 
     function frame:SetInterrupted(interruptedBy)
@@ -1753,37 +1801,19 @@ local function ApplyDriverBackendState(unit)
     return nil
 end
 
-local function ApplyCastbarUnitCold(unit)
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
-        return true
-    end
-    if unit == "target" and type(_G.MSUF_ReanchorTargetCastBarBase) == "function" then
-        _G.MSUF_ReanchorTargetCastBarBase()
-    elseif unit == "focus" and type(_G.MSUF_ReanchorFocusCastBarBase) == "function" then
-        _G.MSUF_ReanchorFocusCastBarBase()
-    elseif unit == "player" and type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then
-        _G.MSUF_ReanchorPlayerCastBarBase()
-    end
-    if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        return true
-    end
-    return false
-end
-
+--- Login re-anchor and visual pass per unit. Castbars/MSUF_Castbars_Core.lua
+--- loads before this file in every TOC and owns MSUF_ApplyCastbarUnitAndSync,
+--- so its old per-function fallbacks never ran; resolved at login (cold path).
 local function MSUF_CastbarDriver_OnLogin()
     local any = _G.MSUF_AreAnyCastbarsEnabled
     if type(any) == "function" and not any() then return end
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
-    local applied = false
-    applied = ApplyCastbarUnitCold("target") or applied
-    applied = ApplyCastbarUnitCold("focus") or applied
-    applied = ApplyCastbarUnitCold("player") or applied
-    if not applied then
-        if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
-    end
+    -- Castbars/MSUF_Castbars_Core.lua loads before this file.
+    local applyUnit = Require("MSUF_ApplyCastbarUnitAndSync", FILE)
+    applyUnit("target")
+    applyUnit("focus")
+    applyUnit("player")
     if _G.MSUF_UpdateCastbarTextures then _G.MSUF_UpdateCastbarTextures() end
 end
 

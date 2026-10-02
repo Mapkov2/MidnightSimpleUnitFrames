@@ -69,6 +69,8 @@ local function Namespace(client)
     return {
         Client = client,
         ExportPublic = function(name, value) _G[name] = value; return value end,
+        -- Kernel/MSUF_Scheduler.lua's keyed deadlines (the GCD bar's finish).
+        Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end },
     }
 end
 
@@ -160,7 +162,10 @@ local function ResolveInterrupt(client, classToken)
     _G.UnitClass = function() return classToken, classToken end
     _G.C_SpellBook = { IsSpellKnownOrInSpellBook = function() return false end }
     _G.C_SpecializationInfo = nil
-    assert(loadfile(root .. "/" .. INTERRUPT_FILE))("MidnightSimpleUnitFrames", Namespace(client))
+    local ns = Namespace(client)
+    -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(root .. "/" .. INTERRUPT_FILE))("MidnightSimpleUnitFrames", ns)
     return _G.MSUF_KickReady_GetSpellID()
 end
 

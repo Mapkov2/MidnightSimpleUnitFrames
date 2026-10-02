@@ -132,6 +132,13 @@ local function NewWorld(arenaSlots)
     end
     _G.MSUF_ApplyPlayerCastbarSizeAndLayout = function(frame, _, width, height) frame:SetSize(width, height) end
     _G.MSUF_GetCastbarAutoAnchorOffsetX = function() return 0 end
+    -- The unit-frame width source (none: the preview follows the unit frame)
+    -- and inset (Anchors), the spark (Core) and the cast target colour (the
+    -- driver): the preview calls them on every layout.
+    _G.MSUF_GetCastbarUnitframeWidthSource = function() return nil end
+    _G.MSUF_GetCastbarUnitframeBottomInset = function() return 0 end
+    _G.MSUF_ApplyCastbarSparkVisual = function() end
+    _G.MSUF_ApplyCastTargetTextColor = function() end
     _G.MSUF_ApplyCastbarFrameLayer = function() end
     _G.MSUF_CB_ApplyTexts = function(frame, _, castText)
         if castText ~= nil and frame and frame.castText then frame.castText:SetText(castText) end

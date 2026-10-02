@@ -13,7 +13,6 @@ local UNIT_CONFIG = {
         y = "castbarPlayerOffsetY",
         dx = 0,
         dy = 5,
-        reanchor = "MSUF_ReanchorPlayerCastBar",
         test = "MSUF_SetPlayerCastbarTestMode",
     },
     target = {
@@ -23,7 +22,6 @@ local UNIT_CONFIG = {
         y = "castbarTargetOffsetY",
         dx = 65,
         dy = -15,
-        reanchor = "MSUF_ReanchorTargetCastBar",
         test = "MSUF_SetTargetCastbarTestMode",
     },
     focus = {
@@ -35,7 +33,6 @@ local UNIT_CONFIG = {
         fallbackY = "castbarTargetOffsetY",
         dx = 65,
         dy = -15,
-        reanchor = "MSUF_ReanchorFocusCastBar",
         test = "MSUF_SetFocusCastbarTestMode",
     },
     boss = {
@@ -45,7 +42,6 @@ local UNIT_CONFIG = {
         y = "bossCastbarOffsetY",
         dx = 0,
         dy = 0,
-        reanchor = "MSUF_ReanchorBossCastBar",
         test = "MSUF_SetBossCastbarTestMode",
     },
     arena = {
@@ -55,7 +51,6 @@ local UNIT_CONFIG = {
         y = "arenaCastbarOffsetY",
         dx = 0,
         dy = 0,
-        reanchor = "MSUF_ReanchorArenaCastBar",
         test = "MSUF_SetArenaCastbarTestMode",
     },
 }
@@ -83,43 +78,11 @@ local function OffsetY(general, config)
         or 0
 end
 
+--- Castbars/MSUF_Castbars_Core.lua loads before this file in every TOC and
+--- owns the apply and sync (reanchor, visuals, edit info, popup); the per-step
+--- fallback that stood here never ran. Late-bound: the menu preview wraps it.
 local function ApplyUnitAndSync(unit)
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
-        return
-    end
-
-    local config = UNIT_CONFIG[unit]
-    local reanchor = config and config.reanchor and _G[config.reanchor]
-
-    if type(reanchor) == "function" then
-        reanchor()
-    end
-
-    local refreshed = false
-    if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        refreshed = true
-    elseif type(MSUF_UpdateCastbarVisuals) == "function" then
-        MSUF_UpdateCastbarVisuals(unit)
-        refreshed = true
-    end
-
-    if not refreshed and unit == "boss" and not InCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-        _G.MSUF_UpdateBossCastbarPreview()
-    end
-
-    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then
-        _G.MSUF_PositionCastbarPreviewUnit(unit)
-    end
-
-    if type(MSUF_UpdateCastbarEditInfo) == "function" then
-        MSUF_UpdateCastbarEditInfo(unit)
-    end
-
-    if type(MSUF_SyncCastbarPositionPopup) == "function" then
-        MSUF_SyncCastbarPositionPopup(unit)
-    end
+    _G.MSUF_ApplyCastbarUnitAndSync(unit)
 end
 
 local function PositionPreviewOnly(unit)
@@ -206,9 +169,7 @@ local function RegisterPreviewNudgeTarget(frame, unit, config)
             end
 
             local general = GeneralDB()
-            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-                _G.MSUF_EM_UndoBeforeChange("castbar", unit, true)
-            end
+            _G.MSUF_EM_UndoBeforeChange("castbar", unit, true)
 
             general[config.x] = Round(OffsetX(general, config) + (deltaX or 0))
             general[config.y] = Round(OffsetY(general, config) + (deltaY or 0))
@@ -251,7 +212,6 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             if _G.MSUF_UnitEditModeActive
                 and not MSUF_EditModeSizing
                 and not InCombat()
-                and type(MSUF_OpenCastbarPositionPopup) == "function"
             then
                 MSUF_OpenCastbarPositionPopup(unit, self)
             end
@@ -322,11 +282,7 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             if not dragFrame.dragMoved then
                 dragFrame.dragMoved = true
 
-                if type(_G.MSUF_EM_UndoBeginChange) == "function" then
-                    dragFrame._msufCastbarHistoryDrag = _G.MSUF_EM_UndoBeginChange("castbar", unit, "Move") == true
-                elseif type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-                    _G.MSUF_EM_UndoBeforeChange("castbar", unit, false)
-                end
+                dragFrame._msufCastbarHistoryDrag = _G.MSUF_EM_UndoBeginChange("castbar", unit, "Move") == true
             end
 
             local liveGeneral = GeneralDB()
@@ -360,12 +316,10 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
 
             if dragFrame.dragMode == "MOVE" and PositionPreviewOnly(unit) then
                 dragFrame._msufPreviewApplyAcc = CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL
-                if type(MSUF_SyncCastbarPositionPopup) == "function" then
-                    dragFrame._msufPopupSyncAcc = (tonumber(dragFrame._msufPopupSyncAcc) or 0) + (tonumber(elapsed) or 0)
-                    if dragFrame._msufPopupSyncAcc >= CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL then
-                        dragFrame._msufPopupSyncAcc = 0
-                        MSUF_SyncCastbarPositionPopup(unit)
-                    end
+                dragFrame._msufPopupSyncAcc = (tonumber(dragFrame._msufPopupSyncAcc) or 0) + (tonumber(elapsed) or 0)
+                if dragFrame._msufPopupSyncAcc >= CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL then
+                    dragFrame._msufPopupSyncAcc = 0
+                    MSUF_SyncCastbarPositionPopup(unit)
                 end
             else
                 ThrottledApplyUnitAndSync(dragFrame, unit, elapsed)
@@ -395,7 +349,7 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         if moved then
             ApplyUnitAndSync(unit)
         end
-        if self._msufCastbarHistoryDrag and type(_G.MSUF_EM_UndoCommitChange) == "function" then
+        if self._msufCastbarHistoryDrag then
             self._msufCastbarHistoryDrag = nil
             _G.MSUF_EM_UndoCommitChange()
         end
@@ -403,7 +357,6 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         if not moved
             and _G.MSUF_UnitEditModeActive
             and not InCombat()
-            and type(MSUF_OpenCastbarPositionPopup) == "function"
         then
             MSUF_OpenCastbarPositionPopup(unit, self)
         end

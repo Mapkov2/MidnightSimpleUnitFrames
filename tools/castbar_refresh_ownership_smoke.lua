@@ -133,7 +133,9 @@ local _, detailCount = refreshBody:gsub("ApplyCastbarDetailLayout%(", "")
 assert(detailCount == 1, "each Visuals frame refresh must invoke detail layout exactly once")
 assert(contains(refreshBody, "ApplyCastbarDetailLayout(frame, forcedUnit, general)"))
 
-local castStart = assert(driver:find("function frame:Cast(state)", 1, true))
+-- frame:Cast and its stages (ResolveCastState .. ShowNoCast) up to SetInterrupted.
+local castStart = assert(driver:find("local function ResolveCastState(frame, state)", 1, true))
+assert(driver:find("function frame:Cast(state)", castStart, true), "frame:Cast must follow its stages")
 local interruptStart = assert(driver:find("function frame:SetInterrupted(interruptedBy)", castStart, true))
 local castBody = driver:sub(castStart, interruptStart - 1)
 assert(not contains(castBody, "self.timer = true"), "ordinary casts must not arm interrupt feedback")
@@ -149,7 +151,7 @@ assert(not contains(driver, "ScheduleTargetFocusChanged")
     and not contains(driver, "_msufTargetFocusRefreshQueued")
     and not contains(driver, "_msufTargetFocusRefreshCallback"),
     "target/focus identity retained a zero-delay scheduler")
-assert(contains(driver, "RunNextFrame(self._msufInactiveRecheckCB)"),
+assert(contains(driver, "RunNextFrame(frame._msufInactiveRecheckCB)"),
     "inactive recheck must use the shared next-frame queue")
 assert(contains(driver, "ScheduleDelayed(self._msufInterruptHideCB, feedbackDuration)"),
     "interrupt feedback must use the keyed 12.1.5 delayed scheduler")
@@ -163,7 +165,8 @@ assert(not contains(player, "HideIfNoLongerCasting({"), "player interrupt callba
 assert(contains(player, "local INTERRUPT_IDENTITY_GRACE = 0.25"),
     "player interrupt feedback must retain a bounded STOP-before-INTERRUPTED identity window")
 assert(contains(player, "frame._msufPlayerInterruptCastGUID = interruptCastGUID")
-    and contains(player, "select(2, ...) == frame._msufPlayerInterruptCastGUID")
+    and contains(player, "MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)))")
+    and contains(player, "and castGUID == pendingGUID")
     and contains(player, "GetTime() <= frame._msufPlayerInterruptCastDeadline"),
     "player interrupt feedback must match the stopped cast GUID before accepting the late terminal event")
 local playerEventStart = assert(player:find("local function PlayerCastbarOnEventImpl", 1, true))

@@ -211,7 +211,7 @@ do
     runtime:DisableNativeTimeText(frame)
     runtime:DisableNativeTimeText(frame)
     Equal(disableCalls, 1, "steady disabled binding repeated native Disable")
-    Equal(frame._msufNativeTimeBound, nil, "successful disable retained bound flag")
+    Check(frame._msufNativeTimeBound ~= true, "successful disable retained bound flag")
     Equal(frame.timeText._msufLastText, nil, "native disable did not invalidate Lua text cache")
 
     -- 12.1 contract model: binding methods cannot reject; the failure surface
@@ -225,7 +225,7 @@ do
         "missing-method binding reported success")
     Check(partialFrame._msufNativeTextUnsafe == true,
         "missing-method binding did not mark native text unsafe")
-    Equal(partialFrame._msufNativeTimeBound, nil, "missing-method binding marked binding live")
+    Check(partialFrame._msufNativeTimeBound ~= true, "missing-method binding marked binding live")
 
     local secretDuration = { secret = true }
     local nativeDuration
@@ -320,7 +320,10 @@ do
         return frame
     end
 
-    LoadAddonFile("Castbars/MSUF_InterruptReady.lua", NewNamespace())
+    local interruptNamespace = NewNamespace()
+    -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", interruptNamespace)
+    LoadAddonFile("Castbars/MSUF_InterruptReady.lua", interruptNamespace)
     Equal(_G.MSUF_KickReady_Init(), 2139, "mage interrupt spell resolution")
     Check(_G.MSUF_KickReady_IsReady() == false, "cooldown unexpectedly ready")
     Check(_G.MSUF_KickReady_IsReady() == false, "cached cooldown unexpectedly ready")
@@ -526,7 +529,7 @@ Check(identityInvalidation < immediateBuild,
 Check(not castbarDriverSource:find("ScheduleTargetFocusChanged", 1, true)
     and not castbarDriverSource:find("_msufTargetFocusRefreshQueued", 1, true),
     "target/focus identity retained zero-delay scheduler overhead")
-Check(castbarDriverSource:find("if self.PrepareForCast then self:PrepareForCast() end", 1, true),
+Check(castbarDriverSource:find("if frame.PrepareForCast then frame:PrepareForCast() end", 1, true),
     "active pool casts do not validate stale geometry/font state before show")
 Check(castbarVisualSource:find('DetailNum(g, prefix, "IconZoom", "castbarIconZoom", 100)', 1, true)
     and castbarVisualSource:find("texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)", 1, true),

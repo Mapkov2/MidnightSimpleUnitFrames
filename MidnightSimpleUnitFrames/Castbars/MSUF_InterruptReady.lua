@@ -14,6 +14,12 @@ local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 
 local SpellAPI = _G.C_Spell
 local TimerAPI = _G.C_Timer
+-- Kernel/MSUF_Scheduler.lua loads first in every TOC.
+local Scheduler = MSUF.Scheduler
+-- Castbars/MSUF_CastbarUtils.lua (loaded first) owns which castbar units the
+-- indicator covers and which setting shows it there.
+local KickReadyUnits = MSUF.Castbars.KickReadyUnits
+local KICK_READY_ROW, KICK_READY_SHOW_KEY = KickReadyUnits.Row, KickReadyUnits.ShowKey
 local CurveAPI = _G.C_CurveUtil
 local EvaluateColorValueFromBoolean = CurveAPI and CurveAPI.EvaluateColorValueFromBoolean
 local EvaluateColorFromBoolean = CurveAPI and CurveAPI.EvaluateColorFromBoolean
@@ -91,6 +97,7 @@ local spellSetGeneration = 0
 local spellBookEventRegistered = false
 local cooldownWakeUnsupported = false
 local cooldownTimerGeneration = 0
+local cooldownTimerArmedGeneration
 local cooldownTimerEndTime
 local eventFrame
 local cooldownEventRegistered = false
@@ -586,24 +593,12 @@ local function RGBAForReady(isReady, general)
     return ColorFromDB(general, "kickNotReadyColor", 1, 0, 0)
 end
 
+--- The focus castbar also shows readiness for the Focus Interrupt Tracker.
 local function ShouldShow(general, unit)
-    if unit == "target" then
-        return general.kickReadyShowTarget == true
-    end
-
-    if unit == "focus" then
-        return general.kickReadyShowFocus == true or general.enableFocusKickIcon == true
-    end
-
-    if unit == "boss" or (type(unit) == "string" and unit:match("^boss%d+$")) then
-        return general.kickReadyShowBoss == true
-    end
-
-    if unit == "arena" or (type(unit) == "string" and unit:match("^arena%d+$")) then
-        return general.kickReadyShowArena == true
-    end
-
-    return false
+    local key = unit and KICK_READY_ROW[unit]
+    if not key then return false end
+    if key == "focus" and general.enableFocusKickIcon == true then return true end
+    return general[KICK_READY_SHOW_KEY[key]] == true
 end
 
 local function CastbarFeatureActive(general, unit, key)
@@ -623,12 +618,11 @@ local function FeatureEnabled(general)
 end
 
 --- The fill style follows the unit's own toggle: ShouldShow without the Focus
---- Interrupt Tracker, which shows its readiness on the focus castbar.
+--- Interrupt Tracker, which shows its readiness on the focus castbar. The
+--- castbar's unavailable tint (MSUF_CastbarUtils.lua) gates on the same rule.
 local function UnitSupportsFillStyle(general, unit)
-    if unit == "focus" then
-        return general.kickReadyShowFocus == true
-    end
-    return ShouldShow(general, unit)
+    local key = unit and KICK_READY_ROW[unit]
+    return key and general[KICK_READY_SHOW_KEY[key]] == true or false
 end
 
 local function IndicatorStyle(general)
@@ -717,9 +711,8 @@ local function RestoreOutline(frame)
 
     frame._kickReadyBorderTinted = nil
 
-    if type(_G.MSUF_ApplyCastbarOutline) == "function" then
-        _G.MSUF_ApplyCastbarOutline(frame, true)
-    end
+    -- Castbars/MSUF_CastbarStyle.lua loads before this file in every TOC.
+    _G.MSUF_ApplyCastbarOutline(frame, true)
 end
 
 --- Raw interruptibility can be nil, false, true, or a wrapped/secret value
@@ -1357,7 +1350,23 @@ ClearCooldownWake = function()
     end
 end
 
-local function ScheduleCooldownRefresh(remaining, remainingResolved, cooldown, cooldownResolved)
+local ScheduleCooldownRefresh
+
+--- The plain-cooldown wake (clients without a native completion frame). One
+--- stable callback keyed in the Kernel scheduler: a reschedule replaces the
+--- deadline, and a newer generation (a reschedule or ClearCooldownWake)
+--- retires a wake that is already due.
+local function OnCooldownTimer()
+    if cooldownTimerArmedGeneration ~= cooldownTimerGeneration then return end
+    cooldownTimerEndTime = nil
+    local remaining, resolved, nextCooldown, nextCooldownResolved = RefreshAll(true)
+    RefreshExternalReadyConsumers()
+    if resolved then
+        ScheduleCooldownRefresh(remaining, true, nextCooldown, nextCooldownResolved)
+    end
+end
+
+ScheduleCooldownRefresh = function(remaining, remainingResolved, cooldown, cooldownResolved)
     if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 then
         ClearCooldownWake()
         return false
@@ -1438,20 +1447,11 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved, cooldown, c
     end
 
     cooldownTimerGeneration = cooldownTimerGeneration + 1
-    local generation = cooldownTimerGeneration
+    cooldownTimerArmedGeneration = cooldownTimerGeneration
     local delay = math.min(remaining + 0.05, 90)
     cooldownTimerEndTime = Now() + delay
 
-    TimerAPI.After(delay, function()
-        if generation == cooldownTimerGeneration then
-            cooldownTimerEndTime = nil
-            local remaining, resolved, nextCooldown, nextCooldownResolved = RefreshAll(true)
-            RefreshExternalReadyConsumers()
-            if resolved then
-                ScheduleCooldownRefresh(remaining, true, nextCooldown, nextCooldownResolved)
-            end
-        end
-    end)
+    Scheduler.ScheduleAfter(OnCooldownTimer, delay, OnCooldownTimer)
     return true
 end
 
@@ -1679,4 +1679,7 @@ UpdateLifecycleEventRegistration = function(enabled)
     UpdateCooldownEventRegistration()
     return true
 end
-UpdateLifecycleEventRegistration(FeatureEnabled())
+-- No registration at file load: the SavedVariables are not loaded yet, so it
+-- read a throwaway profile (the indicator off, nothing to register). The unit
+-- frame spawn at PLAYER_LOGIN (Factory.SpawnAll) runs MSUF_KickReady_RefreshAll
+-- with the saved profile, and every settings change after it does too.

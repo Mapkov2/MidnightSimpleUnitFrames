@@ -27,6 +27,7 @@ local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local UnitHasVehicleUI = _G.UnitHasVehicleUI
 local UnitChannelInfo = _G.UnitChannelInfo
 
+local FILE = "Castbars/MSUF_Castbars.lua"
 local PlayerCastbarCast = _G.MSUF_PlayerCastbar_Cast
 local PlayerCastbarOnEvent = _G.MSUF_PlayerCastbar_OnEvent
 local UpdateLatencyZone = _G.MSUF_PlayerCastbar_UpdateLatencyZone
@@ -511,11 +512,9 @@ local function StopCastbarIfUnitMissing(frame)
     local pools = (frame._msufIsBossCastbar or frame._msufIsArenaCastbar) and MSUF.Castbars and MSUF.Castbars.Pools
     if pools then
         pools.Stop(frame)
-    elseif type(_G.MSUF_CB_ResetStateOnStop) == "function" then
-        _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
     else
-        if UnregisterCastbar then UnregisterCastbar(frame) end
-        if frame.Hide then frame:Hide() end
+        -- Castbars/MSUF_CastbarRuntime.lua loads before this file in every TOC.
+        MSUF.Require("MSUF_CB_ResetStateOnStop", FILE)(frame, "STOPPED")
     end
     return true
 end
@@ -851,22 +850,10 @@ local function CastbarOnHide(hiddenFrame)
     if UnregisterCastbar then UnregisterCastbar(hiddenFrame) end
 end
 
-RegisterCastbar = function(frame)
-    if not (frame and frame.statusBar) then return end
-    if not (CastbarManager and CastbarManager.active) then return end
-
-    if not FrameHasRuntimeWork(frame) then
-        if CastbarManager.active[frame] == true and UnregisterCastbar then
-            UnregisterCastbar(frame)
-        end
-        return
-    end
-
-    if not frame._msufOnHideHooked then
-        frame._msufOnHideHooked = true
-        frame:HookScript("OnHide", CastbarOnHide)
-    end
-
+--- RegisterCastbar stage 1: the frame's runtime work mask (nil without the
+--- runtime). false: the native completion timer alone owns this frame, which
+--- has no manager work left.
+local function ResolveRegisteredWork(frame)
     local runtime = castbarRuntime or _G.MSUF_CastbarRuntime
     local workMask
     if runtime and runtime.PrepareWork then
@@ -881,7 +868,7 @@ RegisterCastbar = function(frame)
             workMask = runtime:PrepareWork(frame)
         end
         if workMask == 0 and runtime:ArmNativeCompletion(frame) then
-            return
+            return false
         end
         workMask = runtime:PrepareWork(frame)
     elseif workMask == WORK_UNIT_FAILSAFE and runtime and runtime.ArmNativeCompletion then
@@ -891,7 +878,13 @@ RegisterCastbar = function(frame)
     elseif runtime and runtime.CancelNativeCompletion then
         runtime:CancelNativeCompletion(frame)
     end
+    return workMask
+end
 
+--- RegisterCastbar stage 2: the frame's tick cadence (empower 0.03 s, plain
+--- bars at most 0.05 s, timer-driven text at least 0.10 s) and its first
+--- remaining time.
+local function SetRegisteredCadence(frame)
     frame._msufFastText = (frame.timeText and frame._msufCastTimeEnabled ~= false and frame.MSUF_timerDriven == true
         and frame._msufNativeTimeBound ~= true and not frame.isEmpower) or false
 
@@ -910,7 +903,12 @@ RegisterCastbar = function(frame)
         local remaining = frame._msufPlainEndTime - Now()
         frame._msufRemaining = (remaining > 0) and remaining or 0
     end
+end
 
+--- RegisterCastbar stage 3: move the frame into its manager bucket (failsafe,
+--- high or low frequency) and keep the bucket counts. Returns failsafeOnly,
+--- highFrequency.
+local function PlaceRegisteredFrame(frame, workMask)
     local failsafeOnly = workMask == WORK_UNIT_FAILSAFE
         and C_Timer and type(C_Timer.NewTicker) == "function" or false
     local highFrequency = not failsafeOnly
@@ -955,6 +953,29 @@ RegisterCastbar = function(frame)
         newBucket[frame] = true
         frame._msufManagerBucket = newBucket
     end
+    return failsafeOnly, highFrequency
+end
+
+RegisterCastbar = function(frame)
+    if not (frame and frame.statusBar) then return end
+    if not (CastbarManager and CastbarManager.active) then return end
+
+    if not FrameHasRuntimeWork(frame) then
+        if CastbarManager.active[frame] == true and UnregisterCastbar then
+            UnregisterCastbar(frame)
+        end
+        return
+    end
+
+    if not frame._msufOnHideHooked then
+        frame._msufOnHideHooked = true
+        frame:HookScript("OnHide", CastbarOnHide)
+    end
+
+    local workMask = ResolveRegisteredWork(frame)
+    if workMask == false then return end
+    SetRegisteredCadence(frame)
+    local failsafeOnly, highFrequency = PlaceRegisteredFrame(frame, workMask)
 
     local lowBucketScanned = false
     if not ManagerTopologyMatches() then
@@ -1262,10 +1283,12 @@ local function UpdateDurationObjectFrame(frame, now)
         end
 
         if not remaining and not remainingFromEnd then
+            -- A secret remaining time still goes to the text sink below; it is
+            -- never compared, not even with nil.
             if frame.timeText
                 and frame._msufCastTimeEnabled ~= false
                 and frame._msufNativeTimeBound ~= true
-                and rawRemaining ~= nil
+                and (issecretvalue(rawRemaining) == true or rawRemaining ~= nil)
             then
                 if type(rawRemaining) == "number" and frame.timeText.SetFormattedText then
                     frame.timeText:SetFormattedText("%.1f", rawRemaining)

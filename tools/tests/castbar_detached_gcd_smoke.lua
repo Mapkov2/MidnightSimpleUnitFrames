@@ -70,10 +70,17 @@ local function Load(client, spellAPI)
     C_DurationUtil = { CreateDuration = function()
         return { Reset = function(self) self.isReset = true end }
     end }
-    C_Timer = { NewTimer = function(delay, fn)
-        local t = { delay = delay, fn = fn }; function t:Cancel() self.cancelled = true end
-        timers[#timers + 1] = t; return t
-    end, NewTicker = function() error("plain GCD must not poll") end }
+    -- The finish deadline goes through Kernel/MSUF_Scheduler.lua; a plain GCD
+    -- never polls and never builds a C_Timer handle.
+    C_Timer = { NewTimer = function() error("the GCD bar must not create a C_Timer handle") end,
+        NewTicker = function() error("plain GCD must not poll") end }
+    local scheduler = {
+        ScheduleAfter = function(key, delay, fn)
+            timers[#timers + 1] = { delay = delay, fn = fn, key = key }
+            return true
+        end,
+        CancelScheduled = function() return false end,
+    }
     MSUF_CastbarRuntime = { RetainDuration = function(_, _, d) return d end,
         ApplyTimer = function(_, bar, d) assert(d == duration); bar:SetTimerDuration(d); casts = casts + 1; return true end,
         BindNativeTimeText = function(_, f, d) f.timeBound = d end,
@@ -85,7 +92,7 @@ local function Load(client, spellAPI)
     MSUF_PlayerCastbar = Frame("Frame")
     MSUF_PlayerCastbar.shown = false
     MSUF_PlayerCastbar.MSUF_castActive = true
-    local ns = { Client = client, ExportPublic = function(k, v) _G[k] = v end }
+    local ns = { Client = client, ExportPublic = function(k, v) _G[k] = v end, Scheduler = scheduler }
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarGCD.lua"))("MSUF", ns)
     return MSUF_GCDBarDriver, function() return mover end
 end

@@ -172,10 +172,8 @@ end
 
 --- Resolves the bar size of one slot: (width, height, preserveWidth).
 function Preview:DesiredSize(index, general, frame)
-    if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-        return _G.MSUF_GetCastbarDesiredSize(self.unitPrefix .. index, general, frame, DEFAULT_WIDTH, DEFAULT_HEIGHT)
-    end
-    return tonumber(general[self.db.width]) or DEFAULT_WIDTH, tonumber(general[self.db.height]) or DEFAULT_HEIGHT
+    -- Castbars/MSUF_CastbarAnchors.lua owns the size (and its width source).
+    return _G.MSUF_GetCastbarDesiredSize(self.unitPrefix .. index, general, frame, DEFAULT_WIDTH, DEFAULT_HEIGHT)
 end
 
 --- Creates one preview per unit slot. The preview is intentionally inert: no
@@ -236,35 +234,19 @@ function Preview:ApplyLayout(frame, index)
         height = Snap(frame, height)
     end
 
-    if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-        _G.MSUF_ApplyPlayerCastbarSizeAndLayout(frame, general, width, height, preserveWidth)
-    else
-        frame:SetSize(width, height)
-    end
+    _G.MSUF_ApplyPlayerCastbarSizeAndLayout(frame, general, width, height, preserveWidth)
 
     local kind = self.kind
-    if type(_G.MSUF_ApplyCastbarFrameLayer) == "function" then
-        _G.MSUF_ApplyCastbarFrameLayer(frame, general, kind)
-    end
+    _G.MSUF_ApplyCastbarFrameLayer(frame, general, kind)
 
-    if type(_G.MSUF_RefreshCastbarFrame) == "function" then
-        _G.MSUF_RefreshCastbarFrame(frame, kind, general)
-        if type(_G.MSUF_ApplyCastbarSparkVisual) == "function" then
-            _G.MSUF_ApplyCastbarSparkVisual(frame, general)
-        end
-    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(kind)
-    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals(kind)
-    end
+    _G.MSUF_RefreshCastbarFrame(frame, kind, general)
+    _G.MSUF_ApplyCastbarSparkVisual(frame, general)
 
     local targetText = frame.castTargetText
     if targetText then
         local showTargetName = general[self.showTargetKey] == true
         targetText:SetText(showTargetName and Translate(self.targetLabel) or "")
-        if type(_G.MSUF_ApplyCastTargetTextColor) == "function" then
-            _G.MSUF_ApplyCastTargetTextColor(frame)
-        end
+        _G.MSUF_ApplyCastTargetTextColor(frame)
         targetText:SetShown(showTargetName)
     end
 
@@ -308,16 +290,9 @@ function Preview:Position(frame, index)
     end
 
     local unit = self.unitPrefix .. index
-    local source = (type(_G.MSUF_GetCastbarUnitframeWidthSource) == "function"
-        and _G.MSUF_GetCastbarUnitframeWidthSource(unit)) or unitFrame
-    local autoX = 0
-    if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
-        autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, unit, frame)
-    end
-    local bottomInset = 0
-    if type(_G.MSUF_GetCastbarUnitframeBottomInset) == "function" then
-        bottomInset = _G.MSUF_GetCastbarUnitframeBottomInset(unit, frame)
-    end
+    local source = _G.MSUF_GetCastbarUnitframeWidthSource(unit) or unitFrame
+    local autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, unit, frame)
+    local bottomInset = _G.MSUF_GetCastbarUnitframeBottomInset(unit, frame)
     local gap
     if type(_G.MSUF_GetPhysicalPixelSize) == "function" then
         gap = _G.MSUF_GetPhysicalPixelSize(frame, UNITFRAME_GAP)
@@ -348,9 +323,7 @@ function Preview:Update()
         if frame and unitFrame and (not unitFrame.IsShown or unitFrame:IsShown()) then
             local castbars = _G[self.poolGlobal]
             local realCastbar = (castbars and castbars[index]) or _G[self.framePrefix .. index]
-            if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
-                _G.MSUF_HardSyncCastbarPreview(frame, realCastbar)
-            end
+            _G.MSUF_HardSyncCastbarPreview(frame, realCastbar)
             self:ApplyLayout(frame, index)
             self:Position(frame, index)
             frame:Show()

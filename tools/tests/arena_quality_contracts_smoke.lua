@@ -412,6 +412,9 @@ local function LoadArenaCastbars(options)
     end
 
     local namespace = Namespace(options.client)
+    -- Castbars/MSUF_CastbarDriver.lua's pool entry, for the stub castbars above.
+    namespace.Castbars = namespace.Castbars or {}
+    namespace.Castbars.Driver = { ShowState = function(frame, state) frame:Cast(state) end }
     assert(loadfile(POOLS))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(CASTBARS))("MidnightSimpleUnitFrames", namespace)
     return W

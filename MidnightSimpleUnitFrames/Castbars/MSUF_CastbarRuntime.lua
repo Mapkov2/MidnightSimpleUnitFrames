@@ -37,8 +37,13 @@
 ---   _msufNativeTextUnsafe         binding lacks a method; Lua time text instead
 ---   _msufNativeTimerUnsafe        no SetTimerDuration: manager drives only time text + completion (legacy casts: endTime Lua fill)
 ---   _msufNativeCompletionTimer/_msufNativeCompletionDeadline/
----   _msufNativeCompletionCallback C_Timer completion arming for native casts
----   _msufNativeCompletionUnsafe   completion timer failed; stay on the manager
+---   _msufNativeCompletionCallback completion deadline for native casts (a
+---                                 Kernel-scheduler key: armed flag true/false,
+---                                 deadline number/false, per-frame callback)
+---   _msufNativeCompletionUnsafe   the duration turned unreadable; stay on the manager
+---   The *Unsafe and armed/bound flags are false when clear, never nil: they
+---   flip every cast, and a key cleared to nil is re-inserted (a table
+---   regrowth once the collector has seen it) on the next cast.
 ---   _msufCastState/_msufCastPhase published cast-state table and phase
 ---   _msufHideToken                bumped to invalidate pending hide timers
 ---   _msufInUnregister             re-entrancy guard around Hide inside Stop
@@ -53,6 +58,9 @@ local _, ns = ...
 ns = ns or _G.MSUF_NS or {}
 
 local ExportPublic = ns.ExportPublic
+-- Kernel/MSUF_Scheduler.lua loads first in every TOC. Its keyed deadlines
+-- allocate nothing after a key's first use; a C_Timer handle per cast did.
+local Scheduler = ns.Scheduler
 
 local Runtime = ns.MSUF_CastbarRuntime or {}
 ns.MSUF_CastbarRuntime = Runtime
@@ -137,6 +145,13 @@ if not activeDurationFrames then
     Runtime._activeDurationFrames = activeDurationFrames
 end
 
+--- Drops the Lua text diff cache of a FontString the native binding writes.
+--- Assigning nil to a key the table does not hold creates the key, so a
+--- cache that is already empty is left alone.
+local function InvalidateTextCache(fontString)
+    if fontString and fontString._msufLastText ~= nil then fontString._msufLastText = nil end
+end
+
 local function MaskHas(mask, flag)
     return type(mask) == "number" and (mask % (flag * 2)) >= flag
 end
@@ -197,6 +212,21 @@ end
 --- (secret/nan/inf -> nil, wrappers unwrapped). Harnesses that load Runtime
 --- standalone load Utils first.
 local PlainNumber = _G.MSUF_Castbar_PlainNumber
+-- The same file owns the fill direction, the status-bar colour write, the
+-- interrupt shake and the empower teardown.
+local GetCastbarReverseFillForFrame = _G.MSUF_GetCastbarReverseFillForFrame
+local SetStatusBarColorIfChanged = _G.MSUF_SetStatusBarColorIfChanged
+local PlayCastbarShake = _G.MSUF_PlayCastbarShake
+local ClearEmpowerState = _G.MSUF_ClearEmpowerState
+
+--- The castbar manager (Castbars/MSUF_Castbars.lua) and the driver's time
+--- text load after this file, before any cast: resolved on first use.
+local FILE = "Castbars/MSUF_CastbarRuntime.lua"
+local RegisterCastbar, UpdateCastTimeText
+local function Register(frame)
+    RegisterCastbar = RegisterCastbar or ns.Require("MSUF_RegisterCastbar", FILE)
+    return RegisterCastbar(frame)
+end
 
 local nativeTextFormats
 local nativeTextFormatsUnavailable
@@ -276,8 +306,10 @@ local function DisableNativeTimeText(frame)
     -- DurationTextBinding mutates the FontString behind MSUF's Lua-side diff
     -- cache. Invalidate that cache so the next Lua clear/update cannot be skipped
     -- against a stale pre-binding value.
-    if frame.timeText then frame.timeText._msufLastText = nil end
-    frame._msufNativeTimeBound = nil
+    InvalidateTextCache(frame.timeText)
+    -- false, not nil: the flag flips every cast, and a key cleared to nil is
+    -- re-inserted (a table regrowth once the collector saw it) on the next.
+    frame._msufNativeTimeBound = false
 end
 
 -- Build the immutable formatter graph and the frame-local binding while the
@@ -334,7 +366,7 @@ local function PrepareNativeTimeText(frame, format, allowRetry)
         frame._msufDurationTextFormat = format
     end
 
-    frame._msufNativeTextUnsafe = nil
+    frame._msufNativeTextUnsafe = false
     return true, binding
 end
 
@@ -419,9 +451,9 @@ local function ApplyNativeTimeText(frame, durationObj, format)
         and type(binding.UpdateFontString) == "function" then
         binding:UpdateFontString()
     end
-    frame.timeText._msufLastText = nil
+    InvalidateTextCache(frame.timeText)
     frame._msufNativeTimeBound = true
-    frame._msufNativeTextUnsafe = nil
+    frame._msufNativeTextUnsafe = false
     return true
 end
 
@@ -552,15 +584,12 @@ function Runtime:PrepareWork(frame)
         mask = mask - WORK_GLOW
     end
 
-    local timerAPI = _G.C_Timer
     if not nativeSecretDurationOwned
         and not isChanneled
         and not isEmpower
         and timerDriven
         and (frame._msufPlainEndTime == nil
-            or frame._msufNativeCompletionUnsafe == true
-            or type(timerAPI) ~= "table"
-            or type(timerAPI.NewTimer) ~= "function")
+            or frame._msufNativeCompletionUnsafe == true)
     then
         mask = MaskAdd(mask, WORK_DURATION_FALLBACK)
     end
@@ -588,16 +617,18 @@ function Runtime:NeedsManager(frame)
     return not (frame and frame._msufCastbarWorkMask == 0)
 end
 
+-- The armed flag and deadline go to false, never nil: the fields stay in the
+-- frame table between casts instead of being re-inserted every cast.
 function Runtime:CancelNativeCompletion(frame)
-    if not frame then return end
-    CancelTimerHandle(frame._msufNativeCompletionTimer)
-    frame._msufNativeCompletionTimer = nil
-    frame._msufNativeCompletionDeadline = nil
+    if not frame or frame._msufNativeCompletionTimer ~= true then return end
+    Scheduler.CancelScheduled(frame._msufNativeCompletionCallback)
+    frame._msufNativeCompletionTimer = false
+    frame._msufNativeCompletionDeadline = false
 end
 
 local function NativeCompletionCallback(frame)
-    frame._msufNativeCompletionTimer = nil
-    frame._msufNativeCompletionDeadline = nil
+    frame._msufNativeCompletionTimer = false
+    frame._msufNativeCompletionDeadline = false
     local workMask = frame._msufCastbarWorkMask
     if frame.MSUF_castActive ~= true
         or (workMask ~= 0 and workMask ~= WORK_UNIT_FAILSAFE)
@@ -628,9 +659,7 @@ local function NativeCompletionCallback(frame)
         -- path.  Do not guess whether it expired.
         frame._msufNativeCompletionUnsafe = true
         Runtime:PrepareWork(frame)
-        if type(_G.MSUF_RegisterCastbar) == "function" then
-            _G.MSUF_RegisterCastbar(frame)
-        end
+        Register(frame)
         return
     end
 
@@ -649,33 +678,26 @@ function Runtime:ArmNativeCompletion(frame)
         return false
     end
 
-    local timerAPI = _G.C_Timer
-    if not (timerAPI and type(timerAPI.NewTimer) == "function") then return false end
-
     local deadline = frame._msufPlainEndTime + 0.05
-    if frame._msufNativeCompletionTimer
+    if frame._msufNativeCompletionTimer == true
         and frame._msufNativeCompletionDeadline
         and math_abs(frame._msufNativeCompletionDeadline - deadline) <= 0.001 then
         return true
     end
     self:CancelNativeCompletion(frame)
 
-    if not frame._msufNativeCompletionCallback then
-        frame._msufNativeCompletionCallback = function()
+    local callback = frame._msufNativeCompletionCallback
+    if not callback then
+        callback = function()
             NativeCompletionCallback(frame)
         end
+        frame._msufNativeCompletionCallback = callback
     end
 
     local delay = deadline - Now()
     if delay < 0.05 then delay = 0.05 end
-    local timer = timerAPI.NewTimer(delay, frame._msufNativeCompletionCallback)
-    if not timer then
-        frame._msufNativeCompletionUnsafe = true
-        self:PrepareWork(frame)
-        return false
-    end
-
-    frame._msufNativeCompletionTimer = timer
+    Scheduler.ScheduleAfter(callback, delay, callback)
+    frame._msufNativeCompletionTimer = true
     frame._msufNativeCompletionDeadline = deadline
     return true
 end
@@ -709,10 +731,10 @@ function Runtime:ReleaseActive(frame)
     frame._msufPlainTotal = nil
     frame._msufCastbarWorkMask = nil
     frame._msufCastbarGlowTick = nil
-    frame._msufNativeCompletionUnsafe = nil
-    frame._msufNativeTimerUnsafe = nil
-    frame._msufDurationSnapshotUnsafe = nil
-    frame._msufNativeTextUnsafe = nil
+    frame._msufNativeCompletionUnsafe = false
+    frame._msufNativeTimerUnsafe = false
+    frame._msufDurationSnapshotUnsafe = false
+    frame._msufNativeTextUnsafe = false
 end
 
 function Runtime:RefreshActiveWork()
@@ -784,15 +806,7 @@ local function ResolveReverseFill(frame, state, isChanneled)
         return state.reverseFill == true
     end
 
-    if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-        return _G.MSUF_GetCastbarReverseFillForFrame(frame, isChanneled and true or false) == true
-    end
-
-    if type(_G.MSUF_GetReverseFillSafe) == "function" then
-        return _G.MSUF_GetReverseFillSafe(frame, isChanneled and true or false) == true
-    end
-
-    return false
+    return GetCastbarReverseFillForFrame(frame, isChanneled and true or false) == true
 end
 
 --- Prefer Blizzard's StatusBar timer object when available. That lets the
@@ -906,7 +920,7 @@ function Runtime:SnapshotDuration(frame, durationObj, nativeTimerOwned)
     end
 
     frame._msufPlainTotal = total
-    frame._msufDurationSnapshotUnsafe = remaining == nil and true or nil
+    frame._msufDurationSnapshotUnsafe = remaining == nil
     return remaining, total
 end
 
@@ -920,16 +934,18 @@ function Runtime:ApplyActive(frame, state, options)
 
     local durationObj = StableDuration(frame, state.durationObj)
     local spellName = state.spellName
-    if not durationObj or not spellName then
+    -- A secret name (SecretWhenUnitSpellCastRestricted) is a spell; only a
+    -- plain name is tested.
+    if not durationObj or (not issecretvalue(spellName) and not spellName) then
         return false
     end
 
     options = options or EMPTY_OPTIONS
 
-    frame._msufNativeCompletionUnsafe = nil
-    frame._msufNativeTimerUnsafe = nil
-    frame._msufDurationSnapshotUnsafe = nil
-    frame._msufNativeTextUnsafe = nil
+    frame._msufNativeCompletionUnsafe = false
+    frame._msufNativeTimerUnsafe = false
+    frame._msufDurationSnapshotUnsafe = false
+    frame._msufNativeTextUnsafe = false
     activeDurationFrames[frame] = true
 
     local castType = state.castType or state.phase or "CAST"
@@ -995,7 +1011,7 @@ function Runtime:ApplyActive(frame, state, options)
     local timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled, true) and true or false
     frame.MSUF_timerDriven = timerDriven
     if timerDriven then
-        frame._msufNativeTimerUnsafe = nil
+        frame._msufNativeTimerUnsafe = false
     else
         frame._msufNativeTimerUnsafe = true
     end
@@ -1028,16 +1044,16 @@ function Runtime:ApplyActive(frame, state, options)
         frame:Show()
     end
 
-    if options.skipRegister ~= true and type(_G.MSUF_RegisterCastbar) == "function" then
-        _G.MSUF_RegisterCastbar(frame)
+    if options.skipRegister ~= true then
+        Register(frame)
     end
 
     if options.skipTimeText ~= true
         and frame.timeText
         and frame._msufNativeTimeBound ~= true
-        and type(_G.MSUF_UpdateCastTimeText_FromStatusBar) == "function"
     then
-        _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
+        UpdateCastTimeText = UpdateCastTimeText or ns.Require("MSUF_UpdateCastTimeText_FromStatusBar", FILE)
+        UpdateCastTimeText(frame)
     end
 
     if type(_G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
@@ -1087,11 +1103,7 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
         red, green, blue = 1.0, 0.82, 0.0
     end
 
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, 1)
-    elseif statusBar.SetStatusBarColor then
-        statusBar:SetStatusBarColor(red, green, blue, 1)
-    end
+    SetStatusBarColorIfChanged(statusBar, red, green, blue, 1)
 
     SetText(frame, "castText", label or _G.INTERRUPTED)
     SetText(frame, "timeText", "")
@@ -1108,8 +1120,8 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
         _G.MSUF_UF_ApplyCastbarRangeAlpha(frame, nil, true)
     end
 
-    if skipShake ~= true and type(_G.MSUF_PlayCastbarShake) == "function" then
-        _G.MSUF_PlayCastbarShake(frame)
+    if skipShake ~= true then
+        PlayCastbarShake(frame)
     end
 end
 
@@ -1164,8 +1176,8 @@ function Runtime:Stop(frame, reasonOrOptions)
         -- unregister implementation did not release native ownership, finish
         -- the cleanup here. The normal manager path clears these flags first.
         if frame._msufNativeTimeBound == true
-            or frame._msufNativeCompletionTimer ~= nil
-            or frame._msufNativeCompletionDeadline ~= nil
+            or frame._msufNativeCompletionTimer == true
+            or frame._msufNativeCompletionDeadline
         then
             self:DeactivateNative(frame)
         end
@@ -1191,10 +1203,10 @@ function Runtime:Stop(frame, reasonOrOptions)
     frame.MSUF_castActive = false
     frame._msufCastbarWorkMask = nil
     frame._msufCastbarGlowTick = nil
-    frame._msufNativeCompletionUnsafe = nil
-    frame._msufNativeTimerUnsafe = nil
-    frame._msufDurationSnapshotUnsafe = nil
-    frame._msufNativeTextUnsafe = nil
+    frame._msufNativeCompletionUnsafe = false
+    frame._msufNativeTimerUnsafe = false
+    frame._msufDurationSnapshotUnsafe = false
+    frame._msufNativeTextUnsafe = false
 
     local castState = frame._msufCastState
     if castState then
@@ -1236,8 +1248,8 @@ function Runtime:Stop(frame, reasonOrOptions)
         return
     end
 
-    if frame.isEmpower and type(_G.MSUF_ClearEmpowerState) == "function" then
-        _G.MSUF_ClearEmpowerState(frame)
+    if frame.isEmpower then
+        ClearEmpowerState(frame)
     end
 
     if reason == REASON_SUCCEEDED or reason == REASON_FAILED then

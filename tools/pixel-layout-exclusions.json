@@ -42,6 +42,12 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
+    "path": "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarGCD.lua",
+    "call": "CreateFrame ( \"Cooldown\" , nil , UIParent )",
+    "count": 1,
+    "reason": "Hidden 1x1 Cooldown (alpha 0, no swipe, edge, bling or numbers): the native OnCooldownDone timer that ends a secret GCD"
+  },
+  {
     "path": "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,

@@ -376,9 +376,26 @@ do
     _G.issecretvalue = function(value) return rawequal(value, SECRET) end
     _G.C_Timer = { After = function() end }
     _G.MSUF_DB = { general = {} }
-    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", NewNamespace())
+    local utilsNamespace = NewNamespace()
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", utilsNamespace)
     local applyTexts = assert(_G.MSUF_CB_ApplyTexts, "MSUF_CB_ApplyTexts missing")
     local refresh = assert(_G.MSUF_RefreshCastbarSpellNameText, "MSUF_RefreshCastbarSpellNameText missing")
+
+    -- The saved shortening modes are named (OFF/ON); legacy booleans and
+    -- larger mode numbers keep their meaning, and the boss override wins.
+    local modes = assert(utilsNamespace.Castbars and utilsNamespace.Castbars.SpellNameShortening,
+        "the spell name shortening modes are not named")
+    Check(modes.OFF == 0 and modes.ON == 1, "the shortening mode values changed")
+    local config = assert(_G.MSUF_GetCastbarSpellNameShorteningConfig, "shortening config missing")
+    local cases = { { 0, false }, { 1, true }, { true, true }, { false, false }, { 3, true }, { 7, true } }
+    for _, case in ipairs(cases) do
+        _G.MSUF_DB.general.castbarSpellNameShortening = case[1]
+        Check((config({ unit = "target" }) == true) == case[2], "shortening " .. tostring(case[1]) .. " decided wrongly")
+    end
+    _G.MSUF_DB.general.castbarSpellNameShortening = modes.ON
+    _G.MSUF_DB.general.bossCastSpellNameShortening = false
+    Check(config({ unit = "boss1" }) == false, "the boss shortening override was ignored")
+    _G.MSUF_DB.general.bossCastSpellNameShortening = nil
 
     for _, mode in ipairs({ 0, 1 }) do
         _G.MSUF_DB.general.castbarSpellNameShortening = mode
@@ -490,6 +507,13 @@ do
     _G.InCombatLockdown = function() return combat end
     _G.MSUF_DB = { general = { enableFocusKickIcon = false }, focus = {} }
     _G.MSUF_SetFontChecked = function() return true end
+    -- The font providers the preview's time text calls (Castbars_Core and
+    -- Runtime/MSUF_FontRegistry.lua, both loaded before the icon) and the
+    -- focus kick state driver.
+    _G.MSUF_GetFontPath = function() return "Fonts\\FRIZQT__.TTF" end
+    _G.MSUF_GetFontFlags = function() return "OUTLINE" end
+    _G.MSUF_GetConfiguredFontColor = function() return 1, 1, 1 end
+    _G.MSUF_FocusKickDriver_ForceUpdate = function() end
     local ns = NewNamespace()
     ns.Translate = function(text) return LOCALE[text] or text end
     LoadAddonFile("Castbars/MSUF_FocusKickIcon.lua", ns)
@@ -506,6 +530,48 @@ do
     preview.scripts.OnDragStart(preview)
     Equal(messages[#messages], "Im Kampf - Vorschau gesperrt.", "focus-kick combat drag message")
     _G.UIErrorsFrame = nil
+end
+
+---------------------------------------------------------------------------
+-- 7. One interrupt-ready unit rule. The castbar's unavailable tint
+--    (MSUF_CastbarUtils.lua) and the indicator's fill style
+--    (MSUF_InterruptReady.lua) gate on the same unit classification and
+--    setting: the tint is the fill rule plus backend ownership, for every unit
+--    token (the tint once matched any "boss..." or "arena..." prefix).
+---------------------------------------------------------------------------
+do
+    WipeAddonGlobals()
+    local namespace = NewNamespace()
+    namespace.Client = { IsRetail = true }
+    namespace.Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end }
+    _G.issecretvalue = function() return false end
+    _G.C_Timer = { After = function() end }
+    _G.C_Spell = {}
+    _G.GetTime = function() return 1 end
+    _G.UnitClass = function() return "Mage", "MAGE" end
+    _G.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
+    _G.UIParent = _G.CreateFrame()
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", namespace)
+    LoadAddonFile("Castbars/MSUF_InterruptReady.lua", namespace)
+    local tint = assert(_G.MSUF_Castbar_ShouldUseInterruptUnavailableColor, "unavailable tint gate missing")
+    local units = assert(namespace.Castbars.KickReadyUnits, "the interrupt-ready unit rule is not shared")
+    local tokens = { "player", "target", "focus", "boss", "arena", "pet", "bosstarget", "boss1target",
+        "arenapet1", "bossX" }
+    for index = 1, 5 do tokens[#tokens + 1] = "boss" .. index; tokens[#tokens + 1] = "arena" .. index end
+    for mask = 0, 31 do
+        local general = { kickReadyStyle = "fill",
+            kickReadyShowTarget = mask % 2 == 1, kickReadyShowFocus = math.floor(mask / 2) % 2 == 1,
+            kickReadyShowBoss = math.floor(mask / 4) % 2 == 1, kickReadyShowArena = math.floor(mask / 8) % 2 == 1 }
+        local owned = math.floor(mask / 16) % 2 == 1
+        _G.MSUF_DB = { general = general }
+        _G.MSUF_ShouldUseMSUFCastbar = function() return owned end
+        for _, unit in ipairs(tokens) do
+            local key = units.Key(unit)
+            local fill = key ~= nil and general[units.ShowKey[key]] == true
+            Check(tint({ unit = unit }) == (fill and owned),
+                "unavailable tint and interrupt-ready fill disagree on " .. unit .. " (settings " .. mask .. ")")
+        end
+    end
 end
 
 print("castbar correctness smoke: ok")

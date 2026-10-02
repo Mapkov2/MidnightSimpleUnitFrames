@@ -55,7 +55,9 @@ MSUF_EnsureDBLazy=function() end
 GetCVar=function() return "400" end
 local reads=0
 GetNetStats=function() reads=reads+1;return 0,0,28,43 end
-local ns={Client={IsRetail=true},ExportPublic=function(k,v) _G[k]=v end}
+-- Kernel/MSUF_Scheduler.lua's keyed deadlines (provider of the castbar timers).
+local ns={Client={IsRetail=true},ExportPublic=function(k,v) _G[k]=v end,
+    Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end }}
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua"))("MSUF",ns)
 MSUF_DB={general={castbarShowLatency=false,castbarShowLatencyText=true}}
 local player={statusBar=Frame(),latencyBar=Frame(),timeText=Frame()}
@@ -74,6 +76,8 @@ C_SpellBook={IsSpellKnownOrInSpellBook=function() return false end}
 UnitClass=function() return "Warrior","WARRIOR" end
 MSUF_ShouldUseMSUFCastbar=function() return true end
 MSUF_DB={general={kickReadyShowTarget=true,kickReadyStyle="border",kickReadyTimeMarker=true,kickReadyTimeSegment=true}}
+-- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF",ns)
 local target={unit="target",statusBar=Frame(),MSUF_castActive=true,MSUF_durationObj=duration,
     isNotInterruptible=false,MSUF_kickInterruptibleConfirmed=true}

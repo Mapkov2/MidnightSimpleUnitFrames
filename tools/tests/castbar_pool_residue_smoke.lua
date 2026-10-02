@@ -184,6 +184,8 @@ local function NewWorld(arenaSlots)
         -- Shell/EditMode/MSUF_EditMode_Compat.lua: the open castbar popup.
         _G.MSUF_UpdateCastbarEditInfo = function() end
         _G.MSUF_SyncCastbarPositionPopup = function() end
+        -- UnitFrames/Engine factory: the cooldown-viewer width observers.
+        _G.MSUF_EnsureCooldownWidthObservers = function() end
     end
     local world = World.New(root, "timer", { pools = true, extra = EXTRA, arenaSlots = arenaSlots, setup = Setup, richWidgets = true })
     world.unitFrames = unitFrames

@@ -46,6 +46,12 @@ local CUE_LABEL_LIMIT = 40
 local cueNames, cueIcons, cueLabelKeys, cueSpell, cueTitled = {}, {}, {}, nil, false
 local cueEventsBound, reachEventsBound, equippedOff, equippedRanged = false, false, nil, nil
 local Public = _G.issecretvalue and function(value) return not _G.issecretvalue(value) end or function() return true end
+-- UnitAttackSpeed is SecretWhenUnitStatsRestricted. A hand without a weapon
+-- answers nil; a secret speed is a returned speed, so its weapon is equipped.
+local function Equipped(speed)
+    if not Public(speed) then return true end
+    return (speed or 0) > 0
+end
 
 -- Settings saved under the former names of the swing extras move over once
 -- (the former key is removed); the queued-attack text was always on with them.
@@ -263,13 +269,13 @@ local function SuppressNative()
 end
 local function RefreshVisibility()
     local main, off, ranged = _G.UnitAttackSpeed("player")
-    equippedOff, equippedRanged = (off or 0) > 0, (ranged or 0) > 0
+    equippedOff, equippedRanged = Equipped(off), Equipped(ranged)
     local listen = false
     for i = 1, #HANDS do
         local frame = frames[HANDS[i]]
         local cfg = frame.config
         if i == 1 then frame.speed = main elseif i == 2 then frame.speed = off else frame.speed = ranged end
-        local equipped = i == 1 or (frame.speed and frame.speed > 0)
+        local equipped = i == 1 or (frame.speed ~= nil and Equipped(frame.speed))
         frame.handlesSwings = cfg.enabled and equipped == true
         if frame.handlesSwings and not preview then listen = true end
         local shown = active and cfg.enabled and (preview or (equipped
@@ -537,7 +543,7 @@ local function OnEvent(_, event, a, b, c)
         -- Haste procs change the speeds many times a minute; only equipping or
         -- removing an off-hand or ranged weapon changes which bars run.
         local _, off, ranged = _G.UnitAttackSpeed("player")
-        if ((off or 0) > 0) ~= equippedOff or ((ranged or 0) > 0) ~= equippedRanged then
+        if Equipped(off) ~= equippedOff or Equipped(ranged) ~= equippedRanged then
             RefreshVisibility()
             SyncRanges()
         end
@@ -547,9 +553,13 @@ local function OnEvent(_, event, a, b, c)
         SyncRanges()
         if event == "PLAYER_REGEN_DISABLED" then UpdateCue() end
         if event == "WEAPON_SLOT_CHANGED" then
+            -- A secret speed cannot rebind the duration (SetTimeFromEnd takes
+            -- plain numbers only); the running swing keeps its timer.
             for i = 1, #HANDS do
                 local frame = frames[HANDS[i]]
-                if frame.endsAt and frame.endsAt > _G.GetTime() then Start(frame, frame.speed) end
+                if frame.endsAt and frame.endsAt > _G.GetTime() and Public(frame.speed) then
+                    Start(frame, frame.speed)
+                end
             end
         end
     end

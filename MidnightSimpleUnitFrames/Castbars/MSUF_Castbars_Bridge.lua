@@ -279,15 +279,12 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
 
         SyncBlizzardCastbarEvents()
         SuppressBlizzardPlayerCastbars()
-        if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then
-            _G.MSUF_FocusKickDriver_ForceUpdate()
-        end
-        if type(_G.MSUF_CastbarDriver_SyncLifecycle) == "function" then
-            _G.MSUF_CastbarDriver_SyncLifecycle(true)
-        end
-        if type(_G.MSUF_KickReady_RefreshAll) == "function" then
-            _G.MSUF_KickReady_RefreshAll()
-        end
+        -- The castbar files below load after this one, before any settings
+        -- change: the focus kick state driver, the castbar driver and the
+        -- interrupt-ready indicator.
+        _G.MSUF_FocusKickDriver_ForceUpdate()
+        _G.MSUF_CastbarDriver_SyncLifecycle(true)
+        _G.MSUF_KickReady_RefreshAll()
 
         local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
         if type(applyPlayerState) == "function" then
@@ -307,12 +304,9 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
             poolOrder[poolIndex].ApplyEnabled()
         end
 
-        if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then
-            _G.MSUF_UpdateCastbarWidthSourceSync(GeneralDB())
-        end
-        if type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
-            _G.MSUF_ApplyPlayerChannelTickMarkers()
-        end
+        -- Castbars/MSUF_CastbarAnchors.lua and _ChannelTicks.lua (after this file).
+        _G.MSUF_UpdateCastbarWidthSourceSync(GeneralDB())
+        _G.MSUF_ApplyPlayerChannelTickMarkers()
 
         if not AreAnyCastbarsEnabled() then
             CastbarsForceHideAll()
@@ -355,10 +349,7 @@ if type(registerModule) == "function" then
         end,
         RefreshSettings = function(_, reason)
             CastbarsOnSettingsChanged(reason or "module_refresh")
-
-            if type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
-                _G.MSUF_ApplyPlayerChannelTickMarkers()
-            end
+            _G.MSUF_ApplyPlayerChannelTickMarkers()
         end,
     })
 end

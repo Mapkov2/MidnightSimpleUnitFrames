@@ -219,6 +219,8 @@ do
     -- the driver measures that shift and repaints the "+x.x" suffix, and a new
     -- castID starts without one.
     do
+        -- Castbars/MSUF_CastbarFrames.lua is not loaded; the regions come below.
+        _G.MSUF_BuildCastbarFrameElements = function() end
         local driven = assert(_G.MSUF_CreateCastBar("MSUF_EngineSmokeTargetCastBar", "target"),
             "driver castbar missing")
         driven.statusBar = NewWidget()
@@ -317,7 +319,8 @@ local unitGuard = assert(runtimeSource:find("if not ActiveUnitMatches(frame, eve
 assert(not runtimeSource:sub(interrupted, unitGuard):find("HasActivePlayerCast", 1, true),
     "late player interrupt feedback still requires an API-active cast after STOP")
 assert(runtimeSource:find("frame._msufPlayerInterruptCastGUID = interruptCastGUID", 1, true)
-    and runtimeSource:find("select(2, ...) == frame._msufPlayerInterruptCastGUID", 1, true)
+    and runtimeSource:find("MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)))", 1, true)
+    and runtimeSource:find("and castGUID == pendingGUID", 1, true)
     and runtimeSource:find("GetTime() <= frame._msufPlayerInterruptCastDeadline", 1, true),
     "player castbar does not retain and verify the stopped cast identity")
 

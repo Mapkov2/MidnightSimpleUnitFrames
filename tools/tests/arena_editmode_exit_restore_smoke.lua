@@ -445,6 +445,23 @@ local function NewWorld(flavor, roster)
         preview.castTargetText = Widget(nil, false, preview)
         return preview
     end
+    -- The castbar providers the pool preview calls (Castbars/MSUF_CastbarAnchors.lua,
+    -- _Castbars_Core.lua, _CastbarVisuals.lua, _CastbarUtils.lua and the driver,
+    -- all loaded before it in every TOC): the pool's own size settings, no
+    -- width source, no visual work.
+    _G.MSUF_GetCastbarDesiredSize = function(unit, general, _, fallbackW, fallbackH)
+        local kind = tostring(unit):match("^(%a+)")
+        return tonumber(general[kind .. "CastbarWidth"]) or fallbackW, tonumber(general[kind .. "CastbarHeight"]) or fallbackH
+    end
+    _G.MSUF_ApplyPlayerCastbarSizeAndLayout = function(frame, _, width, height) frame:SetSize(width, height) end
+    _G.MSUF_GetCastbarUnitframeWidthSource = function() return nil end
+    _G.MSUF_GetCastbarAutoAnchorOffsetX = function() return 0 end
+    _G.MSUF_GetCastbarUnitframeBottomInset = function() return 0 end
+    _G.MSUF_ApplyCastbarFrameLayer = function() end
+    _G.MSUF_RefreshCastbarFrame = function() end
+    _G.MSUF_ApplyCastbarSparkVisual = function() end
+    _G.MSUF_ApplyCastTargetTextColor = function() end
+    _G.MSUF_HardSyncCastbarPreview = function() end
     -- The boss castbar preview follows a boss preview refresh; no boss castbars here.
     _G.MSUF_UpdateBossCastbarPreview = function() end
     _G.MSUF_UpdatePlayerCastbarPreview = function()
