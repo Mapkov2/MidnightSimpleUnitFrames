@@ -1516,6 +1516,42 @@ do
     namespace.BorderStyles, _G.MSUF_BorderStyles = nil, nil
 end
 
+-- W3.1 (re-review 2026-10-02). Classic lanes accept all nine menu anchors ------------
+-- The lane Anchor and cooldown-text Anchor dropdowns offer nine points
+-- (AURA_ANCHORS, Menu_Schema). Classic kept only the four corners and CENTER,
+-- so TOP/LEFT/RIGHT/BOTTOM fell back to the lane default while the Edit Mode
+-- preview drew the choice.
+do
+    for _, anchor in ipairs({ "TOP", "LEFT", "RIGHT", "BOTTOM", "TOPLEFT", "CENTER", "BOTTOMRIGHT" }) do
+        LoadProfile(Profile({ target = {
+            layout = { buffAnchor = anchor, debuffAnchor = anchor },
+            layoutShared = { showBuffs = true, showDebuffs = true, maxBuffs = 4, maxDebuffs = 4,
+                buffCooldownTextAnchor = anchor },
+            filters = {},
+        } }))
+        A3.BumpRuntimeConfig()
+        world.target = { Aura(true), Aura(false) }
+        local target = NewFrame("target", {})
+        assert(Lane(target, "buff").config.anchor == anchor and Lane(target, "debuff").config.anchor == anchor,
+            "W3.1: a target lane dropped the menu anchor " .. anchor .. " for "
+            .. tostring(Lane(target, "buff").config.anchor))
+        assert(Lane(target, "buff").config.cooldownAnchor == anchor,
+            "W3.1: the cooldown text dropped the menu anchor " .. anchor)
+        local party = NewFrame("party3", { scope = "group", auras = {
+            enabled = true, showBuffs = true, maxBuffs = 4, buffAnchor = anchor, buffCooldownAnchor = anchor,
+        } }, GroupFields("party"))
+        assert(Lane(party, "buff").config.anchor == anchor and Lane(party, "buff").config.cooldownAnchor == anchor,
+            "W3.1: a group lane dropped the menu anchor " .. anchor)
+    end
+    -- A value no menu offers still falls back to the lane default.
+    LoadProfile(Profile({ target = {
+        layout = { buffAnchor = "MIDDLE" }, layoutShared = { showBuffs = true, maxBuffs = 4 }, filters = {},
+    } }))
+    A3.BumpRuntimeConfig()
+    local target = NewFrame("target", {})
+    assert(Lane(target, "buff").config.anchor == "BOTTOMRIGHT", "W3.1: an unknown anchor did not fall back")
+end
+
 -- F6. Edit Mode and menu group test frames never run the live backend -------------------
 do
     world.player = {

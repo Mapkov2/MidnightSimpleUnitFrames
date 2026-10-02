@@ -572,10 +572,18 @@ local function ReadNumber(primary, secondary, key, defaultValue, minValue, maxVa
     return ClampNumber(v, defaultValue, minValue, maxValue)
 end
 
+--- The nine anchors the aura menu offers (AURA_ANCHORS in
+--- Auras3/MenuModel/MSUF_Auras3_Menu_Schema.lua) and Retail's runtime accepts
+--- (ReadAnchor in Auras3/Runtime/MSUF_Auras3_Runtime_ConfigValues.lua).
+local AURA_ANCHOR_OK = {
+    TOPLEFT = true, TOP = true, TOPRIGHT = true,
+    LEFT = true, CENTER = true, RIGHT = true,
+    BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+}
+
 local function ReadAnchor(primary, secondary, key, fallback)
     local value = ReadRaw(primary, secondary, key) or fallback or "TOPLEFT"
-    if value ~= "TOPLEFT" and value ~= "TOPRIGHT" and value ~= "BOTTOMLEFT"
-        and value ~= "BOTTOMRIGHT" and value ~= "CENTER" then
+    if AURA_ANCHOR_OK[value] ~= true then
         value = fallback or "TOPLEFT"
     end
     return value
@@ -1285,11 +1293,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local growthX, growthY, xSign, ySign, verticalGrowth = GroupGrowthParts(source[spec.growthXKey], source[spec.growthYKey])
     local x = ClampNumber(source[spec.xKey], 0, -4096, 4096)
     local y = ClampNumber(source[spec.yKey], 0, -4096, 4096)
-    local anchor = source[spec.anchorKey] or spec.defaultAnchor
-    if anchor ~= "TOPLEFT" and anchor ~= "TOPRIGHT" and anchor ~= "BOTTOMLEFT"
-        and anchor ~= "BOTTOMRIGHT" and anchor ~= "CENTER" then
-        anchor = spec.defaultAnchor
-    end
+    local anchor = ReadAnchor(source, nil, spec.anchorKey, spec.defaultAnchor)
     local layer = ClampNumber(source[spec.layerKey], spec.defaultLayer, 1, 15)
     local alpha = ClampNumber(source[spec.alphaKey], 1, 0, 1)
     local rawFilter = GroupLaneRawFilter(kind, spec, source[spec.filterKey] or spec.filter)
