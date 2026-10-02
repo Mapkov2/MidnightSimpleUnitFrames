@@ -189,7 +189,8 @@ for _, marker in ipairs({
     'h = "arenaCastbarHeight"',
     'x = "arenaCastbarOffsetX"',
     'y = "arenaCastbarOffsetY"',
-    'reanchor = "MSUF_ReanchorArenaCastBar"',
+    -- No reanchor name: Castbars_Core's MSUF_ApplyCastbarUnitAndSync applies
+    -- every unit (the pinned MSUF_ReanchorArenaCastBar never existed).
     'test = "MSUF_SetArenaCastbarTestMode"',
     'or (unit == "arena" and "arenaCastbarTestMode")',
 }) do
