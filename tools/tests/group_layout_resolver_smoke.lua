@@ -161,7 +161,7 @@ env.MSUF_EM2.State.Exit()
 assert(GF._groupEditActive == nil, "closing Edit Mode kept the layout owner")
 
 -- The drag writer reads the keys the mover names.
-local layout = World.Read(root .. "/MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_Layout.lua")
+local layout = World.Read(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Layout.lua")
 local groupDrag = assert(layout:match("\nlocal function ApplyGroupDragPosition%(d, centerX, centerY%)\n(.-)\nend\n"), "group drag writer moved")
 assert(groupDrag:find('local xKey, yKey = bar._msufGFOffsetKeyX or "offsetX", bar._msufGFOffsetKeyY or "offsetY"', 1, true)
     and groupDrag:find("d.conf[xKey] = nextX", 1, true) and not groupDrag:find("d.conf.offsetX", 1, true),
