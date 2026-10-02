@@ -26,42 +26,29 @@ end
 local Apply = M.ApplyService or {}
 M.ApplyService = Apply
 
-local pendingUnits = Apply.pendingUnits or {}
-local pendingOpts = Apply.pendingOpts or {}
-local pendingGeneral = Apply.pendingGeneral
-local flushQueued = Apply.flushQueued == true
-local pendingPreview = Apply.pendingPreview
-local pendingAlphaAll = Apply.pendingAlphaAll == true
-local pendingAlphaUnits = Apply.pendingAlphaUnits or {}
-local pendingCastbar = Apply.pendingCastbar == true
-local pendingCastbarUnits = Apply.pendingCastbarUnits or {}
-local pendingClassPowerOpts = Apply.pendingClassPowerOpts
-local pendingCastbarSettingsChanged = Apply.pendingCastbarSettingsChanged == true
-local pendingCastbarSettingsSource = Apply.pendingCastbarSettingsSource
-local pendingAuraScopes = Apply.pendingAuraScopes or {}
-local pendingAuraAll = Apply.pendingAuraAll == true
-local pendingAuraReason = Apply.pendingAuraReason
-local pendingAuraVisuals = Apply.pendingAuraVisuals == true
-local pendingGroups = Apply.pendingGroups or {}
-local pendingGroupReason = Apply.pendingGroupReason
-local applyCombatDeferred = Apply.applyCombatDeferred == true
+local pendingUnits = {}
+local pendingOpts = {}
+local pendingGeneral
+local flushQueued = false
+local pendingPreview
+local pendingAlphaAll = false
+local pendingAlphaUnits = {}
+local pendingCastbar = false
+local pendingCastbarUnits = {}
+local pendingClassPowerOpts
+local pendingCastbarSettingsChanged = false
+local pendingCastbarSettingsSource
+local pendingAuraScopes = {}
+local pendingAuraAll = false
+local pendingAuraReason
+local pendingAuraVisuals = false
+local pendingGroups = {}
+local pendingGroupReason
+local applyCombatDeferred = false
 local applyCombatDeferFrame
 local flushTimer
 local FlushApply
 
-Apply.pendingUnits = pendingUnits
-Apply.pendingOpts = pendingOpts
-Apply.pendingAlphaUnits = pendingAlphaUnits
-Apply.pendingCastbarUnits = pendingCastbarUnits
-Apply.pendingClassPowerOpts = pendingClassPowerOpts
-Apply.pendingCastbarSettingsChanged = pendingCastbarSettingsChanged
-Apply.pendingCastbarSettingsSource = pendingCastbarSettingsSource
-Apply.pendingAuraScopes = pendingAuraScopes
-Apply.pendingAuraAll = pendingAuraAll
-Apply.pendingAuraReason = pendingAuraReason
-Apply.pendingAuraVisuals = pendingAuraVisuals
-Apply.pendingGroups = pendingGroups
-Apply.pendingGroupReason = pendingGroupReason
 
 local APPLY_FLUSH_DELAY = 0.04
 local UNIT_KEYS = KeySet("player", "target", "targettarget", "focustarget", "focus", "pet", "pettarget", "boss", "arena")
@@ -85,7 +72,6 @@ local function EnsureApplyCombatDeferFrame()
         if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
         self:UnregisterEvent("PLAYER_REGEN_ENABLED")
         applyCombatDeferred = false
-        Apply.applyCombatDeferred = false
         if FlushApply then FlushApply() end
     end)
     return applyCombatDeferFrame
@@ -93,7 +79,6 @@ end
 
 local function DeferApplyFlushUntilCombatEnds()
     applyCombatDeferred = true
-    Apply.applyCombatDeferred = true
     local frame = EnsureApplyCombatDeferFrame()
     if frame then frame:RegisterEvent("PLAYER_REGEN_ENABLED") end
     return true
@@ -200,19 +185,15 @@ local function QueueAuraScope(scope, reason, visuals)
     reason = reason or "MSUF2_AURAS"
     if IsGlobalApplyScope(scope) then
         pendingAuraAll = true
-        Apply.pendingAuraAll = true
         WipeTable(pendingAuraScopes)
     else
         pendingAuraScopes[scope] = reason
     end
     pendingAuraReason = reason
-    Apply.pendingAuraReason = reason
     if visuals == true then
         pendingAuraVisuals = true
-        Apply.pendingAuraVisuals = true
     end
     pendingPreview = reason
-    Apply.pendingPreview = reason
     return true
 end
 
@@ -223,12 +204,10 @@ local function FlushPendingAuras()
     local did = false
     if pendingAuraVisuals == true then
         pendingAuraVisuals = false
-        Apply.pendingAuraVisuals = false
         did = BumpAuraNativeVisuals() or did
     end
     if pendingAuraAll == true then
         pendingAuraAll = false
-        Apply.pendingAuraAll = false
         WipeTable(pendingAuraScopes)
         did = ApplyAuraScope("shared", reason) or did
     else
@@ -238,7 +217,6 @@ local function FlushPendingAuras()
         end
     end
     pendingAuraReason = nil
-    Apply.pendingAuraReason = nil
     return did
 end
 
@@ -293,7 +271,6 @@ end
 local function EnsurePendingClassPowerOpts()
     if type(pendingClassPowerOpts) ~= "table" then
         pendingClassPowerOpts = {}
-        Apply.pendingClassPowerOpts = pendingClassPowerOpts
     end
     return pendingClassPowerOpts
 end
@@ -331,7 +308,6 @@ local function FlushPendingClassPower()
     local opts = pendingClassPowerOpts
     if type(opts) ~= "table" then return false end
     pendingClassPowerOpts = nil
-    Apply.pendingClassPowerOpts = nil
     _G.MSUF_ClassPower_Apply(opts)
     return true
 end
@@ -684,9 +660,7 @@ local function QueueGroup(scope, mode, reason)
         rec.dirtyMask = MergeGroupDirty(gf, rec.dirtyMask, GroupDirtyForMode(gf, mode))
     end
     pendingGroupReason = reason or pendingGroupReason or "MSUF2_GROUP"
-    Apply.pendingGroupReason = pendingGroupReason
     pendingPreview = reason or pendingPreview or "MSUF2_GROUP"
-    Apply.pendingPreview = pendingPreview
 end
 
 local function QueueGroupDirtyMask(scope, dirtyMask, reason)
@@ -700,16 +674,13 @@ local function QueueGroupDirtyMask(scope, dirtyMask, reason)
     local gf = MSUF and MSUF.GF
     rec.dirtyMask = MergeGroupDirty(gf, rec.dirtyMask, dirtyMask)
     pendingGroupReason = reason or pendingGroupReason or "MSUF2_GROUP"
-    Apply.pendingGroupReason = pendingGroupReason
     pendingPreview = reason or pendingPreview or "MSUF2_GROUP"
-    Apply.pendingPreview = pendingPreview
 end
 
 local function FlushPendingGroups()
     if next(pendingGroups) == nil then return false end
     local reason = pendingGroupReason or "MSUF2_GROUP"
     pendingGroupReason = nil
-    Apply.pendingGroupReason = nil
     local did = false
     for key, rec in pairs(pendingGroups) do
         pendingGroups[key] = nil
@@ -892,14 +863,12 @@ end
 
 local function QueueCastbarSettingsChanged(source)
     pendingCastbarSettingsChanged = true
-    Apply.pendingCastbarSettingsChanged = true
     source = tostring(source or "menu")
     if pendingCastbarSettingsSource == nil then
         pendingCastbarSettingsSource = source
     elseif pendingCastbarSettingsSource ~= source then
         pendingCastbarSettingsSource = "menu"
     end
-    Apply.pendingCastbarSettingsSource = pendingCastbarSettingsSource
 end
 
 local function FlushCastbarSettingsChanged()
@@ -907,8 +876,6 @@ local function FlushCastbarSettingsChanged()
     local source = pendingCastbarSettingsSource or "menu"
     pendingCastbarSettingsChanged = false
     pendingCastbarSettingsSource = nil
-    Apply.pendingCastbarSettingsChanged = false
-    Apply.pendingCastbarSettingsSource = nil
     _G.MSUF_Castbars_OnSettingsChanged(source)
     return true
 end
@@ -954,15 +921,12 @@ FlushApply = function()
         return DeferApplyFlushUntilCombatEnds()
     end
     flushQueued = false
-    Apply.flushQueued = false
 
     local wantPreview = pendingPreview
     pendingPreview = nil
-    Apply.pendingPreview = nil
 
     local wantAlphaAll = pendingAlphaAll
     pendingAlphaAll = false
-    Apply.pendingAlphaAll = false
 
     FlushCastbarSettingsChanged()
     local coordinatedApplyMask = CoordinatedUnitFrameMask()
@@ -1007,7 +971,6 @@ FlushApply = function()
     if pendingGeneral then
         local opt = pendingGeneral
         pendingGeneral = nil
-        Apply.pendingGeneral = nil
 
         local applied = false
         local applyAll = opt.applyAll ~= false
@@ -1050,7 +1013,6 @@ FlushApply = function()
 
     if pendingCastbar then
         pendingCastbar = false
-        Apply.pendingCastbar = false
         WipeTable(pendingCastbarUnits)
         ApplyAllCastbars()
     else
@@ -1071,7 +1033,6 @@ FlushApply = function()
         end
     end
     WipeTable(pendingAlphaUnits)
-    Apply.pendingAlpha = false
     if wantPreview then
         _G.MSUF_UFPreview_RequestRefresh(wantPreview)
         RefreshActiveBossPreview(wantPreview)
@@ -1081,7 +1042,6 @@ end
 function Apply.QueueFlush()
     if flushQueued then return true end
     flushQueued = true
-    Apply.flushQueued = true
     if InCombat() then return DeferApplyFlushUntilCombatEnds() end
     if C_Timer and type(C_Timer.NewTimer) == "function" then
         local fired = false
@@ -1148,19 +1108,16 @@ function Apply.RequestUnit(unit, reason, opts)
         if opts.auras then o.auras = true end
         if opts.alpha then
             pendingAlphaUnits[unit] = true
-            Apply.pendingAlpha = true
         end
-        if opts.preview ~= false then pendingPreview = opts.previewReason or reason or "MSUF2"; Apply.pendingPreview = pendingPreview end
+        if opts.preview ~= false then pendingPreview = opts.previewReason or reason or "MSUF2" end
     else
         pendingPreview = reason or "MSUF2"
-        Apply.pendingPreview = pendingPreview
     end
     return Apply.QueueFlush()
 end
 
 function Apply.RequestGeneral(reason, opts)
     if not pendingGeneral then pendingGeneral = {} end
-    Apply.pendingGeneral = pendingGeneral
     pendingGeneral.reason = reason or pendingGeneral.reason or "MSUF2_GENERAL"
     local applyAll = not (opts and opts.applyAll == false)
     if not applyAll then
@@ -1222,16 +1179,13 @@ function Apply.RequestGeneral(reason, opts)
         if opts.alpha then
             pendingGeneral.alpha = true
             pendingAlphaAll = true
-            Apply.pendingAlphaAll = true
-            Apply.pendingAlpha = true
         end
-        if opts.castbar then pendingCastbar = true; Apply.pendingCastbar = true end
-        if opts.preview ~= false then pendingPreview = opts.previewReason or reason or "MSUF2_GENERAL"; Apply.pendingPreview = pendingPreview end
+        if opts.castbar then pendingCastbar = true end
+        if opts.preview ~= false then pendingPreview = opts.previewReason or reason or "MSUF2_GENERAL" end
         if opts.visual ~= nil then pendingGeneral.visual = opts.visual and true or false end
         if opts.frames then pendingGeneral.frames = true end
     else
         pendingPreview = reason or "MSUF2_GENERAL"
-        Apply.pendingPreview = pendingPreview
     end
     return Apply.QueueFlush()
 end
@@ -1378,7 +1332,6 @@ function Apply.RequestCastbarUnit(unit, reason, source)
     QueueCastbarSettingsChanged(source or "menu")
     pendingCastbarUnits[unit] = true
     pendingPreview = reason or "MSUF2_CASTBAR_UNIT"
-    Apply.pendingPreview = pendingPreview
     return Apply.QueueFlush()
 end
 
@@ -1432,7 +1385,6 @@ function Apply.RequestClassPower(reason, runtimeOpts, applyFlags)
         return Apply.RequestGeneral(reason or "MSUF2_CLASSPOWER", applyFlags)
     end
     pendingPreview = reason or "MSUF2_CLASSPOWER"
-    Apply.pendingPreview = pendingPreview
     return Apply.QueueFlush()
 end
 
