@@ -248,6 +248,7 @@ local CP = {
     augCompositeActive = false, --- Ebon Might owns the Player Power bar
     ebonSensorDesired = false,
     ebonTextLayerRetryPending = false,
+    ebonStyleRetryPending = false,
     augLifecycleRetryPending = false,
     augLifecycleDisablePending = false,
     augLifecycleTarget = nil,
@@ -1524,9 +1525,12 @@ local function ClassPowerOnRareEvent(event, arg1)
             if CP.augLifecycleRetryPending == true
                 or CP.ebonSensorRetryPending == true
                 or CP.ebonTextLayerRetryPending == true
+                or CP.ebonStyleRetryPending == true
             then
                 CP.augLifecycleRetryPending = false
                 CP.augLifecycleTarget = nil
+                --- The Ebon Might restyle re-queues itself if still denied.
+                CP.ebonStyleRetryPending = nil
                 FullRefresh()
                 return
             end
@@ -1905,6 +1909,8 @@ CP.ApplyFontsPublic = function()
         if CP.RefreshEbonStyle then CP.RefreshEbonStyle() end
         CP.ApplyEbonTextStyle()
         CP.SyncNativeAuras()
+        --- A restyle the restricted slot denied waits for combat end.
+        if CP.ebonStyleRetryPending == true then CP_RefreshEventBindings() end
     end
     if PHP.visible then
         PHP._fontStamp = nil
@@ -1925,6 +1931,7 @@ CP.RefreshVisualsPublic = function()
         if CP.RefreshEbonStyle then CP.RefreshEbonStyle() end
         CP.ApplyEbonTextStyle()
         CP.SyncNativeAuras()
+        if CP.ebonStyleRetryPending == true then CP_RefreshEventBindings() end
         if CP.powerType == "IRONFUR" and CP.ironfur and CP.ironfur.RefreshVisual then
             CP.ironfur.RefreshVisual()
         end

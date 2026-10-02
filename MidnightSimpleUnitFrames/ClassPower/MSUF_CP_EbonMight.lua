@@ -162,14 +162,40 @@ builders.EBON_MIGHT = function(E)
         return true
     end
 
+    --- Blizzard restricts the slot after initializeFrame returns
+    --- (DenyTaintedAccessWhenAurasAreSecret, Blizzard_AuraContainerFrameProviders.lua).
+    --- Its bound regions are restyled only while they are mutable, the same
+    --- rule as the other native slots (MSUF_CP_NativeAuras.lua,
+    --- MSUF_CP_ExtraAuras.lua): out of combat, auras not secret, accessible.
+    local function Accessible(region)
+        local canAccess = region and region.CanBeAccessedInContext
+        return type(canAccess) ~= "function" or canAccess(region) == true
+    end
+
+    local function SlotMutable(bar, text)
+        local inCombat = _G.InCombatLockdown
+        if type(inCombat) == "function" and inCombat() == true then return false end
+        local secrets = _G.C_Secrets
+        if secrets and type(secrets.ShouldAurasBeSecret) == "function" and secrets.ShouldAurasBeSecret() then
+            return false
+        end
+        return Accessible(CP.ebonButton) and Accessible(bar) and Accessible(text)
+    end
+
     --- The registered bar and FontString are plain addon-owned regions inside
-    --- the restricted slot subtree, so re-styling them later is legal and does
-    --- not touch the aura data itself. Without this every media, colour, font
-    --- and offset change would stay invisible until the next /reload, because
-    --- the slot is created exactly once per session.
+    --- the restricted slot subtree, so re-styling them later is legal while the
+    --- slot is mutable and does not touch the aura data itself. Without this
+    --- every media, colour, font and offset change would stay invisible until
+    --- the next /reload, because the slot is created exactly once per session.
+    --- A denied restyle waits for PLAYER_REGEN_ENABLED (ebonStyleRetryPending).
     local function RefreshStyle()
         local bar, text = CP.ebonNativeBar, CP.ebonNativeText
         if not (bar or text) then return false end
+        if not SlotMutable(bar, text) then
+            CP.ebonStyleRetryPending = true
+            return false
+        end
+        CP.ebonStyleRetryPending = nil
         local style = CaptureStyle()
         if bar then
             bar:SetStatusBarTexture(style.texture)

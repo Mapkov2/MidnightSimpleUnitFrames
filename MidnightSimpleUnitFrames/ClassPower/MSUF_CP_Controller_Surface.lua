@@ -54,6 +54,7 @@ builders.CONTROLLER_SURFACE = function(E)
         CP.ebonSensorDesired = false
         CP.ebonSensorRetryPending = nil
         CP.ebonTextLayerRetryPending = nil
+        CP.ebonStyleRetryPending = nil
         ExportPublic("MSUF_AugEvokerActive", false)
         return wasActive
     end

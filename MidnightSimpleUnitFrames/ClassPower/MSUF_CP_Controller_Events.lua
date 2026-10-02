@@ -230,6 +230,7 @@ local function CP_RefreshEventBindings()
             or CP.augLifecycleDisablePending == true
             or CP.ebonSensorRetryPending == true
             or CP.ebonTextLayerRetryPending == true
+            or CP.ebonStyleRetryPending == true
         CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", false, "player")
@@ -304,6 +305,7 @@ local function CP_RefreshEventBindings()
         or (GetAutoHideActive() and CP.visible)
         or CP.ebonSensorRetryPending == true
         or CP.ebonTextLayerRetryPending == true
+        or CP.ebonStyleRetryPending == true
         or CP.augLifecycleRetryPending == true
         or CP.augLifecycleDisablePending == true
     local wantDeadAlive = (CP.visible and profile.deadAlive == true) or PHP.visible
