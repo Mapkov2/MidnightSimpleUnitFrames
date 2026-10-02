@@ -1557,24 +1557,13 @@ local function PreviewAuraState(box, kind, index, icon, cfg, targetDots)
     return fn(kind, index, icon._msufPreviewAuraScratch, options)
 end
 
+-- The swipe and duration bar painters are shared with the group preview
+-- (MSUF_Menu2_PreviewHelpers.lua); a unit icon measures itself.
 local function LayoutPreviewAuraSwipe(swipe, icon, size, remainingFrac, reverse)
     if not (swipe and icon) then return end
-    -- Avoid an effectively invisible one-pixel endpoint while keeping the
-    -- shared dummy animation and configured direction obvious.
-    remainingFrac = max(0.08, min(0.92, tonumber(remainingFrac) or 0.48))
     local iconWidth = icon.GetWidth and icon:GetWidth() or tonumber(size) or 1
     local iconHeight = icon.GetHeight and icon:GetHeight() or tonumber(size) or 1
-    local w = max(1, floor(iconWidth * remainingFrac + 0.5))
-    swipe:ClearAllPoints()
-    swipe:SetWidth(w)
-    swipe:SetHeight(max(1, iconHeight))
-    if reverse == true then
-        swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
-        swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
-    else
-        swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
-        swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
-    end
+    MSUF.MSUF2.PreviewHelpers.PaintPreviewAuraSwipe(swipe, icon, iconWidth, iconHeight, remainingFrac, reverse)
 end
 
 local function LayoutPreviewDurationBar(bar, icon, cfg, size, auraState)
@@ -1584,36 +1573,7 @@ local function LayoutPreviewDurationBar(bar, icon, cfg, size, auraState)
     end
     local iconWidth = icon.GetWidth and icon:GetWidth() or tonumber(size) or 1
     local iconHeight = icon.GetHeight and icon:GetHeight() or tonumber(size) or 1
-    local scaleSize = max(1, min(iconWidth, iconHeight))
-    local height = max(1, min(iconHeight, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
-    local inset = max(1, floor(scaleSize / 32 + 0.5))
-    local avail = max(1, iconWidth - (inset * 2))
-    local frac
-    if cfg.durationBarDirection == "ELAPSED" then
-        frac = auraState and auraState.elapsedFrac or 0.38
-    else
-        frac = auraState and auraState.remainingFrac or 0.62
-    end
-    local r, g, b = AuraDurationBarColor()
-    bar:SetVertexColor(r, g, b, 0.92)
-    frac = max(0.02, min(1, tonumber(frac) or 0.62))
-    bar:ClearAllPoints()
-    bar:SetHeight(height)
-    if auraState then
-        bar:SetWidth(max(1, floor(avail * frac + 0.5)))
-        if cfg.durationBarPosition == "TOP" then
-            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        else
-            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        end
-    elseif cfg.durationBarPosition == "TOP" then
-        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-    else
-        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-    end
-    bar:Show()
+    MSUF.MSUF2.PreviewHelpers.PaintPreviewDurationBar(bar, icon, cfg, iconWidth, iconHeight, auraState)
 end
 
 --- Places a stack or cooldown text on a dummy icon. Anchor, scaled offsets and

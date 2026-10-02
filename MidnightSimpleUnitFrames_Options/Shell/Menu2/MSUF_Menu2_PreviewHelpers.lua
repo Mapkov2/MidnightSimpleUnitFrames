@@ -3303,6 +3303,60 @@ local function ReadPreviewBarsBool(key, default)
 end
 H.ReadPreviewBarsBool = ReadPreviewBarsBool
 
+--- Dummy cooldown swipe over a preview aura icon of width x height: the
+--- remaining share of the width (8-92 %) from the right edge, or from the
+--- left edge when reversed. The unit and group previews both paint it.
+function H.PaintPreviewAuraSwipe(swipe, icon, width, height, remainingFrac, reverse)
+    local max = math.max
+    remainingFrac = max(0.08, min(0.92, tonumber(remainingFrac) or 0.48))
+    swipe:ClearAllPoints()
+    swipe:SetWidth(max(1, floor(width * remainingFrac + 0.5)))
+    swipe:SetHeight(max(1, height))
+    if reverse == true then
+        swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
+        swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+    else
+        swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
+        swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+    end
+end
+
+--- Dummy duration bar inside a preview aura icon of width x height: the
+--- configured height and edge, inset by 1/32 of the icon, and with an aura
+--- state the elapsed or remaining share of the width (else the full width).
+function H.PaintPreviewDurationBar(bar, icon, cfg, width, height, auraState)
+    local max = math.max
+    local scaleSize = max(1, min(width, height))
+    local barHeight = max(1, min(height, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
+    local inset = max(1, floor(scaleSize / 32 + 0.5))
+    local frac
+    if cfg.durationBarDirection == "ELAPSED" then
+        frac = auraState and auraState.elapsedFrac or 0.38
+    else
+        frac = auraState and auraState.remainingFrac or 0.62
+    end
+    local r, g, b = MSUF.MSUF_Auras3.GetDurationBarColor()
+    bar:SetVertexColor(r, g, b, 0.92)
+    frac = max(0.02, min(1, tonumber(frac) or 0.62))
+    bar:ClearAllPoints()
+    bar:SetHeight(barHeight)
+    if auraState then
+        bar:SetWidth(max(1, floor(max(1, width - inset * 2) * frac + 0.5)))
+        if cfg.durationBarPosition == "TOP" then
+            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        else
+            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        end
+    elseif cfg.durationBarPosition == "TOP" then
+        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+    else
+        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+    end
+    bar:Show()
+end
+
 function H.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
     return function(box)
         if not (box and box._animationEnabled == true) then return end

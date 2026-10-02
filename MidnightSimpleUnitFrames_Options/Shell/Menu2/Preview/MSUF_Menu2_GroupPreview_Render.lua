@@ -845,7 +845,6 @@ Render.PaintGroupPreviewPortrait = PaintGroupPreviewPortrait
 
 local function DefaultAuraGrowth() return { px = 1, py = 0, sx = 0, sy = -1 } end
 local function DefaultClampLayer(value, fallback) return tonumber(value) or fallback or 0 end
-local AuraDurationBarColor = MSUF.MSUF_Auras3.GetDurationBarColor
 local NormalizeFrameStrata = _G.MSUF_NormalizeFrameStrata
 local PREVIEW_UNITFRAME_STRATA = "MEDIUM"
 -- Raise the cached mock above the preview canvas, then use that exact level as
@@ -1598,57 +1597,20 @@ local function GroupPreviewAuraState(box, previewAnimation, groupKey, index, han
     options.decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
     return buildAuraState(groupKey, index, scratch, options, box._animationElapsed)
 end
+-- The swipe and duration bar painters are shared with the unit preview
+-- (MSUF_Menu2_PreviewHelpers.lua); a group lane icon is size x size.
 local function GroupAuraPreviewSwipe(swipe, icon, size, remainingFrac, reverse)
     if not (swipe and icon) then return end
-    local max, min, floor = math.max, math.min, math.floor
-    remainingFrac = max(0.08, min(0.92, tonumber(remainingFrac) or 0.48))
-    local w = max(1, floor((tonumber(size) or 1) * remainingFrac + 0.5))
-    swipe:ClearAllPoints()
-    swipe:SetWidth(w)
-    swipe:SetHeight(max(1, tonumber(size) or 1))
-    if reverse == true then
-        swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
-        swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
-    else
-        swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
-        swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
-    end
+    size = tonumber(size) or 1
+    M.PreviewHelpers.PaintPreviewAuraSwipe(swipe, icon, size, size, remainingFrac, reverse)
 end
 local function GroupAuraDurationBar(bar, icon, cfg, size, auraState)
     if not (bar and icon and cfg and cfg.showDurationBar == true) then
         if bar then bar:Hide() end
         return
     end
-    local max, min, floor = math.max, math.min, math.floor
-    size = max(1, tonumber(size) or 1)
-    local height = max(1, min(size, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
-    local inset = max(1, floor(size / 32 + 0.5))
-    local frac
-    if cfg.durationBarDirection == "ELAPSED" then
-        frac = auraState and auraState.elapsedFrac or 0.38
-    else
-        frac = auraState and auraState.remainingFrac or 0.62
-    end
-    local r, g, b = AuraDurationBarColor()
-    bar:SetVertexColor(r, g, b, 0.92)
-    frac = max(0.02, min(1, tonumber(frac) or 0.62))
-    bar:ClearAllPoints()
-    bar:SetHeight(height)
-    if auraState then
-        bar:SetWidth(max(1, floor(max(1, size - inset * 2) * frac + 0.5)))
-        if cfg.durationBarPosition == "TOP" then
-            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        else
-            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        end
-    elseif cfg.durationBarPosition == "TOP" then
-        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-    else
-        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-    end
-    bar:Show()
+    size = math.max(1, tonumber(size) or 1)
+    M.PreviewHelpers.PaintPreviewDurationBar(bar, icon, cfg, size, size, auraState)
 end
 --- Animation tick for one aura lane: timers, stacks, swipes and duration bars
 --- of the icons the last layout placed (Stage.LayoutAuraGroup records it).
