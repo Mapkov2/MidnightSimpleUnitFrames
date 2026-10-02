@@ -3404,6 +3404,39 @@ function H.LayoutPowerBorderEdges(host, edge, roundedPower)
     host:Show()
 end
 
+--- The dispel overlay of a unit or group preview: the region covers the
+--- target (FULL) or a thickness-wide strip along one edge (TOP, BOTTOM, LEFT,
+--- RIGHT), filled with the preview dispel type's colour, or with the spec's
+--- dispel colour where the aura backend paints none.
+function H.PaintDispelOverlayRegion(region, target, style, thickness, a3, dispel)
+    region:ClearAllPoints()
+    if style == "TOP" then
+        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        region:SetHeight(thickness)
+    elseif style == "BOTTOM" then
+        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        region:SetHeight(thickness)
+    elseif style == "LEFT" then
+        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        region:SetWidth(thickness)
+    elseif style == "RIGHT" then
+        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        region:SetWidth(thickness)
+    else
+        region:SetAllPoints(target)
+    end
+    if a3 and type(a3.SetDispelColorTexture) == "function" then
+        a3.SetDispelColorTexture(region, a3.GetDispelColorPreviewType(), true, 1)
+    else
+        region:SetColorTexture(tonumber(dispel and dispel.r) or 0.25,
+            tonumber(dispel and dispel.g) or 0.75, tonumber(dispel and dispel.b) or 1, 1)
+    end
+end
+
 function H.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
     return function(box)
         if not (box and box._animationEnabled == true) then return end

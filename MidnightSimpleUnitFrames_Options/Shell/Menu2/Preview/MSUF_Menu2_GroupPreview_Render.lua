@@ -599,34 +599,8 @@ local function PaintGroupPreviewDispelOverlay(scene)
     local style = tostring(overlay.dispelOverlayStyle or "FULL"):upper()
     local thickness = scene.S.ScaleValue(tonumber(scene.runtimeBorder.highlightThickness) or 3,
         scene.previewScale, 1)
-    region:ClearAllPoints()
-    if style == "TOP" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetHeight(thickness)
-    elseif style == "BOTTOM" then
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetHeight(thickness)
-    elseif style == "LEFT" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetWidth(thickness)
-    elseif style == "RIGHT" then
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetWidth(thickness)
-    else
-        region:SetAllPoints(target)
-    end
-    local a3 = scene.MSUF and scene.MSUF.MSUF_Auras3
-    if a3 and type(a3.SetDispelColorTexture) == "function" then
-        a3.SetDispelColorTexture(region, a3.GetDispelColorPreviewType(), true, 1)
-    else
-        local color = scene.runtimeSpec and scene.runtimeSpec.dispel
-        region:SetColorTexture(tonumber(color and color.r) or 0.25,
-            tonumber(color and color.g) or 0.75, tonumber(color and color.b) or 1, 1)
-    end
+    M.PreviewHelpers.PaintDispelOverlayRegion(region, target, style, thickness,
+        scene.MSUF and scene.MSUF.MSUF_Auras3, scene.runtimeSpec and scene.runtimeSpec.dispel)
     local alpha = math.max(0, math.min(1, tonumber(overlay.dispelOverlayAlpha) or 0.35))
     local layerAlpha = scene.soloLayer and scene.soloLayer ~= "dispelOverlay" and 0.15 or 1
     region:SetAlpha(alpha * layerAlpha)

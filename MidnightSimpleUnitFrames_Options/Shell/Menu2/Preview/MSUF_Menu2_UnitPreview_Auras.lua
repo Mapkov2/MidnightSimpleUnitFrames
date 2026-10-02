@@ -1072,34 +1072,8 @@ function Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel, overlayA
         local target = overlay.onHealth ~= false and mock.hp or (mock.healthBar or mock)
         local style = tostring(overlay.style or "FULL"):upper()
         local thickness = max(1, S(runtimeSpec and runtimeSpec.border and runtimeSpec.border.highlightThickness or 3))
-        region:ClearAllPoints()
-        if style == "TOP" then
-            region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-            region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-            region:SetHeight(thickness)
-        elseif style == "BOTTOM" then
-            region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-            region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-            region:SetHeight(thickness)
-        elseif style == "LEFT" then
-            region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-            region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-            region:SetWidth(thickness)
-        elseif style == "RIGHT" then
-            region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-            region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-            region:SetWidth(thickness)
-        else
-            region:SetAllPoints(target)
-        end
-        local a3 = MSUF and MSUF.MSUF_Auras3
-        if a3 and type(a3.SetDispelColorTexture) == "function" then
-            a3.SetDispelColorTexture(region, a3.GetDispelColorPreviewType(), true, 1)
-        else
-            local color = runtimeSpec and runtimeSpec.dispel or nil
-            region:SetColorTexture(tonumber(color and color.r) or 0.25,
-                tonumber(color and color.g) or 0.75, tonumber(color and color.b) or 1, 1)
-        end
+        MSUF.MSUF2.PreviewHelpers.PaintDispelOverlayRegion(region, target, style, thickness,
+            MSUF and MSUF.MSUF_Auras3, runtimeSpec and runtimeSpec.dispel or nil)
         region:SetAlpha(ClampNumber(overlay.alpha, 0.35, 0, 1))
         region:Show()
         overlayHost:Show()
