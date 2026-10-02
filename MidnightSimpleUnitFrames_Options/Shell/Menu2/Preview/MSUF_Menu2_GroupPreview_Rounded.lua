@@ -2,25 +2,37 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Group preview rounded-frame and outline helpers.
 ---
 --- This isolates the mask/outline subsystem from the native group preview
---- renderer, keeping the renderer focused on layout and composition.
-local _, MSUF = ...
+--- renderer, keeping the renderer focused on layout and composition. It loads
+--- before the native renderer, which reads its exports (Rounded.*) at load.
+local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local EnsureDB = M.EnsureDB
 local Rounded = M.GroupPreviewRounded or {}
 M.GroupPreviewRounded = Rounded
-function Rounded.Install(deps)
-    deps = deps or {}
-    local PreviewHelpers = deps.PreviewHelpers or {}
-    local Specs = deps.Specs or {}
-    local WHITE8X8 = deps.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
-    local GF_PREVIEW_ROUNDED_MASK = deps.ROUNDED_MASK
-    local GF_PREVIEW_ROUNDED_EDGE = deps.ROUNDED_EDGE
-    local GF_PREVIEW_ROUNDED_STRENGTH = 3
-    local ReadBarsBool = deps.ReadBarsBool
-    local Round = deps.Round
-    local HealPredAnchorMode = deps.HealPredAnchorMode
+local floor = math.floor
+local PreviewHelpers = M.PreviewHelpers or {}
+local Specs = M.GroupPreviewSpecs or {}
+local WHITE8X8 = Specs.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
+local maskRoot = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
+local GF_PREVIEW_ROUNDED_MASK = Specs.ROUNDED_MASK or (maskRoot .. "rounded_clean_mask_s3.png")
+local GF_PREVIEW_ROUNDED_EDGE = Specs.ROUNDED_EDGE or (maskRoot .. "rounded_clean_edge_s3.png")
+local GF_PREVIEW_ROUNDED_STRENGTH = 3
+local ReadBarsBool = PreviewHelpers.ReadPreviewBarsBool
+local function Round(value)
+    return floor((tonumber(value) or 0) + 0.5)
+end
+local function NormalizeAnchorMode(value, fallback)
+    local mode = tonumber(value) or fallback or 3
+    if mode < 1 or mode > 5 then mode = fallback or 3 end
+    return mode
+end
+local function HealPredAnchorMode(conf)
+    if conf and conf.hlOverride == true and conf.healPredAnchorMode ~= nil then return NormalizeAnchorMode(conf.healPredAnchorMode, 3) end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    return NormalizeAnchorMode(gen and gen.healPredAnchorMode, 3)
+end
 local function FrameStyle(conf)
     local explicit = conf and conf.frameBarShape
     if explicit == "SLANTED" and ReadBarsBool("slantedBarsEnabled", true)
@@ -334,5 +346,6 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     if mock.SetBackdropBorderColor then mock:SetBackdropBorderColor(0, 0, 0, 0) end
     return true
 end
-    return { SetOutlineShown = SetOutlineShown, LayoutOutline = LayoutOutline, BaseEdgeColor = BaseEdgeColor, ApplyRounded = ApplyRounded }
-end
+Rounded.SetOutlineShown, Rounded.LayoutOutline = SetOutlineShown, LayoutOutline
+Rounded.BaseEdgeColor, Rounded.ApplyRounded = BaseEdgeColor, ApplyRounded
+Rounded.Round, Rounded.HealPredAnchorMode = Round, HealPredAnchorMode

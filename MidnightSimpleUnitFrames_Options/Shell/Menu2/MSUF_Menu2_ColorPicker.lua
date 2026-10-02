@@ -1,18 +1,18 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
--- InstallColorPicker: isolated ownership, bound once during addon initialization.
+-- Color buttons (W.Color) and the menu's Color Picker Plus panel beside
+-- Blizzard's ColorPickerFrame. Loads right after MSUF_Menu2_Widgets.lua and
+-- reads the row cursor and search helpers it publishes.
 local _, MSUF = ...
 local M = MSUF.MSUF2
-M.InstallColorPicker = function(dependencies)
 local floor = math.floor
 local max = math.max
 local min = math.min
-local M = dependencies.M
-local NextRow = dependencies.NextRow
-local RegisterSearchObject = dependencies.RegisterSearchObject
-local SetSearchText = dependencies.SetSearchText
-local T = dependencies.T
-local Tr = dependencies.Tr
-local W = dependencies.W
+local W = M.Widgets
+local T = M.Theme
+local Tr = M.TranslateText
+local NextRow = W.NextRow
+local RegisterSearchObject = W.RegisterSearchObject
+local SetSearchText = W._Shared.SetSearchText
 local function ColorSetRGB(self, r, g, b)
     self._msuf2R = tonumber(r) or 1
     self._msuf2G = tonumber(g) or 1
@@ -418,6 +418,4 @@ function W.Color(section, label)
     return btn
 end
 
-
-return HexColor
-end
+W.ParseHexColor = HexColor

@@ -684,9 +684,6 @@ local function HealthColor(conf, pct, classToken)
         conf.healthCustomG or 0.8,
         conf.healthCustomB or 0.2
 end
-local maskRoot = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
-local GF_PREVIEW_ROUNDED_MASK = Specs.ROUNDED_MASK or (maskRoot .. "rounded_clean_mask_s3.png")
-local GF_PREVIEW_ROUNDED_EDGE = Specs.ROUNDED_EDGE or (maskRoot .. "rounded_clean_edge_s3.png")
 local GF_PREVIEW_MIN_W = Specs.MIN_W or 380
 local GF_PREVIEW_MIN_H = Specs.MIN_H or 130
 local Tr = M.Tr
@@ -866,9 +863,10 @@ local function CurrentSpellColor(kind)
     local c = info and info.color
     return (c and c[1]) or 0.69, (c and c[2]) or 0.50, (c and c[3]) or 0.88
 end
-local function Round(value)
-    return floor((tonumber(value) or 0) + 0.5)
-end
+-- Rounding, the heal prediction anchor and the rounded/outline painters are
+-- the rounded module's (MSUF_Menu2_GroupPreview_Rounded.lua, loaded first).
+local GFRounded = M.GroupPreviewRounded or {}
+local Round = GFRounded.Round
 local function ScaleValue(value, scale, minValue)
     local v = Round((tonumber(value) or 0) * (tonumber(scale) or 1))
     if minValue ~= nil and v < minValue then v = minValue end
@@ -892,11 +890,6 @@ local StepZoom = GFZoomPan.Step or F.Noop
 local StartPan = GFZoomPan.Start or F.False
 local StopPan = GFZoomPan.Stop or F.Noop
 local ReadBarsBool = MSUF.MSUF2.PreviewHelpers.ReadPreviewBarsBool
-local function NormalizeAnchorMode(value, fallback)
-    local mode = tonumber(value) or fallback or 3
-    if mode < 1 or mode > 5 then mode = fallback or 3 end
-    return mode
-end
 local function SharedHealPredictionEnabled()
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if type(gen) ~= "table" then return false end
@@ -910,21 +903,7 @@ local function HealPredictionEnabled(kind, conf)
     if conf and conf.hlOverride == true and conf.healPredEnabled ~= nil then return conf.healPredEnabled == true end
     return SharedHealPredictionEnabled()
 end
-local function HealPredAnchorMode(conf)
-    if conf and conf.hlOverride == true and conf.healPredAnchorMode ~= nil then return NormalizeAnchorMode(conf.healPredAnchorMode, 3) end
-    local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    return NormalizeAnchorMode(gen and gen.healPredAnchorMode, 3)
-end
-local GFRounded = (M.GroupPreviewRounded and M.GroupPreviewRounded.Install and M.GroupPreviewRounded.Install({
-    PreviewHelpers = PreviewHelpers,
-    Specs = Specs,
-    WHITE8X8 = WHITE8X8,
-    ROUNDED_MASK = GF_PREVIEW_ROUNDED_MASK,
-    ROUNDED_EDGE = GF_PREVIEW_ROUNDED_EDGE,
-    ReadBarsBool = ReadBarsBool,
-    Round = Round,
-    HealPredAnchorMode = HealPredAnchorMode,
-})) or {}
+local HealPredAnchorMode = GFRounded.HealPredAnchorMode
 local SetOutlineShown = GFRounded.SetOutlineShown or F.Noop
 local LayoutOutline = GFRounded.LayoutOutline or F.Noop
 local BaseEdgeColor = GFRounded.BaseEdgeColor or F.BlackRGBA
