@@ -6652,6 +6652,8 @@ L["Profile: %s"] = "配置文件：%s"
 L["Support"] = "辅助"
 L["Utility"] = "功能"
 L["Other"] = "其他"
+-- Group aura filter tooltips.
+L["Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. The exact list overrides duration filters so temporary states Blizzard reports without a duration, such as Shroud membership, remain visible."] = "显示 MSUF 从每位小队或团队成员身上精选的高价值增益：重要的防御、治疗、进攻和辅助冷却技能，以及潜行者的团队潜行等战术状态和暗影之舞等常用高价值冷却技能。使用暴雪原生的光环过滤。精确列表优先于持续时间过滤，因此暴雪报告为无持续时间的临时状态（例如潜行者的团队潜行）仍会显示。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

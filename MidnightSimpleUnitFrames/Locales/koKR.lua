@@ -6456,6 +6456,8 @@ L["Profile: %s"] = "프로필: %s"
 L["Support"] = "지원"
 L["Utility"] = "유틸리티"
 L["Other"] = "기타"
+-- Group aura filter tooltips.
+L["Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. The exact list overrides duration filters so temporary states Blizzard reports without a duration, such as Shroud membership, remain visible."] = "모든 파티원 또는 공격대원에게서 MSUF가 선별한 중요한 버프를 표시합니다: 주요 방어, 치유, 공격 및 지원 재사용 대기시간, 도적의 파티 은신 같은 전술 상태, 어둠의 춤처럼 자주 쓰이는 중요한 재사용 대기시간이 포함됩니다. Blizzard의 기본 오라 필터를 사용합니다. 정확한 목록이 지속시간 필터보다 우선하므로, 도적의 파티 은신처럼 Blizzard가 지속시간 없이 알려 주는 일시적인 상태도 계속 표시됩니다."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

@@ -14,7 +14,7 @@ MidnightSimpleUnitFrames/Locales/enGB.lua	*	English (UK) base pack. Same identit
 *	Current profile: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames or _Options. Kept, not deleted, so no dynamic lookup can regress.
 *	MSUF Edit  	Legacy label fragment; no reference in MidnightSimpleUnitFrames or _Options. Kept, not deleted, so no dynamic lookup can regress.
 *	 Private	Legacy label fragment; no reference in MidnightSimpleUnitFrames or _Options. Kept, not deleted, so no dynamic lookup can regress.
-*	Boss 	Concatenated raw into a frame label (MSUF_Auras3_EditMode_Config.lua:180, MSUF_EditMode_AuraPopup.lua:79); never passed to a translate call, so translating the fragment alone would have no effect.
+*	Boss 	Concatenated raw into a frame label (MSUF_EditMode_AuraPopup.lua:79); never passed to a translate call, so translating the fragment alone would have no effect. The aura Edit Mode preview header uses the "Boss %s" format key instead.
 *	Expiring: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames or _Options. Kept, not deleted, so no dynamic lookup can regress.
 *	Missing: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames or _Options. Kept, not deleted, so no dynamic lookup can regress.
 *	Quick Setup applied!\n\nClass Power + Power Bar are detached\nand positioned at screen center.\n\nEssential Cooldowns not detected.\nEnable it for automatic anchoring.\n\nUse Edit Mode for fine-tuning.	Superseded popup wording; MSUF_Menu2_AdvancedClassPower.lua now builds different text (lines 690-725).
