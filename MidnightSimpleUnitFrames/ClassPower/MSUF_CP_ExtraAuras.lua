@@ -148,9 +148,11 @@ function MSUF.CPBuilders.ExtraAuras(E)
             tostring(b.ignorePainTimeMarker ~= false), ArcaneText(), TextFrom(),
             tostring(b.arcaneWindowWarnLastGCD == true), gcd }, ":")
         if state.button == button and state.signature == signature then return end
-        button:ClearAllPoints(); button:SetAllPoints(state.host)
+        button:ClearAllPoints()
+        button:SetAllPoints(state.host)
         local bar = state.bar or PixelLayoutRegion(CreateFrame("StatusBar", nil, button))
-        bar:SetAllPoints(button); bar:SetStatusBarTexture(texture)
+        bar:SetAllPoints(button)
+        bar:SetStatusBarTexture(texture)
         bar:SetStatusBarColor(r, g, blue, 1)
         button:SetDurationBar(bar, { direction = Enum.StatusBarTimerDirection.RemainingTime,
             interpolation = Enum.StatusBarInterpolation.Immediate })
@@ -165,8 +167,10 @@ function MSUF.CPBuilders.ExtraAuras(E)
         end
         button:SetDurationText(text, options)
         if pain then
-            local marker = state.marker or PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY", nil, 7), true); state.marker = marker
-            marker:SetColorTexture(1, 1, 1, 1); marker:SetWidth(2)
+            local marker = state.marker or PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY", nil, 7), true)
+            state.marker = marker
+            marker:SetColorTexture(1, 1, 1, 1)
+            marker:SetWidth(2)
             marker:SetPoint("TOP", bar:GetStatusBarTexture(), "TOPRIGHT")
             marker:SetPoint("BOTTOM", bar:GetStatusBarTexture(), "BOTTOMRIGHT")
             marker:SetShown(b.ignorePainTimeMarker ~= false)
@@ -175,13 +179,15 @@ function MSUF.CPBuilders.ExtraAuras(E)
     end
     local function Park(state)
         if state.sensor and state.active then state.sensor:SetEnabled(false) end
-        state.active = false; state.host:Hide()
+        state.active = false
+        state.host:Hide()
     end
     local function Ensure(key, row)
         local b = E.db.bars
         local state = states[key]
         if not state then
-            state = { key = key, host = PixelLayoutRegion(CreateFrame("Frame", nil, E.GetPlayerFrame())) }; states[key] = state
+            state = { key = key, host = PixelLayoutRegion(CreateFrame("Frame", nil, E.GetPlayerFrame())) }
+            states[key] = state
             -- The Arcane Soul slot covers the Arcane Surge slot at the same place.
             if key == "SOUL" and states.ARCANE and states.ARCANE.host.GetFrameLevel then
                 state.host:SetFrameLevel(states.ARCANE.host:GetFrameLevel() + 2)
@@ -196,7 +202,10 @@ function MSUF.CPBuilders.ExtraAuras(E)
             state.host:SetSize(width, height)
             state.placement = placement
         end
-        if not Mutable(state) then pending = true; return end
+        if not Mutable(state) then
+            pending = true
+            return
+        end
         if state.button then Initialize(state, state.button) end
         local A3 = SensorAPI()
         if not state.sensor and A3 then
@@ -205,7 +214,10 @@ function MSUF.CPBuilders.ExtraAuras(E)
             state.sensor = A3.CreateClassPowerAuraSensor(state.host, "msuf_cp_extra_" .. key, spells, function(button) Initialize(state, button) end)
         end
         if state.sensor then
-            if not state.active then state.sensor:SetEnabled(true); state.active = true end
+            if not state.active then
+                state.sensor:SetEnabled(true)
+                state.active = true
+            end
             state.host:Show()
         else pending = true end
     end
@@ -221,9 +233,15 @@ function MSUF.CPBuilders.ExtraAuras(E)
     -- Edit Mode sample: one bar, labelled with the client's own spell name.
     local function Preview(pain, arcane)
         if disabled or not (editActive or _G.MSUF_UnitEditModeActive == true)
-            or not (pain or arcane) or (InCombatLockdown and InCombatLockdown()) then HidePreview(); return end
+            or not (pain or arcane) or (InCombatLockdown and InCombatLockdown()) then
+            HidePreview()
+            return
+        end
         local b, owner = E.db.bars, E.GetPlayerFrame()
-        if not owner then HidePreview(); return end
+        if not owner then
+            HidePreview()
+            return
+        end
         if not previewHost then
             previewHost = PixelLayoutRegion(CreateFrame("Frame", nil, owner))
             previewHost:EnableMouse(false)
@@ -240,10 +258,13 @@ function MSUF.CPBuilders.ExtraAuras(E)
             bar.text:SetPoint("CENTER", bar, "CENTER")
             previewBars[1] = bar
         end
-        bar:ClearAllPoints(); bar:SetPoint("TOPLEFT", previewHost, "TOPLEFT", 0, 0)
-        bar:SetSize(width, height); bar:SetStatusBarTexture(E.Texture(b.classPowerTexture))
+        bar:ClearAllPoints()
+        bar:SetPoint("TOPLEFT", previewHost, "TOPLEFT", 0, 0)
+        bar:SetSize(width, height)
+        bar:SetStatusBarTexture(E.Texture(b.classPowerTexture))
         bar:SetStatusBarColor(RGB(pain and "ignorePainColor" or "arcaneWindowColor", pain and PAIN_COLOR or ARCANE_COLOR))
-        bar:SetMinMaxValues(0, 1); bar:SetValue(pain and .65 or .6)
+        bar:SetMinMaxValues(0, 1)
+        bar:SetValue(pain and .65 or .6)
         bar.text:SetFont(Font())
         local spellAPI = _G.C_Spell
         local name = spellAPI and spellAPI.GetSpellName and spellAPI.GetSpellName(pain and IGNORE_PAIN or ARCANE_SURGE)
@@ -253,7 +274,8 @@ function MSUF.CPBuilders.ExtraAuras(E)
         end
         bar.text:SetText(name)
         bar:Show()
-        previewHost:Show(); previewShown = true
+        previewHost:Show()
+        previewShown = true
     end
     local function Capture()
         local b = E.db.bars
@@ -281,21 +303,39 @@ function MSUF.CPBuilders.ExtraAuras(E)
                 if not previewShown then Preview(pain, arcane) end
                 return previewShown and previewHost or nil
             end,
-            isEnabled = function() local pain, arcane = Eligible(); return not disabled and (pain or arcane) end,
+            isEnabled = function()
+                local pain, arcane = Eligible()
+                return not disabled and (pain or arcane)
+            end,
             captureState = Capture, restoreState = Restore,
             movePosition = function(request)
                 local state = request.state
                 return Restore({ x = (tonumber(state.x) or 0) + request.deltaX,
                     y = (tonumber(state.y) or -18) + request.deltaY, width = state.width, height = state.height })
             end,
-            onSessionChanged = function(active) editActive = active; if disabled then HidePreview() else Refresh() end end,
+            onSessionChanged = function(active)
+                editActive = active
+                if disabled then
+                    HidePreview()
+                else
+                    Refresh()
+                end
+            end,
             extraControls = {
                 { id = "width", label = translate("Resource bar width"), kind = "number", min = 40, max = 1000, step = 1,
                     get = function() return tonumber(E.db.bars.resourceExtraWidth) or 220 end,
-                    set = function(value) local state = Capture(); state.width = value; return Restore(state) end },
+                    set = function(value)
+                        local state = Capture()
+                        state.width = value
+                        return Restore(state)
+                    end },
                 { id = "height", label = translate("Resource bar height"), kind = "number", min = 2, max = 30, step = 1,
                     get = function() return tonumber(E.db.bars.resourceExtraHeight) or 8 end,
-                    set = function(value) local state = Capture(); state.height = value; return Restore(state) end },
+                    set = function(value)
+                        local state = Capture()
+                        state.height = value
+                        return Restore(state)
+                    end },
             },
         }) == true
     end
@@ -304,13 +344,19 @@ function MSUF.CPBuilders.ExtraAuras(E)
         RegisterMover()
         local pain, arcane = Eligible()
         Preview(pain, arcane)
-        if not Mutable() then pending = true; return end
+        if not Mutable() then
+            pending = true
+            return
+        end
         pending = false
         for key, state in pairs(states) do
             if (key == "PAIN" and not pain) or (key ~= "PAIN" and not arcane) then Park(state) end
         end
         if pain then Ensure("PAIN", 0) end
-        if arcane then Ensure("ARCANE", 0); Ensure("SOUL", 0) end
+        if arcane then
+            Ensure("ARCANE", 0)
+            Ensure("SOUL", 0)
+        end
     end
     -- Haste changes the global cooldown: only the addon-owned formatter rules
     -- and colour curve of the Arcane slots change, also in combat; the bound
@@ -333,8 +379,12 @@ function MSUF.CPBuilders.ExtraAuras(E)
     return { Refresh = Refresh, RefreshHaste = RefreshHaste,
         UsesHaste = function() return not disabled and ArcaneActive() and UsesGCD() end,
         IsPending = function() return pending end, Disable = function()
-        disabled = true; HidePreview()
-        if not Mutable() then pending = true; return end
+        disabled = true
+        HidePreview()
+        if not Mutable() then
+            pending = true
+            return
+        end
         pending = false
         for _, state in pairs(states) do Park(state) end
     end }

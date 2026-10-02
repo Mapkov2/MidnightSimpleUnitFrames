@@ -742,9 +742,12 @@ modeBuilders.SEGMENTED = function(E)
                     if isFilled then
                         CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                     else
-                        local dR = chargedR * 0.45; if dR < 0.05 then dR = 0.05 end
-                        local dG = chargedG * 0.45; if dG < 0.05 then dG = 0.05 end
-                        local dB = chargedB * 0.45; if dB < 0.05 then dB = 0.05 end
+                        local dR = chargedR * 0.45
+                        if dR < 0.05 then dR = 0.05 end
+                        local dG = chargedG * 0.45
+                        if dG < 0.05 then dG = 0.05 end
+                        local dB = chargedB * 0.45
+                        if dB < 0.05 then dB = 0.05 end
                         CP_StampVertexColor(bar._bg, dR, dG, dB, 1)
                     end
                 elseif useSlotColors then
@@ -860,9 +863,16 @@ modeBuilders.FRACTIONAL = function(E)
             local bar = CP.bars[i]
             if bar then
                 CP_StampMinMax(bar, 0, 1)
-                if i <= fullBars then CP_SetPowerValue(bar, 1, smoothInterp); CP_StampAlpha(bar, filledAlpha)
-                elseif i == fullBars + 1 and partial > 0.001 then CP_SetPowerValue(bar, partial, smoothInterp); CP_StampAlpha(bar, filledAlpha)
-                else CP_SetPowerValue(bar, 0, smoothInterp); CP_StampAlpha(bar, emptyAlpha) end
+                if i <= fullBars then
+                    CP_SetPowerValue(bar, 1, smoothInterp)
+                    CP_StampAlpha(bar, filledAlpha)
+                elseif i == fullBars + 1 and partial > 0.001 then
+                    CP_SetPowerValue(bar, partial, smoothInterp)
+                    CP_StampAlpha(bar, filledAlpha)
+                else
+                    CP_SetPowerValue(bar, 0, smoothInterp)
+                    CP_StampAlpha(bar, emptyAlpha)
+                end
                 if bar._msufCPVisualVersion ~= visualVersion or bar._msufCPFullColor ~= isFull then
                     local slotR = useSlotColors and visual.slotR and visual.slotR[i]
                     CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),

@@ -60,7 +60,10 @@ function MSUF.CPBuilders.ResourceExtras(E)
     end
     Refresh = function()
         disabled = false
-        if InCombat() then events:RegisterEvent("PLAYER_REGEN_ENABLED"); return end
+        if InCombat() then
+            events:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
         local b = E.db.bars or {}
         events:UnregisterAllEvents()
         RefreshHelper("ExtraAuras", b.showIgnorePain == true or b.showArcaneWindow == true)

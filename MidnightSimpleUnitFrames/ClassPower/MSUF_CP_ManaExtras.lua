@@ -17,9 +17,25 @@ function MSUF.CPBuilders.ManaExtras(E)
     local Refresh
     local events=CreateFrame("Frame")
     local function Number(value) return E.NotSecret(value) and type(value)=="number" and value==value and value>-math.huge and value<math.huge end
-    local function HidePrediction() if state.prediction then state.prediction:Hide() end;state.cost=nil;state.hasCost=false end
-    local function HideFive() state.fiveUntil=nil;if state.five then state.five:Hide() end end
-    local function HideTick() state.tickUntil=nil;if state.tick then state.tick:Hide() end end
+    local function HidePrediction()
+        if state.prediction then
+            state.prediction:Hide()
+        end
+        state.cost=nil
+        state.hasCost=false
+    end
+    local function HideFive()
+        state.fiveUntil=nil
+        if state.five then
+            state.five:Hide()
+        end
+    end
+    local function HideTick()
+        state.tickUntil=nil
+        if state.tick then
+            state.tick:Hide()
+        end
+    end
     -- One persistent callback per strip: a later start moves the deadline and
     -- the earlier callback finds it in the future. No timer objects.
     local function ExpireFive() if state.fiveUntil and GetTime()>=state.fiveUntil-.01 then HideFive() end end
@@ -72,7 +88,8 @@ function MSUF.CPBuilders.ManaExtras(E)
         for _, key in ipairs({"five", "tick"}) do
             if (key == "five" and state.rule) or (key == "tick" and state.ticks) then
                 local bar = SampleBar(key, host)
-                bar:SetParent(host); bar:ClearAllPoints()
+                bar:SetParent(host)
+                bar:ClearAllPoints()
                 local point, relative, offset = key == "five" and "BOTTOM" or "TOP",
                     key == "five" and "TOP" or "BOTTOM", key == "five" and 1 or -1
                 bar:SetPoint(point .. "LEFT", host, relative .. "LEFT", 0, offset)
@@ -81,7 +98,9 @@ function MSUF.CPBuilders.ManaExtras(E)
                 bar:SetFrameLevel(host:GetFrameLevel() + 2)
                 Color(bar, key == "five" and "manaRegenPauseColor" or "manaGainPulseColor",
                     key == "five" and 1 or .3, key == "five" and .65 or 1, key == "five" and .2 or .7)
-                bar:SetMinMaxValues(0, 1); bar:SetValue(key == "five" and .6 or .5); bar:Show()
+                bar:SetMinMaxValues(0, 1)
+                bar:SetValue(key == "five" and .6 or .5)
+                bar:Show()
             end
         end
         if not state.preview or not state.predictionReady then return end
@@ -92,9 +111,12 @@ function MSUF.CPBuilders.ManaExtras(E)
         if not PublicRegion(fill) then return end
         for _, mask in ipairs(old) do fill:RemoveMaskTexture(mask) end
         state.sampleMasks = {}
-        bar:SetParent(host); bar:ClearAllPoints(); bar:SetSize(state.width, state.height)
+        bar:SetParent(host)
+        bar:ClearAllPoints()
+        bar:SetSize(state.width, state.height)
         bar:SetFrameLevel(host:GetFrameLevel() + 2)
-        bar:SetOrientation(state.vertical and "VERTICAL" or "HORIZONTAL"); bar:SetReverseFill(not state.reverse)
+        bar:SetOrientation(state.vertical and "VERTICAL" or "HORIZONTAL")
+        bar:SetReverseFill(not state.reverse)
         local edge = state.vertical and (state.reverse and "BOTTOM" or "TOP") or (state.reverse and "LEFT" or "RIGHT")
         bar:SetPoint(edge, state.fill, edge, 0, 0)
         fill:SetDrawLayer("OVERLAY", 3)
@@ -104,19 +126,27 @@ function MSUF.CPBuilders.ManaExtras(E)
         for _, mask in ipairs(state.borrowedMasks or {}) do masks[#masks + 1] = mask end
         for _, mask in ipairs(masks) do fill:AddMaskTexture(mask) end
         Color(bar, "manaCostColor", .7, .7, 1)
-        bar:SetMinMaxValues(0, 1); bar:SetValue(.18); bar:Show()
+        bar:SetMinMaxValues(0, 1)
+        bar:SetValue(.18)
+        bar:Show()
     end
     local function Ensure(host)
         HideSamples()
-        if not DetachSampleMasks() then state.predictionReady=false;HidePrediction();return end
+        if not DetachSampleMasks() then
+            state.predictionReady=false
+            HidePrediction()
+            return
+        end
         if not state.five then
             state.five=PixelLayoutRegion(CreateFrame("StatusBar",nil,host))
             state.tick=PixelLayoutRegion(CreateFrame("StatusBar",nil,host))
             for _,bar in ipairs({state.five,state.tick}) do
-                bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8");bar:Hide()
+                bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+                bar:Hide()
             end
             if C_DurationUtil and C_DurationUtil.CreateDuration then
-                state.fiveDuration=C_DurationUtil.CreateDuration();state.tickDuration=C_DurationUtil.CreateDuration()
+                state.fiveDuration=C_DurationUtil.CreateDuration()
+                state.tickDuration=C_DurationUtil.CreateDuration()
             end
         end
         state.host=host
@@ -124,9 +154,16 @@ function MSUF.CPBuilders.ManaExtras(E)
             host._msufManaExtrasSizeHook=true
             host:HookScript("OnSizeChanged",function(self) if state.host==self and E.RequestRefresh then E.RequestRefresh() end end)
         end
-        for _,bar in ipairs({state.five,state.tick}) do bar:SetParent(host);bar:ClearAllPoints() end
-        state.five:SetPoint("BOTTOMLEFT",host,"TOPLEFT",0,1);state.five:SetPoint("BOTTOMRIGHT",host,"TOPRIGHT",0,1);state.five:SetHeight(3)
-        state.tick:SetPoint("TOPLEFT",host,"BOTTOMLEFT",0,-1);state.tick:SetPoint("TOPRIGHT",host,"BOTTOMRIGHT",0,-1);state.tick:SetHeight(2)
+        for _,bar in ipairs({state.five,state.tick}) do
+            bar:SetParent(host)
+            bar:ClearAllPoints()
+        end
+        state.five:SetPoint("BOTTOMLEFT",host,"TOPLEFT",0,1)
+        state.five:SetPoint("BOTTOMRIGHT",host,"TOPRIGHT",0,1)
+        state.five:SetHeight(3)
+        state.tick:SetPoint("TOPLEFT",host,"BOTTOMLEFT",0,-1)
+        state.tick:SetPoint("TOPRIGHT",host,"BOTTOMRIGHT",0,-1)
+        state.tick:SetHeight(2)
         state.predictionReady=false
         local fill=host.GetStatusBarTexture and host:GetStatusBarTexture()
         local width,height=host:GetWidth(),host:GetHeight()
@@ -136,66 +173,116 @@ function MSUF.CPBuilders.ManaExtras(E)
         if host.GetReverseFill then reverse=host:GetReverseFill() end
         if not E.NotSecret(fill) or not fill or not host.CreateMaskTexture
             or not Number(width) or width<=0 or not Number(height) or height<=0
-            or not E.NotSecret(orientation) or not E.NotSecret(reverse) then HidePrediction();return end
+            or not E.NotSecret(orientation) or not E.NotSecret(reverse) then
+            HidePrediction()
+            return
+        end
         local vertical=orientation=="VERTICAL"
         if fill.IsForbidden then
             local forbidden=fill:IsForbidden()
-            if not E.NotSecret(forbidden) or forbidden then HidePrediction();return end
+            if not E.NotSecret(forbidden) or forbidden then
+                HidePrediction()
+                return
+            end
         end
-        if not fill.GetNumMaskTextures or not fill.GetMaskTexture then HidePrediction();return end
+        if not fill.GetNumMaskTextures or not fill.GetMaskTexture then
+            HidePrediction()
+            return
+        end
         local count=fill:GetNumMaskTextures()
-        if not Number(count) or count<0 or count>32 or count%1~=0 then HidePrediction();return end
+        if not Number(count) or count<0 or count>32 or count%1~=0 then
+            HidePrediction()
+            return
+        end
         local masks={}
         for index=1,count do
             local mask=fill:GetMaskTexture(index)
-            if not PublicRegion(mask) then HidePrediction();return end
+            if not PublicRegion(mask) then
+                HidePrediction()
+                return
+            end
             masks[#masks+1]=mask
         end
         local shaped=host._msufPowerShapeActive
-        if not E.NotSecret(shaped) then HidePrediction();return end
+        if not E.NotSecret(shaped) then
+            HidePrediction()
+            return
+        end
         local shapeAsset=shaped and host._msufTexture
-        if shaped and (not E.NotSecret(shapeAsset) or type(shapeAsset)~="string" or shapeAsset=="") then HidePrediction();return end
+        if shaped and (not E.NotSecret(shapeAsset) or type(shapeAsset)~="string" or shapeAsset=="") then
+            HidePrediction()
+            return
+        end
         if not state.prediction then
             state.prediction=PixelLayoutRegion(CreateFrame("StatusBar",nil,host))
-            state.prediction:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8");state.prediction:Hide()
+            state.prediction:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+            state.prediction:Hide()
             state.predictionFill=PixelLayoutRegion(state.prediction:GetStatusBarTexture())
-            if not PublicRegion(state.predictionFill) then HidePrediction();return end
+            if not PublicRegion(state.predictionFill) then
+                HidePrediction()
+                return
+            end
             state.predictionFill:SetDrawLayer("OVERLAY",3)
             state.predictionMask=PixelLayoutRegion(host:CreateMaskTexture(nil,"OVERLAY"))
             state.predictionMask:SetTexture("Interface\\Buttons\\WHITE8X8","CLAMPTOBLACKADDITIVE","CLAMPTOBLACKADDITIVE")
-            if not state.predictionFill.AddMaskTexture or not state.predictionFill.RemoveMaskTexture then HidePrediction();return end
+            if not state.predictionFill.AddMaskTexture or not state.predictionFill.RemoveMaskTexture then
+                HidePrediction()
+                return
+            end
             state.predictionFill:AddMaskTexture(state.predictionMask)
             state.predictionMasked=true
         end
-        if not state.predictionMasked then HidePrediction();return end
+        if not state.predictionMasked then
+            HidePrediction()
+            return
+        end
         -- Borrow references only: shared native masks keep their owner, anchors
         -- and visibility. All hierarchy queries and binding changes stay OOC.
         local old=state.borrowedMasks or {}
-        for _,mask in ipairs(old) do if not PublicRegion(mask) then HidePrediction();return end end
+        for _,mask in ipairs(old) do
+            if not PublicRegion(mask) then
+                HidePrediction()
+                return
+            end
+        end
         for _,mask in ipairs(old) do state.predictionFill:RemoveMaskTexture(mask) end
         state.borrowedMasks={}
         state.predictionFill:RemoveMaskTexture(state.predictionMask)
-        if state.shapeMasked then state.predictionFill:RemoveMaskTexture(state.shapeMask);state.shapeMasked=false end
+        if state.shapeMasked then
+            state.predictionFill:RemoveMaskTexture(state.shapeMask)
+            state.shapeMasked=false
+        end
         if shaped then
             if not state.shapeMask then state.shapeMask=PixelLayoutRegion(host:CreateMaskTexture(nil,"OVERLAY")) end
-            state.shapeMask:SetParent(host);state.shapeMask:ClearAllPoints();state.shapeMask:SetAllPoints(host)
+            state.shapeMask:SetParent(host)
+            state.shapeMask:ClearAllPoints()
+            state.shapeMask:SetAllPoints(host)
             state.shapeMask:SetTexture(shapeAsset,"CLAMPTOBLACKADDITIVE","CLAMPTOBLACKADDITIVE")
             state.shapeMask:Show()
         elseif state.shapeMask then
-            if state.shapeMasked then state.predictionFill:RemoveMaskTexture(state.shapeMask);state.shapeMasked=false end
+            if state.shapeMasked then
+                state.predictionFill:RemoveMaskTexture(state.shapeMask)
+                state.shapeMasked=false
+            end
             state.shapeMask:Hide()
         end
-        state.prediction:SetParent(host);state.prediction:ClearAllPoints()
+        state.prediction:SetParent(host)
+        state.prediction:ClearAllPoints()
         state.prediction:SetSize(width,height)
         state.prediction:SetFrameLevel(host:GetFrameLevel())
         state.prediction:SetOrientation(vertical and "VERTICAL" or "HORIZONTAL")
         state.prediction:SetReverseFill(not reverse)
         local edge=vertical and (reverse and "BOTTOM" or "TOP") or (reverse and "LEFT" or "RIGHT")
         state.prediction:SetPoint(edge,fill,edge,0,0)
-        state.predictionMask:SetParent(host);state.predictionMask:ClearAllPoints();state.predictionMask:SetAllPoints(host)
+        state.predictionMask:SetParent(host)
+        state.predictionMask:ClearAllPoints()
+        state.predictionMask:SetAllPoints(host)
         state.predictionMask:Show()
         state.predictionFill:AddMaskTexture(state.predictionMask)
-        if shaped then state.predictionFill:AddMaskTexture(state.shapeMask);state.shapeMasked=true end
+        if shaped then
+            state.predictionFill:AddMaskTexture(state.shapeMask)
+            state.shapeMasked=true
+        end
         for _,mask in ipairs(masks) do state.predictionFill:AddMaskTexture(mask) end
         state.borrowedMasks=masks
         state.fill,state.width,state.height,state.vertical,state.reverse=fill,width,height,vertical,reverse
@@ -205,13 +292,22 @@ function MSUF.CPBuilders.ManaExtras(E)
         if not duration or not bar.SetTimerDuration then return false end
         duration:SetTimeFromStart(GetTime(),seconds)
         bar:SetTimerDuration(duration,Enum.StatusBarInterpolation.Immediate,Enum.StatusBarTimerDirection.RemainingTime)
-        bar:Show();return true
+        bar:Show()
+        return true
     end
     local function ObserveMana()
-        if not state.ticks then state.last=nil;state.maximum=nil;return end
+        if not state.ticks then
+            state.last=nil
+            state.maximum=nil
+            return
+        end
         local now=GetTime()
         local current,maximum=UnitPower("player",0),UnitPowerMax("player",0)
-        if not Number(current) or not Number(maximum) then state.last=nil;state.maximum=nil;return end
+        if not Number(current) or not Number(maximum) then
+            state.last=nil
+            state.maximum=nil
+            return
+        end
         if state.last and state.maximum==maximum then
             if current>state.last and state.ticks then
                 -- This is an observed mana gain, not a guessed server tick.
@@ -226,17 +322,24 @@ function MSUF.CPBuilders.ManaExtras(E)
     end
     local function Prediction()
         if not state.preview or not state.host or not state.hasCost then return end
-        if not state.predictionReady then HidePrediction();return end
+        if not state.predictionReady then
+            HidePrediction()
+            return
+        end
         local maximum=UnitPowerMax("player",0)
         local width,height=state.host:GetWidth(),state.host:GetHeight()
         local fill=state.host.GetStatusBarTexture and state.host:GetStatusBarTexture()
         if E.NotSecret(maximum) and (not Number(maximum) or maximum<=0) or not Number(width) or width~=state.width
             or not Number(height) or height~=state.height or not E.NotSecret(fill) or not fill or fill~=state.fill then
-            HidePrediction();return
+            HidePrediction()
+            return
         end
         if fill.IsForbidden then
             local forbidden=fill:IsForbidden()
-            if not E.NotSecret(forbidden) or forbidden then HidePrediction();return end
+            if not E.NotSecret(forbidden) or forbidden then
+                HidePrediction()
+                return
+            end
         end
         -- The engine normalizes absolute cost against maximum mana. Neither
         -- restricted value enters Lua arithmetic or layout; the preanchored
@@ -269,7 +372,9 @@ function MSUF.CPBuilders.ManaExtras(E)
     end
     local function CastCost(spellID)
         if not state.preview then return end
-        HidePrediction();state.cost,state.hasCost=ManaCost(spellID,true);Prediction()
+        HidePrediction()
+        state.cost,state.hasCost=ManaCost(spellID,true)
+        Prediction()
     end
     local function OnEvent(self,event,unit,powerToken,spellID)
         if unit~="player" or state.suspended then return end
@@ -283,8 +388,13 @@ function MSUF.CPBuilders.ManaExtras(E)
         if event=="UNIT_POWER_FREQUENT" or event=="UNIT_POWER_UPDATE" then
             if powerToken and powerToken~="MANA" then return end
             ObserveMana()
-        elseif event=="UNIT_MAXPOWER" then state.last=nil;ObserveMana();Prediction()
-        elseif event=="UNIT_SPELLCAST_START" or event=="UNIT_SPELLCAST_CHANNEL_START" then HidePrediction();CastCost(spellID)
+        elseif event=="UNIT_MAXPOWER" then
+            state.last=nil
+            ObserveMana()
+            Prediction()
+        elseif event=="UNIT_SPELLCAST_START" or event=="UNIT_SPELLCAST_CHANNEL_START" then
+            HidePrediction()
+            CastCost(spellID)
         elseif state.preview then
             -- An instant spell allowed during another cast must not clear that
             -- cast's preview. Native C_Spell accepts restricted identifiers;
@@ -303,7 +413,12 @@ function MSUF.CPBuilders.ManaExtras(E)
             state.editListener, state.editActive = nil, nil
         end
         events:UnregisterAllEvents()
-        HideFive();HideTick();HidePrediction();state.last=nil;state.maximum=nil;state.host=nil
+        HideFive()
+        HideTick()
+        HidePrediction()
+        state.last=nil
+        state.maximum=nil
+        state.host=nil
         if state.predictionMask then state.predictionMask:Hide() end
         if state.shapeMask then state.shapeMask:Hide() end
         if not (InCombatLockdown and InCombatLockdown()) and state.prediction then
@@ -313,7 +428,8 @@ function MSUF.CPBuilders.ManaExtras(E)
             end
             state.borrowedMasks=retained
         end
-        state.fill=nil;state.predictionReady=false
+        state.fill=nil
+        state.predictionReady=false
     end
     -- The bar that shows Mana now: the alternative mana bar, or the Player
     -- power bar while it shows Mana. false: no public owner to resolve.
@@ -340,11 +456,18 @@ function MSUF.CPBuilders.ManaExtras(E)
         local suspended=ResolveHost()~=state.host
         if suspended==(state.suspended==true) then return end
         state.suspended=suspended or nil
-        if suspended then HideFive();HideTick();HidePrediction() end
+        if suspended then
+            HideFive()
+            HideTick()
+            HidePrediction()
+        end
     end
     Refresh = function()
         if not Editing() then HideSamples() end
-        if InCombatLockdown and InCombatLockdown() then state.pending=true;return end
+        if InCombatLockdown and InCombatLockdown() then
+            state.pending=true
+            return
+        end
         state.pending=false
         state.suspended=nil
         local b=E.db.bars or {}
@@ -353,16 +476,25 @@ function MSUF.CPBuilders.ManaExtras(E)
         state.ticks=regenTimers and b.manaGainPulse==true
         state.preview=b.manaUpcomingCost==true
         local host=ResolveHost()
-        if host==false then Disable();return end
-        if not PublicRegion(host) or not (state.rule or state.ticks or state.preview) then Disable();return end
-        Ensure(host);events:UnregisterAllEvents()
+        if host==false then
+            Disable()
+            return
+        end
+        if not PublicRegion(host) or not (state.rule or state.ticks or state.preview) then
+            Disable()
+            return
+        end
+        Ensure(host)
+        events:UnregisterAllEvents()
         local api = MSUF.EditModeAPI
         if not state.editListener and api and api.RegisterSessionListener then
             state.editListener = api.RegisterSessionListener("MSUF.ManaExtras", function(active)
-                state.editActive = active; Refresh()
+                state.editActive = active
+                Refresh()
             end) == true
         end
-        Color(state.five,"manaRegenPauseColor",1,.65,.2);Color(state.tick,"manaGainPulseColor",.3,1,.7)
+        Color(state.five,"manaRegenPauseColor",1,.65,.2)
+        Color(state.tick,"manaGainPulseColor",.3,1,.7)
         if state.prediction then Color(state.prediction,"manaCostColor",.7,.7,1) end
         if not state.rule then HideFive() end
         if not state.ticks then HideTick() end
@@ -378,7 +510,11 @@ function MSUF.CPBuilders.ManaExtras(E)
             events:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED","player")
         end
         Samples(host)
-        if not Editing() then state.last=nil;ObserveMana();Prediction() end
+        if not Editing() then
+            state.last=nil
+            ObserveMana()
+            Prediction()
+        end
     end
     return {Refresh=Refresh,Disable=Disable,PowerChanged=PowerChanged,IsPending=function() return state.pending end}
 end

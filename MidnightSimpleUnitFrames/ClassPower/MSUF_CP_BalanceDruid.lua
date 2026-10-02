@@ -89,9 +89,15 @@ local function GetColorOverrides()
 end
 
 local function _checkActive()
-    if not _featureOn then _active = false; return end
+    if not _featureOn then
+        _active = false
+        return
+    end
     local spec = GetSpec and GetSpec()
-    if spec ~= 1 then _active = false; return end
+    if spec ~= 1 then
+        _active = false
+        return
+    end
     local pType = UnitPowerType("player")
     _active = (NotSecret(pType) and pType == LUNAR_POWER) and true or false
 end
@@ -405,7 +411,10 @@ local function _updateOverlay()
         return
     end
     local rawMx = UnitPowerMax("player", LUNAR_POWER)
-    if not NotSecret(rawMx) then _predTex:Hide(); return end
+    if not NotSecret(rawMx) then
+        _predTex:Hide()
+        return
+    end
     local mx = tonumber(rawMx) or 100
     if mx <= 0 then mx = 100 end
     local predFrac = _predAmt / mx
@@ -417,11 +426,20 @@ local function _updateOverlay()
         if remainingFrac < 0 then remainingFrac = 0 end
         if predFrac > remainingFrac then predFrac = remainingFrac end
     end
-    if predFrac <= 0 then _predTex:Hide(); return end
+    if predFrac <= 0 then
+        _predTex:Hide()
+        return
+    end
     local barW, barH = bar:GetWidth(), bar:GetHeight()
-    if barW <= 0 or barH <= 0 then _predTex:Hide(); return end
+    if barW <= 0 or barH <= 0 then
+        _predTex:Hide()
+        return
+    end
     local predW = barW * predFrac
-    if predW < 1 then _predTex:Hide(); return end
+    if predW < 1 then
+        _predTex:Hide()
+        return
+    end
     if _eclColor then
         _predTex:SetVertexColor(_eclColor[1], _eclColor[2], _eclColor[3], CPK.BAL.PRED_ALPHA)
     else

@@ -275,7 +275,10 @@ modeBuilders.IRONFUR = function(E)
         if spellID == IRONFUR_SPELL then
             local duration = baseDuration
             local hasGoE = goeUntil > now and guardianOfEluneKnown
-            if hasGoE then duration = duration + GOE_BONUS; goeUntil = 0 end
+            if hasGoE then
+                duration = duration + GOE_BONUS
+                goeUntil = 0
+            end
             if tickCount < MAX_TRACKED_CASTS then
                 tickCount = tickCount + 1
             else
@@ -353,7 +356,10 @@ modeBuilders.IRONFUR = function(E)
     return {
         Update = Update,
         SetActive = SetActive,
-        InvalidateLayout = function() layoutDirty = true; staticDirty = true end,
+        InvalidateLayout = function()
+            layoutDirty = true
+            staticDirty = true
+        end,
         RefreshVisual = function()
             cachedVisual = GetVisual and GetVisual() or CP.visual
             visualVersion = -1

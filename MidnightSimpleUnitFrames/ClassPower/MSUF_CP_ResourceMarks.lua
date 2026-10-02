@@ -72,7 +72,10 @@ function MSUF.CPBuilders.ResourceMarks(E)
         end
     end
     local function Compile(view)
-        if not (C_CurveUtil and C_CurveUtil.CreateColorCurve) then view.curve = nil; return end
+        if not (C_CurveUtil and C_CurveUtil.CreateColorCurve) then
+            view.curve = nil
+            return
+        end
         local boundaries = { 0, 1 }
         for _, rule in ipairs(view.rules) do
             if rule.threshold then boundaries[#boundaries + 1] = rule.fraction end
@@ -89,7 +92,9 @@ function MSUF.CPBuilders.ResourceMarks(E)
                 for _, rule in ipairs(view.rules) do
                     if rule.threshold and ((rule.direction == "BELOW" and fraction < rule.fraction)
                         or (rule.direction ~= "BELOW" and fraction >= rule.fraction)) then
-                        local color = rule.color; r, g, b = color[1], color[2], color[3]; base = false
+                        local color = rule.color
+                        r, g, b = color[1], color[2], color[3]
+                        base = false
                     end
                 end
                 view.points[#view.points + 1] = { fraction = fraction, color = CreateColor(r, g, b, view.a), base = base, r = r, g = g, b = b }
@@ -102,7 +107,8 @@ function MSUF.CPBuilders.ResourceMarks(E)
     local function View(bar)
         local view = views[bar]
         if view then return view end
-        view = { bar = bar, rules = {} }; views[bar] = view
+        view = { bar = bar, rules = {} }
+        views[bar] = view
         view.r, view.g, view.b, view.a = bar:GetStatusBarColor()
         if not Number(view.r) or not Number(view.g) or not Number(view.b) then view.r, view.g, view.b = 1, 1, 1 end
         if not Number(view.a) then view.a = 1 end
@@ -119,7 +125,11 @@ function MSUF.CPBuilders.ResourceMarks(E)
         return view
     end
     local function RestoreColor(view)
-        if view.r then view.writing = true; view.bar:SetStatusBarColor(view.r, view.g, view.b, view.a); view.writing = false end
+        if view.r then
+            view.writing = true
+            view.bar:SetStatusBarColor(view.r, view.g, view.b, view.a)
+            view.writing = false
+        end
     end
     local function HideMarks(overlay, from)
         for index = from or 1, #overlay.marks do overlay.marks[index]:Hide() end
@@ -132,7 +142,10 @@ function MSUF.CPBuilders.ResourceMarks(E)
             view.enabled, view.hasThreshold, view.suspended = false, false, nil
             if wasEnabled then RestoreColor(view) end
         end
-        for _, overlay in pairs(overlays) do overlay.used = nil; HideMarks(overlay) end
+        for _, overlay in pairs(overlays) do
+            overlay.used = nil
+            HideMarks(overlay)
+        end
         wipe(active)
     end
     -- One overlay per host, above its pips; a host resize moves the marks, so
@@ -225,7 +238,8 @@ function MSUF.CPBuilders.ResourceMarks(E)
                 local vertical, reverse, signed = Axis(rule, host)
                 if fraction and fraction >= 0 and fraction <= 1 and vertical ~= nil then
                     local overlay = Overlay(host)
-                    local count = (hostCounts[host] or 0) + 1; hostCounts[host] = count
+                    local count = (hostCounts[host] or 0) + 1
+                    hostCounts[host] = count
                     local texture = overlay.marks[count]
                     if not texture then
                         texture = PixelLayoutRegion(overlay:CreateTexture(nil, "OVERLAY", nil, 7))
@@ -241,14 +255,21 @@ function MSUF.CPBuilders.ResourceMarks(E)
                     for i = 1, bars and #bars or 1 do
                         local view = View(bars and bars[i] or host)
                         if not view.enabled then
-                            view.enabled = true; view.power = power; view.token = token; view.classResource = rule.target == "CLASS"
+                            view.enabled = true
+                            view.power = power
+                            view.token = token
+                            view.classResource = rule.target == "CLASS"
                             view.target, view.overlay = rule.target, overlay
-                            view.unit = unit; view.powerEvent = powerEvent; maxUnits[unit] = true
-                            wipe(view.rules); active[#active + 1] = view
+                            view.unit = unit
+                            view.powerEvent = powerEvent
+                            maxUnits[unit] = true
+                            wipe(view.rules)
+                            active[#active + 1] = view
                         end
                         if rule.threshold == true then
                             view.hasThreshold = true
-                            powerUnits[powerEvent] = powerUnits[powerEvent] or {}; powerUnits[powerEvent][unit] = true
+                            powerUnits[powerEvent] = powerUnits[powerEvent] or {}
+                            powerUnits[powerEvent][unit] = true
                             if view.classResource and E.ClassNeedsTargetChanged and E.ClassNeedsTargetChanged(power) then targetChanges = true end
                         end
                         view.rules[#view.rules + 1] = { fraction = fraction, threshold = rule.threshold == true, direction = rule.direction, color = color }
@@ -257,7 +278,10 @@ function MSUF.CPBuilders.ResourceMarks(E)
             end
         end
         for _, view in ipairs(active) do
-            if view.hasThreshold then Compile(view); Paint(view) end
+            if view.hasThreshold then
+                Compile(view)
+                Paint(view)
+            end
         end
         if #active > 0 then
             local function Bind(event, units)
@@ -300,7 +324,11 @@ function MSUF.CPBuilders.ResourceMarks(E)
         events:RegisterEvent("PLAYER_REGEN_ENABLED")
     end
     events:SetScript("OnEvent", function(_, event, unit, token)
-        if event == "PLAYER_REGEN_ENABLED" then events:UnregisterEvent("PLAYER_REGEN_ENABLED"); Refresh(); return end
+        if event == "PLAYER_REGEN_ENABLED" then
+            events:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            Refresh()
+            return
+        end
         if event == "PLAYER_TARGET_CHANGED" or event == "COMBO_TARGET_CHANGED" then
             for i = 1, #active do if active[i].classResource then Paint(active[i]) end end
             return
@@ -311,7 +339,10 @@ function MSUF.CPBuilders.ResourceMarks(E)
             if unit == view.unit and (event == "UNIT_MAXPOWER" or event == view.powerEvent)
                 and (not token or not view.token or token == view.token
                 or (view.classResource and E.AcceptPowerToken and E.AcceptPowerToken(view.power, token, view.token))) then
-                if event == "UNIT_MAXPOWER" then Refresh(); return end
+                if event == "UNIT_MAXPOWER" then
+                    Refresh()
+                    return
+                end
                 Paint(view)
             end
         end
