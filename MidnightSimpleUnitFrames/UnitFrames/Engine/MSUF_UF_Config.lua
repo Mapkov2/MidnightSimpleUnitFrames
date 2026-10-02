@@ -343,6 +343,8 @@ local function ResolveDarkColor(general, dst)
   end
   CopyColor(dst, general and general.darkBarR or gray, general and general.darkBarG or gray, general and general.darkBarB or gray, 1)
 end
+--- Engine rule for previews: the dark-mode bar color of `general` into dst.r/g/b/a.
+Config.ResolveDarkColor = ResolveDarkColor
 
 local function ResolveTextColor(general, dst)
   dst = dst or {}
@@ -576,6 +578,10 @@ local function ResolveNameShortening(db, general, conf, unit, text)
   text.nameShortenDots = dots == true
   text.nameShortenMaskPx = maskPx
 end
+--- Engine rule for previews: writes nameShorten, nameShortenMax,
+--- nameShortenSide, nameShortenDots and nameShortenMaskPx into `text` for one
+--- unit config, exactly as a compiled unit spec carries them.
+Config.ResolveNameShortening = ResolveNameShortening
 
 local function ResolveNameColorFlags(general, conf)
   local classColor = general and general.nameClassColor == true
