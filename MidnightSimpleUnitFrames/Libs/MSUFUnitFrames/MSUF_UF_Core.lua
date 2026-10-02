@@ -903,6 +903,12 @@ local SelectElementEventUpdate
 -- here after its frame is detached.
 local NIL_ROUTE_KEY = {}
 local staticElementFunctions = {}
+-- Functions proved not to be an element export (per-frame closures), weakly
+-- keyed so a detached frame's closure is collected. Each miss used to walk every
+-- field of every element again. Elements register while the addon loads, before
+-- any route compiles; a function added to an element later would only lose the
+-- shared route (its private route is equivalent), never behave differently.
+local nonElementFunctions = setmetatable({}, { __mode = "k" })
 local noDispatchElementFunctions = {}
 local directHealthRouteCache = {}
 local directGroupHealthRouteCache = {}
@@ -914,6 +920,7 @@ local sharedFrameEventRoutes = {}
 local function IsRegisteredElementFunction(fn)
   if type(fn) ~= "function" then return false end
   if staticElementFunctions[fn] == true then return true end
+  if nonElementFunctions[fn] == true then return false end
   for i = 1, #UF.elementOrder do
     local element = UF.elements[UF.elementOrder[i]]
     if type(element) == "table" then
@@ -925,6 +932,7 @@ local function IsRegisteredElementFunction(fn)
       end
     end
   end
+  nonElementFunctions[fn] = true
   return false
 end
 
