@@ -1421,16 +1421,18 @@ local GROUP_PAGE_BUTTONS = {
   { "Status", "gf_indicators", "status" },
 }
 
-local function QuickPopup()
+local GroupPopup = {}
+
+function GroupPopup.QuickPopup()
   return EM2.QuickPopup or (_G.MSUF_EM2_Menu2Style and _G.MSUF_EM2_Menu2Style.QuickPopup) or {}
 end
 
-local function Tr(text)
-  local fn = QuickPopup().Tr
+function GroupPopup.Tr(text)
+  local fn = GroupPopup.QuickPopup().Tr
   return fn and fn(text) or text
 end
 
-local function RefreshAfterPopupApply(mode)
+function GroupPopup.RefreshAfterPopupApply(mode)
   local gf = GF()
   if not gf then return end
 
@@ -1466,15 +1468,15 @@ local function RefreshAfterPopupApply(mode)
   end)
 end
 
-local function SetHUDStatus(text, kind)
-  Dep("MSUF_EM2_SetHUDStatus")(Tr(text), kind)
+function GroupPopup.SetHUDStatus(text, kind)
+  Dep("MSUF_EM2_SetHUDStatus")(GroupPopup.Tr(text), kind)
 end
 
-local function GroupComponentForPage(pageKey)
+function GroupPopup.GroupComponentForPage(pageKey)
   return GROUP_PAGE_COMPONENT[pageKey] or "layout"
 end
 
-local function GroupSectionForPage(pageKey, component)
+function GroupPopup.GroupSectionForPage(pageKey, component)
   if pageKey == "gf_bars" then
     if component == "stripe" or component == "dstripe" then return "dstripe" end
     return "dispel"
@@ -1509,9 +1511,9 @@ local function GF_EM2_ResetPosition(kind)
     conf.point = "CENTER"
     conf.relativePoint = "CENTER"
   end
-  RefreshAfterPopupApply(kind)
+  GroupPopup.RefreshAfterPopupApply(kind)
   RefreshGFPositionUI(kind)
-  SetHUDStatus("Reset group position", "ok")
+  GroupPopup.SetHUDStatus("Reset group position", "ok")
   local key = KIND_TO_KEY[kind]
   if key and EM2.Focus and EM2.Focus.Pulse then
     EM2.Focus.Pulse(key, kind == "priority" and "placement" or "layout", nil, { source = "group-reset", duration = 0.32 })
@@ -1524,7 +1526,6 @@ ExportPublic("MSUF_GF_EM2_ResetPosition", GF_EM2_ResetPosition)
 --- popup._msufGFMode, and GroupPopup holds what the popup does, grouped by
 --- concern: writing position and size, repainting the boxes, the ratio lock,
 --- the size copy, the position reset and the Menu2 page jump.
-local GroupPopup = {}
 
 function GroupPopup.ClampWidth(key, value)
   return floor(max(key == "width" and 40 or 20, min(key == "width" and 400 or 500, value)) + 0.5)
@@ -1580,7 +1581,7 @@ function GroupPopup.Apply(popup)
     conf[xKey], conf[yKey] = San(displayX, currentX), San(displayY, currentY)
   end
 
-  RefreshAfterPopupApply(mode)
+  GroupPopup.RefreshAfterPopupApply(mode)
   GroupPopup.NotifyMoved(mode)
 end
 
@@ -1613,8 +1614,8 @@ function GroupPopup.OpenMenu2Page(popup, pageKey)
   local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
   local key = KIND_TO_KEY[mode]
   pageKey = pageKey or "gf_layout"
-  local component = GroupComponentForPage(pageKey)
-  local sectionId = GroupSectionForPage(pageKey, component)
+  local component = GroupPopup.GroupComponentForPage(pageKey)
+  local sectionId = GroupPopup.GroupSectionForPage(pageKey, component)
   if EM2.Focus and EM2.Focus.SetSelection then
     EM2.Focus.SetSelection(key, component, nil, { source = "group-popup", menu = false })
   end
@@ -1632,7 +1633,7 @@ function GroupPopup.OpenMenu2Page(popup, pageKey)
     if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("gfScope", mode) end
   end
   GF_EM2_SetActivePreviewKind(mode)
-  QuickPopup().OpenPage(pageKey, popup)
+  GroupPopup.QuickPopup().OpenPage(pageKey, popup)
 end
 
 --- Copies the source group's size only. Position stays untouched so a size
@@ -1655,12 +1656,12 @@ function GroupPopup.CopySizeTo(popup, targetMode)
   if src[srcH] ~= nil then
     dst[dstH] = GroupPopup.ClampHeight(dstH, tonumber(src[srcH]) or 40)
   end
-  RefreshAfterPopupApply(targetMode)
+  GroupPopup.RefreshAfterPopupApply(targetMode)
   local targetKey = KIND_TO_KEY[targetMode]
   if targetKey and EM2.Focus and EM2.Focus.Pulse then
     EM2.Focus.Pulse(targetKey, "layout", nil, { source = "group-copy", duration = 0.32 })
   end
-  SetHUDStatus("Copied group size", "ok")
+  GroupPopup.SetHUDStatus("Copied group size", "ok")
   if popup and popup:IsShown() then GroupPopup.Sync(popup) end
 end
 
@@ -1674,7 +1675,7 @@ function GroupPopup.ResetPosition(popup)
   local xKey, yKey = PositionKeys(mode, conf)
   conf[xKey], conf[yKey] = 0, 0
   conf.positionMode = STABLE_GRID_POSITION_MODE
-  RefreshAfterPopupApply(mode)
+  GroupPopup.RefreshAfterPopupApply(mode)
   GroupPopup.NotifyMoved(mode)
   if popup and popup:IsShown() then GroupPopup.Sync(popup) end
 end
@@ -1685,7 +1686,7 @@ function GroupPopup.ApplySize(popup, changed)
     local ratio = tonumber(popup._sizeRatio)
     local w = popup.wBox and tonumber(popup.wBox:GetText())
     local h = popup.hBox and tonumber(popup.hBox:GetText())
-    local Q = QuickPopup()
+    local Q = GroupPopup.QuickPopup()
     if ratio and ratio > 0 then
       if changed == "width" and w then
         Q.SetBoxText(popup.hBox, floor(max(16, min(200, w / ratio)) + 0.5))
@@ -1726,7 +1727,7 @@ end
 function GroupPopup.BuildControls(popup)
   local mode = popup._msufGFMode
   local function Apply() GroupPopup.Apply(popup) end
-  local Q = QuickPopup()
+  local Q = GroupPopup.QuickPopup()
   Q.ValueCard(popup, popup, 20, -58, 208, "Position", {
     { label = "X", key = "xBox", onChanged = Apply },
     { label = "Y", key = "yBox", onChanged = Apply },
@@ -1776,7 +1777,7 @@ local function BuildGFPopup(mode)
 
   local isRaid = (mode == "raid" or mode == "mythicraid")
   local title = (mode == "mythicraid") and "Mythic Raid Frames" or (isRaid and "Raid Frames" or "Party Frames")
-  local popup = QuickPopup().CreateShell("MSUF_EM2_GFPopup_" .. mode, {
+  local popup = GroupPopup.QuickPopup().CreateShell("MSUF_EM2_GFPopup_" .. mode, {
     width = 560,
     height = 350,
     x = 250,

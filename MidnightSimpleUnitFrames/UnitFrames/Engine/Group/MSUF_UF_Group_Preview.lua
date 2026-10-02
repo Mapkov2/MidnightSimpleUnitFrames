@@ -741,6 +741,16 @@ local function ApplySpellFrameEffectPreview(visual, frame, slot)
     effect, frame) == true
 end
 
+local function ShowSpellPreviewTimer(visual, slot)
+  if slot.showCooldownText ~= true then return end
+  local timer = EnsurePreviewFontString(visual, "_timer")
+  SetPreviewFont(timer, slot.cooldownSize or 8)
+  timer:SetText("12")
+  timer:SetTextColor(1, 1, 1, 1)
+  PlacePreviewText(timer, visual, slot.cooldownAnchor or "CENTER", slot.cooldownX or 0, slot.cooldownY or 0)
+  timer:Show()
+end
+
 local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   local visualType = slot and tostring(slot.visual or "none"):lower() or "none"
   local hiddenVisual = slot and slot.hiddenVisual == true
@@ -801,14 +811,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
     durationBar:SetTexture(PREVIEW_WHITE)
     durationBar:SetVertexColor(r, g, b, a)
     durationBar:Show()
-    if slot.showCooldownText == true then
-      timer = EnsurePreviewFontString(visual, "_timer")
-      SetPreviewFont(timer, slot.cooldownSize or 8)
-      timer:SetText("12")
-      timer:SetTextColor(1, 1, 1, 1)
-      PlacePreviewText(timer, visual, slot.cooldownAnchor or "CENTER", slot.cooldownX or 0, slot.cooldownY or 0)
-      timer:Show()
-    end
+    ShowSpellPreviewTimer(visual, slot)
   elseif visualType == "square" then
     texture:SetTexture(PREVIEW_WHITE)
     texture:SetTexCoord(0, 1, 0, 1)
@@ -840,14 +843,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
       swipe:Show()
     end
 
-    if slot.showCooldownText == true then
-      timer = EnsurePreviewFontString(visual, "_timer")
-      SetPreviewFont(timer, slot.cooldownSize or 8)
-      timer:SetText("12")
-      timer:SetTextColor(1, 1, 1, 1)
-      PlacePreviewText(timer, visual, slot.cooldownAnchor or "CENTER", slot.cooldownX or 0, slot.cooldownY or 0)
-      timer:Show()
-    end
+    ShowSpellPreviewTimer(visual, slot)
 
     if slot.showStacks == true then
       stack = EnsurePreviewFontString(visual, "_stack")
