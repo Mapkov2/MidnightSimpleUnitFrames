@@ -2110,24 +2110,11 @@ local function CreateLayerSidebar(box, sideW)
         box.layerButtons[#box.layerButtons + 1] = btn
     end
 end
+local ANIMATE_IDLE_FILL, ANIMATE_IDLE_BORDER = { 0.025, 0.030, 0.045, 0.88 }, { 0.12, 0.16, 0.24, 0.92 }
 local function RefreshAnimateButton(preview)
     local btn = preview and preview.animateButton
     if not btn then return end
-    local active = AnimationEnabled(preview)
-    if btn.fs then
-        btn.fs:SetText(active and TR("Stop") or TR("Animate"))
-        btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
-    end
-    if btn.MSUF2RefreshPreviewPill then btn:MSUF2RefreshPreviewPill(active) end
-    if btn.SetBackdropColor and not btn._msuf2PreviewPillFill then
-        if active then
-            btn:SetBackdropColor(0.020, 0.125, 0.155, 0.96)
-            btn:SetBackdropBorderColor(0.10, 0.82, 0.95, 1)
-        else
-            btn:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
-            btn:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
-        end
-    end
+    Helpers.PaintAnimateButton(btn, AnimationEnabled(preview), TR, ANIMATE_IDLE_FILL, ANIMATE_IDLE_BORDER)
 end
 local function StopAnimationDriver(preview)
     local driver = preview and preview.animationDriver
@@ -2242,27 +2229,7 @@ local function EnsureClassPowerLayersButton(box)
 end
 local SetClassPowerPreviewToolsShown = M.PreviewHelpers.SetCanvasToolsShown
 local function LayoutClassPowerHeaderControls(box, compact)
-    if not box then return end
-    local header = box._msuf2CompactHeader
-    local expandBtn = box._msuf2CompactExpandButton
-    local layersBtn = box._msuf2LayersButton
-    if compact and header then
-        if layersBtn then
-            layersBtn:SetText(TR("Layers") .. " v", true)
-            layersBtn:SetParent(header)
-            layersBtn:ClearAllPoints()
-            if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
-            else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
-            if layersBtn.SetFrameLevel and header.GetFrameLevel then layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
-        end
-        return
-    end
-    if layersBtn then
-        layersBtn:SetText("Layers")
-        layersBtn:SetParent(box)
-        layersBtn:ClearAllPoints()
-        layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
-    end
+    Helpers.LayoutCompactLayersButton(box, compact, TR)
 end
 local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     if not box then return end

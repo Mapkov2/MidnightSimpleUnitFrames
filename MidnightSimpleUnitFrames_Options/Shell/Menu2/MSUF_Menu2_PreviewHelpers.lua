@@ -2656,6 +2656,56 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn:Refresh()
     return btn
 end
+--- Moves a preview's "Layers" button into the compact header, beside the
+--- expand button, or back to the box's top-left corner.
+function H.LayoutCompactLayersButton(box, compact, Tr)
+    if not box then return end
+    local header = box._msuf2CompactHeader
+    local expandBtn = box._msuf2CompactExpandButton
+    local layersBtn = box._msuf2LayersButton
+    if compact and header then
+        if layersBtn then
+            if layersBtn.SetText then layersBtn:SetText(Tr("Layers") .. " v", true) end
+            layersBtn:SetParent(header)
+            layersBtn:ClearAllPoints()
+            if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
+            else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
+            if layersBtn.SetFrameLevel and header.GetFrameLevel then
+                layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3)
+            end
+        end
+        return
+    end
+    if layersBtn then
+        if layersBtn.SetText then layersBtn:SetText("Layers") end
+        layersBtn:SetParent(box)
+        layersBtn:ClearAllPoints()
+        layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
+    end
+end
+
+--- Paints an "Animate" / "Stop" preview pill: label, text colour, pill state
+--- and, on a button without a pill fill, the backdrop (idleFill / idleBorder
+--- while stopped).
+function H.PaintAnimateButton(btn, active, Tr, idleFill, idleBorder)
+    if btn.fs then
+        -- The button plays an animation loop; it does not switch the preview
+        -- into a combat state. Label it after what it does.
+        btn.fs:SetText(active and Tr("Stop") or Tr("Animate"))
+        btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
+    end
+    if btn.MSUF2RefreshPreviewPill then btn:MSUF2RefreshPreviewPill(active) end
+    if btn.SetBackdropColor and not btn._msuf2PreviewPillFill then
+        if active then
+            btn:SetBackdropColor(0.020, 0.125, 0.155, 0.96)
+            btn:SetBackdropBorderColor(0.10, 0.82, 0.95, 1)
+        else
+            btn:SetBackdropColor(idleFill[1], idleFill[2], idleFill[3], idleFill[4])
+            btn:SetBackdropBorderColor(idleBorder[1], idleBorder[2], idleBorder[3], idleBorder[4])
+        end
+    end
+end
+
 --- The chip-style layer button options both preview rails share (theme text
 --- colours, quiet row fills, the selected-layer check). The caller's table
 --- carries availability, on state and the pointer handlers and is returned.

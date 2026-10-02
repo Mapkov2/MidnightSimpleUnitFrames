@@ -477,28 +477,10 @@ local function SetGroupPreviewToolsShown(box, shown)
     if box._previewRoleButton then box._previewRoleButton:Show() end
     if controlsHint and box._msuf2CompactControlsHintWasShown then controlsHint:Show() end
 end
+-- The Theme button translates "Layers" itself; the compact label is
+-- composed, so it is translated first and set as translated.
 local function LayoutGroupPreviewHeaderControls(box, compact)
-    if not box then return end
-    local header = box._msuf2CompactHeader
-    local expandBtn = box._msuf2CompactExpandButton
-    local layersBtn = box._msuf2LayersButton
-    if compact and header then
-        if layersBtn then
-            layersBtn:SetText(((M.Tr and M.Tr("Layers")) or "Layers") .. " v", true)
-            layersBtn:SetParent(header)
-            layersBtn:ClearAllPoints()
-            if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
-            else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
-            if layersBtn.SetFrameLevel and header.GetFrameLevel then layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
-        end
-        return
-    end
-    if layersBtn then
-        layersBtn:SetText((M.Tr and M.Tr("Layers")) or "Layers")
-        layersBtn:SetParent(box)
-        layersBtn:ClearAllPoints()
-        layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
-    end
+    PreviewHelpers.LayoutCompactLayersButton(box, compact, M.Tr)
 end
 local function ApplyGroupCompactPresentation(box, compact, sideW)
     if not box then return end
