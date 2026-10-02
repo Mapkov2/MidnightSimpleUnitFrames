@@ -859,6 +859,38 @@ local function RunLayerHistory(row, callback, fieldLabel)
     return callback()
 end
 
+--- Writes field on a custom aura container (or on its frame block) in one
+--- history step and queues the aura apply; false when nothing changed.
+local function WriteCustomContainerField(row, edit, field, value, reason, fieldLabel)
+    local model = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
+    if type(model) ~= "table" or type(model.CustomContainer) ~= "function" then return false end
+    return RunLayerHistory(row, function()
+        local item = model.CustomContainer(edit.scope, edit.index, true)
+        if type(item) ~= "table" then return false end
+        local target = edit.kind == "aura-custom-frame" and EnsureChild(item, "frame") or item
+        if not target or target[field] == value then return false end
+        target[field] = value
+        local apply = M.ApplyService
+        if apply and type(apply.RequestAuras) == "function" then apply.RequestAuras(edit.scope, reason) end
+        return true
+    end, fieldLabel) ~= false
+end
+--- Writes a group frame setting at edit.path in one history step and queues
+--- the group refresh (the Group page's queue when it is loaded).
+local function WriteGroupField(row, edit, value, reason, fieldLabel)
+    return RunLayerHistory(row, function()
+        local conf = EnsureChild(DB(), edit.dbKey)
+        if not WriteNested(conf, edit.path, value) then return false end
+        local groupPage = M.GroupPage
+        if groupPage and type(groupPage.QueueGF) == "function" then
+            groupPage.QueueGF(edit.scope, edit.mode or "visual")
+        elseif M.ApplyService and type(M.ApplyService.RequestGroup) == "function" then
+            M.ApplyService.RequestGroup(edit.scope, edit.mode or "visual", reason)
+        end
+        return true
+    end, fieldLabel) ~= false
+end
+
 function Overview.SetLayerValue(row, value)
     if type(row) ~= "table" or type(row.edit) ~= "table" then return false end
     if type(M.BlockCombatAction) == "function" and M.BlockCombatAction() then return false end
@@ -921,33 +953,11 @@ function Overview.SetLayerValue(row, value)
     end
 
     if edit.kind == "aura-custom" or edit.kind == "aura-custom-frame" then
-        local model = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
-        if type(model) ~= "table" or type(model.CustomContainer) ~= "function" then return false end
-        return RunLayerHistory(row, function()
-            local item = model.CustomContainer(edit.scope, edit.index, true)
-            if type(item) ~= "table" then return false end
-            local target = edit.kind == "aura-custom-frame" and EnsureChild(item, "frame") or item
-            if not target or target.layer == value then return false end
-            target.layer = value
-            local apply = M.ApplyService
-            if apply and type(apply.RequestAuras) == "function" then apply.RequestAuras(edit.scope, reason) end
-            return true
-        end) ~= false
+        return WriteCustomContainerField(row, edit, "layer", value, reason)
     end
 
     if edit.kind == "group" then
-        return RunLayerHistory(row, function()
-            local db = DB()
-            local conf = EnsureChild(db, edit.dbKey)
-            if not WriteNested(conf, edit.path, value) then return false end
-            local groupPage = M.GroupPage
-            if groupPage and type(groupPage.QueueGF) == "function" then
-                groupPage.QueueGF(edit.scope, edit.mode or "visual")
-            elseif M.ApplyService and type(M.ApplyService.RequestGroup) == "function" then
-                M.ApplyService.RequestGroup(edit.scope, edit.mode or "visual", reason)
-            end
-            return true
-        end) ~= false
+        return WriteGroupField(row, edit, value, reason)
     end
 
     if edit.kind == "class-resources" then
@@ -1000,33 +1010,11 @@ function Overview.SetStrataValue(row, value)
     end
 
     if edit.kind == "aura-custom" or edit.kind == "aura-custom-frame" then
-        local model = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
-        if type(model) ~= "table" or type(model.CustomContainer) ~= "function" then return false end
-        return RunLayerHistory(row, function()
-            local item = model.CustomContainer(edit.scope, edit.index, true)
-            if type(item) ~= "table" then return false end
-            local target = item
-            if edit.kind == "aura-custom-frame" then target = EnsureChild(item, "frame") end
-            if not target or target.strata == value then return false end
-            target.strata = value
-            local apply = M.ApplyService
-            if apply and type(apply.RequestAuras) == "function" then apply.RequestAuras(edit.scope, reason) end
-            return true
-        end, "FrameStrata") ~= false
+        return WriteCustomContainerField(row, edit, "strata", value, reason, "FrameStrata")
     end
 
     if edit.kind == "group" then
-        return RunLayerHistory(row, function()
-            local conf = EnsureChild(DB(), edit.dbKey)
-            if not WriteNested(conf, edit.path, value) then return false end
-            local groupPage = M.GroupPage
-            if groupPage and type(groupPage.QueueGF) == "function" then
-                groupPage.QueueGF(edit.scope, edit.mode or "visual")
-            elseif M.ApplyService and type(M.ApplyService.RequestGroup) == "function" then
-                M.ApplyService.RequestGroup(edit.scope, edit.mode or "visual", reason)
-            end
-            return true
-        end, "FrameStrata") ~= false
+        return WriteGroupField(row, edit, value, reason, "FrameStrata")
     end
 
     if edit.kind == "bar-outline" then
