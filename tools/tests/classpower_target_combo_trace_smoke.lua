@@ -324,8 +324,11 @@ local function Start(client, class)
         if powerType == S.primary then return 50 end
         return 3
     end
-    function UnitPowerMax(_, powerType)
+    function UnitPowerMax(_, powerType, unmodified)
         if powerType == S.primary then return 100 end
+        -- Mists Burning Embers count from the unmodified maximum, 10 per ember
+        -- (Blizzard Mists ShardBar.lua): 50 keeps the five-ember trace.
+        if unmodified and powerType == 14 then return 50 end
         return 5
     end
     function UnitPartialPower() return 0 end

@@ -107,6 +107,7 @@ if IS_CLASSIC then
     ClientCP = assert(MSUF.CPClassicRouting, "Classic ClassPower routing must load first")
     UnitPower = ClientCP.UnitPower or UnitPower
     UnitPowerDisplayMod = ClientCP.UnitPowerDisplayMod or UnitPowerDisplayMod
+    UnitPowerMax = ClientCP.UnitPowerMax or UnitPowerMax
 end
 
 --- Resolved once, on the Classic clients only: no Classic game type loads a

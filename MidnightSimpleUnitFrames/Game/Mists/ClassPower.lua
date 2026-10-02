@@ -11,6 +11,7 @@ local CPK = K.CPK or {}
 local MODE = CPK.MODE or {}
 local PT = K.PT or {}
 local NativeUnitPowerDisplayMod = _G.UnitPowerDisplayMod
+local NativeUnitPowerMax = _G.UnitPowerMax
 --- Blizzard Mists ShardBar.lua: MAX_POWER_PER_EMBER = 10 raw power per ember.
 local EMBER_POWER_SCALE = 10
 --- Blizzard_FrameXMLBase/Classic/Constants.lua WARLOCK_BURNING_EMBERS: Mists
@@ -39,6 +40,18 @@ function Provider.UnitPowerDisplayMod(powerType)
         return NativeUnitPowerDisplayMod(powerType)
     end
     return nil
+end
+
+--- The ember count follows Blizzard's Mists ShardBar.lua too:
+--- floor(UnitPowerMax(unit, BurningEmbers, true) / MAX_POWER_PER_EMBER), on
+--- the same fixed scale, never the client's modified maximum.
+function Provider.UnitPowerMax(unit, powerType, unmodified)
+    if type(NativeUnitPowerMax) ~= "function" then return nil end
+    if powerType == PT.BurningEmbers and not unmodified then
+        local raw = NativeUnitPowerMax(unit, powerType, true)
+        if type(raw) == "number" then return math.floor(raw / EMBER_POWER_SCALE) end
+    end
+    return NativeUnitPowerMax(unit, powerType, unmodified)
 end
 
 function Provider.Resolve(env)

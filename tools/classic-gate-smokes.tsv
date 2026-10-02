@@ -211,6 +211,7 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua	tools/tests/classpower_paint_stamps_smoke.lua	{root}	ClassPower paint stamp smoke failed
 -	lua	tools/tests/classpower_secret_minmax_smoke.lua	{root}	ClassPower secret min/max smoke failed
 -	lua	tools/tests/classpower_warlock_prediction_smoke.lua	{root}	ClassPower Warlock shard prediction smoke failed
+-	lua	tools/tests/classpower_mists_embers_smoke.lua	{root}	ClassPower Mists Burning Embers smoke failed
 -	lua	tools/tests/pixel_layout_profile_smoke.lua	{root}	Pixel layout profile preservation smoke failed
 -	python	tools/tests/pixel_layout_coverage_smoke.py	{root}	Pixel layout creation coverage failed
 -	lua	tools/tests/suite_cooldown_anchor_smoke.lua	{root/}	MSUF Suite cooldown anchor smoke failed
