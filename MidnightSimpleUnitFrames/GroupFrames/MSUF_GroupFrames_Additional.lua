@@ -25,6 +25,7 @@ local holders, targetButtons, bossButtons, manaRows = {}, {}, {}, {}
 local previewPools = setmetatable({}, {__mode = "k"})
 local screenPreviews, previewRequests = {}, {}
 local pending, activeKind, refreshQueued = false, nil, false
+local rosterRefreshQueued = false
 local styleSerial = 1
 local events = CreateFrame("Frame")
 local UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE", "UNIT_CONNECTION" }
@@ -583,6 +584,10 @@ end
 local RAID_UNITS = {}
 for i = 1, 40 do RAID_UNITS[i] = "raid" .. i end
 -- A row listens to its own unit; rebinding happens only when the unit changes.
+local function PaintManaIdentity(row)
+    row.name:SetText(UnitName(row.unit))
+    UpdateManaValue(row)
+end
 local function BindManaRow(row, unit)
     if row.unit == unit then return false end
     row:UnregisterAllEvents()
@@ -591,12 +596,11 @@ local function BindManaRow(row, unit)
         row:RegisterUnitEvent("UNIT_POWER_UPDATE", unit)
         row:RegisterUnitEvent("UNIT_MAXPOWER", unit)
         row:RegisterUnitEvent("UNIT_NAME_UPDATE", unit)
-        row.name:SetText(UnitName(unit))
-        UpdateManaValue(row)
+        PaintManaIdentity(row)
     end
     return true
 end
-local function ApplyMana(kind, conf, enabled)
+local function ApplyMana(kind, conf, enabled, refreshIdentity)
     local holder = Holder("HealerMana")
     local rows = 0
     if enabled and conf.healerManaEnabled == true then
@@ -619,7 +623,8 @@ local function ApplyMana(kind, conf, enabled)
                     row.value:SetShown(conf.healerManaShowValue ~= false)
                     row._msufStyleSerial, row._msufKind = styleSerial, kind
                 end
-                BindManaRow(row, unit)
+                local rebound = BindManaRow(row, unit)
+                if refreshIdentity and not rebound then PaintManaIdentity(row) end
                 local y = -(rows - 1) * (height + 2)
                 if row._msufW ~= width or row._msufH ~= height or row._msufY ~= y then
                     row:SetSize(width, height)
@@ -639,14 +644,14 @@ local function ApplyMana(kind, conf, enabled)
     end
     holder:SetShown(rows > 0)
 end
-function GF.RefreshAdditionalGroups()
+function GF.RefreshAdditionalGroups(refreshIdentity)
     local combat = InCombatLockdown()
     if not combat then GF.EnsureDB() end
     local kind = GF.GetLiveGroupKind() or "party"
     local conf = GF.GetConf(kind)
     -- The same rule as the group runtime: a scope is on only when enabled is true.
     local enabled = conf.enabled == true and (IsInGroup() or conf.showSolo == true)
-    ApplyMana(kind, conf, enabled)
+    ApplyMana(kind, conf, enabled, refreshIdentity)
     if combat then pending = true; return end
     pending = false
     activeKind = kind
@@ -660,9 +665,12 @@ end
 -- Roster storms and settings changes fold into one pass on the next frame.
 local function RunQueuedRefresh()
     refreshQueued = false
-    GF.RefreshAdditionalGroups()
+    local refreshIdentity = rosterRefreshQueued
+    rosterRefreshQueued = false
+    GF.RefreshAdditionalGroups(refreshIdentity)
 end
-local function RequestRefresh()
+local function RequestRefresh(refreshIdentity)
+    if refreshIdentity then rosterRefreshQueued = true end
     if refreshQueued then return end
     refreshQueued = true
     local timer = _G.C_Timer
@@ -679,7 +687,7 @@ local function OnEvent(_, event)
         if pending then GF.RefreshAdditionalGroups() end
         return
     end
-    RequestRefresh()
+    RequestRefresh(event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD")
 end
 events:SetScript("OnEvent", OnEvent)
 events:RegisterEvent("PLAYER_ENTERING_WORLD")

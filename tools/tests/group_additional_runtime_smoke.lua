@@ -132,9 +132,10 @@ local function RunTimers() local due = timers; timers = {}; for _, fn in ipairs(
 local health = { party1target = 70, target = 50, pet = 30, partypet1 = 40 }
 function UnitHealth(unit) Count("UnitHealth"); if secretValues then return secretHealth end; return health[unit] or 100 end
 function UnitHealthMax(unit) Count("UnitHealthMax"); if secretValues then return secretMax end; return 100 end
-function UnitName(unit) Count("UnitName"); if secretValues then return secretName end; return unit end
+local names, powerValues = {}, {}
+function UnitName(unit) Count("UnitName"); if secretValues then return secretName end; return names[unit] or unit end
 function UnitClass() return "Hunter", "HUNTER" end
-function UnitPower(unit) Count("UnitPower"); if secretValues then return secretPower end; return "MANA:" .. unit end
+function UnitPower(unit) Count("UnitPower"); if secretValues then return secretPower end; return powerValues[unit] or "MANA:" .. unit end
 function UnitPowerMax() Count("UnitPowerMax"); if secretValues then return secretMax end; return 1000 end
 local roles = { player = "HEALER", party1 = "DAMAGER", party2 = "HEALER" }
 function RegisterUnitWatch(b) assert(not combat, "unit watch in combat"); b.watched = true end
@@ -311,6 +312,40 @@ local function ManaUnits()
     return table.concat(out, ",")
 end
 assert(ManaUnits() == "party2,player", "healer rows wrong: " .. ManaUnits())
+-- A roster swap can replace a person without replacing the row's unit token.
+local manaRow
+for _, f in ipairs(frames) do if f.parent == mana and f.unit == "party2" then manaRow = f end end
+assert(manaRow)
+names.party2, powerValues.party2 = "Replacement healer", 275
+combat = true
+Reset()
+for _, f in ipairs(frames) do
+    if f.events.GROUP_ROSTER_UPDATE and f.scripts.OnEvent then f.scripts.OnEvent(f, "GROUP_ROSTER_UPDATE") end
+end
+RunTimers()
+assert(manaRow.name.text == "Replacement healer" and manaRow.bar.value == 275,
+    "same-token roster replacement kept the old healer name or mana")
+assert(not counters.RegisterUnitEvent, "same-token roster replacement rebound events")
+assert(counters.UnitName == 2 and counters.UnitPower == 2 and counters.UnitPowerMax == 2,
+    "roster repaint must read each of two healers exactly once")
+Reset()
+local manaInstructions = 0
+collectgarbage("collect")
+collectgarbage("stop")
+local manaKB = collectgarbage("count")
+debug.sethook(function() manaInstructions = manaInstructions + 1 end, "", 1)
+for _ = 1, 100 do manaRow.scripts.OnEvent(manaRow, "UNIT_POWER_UPDATE", "party2", "MANA") end
+debug.sethook()
+manaKB = collectgarbage("count") - manaKB
+collectgarbage("restart")
+assert(counters.UnitPower == 100 and counters.UnitPowerMax == 100 and counters.SetMinMaxValues == 100
+    and counters.SetValue == 100 and counters.SetText == 100 and not counters.UnitName,
+    "mana tick native-call budget changed")
+print(string.format("group additional mana: %.2f instructions / %.3f KB / 5 native calls per event",
+    manaInstructions / 100, manaKB / 100))
+assert(manaInstructions <= 16000 and manaKB <= 1, "mana tick VM/allocation budget exceeded")
+combat = false
+
 combat = true
 roles.party2, roles.party1 = "DAMAGER", "HEALER"
 for _, f in ipairs(frames) do if f.events.GROUP_ROSTER_UPDATE and f.scripts.OnEvent then f.scripts.OnEvent(f, "GROUP_ROSTER_UPDATE") end end
