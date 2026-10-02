@@ -2656,6 +2656,88 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn:Refresh()
     return btn
 end
+--- The chip-style layer button options both preview rails share (theme text
+--- colours, quiet row fills, the selected-layer check). The caller's table
+--- carries availability, on state and the pointer handlers and is returned.
+local function LayerChipSelected(owner, key) return owner and owner._msuf2SelectedPreviewLayerKey == key end
+function H.LayerChipButtonOpts(Tr, colors, chrome, opts)
+    local active = colors.pillTextActive or colors.text or { 0.92, 0.96, 1.00, 1.00 }
+    local muted = colors.muted or { 0.62, 0.70, 0.82, 0.90 }
+    local disabled = colors.dim or { 0.36, 0.46, 0.60, 0.82 }
+    opts.Tr, opts.layout, opts.height, opts.rowHeight, opts.topOffset = Tr, "chip", 20, 20, 23
+    opts.showOffText, opts.quiet, opts.quietBase, opts.quietHover = false, true, chrome.rowBase, chrome.rowHover
+    opts.textOn = { active[1], active[2], active[3], 1.00 }
+    opts.textOff = { muted[1], muted[2], muted[3], 0.72 }
+    opts.textDisabled = { disabled[1], disabled[2], disabled[3], 0.64 }
+    opts.IsSelected = LayerChipSelected
+    return opts
+end
+
+--- Lays out a preview box's layer chips: as the compact popover while the
+--- rail hangs under the "Layers" button (it owns its width then), otherwise
+--- flowed across the rail beside the optional rail header.
+function H.LayoutLayerRail(box, rail, buttons, railWidth)
+    if not H.FlowLayerChips then return 30 end
+    local popover = box._msuf2LayerPopoverWidth
+    if popover and H.FlowLayerPopover then
+        local boxW = (box.GetWidth and box:GetWidth()) or 0
+        local boxH = (box.GetHeight and box:GetHeight()) or 0
+        return H.FlowLayerPopover(rail, buttons, {
+            width = popover,
+            maxWidth = boxW > 0 and (boxW - 24) or nil,
+            maxHeight = boxH > 0 and (boxH - 44) or nil,
+            rowHeight = 20,
+        })
+    end
+    railWidth = tonumber(railWidth) or (rail and rail.GetWidth and rail:GetWidth()) or 0
+    local headerWidth = 0
+    local header = box._msuf2LayerRailHeader
+    if header and header:IsShown() then
+        headerWidth = ((header.GetStringWidth and header:GetStringWidth()) or 44) + 18
+    end
+    return H.FlowLayerChips(rail, buttons, {
+        width = railWidth - headerWidth,
+        padX = 10 + headerWidth,
+        rowHeight = 20,
+    })
+end
+
+--- One layout path for a docked or floating preview box: the layer rail on
+--- the bottom edge, the selection bar above it, the surface takes the rest.
+--- raiseRail lifts the rail over the surface and shows its header first.
+function H.ApplyDockedPreviewLayout(box, rail, surface, bottomInset, raiseRail)
+    bottomInset = tonumber(bottomInset) or 12
+    local selection = box._msuf2SelectionBar
+    if not surface then return end
+    if rail then
+        rail:ClearAllPoints()
+        rail:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, bottomInset)
+        rail:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, bottomInset)
+        if raiseRail then
+            if rail.SetFrameLevel and surface.GetFrameLevel then
+                rail:SetFrameLevel((surface:GetFrameLevel() or 1) + 1)
+            end
+            if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Show() end
+        end
+        rail:Show()
+        if box.LayoutLayerRail then
+            box:LayoutLayerRail((box.GetWidth and box:GetWidth() or 0) - 24)
+        end
+    end
+    surface:ClearAllPoints()
+    surface:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+    if selection and rail then
+        selection:ClearAllPoints()
+        selection:SetPoint("BOTTOMLEFT", rail, "TOPLEFT", 0, 6)
+        selection:SetPoint("BOTTOMRIGHT", rail, "TOPRIGHT", 0, 6)
+        selection:Show()
+        surface:SetPoint("BOTTOMRIGHT", selection, "TOPRIGHT", 0, 6)
+    else
+        surface:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, bottomInset)
+    end
+    if box._msuf2ElementPicker then box._msuf2ElementPicker:Show() end
+end
+
 --- Flows measured layer chips into `rail`, wrapping when a row is full.
 --- Returns the height the rail needs, so callers can let the canvas absorb
 --- whatever the chips do not use instead of reserving a fixed strip.

@@ -937,25 +937,10 @@ function BoxBuild.LayerRail(box, s)
     local function UnitLayerAvailable(owner, key)
         return not (owner and owner.layerAvailable and owner.layerAvailable[key] == false)
     end
-    local activeLayerText = colors.pillTextActive or colors.text or { 0.92, 0.96, 1.00, 1.00 }
-    local mutedLayerText = colors.muted or { 0.62, 0.70, 0.82, 0.90 }
     local disabledLayerText = colors.dim or { 0.36, 0.46, 0.60, 0.82 }
-    local unitLayerButtonOpts = {
-        Tr = TR,
-        layout = "chip",
-        height = 20,
-        rowHeight = 20,
-        topOffset = 23,
-        showOffText = false,
-        quiet = true,
-        quietBase = chrome.rowBase,
-        quietHover = chrome.rowHover,
-        textOn = { activeLayerText[1], activeLayerText[2], activeLayerText[3], 1.00 },
-        textOff = { mutedLayerText[1], mutedLayerText[2], mutedLayerText[3], 0.72 },
-        textDisabled = { disabledLayerText[1], disabledLayerText[2], disabledLayerText[3], 0.64 },
+    local unitLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(TR, colors, chrome, {
         IsAvailable = UnitLayerAvailable,
         IsOn = function(owner, key) return UnitLayerAvailable(owner, key) and owner.layerVisibility[key] ~= false end,
-        IsSelected = function(owner, key) return owner and owner._msuf2SelectedPreviewLayerKey == key end,
         OnClick = function(self, owner)
             if owner.layerAvailable and owner.layerAvailable[self.key] == false then
                 if GameTooltip then GameTooltip:Hide() end
@@ -997,7 +982,7 @@ function BoxBuild.LayerRail(box, s)
             end
         end,
         OnLeave = function(_, owner) UpdateHandleHint(owner, owner._selectedHandle) end,
-    }
+    })
     for i = 1, #PREVIEW_LAYERS do
         local def = PREVIEW_LAYERS[i]
         -- Bounds are an optional measurement overlay, not part of the frame's
@@ -1019,36 +1004,13 @@ function BoxBuild.LayerRail(box, s)
         end
         box.layerButtons[#box.layerButtons + 1] = btn
     end
+    -- While the rail hangs under the "Layers" button it is a dropdown, not
+    -- the docked strip, so it owns its own width. Callers that re-flow it
+    -- from the preview box -- the render pass does, on every layer-
+    -- availability change such as entering combat view -- would otherwise
+    -- push the chips out past the panel painted behind them.
     box.LayoutLayerRail = function(self, railWidth)
-        if not PreviewHelpers.FlowLayerChips then return 30 end
-        -- While the rail hangs under the "Layers" button it is a dropdown, not
-        -- the docked strip, so it owns its own width. Callers that re-flow it
-        -- from the preview box -- the render pass does, on every layer-
-        -- availability change such as entering combat view -- would otherwise
-        -- push the chips out past the panel painted behind them.
-        local popover = self._msuf2LayerPopoverWidth
-        if popover and PreviewHelpers.FlowLayerPopover then
-            local boxW = (self.GetWidth and self:GetWidth()) or 0
-            local boxH = (self.GetHeight and self:GetHeight()) or 0
-            return PreviewHelpers.FlowLayerPopover(self.sidebar, self.layerButtons, {
-                width = popover,
-                maxWidth = boxW > 0 and (boxW - 24) or nil,
-                maxHeight = boxH > 0 and (boxH - 44) or nil,
-                rowHeight = 20,
-            })
-        end
-        railWidth = tonumber(railWidth) or (self.sidebar and self.sidebar.GetWidth and self.sidebar:GetWidth()) or 0
-        local headerWidth = 0
-        local header = self._msuf2LayerRailHeader
-        if header and header:IsShown() then
-            headerWidth = (header.GetStringWidth and header:GetStringWidth()) or 44
-            headerWidth = headerWidth + 18
-        end
-        return PreviewHelpers.FlowLayerChips(self.sidebar, self.layerButtons, {
-            width = railWidth - headerWidth,
-            padX = 10 + headerWidth,
-            rowHeight = 20,
-        })
+        return PreviewHelpers.LayoutLayerRail(self, self.sidebar, self.layerButtons, railWidth)
     end
 end
 function BoxBuild.Selection(box, s)
@@ -1079,30 +1041,7 @@ function BoxBuild.Selection(box, s)
     -- rail sits on the bottom edge, the selection bar rides above it, and the
     -- canvas takes whatever is left instead of a fixed-width column.
     box.ApplyDockedPreviewLayout = function(self, bottomInset)
-        bottomInset = tonumber(bottomInset) or 12
-        local rail, selection, surface = self.sidebar, self._msuf2SelectionBar, self.canvas
-        if not surface then return end
-        if rail then
-            rail:ClearAllPoints()
-            rail:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 12, bottomInset)
-            rail:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -12, bottomInset)
-            rail:Show()
-            if self.LayoutLayerRail then
-                self:LayoutLayerRail((self.GetWidth and self:GetWidth() or 0) - 24)
-            end
-        end
-        surface:ClearAllPoints()
-        surface:SetPoint("TOPLEFT", self, "TOPLEFT", 12, -30)
-        if selection and rail then
-            selection:ClearAllPoints()
-            selection:SetPoint("BOTTOMLEFT", rail, "TOPLEFT", 0, 6)
-            selection:SetPoint("BOTTOMRIGHT", rail, "TOPRIGHT", 0, 6)
-            selection:Show()
-            surface:SetPoint("BOTTOMRIGHT", selection, "TOPRIGHT", 0, 6)
-        else
-            surface:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -12, bottomInset)
-        end
-        if self._msuf2ElementPicker then self._msuf2ElementPicker:Show() end
+        return PreviewHelpers.ApplyDockedPreviewLayout(self, self.sidebar, self.canvas, bottomInset, false)
     end
 end
 function BoxBuild.MockHealth(box, s)

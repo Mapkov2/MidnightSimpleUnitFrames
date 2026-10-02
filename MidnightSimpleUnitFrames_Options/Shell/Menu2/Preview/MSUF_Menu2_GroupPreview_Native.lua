@@ -1558,22 +1558,7 @@ function NativeBuild.LayerRail(state)
     }
     box._layerButtons = {}
     box.layerVisibility = layerVisibility
-    local activeLayerText = layerColors.pillTextActive or layerColors.text or { 0.92, 0.96, 1.00, 1.00 }
-    local mutedLayerText = layerColors.muted or { 0.62, 0.70, 0.82, 0.90 }
-    local disabledLayerText = layerColors.dim or { 0.36, 0.46, 0.60, 0.82 }
-    local groupLayerButtonOpts = {
-        Tr = R.Tr,
-        layout = "chip",
-        height = 20,
-        rowHeight = 20,
-        topOffset = 23,
-        showOffText = false,
-        quiet = true,
-        quietBase = chrome.rowBase,
-        quietHover = chrome.rowHover,
-        textOn = { activeLayerText[1], activeLayerText[2], activeLayerText[3], 1.00 },
-        textOff = { mutedLayerText[1], mutedLayerText[2], mutedLayerText[3], 0.72 },
-        textDisabled = { disabledLayerText[1], disabledLayerText[2], disabledLayerText[3], 0.64 },
+    local groupLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(R.Tr, layerColors, chrome, {
         IsAvailable = function(owner, key)
             return not (owner and owner._layerAvailable and owner._layerAvailable[key] == false)
         end,
@@ -1582,7 +1567,6 @@ function NativeBuild.LayerRail(state)
             if M.gfPreviewSoloLayer ~= nil then return M.gfPreviewSoloLayer == key end
             return layerVisibility[key] ~= false
         end,
-        IsSelected = function(owner, key) return owner and owner._msuf2SelectedPreviewLayerKey == key end,
         OnClick = function(self, owner)
             if owner and owner._layerAvailable and owner._layerAvailable[self.key] == false then
                 if GameTooltip then GameTooltip:Hide() end
@@ -1613,7 +1597,7 @@ function NativeBuild.LayerRail(state)
             owner._hint:SetText(label .. " - " .. tr(action))
         end,
         OnLeave = function(_, owner) R.UpdateHint(owner, owner._selectedHandle) end,
-    }
+    })
     for i = 1, #layerDefs do
         local def = layerDefs[i]
         local btn = PreviewHelpers.CreateLayerButton(layers, box, {
@@ -1648,60 +1632,11 @@ function NativeBuild.LayerRail(state)
         box._layerButtons[#box._layerButtons + 1] = btn
     end
     box.LayoutLayerRail = function(self, railWidth)
-        if not PreviewHelpers.FlowLayerChips then return 30 end
-        -- The compact popover owns its own width; see the unit preview rail.
-        local popover = self._msuf2LayerPopoverWidth
-        if popover and PreviewHelpers.FlowLayerPopover then
-            local boxW = (self.GetWidth and self:GetWidth()) or 0
-            local boxH = (self.GetHeight and self:GetHeight()) or 0
-            return PreviewHelpers.FlowLayerPopover(self._layers, self._layerButtons, {
-                width = popover,
-                maxWidth = boxW > 0 and (boxW - 24) or nil,
-                maxHeight = boxH > 0 and (boxH - 44) or nil,
-                rowHeight = 20,
-            })
-        end
-        railWidth = tonumber(railWidth) or (self._layers and self._layers.GetWidth and self._layers:GetWidth()) or 0
-        local headerWidth = 0
-        local header = self._msuf2LayerRailHeader
-        if header and header:IsShown() then
-            headerWidth = ((header.GetStringWidth and header:GetStringWidth()) or 44) + 18
-        end
-        return PreviewHelpers.FlowLayerChips(self._layers, self._layerButtons, {
-            width = railWidth - headerWidth,
-            padX = 10 + headerWidth,
-            rowHeight = 20,
-        })
+        return PreviewHelpers.LayoutLayerRail(self, self._layers, self._layerButtons, railWidth)
     end
-    -- One layout path for the docked and floating states: chips on the bottom
-    -- edge, selection bar above them, stage takes whatever is left.
+    -- The stage is the surface; the rail sits over it with its header shown.
     box.ApplyDockedPreviewLayout = function(self, bottomInset)
-        bottomInset = tonumber(bottomInset) or 12
-        local rail, selection, surface = self._layers, self._msuf2SelectionBar, self._stage
-        if not surface then return end
-        if rail then
-            rail:ClearAllPoints()
-            rail:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 12, bottomInset)
-            rail:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -12, bottomInset)
-            if rail.SetFrameLevel and surface.GetFrameLevel then
-                rail:SetFrameLevel((surface:GetFrameLevel() or 1) + 1)
-            end
-            if self._msuf2LayerRailHeader then self._msuf2LayerRailHeader:Show() end
-            rail:Show()
-            self:LayoutLayerRail((self.GetWidth and self:GetWidth() or 0) - 24)
-        end
-        surface:ClearAllPoints()
-        surface:SetPoint("TOPLEFT", self, "TOPLEFT", 12, -30)
-        if selection and rail then
-            selection:ClearAllPoints()
-            selection:SetPoint("BOTTOMLEFT", rail, "TOPLEFT", 0, 6)
-            selection:SetPoint("BOTTOMRIGHT", rail, "TOPRIGHT", 0, 6)
-            selection:Show()
-            surface:SetPoint("BOTTOMRIGHT", selection, "TOPRIGHT", 0, 6)
-        else
-            surface:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -12, bottomInset)
-        end
-        if self._msuf2ElementPicker then self._msuf2ElementPicker:Show() end
+        return PreviewHelpers.ApplyDockedPreviewLayout(self, self._layers, self._stage, bottomInset, true)
     end
 end
 function NativeBuild.Mock(state)

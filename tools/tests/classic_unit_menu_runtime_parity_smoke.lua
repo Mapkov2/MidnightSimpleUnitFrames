@@ -203,8 +203,10 @@ local function HelperBody(name)
     local _, finish = assert(helperSource:find("\nend\n", start, true))
     return helperSource:sub(start, finish)
 end
+-- The rail layout (popover or flowed strip) is shared with the group preview
+-- in PreviewHelpers; the unit preview's box.LayoutLayerRail delegates to it.
 local helpers = assert(loadstring("local H = {}\nlocal min = math.min\n" .. HelperBody("FlowLayerChips")
-    .. HelperBody("FlowLayerPopover") .. "\nreturn H", "@preview_layer_flow"))()
+    .. HelperBody("FlowLayerPopover") .. HelperBody("LayoutLayerRail") .. "\nreturn H", "@preview_layer_flow"))()
 
 local view = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_View.lua")
 local railStart = assert(view:find("\n    box.LayoutLayerRail = function(self, railWidth)\n", 1, true),
