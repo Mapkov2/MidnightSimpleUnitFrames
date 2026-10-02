@@ -127,6 +127,25 @@ do
     end
 end
 
+-- Structural refreshes are throttled to one per 150 ms. A second form change
+-- inside the window must still be shown: a trailing refresh follows.
+do
+    local t = World.Start(repo, "Mainline", "DRUID", 2, PT.ENERGY)
+    local CP = t.CP
+    Check(CP.visible and CP.powerType == PT.COMBO, "Feral in Cat form did not route combo points")
+    t.env:AdvanceTime(1)
+    t.S.primary = PT.RAGE
+    World.Dispatcher(t, "UNIT_DISPLAYPOWER", "player", "RAGE")()
+    Check(not CP.visible, "Bear form kept the combo points")
+    t.env:AdvanceTime(0.05)
+    t.S.primary = PT.ENERGY
+    World.Dispatcher(t, "UNIT_DISPLAYPOWER", "player", "ENERGY")()
+    t.env:AdvanceTime(0.2)
+    t.env:RunTimers()
+    Check(CP.visible and CP.powerType == PT.COMBO,
+        "a form change inside the refresh throttle window was dropped (Cat form shows no combo points)")
+end
+
 if #failures > 0 then
     error("classpower_paint_stamps_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end

@@ -1370,13 +1370,29 @@ CP_RefreshEventBindings = CPEvents.RefreshEventBindings
 CP_ShouldUseFrequentPowerEvents = CPEvents.ShouldUseFrequentPowerEvents
 CP_ShouldUseLiteBindings = CPEvents.ShouldUseLiteBindings
 
---- Throttle for rare events (spec/form changes)
+--- Throttle for rare events (spec/form changes). A structural event inside the
+--- window still describes a state the bar must show: one trailing FullRefresh
+--- runs when the window ends instead of dropping it.
 local _lastFullRefresh = 0
 local FULL_REFRESH_THROTTLE = 0.15
+local _trailingRefreshPending = false
+
+local function TrailingFullRefresh()
+    _trailingRefreshPending = false
+    _lastFullRefresh = GetTime()
+    FullRefresh()
+end
 
 ThrottledFullRefresh = function()
     local now = GetTime()
-    if now - _lastFullRefresh < FULL_REFRESH_THROTTLE then return end
+    local elapsed = now - _lastFullRefresh
+    if elapsed < FULL_REFRESH_THROTTLE then
+        if not _trailingRefreshPending then
+            _trailingRefreshPending = true
+            C_Timer.After(FULL_REFRESH_THROTTLE - elapsed, TrailingFullRefresh)
+        end
+        return
+    end
     _lastFullRefresh = now
     FullRefresh()
 end
