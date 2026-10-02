@@ -32,7 +32,6 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
     local LANE_STYLE_KEYS = Schema.LANE_STYLE_KEYS
     local PUBLIC_UNITS = Schema.PUBLIC_UNITS
     local ROW_WRAP_OK = Schema.ROW_WRAP_OK
-    local ROW_WRAP_VALUES = Schema.ROW_WRAP_VALUES
     local STACK_ANCHORS = Schema.STACK_ANCHORS
     local STACK_ANCHOR_OK = Schema.STACK_ANCHOR_OK
     local STYLE_SCOPES = Schema.STYLE_SCOPES
@@ -55,10 +54,6 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
 
     function Model.GrowthValues()
         return GROWTH_VALUES
-    end
-
-    function Model.RowWrapValues()
-        return ROW_WRAP_VALUES
     end
 
     function Model.AuraAnchorValues()
@@ -263,26 +258,6 @@ function Factories.Appearance(A3, Model, Schema, Common, Storage)
         if scope == "focus" then return "Focus" end
         if scope == "arena" then return "Arena" end
         return "Boss"
-    end
-
-    function Model.ReadGrowth(unit)
-        local v = tostring(Model.ReadValue(unit, "growth", "RIGHT") or "RIGHT")
-        return GROWTH_OK[v] and v or "RIGHT"
-    end
-
-    function Model.WriteGrowth(unit, value)
-        value = GROWTH_OK[value] and value or "RIGHT"
-        Model.WriteValue(unit, "growth", value)
-    end
-
-    function Model.ReadRowWrap(unit)
-        local v = tostring(Model.ReadValue(unit, "rowWrap", "DOWN") or "DOWN")
-        return ROW_WRAP_OK[v] and v or "DOWN"
-    end
-
-    function Model.WriteRowWrap(unit, value)
-        value = ROW_WRAP_OK[value] and value or "DOWN"
-        Model.WriteValue(unit, "rowWrap", value)
     end
 
     function Model.ReadLanePerRow(unit, kind)

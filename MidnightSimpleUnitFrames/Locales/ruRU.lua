@@ -6425,6 +6425,11 @@ L["Priority Frames are full (%s)."] = "Приоритетные рамки за�
 L["Join a party or raid before selecting a Priority Frame."] = "Вступите в группу или рейд, прежде чем выбирать приоритетную рамку."
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "Наведите курсор на рамку группы, рейда или приоритетную рамку MSUF и нажмите клавишу приоритетных рамок."
 L["The saved Priority Frames list is full."] = "Сохранённый список приоритетных рамок заполнен."
+
+-- Aura spell lists and Edit Mode aura preview labels.
+L["%s (unresolved)"] = "%s (не распознано)"
+L["Arena %s"] = "Арена %s"
+L["Custom Aura %d"] = "Своя аура %d"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

@@ -50,7 +50,6 @@ local EnsureState = Lanes.EnsureState
 local ApplyConfig = Lanes.ApplyConfig
 local HideState = Lanes.HideState
 local ClearLane = Lanes.ClearLane
-local RenderLane = Lanes.RenderLane
 local UpdateAuraLaneRuntime = Lanes.UpdateAuraLaneRuntime
 local ClearFrameAuraVisualState = FrameVisuals.ClearFrameAuraVisualState
 local FrameHasAuraVisualState = FrameVisuals.FrameHasAuraVisualState
@@ -242,34 +241,6 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
     return changedCount > 0 or visualChanged == true
 end
 
-local function RenderCachedAuras(frame, combatOnly)
-    if not frame then return false end
-    local unit = BindFrameUnit(frame)
-    local state, cfg = CurrentFrameState(frame, unit)
-    if not (state and cfg and cfg.enabled) then
-        HideState(frame)
-        return false
-    end
-    if state.needFullUpdate == true or state.scanning == true then
-        return UpdateAuras(frame, "ForceUpdate", unit, nil, true)
-    end
-
-    local changed = false
-    local order = cfg.laneOrder or BASE_LANE_ORDER
-    for i = 1, #order do
-        local lane = state.lanes[order[i]]
-        local laneCfg = lane and lane.config
-        if laneCfg and laneCfg.enabled and (combatOnly ~= true or laneCfg.needsCombatRefresh == true) then
-            RenderLane(lane, unit)
-            changed = true
-        end
-    end
-    if changed and (cfg.visual ~= nil or FrameHasAuraVisualState(frame)) then
-        UpdateFrameAuraVisualState(frame, state, cfg, unit)
-    end
-    return changed
-end
-
 local function ResetAurasForIdentity(frame)
     if not frame then return false end
     return UpdateAuras(frame, "ForceUpdate", BindFrameUnit(frame), nil, true)
@@ -292,7 +263,7 @@ end
 --- identity owners re-read it on this event (IdentityEvents in Auras3/Runtime).
 --- Only a Friendly or Enemy border subscribes (AurasElement.GetEvents). The
 --- gate is re-applied to the lanes the frame already holds, so nothing is
---- rescanned unless the lanes owe a full update, as in RenderCachedAuras. The
+--- rescanned unless the lanes owe a full update. The
 --- event names a token, not a member: GROUP_ROSTER_UPDATE rescans a token that
 --- changed hands (GroupRosterAuras), and the player's own payload
 --- reaches every other such frame through FactionPlayerFanOut.
@@ -311,15 +282,12 @@ end
 
 --- UNIT_FACTION for the player. A duel or mind control flips the player's own
 --- side of UnitCanAssist("player", unit) while no event names the other unit.
---- Retail covers only half of that: IdentityEvents in Auras3/Runtime registers
---- UNIT_FACTION unfiltered, but on a "player" payload it re-checks every group
---- assist owner and routes its direct owners through the named unit alone, so a
---- Mainline target, focus, boss or arena dispel border stays stale until some
---- unrelated refresh. Classic follows Blizzard's own Classic TargetFrame
---- instead, which re-runs CheckFaction and UpdateAuras whenever UNIT_FACTION
---- names "player" (Blizzard_UnitFrame/Classic/TargetFrame.lua). That wider fan-
---- out is deliberate: it is a Classic-over-Mainline asymmetry, not a gap to
---- close by narrowing this back to group frames. A frame registers UNIT_FACTION
+--- Classic follows Blizzard's own Classic TargetFrame, which re-runs
+--- CheckFaction and UpdateAuras whenever UNIT_FACTION names "player"
+--- (Blizzard_UnitFrame/Classic/TargetFrame.lua); Retail's IdentityEvents in
+--- Auras3/Runtime fans a "player" payload out to its group assist owners and
+--- its unit-frame identity owners alike. Do not narrow this back to group
+--- frames. A frame registers UNIT_FACTION
 --- for its own unit only, so one shared driver listens for the player while any
 --- frame - a group frame or a target, focus, boss or arena frame - holds a
 --- Friendly or Enemy border (AurasElement.GetEvents keeps that set) and
@@ -367,6 +335,27 @@ local function NeedsCombatAuraEvents(cfg)
     if not (cfg and cfg.enabled and cfg.lanes) then return false end
     for _, lane in pairs(cfg.lanes) do
         if lane and lane.enabled and lane.needsCombatRefresh == true then return true end
+    end
+    return false
+end
+
+--- PLAYER_REGEN_DISABLED/ENABLED, which only a frame with a "Raid in combat"
+--- lane registers (AurasElement.GetEvents). RAID_IN_COMBAT membership follows
+--- the player's combat state, yet the cached token sets (TokenSet in
+--- Filters.lua) and every lane's active set describe the other side of the
+--- edge. Re-rendering them changed nothing, so the edge runs one full update:
+--- it bumps the unit's TokenSerial and re-runs ShouldShowAura on every aura.
+--- Lanes an aborted update left half merged owe that full update as well.
+local function CombatEdgeAuras(frame)
+    if not frame then return false end
+    local unit = BindFrameUnit(frame)
+    local state, cfg = CurrentFrameState(frame, unit)
+    if not (state and cfg and cfg.enabled) then
+        HideState(frame)
+        return false
+    end
+    if state.needFullUpdate == true or state.scanning == true or NeedsCombatAuraEvents(cfg) then
+        return UpdateAuras(frame, "ForceUpdate", unit, nil, true)
     end
     return false
 end
@@ -659,18 +648,11 @@ function AurasElement.Update(frame, event, unit, updateInfo)
     end
     if event == "PLAYER_REGEN_DISABLED"
         or event == "PLAYER_REGEN_ENABLED" then
-        return RenderCachedAuras(frame, true)
+        return CombatEdgeAuras(frame)
     end
     return A3.HandleUnitAura(frame, event, unit, updateInfo)
 end
 
 UF.RegisterElement("Auras", AurasElement)
-
-A3.frontendOnly = false
-A3.backendEnabled = true
-A3.unitFrameAuras = true
-A3.nativeAuraBackend = false
-A3.classicAuraBackend = true
-MSUF.AuraBackendEnabled = true
 
 Backend.Element = AurasElement

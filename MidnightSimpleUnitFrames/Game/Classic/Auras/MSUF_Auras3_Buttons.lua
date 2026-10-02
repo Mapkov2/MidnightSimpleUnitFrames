@@ -296,9 +296,6 @@ local function CreateAuraButton(lane, index)
 
     lane[index] = button
     lane.createdButtons = index
-    if type(lane.PostCreateButton) == "function" then
-        lane:PostCreateButton(button)
-    end
     return button
 end
 

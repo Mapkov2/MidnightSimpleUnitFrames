@@ -28,6 +28,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     local SpellIDFromInput = Common.SpellIDFromInput
     local SpellInfo = Common.SpellInfo
     local SpellLabel = Common.SpellLabel
+    local UnresolvedSpellText = Common.UnresolvedSpellText
     local BlacklistPresetKeysForKind = Presets.BlacklistPresetKeysForKind
     local BuildBlacklistPresetValues = Presets.BuildBlacklistPresetValues
     local FALLBACK_PUBLIC_AURA_META = Presets.FALLBACK_PUBLIC_AURA_META
@@ -164,7 +165,12 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
             value = "MSUF_GROUP_HIGHLIGHTS_V1",
             text = "MSUF Highlights",
             tooltipTitle = "MSUF Highlights",
-            tooltip = "Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. The exact list overrides duration filters so temporary states Blizzard reports without a duration, such as Shroud membership, remain visible.",
+            -- One text, split only to keep the line short.
+            tooltip = "Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, "
+                .. "healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and "
+                .. "frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. "
+                .. "The exact list overrides duration filters so temporary states Blizzard reports without a "
+                .. "duration, such as Shroud membership, remain visible.",
         },
         { value = "Player", text = "Cast by Me" },
         { value = "BigDefensive", text = "Big Defensive" },
@@ -399,24 +405,6 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         return count
     end
 
-    function Model.GroupBlacklistSummary(scope, groupKey)
-        scope = NormalizeGroupScope(scope)
-        groupKey = NormalizeKind(groupKey)
-        local a = GroupScopeKinds(scope)
-        local spells = EnsureGroupBlacklistSpells(a, groupKey, false)
-        if type(spells) ~= "table" then return "No blacklisted spells." end
-        local out = {}
-        for key, enabled in pairs(spells) do
-            if enabled == true then
-                local spellID = SpellIDFromInput(key)
-                out[#out + 1] = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)")
-            end
-        end
-        table_sort(out)
-        if #out == 0 then return "No blacklisted spells." end
-        return table.concat(out, "\n")
-    end
-
     function Model.ReadGroupBlacklistHidePermanent(scope, groupKey)
         local kind = GroupScopeKinds(scope)
         local group = GroupAuraGroup(kind, groupKey)
@@ -484,7 +472,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
                 end
                 out[#out + 1] = {
                     value = spellID and tostring(spellID) or tostring(key),
-                    text = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)"),
+                    text = spellID and SpellLabel(spellID) or UnresolvedSpellText(key),
                     icon = icon,
                 }
             end
@@ -647,22 +635,6 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         if b then write(b) end
         if changed then InvalidateGroupBlacklist(scope, groupKey) end
         return changed
-    end
-
-    function Model.GroupBlacklistCategorySummary(scope, groupKey)
-        scope = NormalizeGroupScope(scope)
-        groupKey = NormalizeKind(groupKey)
-        local a = GroupScopeKinds(scope)
-        local group = GroupAuraGroup(a, groupKey)
-        local cats = type(group.blacklistCats) == "table" and group.blacklistCats or nil
-        if type(cats) ~= "table" then return "No blacklisted aura categories." end
-        local out = {}
-        for key, enabled in pairs(cats) do
-            if enabled == true then out[#out + 1] = Model.GroupBlacklistCategoryLabel(key) end
-        end
-        table_sort(out)
-        if #out == 0 then return "No blacklisted aura categories." end
-        return table.concat(out, "\n")
     end
 
 end

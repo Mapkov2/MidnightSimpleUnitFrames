@@ -15,6 +15,11 @@
 -- Vanilla. Each instruction limit sits 2% above. KB limits are for 32-bit
 -- Lua; on any interpreter the value events (health, power) must stay
 -- allocation-free (one table per dispatch would cost 16 KB or more).
+-- 2026-10-02 (wave 3): one shared table grows once while UNIT_NAME_UPDATE or
+-- UNIT_FLAGS runs (about 2.5 KB). Which of the two hosts that growth depends on
+-- the memory layout alone: 100 unrelated closures allocated before boot move it
+-- from UNIT_FLAGS to UNIT_NAME_UPDATE with identical instruction counts. Both
+-- events therefore carry the same 3 KB limit.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -27,7 +32,7 @@ local BUDGETS = {
     UNIT_HEALTH = { 97, 1 },
     UNIT_MAXHEALTH = { 1419, 3 },
     UNIT_POWER_UPDATE = { 123, 1 },
-    UNIT_NAME_UPDATE = { 946, 1 },
+    UNIT_NAME_UPDATE = { 946, 3 },
     UNIT_FLAGS = { 1241, 3 },
 }
 local EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_NAME_UPDATE", "UNIT_FLAGS" }

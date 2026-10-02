@@ -19,7 +19,6 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
     local C_Spell = _G.C_Spell
 
     local DEFAULT_SHARED = Schema.DEFAULT_SHARED
-    local RUNTIME_FILTER_KEYS = Schema.RUNTIME_FILTER_KEYS
     local ClampNumber = Common.ClampNumber
     local CountBlacklistSpells = Common.CountBlacklistSpells
     local DeepCopy = Common.DeepCopy
@@ -30,7 +29,8 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
     local RuntimeUnit = Common.RuntimeUnit
     local SpellIDFromInput = Common.SpellIDFromInput
     local SpellInfo = Common.SpellInfo
-    local SpellLabel = Common.SpellLabel
+    local SpellIDText = Common.SpellIDText
+    local UnresolvedSpellText = Common.UnresolvedSpellText
     local DefaultsIntoOnce = Storage.DefaultsIntoOnce
     local PerUnit = Storage.PerUnit
 
@@ -77,23 +77,6 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
         end)
     end
 
-    function Model.UseSharedRules(scope)
-        return false
-    end
-
-    function Model.SetUseSharedRules(scope, useShared)
-        scope = NormalizeScope(scope)
-        if scope == "shared" then return end
-        local auras, shared = Model.EnsureDB()
-        EachRuntimeUnit(scope, function(runtimeUnit)
-            local pu = PerUnit(auras, runtimeUnit, true)
-            if not pu then return end
-            local f = EnsureRuntimeFilters(auras, shared, runtimeUnit, true)
-            pu.filters = f
-            pu.overrideFilters = true
-        end)
-    end
-
     function Model.ReadFilter(scope, kind, key, defaultValue)
         local filters = EnsureScopeFilters(scope, false)
         kind = NormalizeKind(kind)
@@ -132,103 +115,6 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
             if type(filters) ~= "table" then return end
             if type(filters[tableKey]) ~= "table" then filters[tableKey] = {} end
             filters[tableKey].enabled = enabled == true
-        end)
-    end
-
-    function Model.ScopeFiltersEnabled(scope)
-        return Model.LaneFiltersEnabled(scope, "buff")
-            and Model.LaneFiltersEnabled(scope, "debuff")
-    end
-
-    local function ApplyScopeFiltersEnabled(filters, enabled, sharedScope, shared)
-        if type(filters) ~= "table" then return end
-
-        local snap = filters.disabledSnapshot
-        if enabled then
-            if type(snap) == "table" then
-                for groupKey, keys in pairs(RUNTIME_FILTER_KEYS) do
-                    local group = filters[groupKey]
-                    local groupSnap = snap[groupKey]
-                    if type(group) == "table" and type(groupSnap) == "table" then
-                        for i = 1, #keys do
-                            local key = keys[i]
-                            if groupSnap[key] ~= nil then group[key] = groupSnap[key] end
-                        end
-                    end
-                end
-                if sharedScope and type(shared) == "table" then
-                    if snap.onlyMyBuffs ~= nil then shared.onlyMyBuffs = snap.onlyMyBuffs end
-                    if snap.onlyMyDebuffs ~= nil then shared.onlyMyDebuffs = snap.onlyMyDebuffs end
-                end
-                if snap.hidePermanent ~= nil then
-                    filters.hidePermanent = snap.hidePermanent == true
-                end
-                filters.disabledSnapshot = nil
-            end
-            filters.enabled = true
-            return
-        end
-
-        if type(snap) ~= "table" then
-            snap = {}
-            for groupKey, keys in pairs(RUNTIME_FILTER_KEYS) do
-                local group = filters[groupKey]
-                if type(group) == "table" then
-                    local groupSnap = {}
-                    for i = 1, #keys do
-                        local key = keys[i]
-                        groupSnap[key] = group[key]
-                    end
-                    snap[groupKey] = groupSnap
-                end
-            end
-            if sharedScope and type(shared) == "table" then
-                snap.onlyMyBuffs = shared.onlyMyBuffs
-                snap.onlyMyDebuffs = shared.onlyMyDebuffs
-            end
-            filters.disabledSnapshot = snap
-        end
-
-        if type(filters.buffs) == "table" then
-            filters.buffs.onlyMine = false
-            filters.buffs.onlyImportant = false
-            filters.buffs.raid = false
-            filters.buffs.raidInCombat = false
-            filters.buffs.includeNameplateOnly = false
-            filters.buffs.includeDispellable = false
-            filters.buffs.dispellableAny = false
-            filters.buffs.cancelable = false
-            filters.buffs.notCancelable = false
-            filters.buffs.externalDefensive = false
-            filters.buffs.bigDefensive = false
-            filters.buffs.exclusive = "none"
-        end
-        if type(filters.debuffs) == "table" then
-            filters.debuffs.onlyMine = false
-            filters.debuffs.onlyImportant = false
-            filters.debuffs.raid = false
-            filters.debuffs.raidInCombat = false
-            filters.debuffs.includeNameplateOnly = false
-            filters.debuffs.includeDispellable = false
-            filters.debuffs.dispellableAny = false
-            filters.debuffs.crowdControl = false
-            filters.debuffs.nonPlayer = false
-            filters.debuffs.exclusive = "none"
-        end
-        if sharedScope and type(shared) == "table" then
-            shared.onlyMyBuffs = false
-            shared.onlyMyDebuffs = false
-        end
-        filters.enabled = false
-    end
-
-    function Model.SetScopeFiltersEnabled(scope, enabled)
-        ForEachScopeFilters(scope, true, function(filters, sharedScope, shared)
-            ApplyScopeFiltersEnabled(filters, enabled == true, sharedScope, shared)
-            filters.buffs = type(filters.buffs) == "table" and filters.buffs or {}
-            filters.debuffs = type(filters.debuffs) == "table" and filters.debuffs or {}
-            filters.buffs.enabled = enabled == true
-            filters.debuffs.enabled = enabled == true
         end)
     end
 
@@ -403,8 +289,7 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
                 name = name or staticName
                 icon = icon or staticIcon
             end
-            local text = (type(name) == "string" and name ~= "" and name or "Spell")
-                .. " (#" .. tostring(auraID) .. ")"
+            local text = SpellIDText(name, auraID)
             values[#values + 1] = { value = auraID, text = text, name = name, icon = icon }
         end)
         table_sort(values, function(a, b) return tostring(a.text) < tostring(b.text) end)
@@ -483,22 +368,6 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
         return changed
     end
 
-    function Model.BlacklistSummary(scope, kind)
-        local list = EnsureBlacklist(scope, false, kind)
-        local spells = type(list) == "table" and list.spells
-        if type(spells) ~= "table" then return "No blacklisted spells." end
-        local out = {}
-        for key, enabled in pairs(spells) do
-            if enabled == true then
-                local spellID = SpellIDFromInput(key)
-                out[#out + 1] = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)")
-            end
-        end
-        table_sort(out)
-        if #out == 0 then return "No blacklisted spells." end
-        return table.concat(out, "\n")
-    end
-
     function Model.BlacklistEntries(scope, kind)
         local list = EnsureBlacklist(scope, false, kind)
         local spells = type(list) == "table" and list.spells
@@ -513,13 +382,13 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
                     out[#out + 1] = {
                         value = tostring(id),
                         spellID = id,
-                        text = (type(name) == "string" and name ~= "" and name or "Spell") .. " (#" .. tostring(id) .. ")",
+                        text = SpellIDText(name, id),
                         icon = icon,
                     }
                 else
                     out[#out + 1] = {
                         value = tostring(key),
-                        text = tostring(key) .. " (unresolved)",
+                        text = UnresolvedSpellText(key),
                     }
                 end
             end
@@ -534,17 +403,6 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
         ForEachFrameBlacklist(scope, true, kind, function(list)
             if type(list) == "table" then list.spells = {} end
         end)
-        return count
-    end
-
-    function Model.BlacklistPreparedCount(scope, kind)
-        local list = EnsureBlacklist(scope, false, kind)
-        local spells = type(list) == "table" and list.spells
-        if type(spells) ~= "table" then return 0 end
-        local count = 0
-        for key, enabled in pairs(spells) do
-            if enabled == true and SpellIDFromInput(key) then count = count + 1 end
-        end
         return count
     end
 

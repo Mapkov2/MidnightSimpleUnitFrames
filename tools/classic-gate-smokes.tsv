@@ -137,6 +137,10 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	tools/tests/classic_prediction_contract_smoke.lua	{root/}	Classic prediction contract smoke failed
 -	lua+driver	tools/tests/classic_aura_backend_smoke.lua	{root/}	Classic aura backend smoke failed
 -	lua+driver	tools/tests/classic_aura_edit_forbidden_mouse_smoke.lua	{root/}	Classic aura edit forbidden mouse smoke failed
+-	lua	tools/tests/aura_secret_truth_test_smoke.lua	{root}	Aura secret truth-test smoke failed
+-	lua	tools/tests/aura_native_lane_park_smoke.lua	{root}	Aura native lane park smoke failed
+-	lua	tools/tests/aura_label_i18n_smoke.lua	{root}	Aura label i18n smoke failed
+-	lua	tools/tests/aura_icon_shape_shared_smoke.lua	{root}	Aura icon shape shared smoke failed
 -	lua+driver	tools/tests/classic_aura_update_path_smoke.lua	{root/}	Classic aura update path smoke failed
 -	lua+driver	tools/tests/classic_aura_hotpath_budget_smoke.lua	{root/}	Classic aura hot-path budget smoke failed
 -	lua+driver	tools/tests/classic_aura_lane_schema_smoke.lua	{root/}	Classic aura lane schema smoke failed

@@ -6402,6 +6402,11 @@ L["Priority Frames are full (%s)."] = "Os quadros prioritários estão cheios (%
 L["Join a party or raid before selecting a Priority Frame."] = "Entre em um grupo ou raide antes de escolher um quadro prioritário."
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "Passe o mouse sobre um quadro de grupo, raide ou prioritário do MSUF e pressione a tecla dos quadros prioritários."
 L["The saved Priority Frames list is full."] = "A lista salva de quadros prioritários está cheia."
+
+-- Aura spell lists and Edit Mode aura preview labels.
+L["%s (unresolved)"] = "%s (não resolvido)"
+L["Arena %s"] = "Arena %s"
+L["Custom Aura %d"] = "Aura personalizada %d"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

@@ -1,5 +1,9 @@
--- Shared aura icon assets and shape normalization; no client rendering policy.
+-- Shared aura icon assets, shape normalization and the shape painters both
+-- aura backends use; no client rendering policy.
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
+local type, select = type, select
+local math_floor, math_max, math_min = math.floor, math.max, math.min
 local A3 = assert(MSUF.MSUF_Auras3)
 local Shape = {}
 A3.IconShape = Shape
@@ -83,4 +87,116 @@ function Shape.ApplyMask(region, mask)
         region:AddMaskTexture(mask)
         region._msufA3AuraShapeMask = mask
     end
+end
+
+--- Vanilla and TBC keep the pre-Dragonflight HUD art, so the Blizzard portrait
+--- mask atlas may not exist there. SetAtlas raises on an unknown atlas name;
+--- probe once per name and fall back to the shape's own circle media.
+local atlasKnown = {}
+function Shape.AtlasKnown(name)
+    if type(name) ~= "string" or name == "" then return false end
+    local known = atlasKnown[name]
+    if known == nil then
+        local api = _G.C_Texture
+        if api and type(api.GetAtlasInfo) == "function" then
+            known = api.GetAtlasInfo(name) ~= nil
+        else
+            -- No probe API (test harness / very old client): keep the
+            -- pre-guard behavior and let SetAtlas decide.
+            known = true
+        end
+        atlasKnown[name] = known
+    end
+    return known
+end
+
+--- The shape mask on `owner`, created once and repointed to the shape's media.
+function Shape.EnsureMask(owner, shape)
+    local media = Shape.MEDIA[shape]
+    if not (owner and media and owner.CreateMaskTexture) then return nil end
+    local mask = owner._msufA3AuraShapeMask
+    if not mask then
+        mask = owner:CreateMaskTexture(nil, "BACKGROUND")
+        owner._msufA3AuraShapeMask = mask
+    end
+    if media.maskAtlas and mask.SetAtlas and Shape.AtlasKnown(media.maskAtlas) then
+        mask:SetAtlas(media.maskAtlas)
+    else
+        mask:SetTexture(media.mask or media.swipe)
+    end
+    mask:ClearAllPoints()
+    mask:SetAllPoints(owner)
+    mask:Show()
+    return mask
+end
+
+--- The cooldown swipe in the shape's media, and its regions under `mask`.
+function Shape.ApplyCooldownShape(cooldown, shape, mask)
+    if not cooldown then return end
+    local media = Shape.MEDIA[shape]
+    if cooldown.SetSwipeTexture then
+        cooldown:SetSwipeTexture(media and (media.swipe or media.mask) or "Interface\\Buttons\\WHITE8X8")
+    end
+    if not (cooldown.GetNumRegions and cooldown.GetRegions) then return end
+    for index = 1, cooldown:GetNumRegions() do
+        local region = select(index, cooldown:GetRegions())
+        if mask then Shape.ApplyMask(region, mask) else Shape.ClearMask(region) end
+    end
+end
+
+function A3.AuraShapeBorderPath(shape)
+    local media = Shape.MEDIA[Shape.Normalize(shape)]
+    return media and media.border or nil
+end
+
+--- Points `texture` at the shape's border ring (`useBorder`) or its filled
+--- silhouette. Returns false for a shape without media.
+function Shape.SetTexture(texture, shape, useBorder)
+    local media = Shape.MEDIA[shape]
+    if not (texture and media) then return false end
+    if useBorder == true then
+        texture:SetTexture(media.border)
+    elseif media.maskAtlas and texture.SetAtlas and Shape.AtlasKnown(media.maskAtlas) then
+        texture:SetAtlas(media.maskAtlas)
+    else
+        texture:SetTexture(media.swipe or media.mask)
+    end
+    if texture.SetDesaturated then texture:SetDesaturated(media.desaturate == true) end
+    if texture.SetTexCoord then texture:SetTexCoord(0, 1, 0, 1) end
+    return true
+end
+
+--- A shaped icon's border: up to eight stacked shape rings on `button`, inside
+--- the icon on ARTWORK(7) for an inner style, else outside on BORDER(-1). Both
+--- icon-style painters draw it (ApplyIconStyleBorder in
+--- Auras3/Runtime/MSUF_Auras3_Runtime_ButtonVisuals.lua and the Classic one in
+--- Game/Classic/Auras/MSUF_Auras3_Visuals.lua).
+function Shape.ApplyBorderRings(button, style, shape)
+    local rings = button._msufA3ShapedStyleBorders
+    if not (style and style.borderEnabled) then
+        for i = 1, rings and #rings or 0 do rings[i]:Hide() end
+        return
+    end
+    rings = rings or {}
+    button._msufA3ShapedStyleBorders = rings
+    local media = Shape.MEDIA[shape]
+    local inner = style.borderPlacement == "inner" and not (media and media.borderOuterOnly)
+    local count = math_max(1, math_min(8, math_floor((style.borderThickness or 1) + 0.5)))
+    for i = 1, count do
+        local ring = rings[i]
+        if not ring then
+            ring = PixelLayoutRegion(button:CreateTexture(nil, inner and "ARTWORK" or "BORDER", nil, inner and 7 or -1))
+            rings[i] = ring
+        elseif ring.SetDrawLayer then
+            ring:SetDrawLayer(inner and "ARTWORK" or "BORDER", inner and 7 or -1)
+        end
+        if not Shape.SetTexture(ring, shape, true) then ring:Hide(); return end
+        local inset = inner and (i - 1) or -i
+        ring:ClearAllPoints()
+        ring:SetPoint("TOPLEFT", button, "TOPLEFT", inset, -inset)
+        ring:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -inset, inset)
+        ring:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
+        ring:Show()
+    end
+    for i = count + 1, #rings do rings[i]:Hide() end
 end

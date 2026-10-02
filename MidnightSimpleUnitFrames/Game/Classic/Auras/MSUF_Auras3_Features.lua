@@ -368,7 +368,8 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     -- The Buff/Debuff lane parser (MSUF_Auras3_Compile.lua, loaded before any
     -- lane compiles) with the same Player & Priority First fallback, so one
     -- sort name orders a container and a lane alike.
-    local sortOrder = A3._ClassicCompile.SortMode(placed.sortMethod, 1)
+    local Compile = A3._ClassicCompile
+    local sortOrder = Compile.SortMode(placed.sortMethod, Compile.SORT_MODE.PLAYER_FIRST)
     if forcePlayer == true and (not activeFilters or activeFilters.onlyMine ~= true) then
         local source = activeFilters or {}
         activeFilters = {}
@@ -446,7 +447,7 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         onlyMine = onlyMine,
         hasInclusive = hasInclusive,
         needsPlayerFlag = filterPlan.needsPlayerFlag == true
-            or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5,
+            or Compile.SORT_READS_OWNERSHIP[sortOrder] == true,
         needsCombatRefresh = filterPlan.needsCombatRefresh == true,
         -- Classic has no Pandemic state, so onlyInPandemicWindow is deliberately
         -- never read: a true saved by Retail (the menu hides that switch here)

@@ -11,6 +11,7 @@ A3.EditModeModules = A3.EditModeModules or {}
 A3.EditModeModules.Config = function()
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor = math.floor
+local string_format = string.format
 local AURA_UNITS = { "player", "pet", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5", "arena1", "arena2", "arena3" }
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local ARENA_UNITS = { arena1=true, arena2=true, arena3=true }
@@ -173,19 +174,31 @@ local function CustomPreviewEntriesSignature(entries)
     return out
 end
 
+--- Text in the menu language; the localization core loads before Edit Mode.
+local function Translate(text)
+    local translate = MSUF.Translate
+    if type(translate) == "function" then return translate(text) end
+    return text
+end
+
+local UNIT_LABELS = { player = "Player", pet = "Pet", target = "Target", focus = "Focus" }
+
 local function UnitLabel(unit)
-    if unit == "player" then return "Player" end
-    if unit == "pet" then return "Pet" end
-    if unit == "target" then return "Target" end
-    if unit == "focus" then return "Focus" end
-    if BOSS_UNITS[unit] then return "Boss " .. tostring(unit):match("%d+") end
-    if ARENA_UNITS[unit] then return "Arena " .. tostring(unit):match("%d+") end
+    local label = UNIT_LABELS[unit]
+    if label then return Translate(label) end
+    if BOSS_UNITS[unit] then return string_format(Translate("Boss %s"), tostring(unit):match("%d+")) end
+    if ARENA_UNITS[unit] then return string_format(Translate("Arena %s"), tostring(unit):match("%d+")) end
     return tostring(unit or "")
 end
 
 local function GroupLabel(unit, kind, spec)
-    if unit == "player" and kind == "custom4" then return "Defensive Buffs" end
-    return spec and spec.label or tostring(kind or "")
+    if unit == "player" and kind == "custom4" then return Translate("Defensive Buffs") end
+    return spec and spec.label and Translate(spec.label) or tostring(kind or "")
+end
+
+--- The preview group's header: the unit, then the lane ("Boss 1 Buffs").
+local function GroupTitle(unit, kind, spec)
+    return string_format(Translate("%s %s"), UnitLabel(unit), GroupLabel(unit, kind, spec))
 end
 
 local function EnsureDB()
@@ -476,8 +489,7 @@ return {
     CustomItem = CustomItem,
     CustomPreviewEntries = CustomPreviewEntries,
     CustomPreviewEntriesSignature = CustomPreviewEntriesSignature,
-    UnitLabel = UnitLabel,
-    GroupLabel = GroupLabel,
+    GroupTitle = GroupTitle,
     EnsureDB = EnsureDB,
     UnitEnabled = UnitEnabled,
     UnitHasCustomPreview = UnitHasCustomPreview,

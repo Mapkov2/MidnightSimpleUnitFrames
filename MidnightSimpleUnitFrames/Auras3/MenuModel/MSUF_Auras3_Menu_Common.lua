@@ -16,6 +16,7 @@ function Factories.Common(Schema)
     local tostring = tostring
     local pairs = pairs
     local math_floor = math.floor
+    local string_format = string.format
     local C_Spell = _G.C_Spell
     local GetSpellInfo = _G.GetSpellInfo
     local BOSS_LOOKUP = Schema.BOSS_LOOKUP
@@ -183,11 +184,31 @@ function Factories.Common(Schema)
         return nil
     end
 
+    --- The text in the menu language. The localization core loads before this
+    --- file; a harness without it keeps the English key.
+    local function Translate(text)
+        local translate = MSUF.Translate
+        if type(translate) == "function" then return translate(text) end
+        return text
+    end
+
+    --- "Name (#id)". The client already names a spell in its own language, so
+    --- only the fallback word is translated; the "(#id)" part has no words.
+    local function SpellIDText(name, id, fallback)
+        if type(name) ~= "string" or name == "" then
+            name = (type(fallback) == "string" and fallback ~= "") and fallback or Translate("Spell")
+        end
+        return string_format("%s (#%s)", name, tostring(id))
+    end
+
+    --- A stored spell key the client no longer resolves to a spell.
+    local function UnresolvedSpellText(key)
+        return string_format(Translate("%s (unresolved)"), tostring(key))
+    end
+
     local function SpellLabel(spellID)
         local id, name = SpellInfo(spellID)
-        id = id or tonumber(spellID) or 0
-        if type(name) ~= "string" or name == "" then name = "Spell" end
-        return name .. " (#" .. tostring(id) .. ")"
+        return SpellIDText(name, id or tonumber(spellID) or 0)
     end
 
     local function CountBlacklistSpells(spells)
@@ -221,7 +242,10 @@ function Factories.Common(Schema)
         Round = Round,
         RuntimeUnit = RuntimeUnit,
         SpellIDFromInput = SpellIDFromInput,
+        SpellIDText = SpellIDText,
         SpellInfo = SpellInfo,
         SpellLabel = SpellLabel,
+        Translate = Translate,
+        UnresolvedSpellText = UnresolvedSpellText,
     }
 end

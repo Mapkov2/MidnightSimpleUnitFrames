@@ -22,37 +22,8 @@ local Shape = A3.IconShape
 
 
 
-function Shape.EnsureMask(owner, shape)
-    local media = Shape.MEDIA[shape]
-    if not (owner and media and owner.CreateMaskTexture) then return nil end
-    local mask = owner._msufA3AuraShapeMask
-    if not mask then
-        mask = owner:CreateMaskTexture(nil, "BACKGROUND")
-        owner._msufA3AuraShapeMask = mask
-    end
-    if media.maskAtlas and mask.SetAtlas then
-        mask:SetAtlas(media.maskAtlas)
-    else
-        mask:SetTexture(media.mask)
-    end
-    mask:ClearAllPoints()
-    mask:SetAllPoints(owner)
-    mask:Show()
-    return mask
-end
-
-function Shape.ApplyCooldownShape(cooldown, shape, mask)
-    if not cooldown then return end
-    local media = Shape.MEDIA[shape]
-    if cooldown.SetSwipeTexture then
-        cooldown:SetSwipeTexture(media and (media.swipe or media.mask) or "Interface\\Buttons\\WHITE8X8")
-    end
-    if not (cooldown.GetNumRegions and cooldown.GetRegions) then return end
-    for index = 1, cooldown:GetNumRegions() do
-        local region = select(index, cooldown:GetRegions())
-        if mask then Shape.ApplyMask(region, mask) else Shape.ClearMask(region) end
-    end
-end
+-- Shape.EnsureMask, Shape.ApplyCooldownShape and A3.AuraShapeBorderPath are
+-- shared with the Classic backend in Auras3/MSUF_Auras3_IconShape.lua.
 
 --- Cold-path-only shape stamp for runtime AuraButtons and reusable previews.
 --- RECTANGLE deliberately creates no mask and leaves the normal renderer alone.
@@ -75,11 +46,6 @@ function A3.ApplyAuraIconShape(owner, shape, cooldown, ...)
     Shape.ApplyCooldownShape(cooldown, shape, mask)
     owner._msufA3IconShape = shape
     return shape
-end
-
-function A3.AuraShapeBorderPath(shape)
-    local media = Shape.MEDIA[Shape.Normalize(shape)]
-    return media and media.border or nil
 end
 
 -- Blizzard's AuraButtonArtTemplate uses a 30px icon inside a 40px debuff

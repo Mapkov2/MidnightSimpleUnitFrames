@@ -299,6 +299,13 @@ A3._PlayerDefensiveSpellIDHash = function()
     return cached
 end
 
+--- The name of an unnamed Custom Aura display, in the menu language.
+local function CustomAuraFallbackName(index)
+    local translate = MSUF.Translate
+    local format = type(translate) == "function" and translate("Custom Aura %d") or "Custom Aura %d"
+    return string.format(format, index)
+end
+
 local function CompileUnitCustomDisplays(auras, unit)
     local source = EffectiveUnitCustomDisplays(auras, unit)
     if type(source) ~= "table" then return nil end
@@ -311,7 +318,7 @@ local function CompileUnitCustomDisplays(auras, unit)
                 local helpful = tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
                 items[#items + 1] = {
                     key = "ufcustom:" .. tostring(entry.id or i),
-                    display = entry.name or ("Custom Aura " .. tostring(i)),
+                    display = entry.name or CustomAuraFallbackName(i),
                     enabled = true,
                     includeSpellIDs = includeSpellIDs,
                     nativeFilter = helpful and (entry.onlyOwn == true and "HELPFUL|PLAYER" or "HELPFUL")
