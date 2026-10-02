@@ -783,8 +783,9 @@ local function RegisterCastContextFactories()
     -- Per-castbar detail text colors. A detail with no complete stored triple is
     -- still following the shared castbar color, so the factory hands back that
     -- shared target instead of a swatch whose first click would quietly create an
-    -- override nobody asked for. Locals stay inside this IIFE: it sits at the Lua
-    -- 5.1 upvalue ceiling, so the DB reach-through goes via the exported globals.
+    -- override nobody asked for. Locals stay inside this IIFE, which keeps its
+    -- upvalue footprint small (17 of Lua 5.1's 60), so the DB reach-through goes
+    -- via the exported globals.
     local CAST_DETAIL_PREFIX = {
         player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast",
     arena = "arenaCast",
@@ -978,9 +979,9 @@ local function RegisterPowerContextFactories()
     -- A single unit has one resource, so "power.current" resolves it from context.
     -- A party or raid roster mixes every resource type at once, so group cards name
     -- each color instead. Labels are spelled out rather than read from the page's
-    -- COLOR_POWER_TOKENS list: this registry is an IIFE sitting at 60 upvalues, and
-    -- reaching for one more file-level local breaks Lua 5.1's limit. They must stay
-    -- in sync with that list, and each entry edits the same shared override table.
+    -- COLOR_POWER_TOKENS list: this registry is an IIFE that holds 28 of Lua 5.1's
+    -- 60 upvalues, and a file-level local for the list would add another. They must
+    -- stay in sync with that list, and each entry edits the same shared override table.
     local POWER_TOKEN_CONTEXT_IDS = {
         { "power.token.mana", "MANA", "Mana" },
         { "power.token.rage", "RAGE", "Rage" },

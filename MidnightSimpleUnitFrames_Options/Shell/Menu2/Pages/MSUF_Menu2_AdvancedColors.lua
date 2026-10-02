@@ -54,7 +54,7 @@ end
 local function ApplyColors()
     -- The painter's Resources strip paints straight from these DB values and
     -- has no writer of its own, so both apply paths poke it. Kept inline: this
-    -- file rides the 200 active-local ceiling.
+    -- file's main chunk holds 160 of Lua 5.1's 200 locals.
     local painter = M.ColorPainter
     if painter and type(painter.RefreshResourcesStrip) == "function" then painter.RefreshResourcesStrip() end
     local apply = CurrentApplyService()
@@ -808,7 +808,7 @@ end
 --- Texture layer colors mirror the portrait pattern: the Colors page writes the
 --- general baseline plus every unit's copy, while the unit accordion edits only
 --- its own frame. Refreshes are cold path (one re-stamp per frame). Stored on M
---- instead of file locals: this file rides the 200 active-local ceiling.
+--- instead of file locals: this file's main chunk holds 160 of Lua 5.1's 200 locals.
 function M._ApplyTextureLayerColors()
     _G.MSUF_RefreshUnitTextureLayers()
     _G.MSUF_UFPreview_RequestRefresh("MSUF2_TEXLAYER")
@@ -1004,7 +1004,7 @@ end
 -- Frame and indicator choices for the canonical status text color surface. The
 -- indicator value IS the DB key prefix, which keeps this list and the engine's
 -- PrefixedStatusDef naming in one piece. Parked on M rather than a file local:
--- this chunk is at Lua 5.1's 200-local ceiling and one more breaks the page.
+-- the main chunk holds 160 of Lua 5.1's 200 locals.
 M._levelDifficultyColor = {
     -- key prefix, label, default RGB, semantic path. Order and defaults mirror
     -- Shared.LEVEL_DIFFICULTY_TIERS in MSUF_UF_Shared.lua.
@@ -1236,7 +1236,7 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
     -- Level difficulty palette. Global on purpose: the bands mean the same on
     -- every unit and group frame, and each frame only decides whether to use
     -- them (Status icons > Level Text > Color by level difficulty). Rows come
-    -- from M._levelDifficultyColor; this chunk rides the 200-local ceiling.
+    -- from M._levelDifficultyColor, which is parked on M instead of a file local.
     -- No reset button: right-click on a swatch already restores its default.
     LabelAt(statusText, "Level Difficulty Colors", 12, -240, statusTextW - 28, "GameFontNormal", T.colors.accent)
     LabelAt(statusText, "Shared by every unit and group frame that colors its level by difficulty.",

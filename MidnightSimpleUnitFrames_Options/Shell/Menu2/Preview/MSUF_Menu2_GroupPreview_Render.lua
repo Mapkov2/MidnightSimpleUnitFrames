@@ -3130,8 +3130,8 @@ function Stage.RenderPowerBar(st, env)
         local LayerAlpha, LayerOn, S, barTex, bgTex, conf, inset, liveW = st.LayerAlpha, st.LayerOn, st.S, st.barTex, st.bgTex, st.conf, st.inset, st.liveW
         local mock, mockW, powerDetached, powerEmbed, powerH, powerPct, previewScale, runtimePower = st.mock, st.mockW, st.powerDetached, st.powerEmbed, st.powerH, st.powerPct, st.previewScale, st.runtimePower
         local MSUF, Round, ScaleValue, max = env.MSUF, env.Round, env.ScaleValue, env.max
-        -- Scoped block: this render function sits near Lua's 200-local limit,
-        -- so the power placement locals must release their slots when done.
+        -- Scoped block: the power placement locals end here instead of staying
+        -- live for the rest of the stage.
         do
         -- LayoutDetached geometry (compiler resolves width to the frame width
         -- when unset; the conf fallback mirrors that for the no-spec path).
