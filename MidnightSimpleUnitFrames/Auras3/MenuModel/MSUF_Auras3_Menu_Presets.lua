@@ -249,7 +249,8 @@ function Factories.Presets(Model, Common)
             local bucket = buckets[category]
             if bucket and #bucket > 0 then
                 table_sort(bucket, function(a, b) return (a._order or 0) < (b._order or 0) end)
-                values[#values + 1] = { text = category, header = true, disabled = true, translate = false }
+                -- Category headers are English keys; the dropdown translates them.
+                values[#values + 1] = { text = category, header = true, disabled = true }
                 for j = 1, #bucket do
                     local item = bucket[j]
                     item._order = nil

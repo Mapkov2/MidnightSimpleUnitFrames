@@ -502,7 +502,10 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
         if layoutChanged then QueueDockedPreviewOwnershipRefresh(M.scrollFrame) end
         return layoutChanged
     end
-    function b:Section(title, height)
+    --- opts.translated marks a title the caller composed from translated parts
+    --- (M.Format with a translated argument); it is shown as it is.
+    function b:Section(title, height, opts)
+        local translated = opts ~= nil and opts.translated == true
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
         T.ApplySurface(section, "card")
         SetSearchTitle(section, title)
@@ -514,7 +517,8 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
         section._msuf2Width = self.width
         section._msuf2ContextColorHost = true
         section._msuf2ContextColorHostTitle = title
-        local fs = T.Font(section, "GameFontNormal", title or "", T.colors.text, "section")
+        local fs = T.Font(section, "GameFontNormal", translated and "" or (title or ""), T.colors.text, "section")
+        if translated then T.SetTranslatedText(fs, title or "") end
         SetSearchText(fs, title)
         fs:SetPoint("TOPLEFT", 16, -12)
         section.title = fs

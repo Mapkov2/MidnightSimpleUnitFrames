@@ -553,7 +553,7 @@ local function BuildToolsCluster()
             if tracked then undo.CommitChange() end
             SetActive(cdmBtn, false)
             ApplyAllSettingsSafe()
-            HUD.SetStatus(HelpText("EM_ANCHOR_SET") .. ": " .. tostring(frameName or ""), "ok")
+            HUD.SetStatus(string.format(HelpText("Anchor set: %s"), tostring(frameName or "")), "ok")
             C_Timer.After(0.1, function()
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             end)
@@ -766,7 +766,7 @@ function HUD.RefreshControls(force)
         local value = floor(EM2.Grid.GetBgAlpha() * 100 + 0.5)
         if force or alphaFS._msufValue ~= value then
             alphaFS._msufValue = value
-            alphaFS:SetText(HelpText("BG") .. " " .. value .. "%")
+            alphaFS:SetText(string.format(HelpText("BG %d%%"), value))
         end
     end
     if stepFS and EM2.Grid then
@@ -774,7 +774,7 @@ function HUD.RefreshControls(force)
         local value = floor(EM2.Grid.GetGridStep())
         if force or stepFS._msufValue ~= value then
             stepFS._msufValue = value
-            stepFS:SetText(HelpText("Grid") .. " " .. value .. "px")
+            stepFS:SetText(string.format(HelpText("Grid %dpx"), value))
         end
         if gridWidget._msufEnabled ~= enabled then
             gridWidget._msufEnabled = enabled

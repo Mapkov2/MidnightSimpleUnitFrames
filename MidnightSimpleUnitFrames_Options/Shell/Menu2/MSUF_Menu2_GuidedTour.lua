@@ -3055,11 +3055,12 @@ local function BuildEditModePage(ctx, T, W)
     if decisionCard.title then decisionCard.title:SetText("") end
     local decision
     if cooldownSupported then
+        -- W.Segment translates its label and option texts itself.
         local decisionValues = {
-            { value = "cooldown", text = Tr("Follow Blizzard's Essential Cooldowns") },
-            { value = "independent", text = Tr("Independent placement") },
+            { value = "cooldown", text = "Follow Blizzard's Essential Cooldowns" },
+            { value = "independent", text = "Independent placement" },
         }
-        decision = W.Segment(decisionCard, Tr("Should all Unitframes follow the Cooldown Manager?"), decisionValues, max(240, b.width - 32))
+        decision = W.Segment(decisionCard, "Should all Unitframes follow the Cooldown Manager?", decisionValues, max(240, b.width - 32))
         RegisterSpecialClickTargets("edit_mode", "anchor", decision.buttons)
         if type(W.MoveWidget) == "function" then W.MoveWidget(decision, decisionCard, 16, -18, max(240, b.width - 32), "LEFT") end
     end
@@ -3097,7 +3098,7 @@ local function BuildEditModePage(ctx, T, W)
                 SetButtonEnabled(decision.buttons[i], true)
             end
             if decision._msuf2Title and decision._msuf2Title.SetText then
-                decision._msuf2Title:SetText(automaticProviderLabel
+                M.Theme.SetTranslatedText(decision._msuf2Title, automaticProviderLabel
                     and M.Format("Cooldown Manager anchoring (%s)", automaticProviderLabel)
                     or Tr("Should all Unitframes follow the Cooldown Manager?"))
             end

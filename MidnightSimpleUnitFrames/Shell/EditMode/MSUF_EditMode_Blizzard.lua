@@ -260,7 +260,8 @@ end
 
 local function ReportLayoutFailure(reason)
     if type(_G.print) == "function" then
-        _G.print("MSUF Edit Mode: Blizzard layout is not editable (" .. tostring(reason) .. ")")
+        local translate = MSUF.Translate or tostring
+        _G.print(string.format(translate("MSUF Edit Mode: Blizzard layout is not editable (%s)"), tostring(reason)))
     end
 end
 

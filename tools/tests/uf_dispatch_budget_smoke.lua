@@ -15,6 +15,9 @@
 -- Vanilla. Each instruction limit sits 2% above. KB limits are for 32-bit
 -- Lua; on any interpreter the value events (health, power) must stay
 -- allocation-free (one table per dispatch would cost 16 KB or more).
+-- Since 2026-10-02 the KB figure is the smaller of two identical windows:
+-- the 2.35 / 2.63 KB above were a one-off VM table growth, and every event
+-- now measures 0.00 KB.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -96,6 +99,17 @@ local function Measure(event)
     for _ = 1, 100 do Dispatch(event) end
     debug.sethook()
     kb = collectgarbage("count") - kb
+    -- A one-off growth of a shared VM structure (the interned string table
+    -- doubles once the string count reaches its size) lands in whichever
+    -- window crosses that size, so it moves between events whenever the load
+    -- graph interns a few more strings (2026-10-02: new locale keys moved a
+    -- 2.5 KB step from UNIT_FLAGS to UNIT_NAME_UPDATE). It cannot repeat in a
+    -- second identical window; a per-dispatch allocation does. Count the
+    -- smaller window.
+    local second = collectgarbage("count")
+    for _ = 1, 100 do Dispatch(event) end
+    second = collectgarbage("count") - second
+    if second < kb then kb = second end
     collectgarbage("restart")
     h:RunTimers()
     results[#results + 1] = { event = event, k = ticks, kb = kb }

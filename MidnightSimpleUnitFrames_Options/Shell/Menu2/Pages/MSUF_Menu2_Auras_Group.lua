@@ -872,11 +872,11 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
 end
 
 local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
-    local laneTitle = lane == "debuff" and "Debuff" or "Buff"
+    local filtersTitle = lane == "debuff" and "Debuff Filters" or "Buff Filters"
     if M.CLASSIC_AURA_FILTERS_REDUCED == true then
         -- The Classic aura backends filter by Only mine and Hide permanent, so a
         -- group lane gets the same two switches and layout as a UnitFrame lane.
-        local section = b:Section(laneTitle .. " Filters", 118)
+        local section = b:Section(filtersTitle, 118)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
         local gap = 12
@@ -922,7 +922,7 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     local optionRows = max(1, ceil(#values / 4))
     local sectionHeight = max(150, 104 + optionRows * 32)
         + (M.CLASSIC_AURA_FILTERS_REDUCED ~= true and 58 or 0)
-    local section = b:Section(laneTitle .. " Filters", sectionHeight)
+    local section = b:Section(filtersTitle, sectionHeight)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
     local gap = 12
@@ -977,12 +977,11 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
 end
 
 local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
-    local laneTitle = lane == "debuff" and "Debuff" or "Buff"
     local isDebuff = lane == "debuff"
     -- The Classic aura backends re-apply only the Auras element for a blacklist
     -- change, the focused path their group filters use as well.
     local blacklistApplyMode = M.CLASSIC_AURA_FILTERS_REDUCED == true and "auras" or "visual"
-    local section = b:Section(laneTitle .. " Blacklist", isDebuff and 502 or 528)
+    local section = b:Section(isDebuff and "Debuff Blacklist" or "Buff Blacklist", isDebuff and 502 or 528)
     local groupActionPath = "group-workspace.scope." .. AuraCatalogToken(scope)
         .. ".lane." .. AuraCatalogToken(lane) .. ".blacklist"
     local w = section._msuf2Width or b.width or 720

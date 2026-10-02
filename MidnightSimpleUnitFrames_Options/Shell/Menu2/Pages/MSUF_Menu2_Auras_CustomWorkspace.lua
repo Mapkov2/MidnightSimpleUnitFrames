@@ -42,6 +42,13 @@ local CUSTOM_AURA_TYPES = VTP "BUFF=Buff|DEBUFF=Debuff"
 -- a compacting list into one fixed slot per whitelisted entry. It belongs
 -- next to Aura type, where the other structural decision already lives.
 local CUSTOM_DISPLAY_MODES = VTP "active=Only active auras|reminder=Fixed slots (reminder)"
+-- Section titles compose the translated container name into one translated
+-- format string, so they are shown as they are.
+local TRANSLATED_TITLE = { translated = true }
+local function ContainerTitle(C)
+    if C.isPlayerDefensives or C.isTargetDots then return Tr(C.containerLabel) end
+    return M.Format("Custom %d", C.index)
+end
 -- Every tool builder below receives the workspace record C and re-establishes the
 -- same local names the inline body used; a builder returns true when its tool
 -- matched, so the dispatcher keeps the original first-match order.
@@ -505,9 +512,9 @@ local function BuildCustomWhitelistEnchants(C)
 end
 
 local function BuildCustomWhitelistTool(C)
-    local ctx, b, unit, index, tool, customActionPath, containerLabel, item, Apply = C.ctx, C.b, C.unit, C.index, C.tool, C.customActionPath, C.containerLabel, C.item, C.Apply
+    local ctx, b, unit, index, tool, customActionPath, item, Apply = C.ctx, C.b, C.unit, C.index, C.tool, C.customActionPath, C.item, C.Apply
     if tool == "whitelist" then
-        local section = b:Section(containerLabel .. " Whitelist", 430)
+        local section = b:Section(M.Format("%s Whitelist", ContainerTitle(C)), 430, TRANSLATED_TITLE)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
         local auraType = item.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
@@ -727,7 +734,7 @@ local function BuildCustomWhitelistTool(C)
 end
 
 local function BuildCustomFiltersTool(C)
-    local ctx, b, tool, isPlayerDefensives, isTargetDots, containerLabel, item, Apply, Grid = C.ctx, C.b, C.tool, C.isPlayerDefensives, C.isTargetDots, C.containerLabel, C.item, C.Apply, C.Grid
+    local ctx, b, tool, isPlayerDefensives, isTargetDots, item, Apply, Grid = C.ctx, C.b, C.tool, C.isPlayerDefensives, C.isTargetDots, C.item, C.Apply, C.Grid
     local WriteMaxDuration = function(value)
 item.filters.maxDuration = Round(min(180, max(0, tonumber(value) or 0)))
                 Apply("AURAS3_CUSTOM_MAX_DURATION", true)
@@ -735,7 +742,7 @@ end
 
     if tool == "filters" then
         if isPlayerDefensives or isTargetDots then
-            local section = b:Section(containerLabel .. " Filters", 160)
+            local section = b:Section(M.Format("%s Filters", ContainerTitle(C)), 160, TRANSLATED_TITLE)
             local w = section._msuf2Width or b.width or 720
             local inner = w - 48
             local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24, -40, inner,
@@ -769,7 +776,7 @@ end
             { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
         }
         local optionRows = max(1, ceil(#specs / 4))
-        local section = b:Section(containerLabel .. " Filters", 160 + optionRows * 32)
+        local section = b:Section(M.Format("%s Filters", ContainerTitle(C)), 160 + optionRows * 32, TRANSLATED_TITLE)
         local w = section._msuf2Width or b.width or 720
         local colW, gap = Grid(w, 4)
         local controls = {}
@@ -817,10 +824,10 @@ end
 end
 
 local function BuildCustomLayoutTool(C)
-    local ctx, b, unit, tool, containerLabel, item, Apply, Grid = C.ctx, C.b, C.unit, C.tool, C.containerLabel, C.item, C.Apply, C.Grid
+    local ctx, b, unit, tool, item, Apply, Grid = C.ctx, C.b, C.unit, C.tool, C.item, C.Apply, C.Grid
     if tool == "layout" then
-        local layoutTitle = M.Format("%s Layout", Tr(containerLabel))
-        local section = b:Section(layoutTitle, 190)
+        local layoutTitle = M.Format("%s Layout", ContainerTitle(C))
+        local section = b:Section(layoutTitle, 190, TRANSLATED_TITLE)
         M.AttachAuraFontsAndColors(section, layoutTitle, unit)
         local w = section._msuf2Width or b.width or 720
         local col3, gap3 = Grid(w, 3)
@@ -1481,16 +1488,16 @@ local function BuildCustomDotsSetup(C)
         })
         local count = #Model.CustomContainerSpellEntries(unit, index)
         W.Text(section, M.Format("Source: this UnitFrame · Ownership: only mine · Harmful DoTs only · %d selected", count), 24, -324, inner, T.colors.muted)
-        W.Text(section, "Display: " .. (item.portraitIcon == true and "portrait position" or "normal DoT lane"), 24, -356, inner, T.colors.muted)
+        W.Text(section, item.portraitIcon == true and "Display: portrait position" or "Display: normal DoT lane", 24, -356, inner, T.colors.muted)
         return true
     end
 end
 
 local function BuildCustomContainerSetup(C)
-    local ctx, b, unit, index, customActionPath, containerLabel, item, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.customActionPath, C.containerLabel, C.item, C.Apply, C.Grid
+    local ctx, b, unit, index, customActionPath, item, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.customActionPath, C.item, C.Apply, C.Grid
     local setupW = b.width or 720
     local compactSetup = setupW < 680
-    local section = b:Section(containerLabel .. " Setup", compactSetup and 262 or 210)
+    local section = b:Section(M.Format("%s Setup", ContainerTitle(C)), compactSetup and 262 or 210, TRANSLATED_TITLE)
     local w = section._msuf2Width or setupW
     local inner = w - 48
     local enabled = BindSwitch(ctx, section, "Enabled", 24, compactSetup and -52 or -62, 106,
@@ -1515,9 +1522,19 @@ local function BuildCustomContainerSetup(C)
         or max(150, min(max(170, floor(inner * 0.18)), fieldSpace - 200))
     local nameW = compactSetup and max(120, fieldSpace - typeW)
         or max(120, min(max(260, floor(inner * 0.42)), fieldSpace - typeW))
+    -- The model stores the factory name in English ("Custom N"). It is shown
+    -- translated, and the shown text coming back unchanged keeps that saved name.
+    local factoryName = "Custom " .. tostring(index)
+    local shownFactoryName = M.Format("Custom %d", index)
     BindTextInput(ctx, section, "Container name", fieldX, fieldY, nameW,
-        function() return item.name or ("Custom " .. tostring(index)) end,
-        function(value) item.name = value ~= "" and value or ("Custom " .. tostring(index)); Apply("AURAS3_CUSTOM_CONTAINER_NAME") end,
+        function()
+            local name = item.name or factoryName
+            return name == factoryName and shownFactoryName or name
+        end,
+        function(value)
+            item.name = (value == "" or value == shownFactoryName) and factoryName or value
+            Apply("AURAS3_CUSTOM_CONTAINER_NAME")
+        end,
         false, AuraControlMeta(ctx, "custom-container.setup.name"))
     BindDropdown(ctx, section, "Aura type", fieldX + nameW + fieldGap, fieldY, CUSTOM_AURA_TYPES, typeW,
         function() return item.auraType == "DEBUFF" and "DEBUFF" or "BUFF" end,
