@@ -1,0 +1,180 @@
+{
+ "about": "Removals the feature inventory (tools/feature_inventory.py) accepts, each with a basis (migration, owner, dead, moved), evidence and a reason; see the tool docstring. Frozen against 1908d740.",
+ "removed": [
+  {
+   "category": "labels",
+   "items": [
+    "classic: gf_layout | Text color",
+    "main: gf_layout | Text color"
+   ],
+   "basis": "moved",
+   "evidence": "94dfce09a fix(menu): repair page layouts, previews and accordion controls",
+   "reason": "The healer mana text color swatch moved from the group layout page to Colors > Mana > Text (opt_colors 'Text color'); the group layout section keeps a context color reference to it, and the saved keys healerManaTextR/G/B are unchanged.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_CreateGridFrame",
+    "MSUF_EM2_SchedulePreviewReforce",
+    "MSUF_Edit",
+    "MSUF_GetCurrentGridStep",
+    "MSUF_MakeBlizzardOptionsMovable",
+    "MSUF_OpenPositionPopup",
+    "MSUF_ResetCurrentEditUnit",
+    "MSUF_SetMSUFEditModeFromBlizzard",
+    "MSUF_SyncCastbarEditModeWithUnitEdit",
+    "MSUF_UpdateEditModeVisuals",
+    "MSUF_UpdateGridOverlay"
+   ],
+   "basis": "dead",
+   "evidence": "2172b0303 fix(editmode): preserve drag history and normalize search input",
+   "reason": "Legacy Edit Mode compat stubs from the deleted MSUF_EditMode.lua; no reference to the name remains in the Classic addons or the Suite (MSUF_EM2_SchedulePreviewReforce survives only as a file-local function).",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_A3_RequestUnit",
+    "MSUF_Auras3_ApplyFontsFromGlobal",
+    "MSUF_Auras3_RefreshAll",
+    "MSUF_Auras3_RefreshUnit"
+   ],
+   "basis": "dead",
+   "evidence": "2257c1185 refactor(auras): remove dead aura exports and the unset button hook",
+   "reason": "Aura exports nothing called; no reference to the name remains in the Classic addons or the Suite.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_ArenaPreviewRefreshLock",
+    "MSUF_BossPreviewRefreshLock"
+   ],
+   "basis": "dead",
+   "evidence": "383a4ee18 refactor(castbars): share one preview module for boss and arena castbars",
+   "reason": "Preview re-entrancy flags exported as globals; the shared preview module keeps its own state and no reference to the name remains.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_ClassPowerLayoutDirty",
+    "MSUF_ClassPower_PlayerHP_Refresh",
+    "MSUF_ClassPower_PlayerHP_RefreshTextures",
+    "MSUF_ClassPower_RefreshCDMWidthBindings",
+    "MSUF_ClassPower_RefreshVisuals",
+    "MSUF_SmoothPowerBar_Apply"
+   ],
+   "basis": "dead",
+   "evidence": "38cd8187d refactor(classpower): drop six class power globals nothing reads",
+   "reason": "Class power globals nothing read; no reference to the name remains in the Classic addons or the Suite.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_BuildEmpowerTimeline",
+    "MSUF_CastbarRuntime_PlainNumber",
+    "MSUF_CastbarStyleRev",
+    "MSUF_CreateFocusCastbarPreview",
+    "MSUF_CreatePlayerCastbarPreview",
+    "MSUF_CreateTargetCastbarPreview",
+    "MSUF_EnsureEmpowerStageSegments",
+    "MSUF_EnsureEmpowerTicks",
+    "MSUF_GetCastbarBackendKey",
+    "MSUF_GetCastbarEnableKey",
+    "MSUF_GetCastbarReverseFill",
+    "MSUF_GetCastbarUnitInfo",
+    "MSUF_GetGlobalCastbarStyleCache",
+    "MSUF_GetPlayerCastbarDesiredSize",
+    "MSUF_GetUnifiedDirection",
+    "MSUF_IsArenaCastbarUnit",
+    "MSUF_IsBossCastbarUnit",
+    "MSUF_IsChannelTickLinesEnabled",
+    "MSUF_IsEmpowerColorStagesEnabled",
+    "MSUF_IsGCDBarEnabled",
+    "MSUF_LayoutEmpowerStageSegments",
+    "MSUF_PlayerCastbar_GetEffectiveUnit",
+    "MSUF_PlayerCastbar_UnhaltedUpdate",
+    "MSUF_PlayerChannelHasteMarkers_Ensure",
+    "MSUF_ShouldHideCastbar",
+    "MSUF_UpdateCastbarChannelTicks"
+   ],
+   "basis": "dead",
+   "evidence": "4b10165a1 refactor(castbars): drop 27 castbar globals that only export, never get read",
+   "reason": "Castbar globals that were only exported and never read; no reference to the name remains in the Classic addons or the Suite.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_ApplyBossCastbarTextsLayout",
+    "MSUF_ApplyCastbarOutlineToAll",
+    "MSUF_ApplyCastbarTimeTextLayout",
+    "MSUF_ApplyPlayerCastbarIconLayout",
+    "MSUF_ApplyRoundedCastbars",
+    "MSUF_GetInterruptFeedbackColor",
+    "MSUF_GetUnifiedFillEnabled",
+    "MSUF_KickReady_EvaluateColor",
+    "MSUF_PlayerCastbar_HideIfNoLongerCasting",
+    "MSUF_UpdateCastbarFillDirection"
+   ],
+   "basis": "dead",
+   "evidence": "53b8999b0 refactor(castbars): remove ten castbar functions nothing calls",
+   "reason": "Castbar functions nothing called; no reference to the name remains in the Classic addons or the Suite.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_BossPreviewSetupHooked",
+    "MSUF_SyncBossCastbarSliders"
+   ],
+   "basis": "dead",
+   "evidence": "5498ae815 refactor(castbars): remove the boss slider sync and a hook that never installs",
+   "reason": "The boss slider sync and a hook that never installed; no reference to the name remains in the Classic addons or the Suite.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_SetGlobalUiScale_RAW"
+   ],
+   "basis": "dead",
+   "evidence": "60d6a0c24 fix(core): preserve profile state, fonts and unit frame lifecycle",
+   "reason": "A conditional RAW alias of MSUF_SetGlobalUiScale, which stays exported; no reference to the name remains.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_InstallEditModeHUD"
+   ],
+   "basis": "moved",
+   "evidence": "95351c82a refactor(editmode): load the toolbar as XML-ordered modules",
+   "reason": "The installer export was a loader indirection; the toolbar modules now load straight from MSUF_EditMode.xml, so the feature is unchanged.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_RebuildStatusbarChoices"
+   ],
+   "basis": "dead",
+   "evidence": "9e844e560 refactor(engine): replace function guards on MSUF providers with Require and Optional",
+   "reason": "The export was nil (the function was never defined) and its only call sat behind a type guard; no reference to the name remains.",
+   "date": "2026-10-02"
+  },
+  {
+   "category": "exports",
+   "items": [
+    "MSUF_InstallEditLayoutUI"
+   ],
+   "basis": "moved",
+   "evidence": "e23ccb853 refactor(editmode): load the layout family as XML-ordered modules",
+   "reason": "The installer export was a loader indirection; the layout modules now load straight from MSUF_EditMode.xml, so the feature is unchanged.",
+   "date": "2026-10-02"
+  }
+ ]
+}
