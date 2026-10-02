@@ -143,6 +143,8 @@ for _, page in ipairs({ "MSUF_Menu2_Auras.lua", "MSUF_Menu2_Auras_Group.lua" }) 
         page .. " retains an unresolved global VT call")
 end
 
+-- The group page requires the shipped group aura filter table at load.
+assert(loadfile(root .. "/tools/tests/gf_aura_filter_fixture.lua"))().Install(root, _G, namespace)
 for _, helper in ipairs({ "AuraSettings", "AuraControls" }) do
     assert(loadfile(pagesPath .. "MSUF_Menu2_" .. helper .. ".lua"))(
         "MidnightSimpleUnitFrames", namespace)

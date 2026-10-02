@@ -17,6 +17,10 @@ local T = M.Theme
 local GP = M.GroupPage or {}
 local A3 = MSUF.MSUF_Auras3
 local Model = A3 and A3.MenuModel
+-- The group aura filter tables are owned by the core's aura menu model
+-- (Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua), which publishes them
+-- before this load-on-demand addon loads on every client.
+local GF_AURA_FILTER = MSUF.Require("MSUF_GF_AuraFilter", "Shell/Menu2/Pages/MSUF_Menu2_Auras_Group.lua")
 local VT = M.ValueTextList
 local CreateFrame = _G.CreateFrame
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
@@ -106,20 +110,9 @@ local function CanonicalGroupFilterValue(value, lane)
         if canonical == "Player" or canonical:sub(-6) == "Player" then return "Player" end
         return "ALL"
     end
-    local auraFilter = (type(MSUF.GF) == "table" and MSUF.GF.AuraFilter) or _G.MSUF_GF_AuraFilter
-    local canonical
-    if auraFilter and type(auraFilter.NormalizeFilterToken) == "function" then
-        canonical = auraFilter.NormalizeFilterToken(lane, value)
-    else
-        local key = tostring(value or "ALL"):upper():gsub("[^A-Z0-9]", "")
-        canonical = GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
-    end
+    local canonical = GF_AURA_FILTER.NormalizeFilterToken(lane, value)
     local allowed = GROUP_NATIVE_FILTER_ALLOWED[lane == "debuff" and "debuff" or "buff"]
     return allowed[canonical] and canonical or "ALL"
-end
-local function GF()
-    if type(GP.GF) == "function" then return GP.GF() end
-    return MSUF and MSUF.GF
 end
 local function RefreshGFPreview()
     if type(GP.RefreshGFPreview) == "function" then GP.RefreshGFPreview() end
@@ -210,10 +203,7 @@ end
 local function GFWriteRootValue(scope, key, value, mode)
     GFWriteScopeValue(scope, mode, GFAurasRoot, key, value)
 end
-local function AuraFilter()
-    local gf = GF()
-    return (gf and gf.AuraFilter) or _G.MSUF_GF_AuraFilter
-end
+local function AuraFilter() return GF_AURA_FILTER end
 local function GroupFilterValues(groupKey)
     if M.CLASSIC_AURA_FILTERS_REDUCED == true then
         return VT("ALL", "All", "Player", "Only mine")

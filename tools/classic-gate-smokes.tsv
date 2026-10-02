@@ -346,3 +346,4 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 -	lua	tools/tests/over_absorb_protected_glow_smoke.lua	{root}	Protected over-absorb glow smoke failed
 -	lua	tools/tests/health_dispatch_free_death_smoke.lua	{root}	Dispatch-free health death smoke failed
 clients+Forever	lua	tools/tests/castbar_preview_time_offset_smoke.lua	{root} {flavor}	Castbar preview time offsets drifted from the live bar: {flavor}
+-	lua	tools/tests/menu_required_owners_smoke.lua	{root}	A menu or Edit Mode owner is guarded or falls back instead of being required
