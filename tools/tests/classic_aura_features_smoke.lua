@@ -29,6 +29,10 @@ _G.C_Spell = {
 }
 
 local path = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
+-- The shipped order: the shared data and the visuals load before the features.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_DataShared.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(path))("MidnightSimpleUnitFrames", namespace)
 local features = assert(A3.ClassicFeatures, "Classic feature compiler did not load")
 -- The container compiler sorts with the lane compiler's parser, which Compile

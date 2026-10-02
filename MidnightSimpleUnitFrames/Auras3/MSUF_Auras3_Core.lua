@@ -215,7 +215,13 @@ end
 
 function A3.NormalizeProfileDB(db)
     if type(db.auras2) == "table" then
-        _G.MSUF_ProfileIO_TranslateProfileToCurrent(db, { source = "auras3_core", markProfile = true })
+        --- Every caller passes a stored profile: the live MSUF_DB, a profile being
+        --- exported, or an import candidate whose payload already ran the untrusted
+        --- import pass. Without the trust flag the translator wiped the defaults and
+        --- dispel migration stamps and forced showNavigationIcons back on.
+        _G.MSUF_ProfileIO_TranslateProfileToCurrent(db, {
+            source = "auras3_core", markProfile = true, trustProfileMetadata = true,
+        })
     end
     local current = db.auras3
     if type(current) ~= "table" then

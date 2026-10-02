@@ -268,6 +268,7 @@ clients+Forever	lua	tools/tests/menu_preview_live_parity_smoke.lua	{root} {flavo
 clients+Forever	lua	tools/tests/menu_preview_repaint_budget_smoke.lua	{root} {flavor}	Menu preview repaint budget smoke failed: {flavor}
 -	lua	tools/tests/options_manifest_duplicates_smoke.lua	{root}	Options manifest duplicate smoke failed
 clients+Forever	lua	tools/tests/auras3_normalize_stamp_smoke.lua	{root} {flavor}	Auras3 normalize stamp smoke failed: {flavor}
+clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}	Auras3 normalize trust smoke failed: {flavor}
 -	lua	tools/tests/castbar_time_axis_smoke.lua	{root}	Castbar time-axis decorations follow the fill direction
 -	lua	tools/tests/castbar_driver_lifecycle_smoke.lua	{root}	Castbar driver lifecycle smoke failed
 -	lua	tools/tests/castbar_module_topology_smoke.lua	{root}	Castbar module topology smoke failed

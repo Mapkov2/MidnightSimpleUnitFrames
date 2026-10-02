@@ -237,12 +237,13 @@ _G.MSUF_DB = Profile()
 -- Load the real chain in the shipped TOC order -------------------------------------------
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 local chain = {
-    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
+    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
-    "Game/Classic/Auras/MSUF_Auras3_Preview.lua", "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
     "Game/Classic/Auras/MSUF_Auras3_Buttons.lua", "Game/Classic/Auras/MSUF_Auras3_Filters.lua",
     "Game/Classic/Auras/MSUF_Auras3_FrameVisuals.lua", "Game/Classic/Auras/MSUF_Auras3_Lanes.lua",
     "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua", "Game/Classic/Auras/MSUF_Auras3_Requests.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Preview.lua",
 }
 local overridePaths = {}
 for relative, path in pairs(overrides) do overridePaths[ADDON .. relative] = path end
@@ -297,9 +298,19 @@ namespace.GF = {
         return any
     end,
     CompileSpec = function(_, frame) return frame.MSUFSpec end,
+    FrameForUnit = function(unit)
+        for i = 1, #groupFrames do
+            if groupFrames[i].MSUFUnitKey == unit then return groupFrames[i] end
+        end
+    end,
+    -- No live group runtime or preview here: their refreshes have nothing to redraw.
+    RefreshVisuals = function() end,
+    RefreshPreviewLayout = function() end,
+    DIRTY_AURAS = 0x40,
 }
 local currentFont = "Fonts\\FontA.ttf"
-_G.MSUF_GetGlobalFontSettings = function() return currentFont, "OUTLINE", 1, 1, 1, nil, false end
+-- Castbars_Core.lua publishes this as MSUF.MSUF_GetGlobalFontSettings in game.
+namespace.MSUF_GetGlobalFontSettings = function() return currentFont, "OUTLINE", 1, 1, 1, nil, false end
 local function Config(frame) return frame._msufA3State and frame._msufA3State.config end
 local function Lane(frame, kind) return frame._msufA3State and frame._msufA3State.lanes[kind] end
 local function ReplayUnitAura(frame) return Update(frame, { updatedAuraInstanceIDs = { UnitList(frame.MSUFUnitKey)[1].auraInstanceID } }) end
@@ -1153,6 +1164,8 @@ do
     -- (A3._HideLane is called only by Retail's NativeApply, which defines its own).
     assert(A3._HideLane == nil and A3.UnitFrameOwnsUnitAura == nil and A3.IconStylePreviewForScope == nil,
         "F14: an uncalled Classic aura export (_HideLane, UnitFrameOwnsUnitAura, IconStylePreviewForScope) is back")
+    -- Review 2026-10-02: A3.RenderCachedFrame had no caller on any client.
+    assert(A3.RenderCachedFrame == nil, "F14: the uncalled A3.RenderCachedFrame export is back")
     local source = ""
     for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
         local relative = "Game/Classic/Auras/MSUF_Auras3_" .. module .. ".lua"
@@ -1164,6 +1177,10 @@ do
         "F14: the Classic backend calls the A3.CooldownText hook again, which no Classic file defines")
     assert(type(_G.MSUF_SetDispelOverlayPreview) == "function" and type(_G.MSUF_SetDispelSymbolPreview) == "function",
         "F14: precondition: the live Classic dispel previews are gone")
+    -- The dispel previews are an ordinary module loaded after the backend, not an
+    -- installer closure the backend calls.
+    assert(namespace.InstallClassicAuraPreview == nil and type(A3._ClassicBackend.Preview) == "table",
+        "F14: the Classic dispel previews are installed by a closure again")
 end
 
 -- F8, F9, F4. Visuals drawn once per config, one shared timer driver, live buckets -------
@@ -1391,6 +1408,48 @@ do
         .. tostring(container.frame:GetFrameStrata()) .. ")")
     Widget.SetFrameStrata, Widget.GetFrameStrata = savedSet, savedGet
     _G.MSUF_DB.auras3.customContainers = nil
+end
+
+-- C3.5 follow-up. A dispel symbol strata set back to AUTO returns to the frame's --------
+-- An explicit "Symbol strata" stays on the symbol host until the host is written
+-- again, so going back to AUTO has to restore the frame's strata; it used to keep
+-- the last explicit one. Both the live and the menu preview host share the path.
+do
+    local savedSet, savedGet = Widget.SetFrameStrata, Widget.GetFrameStrata
+    function Widget:SetFrameStrata(strata) self._strata = strata end
+    function Widget:GetFrameStrata()
+        return self._strata or (self._parent and self._parent:GetFrameStrata()) or "MEDIUM"
+    end
+    -- The menu preview host is draggable.
+    local savedMovable, savedDrag = Widget.SetMovable, Widget.RegisterForDrag
+    function Widget:SetMovable(movable) self._movable = movable end
+    function Widget:RegisterForDrag(button) self._dragButton = button end
+    local V = assert(A3.ClassicVisuals, "C3.5: precondition: the Classic aura visuals did not load")
+    local symbol = { enabled = true, mode = "ALL", style = "BLIZZARD", size = 14, spacing = 2, growth = "RIGHT",
+        anchor = "TOPRIGHT", x = 0, y = 0, alpha = 1, layer = 8, strata = "HIGH" }
+    local visual = { symbol = symbol }
+    for _, preview in ipairs({ false, true }) do
+        local label = preview and "preview" or "live"
+        local frame = setmetatable({ _shown = true }, Widget)
+        frame:SetFrameStrata("LOW")
+        symbol.strata = "HIGH"
+        assert(V.UpdateDispelSymbols(frame, visual, { Magic = true }, preview) == true,
+            "C3.5: precondition: the " .. label .. " dispel symbol did not render")
+        local host = assert(frame[preview and "_msufA3ClassicDispelSymbolPreviewHost" or "_msufA3ClassicDispelSymbolHost"],
+            "C3.5: precondition: no " .. label .. " dispel symbol host")
+        assert(host:GetFrameStrata() == "HIGH", "C3.5: precondition: an explicit symbol strata was not applied")
+        symbol.strata = "AUTO"
+        V.UpdateDispelSymbols(frame, visual, { Magic = true }, preview)
+        assert(host:GetFrameStrata() == "LOW",
+            "C3.5: Symbol strata back on AUTO kept the " .. label .. " symbol on " .. tostring(host:GetFrameStrata()))
+        -- A frame on another strata: AUTO follows it on the next render.
+        frame:SetFrameStrata("MEDIUM")
+        V.UpdateDispelSymbols(frame, visual, { Magic = true, Curse = true }, preview)
+        assert(host:GetFrameStrata() == "MEDIUM",
+            "C3.5: an AUTO " .. label .. " symbol did not take its frame's strata")
+    end
+    Widget.SetFrameStrata, Widget.GetFrameStrata = savedSet, savedGet
+    Widget.SetMovable, Widget.RegisterForDrag = savedMovable, savedDrag
 end
 
 -- F10. The icon-style border draws like Retail's ApplyIconStyleBorder ------------------

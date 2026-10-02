@@ -13,11 +13,10 @@ local type, tostring, pairs = type, tostring, pairs
 local A3 = MSUF.MSUF_Auras3
 local Model = type(A3) == "table" and A3.MenuModel or nil
 if type(Model) ~= "table" or A3.__classicAuraMenuCompatLoaded == true then return end
+--- The Classic aura compiler and the shared menu model both load before this
+--- adapter (Game/<Flavor>/Auras.xml).
 local Compile = A3._ClassicCompile
-if type(Compile) ~= "table" or type(Compile.ReadBlacklistHidePermanent) ~= "function"
-    or type(Model.WriteBlacklistHidePermanent) ~= "function" then
-    return
-end
+assert(type(Compile) == "table", "Classic aura menu compat requires Game/Classic/Auras/MSUF_Auras3_Compile.lua")
 local ReadBlacklistHidePermanent = Compile.ReadBlacklistHidePermanent
 
 local DeepCopy = MSUF.MSUF_DeepCopy
@@ -34,13 +33,7 @@ for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
 end
 
 local function AuraDB()
-    local auras, shared
-    if type(A3.EnsureDB) == "function" then auras, shared = A3.EnsureDB() end
-    if type(auras) ~= "table" then
-        local db = _G.MSUF_DB
-        auras = type(db) == "table" and db.auras3 or nil
-    end
-    if type(auras) ~= "table" then return nil, nil end
+    local auras, shared = A3.EnsureDB()
     if type(auras.perUnit) ~= "table" then auras.perUnit = {} end
     shared = type(shared) == "table" and shared
         or (type(auras.shared) == "table" and auras.shared or nil)

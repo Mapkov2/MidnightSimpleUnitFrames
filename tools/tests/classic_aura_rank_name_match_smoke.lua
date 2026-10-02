@@ -60,7 +60,7 @@ end
 -- 2. Every compile site that builds an include-ID set builds the name set next
 -- to it, and both runtime predicates consult it when the ID misses.
 local compileSource = readFile("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua")
-assert(compileSource:find("includeSpellNames = A3.ClassicFeatures.NameHash(includeSpellIDs)", 1, true),
+assert(compileSource:find("includeSpellNames = Features.NameHash(includeSpellIDs)", 1, true),
     "Buff/Debuff include lists must compile an aura-name set")
 local featuresSource = readFile("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua")
 assert(featuresSource:find("includeSpellNames = NameHash(spellIDs),", 1, true),
@@ -120,7 +120,9 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
     _G.GetSpellInfo = function(spellID) return names[spellID] end
     _G.C_Spell = nil
     Manifest.LoadSelected(root, flavor, namespace, {
+        "Auras3/MSUF_Auras3_IconShape.lua",
         "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
+        "Game/Classic/Auras/MSUF_Auras3_Visuals.lua",
         "Game/Classic/Auras/MSUF_Auras3_Features.lua",
         "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
     })

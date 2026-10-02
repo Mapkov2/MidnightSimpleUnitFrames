@@ -853,8 +853,8 @@ local function UpdateStealableMarker(button, cfg, data)
         return
     end
 
-    local style = type(A3.NormalizeClassicStealableStyle) == "function"
-        and A3.NormalizeClassicStealableStyle(cfg.stealableStyle) or "BORDER_ICON"
+    -- Compile.lua defines the normalizer; buttons render only after it loaded.
+    local style = A3.NormalizeClassicStealableStyle(cfg.stealableStyle)
     if style == "BORDER" or style == "BORDER_ICON" then
         border = border or EnsureStealableTexture(button, "_msufA3ClassicStealableBorder", 5)
         border:ClearAllPoints()
@@ -1084,7 +1084,8 @@ function V.OnDispelPreviewDragStop(host)
     if type(handler) == "function" then
         handler(_G.MSUF_DispelSymbolPreviewScope, x, y, frame)
     end
-    if type(A3.RefreshDispelSymbolPreview) == "function" then A3.RefreshDispelSymbolPreview() end
+    -- Only the preview host is draggable, and Preview.lua renders it.
+    A3.RefreshDispelSymbolPreview()
 end
 
 function V.UpdateDispelSymbols(frame, visual, present, preview)
@@ -1150,7 +1151,13 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
     host:SetSize(horizontal and (#selected * size + math_max(0, #selected - 1) * spacing) or size,
         horizontal and size or (#selected * size + math_max(0, #selected - 1) * spacing))
     if host.SetAlpha then host:SetAlpha(Clamp01(cfg.alpha, 1)) end
-    if host.SetFrameStrata and cfg.strata and cfg.strata ~= "AUTO" then host:SetFrameStrata(cfg.strata) end
+    if host.SetFrameStrata then
+        --- An explicit strata stays on the host until it is written again, so AUTO
+        --- restores the frame's strata instead of keeping the last explicit one.
+        local strata = cfg.strata
+        if strata == nil or strata == "AUTO" then strata = A3.ReadParentFrameStrata(frame) end
+        if strata then host:SetFrameStrata(strata) end
+    end
     if host.SetFrameLevel and frame.GetFrameLevel then host:SetFrameLevel((frame:GetFrameLevel() or 0) + Clamp(cfg.layer, 8, 0, 30)) end
     for i = 1, #selected do
         local tile = host.tiles[i]

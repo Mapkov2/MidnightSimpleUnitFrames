@@ -16,12 +16,20 @@ local namespace = {
         return value
     end,
 }
+-- The Auras3 core is not loaded here; its EnsureDB returns the profile's tree.
+namespace.MSUF_Auras3.EnsureDB = function()
+    local auras = _G.MSUF_DB.auras3
+    return auras, auras.shared
+end
 namespace.MSUF_Auras3.BumpRuntimeConfig = function()
     local A3 = namespace.MSUF_Auras3
     A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
     return A3._runtimeConfigGen
 end
 
+-- No live group frames until the Group bridge section below: the group
+-- runtime (MSUF.GF, loaded after the aura backend in game) has nothing to redraw.
+namespace.GF = { ForEachFrame = function() return false end, RefreshVisuals = function() end, DIRTY_AURAS = 0x40 }
 _G.MSUF_NS = namespace
 _G.MSUF = namespace
 _G.MSUF_DB = {
@@ -99,6 +107,10 @@ _G.C_Timer = {}
 local classicPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"
 local featuresPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
 local retailPath = root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
+local classicAuras = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_"
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(classicAuras .. "DataShared.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(classicAuras .. "Visuals.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(featuresPath))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua"))("MidnightSimpleUnitFrames", namespace)
 local classicBackend = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_"
@@ -107,6 +119,7 @@ for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes" }) do
 end
 assert(loadfile(classicPath))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(classicBackend .. "Requests.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(classicBackend .. "Preview.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(retailPath))("MidnightSimpleUnitFrames", namespace)
 
 assert(registrations == 1, "Retail aura backend registered after Classic ownership")

@@ -81,8 +81,9 @@ for client in client_suffixes():
                      "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua"):
         check(order.index(prefix + provider) < order.index(prefix + defaults), client, provider, "must load before", defaults)
     if client != "Mainline":
-        check(order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_Preview.lua") < order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"),
-              client, "Classic aura preview must load before the Classic aura backend")
+        # The menu preview module imports the compiler and installs only with the backend.
+        check(order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_Requests.lua") < order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_Preview.lua"),
+              client, "Classic aura preview must load after the Classic aura backend")
         check(order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_Compile.lua") < order.index(prefix + "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"),
               client, "Classic aura compiler must load before the Classic aura backend")
         # The backend files import the earlier ones at load (A3._ClassicBackend).

@@ -34,6 +34,8 @@ local IsUnitToken = Compile.IsUnitToken
 local BindFrameUnit = Compile.BindFrameUnit
 local AuraDispelColor = Buttons.AuraDispelColor
 local MatchDispelTrigger = Filters.MatchDispelTrigger
+-- The Classic visuals (Visuals.lua) draw the frame-level symbols and overlay.
+local renderer = A3.ClassicVisuals
 
 local function ResetLaneVisualCache(lane)
     if not lane then return end
@@ -169,11 +171,9 @@ local function ResolveDispelTriggerVisual(lane, unit, visual, trigger)
 end
 
 local function UpdateDispelSymbols(frame, lane, visual, unit)
-    local renderer = A3.ClassicVisuals
-    if not (renderer and type(renderer.UpdateDispelSymbols) == "function") then return false end
     local symbol = visual and visual.symbol
     if not (frame and symbol and symbol.enabled == true and lane and lane.all) then
-        return renderer.HideDispelSymbols and renderer.HideDispelSymbols(frame) or false
+        return renderer.HideDispelSymbols(frame)
     end
     -- Per-frame scratch set, wiped instead of reallocated on every
     -- visual-dirty UNIT_AURA; the renderer only reads it during this call.
@@ -195,11 +195,9 @@ end
 --- dispellable by me, cast by me, or every debuff (Any dispel type); only a
 --- readable dispel type adds a symbol, as in the lane walk above.
 local function UpdateDirectDispelSymbols(frame, visual, unit)
-    local renderer = A3.ClassicVisuals
-    if not (renderer and type(renderer.UpdateDispelSymbols) == "function") then return false end
     local symbol = visual and visual.symbol
     if not (frame and symbol and symbol.enabled == true and IsUnitToken(unit) and GetAuraSlots and GetAuraDataBySlot) then
-        return renderer.HideDispelSymbols and renderer.HideDispelSymbols(frame) or false
+        return renderer.HideDispelSymbols(frame)
     end
     local trigger = symbol.trigger
     local filter = trigger == "PLAYER_CAST" and "HARMFUL|PLAYER"
@@ -264,9 +262,7 @@ local function SetFrameAuraVisualState(frame,
     orr, og, ob, oa = orr or br, og or bg, ob or bb, oa or ba
     borderSecret = borderSecret == true
     overlaySecret = overlaySecret == true
-    local renderer = A3.ClassicVisuals
-    local overlayRendererChanged = renderer and type(renderer.UpdateDispelOverlay) == "function"
-        and renderer.UpdateDispelOverlay(frame, visual, overlayActive, orr, og, ob, oa) or false
+    local overlayRendererChanged = renderer.UpdateDispelOverlay(frame, visual, overlayActive, orr, og, ob, oa) or false
     local borderChanged = frame._msufA3DispelActive ~= borderActive
         or frame._msufA3DispelColorSecret ~= borderSecret
         or frame._msufA3DispelToken ~= borderToken
@@ -335,9 +331,7 @@ end
 
 local function ClearFrameAuraVisualState(frame)
     if not frame then return false end
-    local renderer = A3.ClassicVisuals
-    local symbolChanged = renderer and type(renderer.HideDispelSymbols) == "function"
-        and renderer.HideDispelSymbols(frame) or false
+    local symbolChanged = renderer.HideDispelSymbols(frame) or false
     if not FrameHasAuraVisualState(frame) then
         return symbolChanged
     end

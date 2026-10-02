@@ -209,12 +209,13 @@ _G.MSUF_DB = {
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 local chain = {
     "Game/Shared/Initialize.lua",
-    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
+    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
-    "Game/Classic/Auras/MSUF_Auras3_Preview.lua", "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
     "Game/Classic/Auras/MSUF_Auras3_Buttons.lua", "Game/Classic/Auras/MSUF_Auras3_Filters.lua",
     "Game/Classic/Auras/MSUF_Auras3_FrameVisuals.lua", "Game/Classic/Auras/MSUF_Auras3_Lanes.lua",
     "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua", "Game/Classic/Auras/MSUF_Auras3_Requests.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Preview.lua",
 }
 local overridePaths = {}
 for relative, path in pairs(overrides) do overridePaths[ADDON .. relative] = path end

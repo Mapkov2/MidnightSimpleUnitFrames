@@ -1,11 +1,28 @@
--- InstallClassicAuraPreview: isolated ownership, bound once during addon initialization.
+--- Game/Classic/Auras/MSUF_Auras3_Preview.lua
+--- The Menu2 dispel overlay and dispel symbol previews of the Classic aura
+--- backend: the preview modes and scopes the menu pages set, the per-frame
+--- preview render through the Classic visuals, and the symbol drag handler.
+--- Every entry point is a cold path; UNIT_AURA never reaches this file.
+---
+--- Game/<Flavor>/Auras.xml loads it after the unit-frame aura backend
+--- (Requests.lua last). It imports the compiler at load time and installs only
+--- when that backend loaded, as Requests.lua's installer call used to.
+if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
-MSUF.InstallClassicAuraPreview = function(dependencies)
-local A3 = dependencies.A3
-local CompileFrameAuraVisual = dependencies.CompileFrameAuraVisual
-local ExportPublic = dependencies.ExportPublic
-local UF = dependencies.UF
-local CombatBlocked = dependencies.CombatBlocked
+MSUF = MSUF or (_G.MSUF_NS) or {}
+local A3 = MSUF.MSUF_Auras3
+local Backend = type(A3) == "table" and A3._ClassicBackend
+if not (Backend and Backend.Requests) or Backend.Preview then return end
+local Compile, Visuals = A3._ClassicCompile, A3.ClassicVisuals
+local Preview = {}
+
+local UF = MSUF.UF
+local ExportPublic = MSUF.ExportPublic
+local type, tostring, pairs = type, tostring, pairs
+
+local CompileFrameAuraVisual = Compile.CompileFrameAuraVisual
+local CombatBlocked = Compile.AuraRuntimeCombatBlocked
+
 local function NormalizePreviewScope(scope)
     scope = tostring(scope or "shared"):lower()
     if scope == "" or scope == "all" or scope == "global" then return "shared" end
@@ -30,11 +47,12 @@ local function PreviewApplies(frame, scope, includeGroup)
     return frame.MSUFUnitKey == wanted or frame.configKey == wanted
 end
 
+--- Live unit frames, live group frames and the group preview frames. The group
+--- frame modules load after this file, before any preview can be switched on.
 local function ForEachPreviewFrame(fn)
-    if UF and type(UF.ForEachFrame) == "function" then UF.ForEachFrame(fn) end
-    local gf = MSUF and MSUF.GF
-    if not gf then return end
-    if type(gf.ForEachFrame) == "function" then gf.ForEachFrame(fn, true) end
+    UF.ForEachFrame(fn)
+    local gf = MSUF.GF
+    gf.ForEachFrame(fn, true)
     local previews = gf._previewFrames
     if type(previews) ~= "table" then return end
     for _, frames in pairs(previews) do
@@ -47,13 +65,11 @@ local function ForEachPreviewFrame(fn)
 end
 
 local function ApplyOverlayPreview(frame)
-    local renderer = A3.ClassicVisuals
-    if not (renderer and type(renderer.UpdateDispelOverlayPreview) == "function") then return false end
     local active = _G.MSUF_DispelOverlayPreviewMode == true
         and PreviewApplies(frame, _G.MSUF_DispelOverlayPreviewScope, true)
     local visual = active and frame and frame.MSUFSpec and CompileFrameAuraVisual(frame.MSUFSpec) or nil
     active = active and visual and visual.overlayEnabled == true or false
-    return renderer.UpdateDispelOverlayPreview(frame, visual, active)
+    return Visuals.UpdateDispelOverlayPreview(frame, visual, active)
 end
 
 function A3.RefreshDispelOverlayPreview()
@@ -72,13 +88,11 @@ function A3.SetDispelOverlayPreview(active, scope)
 end
 
 local function ApplySymbolPreview(frame)
-    local renderer = A3.ClassicVisuals
-    if not (renderer and type(renderer.UpdateDispelSymbolPreview) == "function") then return false end
     local active = _G.MSUF_DispelSymbolPreviewMode == true
         and PreviewApplies(frame, _G.MSUF_DispelSymbolPreviewScope, false)
     local visual = active and frame and frame.MSUFSpec and CompileFrameAuraVisual(frame.MSUFSpec) or nil
     active = active and visual and visual.symbol and visual.symbol.enabled == true or false
-    return renderer.UpdateDispelSymbolPreview(frame, visual, active)
+    return Visuals.UpdateDispelSymbolPreview(frame, visual, active)
 end
 
 function A3.RefreshDispelSymbolPreview()
@@ -108,4 +122,5 @@ ExportPublic("MSUF_SetDispelSymbolPreview", A3.SetDispelSymbolPreview)
 ExportPublic("MSUF_RefreshDispelSymbolPreview", A3.RefreshDispelSymbolPreview)
 ExportPublic("MSUF_ApplyDispelSymbolPreviewToFrame", ApplySymbolPreview)
 ExportPublic("MSUF_SetDispelSymbolPreviewMoveHandler", A3.SetDispelSymbolPreviewMoveHandler)
-end
+
+Backend.Preview = Preview

@@ -225,11 +225,15 @@ local function Boot(withFeatures, client)
     end
     _G.MSUF_NS, _G.MSUF = namespace, namespace
     local base = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/"
+    -- The shipped order: the shared data and the visuals load before the features.
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
+    assert(loadfile(base .. "MSUF_Auras3_DataShared.lua"))("MidnightSimpleUnitFrames", namespace)
+    assert(loadfile(base .. "MSUF_Auras3_Visuals.lua"))("MidnightSimpleUnitFrames", namespace)
     if withFeatures then
         assert(loadfile(base .. "MSUF_Auras3_Features.lua"))("MidnightSimpleUnitFrames", namespace)
     end
     assert(loadfile(base .. "MSUF_Auras3_Compile.lua"))("MidnightSimpleUnitFrames", namespace)
-    for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
+    for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests", "Preview" }) do
         assert(loadfile(base .. "MSUF_Auras3_" .. module .. ".lua"))("MidnightSimpleUnitFrames", namespace)
     end
     Check(element, "Classic aura element did not register")
@@ -498,56 +502,15 @@ do
     records[#records] = nil
 end
 
--- 4. Only mine without the feature compiler (ownership resolved per aura) ---
+-- 4. The compiler requires the feature compiler ----------------------------
+-- Every Game/<Flavor>/Auras.xml loads Features.lua before Compile.lua. A
+-- backend without it used to compile every lane with the base filter, so
+-- Only mine lost its native PLAYER scan without a word; the compiler now
+-- refuses to load instead (sections 2 and 3 cover Only mine itself).
 do
-    local fallbackA3, fallbackElement = Boot(false)
-    local own = World.Aura({ source = "player" })
-    local pet = World.Aura({ source = "pet" })
-    local vehicle = World.Aura({ source = "vehicle" })
-    local foreign = World.Aura({ source = "party2", legacyFlag = false })
-    local unknown = World.Aura({})
-    local legacyOwn = World.Aura({ legacyFlag = true })
-    local ownPermanent = World.Aura({ source = "player", duration = 0 })
-    local debuffOwn = World.Aura({ harmful = true, source = "player" })
-    local debuffForeign = World.Aura({ harmful = true, source = "party2" })
-    local records = { foreign, own, debuffForeign, pet, unknown, debuffOwn, vehicle, legacyOwn, ownPermanent }
-
-    -- The default player-first sort resolves ownership on its own, which would
-    -- mask a lane that lost Only mine's ownership request. The ID sort does
-    -- not, so there Only mine alone must make the runtime resolve each caster.
-    local cases = {
-        { onlyMine = false }, { onlyMine = true },
-        { onlyMine = false, sort = "INSTANCE_ID" }, { onlyMine = true, sort = "INSTANCE_ID" },
-    }
-    for _, case in ipairs(cases) do
-        local onlyMine = case.onlyMine
-        local label = "fallback target (onlyMine=" .. tostring(onlyMine) .. ", sort=" .. (case.sort or "default") .. ")"
-        SetTargetDB({
-            buffFilters = { onlyMine = onlyMine }, debuffFilters = { onlyMine = onlyMine },
-            buffSort = case.sort, debuffSort = case.sort,
-        })
-        World.Set("target", records)
-        local cfg = fallbackA3.ResolveUnitFrameConfig("target", {})
-        Check(cfg.lanes.buff.filter == "HELPFUL" and cfg.lanes.debuff.filter == "HARMFUL",
-            label .. ": lanes without the feature compiler must scan with the base filter")
-        Check(cfg.lanes.buff.onlyMine == onlyMine and cfg.lanes.buff.hasInclusive == onlyMine
-            and cfg.lanes.debuff.hasInclusive == onlyMine,
-            label .. ": Only mine did not compile into an inclusive lane")
-        if case.sort then
-            Check(cfg.lanes.buff.needsPlayerFlag == onlyMine and cfg.lanes.debuff.needsPlayerFlag == onlyMine,
-                label .. ": Only mine did not request per-aura ownership resolution")
-        end
-        local frame = EnableFrame(fallbackElement, NewFrame("target"))
-        if onlyMine then
-            ExpectVisible(frame, "buff", IDs(own.id, pet.id, vehicle.id, legacyOwn.id, ownPermanent.id), label)
-            ExpectVisible(frame, "debuff", IDs(debuffOwn.id), label)
-        else
-            ExpectVisible(frame, "buff",
-                IDs(own.id, pet.id, vehicle.id, foreign.id, unknown.id, legacyOwn.id, ownPermanent.id), label)
-            ExpectVisible(frame, "debuff", IDs(debuffOwn.id, debuffForeign.id), label)
-        end
-        ExpectNoUnknownFilters(label)
-    end
+    local ok, failure = pcall(Boot, false)
+    Check(not ok and tostring(failure):find("MSUF_Auras3_Features.lua", 1, true),
+        "the Classic aura compiler loaded without the feature compiler: " .. tostring(failure))
 end
 
 -- 5. Dispel border with aura icons off (direct visual queries) --------------

@@ -23,12 +23,16 @@ local ADDON = root .. "/MidnightSimpleUnitFrames/"
 
 -- Budgets -------------------------------------------------------------------------------
 -- Lua VM instructions per operation: the 2026-10-01 baseline plus 2 %.
+-- 2026-10-02 (W-C3): direct module calls instead of guards made three
+-- operations cheaper (targetAddRemove 11224 -> 11164, targetForceFull
+-- 10942 -> 10898, targetReapply 27935 -> 27653); their budgets are the new
+-- values plus 2 %.
 -- MSUF_AURA_BUDGET_MEASURE=1 prints the measured values without asserting.
 local BUDGET = {
     targetDelta = 781,         -- UNIT_AURA, one refreshed aura (in-place update)
-    targetAddRemove = 11457,   -- UNIT_AURA, one aura added, then removed
-    targetForceFull = 11175,   -- ForceUpdate: full scan and render of both lanes
-    targetReapply = 28452,     -- UF.ApplyElementToFrame on an active frame (C3.2: was 56621)
+    targetAddRemove = 11387,   -- UNIT_AURA, one aura added, then removed
+    targetForceFull = 11116,   -- ForceUpdate: full scan and render of both lanes
+    targetReapply = 28206,     -- UF.ApplyElementToFrame on an active frame (C3.2: was 56621)
     partyDelta = 702,          -- group frame UNIT_AURA, one refreshed aura
     partyReapply = 12898,      -- UF.ApplyElementToFrame on an active group frame (C3.2: was 25598)
     combatRender = 173,        -- PLAYER_REGEN_DISABLED render of the cached lanes
@@ -226,12 +230,13 @@ function UF.RegisterElement(name, element) UF.elements[name] = element; register
 -- Load the real chain in the shipped TOC order ------------------------------------------
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 local chain = {
-    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
+    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
-    "Game/Classic/Auras/MSUF_Auras3_Preview.lua", "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
     "Game/Classic/Auras/MSUF_Auras3_Buttons.lua", "Game/Classic/Auras/MSUF_Auras3_Filters.lua",
     "Game/Classic/Auras/MSUF_Auras3_FrameVisuals.lua", "Game/Classic/Auras/MSUF_Auras3_Lanes.lua",
     "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua", "Game/Classic/Auras/MSUF_Auras3_Requests.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Preview.lua",
 }
 local scanFunctionFound = false
 manifest.LoadSelected(root, "Vanilla", namespace, chain, function(path)

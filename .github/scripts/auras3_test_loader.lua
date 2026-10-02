@@ -301,11 +301,29 @@ local function PrepareDirectContracts(source, namespace)
             "State/Defaults/MSUF_Defaults_Bars.lua", "State/Defaults/MSUF_Defaults_Units.lua",
         }, originalLoadfile)
     end
+    -- The explicit optional-dependency helper (Kernel/MSUF_Require.lua), loaded
+    -- from its owner into a harness namespace that has no kernel.
+    if Uses("MSUF.Optional(") and not namespace.Optional and namespace.ExportPublic then
+        assert(originalLoadfile("MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
+    end
+    -- Castbars/MSUF_Castbars_Core.lua publishes the global font settings after
+    -- the aura backend loads. Aura harnesses load no castbar core: fonts keep
+    -- their defaults unless a smoke installs its own settings.
+    if Uses("MSUF.MSUF_GetGlobalFontSettings()") and namespace.MSUF_GetGlobalFontSettings == nil then
+        namespace.MSUF_GetGlobalFontSettings = function() end
+    end
+    -- The Auras3 core's strata helpers, bound from their owner for harnesses
+    -- that stand in for the core with a hand-built A3 table.
+    local auras3 = namespace.MSUF_Auras3
+    if (Uses("A3.SyncFrameStrata(") or Uses("A3.ReadParentFrameStrata(")) and type(auras3) == "table"
+        and auras3.SyncFrameStrata == nil then
+        local owner = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"
+        local preamble = "local AuraStrataIsSecret = _G.issecretvalue\n"
+        auras3.ReadParentFrameStrata = auras3.ReadParentFrameStrata or Bind(owner, "ReadParentFrameStrata", preamble)
+        auras3.SyncFrameStrata = Bind(owner, "SyncFrameStrata", preamble)
+    end
     if Uses("local Shape = A3.IconShape") then
         assert(originalLoadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
-    end
-    if Uses("MSUF.InstallClassicAuraPreview({") then
-        assert(originalLoadfile("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Preview.lua"))("MidnightSimpleUnitFrames", namespace)
     end
     if Uses("M.InstallColorPicker({") then
         assert(originalLoadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua"))("MidnightSimpleUnitFrames", namespace)
@@ -413,7 +431,8 @@ local function NeedsDirectContracts(source)
     if (source:match("= MSUF%.ExportPublic[ \t]*[\r\n]") or source:match("= ns%.ExportPublic[ \t]*[\r\n]")) then return true end
     for _, key in ipairs({ "CreateAnimationStarter", "_G.MSUF_EM2.ExternalProviders.Create", "MSUF_IsGroupUnitToken", "Text.ApplyNameTextColor", "Text.ApplyInlineTextColor", "MSUF.Secrets", "Layers.BorderOffset", "= Apply.ColorTexture", "_G.issecretvalue", "_G.wipe", "M.Lines", "M.KeySetFromWords", "M.FindPageEntry", "M.PageKeyForWidget", "MSUF_NormalizeFontKey", "A3.NormalizeProfileDB", "M.TranslateText", "M.Tr", "= MSUF.Translate", "= MSUF.UF.GetFrame", "MSUF.Secrets.PlainBool",
         "MSUF.MSUF_Auras3.GetDurationBarColor", "Layers.BaseFrameLevel", "= Apply.Text", "= Apply.Shown", "= Apply.Texture", "MSUF.UF.Clamp01", "MSUF.UFBarTextCommon.HealthModeNeedsIdentity", "UF.IsBossUnit", "GF.GetLiveGroupKind", "GF.GetAnchorPoint", "_G.MSUF_UF_ScheduleApplyCommit", "_G.MSUF_GetSharedMedia", "_G.MSUF_EnsureCastbarGeneralDB", "M.AuraCatalogToken", "M.GroupAuraSettingKeys", "M.TrimText", "PreviewHelpers.ReadPreviewBarsBool", "M.Widgets.SetTextLayout", "M.Widgets.ResolveContextColorOption", "M.NormalizeControlPath", "M.PortableControlToken", "M.AccessibleNumber",
-        "M.ApplyService.CallGlobal", "= M.Format", "W.ThemedControlCard", "W.ToggleBadge", "W.SetTileVisual", "PreviewHelpers.ExactPreviewDelta" }) do
+        "M.ApplyService.CallGlobal", "= M.Format", "W.ThemedControlCard", "W.ToggleBadge", "W.SetTileVisual", "PreviewHelpers.ExactPreviewDelta",
+        "MSUF.Optional(", "MSUF.MSUF_GetGlobalFontSettings()", "A3.SyncFrameStrata(", "A3.ReadParentFrameStrata(" }) do
         if source:find(key, 1, true) then return true end
     end
     return false

@@ -14,6 +14,9 @@ if type(A3) ~= "table" then return end
 
 local Features = A3.ClassicFeatures or {}
 A3.ClassicFeatures = Features
+--- Visuals.lua loads right before this file in every Game/<Flavor>/Auras.xml.
+local Visuals = A3.ClassicVisuals
+assert(type(Visuals) == "table", "Classic aura features require Game/Classic/Auras/MSUF_Auras3_Visuals.lua")
 
 local type, tostring, tonumber, pairs, next = type, tostring, tonumber, pairs, next
 local math_floor, math_max, math_min = math.floor, math.max, math.min
@@ -92,11 +95,7 @@ local function MergeSpellIDs(out, source, disabled)
     out = out or {}
     for spellID in pairs(source or {}) do
         if not (disabled and disabled[spellID] == true) then
-            if type(A3.AddAuraSpellIDAndAliases) == "function" then
-                A3.AddAuraSpellIDAndAliases(out, spellID)
-            else
-                out[spellID] = true
-            end
+            A3.AddAuraSpellIDAndAliases(out, spellID)
         end
     end
     return out
@@ -315,11 +314,7 @@ local function TargetDotHash(entry)
     local out = {}
     for spellID in pairs(selected) do
         if known[spellID] == true or (custom and custom[spellID] == true) then
-            if type(A3.AddAuraSpellIDAndAliases) == "function" then
-                A3.AddAuraSpellIDAndAliases(out, spellID)
-            else
-                out[spellID] = true
-            end
+            A3.AddAuraSpellIDAndAliases(out, spellID)
         end
     end
     return next(out) and out or nil
@@ -384,7 +379,8 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     local filter = filterPlan.scanFilter
     local onlyMine = activeFilters and activeFilters.onlyMine == true or false
     local hasInclusive = filterPlan.hasRequirements == true
-    local debuffTypeBorderMode = helpful ~= true and type(A3.NormalizeClassicDebuffTypeBorderMode) == "function"
+    --- Compile.lua defines the normalizer; lanes compile only after it loaded.
+    local debuffTypeBorderMode = helpful ~= true
         and A3.NormalizeClassicDebuffTypeBorderMode(placed.debuffTypeBorderMode, false, false) or "OFF"
     local cfg = {
         kind = kind,
@@ -543,9 +539,7 @@ function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
                     elseif entry.portraitIcon == true and targetDot then
                         lane = PortraitLane(lane, frameSpec, entry, "targetDotPortrait", "TargetDotPortrait") or lane
                     end
-                    if A3.ClassicVisuals and type(A3.ClassicVisuals.EnrichCustomLane) == "function" then
-                        A3.ClassicVisuals.EnrichCustomLane(lane, entry, frameSpec)
-                    end
+                    Visuals.EnrichCustomLane(lane, entry, frameSpec)
                     lanes[lane.kind] = lane
                     order[#order + 1] = lane.kind
                 end
@@ -565,9 +559,7 @@ function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
                     tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF", "CustomDisplay" .. tostring(index), nil, lanePadding)
                 lane.appearanceKind = lane.harmful == true and "debuff" or "buff"
                 lane.max = 1
-                if A3.ClassicVisuals and type(A3.ClassicVisuals.EnrichCustomLane) == "function" then
-                    A3.ClassicVisuals.EnrichCustomLane(lane, entry, frameSpec)
-                end
+                Visuals.EnrichCustomLane(lane, entry, frameSpec)
                 lanes[kind] = lane
                 order[#order + 1] = kind
             end
@@ -596,9 +588,7 @@ local function AddIndicatorLane(lanes, order, unit, item, index, prefix)
     lane.max = 1
     lane.cols, lane.rows = 1, 1
     lane.width, lane.height = lane.buttonWidth, lane.buttonHeight
-    if A3.ClassicVisuals and type(A3.ClassicVisuals.EnrichCustomLane) == "function" then
-        A3.ClassicVisuals.EnrichCustomLane(lane, entry, nil)
-    end
+    Visuals.EnrichCustomLane(lane, entry, nil)
     lanes[kind] = lane
     order[#order + 1] = kind
 end

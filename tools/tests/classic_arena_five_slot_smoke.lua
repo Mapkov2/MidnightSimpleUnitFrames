@@ -282,6 +282,12 @@ local function CompileWith(slots)
             return function(value) return value end
         end
     end })
+    -- The Auras3 core is not loaded here; its EnsureDB returns the profile's tree.
+    A3.EnsureDB = function() local auras = _G.MSUF_DB.auras3; return auras, auras.shared end
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
+    for _, file in ipairs({ "MSUF_Auras3_DataShared.lua", "MSUF_Auras3_Visuals.lua", "MSUF_Auras3_Features.lua" }) do
+        LoadAura(namespace, file)
+    end
     LoadAura(namespace, "MSUF_Auras3_Compile.lua")
     Check(type(A3._ClassicCompile) == "table", "Classic compile exports missing")
     return A3
