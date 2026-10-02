@@ -4543,6 +4543,8 @@ L["Profile: %s"] = "Profile: %s"
 L["Support"] = "Support"
 L["Utility"] = "Utility"
 L["Other"] = "Other"
+L["Boss %s"] = "Boss %s"
+L["Arena %s"] = "Arena %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

@@ -56,6 +56,9 @@ local FORBIDDEN = {
     { EDIT .. "MSUF_EditMode_HUD.lua", 'HelpText%("BG"%) %.%.', "grid background readout" },
     { EDIT .. "MSUF_EditMode_HUD.lua", 'HelpText%("Grid"%) %.%.', "grid step readout" },
     { EDIT .. "MSUF_EditMode_HUD_Picker.lua", 'HelpText%("Selected"%) %.%.', "picker selection status" },
+    { EDIT .. "MSUF_EditMode_AuraPopup.lua", '"Boss " %.%.', "aura popup boss frame label" },
+    { EDIT .. "MSUF_EditMode_AuraPopup.lua", '"Arena " %.%.', "aura popup arena frame label" },
+    { EDIT .. "MSUF_EditMode_AuraPopup.lua", 'UnitLabel%(pf%.unit%)%) %.%. " " %.%.', "aura popup title" },
     { MENU .. "MSUF_Menu2_Window.lua", 'L_PROFILE %.%.', "status bar profile" },
     { MENU .. "MSUF_Menu2_GuidedTour.lua", 'text = Tr%("Follow Blizzard', "tour segment option translated twice" },
     { MENU .. "MSUF_Menu2_GuidedTour.lua", 'W%.Segment%(decisionCard, Tr%(', "tour segment label translated twice" },
@@ -81,6 +84,7 @@ local KEYS = {
     "Anchor set: %s", "BG %d%%", "Grid %dpx", "Selected %s", "Profile: %s",
     "Support", "Utility", "Other", "Raid", "Healer",
     "%s Cooldown Text Settings", "%s Cooldown Colors",
+    "Boss %s", "Arena %s", "%s %s",
     "Death Knight", "Demon Hunter", "Druid", "Evoker", "Hunter", "Mage", "Monk",
     "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior",
 }
@@ -100,6 +104,7 @@ local SITE_KEYS = {
     { EDIT .. "MSUF_EditMode_Blizzard.lua", { "MSUF Edit Mode: Blizzard layout is not editable (%s)" } },
     { EDIT .. "MSUF_EditMode_HUD.lua", { "Anchor set: %s", "BG %d%%", "Grid %dpx" } },
     { EDIT .. "MSUF_EditMode_HUD_Picker.lua", { "Selected %s" } },
+    { EDIT .. "MSUF_EditMode_AuraPopup.lua", { "Boss %s", "Arena %s", "%s %s" } },
     { MENU .. "MSUF_Menu2_Window.lua", { "Profile: %s" } },
 }
 for _, entry in ipairs(SITE_KEYS) do

@@ -72,12 +72,14 @@ local function AuraScope(unit)
     return unit
 end
 
+-- The translated frame name; numbered frames use the "Boss %s" / "Arena %s"
+-- format keys, the same ones the aura Edit Mode preview header uses.
 local function UnitLabel(unit)
-    if unit == "player" then return "Player" end
-    if unit == "target" then return "Target" end
-    if unit == "focus" then return "Focus" end
-    if IsBoss(unit) then return "Boss " .. (unit:match("%d+") or "1") end
-    if IsArena(unit) then return "Arena " .. (unit:match("%d+") or "1") end
+    if unit == "player" then return Quick.Tr("Player") end
+    if unit == "target" then return Quick.Tr("Target") end
+    if unit == "focus" then return Quick.Tr("Focus") end
+    if IsBoss(unit) then return string.format(Quick.Tr("Boss %s"), unit:match("%d+") or "1") end
+    if IsArena(unit) then return string.format(Quick.Tr("Arena %s"), unit:match("%d+") or "1") end
     return tostring(unit or "")
 end
 
@@ -553,7 +555,7 @@ function Sync()
     local activeGroup, spec = ActiveGroup()
     if pf._titleFS then
         local laneLabel = spec.customIndex and LaneLabel(pf.unit, activeGroup, spec) or "Auras"
-        pf._titleFS:SetText(Quick.Tr(UnitLabel(pf.unit)) .. " " .. Quick.Tr(laneLabel))
+        pf._titleFS:SetText(string.format(Quick.Tr("%s %s"), UnitLabel(pf.unit), Quick.Tr(laneLabel)))
     end
     SetLabel(pf.xBoxLabel, "X")
     SetLabel(pf.yBoxLabel, "Y")
