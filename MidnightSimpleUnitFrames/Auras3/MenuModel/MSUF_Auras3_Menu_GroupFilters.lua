@@ -165,7 +165,12 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
             value = "MSUF_GROUP_HIGHLIGHTS_V1",
             text = "MSUF Highlights",
             tooltipTitle = "MSUF Highlights",
-            tooltip = "Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. The exact list overrides duration filters so temporary states Blizzard reports without a duration, such as Shroud membership, remain visible.",
+            -- One text, split only to keep the line short.
+            tooltip = "Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, "
+                .. "healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and "
+                .. "frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. "
+                .. "The exact list overrides duration filters so temporary states Blizzard reports without a "
+                .. "duration, such as Shroud membership, remain visible.",
         },
         { value = "Player", text = "Cast by Me" },
         { value = "BigDefensive", text = "Big Defensive" },
