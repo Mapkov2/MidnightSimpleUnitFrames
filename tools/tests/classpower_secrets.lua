@@ -17,10 +17,14 @@
 -- `secret == nil` or `secret == ""` stays silent at the VM level. Watch(path)
 -- closes that gap with a line hook: whenever a line of that file runs while a
 -- local named on it holds a secret, and the line compares that name with == or
--- ~= or truth-tests it with not, the line is recorded as a violation. Two
--- short-circuits count as guards and pass: the line calls issecretvalue(name),
--- or the use follows `flag or` with a true plain local flag (or `flag and` with
--- a false one), as in `local changed = maxSecret or cache ~= maxValue`.
+-- ~= or truth-tests it with not, the line is recorded as a violation, unless
+-- the text before the use short-circuits it while the value is secret: a
+-- secret predicate on the same name joined the right way round
+-- (`NotSecret(v) and v ~= nil`, `not NotSecret(v) or v == nil`,
+-- `not CanAccessTableValue(t) or #t == 0`, `issecretvalue(v) or ...`), or a
+-- plain local flag (`maxSecret or cache ~= maxValue`, `curSafe and v == nil`,
+-- `not curSecret and v == nil`). An `or` after an `and` guard, or a
+-- parenthesis group closing around the guard, makes the use reachable again.
 --
 -- Plain Lua 5.1.
 
@@ -93,14 +97,93 @@ end
 
 local function Escape(name) return (name:gsub("%W", "%%%0")) end
 
--- True when the text before a use short-circuits it: `flag or` with a true
--- plain local flag, or `flag and` with a false one.
-local function ShortCircuited(prefix, locals)
-    for flag, operator in prefix:gmatch("([%a_][%w_]*)%s+(%a+)%s") do
-        local value = locals[flag]
-        if not kinds[value] and flag ~= "not" then
-            if operator == "or" and value then return true end
-            if operator == "and" and value == false then return true end
+-- Short-circuit guards. A use of a secret local is safe when the text before
+-- it on the line makes the rest of the expression unreachable while the value
+-- is secret: a secret predicate on the same name (NotSecret, CanAccess*,
+-- issecretvalue) or a plain local flag, joined by `and` / `or` the right way
+-- round, with no `or` cutting an `and` guard off (`a and x or use` reaches
+-- use) and no parenthesis group closing around the guard before the use.
+-- Each entry: pattern (%s is the escaped name), the joining operator, and
+-- whether the pattern starts with `not`.
+local SECRET_GUARDS = {
+    { "%%f[%%w_]NotSecret%%(%%s*%s%%s*%%)%%s+and%%f[^%%w_]", "and" },
+    { "%%f[%%w_]CanAccess[%%w_]*%%(%%s*%s%%s*%%)%%s+and%%f[^%%w_]", "and" },
+    { "%%f[%%w_]not%%s+issecretvalue%%(%%s*%s%%s*%%)%%s+and%%f[^%%w_]", "and", true },
+    { "%%f[%%w_]not%%s+NotSecret%%(%%s*%s%%s*%%)%%s+or%%f[^%%w_]", "or", true },
+    { "%%f[%%w_]NotSecret%%(%%s*%s%%s*%%)%%s*==%%s*false%%s+or%%f[^%%w_]", "or" },
+    { "%%f[%%w_]not%%s+CanAccess[%%w_]*%%(%%s*%s%%s*%%)%%s+or%%f[^%%w_]", "or", true },
+    { "%%f[%%w_]issecretvalue%%(%%s*%s%%s*%%)%%s+or%%f[^%%w_]", "or" },
+    { "%%f[%%w_]issecretvalue%%(%%s*%s%%s*%%)%%s*~=%%s*true%%s+and%%f[^%%w_]", "and" },
+    { "%%f[%%w_]issecretvalue%%(%%s*%s%%s*%%)%%s*==%%s*false%%s+and%%f[^%%w_]", "and" },
+    { "%%f[%%w_]issecretvalue%%(%%s*%s%%s*%%)%%s*==%%s*true%%s+or%%f[^%%w_]", "or" },
+    { "%%f[%%w_]NotSecret%%(%%s*%s%%s*%%)%%s*==%%s*true%%s+and%%f[^%%w_]", "and" },
+    { "%%f[%%w_]NotSecret%%(%%s*%s%%s*%%)%%s*~=%%s*false%%s+and%%f[^%%w_]", "and" },
+}
+
+local KEYWORDS = { ["and"] = true, ["or"] = true, ["not"] = true, ["if"] = true, ["then"] = true,
+    ["elseif"] = true, ["return"] = true, ["local"] = true, ["while"] = true, ["do"] = true,
+    ["until"] = true, ["true"] = true, ["false"] = true, ["nil"] = true }
+
+local function ParenDepth(text)
+    local depth = 0
+    for c in text:gmatch("[()]") do depth = depth + (c == "(" and 1 or -1) end
+    return depth
+end
+
+-- True when a guard spanning prefix[start .. finish] still governs the end of
+-- prefix (where the use starts).
+local function Reaches(prefix, start, finish, operator)
+    local guardDepth = ParenDepth(prefix:sub(1, start - 1))
+    local depth, rest = guardDepth, prefix:sub(finish + 1)
+    local index = 1
+    while index <= #rest do
+        local c = rest:sub(index, index)
+        if c == "(" then
+            depth = depth + 1
+        elseif c == ")" then
+            depth = depth - 1
+            if depth < guardDepth then return false end
+        elseif operator == "and" and depth <= guardDepth and rest:find("^or%f[^%w_]", index)
+            and (index == 1 or not rest:sub(index - 1, index - 1):find("[%w_]")) then
+            return false
+        end
+        index = index + 1
+    end
+    return true
+end
+
+local function Guarded(prefix, name, locals, known)
+    local n = Escape(name)
+    for i = 1, #SECRET_GUARDS do
+        local entry = SECRET_GUARDS[i]
+        local pattern, operator, negated = entry[1]:format(n), entry[2], entry[3]
+        local position = 1
+        while true do
+            local start, finish = prefix:find(pattern, position)
+            if not start then break end
+            local before = prefix:sub(1, start - 1)
+            if (negated or not before:find("%f[%w_]not%s*$")) and Reaches(prefix, start, finish, operator) then
+                return true
+            end
+            position = start + 1
+        end
+    end
+    for start, flag, flagEnd in prefix:gmatch("()([%a_][%w_]*)()") do
+        local opStart, opEnd, operator = prefix:find("^%s+(%a+)%f[^%w_]", flagEnd)
+        if (operator == "and" or operator == "or") and known[flag] and not KEYWORDS[flag]
+            and not kinds[locals[flag]] then
+            local before = prefix:sub(1, start - 1)
+            if not before:find("[%.:]%s*$") then
+                local truthy = locals[flag] ~= nil and locals[flag] ~= false
+                local guardStart = start
+                local negation = before:find("%f[%w_]not%s+$")
+                if negation then
+                    truthy = not truthy
+                    guardStart = negation
+                end
+                local short = (operator == "or" and truthy) or (operator == "and" and not truthy)
+                if short and Reaches(prefix, guardStart, opEnd, operator) then return true end
+            end
         end
     end
     return false
@@ -108,40 +191,45 @@ end
 
 local USE_PATTERNS = { "%%f[%%w_]%s%%s*[=~]=", "[=~]=%%s*%s%%f[^%%w_]", "%%f[%%w_]not%%s+%s%%f[^%%w_]" }
 
-local function Misuses(line, name, locals)
+local function Misuses(line, name, locals, known)
     local n = Escape(name)
-    if line:find("issecretvalue%(%s*" .. n .. "%s*%)") then return false end
     for i = 1, #USE_PATTERNS do
         local start = line:find(USE_PATTERNS[i]:format(n))
-        if start and not ShortCircuited(line:sub(1, start - 1), locals) then return true end
+        if start and not Guarded(line:sub(1, start - 1), name, locals, known) then return true end
     end
     return false
 end
 
 --- Records every executed line of `path` that compares or truth-tests a local
---- holding a secret. Returns stop(): it removes the hook and returns the
---- violations as "file:line: text" strings.
+--- holding a secret. `path` may also be a list of paths: one hook watches them
+--- all (debug.sethook keeps a single hook). Returns stop(): it removes the hook
+--- and returns the violations as "file:line: text" strings.
 function Secrets.Watch(path)
-    local lines = SourceLines(path)
-    local wanted = "@" .. path
-    local violations, seen = {}, {}
+    local watched = {}
+    for _, file in ipairs(type(path) == "table" and path or { path }) do
+        local key = ("@" .. file):gsub("\\", "/")
+        watched[key] = { lines = SourceLines(file), name = file:match("[^/\\]+$"), seen = {} }
+    end
+    local violations = {}
     debug.sethook(function(_, lineNumber)
         local info = debug.getinfo(2, "S")
-        if not info or (info.source ~= wanted and info.source:gsub("\\", "/") ~= wanted:gsub("\\", "/")) then return end
+        local entry = info and (watched[info.source] or watched[(info.source:gsub("\\", "/"))])
+        if not entry then return end
+        local lines, seen = entry.lines, entry.seen
         local text = lines[lineNumber]
         if not text or seen[lineNumber] then return end
         -- Later locals shadow earlier ones of the same name.
-        local locals, index = {}, 1
+        local locals, known, index = {}, {}, 1
         while true do
             local name, value = debug.getlocal(2, index)
             if not name then break end
-            locals[name] = value
+            locals[name], known[name] = value, true
             index = index + 1
         end
         for name, value in pairs(locals) do
-            if kinds[value] and Misuses(text, name, locals) then
+            if kinds[value] and Misuses(text, name, locals, known) then
                 seen[lineNumber] = true
-                violations[#violations + 1] = ("%s:%d: %s"):format(path:match("[^/\\]+$"), lineNumber, text:match("^%s*(.-)%s*$"))
+                violations[#violations + 1] = ("%s:%d: %s"):format(entry.name, lineNumber, text:match("^%s*(.-)%s*$"))
                 break
             end
         end

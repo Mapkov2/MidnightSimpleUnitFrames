@@ -132,7 +132,7 @@ local _balAuras = {
 }
 
 local function _AuraID(value)
-    if value == nil or not NotSecret(value) then return nil end
+    if not NotSecret(value) or value == nil then return nil end
     return tonumber(value)
 end
 

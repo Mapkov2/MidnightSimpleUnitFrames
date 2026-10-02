@@ -38,9 +38,11 @@ local CPAuras = {
     spellByInstance = {},
 }
 
+--- A restricted spell or aura instance ID is never compared, not even with
+--- nil: the secret check comes first.
 function CPAuras.NormalizeID(value)
-    if value == nil then return nil end
     if NotSecret(value) == false then return nil end
+    if value == nil then return nil end
     return tonumber(value)
 end
 
