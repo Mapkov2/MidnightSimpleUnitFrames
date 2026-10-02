@@ -262,7 +262,10 @@ function Shape.ApplyIconShadow(button, style, size, shape)
             shapedShadow = PixelLayoutRegion(button:CreateTexture(nil, "BACKGROUND", nil, -7))
             button._msufA3ShapedStyleShadow = shapedShadow
         end
-        if not Shape.SetTexture(shapedShadow, shape, false) then shapedShadow:Hide(); return end
+        if not Shape.SetTexture(shapedShadow, shape, false) then
+            shapedShadow:Hide()
+            return
+        end
         local extent = (style.shadowSize or 0) + (style.borderEnabled and style.borderThickness or 0)
         shapedShadow:ClearAllPoints()
         shapedShadow:SetPoint("TOPLEFT", button, "TOPLEFT", -extent, extent)

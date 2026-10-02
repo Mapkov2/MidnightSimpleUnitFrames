@@ -96,7 +96,8 @@ local checks = {}
 local function RunPath(pathName, arenaSlots, loadRuntime)
     Emit("## path " .. pathName)
     local namespace = {
-        Client = { Family = loadRuntime and "Mainline" or "Classic", IsClassic = not loadRuntime },
+        Client = { Family = loadRuntime and "Mainline" or "Classic", IsClassic = not loadRuntime,
+            MaxArenaOpponents = arenaSlots },
         ExportPublic = function(name, value) _G[name] = value; return value end,
         MSUF_CreateCanonicalPlayerDefensiveAuraContainer = function() return { name = "Defensive Buffs", placed = {} } end,
     }

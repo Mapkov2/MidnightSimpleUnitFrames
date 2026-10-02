@@ -336,7 +336,7 @@ local function PrepareDirectContracts(source, namespace)
             Slice.Function(text, "local function BuildLaneKeySchema", owner),
             "return BuildLaneKeySchema()",
         }
-        auras3.LaneKeySchema = assert(compileSource(table.concat(parts, "\n")))()
+        auras3.LaneKeySchema = assert(compileSource("local MSUF = ...\n" .. table.concat(parts, "\n")))(namespace)
     end
     -- The core's Custom Aura container constants, read from their owner.
     if (Uses("A3.CUSTOM_CONTAINER_COUNT") or Uses("A3.PRESET_CUSTOM_CONTAINER_INDEX")) and type(auras3) == "table"

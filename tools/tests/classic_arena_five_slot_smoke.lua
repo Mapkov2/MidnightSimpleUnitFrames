@@ -278,6 +278,7 @@ local function CompileWith(slots)
     -- The Auras3 core loads first in game; its lane-key schema carries the
     -- managed units, arena slots included.
     namespace.MSUF_CreateCanonicalPlayerDefensiveAuraContainer = function() return {} end
+    namespace.Client.MaxArenaOpponents = slots
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"))("MidnightSimpleUnitFrames", namespace)
     -- MSUF_Auras3_UnitFrames.lua provides the NormalizeClassic* value helpers in
     -- game; lane compilation only needs them to pass values through here.
