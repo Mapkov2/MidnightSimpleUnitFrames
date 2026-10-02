@@ -78,8 +78,10 @@ end
 --- secret GUIDs; a secret one would read as unknown on both sides of the check.
 local function RosterGUID(unit)
     local unitGUID = _G.UnitGUID
-    local guid = unit ~= nil and type(unitGUID) == "function" and unitGUID(unit) or nil
-    if guid == nil or IsSecret(guid) then return nil end
+    if unit == nil or type(unitGUID) ~= "function" then return nil end
+    -- UnitGUID is SecretWhenUnitIdentityRestricted: read it, then guard it.
+    local guid = unitGUID(unit)
+    if IsSecret(guid) then return nil end
     return guid
 end
 

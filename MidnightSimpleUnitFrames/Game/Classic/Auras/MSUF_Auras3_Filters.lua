@@ -133,6 +133,15 @@ local function TokenSet(unit, filter)
     return set
 end
 
+--- Whether a source token is the player, the pet or the vehicle, answered once
+--- per token and lane scan: FullScanLane (MSUF_Auras3_Lanes.lua) advances
+--- SourceMemo.serial at the start of every scan, so the up to three UnitIsUnit
+--- calls a non-literal source costs run once per distinct token instead of
+--- once per aura. A delta asks directly. The tables are keyed by unit tokens,
+--- a bounded set.
+local SourceMemo = { serial = 0 }
+local sourceMemoSerial, sourceMemoAnswer = {}, {}
+
 local function Filtered(unit, auraInstanceID, filter)
     if unit == nil or auraInstanceID == nil or filter == nil then return false end
     return TokenSet(unit, filter)[auraInstanceID] ~= true
@@ -161,27 +170,50 @@ local function ProcessData(lane, unit, data, fromLaneScan)
         -- not authoritative. Fall back to PLAYER scan membership only while
         -- that native filter is trustworthy: on an explicitly out-of-range
         -- group unit some Classic clients return every aura for |PLAYER.
-        local sourceUnit = data.sourceUnit
+        -- Secret fields read as unknown, before anything compares them.
         local fromPlayer = data.isFromPlayerOrPlayerPet
+        if IsSecret(fromPlayer) then fromPlayer = nil end
         -- A trusted positive flag decides at once, before any UnitIsUnit call:
         -- the default "player first" sort asks this for every aura, and a
         -- non-literal source would cost three calls each.
-        if lane._msufA3NativePlayerFilterTrusted ~= false
-            and fromPlayer ~= nil and not IsSecret(fromPlayer) and fromPlayer == true then
+        if lane._msufA3NativePlayerFilterTrusted ~= false and fromPlayer == true then
             lane.mine[auraInstanceID] = true
-        elseif sourceUnit ~= nil and not IsSecret(sourceUnit) then
-            -- The literal tokens are the common case and need no API call.
-            local sourceIsPlayer = sourceUnit == "player"
-                or sourceUnit == "pet" or sourceUnit == "vehicle"
-            if not sourceIsPlayer and UnitIsUnit then
-                sourceIsPlayer = UnitIsUnit("player", sourceUnit)
-                    or UnitIsUnit("pet", sourceUnit)
-                    or UnitIsUnit("vehicle", sourceUnit)
-            end
-            lane.mine[auraInstanceID] = sourceIsPlayer == true
         else
-            lane.mine[auraInstanceID] = lane._msufA3NativePlayerFilterTrusted ~= false
-                and not Filtered(unit, auraInstanceID, cfg.playerFilter)
+            -- Whether the source is the player, the pet or the vehicle: true,
+            -- false, or nil while a restricted comparison leaves it open, when
+            -- the native PLAYER membership decides, as for an unreadable source.
+            -- The literal tokens are the common case and need no API call.
+            -- UnitIsUnit is SecretWhenUnitComparisonRestricted on 12.x engines
+            -- (UnitDocumentation.lua, upstream/live; no Classic branch documents
+            -- it). The three comparisons share the source unit and the player,
+            -- pet and vehicle tokens are never restricted, so the first answer
+            -- tells for all three.
+            local sourceUnit = data.sourceUnit
+            local sourceIsPlayer = nil
+            if IsSecret(sourceUnit) then sourceUnit = nil end
+            if sourceUnit == "player" or sourceUnit == "pet" or sourceUnit == "vehicle" then
+                sourceIsPlayer = true
+            elseif sourceUnit ~= nil then
+                if fromLaneScan == true and sourceMemoSerial[sourceUnit] == SourceMemo.serial then
+                    sourceIsPlayer = sourceMemoAnswer[sourceUnit]
+                else
+                    local same = UnitIsUnit("player", sourceUnit)
+                    if not IsSecret(same) then
+                        sourceIsPlayer = same == true or UnitIsUnit("pet", sourceUnit) == true
+                            or UnitIsUnit("vehicle", sourceUnit) == true
+                    end
+                    if fromLaneScan == true then
+                        sourceMemoSerial[sourceUnit] = SourceMemo.serial
+                        sourceMemoAnswer[sourceUnit] = sourceIsPlayer
+                    end
+                end
+            end
+            if sourceIsPlayer ~= nil then
+                lane.mine[auraInstanceID] = sourceIsPlayer
+            else
+                lane.mine[auraInstanceID] = lane._msufA3NativePlayerFilterTrusted ~= false
+                    and not Filtered(unit, auraInstanceID, cfg.playerFilter)
+            end
         end
     end
     return data
@@ -241,7 +273,8 @@ local function TimedAura(unit, data)
         local isZero = durationObject and durationObject.IsZero
         if type(isZero) == "function" then
             local zero = isZero(durationObject)
-            if not IsSecret(zero) then return zero ~= true end
+            if IsSecret(zero) then return nil end
+            return zero ~= true
         end
     end
     return nil
@@ -341,11 +374,13 @@ end
 local function DataMatchesLane(data, cfg)
     if type(data) == "table" then
         local harmful = data.isHarmful
-        if harmful ~= nil and not IsSecret(harmful) then
+        if IsSecret(harmful) then harmful = nil end
+        if harmful ~= nil then
             return (harmful == true) == (cfg.harmful == true)
         end
         local helpful = data.isHelpful
-        if helpful ~= nil and not IsSecret(helpful) then
+        if IsSecret(helpful) then helpful = nil end
+        if helpful ~= nil then
             return (helpful == true) ~= (cfg.harmful == true)
         end
     end
@@ -355,6 +390,7 @@ end
 
 Filters.TokenSet = TokenSet
 Filters.TokenSerial = TokenSerial
+Filters.SourceMemo = SourceMemo
 Filters.TokenTrust = TokenTrust
 Filters.ProcessData = ProcessData
 Filters.MatchDispelTrigger = MatchDispelTrigger

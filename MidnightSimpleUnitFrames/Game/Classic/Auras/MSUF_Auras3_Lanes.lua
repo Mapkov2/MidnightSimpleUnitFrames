@@ -45,6 +45,7 @@ local HideTrailingButtons = Buttons.HideTrailingButtons
 local UpdateButton = Buttons.UpdateButton
 local BuildButtonUpdater = Buttons.BuildButtonUpdater
 local ProcessData = Filters.ProcessData
+local SourceMemo = Filters.SourceMemo
 local ShouldShowAura = Filters.ShouldShowAura
 local DataMatchesLane = Filters.DataMatchesLane
 local ResetLaneVisualCache = FrameVisuals.ResetLaneVisualCache
@@ -397,6 +398,8 @@ end
 local function FullScanLane(lane, unit, renderInline)
     local cfg = lane.config
     if not (cfg and cfg.enabled) then return false end
+    -- One scan shares the source-is-player answers (Filters.ProcessData).
+    SourceMemo.serial = SourceMemo.serial + 1
 
     local inlineRender = renderInline == true
         and cfg.naturalOrder == true

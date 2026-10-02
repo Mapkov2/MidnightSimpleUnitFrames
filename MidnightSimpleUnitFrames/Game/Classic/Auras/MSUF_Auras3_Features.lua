@@ -612,7 +612,8 @@ function Features.CompileGroupIndicatorLanes(frame, unit)
 end
 
 local function PublicNumber(value)
-    if value == nil or IsSecret(value) then return nil end
+    if IsSecret(value) then return nil end
+    if value == nil then return nil end
     return tonumber(value)
 end
 

@@ -29,6 +29,26 @@ local function Clamp01(value, fallback)
     return Clamp(value, fallback, 0, 1)
 end
 
+--- AuraData fields and unit answers can be secret (12.x engine clients). These
+--- readers return a plain value of the asked kind, or nil for a secret or any
+--- other kind, so the result can be compared and cached. The compiler and the
+--- button code import them from here (Compile.lua loads after this file).
+local IsSecret = _G.issecretvalue or function() return false end
+function V.PlainNumber(value)
+    if IsSecret(value) then return nil end
+    return type(value) == "number" and value or nil
+end
+function V.PlainString(value)
+    if IsSecret(value) then return nil end
+    return type(value) == "string" and value or nil
+end
+function V.PlainBool(value)
+    if IsSecret(value) then return nil end
+    if value == true then return true end
+    if value == false then return false end
+    return nil
+end
+
 local Shape = A3.IconShape
 
 
@@ -684,10 +704,17 @@ function V.UpdateButtonVisual(lane, button, unit, data)
     end
     local visual = ApplyIndicatorVisual(button, cfg)
     if visual == "number" and button.Count then
-        local applications = tonumber(data and data.applications) or 1
-        if button._msufA3NumberText ~= applications then
+        local applications = data and data.applications
+        if IsSecret(applications) then
+            -- A secret count goes to the C sink as it is and is never cached.
             button.Count:SetText(applications)
-            button._msufA3NumberText = applications
+            button._msufA3NumberText = nil
+        else
+            applications = tonumber(applications) or 1
+            if button._msufA3NumberText ~= applications then
+                button.Count:SetText(applications)
+                button._msufA3NumberText = applications
+            end
         end
         button.Count:Show()
     end
@@ -695,8 +722,11 @@ function V.UpdateButtonVisual(lane, button, unit, data)
     ApplyFrameEffect(lane, button, data)
     if cfg.showDurationBar == true then
         local bar = DurationBar(button, cfg)
-        local rawDuration = tonumber(data and data.duration)
-        local expiration = tonumber(data and data.expirationTime)
+        -- A secret duration or expiration cannot drive the Lua bar: such an
+        -- aura shows no bar, like a permanent one.
+        local rawDuration, expiration = data and data.duration, data and data.expirationTime
+        if IsSecret(rawDuration) or IsSecret(expiration) then rawDuration, expiration = nil, nil end
+        rawDuration, expiration = tonumber(rawDuration), tonumber(expiration)
         local timed = rawDuration and expiration and rawDuration > 0 and expiration > 0
         if timed then
             local elapsedMode = cfg.durationBarDirection == "ELAPSED"

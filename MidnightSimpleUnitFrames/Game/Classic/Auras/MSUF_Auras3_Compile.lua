@@ -419,22 +419,7 @@ local function SortMode(value, fallback)
     return fallback
 end
 
-local function PlainNumber(value)
-    if IsSecret(value) then return nil end
-    return type(value) == "number" and value or nil
-end
-
-local function PlainString(value)
-    if IsSecret(value) then return nil end
-    return type(value) == "string" and value or nil
-end
-
-local function PlainBool(value)
-    if IsSecret(value) then return nil end
-    if value == true then return true end
-    if value == false then return false end
-    return nil
-end
+local PlainNumber, PlainString, PlainBool = Visuals.PlainNumber, Visuals.PlainString, Visuals.PlainBool
 
 local function ReadGeneralColor(key, defaultR, defaultG, defaultB)
     local general = _G.MSUF_DB and _G.MSUF_DB.general

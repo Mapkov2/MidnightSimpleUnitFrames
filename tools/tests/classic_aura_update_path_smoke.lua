@@ -122,7 +122,12 @@ end
 -- The backend binds GetAuraSlots and friends as locals at load, so every knob
 -- below is data these functions read, never a replacement function.
 _G.UnitExists = function() return true end
-_G.UnitIsUnit = function(a, b) return a == b end
+-- unitAliases["player>party2"] = true makes a token the player; every call is counted.
+local unitAliases, unitIsUnitCalls = {}, 0
+_G.UnitIsUnit = function(a, b)
+    unitIsUnitCalls = unitIsUnitCalls + 1
+    return a == b or unitAliases[a .. ">" .. b] == true
+end
 _G.UnitInRange = function() return true, true end
 _G.GetTime = function() return 50 end
 _G.InCombatLockdown = function() return false end
@@ -612,5 +617,25 @@ permanent.duration, permanent.expirationTime = 30, 80
 Update(player, { updatedAuraInstanceIDs = { permanent.auraInstanceID } })
 assert(playerDebuff[1]._msufA3CooldownShown == true and playerDebuff[1].Cooldown._shown == false,
     "a bar-only lane kept the cooldown swipe of a newly timed aura")
+
+-- A lane scan asks UnitIsUnit once per source token, not once per aura
+-- (Filters.ProcessData), and that answer lasts one scan: a token that stops
+-- being the player is read again by the next scan.
+local targetLanes = target._msufA3State.lanes
+for i = 1, #targetList do targetList[i].sourceUnit, targetList[i].isFromPlayerOrPlayerPet = "party2", false end
+unitAliases["player>party2"] = true
+unitIsUnitCalls = 0
+Update(target, { isFullUpdate = true })
+local ownBuffs = 0
+for _, own in pairs(targetLanes.buff.mine) do if own == true then ownBuffs = ownBuffs + 1 end end
+assert(ownBuffs == targetLanes.buff.visible and ownBuffs > 1,
+    "auras cast by a token that is the player did not count as the player's own")
+assert(unitIsUnitCalls <= 2, "a lane scan asked UnitIsUnit per aura instead of per source token: " .. unitIsUnitCalls)
+unitAliases["player>party2"] = nil
+Update(target, { isFullUpdate = true })
+for id, own in pairs(targetLanes.buff.mine) do
+    assert(own == false, "the next scan kept a stale source answer for aura " .. tostring(id))
+end
+for i = 1, #targetList do targetList[i].sourceUnit, targetList[i].isFromPlayerOrPlayerPet = nil, false end
 
 print("classic aura update path smoke passed")
