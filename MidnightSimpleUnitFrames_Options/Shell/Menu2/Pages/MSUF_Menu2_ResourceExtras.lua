@@ -1,7 +1,7 @@
 local _,MSUF=...
 local M=MSUF.MSUF2
 local W,AP=M.Widgets,M.AdvancedPage
-local R={};M.ResourceExtrasPage=R
+local ResourceExtras={};M.ResourceExtrasPage=ResourceExtras
 local function Meta(path,key,kind)
     return M.ControlMeta("classpower","advanced","resource_extras."..path,kind or "setting",
         key and {settingKey="bars."..key} or {searchSettingKeys={"bars.resourceMarks"}})
@@ -53,7 +53,7 @@ local CLIENT_EXTRAS={
     } end},
 }
 -- Setting keys of every client-only extra, and those this client builds.
-function R.ClientOnlySettings()
+function ResourceExtras.ClientOnlySettings()
     local all,built={},{}
     for _,group in ipairs(CLIENT_EXTRAS) do
         local wanted=group.wanted()
@@ -64,7 +64,7 @@ function R.ClientOnlySettings()
     end
     return all,built
 end
-function R.Build(page,Bars,Apply)
+function ResourceExtras.Build(page,Bars,Apply)
     local ctx=page.ctx
     local specs={
         {"manaUpcomingCost","toggle","Mana spend preview","manaUpcomingCost",false},
@@ -89,9 +89,9 @@ function R.Build(page,Bars,Apply)
     for _,spec in ipairs(specs) do spec.meta=Meta(spec[1],spec[1]) end
     local controls=page:Controls(section,Bars,Apply,"resource_extras",specs)
     for i,spec in ipairs(specs) do W.MoveWidget(controls[spec[1]],section,24,-40-(i-1)*54,280) end
-    R.BuildMarks(page,Bars,Apply)
+    ResourceExtras.BuildMarks(page,Bars,Apply)
 end
-function R.BuildMarks(page,Bars,Apply)
+function ResourceExtras.BuildMarks(page,Bars,Apply)
     local ctx=page.ctx
     local section=page.b:CollapsibleSection("classpower_resource_marks","Resource marks and thresholds",690,false)
     local selected=1
@@ -146,7 +146,7 @@ function R.BuildMarks(page,Bars,Apply)
     M.BindColor(ctx,color,function() local rule=Rule();local c=rule and rule.color or {1,1,1};return c[1],c[2],c[3] end,
         function(r,g,b) Write("color",{r,g,b}) end,Meta("marks.color"))
 end
-function R.BuildColors(ctx,b,Bars,ColorValueAt,Apply)
+function ResourceExtras.BuildColors(ctx,b,Bars,ColorValueAt,Apply)
     local regen=RegenTimers()
     local specs={{"ignorePainColor","Ignore Pain",.45,.7,1,EXTRA_AURAS},{"arcaneWindowColor","Arcane window bar",.66,.42,1,EXTRA_AURAS},
         {"arcaneWindowSoulColor","Arcane Soul phase bar",.92,.4,.86,EXTRA_AURAS},

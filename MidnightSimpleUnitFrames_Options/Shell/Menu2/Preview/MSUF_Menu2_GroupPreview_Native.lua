@@ -16,7 +16,7 @@ local PreviewHelpers = M.PreviewHelpers or {}
 local Specs = M.GroupPreviewSpecs or {}
 local GFZoomPan = M.GroupPreviewZoomPan or {}
 
-local F = M.Fallbacks or {}
+local Fallbacks = M.Fallbacks or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -840,12 +840,12 @@ if GFZoomPan.Configure then
     })
 end
 local ClampZoom = GFZoomPan.Clamp
-local UpdateZoomControls = GFZoomPan.UpdateControls or F.Noop
-local ResolveDefaultZoomLock = GFZoomPan.ResolveDefaultLock or F.Noop
-local SetZoom = GFZoomPan.SetZoom or F.Noop
-local StepZoom = GFZoomPan.Step or F.Noop
-local StartPan = GFZoomPan.Start or F.False
-local StopPan = GFZoomPan.Stop or F.Noop
+local UpdateZoomControls = GFZoomPan.UpdateControls or Fallbacks.Noop
+local ResolveDefaultZoomLock = GFZoomPan.ResolveDefaultLock or Fallbacks.Noop
+local SetZoom = GFZoomPan.SetZoom or Fallbacks.Noop
+local StepZoom = GFZoomPan.Step or Fallbacks.Noop
+local StartPan = GFZoomPan.Start or Fallbacks.False
+local StopPan = GFZoomPan.Stop or Fallbacks.Noop
 local ReadBarsBool = MSUF.MSUF2.PreviewHelpers.ReadPreviewBarsBool
 local function SharedHealPredictionEnabled()
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
@@ -861,10 +861,10 @@ local function HealPredictionEnabled(kind, conf)
     return SharedHealPredictionEnabled()
 end
 local HealPredAnchorMode = GFRounded.HealPredAnchorMode
-local SetOutlineShown = GFRounded.SetOutlineShown or F.Noop
-local LayoutOutline = GFRounded.LayoutOutline or F.Noop
-local BaseEdgeColor = GFRounded.BaseEdgeColor or F.BlackRGBA
-local ApplyRounded = GFRounded.ApplyRounded or F.False
+local SetOutlineShown = GFRounded.SetOutlineShown or Fallbacks.Noop
+local LayoutOutline = GFRounded.LayoutOutline or Fallbacks.Noop
+local BaseEdgeColor = GFRounded.BaseEdgeColor or Fallbacks.BlackRGBA
+local ApplyRounded = GFRounded.ApplyRounded or Fallbacks.False
 local function ConfigToOffset(value, scale)
     return Round((tonumber(value) or 0) * (tonumber(scale) or 1))
 end
@@ -1063,12 +1063,12 @@ local GFTextFocus = (M.GroupPreviewTextFocus and M.GroupPreviewTextFocus.Install
 local CurrentTextKind = GFTextFocus.CurrentTextKind
 local TextOffsetKeys = GFTextFocus.TextOffsetKeys
 local TextLabel = GFTextFocus.TextLabel
-local TextMovesTogether = GFTextFocus.TextMovesTogether or F.True
-local SetTextMoveTogether = GFTextFocus.SetTextMoveTogether or F.Noop
-local PlaceHandleAroundRegions = GFTextFocus.PlaceHandleAroundRegions or F.False
-local NormalizeTextFocusKind = GFTextFocus.NormalizeTextFocusKind or F.Identity
-local NormalizeTextFocusSlot = GFTextFocus.NormalizeTextFocusSlot or F.Identity
-local ApplyTextFocus = GFTextFocus.ApplyTextFocus or F.Noop
+local TextMovesTogether = GFTextFocus.TextMovesTogether or Fallbacks.True
+local SetTextMoveTogether = GFTextFocus.SetTextMoveTogether or Fallbacks.Noop
+local PlaceHandleAroundRegions = GFTextFocus.PlaceHandleAroundRegions or Fallbacks.False
+local NormalizeTextFocusKind = GFTextFocus.NormalizeTextFocusKind or Fallbacks.Identity
+local NormalizeTextFocusSlot = GFTextFocus.NormalizeTextFocusSlot or Fallbacks.Identity
+local ApplyTextFocus = GFTextFocus.ApplyTextFocus or Fallbacks.Noop
 local function SpellPlacedForHandle(handle, conf)
     local item = handle and handle._cfgSpellItem
     if type(item) ~= "table" then return nil end
@@ -1138,7 +1138,7 @@ UpdateHint = function(box, handle)
     if not box._hint then return end
     T.SetTranslatedText(box._hint, GroupPreviewDefaultHint())
 end
-local NudgeStep = PreviewHelpers.NudgeStep or F.One
+local NudgeStep = PreviewHelpers.NudgeStep or Fallbacks.One
 --- The selected element is user intent, but `_selectedHandle` is a live frame
 --- pointer on a box whose lifecycle is suspend/resume: one shared native box
 --- serves every Group preview page, and Group sections open on *other* pages, so
@@ -1261,7 +1261,7 @@ local NativeDeps = {
     ResolveDefaultZoomLock = ResolveDefaultZoomLock,
     StartPan = StartPan,
     StopPan = StopPan,
-    ZoomWheel = F.Noop,
+    ZoomWheel = Fallbacks.Noop,
     UpdateHint = UpdateHint,
     Round = Round,
     ResolveAnchor = ResolveAnchor,
@@ -1323,8 +1323,8 @@ local NativeDeps = {
 -- the box methods and the render module exactly as before.
 local NativeBuild = {}
 function NativeBuild.Frame(parent, ctx)
-    local R = ShallowCopy(NativeDeps) or {}
-    local H, T, M = R.Helpers, R.T, R.M
+    local Deps = ShallowCopy(NativeDeps) or {}
+    local H, T, M = Deps.Helpers, Deps.T, Deps.M
     local width = (ctx.width or 720) - 28
     local layerW = 104
     local box = PixelLayoutRegion(CreateFrame("Frame", nil, parent, T.Template()))
@@ -1362,11 +1362,11 @@ function NativeBuild.Frame(parent, ctx)
     local chrome
     if PreviewHelpers.ApplyPreviewChrome then
         chrome = PreviewHelpers.ApplyPreviewChrome(box, "outer", T, function(frame, bg, border)
-            ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
+            ApplyGroupPreviewFlatBackdrop(frame, Deps.WHITE8X8, bg, border)
         end)
     else
         chrome = { title = T.colors.title or T.colors.text, layerHeader = T.colors.muted }
-        ApplyGroupPreviewFlatBackdrop(box, R.WHITE8X8, T.colors.panel or T.colors.panel2, T.colors.borderSoft or T.colors.border)
+        ApplyGroupPreviewFlatBackdrop(box, Deps.WHITE8X8, T.colors.panel or T.colors.panel2, T.colors.borderSoft or T.colors.border)
     end
     box:SetSize(width, 358)
     box._msufStaticH = 358
@@ -1394,13 +1394,13 @@ function NativeBuild.Frame(parent, ctx)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     box._hint = hint
     return {
-        ctx = ctx, R = R, width = width, layerW = layerW, box = box, chrome = chrome,
+        ctx = ctx, R = Deps, width = width, layerW = layerW, box = box, chrome = chrome,
         RegisterPreviewControl = RegisterPreviewControl,
     }
 end
 function NativeBuild.Stage(state)
-    local R, box, RegisterPreviewControl = state.R, state.box, state.RegisterPreviewControl
-    local T, M = R.T, R.M
+    local Deps, box, RegisterPreviewControl = state.R, state.box, state.RegisterPreviewControl
+    local T, M = Deps.T, Deps.M
     -- The stage is re-anchored against the selection bar by
     -- ApplyDockedPreviewLayout once the layer rail exists.
     local stage = PixelLayoutRegion(CreateFrame("Frame", nil, box, T.Template()))
@@ -1409,10 +1409,10 @@ function NativeBuild.Stage(state)
     stage._msuf2PreviewCanvasUnderlay = box
     if PreviewHelpers.ApplyPreviewChrome then
         PreviewHelpers.ApplyPreviewChrome(stage, "canvas", T, function(frame, bg, border)
-            ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
+            ApplyGroupPreviewFlatBackdrop(frame, Deps.WHITE8X8, bg, border)
         end)
     else
-        ApplyGroupPreviewFlatBackdrop(stage, R.WHITE8X8, { 0.020, 0.039, 0.071, 0.92 }, T.colors.borderSoft)
+        ApplyGroupPreviewFlatBackdrop(stage, Deps.WHITE8X8, { 0.020, 0.039, 0.071, 0.92 }, T.colors.borderSoft)
     end
     if stage.SetClipsChildren then stage:SetClipsChildren(true) end
     stage:EnableMouse(true)
@@ -1421,17 +1421,17 @@ function NativeBuild.Stage(state)
     box._stage = stage
     PreviewHelpers.BuildZoomBar(box, stage, {
         template = T.Template(),
-        texture = R.WHITE8X8,
+        texture = Deps.WHITE8X8,
         T = T,
         themeReadout = true,
         fieldPrefix = "_",
         wheelField = "_zoomWheel",
-        CreateZoomButton = R.CreateZoomButton,
-        Tr = R.Tr,
-        StepZoom = R.StepZoom,
-        SetZoom = R.SetZoom,
-        StartPan = R.StartPan,
-        StopPan = R.StopPan,
+        CreateZoomButton = Deps.CreateZoomButton,
+        Tr = Deps.Tr,
+        StepZoom = Deps.StepZoom,
+        SetZoom = Deps.SetZoom,
+        StartPan = Deps.StartPan,
+        StopPan = Deps.StopPan,
         fitReason = "GROUP_PREVIEW_ZOOM_FIT",
         oneReason = "GROUP_PREVIEW_ZOOM_1TO1",
         lockButton = true,
@@ -1458,10 +1458,10 @@ function NativeBuild.Stage(state)
         RegisterPreviewControl(box[info[1]], info[2], info[3], "button", "ephemeral")
     end
     if PreviewHelpers.EnsurePreviewControlsHint then
-        local controlsHint = PreviewHelpers.EnsurePreviewControlsHint(box, stage, { M = M, T = T, Tr = R.Tr })
+        local controlsHint = PreviewHelpers.EnsurePreviewControlsHint(box, stage, { M = M, T = T, Tr = Deps.Tr })
         RegisterPreviewControl(controlsHint and controlsHint._close, "hint.dismiss", "Dismiss preview tip", "button", "ephemeral")
     end
-    R.ZoomWheel = box._zoomWheel or R.ZoomWheel
+    Deps.ZoomWheel = box._zoomWheel or Deps.ZoomWheel
     CreatePreviewAnimationButton(box, RegisterPreviewControl)
     CreatePreviewRoleButton(box, RegisterPreviewControl)
     local bounds = PixelLayoutRegion(CreateFrame("Frame", nil, stage, T.Template()))
@@ -1473,16 +1473,16 @@ function NativeBuild.Stage(state)
     state.stage, state.bounds = stage, bounds
 end
 function NativeBuild.LayerRail(state)
-    local R, box, chrome, layerW, RegisterPreviewControl = state.R, state.box, state.chrome, state.layerW, state.RegisterPreviewControl
-    local T, M = R.T, R.M
+    local Deps, box, chrome, layerW, RegisterPreviewControl = state.R, state.box, state.chrome, state.layerW, state.RegisterPreviewControl
+    local T, M = Deps.T, Deps.M
     local layers = PixelLayoutRegion(CreateFrame("Frame", nil, box, T.Template()))
     local layerColors = T.colors or {}
     if PreviewHelpers.ApplyPreviewChrome then
         PreviewHelpers.ApplyPreviewChrome(layers, "sidebar", T, function(frame, bg, border)
-            ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
+            ApplyGroupPreviewFlatBackdrop(frame, Deps.WHITE8X8, bg, border)
         end)
     else
-        ApplyGroupPreviewFlatBackdrop(layers, R.WHITE8X8, layerColors.coreShadow or layerColors.panel, layerColors.borderSoft)
+        ApplyGroupPreviewFlatBackdrop(layers, Deps.WHITE8X8, layerColors.coreShadow or layerColors.panel, layerColors.borderSoft)
     end
     -- Layer chips flow along the bottom edge instead of holding a fixed column,
     -- so the stage keeps the full card width. Same treatment as the Unit preview.
@@ -1490,7 +1490,7 @@ function NativeBuild.LayerRail(state)
     layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     layers:SetHeight(30)
     box._layers = layers
-    local layersTitle = R.LayerFont(layers, "LAYERS", chrome.layerHeader or (T.colors and T.colors.muted) or R.LayerHeaderColor)
+    local layersTitle = Deps.LayerFont(layers, "LAYERS", chrome.layerHeader or (T.colors and T.colors.muted) or Deps.LayerHeaderColor)
     layersTitle:SetPoint("LEFT", layers, "LEFT", 10, 0)
     box._msuf2LayerRailHeader = layersTitle
     local layerDefaults = {
@@ -1540,7 +1540,7 @@ function NativeBuild.LayerRail(state)
     }
     box._layerButtons = {}
     box.layerVisibility = layerVisibility
-    local groupLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(R.Tr, layerColors, chrome, {
+    local groupLayerButtonOpts = PreviewHelpers.LayerChipButtonOpts(Deps.Tr, layerColors, chrome, {
         IsAvailable = function(owner, key)
             return not (owner and owner._layerAvailable and owner._layerAvailable[key] == false)
         end,
@@ -1578,7 +1578,7 @@ function NativeBuild.LayerRail(state)
             local action = solo and "Shift-click clears solo layer" or (on and "click to hide - Shift-click to solo" or "click to show")
             owner._hint:SetText(label .. " - " .. tr(action))
         end,
-        OnLeave = function(_, owner) R.UpdateHint(owner, owner._selectedHandle) end,
+        OnLeave = function(_, owner) Deps.UpdateHint(owner, owner._selectedHandle) end,
     })
     for i = 1, #layerDefs do
         local def = layerDefs[i]
@@ -1622,19 +1622,19 @@ function NativeBuild.LayerRail(state)
     end
 end
 function NativeBuild.Mock(state)
-    local R, box, stage, bounds, RegisterPreviewControl = state.R, state.box, state.stage, state.bounds, state.RegisterPreviewControl
-    local T, M = R.T, R.M
+    local Deps, box, stage, bounds, RegisterPreviewControl = state.R, state.box, state.stage, state.bounds, state.RegisterPreviewControl
+    local T, M = Deps.T, Deps.M
     local mock = PixelLayoutRegion(CreateFrame("Frame", nil, stage, T.Template()), true)
-    PixelLayoutRegion(mock, "SetBackdrop", { bgFile = R.WHITE8X8 })
+    PixelLayoutRegion(mock, "SetBackdrop", { bgFile = Deps.WHITE8X8 })
     mock:SetBackdropColor(0.08, 0.08, 0.09, 0.92)
     mock:SetBackdropBorderColor(0.0, 0.0, 0.0, 0)
     mock:EnableMouse(true)
     mock:EnableMouseWheel(true)
     if mock.SetPropagateMouseWheel then mock:SetPropagateMouseWheel(false) end
-    mock:SetScript("OnMouseWheel", R.ZoomWheel)
-    mock:SetScript("OnMouseDown", function(_, button) R.StartPan(stage, box, button, true) end)
+    mock:SetScript("OnMouseWheel", Deps.ZoomWheel)
+    mock:SetScript("OnMouseDown", function(_, button) Deps.StartPan(stage, box, button, true) end)
     mock:SetScript("OnMouseUp", function()
-        if stage._msufGFPreviewPanning then R.StopPan(stage) end
+        if stage._msufGFPreviewPanning then Deps.StopPan(stage) end
     end)
     -- Stands in for the live frame's MSUFSpec.scope: the shared preview border
     -- helper puts group mocks in the group foreground band (Layers.BorderOffset).
@@ -1664,7 +1664,7 @@ function NativeBuild.Mock(state)
     mock._healthBgBar = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._healthBgBar:SetMinMaxValues(0, 1)
     mock._healthBgBar:SetValue(1)
-    mock._healthBgBar:SetStatusBarTexture(R.WHITE8X8)
+    mock._healthBgBar:SetStatusBarTexture(Deps.WHITE8X8)
     mock._healthBgBar:EnableMouse(false)
     if mock._healthBgBar.SetFrameLevel and mock.GetFrameLevel then
         mock._healthBgBar:SetFrameLevel(mock:GetFrameLevel() or 0)
@@ -1677,7 +1677,7 @@ function NativeBuild.Mock(state)
     mock._tempMaxHealth = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._tempMaxHealth:SetMinMaxValues(0, 1)
     mock._tempMaxHealth:SetValue(0.20)
-    mock._tempMaxHealth:SetStatusBarTexture(R.WHITE8X8)
+    mock._tempMaxHealth:SetStatusBarTexture(Deps.WHITE8X8)
     mock._tempMaxHealth:SetStatusBarColor(0.70, 0.10, 0.10, 1)
     mock._tempMaxHealthBg = PixelLayoutRegion(mock._tempMaxHealth:CreateTexture(nil, "BACKGROUND"))
     mock._tempMaxHealthBg:SetColorTexture(0, 0, 0, 0.65)
@@ -1687,17 +1687,17 @@ function NativeBuild.Mock(state)
     mock._healPred = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._healPred:SetMinMaxValues(0, 1)
     mock._healPred:SetValue(0.12)
-    mock._healPred:SetStatusBarTexture(R.WHITE8X8)
+    mock._healPred:SetStatusBarTexture(Deps.WHITE8X8)
     mock._healPred:SetStatusBarColor(0, 1, 0.4, 0.45)
     mock._absorb = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock))
     mock._absorb:SetMinMaxValues(0, 1)
     mock._absorb:SetValue(1)
-    mock._absorb:SetStatusBarTexture(R.WHITE8X8)
+    mock._absorb:SetStatusBarTexture(Deps.WHITE8X8)
     mock._absorb:SetStatusBarColor(0.55, 0.70, 1, 0.55)
     mock._healAbsorb = PixelLayoutRegion(CreateFrame("StatusBar", nil, mock._health))
     mock._healAbsorb:SetMinMaxValues(0, 1)
     mock._healAbsorb:SetValue(0.07)
-    mock._healAbsorb:SetStatusBarTexture(R.WHITE8X8)
+    mock._healAbsorb:SetStatusBarTexture(Deps.WHITE8X8)
     mock._healAbsorb:SetStatusBarColor(0.70, 0, 0, 1)
     if mock._health.SetClipsChildren then mock._health:SetClipsChildren(true) end
     if mock._healAbsorb.SetFrameLevel and mock._health.GetFrameLevel then mock._healAbsorb:SetFrameLevel((mock._health:GetFrameLevel() or 1) + 3) end
@@ -1725,11 +1725,11 @@ function NativeBuild.Mock(state)
     state.mock = mock
 end
 function NativeBuild.Handles(state)
-    local R, box, stage, RegisterPreviewControl = state.R, state.box, state.stage, state.RegisterPreviewControl
-    local T, M = R.T, R.M
+    local Deps, box, stage, RegisterPreviewControl = state.R, state.box, state.stage, state.RegisterPreviewControl
+    local T, M = Deps.T, Deps.M
     box._selectedHandle = nil
-    R.RegisterPreviewControl = RegisterPreviewControl
-    local handleBundle = (M.GroupPreviewHandles and M.GroupPreviewHandles.Install and M.GroupPreviewHandles.Install(box, R)) or {}
+    Deps.RegisterPreviewControl = RegisterPreviewControl
+    local handleBundle = (M.GroupPreviewHandles and M.GroupPreviewHandles.Install and M.GroupPreviewHandles.Install(box, Deps)) or {}
     local buffHandle = handleBundle.buffHandle
     local trackedBuffHandle = handleBundle.trackedBuffHandle
     local debuffHandle = handleBundle.debuffHandle
@@ -1751,8 +1751,8 @@ function NativeBuild.Handles(state)
         -- space; only Name mirrors the stored offset contract used by its
         -- anchor control and renderer.
         if handle and handle._cfgText == true and handle._cfgTextKind == "name" then
-            local _, rawX, rawY = R.HandleOffsets(handle)
-            return R.Round(tonumber(rawX) or 0), R.Round(tonumber(rawY) or 0)
+            local _, rawX, rawY = Deps.HandleOffsets(handle)
+            return Deps.Round(tonumber(rawX) or 0), Deps.Round(tonumber(rawY) or 0)
         end
         local selection = M.PreviewSelectionBar
         local x, y
@@ -1761,13 +1761,13 @@ function NativeBuild.Handles(state)
                 owner and (owner._mockScale or (owner._mock and owner._mock._previewScale)) or 1)
         end
         if x == nil or y == nil then
-            local _, rawX, rawY = R.HandleOffsets(handle)
+            local _, rawX, rawY = Deps.HandleOffsets(handle)
             x, y = rawX, rawY
         end
-        return R.Round(tonumber(x) or 0), R.Round(tonumber(y) or 0)
+        return Deps.Round(tonumber(x) or 0), Deps.Round(tonumber(y) or 0)
     end
     local function WriteGroupStoredOffsets(owner, handle, x, y)
-        local _, curX, curY = R.HandleOffsets(handle)
+        local _, curX, curY = Deps.HandleOffsets(handle)
         local dx = (tonumber(x) or 0) - (tonumber(curX) or 0)
         local dy = (tonumber(y) or 0) - (tonumber(curY) or 0)
         if dx == 0 and dy == 0 then return true end
@@ -1791,14 +1791,14 @@ function NativeBuild.Handles(state)
     end
     if M.PreviewSelectionBar then
         M.PreviewSelectionBar.Create(box, {
-            Tr = R.Tr,
+            Tr = Deps.Tr,
             Theme = function() return T end,
             ApplyBackdrop = function(frame, bg, border)
-                ApplyGroupPreviewFlatBackdrop(frame, R.WHITE8X8, bg, border)
+                ApplyGroupPreviewFlatBackdrop(frame, Deps.WHITE8X8, bg, border)
             end,
-            Round = R.Round,
+            Round = Deps.Round,
             HandleList = function(owner) return owner._handleList end,
-            HandleLabel = R.HandleText,
+            HandleLabel = Deps.HandleText,
             -- Locked handles are shown but not movable, so they are not a
             -- selectable row or a Tab stop either.
             IsPlaced = function(handle)
@@ -1868,8 +1868,8 @@ function NativeBuild.Handles(state)
     state.StopHandleDrag = StopHandleDrag
 end
 function NativeBuild.Render(state)
-    local ctx, R, box, width, mock = state.ctx, state.R, state.box, state.width, state.mock
-    local H, M = R.Helpers, R.M
+    local ctx, Deps, box, width, mock = state.ctx, state.R, state.box, state.width, state.mock
+    local H, M = Deps.Helpers, Deps.M
     local buffHandle, trackedBuffHandle, debuffHandle = state.buffHandle, state.trackedBuffHandle, state.debuffHandle
     local externalHandle, powerBarHandle, portraitHandle = state.externalHandle, state.powerBarHandle, state.portraitHandle
     local dispelSymbolHandle, statusHandles, spellHandle = state.dispelSymbolHandle, state.statusHandles, state.spellHandle
@@ -1879,7 +1879,7 @@ function NativeBuild.Render(state)
     end
     if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
     if M.GroupPreviewRender and M.GroupPreviewRender.Install then
-        local renderDeps = ShallowCopy(R) or {}
+        local renderDeps = ShallowCopy(Deps) or {}
         renderDeps.width, renderDeps.mock = width, mock
         renderDeps.buffHandle, renderDeps.debuffHandle = buffHandle, debuffHandle
         renderDeps.trackedBuffHandle = trackedBuffHandle

@@ -45,8 +45,8 @@ end
 -- Section builders take the page state table built by CreateCastbarPageState
 -- (preview handle, refresh requests and the shared cast-control binders) and
 -- re-establish the binder names they use before their unchanged bodies.
-local function BuildBehaviorSection(S, secBuilder)
-    local BuildCastControlSpecs, ApplyAndRefresh, ApplyCastbarsIfNeeded, ShakeCastPreview = S.BuildCastControlSpecs, S.ApplyAndRefresh, S.ApplyCastbarsIfNeeded, S.ShakeCastPreview
+local function BuildBehaviorSection(PageState, secBuilder)
+    local BuildCastControlSpecs, ApplyAndRefresh, ApplyCastbarsIfNeeded, ShakeCastPreview = PageState.BuildCastControlSpecs, PageState.ApplyAndRefresh, PageState.ApplyCastbarsIfNeeded, PageState.ShakeCastPreview
     local behavior = secBuilder:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 224, true)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(behavior, { "cast.interrupt_feedback" }, {
@@ -103,10 +103,10 @@ local function BuildBehaviorSection(S, secBuilder)
         W.SetControlDisabledReason(lastTick, W.TurnOnReason("Spell-specific channel tick markers", TicksOn))
     end
     syncLastTick = function() SetControlEnabled(lastTick, TicksOn()) end
-    M.TrackRefresh(S.ctx, syncLastTick)
+    M.TrackRefresh(PageState.ctx, syncLastTick)
 end
-local function BuildFilterSection(S, secBuilder)
-    local BuildCastControlSpecs, ApplyAndRefresh = S.BuildCastControlSpecs, S.ApplyAndRefresh
+local function BuildFilterSection(PageState, secBuilder)
+    local BuildCastControlSpecs, ApplyAndRefresh = PageState.BuildCastControlSpecs, PageState.ApplyAndRefresh
     local filters = secBuilder:CollapsibleSection("castbar_filters", "Filtering & Feedback", 110, false)
     local filterLeftX = 14
     local filterControls = BuildCastControlSpecs(filters, {
@@ -124,8 +124,8 @@ local function BuildFilterSection(S, secBuilder)
             { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" })
     end
 end
-local function BuildGCDSection(S, secBuilder)
-    local ctx, BuildCastControlSpecs = S.ctx, S.BuildCastControlSpecs
+local function BuildGCDSection(PageState, secBuilder)
+    local ctx, BuildCastControlSpecs = PageState.ctx, PageState.BuildCastControlSpecs
     local gcd = secBuilder:CollapsibleSection("castbar_gcd", "GCD Bar", 346, false)
     local gcdLeftX = 14
     local syncGCD
@@ -182,8 +182,8 @@ local function BuildGCDSection(S, secBuilder)
     end
     M.TrackRefresh(ctx, syncGCD)
 end
-local function BuildTexturesSection(S, secBuilder)
-    local ApplyCastbarTextures, RequestCastPreviewRefresh, BuildCastControlSpecs = S.ApplyCastbarTextures, S.RequestCastPreviewRefresh, S.BuildCastControlSpecs
+local function BuildTexturesSection(PageState, secBuilder)
+    local ApplyCastbarTextures, RequestCastPreviewRefresh, BuildCastControlSpecs = PageState.ApplyCastbarTextures, PageState.RequestCastPreviewRefresh, PageState.BuildCastControlSpecs
     local textures = secBuilder:CollapsibleSection("castbar_textures", "Textures & Outline", 246, false)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(textures, {
@@ -224,8 +224,8 @@ local function BuildTexturesSection(S, secBuilder)
             "Lets the spark stick out above and below the bar at about twice its height. Only matters while the spark is shown.", tip)
     end
 end
-local function BuildEmpoweredSection(S, secBuilder)
-    local ctx, BuildCastControlSpecs, ApplyCastbarsIfNeeded, ShowEmpoweredPreview = S.ctx, S.BuildCastControlSpecs, S.ApplyCastbarsIfNeeded, S.ShowEmpoweredPreview
+local function BuildEmpoweredSection(PageState, secBuilder)
+    local ctx, BuildCastControlSpecs, ApplyCastbarsIfNeeded, ShowEmpoweredPreview = PageState.ctx, PageState.BuildCastControlSpecs, PageState.ApplyCastbarsIfNeeded, PageState.ShowEmpoweredPreview
     local empowered = secBuilder:CollapsibleSection("castbar_empowered", "Empowered Casts", 130, false)
     local empoweredLeftX, empoweredRightX = 14, 392
     local syncEmpowered
@@ -246,8 +246,8 @@ local function BuildEmpoweredSection(S, secBuilder)
     syncEmpowered = function() SetControlsEnabled(blinkControls, ReadGBool("empowerStageBlink", true)) end
     M.TrackRefresh(ctx, syncEmpowered)
 end
-local function BuildNameShorteningSection(S, secBuilder)
-    local ctx, BuildCastControlSpecs, ApplyAndRefresh, RequestCastPreviewRefresh = S.ctx, S.BuildCastControlSpecs, S.ApplyAndRefresh, S.RequestCastPreviewRefresh
+local function BuildNameShorteningSection(PageState, secBuilder)
+    local ctx, BuildCastControlSpecs, ApplyAndRefresh, RequestCastPreviewRefresh = PageState.ctx, PageState.BuildCastControlSpecs, PageState.ApplyAndRefresh, PageState.RequestCastPreviewRefresh
     local text = secBuilder:CollapsibleSection("castbar_name_shortening", "Name Shortening", 154, false)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(text, {
@@ -294,8 +294,8 @@ local function BuildNameShorteningSection(S, secBuilder)
     syncNameShortening = function() SetControlsEnabled(nameShorteningControls, NameShorteningEnabled()) end
     M.TrackRefresh(ctx, syncNameShortening)
 end
-local function BuildFocusKickSection(S, secBuilder)
-    local ctx, BuildCastControlSpecs = S.ctx, S.BuildCastControlSpecs
+local function BuildFocusKickSection(PageState, secBuilder)
+    local ctx, BuildCastControlSpecs = PageState.ctx, PageState.BuildCastControlSpecs
     local focusKick = secBuilder:CollapsibleSection("castbar_focus_kick", "Focus Kick", 352, false)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(focusKick, {
@@ -391,8 +391,8 @@ local function BuildFocusKickSection(S, secBuilder)
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
     M.TrackRefresh(ctx, syncFocusKick)
 end
-local function BuildInterruptReadySection(S, secBuilder)
-    local ctx, BuildCastControlSpecs, ApplyCastbarsIfNeeded, ApplyAndRefresh, RequestCastPreviewRefresh = S.ctx, S.BuildCastControlSpecs, S.ApplyCastbarsIfNeeded, S.ApplyAndRefresh, S.RequestCastPreviewRefresh
+local function BuildInterruptReadySection(PageState, secBuilder)
+    local ctx, BuildCastControlSpecs, ApplyCastbarsIfNeeded, ApplyAndRefresh, RequestCastPreviewRefresh = PageState.ctx, PageState.BuildCastControlSpecs, PageState.ApplyCastbarsIfNeeded, PageState.ApplyAndRefresh, PageState.RequestCastPreviewRefresh
     local kick = secBuilder:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 382, false)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(kick, function()
@@ -599,27 +599,27 @@ end
 local function BuildCastbars(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Castbar", "Castbar behavior, textures and interrupt indicators.", 72)
-    local S = CreateCastbarPageState(ctx, b)
-    local LazyCastbarSection = S.LazyCastbarSection
-    LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 224, defaultOpen = true, build = function(_, secBuilder) return BuildBehaviorSection(S, secBuilder) end })
-    LazyCastbarSection({ sectionId = "castbar_filters", title = "Filtering & Feedback", height = 110, build = function(_, secBuilder) return BuildFilterSection(S, secBuilder) end })
+    local PageState = CreateCastbarPageState(ctx, b)
+    local LazyCastbarSection = PageState.LazyCastbarSection
+    LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 224, defaultOpen = true, build = function(_, secBuilder) return BuildBehaviorSection(PageState, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_filters", title = "Filtering & Feedback", height = 110, build = function(_, secBuilder) return BuildFilterSection(PageState, secBuilder) end })
     if GCDBarSupported() then
-        LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 346, build = function(_, secBuilder) return BuildGCDSection(S, secBuilder) end })
+        LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 346, build = function(_, secBuilder) return BuildGCDSection(PageState, secBuilder) end })
     end
-    LazyCastbarSection({ sectionId = "castbar_textures", title = "Textures & Outline", height = 246, build = function(_, secBuilder) return BuildTexturesSection(S, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_textures", title = "Textures & Outline", height = 246, build = function(_, secBuilder) return BuildTexturesSection(PageState, secBuilder) end })
     -- Empowered casts are an Evoker mechanic: Midnight only. WoW Forever and the
     -- Classic clients have no Evoker (MSUF.Client.HasEmpoweredCasts). A harness
     -- that fakes only IsClassic still hides the section.
     local client = MSUF.Client
     if not client or (client.HasEmpoweredCasts ~= false and client.IsClassic ~= true) then
-        LazyCastbarSection({ sectionId = "castbar_empowered", title = "Empowered Casts", height = 130, build = function(_, secBuilder) return BuildEmpoweredSection(S, secBuilder) end })
+        LazyCastbarSection({ sectionId = "castbar_empowered", title = "Empowered Casts", height = 130, build = function(_, secBuilder) return BuildEmpoweredSection(PageState, secBuilder) end })
     end
-    LazyCastbarSection({ sectionId = "castbar_name_shortening", title = "Name Shortening", height = 154, build = function(_, secBuilder) return BuildNameShorteningSection(S, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_name_shortening", title = "Name Shortening", height = 154, build = function(_, secBuilder) return BuildNameShorteningSection(PageState, secBuilder) end })
     -- Focus Kick tracks the focus unit, which Classic Era does not have.
     if not M.SupportsFrameScope or M.SupportsFrameScope("focus") then
-        LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 352, build = function(_, secBuilder) return BuildFocusKickSection(S, secBuilder) end })
+        LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 352, build = function(_, secBuilder) return BuildFocusKickSection(PageState, secBuilder) end })
     end
-    LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 382, build = function(_, secBuilder) return BuildInterruptReadySection(S, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 382, build = function(_, secBuilder) return BuildInterruptReadySection(PageState, secBuilder) end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 6 })

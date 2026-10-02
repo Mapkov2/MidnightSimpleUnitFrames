@@ -6,7 +6,7 @@ addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
-local F = M.Fallbacks or {}
+local Fallbacks = M.Fallbacks or {}
 local H = M.PreviewHelpers or {}
 M.PreviewHelpers = H
 local CP = M.ClassPowerPreview or {}
@@ -954,7 +954,7 @@ function H.ShowPreviewHandleContext(handle, opts)
     local M2 = opts.M or M
     local T = opts.T or (M2 and M2.Theme)
     local W = opts.W or (M2 and M2.Widgets)
-    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or Fallbacks.Identity
     local openSettings = opts.openSettings
     if type(openSettings) ~= "function" then return end
     local popup = H._previewHandleContextPopup
@@ -1074,7 +1074,7 @@ function H.EnsurePreviewHandleGear(handle, opts)
     opts = opts or {}
     if not handle then return nil end
     local T = opts.T or (M and M.Theme)
-    local tr = opts.Tr or opts.TR or (M and M.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M and M.Tr) or Fallbacks.Identity
     local gear = handle._msuf2SettingsGear
     if not gear then
         local template = T and T.Template and T.Template() or "BackdropTemplate"
@@ -1171,7 +1171,7 @@ end
 function H.EnsureZoomLockButton(box, zoomBar, opts)
     if not (box and zoomBar) then return nil end
     opts = opts or {}
-    local tr = opts.Tr or opts.TR or (M and M.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M and M.Tr) or Fallbacks.Identity
     local T = opts.T or (M and M.Theme)
     local btn = box.zoomLockButton
     if not btn then
@@ -1438,7 +1438,7 @@ function H.ShowPreviewMoveCue(owner, handle)
     cue:Hide()
     cue:ClearAllPoints()
     cue:SetPoint("BOTTOM", handle, "TOP", 0, 12)
-    local tr = (M and M.Tr) or F.Identity
+    local tr = (M and M.Tr) or Fallbacks.Identity
     cue._label:SetText(tr("Drag to move"))
     cue._previewOwner = owner
     cue:Show()
@@ -1451,7 +1451,7 @@ function H.ShowPreviewMoveCue(owner, handle)
     return true
 end
 local function PreviewControlsLines(tr)
-    tr = tr or F.Identity
+    tr = tr or Fallbacks.Identity
     return {
         tr("Drag handles to move."),
         tr("Right-click: quick actions."),
@@ -1465,7 +1465,7 @@ function H.ShowPreviewControlsHelp(anchor, opts)
     local M2 = opts.M or M
     local T = opts.T or (M2 and M2.Theme)
     local W = opts.W or (M2 and M2.Widgets)
-    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or Fallbacks.Identity
     local popup = H._previewControlsHelpPopup
     if not popup then
         if M2 and type(M2.CreateMenuPopupPanel) == "function" then
@@ -1551,7 +1551,7 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
     if not box then return nil end
     local M2 = opts.M or M
     local T = opts.T or (M2 and M2.Theme)
-    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or Fallbacks.Identity
     local state = M2 and M2.GetPersistentMenuStateTable and M2.GetPersistentMenuStateTable("previewControlsHintState") or nil
     if state and state.seen == true then return nil end
     local parent = anchor or box.canvas or box._stage or box
@@ -2058,14 +2058,14 @@ end
 function H.BuildZoomBar(box, surface, opts)
     if not (box and surface) then return nil end
     opts = opts or {}
-    local tr = opts.Tr or F.Identity
+    local tr = opts.Tr or Fallbacks.Identity
     local tex = opts.texture or "Interface\\Buttons\\WHITE8X8"
     local template = opts.template or "BackdropTemplate"
-    local stepZoom = opts.StepZoom or F.Noop
-    local setZoom = opts.SetZoom or F.Noop
+    local stepZoom = opts.StepZoom or Fallbacks.Noop
+    local setZoom = opts.SetZoom or Fallbacks.Noop
     local panEnabled = type(opts.StartPan) == "function"
-    local startPan = opts.StartPan or F.False
-    local stopPan = opts.StopPan or F.Noop
+    local startPan = opts.StartPan or Fallbacks.False
+    local stopPan = opts.StopPan or Fallbacks.Noop
     local buttonH = tonumber(opts.buttonHeight) or 20
     local createButton = opts.CreateZoomButton
     local prefix = opts.fieldPrefix or ""
@@ -2559,7 +2559,7 @@ end
 function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     if not (parent and def) then return nil end
     opts = opts or {}
-    local tr = opts.Tr or F.Identity
+    local tr = opts.Tr or Fallbacks.Identity
     local theme = opts.T or (M and M.Theme)
     local chip = opts.layout == "chip"
     local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))

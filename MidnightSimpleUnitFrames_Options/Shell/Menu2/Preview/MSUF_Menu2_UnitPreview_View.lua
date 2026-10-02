@@ -39,7 +39,7 @@ local ViewChrome = MSUF.UFPreviewViewChrome or {}
 -- when its handle exists, so a client without boss units never shows one.
 local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSUF.Client.SupportsUnit("boss1")
 
-local F = M2.Fallbacks or {}
+local Fallbacks = M2.Fallbacks or {}
 local PreviewModel = Preview.Model or {}
 local UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed = PreviewModel.UNIT_LABELS, PreviewModel.UNIT_DATA, PreviewModel.PreviewRaidGroupNameAllowed
 local PreviewRaidGroupNameText = PreviewModel.PreviewRaidGroupNameText
@@ -84,13 +84,13 @@ local PositionLevelPreview = PreviewStatus.PositionLevelPreview
 local RoundOffset = PreviewCore.RoundOffset
 -- Preview keyboard helpers are shared with ClassPower preview so arrow nudges,
 -- EM2 nudge targets, and text-focus guards stay identical across preview types.
-local GetNudgeStep = PreviewHelpers.NudgeStep or F.One
+local GetNudgeStep = PreviewHelpers.NudgeStep or Fallbacks.One
 
 local CastbarOffsetFields, CastbarDetached, ReadCastbarSize = PreviewCastbar.OffsetFields, PreviewCastbar.Detached, PreviewCastbar.ReadSize
 local ReadCastbarNum, FormatCastbarPreviewTime = PreviewCastbar.ReadNumber, PreviewCastbar.FormatPreviewTime
 local ClampPreviewLayer = PreviewCore.ClampLayer
-local RuntimeSpecForPreviewKey = PreviewRuntime.SpecForPreviewKey or F.Nil
-local RuntimeVisualScaleForPreviewKey = PreviewRuntime.VisualScaleForPreviewKey or F.One
+local RuntimeSpecForPreviewKey = PreviewRuntime.SpecForPreviewKey or Fallbacks.Nil
+local RuntimeVisualScaleForPreviewKey = PreviewRuntime.VisualScaleForPreviewKey or Fallbacks.One
 -- Handle storage/navigation and chrome helpers live in the *_View_Handles and
 -- *_View_Chrome siblings. The ones on the drag/nudge path stay upvalues here.
 local RegisterUnitPreviewControl, ApplyCastbarRuntimeForKey = ViewHandles.RegisterUnitPreviewControl, ViewHandles.ApplyCastbarRuntimeForKey
@@ -792,9 +792,9 @@ local ZOOM_MIN = tonumber(PreviewZoomPan.MIN) or 0.35
 if PreviewZoomPan.Configure then PreviewZoomPan.Configure({ Preview = Preview, T = M2.Theme, TR = TR, TEX_W8 = TEX_W8, UpdateHandleHint = UpdateHandleHint }) end
 local function ZoomOrOne(v) return tonumber(v) or 1 end
 local ClampPreviewZoom = PreviewZoomPan.Clamp or ZoomOrOne
-local UpdatePreviewZoomControls = PreviewZoomPan.UpdateControls or F.Noop
-local SetPreviewZoom = PreviewZoomPan.SetZoom or F.Noop
-local StepPreviewZoom = PreviewZoomPan.Step or F.Noop
+local UpdatePreviewZoomControls = PreviewZoomPan.UpdateControls or Fallbacks.Noop
+local SetPreviewZoom = PreviewZoomPan.SetZoom or Fallbacks.Noop
+local StepPreviewZoom = PreviewZoomPan.Step or Fallbacks.Noop
 StartPreviewPan = PreviewZoomPan.Start or StartPreviewPan
 StopPreviewPan = PreviewZoomPan.Stop or StopPreviewPan
 -- BuildPreview runs a sequence of stages on one box: frame, chrome, layer rail, selection bar, the mock
@@ -1462,11 +1462,11 @@ do
     M2.Assign(deps, {
         PreviewInCombat = PreviewInCombat, TR = TR, PortraitStyleGet = PortraitStyleGet,
         RuntimeSpecForPreviewKey = RuntimeSpecForPreviewKey,
-        RuntimeAppliedPortraitSizeForPreviewKey = PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil,
+        RuntimeAppliedPortraitSizeForPreviewKey = PreviewRuntime.AppliedPortraitSizeForPreviewKey or Fallbacks.Nil,
         RuntimeVisualScaleForPreviewKey = RuntimeVisualScaleForPreviewKey,
         RuntimeCastbarVisualScaleForPreviewKey = PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey,
         ClampPreviewZoom = ClampPreviewZoom,
-        ResolveDefaultPreviewZoomLock = PreviewZoomPan.ResolveDefaultLock or F.Noop,
+        ResolveDefaultPreviewZoomLock = PreviewZoomPan.ResolveDefaultLock or Fallbacks.Noop,
         UpdatePreviewZoomControls = UpdatePreviewZoomControls, ZOOM_MIN = ZOOM_MIN, max = max, min = min, abs = abs,
         floor = floor, format = format, TEX_W8 = TEX_W8, FONT = FONT, STATUS_PREVIEW = STATUS_PREVIEW,
         CurrentPanelKey = CurrentPanelKey, UnitDB = UnitDB, UNIT_DATA = UNIT_DATA, UNIT_LABELS = UNIT_LABELS,

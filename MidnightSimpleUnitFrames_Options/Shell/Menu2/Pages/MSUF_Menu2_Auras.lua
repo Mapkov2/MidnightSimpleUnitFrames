@@ -418,7 +418,7 @@ local GFAnchorValues = M.AuraSettings.GFAnchorValues
 -- style binders below are created once, and each accordion builder re-establishes
 -- the same local names from that record so the bodies read exactly as before.
 local function CreateUnitStyleState(ctx, b, scope, options)
-    local S = {}
+    local StyleState = {}
     options = type(options) == "table" and options or nil
     local embeddedUnitPreview = options and options.embeddedUnitPreview == true
     local appearanceGlobalsOnly = options and options.appearanceGlobalsOnly == true
@@ -429,8 +429,8 @@ local function CreateUnitStyleState(ctx, b, scope, options)
     local styleCatalogLane = appearanceGlobalsOnly and appearanceKind or lane
     local styleControls = {}
     local function RefreshStylePreview()
-        if S.refreshMiniPreview then
-            AurasPage.RefreshMiniAuraPreviewNow(S.refreshMiniPreview)
+        if StyleState.refreshMiniPreview then
+            AurasPage.RefreshMiniAuraPreviewNow(StyleState.refreshMiniPreview)
         elseif embeddedUnitPreview then
             local refreshOwnedPreview = ctx and ctx._msuf2RefreshUnitPreview
             if type(refreshOwnedPreview) == "function" then
@@ -609,7 +609,7 @@ local function CreateUnitStyleState(ctx, b, scope, options)
         return body and (body._msuf2Width or body.GetWidth and body:GetWidth()) or b.width or 720
     end
     local baseId = "aura_style_" .. tostring(scope or "unit") .. "_" .. lane
-    M.Assign(S, {
+    M.Assign(StyleState, {
         ctx = ctx, b = b, scope = scope,
         embeddedUnitPreview = embeddedUnitPreview, appearanceGlobalsOnly = appearanceGlobalsOnly, previewContainer = previewContainer,
         appearanceKind = appearanceKind, unit = unit, lane = lane,
@@ -624,10 +624,10 @@ local function CreateUnitStyleState(ctx, b, scope, options)
         BindStyleSwitch = BindStyleSwitch, BindStyleDropdown = BindStyleDropdown, BindStyleSlider = BindStyleSlider,
         BodyWidth = BodyWidth,
     })
-    return S
+    return StyleState
 end
-local function BuildUnitStyleFrameBasics(S)
-    local ctx, b, appearanceGlobalsOnly, unit, lane, baseId, ReadScopeBool, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, BindStyleSwitch, BindStyleDropdown, BindStyleSlider, BodyWidth = S.ctx, S.b, S.appearanceGlobalsOnly, S.unit, S.lane, S.baseId, S.ReadScopeBool, S.ReadScopeDebuffBorderMode, S.WriteScopeDebuffBorderMode, S.BindStyleSwitch, S.BindStyleDropdown, S.BindStyleSlider, S.BodyWidth
+local function BuildUnitStyleFrameBasics(StyleState)
+    local ctx, b, appearanceGlobalsOnly, unit, lane, baseId, ReadScopeBool, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, BindStyleSwitch, BindStyleDropdown, BindStyleSlider, BodyWidth = StyleState.ctx, StyleState.b, StyleState.appearanceGlobalsOnly, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.ReadScopeBool, StyleState.ReadScopeDebuffBorderMode, StyleState.WriteScopeDebuffBorderMode, StyleState.BindStyleSwitch, StyleState.BindStyleDropdown, StyleState.BindStyleSlider, StyleState.BodyWidth
     local frameBasics
     local stealableStyleControl
     if not appearanceGlobalsOnly then
@@ -678,10 +678,10 @@ local function BuildUnitStyleFrameBasics(S)
                 basicsCol, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
         end
     end
-    S.frameBasics, S.stealableStyleControl = frameBasics, stealableStyleControl
+    StyleState.frameBasics, StyleState.stealableStyleControl = frameBasics, stealableStyleControl
 end
-local function BuildUnitStyleIconStyle(S)
-    local ctx, b, appearanceGlobalsOnly, appearanceKind, baseId, RefreshStylePreview, ReadScopeBool, ReadScopeNumber, AddStyleControl, BodyWidth = S.ctx, S.b, S.appearanceGlobalsOnly, S.appearanceKind, S.baseId, S.RefreshStylePreview, S.ReadScopeBool, S.ReadScopeNumber, S.AddStyleControl, S.BodyWidth
+local function BuildUnitStyleIconStyle(StyleState)
+    local ctx, b, appearanceGlobalsOnly, appearanceKind, baseId, RefreshStylePreview, ReadScopeBool, ReadScopeNumber, AddStyleControl, BodyWidth = StyleState.ctx, StyleState.b, StyleState.appearanceGlobalsOnly, StyleState.appearanceKind, StyleState.baseId, StyleState.RefreshStylePreview, StyleState.ReadScopeBool, StyleState.ReadScopeNumber, StyleState.AddStyleControl, StyleState.BodyWidth
     local iconStyleGates = { border = {}, shadow = {}, Apply = function() end }
     if appearanceGlobalsOnly then
     -- Border and shadow are global for the selected Aura product. There is no
@@ -898,10 +898,10 @@ local function BuildUnitStyleIconStyle(S)
     iconStyleGates.shadow[1] = IconStyleSlider("Shadow Size", 0, -210, 1, 16, "styleShadowSize", 4, "AURAS3_ICON_STYLE_SHADOW")
     iconStyleGates.shadow[2] = IconStyleAlphaSlider("Shadow Alpha (%)", 1, -210, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
     end
-    S.iconStyleGates = iconStyleGates
+    StyleState.iconStyleGates = iconStyleGates
 end
-local function BuildUnitStyleStack(S)
-    local ctx, b, scope, unit, lane, baseId, RefreshStylePreview, AddStyleControl, BindStyleSwitch, BindStyleSlider, BodyWidth = S.ctx, S.b, S.scope, S.unit, S.lane, S.baseId, S.RefreshStylePreview, S.AddStyleControl, S.BindStyleSwitch, S.BindStyleSlider, S.BodyWidth
+local function BuildUnitStyleStack(StyleState)
+    local ctx, b, scope, unit, lane, baseId, RefreshStylePreview, AddStyleControl, BindStyleSwitch, BindStyleSlider, BodyWidth = StyleState.ctx, StyleState.b, StyleState.scope, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.RefreshStylePreview, StyleState.AddStyleControl, StyleState.BindStyleSwitch, StyleState.BindStyleSlider, StyleState.BodyWidth
     local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 296, false)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(stack, {
@@ -945,10 +945,10 @@ local function BuildUnitStyleStack(S)
     local stackSmallW = max(120, floor((sw - 72) / 2))
     BindStyleSlider(stack, "X", 24, -212, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
     BindStyleSlider(stack, "Y", 32 + stackSmallW, -212, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
-    S.stack = stack
+    StyleState.stack = stack
 end
-local function BuildUnitStyleCooldown(S)
-    local b, scope, unit, lane, baseId, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, ReadScopeSwipeDirection, WriteScopeSwipeDirection, BindStyleDropdown, BindStyleSlider, BodyWidth = S.b, S.scope, S.unit, S.lane, S.baseId, S.ReadScopeCooldownAnchor, S.WriteScopeCooldownAnchor, S.ReadScopeSwipeDirection, S.WriteScopeSwipeDirection, S.BindStyleDropdown, S.BindStyleSlider, S.BodyWidth
+local function BuildUnitStyleCooldown(StyleState)
+    local b, scope, unit, lane, baseId, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, ReadScopeSwipeDirection, WriteScopeSwipeDirection, BindStyleDropdown, BindStyleSlider, BodyWidth = StyleState.b, StyleState.scope, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.ReadScopeCooldownAnchor, StyleState.WriteScopeCooldownAnchor, StyleState.ReadScopeSwipeDirection, StyleState.WriteScopeSwipeDirection, StyleState.BindStyleDropdown, StyleState.BindStyleSlider, StyleState.BodyWidth
     -- The final slider begins at -328 and its control sits another 24px lower.
     -- Leave a 16px footer so its buttons cannot bleed into Duration Bar.
     local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 392, true)
@@ -982,10 +982,10 @@ local function BuildUnitStyleCooldown(S)
     AddTooltip(swipeDirection, "Cooldown swipe direction", "Reverses only the swipe overlay. Icon size and position stay unchanged.")
     local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -328, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
-    S.cooldown = cooldown
+    StyleState.cooldown = cooldown
 end
-local function BuildUnitStyleDurationBar(S)
-    local b, lane, baseId, ReadScopeBool, ReadScopeNumber, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, BindStyleSwitch, BindStyleDropdown, BindStyleSlider, BodyWidth = S.b, S.lane, S.baseId, S.ReadScopeBool, S.ReadScopeNumber, S.ReadScopeDurationBarDisplay, S.WriteScopeDurationBarDisplay, S.ReadScopeDurationBarPosition, S.WriteScopeDurationBarPosition, S.ReadScopeDurationBarDirection, S.WriteScopeDurationBarDirection, S.BindStyleSwitch, S.BindStyleDropdown, S.BindStyleSlider, S.BodyWidth
+local function BuildUnitStyleDurationBar(StyleState)
+    local b, lane, baseId, ReadScopeBool, ReadScopeNumber, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, BindStyleSwitch, BindStyleDropdown, BindStyleSlider, BodyWidth = StyleState.b, StyleState.lane, StyleState.baseId, StyleState.ReadScopeBool, StyleState.ReadScopeNumber, StyleState.ReadScopeDurationBarDisplay, StyleState.WriteScopeDurationBarDisplay, StyleState.ReadScopeDurationBarPosition, StyleState.WriteScopeDurationBarPosition, StyleState.ReadScopeDurationBarDirection, StyleState.WriteScopeDurationBarDirection, StyleState.BindStyleSwitch, StyleState.BindStyleDropdown, StyleState.BindStyleSlider, StyleState.BodyWidth
     local refreshDurationBarSummary
     local durationInline = (b.width or 720) >= 520
     -- Dropdown buttons sit 24 px below their labels and carry a soft edge/glow.
@@ -1021,10 +1021,10 @@ local function BuildUnitStyleDurationBar(S)
         type(Model.DurationBarDirectionValues) == "function" and Model.DurationBarDirectionValues() or DURATION_BAR_DIRECTION_VALUES,
         durationChoiceWidth, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION", refreshDurationBarSummary),
         "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
-    S.durationBar, S.refreshDurationBarSummary = durationBar, refreshDurationBarSummary
+    StyleState.durationBar, StyleState.refreshDurationBarSummary = durationBar, refreshDurationBarSummary
 end
-local function BuildUnitStyleFrameEffect(S)
-    local ctx, b, unit, lane, baseId, RefreshStylePreview, AddStyleControl, BodyWidth = S.ctx, S.b, S.unit, S.lane, S.baseId, S.RefreshStylePreview, S.AddStyleControl, S.BodyWidth
+local function BuildUnitStyleFrameEffect(StyleState)
+    local ctx, b, unit, lane, baseId, RefreshStylePreview, AddStyleControl, BodyWidth = StyleState.ctx, StyleState.b, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.RefreshStylePreview, StyleState.AddStyleControl, StyleState.BodyWidth
     local effectPrefix = lane == "buff" and "buff" or "debuff"
     local function EffectKey(suffix) return effectPrefix .. "FrameEffect" .. suffix end
     local function ReadEffectValue(suffix, fallback)
@@ -1091,10 +1091,10 @@ local function BuildUnitStyleFrameEffect(S)
     EffectSlider("Layer (0-30)", 1, -96, 0, 30, 1, "Layer", 0, "AURAS3_LANE_FRAME_EFFECT_LAYER")
     EffectSlider("Thickness", 2, -96, 1, 16, 1, "Thickness", 2, "AURAS3_LANE_FRAME_EFFECT_THICKNESS")
     EffectSlider("Priority", 0, -150, 1, 10, 1, "Priority", 5, "AURAS3_LANE_FRAME_EFFECT_PRIORITY")
-    S.frameEffect, S.ReadEffectValue = frameEffect, ReadEffectValue
+    StyleState.frameEffect, StyleState.ReadEffectValue = frameEffect, ReadEffectValue
 end
-local function TrackUnitStyleBadges(S)
-    local ctx, unit, lane, styleControls, ReadScopeBool, ReadScopeDebuffBorderMode, ReadScopeNumber, ReadScopeCooldownAnchor, ReadScopeSwipeDirection, frameBasics, stealableStyleControl, iconStyleGates, stack, cooldown, refreshDurationBarSummary, frameEffect, ReadEffectValue = S.ctx, S.unit, S.lane, S.styleControls, S.ReadScopeBool, S.ReadScopeDebuffBorderMode, S.ReadScopeNumber, S.ReadScopeCooldownAnchor, S.ReadScopeSwipeDirection, S.frameBasics, S.stealableStyleControl, S.iconStyleGates, S.stack, S.cooldown, S.refreshDurationBarSummary, S.frameEffect, S.ReadEffectValue
+local function TrackUnitStyleBadges(StyleState)
+    local ctx, unit, lane, styleControls, ReadScopeBool, ReadScopeDebuffBorderMode, ReadScopeNumber, ReadScopeCooldownAnchor, ReadScopeSwipeDirection, frameBasics, stealableStyleControl, iconStyleGates, stack, cooldown, refreshDurationBarSummary, frameEffect, ReadEffectValue = StyleState.ctx, StyleState.unit, StyleState.lane, StyleState.styleControls, StyleState.ReadScopeBool, StyleState.ReadScopeDebuffBorderMode, StyleState.ReadScopeNumber, StyleState.ReadScopeCooldownAnchor, StyleState.ReadScopeSwipeDirection, StyleState.frameBasics, StyleState.stealableStyleControl, StyleState.iconStyleGates, StyleState.stack, StyleState.cooldown, StyleState.refreshDurationBarSummary, StyleState.frameEffect, StyleState.ReadEffectValue
     M.TrackRefresh(ctx, function()
         -- Individual Style editors are always actionable. The first write to a
         -- formerly inherited lane activates its sparse per-frame override.
@@ -1156,14 +1156,14 @@ local function TrackUnitStyleBadges(S)
     end)
 end
 local function BuildUnitStyle(ctx, b, scope, options)
-    local S = CreateUnitStyleState(ctx, b, scope, options)
-    local embeddedUnitPreview, appearanceGlobalsOnly, previewContainer, unit, lane, baseId, RefreshStylePreview, ReadScopeIconShape, WriteScopeIconShape, BindStyleDropdown, BodyWidth = S.embeddedUnitPreview, S.appearanceGlobalsOnly, S.previewContainer, S.unit, S.lane, S.baseId, S.RefreshStylePreview, S.ReadScopeIconShape, S.WriteScopeIconShape, S.BindStyleDropdown, S.BodyWidth
+    local StyleState = CreateUnitStyleState(ctx, b, scope, options)
+    local embeddedUnitPreview, appearanceGlobalsOnly, previewContainer, unit, lane, baseId, RefreshStylePreview, ReadScopeIconShape, WriteScopeIconShape, BindStyleDropdown, BodyWidth = StyleState.embeddedUnitPreview, StyleState.appearanceGlobalsOnly, StyleState.previewContainer, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.RefreshStylePreview, StyleState.ReadScopeIconShape, StyleState.WriteScopeIconShape, StyleState.BindStyleDropdown, StyleState.BodyWidth
 
     if not embeddedUnitPreview then
-        S.refreshMiniPreview = AurasPage.BuildAuraStylePreviewWorkbench(ctx, b, unit, lane, previewContainer)
+        StyleState.refreshMiniPreview = AurasPage.BuildAuraStylePreviewWorkbench(ctx, b, unit, lane, previewContainer)
     end
 
-    BuildUnitStyleFrameBasics(S)
+    BuildUnitStyleFrameBasics(StyleState)
 
     if appearanceGlobalsOnly then
         local appearanceShape = b:CollapsibleSection(baseId .. "_appearance_shape", "Icon Shape", 112, false)
@@ -1176,8 +1176,8 @@ local function BuildUnitStyle(ctx, b, scope, options)
             "Applies to every UnitFrame and GroupFrame icon of this Aura type. Spell Icons use the Buff appearance.")
     end
 
-    BuildUnitStyleIconStyle(S)
-    local iconStyleGates = S.iconStyleGates
+    BuildUnitStyleIconStyle(StyleState)
+    local iconStyleGates = StyleState.iconStyleGates
 
     if appearanceGlobalsOnly then
         -- Re-apply the master-toggle gates whenever any Appearance page is
@@ -1262,13 +1262,13 @@ local function BuildUnitStyle(ctx, b, scope, options)
     end
     if appearanceGlobalsOnly then return end
 
-    BuildUnitStyleStack(S)
-    BuildUnitStyleCooldown(S)
-    BuildUnitStyleDurationBar(S)
+    BuildUnitStyleStack(StyleState)
+    BuildUnitStyleCooldown(StyleState)
+    BuildUnitStyleDurationBar(StyleState)
     -- No Classic aura backend renders a lane Full-Frame Effect; its badge is
     -- skipped under the same gate in TrackUnitStyleBadges.
-    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then BuildUnitStyleFrameEffect(S) end
-    TrackUnitStyleBadges(S)
+    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then BuildUnitStyleFrameEffect(StyleState) end
+    TrackUnitStyleBadges(StyleState)
 end
 
 local function BuildUnitOrdering(ctx, b, unit, lane)

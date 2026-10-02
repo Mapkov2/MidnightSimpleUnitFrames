@@ -10,7 +10,7 @@ MSUF.MSUF2 = M
 local EnsureDB = M.EnsureDB
 local Render = M.GroupPreviewRender or {}
 M.GroupPreviewRender = Render
-local F = M.Fallbacks or {}
+local Fallbacks = M.Fallbacks or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local issecretvalue = _G.issecretvalue
 local wipe = _G.wipe
@@ -867,14 +867,14 @@ local function FrameStrataRank(value)
 end
 local function DefaultClassColor(_, r, g, b) return r or 1, g or 1, b or 1 end
 local GROUP_RENDER_FALLBACKS = {
-    CompiledSpec = F.Nil, CompiledAuraLane = DefaultCompiledAuraLane, RuntimeStatusConfig = F.Nil,
-    CurrentStatusSpec = F.Nil, StatusSpecEnabled = F.False, StatusSpecInMode = F.False, StatusSpecIsText = F.False,
-    StatusText = F.Empty, StatusLabel = F.Status, CurrentSpellInfo = F.Nil, PreviewAllSpecSpellIcons = F.False, CurrentSpellConfig = F.Nil, CurrentSpellPlaced = F.Nil,
-    CurrentSpellTexture = F.QuestionIcon, CurrentSpellColor = F.WhiteRGB, MockSpellTexture = F.QuestionIcon,
-    Int = DefaultInt, Round = F.Round, ClampZoom = NumberOrOne, ResolveDefaultZoomLock = F.Noop, UpdateZoomControls = F.Noop,
-    AuraGrowth = DefaultAuraGrowth, ApplyRounded = F.False, ClampLayer = DefaultClampLayer,
-    ClassColor = DefaultClassColor, HealthColor = F.HealthRGB,
-    SelectHandle = F.Noop, NudgeHandlePosition = F.Noop, AddIconPool = F.Noop, RefreshHandleSelection = F.Noop,
+    CompiledSpec = Fallbacks.Nil, CompiledAuraLane = DefaultCompiledAuraLane, RuntimeStatusConfig = Fallbacks.Nil,
+    CurrentStatusSpec = Fallbacks.Nil, StatusSpecEnabled = Fallbacks.False, StatusSpecInMode = Fallbacks.False, StatusSpecIsText = Fallbacks.False,
+    StatusText = Fallbacks.Empty, StatusLabel = Fallbacks.Status, CurrentSpellInfo = Fallbacks.Nil, PreviewAllSpecSpellIcons = Fallbacks.False, CurrentSpellConfig = Fallbacks.Nil, CurrentSpellPlaced = Fallbacks.Nil,
+    CurrentSpellTexture = Fallbacks.QuestionIcon, CurrentSpellColor = Fallbacks.WhiteRGB, MockSpellTexture = Fallbacks.QuestionIcon,
+    Int = DefaultInt, Round = Fallbacks.Round, ClampZoom = NumberOrOne, ResolveDefaultZoomLock = Fallbacks.Noop, UpdateZoomControls = Fallbacks.Noop,
+    AuraGrowth = DefaultAuraGrowth, ApplyRounded = Fallbacks.False, ClampLayer = DefaultClampLayer,
+    ClassColor = DefaultClassColor, HealthColor = Fallbacks.HealthRGB,
+    SelectHandle = Fallbacks.Noop, NudgeHandlePosition = Fallbacks.Noop, AddIconPool = Fallbacks.Noop, RefreshHandleSelection = Fallbacks.Noop,
 }
 local DEBUFF_TYPE_BORDER_PREVIEW_ATLAS = {
     BORDER = "ui-debuff-border-magic-noicon",
@@ -1008,8 +1008,8 @@ local function PreviewIconScale(value)
 end
 
 local function BuildScene(box, reason)
-    local S = box._msufGFRenderState
-    local H, M, MSUF = S.H, S.M, S.MSUF
+    local RenderState = box._msufGFRenderState
+    local H, M, MSUF = RenderState.H, RenderState.M, RenderState.MSUF
     local kind = H.CurrentScope()
     local conf = H.Conf(kind)
     local gf = MSUF and MSUF.GF
@@ -1019,7 +1019,7 @@ local function BuildScene(box, reason)
     local animState = box._animationEnabled == true and type(buildFrameState) == "function"
         and buildFrameState(box, 1, kind, box._msufGFMenuPreviewAnimState or {}, box._animationElapsed)
     if animState then box._msufGFMenuPreviewAnimState = animState end
-    local runtimeSpec = S.CompiledSpec(kind)
+    local runtimeSpec = RenderState.CompiledSpec(kind)
     -- Group cells mirror the player's current state (name, class, exact
     -- HP/power) so the preview matches the live group frame. Pull-based only:
     -- sampled during this refresh, stylized values back any missing field.
@@ -1032,8 +1032,8 @@ local function BuildScene(box, reason)
         scene = {}
         box._msufGFSceneState = scene
     end
-    scene.S, scene.box, scene.reason, scene.H, scene.M, scene.MSUF = S, box, reason, H, M, MSUF
-    scene.mock, scene.kind, scene.label, scene.conf, scene.gf = S.mock, kind, H.PreviewScopeLabel(kind), conf, gf
+    scene.S, scene.box, scene.reason, scene.H, scene.M, scene.MSUF = RenderState, box, reason, H, M, MSUF
+    scene.mock, scene.kind, scene.label, scene.conf, scene.gf = RenderState.mock, kind, H.PreviewScopeLabel(kind), conf, gf
     scene.previewAnimation, scene.animState, scene.liveData = previewAnimation, animState, liveData
     scene.hpPct = animState and math.max(0.02, math.min(0.98, tonumber(animState.hpPct) or 0.72)) or (liveData and liveData.hp) or 0.72
     scene.powerPct = animState and math.max(0, math.min(1, tonumber(animState.powerPct) or 0.70)) or (liveData and liveData.power) or 0.70
@@ -1048,11 +1048,11 @@ local function BuildScene(box, reason)
     scene.runtimeTempMaxHealth = runtimeSpec and runtimeSpec.tempMaxHealth or {}
     scene.runtimePrediction = runtimeSpec and runtimeSpec.prediction or {}
     scene.runtimeStatus = runtimeSpec and runtimeSpec.status or {}
-    scene.focus = H.PreviewFocusForPage(S.ctx.key)
+    scene.focus = H.PreviewFocusForPage(RenderState.ctx.key)
     scene.layerVisible = type(M.gfPreviewLayerVisible) == "table" and M.gfPreviewLayerVisible or {}
     scene.soloLayer = M.gfPreviewSoloLayer
     scene.textHandles = box._textHandles or {}
-    scene.previewRole = H.PreviewRole and H.PreviewRole(kind) or S.GF_PREVIEW_ROLE
+    scene.previewRole = H.PreviewRole and H.PreviewRole(kind) or RenderState.GF_PREVIEW_ROLE
     local rawAuras = conf.auras or {}
     local trackedRawState = box._msufGFTrackedRawState
     if not trackedRawState then
@@ -1083,21 +1083,21 @@ local function BuildScene(box, reason)
         box._msufGFCompiledLaneState = lanes
     end
     scene.buffCfg = runtimeLanes and runtimeLanes.buff or scene.runtimeAuras
-        and S.CompiledAuraLane(scene.runtimeAuras, "buff", rawAuras.buff or {}, lanes.buff) or rawAuras.buff or {}
+        and RenderState.CompiledAuraLane(scene.runtimeAuras, "buff", rawAuras.buff or {}, lanes.buff) or rawAuras.buff or {}
     scene.trackedBuffCfg = runtimeLanes and runtimeLanes.trackedBuff or scene.runtimeAuras
-        and S.CompiledAuraLane(scene.runtimeAuras, "trackedBuff", trackedRaw, lanes.trackedBuff) or trackedRaw
+        and RenderState.CompiledAuraLane(scene.runtimeAuras, "trackedBuff", trackedRaw, lanes.trackedBuff) or trackedRaw
     scene.debuffCfg = runtimeLanes and runtimeLanes.debuff or scene.runtimeAuras
-        and S.CompiledAuraLane(scene.runtimeAuras, "debuff", rawAuras.debuff or {}, lanes.debuff) or rawAuras.debuff or {}
+        and RenderState.CompiledAuraLane(scene.runtimeAuras, "debuff", rawAuras.debuff or {}, lanes.debuff) or rawAuras.debuff or {}
     scene.externalCfg = runtimeLanes and runtimeLanes.external or scene.runtimeAuras
-        and S.CompiledAuraLane(scene.runtimeAuras, "external", rawAuras.externals or {}, lanes.external) or rawAuras.externals or {}
+        and RenderState.CompiledAuraLane(scene.runtimeAuras, "external", rawAuras.externals or {}, lanes.external) or rawAuras.externals or {}
     if not runtimeLanes then
         OverlayRawAuraPreviewStyle(scene.buffCfg, rawAuras.buff)
         OverlayRawAuraPreviewStyle(scene.trackedBuffCfg, trackedRaw)
         OverlayRawAuraPreviewStyle(scene.debuffCfg, rawAuras.debuff)
         OverlayRawAuraPreviewStyle(scene.externalCfg, rawAuras.externals)
     end
-    scene.statusSpec = S.CurrentStatusSpec()
-    scene.selectedSpellCfg = S.CurrentSpellConfig(kind)
+    scene.statusSpec = RenderState.CurrentStatusSpec()
+    scene.selectedSpellCfg = RenderState.CurrentSpellConfig(kind)
     -- The selected frame effect belongs to the selected spell, not to whichever
     -- preview handle happens to render it.  Runtime compilation can temporarily
     -- hand ownership back to the fallback handle across Edit Mode transitions.
@@ -1105,12 +1105,12 @@ local function BuildScene(box, reason)
     local selectedEffectKind = type(scene.selectedSpellEffect) == "table"
         and tostring(scene.selectedSpellEffect.type or "none"):lower() or "none"
     scene.selectedSpellEffectAvailable = selectedEffectKind ~= "" and selectedEffectKind ~= "none"
-    local _, selectedSpellSpecKey, selectedSpellAuraName = S.CurrentSpellInfo(kind)
+    local _, selectedSpellSpecKey, selectedSpellAuraName = RenderState.CurrentSpellInfo(kind)
     scene.selectedSpellSpecKey = selectedSpellSpecKey
     scene.selectedSpellAuraName = selectedSpellAuraName
-    scene.previewAllSpecSpellIcons = S.PreviewAllSpecSpellIcons(kind) == true
+    scene.previewAllSpecSpellIcons = RenderState.PreviewAllSpecSpellIcons(kind) == true
     scene.rawSelectedPlaced = scene.selectedSpellCfg and scene.selectedSpellCfg.placed
-    scene.selectedPlaced = S.CurrentSpellPlaced(kind)
+    scene.selectedPlaced = RenderState.CurrentSpellPlaced(kind)
     scene.selectedSpellPlacedEnabled = scene.selectedPlaced
         and (scene.selectedPlaced.type or "icon") ~= "none"
     scene.selectedSpellNeedsPlacementPreview = scene.selectedSpellCfg ~= nil and scene.rawSelectedPlaced == nil
@@ -1165,9 +1165,9 @@ local function BuildScene(box, reason)
         end
     end
     local statusAvailable = false
-    for i = 1, #S.statusSpecs do
-        local spec = S.statusSpecs[i]
-        if S.StatusSpecInMode(spec, scene.statusSpec) and SceneStatusAvailable(scene, spec) then
+    for i = 1, #RenderState.statusSpecs do
+        local spec = RenderState.statusSpecs[i]
+        if RenderState.StatusSpecInMode(spec, scene.statusSpec) and SceneStatusAvailable(scene, spec) then
             statusAvailable = true
             break
         end
@@ -1328,20 +1328,20 @@ end
 --- runtime keeps every layer-aware element on its owning frame's strata, so
 --- neither a live frame's strata nor a configured legacy strata applies here.
 local function PreviewHostStrata(scene)
-    local S = scene.S
+    local RenderState = scene.S
     local host = scene.mock.GetFrameStrata and scene.mock:GetFrameStrata()
-    if S.issecretvalue(host) == true or not host or host == "" then
+    if RenderState.issecretvalue(host) == true or not host or host == "" then
         host = scene.box.GetFrameStrata and scene.box:GetFrameStrata()
-        if S.issecretvalue(host) == true or host == "" then host = nil end
+        if RenderState.issecretvalue(host) == true or host == "" then host = nil end
     end
     return host
 end
 
 local function ApplyHandleStrata(scene, handle, host)
-    local S = scene.S
+    local RenderState = scene.S
     if handle and handle.SetFrameStrata and host then
         local current = handle.GetFrameStrata and handle:GetFrameStrata()
-        if S.issecretvalue(current) == true or current ~= host then handle:SetFrameStrata(host) end
+        if RenderState.issecretvalue(current) == true or current ~= host then handle:SetFrameStrata(host) end
     end
 end
 
@@ -1358,11 +1358,11 @@ local function SyncIconDetailLevels(layers, handle)
 end
 
 local function FinalizeScene(scene)
-    local S, box, mock = scene.S, scene.box, scene.mock
+    local RenderState, box, mock = scene.S, scene.box, scene.mock
     local conf, runtimeText, runtimeStatus = scene.conf, scene.runtimeText, scene.runtimeStatus
     local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
     local function ElementLevel(layer, fallback, detail)
-        return PreviewElementLevel(mock, S.Layers, layer, fallback, detail)
+        return PreviewElementLevel(mock, RenderState.Layers, layer, fallback, detail)
     end
     --- Mirror of Layers.AuraEffectLevel inside the preview's private band. The
     --- shared renderer floors every full-frame effect above the surface it
@@ -1390,10 +1390,10 @@ local function FinalizeScene(scene)
     PlaceTextHandles(scene)
     local hostStrata = PreviewHostStrata(scene)
     local auraHandles = {
-        { S.buffHandle, scene.buffCfg, 5 },
-        { S.trackedBuffHandle, scene.trackedBuffCfg, 9 },
-        { S.debuffHandle, scene.debuffCfg, 6 },
-        { S.externalHandle, scene.externalCfg, 7 },
+        { RenderState.buffHandle, scene.buffCfg, 5 },
+        { RenderState.trackedBuffHandle, scene.trackedBuffCfg, 9 },
+        { RenderState.debuffHandle, scene.debuffCfg, 6 },
+        { RenderState.externalHandle, scene.externalCfg, 7 },
     }
     for i = 1, #auraHandles do
         local item, handle = auraHandles[i], auraHandles[i][1]
@@ -1404,14 +1404,14 @@ local function FinalizeScene(scene)
                 local owner = handle._auraStyleOwners[j]
                 if owner and owner.SetFrameLevel then SetPreviewFrameLevel(owner, level) end
             end
-            SyncIconDetailLevels(S.Layers, handle)
+            SyncIconDetailLevels(RenderState.Layers, handle)
         end
     end
-    for i = 1, #S.statusHandles do
-        local handle = S.statusHandles[i]
+    for i = 1, #RenderState.statusHandles do
+        local handle = RenderState.statusHandles[i]
         local spec = handle and handle._statusSpec
         if handle then
-            local cfg = S.RuntimeStatusConfig(runtimeStatus, spec)
+            local cfg = RenderState.RuntimeStatusConfig(runtimeStatus, spec)
             SetPreviewFrameLevel(handle, ElementLevel(cfg and cfg.layer or spec and conf[spec.layer], spec and spec.defaultLayer or 7, 8))
         end
     end
@@ -1421,22 +1421,22 @@ local function FinalizeScene(scene)
     -- Without this the handle kept its creation-time level and the slider looked
     -- dead in the preview while it worked on the real frame.
     local dispelSymbolCfg = scene.runtimeSpec and scene.runtimeSpec.dispelSymbol
-    if S.dispelSymbolHandle then
-        ApplyHandleStrata(scene, S.dispelSymbolHandle, hostStrata)
-        SetPreviewFrameLevel(S.dispelSymbolHandle, ElementLevel(dispelSymbolCfg and dispelSymbolCfg.layer, 8, 8))
+    if RenderState.dispelSymbolHandle then
+        ApplyHandleStrata(scene, RenderState.dispelSymbolHandle, hostStrata)
+        SetPreviewFrameLevel(RenderState.dispelSymbolHandle, ElementLevel(dispelSymbolCfg and dispelSymbolCfg.layer, 8, 8))
     end
     local rawIndicators = conf.spellIndicators or {}
     local runtimeIndicators = scene.runtimeSpellIndicators or {}
     local spellLayer = runtimeIndicators.layer ~= nil and runtimeIndicators.layer or rawIndicators.layer
     local selected = scene.selectedSpellCfg
-    ApplyHandleStrata(scene, S.spellHandle, hostStrata)
-    SetPreviewFrameLevel(S.spellHandle, ElementLevel(selected and selected.layer or spellLayer, 9, 1))
-    SyncIconDetailLevels(S.Layers, S.spellHandle)
+    ApplyHandleStrata(scene, RenderState.spellHandle, hostStrata)
+    SetPreviewFrameLevel(RenderState.spellHandle, ElementLevel(selected and selected.layer or spellLayer, 9, 1))
+    SyncIconDetailLevels(RenderState.Layers, RenderState.spellHandle)
     local selectedEffectOwner = box._msufGFSelectedSpellEffectOwner
     local selectedEffectRoot = selectedEffectOwner and selectedEffectOwner._msufSpellPreviewEffectRoot
     if selectedEffectRoot and selectedEffectRoot.IsShown and selectedEffectRoot:IsShown() then
         local priority = max(1, min(10, floor((tonumber(selectedEffectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
-        local effectLayer = S.ClampLayer(selectedEffectRoot._msufSpellPreviewLayer, 0)
+        local effectLayer = RenderState.ClampLayer(selectedEffectRoot._msufSpellPreviewLayer, 0)
         -- Only one selected full-frame effect is rendered. Its configured live
         -- strata must not be translated relative to an Edit Mode preview frame:
         -- that live frame can remain on a higher strata during teardown and
@@ -1448,19 +1448,19 @@ local function FinalizeScene(scene)
     if selectedEffectOwner then
         SetPreviewFrameLevel(selectedEffectOwner, baseLevel + 1)
     end
-    local selectedIconEffectRoot = S.spellHandle._msufSpellPreviewIconEffectRoot
+    local selectedIconEffectRoot = RenderState.spellHandle._msufSpellPreviewIconEffectRoot
     if selectedIconEffectRoot and selectedIconEffectRoot.IsShown and selectedIconEffectRoot:IsShown() then
         ApplyHandleStrata(scene, selectedIconEffectRoot, hostStrata)
-        SetPreviewFrameLevel(selectedIconEffectRoot, S.spellHandle:GetFrameLevel() + 4)
+        SetPreviewFrameLevel(selectedIconEffectRoot, RenderState.spellHandle:GetFrameLevel() + 4)
     end
     for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
         ApplyHandleStrata(scene, handle, hostStrata)
         SetPreviewFrameLevel(handle, ElementLevel(handle._msufSpellIndicatorLayer or spellLayer, 9, 1))
-        SyncIconDetailLevels(S.Layers, handle)
+        SyncIconDetailLevels(RenderState.Layers, handle)
         local effectRoot = handle._msufSpellPreviewEffectRoot
         if effectRoot and effectRoot.IsShown and effectRoot:IsShown() then
             local priority = max(1, min(10, floor((tonumber(effectRoot._msufSpellPreviewPriority) or 5) + 0.5)))
-            local effectLayer = S.ClampLayer(effectRoot._msufSpellPreviewLayer, 0)
+            local effectLayer = RenderState.ClampLayer(effectRoot._msufSpellPreviewLayer, 0)
             ApplyHandleStrata(scene, effectRoot, hostStrata)
             SetPreviewFrameLevel(effectRoot, SpellEffectPreviewLevel(effectLayer, priority,
                 effectRoot._msufSpellPreviewKind))
@@ -1483,11 +1483,11 @@ local function FinalizeScene(scene)
             handle:SetAlpha(SceneLayerAlpha(scene, key) * AuraPreviewAlpha(cfg))
         end
     end
-    for i = 1, #S.statusHandles do
-        local handle = S.statusHandles[i]
+    for i = 1, #RenderState.statusHandles do
+        local handle = RenderState.statusHandles[i]
         local spec = handle and handle._statusSpec
         if handle then
-            handle:SetShown(S.StatusSpecInMode(spec, scene.statusSpec)
+            handle:SetShown(RenderState.StatusSpecInMode(spec, scene.statusSpec)
                 and SceneStatusAvailable(scene, spec) and SceneLayerOn(scene, "status"))
             handle:SetAlpha(SceneLayerAlpha(scene, "status"))
         end
@@ -1496,8 +1496,8 @@ local function FinalizeScene(scene)
     if selectedEffectOwner then
         selectedEffectOwner:SetShown(spellVisible and scene.selectedSpellEffectAvailable == true)
     end
-    S.spellHandle:SetShown(spellVisible)
-    S.spellHandle:SetAlpha(selected and selected.enabled == false and SceneLayerAlpha(scene, "si") * 0.45
+    RenderState.spellHandle:SetShown(spellVisible)
+    RenderState.spellHandle:SetAlpha(selected and selected.enabled == false and SceneLayerAlpha(scene, "si") * 0.45
         or SceneLayerAlpha(scene, "si"))
     for _, handle in pairs(scene.dynamicSpellHandlesActive or {}) do
         handle:SetShown(spellVisible)
@@ -1538,8 +1538,8 @@ local function FinalizeScene(scene)
     if scene.gf and type(scene.gf.SetPreviewLayerFilter) == "function" then
         scene.gf.SetPreviewLayerFilter(scene.layerVisible, scene.soloLayer)
     end
-    if box._selectedHandle and box._selectedHandle.IsShown and not box._selectedHandle:IsShown() then S.SelectHandle(nil) end
-    S.RefreshHandleSelection(box)
+    if box._selectedHandle and box._selectedHandle.IsShown and not box._selectedHandle:IsShown() then RenderState.SelectHandle(nil) end
+    RenderState.RefreshHandleSelection(box)
 end
 
 --- Render stages. Each renders one slice of the mock from a shared per-refresh
@@ -1621,13 +1621,13 @@ local function GroupHealthFillColor(runtimeHealth, HealthColor, conf, hpPct, cls
     end
     return HealthColor(conf, hpPct or 0.72, cls)
 end
-local function GroupHealthBackgroundColor(S, MSUF, ClassColor, mode, hbCfg, conf, gen, runtimeHealth, cls, hr, hg, hb, hpPct)
+local function GroupHealthBackgroundColor(RenderState, MSUF, ClassColor, mode, hbCfg, conf, gen, runtimeHealth, cls, hr, hg, hb, hpPct)
     local hbr, hbg, hbb = hbCfg.r or conf.bgR or 0.06, hbCfg.g or conf.bgG or 0.06, hbCfg.b or conf.bgB or 0.07
     if mode == "health_gradient" and MSUF.UFBarTextCommon
         and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
         hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(runtimeHealth, hpPct)
     elseif mode == "match_health" then
-        hbr, hbg, hbb = S.HealthBackgroundRenderer._MatchHealthBackgroundColor(hr or hbr, hg or hbg, hb or hbb, gen)
+        hbr, hbg, hbb = RenderState.HealthBackgroundRenderer._MatchHealthBackgroundColor(hr or hbr, hg or hbg, hb or hbb, gen)
     elseif mode == "class" then
         hbr, hbg, hbb = ClassColor(cls, hbr, hbg, hbb)
     end
@@ -1705,11 +1705,11 @@ local function PlaceAuraPreviewText(fs, relativeTo, anchor, x, y)
         end
     end
 end
-local function BuildAuraLaneHelpers(st, S)
-    local mock = S.mock
-    local GF_PREVIEW_ANCHOR_FRAC = S.GF_PREVIEW_ANCHOR_FRAC
-    local Round, ConfigToOffset = S.Round, S.ConfigToOffset
-    local floor, max, min = S.floor, S.max, S.min
+local function BuildAuraLaneHelpers(st, RenderState)
+    local mock = RenderState.mock
+    local GF_PREVIEW_ANCHOR_FRAC = RenderState.GF_PREVIEW_ANCHOR_FRAC
+    local Round, ConfigToOffset = RenderState.Round, RenderState.ConfigToOffset
+    local floor, max, min = RenderState.floor, RenderState.max, RenderState.min
     local function LayoutHandle(handle, anchor, x, y, defaultAnchor)
         local previewScale = st.previewScale
         anchor = anchor or defaultAnchor or "CENTER"
@@ -1760,27 +1760,27 @@ local function BuildAuraLaneHelpers(st, S)
         return cols, math.ceil(count / perRow)
     end
     return {
-        st = st, S = S, LayoutHandle = LayoutHandle, RuntimeAuraAnchor = RuntimeAuraAnchor,
+        st = st, S = RenderState, LayoutHandle = LayoutHandle, RuntimeAuraAnchor = RuntimeAuraAnchor,
         LayoutAuraPreviewBorder = LayoutAuraPreviewBorder, PreviewAuraState = PreviewAuraState,
         RuntimeAuraGridShape = RuntimeAuraGridShape,
     }
 end
 function Stage.PrepareAuraLanes(st)
     local scene = st.scene
-    local S, self, mock = scene.S, scene.box, scene.mock
+    local RenderState, self, mock = scene.S, scene.box, scene.mock
     local gf, kind, conf = scene.gf, scene.kind, scene.conf
     local runtimeAuras = scene.runtimeAuras
     local buffCfg, trackedBuffCfg, debuffCfg, externalCfg = scene.buffCfg, scene.trackedBuffCfg, scene.debuffCfg, scene.externalCfg
-    local buffHandle, trackedBuffHandle, debuffHandle, externalHandle = S.buffHandle, S.trackedBuffHandle, S.debuffHandle, S.externalHandle
-    local GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS = S.GF_PREVIEW_ANCHOR_FRAC, S.GF_AURA_MOCK_ICON_IDS
-    local Int, Round, ScaleValue, ConfigToOffset = S.Int, S.Round, S.ScaleValue, S.ConfigToOffset
-    local AuraGrowth, AddIconPool, MockSpellTexture = S.AuraGrowth, S.AddIconPool, S.MockSpellTexture
-    local max, min = S.max, S.min
+    local buffHandle, trackedBuffHandle, debuffHandle, externalHandle = RenderState.buffHandle, RenderState.trackedBuffHandle, RenderState.debuffHandle, RenderState.externalHandle
+    local GF_PREVIEW_ANCHOR_FRAC, GF_AURA_MOCK_ICON_IDS = RenderState.GF_PREVIEW_ANCHOR_FRAC, RenderState.GF_AURA_MOCK_ICON_IDS
+    local Int, Round, ScaleValue, ConfigToOffset = RenderState.Int, RenderState.Round, RenderState.ScaleValue, RenderState.ConfigToOffset
+    local AuraGrowth, AddIconPool, MockSpellTexture = RenderState.AuraGrowth, RenderState.AddIconPool, RenderState.MockSpellTexture
+    local max, min = RenderState.max, RenderState.min
     local previewScale = scene.previewScale
     local SetPreviewFont = scene.SetPreviewFont
     local helpers = self._msufGFAuraLaneHelpers
-    if not helpers or helpers.st ~= st or helpers.S ~= S then
-        helpers = BuildAuraLaneHelpers(st, S)
+    if not helpers or helpers.st ~= st or helpers.S ~= RenderState then
+        helpers = BuildAuraLaneHelpers(st, RenderState)
         self._msufGFAuraLaneHelpers = helpers
     end
     local LayoutHandle, RuntimeAuraAnchor = helpers.LayoutHandle, helpers.RuntimeAuraAnchor
@@ -2143,8 +2143,8 @@ function Render.Install(box, ctx, deps)
     local AddIconPool = deps.AddIconPool or GROUP_RENDER_FALLBACKS.AddIconPool
     local RefreshHandleSelection = deps.RefreshHandleSelection or GROUP_RENDER_FALLBACKS.RefreshHandleSelection
     local ScaleValue = deps.ScaleValue
-    local ApplyFrameBorder = deps.ApplyFrameBorder or F.Noop
-    local ApplyBoundsGuide = deps.ApplyBoundsGuide or F.Noop
+    local ApplyFrameBorder = deps.ApplyFrameBorder or Fallbacks.Noop
+    local ApplyBoundsGuide = deps.ApplyBoundsGuide or Fallbacks.Noop
     local ConfigToOffset = deps.ConfigToOffset
     local ResolvePreviewStatusbarTexture = deps.ResolveStatusbarTexture
     box._msufGFRenderState = {
@@ -2381,9 +2381,9 @@ function Stage.Animate(env, self)
     Stage.PaintHealthTexts(st, env)
     Stage.PaintPowerTexts(st, env)
     PlaceTextHandles(scene)
-    local S = scene.S
+    local RenderState = scene.S
     for i = 1, #GROUP_AURA_LANE_HANDLES do
-        AnimateGroupAuraLane(self, previewAnimation, S[GROUP_AURA_LANE_HANDLES[i]])
+        AnimateGroupAuraLane(self, previewAnimation, RenderState[GROUP_AURA_LANE_HANDLES[i]])
     end
     return true
 end
@@ -2408,7 +2408,7 @@ function Stage.PrepareScene(st, env)
             SetPreviewFrameLevel(self._dragFrame, PreviewInteractionLevel(mock, Layers, 2))
         end
         local scene = BuildScene(self, reason)
-        local S = scene.S
+        local RenderState = scene.S
         if self.RefreshRoleButton then self:RefreshRoleButton(scene.kind) end
         local kind, label, conf, gf = scene.kind, scene.label, scene.conf, scene.gf
         local previewAnimation, hpPct, powerPct, healPct, absorbPct = scene.previewAnimation,
@@ -2436,7 +2436,7 @@ function Stage.PrepareScene(st, env)
             self._msufGFSceneAccessors = accessors
         end
         local LayerOn, LayerAlpha, ResolveStatusTexture = accessors.LayerOn, accessors.LayerAlpha, accessors.ResolveStatusTexture
-        st.LayerAlpha, st.LayerOn, st.ResolveStatusTexture, st.S, st.absorbPct, st.buffCfg, st.conf, st.gf = LayerAlpha, LayerOn, ResolveStatusTexture, S, absorbPct, buffCfg, conf, gf
+        st.LayerAlpha, st.LayerOn, st.ResolveStatusTexture, st.S, st.absorbPct, st.buffCfg, st.conf, st.gf = LayerAlpha, LayerOn, ResolveStatusTexture, RenderState, absorbPct, buffCfg, conf, gf
         st.healPct, st.hpPct, st.kind, st.label, st.powerPct, st.runtimeBorder, st.runtimeHealth, st.runtimePower = healPct, hpPct, kind, label, powerPct, runtimeBorder, runtimeHealth, runtimePower
         st.runtimePrediction, st.runtimeSpec, st.runtimeSpellIndicators, st.runtimeSpellItems, st.runtimeStatus, st.runtimeTempMaxHealth, st.runtimeText, st.scene = runtimePrediction, runtimeSpec, runtimeSpellIndicators, runtimeSpellItems, runtimeStatus, runtimeTempMaxHealth, runtimeText, scene
         st.selectedPlaced, st.selectedSpellCfg, st.selectedSpellEffect, st.selectedSpellNeedsPlacementPreview = selectedPlaced, selectedSpellCfg, selectedSpellEffect, selectedSpellNeedsPlacementPreview
@@ -2611,7 +2611,7 @@ local function BuildSpellEffectPreview(env, glow)
         local EnsureSpellEffectPreview, EnsureSpellEffectRuntimeOwner, EnsureSpellPreviewEdges = glow.EnsureSpellEffectPreview, glow.EnsureSpellEffectRuntimeOwner, glow.EnsureSpellPreviewEdges
         local HideSpellEffectPreview, HideSpellPreviewRegions, ShowPreviewGlow = glow.HideSpellEffectPreview, glow.HideSpellPreviewRegions, glow.ShowPreviewGlow
         local SpellPreviewHealthBar, SpellPreviewHealthFill, SyncSpellPreviewName = glow.SpellPreviewHealthBar, glow.SpellPreviewHealthFill, glow.SyncSpellPreviewName
-        local S = env
+        local RenderState = env
         local MSUF, ScaleValue, T, WHITE8X8, floor, max, min, mock = env.MSUF, env.ScaleValue, env.T, env.WHITE8X8, env.floor, env.max, env.min, env.mock
         local function LayoutSpellPreviewEdges(root, target, effect, r, g, b, a)
             local edges = EnsureSpellPreviewEdges(root)
@@ -2684,7 +2684,7 @@ local function BuildSpellEffectPreview(env, glow)
                             runtimeRoot._msufSpellPreviewStrata = previewEffect.strata
                             runtimeRoot._msufSpellPreviewPriority = max(1,
                                 min(10, floor((tonumber(previewEffect.priority) or 5) + 0.5)))
-                            runtimeRoot._msufSpellPreviewLayer = S.ClampLayer(previewEffect.layer, 0)
+                            runtimeRoot._msufSpellPreviewLayer = RenderState.ClampLayer(previewEffect.layer, 0)
                             runtimeRoot._msufSpellPreviewKind = kind
                             return
                         end
@@ -2707,7 +2707,7 @@ local function BuildSpellEffectPreview(env, glow)
             root:SetAllPoints(healthBar)
             root._msufSpellPreviewStrata = effect.strata or handle._msufSpellIndicatorStrata
             root._msufSpellPreviewPriority = max(1, min(10, floor((tonumber(effect.priority) or 5) + 0.5)))
-            root._msufSpellPreviewLayer = S.ClampLayer(effect.layer, 0)
+            root._msufSpellPreviewLayer = RenderState.ClampLayer(effect.layer, 0)
             root._msufSpellPreviewKind = tostring(effect.type or "none"):lower()
             local color = effect.color or {}
             local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
@@ -2931,7 +2931,7 @@ end
 --- Health bar colors and fill, background, temp max health, heal prediction,
 --- absorb and heal-absorb overlays.
 function Stage.RenderHealthBars(st, env)
-        local S, absorbPct, borderEnabled, conf, gf, healPct, hpPct, inset = st.S, st.absorbPct, st.borderEnabled, st.conf, st.gf, st.healPct, st.hpPct, st.inset
+        local RenderState, absorbPct, borderEnabled, conf, gf, healPct, hpPct, inset = st.S, st.absorbPct, st.borderEnabled, st.conf, st.gf, st.healPct, st.hpPct, st.inset
         local kind, mock, mockW, powerInsetH, runtimeBorder, runtimeHealth, runtimePower, runtimePrediction = st.kind, st.mock, st.mockW, st.powerInsetH, st.runtimeBorder, st.runtimeHealth, st.runtimePower, st.runtimePrediction
         local runtimeSpec, runtimeTempMaxHealth, scene, self = st.runtimeSpec, st.runtimeTempMaxHealth, st.scene, st.self
         local ClassColor, H, HealthColor, MSUF, ResolvePreviewStatusbarTexture, WHITE8X8, max = env.ClassColor, env.H, env.HealthColor, env.MSUF, env.ResolvePreviewStatusbarTexture, env.WHITE8X8, env.max
@@ -2983,14 +2983,14 @@ function Stage.RenderHealthBars(st, env)
         end
         mock._healthBg:SetTexture(bgTex)
         local hbCfg = runtimeHealth.background or NO_HEALTH_BACKGROUND
-        mock._msufGFPreviewBackgroundColorMode = S.HealthBackgroundRenderer._HealthBackgroundColorMode(runtimeHealth, gen)
-        local hbr, hbg, hbb = GroupHealthBackgroundColor(S, MSUF, ClassColor, mock._msufGFPreviewBackgroundColorMode,
+        mock._msufGFPreviewBackgroundColorMode = RenderState.HealthBackgroundRenderer._HealthBackgroundColorMode(runtimeHealth, gen)
+        local hbr, hbg, hbb = GroupHealthBackgroundColor(RenderState, MSUF, ClassColor, mock._msufGFPreviewBackgroundColorMode,
             hbCfg, conf, gen, runtimeHealth, cls, hr, hg, hb, hpPct)
         st.healthBgCfg, st.healthBgAlpha = hbCfg, hbCfg.a or groupVisual.hpBgAlpha or conf.hpBgAlpha or 0.85
         mock._healthBg:SetVertexColor(hbr, hbg, hbb, st.healthBgAlpha)
         st.healthBgMissing = runtimeHealth.backgroundFillMode == "missing"
             or (not runtimeSpec and gen and gen.barBgFillMode == "missing")
-        S.HealthBackgroundRenderer._ApplyHealthBackgroundFill(mock, st.healthBgMissing, hpReverse, hpPct)
+        RenderState.HealthBackgroundRenderer._ApplyHealthBackgroundFill(mock, st.healthBgMissing, hpReverse, hpPct)
         local tempMaxShown
         if runtimeSpec then
             tempMaxShown = runtimeTempMaxHealth.enabled == true
@@ -3156,7 +3156,7 @@ end
 --- Power bar placement (embedded, attached below, detached) with its handle,
 --- frame level, background and gradient.
 function Stage.RenderPowerBar(st, env)
-        local LayerAlpha, LayerOn, S, barTex, bgTex, conf, inset, liveW = st.LayerAlpha, st.LayerOn, st.S, st.barTex, st.bgTex, st.conf, st.inset, st.liveW
+        local LayerAlpha, LayerOn, RenderState, barTex, bgTex, conf, inset, liveW = st.LayerAlpha, st.LayerOn, st.S, st.barTex, st.bgTex, st.conf, st.inset, st.liveW
         local mock, mockW, powerDetached, powerEmbed, powerH, powerPct, previewScale, runtimePower = st.mock, st.mockW, st.powerDetached, st.powerEmbed, st.powerH, st.powerPct, st.previewScale, st.runtimePower
         local MSUF, Round, ScaleValue, max = env.MSUF, env.Round, env.ScaleValue, env.max
         -- Scoped block: the power placement locals end here instead of staying
@@ -3169,7 +3169,7 @@ function Stage.RenderPowerBar(st, env)
         local detachedPowerH = tonumber(runtimePower.detachedHeight) or tonumber(conf.detachedPowerBarHeight) or 6
         local detachedPowerX = tonumber(runtimePower.detachedX) or tonumber(conf.detachedPowerBarOffsetX) or 0
         local detachedPowerY = tonumber(runtimePower.detachedY) or tonumber(conf.detachedPowerBarOffsetY) or -4
-        local powerBarHandle = S.powerBarHandle
+        local powerBarHandle = RenderState.powerBarHandle
         if powerBarHandle then
             -- Runtime parity for interaction too: only the detached bar owns
             -- free offsets, so the handle locks itself while the bar is

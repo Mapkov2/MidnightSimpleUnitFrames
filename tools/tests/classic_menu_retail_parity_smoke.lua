@@ -104,10 +104,10 @@ assert(aurasGroupPage:find("\n[ \t]*return\n[ \t]*end\n[ \t]*BuildGroupFilters%(
 -- No Classic runtime renders the lane Full-Frame Effect, so the Classic flavors
 -- skip its section and its badge; whole live source lines, so a commented-out,
 -- disabled or inverted guard fails.
-assert(aurasPage:find("\n[ \t]*if M%.CLASSIC_AURA_FILTERS_REDUCED ~= true then BuildUnitStyleFrameEffect%(S%) end\n"),
+assert(aurasPage:find("\n[ \t]*if M%.CLASSIC_AURA_FILTERS_REDUCED ~= true then BuildUnitStyleFrameEffect%(StyleState%) end\n"),
     "Classic Aura menu exposes the lane Full-Frame Effect section that no Classic runtime renders")
-local _, frameEffectMentions = aurasPage:gsub("BuildUnitStyleFrameEffect%(S%)", "")
-assert(frameEffectMentions == 2 and aurasPage:find("\nlocal function BuildUnitStyleFrameEffect(S)\n", 1, true),
+local _, frameEffectMentions = aurasPage:gsub("BuildUnitStyleFrameEffect%(StyleState%)", "")
+assert(frameEffectMentions == 2 and aurasPage:find("\nlocal function BuildUnitStyleFrameEffect(StyleState)\n", 1, true),
     "the lane Full-Frame Effect section is built outside its Classic gate")
 assert(aurasPage:find("\n[ \t]*if M%.CLASSIC_AURA_FILTERS_REDUCED ~= true then\n[ \t]*local effectType = tostring%(ReadEffectValue%(\"Type\", \"none\"%)%)\n"),
     "the lane Full-Frame Effect badge is not gated with its section")

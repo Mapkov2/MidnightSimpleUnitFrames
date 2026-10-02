@@ -1162,7 +1162,7 @@ do
         local render = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_Render.lua")
         Check(render:find('statusPetHappiness = "petHappiness", statusThreat = "threat",', 1, true),
             "UnitPreview_Render: the preview must read the compiled threat entry")
-        Check(render:find('                textW = R.PreviewStatus.ThreatPlate and R.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW\n',
+        Check(render:find('                textW = RenderState.PreviewStatus.ThreatPlate and RenderState.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW\n',
             1, true),
             "UnitPreview_Render: the Threat % preview no longer lays out on its plate")
         local section = Read(MENU .. "Pages/MSUF_Menu2_UnitStatusSection.lua")
