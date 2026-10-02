@@ -294,6 +294,7 @@ local raidManagerMode = "AUTO"
 local raidManagerHooked = false
 local raidManagerMouseDefault
 local raidManagerPendingMouse
+local raidManagerGamepadLit = false
 
 --- "DEFAULT" is the pre-release spelling of AUTO and is mapped rather than dropped, so a
 --- profile written by an in-between build keeps working instead of silently resetting.
@@ -478,14 +479,14 @@ end
 local function RaidManagerDisplayOnShow()
   local manager = _G.CompactRaidFrameManager
   if not manager or raidManagerEffectiveMode == "SHOW" or not RaidManagerGamepadUIActive() then return end
-  manager._msufGamepadLit = true
+  raidManagerGamepadLit = true
   manager:SetAlpha(1)
 end
 
 local function RaidManagerDisplayOnHide()
   local manager = _G.CompactRaidFrameManager
-  if not (manager and manager._msufGamepadLit) then return end
-  manager._msufGamepadLit = nil
+  if not (manager and raidManagerGamepadLit) then return end
+  raidManagerGamepadLit = false
   if raidManagerEffectiveMode == "SHOW" then return end
   if raidManagerEffectiveMode == "MOUSEOVER" and MouseIsOverRaidManager(manager) then return end
   manager:SetAlpha(0)
@@ -545,7 +546,10 @@ local function ApplyRaidManagerMode()
     EnsureRaidManagerGamepadHooks(manager)
   end
   -- An open gamepad panel stays lit until it closes (RaidManagerDisplayOnHide).
-  local gamepadLit = manager._msufGamepadLit == true and mode ~= "SHOW"
+  if raidManagerGamepadHooked and mode ~= "SHOW" and manager.collapsed == false and RaidManagerGamepadUIActive() then
+    raidManagerGamepadLit = true
+  end
+  local gamepadLit = raidManagerGamepadLit and mode ~= "SHOW"
 
   if mode == "HIDDEN" then
     manager:SetAlpha(gamepadLit and 1 or 0)
@@ -555,7 +559,7 @@ local function ApplyRaidManagerMode()
   ApplyRaidManagerMouse(manager, true)
   if mode == "MOUSEOVER" then
     EnsureRaidManagerHooks(manager)
-    manager:SetAlpha((gamepadLit or MouseIsOverRaidManager(manager)) and 1 or 0)
+    manager:SetAlpha((gamepadLit or manager.collapsed == false or MouseIsOverRaidManager(manager)) and 1 or 0)
     return
   end
   manager:SetAlpha(1)

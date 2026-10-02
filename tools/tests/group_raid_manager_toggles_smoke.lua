@@ -60,6 +60,10 @@ local back = NewFrame("toggleButtonBack", true)
 local legacy = NewFrame("toggleButton", true)
 local manager = NewFrame("CompactRaidFrameManager", true)
 manager.collapsed = true
+manager.displayFrame = NewFrame("displayFrame", true)
+local gamepad = false
+_G.InputUtil = { IsGamepadUIEnabled = function() return gamepad end }
+_G.CompactRaidFrameManager_InitializeGamepad = function() end
 manager.toggleButtonForward, manager.toggleButtonBack = forward, back
 
 _G.MSUF_NS = {
@@ -124,6 +128,23 @@ Check(f == false and b == false, "the collapse click did not hand the toggles ba
 Check(SetMode("MOUSEOVER") == "MOUSEOVER", "MOUSEOVER did not resolve")
 m, f, b = Mouse()
 Check(m and f and b and manager.alpha == 0, "MOUSEOVER must restore every default and stay transparent")
+
+-- Reapplying a mode must respect an already expanded panel, including a
+-- gamepad panel opened while SHOW had not installed the display hooks yet.
+manager.collapsed = false
+SetMode("MOUSEOVER")
+Check(manager.alpha == 1, "MOUSEOVER reapply hid the expanded panel")
+manager.collapsed = true
+SetMode("MOUSEOVER")
+Check(manager.alpha == 0, "collapsed MOUSEOVER did not fade")
+SetMode("SHOW")
+gamepad, manager.collapsed = true, false
+SetMode("HIDDEN")
+Check(manager.alpha == 1, "HIDDEN hid an already-open gamepad panel")
+manager.collapsed = true
+manager.displayFrame.hooks.OnHide(manager.displayFrame)
+Check(manager.alpha == 0, "gamepad close did not restore HIDDEN")
+gamepad = false
 
 -- AUTO while MSUF owns the live group frames resolves to HIDDEN.
 configs.party.enabled, configs.party.showSolo = true, true
