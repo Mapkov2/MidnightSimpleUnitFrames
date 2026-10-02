@@ -1,6 +1,22 @@
 -- Exercise the live Edit Mode registry and offset drag path for Class Resources
 -- and a detached Player Power Bar without a WoW client.
 local root = assert(arg[1], "repo root missing")
+-- The Edit Mode layout family (Grid, Snap, Nudge, then the drag ticker) in
+-- its MSUF_EditMode.xml order.
+local function LoadLayoutFamily(addon, namespace)
+    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode.xml", "rb"))
+    local xml = handle:read("*a")
+    handle:close()
+    local files = {}
+    for file in xml:gmatch('<Script file="(MSUF_EditMode_Layout[%w_]*%.lua)"/>') do files[#files + 1] = file end
+    assert(#files == 4, "the Edit Mode layout family changed; update this loader")
+    -- Run the chunks outside the gmatch loop: chunks run from inside it leave
+    -- the VM stack sized so that the first call after a full collect regrows
+    -- it, which the allocation probes below would misread as drag cost.
+    for _, file in ipairs(files) do
+        assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/" .. file))(addon, namespace)
+    end
+end
 local function Widget(left, bottom, width, height, parent)
     local frame = { left = left, bottom = bottom, width = width, height = height, parent = parent, shown = true }
     function frame:GetLeft() return self.left end
@@ -67,7 +83,9 @@ local namespace = {
     ExportPublic = function(name, value) _G[name] = value end,
     UF = { GetFrame = function(key) if key == "player" then return player end end },
 }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Movers.lua"))("MSUF", namespace)
+for _, file in ipairs({ "Movers", "Elements", "Compat" }) do
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_" .. file .. ".lua"))("MSUF", namespace)
+end
 local classCfg, powerCfg = assert(registry.classpower), assert(registry.power_player)
 assert(classCfg.getFrame() == combo and powerCfg.getFrame() == energy,
     "visible Class Resources and detached Player Power must have separate movers")
@@ -99,8 +117,7 @@ MSUF_ClassPower_EnsureEditModeAnchor = function()
 end
 assert(classCfg.getFrame() == combo and ensureCalls == 1,
     "first Edit Mode entry did not lazily create an inactive resource anchor")
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_Layout.lua"))("MSUF", namespace)
-MSUF_InstallEditLayoutUI("MSUF", namespace)
+LoadLayoutFamily("MSUF", namespace)
 local ticker = assert(MSUF_EM2.Ticker)
 energy.shown = false
 local inactivePowerMover = Widget(100, 125, 250, 16, UIParent)

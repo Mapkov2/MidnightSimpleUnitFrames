@@ -84,19 +84,6 @@ local function IsPopupOpen()
     return st and st.popupOpen == true or false
 end
 
-local function HideLegacyInspector()
-    local inspector = _G.MSUF_EM2_Inspector
-    if inspector and inspector.Hide then
-        inspector:Hide()
-        if inspector.SetAlpha then inspector:SetAlpha(0) end
-    end
-end
-
-local function HideOldFocusLayer()
-    local old = _G.MSUF_EM2_FocusLayer
-    if old and old.Hide then old:Hide() end
-end
-
 local function Menu2()
     return _G.MSUF2 or (MSUF and MSUF.MSUF2)
 end
@@ -271,10 +258,6 @@ local function PlaceAroundFrame(veil, frame)
     return true
 end
 
-local function HideVeils()
-    HideLegacyInspector()
-end
-
 local function EnsureHoverFrame()
     if hoverFrame then return hoverFrame end
     hoverFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_HoverPreviewRing", UIParent, "BackdropTemplate"))
@@ -320,10 +303,9 @@ local function HideHover()
     end
 end
 
+--- The focus veil is retired: the Focus calls below still report that none
+--- is shown.
 local function SyncVeil()
-    HideLegacyInspector()
-    HideOldFocusLayer()
-    HideVeils()
     return false
 end
 
@@ -353,7 +335,6 @@ function Focus.SetSelection(key, component, slot, opts)
     else
         ClearPassiveMenuFocusRequest()
     end
-    HideLegacyInspector()
     if EM2.HUD and EM2.HUD.RefreshControls then EM2.HUD.RefreshControls() end
     return state.key ~= nil
 end
@@ -367,7 +348,6 @@ function Focus.SetHover(key, component, slot, opts)
     state.hoverKey = NormalizeKey(key)
     state.hoverComponent = NormalizeComponent(component)
     state.hoverSlot = NormalizeSlot(slot)
-    HideLegacyInspector()
     if not state.hoverKey then
         HideHover()
         return false
@@ -413,7 +393,6 @@ function Focus.ClearHover()
     state.hoverKey = nil
     state.hoverComponent = nil
     state.hoverSlot = nil
-    HideLegacyInspector()
     if hoverFrame then
         hoverFrame._msufKey = nil
         hoverFrame._msufComponent = nil
@@ -453,7 +432,6 @@ end
 
 function Focus.ClearPopupFocus()
     state.popupKey = nil
-    HideVeils()
 end
 
 function Focus.RefreshPopupFocus()
@@ -512,7 +490,6 @@ function Focus.Hide()
     state.active = false
     state.popupKey = nil
     Focus.ClearHover()
-    HideVeils()
 end
 
 function Focus.Sync()
@@ -583,6 +560,3 @@ local function OpenFocusSettings(pageKey)
     return Focus.OpenFullSettings(pageKey)
 end
 ExportPublic("MSUF_EM2_OpenFocusSettings", OpenFocusSettings)
-
-HideLegacyInspector()
-HideOldFocusLayer()

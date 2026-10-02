@@ -3987,6 +3987,7 @@ L["Profile string ready - press Ctrl+C"] = "프로필 문자열이 준비되었�
 L["Provider & Surface"] = "제공자 및 표면"
 L["Reset failed: defaults unavailable"] = "초기화 실패: 기본값 사용 불가"
 L["Reset unavailable"] = "초기화 사용 불가"
+L["Reset %s"] = "%s 초기화됨"
 L["Resource Bar Colors"] = "자원 바 색상"
 L["Selected Status Text Settings"] = "선택한 상태 텍스트 설정"
 L["Target Highlight Color"] = "대상 강조 색상"

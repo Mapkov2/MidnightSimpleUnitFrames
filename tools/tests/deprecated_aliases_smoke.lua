@@ -40,7 +40,7 @@ local EXPECTED = {
 local KNOWN_CALLERS = {
     ["MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Core.lua"] = { MSUF_FontPathMatches = true },
     ["MidnightSimpleUnitFrames/ClassPower/MSUF_CP_PlayerHP.lua"] = { MSUF_FontPathMatches = true },
-    ["MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Movers.lua"] = {
+    ["MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Compat.lua"] = {
         MSUF_ApplyPowerBarBorder_All = true, MSUF_ApplyAllAlpha = true },
     ["MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua"] = { MSUF_FontPathMatches = true },
 }

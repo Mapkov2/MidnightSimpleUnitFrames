@@ -44,7 +44,12 @@ end
 local FILES = {
     loadConditions = "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua",
     editCore = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua",
+    editRegistry = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Registry.lua",
+    editState = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua",
+    editUndo = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Undo.lua",
     editMovers = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Movers.lua",
+    editElements = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Elements.lua",
+    editCompat = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Compat.lua",
     arenaMatch = "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
     arenaTrinkets = "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
     -- The arena preview is the arena descriptor of the pool preview module; it
@@ -655,7 +660,12 @@ local function NewWorld(flavor, roster)
         Load(FILES.loadConditions)
         Check(type(UF.elements.LoadConditions) == "table", "LoadConditions did not register")
         Load(FILES.editCore)
+        Load(FILES.editRegistry)
+        Load(FILES.editState)
+        Load(FILES.editUndo)
         Load(FILES.editMovers)
+        Load(FILES.editElements)
+        Load(FILES.editCompat)
         local em2 = _G.MSUF_EM2
         Check(type(em2) == "table" and em2.State and em2.Movers, "Edit Mode state machine did not load")
         -- Mover overlays are UI chrome drawn above the frames; they never own

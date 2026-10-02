@@ -4032,6 +4032,7 @@ L["Profile string ready - press Ctrl+C"] = "設定檔字串已準備好，請按
 L["Provider & Surface"] = "提供者與表面"
 L["Reset failed: defaults unavailable"] = "重設失敗：預設值無法使用"
 L["Reset unavailable"] = "無法重設"
+L["Reset %s"] = "已重設%s"
 L["Resource Bar Colors"] = "資源條顏色"
 L["Selected Status Text Settings"] = "所選狀態文字設定"
 L["Target Highlight Color"] = "目標醒目顏色"

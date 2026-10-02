@@ -477,7 +477,7 @@ local function CopySizeTo(targetKey)
     if src.height ~= nil then dst.height = floor(max(SizeBounds.minH, min(SizeBounds.maxH, tonumber(src.height) or 40)) + 0.5) end
     local applied = ApplySettingsForKeySafe(targetKey)
     ApplyPowerLayoutForUnitKey(targetKey, dst.powerBarDetached == true and CanDetachPower(targetKey))
-    if not applied and not ApplyAllSettingsSafe() and type(_G.MSUF_UpdateAllFrames)=="function" then _G.MSUF_UpdateAllFrames() end
+    if not applied then ApplyAllSettingsSafe() end
     SyncMovers()
     RefreshUFPreview("EM2_UNIT_POPUP_COPY_SIZE", targetKey)
     if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(targetKey, "frame", nil, { source = "unit-copy", duration = 0.32 }) end

@@ -1235,6 +1235,18 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPoolPreviews.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Elements.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Compat.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Registry.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Undo.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Kit.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Selection.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Dock.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Picker.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Layout_Grid.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Layout_Snap.lua",
+    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua",
     "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua",
     "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_deDE.lua",
     "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_enUS.lua",
@@ -1502,10 +1514,6 @@ $luaLocalBudget = 190
 $luaSlotBudget = 230
 $luaUpvalueBudget = 56
 $luaBudgetExceptions = [ordered]@{
-    "MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_HUD.lua" = @{
-        Locals = 4; Upvalues = 60
-        Reason = "Retail override at Lua 5.1's 60-upvalue ceiling; the headroom is Retail's to reclaim, and this repository must not diverge further"
-    }
 }
 
 # luac takes a file list, so the syntax check and the budget listing each cost
@@ -1625,9 +1633,7 @@ if ($luac) {
             $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
             throw "Lua 5.1 local budget exceeded: $relativePath has $($measured.MainLocals) main-chunk locals; budget $localCeiling of Lua's 200$why"
         }
-        # Installer-wrapped files (Edit Mode HUD and Layout) keep almost no
-        # main-chunk locals, so every function's local count is held to the
-        # same budget.
+        # Every function's local count is held to the main-chunk budget too.
         if ($measured.MaxLocals -gt $localCeiling) {
             $why = if ($exception) { " (recorded exception: $($exception.Reason))" } else { "" }
             throw "Lua 5.1 local budget exceeded: $relativePath has a function with $($measured.MaxLocals) locals; budget $localCeiling of Lua's 200$why"

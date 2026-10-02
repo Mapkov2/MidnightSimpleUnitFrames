@@ -89,7 +89,7 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
     for _, frame in ipairs(world.widgets.frames) do
         local callback = frame:GetScript("OnEvent")
         if frame:IsEventRegistered("PLAYER_REGEN_DISABLED") and callback
-            and debug.getinfo(callback, "S").source:find("MSUF_EditMode_Core.lua", 1, true) then
+            and debug.getinfo(callback, "S").source:find("MSUF_EditMode_State.lua", 1, true) then
             callback(frame, "PLAYER_REGEN_DISABLED")
         end
     end

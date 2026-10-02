@@ -3937,6 +3937,7 @@ L["Profile string ready - press Ctrl+C"] = "String do perfil pronta: pressione C
 L["Provider & Surface"] = "Provedor e superfície"
 L["Reset failed: defaults unavailable"] = "Falha ao redefinir: padrões indisponíveis"
 L["Reset unavailable"] = "Redefinição indisponível"
+L["Reset %s"] = "Redefinido: %s"
 L["Resource Bar Colors"] = "Cores da barra de recurso"
 L["Selected Status Text Settings"] = "Configurações do texto do status selecionado"
 L["Target Highlight Color"] = "Cor de destaque do alvo"

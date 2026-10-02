@@ -141,8 +141,6 @@ function Controller:ApplyKey(key)
     local util = EM2.Util
     if util and type(util.ApplySettingsForKeySafe) == "function" then
         util.ApplySettingsForKeySafe(key)
-    elseif type(_G.MSUF_ApplyAllSettings) == "function" then
-        _G.MSUF_ApplyAllSettings()
     end
 end
 

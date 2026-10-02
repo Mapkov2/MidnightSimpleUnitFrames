@@ -5,6 +5,7 @@
 -- Quality program A-C6 (C6.4, C6.5): the HUD settings tip and provider anchor
 -- label, the Edit Mode history labels and the Classic route to Blizzard's Edit
 -- Mode are format strings over translated pieces, never English concatenation.
+-- W-C6: so is the HUD Reset status ("Reset %s"), checked in German at run time.
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 
 local failures = {}
@@ -24,7 +25,7 @@ local KEYS = {
     "Edit Arena 1-3 together", "Edit Arena 1-5 together", "Sync class", "Anchor class", "Text on bar",
     "No selection", "Opened settings", "Settings unavailable", "Preview animation unavailable",
     "Open %s settings",
-    "Choose %s in the game menu", "%s settings", "%s Anchor", "%s %s: %s", "%s %s",
+    "Choose %s in the game menu", "%s settings", "%s Anchor", "%s %s: %s", "%s %s", "Reset %s",
     "Unit frame", "General layout", "Group frame", "Move", "Nudge", "Set", "Change",
 }
 -- Pure format strings: every pack keeps the same placeholders.
@@ -63,14 +64,55 @@ local external = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Ext
 Check(external:find('Tr("Open %s settings")', 1, true) ~= nil,
     "the external popup settings button does not translate its label")
 Check(not external:find('"Open " ..', 1, true), "the external popup still concatenates its settings label")
-local hud = Read("MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_HUD.lua")
+-- The toolbar files in their MSUF_EditMode.xml order.
+local hudFiles = {}
+for _, name in ipairs({ "HUD_Kit", "HUD_Selection", "HUD_Dock", "HUD_Picker", "HUD" }) do
+    hudFiles[#hudFiles + 1] = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_" .. name .. ".lua")
+end
+local hud = table.concat(hudFiles, "\n")
 Check(hud:find('string.format(HelpText("%s settings"), selectedCfg.label or key)', 1, true)
     and not hud:find('.. " settings")', 1, true), "the HUD settings tip concatenates its label")
 Check(hud:find('string.format(HelpText("%s Anchor"), providerLabel)', 1, true)
     and not hud:find('" Anchor")', 1, true), "the HUD cooldown button concatenates its provider anchor label")
+Check(hud:find('string.format(HelpText("Reset %s"), ', 1, true)
+    and not hud:find('HelpText("Reset") .. ', 1, true), "the HUD Reset status concatenates its label")
 local blizzard = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Blizzard.lua")
 Check(blizzard:find('translate("Choose %s in the game menu")', 1, true) ~= nil,
     "the Classic route to Blizzard's Edit Mode does not translate its hint")
+
+-- The Reset status a German client shows after HUD Reset on the player frame
+-- (real core and Options graphs, tools/tests/client_world.lua).
+do
+    local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+    local world = World.New(root, "Mainline", { locale = "deDE" }):Boot()
+    local failure = world:FirstFailure()
+    assert(not failure, "deDE boot failed: " .. tostring(failure and failure.file) .. ": "
+        .. tostring(failure and failure.message))
+    local env, core = world.env, world.core
+    core.UF.Apply = function() return true end
+    env.MSUF_ForceReanchorAllUnitFrames_Once = function() end
+    core.FinalizeLocale()
+    env.MSUF_InitProfiles()
+    env.MSUF2.ApplyService.Flush = function() return true end
+    local EM2 = env.MSUF_EM2
+    if Check(EM2.State.Enter("player") == true, "deDE: Edit Mode did not open") then
+        world.widgets:RunTimers()
+        local status
+        local setStatus = EM2.HUD.SetStatus
+        EM2.HUD.SetStatus = function(text, kind, seconds) status = text; return setStatus(text, kind, seconds) end
+        EM2.State.SetUnitKey("player")
+        EM2.HUD.ResetCurrentPosition()
+        EM2.HUD.SetStatus = setStatus
+        local function Translated(key)
+            local value = rawget(core.L, key)
+            return type(value) == "string" and value ~= "" and value or key
+        end
+        local expected = string.format(Translated("Reset %s"), Translated("Player"))
+        Check(Translated("Reset %s") ~= "Reset %s" and status == expected,
+            "deDE: HUD Reset said " .. tostring(status) .. ", not " .. expected)
+        EM2.State.Exit("test")
+    end
+end
 
 if #failures > 0 then
     error("editmode_shell_locale_smoke failed:\n  " .. table.concat(failures, "\n  "))

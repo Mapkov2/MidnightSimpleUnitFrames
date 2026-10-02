@@ -20,8 +20,15 @@ local function Allocated(calls, fn)
     for i = 1, 50 do fn(i) end
     collectgarbage("collect")
     collectgarbage("stop")
-    local before = collectgarbage("count")
-    for i = 1, calls do fn(i) end
+    -- A full collect may halve the VM stack, and the first deep call after it
+    -- regrows the stack once. Two identical passes with the collector stopped
+    -- (the stack cannot shrink again until it runs) and only the second one
+    -- counted keep that one-time regrowth out of the per-call figure.
+    local before
+    for _ = 1, 2 do
+        before = collectgarbage("count")
+        for i = 1, calls do fn(i) end
+    end
     local after = collectgarbage("count")
     collectgarbage("restart")
     return (after - before) * 1024 / calls
@@ -41,7 +48,23 @@ local function FindUpvalue(fn, name, seen)
     end
 end
 
--- F7 / F8 (Layout): real Shell/UI/EditMode/MSUF_EditMode_Layout.lua ----------
+-- F7 / F8 (Layout): the real Shell/EditMode/MSUF_EditMode_Layout*.lua ------
+-- The Edit Mode layout family (Grid, Snap, Nudge, then the drag ticker) in
+-- its MSUF_EditMode.xml order.
+local function LoadLayoutFamily(addon, namespace)
+    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode.xml", "rb"))
+    local xml = handle:read("*a")
+    handle:close()
+    local files = {}
+    for file in xml:gmatch('<Script file="(MSUF_EditMode_Layout[%w_]*%.lua)"/>') do files[#files + 1] = file end
+    assert(#files == 4, "the Edit Mode layout family changed; update this loader")
+    -- Run the chunks outside the gmatch loop: chunks run from inside it leave
+    -- the VM stack sized so that the first call after a full collect regrows
+    -- it, which the allocation probes below would misread as drag cost.
+    for _, file in ipairs(files) do
+        assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/" .. file))(addon, namespace)
+    end
+end
 do
     local ns = { ExportPublic = function(name, value) _G[name] = value end }
     local general = { editModeSnapEnabled = true }
@@ -93,9 +116,7 @@ do
         },
         Movers = { All = function() return movers end },
     }
-    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_Layout.lua"))("MidnightSimpleUnitFrames", ns)
-    assert(type(_G.MSUF_InstallEditLayoutUI) == "function", "Layout installer missing")
-    _G.MSUF_InstallEditLayoutUI("MidnightSimpleUnitFrames", ns)
+    LoadLayoutFamily("MidnightSimpleUnitFrames", ns)
     local Snap = assert(_G.MSUF_EM2.Snap and _G.MSUF_EM2.Snap.Apply, "Snap.Apply missing")
 
     local snapped = 0
