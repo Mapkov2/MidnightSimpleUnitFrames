@@ -359,7 +359,6 @@ end
 ExportPublic("MSUF_PlayerCastbar_ApplyBackendState", PlayerCastbarApplyBackendState)
 
 ExportPublic("MSUF__castbarStyleGlobalRev", _G.MSUF__castbarStyleGlobalRev or 1)
-ExportPublic("MSUF_CastbarStyleRev", _G.MSUF__castbarStyleGlobalRev)
 local castbarStyleRev = _G.MSUF__castbarStyleGlobalRev
 
 ExportPublic("MSUF__castTimeGlobalRev", _G.MSUF__castTimeGlobalRev or 1)
@@ -381,7 +380,6 @@ end)
 
 local function BumpCastbarStyleRev()
     ExportPublic("MSUF__castbarStyleGlobalRev", (_G.MSUF__castbarStyleGlobalRev or 1) + 1)
-    ExportPublic("MSUF_CastbarStyleRev", _G.MSUF__castbarStyleGlobalRev)
     castbarStyleRev = _G.MSUF__castbarStyleGlobalRev
 end
 

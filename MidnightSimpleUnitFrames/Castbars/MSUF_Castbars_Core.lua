@@ -101,19 +101,16 @@ local function GetCastbarUnitInfo(unit)
     local info = _G.MSUF_CastbarUnitInfo
     return info and info[unit] or nil
 end
-ExportPublic("MSUF_GetCastbarUnitInfo", GetCastbarUnitInfo)
 
 local function IsBossCastbarUnit(unit)
     local info = GetCastbarUnitInfo(unit)
     return (info and info.isBoss) and true or false
 end
-ExportPublic("MSUF_IsBossCastbarUnit", IsBossCastbarUnit)
 
 local function IsArenaCastbarUnit(unit)
     local info = GetCastbarUnitInfo(unit)
     return (info and info.isArena) and true or false
 end
-ExportPublic("MSUF_IsArenaCastbarUnit", IsArenaCastbarUnit)
 
 --- Boss and arena castbars are indexed pools (MSUF_CastbarPools.lua) with
 --- indexed previews (MSUF_CastbarPoolPreviews.lua); both load after this file.
@@ -416,7 +413,6 @@ local function GetCastbarReverseFill(isChanneled)
     cache[cacheKey] = reverseFill and true or false
     return cache[cacheKey]
 end
-ExportPublic("MSUF_GetCastbarReverseFill", GetCastbarReverseFill)
 
 if not _G.MSUF_CastbarStyleRevision then ExportPublic("MSUF_CastbarStyleRevision", 1) end
 
@@ -450,7 +446,6 @@ local function GetGlobalCastbarStyleCache()
     ExportPublic("MSUF_GlobalCastbarStyleCache", cache)
     return cache
 end
-ExportPublic("MSUF_GetGlobalCastbarStyleCache", GetGlobalCastbarStyleCache)
 
 local function RefreshCastbarStyleCache(frame)
     if not frame then return end

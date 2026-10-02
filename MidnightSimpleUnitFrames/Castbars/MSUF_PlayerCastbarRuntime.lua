@@ -1105,7 +1105,5 @@ end
 ExportPublic("MSUF_PlayerCastbar_UpdateLatencyZone", UpdateLatencyZone)
 ExportPublic("MSUF_PlayerCastbar_UpdateColorForInterruptible", UpdateColorForInterruptible)
 ExportPublic("MSUF_PlayerCastbar_ShowInterruptFeedback", ShowInterruptFeedback)
-ExportPublic("MSUF_PlayerCastbar_GetEffectiveUnit", GetEffectiveUnit)
-ExportPublic("MSUF_PlayerCastbar_UnhaltedUpdate", UnhaltedUpdate)
 ExportPublic("MSUF_PlayerCastbar_Cast", CastPlayerCastbar)
 ExportPublic("MSUF_PlayerCastbar_OnEvent", PlayerCastbarOnEvent)

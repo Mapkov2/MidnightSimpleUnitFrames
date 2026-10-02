@@ -1286,4 +1286,3 @@ ExportPublic("MSUF_CB_ResetStateOnStop", function(frame, reason)
 end)
 
 -- Historical export name; the implementation lives in MSUF_CastbarUtils.lua.
-ExportPublic("MSUF_CastbarRuntime_PlainNumber", PlainNumber)

@@ -150,7 +150,6 @@ local STAGE_SEGMENT_COLORS = {
     { 1.00, 0.25, 0.25, 0.18 },
 }
 
-local cachedUnifiedDirection
 local cachedColorStages
 
 local function GetEmpowerStageBlinkTime()
@@ -256,24 +255,6 @@ local function EnsureEmpowerStageSegments(frame, count)
     if created and type(_G.MSUF_RoundedCastbar_RefreshFrame) == "function" then
         _G.MSUF_RoundedCastbar_RefreshFrame(frame)
     end
-end
-
-local function GetUnifiedDirection()
-    local db = _G.MSUF_DB
-    if db and db.general ~= nil then
-        cachedUnifiedDirection = db.general.castbarUnifiedDirection and true or false
-        return cachedUnifiedDirection
-    end
-    if cachedUnifiedDirection ~= nil then
-        return cachedUnifiedDirection
-    end
-
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-        db = _G.MSUF_DB
-    end
-    cachedUnifiedDirection = (db and db.general and db.general.castbarUnifiedDirection) and true or false
-    return cachedUnifiedDirection
 end
 
 local function IsEmpowerColorStagesEnabled()
@@ -626,14 +607,8 @@ local function PlayerCastbarClearEmpower(frame, hideFrame)
     end
 end
 
-ExportPublic("MSUF_BuildEmpowerTimeline", BuildEmpowerTimeline)
 ExportPublic("MSUF_BlinkEmpowerTick", BlinkEmpowerTick)
 ExportPublic("MSUF_LayoutEmpowerTicks", LayoutEmpowerTicks)
-ExportPublic("MSUF_EnsureEmpowerTicks", EnsureEmpowerTicks)
-ExportPublic("MSUF_EnsureEmpowerStageSegments", EnsureEmpowerStageSegments)
-ExportPublic("MSUF_LayoutEmpowerStageSegments", LayoutEmpowerStageSegments)
-ExportPublic("MSUF_GetUnifiedDirection", GetUnifiedDirection)
-ExportPublic("MSUF_IsEmpowerColorStagesEnabled", IsEmpowerColorStagesEnabled)
 ExportPublic("MSUF_GetEmpowerStageBlinkTime", GetEmpowerStageBlinkTime)
 ExportPublic("MSUF_IsEmpowerStageBlinkEnabled", IsEmpowerStageBlinkEnabled)
 ExportPublic("MSUF_PlayerCastbar_EmpowerStart", PlayerCastbarEmpowerStart)

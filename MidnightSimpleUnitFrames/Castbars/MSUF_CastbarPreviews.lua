@@ -150,18 +150,6 @@ local function CreatePreview(unit)
     return frame
 end
 
-local function CreatePlayerCastbarPreview()
-    return CreatePreview("player")
-end
-
-local function CreateTargetCastbarPreview()
-    return CreatePreview("target")
-end
-
-local function CreateFocusCastbarPreview()
-    return CreatePreview("focus")
-end
-
 local function SourceCastbarForUnit(unit)
     if unit == "player" then return _G.MSUF_PlayerCastbar end
     if unit == "target" then return _G.MSUF_TargetCastbar end
@@ -675,9 +663,6 @@ local function SyncBossCastbarSliders()
 end
 
 ExportPublic("MSUF_HideBlizzardPlayerCastbar", HideBlizzardPlayerCastbar)
-ExportPublic("MSUF_CreatePlayerCastbarPreview", _G.MSUF_CreatePlayerCastbarPreview or CreatePlayerCastbarPreview)
-ExportPublic("MSUF_CreateTargetCastbarPreview", _G.MSUF_CreateTargetCastbarPreview or CreateTargetCastbarPreview)
-ExportPublic("MSUF_CreateFocusCastbarPreview", _G.MSUF_CreateFocusCastbarPreview or CreateFocusCastbarPreview)
 ExportPublic("MSUF_PositionPlayerCastbarPreview", PositionPlayerCastbarPreview)
 ExportPublic("MSUF_PositionTargetCastbarPreview", PositionTargetCastbarPreview)
 ExportPublic("MSUF_PositionFocusCastbarPreview", PositionFocusCastbarPreview)
