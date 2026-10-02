@@ -979,7 +979,6 @@ function Overview.SetLayerValue(row, value)
     return false
 end
 
-M.SetLayerOverviewValue = Overview.SetLayerValue
 ExportPublic("MSUF_SetLayerOverviewValue", Overview.SetLayerValue)
 
 function Overview.SetStrataValue(row, value)
@@ -1045,7 +1044,6 @@ function Overview.SetStrataValue(row, value)
     return false
 end
 
-M.SetStrataOverviewValue = Overview.SetStrataValue
 ExportPublic("MSUF_SetStrataOverviewValue", Overview.SetStrataValue)
 
 local function Color(name, fallback)

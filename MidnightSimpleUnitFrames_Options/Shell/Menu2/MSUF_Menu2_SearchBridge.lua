@@ -91,16 +91,6 @@ function Bridge.RouteForExactTarget(pageKey, query, fallback, exactTarget)
     local called, route = SearchCall("RouteForTarget", pageKey, routeQuery, pathOwned and "" or fallback)
     return called and route or nil
 end
-function Bridge.PrepareSearchTarget(pageKey, query, fallback, exactTarget)
-    local descriptor = exactTarget
-    local routeQuery, pathOwned = ExactRouteQuery(query, fallback, descriptor)
-    local called, route = SearchCall("RouteForTarget", pageKey, routeQuery,
-        pathOwned and "" or fallback)
-    if not called then return false, nil, descriptor end
-    local applyCalled, changed = SearchCall("ApplyRoute", pageKey, route)
-    if not applyCalled then return false, route, descriptor end
-    return true, route, descriptor, changed == true
-end
 function Bridge.OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)
     if route == nil and type(exactTarget) == "table" then
         local routeQuery, pathOwned = ExactRouteQuery(query, fallback, exactTarget)

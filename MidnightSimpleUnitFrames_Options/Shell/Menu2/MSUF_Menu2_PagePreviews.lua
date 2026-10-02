@@ -400,9 +400,8 @@ local function ShowGFBarMenuPreviews(gf)
     ShowGFPreviewWhenNoLiveFrames(gf, "raid", BARS_MENU_PREVIEW_COUNT)
     gf.HidePreview("mythicraid")
 end
-local function SetGFPagePreviewFlag(active, kind)
+local function SetGFPagePreviewFlag(active)
     _G.MSUF2_GFPagePreviewActive = active and true or nil
-    _G.MSUF2_GFPagePreviewKind = active and kind or nil
 end
 local function GFPreviewRuntimeActive(gf)
     if _G.MSUF2_GFPagePreviewActive == true then return true end
@@ -479,7 +478,7 @@ local function SyncGroupPagePreviewForKey(key, force)
     end
     if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind((active and not dualMenuPreviews) and kind or nil) end
     if not hasRuntime then
-        SetGFPagePreviewFlag(active, kind)
+        SetGFPagePreviewFlag(active)
         return
     end
     if not active then
@@ -488,7 +487,7 @@ local function SyncGroupPagePreviewForKey(key, force)
         HideGFRuntimePreviews(gf, true)
         return
     end
-    SetGFPagePreviewFlag(true, kind)
+    SetGFPagePreviewFlag(true)
     RestoreGFHeaders(gf)
     if gf.SetPreviewAnchor then
         gf.SetPreviewAnchor("party", nil)

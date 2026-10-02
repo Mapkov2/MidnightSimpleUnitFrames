@@ -762,7 +762,6 @@ local function BuildNavRail(parent)
         return true
     end
     clear:SetScript("OnClick", ClearSearchInput)
-    M.ClearNavSearch = ClearSearchInput
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(clear, "search.clear", "Clear menu search", "action", {
             actionKey = "menu_search_clear",

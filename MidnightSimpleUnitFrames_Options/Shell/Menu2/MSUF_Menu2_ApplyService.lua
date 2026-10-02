@@ -1236,10 +1236,6 @@ function Apply.RequestGeneral(reason, opts)
     return Apply.QueueFlush()
 end
 
-function Apply.RequestVisuals(reason)
-    return Apply.RequestFonts(reason or "MSUF2_VISUALS")
-end
-
 function Apply.RequestColors(reason, scope)
     local globalScope = IsGlobalApplyScope(scope)
     if globalScope and PushVisualUpdates() then return true end
@@ -1438,12 +1434,6 @@ function Apply.RequestClassPower(reason, runtimeOpts, applyFlags)
     pendingPreview = reason or "MSUF2_CLASSPOWER"
     Apply.pendingPreview = pendingPreview
     return Apply.QueueFlush()
-end
-
-function Apply.RequestDetachedPowerBar(reason, runtimeOpts, applyFlags)
-    return Apply.RequestClassPower(reason or "MSUF2_DETACHED_POWER_BAR",
-        runtimeOpts or { anchor = true, cdm = true, playerHP = true, syncNow = false },
-        applyFlags or { preview = true, applyAll = false, unit = "player", power = true, detachedPowerBar = true, classpowerApplied = true })
 end
 
 function Apply.ApplyPowerLayout(unit, detachedPowerBar, refreshTextures)

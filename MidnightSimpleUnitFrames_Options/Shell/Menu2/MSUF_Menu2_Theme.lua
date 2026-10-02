@@ -1879,9 +1879,6 @@ end
 function T.StyleCheckmark(checkButton)
     if not checkButton then return end
     if MenuSkin then MenuSkin.TrackPaint(checkButton, T.StyleCheckmark) end
-    local UI = MSUF and MSUF.UI
-    local styleText = (_G and _G.MSUF_StyleToggleText) or (MSUF and MSUF.MSUF_StyleToggleText) or (UI and UI.StyleToggleText)
-    if type(styleText) == "function" then styleText(checkButton) end
     local function HideQuietCheckboxTexture(texture)
         if not texture then return end
         if texture.SetAlpha then texture:SetAlpha(0) end
@@ -1906,8 +1903,6 @@ function T.StyleCheckmark(checkButton)
         end
     end
     local function ApplyCheckTexture()
-        local oldStyle = (_G and _G.MSUF_StyleCheckmark) or (MSUF and MSUF.MSUF_StyleCheckmark) or (UI and UI.StyleCheckmark)
-        if type(oldStyle) == "function" then oldStyle(checkButton) end
         HideQuietCheckboxNative()
         local tick = (checkButton._msuf2QuietCheckBox and T.media.checkTickMedium) or T.media.checkTick
         if checkButton.SetCheckedTexture then checkButton:SetCheckedTexture(tick) end

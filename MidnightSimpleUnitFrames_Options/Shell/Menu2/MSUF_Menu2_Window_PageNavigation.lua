@@ -113,9 +113,8 @@ end
 local function CurrentMenuDataRevision()
     return tonumber(M._msuf2MenuDataRevision) or 0
 end
-function M.MarkMenuDataDirty(reason)
+function M.MarkMenuDataDirty()
     M._msuf2MenuDataRevision = CurrentMenuDataRevision() + 1
-    M._msuf2MenuDataDirtyReason = reason
     return M._msuf2MenuDataRevision
 end
 local function RunRefreshers(entry, opts)

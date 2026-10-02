@@ -387,13 +387,6 @@ local function StageIncludesSection(stage, sectionId)
     local excluded = stage.excludeSections
     return type(excluded) ~= "table" or excluded[sectionId] ~= true
 end
-function M.IsGuidedTourSectionIncluded(stageId, sectionId)
-    return StageIncludesSection(STAGE_BY_ID[tostring(stageId or "")], tostring(sectionId or ""))
-end
-function M.GuidedTourIncludesEphemeralControls(stageId)
-    local stage = STAGE_BY_ID[tostring(stageId or "")]
-    return type(stage) == "table" and stage.includeEphemeralControls == true
-end
 
 local Runtime = M._guidedTourRuntime or {}
 M._guidedTourRuntime = Runtime
@@ -520,10 +513,6 @@ end
 local function GroupEditModeMovementComplete()
     return Preference("groupEditModeMoved") == true
 end
-M.GetGuidedCooldownAnchorDecision = CooldownAnchorDecision
-M.IsGuidedEditModePlacementUnlocked = CooldownAnchorDecisionComplete
-M.IsGuidedEditModePlacementComplete = EditModePlacementComplete
-M.IsGuidedGroupEditModePlacementComplete = GroupEditModePlacementComplete
 
 local PREFERENCE_LABELS = {
     quick = "Quick Setup",
@@ -750,7 +739,6 @@ local function ShouldShowEditModeOpenCue()
     local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
     return status.active ~= true and status.combatLocked ~= true
 end
-M.ShouldShowGuidedEditModeOpenCue = ShouldShowEditModeOpenCue
 
 local function RefreshEditModeOpenCue(show)
     local T = M.Theme
@@ -1237,7 +1225,6 @@ local function GuidedWidgetIsActionable(widget)
     end
     return true
 end
-M.IsGuidedTourWidgetActionable = GuidedWidgetIsActionable
 
 local function GuidedDisplayLabel(value)
     value = tostring(value or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")

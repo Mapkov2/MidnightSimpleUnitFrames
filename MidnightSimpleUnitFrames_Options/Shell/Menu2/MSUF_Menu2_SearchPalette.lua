@@ -102,7 +102,6 @@ local function CreatePaletteController(parent, searchBox)
         if self.frame then self.frame:Hide() end
         self.visibleResults = {}
         self.selectedIndex = 1
-        M.searchPaletteActive = nil
         local bridge = SearchBridge()
         if type(bridge.CancelSearchBackgroundIndex) == "function" then
             bridge.CancelSearchBackgroundIndex()
@@ -270,7 +269,6 @@ local function CreatePaletteController(parent, searchBox)
         end
 
         local palette = EnsurePalette(self)
-        M.searchPaletteActive = true
         local results = type(M.searchResults) == "table" and M.searchResults or {}
         if M.searchResultsQuery ~= query then results = {} end
         pending = pending == true or M.searchResultsPending == true
@@ -309,9 +307,6 @@ local function CreatePaletteController(parent, searchBox)
         return true
     end
 
-    M.RefreshNavSearchPalette = function(query)
-        return controller:Refresh(query or (searchBox.GetText and searchBox:GetText()) or "", false)
-    end
     M.HideNavSearchPalette = function() controller:Hide() end
     return controller
 end

@@ -72,37 +72,6 @@ local function RefreshHome()
     if type(M.SelectPage) == "function" then M.SelectPage("home") end
 end
 
-function M.RestartUpgradeHighlightTour(source)
-    if BlockedByCombat() then
-        return false, "Leave combat, then ask me to restart the highlight tour again.",
-            { noMutation = true, userFacingFailure = true }
-    end
-    local controller = Controller()
-    if not (controller and type(controller.ResetCurrent) == "function" and type(controller.Start) == "function") then
-        return false, "The upgrade highlight tour is not available in this menu build.",
-            { noMutation = true, userFacingFailure = true }
-    end
-    if type(M.SetPageHistoryTourCue) == "function" then M.SetPageHistoryTourCue(false) end
-    local reset, releaseKey = controller:ResetCurrent()
-    if reset ~= true then
-        return false, "I could not reset the upgrade highlight tour.",
-            { noMutation = true, userFacingFailure = true }
-    end
-    local started = controller:Start()
-    if started ~= true then
-        return false, "I reset the upgrade highlights but could not start the tour.",
-            { userFacingFailure = true }
-    end
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
-    local opened = type(M.Open) == "function" and M.Open("home")
-    if opened == false or opened == nil then
-        return false, "The highlight tour was restarted, but I could not open its first page.",
-            { userFacingFailure = true }
-    end
-    return true, "Restarted the " .. tostring(releaseKey or "current")
-        .. " upgrade highlight tour at highlight 1.", { source = tostring(source or "menu") }
-end
-
 local function ApplyTargetRoute(item)
     local route = type(item) == "table" and item.route or nil
     if type(route) ~= "table" then return end
@@ -143,7 +112,6 @@ local function ApplyTargetRoute(item)
         end
     end
 end
-M.ApplyUpgradeHighlightTargetRoute = ApplyTargetRoute
 
 local function OpenPage(item)
     local pageKey = type(item) == "table" and item.pageKey or item

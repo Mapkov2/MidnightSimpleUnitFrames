@@ -266,7 +266,7 @@ function W.SetPreviewFocus(key, component, slot, active)
     local textComponent = (component == "name" or component == "hp" or component == "power")
     local didFocus = false
     if (not key) or (not component) then
-        local clearUnit = _G.MSUF_UFPreview_ClearFocus
+        local clearUnit = _G.MSUF_UFPreview_ClearTextFocus
         if type(clearUnit) == "function" then didFocus = clearUnit() or didFocus end
         if type(M.FocusGFPreviewTextSlot) == "function" then didFocus = M.FocusGFPreviewTextSlot(nil, nil, false) or didFocus end
         return didFocus
@@ -1152,20 +1152,6 @@ function PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
         end
         return height
     end
-    --- Declarative card layout. Renders one ControlCard whose controls auto-flow
-    --- top-to-bottom using the SAME widget constructors and binders that hand-written
-    --- pages use, so output is pixel-identical to a manually placed card. The point is
-    --- to delete the repeated PlaceDropdown/PlaceSlider/MoveWidget choreography and the
-    --- hand-computed -48/-112/-174 row offsets that came with it.
-    ---
-    --- spec = {
-    ---   title, subtitle, x, y, width, height?,  -- height auto-computed when omitted
-    ---   rows = { <controlSpec>, ... },
-    --- }
-    --- Returns { card = <frame>, controls = <id -> widget>, gate = <fn or nil> }.
-    function b:Card(spec)
-        return W.BuildCard(self.ctx, self.parent, spec)
-    end
 end
 function W.PageBuilder(ctx, opts)
     opts = type(opts) == "table" and opts or {}
@@ -1198,9 +1184,8 @@ function W.PageBuilder(ctx, opts)
     return b
 end
 
---- Height each auto-flowing widget kind consumes inside a card/section, matching the
---- NextRow() advances in the individual W.* constructors. Kept here so card height can be
---- pre-computed without first creating the widgets.
+--- Height each auto-flowing widget kind consumes inside a settings row, matching the
+--- NextRow() advances in the individual W.* constructors.
 local CARD_ROW_HEIGHT = {
     toggle = 30, switch = 30, button = 30,
     slider = 48, dropdown = 48, segment = 48, textinput = 50,
@@ -1254,82 +1239,10 @@ local function BuildCardControl(ctx, card, row, x, y, width)
     return widget
 end
 
---- Standalone card builder (also reachable as b:Card on a PageBuilder).
----
---- Each interactive row is placed explicitly at a cursor that starts at `firstRowY`
---- (default -52, matching ControlCard's own first-control line) and advances by the
---- row's height plus `rowGap` (default 6). Pin `firstRowY`/`rowGap`/per-row `height`
---- to reproduce an existing card's exact spacing, so a conversion stays pixel-identical.
----
---- spec = {
----   title, subtitle, x, y, width, height?, firstRowY?, rowGap?, contentX?,
----   rows = { { kind, label, get, set, values?/min/max/step?, width?, id?, controlId?, settingKey?, gate?, height? }, ... },
---- }
---- Returns { card = <frame>, controls = <id -> widget>, gate = <fn or nil> }.
-function W.BuildCard(ctx, parent, spec)
-    if not (parent and type(spec) == "table") then return nil end
-    local rows = spec.rows or {}
-    local width = spec.width or (parent._msuf2Width and (parent._msuf2Width - 32)) or 360
-    local contentX = spec.contentX or 16
-    local controlW = max(48, width - 32)
-    local rowGap = spec.rowGap or 6
-    -- Pre-compute card height from the row kinds unless the caller pinned one.
-    local height = spec.height
-    if not height then
-        height = (spec.subtitle and spec.subtitle ~= "") and 64 or 52 -- title (+ subtitle) block
-        for i = 1, #rows do
-            local k = rows[i].kind or rows[i].type
-            height = height + (rows[i].height or CARD_ROW_HEIGHT[k] or 30) + rowGap
-        end
-        height = height + 6 -- bottom padding
-    end
-    local card = W.ControlCard(parent, spec.title, spec.subtitle, spec.x or 0, spec.y or 0, width, height)
-    if not card then return nil end
-    local y = spec.firstRowY or ((spec.subtitle and spec.subtitle ~= "") and -64 or -52)
-    local controls = {}
-    local gated
-    for i = 1, #rows do
-        local row = rows[i]
-        local kind = row.kind or row.type
-        local rowHeight = row.height or CARD_ROW_HEIGHT[kind] or 30
-        if kind == "spacer" then
-            -- no widget; only advances the cursor
-        elseif kind == "text" then
-            local fs = W.LabelAt(card, CardResolve(row.text) or "", contentX, y, controlW, row.template, row.color)
-            if row.id then controls[row.id] = fs end
-        elseif kind == "divider" then
-            W.DividerAt(card, y - 6)
-        else
-            local widget = BuildCardControl(ctx, card, row, contentX, y, controlW)
-            if widget then
-                if row.id then controls[row.id] = widget end
-                if row.gate then
-                    widget._msuf2GateFn = row.gate
-                    gated = gated or {}
-                    gated[#gated + 1] = widget
-                end
-            end
-        end
-        y = y - rowHeight - rowGap
-    end
-    -- Single shared gate refresher: any row.gate returning false disables its control.
-    local gate
-    if gated then
-        gate = function()
-            for i = 1, #gated do
-                local w = gated[i]
-                W.SetControlEnabled(w, w._msuf2GateFn() and true or false)
-            end
-        end
-        if M.TrackRefresh then M.TrackRefresh(ctx, gate) end
-    end
-    return { card = card, controls = controls, gate = gate }
-end
-
 --- Uniform multi-column settings rows inside an EXISTING section or card (the
 --- "Zeilen-Grid" building block): fixed cell metrics, cells flow left-to-right
 --- then top-to-bottom, optional per-row reset-to-default action. Uses the same
---- row specs, constructors and binders as W.BuildCard, so converted sections
+--- row specs, constructors and binders as hand-placed controls, so converted sections
 --- keep their control behavior and Search metadata unchanged.
 ---
 --- spec = {
@@ -1504,19 +1417,6 @@ function W.TopButton(parent, label, width, height, style, active)
 end
 function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     return nil, nil
-end
-function W.SetCollapsibleToggleText(section, openText, closedText)
-    local entry = section and section._msuf2CollapsibleEntry
-    if not (entry and entry.label and entry.label.SetText) then return nil end
-    local function Refresh()
-        entry.label:SetText(Tr(entry.open and (openText or "") or (closedText or openText or "")))
-    end
-    if entry.header and entry.header.HookScript and not entry._msuf2DynamicTitleHooked then
-        entry._msuf2DynamicTitleHooked = true
-        entry.header:HookScript("OnClick", Refresh)
-    end
-    Refresh()
-    return Refresh
 end
 local COLLAPSIBLE_BADGE_STYLES = {
     ok = {
@@ -2054,119 +1954,6 @@ local function AttachBoundColorToContextCard(colorControl)
     return true
 end
 
---- Mirrors existing bound color controls into compact, clickable accordion-header
---- swatches. The header buttons proxy the original control, so color history,
---- picker behavior, setting metadata, and runtime apply paths stay single-sourced.
-function W.SetCollapsibleColorSwatches(ctx, section, specs)
-    local entry = section and section._msuf2CollapsibleEntry
-    local header = entry and entry.header
-    if not header then return end
-    specs = specs or {}
-    entry._msuf2ColorSwatches = entry._msuf2ColorSwatches or {}
-    local count = #specs
-    local measuredW = header.GetWidth and header:GetWidth()
-    local headerW = (tonumber(measuredW) or 0) > 0 and measuredW or (entry.builder and entry.builder.width) or 720
-    local baseWidth = count > 12 and 16 or (count > 8 and 20 or (count > 5 and 24 or 32))
-    local gap = count > 8 and 3 or 5
-    local maxReserve = max(80, headerW - 220)
-    local visibleLimit = max(1, floor((maxReserve + gap) / (baseWidth + gap)))
-    local renderCount = min(count, visibleLimit)
-    local right = -12
-    local visibleCount = 0
-    for i = 1, renderCount do
-        local spec = specs[i] or {}
-        local control = spec.control or spec[1]
-        local swatch = entry._msuf2ColorSwatches[i]
-        if not swatch then
-            swatch = PixelLayoutRegion(CreateFrame("Button", nil, header))
-            swatch:SetSize(32, 18)
-            swatch:SetFrameLevel((header.GetFrameLevel and header:GetFrameLevel() or 1) + 3)
-            swatch._msuf2Fill, swatch._msuf2Edge = T.CreateSuperellipseLayers(swatch, "_msuf2HeaderColor", 1, "ARTWORK", "OVERLAY")
-            local hover = PixelLayoutRegion(swatch:CreateTexture(nil, "HIGHLIGHT"))
-            hover:SetAllPoints()
-            hover:SetColorTexture(1, 1, 1, 0.10)
-            entry._msuf2ColorSwatches[i] = swatch
-        end
-        swatch._msuf2ColorControl = control
-        swatch._msuf2ColorPreviewAvailable = control and true or false
-        swatch:SetSize(tonumber(spec.width) or baseWidth, tonumber(spec.height) or (baseWidth < 24 and 14 or 18))
-        swatch:ClearAllPoints()
-        swatch:SetPoint("RIGHT", header, "RIGHT", right, 0)
-        right = right - swatch:GetWidth() - gap
-        visibleCount = visibleCount + 1
-        if M.MarkRuntimeControlComponent and control then
-            M.MarkRuntimeControlComponent(swatch, control)
-        elseif control then
-            swatch._msuf2ControlPartOf = control
-        end
-        local function RefreshSwatch(r, g, b)
-            if not control then swatch:Hide(); return end
-            if type(r) ~= "number" then r, g, b = nil, nil, nil end
-            if r == nil and control.GetRGB then r, g, b = control:GetRGB() end
-            r, g, b = tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1
-            if swatch._msuf2Fill.SetColorTexture then swatch._msuf2Fill:SetColorTexture(r, g, b, 1)
-            else swatch._msuf2Fill:SetVertexColor(r, g, b, 1) end
-            local enabled = not control.IsEnabled or control:IsEnabled()
-            if enabled then swatch:Enable() else swatch:Disable() end
-            -- A header swatch previews the stored color, even while its setting is
-            -- conditionally inactive. Dimming the whole button falsifies that color.
-            swatch:SetAlpha(1)
-            swatch._msuf2Edge:SetVertexColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], enabled and 0.90 or 0.48)
-            swatch:SetShown(entry.open ~= true and swatch._msuf2ColorPreviewAvailable == true)
-        end
-        swatch._msuf2RefreshColor = RefreshSwatch
-        swatch:SetScript("OnClick", function(self)
-            local target = self._msuf2ColorControl
-            if not target or (target.IsEnabled and not target:IsEnabled()) then return end
-            if target.Click then target:Click("LeftButton")
-            else
-                local click = target.GetScript and target:GetScript("OnClick")
-                if type(click) == "function" then click(target, "LeftButton") end
-            end
-        end)
-        if M.AddTooltip and not swatch._msuf2ColorTooltipInstalled then
-            swatch._msuf2ColorTooltipInstalled = true
-            M.AddTooltip(swatch, spec.label or spec.text or "Color", spec.help or "Click to edit this color.", { hook = true })
-        end
-        if control and swatch._msuf2MirrorControl ~= control then
-            swatch._msuf2MirrorControl = control
-            control._msuf2ColorMirrors = control._msuf2ColorMirrors or {}
-            control._msuf2ColorMirrors[#control._msuf2ColorMirrors + 1] = RefreshSwatch
-            if control.HookScript then
-                control:HookScript("OnEnable", RefreshSwatch)
-                control:HookScript("OnDisable", RefreshSwatch)
-            end
-        end
-        RefreshSwatch()
-    end
-    for i = renderCount + 1, #entry._msuf2ColorSwatches do
-        local swatch = entry._msuf2ColorSwatches[i]
-        swatch._msuf2ColorPreviewAvailable = false
-        swatch:Hide()
-    end
-    entry._msuf2ClosedColorSwatchReserve = visibleCount > 0 and math.abs(right + 12) or 0
-    entry._msuf2RefreshColorSwatchVisibility = function()
-        local showPreviews = entry.open ~= true
-        entry._msuf2ColorSwatchReserve = showPreviews and entry._msuf2ClosedColorSwatchReserve or 0
-        for i = 1, #(entry._msuf2ColorSwatches or {}) do
-            local swatch = entry._msuf2ColorSwatches[i]
-            if swatch then
-                swatch:SetShown(showPreviews and swatch._msuf2ColorPreviewAvailable == true)
-            end
-        end
-        if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
-    end
-    if M.TrackRefresh and not entry._msuf2ColorSwatchRefreshTracked then
-        entry._msuf2ColorSwatchRefreshTracked = true
-        M.TrackRefresh(ctx, function()
-            for i = 1, #(entry._msuf2ColorSwatches or {}) do
-                local swatch = entry._msuf2ColorSwatches[i]
-                if swatch and swatch._msuf2ColorPreviewAvailable and swatch._msuf2RefreshColor then swatch._msuf2RefreshColor() end
-            end
-        end)
-    end
-    entry._msuf2RefreshColorSwatchVisibility()
-end
 
 --- Register every bound color for its nearest visible content surface and for
 --- picker grouping. Accordion headers intentionally stay clean: the only
