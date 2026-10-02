@@ -3,10 +3,12 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
     return region
 end
 --- ClassPower/MSUF_CP_Core.lua
---- Builder bundle for the ClassPower controller.
+--- Module bundle for the ClassPower controller.
 ---
---- The controller owns events and live state; this file contributes closures for
---- build, layout, presentation, runtime routing, and class-specific prediction.
+--- The controller owns events and live state; this file contributes five
+--- modules for build, layout, presentation, runtime routing and class-specific
+--- prediction. Each is a do-block whose functions are defined once at load; its
+--- builder binds the controller's environment once and returns the module API.
 --- Keep the split intact when extending ClassPower: frame creation belongs in
 --- BUILD, anchoring and sizing in LAYOUT, texture/font refresh in PRESENTATION,
 --- event handlers in RUNTIME, and speculative class mechanics in SPECIALS.

@@ -1293,7 +1293,7 @@ do
     --- Star cost on every Meta aura update.
     local E, GetTime, CP, _cpDB, C_UnitAuras, GetTrackedPlayerAura, C_Spell, CPK, NotSecret
     local ResolveClassPowerBgColor, ResolveMWAbove5Color, CP_CheckAutoHide
-    local GetCollapsingStarCost
+    local CollapsingStarCost
     local MAX_FRAGMENT_NOTCHES
     --- Top of the Pip gap slider; the divider budget is shared across it.
     local MAX_PIP_GAP = 8
@@ -1565,8 +1565,8 @@ do
         local progressMax
         if inMeta then
             --- Collapsing Star's cost can change while Meta is active.
-            if type(GetCollapsingStarCost) == "function" then
-                local rawCost = GetCollapsingStarCost()
+            if type(CollapsingStarCost) == "function" then
+                local rawCost = CollapsingStarCost()
                 if NotSecret(rawCost) and rawCost ~= nil then progressMax = tonumber(rawCost) end
             end
             local whispers = GetPlayerAura(CPK.SPELL.SILENCE_THE_WHISPERS)
@@ -1643,7 +1643,7 @@ do
         CPK, NotSecret = E.CPK, E.NotSecret
         ResolveClassPowerBgColor, ResolveMWAbove5Color = E.ResolveClassPowerBgColor, E.ResolveMWAbove5Color
         CP_CheckAutoHide = E.CP_CheckAutoHide
-        GetCollapsingStarCost = _G.GetCollapsingStarCost
+        CollapsingStarCost = GetCollapsingStarCost
         MAX_FRAGMENT_NOTCHES = (E.CPConst and tonumber(E.CPConst.MAX_FRAGMENT_NOTCHES)) or 64
         ClassicSpellCastCount, ClassicSpellMaxApplications = nil, nil
         if IS_CLASSIC then

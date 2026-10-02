@@ -1115,7 +1115,7 @@ local function Refresh(playerFrame)
     end
 end
 
---- Builds closures bound to the ClassPower controller environment. Nothing in
+--- Binds this module to the ClassPower controller environment. Nothing in
 --- this file touches frames at load time; frame creation waits until the
 --- player frame exists and the feature is enabled.
 builders.PLAYER_HP = function(E)
