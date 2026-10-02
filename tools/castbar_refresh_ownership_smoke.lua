@@ -68,9 +68,10 @@ assert(contains(core, 'ExportPublic("MSUF_UpdateCastbarTextures", UpdateCastbarT
 assert(contains(core, 'ExportPublic("MSUF_UpdateCastbarTextures_Immediate", UpdateCastbarTextures)'))
 assert(not contains(fonts, 'ExportPublic("MSUF_UpdateCastbarTextures",'))
 assert(contains(core, 'ExportPublic("MSUF_ApplyAllCastbarsAndSync", ApplyAllCastbarsAndSync)'))
-assert(ownerCountFor('ExportPublic("MSUF_UpdateCastbarFillDirection",', { core, style }) == 1,
-    "castbar fill direction must have exactly one public owner")
-assert(contains(style, 'ExportPublic("MSUF_UpdateCastbarFillDirection",'))
+-- The fill-direction refresher had no caller and was removed (quality wave 3);
+-- the menu applies castbarFillDirection through the castbar visual refresh.
+assert(ownerCountFor('ExportPublic("MSUF_UpdateCastbarFillDirection",', { core, style }) == 0,
+    "the unused castbar fill-direction refresher came back")
 assert(ownerCountFor('ExportPublic("MSUF_GetCastbarReverseFillForFrame",', { core, utils }) == 1,
     "castbar reverse-fill resolution must have exactly one public owner")
 assert(contains(utils, 'ExportPublic("MSUF_GetCastbarReverseFillForFrame",'))

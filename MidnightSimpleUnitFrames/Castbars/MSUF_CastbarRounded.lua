@@ -305,9 +305,6 @@ local function ApplyAll(masterActive)
 end
 
 MSUF.RoundedCastbarsApplyAll = ApplyAll
-ExportPublic("MSUF_ApplyRoundedCastbars", function()
-    ApplyAll(SettingEnabled())
-end)
 ExportPublic("MSUF_RoundedCastbar_RefreshFrame", ApplyFrame)
 ExportPublic("MSUF_RoundedCastbar_ApplyOutline", ApplyRoundedOutline)
 ExportPublic("MSUF_RoundedCastbar_TintOutline", TintRoundedOutline)

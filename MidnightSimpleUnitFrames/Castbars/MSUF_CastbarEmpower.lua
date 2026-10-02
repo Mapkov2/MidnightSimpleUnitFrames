@@ -276,14 +276,6 @@ local function GetUnifiedDirection()
     return cachedUnifiedDirection
 end
 
-local function GetUnifiedFillEnabled(frame)
-    local enabled = GetUnifiedDirection()
-    if frame then
-        frame.MSUF_cachedUnifiedDirection = enabled
-    end
-    return enabled
-end
-
 local function IsEmpowerColorStagesEnabled()
     local db = _G.MSUF_DB
     if db and db.general ~= nil then
@@ -641,7 +633,6 @@ ExportPublic("MSUF_EnsureEmpowerTicks", EnsureEmpowerTicks)
 ExportPublic("MSUF_EnsureEmpowerStageSegments", EnsureEmpowerStageSegments)
 ExportPublic("MSUF_LayoutEmpowerStageSegments", LayoutEmpowerStageSegments)
 ExportPublic("MSUF_GetUnifiedDirection", GetUnifiedDirection)
-ExportPublic("MSUF_GetUnifiedFillEnabled", GetUnifiedFillEnabled)
 ExportPublic("MSUF_IsEmpowerColorStagesEnabled", IsEmpowerColorStagesEnabled)
 ExportPublic("MSUF_GetEmpowerStageBlinkTime", GetEmpowerStageBlinkTime)
 ExportPublic("MSUF_IsEmpowerStageBlinkEnabled", IsEmpowerStageBlinkEnabled)

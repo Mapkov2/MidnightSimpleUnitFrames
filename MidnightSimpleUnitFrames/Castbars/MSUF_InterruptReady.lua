@@ -1488,10 +1488,6 @@ local function KickReady_GetReadyBoolForTint()
     return InterruptReadyBoolForTint()
 end
 
-local function KickReady_EvaluateColor(ready)
-    return ColorForReady(ready)
-end
-
 local function KickReady_EvaluateRGBA(ready, rawNotInterruptible)
     local red, green, blue, alpha = EvaluateIndicatorRGBA(ready, rawNotInterruptible)
     return red, green, blue, alpha
@@ -1580,7 +1576,6 @@ ExportPublic("MSUF_KickReady_Init", KickReady_Init)
 ExportPublic("MSUF_KickReady_IsReady", KickReady_IsReady)
 ExportPublic("MSUF_KickReady_GetSpellID", KickReady_GetSpellID)
 ExportPublic("MSUF_KickReady_GetReadyBoolForTint", KickReady_GetReadyBoolForTint)
-ExportPublic("MSUF_KickReady_EvaluateColor", KickReady_EvaluateColor)
 ExportPublic("MSUF_KickReady_EvaluateRGBA", KickReady_EvaluateRGBA)
 ExportPublic("MSUF_KickReady_ApplyLayout", KickReady_ApplyLayout)
 ExportPublic("MSUF_KickReady_RefreshFrame", KickReady_RefreshFrame)
