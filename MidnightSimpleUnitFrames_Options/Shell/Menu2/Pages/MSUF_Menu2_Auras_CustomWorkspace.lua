@@ -987,7 +987,7 @@ local function BuildCustomAppearancePandemic(C, StyleGrid)
 end
 
 local function BuildCustomAppearanceTool(C)
-    local ctx, b, unit, index, tool, isTargetDots, containerLabel, styleItem, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.tool, C.isTargetDots, C.containerLabel, C.styleItem, C.Apply, C.Grid
+    local ctx, b, unit, index, tool, isTargetDots, styleItem, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.tool, C.isTargetDots, C.styleItem, C.Apply, C.Grid
     if tool == "appearance" then
         -- Every Custom container, including Player Defensives and Dots on
         -- Target, binds visual controls to this UnitFrame-owned record.
@@ -1068,7 +1068,7 @@ local function BuildCustomAppearanceTool(C)
         local cooldown = b:CollapsibleSection(CustomStyleSectionId(index, "cooldown"), "Cooldown Text", 184, true)
         if W.AttachContextColorShortcut then
             W.AttachContextColorShortcut(cooldown, {
-                title = containerLabel .. " Cooldown Text Settings",
+                title = M.Format("%s Cooldown Text Settings", ContainerTitle(C)),
                 historyLabel = "Custom aura cooldown text color",
                 historySource = "menu:custom-auras-cooldown-text-color",
                 scopeTag = "Shared",
@@ -1078,7 +1078,7 @@ local function BuildCustomAppearanceTool(C)
                     unit = unit,
                     kind = "aura",
                     colorReferences = AURA_COOLDOWN_COLOR_REFERENCES,
-                    colorTitle = containerLabel .. " Cooldown Colors",
+                    colorTitle = M.Format("%s Cooldown Colors", ContainerTitle(C)),
                     subtitle = "Custom aura text follows the shared Fonts settings.",
                     capabilities = {
                         opacity = false, baseline = false,
