@@ -1062,13 +1062,10 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
   return false
 end
 
-local function UpdateDeadBg(frame, cfg, seedHP, event)
-  local bg = frame.bg
-  local unit = frame.MSUFUnitKey
-  if not (bg and IsUnitToken(unit)) then return end
+local function ApplyDeadBgState(frame, cfg, gone)
   local cached = frame._msufGFDeadBgState
-  local gone = ResolveGone(frame, cfg, unit, seedHP, event)
   local firstResolve = cached == nil
+  local bg = frame.bg
   if gone then
     if cached == true and frame._msufHealthBgDynamic ~= true
       and frame._msufPowerBgDynamic ~= true then
@@ -1095,6 +1092,44 @@ local function UpdateDeadBg(frame, cfg, seedHP, event)
   if not firstResolve then
     RestoreHealthBackground(frame)
   end
+end
+
+local function UpdateDeadBg(frame, cfg, seedHP, event)
+  local unit = frame.MSUFUnitKey
+  if not (frame.bg and IsUnitToken(unit)) then return end
+  return ApplyDeadBgState(frame, cfg, ResolveGone(frame, cfg, unit, seedHP, event))
+end
+
+-- Health's gone-state sink (NotifyHealthState, UpdateGroupPercentLean). A
+-- UNIT_HEALTH tick can flip only death, and ResolveGone's health rule decides
+-- it: a plain seed by itself, a protected one through the never-secret
+-- UnitIsDeadOrGhost read (Blizzard's CompactUnitFrame reads it on every
+-- UNIT_HEALTH too, CompactUnitFrame.lua:112, 1103). A tick that leaves the
+-- state as it is returns here, before the generic chain (the 2026-10-02 raid
+-- trace: UpdateGoneState, UpdateDeadBg and ResolveGone 45 ms per 13.7k group
+-- ticks). Connection and lifecycle events keep the full resolver.
+local function UpdateGoneStateFromHealth(frame, event, unit, seedHP)
+  if event ~= "UNIT_HEALTH" then
+    local fn = frame._msufGFVisualRuntimeGone
+    if fn then fn(frame, frame._msufGFVisualRuntimeGroup, seedHP, event) end
+    return
+  end
+  local frameUnit = frame.MSUFUnitKey
+  local cfg = frame._msufGFVisualRuntimeGroup
+  if not (cfg and frame._msufGFVisualRuntimeGone and frame.bg and IsUnitToken(frameUnit)) then return end
+  local gone
+  if issecretvalue(seedHP) ~= true and type(seedHP) == "number" then
+    gone = seedHP <= 0
+  else
+    local dead, known = ReadDeadCached(frame, frameUnit)
+    gone = known == true and dead == true
+  end
+  local cached = frame._msufGFDeadBgState
+  if cached == gone and (gone ~= true
+      or (frame._msufHealthBgDynamic ~= true and frame._msufPowerBgDynamic ~= true)) then
+    return
+  end
+  return ApplyDeadBgState(frame, cfg, gone)
 end
 
 local HealthFadeActive
@@ -1343,7 +1378,7 @@ function GroupVisuals.Apply(frame)
     frame._msufGFVisualRuntimeGroup = cfg
     frame._msufGFVisualRuntimeGone = goneFn
     frame._msufGFVisualHealthBackgroundTexture = frame.MSUFSpec and frame.MSUFSpec.health and frame.MSUFSpec.health.backgroundTexture or false
-    frame._msufUpdateGroupVisualsGoneState = goneFn and GroupVisuals.UpdateGoneState or nil
+    frame._msufUpdateGroupVisualsGoneState = goneFn and UpdateGoneStateFromHealth or nil
   end
   SetIndicatorRegistration(frame, cfg and cfg.targetIndicator == true, cfg and cfg.focusIndicator == true)
   PrepareVisuals(frame, cfg)

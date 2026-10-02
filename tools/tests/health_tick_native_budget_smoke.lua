@@ -55,8 +55,8 @@ local PRINT = arg[3] == "print" or os.getenv("MSUF_BUDGET_MEASURE") == "1"
 -- A native not listed must stay at 0. VM limits sit 2 % above the measurement.
 local PLAIN = { UnitHealthPercent = 1, SetValue = 2, SetVertexColor = 1 }
 local PLAIN_BUDGETS = {
-    ["group plain"] = { natives = PLAIN, predicates = 4, k = 300, kb = 0 },
-    ["group plain overflow"] = { natives = PLAIN, predicates = 16, k = 595, kb = 0 },
+    ["group plain"] = { natives = PLAIN, predicates = 4, k = 284, kb = 0 },
+    ["group plain overflow"] = { natives = PLAIN, predicates = 16, k = 579, kb = 0 },
     ["unit plain"] = { natives = PLAIN, predicates = 2, k = 248, kb = 0 },
     ["unit plain overflow"] = { natives = PLAIN, predicates = 14, k = 543, kb = 0 },
 }
@@ -65,10 +65,11 @@ local BUDGETS = {
         -- W4-C1 glow: one calculator read, the step curve on that calculator,
         -- one flag sink, the cached texture (6 glow natives -> 4); the health
         -- follower renders a warm protected tick directly; ReadDeadCached
-        -- reads UnitIsDeadOrGhost once.
+        -- reads UnitIsDeadOrGhost once; the group gone state resolves a
+        -- health tick in Health's sink.
         ["group protected"] = { natives = { UnitHealthPercent = 4, UnitGetDetailedHealPrediction = 1,
             ["calc:GetDamageAbsorbs"] = 1, ["calc:EvaluateCurrentHealthPercent"] = 1, SetAlphaFromBoolean = 1,
-            SetValue = 2, SetVertexColor = 1, UnitIsDeadOrGhost = 1 }, predicates = 8, k = 417 },
+            SetValue = 2, SetVertexColor = 1, UnitIsDeadOrGhost = 1 }, predicates = 8, k = 399 },
         ["unit protected"] = { natives = { UnitHealthPercent = 4, UnitGetDetailedHealPrediction = 1,
             ["calc:GetDamageAbsorbs"] = 1, ["calc:EvaluateCurrentHealthPercent"] = 1, SetAlphaFromBoolean = 1,
             SetValue = 2, SetVertexColor = 1 }, predicates = 4, k = 322 },
