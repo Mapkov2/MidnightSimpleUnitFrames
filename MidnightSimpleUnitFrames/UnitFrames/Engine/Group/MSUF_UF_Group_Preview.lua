@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua
 --- Non-combat preview frames for group-frame menu/edit workflows.
 ---
@@ -8,6 +7,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local ExportPublic = MSUF.ExportPublic
 
 local GF = MSUF.GF or {}
@@ -19,6 +19,7 @@ local InCombatLockdown = InCombatLockdown
 local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetNumGroupMembers = GetNumGroupMembers
 local UnitName = UnitName
+local issecretvalue = _G.issecretvalue
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
 local C_Timer = _G.C_Timer
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
@@ -740,6 +741,16 @@ local function ApplySpellFrameEffectPreview(visual, frame, slot)
     effect, frame) == true
 end
 
+local function ShowSpellPreviewTimer(visual, slot)
+  if slot.showCooldownText ~= true then return end
+  local timer = EnsurePreviewFontString(visual, "_timer")
+  SetPreviewFont(timer, slot.cooldownSize or 8)
+  timer:SetText("12")
+  timer:SetTextColor(1, 1, 1, 1)
+  PlacePreviewText(timer, visual, slot.cooldownAnchor or "CENTER", slot.cooldownX or 0, slot.cooldownY or 0)
+  timer:Show()
+end
+
 local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   local visualType = slot and tostring(slot.visual or "none"):lower() or "none"
   local hiddenVisual = slot and slot.hiddenVisual == true
@@ -800,14 +811,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
     durationBar:SetTexture(PREVIEW_WHITE)
     durationBar:SetVertexColor(r, g, b, a)
     durationBar:Show()
-    if slot.showCooldownText == true then
-      timer = EnsurePreviewFontString(visual, "_timer")
-      SetPreviewFont(timer, slot.cooldownSize or 8)
-      timer:SetText("12")
-      timer:SetTextColor(1, 1, 1, 1)
-      PlacePreviewText(timer, visual, slot.cooldownAnchor or "CENTER", slot.cooldownX or 0, slot.cooldownY or 0)
-      timer:Show()
-    end
+    ShowSpellPreviewTimer(visual, slot)
   elseif visualType == "square" then
     texture:SetTexture(PREVIEW_WHITE)
     texture:SetTexCoord(0, 1, 0, 1)
@@ -839,14 +843,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
       swipe:Show()
     end
 
-    if slot.showCooldownText == true then
-      timer = EnsurePreviewFontString(visual, "_timer")
-      SetPreviewFont(timer, slot.cooldownSize or 8)
-      timer:SetText("12")
-      timer:SetTextColor(1, 1, 1, 1)
-      PlacePreviewText(timer, visual, slot.cooldownAnchor or "CENTER", slot.cooldownX or 0, slot.cooldownY or 0)
-      timer:Show()
-    end
+    ShowSpellPreviewTimer(visual, slot)
 
     if slot.showStacks == true then
       stack = EnsurePreviewFontString(visual, "_stack")
@@ -1078,7 +1075,8 @@ local function ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
     text.UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey, hp, hpMax)
   end
 
-  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, PercentFactory((power / max(powerMax, 1)) * 100), rt.powerNeedsPercent, rt)
+  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, PercentFactory((power / max(powerMax, 1)) * 100),
+      rt.powerNeedsPercent, rt)
 end
 
 local function ApplyRoleIcon(frame, kind, role)
@@ -1102,7 +1100,10 @@ local function ApplyLeaderIcon(frame, kind, assist)
   local tex = assist and frame.assistIcon or frame.leaderIcon
   if not tex then return end
   local fn = assist and GF.GetAssistTexture or GF.GetLeaderTexture
-  if type(fn) ~= "function" then tex:Hide(); return end
+  if type(fn) ~= "function" then
+    tex:Hide()
+    return
+  end
   local path, l, r, t, b = fn(kind)
   tex:SetTexture(path)
   tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
@@ -1218,6 +1219,9 @@ local function ApplyPreviewData(frame, index, kind)
   local class = PREVIEW_CLASSES[((index - 1) % #PREVIEW_CLASSES) + 1]
   local role = PREVIEW_ROLES[((index - 1) % #PREVIEW_ROLES) + 1]
   local playerName = UnitName and UnitName("player")
+  -- Preview identities are synthetic; an unreadable player name uses the same
+  -- sample as an unavailable name, before shortening or caching it.
+  if issecretvalue(playerName) then playerName = nil end
   local name = (index == 1 and playerName) or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
 
   frame._msufGFPreviewActive = true

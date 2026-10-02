@@ -72,6 +72,7 @@ local function Load(hasGamepadManager)
     _G.CompactRaidFrameManager = manager
     _G.CompactRaidFrameManager_InitializeGamepad = hasGamepadManager and function() end or nil
 
+    dofile(root .. "/tools/tests/group_dependencies.lua")(_G.MSUF_NS)
     local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"
     assert(loadfile(path))("MidnightSimpleUnitFrames", _G.MSUF_NS)
     return assert(_G.MSUF_NS.GF)

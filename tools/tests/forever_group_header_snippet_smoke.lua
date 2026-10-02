@@ -188,6 +188,7 @@ local function Load(isForever)
         local point = GF.GetAnchorPoint(c)
         return point, point
     end
+    dofile(repo .. "/tools/tests/group_dependencies.lua")(ns)
     _G.MSUF_NS = ns
     assert(loadfile(headersPath))("MidnightSimpleUnitFrames", ns)
     return GF, conf

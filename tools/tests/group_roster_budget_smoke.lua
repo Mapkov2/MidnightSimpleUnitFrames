@@ -44,7 +44,7 @@ local BUDGETS = {
         raid_settle = { 66, 18 }, raid_apply = { 1623, 1395 }, raid_shift = { 108, 75 },
     },
 }
-local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1"
+local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1" or arg[3] == "native"
 
 local function Check(condition, message)
     if not condition then error(flavor .. ": " .. message, 2) end
@@ -59,6 +59,35 @@ local h = Harness.New(root, flavor, { beforeBoot = function(harness)
     end
 end })
 local GF, env = h.GF, h.env
+-- Native counting runs the same scenarios separately, keeping hook allocations
+-- and stack growth out of the original VM/KB measurement.
+if arg[3] == "native" then
+    local natives = {}
+    for _, name in ipairs({ "UnitHealth", "UnitHealthMax", "UnitHealthPercent", "UnitPower", "UnitPowerMax",
+        "UnitPowerPercent", "UnitName", "UnitGUID", "UnitGroupRolesAssigned", "GetRaidRosterInfo",
+        "UnitIsDeadOrGhost", "UnitIsConnected", "GetNumGroupMembers", "GetNumSubgroupMembers" }) do
+        if type(env[name]) == "function" then natives[env[name]] = true end
+    end
+    for _, name in ipairs({ "SetValue", "SetMinMaxValues", "SetText", "SetFormattedText", "SetTextColor",
+        "SetStatusBarColor", "SetStatusBarTexture", "SetVertexColor", "SetColorTexture", "SetTexture",
+        "SetPoint", "ClearAllPoints", "SetSize", "SetWidth", "SetHeight", "SetAttribute", "Show", "Hide",
+        "RegisterEvent", "RegisterUnitEvent", "UnregisterEvent", "UnregisterAllEvents" }) do
+        local fn = h.widgets.Methods[name]
+        if type(fn) == "function" then natives[fn] = true end
+    end
+    h.nativeCounts = {}
+    h.nativeTick = function()
+        if natives[debug.getinfo(2, "f").func] then h.nativeCalls = h.nativeCalls + 1 end
+    end
+    h.nativeLimits = flavor == "Mainline" and {
+        party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6151,
+        raid_settle = 148, raid_apply = 1120, raid_shift = 107,
+    } or {
+        party_join = 439, party_settle = 81, party_apply = 350, raid_build = 6532,
+        raid_settle = 188, raid_apply = 1380, raid_shift = 161,
+    }
+end
+
 
 ---------------------------------------------------------------------------
 -- GF.EnsureDB stays a cold path
@@ -101,12 +130,21 @@ local function Measure(case, fn)
     collectgarbage("collect")
     collectgarbage("stop")
     local kb = collectgarbage("count")
-    debug.sethook(Tick, "", 1000)
+    if h.nativeTick then
+        h.nativeCalls = 0
+        debug.sethook(h.nativeTick, "c")
+    else
+        debug.sethook(Tick, "", 1000)
+    end
     fn()
     debug.sethook()
     kb = collectgarbage("count") - kb
     collectgarbage("restart")
     results[#results + 1] = { case = case, k = ticks, kb = kb }
+    if h.nativeCounts then
+        h.nativeCounts[case] = h.nativeCalls
+        Check(h.nativeCalls <= h.nativeLimits[case], case .. ": native-call budget exceeded")
+    end
     local budget = (BUDGETS[flavor] or {})[case]
     if budget and not MEASURE_ONLY then
         Check(ticks <= budget[1], string.format("%s: %d k instructions, budget %d k", case, ticks, budget[1]))
@@ -196,7 +234,11 @@ for _, result in ipairs(results) do
         Check(result.kb <= memoryBudget, string.format("%s: %.1f KB allocated, budget %d KB",
             result.case, result.kb, memoryBudget))
     end
-    summary[#summary + 1] = string.format("%s %dk/%.1fKB", result.case, result.k, result.kb)
+    if h.nativeCounts then
+        summary[#summary + 1] = string.format("%s %d native calls", result.case, h.nativeCounts[result.case])
+    else
+        summary[#summary + 1] = string.format("%s %dk/%.1fKB", result.case, result.k, result.kb)
+    end
 end
 print(string.format("group_roster_budget_smoke: ok (%s, %s-bit%s: %s)", flavor,
     wideTables and "64" or "32", MEASURE_ONLY and ", measure only" or "",

@@ -195,7 +195,10 @@ local function FillPriorityPinView(out, groupType, featureEnabled, baseFramesEna
   local pins = Pins(false)
   for i = 1, #pins do
     local row = out[i]
-    if type(row) ~= "table" then row = {}; out[i] = row end
+    if type(row) ~= "table" then
+      row = {}
+      out[i] = row
+    end
     local guid, name = PinIdentity(pins[i])
     local entry = guid and rosterByGUID[guid] or nil
     if not entry and name then entry = rosterByName[name] or rosterByFoldedName[name:lower()] end
@@ -289,9 +292,11 @@ end
 local function AddRosterUnit(unit, name)
   name = PlainString(name)
   if not name then return end
-  local guid = UnitGUID and UnitGUID(unit) or nil
+  local guid
+  if UnitGUID then guid = UnitGUID(unit) end
   guid = PlainString(guid)
-  local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or nil
+  local role
+  if UnitGroupRolesAssigned then role = UnitGroupRolesAssigned(unit) end
   if issecretvalue(role) == true then role = nil end
   rosterCount = rosterCount + 1
   local entry = rosterEntries[rosterCount]
@@ -309,7 +314,9 @@ local function AddRosterUnit(unit, name)
 end
 
 local function AddRaidRosterEntry(index)
-  AddRosterUnit("raid" .. index, GetRaidRosterInfo and GetRaidRosterInfo(index) or nil)
+  local name
+  if GetRaidRosterInfo then name = GetRaidRosterInfo(index) end
+  AddRosterUnit("raid" .. index, name)
 end
 
 ResetRosterIndex = function()
@@ -471,15 +478,17 @@ local function UnitRosterIdentity(unit)
   local name
   if groupType == "raid" then
     local index = tonumber(unit:match("^raid(%d+)$"))
-    name = index and GetRaidRosterInfo and GetRaidRosterInfo(index) or nil
+    if index and GetRaidRosterInfo then name = GetRaidRosterInfo(index) end
   else
     name = PartyUnitName(unit)
   end
   name = PlainString(name)
   if not name then return nil end
-  local guid = UnitGUID and UnitGUID(unit) or nil
+  local guid
+  if UnitGUID then guid = UnitGUID(unit) end
   guid = PlainString(guid)
-  local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or nil
+  local role
+  if UnitGroupRolesAssigned then role = UnitGroupRolesAssigned(unit) end
   if issecretvalue(role) == true then role = nil end
   return guid, name, role
 end
@@ -532,7 +541,10 @@ local function FindHoveredFrame(frame, unit, kind)
   if frame.IsShown and not frame:IsShown() then return end
   if frame.IsMouseOver and frame:IsMouseOver() then
     local candidate = unit or frame.MSUFUnitKey
-    if GF.IsPriorityGroupUnit(candidate) then hoveredUnit = candidate; return true end
+    if GF.IsPriorityGroupUnit(candidate) then
+      hoveredUnit = candidate
+      return true
+    end
   end
 end
 

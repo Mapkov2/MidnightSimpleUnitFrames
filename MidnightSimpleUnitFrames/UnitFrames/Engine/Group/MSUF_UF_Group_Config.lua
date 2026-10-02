@@ -38,6 +38,8 @@ local FillPredictionColors = UF.FillPredictionColors
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local EMPTY_EVENTS = {}
+local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
+local ABSORB_DISPLAY = GF.ABSORB_DISPLAY_MODES
 
 local function PVPIndicatorContextActive()
   return UF and type(UF.PVPIndicatorContextActive) == "function" and UF.PVPIndicatorContextActive() == true
@@ -191,6 +193,19 @@ end
 
 --- Resolve the effective health-color model once per compile. Runtime visual
 --- code receives concrete mode/color fields instead of profile fallback logic.
+local function ApplyFixedBarColor(out, conf, cache, general, mode)
+  if mode == "dark" then
+    local gray = Num(general and (general.darkBarGray or general.darkBgBrightness), 0.07)
+    out.r = Num(conf.gfDarkR, cache and cache.darkBarR or general and general.darkBarR or gray)
+    out.g = Num(conf.gfDarkG, cache and cache.darkBarG or general and general.darkBarG or gray)
+    out.b = Num(conf.gfDarkB, cache and cache.darkBarB or general and general.darkBarB or gray)
+  elseif mode == "unified" then
+    out.r = Num(conf.gfUnifiedR, cache and cache.unifiedBarR or general and general.unifiedBarR or 0.10)
+    out.g = Num(conf.gfUnifiedG, cache and cache.unifiedBarG or general and general.unifiedBarG or 0.60)
+    out.b = Num(conf.gfUnifiedB, cache and cache.unifiedBarB or general and general.unifiedBarB or 0.90)
+  end
+end
+
 local function ResolveHealthVisual(conf)
   conf = conf or {}
   local cache = SettingsCache()
@@ -225,15 +240,8 @@ local function ResolveHealthVisual(conf)
     gradientHighG = Num(cache and cache.healthGradientHighG or general and general.healthGradientHighG, 1),
     gradientHighB = Num(cache and cache.healthGradientHighB or general and general.healthGradientHighB, 0),
   }
-  if mode == "dark" then
-    local gray = Num(general and (general.darkBarGray or general.darkBgBrightness), 0.07)
-    out.r = Num(conf.gfDarkR, cache and cache.darkBarR or general and general.darkBarR or gray)
-    out.g = Num(conf.gfDarkG, cache and cache.darkBarG or general and general.darkBarG or gray)
-    out.b = Num(conf.gfDarkB, cache and cache.darkBarB or general and general.darkBarB or gray)
-  elseif mode == "unified" then
-    out.r = Num(conf.gfUnifiedR, cache and cache.unifiedBarR or general and general.unifiedBarR or 0.10)
-    out.g = Num(conf.gfUnifiedG, cache and cache.unifiedBarG or general and general.unifiedBarG or 0.60)
-    out.b = Num(conf.gfUnifiedB, cache and cache.unifiedBarB or general and general.unifiedBarB or 0.90)
+  if mode == "dark" or mode == "unified" then
+    ApplyFixedBarColor(out, conf, cache, general, mode)
   elseif mode == "gradient" or mode == "class" then
     out.r = Num(cache and cache.unifiedBarR or general and general.unifiedBarR, out.r)
     out.g = Num(cache and cache.unifiedBarG or general and general.unifiedBarG, out.g)
@@ -276,15 +284,8 @@ local function ResolvePowerVisual(conf)
     -- global bar-background runtime); keep it truthful instead of hardcoded.
     backgroundMatchHealth = (general and general.powerBarBgMatchBarColor == true) or false,
   }
-  if mode == "dark" then
-    local gray = Num(general and (general.darkBarGray or general.darkBgBrightness), 0.07)
-    out.r = Num(conf.gfDarkR, cache and cache.darkBarR or general and general.darkBarR or gray)
-    out.g = Num(conf.gfDarkG, cache and cache.darkBarG or general and general.darkBarG or gray)
-    out.b = Num(conf.gfDarkB, cache and cache.darkBarB or general and general.darkBarB or gray)
-  elseif mode == "unified" then
-    out.r = Num(conf.gfUnifiedR, cache and cache.unifiedBarR or general and general.unifiedBarR or 0.10)
-    out.g = Num(conf.gfUnifiedG, cache and cache.unifiedBarG or general and general.unifiedBarG or 0.60)
-    out.b = Num(conf.gfUnifiedB, cache and cache.unifiedBarB or general and general.unifiedBarB or 0.90)
+  if mode == "dark" or mode == "unified" then
+    ApplyFixedBarColor(out, conf, cache, general, mode)
   elseif mode == "static" then
     out.r = Num(general and general.powerBarColorR, 0.10)
     out.g = Num(general and general.powerBarColorG, 0.35)
@@ -407,16 +408,7 @@ end
 local ResolvePowerTextColorByType = Shared.ResolvePowerTextColorByType
 local ResolveTextSlotHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol
 
-local function GetRole(unit)
-  if GF.GetUnitGroupRole then
-    return GF.GetUnitGroupRole(unit)
-  end
-  local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
-  if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
-    return role
-  end
-  return "DAMAGER"
-end
+local GetRole = GF.GetUnitGroupRole
 
 local function EffectivePowerHeight(kind, unit, role, conf)
   if conf.powerBarEnabled == false then
@@ -430,7 +422,8 @@ end
 
 local AddEvent = Shared.AddEvent
 
-local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextFlags, statusTextPlayerFlags, incomingRes, pvp, level, levelColored)
+local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextFlags,
+    statusTextPlayerFlags, incomingRes, pvp, level, levelColored)
   local events, unitlessEvents
   if level then
     events = AddEvent(events, "UNIT_LEVEL")
@@ -504,7 +497,8 @@ local GROUP_STATUS_REGIONS = {
   statusText = { "statusTextSize", 14, "statusTextAnchor", "CENTER", "statusOffsetX", 0, "statusOffsetY", 0, "statusTextLayer", 7 },
   statusGhost = { "statusGhostTextSize", 14, "statusGhostTextAnchor", "CENTER", "statusGhostOffsetX", 0, "statusGhostOffsetY", 0, "statusGhostTextLayer", 7 },
   statusAFK = { "statusAFKTextSize", 14, "statusAFKTextAnchor", "CENTER", "statusAFKOffsetX", 0, "statusAFKOffsetY", 0, "statusAFKTextLayer", 7 },
-  statusAFKTimer = { "statusAFKTimerTextSize", 10, "statusAFKTimerTextAnchor", "CENTER", "statusAFKTimerOffsetX", 0, "statusAFKTimerOffsetY", -10, "statusAFKTimerTextLayer", 7 },
+  statusAFKTimer = { "statusAFKTimerTextSize", 10, "statusAFKTimerTextAnchor", "CENTER", "statusAFKTimerOffsetX", 0, "statusAFKTimerOffsetY",
+      -10, "statusAFKTimerTextLayer", 7 },
   statusDND = { "statusDNDTextSize", 14, "statusDNDTextAnchor", "CENTER", "statusDNDOffsetX", 0, "statusDNDOffsetY", 0, "statusDNDTextLayer", 7 },
   raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
   level = { "levelTextSize", 10, "levelTextAnchor", "BOTTOMLEFT", "levelTextX", 2, "levelTextY", 2, "levelTextLayer", 7 },
@@ -652,7 +646,7 @@ local function CompilePrediction(kind, conf, texture)
   end
   if absorbEnabled == nil then
     local absorbMode = Num(ScopedValue(conf, general, "absorbTextMode", nil), nil)
-    absorbEnabled = absorbMode == nil or absorbMode == 2 or absorbMode == 3
+    absorbEnabled = absorbMode == nil or absorbMode == ABSORB_DISPLAY.BAR or absorbMode == ABSORB_DISPLAY.LEGACY_BAR_AND_TEXT
   end
   local absorb = absorbEnabled ~= false
   local heal = GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf) or conf.healPredEnabled == true
@@ -680,9 +674,9 @@ local function CompilePrediction(kind, conf, texture)
     healTest = healTest == true,
     absorbTest = absorbTest == true,
     healAbsorbTest = healAbsorbTest == true,
-    healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", 3), 3),
-    absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", 2), 2),
-    healAbsorbAnchorMode = Num(ScopedValue(conf, general, "healAbsorbAnchorMode", 3), 3),
+    healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH),
+    absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", PREDICTION_ANCHOR.RIGHT), PREDICTION_ANCHOR.RIGHT),
+    healAbsorbAnchorMode = Num(ScopedValue(conf, general, "healAbsorbAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH),
     healHeight = Geometry("healPredictionBarHeight", 0, 0, 100),
     healOffsetY = Geometry("healPredictionBarOffsetY", 0, -100, 100),
     absorbHeight = Geometry("absorbBarHeight", 0, 0, 100),
@@ -1292,7 +1286,8 @@ local function CompileCoreAuras(kind, conf)
     stackY = buff.trackedStackY,
   }
   local function T(value, fallback, minValue) return ScaleAuraValue(Num(value, fallback), trackedScale, minValue) end
-  ApplyAuraLane(out, "trackedBuff", "trackedBuff", trackedBuff, AURA_LANE_DEFAULTS.trackedBuff, 8, defaultTrackedBuffSize, trackedBuffGrowthX, trackedBuffGrowthY, T, kind)
+  ApplyAuraLane(out, "trackedBuff", "trackedBuff", trackedBuff, AURA_LANE_DEFAULTS.trackedBuff, 8, defaultTrackedBuffSize, trackedBuffGrowthX,
+      trackedBuffGrowthY, T, kind)
   out.trackedBuffIncludeHash = trackedBuffIncludeHash
   out.trackedBuffTrackedCount = trackedBuffCount or 0
   ApplyAuraLane(out, "debuff", "debuff", debuff, AURA_LANE_DEFAULTS.debuff, Num(conf.auraMaxIcons, 4), defaultDebuffSize, debuffGrowthX, debuffGrowthY, S, kind)
@@ -1479,7 +1474,8 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     -- The name bar centres the name in its strip: like nameY below, the free
     -- offsets (default X 28 for the LEFT anchor) do not apply to it.
     nameX = conf.nameBarEnabled == true and 0 or Num(conf.nameOffsetX, 0),
-    nameY = conf.nameBarEnabled == true and (-math.max(0, NameBarHeight(kind, conf) - Num(conf.nameFontSize, 12)) / 2 + baselineOffset) or Num(conf.nameOffsetY, 0) + baselineOffset,
+    nameY = conf.nameBarEnabled == true and (-math.max(0, NameBarHeight(kind, conf) - Num(conf.nameFontSize,
+        12)) / 2 + baselineOffset) or Num(conf.nameOffsetY, 0) + baselineOffset,
     nameLayer = Layer(conf.nameTextLayer, 5),
     nameShorten = nameTextOptions.nameShorten == true,
     nameShortenMax = nameTextOptions.nameShortenMax,
@@ -1567,7 +1563,8 @@ local function CompileBorderSpec(kind, conf, general)
   local prioEnabled, prioOrder = CompileBorderPriority(conf, general)
   local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)
   local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
-  local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or (bars and bars.barOutlineStrata))
+  local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata
+      or (bars and bars.barOutlineStrata))
   local borderLayer = Layer(conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or (bars and bars.barOutlineLayer), 0)
   -- Optional typed outline media, same scope rails as thickness/layer. True
   -- borders use edgeFile geometry; textures use the historic stretched edges.
@@ -1637,6 +1634,22 @@ local function BumpCompiledSpecRevision(kind)
   end
 end
 
+local function ResolveFontDomain(kind)
+  local font = GF.ResolveFontPath and GF.ResolveFontPath(kind) or "Fonts\\FRIZQT__.TTF"
+  local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "OUTLINE"
+  local tr, tg, tb = 1, 1, 1
+  if GF.ResolveFontColor then
+    tr, tg, tb = GF.ResolveFontColor(kind)
+  end
+  local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
+  local baselineOffset = GF.ResolveFontBaselineOffset and GF.ResolveFontBaselineOffset(kind) or 0
+  local fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = true, 1, 1, -1
+  if GF.ResolveFontShadow then
+    fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = GF.ResolveFontShadow(kind)
+  end
+  return font, fontFlags, tr, tg, tb, textAlpha, baselineOffset, fontShadow, fontShadowAlpha, fontShadowX, fontShadowY
+end
+
 local function CompileSpecUncached(kind, frame, unit, conf)
   kind = kind or "party"
   if not conf then
@@ -1658,18 +1671,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
   local powerHeight = EffectivePowerHeight(kind, unit, role, conf)
   local texture = ResolveTexture(GF.ResolveBarTexture, kind)
   local bgTexture = ResolveTexture(GF.ResolveBarBgTexture, kind)
-  local font = GF.ResolveFontPath and GF.ResolveFontPath(kind) or "Fonts\\FRIZQT__.TTF"
-  local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "OUTLINE"
-  local tr, tg, tb = 1, 1, 1
-  if GF.ResolveFontColor then
-    tr, tg, tb = GF.ResolveFontColor(kind)
-  end
-  local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
-  local baselineOffset = GF.ResolveFontBaselineOffset and GF.ResolveFontBaselineOffset(kind) or 0
-  local fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = true, 1, 1, -1
-  if GF.ResolveFontShadow then
-    fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = GF.ResolveFontShadow(kind)
-  end
+  local font, fontFlags, tr, tg, tb, textAlpha, baselineOffset, fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = ResolveFontDomain(kind)
 
   local general = GeneralDB() or {}
   local healthVisual = ResolveHealthVisual(conf)
@@ -1777,18 +1779,7 @@ local function BumpSpecDomain(base, key)
 end
 
 local function RefreshFontDomain(kind, base, conf)
-  local font = GF.ResolveFontPath and GF.ResolveFontPath(kind) or "Fonts\\FRIZQT__.TTF"
-  local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "OUTLINE"
-  local tr, tg, tb = 1, 1, 1
-  if GF.ResolveFontColor then
-    tr, tg, tb = GF.ResolveFontColor(kind)
-  end
-  local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
-  local baselineOffset = GF.ResolveFontBaselineOffset and GF.ResolveFontBaselineOffset(kind) or 0
-  local fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = true, 1, 1, -1
-  if GF.ResolveFontShadow then
-    fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = GF.ResolveFontShadow(kind)
-  end
+  local font, fontFlags, tr, tg, tb, textAlpha, baselineOffset, fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = ResolveFontDomain(kind)
   local general = GeneralDB() or {}
   local nameTextOptions = ResolveNameTextOptions(kind, conf)
   if type(nameTextOptions.nameColor) == "table" then

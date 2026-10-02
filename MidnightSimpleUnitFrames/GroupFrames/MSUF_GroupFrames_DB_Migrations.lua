@@ -30,6 +30,7 @@ if type(GF.PARTY_DEFAULTS) ~= "table"
     error("MSUF_GroupFrames_DB_Migrations.lua loaded before MSUF_GroupFrames_DB.lua.", 2)
 end
 
+local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
 local PARTY_DEFAULTS = GF.PARTY_DEFAULTS
 local MIGRATIONS_FILE = "GroupFrames/MSUF_GroupFrames_DB_Migrations.lua"
 local RAID_DEFAULTS = GF.RAID_DEFAULTS
@@ -135,14 +136,16 @@ local function RemoveLayoutPresetState(conf)
 end
 
 local function NormalizeHealPredictionAnchorMode(value, fallback)
-    local mode = tonumber(value) or fallback or 3
-    if mode < 1 or mode > 5 then mode = fallback or 3 end
+    local mode = tonumber(value) or fallback or PREDICTION_ANCHOR.FOLLOW_HEALTH
+    if mode < PREDICTION_ANCHOR.LEFT or mode > PREDICTION_ANCHOR.REVERSE_FROM_MAX then
+        mode = fallback or PREDICTION_ANCHOR.FOLLOW_HEALTH
+    end
     return mode
 end
 
 local function ResolveSharedHealPredictionAnchorMode(db)
     local gen = db.general
-    return NormalizeHealPredictionAnchorMode(gen and gen.healPredAnchorMode, 3)
+    return NormalizeHealPredictionAnchorMode(gen and gen.healPredAnchorMode, PREDICTION_ANCHOR.FOLLOW_HEALTH)
 end
 
 local function MigrateHealPredictionOwnership(conf, scope, db)
@@ -153,12 +156,12 @@ local function MigrateHealPredictionOwnership(conf, scope, db)
     if conf.healPredEnabled == nil then
         conf.healPredEnabled = ResolveLegacyHealPredictionEnabled(db)
     end
-    conf.healPredAnchorMode = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, 3)
+    conf.healPredAnchorMode = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, PREDICTION_ANCHOR.FOLLOW_HEALTH)
     if conf._healPredBarsScopeMigrated ~= true then
         local sharedEnabled = ResolveLegacyHealPredictionEnabled(db)
         local localEnabled = conf.healPredEnabled == true
         local sharedAnchor = ResolveSharedHealPredictionAnchorMode(db)
-        local localAnchor = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, 3)
+        local localAnchor = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, PREDICTION_ANCHOR.FOLLOW_HEALTH)
         if localEnabled ~= sharedEnabled or (localEnabled and localAnchor ~= sharedAnchor) then
             conf.hlOverride = true
         end
@@ -814,13 +817,31 @@ function GF.MigrateAuraConfig(conf, isRaid)
         conf.privateAuras = LegacyPrivateAuraDefaults()
         changed = true
     end
-    if type(conf.auras.buff) ~= "table" then conf.auras.buff = LegacyBuffDefaults(); changed = true end
-    if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = LegacyDebuffDefaults(); changed = true end
-    if type(conf.auras.externals) ~= "table" then conf.auras.externals = LegacyExternalDefaults(); changed = true end
-    if conf.auras.iconZoom == nil then conf.auras.iconZoom = 100; changed = true end
+    if type(conf.auras.buff) ~= "table" then
+        conf.auras.buff = LegacyBuffDefaults()
+        changed = true
+    end
+    if type(conf.auras.debuff) ~= "table" then
+        conf.auras.debuff = LegacyDebuffDefaults()
+        changed = true
+    end
+    if type(conf.auras.externals) ~= "table" then
+        conf.auras.externals = LegacyExternalDefaults()
+        changed = true
+    end
+    if conf.auras.iconZoom == nil then
+        conf.auras.iconZoom = 100
+        changed = true
+    end
     local legacyIconZoom = tonumber(conf.auras.iconZoom) or 100
-    if conf.auras.buff.iconZoom == nil then conf.auras.buff.iconZoom = legacyIconZoom; changed = true end
-    if conf.auras.debuff.iconZoom == nil then conf.auras.debuff.iconZoom = legacyIconZoom; changed = true end
+    if conf.auras.buff.iconZoom == nil then
+        conf.auras.buff.iconZoom = legacyIconZoom
+        changed = true
+    end
+    if conf.auras.debuff.iconZoom == nil then
+        conf.auras.debuff.iconZoom = legacyIconZoom
+        changed = true
+    end
     FillMissingAuraFields(conf.auras.buff, LEGACY_BUFF_DEFAULTS)
     FillMissingAuraFields(conf.auras.debuff, LEGACY_DEBUFF_DEFAULTS)
     FillMissingAuraFields(conf.auras.externals, LEGACY_EXTERNAL_DEFAULTS)
@@ -828,8 +849,14 @@ function GF.MigrateAuraConfig(conf, isRaid)
         conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconZoom = 100, iconScale = 100 }
         changed = true
     end
-    if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100; changed = true end
-    if conf.spellIndicators.iconScale == nil then conf.spellIndicators.iconScale = 100; changed = true end
+    if conf.spellIndicators.iconZoom == nil then
+        conf.spellIndicators.iconZoom = 100
+        changed = true
+    end
+    if conf.spellIndicators.iconScale == nil then
+        conf.spellIndicators.iconScale = 100
+        changed = true
+    end
     local _, spellStyleChanged = GF.EnsureSpellIndicatorStyle(conf)
     changed = spellStyleChanged or changed
     return changed

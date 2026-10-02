@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua
 --- Secure party/raid header creation and anchoring.
 ---
@@ -8,6 +7,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -503,7 +503,8 @@ function GF.GetPreservedRaidGroupCount(conf, keepEmpty)
     end
   end
   if occupied then
-    local count = 0; for _ in pairs(occupied) do count = count + 1 end
+    local count = 0
+    for _ in pairs(occupied) do count = count + 1 end
     return math.max(1, count)
   end
   return ResolvePreservedRaidGroupCount(conf, maxRosterGroup)
@@ -775,7 +776,10 @@ local function ClassPriority(conf)
   local result, count = {}, 0
   for token in (type(conf.classOrder) == "string" and conf.classOrder or ""):gmatch("[^,%s]+") do
     token = token:upper()
-    if not result[token] then count = count + 1; result[token] = count end
+    if not result[token] then
+      count = count + 1
+      result[token] = count
+    end
   end
   return result
 end
@@ -1000,7 +1004,10 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
           local block = floor((position - 1) / 5) + 1
           if block <= blockLimit and block <= groupCount then
             local names = nameLists[block]
-            if not names then names = {}; nameLists[block] = names end
+            if not names then
+              names = {}
+              nameLists[block] = names
+            end
             names[#names + 1] = name
           end
         end
@@ -1014,11 +1021,17 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
         local groupIndex, name = entry.group, entry.name
         if type(groupIndex) == "number" and groupIndex >= 1 and groupIndex <= groupCount and name then
           local seen = seenByGroup[groupIndex]
-          if not seen then seen = {}; seenByGroup[groupIndex] = seen end
+          if not seen then
+            seen = {}
+            seenByGroup[groupIndex] = seen
+          end
           if not seen[name] then
             seen[name] = true
             local names = nameLists[groupIndex]
-            if not names then names = {}; nameLists[groupIndex] = names end
+            if not names then
+              names = {}
+              nameLists[groupIndex] = names
+            end
             names[#names + 1] = name
           end
         end
@@ -1046,7 +1059,10 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
     local playerBlock
     if not all and mode == "GROUP_ROLE" and conf.playerFirstInRole == true then
       for i = 1, #entries do
-        if entries[i].player == true then playerBlock = entries[i].group; break end
+        if entries[i].player == true then
+          playerBlock = entries[i].group
+          break
+        end
       end
     end
     for groupIndex = 1, groupCount do

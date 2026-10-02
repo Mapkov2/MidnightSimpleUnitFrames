@@ -425,6 +425,15 @@ local namespace = {
     ExportPublic = function(name, value) sandbox[name] = value; return value end,
     GF = { GetConf = function(kind) return kind == "party" and party or raid end },
 }
+-- The group file's hard dependencies come from the same providers the client loads before it:
+-- the real Kernel/MSUF_Require.lua resolves them against this sandbox, and
+-- MSUF_PixelLayoutRegion is the export the booted flavor graph took from Kernel/MSUF_Util.lua.
+sandbox.MSUF_PixelLayoutRegion = assert(env.MSUF_PixelLayoutRegion,
+    flavor .. ": the booted graph does not export MSUF_PixelLayoutRegion")
+local requireChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))
+setfenv(requireChunk, sandbox)
+requireChunk("MidnightSimpleUnitFrames", namespace)
+Check(namespace.Require == sandbox.MSUF_Require and namespace.Optional ~= nil, "the real Require provider did not publish MSUF.Require")
 local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"))
 setfenv(chunk, sandbox)
 chunk("MidnightSimpleUnitFrames", namespace)

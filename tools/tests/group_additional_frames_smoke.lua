@@ -64,6 +64,12 @@ function IsInRaid() return raid end
 function IsInGroup() return group end
 function GetNumGroupMembers() return size end
 function MSUF.ExportPublic(k,v) _G[k]=v end
+local startingCombat = false
+MSUF.Util = { InCombat = function(event)
+    if event == "PLAYER_REGEN_DISABLED" then startingCombat = true end
+    if event == "PLAYER_REGEN_ENABLED" then startingCombat = false end
+    return startingCombat or combat
+end }
 local GF=MSUF.GF
 function GF.GetConf() return conf end
 function GF.EnsureDB() end
@@ -73,6 +79,7 @@ function GF.ResolveFontPath() return "font" end
 function GF.ResolveFontFlags() return "OUTLINE" end
 function GF.GetUnitGroupRole(unit) return (unit=="player" or unit=="party1" or unit=="raid1") and "HEALER" or "DAMAGER" end
 function GF.RegisterRuntimeObserver(_,cb) GF.observer=cb end
+dofile(root .. "/tools/tests/group_dependencies.lua")(MSUF)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua"))("MSUF",MSUF)
 conf.petsEnabled=false
 GF.RefreshAdditionalGroups()

@@ -181,6 +181,9 @@ end
 _G.MSUF_NS = MSUF
 -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
 assert(loadfile('MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua'))('MidnightSimpleUnitFrames', MSUF)
+-- Kernel/MSUF_Util.lua (after Require in every core TOC) publishes MSUF_PixelLayoutRegion,
+-- which the group files require.
+assert(loadfile('MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua'))('MidnightSimpleUnitFrames', MSUF)
 -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry each border
 -- apply calls; this harness builds no boss frames.
 _G.MSUF_ApplyBossPhysicalBarGeometry = function() end
