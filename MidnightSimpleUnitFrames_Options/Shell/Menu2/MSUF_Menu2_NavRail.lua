@@ -39,9 +39,10 @@ local function IsAdvancedNavHidden()
     if type(g) ~= "table" then return true end
     return g.hideAdvancedMenu ~= false
 end
+-- On unless turned off: Defaults_Shell seeds showNavigationIcons = true.
 local function NavIconsEnabled()
     local g = M.GetGeneralDB and M.GetGeneralDB()
-    return type(g) == "table" and g.showNavigationIcons == true
+    return type(g) ~= "table" or g.showNavigationIcons ~= false
 end
 local TrimText = M.TrimText
 local function ShortLabel(text, limit)

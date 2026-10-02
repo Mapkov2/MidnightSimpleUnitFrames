@@ -22,6 +22,13 @@ local ReviewedMeta, RegisterControl = UP.ReviewedMeta, UP.RegisterControl
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast", arena = "arenaCast" }
 local CASTBAR_UNITS = M.KeySetFromWords "player target focus boss arena"
+-- Castbar width and height an unset key reads as: the values the defaults
+-- pass seeds (State/Defaults/MSUF_Defaults_Bars.lua). One table for the
+-- sliders, their reset values and the spell text width.
+local CASTBAR_DEFAULT_SIZE = {
+    player = { width = 271, height = 18 }, target = { width = 272, height = 18 },
+    focus = { width = 175, height = 18 }, boss = { width = 176, height = 12 }, arena = { width = 176, height = 12 },
+}
 local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT", "Inside Left", "INSIDE_RIGHT", "Inside Right")
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
@@ -1381,13 +1388,14 @@ local function BuildCastbar(ctx, builder, unit)
     W.MoveWidget(manualWidth, sizeCard, sizeRightX, -52, sizeControlWRight)
     AddControl(nil, manualWidth)
     W.AttachUnitEditFocus(manualWidth, unit, "castbar")
+    local defaultSize = CASTBAR_DEFAULT_SIZE[unit] or CASTBAR_DEFAULT_SIZE.target
     M.BindNumberWidget(ctx, manualWidth,
-        function() return ReadGeneralNumber(widthKey, (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272)) end,
+        function() return ReadGeneralNumber(widthKey, defaultSize.width) end,
         function(v)
             if not widthKey then return end
             SetGeneralNumber(widthKey, v, "MSUF2_CASTBAR_WIDTH")
         end,
-        (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272), (function()
+        defaultSize.width, (function()
             local meta = SettingMeta(ctx, "castbar.manual_width", "general", widthKey)
             meta.step, meta.roundStep = 1, true
             return meta
@@ -1397,12 +1405,12 @@ local function BuildCastbar(ctx, builder, unit)
     AddControl(nil, height)
     W.AttachUnitEditFocus(height, unit, "castbar")
     M.BindNumberWidget(ctx, height,
-        function() return ReadGeneralNumber(heightKey, (unit == "boss" or unit == "arena") and 12 or 18) end,
+        function() return ReadGeneralNumber(heightKey, defaultSize.height) end,
         function(v)
             if not heightKey then return end
             SetGeneralNumber(heightKey, v, "MSUF2_CASTBAR_HEIGHT")
         end,
-        (unit == "boss" or unit == "arena") and 12 or 18, (function()
+        defaultSize.height, (function()
             local meta = SettingMeta(ctx, "castbar.height", "general", heightKey)
             meta.step, meta.roundStep = 1, true
             return meta
@@ -1501,8 +1509,7 @@ local function BuildCastbar(ctx, builder, unit)
         return ReadSpellTextWidthMode() == "CLIP"
     end
     local function DefaultSpellTextManualWidth()
-        local base = (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272)
-        local value = ReadGeneralNumber(CastbarWidthKey(), base) - 64
+        local value = ReadGeneralNumber(CastbarWidthKey(), defaultSize.width) - 64
         return max(40, min(260, floor(value + 0.5)))
     end
     local spellTextWidthMode = W.Dropdown(textAdvancedCard, "Width behavior", CASTBAR_TRUNCATE_VALUES, min(260, controlWLeft))
