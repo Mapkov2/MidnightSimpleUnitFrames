@@ -641,9 +641,11 @@ end
 -- the absorb overflows the missing health, incoming heals counted: `clamped`,
 -- the plain rule (hp + incoming + absorb >= max) as a possibly secret boolean.
 -- The calculator documents it as "in excess of the clamp boundary"
--- (UnitHealPredictionCalculatorAPIDocumentation), so an absorb that exactly
--- fills the missing health is the one case where it can differ from the plain
--- rule's >=; no secret-safe API reports that edge. Without the full-health
+-- (UnitHealPredictionCalculatorAPIDocumentation). When the health and
+-- incoming-heal inputs agree with the plain path's, an absorb that exactly
+-- fills the missing health is the case where it differs from the plain rule's
+-- >=; no secret-safe API reports that edge. Its inputs need not agree: see
+-- the next paragraph on its health source. Without the full-health
 -- stripe a step curve keeps the plain rule that full health shows no partial
 -- glow; with the stripe, `clamped` is already the union of both, because at
 -- full health every positive absorb is clamped.

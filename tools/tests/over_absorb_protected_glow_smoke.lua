@@ -33,8 +33,10 @@
 --      full health: only with the stripe), including predicted health ahead
 --      of or behind the calculator's, and the exact absorb boundary, where the
 --      protected path follows the calculator ("in excess", strictly above)
---      and the plain path the >= rule: that one documented difference has no
---      secret-safe native to close it.
+--      and the plain path the >= rule. With the health and incoming-heal
+--      inputs in agreement that is the documented difference, with no
+--      secret-safe native to close it; where the calculator's health differs
+--      from the predicted health, its own inputs decide the overflow too.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -374,9 +376,13 @@ end)
 -- CompactUnitFrame_UpdateHealPrediction). The protected path cannot compare:
 -- predicted health gates full health through the step curve, and the overflow
 -- is the calculator's MissingHealth flag, documented as "in excess of the
--- clamp boundary" (UnitHealPredictionCalculatorAPIDocumentation). At the exact
--- boundary (absorb == missing - incoming) that flag stays off while the plain
--- rule shows: the one documented difference (no secret-safe API reports >=).
+-- clamp boundary" (UnitHealPredictionCalculatorAPIDocumentation). When the
+-- health and incoming-heal inputs agree, the exact boundary (absorb ==
+-- missing - incoming) is where that flag stays off while the plain rule shows
+-- (no secret-safe API reports >=). When the calculator's health differs from
+-- the predicted health, the overflow follows the calculator's inputs (for
+-- example calculator 0.20, predicted 0.30, absorb 0.50, incoming 0.25: plain
+-- shows, protected does not).
 local function Rule(protected, current, predicted, absorb, incoming, overlay, stripe)
     if absorb <= 0 then return false end
     if not protected then
