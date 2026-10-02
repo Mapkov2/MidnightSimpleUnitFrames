@@ -412,14 +412,33 @@ local function GetCastbarReverseFillForFrame(frame, _)
 end
 ExportPublic("MSUF_GetCastbarReverseFillForFrame", GetCastbarReverseFillForFrame)
 
+local function GetInterruptibleCastColor()
+    EnsureDBLazy()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local red = tonumber(general.castbarInterruptibleR)
+    local green = tonumber(general.castbarInterruptibleG)
+    local blue = tonumber(general.castbarInterruptibleB)
+    if red and green and blue then return red, green, blue, 1 end
+end
+ExportPublic("MSUF_GetInterruptibleCastColor", GetInterruptibleCastColor)
+
+local function GetNonInterruptibleCastColor()
+    EnsureDBLazy()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local red = tonumber(general.castbarNonInterruptibleR)
+    local green = tonumber(general.castbarNonInterruptibleG)
+    local blue = tonumber(general.castbarNonInterruptibleB)
+    if red and green and blue then return red, green, blue, 1 end
+end
+ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
+
+-- The custom colours come from this file's getters: Castbars load after
+-- Runtime/MSUF_Colors.lua, so these are what the public aliases hold.
 local function ResolveCastbarColors()
     EnsureDBLazy()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 
-    local castR, castG, castB
-    if type(_G.MSUF_GetInterruptibleCastColor) == "function" then
-        castR, castG, castB = _G.MSUF_GetInterruptibleCastColor()
-    end
+    local castR, castG, castB = GetInterruptibleCastColor()
     if not (castR and castG and castB) then
         local key = general.castbarInterruptibleColor or "teal"
         local getRGB = _G.MSUF_GetColorRGBFromKey
@@ -431,10 +450,7 @@ local function ResolveCastbarColors()
     end
     if not (castR and castG and castB) then castR, castG, castB = 0, 0.85, 0.85 end
 
-    local nonR, nonG, nonB
-    if type(_G.MSUF_GetNonInterruptibleCastColor) == "function" then
-        nonR, nonG, nonB = _G.MSUF_GetNonInterruptibleCastColor()
-    end
+    local nonR, nonG, nonB = GetNonInterruptibleCastColor()
     if not (nonR and nonG and nonB) then
         local key = general.castbarNonInterruptibleColor or "red"
         local getRGB = _G.MSUF_GetColorRGBFromKey
@@ -500,26 +516,6 @@ local function PlayCastbarShake(frame)
     end
 end
 ExportPublic("MSUF_PlayCastbarShake", PlayCastbarShake)
-
-local function GetInterruptibleCastColor()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-    local red = tonumber(general.castbarInterruptibleR)
-    local green = tonumber(general.castbarInterruptibleG)
-    local blue = tonumber(general.castbarInterruptibleB)
-    if red and green and blue then return red, green, blue, 1 end
-end
-ExportPublic("MSUF_GetInterruptibleCastColor", GetInterruptibleCastColor)
-
-local function GetNonInterruptibleCastColor()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-    local red = tonumber(general.castbarNonInterruptibleR)
-    local green = tonumber(general.castbarNonInterruptibleG)
-    local blue = tonumber(general.castbarNonInterruptibleB)
-    if red and green and blue then return red, green, blue, 1 end
-end
-ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
 
 local function GetInterruptUnavailableCastColor()
     EnsureDBLazy()

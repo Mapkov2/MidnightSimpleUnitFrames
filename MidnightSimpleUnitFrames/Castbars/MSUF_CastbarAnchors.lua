@@ -930,6 +930,71 @@ local function ApplyPlayerCastbarSizeAndLayout(bar, g, w, h, preserveWidth)
 
 end
 
+-- Set the outer frame size. Returns true when a frame was present.
+local function SetOuterSize(frame, w, h)
+    if not frame then return false end
+    SetWidth(frame, w)
+    if h and h > 0 then SetHeight(frame, h) end
+    return true
+end
+
+--- The player castbar and its preview take the full size and layout.
+local function ApplyPlayerCastbarEffectiveSize(g)
+    local frame = _G.MSUF_PlayerCastbar
+    local preview = _G.MSUF_PlayerCastbarPreview
+    local target = frame or preview
+    if not target then return false end
+
+    local w, h, preserveWidth = MSUF_GetCastbarDesiredSize("player", g, target, 250, 18)
+    if frame then ApplyPlayerCastbarSizeAndLayout(frame, g, w, h, preserveWidth) end
+    if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
+    return true
+end
+
+--- Target and focus: the live bar gets its outer size (the status bar keeps
+--- the icon's square), the preview the full layout.
+local function ApplyTargetFocusCastbarEffectiveSize(unit, g)
+    local frame = (unit == "target"
+        and (_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)))
+        or (_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar))
+    local preview = (unit == "target" and _G.MSUF_TargetCastbarPreview) or _G.MSUF_FocusCastbarPreview
+    local target = frame or preview
+    if not target then return false end
+
+    local fallbackW = (target.GetWidth and target:GetWidth()) or 240
+    local fallbackH = (target.GetHeight and target:GetHeight()) or 18
+    local w, h, preserveWidth = MSUF_GetCastbarDesiredSize(unit, g, target, fallbackW, fallbackH)
+
+    if frame and SetOuterSize(frame, w, h) and frame.statusBar then
+        local barH = (frame.GetHeight and frame:GetHeight()) or h or 18
+        SetWidth(frame.statusBar, math.max(1, (w or 240) - barH - 1))
+    end
+    if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
+    return true
+end
+
+--- Boss and arena: every built bar of the pool, then its Edit Mode preview.
+local function ApplyPoolCastbarEffectiveSize(pool, g)
+    local applied = false
+    for index = 1, pool.maxFrames do
+        local frame = pool.Bar(index)
+        if frame then
+            local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240
+            local fallbackH = (frame.GetHeight and frame:GetHeight()) or 12
+            local w, h = MSUF_GetCastbarDesiredSize(pool.unitPrefix .. index, g, frame, fallbackW, fallbackH)
+            if SetOuterSize(frame, w, h) then
+                applied = true
+                if frame.ApplyLayout then frame:ApplyLayout() end
+            end
+        end
+    end
+    if _G.MSUF_UnitEditModeActive == true and pool.preview then
+        pool.preview:Update()
+        applied = true
+    end
+    return applied
+end
+
 -- Apply the effective runtime size to a unit's castbar(s). Returns true if a
 -- bar was sized. (Assigned to the forward-declared local above.)
 ApplyCastbarEffectiveSizeUnit = function(unit, g)
@@ -941,68 +1006,16 @@ ApplyCastbarEffectiveSizeUnit = function(unit, g)
     unit = NormalizeUnit(unit)
     if not ShouldUseMSUFCastbar(unit, g) then return false end
 
-    -- Set the outer frame size. Returns true when a frame was present.
-    local function SetOuterSize(frame, w, h)
-        if not frame then return false end
-        SetWidth(frame, w)
-        if h and h > 0 then SetHeight(frame, h) end
-        return true
-    end
-
     if unit == "player" then
-        local frame = _G.MSUF_PlayerCastbar
-        local preview = _G.MSUF_PlayerCastbarPreview
-        local target = frame or preview
-        if not target then return false end
-
-        local w, h, preserveWidth = MSUF_GetCastbarDesiredSize("player", g, target, 250, 18)
-        if frame then ApplyPlayerCastbarSizeAndLayout(frame, g, w, h, preserveWidth) end
-        if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
-        return true
+        return ApplyPlayerCastbarEffectiveSize(g)
     end
-
     if unit == "target" or unit == "focus" then
-        local frame = (unit == "target"
-            and (_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)))
-            or (_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar))
-        local preview = (unit == "target" and _G.MSUF_TargetCastbarPreview) or _G.MSUF_FocusCastbarPreview
-        local target = frame or preview
-        if not target then return false end
-
-        local fallbackW = (target.GetWidth and target:GetWidth()) or 240
-        local fallbackH = (target.GetHeight and target:GetHeight()) or 18
-        local w, h, preserveWidth = MSUF_GetCastbarDesiredSize(unit, g, target, fallbackW, fallbackH)
-
-        if frame and SetOuterSize(frame, w, h) and frame.statusBar then
-            local barH = (frame.GetHeight and frame:GetHeight()) or h or 18
-            SetWidth(frame.statusBar, math.max(1, (w or 240) - barH - 1))
-        end
-        if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
-        return true
+        return ApplyTargetFocusCastbarEffectiveSize(unit, g)
     end
-
     local pool = CastbarPool(unit)
     if pool then
-        local applied = false
-        for index = 1, pool.maxFrames do
-            local frame = pool.Bar(index)
-            if frame then
-                local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240
-                local fallbackH = (frame.GetHeight and frame:GetHeight()) or 12
-                local w, h = MSUF_GetCastbarDesiredSize(pool.unitPrefix .. index, g, frame, fallbackW, fallbackH)
-                if SetOuterSize(frame, w, h) then
-                    applied = true
-                    if frame.ApplyLayout then frame:ApplyLayout() end
-                end
-            end
-        end
-        if _G.MSUF_UnitEditModeActive == true and pool.preview then
-            pool.preview:Update()
-            applied = true
-        end
-        return applied
+        return ApplyPoolCastbarEffectiveSize(pool, g)
     end
-
     return false
 end
 

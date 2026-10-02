@@ -529,7 +529,7 @@ Check(identityInvalidation < immediateBuild,
 Check(not castbarDriverSource:find("ScheduleTargetFocusChanged", 1, true)
     and not castbarDriverSource:find("_msufTargetFocusRefreshQueued", 1, true),
     "target/focus identity retained zero-delay scheduler overhead")
-Check(castbarDriverSource:find("if self.PrepareForCast then self:PrepareForCast() end", 1, true),
+Check(castbarDriverSource:find("if frame.PrepareForCast then frame:PrepareForCast() end", 1, true),
     "active pool casts do not validate stale geometry/font state before show")
 Check(castbarVisualSource:find('DetailNum(g, prefix, "IconZoom", "castbarIconZoom", 100)', 1, true)
     and castbarVisualSource:find("texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)", 1, true),
