@@ -345,3 +345,7 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 -	lua	tools/tests/afk_timer_combat_return_smoke.lua	{root}	AFK timer combat return smoke failed
 -	lua	tools/tests/over_absorb_protected_glow_smoke.lua	{root}	Protected over-absorb glow smoke failed
 -	lua	tools/tests/health_dispatch_free_death_smoke.lua	{root}	Dispatch-free health death smoke failed
+-	python	tools/tests/quality_ratchet_smoke.py	{root}	Quality ratchet tool self-test failed
+-	python	tools/tests/quality_ratchet_gate_smoke.py	{root}	Quality ratchet regression: run tools/quality_ratchet.py --check
+-	python	tools/tests/feature_inventory_smoke.py	{root}	Feature inventory tool self-test failed
+-	python	tools/tests/feature_inventory_gate_smoke.py	{root}	Feature inventory removal: run tools/feature_inventory.py --diff

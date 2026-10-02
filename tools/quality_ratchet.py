@@ -1,0 +1,635 @@
+"""Quality ratchet: per-file code metrics that may only get better (N3).
+
+Usage (from the repo root; Python 3.12 and the Lua 5.1 luac):
+  python tools/quality_ratchet.py                 # check (the default)
+  python tools/quality_ratchet.py --check
+  python tools/quality_ratchet.py --update        # rebaseline (see below)
+  python tools/quality_ratchet.py --report [--top N]
+
+Product files measured. Suite: every MSUF_Suite*/ addon. Classic:
+MidnightSimpleUnitFrames/ and MidnightSimpleUnitFrames_Options/. Skipped:
+Libs/ and the data and generated files the allowlist JSON declares ("data_files": glob ->
+reason; the Suite's size_exempt list counts too). A file never leaves measurement by what it
+says about itself: a header comment declares nothing, and a file the baseline measured that is
+still on disk but no longer measured fails the check (and blocks --update) until the declaration
+is removed or --accept-regressions says the move is deliberate. The repo profile is picked from
+the folders under the root; --profile suite|classic forces it.
+
+Metrics per file (lower is better for every one):
+  lines            line count
+  max_function     longest function in lines (luac 5.1 listing)
+  main_locals      locals in the main chunk (luac 5.1 listing; Lua caps it at 200)
+  max_upvalues     most upvalues of any function (Lua caps it at 60)
+  g_reads          `_G.name`, `_G[...]` and rawget(_G, ...) reads (writes are not counted)
+  type_guards      `type(x) == "function"` and `~=` guards
+  semicolon_lines  lines holding a statement-level `;` (a table field `;` is not one)
+  long_lines       lines longer than 160 characters
+  long_functions   functions longer than the profile limit (Suite 72, Classic 150 lines)
+  clone_windows    6-line windows of comment-free, whitespace-normalized code that
+                   also occur elsewhere in the measured files
+Strings and comments never count: code inside them is blanked before matching.
+
+Check. A file fails when any metric is worse than tools/quality_ratchet_baseline.json,
+unless tools/quality_ratchet_allowlist.json has an "allowed" entry for that file
+and metric whose "max" covers the new value, with a "reason" and a "date". A file
+the baseline does not know is measured against the limits of the repo profile
+(Suite: 810 lines, 72-line functions, 150 locals; Classic owned files: 160 locals,
+45 upvalues, 150-line functions; both: no `;` statements, no line over 160
+characters, clone share at most 1 percent). An entry covers a new file the same way.
+Improvements pass and are counted. Check exits 1 on any failure and always ends
+with one summary line.
+
+Update. Recomputes every metric and rewrites the baseline. It refuses while a
+regression has no valid allowlist entry or a file left measurement (--accept-regressions
+overrides that: the lead's explicit call after a merge or a Retail sync) and always refuses
+while an allowlist entry is malformed. It prunes the allowlist entries the new baseline
+already covers. Run it after each merge, then commit both files.
+
+Allowlist entry:
+  {"file": "MSUF_Suite/X.lua", "metric": "g_reads", "max": 12,
+   "reason": "why this cannot improve yet", "date": "2026-10-02"}
+
+Environment: MSUF_LUAC (or MSUF_LUAC51, or the folder of MSUF_LUA51 / MSUF_LUA)
+names the Lua 5.1 luac; the check never runs without one.
+"""
+
+import argparse
+import fnmatch
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+DEFAULT_ROOT = HERE.parent
+DEFAULT_LUAC = r"C:\Users\Marco\AppData\Local\Temp\msuf-lua51\portable\luac.exe"
+BASELINE_NAME = "quality_ratchet_baseline.json"
+ALLOWLIST_NAME = "quality_ratchet_allowlist.json"
+SUITE_STRUCTURE_ALLOWLIST = "tools/tests/suite_structure_allowlist.json"
+LONG_LINE = 160
+WINDOW = 6
+CLONE_SHARE_NEW_FILE = 0.01
+METRICS = ("lines", "max_function", "main_locals", "max_upvalues", "g_reads", "type_guards",
+           "semicolon_lines", "long_lines", "long_functions", "clone_windows")
+PROFILES = {
+    "suite": {
+        "marker": "MSUF_Suite",
+        "addon": lambda name: name.startswith("MSUF_Suite"),
+        "function_limit": 72,
+        "limits": {"lines": 810, "max_function": 72, "main_locals": 150, "semicolon_lines": 0,
+                   "long_lines": 0, "long_functions": 0},
+        "owned_list": None,
+    },
+    "classic": {
+        "marker": "MidnightSimpleUnitFrames",
+        "addon": lambda name: name in ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options"),
+        "function_limit": 150,
+        "limits": {"main_locals": 160, "max_upvalues": 45, "max_function": 150, "semicolon_lines": 0,
+                   "long_lines": 0, "long_functions": 0},
+        "owned_list": "tools/classic-owned-addon-paths.txt",
+        "override_list": "tools/classic-retail-overrides.tsv",
+    },
+}
+DATA_NOTE = "data_files"
+
+
+# ------------------------------------------------------------------ luac
+def find_luac(explicit=None):
+    candidates = [explicit, os.environ.get("MSUF_LUAC"), os.environ.get("MSUF_LUAC51")]
+    for variable in ("MSUF_LUA51", "MSUF_LUA"):
+        lua = os.environ.get(variable)
+        if lua:
+            folder = Path(lua).resolve().parent
+            candidates.append(str(folder / ("luac.exe" if os.name == "nt" else "luac")))
+    candidates.append(shutil.which("luac"))
+    candidates.append(DEFAULT_LUAC)
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            run = subprocess.run([candidate, "-v"], capture_output=True, text=True, errors="replace")
+            if run.returncode == 0 and re.match(r"Lua 5\.1", (run.stdout + run.stderr).strip()):
+                return candidate
+    raise SystemExit("FAIL Lua 5.1 luac not found (set MSUF_LUAC or put the portable 5.1 on PATH); "
+                     "the ratchet never skips")
+
+
+HEADER = re.compile(r"^(main|function) <(.+):(\d+),(\d+)> \(")
+INFO = re.compile(r"^(\d+)\+? params?, (\d+) slots?, (\d+) upvalues?, (\d+) locals?")
+CHUNK_CHARS = 24000
+
+
+def luac_facts(luac, root, rels):
+    """{rel: (main_locals, max_upvalues, [function line spans])} from luac -l -p.
+    Files are passed in chunks; luac then lists every file's main chunk by name."""
+    facts = {}
+    chunks, current, size = [], [], 0
+    for rel in rels:
+        if current and size + len(rel) + 1 > CHUNK_CHARS:
+            chunks.append(current)
+            current, size = [], 0
+        current.append(rel)
+        size += len(rel) + 1
+    if current:
+        chunks.append(current)
+    for chunk in chunks:
+        with subprocess.Popen([luac, "-l", "-p"] + chunk, cwd=str(root), stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, bufsize=1 << 20) as process:
+            found = parse_listing(process.stdout)
+            error = process.stderr.read().decode("utf-8", "replace").strip()
+            status = process.wait()
+        if status != 0:
+            for rel in chunk:
+                run = subprocess.run([luac, "-p", rel], cwd=str(root), capture_output=True, text=True,
+                                     errors="replace")
+                if run.returncode != 0:
+                    raise SystemExit("FAIL %s does not compile under Lua 5.1: %s" % (rel, run.stderr.strip()))
+            raise SystemExit("FAIL luac failed on a batch that no single file reproduces: " + error)
+        facts.update(found)
+    missing = [rel for rel in rels if rel not in facts]
+    if missing:
+        raise SystemExit("FAIL luac listing has no main chunk for %s" % missing[0])
+    return facts
+
+
+def parse_listing(stream):
+    facts, current, kind, info_seen = {}, None, None, True
+    for raw in stream:
+        if raw[:1] == b"\t":
+            continue
+        line = raw.decode("utf-8", "replace").rstrip("\r\n")
+        header = HEADER.match(line)
+        if header:
+            kind = header.group(1)
+            info_seen = False
+            if kind == "main":
+                name = header.group(2)
+                current = None if name.startswith("=(luac)") or name == "(luac)" else name
+                if current is not None:
+                    current = current.replace("\\", "/")
+                    facts[current] = [0, 0, []]
+            elif current is not None:
+                facts[current][2].append(int(header.group(4)) - int(header.group(3)) + 1)
+            continue
+        if info_seen or current is None:
+            continue
+        info = INFO.match(line)
+        if info:
+            info_seen = True
+            if kind == "main":
+                facts[current][0] = int(info.group(4))
+            facts[current][1] = max(facts[current][1], int(info.group(3)))
+    return facts
+
+
+# ------------------------------------------------------------------ source scan
+SCAN = re.compile(r"--\[(=*)\[|--[^\n]*|\[(=*)\[|\"(?:[^\"\\\n]|\\.)*\"|'(?:[^'\\\n]|\\.)*'", re.S)
+G_NAME = re.compile(r"(?<![\w.])_G\s*\.\s*[A-Za-z_]\w*(\s*=(?!=))?")
+G_INDEX = re.compile(r"(?<![\w.])_G\s*\[[^\]\n]*\](\s*=(?!=))?")
+G_RAWGET = re.compile(r"\brawget\s*\(\s*_G\b")
+TYPE_GUARD = re.compile(r"\btype\s*\([^\n]{0,200}?\)\s*[=~]=\s*\"function\"|\"function\"\s*[=~]=\s*type\s*\(")
+STRUCTURE = re.compile(r"\b(?:function|if|do|repeat|end|until)\b|[{};]")
+TRIVIAL = {"end", "else", "end)", "end,", "}", "},", "})", "return", "do", "then", "))", "),", ")", "{"}
+WHITESPACE = re.compile(r"\s+")
+
+
+def strip_source(text):
+    """(code, plain): code has comments removed and string contents emptied
+    (a "function" string survives for the type-guard match); plain has only the
+    comments removed. Both keep every line break."""
+    code, plain, position = [], [], 0
+    for match in SCAN.finditer(text):
+        start, end = match.span()
+        if start < position:
+            continue
+        gap = text[position:start]
+        code.append(gap)
+        plain.append(gap)
+        token = match.group(0)
+        if token.startswith("--"):
+            if match.group(1) is not None:
+                close = text.find("]" + match.group(1) + "]", end)
+                end = len(text) if close < 0 else close + len(match.group(1)) + 2
+                breaks = "\n" * text.count("\n", start, end)
+                code.append(breaks)
+                plain.append(breaks)
+            position = end
+            continue
+        if match.group(2) is not None:
+            close = text.find("]" + match.group(2) + "]", end)
+            end = len(text) if close < 0 else close + len(match.group(2)) + 2
+            body = text[start:end]
+            code.append('""' + "\n" * body.count("\n"))
+            plain.append(body)
+            position = end
+            continue
+        code.append('"function"' if token[1:-1] == "function" else '""')
+        plain.append(token)
+        position = end
+    gap = text[position:]
+    code.append(gap)
+    plain.append(gap)
+    return "".join(code), "".join(plain)
+
+
+def semicolon_lines(code):
+    """Lines holding a `;` that separates statements. A `;` directly inside a
+    table constructor separates fields and does not count."""
+    if ";" not in code:
+        return 0
+    stack, lines = [], set()
+    for match in STRUCTURE.finditer(code):
+        token = match.group(0)
+        if token == ";":
+            if not stack or stack[-1] != "{":
+                lines.add(code.count("\n", 0, match.start()))
+        elif token == "{":
+            stack.append("{")
+        elif token == "}":
+            if stack and stack[-1] == "{":
+                stack.pop()
+        elif token in ("end", "until"):
+            if stack and stack[-1] != "{":
+                stack.pop()
+        else:
+            stack.append(token)
+    return len(lines)
+
+
+def count_g_reads(code):
+    reads = 0
+    for pattern in (G_NAME, G_INDEX):
+        reads += sum(1 for match in pattern.finditer(code) if match.group(1) is None)
+    return reads + len(G_RAWGET.findall(code))
+
+
+def normalized_lines(plain):
+    kept = []
+    for line in plain.split("\n"):
+        text = WHITESPACE.sub(" ", line.strip())
+        if len(text) > 3 and text not in TRIVIAL:
+            kept.append(text)
+    return kept
+
+
+def window_hashes(kept):
+    return [hashlib.md5("\n".join(kept[i:i + WINDOW]).encode("utf-8", "replace")).digest()[:8]
+            for i in range(len(kept) - WINDOW + 1)]
+
+
+def analyze_source(text):
+    """Metrics that need only the source: ({metric: value}, window hashes)."""
+    text = text.replace("\r\n", "\n").lstrip("\ufeff")
+    code, plain = strip_source(text)
+    raw_lines = text.split("\n")
+    metrics = {
+        "lines": text.count("\n") + (0 if text.endswith("\n") or not text else 1),
+        "g_reads": count_g_reads(code),
+        "type_guards": len(TYPE_GUARD.findall(code)),
+        "semicolon_lines": semicolon_lines(code),
+        "long_lines": sum(1 for line in raw_lines if len(line) > LONG_LINE),
+    }
+    return metrics, window_hashes(normalized_lines(plain))
+
+
+# ------------------------------------------------------------------ file selection
+def load_json(path, default):
+    if not path.is_file():
+        return default
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def declared_data(root, profile_name, allowlist):
+    patterns = dict(allowlist.get(DATA_NOTE, {}))
+    if profile_name == "suite":
+        structure = load_json(root / SUITE_STRUCTURE_ALLOWLIST, {})
+        for rel, reason in structure.get("size_exempt", {}).items():
+            patterns[rel] = reason
+    return patterns
+
+
+def product_files(root, profile, data_patterns):
+    """(measured rel paths, excluded {rel: reason}) of the profile's addons."""
+    measured, excluded = [], {}
+    for addon in sorted(os.listdir(root)):
+        folder = root / addon
+        if not profile["addon"](addon) or not folder.is_dir():
+            continue
+        for dirpath, dirs, names in os.walk(folder):
+            dirs[:] = sorted(d for d in dirs if d != "Libs")
+            for name in sorted(names):
+                if not name.endswith(".lua"):
+                    continue
+                path = Path(dirpath) / name
+                rel = path.relative_to(root).as_posix()
+                reason = next((why for pattern, why in sorted(data_patterns.items())
+                               if fnmatch.fnmatchcase(rel, pattern)), None)
+                if reason is None:
+                    measured.append(rel)
+                else:
+                    excluded[rel] = reason
+    return measured, excluded
+
+
+def detect_profile(root):
+    for name, profile in PROFILES.items():
+        if (root / profile["marker"]).is_dir():
+            return name
+    raise SystemExit("FAIL no Suite or Classic addon folder under %s" % root)
+
+
+def measure(root, profile_name, allowlist, luac):
+    profile = PROFILES[profile_name]
+    rels, excluded = product_files(root, profile, declared_data(root, profile_name, allowlist))
+    facts = luac_facts(luac, root, rels)
+    results, window_counts, locations = {}, {}, {}
+    for rel in rels:
+        text = (root / rel).read_bytes().decode("utf-8", "replace")
+        metrics, hashes = analyze_source(text)
+        spans = facts[rel][2]
+        metrics["main_locals"] = facts[rel][0]
+        metrics["max_upvalues"] = facts[rel][1]
+        metrics["max_function"] = max(spans) if spans else 0
+        metrics["long_functions"] = sum(1 for span in spans if span > profile["function_limit"])
+        results[rel] = metrics
+        window_counts[rel] = len(hashes)
+        for index, digest in enumerate(hashes):
+            locations.setdefault(digest, []).append((rel, index))
+    for rel in rels:
+        results[rel]["clone_windows"] = 0
+    for places in locations.values():
+        if len(places) > 1:
+            for rel, _ in places:
+                results[rel]["clone_windows"] += 1
+    return results, window_counts, excluded, locations
+
+
+def clone_partners(locations, rel, count=3):
+    """The files that hold the other copies of this file's cloned windows, most shared first."""
+    shared = {}
+    for places in locations.values():
+        if len(places) > 1 and any(name == rel for name, _ in places):
+            for name, _ in places:
+                if name != rel:
+                    shared[name] = shared.get(name, 0) + 1
+    ranked = sorted(shared.items(), key=lambda item: (-item[1], item[0]))[:count]
+    return ", ".join("%s (%d)" % pair for pair in ranked) or "other places in the same file"
+
+
+# ------------------------------------------------------------------ baseline and allowlist
+def baseline_from(results, profile_name):
+    return {"about": "Generated by tools/quality_ratchet.py --update; do not edit by hand. Per file, "
+                     "in the order of 'metrics'; a file may only get better (see the tool docstring).",
+            "profile": profile_name, "metrics": list(METRICS),
+            "files": {rel: [values[m] for m in METRICS] for rel, values in sorted(results.items())}}
+
+
+def write_baseline(path, baseline):
+    lines = ["{", ' "about": %s,' % json.dumps(baseline["about"]),
+             ' "profile": %s,' % json.dumps(baseline["profile"]),
+             ' "metrics": %s,' % json.dumps(baseline["metrics"]), ' "files": {']
+    items = sorted(baseline["files"].items())
+    for index, (rel, values) in enumerate(items):
+        lines.append("  %s: %s%s" % (json.dumps(rel), json.dumps(values), "," if index < len(items) - 1 else ""))
+    lines += [" }", "}"]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
+def read_baseline(path):
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    names = data["metrics"]
+    return {rel: dict(zip(names, values)) for rel, values in data["files"].items()}
+
+
+def allowlist_state(allowlist, known_files):
+    """(valid entries, malformed-entry problems, orphan problems). Only a valid entry covers a
+    regression: one without a reason, a date, an integer max, a known metric or a unique
+    file/metric pair covers nothing and blocks --update."""
+    entries = allowlist.get("allowed", [])
+    counts = {}
+    for entry in entries:
+        key = (entry.get("file"), entry.get("metric"))
+        counts[key] = counts.get(key, 0) + 1
+    valid, malformed, orphans, reported = [], [], [], set()
+    for entry in entries:
+        key = (entry.get("file"), entry.get("metric"))
+        label = "allowlist entry %s %s" % key
+        problems = []
+        if counts[key] > 1 and key not in reported:
+            problems.append("%s is listed twice" % label)
+        reported.add(key)
+        if entry.get("metric") not in METRICS:
+            problems.append("%s names an unknown metric (known: %s)" % (label, ", ".join(METRICS)))
+        if not isinstance(entry.get("max"), int) or isinstance(entry.get("max"), bool):
+            problems.append("%s needs an integer max" % label)
+        if not str(entry.get("reason", "")).strip():
+            problems.append("%s needs a reason" % label)
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(entry.get("date", ""))):
+            problems.append("%s needs a date (YYYY-MM-DD)" % label)
+        if problems or counts[key] > 1:
+            malformed.extend(problems)
+        elif entry.get("file") not in known_files:
+            orphans.append("%s names a file the ratchet does not measure; remove it" % label)
+        else:
+            valid.append(entry)
+    return valid, malformed, orphans
+
+
+def vanished_files(root, baseline, results, excluded):
+    """Files the baseline measured that are still on disk but no longer measured. A file that
+    was deleted or renamed is gone from disk and is no failure."""
+    return ["%s: measured by the baseline but no longer measured (%s); remove the declaration or rebaseline "
+            "with --update --accept-regressions" % (rel, excluded.get(rel, "outside the measured addons"))
+            for rel in sorted(baseline) if rel not in results and (root / rel).is_file()]
+
+
+def owned_paths(root, profile):
+    if not profile["owned_list"]:
+        return None
+    path = root / profile["owned_list"]
+    if not path.is_file():
+        return None
+    return {line.strip().replace("\\", "/") for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")}
+
+
+def evaluate(results, window_counts, baseline, allowlist, profile, owned, locations=None):
+    """(failures, improved files, new files, stale entries) of one check."""
+    allowed = {(e["file"], e["metric"]): e["max"] for e in allowlist.get("allowed", [])
+               if isinstance(e.get("max"), int)}
+    failures, improved, new, used = [], [], [], set()
+
+    def partners(rel):
+        return "; shares windows with " + clone_partners(locations, rel) if locations else ""
+
+    def covered(rel, metric, value):
+        ceiling = allowed.get((rel, metric))
+        if ceiling is not None and value <= ceiling:
+            used.add((rel, metric))
+            return True
+        return False
+
+    for rel in sorted(results):
+        values = results[rel]
+        before = baseline.get(rel)
+        if before is None:
+            new.append(rel)
+            enforce = owned is None or rel in owned
+            if enforce:
+                for metric, limit in profile["limits"].items():
+                    if values[metric] > limit and not covered(rel, metric, values[metric]):
+                        failures.append("%s: new file has %s %d (limit %d)" % (rel, metric, values[metric], limit))
+                share = values["clone_windows"] - int(window_counts[rel] * CLONE_SHARE_NEW_FILE)
+                if share > 0 and not covered(rel, "clone_windows", values["clone_windows"]):
+                    failures.append("%s: new file has %d clone windows of %d (limit %d percent)%s"
+                                    % (rel, values["clone_windows"], window_counts[rel],
+                                       int(CLONE_SHARE_NEW_FILE * 100), partners(rel)))
+            continue
+        better = False
+        for metric in METRICS:
+            if values[metric] > before[metric]:
+                if not covered(rel, metric, values[metric]):
+                    failures.append("%s: %s %d is worse than the baseline %d (+%d)%s"
+                                    % (rel, metric, values[metric], before[metric], values[metric] - before[metric],
+                                       partners(rel) if metric == "clone_windows" else ""))
+            elif values[metric] < before[metric]:
+                better = True
+        if better:
+            improved.append(rel)
+    stale = sorted(set(allowed) - used)
+    return failures, improved, new, stale
+
+
+# ------------------------------------------------------------------ report
+def totals(results):
+    return {metric: sum(values[metric] for values in results.values()) for metric in METRICS}
+
+
+def worst(results, metric, count):
+    ranked = sorted(results.items(), key=lambda item: (-item[1][metric], item[0]))
+    return [(rel, values[metric]) for rel, values in ranked[:count] if values[metric] > 0]
+
+
+def ownership_tags(root, profile, results):
+    """Classic only: O owned, P override of a Retail file, M exact Retail mirror."""
+    owned = owned_paths(root, profile)
+    if owned is None or not profile.get("override_list"):
+        return {}
+    path = root / profile["override_list"]
+    overrides = set()
+    if path.is_file():
+        overrides = {line.split("\t")[0].strip().replace("\\", "/") for line in path.read_text(encoding="utf-8").splitlines()}
+    return {rel: "O" if rel in owned else "P" if rel in overrides else "M" for rel in results}
+
+
+def print_report(results, excluded, top, profile, tags):
+    print("files measured: %d (excluded as data or generated: %d)" % (len(results), len(excluded)))
+    summed = totals(results)
+    print("totals: " + ", ".join("%s=%d" % (metric, summed[metric]) for metric in METRICS if metric != "max_function"
+                                 and metric != "max_upvalues" and metric != "main_locals"))
+    mark = (lambda rel: " [%s]" % tags[rel] if rel in tags else "")
+    print("files above the new-file limits%s:" % (" (O owned, P override, M Retail mirror)" if tags else ""))
+    for metric, limit in profile["limits"].items():
+        over = sorted(rel for rel, values in results.items() if values[metric] > limit)
+        owned_over = [rel for rel in over if tags.get(rel) == "O"] if tags else over
+        print("  %-16s > %-4d %3d files%s" % (metric, limit, len(over),
+                                              " (%d owned)" % len(owned_over) if tags else ""))
+    for metric in METRICS:
+        print("worst %s:" % metric)
+        for rel, value in worst(results, metric, top):
+            print("  %6d  %s%s" % (value, rel, mark(rel)))
+
+
+# ------------------------------------------------------------------ main
+def summary(profile_name, results, failures, improved, new, stale, entries):
+    return ("quality ratchet (%s): %d files, %d problems, %d improved, %d new, allowlist %d entries (%d stale)%s"
+            % (profile_name, len(results), len(failures), len(improved), len(new), entries, len(stale),
+               "" if not improved else "; run --update to lock the improvements in"))
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Per-file quality ratchet (see the module docstring).")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="fail on any regression (default)")
+    mode.add_argument("--update", action="store_true", help="rewrite the baseline")
+    mode.add_argument("--report", action="store_true", help="print totals and the worst files per metric")
+    parser.add_argument("--root", default=str(DEFAULT_ROOT))
+    parser.add_argument("--profile", choices=sorted(PROFILES))
+    parser.add_argument("--baseline", default=None)
+    parser.add_argument("--allowlist", default=None)
+    parser.add_argument("--luac", default=None)
+    parser.add_argument("--top", type=int, default=10)
+    parser.add_argument("--accept-regressions", action="store_true",
+                        help="--update only: absorb regressions that have no allowlist entry")
+    args = parser.parse_args(argv)
+
+    root = Path(args.root).resolve()
+    profile_name = args.profile or detect_profile(root)
+    profile = PROFILES[profile_name]
+    baseline_path = Path(args.baseline) if args.baseline else root / "tools" / BASELINE_NAME
+    allowlist_path = Path(args.allowlist) if args.allowlist else root / "tools" / ALLOWLIST_NAME
+    allowlist = load_json(allowlist_path, {})
+    results, window_counts, excluded, locations = measure(root, profile_name, allowlist, find_luac(args.luac))
+
+    if args.report:
+        print_report(results, excluded, args.top, profile, ownership_tags(root, profile, results))
+        return 0
+
+    baseline = read_baseline(baseline_path)
+    valid, malformed, orphans = allowlist_state(allowlist, set(results))
+    owned = owned_paths(root, profile)
+    entries = len(allowlist.get("allowed", []))
+    if baseline is None:
+        if not args.update:
+            print("FAIL no baseline at %s; create it with --update" % baseline_path)
+            return 1
+        baseline = {}
+
+    failures, improved, new, stale = evaluate(results, window_counts, baseline, {"allowed": valid}, profile, owned,
+                                              locations)
+    failures = failures + vanished_files(root, baseline, results, excluded)
+    if args.update:
+        if malformed:
+            for problem in malformed:
+                print("FAIL " + problem)
+            print("quality ratchet (%s): update refused, %d malformed allowlist entries; fix them first"
+                  % (profile_name, len(malformed)))
+            return 1
+        regressions = [f for f in failures if "new file" not in f]
+        blocked = failures if not args.accept_regressions else []
+        if blocked and baseline:
+            for failure in blocked:
+                print("FAIL " + failure)
+            print("quality ratchet (%s): update refused, %d problems; add allowlist entries or pass "
+                  "--accept-regressions" % (profile_name, len(blocked)))
+            return 1
+        write_baseline(baseline_path, baseline_from(results, profile_name))
+        # The new baseline holds every value, so no entry is needed any more; the reasons
+        # stay in the git history and are printed here for the commit message.
+        pruned = allowlist.get("allowed", [])
+        for entry in pruned:
+            print("pruned: %s %s <= %s (%s, %s)" % (entry.get("file"), entry.get("metric"), entry.get("max"),
+                                                    entry.get("reason"), entry.get("date")))
+        if pruned:
+            allowlist["allowed"] = []
+            allowlist_path.write_text(json.dumps(allowlist, indent=1, ensure_ascii=False) + "\n",
+                                      encoding="utf-8", newline="\n")
+        print("quality ratchet (%s): baseline written for %d files (%d regressions absorbed, "
+              "%d allowlist entries pruned)" % (profile_name, len(results), len(regressions), len(pruned)))
+        return 0
+
+    problems = malformed + orphans
+    for problem in problems:
+        print("FAIL " + problem)
+    for failure in failures:
+        print("FAIL " + failure)
+    print(summary(profile_name, results, failures + problems, improved, new, stale, entries))
+    return 1 if failures or problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
