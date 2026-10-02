@@ -569,3 +569,16 @@ function Movers.SyncAll()
     end
     Movers.RefreshGuidedPlacementCue()
 end
+
+--- Puts one existing mover back on its frame, for code that moved a single
+--- frame. Showing, hiding and labels stay with SyncAll.
+function Movers.SyncKey(key)
+    local m = movers[key]
+    if not (m and moverParent and moverParent:IsShown()) then return false end
+    if EM2.Ticker and EM2.Ticker.IsDragging() then return false end
+    local c = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key)
+    local f = c and c.getFrame and c.getFrame()
+    if not f then return false end
+    SyncMoverToFrame(m, f, c)
+    return true
+end

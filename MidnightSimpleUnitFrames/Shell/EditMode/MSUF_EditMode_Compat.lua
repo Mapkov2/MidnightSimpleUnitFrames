@@ -22,9 +22,6 @@ local function MSUF_IsInEditMode()
 end
 ExportPublic("MSUF_IsInEditMode", MSUF_IsInEditMode)
 
---- Castbar code still calls this guarded refresh; the old edit info panel it
---- updated is gone, so it does nothing.
-local function LegacyNoop() end
 local function OpenMoverPopup(prefix, fallback, unit, parent)
     if EM2.Popups then
         EM2.Popups.Open(prefix and (prefix .. tostring(unit or "")) or unit, parent)
@@ -33,7 +30,25 @@ local function OpenMoverPopup(prefix, fallback, unit, parent)
     end
 end
 
-ExportPublic("MSUF_UpdateCastbarEditInfo", LegacyNoop)
+--- Castbar code calls this after it moves, resizes or re-anchors a castbar
+--- (MSUF_ApplyCastbarUnitAndSync, behind the menu, the castbar popup and the
+--- castbar preview drag). Movers are snapshots of their frame's rect, so while
+--- Edit Mode is open the castbar's mover is put back on the castbar here, and
+--- the toolbar's X/Y/W/H readout follows when that castbar is selected.
+local CASTBAR_MOVER_KEYS = {
+    player = "castbar_player", target = "castbar_target", focus = "castbar_focus",
+    boss = "castbar_boss", arena = "castbar_arena",
+}
+local function MSUF_UpdateCastbarEditInfo(unit)
+    local key = CASTBAR_MOVER_KEYS[unit]
+    local state = EM2.State
+    if not (key and state and state.IsActive()) then return false end
+    local synced = EM2.Movers.SyncKey(key)
+    local hud = EM2.HUD
+    if state.GetUnitKey() == key and hud and hud.RefreshControls then hud.RefreshControls() end
+    return synced
+end
+ExportPublic("MSUF_UpdateCastbarEditInfo", MSUF_UpdateCastbarEditInfo)
 
 local function MSUF_OpenCastbarPositionPopup(unit, parent)
     OpenMoverPopup("castbar_", EM2.CastPopup, unit, parent)
