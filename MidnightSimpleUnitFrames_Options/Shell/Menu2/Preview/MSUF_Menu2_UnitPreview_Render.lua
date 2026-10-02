@@ -1803,7 +1803,8 @@ function Stage.MeasureTextFootprint(st, Preview)
                         local previewText = R.PreviewStatus.IdentityPreviewText and R.PreviewStatus.IdentityPreviewText(spec, data) or spec.text
                         rw, rh = ApproxTextWidth(previewText, rawSize, 2), rawSize + 4
                     elseif R.PreviewStatus.IsStatusTextState and R.PreviewStatus.IsStatusTextState(spec) then
-                        rw, rh = ApproxTextWidth(box._previewStatusText or "DEAD", rawSize, 4), rawSize + 4
+                        rw, rh = ApproxTextWidth(R.PreviewStatus.StatusTokenText(box._previewStatusText or "DEAD"),
+                            rawSize, 4), rawSize + 4
                     end
                     local anchor = (statusCfg and statusCfg.anchor) or conf[spec.anchor] or R.ResolveStatusPreviewAnchor(spec, conf, g)
                     local sx = tonumber(statusCfg and statusCfg.x) or tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0
