@@ -977,14 +977,13 @@ local function RefreshAllCastTargetTextColors()
     RefreshPreview(_G.MSUF_FocusCastbarPreview)
 
     local bossCastbars = _G.MSUF_BossCastbars
-    local maxBossFrames = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+    local maxBossFrames = tonumber(_G.MAX_BOSS_FRAMES) or 5
     if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
     for index = 1, maxBossFrames do
         RefreshLive((bossCastbars and bossCastbars[index])
             or _G["MSUF_BossCastbar" .. index]
             or _G["MSUF_boss" .. index .. "CastBar"])
-        RefreshPreview(index == 1 and (_G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1)
-            or _G["MSUF_BossCastbarPreview" .. index])
+        RefreshPreview(index == 1 and _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview" .. index])
     end
 
     local arenaCastbars = _G.MSUF_ArenaCastbars
@@ -1312,9 +1311,6 @@ end
 local function BuildCastbarFrameElements(frame)
     if type(_G.MSUF_BuildCastbarFrameElements) == "function" then
         return _G.MSUF_BuildCastbarFrameElements(frame)
-    end
-    if _G.MSUF_DevPrint then
-        _G.MSUF_DevPrint("MSUF: MSUF_BuildCastbarFrameElements missing")
     end
     return nil
 end

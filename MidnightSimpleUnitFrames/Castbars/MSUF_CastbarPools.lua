@@ -28,17 +28,16 @@
 ---   lifecycle       { event, key, action = "pass"|"unit"|"terminal", prewarm,
 ---                     once, units, supported, terminalWhen, unitFallback }
 ---   scheduleKeys    { pass = "...", prewarm = "..." } (prewarm optional)
----   exports         global names: positionSetting, applyEnabled, stop,
----                   syncLifecycle
+---   publishPool     function(castbars) exporting the built pool table under
+---                   the kind's documented global (MSUF_BossCastbars)
 ---
---- Returns the kind's module table (also MSUF.Castbars.Pools.kinds[kind]).
+--- Returns the kind's module table (also MSUF.Castbars.Pools.kinds[kind]). Its
+--- ApplyPositionSetting, ApplyEnabled, Stop and SyncLifecycle are the entry
+--- points; the descriptor file exports them under the kind's documented global
+--- names as compatibility aliases.
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic or function(name, value)
-    _G[name] = value
-    return value
-end
 
 MSUF.Castbars = MSUF.Castbars or {}
 local Pools = MSUF.Castbars.Pools or {}
@@ -301,7 +300,7 @@ function Pools.Define(desc)
     local PREVIEW_UPDATE = desc.previewUpdate
     local SCHEDULE_PASS = desc.scheduleKeys.pass
     local SCHEDULE_PREWARM = desc.scheduleKeys.prewarm
-    local EXPORTS = desc.exports
+    local PUBLISH_POOL = desc.publishPool
 
     local pool = { descriptor = desc, kind = KIND, maxFrames = MAX_FRAMES }
     kinds[KIND] = pool
@@ -579,7 +578,7 @@ function Pools.Define(desc)
         end
 
         local castbars = {}
-        ExportPublic(POOL_GLOBAL, castbars)
+        PUBLISH_POOL(castbars)
 
         for index = 1, MAX_FRAMES do
             local frame = EnsureCastbar(index, true)
@@ -918,14 +917,13 @@ function Pools.Define(desc)
     --- backend instead of being rewritten to HIDE, so a profile taken to a
     --- client with those units still shows the castbars.
     local function ApplyEnabled()
-        local sync = _G[EXPORTS.syncLifecycle]
         if not HAS_UNITS then
-            if sync then sync(false) end
+            SyncLifecycle(false)
             return
         end
         local enabled = Enabled()
         SetEnabled(enabled)
-        if sync then sync(enabled) end
+        SyncLifecycle(enabled)
     end
 
     pool.ApplyPositionSetting = ApplyPositionSetting
@@ -935,11 +933,6 @@ function Pools.Define(desc)
     pool.RefreshFromUnit = RefreshFromUnit
     pool.Stop = StopCastbar
 
-    -- Documented public globals, kept as compatibility aliases.
-    ExportPublic(EXPORTS.positionSetting, ApplyPositionSetting)
-    ExportPublic(EXPORTS.applyEnabled, ApplyEnabled)
-    ExportPublic(EXPORTS.stop, StopCastbar)
-    ExportPublic(EXPORTS.syncLifecycle, SyncLifecycle)
     SyncLifecycle(Enabled())
     return pool
 end

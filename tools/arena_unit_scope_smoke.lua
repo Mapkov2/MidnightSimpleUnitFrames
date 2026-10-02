@@ -106,8 +106,8 @@ Check(anchors:find('"player", "target", "focus", "boss", "arena"', 1, true),
     "CASTBAR_UNITS no longer syncs the arena castbars")
 local arenaCastbars = Read("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua")
 for _, marker in ipairs({
-    'positionSetting = "MSUF_ApplyArenaCastbarPositionSetting"',
-    'syncLifecycle = "MSUF_ArenaCastbars_SyncLifecycle"',
+    'ExportPublic("MSUF_ApplyArenaCastbarPositionSetting", pool.ApplyPositionSetting)',
+    'ExportPublic("MSUF_ArenaCastbars_SyncLifecycle", pool.SyncLifecycle)',
     '"ARENA_OPPONENT_UPDATE"',
     '"ARENA_PREP_OPPONENT_SPECIALIZATIONS"',
     '"PVP_MATCH_STATE_CHANGED"',
@@ -117,8 +117,8 @@ for _, marker in ipairs({
 end
 local castbarPools = Read("MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua")
 for _, marker in ipairs({
-    "ExportPublic(EXPORTS.positionSetting, ApplyPositionSetting)",
-    "ExportPublic(EXPORTS.syncLifecycle, SyncLifecycle)",
+    "pool.ApplyPositionSetting = ApplyPositionSetting",
+    "pool.SyncLifecycle = SyncLifecycle",
 }) do
     Check(castbarPools:find(marker, 1, true),
         "the castbar pool module lost its lifecycle exports: " .. marker)

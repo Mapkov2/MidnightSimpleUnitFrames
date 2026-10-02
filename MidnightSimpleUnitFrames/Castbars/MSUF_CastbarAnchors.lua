@@ -1109,7 +1109,7 @@ ApplyCastbarEffectiveSizeUnit = function(unit, g)
 
     if unit == "boss" then
         local applied = false
-        local maxBoss = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+        local maxBoss = tonumber(_G.MAX_BOSS_FRAMES) or 5
         if maxBoss < 1 or maxBoss > 12 then maxBoss = 5 end
         for i = 1, maxBoss do
             local frame = (_G.MSUF_BossCastbars and _G.MSUF_BossCastbars[i]) or _G["MSUF_BossCastbar" .. i]
@@ -1328,31 +1328,31 @@ function MSUF_ReanchorPlayerCastBar()
     RefreshCastbarVisualFollowers(preview, "player", general)
 end
 
-function MSUF_ReanchorBossCastBar()
-    if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
-        _G.MSUF_ApplyBossCastbarPositionSetting(false, true)
+--- Boss and arena castbars re-anchor through their pool and preview modules
+--- (MSUF_CastbarPools.lua, MSUF_CastbarPoolPreviews.lua; both load later).
+local function ReanchorPoolCastBar(kind)
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    local pool = pools and pools.kinds[kind]
+    if pool then
+        pool.ApplyPositionSetting(false, true)
     end
-    if not InCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-        _G.MSUF_UpdateBossCastbarPreview()
+    if not InCombat() and pool and pool.preview then
+        pool.preview:Update()
     end
-    if type(MSUF_SyncBossCastbarSliders) == "function" then
+    if kind == "boss" and type(MSUF_SyncBossCastbarSliders) == "function" then
         MSUF_SyncBossCastbarSliders()
     end
     if type(MSUF_SyncCastbarPositionPopup) == "function" then
-        MSUF_SyncCastbarPositionPopup("boss")
+        MSUF_SyncCastbarPositionPopup(kind)
     end
 end
 
+function MSUF_ReanchorBossCastBar()
+    ReanchorPoolCastBar("boss")
+end
+
 function MSUF_ReanchorArenaCastBar()
-    if type(_G.MSUF_ApplyArenaCastbarPositionSetting) == "function" then
-        _G.MSUF_ApplyArenaCastbarPositionSetting(false, true)
-    end
-    if not InCombat() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
-        _G.MSUF_UpdateArenaCastbarPreview()
-    end
-    if type(MSUF_SyncCastbarPositionPopup) == "function" then
-        MSUF_SyncCastbarPositionPopup("arena")
-    end
+    ReanchorPoolCastBar("arena")
 end
 
 ------------------------------------------------------------------------

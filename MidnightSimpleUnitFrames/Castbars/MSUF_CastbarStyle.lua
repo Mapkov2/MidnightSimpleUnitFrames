@@ -290,27 +290,24 @@ function Style:ApplyCastbarOutlineToAll(force)
         _G.MSUF_PlayerCastbarPreview,
         _G.MSUF_TargetCastbarPreview,
         _G.MSUF_FocusCastbarPreview,
-        _G.MSUF_BossCastbarPreview,
     }
 
-    for bossIndex = 2, tonumber(_G.MAX_BOSS_FRAMES) or 5 do
-        frames[#frames + 1] = _G["MSUF_BossCastbarPreview" .. bossIndex]
-    end
-
-    local bossCastbars = _G.MSUF_BossCastbars
-    if type(bossCastbars) == "table" then
-        for index = 1, #bossCastbars do
-            frames[#frames + 1] = bossCastbars[index]
+    -- Boss, then arena: each pool's previews, then its live bars.
+    local pools = ns.Castbars and ns.Castbars.Pools
+    local poolOrder = pools and pools.order
+    for poolIndex = 1, poolOrder and #poolOrder or 0 do
+        local pool = poolOrder[poolIndex]
+        local preview = pool.preview
+        if preview then
+            for index = 1, preview.maxFrames do
+                frames[#frames + 1] = _G[preview:Name(index)]
+            end
         end
-    end
-
-    for arenaIndex = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-        frames[#frames + 1] = _G["MSUF_ArenaCastbarPreview" .. arenaIndex]
-    end
-    local arenaCastbars = _G.MSUF_ArenaCastbars
-    if type(arenaCastbars) == "table" then
-        for index = 1, #arenaCastbars do
-            frames[#frames + 1] = arenaCastbars[index]
+        local castbars = pool.Castbars()
+        if type(castbars) == "table" then
+            for index = 1, #castbars do
+                frames[#frames + 1] = castbars[index]
+            end
         end
     end
 
@@ -504,17 +501,15 @@ local function UpdateCastbarFillDirection()
     Apply(_G.MSUF_TargetCastbarPreview)
     Apply(_G.MSUF_FocusCastbarPreview)
 
-    local bossCastbars = _G.MSUF_BossCastbars
-    if type(bossCastbars) == "table" then
-        for index = 1, #bossCastbars do
-            Apply(bossCastbars[index])
-        end
-    end
-
-    local arenaCastbars = _G.MSUF_ArenaCastbars
-    if type(arenaCastbars) == "table" then
-        for index = 1, #arenaCastbars do
-            Apply(arenaCastbars[index])
+    -- Boss, then arena: every built pool (MSUF_CastbarPools.lua).
+    local pools = ns.Castbars and ns.Castbars.Pools
+    local poolOrder = pools and pools.order
+    for poolIndex = 1, poolOrder and #poolOrder or 0 do
+        local castbars = poolOrder[poolIndex].Castbars()
+        if type(castbars) == "table" then
+            for index = 1, #castbars do
+                Apply(castbars[index])
+            end
         end
     end
 

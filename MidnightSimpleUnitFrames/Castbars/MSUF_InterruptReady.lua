@@ -1237,17 +1237,15 @@ local function RefreshAll(updateFillColor)
         or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar),
         nil, status, general, updateFillColor)
 
-    local bossCastbars = _G.MSUF_BossCastbars
-    if type(bossCastbars) == "table" then
-        for index = 1, #bossCastbars do
-            RefreshFrame(bossCastbars[index], nil, status, general, updateFillColor)
-        end
-    end
-
-    local arenaCastbars = _G.MSUF_ArenaCastbars
-    if type(arenaCastbars) == "table" then
-        for index = 1, #arenaCastbars do
-            RefreshFrame(arenaCastbars[index], nil, status, general, updateFillColor)
+    -- Boss, then arena: every built pool (MSUF_CastbarPools.lua).
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    local poolOrder = pools and pools.order
+    for poolIndex = 1, poolOrder and #poolOrder or 0 do
+        local castbars = poolOrder[poolIndex].Castbars()
+        if type(castbars) == "table" then
+            for index = 1, #castbars do
+                RefreshFrame(castbars[index], nil, status, general, updateFillColor)
+            end
         end
     end
 

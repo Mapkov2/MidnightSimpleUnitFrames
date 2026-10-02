@@ -339,21 +339,17 @@ builders.LAYOUT = function(E)
         pass.h = height
         pass.powerType = powerType
 
-        local hardLocked = (type(_G.MSUF_IsUnitFramePositionLocked) == "function" and _G.MSUF_IsUnitFramePositionLocked())
-            or false
-        local inLockdown = hardLocked
-            or (InCombatLockdown and InCombatLockdown())
-            or false
+        local inLockdown = (InCombatLockdown and InCombatLockdown()) or false
         pass.inLockdown = inLockdown
         if CP.container._msufLayoutInitialized == true
-            and (hardLocked or (inLockdown and CP.container.IsProtected and CP.container:IsProtected()))
+            and inLockdown and CP.container.IsProtected and CP.container:IsProtected()
         then
             --- The container is a plain child frame: insecure SetPoint/SetSize
             --- on it is legal during combat lockdown (protection propagates to
             --- parents/anchor targets of protected frames, never to plain
-            --- children). Only defer when a hard position lock is active or
-            --- something promoted the container into the protected anchor
-            --- family; then the post-combat pass replays the geometry.
+            --- children). Only defer when something promoted the container
+            --- into the protected anchor family; then the post-combat pass
+            --- replays the geometry.
             CP._layoutDirty = true
             ExportPublic("MSUF_ClassPowerLayoutDirty", true)
             RequestUFReanchorAfterCombat()
