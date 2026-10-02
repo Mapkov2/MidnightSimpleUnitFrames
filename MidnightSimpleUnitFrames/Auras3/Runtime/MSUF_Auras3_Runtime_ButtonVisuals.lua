@@ -11,7 +11,6 @@ local math_floor = math.floor
 local math_max = math.max
 local math_min = math.min
 local tonumber = tonumber
-local tostring = tostring
 local type = type
 local ApplyAuraIconZoom = dependencies.ConfigValues.ApplyAuraIconZoom
 local ApplyFont = dependencies.DurationText.ApplyFont
@@ -67,142 +66,11 @@ local function LayoutAuraBorder(button, border, lane, useNativeAtlas)
     border:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", padX, -padY)
 end
 
--- Shared icon style rendering. Both the border and the shadow are edge bands
--- straddling the icon rect, drawn as eight plain textures by
--- MSUF.BorderStyles -- no BackdropTemplate child frame, so the aura button
--- keeps its draw layers and cannot pick up frame protection from a child.
-local ICON_SHADOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
-    .. "\\Media\\Borders\\msuf_aura_border_shadow.tga"
-
---- Soft drop shadow behind the icon. `shadowSize` is the visible extent in
---- pixels, so the band is twice that: its inner half hides behind the icon and
---- the whole falloff lands outside.
--- Shared with the Classic backend (Auras3/MSUF_Auras3_IconShape.lua); it also
--- probes the Blizzard portrait mask atlas before SetAtlas.
-local SetAuraShapeTexture = Shape.SetTexture
-
-local function ApplyIconStyleShadow(button, style, size, shape)
-    local pieces = button._msufA3StyleShadow
-    local shaped = shape and shape ~= Shape.RECTANGLE
-    local shapedShadow = button._msufA3ShapedStyleShadow
-    if shaped then
-        if pieces then MSUF.BorderStyles.Hide(pieces) end
-        if not (style and style.shadowEnabled) then
-            if shapedShadow then shapedShadow:Hide() end
-            return
-        end
-        if not shapedShadow then
-            shapedShadow = PixelLayoutRegion(button:CreateTexture(nil, "BACKGROUND", nil, -7))
-            button._msufA3ShapedStyleShadow = shapedShadow
-        end
-        if not SetAuraShapeTexture(shapedShadow, shape, false) then shapedShadow:Hide(); return end
-        local extent = (style.shadowSize or 0) + (style.borderEnabled and style.borderThickness or 0)
-        shapedShadow:ClearAllPoints()
-        shapedShadow:SetPoint("TOPLEFT", button, "TOPLEFT", -extent, extent)
-        shapedShadow:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", extent, -extent)
-        shapedShadow:SetVertexColor(style.shadowR, style.shadowG, style.shadowB, style.shadowA)
-        shapedShadow:Show()
-        return
-    end
-    if shapedShadow then shapedShadow:Hide() end
-    if not (style and style.shadowEnabled) then
-        if pieces then MSUF.BorderStyles.Hide(pieces) end
-        return
-    end
-    local BorderStyles = MSUF.BorderStyles
-    if not BorderStyles then return end
-    if not pieces then
-        pieces = BorderStyles.Create(button, "BACKGROUND", -7, ICON_SHADOW_TEXTURE)
-        button._msufA3StyleShadow = pieces
-    end
-    -- The shadow starts outside the border ring when both are on, so a thick
-    -- ring never eats the halo.
-    local base = (style.borderEnabled and style.borderThickness or 0)
-    local extent = style.shadowSize + base
-    BorderStyles.Apply(pieces, button, extent * 2, size, size,
-        style.shadowR, style.shadowG, style.shadowB, style.shadowA)
-end
-
---- Largest inner band we allow, as a share of the icon. An "inner" style shades
---- the artwork itself, so an unclamped thickness would black the icon out.
---- 0.3 matches the reach of the classic Masque shadow skins, whose dark band
---- covers a little under a third of the icon.
-local ICON_INNER_BAND_MAX = 0.3
-
---- Border ring. SOLID keeps the original single stretched quad (one texture,
---- pixel-crisp at any thickness); every other style is an edgeFile band.
----
---- Outer styles frame the icon: the band straddles its edge and draws behind
---- it at BORDER(-1). Inner styles (Shadow) shade the icon instead: the band
---- sits wholly inside and draws on top at ARTWORK(7), above the icon but still
---- below the OVERLAY dispel border.
-local function ApplyIconStyleBorder(button, style, size, shape)
-    local flat = button._msufA3StyleBorder
-    local pieces = button._msufA3StyleBorderPieces
-    local shaped = shape and shape ~= Shape.RECTANGLE
-    local shapedBorders = button._msufA3ShapedStyleBorders
-    if shaped then
-        if flat then flat:Hide() end
-        if pieces then MSUF.BorderStyles.Hide(pieces) end
-        return Shape.ApplyBorderRings(button, style, shape)
-    end
-    for i = 1, #(shapedBorders or {}) do shapedBorders[i]:Hide() end
-    if not (style and style.borderEnabled) then
-        if flat then flat:Hide() end
-        if pieces then MSUF.BorderStyles.Hide(pieces) end
-        return
-    end
-    local texture = style.borderTexture
-    if texture and MSUF.BorderStyles then
-        if flat then flat:Hide() end
-        local inner = style.borderPlacement == "inner"
-        local edge = style.borderEdge or 8
-        local inset = 0
-        if inner then
-            edge = math_max(1, math_min(edge, math_floor(size * ICON_INNER_BAND_MAX)))
-            inset = edge * 0.5
-        end
-        -- The draw layer is baked into the textures, so a placement change has
-        -- to rebuild them rather than just re-anchor.
-        if pieces and button._msufA3StyleBorderInner ~= inner then
-            MSUF.BorderStyles.Hide(pieces)
-            pieces = nil
-        end
-        if not pieces then
-            pieces = MSUF.BorderStyles.Create(button, inner and "ARTWORK" or "BORDER", inner and 7 or -1, texture)
-            button._msufA3StyleBorderPieces = pieces
-            button._msufA3StyleBorderInner = inner
-        else
-            MSUF.BorderStyles.SetTexture(pieces, texture)
-        end
-        MSUF.BorderStyles.Apply(pieces, button, edge, size, size,
-            style.borderR, style.borderG, style.borderB, style.borderA, inset)
-        return
-    end
-    if pieces then MSUF.BorderStyles.Hide(pieces) end
-    if not flat then
-        flat = PixelLayoutRegion(button:CreateTexture(nil, "BORDER", nil, -1))
-        flat:SetTexture("Interface\\Buttons\\WHITE8X8")
-        button._msufA3StyleBorder = flat
-    end
-    local inset = style.borderThickness
-    flat:ClearAllPoints()
-    flat:SetPoint("TOPLEFT", button, "TOPLEFT", -inset, inset)
-    flat:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", inset, -inset)
-    flat:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
-    flat:Show()
-end
-
---- Stamps the shared icon style onto a preview dummy with the same renderer
---- real buttons use in initializeFrame, so edit-mode lanes and menu mocks stay
---- pixel-identical to the runtime. Cold path only; passing nil (opted-out
---- scope, bar-only lane) hides any pieces a previous stamp created.
-function A3.ApplyIconStylePreview(button, style, size, shape)
-    if not button then return end
-    shape = Shape.Normalize(shape)
-    ApplyIconStyleShadow(button, style, size, shape)
-    ApplyIconStyleBorder(button, style, size, shape)
-end
+-- The icon style painters (shadow, border ring, shaped rings) and
+-- A3.ApplyIconStylePreview are shared with the Classic backend in
+-- Auras3/MSUF_Auras3_IconShape.lua.
+local ApplyIconStyleShadow = Shape.ApplyIconShadow
+local ApplyIconStyleBorder = Shape.ApplyIconBorder
 
 function A3.ApplyAuraDispelPreview(border, icon, size, mode, shape, dispelType, useOverride)
     shape = Shape.Normalize(shape)
