@@ -320,7 +320,10 @@ do
         return frame
     end
 
-    LoadAddonFile("Castbars/MSUF_InterruptReady.lua", NewNamespace())
+    local interruptNamespace = NewNamespace()
+    -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", interruptNamespace)
+    LoadAddonFile("Castbars/MSUF_InterruptReady.lua", interruptNamespace)
     Equal(_G.MSUF_KickReady_Init(), 2139, "mage interrupt spell resolution")
     Check(_G.MSUF_KickReady_IsReady() == false, "cooldown unexpectedly ready")
     Check(_G.MSUF_KickReady_IsReady() == false, "cached cooldown unexpectedly ready")

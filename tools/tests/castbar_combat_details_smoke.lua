@@ -76,6 +76,8 @@ C_SpellBook={IsSpellKnownOrInSpellBook=function() return false end}
 UnitClass=function() return "Warrior","WARRIOR" end
 MSUF_ShouldUseMSUFCastbar=function() return true end
 MSUF_DB={general={kickReadyShowTarget=true,kickReadyStyle="border",kickReadyTimeMarker=true,kickReadyTimeSegment=true}}
+-- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF",ns)
 local target={unit="target",statusBar=Frame(),MSUF_castActive=true,MSUF_durationObj=duration,
     isNotInterruptible=false,MSUF_kickInterruptibleConfirmed=true}

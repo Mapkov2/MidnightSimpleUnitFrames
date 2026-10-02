@@ -120,6 +120,8 @@ local ns = { Client = client, ExportPublic = function(name, value) _G[name] = va
         end,
         CancelScheduled = function() return false end,
     } }
+-- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF", ns)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF", ns)
 local eventFrame = Check(named.MSUF_InterruptReady_EventFrame, "interrupt-ready event frame is missing")
 Check(_G.MSUF_KickReady_GetSpellID() == PUMMEL, "Warriors must interrupt with Pummel")

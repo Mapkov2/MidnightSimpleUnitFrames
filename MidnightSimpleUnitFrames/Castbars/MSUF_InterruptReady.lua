@@ -16,6 +16,10 @@ local SpellAPI = _G.C_Spell
 local TimerAPI = _G.C_Timer
 -- Kernel/MSUF_Scheduler.lua loads first in every TOC.
 local Scheduler = MSUF.Scheduler
+-- Castbars/MSUF_CastbarUtils.lua (loaded first) owns which castbar units the
+-- indicator covers and which setting shows it there.
+local KickReadyUnits = MSUF.Castbars.KickReadyUnits
+local KICK_READY_ROW, KICK_READY_SHOW_KEY = KickReadyUnits.Row, KickReadyUnits.ShowKey
 local CurveAPI = _G.C_CurveUtil
 local EvaluateColorValueFromBoolean = CurveAPI and CurveAPI.EvaluateColorValueFromBoolean
 local EvaluateColorFromBoolean = CurveAPI and CurveAPI.EvaluateColorFromBoolean
@@ -589,24 +593,12 @@ local function RGBAForReady(isReady, general)
     return ColorFromDB(general, "kickNotReadyColor", 1, 0, 0)
 end
 
+--- The focus castbar also shows readiness for the Focus Interrupt Tracker.
 local function ShouldShow(general, unit)
-    if unit == "target" then
-        return general.kickReadyShowTarget == true
-    end
-
-    if unit == "focus" then
-        return general.kickReadyShowFocus == true or general.enableFocusKickIcon == true
-    end
-
-    if unit == "boss" or (type(unit) == "string" and unit:match("^boss%d+$")) then
-        return general.kickReadyShowBoss == true
-    end
-
-    if unit == "arena" or (type(unit) == "string" and unit:match("^arena%d+$")) then
-        return general.kickReadyShowArena == true
-    end
-
-    return false
+    local key = unit and KICK_READY_ROW[unit]
+    if not key then return false end
+    if key == "focus" and general.enableFocusKickIcon == true then return true end
+    return general[KICK_READY_SHOW_KEY[key]] == true
 end
 
 local function CastbarFeatureActive(general, unit, key)
@@ -626,12 +618,11 @@ local function FeatureEnabled(general)
 end
 
 --- The fill style follows the unit's own toggle: ShouldShow without the Focus
---- Interrupt Tracker, which shows its readiness on the focus castbar.
+--- Interrupt Tracker, which shows its readiness on the focus castbar. The
+--- castbar's unavailable tint (MSUF_CastbarUtils.lua) gates on the same rule.
 local function UnitSupportsFillStyle(general, unit)
-    if unit == "focus" then
-        return general.kickReadyShowFocus == true
-    end
-    return ShouldShow(general, unit)
+    local key = unit and KICK_READY_ROW[unit]
+    return key and general[KICK_READY_SHOW_KEY[key]] == true or false
 end
 
 local function IndicatorStyle(general)

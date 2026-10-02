@@ -82,11 +82,13 @@ end
 _G.CreateFrame = function() return Region() end
 _G.UIParent = Region()
 
+local interruptNamespace = { ExportPublic = function(name, value) _G[name] = value return value end,
+    Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end } }
+-- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))(
+    "MidnightSimpleUnitFrames", interruptNamespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))(
-    "MidnightSimpleUnitFrames",
-    { ExportPublic = function(name, value) _G[name] = value return value end,
-        Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end } }
-)
+    "MidnightSimpleUnitFrames", interruptNamespace)
 local refresh = assert(_G.MSUF_KickReady_RefreshFrame, "MSUF_KickReady_RefreshFrame missing")
 
 -- The outline host the castbar style owner builds (MSUF_CastbarStyle.lua).

@@ -280,6 +280,8 @@ do
         kickReadyTimeMarker = true, kickReadyTimeSegment = true } }
     local ns = { Client = { IsRetail = true }, ExportPublic = function(name, value) _G[name] = value end,
         Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end } }
+    -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MSUF", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF", ns)
     local refresh = Check(_G.MSUF_KickReady_RefreshFrame, "interrupt-ready refresh export is missing")
     local eventFrame = Check(named.MSUF_InterruptReady_EventFrame, "interrupt-ready event frame is missing")

@@ -563,28 +563,42 @@ local function ResolveInterruptFeedbackCastColor()
 end
 ExportPublic("MSUF_ResolveInterruptFeedbackCastColor", ResolveInterruptFeedbackCastColor)
 
+--- Interrupt-ready units: a castbar unit's config row (target, focus, boss for
+--- boss and bossN, arena for arena and arenaN; nil for any other unit) and the
+--- setting that shows the indicator on it. The one rule for the indicator
+--- (MSUF_InterruptReady.lua) and the unavailable tint below.
+local KICK_READY_SHOW_KEY = {
+    target = "kickReadyShowTarget",
+    focus = "kickReadyShowFocus",
+    boss = "kickReadyShowBoss",
+    arena = "kickReadyShowArena",
+}
+
+local function KickReadyUnitKey(unit)
+    if type(unit) ~= "string" then return nil end
+    if KICK_READY_SHOW_KEY[unit] then return unit end
+    if unit:match("^boss%d+$") then return "boss" end
+    if unit:match("^arena%d+$") then return "arena" end
+    return nil
+end
+
+--- unit token -> its config row or false, classified once per token (the
+--- indicator asks for every castbar on every cooldown event).
+local KICK_READY_ROW = setmetatable({}, { __index = function(rows, unit)
+    local row = KickReadyUnitKey(unit) or false
+    rawset(rows, unit, row)
+    return row
+end })
+
+MSUF.Castbars = MSUF.Castbars or {}
+MSUF.Castbars.KickReadyUnits = { Key = KickReadyUnitKey, ShowKey = KICK_READY_SHOW_KEY, Row = KICK_READY_ROW }
+
 local function UnitSupportsInterruptUnavailableTint(frame, general)
     local unit = frame and frame.unit
-    if type(unit) ~= "string" then return false end
-
-    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
-    local key
-    if unit == "target" then
-        if general.kickReadyShowTarget ~= true then return false end
-        key = "target"
-    elseif unit == "focus" then
-        if general.kickReadyShowFocus ~= true then return false end
-        key = "focus"
-    elseif unit:sub(1, 4) == "boss" then
-        if general.kickReadyShowBoss ~= true then return false end
-        key = "boss"
-    elseif unit:sub(1, 5) == "arena" then
-        if general.kickReadyShowArena ~= true then return false end
-        key = "arena"
-    else
-        return false
-    end
+    local key = unit and KICK_READY_ROW[unit]
+    if not key or general[KICK_READY_SHOW_KEY[key]] ~= true then return false end
     -- Resolve live ownership directly; no per-query closure is needed.
+    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
     return type(shouldUse) ~= "function" or shouldUse(key, general) == true
 end
 

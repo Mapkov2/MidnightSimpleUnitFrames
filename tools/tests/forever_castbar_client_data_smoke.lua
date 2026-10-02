@@ -162,7 +162,10 @@ local function ResolveInterrupt(client, classToken)
     _G.UnitClass = function() return classToken, classToken end
     _G.C_SpellBook = { IsSpellKnownOrInSpellBook = function() return false end }
     _G.C_SpecializationInfo = nil
-    assert(loadfile(root .. "/" .. INTERRUPT_FILE))("MidnightSimpleUnitFrames", Namespace(client))
+    local ns = Namespace(client)
+    -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(root .. "/" .. INTERRUPT_FILE))("MidnightSimpleUnitFrames", ns)
     return _G.MSUF_KickReady_GetSpellID()
 end
 

@@ -105,11 +105,15 @@ _G.CreateFrame = function(frameType)
     }
 end
 
+local interruptNamespace = { ExportPublic = function(name, value) _G[name] = value return value end,
+    Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end } }
+-- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))(
+    "MidnightSimpleUnitFrames", interruptNamespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))(
-    "MidnightSimpleUnitFrames",
-    { ExportPublic = function(name, value) _G[name] = value return value end,
-        Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end } }
-)
+    "MidnightSimpleUnitFrames", interruptNamespace)
+-- The utilities' own next-frame refresh at load is not a cooldown timer.
+timerAfterCalls = 0
 
 -- Preserve the existing scalar-composition contract for secret
 -- interruptibility values.

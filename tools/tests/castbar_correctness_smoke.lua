@@ -525,4 +525,46 @@ do
     _G.UIErrorsFrame = nil
 end
 
+---------------------------------------------------------------------------
+-- 7. One interrupt-ready unit rule. The castbar's unavailable tint
+--    (MSUF_CastbarUtils.lua) and the indicator's fill style
+--    (MSUF_InterruptReady.lua) gate on the same unit classification and
+--    setting: the tint is the fill rule plus backend ownership, for every unit
+--    token (the tint once matched any "boss..." or "arena..." prefix).
+---------------------------------------------------------------------------
+do
+    WipeAddonGlobals()
+    local namespace = NewNamespace()
+    namespace.Client = { IsRetail = true }
+    namespace.Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end }
+    _G.issecretvalue = function() return false end
+    _G.C_Timer = { After = function() end }
+    _G.C_Spell = {}
+    _G.GetTime = function() return 1 end
+    _G.UnitClass = function() return "Mage", "MAGE" end
+    _G.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
+    _G.UIParent = _G.CreateFrame()
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", namespace)
+    LoadAddonFile("Castbars/MSUF_InterruptReady.lua", namespace)
+    local tint = assert(_G.MSUF_Castbar_ShouldUseInterruptUnavailableColor, "unavailable tint gate missing")
+    local units = assert(namespace.Castbars.KickReadyUnits, "the interrupt-ready unit rule is not shared")
+    local tokens = { "player", "target", "focus", "boss", "arena", "pet", "bosstarget", "boss1target",
+        "arenapet1", "bossX" }
+    for index = 1, 5 do tokens[#tokens + 1] = "boss" .. index; tokens[#tokens + 1] = "arena" .. index end
+    for mask = 0, 31 do
+        local general = { kickReadyStyle = "fill",
+            kickReadyShowTarget = mask % 2 == 1, kickReadyShowFocus = math.floor(mask / 2) % 2 == 1,
+            kickReadyShowBoss = math.floor(mask / 4) % 2 == 1, kickReadyShowArena = math.floor(mask / 8) % 2 == 1 }
+        local owned = math.floor(mask / 16) % 2 == 1
+        _G.MSUF_DB = { general = general }
+        _G.MSUF_ShouldUseMSUFCastbar = function() return owned end
+        for _, unit in ipairs(tokens) do
+            local key = units.Key(unit)
+            local fill = key ~= nil and general[units.ShowKey[key]] == true
+            Check(tint({ unit = unit }) == (fill and owned),
+                "unavailable tint and interrupt-ready fill disagree on " .. unit .. " (settings " .. mask .. ")")
+        end
+    end
+end
+
 print("castbar correctness smoke: ok")
