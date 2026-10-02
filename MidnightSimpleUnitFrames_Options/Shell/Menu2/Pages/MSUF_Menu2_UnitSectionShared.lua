@@ -114,7 +114,8 @@ function Shared.AttachSectionUX(ctx, opts)
                 and not ctx.entry.hiddenBuild and {} or nil
             local function Refresh()
                 local scope = opts.scope()
-                summary:SetText(spec.summary and spec.summary(opts.conf(scope), scope) or "")
+                -- Summaries are composed from translated words and numbers already.
+                T.SetTranslatedText(summary, spec.summary and spec.summary(opts.conf(scope), scope) or "")
                 if customCache then
                     W.SetCollapsibleCustomBadge(section, Shared.SectionIsCustom(spec, opts.conf(scope),
                         Shared.CachedSectionDefaults(opts, scope), customCache))
@@ -162,10 +163,10 @@ function Shared.AttachSectionUX(ctx, opts)
                             return true
                         end)
                     if success == true then
-                        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(target and "Section copied" or "Section reset"), "ok", 1.5) end
+                        if M.ShowStatusFeedback then M.ShowStatusFeedback(target and "Section copied" or "Section reset", "ok", 1.5) end
                         M.Refresh(ctx)
                     elseif M.ShowStatusFeedback then
-                        M.ShowStatusFeedback(M.Tr("Action failed"), "danger", 1.8)
+                        M.ShowStatusFeedback("Action failed", "danger", 1.8)
                     end
                     Close()
                     return success
@@ -200,7 +201,7 @@ function Shared.AttachSectionUX(ctx, opts)
                         local close = W.TopButton(popup, "x", 20, 20)
                         close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -6, -6)
                         close:SetScript("OnClick", Close)
-                        local reset = W.TopButton(popup, M.Tr("Reset section"), 250, 24)
+                        local reset = W.TopButton(popup, "Reset section", 250, 24)
                         reset:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -42)
                         reset:SetScript("OnClick", function() Change(nil) end)
                         popup._msuf2ResetButton = reset
@@ -211,7 +212,7 @@ function Shared.AttachSectionUX(ctx, opts)
                         select:SetValue(destination)
                         -- Use the widget's canonical callback, not a second settings binding.
                         select:SetOnValueChanged(function(value) destination = value end)
-                        local copy = W.TopButton(popup, M.Tr("Copy section"), 250, 24)
+                        local copy = W.TopButton(popup, "Copy section", 250, 24)
                         copy:SetPoint("TOPLEFT", popup, "TOPLEFT", 14, -132)
                         copy:SetScript("OnClick", function() if destination then Change(destination) end end)
                         local copyAllowed = spec.noCopy ~= true and #values > 0
@@ -230,7 +231,7 @@ function Shared.AttachSectionUX(ctx, opts)
                         popup._msuf2CopySection = function(target) return Change(target) end
                     end
                     popup.RefreshTargets()
-                    popup.title:SetText(opts.label(popupSource) .. " · " .. (entry.label:GetText() or id))
+                    T.SetTranslatedText(popup.title, opts.label(popupSource) .. " · " .. (entry.label:GetText() or id))
                     popup:ClearAllPoints()
                     popup:SetPoint("TOPRIGHT", more, "BOTTOMRIGHT", 0, -4)
                     M.ApplyPopupFramePriority(popup)
@@ -405,7 +406,7 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     end
     function notice:SetMessage(message, tone)
         self:SetTone(tone)
-        text:SetText(tostring(message or ""))
+        T.SetTranslatedText(text, tostring(message or ""))
     end
     notice:Hide()
     return notice, text, button
@@ -483,13 +484,13 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             scopes[cat.key] = selected and true or false
             if popup and popup._checks and popup._checks[i] then popup._checks[i]:SetChecked(selected and true or false) end
         end
-        if feedback and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(feedback), "info", 1.15) end
+        if feedback and M.ShowStatusFeedback then M.ShowStatusFeedback(feedback, "info", 1.15) end
     end
     local function RefreshTargets()
         if not popup then return end
         local source = SourceKey()
         local selected = opts.selectedTarget and opts.selectedTarget(source)
-        if popup._title then popup._title:SetText(M.Format(M.Tr(opts.titleFormat or "Copy from %s"), opts.sourceLabel and opts.sourceLabel(source) or tostring(source or ""))) end
+        if popup._title then T.SetTranslatedText(popup._title, M.Format(opts.titleFormat or "Copy from %s", opts.sourceLabel and opts.sourceLabel(source) or tostring(source or ""))) end
         local x = opts.targetX or 16
         for i = 1, #targets do
             local item = targets[i]
@@ -532,7 +533,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -8)
             close:SetScript("OnClick", function() popup:Hide() end)
             RegisterSharedControl(close, opts, "close", "Close copy popup", "button", "ephemeral")
-            local destLabel = T.Font(popup, "GameFontDisableSmall", M.Tr(opts.targetLabel or "Destination"), T.colors.dim)
+            local destLabel = T.Font(popup, "GameFontDisableSmall", opts.targetLabel or "Destination", T.colors.dim)
             destLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.targetLabelY or -40)
             popup._targetBtns = {}
             for i = 1, #targets do
@@ -540,7 +541,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                 local key = type(item) == "table" and (item.key or item.value) or item
                 local label = type(item) == "table" and (item.text or item.label) or nil
                 label = label or (opts.targetLabelText and opts.targetLabelText(key)) or tostring(key or "")
-                local btn = CopyPopupButton(popup, M.Tr(label), TargetWidth(key), "target")
+                local btn = CopyPopupButton(popup, label, TargetWidth(key), "target")
                 btn._msuf2CopyTarget = key
                 btn:SetScript("OnClick", function()
                     NotifyGuidedInteraction(btn)
@@ -550,7 +551,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                 RegisterSharedControl(btn, opts, "target." .. tostring(key), "Copy target " .. tostring(label), "button", opts.runLabel and "ephemeral" or "action")
                 popup._targetBtns[key] = btn
             end
-            local catLabel = T.Font(popup, "GameFontDisableSmall", M.Tr(opts.categoryLabel or "Copy categories"), T.colors.dim)
+            local catLabel = T.Font(popup, "GameFontDisableSmall", opts.categoryLabel or "Copy categories", T.colors.dim)
             catLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.categoryLabelY or -90)
             popup._checks = {}
             for i = 1, #categories do
@@ -569,14 +570,14 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                 end
                 popup._checks[i] = cb
             end
-            local allBtn = CopyPopupButton(popup, M.Tr("All"), 48, "normal")
+            local allBtn = CopyPopupButton(popup, "All", 48, "normal")
             allBtn:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 16, 12)
             allBtn:SetScript("OnClick", function()
                 NotifyGuidedInteraction(allBtn)
                 SetAll(true, opts.allFeedback or "All copy categories selected")
             end)
             RegisterSharedControl(allBtn, opts, "categories.all", "All copy categories", "button", "ephemeral")
-            local noneBtn = CopyPopupButton(popup, M.Tr("None"), 58, "normal")
+            local noneBtn = CopyPopupButton(popup, "None", 58, "normal")
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 8, 0)
             noneBtn:SetScript("OnClick", function()
                 NotifyGuidedInteraction(noneBtn)
@@ -584,7 +585,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
             end)
             RegisterSharedControl(noneBtn, opts, "categories.none", "No copy categories", "button", "ephemeral")
             if opts.runLabel then
-                local runBtn = CopyPopupButton(popup, M.Tr(opts.runLabel), opts.runWidth or 128, "action")
+                local runBtn = CopyPopupButton(popup, opts.runLabel, opts.runWidth or 128, "action")
                 runBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -16, 12)
                 runBtn:SetScript("OnClick", function()
                     NotifyGuidedInteraction(runBtn)
@@ -753,7 +754,7 @@ end
 function Shared.CustomAnchorEditor(ctx, parent, opts)
     opts = opts or {}
     local x, y, width = opts.x or 14, opts.y or -104, opts.width or 200
-    local label = T.Font(parent, "GameFontHighlightSmall", M.Tr(opts.label or "Custom Anchor Frame"), opts.labelColor or { 0.62, 0.74, 0.96, 1 })
+    local label = T.Font(parent, "GameFontHighlightSmall", opts.label or "Custom Anchor Frame", opts.labelColor or { 0.62, 0.74, 0.96, 1 })
     label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); label:SetJustifyH("LEFT")
     local box = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24); box:SetSize(width, 24); box:SetAutoFocus(false)

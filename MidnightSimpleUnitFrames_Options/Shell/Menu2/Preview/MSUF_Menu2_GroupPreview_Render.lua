@@ -2743,8 +2743,9 @@ function Stage.LayoutMockFrame(st, env)
         local conf, gf, kind, label, runtimeBorder, runtimeHealth, runtimePower, runtimeSpec = st.conf, st.gf, st.kind, st.label, st.runtimeBorder, st.runtimeHealth, st.runtimePower, st.runtimeSpec
         local self = st.self
         local ClampZoom, H, M, ResolveDefaultZoomLock, Round, ScaleValue, UpdateZoomControls, WHITE8X8 = env.ClampZoom, env.H, env.M, env.ResolveDefaultZoomLock, env.Round, env.ScaleValue, env.UpdateZoomControls, env.WHITE8X8
+        local T = env.T
         local max, min, width = env.max, env.min, env.width
-        self._title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
+        T.SetTranslatedText(self._title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
         local stageW = self._stage:GetWidth() or (width - 98)
         local stageH = self._stage:GetHeight() or 218
         if stageW <= 1 then stageW = math.max(260, width - 98) end
@@ -3129,8 +3130,8 @@ function Stage.RenderPowerBar(st, env)
         local LayerAlpha, LayerOn, S, barTex, bgTex, conf, inset, liveW = st.LayerAlpha, st.LayerOn, st.S, st.barTex, st.bgTex, st.conf, st.inset, st.liveW
         local mock, mockW, powerDetached, powerEmbed, powerH, powerPct, previewScale, runtimePower = st.mock, st.mockW, st.powerDetached, st.powerEmbed, st.powerH, st.powerPct, st.previewScale, st.runtimePower
         local MSUF, Round, ScaleValue, max = env.MSUF, env.Round, env.ScaleValue, env.max
-        -- Scoped block: this render function sits near Lua's 200-local limit,
-        -- so the power placement locals must release their slots when done.
+        -- Scoped block: the power placement locals end here instead of staying
+        -- live for the rest of the stage.
         do
         -- LayoutDetached geometry (compiler resolves width to the frame width
         -- when unset; the conf fallback mirrors that for the no-spec path).

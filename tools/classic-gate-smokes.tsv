@@ -188,6 +188,7 @@ clients+Forever	lua	tools/tests/menu_page_reset_history_smoke.lua	{root} {flavor
 clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}	Menu combat quiescence: {flavor}
 clients+Forever	lua	tools/tests/menu_refresh_queue_smoke.lua	{root} {flavor}	Menu refresh requests re-queue after a cancelled task: {flavor}
 clients+Forever	lua	tools/tests/menu_core_text_smoke.lua	{root} {flavor}	Menu core text, slider names and feedback settle: {flavor}
+clients+Forever	lua	tools/tests/menu_pages_translate_once_smoke.lua	{root} {flavor}	Menu pages and previews translate their text once: {flavor}
 clients+Forever	lua	tools/tests/menu_button_history_smoke.lua	{root} {flavor}	Menu button history checkpoint is opt-in and keeps undo: {flavor}
 clients+Forever	lua	tools/tests/menu_page_rebuild_leak_smoke.lua	{root} {flavor}	Undo, reset and view switches repaint pages without new frames: {flavor}
 clients+Forever	lua	tools/tests/menu_preview_focus_clear_smoke.lua	{root} {flavor}	Leaving a text control clears the unit preview text focus: {flavor}

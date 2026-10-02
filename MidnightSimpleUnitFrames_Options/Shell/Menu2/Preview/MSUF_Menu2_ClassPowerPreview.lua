@@ -78,9 +78,9 @@ local function SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
     if powerFrame then parts[#parts + 1] = "Player Power" end
     if hpFrame then parts[#parts + 1] = "Second HP" end
     if #parts == 0 then
-        box.summary:SetText(TR("Shown here: Player frame reference only"))
+        T.SetTranslatedText(box.summary, TR("Shown here: Player frame reference only"))
     else
-        box.summary:SetText(TR("Shown here: ") .. table.concat(parts, " + "))
+        T.SetTranslatedText(box.summary, TR("Shown here: ") .. table.concat(parts, " + "))
     end
 end
 local CP_PREVIEW_LAYERS = {
@@ -543,7 +543,7 @@ local function RefreshHandleVisuals(preview)
             preview.hint:SetText(string.format("%s   x: %d   y: %d",
                 TR(selected._label or selected._key or "Element"), Round(x or 0), Round(y or 0)))
         else
-            preview.hint:SetText(TR("Click to open settings. Move resources in Edit Mode."))
+            preview.hint:SetText("Click to open settings. Move resources in Edit Mode.")
         end
     end
 end
@@ -2089,7 +2089,7 @@ local function CreateLayerSidebar(box, sideW)
     if sidebar.SetClipsChildren then sidebar:SetClipsChildren(true) end
     box.sidebar = sidebar
     local chrome = Helpers.PreviewChromePalette and Helpers.PreviewChromePalette(T) or {}
-    local hdr = T.Font(sidebar, "GameFontDisableSmall", TR("LAYERS"), chrome.layerHeader or T.colors.muted)
+    local hdr = T.Font(sidebar, "GameFontDisableSmall", "LAYERS", chrome.layerHeader or T.colors.muted)
     hdr:SetPoint("TOP", sidebar, "TOP", 0, -5)
     box.layerVisibility = {}
     box.layerButtons = {}
@@ -2231,7 +2231,8 @@ local function CreateAnimateButton(preview)
 end
 local function EnsureClassPowerLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
-    local btn = T.Button(box, TR("Layers") .. " v", 76, 20)
+    local btn = T.Button(box, "", 76, 20)
+    btn:SetText(TR("Layers") .. " v", true)
     if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
     btn:SetScript("OnClick", function()
         if box.sidebar then box.sidebar:SetShown(not box.sidebar:IsShown()) end
@@ -2249,7 +2250,7 @@ local function LayoutClassPowerHeaderControls(box, compact)
     local layersBtn = box._msuf2LayersButton
     if compact and header then
         if layersBtn then
-            layersBtn:SetText(TR("Layers") .. " v")
+            layersBtn:SetText(TR("Layers") .. " v", true)
             layersBtn:SetParent(header)
             layersBtn:ClearAllPoints()
             if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
@@ -2259,7 +2260,7 @@ local function LayoutClassPowerHeaderControls(box, compact)
         return
     end
     if layersBtn then
-        layersBtn:SetText(TR("Layers"))
+        layersBtn:SetText("Layers")
         layersBtn:SetParent(box)
         layersBtn:ClearAllPoints()
         layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
@@ -2354,10 +2355,10 @@ function Preview.Create(ctx, builder)
     box._msuf2ExpandedCanvasW, box._msuf2ExpandedCanvasH = box.canvasW, box.canvasH
     box.playerW, box.playerH = min(275, max(190, box.canvasW - 160)), 38
     box.handles = {}
-    local title = T.Font(box, "GameFontNormal", TR("Class Resources Preview"), chrome.title or T.colors.accent)
+    local title = T.Font(box, "GameFontNormal", "Class Resources Preview", chrome.title or T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
     box.title = title
-    local hint = T.Font(box, "GameFontDisableSmall", TR("Click to open settings. Move resources in Edit Mode."), T.colors.muted)
+    local hint = T.Font(box, "GameFontDisableSmall", "Click to open settings. Move resources in Edit Mode.", T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     hint:SetPoint("RIGHT", box, "RIGHT", -12, 0)
     hint:SetJustifyH("LEFT")
@@ -2384,7 +2385,7 @@ function Preview.Create(ctx, builder)
         help = "Shows the resource layout fitted to the preview. Movement is handled in Edit Mode.",
     })
     CreateLayerSidebar(box, sideW)
-    box.noResource = T.Font(box.canvas, "GameFontDisableSmall", TR("Class resource is disabled for this preview resource."), T.colors.muted)
+    box.noResource = T.Font(box.canvas, "GameFontDisableSmall", "Class resource is disabled for this preview resource.", T.colors.muted)
     box.noResource:SetPoint("CENTER", box.canvas, "CENTER", 0, 28)
     box.noResource:Hide()
     CreatePlayerReference(box)
@@ -2417,9 +2418,9 @@ function Preview.Create(ctx, builder)
         if classFrame and classFrame.IsShown and classFrame:IsShown() then
             box.noResource:Hide()
         else
-            box.noResource:SetText(TR(classDisabledReason == "settings"
+            box.noResource:SetText(classDisabledReason == "settings"
                 and "Class resource is disabled in Class Resource settings."
-                or "The selected preview resource has no class resource."))
+                or "The selected preview resource has no class resource.")
             box.noResource:Show()
         end
         local powerFrame = RenderDetachedPower(box, bars, player, classFrame, spec)

@@ -39,7 +39,6 @@ local ViewChrome = MSUF.UFPreviewViewChrome or {}
 -- when its handle exists, so a client without boss units never shows one.
 local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSUF.Client.SupportsUnit("boss1")
 
-local AssignNamedValues = M2.AssignNamedValues
 local F = M2.Fallbacks or {}
 local PreviewModel = Preview.Model or {}
 local UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed = PreviewModel.UNIT_LABELS, PreviewModel.UNIT_DATA, PreviewModel.PreviewRaidGroupNameAllowed
@@ -798,7 +797,12 @@ local SetPreviewZoom = PreviewZoomPan.SetZoom or F.Noop
 local StepPreviewZoom = PreviewZoomPan.Step or F.Noop
 StartPreviewPan = PreviewZoomPan.Start or StartPreviewPan
 StopPreviewPan = PreviewZoomPan.Stop or StopPreviewPan
-local function BuildPreview(parent, panel, width, height)
+-- BuildPreview runs a sequence of stages on one box: frame, chrome, layer rail, selection bar, the mock
+-- frame (health, class power, overlays, castbar), drag handles and scripts. The stages create their
+-- widgets in the order the single builder did, so the layout is unchanged. They share a small state
+-- table (`s`) and live on one table so the main chunk keeps its local budget.
+local BoxBuild = {}
+function BoxBuild.Frame(parent, panel, width, height)
     local sideW = 104
     local T = MenuTheme()
     local colors = (T and T.colors) or {}
@@ -869,6 +873,10 @@ local function BuildPreview(parent, panel, width, height)
     canvas:EnableMouseWheel(true)
     if canvas.SetPropagateMouseWheel then canvas:SetPropagateMouseWheel(false) end
     box.canvas = canvas
+    return box, { sideW = sideW, T = T, colors = colors, chrome = chrome, canvas = canvas }
+end
+function BoxBuild.Chrome(box, s)
+    local T, colors, chrome, canvas = s.T, s.colors, s.chrome, s.canvas
     PreviewHelpers.BuildZoomBar(box, canvas, {
         texture = TEX_W8,
         T = T,
@@ -922,6 +930,10 @@ local function BuildPreview(parent, panel, width, height)
     box._msuf2LayerRailHeader = sHdr
     box.layerVisibility = {}
     box.layerButtons = {}
+    s.sidebar = sidebar
+end
+function BoxBuild.LayerRail(box, s)
+    local colors, chrome, sidebar, sideW = s.colors, s.chrome, s.sidebar, s.sideW
     local function UnitLayerAvailable(owner, key)
         return not (owner and owner.layerAvailable and owner.layerAvailable[key] == false)
     end
@@ -1038,6 +1050,9 @@ local function BuildPreview(parent, panel, width, height)
             rowHeight = 20,
         })
     end
+end
+function BoxBuild.Selection(box, s)
+    local canvas = s.canvas
     if M2.PreviewSelectionBar then
         M2.PreviewSelectionBar.Create(box, {
             Tr = TR,
@@ -1089,6 +1104,9 @@ local function BuildPreview(parent, panel, width, height)
         end
         if self._msuf2ElementPicker then self._msuf2ElementPicker:Show() end
     end
+end
+function BoxBuild.MockHealth(box, s)
+    local T, canvas = s.T, s.canvas
     -- A plain root owns no synthetic Center texture. Only the real health
     -- background media below may cover the unit-frame rectangle; outlines are
     -- drawn by the dedicated four-edge overlay in PreviewCore.
@@ -1159,6 +1177,10 @@ local function BuildPreview(parent, panel, width, height)
     MockTexture("powerBG", "BACKGROUND", TEX_W8, { 0, 0, 0, 0 }, "color")
     local initialPower = MockTexture("power", "ARTWORK", type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8, nil, "settex")
     initialPower:SetAlpha(0)
+    s.mock, s.FillFrame, s.MakeTextSet = mock, FillFrame, MakeTextSet
+end
+function BoxBuild.MockClassPower(box, s)
+    local canvas, mock = s.canvas, s.mock
     -- Decorative texture layer preview regions (3 slots): child frames so the
     -- render pass can mirror the runtime's per-slot frame-level offsets (see
     -- RenderTextureLayerPreview).
@@ -1214,6 +1236,9 @@ local function BuildPreview(parent, panel, width, height)
     mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", 0, 0)
     mock.classPower.text:SetText("5")
     mock.classPower.text:Hide()
+end
+function BoxBuild.MockOverlays(box, s)
+    local canvas, mock, FillFrame, MakeTextSet = s.canvas, s.mock, s.FillFrame, s.MakeTextSet
     mock.detachedPower = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
     PixelLayoutRegion(mock.detachedPower, "SetBackdrop", { bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock.detachedPower:SetBackdropColor(0, 0, 0, 0.82)
@@ -1254,6 +1279,9 @@ local function BuildPreview(parent, panel, width, height)
     MakeTextSet(mock.raidGroupLayer, "raidGroupNameText")
     MakeTextSet(mock.hpLayer, "hpTextLeft", "hpTextCenter", "hpText", "hpTextPct")
     MakeTextSet(mock.powerLayer, "powerTextLeft", "powerTextCenter", "powerText", "powerTextPct")
+end
+function BoxBuild.MockCast(box, s)
+    local T, canvas, mock = s.T, s.canvas, s.mock
     mock.cast = PixelLayoutRegion(CreateFrame("Frame", nil, canvas, "BackdropTemplate"))
     PixelLayoutRegion(mock.cast, "SetBackdrop", { bgFile = TEX_W8 })
     mock.cast:SetBackdropColor(0, 0, 0, 0.92)
@@ -1308,6 +1336,9 @@ local function BuildPreview(parent, panel, width, height)
         local spec = STATUS_PREVIEW[i]
         mock.icons[spec.id] = CreateIcon(canvas, spec.color, spec.text)
     end
+end
+function BoxBuild.Handles(box, s)
+    local canvas = s.canvas
     box.handles = {}
     box.dragFrame = PixelLayoutRegion(CreateFrame("Frame", nil, canvas), true)
     box.dragFrame:EnableMouse(true)
@@ -1378,6 +1409,8 @@ local function BuildPreview(parent, panel, width, height)
         local spec = STATUS_PREVIEW[i]
         box.statusHandles[spec.id] = MakeHandle(box, spec.id, { x = spec.x, y = spec.y, defaultX = spec.defaultX or 0, defaultY = spec.defaultY or 0, statusRefresh = spec.refresh, section = "status" }, spec.label, spec.color)
     end
+end
+function BoxBuild.Scripts(box)
     box:EnableKeyboard(true)
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
     box:SetScript("OnKeyDown", PreviewArrowKeyDown)
@@ -1459,6 +1492,18 @@ local function BuildPreview(parent, panel, width, height)
     end
     box:ApplyDockedPreviewLayout(12)
     Preview.RegisterRuntimeControlsForPage(box, M2.activeKey)
+end
+local function BuildPreview(parent, panel, width, height)
+    local box, s = BoxBuild.Frame(parent, panel, width, height)
+    BoxBuild.Chrome(box, s)
+    BoxBuild.LayerRail(box, s)
+    BoxBuild.Selection(box, s)
+    BoxBuild.MockHealth(box, s)
+    BoxBuild.MockClassPower(box, s)
+    BoxBuild.MockOverlays(box, s)
+    BoxBuild.MockCast(box, s)
+    BoxBuild.Handles(box, s)
+    BoxBuild.Scripts(box)
     return box
 end
 local CastbarEnabled = PreviewCastbar.Enabled
@@ -1475,32 +1520,57 @@ local PreviewInCombat = PreviewCore.InCombat
 do
     local deps = Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
-    AssignNamedValues(deps, [[
-        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls ZOOM_MIN
-        max min abs floor format TEX_W8 FONT STATUS_PREVIEW CurrentPanelKey UnitDB UNIT_DATA UNIT_LABELS ReadPowerBarEnabled ReadPowerBarHeight LiveUnitData SyncLiveStateDriver
-    ]],
-        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil, RuntimeVisualScaleForPreviewKey, PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, PreviewZoomPan.ResolveDefaultLock or F.Noop, UpdatePreviewZoomControls, ZOOM_MIN,
-        max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight, PreviewModel.LiveUnitData, ViewChrome.SyncUnitPreviewLiveState)
-    AssignNamedValues(deps, [[
-        PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizeRaidGroupNameAnchor CastbarEnabled CastbarShowIcon CastbarShowText ReadCastbarSize ReadCastbarNum FormatCastbarPreviewTime
-        CastbarOffsetFields CastbarDetached CanDetachPowerBarKey ClampPreviewLayer SetTex PlaceHandle PlaceHandleAroundRegions UnitPreviewText UnitPreviewTextMovesTogether
-        NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor ClassColor HealthColor
-    ]],
-        PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor, CastbarEnabled, CastbarShowIcon, CastbarShowText, ReadCastbarSize, ReadCastbarNum, FormatCastbarPreviewTime,
-        CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey, ClampPreviewLayer, SetTex, PlaceHandle, UnitPreviewText.PlaceHandleAroundRegions, UnitPreviewText, ViewHandles.UnitPreviewTextMovesTogether,
-        NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, FormatMode, ShortenPreviewName, ToTInlineSeparator, ResolveNameAnchor, ClassColor, HealthColor)
-    AssignNamedValues(deps, [[
-        DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
-        UnitPreviewPortraitTexture ClassPortraitVisual PreviewNameColor PreviewToTInlineColor LayoutUnitPreviewOverlay PositionFromAnchor PositionRuntimeLayoutIconPreview
-        PositionStatusCornerPreview PositionSameAnchorPreview PositionLevelPreview ResolveStatusPreviewAnchor SetPreviewIconTexture NormalizeStatusPreviewId
-        ApplyPreviewTextFocus ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide SetShownSafe ApplyPreviewLayerVisibility
-        ApplyPreviewTransparency RefreshHandleSelectionVisuals Auras
-    ]],
-        DarkMatchHPColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor, FontColor, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewHealPredictionEnabled, PreviewAbsorbBarEnabled,
-        UnitPreviewPortraitTexture, ClassPortraitVisual, PreviewNameColor, PreviewToTInlineColor, LayoutUnitPreviewOverlay, PositionFromAnchor, PositionRuntimeLayoutIconPreview,
-        PositionStatusCornerPreview, PositionSameAnchorPreview, PositionLevelPreview, ResolveStatusPreviewAnchor, SetPreviewIconTexture, NormalizeStatusPreviewId,
-        ViewChrome.ApplyPreviewTextFocus, ApplyPreviewRounded, ApplyPreviewFrameBorder, PreviewRoundedOutlineThickness, ApplyPreviewBoundsGuide, SetShownSafe, ApplyPreviewLayerVisibility,
-        Preview.ApplyPreviewTransparency, RefreshHandleSelectionVisuals, PreviewAuras)
+    M2.Assign(deps, {
+        PreviewInCombat = PreviewInCombat, TR = TR, PortraitStyleGet = PortraitStyleGet,
+        RuntimeSpecForPreviewKey = RuntimeSpecForPreviewKey,
+        RuntimeAppliedPortraitSizeForPreviewKey = PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil,
+        RuntimeVisualScaleForPreviewKey = RuntimeVisualScaleForPreviewKey,
+        RuntimeCastbarVisualScaleForPreviewKey = PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey,
+        ClampPreviewZoom = ClampPreviewZoom,
+        ResolveDefaultPreviewZoomLock = PreviewZoomPan.ResolveDefaultLock or F.Noop,
+        UpdatePreviewZoomControls = UpdatePreviewZoomControls, ZOOM_MIN = ZOOM_MIN, max = max, min = min, abs = abs,
+        floor = floor, format = format, TEX_W8 = TEX_W8, FONT = FONT, STATUS_PREVIEW = STATUS_PREVIEW,
+        CurrentPanelKey = CurrentPanelKey, UnitDB = UnitDB, UNIT_DATA = UNIT_DATA, UNIT_LABELS = UNIT_LABELS,
+        ReadPowerBarEnabled = ReadPowerBarEnabled, ReadPowerBarHeight = ReadPowerBarHeight,
+        LiveUnitData = PreviewModel.LiveUnitData, SyncLiveStateDriver = ViewChrome.SyncUnitPreviewLiveState,
+    })
+    M2.Assign(deps, {
+        PreviewRaidGroupNameAllowed = PreviewRaidGroupNameAllowed,
+        PreviewRaidGroupNameText = PreviewRaidGroupNameText,
+        NormalizeRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor, CastbarEnabled = CastbarEnabled,
+        CastbarShowIcon = CastbarShowIcon, CastbarShowText = CastbarShowText, ReadCastbarSize = ReadCastbarSize,
+        ReadCastbarNum = ReadCastbarNum, FormatCastbarPreviewTime = FormatCastbarPreviewTime,
+        CastbarOffsetFields = CastbarOffsetFields, CastbarDetached = CastbarDetached,
+        CanDetachPowerBarKey = CanDetachPowerBarKey, ClampPreviewLayer = ClampPreviewLayer, SetTex = SetTex,
+        PlaceHandle = PlaceHandle, PlaceHandleAroundRegions = UnitPreviewText.PlaceHandleAroundRegions,
+        UnitPreviewText = UnitPreviewText, UnitPreviewTextMovesTogether = ViewHandles.UnitPreviewTextMovesTogether,
+        NormalizeHpMode = NormalizeHpMode, NormalizePowerMode = NormalizePowerMode, TextScopeGet = TextScopeGet,
+        TextScopeHasSlots = TextScopeHasSlots, TextScopeSlotGet = TextScopeSlotGet, FormatMode = FormatMode,
+        ShortenPreviewName = ShortenPreviewName, ToTInlineSeparator = ToTInlineSeparator,
+        ResolveNameAnchor = ResolveNameAnchor, ClassColor = ClassColor, HealthColor = HealthColor,
+    })
+    M2.Assign(deps, {
+        DarkMatchHPColor = DarkMatchHPColor, HealthBackgroundColor = HealthBackgroundColor,
+        PowerBackgroundColor = PowerBackgroundColor, PowerColor = PowerColor, FontColor = FontColor,
+        PreviewResolveHealPredAnchorMode = PreviewResolveHealPredAnchorMode,
+        PreviewResolveAbsorbAnchorMode = PreviewResolveAbsorbAnchorMode,
+        PreviewHealPredictionEnabled = PreviewHealPredictionEnabled,
+        PreviewAbsorbBarEnabled = PreviewAbsorbBarEnabled, UnitPreviewPortraitTexture = UnitPreviewPortraitTexture,
+        ClassPortraitVisual = ClassPortraitVisual, PreviewNameColor = PreviewNameColor,
+        PreviewToTInlineColor = PreviewToTInlineColor, LayoutUnitPreviewOverlay = LayoutUnitPreviewOverlay,
+        PositionFromAnchor = PositionFromAnchor, PositionRuntimeLayoutIconPreview = PositionRuntimeLayoutIconPreview,
+        PositionStatusCornerPreview = PositionStatusCornerPreview,
+        PositionSameAnchorPreview = PositionSameAnchorPreview, PositionLevelPreview = PositionLevelPreview,
+        ResolveStatusPreviewAnchor = ResolveStatusPreviewAnchor, SetPreviewIconTexture = SetPreviewIconTexture,
+        NormalizeStatusPreviewId = NormalizeStatusPreviewId,
+        ApplyPreviewTextFocus = ViewChrome.ApplyPreviewTextFocus, ApplyPreviewRounded = ApplyPreviewRounded,
+        ApplyPreviewFrameBorder = ApplyPreviewFrameBorder,
+        PreviewRoundedOutlineThickness = PreviewRoundedOutlineThickness,
+        ApplyPreviewBoundsGuide = ApplyPreviewBoundsGuide, SetShownSafe = SetShownSafe,
+        ApplyPreviewLayerVisibility = ApplyPreviewLayerVisibility,
+        ApplyPreviewTransparency = Preview.ApplyPreviewTransparency,
+        RefreshHandleSelectionVisuals = RefreshHandleSelectionVisuals, Auras = PreviewAuras,
+    })
 end
 if MSUF.UFPreviewRender and MSUF.UFPreviewRender.Install then MSUF.UFPreviewRender.Install(Preview, Preview.RefreshDeps) end
 Preview._BuildPreview = BuildPreview

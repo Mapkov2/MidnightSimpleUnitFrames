@@ -22,8 +22,8 @@ local TableRGB, ColorValueAt, Meta = CP.TableRGB, CP.ColorValueAt, CP.Meta
 local COLOR_DATA, COLOR_PAINTER_CATEGORIES, COLOR_POWER_TOKENS, COLOR_CP_TOKENS = CP.COLOR_DATA, CP.COLOR_PAINTER_CATEGORIES, CP.COLOR_POWER_TOKENS, CP.COLOR_CP_TOKENS
 local function ApplyClassPowerColors()
     -- The painter's Resources strip paints straight from these DB values and
-    -- has no writer of its own, so both apply paths poke it. Kept inline: this
-    -- file rides the 200 active-local ceiling.
+    -- has no writer of its own, so both apply paths poke it. Kept inline in
+    -- this apply path.
     local painter = M.ColorPainter
     if painter and type(painter.RefreshResourcesStrip) == "function" then painter.RefreshResourcesStrip() end
     local apply = CurrentApplyService()

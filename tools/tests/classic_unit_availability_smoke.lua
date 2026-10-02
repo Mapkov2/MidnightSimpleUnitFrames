@@ -77,7 +77,7 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     local order = {"player", "target", "boss", "arena", "focus", "pet", "targettarget", "focustarget"}
     local mapping = {}
     for key, page in pairs(pages) do mapping[page.unit] = key end
-    local build = assert(loadstring("local M, UNIT_TAB_ORDER, UNIT_PAGE_FOR_UNIT = ...; local function UnitTopTabLabel(u) return u end; local function UnitTopTabWidth() return 50 end; "
+    local build = assert(loadstring("local M, UNIT_TAB_ORDER, UNIT_PAGE_FOR_UNIT = ...; local function UnitTopTabKey(u) return u end; local function UnitTopTabWidth() return 50 end; "
         .. tabs:sub(start, finish - 1) .. " return scopeValues end; return BuildTopActions"))(menu, order, mapping)
     local visible = build({}, {width=720}, "player", "Player")
     assert(#visible == (flavor == "Vanilla" and 4 or flavor == "TBC" and 7 or 8), flavor .. " visible tab count")

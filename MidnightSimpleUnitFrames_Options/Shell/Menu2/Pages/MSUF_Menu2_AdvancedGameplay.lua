@@ -432,7 +432,7 @@ local function BuildGameplay(ctx)
         local g = Gameplay()
         local id = CurrentMeleeSpellID()
         local name = SpellName(id)
-        if selectedSpellText then selectedSpellText:SetText((id > 0 and M.Format(M.Tr("Selected: %s (%d)"), name or M.Tr("Spell"), id)) or M.Tr("Selected: none")) end
+        if selectedSpellText then T.SetTranslatedText(selectedSpellText, (id > 0 and M.Format("Selected: %s (%d)", name or M.Tr("Spell"), id)) or M.Tr("Selected: none")) end
         if noSpellWarn then noSpellWarn:SetShown((g.enableCombatCrosshairMeleeRangeColor == true) and id <= 0) end
         local size = math.max(20, tonumber(g.crosshairSize) or 40)
         local thick = math.max(1, tonumber(g.crosshairThickness) or 3)

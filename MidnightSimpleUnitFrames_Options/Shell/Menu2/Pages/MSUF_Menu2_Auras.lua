@@ -1389,11 +1389,12 @@ local function SetUnitAuraTool(unit, container, tool)
 end
 
 local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
-    local title = kind == "debuff" and Tr("Debuff Layout") or Tr("Buff Layout")
+    local titleKey = kind == "debuff" and "Debuff Layout" or "Buff Layout"
+    local title = Tr(titleKey)
     -- Stufe-1 pilot: this section renders through the uniform W.SettingsRows
     -- grid (fixed cell metrics, per-value reset) instead of hand-placed
     -- offsets. Control identities, setters and apply reasons are unchanged.
-    local section = b:Section(title, 208)
+    local section = b:Section(titleKey, 208)
     M.AttachAuraFontsAndColors(section, title, unit)
     local w = section._msuf2Width or b.width or 720
     local inner = w - 48
@@ -1730,8 +1731,8 @@ local function EnsureAuraCombatScanner()
                 -- Access denial is temporary (encounter/M+/PvP); keep
                 -- ticking cheaply so the scan resumes on its own.
                 self._dots = ((self._dots or 0) % 3) + 1
-                self.title:SetText(Tr("Scanning auras - creating a list") .. string.rep(".", self._dots))
-                self.hint:SetText(Tr("Blocked by Blizzard during this fight - resumes automatically. In instances, use the curated presets."))
+                T.SetTranslatedText(self.title, Tr("Scanning auras - creating a list") .. string.rep(".", self._dots))
+                self.hint:SetText("Blocked by Blizzard during this fight - resumes automatically. In instances, use the curated presets.")
                 self.hint:Show()
                 return
             end
@@ -1762,14 +1763,14 @@ local function EnsureAuraCombatScanner()
                 if icon then tex:SetTexture(icon) tex:Show() else tex:Hide() end
             end
             self._dots = ((self._dots or 0) % 3) + 1
-            self.title:SetText(Tr("Scanning auras - creating a list") .. string.rep(".", self._dots))
+            T.SetTranslatedText(self.title, Tr("Scanning auras - creating a list") .. string.rep(".", self._dots))
             if (self._unreadable or 0) > 0 then
-                self.count:SetText(M.Format("%d captured so far - %d hidden by Blizzard",
+                T.SetTranslatedText(self.count, M.Format("%d captured so far - %d hidden by Blizzard",
                     self._count or 0, self._unreadable))
-                self.hint:SetText(Tr("Hidden auras are Blizzard-secret - no addon can block them. Everything blockable was captured."))
+                self.hint:SetText("Hidden auras are Blizzard-secret - no addon can block them. Everything blockable was captured.")
                 self.hint:Show()
             else
-                self.count:SetText(M.Format("%d captured so far", self._count or 0))
+                T.SetTranslatedText(self.count, M.Format("%d captured so far", self._count or 0))
                 self.hint:Hide()
             end
         end)
@@ -1952,8 +1953,8 @@ local function BuildUnitBlacklistLiveScan(B)
         local sessionCount = 0
         for _ in pairs(CapturedAuras(false)) do sessionCount = sessionCount + 1 end
         s._count = sessionCount
-        s.title:SetText(Tr("Scanning auras - creating a list"))
-        s.count:SetText(M.Format("%d captured so far", sessionCount))
+        s.title:SetText("Scanning auras - creating a list")
+        T.SetTranslatedText(s.count, M.Format("%d captured so far", sessionCount))
         if s.hint then s.hint:Hide() end
         for i = 1, #s.icons do s.icons[i]:Hide() end
         s:Show()
@@ -1992,31 +1993,31 @@ local function BuildUnitBlacklistManualEntry(B)
             elseif mine.status == "scan" and mine.blocked then
                 local c = T.colors.accent2 or T.colors.accent
                 if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
-                verifyText:SetText(Tr("Blizzard is blocking aura scanning right now (encounter, Mythic+, or PvP match). Use the curated presets - they cover everything blockable in instanced content."))
+                verifyText:SetText("Blizzard is blocking aura scanning right now (encounter, Mythic+, or PvP match). Use the curated presets - they cover everything blockable in instanced content.")
             elseif mine.status == "scan" then
                 local c = T.colors.accent
                 if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
                 if (mine.secretCount or 0) > 0 then
-                    verifyText:SetText(M.Format("Scan complete: %d auras readable right now, %d captured this session. %d more are hidden by Blizzard and cannot be blocked by any addon.",
+                    T.SetTranslatedText(verifyText, M.Format("Scan complete: %d auras readable right now, %d captured this session. %d more are hidden by Blizzard and cannot be blocked by any addon.",
                         mine.liveCount or 0, mine.sessionCount or 0, mine.secretCount))
                 else
-                    verifyText:SetText(M.Format("Scan complete: %d auras readable right now, %d captured this session.",
+                    T.SetTranslatedText(verifyText, M.Format("Scan complete: %d auras readable right now, %d captured this session.",
                         mine.liveCount or 0, mine.sessionCount or 0))
                 end
             elseif mine.status == "active" then
                 local c = T.colors.accent
                 if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
-                verifyText:SetText(M.Format("%s (#%d) is active on this frame right now - blacklist entry verified.",
+                T.SetTranslatedText(verifyText, M.Format("%s (#%d) is active on this frame right now - blacklist entry verified.",
                     tostring(mine.name or "Spell"), mine.enteredID or 0))
             else
                 local c = T.colors.accent2 or T.colors.accent
                 if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
-                verifyText:SetText(M.Format("#%d is not active on this frame, but %s is currently active as #%d. The aura's ID can differ from your cast's Spell ID.",
+                T.SetTranslatedText(verifyText, M.Format("#%d is not active on this frame, but %s is currently active as #%d. The aura's ID can differ from your cast's Spell ID.",
                     mine.enteredID or 0, tostring(mine.suggestName or "Spell"), mine.suggestID or 0))
             end
             local showSwap = mine ~= nil and mine.status == "mismatch" and mine.suggestID ~= nil
             if showSwap and swapBtn._msuf2Label and swapBtn._msuf2Label.SetText then
-                swapBtn._msuf2Label:SetText(M.Format("Block #%d instead", mine.suggestID))
+                T.SetTranslatedText(swapBtn._msuf2Label, M.Format("Block #%d instead", mine.suggestID))
             end
             swapBtn:SetShown(showSwap)
             if B.nonPresetHint then B.nonPresetHint:SetShown(mine == nil) end
@@ -2239,7 +2240,7 @@ local function BuildUnitBlacklistPresetsAndList(B)
                 or Model.BlacklistSpellValues(CurrentPreset())
             local missing = 0
             for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
-            selectedSummary:SetText(missing == 0
+            T.SetTranslatedText(selectedSummary, missing == 0
                 and M.Format("%d spells in this set - all already blocked", #setSpells)
                 or M.Format("%d spells in this set - %d can still be added", #setSpells, missing))
             W.SetControlEnabled(addSet, missing > 0)
@@ -2254,8 +2255,8 @@ local function BuildUnitBlacklistPresetsAndList(B)
                 .. tostring(entry.spellID or entry.value or "")):lower()
             if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
         end
-        prepared:SetText(M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
-        empty:SetText(#entries == 0 and Tr(emptyText) or M.Format(Tr("No results for \"%s\"."), query))
+        T.SetTranslatedText(prepared, M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
+        T.SetTranslatedText(empty, #entries == 0 and Tr(emptyText) or M.Format("No results for \"%s\".", query))
         empty:SetShown(#visible == 0)
         listScroll:SetShown(#visible > 0)
         listChild:SetHeight(max(150, #visible * 44))
@@ -2432,8 +2433,8 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         M.NavPath("auras3_styling"))
     local workspaceHint = W.Text(top, workspaceHintText, 16, footerY - 8, sectionW - 198, T.colors.muted)
     M.TrackRefresh(ctx, function()
-        workspaceHint:SetText(normalLane and UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit)
-            and UNIT_AURA_DISPEL_WARNING
+        T.SetTranslatedText(workspaceHint, normalLane and UnitDispelRequested(unit) and not UnitAuraSensorEnabled(unit)
+            and Tr(UNIT_AURA_DISPEL_WARNING)
             or workspaceHintText)
     end)
 

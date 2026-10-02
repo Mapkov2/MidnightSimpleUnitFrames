@@ -18,6 +18,13 @@ M.ClassPowerPreview = CP
 local floor = math.floor
 local min = math.min
 local IsSecretValue = _G.issecretvalue
+-- Text translated already, or composed from translated parts, goes through the
+-- theme's raw setter so a theme font does not look it up a second time.
+local function SetShownText(fs, text)
+    local theme = M.Theme
+    if theme and theme.SetTranslatedText then return theme.SetTranslatedText(fs, text) end
+    return fs:SetText(text)
+end
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
 local ROUNDED_MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
@@ -969,7 +976,7 @@ function H.ShowPreviewHandleContext(handle, opts)
         title:SetJustifyH("LEFT")
         popup._title = title
         local function MakeButton(label, y)
-            local btn = W and W.TopButton and W.TopButton(popup, tr(label), 152, 24) or (T and T.Button and T.Button(popup, tr(label), 152, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
+            local btn = W and W.TopButton and W.TopButton(popup, label, 152, 24) or (T and T.Button and T.Button(popup, label, 152, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
             btn:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, y)
             if not btn.GetText then btn:SetText(tr(label)) end
             return btn
@@ -1020,7 +1027,7 @@ function H.ShowPreviewHandleContext(handle, opts)
     end
     popup._handle = handle
     popup._openSettings = openSettings
-    if popup._title and popup._title.SetText then popup._title:SetText(tr(opts.title or (handle._label or handle._previewText or handle._key or "Preview Element"))) end
+    if popup._title and popup._title.SetText then SetShownText(popup._title, tr(opts.title or (handle._label or handle._previewText or handle._key or "Preview Element"))) end
     popup._open:SetScript("OnClick", function(self)
         local p = self:GetParent()
         local h = p and p._handle
@@ -1487,7 +1494,7 @@ function H.ShowPreviewControlsHelp(anchor, opts)
             if fs.SetMaxLines then fs:SetMaxLines(1) end
             popup._lines[i] = fs
         end
-        local close = W and W.TopButton and W.TopButton(popup, tr("Got it"), 84, 24) or (T and T.Button and T.Button(popup, tr("Got it"), 84, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
+        local close = W and W.TopButton and W.TopButton(popup, "Got it", 84, 24) or (T and T.Button and T.Button(popup, "Got it", 84, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
         close:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -12, 12)
         if not close.GetText then close:SetText(tr("Got it")) end
         close:SetScript("OnClick", function(self)
@@ -1513,13 +1520,13 @@ function H.ShowPreviewControlsHelp(anchor, opts)
         popup._close = close
         H._previewControlsHelpPopup = popup
     end
-    popup._title:SetText(tr(opts.title or "Preview Controls"))
+    SetShownText(popup._title, tr(opts.title or "Preview Controls"))
     -- Callers with a reduced interaction model (e.g. the color-only preview)
     -- can supply their own lines instead of the full editing help.
     local lines = opts.lines or PreviewControlsLines(tr)
     for i = 1, #(popup._lines or {}) do
         local fs = popup._lines[i]
-        if fs then fs:SetText(lines[i] and ("- " .. lines[i]) or "") end
+        if fs then SetShownText(fs, lines[i] and ("- " .. lines[i]) or "") end
     end
     if M2 and type(M2.ApplyPopupFramePriority) == "function" then M2.ApplyPopupFramePriority(popup) end
     popup:ClearAllPoints()
@@ -1922,7 +1929,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         surface[PAN_CURSOR_X], surface[PAN_CURSOR_Y] = (cx or 0) / uiScale, (cy or 0) / uiScale
         surface[PAN_START_X], surface[PAN_START_Y] = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
         local hint = box[opts.hintField or "hint"]
-        if hint then hint:SetText(TR("moving preview canvas - release mouse to stop - Fit recenters")) end
+        if hint then SetShownText(hint, TR("moving preview canvas - release mouse to stop - Fit recenters")) end
         surface:SetScript("OnUpdate", function(self)
             if not self[PAN_PANNING] then return end
             if IsMouseButtonDown and self[PAN_BUTTON] and not IsMouseButtonDown(self[PAN_BUTTON]) then

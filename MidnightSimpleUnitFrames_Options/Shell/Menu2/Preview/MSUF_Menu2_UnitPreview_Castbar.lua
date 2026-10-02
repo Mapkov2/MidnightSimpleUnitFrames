@@ -85,7 +85,6 @@ local function RuntimeCastbarFrame(key)
         return (bars and bars[1])
             or _G.MSUF_BossCastbar1
             or _G.MSUF_boss1CastBar
-            or _G.MSUF_BossCastbar
             or _G.MSUF_BossCastbarPreview
             or _G.MSUF_BossCastbarPreview1
     elseif key == "arena" then

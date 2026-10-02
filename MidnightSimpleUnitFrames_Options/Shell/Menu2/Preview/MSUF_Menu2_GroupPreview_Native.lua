@@ -471,7 +471,8 @@ local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
 end
 local function EnsureGroupLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
-    local btn = T.Button(box, ((M.Tr and M.Tr("Layers")) or "Layers") .. " v", 76, 20)
+    local btn = T.Button(box, "", 76, 20)
+    btn:SetText(((M.Tr and M.Tr("Layers")) or "Layers") .. " v", true)
     if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
     btn:SetScript("OnClick", function()
         if box._layers then box._layers:SetShown(not box._layers:IsShown()) end
@@ -509,7 +510,7 @@ local function LayoutGroupPreviewHeaderControls(box, compact)
     local layersBtn = box._msuf2LayersButton
     if compact and header then
         if layersBtn then
-            layersBtn:SetText(((M.Tr and M.Tr("Layers")) or "Layers") .. " v")
+            layersBtn:SetText(((M.Tr and M.Tr("Layers")) or "Layers") .. " v", true)
             layersBtn:SetParent(header)
             layersBtn:ClearAllPoints()
             if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
@@ -1201,7 +1202,7 @@ UpdateHint = function(box, handle)
     if not box then return end
     if M.PreviewSelectionBar then M.PreviewSelectionBar.Refresh(box) end
     if not box._hint then return end
-    box._hint:SetText(GroupPreviewDefaultHint())
+    T.SetTranslatedText(box._hint, GroupPreviewDefaultHint())
 end
 local NudgeStep = PreviewHelpers.NudgeStep or F.One
 --- The selected element is user intent, but `_selectedHandle` is a live frame
@@ -1453,7 +1454,7 @@ function NativeBuild.Frame(parent, ctx)
     if parent and parent.GetFrameLevel and box.SetFrameLevel then box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2) end
     local title = T.Font(box, "GameFontNormal", "", chrome.title or T.colors.title or T.colors.text)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
-    title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", H.PreviewScopeLabel(H.CurrentScope())))
+    T.SetTranslatedText(title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", H.PreviewScopeLabel(H.CurrentScope())))
     box._title = title
     local hint = T.Font(box, "GameFontDisableSmall", "", T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)

@@ -480,8 +480,6 @@ local function SyncGroupPagePreviewForKey(key, force)
         return
     end
     if not active then
-        local classicPanel = _G.MSUF_GFOptionsPanel
-        if classicPanel and classicPanel.IsShown and classicPanel:IsShown() then return end
         HideGFRuntimePreviews(gf, true)
         return
     end

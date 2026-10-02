@@ -52,7 +52,7 @@ local widgets = {
 local menu
 menu = {
     Widgets = widgets,
-    Theme = { colors = { muted = { 1, 1, 1, 1 } } },
+    Theme = { colors = { muted = { 1, 1, 1, 1 } }, SetTranslatedText = function(fs, text) return fs:SetText(text) end },
     -- An empty profile: no dispel overlay, symbol or outline is requested.
     EnsureDB = function() return {} end,
     GroupPage = groupPage,

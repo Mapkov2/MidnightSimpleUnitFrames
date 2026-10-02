@@ -684,7 +684,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
                 end
             end
             local label = ScopeLabel(previewScope)
-            titleLabel:SetText(M.Format("%s Sample Preview", Tr(label)))
+            T.SetTranslatedText(titleLabel, M.Format("%s Sample Preview", Tr(label)))
             if type(opts.getSampleMeta) == "function" then
                 meta:SetText(opts.getSampleMeta(cfg, previewScope) or "")
             else

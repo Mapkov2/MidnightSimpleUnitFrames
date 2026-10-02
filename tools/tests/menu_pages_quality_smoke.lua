@@ -111,12 +111,14 @@ M.RegisterSearchWidget = function(widget, meta, ...)
     return RegisterSearchWidget(widget, meta, ...)
 end
 local Translate = Check(MSUF.Translate, "MSUF.Translate is missing")
--- Control cards by their (translated) title, the last one built.
+-- Control cards by the title they show (translated), the last one built.
+-- Pages pass the raw key; the card heading translates it.
 local cardByTitle = {}
 local ControlCard = Check(M.Widgets and M.Widgets.ControlCard, "W.ControlCard is missing")
 M.Widgets.ControlCard = function(parent, title, ...)
     local card = ControlCard(parent, title, ...)
-    if type(title) == "string" then cardByTitle[title] = card end
+    local shown = card and card.title and card.title.GetText and card.title:GetText()
+    if type(shown) == "string" then cardByTitle[shown] = card end
     return card
 end
 -- Color shortcut options by history source, the last one attached.

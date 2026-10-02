@@ -525,13 +525,14 @@ local function UnitPreviewLayerForHandle(key, fields)
     if tostring(key or ""):match("^hp") then return "hpText" end
     if tostring(key or ""):match("^power") then return "powerText" end
 end
-M2.AssignNamedValues(Handles, [[
-    RegisterUnitPreviewControl UnitPreviewTextMovesTogether ApplyCastbarRuntimeForKey
-    ReadBarsHandleOffsets WriteBarsHandleOffsets ReadCastbarSubOffsets WriteCastbarSubOffsets
-    BeginMenuHistory CommitMenuHistory CheckpointMenuHistory OpenPreviewHandleSettings NameHandleOffsetDelta
-    PreviewTextKindSlotForKey StorePreviewTextSelection HANDLE_BORDER_SPECS UnitPreviewLayerForHandle
-]],
-    RegisterUnitPreviewControl, UnitPreviewTextMovesTogether, ApplyCastbarRuntimeForKey,
-    ReadBarsHandleOffsets, WriteBarsHandleOffsets, ReadCastbarSubOffsets, WriteCastbarSubOffsets,
-    BeginMenuHistory, CommitMenuHistory, CheckpointMenuHistory, OpenPreviewHandleSettings, NameHandleOffsetDelta,
-    PreviewTextKindSlotForKey, StorePreviewTextSelection, HANDLE_BORDER_SPECS, UnitPreviewLayerForHandle)
+M2.Assign(Handles, {
+    RegisterUnitPreviewControl = RegisterUnitPreviewControl,
+    UnitPreviewTextMovesTogether = UnitPreviewTextMovesTogether,
+    ApplyCastbarRuntimeForKey = ApplyCastbarRuntimeForKey, ReadBarsHandleOffsets = ReadBarsHandleOffsets,
+    WriteBarsHandleOffsets = WriteBarsHandleOffsets, ReadCastbarSubOffsets = ReadCastbarSubOffsets,
+    WriteCastbarSubOffsets = WriteCastbarSubOffsets, BeginMenuHistory = BeginMenuHistory,
+    CommitMenuHistory = CommitMenuHistory, CheckpointMenuHistory = CheckpointMenuHistory,
+    OpenPreviewHandleSettings = OpenPreviewHandleSettings, NameHandleOffsetDelta = NameHandleOffsetDelta,
+    PreviewTextKindSlotForKey = PreviewTextKindSlotForKey, StorePreviewTextSelection = StorePreviewTextSelection,
+    HANDLE_BORDER_SPECS = HANDLE_BORDER_SPECS, UnitPreviewLayerForHandle = UnitPreviewLayerForHandle,
+})

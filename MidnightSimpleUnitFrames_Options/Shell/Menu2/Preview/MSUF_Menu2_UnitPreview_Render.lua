@@ -1490,8 +1490,8 @@ function Stage.ResolveFrameGeometry(st)
             or tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0)
         or 0
     if pSize <= 0 then pSize = max(22, h - 4) end
-    -- Placement/geometry mirrors of the live spec. Parked on the box because
-    -- Refresh already sits at the Lua 5.1 ceiling of 200 locals per function.
+    -- Placement/geometry mirrors of the live spec. Parked on the box because the
+    -- later stages (portrait, power bar, overlays) read them from there.
     box._runtimePortraitPlacement = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.placement)
         or PortraitStyleGet(key, "portraitPlacement", "ATTACHED") or "ATTACHED"
     box._runtimePortraitPoint = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.point)
@@ -1543,8 +1543,7 @@ function Stage.ResolveFrameGeometry(st)
     if castOffsetY == nil then castOffsetY = tonumber(castDefY) or 0 end
     local castDetached = castEnabled and CastbarDetached(key, g)
     local castPreviewVisible = castEnabled and PreviewLayerWanted(box, "castbar")
-    -- Kept on the box instead of in locals: Refresh already sits at the Lua 5.1
-    -- ceiling of 200 locals per function, so two more would fail to compile.
+    -- Projected position of a detached castbar, from the live layout.
     box._detachedCastProjectedX, box._detachedCastProjectedY = nil, nil
     if castDetached and type(R.DetachedCastbarOffsetForPreviewKey) == "function" then
         box._detachedCastProjectedX, box._detachedCastProjectedY = R.DetachedCastbarOffsetForPreviewKey(key)
@@ -3650,7 +3649,6 @@ function Stage.RenderAurasAndStatus(st, Preview)
                 local textW = icon.txt and icon.txt.GetStringWidth and icon.txt:GetStringWidth() or sz
                 local textH = icon.txt and icon.txt.GetStringHeight and icon.txt:GetStringHeight() or sz
                 -- Threat % on its dark plate lays out at the width of "100%", like the runtime.
-                -- (No new local here: this function sits at Lua 5.1's 200-local limit.)
                 textW = R.PreviewStatus.ThreatPlate and R.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW
                 icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
                 R.PositionSameAnchorPreview(icon, anchor, x, y, mock)

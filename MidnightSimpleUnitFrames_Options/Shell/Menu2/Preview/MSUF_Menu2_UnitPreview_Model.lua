@@ -334,26 +334,22 @@ local function UnitDB(key)
 end
 local function SeedTextFromGeneral(db)
     if not db then return end
-    if type(_G.MSUF_Bars_SeedTextFromGeneral) == "function" then
-        _G.MSUF_Bars_SeedTextFromGeneral(db)
-    else
-        local g = M.EnsureDB().general or {}
-        if db.hpTextMode == nil then db.hpTextMode = g.hpTextMode end
-        if db.hpTextReverse == nil then db.hpTextReverse = g.hpTextReverse end
-        if db.powerTextMode == nil then db.powerTextMode = g.powerTextMode end
-        if db.textLeft == nil and db.textCenter == nil and db.textRight == nil then
-            db.textLeft = "NONE"
-            db.textCenter = "NONE"
-            db.textRight = db.hpTextMode or g.hpTextMode or "CURPERCENT"
-        end
-        if db.powerTextLeft == nil and db.powerTextCenter == nil and db.powerTextRight == nil then
-            db.powerTextLeft = "NONE"
-            db.powerTextCenter = "NONE"
-            db.powerTextRight = db.powerTextMode or g.powerTextMode or "CURPERCENT"
-        end
-        if db.hpTextSeparator == nil then db.hpTextSeparator = g.hpTextSeparator end
-        if db.powerTextSeparator == nil then db.powerTextSeparator = g.powerTextSeparator end
+    local g = M.EnsureDB().general or {}
+    if db.hpTextMode == nil then db.hpTextMode = g.hpTextMode end
+    if db.hpTextReverse == nil then db.hpTextReverse = g.hpTextReverse end
+    if db.powerTextMode == nil then db.powerTextMode = g.powerTextMode end
+    if db.textLeft == nil and db.textCenter == nil and db.textRight == nil then
+        db.textLeft = "NONE"
+        db.textCenter = "NONE"
+        db.textRight = db.hpTextMode or g.hpTextMode or "CURPERCENT"
     end
+    if db.powerTextLeft == nil and db.powerTextCenter == nil and db.powerTextRight == nil then
+        db.powerTextLeft = "NONE"
+        db.powerTextCenter = "NONE"
+        db.powerTextRight = db.powerTextMode or g.powerTextMode or "CURPERCENT"
+    end
+    if db.hpTextSeparator == nil then db.hpTextSeparator = g.hpTextSeparator end
+    if db.powerTextSeparator == nil then db.powerTextSeparator = g.powerTextSeparator end
     if db.nameTextLayer == nil then db.nameTextLayer = 5 end
     if db.hpTextLayer == nil then db.hpTextLayer = 5 end
     if db.powerTextLayer == nil then db.powerTextLayer = 2 end
@@ -1055,48 +1051,54 @@ local UnitPreviewText = {}
 function UnitPreviewText.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
 end
--- The export is split into calls of at most 23 values: one call with every
--- value keeps them all on the stack at once, and this main chunk sat at 223
--- of Lua 5.1's 250 stack slots (the gate holds main chunks to 230).
-M.AssignNamedValues(Model, [[
-    UNIT_KEYS UNIT_SET UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText
-    NormalizePreviewRaidGroupNameAnchor TEXT_ANCHORS HP_MODES POWER_MODES SEP_ITEMS PORTRAIT_MODE_ITEMS
-    PORTRAIT_RENDER_ITEMS PortraitClassItems PORTRAIT_SHAPE_ITEMS PORTRAIT_BORDER_ITEMS PORTRAIT_STYLE_DEFAULTS
-    CanonKey EnsureDB CurrentPanelKey UnitDB SeedTextFromGeneral NormalizeHpMode
-]],
-    UNIT_KEYS, UNIT_SET, UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText,
-    NormalizePreviewRaidGroupNameAnchor, TEXT_ANCHORS, HP_MODES, POWER_MODES, SEP_ITEMS, PORTRAIT_MODE_ITEMS,
-    PORTRAIT_RENDER_ITEMS, PortraitClassItems, PORTRAIT_SHAPE_ITEMS, PORTRAIT_BORDER_ITEMS, PORTRAIT_STYLE_DEFAULTS,
-    CanonKey, EnsureDB, CurrentPanelKey, UnitDB, SeedTextFromGeneral, NormalizeHpMode)
-M.AssignNamedValues(Model, [[
-    NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet TOTINLINE_SEP_VALID TOTINLINE_CUSTOM_SEPARATOR
-    TOTINLINE_CUSTOM_SEPARATOR_MAX TruncateUtf8Chars CleanToTInlineCustomSeparator ToTInlineSeparator
-    ShortenPreviewName TextScopeSet ForceTextUnit ApplyPanelUnit RefreshAllControls Label PlaceTopLeft SetOptionWidth
-    AddOptionDivider SetWidgetEnabled AddPlainCheck NormalizePortraitClassStyle EnsureUnitPortraitStyle
-]],
-    NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, TOTINLINE_SEP_VALID,
-    TOTINLINE_CUSTOM_SEPARATOR, TOTINLINE_CUSTOM_SEPARATOR_MAX, TruncateUtf8Chars, CleanToTInlineCustomSeparator,
-    ToTInlineSeparator, ShortenPreviewName, TextScopeSet, ForceTextUnit, ApplyPanelUnit, RefreshAllControls, Label,
-    PlaceTopLeft, SetOptionWidth, AddOptionDivider, SetWidgetEnabled, AddPlainCheck, NormalizePortraitClassStyle,
-    EnsureUnitPortraitStyle)
-M.AssignNamedValues(Model, [[
-    PortraitStyleGet PortraitStyleSet ApplyPortrait NormalizeStatusPreviewId ClassColor Clamp01 SettingsCache
-    PreviewNPCKind NPCColor GradientPreviewColor HealthColor DarkMatchHPColor HealthBackgroundColor
-    PowerBackgroundColor PowerColor ClassPortraitVisual UnitPreviewPortraitTexture FontColor
-    NormalizeToTInlineColorMode PreviewNameColorFlags PreviewNameColor PreviewToTInlineColor SetTex
-]],
-    PortraitStyleGet, PortraitStyleSet, ApplyPortrait, NormalizeStatusPreviewId, ClassColor, Clamp01, SettingsCache,
-    PreviewNPCKind, NPCColor, GradientPreviewColor, HealthColor, DarkMatchHPColor, HealthBackgroundColor,
-    PowerBackgroundColor, PowerColor, ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor,
-    NormalizeToTInlineColorMode, PreviewNameColorFlags, PreviewNameColor, PreviewToTInlineColor, SetTex)
-M.AssignNamedValues(Model, [[
-    NormalizePreviewAnchorMode UnitPreviewBarOverrideEnabled PreviewHealPredictionEnabled
-    PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled PreviewOverlayWidth
-    LayoutUnitPreviewOverlay MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor
-    ResolveNameOffsetDelta NumText JoinSep FormatMode UnitPreviewText LiveUnitData LiveRaidSubgroup
-]],
-    NormalizePreviewAnchorMode, UnitPreviewBarOverrideEnabled, PreviewHealPredictionEnabled,
-    PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, PreviewOverlayWidth,
-    LayoutUnitPreviewOverlay, MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight,
-    ResolveNameAnchor, ResolveNameOffsetDelta, NumText, JoinSep, FormatMode, UnitPreviewText, LiveUnitData,
-    LiveRaidSubgroup)
+-- The export is named, in four groups. A named table keeps one table on the
+-- stack, where one positional call with every value kept them all there and
+-- this main chunk sat at 223 of Lua 5.1's 250 stack slots (the gate holds main
+-- chunks to 230).
+M.Assign(Model, {
+    UNIT_KEYS = UNIT_KEYS, UNIT_SET = UNIT_SET, UNIT_LABELS = UNIT_LABELS, UNIT_DATA = UNIT_DATA,
+    PreviewRaidGroupNameAllowed = PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText = PreviewRaidGroupNameText,
+    NormalizePreviewRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor, TEXT_ANCHORS = TEXT_ANCHORS,
+    HP_MODES = HP_MODES, POWER_MODES = POWER_MODES, SEP_ITEMS = SEP_ITEMS, PORTRAIT_MODE_ITEMS = PORTRAIT_MODE_ITEMS,
+    PORTRAIT_RENDER_ITEMS = PORTRAIT_RENDER_ITEMS, PortraitClassItems = PortraitClassItems,
+    PORTRAIT_SHAPE_ITEMS = PORTRAIT_SHAPE_ITEMS, PORTRAIT_BORDER_ITEMS = PORTRAIT_BORDER_ITEMS,
+    PORTRAIT_STYLE_DEFAULTS = PORTRAIT_STYLE_DEFAULTS, CanonKey = CanonKey, EnsureDB = EnsureDB,
+    CurrentPanelKey = CurrentPanelKey, UnitDB = UnitDB, SeedTextFromGeneral = SeedTextFromGeneral,
+    NormalizeHpMode = NormalizeHpMode,
+})
+M.Assign(Model, {
+    NormalizePowerMode = NormalizePowerMode, TextScopeGet = TextScopeGet, TextScopeHasSlots = TextScopeHasSlots,
+    TextScopeSlotGet = TextScopeSlotGet, TOTINLINE_SEP_VALID = TOTINLINE_SEP_VALID,
+    TOTINLINE_CUSTOM_SEPARATOR = TOTINLINE_CUSTOM_SEPARATOR,
+    TOTINLINE_CUSTOM_SEPARATOR_MAX = TOTINLINE_CUSTOM_SEPARATOR_MAX, TruncateUtf8Chars = TruncateUtf8Chars,
+    CleanToTInlineCustomSeparator = CleanToTInlineCustomSeparator, ToTInlineSeparator = ToTInlineSeparator,
+    ShortenPreviewName = ShortenPreviewName, TextScopeSet = TextScopeSet, ForceTextUnit = ForceTextUnit,
+    ApplyPanelUnit = ApplyPanelUnit, RefreshAllControls = RefreshAllControls, Label = Label,
+    PlaceTopLeft = PlaceTopLeft, SetOptionWidth = SetOptionWidth, AddOptionDivider = AddOptionDivider,
+    SetWidgetEnabled = SetWidgetEnabled, AddPlainCheck = AddPlainCheck,
+    NormalizePortraitClassStyle = NormalizePortraitClassStyle, EnsureUnitPortraitStyle = EnsureUnitPortraitStyle,
+})
+M.Assign(Model, {
+    PortraitStyleGet = PortraitStyleGet, PortraitStyleSet = PortraitStyleSet, ApplyPortrait = ApplyPortrait,
+    NormalizeStatusPreviewId = NormalizeStatusPreviewId, ClassColor = ClassColor, Clamp01 = Clamp01,
+    SettingsCache = SettingsCache, PreviewNPCKind = PreviewNPCKind, NPCColor = NPCColor,
+    GradientPreviewColor = GradientPreviewColor, HealthColor = HealthColor, DarkMatchHPColor = DarkMatchHPColor,
+    HealthBackgroundColor = HealthBackgroundColor, PowerBackgroundColor = PowerBackgroundColor,
+    PowerColor = PowerColor, ClassPortraitVisual = ClassPortraitVisual,
+    UnitPreviewPortraitTexture = UnitPreviewPortraitTexture, FontColor = FontColor,
+    NormalizeToTInlineColorMode = NormalizeToTInlineColorMode, PreviewNameColorFlags = PreviewNameColorFlags,
+    PreviewNameColor = PreviewNameColor, PreviewToTInlineColor = PreviewToTInlineColor, SetTex = SetTex,
+})
+M.Assign(Model, {
+    NormalizePreviewAnchorMode = NormalizePreviewAnchorMode,
+    UnitPreviewBarOverrideEnabled = UnitPreviewBarOverrideEnabled,
+    PreviewHealPredictionEnabled = PreviewHealPredictionEnabled,
+    PreviewResolveHealPredAnchorMode = PreviewResolveHealPredAnchorMode,
+    PreviewResolveAbsorbAnchorMode = PreviewResolveAbsorbAnchorMode,
+    PreviewAbsorbBarEnabled = PreviewAbsorbBarEnabled, PreviewOverlayWidth = PreviewOverlayWidth,
+    LayoutUnitPreviewOverlay = LayoutUnitPreviewOverlay, MakeFS = MakeFS, ReadPowerBarEnabled = ReadPowerBarEnabled,
+    CanDetachPowerBarKey = CanDetachPowerBarKey, ReadPowerBarHeight = ReadPowerBarHeight,
+    ResolveNameAnchor = ResolveNameAnchor, ResolveNameOffsetDelta = ResolveNameOffsetDelta, NumText = NumText,
+    JoinSep = JoinSep, FormatMode = FormatMode, UnitPreviewText = UnitPreviewText, LiveUnitData = LiveUnitData,
+    LiveRaidSubgroup = LiveRaidSubgroup,
+})

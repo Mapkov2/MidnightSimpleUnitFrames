@@ -77,6 +77,8 @@ local W = {
 }
 local T = {
     Font = function(_, _, text) return NewFrame(text) end,
+    -- The theme shows text that is translated already as is.
+    SetTranslatedText = function(fs, text) return fs:SetText(text) end,
     colors = {
         text = { 1, 1, 1, 1 }, muted = { 0.7, 0.7, 0.7, 1 }, danger = { 0.878, 0.322, 0.369, 1 },
         coreShadow = { 0, 0, 0, 1 }, borderSoft = { 0, 0, 0, 1 }, coreSurface = { 0, 0, 0, 1 }, coreBlue = { 0, 0, 1, 1 },
@@ -191,7 +193,8 @@ Check(plain.select.value == "player" and plain.copy.enabled == true, "without ta
 local sections = Read(OPTIONS .. "MSUF_Menu2_UnitSections.lua")
 local tabOrder = assert(sections:match("\nlocal UNIT_TAB_ORDER = (%b{})"), "UNIT_TAB_ORDER missing")
 local unitSource = table.concat({
-    "local MSUF, M, UP, UnitSectionShared, UNIT_PAGE_FOR_UNIT, UnitTopLabel, UnitTopTabLabel, UnitTopTabWidth, GetConf, ReadBool = ...",
+    "local MSUF, M, UP, UnitSectionShared, UNIT_PAGE_FOR_UNIT, UnitTopLabel, UnitTopTabKey, UnitTopTabWidth, GetConf, ReadBool = ...",
+    "local UnitTopLabelKey = UnitTopLabel",
     "local UNIT_TAB_ORDER = " .. tabOrder,
     Slice(sections, "local function UnitFrameEnabled(", "local function ApplyUnitFrameEnabledGate(", "UnitSections"),
     Slice(sections, "local function SectionNumber(", "local function BuildTopActions(", "UnitSections"),
@@ -260,7 +263,7 @@ end
 
 -- Group ----------------------------------------------------------------------
 local group = Read(OPTIONS .. "MSUF_Menu2_Group.lua")
-local groupSource = "local MSUF, M, Shared, SCOPE_VALUES, ScopeShortLabel, CurrentScope, Conf, Bool, GF, QueueGF, RefreshGFPreview, floor = ...\n"
+local groupSource = "local MSUF, M, Shared, SCOPE_VALUES, ScopeShortLabel, CurrentScope, Conf, Bool, GF, QueueGF, RefreshGFPreview, floor, ScopeShortKey = ...\n"
     .. Slice(group, "local function AttachGroupSectionUX(", "local function FinalizeScopePage(", "Group")
     .. "\nreturn AttachGroupSectionUX"
 local groupEnabled = { party = true, raid = false }
@@ -274,7 +277,7 @@ local attachGroup = assert(loadstring(groupSource, "@MSUF_Menu2_Group.lua"))({},
         if value == nil then return default and true or false end
         return value and true or false
     end,
-    function() return nil end, noop, noop, math.floor)
+    function() return nil end, noop, noop, math.floor, function(kind) return kind end)
 attachGroup({})
 Check(captured and captured.targetOff, "Group: the ::: popup gets no targetOff")
 Check(#captured.targets == 2 and captured.targets[1].value == "party" and captured.targets[2].value == "raid",

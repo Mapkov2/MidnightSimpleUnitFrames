@@ -31,7 +31,7 @@ function P.RefreshResourcesStrip()
 end
 
 local function Label(parent, text, x, y, width, color, template)
-    local fs = T.Font(parent, template or "GameFontHighlightSmall", Tr(text), color or T.colors.text)
+    local fs = T.Font(parent, template or "GameFontHighlightSmall", text, color or T.colors.text)
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     if width then fs:SetWidth(width); fs:SetJustifyH("LEFT") end
     return fs
@@ -790,10 +790,10 @@ function PainterBuild.Palette(state)
     local function SetHintStatus(text, holdSeconds)
         hintResetSerial = hintResetSerial + 1
         local serial = hintResetSerial
-        hintLine:SetText(text and Tr(text) or Tr(HINT_BASE))
+        T.SetTranslatedText(hintLine, text or Tr(HINT_BASE))
         if text and holdSeconds and C_Timer and C_Timer.After then
             C_Timer.After(holdSeconds, function()
-                if serial == hintResetSerial then hintLine:SetText(Tr(HINT_BASE)) end
+                if serial == hintResetSerial then hintLine:SetText(HINT_BASE) end
             end)
         end
     end
@@ -829,7 +829,7 @@ function PainterBuild.Palette(state)
         M.colorsBrushHex = hex
         RefreshPaletteBrushVisuals()
         if hex then
-            SetHintStatus("Brush armed: click a preview element to paint it. Right-click the swatch to disarm.")
+            SetHintStatus(Tr("Brush armed: click a preview element to paint it. Right-click the swatch to disarm."))
         else
             SetHintStatus(nil)
         end
@@ -1087,8 +1087,8 @@ function PainterBuild.ResourcesStrip(state)
             local br, bgc, bb = preview.powerBg()
             powerFill:SetColorTexture(pr, pg, pb, 1)
             powerBg:SetColorTexture(br, bgc, bb, 0.9)
-            powerLabel:SetText(Tr("Power") .. " - " .. Tr(preview.powerLabel() or ""))
-            resourceLabel:SetText(Tr("Class Resource") .. " - " .. Tr(preview.resourceLabel() or ""))
+            T.SetTranslatedText(powerLabel, Tr("Power") .. " - " .. Tr(preview.powerLabel() or ""))
+            T.SetTranslatedText(resourceLabel, Tr("Class Resource") .. " - " .. Tr(preview.resourceLabel() or ""))
             local count = tonumber(preview.slotCount()) or 0
             local slotsShown = count > 0
             if slotsShown then
@@ -1177,7 +1177,7 @@ function PainterBuild.Category(state)
         end
         if categoryBar and categoryBar.Refresh then categoryBar:Refresh() end
         if category then
-            tabDescription:SetText(Tr(category.subtitle or ""))
+            tabDescription:SetText(category.subtitle or "")
             if strip then
                 ReleaseClickTargets(state.clickTargets)
                 state.clickTargets = {}

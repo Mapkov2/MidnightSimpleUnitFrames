@@ -38,8 +38,8 @@ local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "
 local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
 local PLAYER_POWER_SOURCE_VALUES = M.PlayerPowerSourceValues
 local NormalizePlayerPowerSource = M.NormalizePlayerPowerSource
--- Portrait placement value lists. Kept in one table so the page stays well clear
--- of the Lua 200-upvalue ceiling that already bites the Auras page.
+-- Portrait placement value lists. Kept in one table instead of one file local
+-- per list.
 local PORTRAIT_PLACEMENT = {
     dragonLayer = VT("BACKGROUND", "Background", "BORDER", "Border", "ARTWORK", "Artwork", "OVERLAY", "Overlay"),
     classificationPreview = VT("OFF", "Off", "elite", "Elite (gold)", "rare", "Rare (silver)",

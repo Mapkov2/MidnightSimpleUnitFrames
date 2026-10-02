@@ -47,8 +47,6 @@ local UNIT_DISPEL_SYMBOL_ANCHORS = VT("TOPLEFT", "Top Left", "TOP", "Top", "TOPR
 local NormalizeDispelTrigger = _G.MSUF_NormalizeDispelBorderTrigger
 
 local function NormalizeUnitDispelOverlayTrigger(value)
-    local normalize = _G.MSUF_NormalizeUnitDispelOverlayTrigger
-    if type(normalize) == "function" then return normalize(value) end
     if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
     return NormalizeDispelTrigger(value)
 end

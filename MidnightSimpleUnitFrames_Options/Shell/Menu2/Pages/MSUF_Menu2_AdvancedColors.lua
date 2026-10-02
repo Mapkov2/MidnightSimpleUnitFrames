@@ -54,7 +54,7 @@ end
 local function ApplyColors()
     -- The painter's Resources strip paints straight from these DB values and
     -- has no writer of its own, so both apply paths poke it. Kept inline: this
-    -- file rides the 200 active-local ceiling.
+    -- file's main chunk holds 160 of Lua 5.1's 200 locals.
     local painter = M.ColorPainter
     if painter and type(painter.RefreshResourcesStrip) == "function" then painter.RefreshResourcesStrip() end
     local apply = CurrentApplyService()
@@ -604,8 +604,8 @@ local function AttachDefaultColorBehavior(ctx, control, defaultRGB)
         if type(baseClick) == "function" then baseClick(self, mouseButton, ...) end
     end)
     if M.AddTooltip and control._msuf2ColorLabel then
-        M.AddTooltip(control, TrText(control._msuf2ColorLabel),
-            TrText("Right-click resets this color to its default."), { hook = true })
+        M.AddTooltip(control, control._msuf2ColorLabel,
+            "Right-click resets this color to its default.", { hook = true })
     end
     RefreshDot()
 end
@@ -808,7 +808,7 @@ end
 --- Texture layer colors mirror the portrait pattern: the Colors page writes the
 --- general baseline plus every unit's copy, while the unit accordion edits only
 --- its own frame. Refreshes are cold path (one re-stamp per frame). Stored on M
---- instead of file locals: this file rides the 200 active-local ceiling.
+--- instead of file locals: this file's main chunk holds 160 of Lua 5.1's 200 locals.
 function M._ApplyTextureLayerColors()
     _G.MSUF_RefreshUnitTextureLayers()
     _G.MSUF_UFPreview_RequestRefresh("MSUF2_TEXLAYER")
@@ -1004,7 +1004,7 @@ end
 -- Frame and indicator choices for the canonical status text color surface. The
 -- indicator value IS the DB key prefix, which keeps this list and the engine's
 -- PrefixedStatusDef naming in one piece. Parked on M rather than a file local:
--- this chunk is at Lua 5.1's 200-local ceiling and one more breaks the page.
+-- the main chunk holds 160 of Lua 5.1's 200 locals.
 M._levelDifficultyColor = {
     -- key prefix, label, default RGB, semantic path. Order and defaults mirror
     -- Shared.LEVEL_DIFFICULTY_TIERS in MSUF_UF_Shared.lua.
@@ -1236,7 +1236,7 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
     -- Level difficulty palette. Global on purpose: the bands mean the same on
     -- every unit and group frame, and each frame only decides whether to use
     -- them (Status icons > Level Text > Color by level difficulty). Rows come
-    -- from M._levelDifficultyColor; this chunk rides the 200-local ceiling.
+    -- from M._levelDifficultyColor, which is parked on M instead of a file local.
     -- No reset button: right-click on a swatch already restores its default.
     LabelAt(statusText, "Level Difficulty Colors", 12, -240, statusTextW - 28, "GameFontNormal", T.colors.accent)
     LabelAt(statusText, "Shared by every unit and group frame that colors its level by difficulty.",
@@ -1404,7 +1404,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     local previewPanel = T.Panel(background, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.92 }, T.colors.borderSoft)
     previewPanel:SetPoint("TOPLEFT", background, "TOPLEFT", 12, -104)
     previewPanel:SetSize(previewWidth, 66)
-    local previewLabel = T.Font(previewPanel, "GameFontNormalSmall", TrText("Preview"), T.colors.muted)
+    local previewLabel = T.Font(previewPanel, "GameFontNormalSmall", "Preview", T.colors.muted)
     previewLabel:SetPoint("TOPLEFT", previewPanel, "TOPLEFT", 12, -8)
     local previewMode = T.Font(previewPanel, "GameFontHighlightSmall", "", T.colors.muted)
     previewMode:SetPoint("TOPRIGHT", previewPanel, "TOPRIGHT", -12, -8)
@@ -1559,7 +1559,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
         if modeRow and modeRow.SetValue then modeRow:SetValue(mode) end
         for i = 1, #BAR_MODE_CARDS do
             if BAR_MODE_CARDS[i].mode == mode and modeDescLabel and modeDescLabel.SetText then
-                modeDescLabel:SetText(TrText(BAR_MODE_CARDS[i].desc))
+                modeDescLabel:SetText(BAR_MODE_CARDS[i].desc)
             end
         end
     end
@@ -1698,7 +1698,7 @@ end
 -- separate settings.
 local function MarkSharedColor(control)
     if not control then return end
-    local tag = T.Font(control, "GameFontDisableSmall", TrText("Shared with group frames"), T.colors.muted)
+    local tag = T.Font(control, "GameFontDisableSmall", "Shared with group frames", T.colors.muted)
     tag:SetPoint("LEFT", control, "RIGHT", 8, 0)
     control._msuf2SharedColorTag = tag
 end
@@ -1938,11 +1938,18 @@ local function BuildHighlightAndGameplayColors(ctx, b, CH, part)
     }) do
         local rowY = -10 - (texIndex - 1) * 108
         local slotPrefix = texSlot.prefix
-        ColorValueAt(ctx, texLayer, M.Tr("Texture layer color") .. texSlot.suffix, 12, rowY,
+        -- The first slot passes the raw keys. Slots 2 and 3 show the translated name plus the
+        -- slot number: W.Color has no pre-translated label path, and a key per slot would cost
+        -- startup locale bytes in every pack.
+        local colorLabel, gradientLabel = "Texture layer color", "Texture layer gradient end"
+        if texSlot.suffix ~= "" then
+            colorLabel, gradientLabel = M.Tr(colorLabel) .. texSlot.suffix, M.Tr(gradientLabel) .. texSlot.suffix
+        end
+        ColorValueAt(ctx, texLayer, colorLabel, 12, rowY,
             function() return GeneralRGB(slotPrefix .. "Color", 1, 1, 1) end,
             function(r, g, c) M._SetAllTextureLayerRGB(slotPrefix .. "Color", r, g, c) end,
             nil, nil, Meta(texSlot.id .. ".color"), { 1, 1, 1 })
-        ColorValueAt(ctx, texLayer, M.Tr("Texture layer gradient end") .. texSlot.suffix, 12, rowY - 36,
+        ColorValueAt(ctx, texLayer, gradientLabel, 12, rowY - 36,
             function() return GeneralRGB(slotPrefix .. "Gradient2", 0, 0, 0) end,
             function(r, g, c) M._SetAllTextureLayerRGB(slotPrefix .. "Gradient2", r, g, c) end,
             nil, nil, Meta(texSlot.id .. ".gradient_color"), { 0, 0, 0 })

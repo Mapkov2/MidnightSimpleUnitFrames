@@ -20,6 +20,7 @@ local VT = M.ValueTextList
 local UNIT_PAGES, LOAD_CONDITIONS, BOSS_LAYOUT_OPTIONS = UP.UNIT_PAGES or {}, UP.LOAD_CONDITIONS or {}, UP.BOSS_LAYOUT_OPTIONS or {}
 local SEPARATORS, UF_COPY_CATEGORIES = UP.SEPARATORS or {}, UP.UF_COPY_CATEGORIES or {}
 local GetConf, GetGeneral, DefaultCopyTarget, UnitTopLabel = UP.GetConf, UP.GetGeneral, UP.DefaultCopyTarget, UP.UnitTopLabel
+local UnitTopLabelKey = UP.UnitTopLabelKey
 local UnitTopPillWidth, NewCopyScopeDefaults, ConfirmCopyToAll = UP.UnitTopPillWidth, UP.NewCopyScopeDefaults, UP.ConfirmCopyToAll
 local CopyUnitSettings, ReadBool = UP.CopyUnitSettings, UP.ReadBool
 local SetBool, ReadNumber, SetNumber = UP.SetBool, UP.ReadNumber, UP.SetNumber
@@ -181,9 +182,10 @@ local UNIT_PAGE_FOR_UNIT = {}
 for pageKey, pageInfo in pairs(UNIT_PAGES or {}) do
     if pageInfo and pageInfo.unit then UNIT_PAGE_FOR_UNIT[pageInfo.unit] = pageKey end
 end
-local function UnitTopTabLabel(unit, compact)
-    if compact then return M.Tr(UNIT_TAB_COMPACT_LABELS[unit] or UNIT_TAB_LABELS[unit] or UnitTopLabel(unit)) end
-    return M.Tr(UNIT_TAB_LABELS[unit] or UnitTopLabel(unit))
+-- Raw label keys: the scope bar translates its own buttons.
+local function UnitTopTabKey(unit, compact)
+    if compact then return UNIT_TAB_COMPACT_LABELS[unit] or UNIT_TAB_LABELS[unit] or UnitTopLabelKey(unit) end
+    return UNIT_TAB_LABELS[unit] or UnitTopLabelKey(unit)
 end
 local function UnitTopTabWidth(unit, compact)
     local widths = compact and UNIT_TAB_COMPACT_WIDTHS or UNIT_TAB_WIDTHS
@@ -242,8 +244,6 @@ local function HealthColorModeOptions()
     return HEALTH_COLOR_OPTIONS
 end
 local function ToTInlineNPCColorAvailable()
-    local fn = _G.MSUF_UFCore_IsToTInlineNPCColorModeAvailable
-    if type(fn) == "function" then return fn() == true end
     local db = EnsureDB()
     local gen = db and db.general
     local wantNpc = gen and gen.npcNameRed
@@ -613,7 +613,7 @@ local function AttachUnitSectionUX(ctx, unit)
     local targets = {}
     for _, key in ipairs(UNIT_TAB_ORDER) do
         if UNIT_PAGE_FOR_UNIT[key] and (not M.SupportsFrameScope or M.SupportsFrameScope(key)) then
-            targets[#targets + 1] = { value = key, text = UnitTopLabel(key) }
+            targets[#targets + 1] = { value = key, text = UnitTopLabelKey(key) }
         end
     end
     UnitSectionShared.AttachSectionUX(ctx, {
@@ -640,7 +640,7 @@ local function BuildTopActions(ctx, builder, unit, label)
         if UNIT_PAGE_FOR_UNIT[tabUnit] and (not M.SupportsFrameScope or M.SupportsFrameScope(tabUnit)) then
         scopeValues[#scopeValues + 1] = {
             value = tabUnit,
-            text = UnitTopTabLabel(tabUnit, false),
+            text = UnitTopTabKey(tabUnit, false),
             width = UnitTopTabWidth(tabUnit, false),
         }
         end
@@ -672,8 +672,8 @@ local function BuildTopActions(ctx, builder, unit, label)
     local rowY = -15
     local scopeBar = W.ScopeOverrideBar and W.ScopeOverrideBar(ctx, sec, scopeOpts)
     RegisterControl(scopeBar, ctx, "navigation.unit_page.selector", "Editing", "segment", "ephemeral")
-    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "success", 82, 24))
-        or W.TopButton(sec, M.Tr("Copy To"), 82, 24, nil, false)
+    local copy = (W.RoleButton and W.RoleButton(sec, "Copy To", "success", 82, 24))
+        or W.TopButton(sec, "Copy To", 82, 24, nil, false)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, rowY)
     -- Opening the selector is safe in combat. The actual copy remains guarded
     -- in onRun below, where a blocked click can produce visible feedback.
@@ -708,7 +708,7 @@ local function BuildTopActions(ctx, builder, unit, label)
         targetWidths = UF_COPY_TARGET_WIDTHS,
         sourceKey = function() return unit end,
         sourceLabel = UnitTopLabel,
-        targetLabelText = function(key) return UF_COPY_TARGET_SHORT_LABELS[key] or UnitTopLabel(key) end,
+        targetLabelText = function(key) return UF_COPY_TARGET_SHORT_LABELS[key] or UnitTopLabelKey(key) end,
         selectedTarget = function() return NormalizeCopyDest(unit) end,
         isTargetVisible = function(key, source) return key ~= source end,
         onTargetClick = function(key) M.unitCopyTarget = key end,
@@ -720,7 +720,7 @@ local function BuildTopActions(ctx, builder, unit, label)
             -- The one-row target strip keeps ToT/FT/PT compact; hover names the frame in full.
             for _, key in ipairs({ "targettarget", "focustarget", "pettarget" }) do
                 local chip = popup._targetBtns and popup._targetBtns[key]
-                if chip and M.AddTooltip then M.AddTooltip(chip, UnitTopLabel(key), nil, { hook = true }) end
+                if chip and M.AddTooltip then M.AddTooltip(chip, UnitTopLabelKey(key), nil, { hook = true }) end
             end
         end,
         onRun = function(api, popup)
@@ -733,7 +733,7 @@ local function BuildTopActions(ctx, builder, unit, label)
             local function CopyFeedback(applied, result)
                 result = type(result) == "table" and result or {}
                 if applied == true then
-                    local message = M.Format(M.Tr("Copied to %s"), destinationLabel)
+                    local message = M.Format("Copied to %s", destinationLabel)
                     if result.auraSkipped == true then
                         message = message .. " " .. M.Tr("Aura settings were skipped for unsupported UnitFrames.")
                     end
@@ -749,13 +749,13 @@ local function BuildTopActions(ctx, builder, unit, label)
                 end
                 local message
                 if result.reason == "no_categories" then
-                    message = M.Tr("No copy categories selected.")
+                    message = "No copy categories selected."
                 elseif result.reason == "unsupported_aura_scope" or result.reason == "aura_copy_unavailable" then
-                    message = M.Tr("Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames.")
+                    message = "Aura settings are only available for Player, Target, Focus, Boss, and Arena Frames."
                 elseif result.reason == "unsupported_castbar_scope" then
-                    message = M.Tr("Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames.")
+                    message = "Castbar settings are only available for Player, Target, Focus, Boss, and Arena Frames."
                 else
-                    message = M.Tr("Nothing was copied.")
+                    message = "Nothing was copied."
                 end
                 if M.ShowStatusFeedback then M.ShowStatusFeedback(message, "warning", 2.0) end
             end
@@ -820,7 +820,7 @@ local function AttachBasicsHeaderStatus(sec, unit)
             and (unit ~= "focustarget" or ReadBool("focus", "enabled", true))
         local color = enabled and EnabledHeaderColor() or WARNING_HEADER_BG
         W.SetCollapsibleHeaderBaseTone(entry, color, color[4])
-        entry.label:SetText(M.Tr("Basics") .. (enabled and "" or (" - " .. M.Tr("Frame disabled"))))
+        T.SetTranslatedText(entry.label, M.Tr("Basics") .. (enabled and "" or (" - " .. M.Tr("Frame disabled"))))
     end
     Refresh()
     return Refresh
@@ -1066,10 +1066,10 @@ local function BuildBasics(ctx, builder, unit, label)
         SetControlsEnabled(basicsDependentControls, ownOn)
         if parentOff then
             notice:SetMessage(M.Tr("Focus Target follows the Focus frame. Enable Focus to show it."), "warning")
-            if enableNow.SetText then enableNow:SetText(M.Tr("Enable Focus")) end
+            if enableNow.SetText then enableNow:SetText("Enable Focus") end
         else
             notice:SetMessage(M.Format("%s frame is disabled and will not appear.", unitLabel), "warning")
-            if enableNow.SetText then enableNow:SetText(M.Tr("Enable")) end
+            if enableNow.SetText then enableNow:SetText("Enable") end
         end
         notice:SetShown(not ownOn or parentOff)
         RefreshBasicsState()
@@ -1464,7 +1464,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
     control.values = BOSS_LAYOUT_OPTIONS
     control.buttons = {}
 
-    local title = T.Font(control, "GameFontNormalSmall", M.Tr(titleText or "Boss frame layout"), T.colors.accent)
+    local title = T.Font(control, "GameFontNormalSmall", titleText or "Boss frame layout", T.colors.accent)
     title:SetPoint("TOPLEFT", control, "TOPLEFT", 0, 0)
     control._msuf2Title = title
 
@@ -1581,7 +1581,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
         btn._label = text
         btn:SetScript("OnEnter", function(self) SetTileVisual(self, control._msuf2Value == info.value, true) end)
         btn:SetScript("OnLeave", function(self) SetTileVisual(self, control._msuf2Value == info.value, false) end)
-        M.AddTooltip(btn, function() return M.Format(M.Tr("Boss frame layout: %s"), M.Tr(info.tooltip or info.text or "")) end, "Click to set how boss frames are arranged.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
+        M.AddTooltip(btn, function() return M.Format("Boss frame layout: %s", M.Tr(info.tooltip or info.text or "")) end, "Click to set how boss frames are arranged.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
         control.buttons[i] = btn
     end
     control:SetValue("VERTICAL_DOWN")

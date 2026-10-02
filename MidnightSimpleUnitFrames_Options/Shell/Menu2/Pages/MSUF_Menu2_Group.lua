@@ -360,8 +360,12 @@ end
 local function ScopeLabel(kind)
     return M.Tr(SCOPE_LABELS[kind] or "Party")
 end
+-- Scope bars, Copy To targets and tooltips translate their label themselves.
+local function ScopeShortKey(kind)
+    return SCOPE_SHORT_LABELS[kind] or SCOPE_LABELS[kind] or "Party"
+end
 local function ScopeShortLabel(kind)
-    return M.Tr(SCOPE_SHORT_LABELS[kind] or SCOPE_LABELS[kind] or "Party")
+    return M.Tr(ScopeShortKey(kind))
 end
 local function NormalizeFrameProvider(value)
     if value == "MSUF" then return "MSUF" end
@@ -728,7 +732,7 @@ local function AttachGroupSectionUX(ctx)
         end },
     }
     local targets = {}
-    for _, scope in ipairs(SCOPE_VALUES) do targets[#targets + 1] = { value = scope.value, text = ScopeShortLabel(scope.value) } end
+    for _, scope in ipairs(SCOPE_VALUES) do targets[#targets + 1] = { value = scope.value, text = ScopeShortKey(scope.value) } end
     Shared.AttachSectionUX(ctx, {
         sections = sections, scope = CurrentScope, conf = Conf, label = ScopeShortLabel, targets = targets,
         -- The same switch ApplyScopeEnabledGate greys the scope's page with.
@@ -793,7 +797,7 @@ local function ScopeSection(ctx, builder, opts)
             local info = SCOPE_VALUES[i]
             scopeValues[i] = {
                 value = info.value,
-                text = ScopeShortLabel(info.value),
+                text = ScopeShortKey(info.value),
                 width = (info.value == "mythicraid") and 86 or 64,
             }
         end
@@ -863,7 +867,7 @@ local function ScopeSection(ctx, builder, opts)
         return sec
     end
 
-    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "success", 86, 24)) or W.TopButton(sec, M.Tr("Copy To"), 86, 24, {})
+    local copy = (W.RoleButton and W.RoleButton(sec, "Copy To", "success", 86, 24)) or W.TopButton(sec, "Copy To", 86, 24, {})
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -16)
     local scopeBtns = {}
     local scopeBar = W.ScopeOverrideBar(ctx, command, {
@@ -1035,8 +1039,13 @@ local function PreparePartyPortraitSwitch(ctx, sec)
     portraitEnable:SetChecked(Val(kind, "portraitMode", "OFF") ~= "OFF")
     return portraitEnable
 end
-function GroupPage.BuildPortrait(ctx, builder)
-    local kind = "party"
+-- Party portrait workspace. GroupPage.BuildPortrait runs a sequence of stages that share one state
+-- table (`s`): shell, binders, tabs, controls and gates. The stages create their widgets in the order
+-- the single builder did, so the layout is unchanged. The stages live on one table so the main chunk
+-- keeps its local budget.
+local PortraitBuild = {}
+function PortraitBuild.Shell(ctx, builder)
+    local s = { kind = "party", stateKey = "gf_party" }
     local cardH = { main = 224, geometry = 440, placement = 382, border = 440, style = 330 }
     local tabH = {
         general = cardH.main + 116,
@@ -1091,6 +1100,15 @@ function GroupPage.BuildPortrait(ctx, builder)
     local cardW = max(260, min(620, sectionW - 32))
     local tabW = max(260, min(780, sectionW - 40))
     local RefreshPortraitControls = M.RefreshProxy()
+    s.cardH, s.tabH, s.placementValues, s.renderValues = cardH, tabH, placementValues, renderValues
+    s.sizeModeValues, s.shapeValues, s.borderValues = sizeModeValues, shapeValues, borderValues
+    s.ClassStyleValues, s.NormalizeTab = ClassStyleValues, NormalizeTab
+    s.sec, s.sectionW, s.cardX, s.cardW, s.tabW = sec, sectionW, cardX, cardW, tabW
+    s.RefreshPortraitControls = RefreshPortraitControls
+    return s
+end
+function PortraitBuild.Binders(ctx, s)
+    local kind, stateKey = s.kind, s.stateKey
     local function AttachPortraitFocus(widget)
         W.AttachGroupEditFocus(widget, stateKey, "portrait")
         return widget
@@ -1196,6 +1214,14 @@ function GroupPage.BuildPortrait(ctx, builder)
         W.MoveWidget(control, parent, x, y, width, "LEFT")
         return AttachPortraitFocus(control)
     end
+    s.AttachPortraitFocus, s.PortraitMeta, s.SetValue = AttachPortraitFocus, PortraitMeta, SetValue
+    s.BindDropdown, s.BindNumber, s.BindToggle, s.BindColor = BindDropdown, BindNumber, BindToggle, BindColor
+end
+function PortraitBuild.Tabs(ctx, s)
+    local stateKey = s.stateKey
+    local tabH, NormalizeTab = s.tabH, s.NormalizeTab
+    local sec, sectionW, cardX, cardW, tabW, cardH = s.sec, s.sectionW, s.cardX, s.cardW, s.tabW, s.cardH
+    local RefreshPortraitControls, AttachPortraitFocus = s.RefreshPortraitControls, s.AttachPortraitFocus
     local function SetSectionHeight(height)
         height = max(120, floor((tonumber(height) or tabH.general) + 0.5))
         local entry = sec and sec._msuf2CollapsibleEntry
@@ -1263,6 +1289,16 @@ function GroupPage.BuildPortrait(ctx, builder)
     local portraitEnable = PreparePartyPortraitSwitch(ctx, sec)
     portraitEnable.refreshDetails = function() RefreshPortraitControls() end
     AttachPortraitFocus(portraitEnable)
+    s.mainCard, s.geometryCard, s.placementCard, s.borderCard, s.styleCard = mainCard, geometryCard, placementCard, borderCard, styleCard
+    s.portraitEnable = portraitEnable
+end
+function PortraitBuild.Controls(ctx, s)
+    local kind, cardW = s.kind, s.cardW
+    local mainCard, geometryCard, placementCard, borderCard, styleCard = s.mainCard, s.geometryCard, s.placementCard, s.borderCard, s.styleCard
+    local renderValues, sizeModeValues, shapeValues, borderValues = s.renderValues, s.sizeModeValues, s.shapeValues, s.borderValues
+    local placementValues, ClassStyleValues = s.placementValues, s.ClassStyleValues
+    local RefreshPortraitControls, AttachPortraitFocus, PortraitMeta, SetValue = s.RefreshPortraitControls, s.AttachPortraitFocus, s.PortraitMeta, s.SetValue
+    local BindDropdown, BindNumber, BindToggle, BindColor = s.BindDropdown, s.BindNumber, s.BindToggle, s.BindColor
     local side = W.Segment(mainCard, "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, cardW - 32))
     W.MoveWidget(side, mainCard, 16, -62, min(220, cardW - 32))
     M.BindSegment(ctx, side,
@@ -1323,6 +1359,24 @@ function GroupPage.BuildPortrait(ctx, builder)
     local backgroundAlpha = BindNumber(styleCard, "Background opacity", 16, -210, cardW - 58, 0, 1, 0.05, "portraitBgColorA", 0.85, true)
     local castIcon = BindToggle(styleCard, "Show cast spell icon in portrait", 16, -274, cardW - 32, "portraitCastSpellIcon", false)
     castIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
+    s.controls = {
+        side = side, render = render, clickable = clickable, shape = shape, sizeMode = sizeMode,
+        size = size, width = width, height = height, zoom = zoom, panX = panX, panY = panY,
+        placement = placement, detachedPoint = detachedPoint, detachedTo = detachedTo, overlayAlign = overlayAlign,
+        level = level, alpha = alpha, border = border, edgeSoftness = edgeSoftness, borderArt = borderArt,
+        direction = direction, thickness = thickness, fill = fill, classStyle = classStyle,
+        background = background, backgroundColor = backgroundColor, backgroundAlpha = backgroundAlpha, castIcon = castIcon,
+    }
+end
+function PortraitBuild.Gates(ctx, s)
+    local kind, sec, portraitEnable, RefreshPortraitControls = s.kind, s.sec, s.portraitEnable, s.RefreshPortraitControls
+    local c = s.controls
+    local side, render, clickable, shape, sizeMode = c.side, c.render, c.clickable, c.shape, c.sizeMode
+    local size, width, height, zoom, panX, panY = c.size, c.width, c.height, c.zoom, c.panX, c.panY
+    local placement, detachedPoint, detachedTo, overlayAlign = c.placement, c.detachedPoint, c.detachedTo, c.overlayAlign
+    local level, alpha, border, edgeSoftness, borderArt = c.level, c.alpha, c.border, c.edgeSoftness, c.borderArt
+    local direction, thickness, fill, classStyle = c.direction, c.thickness, c.fill, c.classStyle
+    local background, backgroundColor, backgroundAlpha, castIcon = c.background, c.backgroundColor, c.backgroundAlpha, c.castIcon
     local activeControls = {
         render, clickable, shape, sizeMode, size, width, height, placement, level, alpha,
         border, edgeSoftness, background, castIcon,
@@ -1378,6 +1432,13 @@ function GroupPage.BuildPortrait(ctx, builder)
     }))
     if sec._msufPartyPortraitRefresh then sec._msufPartyPortraitRefresh() end
 end
+function GroupPage.BuildPortrait(ctx, builder)
+    local s = PortraitBuild.Shell(ctx, builder)
+    PortraitBuild.Binders(ctx, s)
+    PortraitBuild.Tabs(ctx, s)
+    PortraitBuild.Controls(ctx, s)
+    PortraitBuild.Gates(ctx, s)
+end
 
 --- Hide and collapse the Portrait shell outside Party without destroying the
 --- cached page. Restoring the original geometry makes scope switching cheap
@@ -1426,7 +1487,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
     local y = opts.y or section._msuf2CursorY or -38
     local tileW, tileH, gap = opts.tileWidth or 64, opts.tileHeight or 64, opts.gap or 6
     if opts.advanceCursor ~= false then section._msuf2CursorY = y - tileH - 40 end
-    local label = T.Font(section, "GameFontNormalSmall", M.Tr("Growth Direction"), T.colors.accent)
+    local label = T.Font(section, "GameFontNormalSmall", "Growth Direction", T.colors.accent)
     label:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
     local holder = PixelLayoutRegion(CreateFrame("Frame", nil, section))
     holder:SetPoint("TOPLEFT", section, "TOPLEFT", x, y - 20)
@@ -1567,7 +1628,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         btn:SetScript("OnLeave", function(self)
             SetTileVisual(self, Val(CurrentScope(), "growth", "DOWN") == info.value, false)
         end)
-        M.AddTooltip(btn, function() return M.Format(M.Tr("Growth: %s"), M.Tr(info.text or "")) end, "Click to set group frame growth direction.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
+        M.AddTooltip(btn, function() return M.Format("Growth: %s", M.Tr(info.text or "")) end, "Click to set group frame growth direction.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
         btn:SetScript("OnClick", function()
             Set(CurrentScope(), "growth", info.value, "geometry")
             RefreshGrowthTiles()
