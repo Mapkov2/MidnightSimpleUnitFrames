@@ -82,6 +82,7 @@ local _pendingGroupDragTarget
 
 -- The group DB (first group file in every load graph) owns the saved modes.
 local STABLE_GRID_POSITION_MODE = MSUF.GF.GRID_POSITION_MODES.STABLE
+local PRIORITY_ANCHOR = MSUF.GF.PRIORITY_ANCHOR_MODES
 
 local function GF()
   return MSUF and MSUF.GF
@@ -471,7 +472,7 @@ local function FrameCenterToUI(frame)
 end
 
 local function DetachPriorityForFreeMove(conf, sourceFrame)
-  if not conf or conf.anchorMode == "FREE" then return false end
+  if not conf or conf.anchorMode == PRIORITY_ANCHOR.FREE then return false end
   local anchor = RuntimeAnchor("priority") or sourceFrame or _previewAnchors.priority or _containers.priority
   local cx, cy = FrameCenterToUI(anchor)
   local uiCX, uiCY = FrameCenterToUI(UIParent)
@@ -483,7 +484,7 @@ local function DetachPriorityForFreeMove(conf, sourceFrame)
     cx = uiCX + (tonumber(conf.offsetX) or -120)
     cy = uiCY + (tonumber(conf.offsetY) or 0)
   end
-  conf.anchorMode = "FREE"
+  conf.anchorMode = PRIORITY_ANCHOR.FREE
   conf.point = "CENTER"
   conf.relativePoint = "CENTER"
   conf.offsetX = floor((cx - uiCX) + 0.5)
@@ -593,7 +594,7 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
   if not anchor then return nil end
   anchor:SetSize(max(totalW or 1, 1), max(totalH or 1, 1))
   anchor:ClearAllPoints()
-  if kind == "priority" and conf and conf.anchorMode ~= "FREE" then
+  if kind == "priority" and conf and conf.anchorMode ~= PRIORITY_ANCHOR.FREE then
     local gf = GF()
     local baseKind = GetLiveGroupKind() or "party"
     local baseAnchorKey = baseKind == "party" and "party" or "raid"
@@ -601,11 +602,11 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
     if baseAnchor and baseAnchor.GetLeft and baseAnchor:GetLeft() ~= nil then
       local gap = min(100, max(0, floor((tonumber(conf.attachGap) or 8) + 0.5)))
       local cross = floor((tonumber(conf.attachOffset) or 0) + 0.5)
-      if conf.anchorMode == "RAID_LEFT" then
+      if conf.anchorMode == PRIORITY_ANCHOR.LEFT then
         anchor:SetPoint("TOPRIGHT", baseAnchor, "TOPLEFT", -gap, cross)
-      elseif conf.anchorMode == "RAID_TOP" then
+      elseif conf.anchorMode == PRIORITY_ANCHOR.TOP then
         anchor:SetPoint("BOTTOMLEFT", baseAnchor, "TOPLEFT", cross, gap)
-      elseif conf.anchorMode == "RAID_BOTTOM" then
+      elseif conf.anchorMode == PRIORITY_ANCHOR.BOTTOM then
         anchor:SetPoint("TOPLEFT", baseAnchor, "BOTTOMLEFT", cross, -gap)
       else
         anchor:SetPoint("TOPLEFT", baseAnchor, "TOPRIGHT", gap, cross)
@@ -1493,7 +1494,7 @@ local function GF_EM2_ResetPosition(kind)
   conf[yKey] = y
   conf.positionMode = STABLE_GRID_POSITION_MODE
   if kind == "priority" then
-    conf.anchorMode = "RAID_RIGHT"
+    conf.anchorMode = PRIORITY_ANCHOR.RIGHT
     conf.attachGap = 8
     conf.attachOffset = 0
     conf.point = "CENTER"

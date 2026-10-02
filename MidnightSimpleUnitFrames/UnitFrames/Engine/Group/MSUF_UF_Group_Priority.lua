@@ -36,6 +36,9 @@ local Translate = MSUF.Translate
 
 local MAX_PRIORITY_FRAMES = 5
 local MAX_STORED_PINS = MAX_PRIORITY_FRAMES
+-- The group DB (first group file in every load graph) owns the saved modes.
+local VALID_ANCHOR_MODES = {}
+for _, mode in pairs(GF.PRIORITY_ANCHOR_MODES) do VALID_ANCHOR_MODES[mode] = true end
 local EMPTY_PINS = {}
 local resolvedUnits = {}
 local resolvedNames = {}
@@ -630,8 +633,7 @@ function GF.SetPriorityOption(key, value)
     value = floor((tonumber(value) or 2) + 0.5)
     if value < 0 then value = 0 elseif value > 40 then value = 40 end
   elseif key == "anchorMode" then
-    if value ~= "RAID_RIGHT" and value ~= "RAID_LEFT" and value ~= "RAID_TOP"
-      and value ~= "RAID_BOTTOM" and value ~= "FREE" then return false end
+    if VALID_ANCHOR_MODES[value] ~= true then return false end
   elseif key == "point" or key == "relativePoint" then
     local valid = value == "CENTER" or value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT"
       or value == "TOPLEFT" or value == "TOPRIGHT" or value == "BOTTOMLEFT" or value == "BOTTOMRIGHT"

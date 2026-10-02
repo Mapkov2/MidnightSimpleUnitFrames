@@ -76,6 +76,16 @@ GF.GRID_POSITION_MODES = {
     STABLE = "GRID_BOUNDS_V2",
 }
 
+--- Saved anchorMode values of the Priority Frames strip: docked to one side of
+--- the active Party/Raid container, or FREE on its own Edit Mode mover.
+GF.PRIORITY_ANCHOR_MODES = {
+    RIGHT = "RAID_RIGHT",
+    LEFT = "RAID_LEFT",
+    TOP = "RAID_TOP",
+    BOTTOM = "RAID_BOTTOM",
+    FREE = "FREE",
+}
+
 ---
 --- Defaults
 ---
@@ -713,7 +723,7 @@ local PRIORITY_DEFAULTS = {
     maxFrames     = 5,
     growth        = "DOWN",
     spacing       = 2,
-    anchorMode    = "RAID_RIGHT", --- RAID_RIGHT / RAID_LEFT / RAID_TOP / RAID_BOTTOM / FREE
+    anchorMode    = GF.PRIORITY_ANCHOR_MODES.RIGHT, --- one of GF.PRIORITY_ANCHOR_MODES
     attachGap     = 8,
     attachOffset  = 0,
     point         = "CENTER",

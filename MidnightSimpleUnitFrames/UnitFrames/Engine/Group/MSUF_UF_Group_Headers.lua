@@ -1762,21 +1762,22 @@ local function PriorityLayoutParts(kind, conf, count)
 end
 
 local function PositionPriorityAnchor(anchor, conf, totalW, totalH, kind)
-  local mode = conf and conf.anchorMode or "RAID_RIGHT"
+  local modes = GF.PRIORITY_ANCHOR_MODES
+  local mode = conf and conf.anchorMode or modes.RIGHT
   local baseAnchorKey = kind == "party" and "party" or "raid"
   local baseAnchor = GF.anchors and GF.anchors[baseAnchorKey]
-  if mode ~= "FREE" and baseAnchor then
+  if mode ~= modes.FREE and baseAnchor then
     local gap = floor((tonumber(conf.attachGap) or 8) + 0.5)
     local cross = floor((tonumber(conf.attachOffset) or 0) + 0.5)
     if gap < 0 then gap = 0 elseif gap > 100 then gap = 100 end
     anchor:ClearAllPoints()
-    if mode == "RAID_LEFT" then
+    if mode == modes.LEFT then
       anchor:SetPoint("TOPRIGHT", baseAnchor, "TOPLEFT", -gap, cross)
       ClampAnchorOnScreen(anchor, "TOPRIGHT", "TOPLEFT", baseAnchor, -gap, cross, totalW, totalH)
-    elseif mode == "RAID_TOP" then
+    elseif mode == modes.TOP then
       anchor:SetPoint("BOTTOMLEFT", baseAnchor, "TOPLEFT", cross, gap)
       ClampAnchorOnScreen(anchor, "BOTTOMLEFT", "TOPLEFT", baseAnchor, cross, gap, totalW, totalH)
-    elseif mode == "RAID_BOTTOM" then
+    elseif mode == modes.BOTTOM then
       anchor:SetPoint("TOPLEFT", baseAnchor, "BOTTOMLEFT", cross, -gap)
       ClampAnchorOnScreen(anchor, "TOPLEFT", "BOTTOMLEFT", baseAnchor, cross, -gap, totalW, totalH)
     else

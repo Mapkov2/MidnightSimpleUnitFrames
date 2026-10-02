@@ -17,6 +17,16 @@ local function Check(condition, message)
     if not condition then error(message, 2) end
 end
 
+-- MSUF_GroupFrames_DB.lua, the first group file on every client, owns the saved
+-- Priority anchor modes the header code compares against.
+local function PriorityAnchorModes()
+    local file = assert(io.open(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua", "rb"))
+    local source = file:read("*a")
+    file:close()
+    local body = assert(source:match("\nGF%.PRIORITY_ANCHOR_MODES = (%b{})"), "the group DB lost GF.PRIORITY_ANCHOR_MODES")
+    return assert(loadstring("return " .. body))()
+end
+
 local inGroup, inRaid = true, false
 local partyUnits = { "player", "party1", "party2" }
 local raidCount = 0
@@ -164,6 +174,7 @@ local function Load(isForever)
         Secrets = { UnitMissing = function(unit) return unit == "party3" or unit == "party4" end },
     }
     local GF = ns.GF
+    GF.PRIORITY_ANCHOR_MODES = PriorityAnchorModes()
     GF.GetConf = function(kind) return kind == "party" and conf.party or conf.raid end
     local priorityConf = { spacing = 2, growth = "DOWN", anchorMode = "FREE" }
     GF.GetPriorityConf = function() return priorityConf end

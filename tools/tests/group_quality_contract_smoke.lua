@@ -14,8 +14,10 @@
 --   * No dead code: no read of a global nothing defines (the retired
 --     temporary-profile flag and the legacy group options panel), and no
 --     file-scope alias (`local X = X`, `local X = _G.X`) that nothing reads.
---   * Named constants: the saved grid position modes are spelled once, in
---     GF.GRID_POSITION_MODES (MSUF_GroupFrames_DB.lua).
+--   * Named constants: the saved grid position modes and Priority anchor
+--     modes are spelled once, in GF.GRID_POSITION_MODES and
+--     GF.PRIORITY_ANCHOR_MODES (MSUF_GroupFrames_DB.lua); the Priority option
+--     setter accepts exactly those anchor modes.
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
@@ -126,6 +128,10 @@ for _, relative in ipairs(GROUP_FILES) do
             Check(not text:find(literal, 1, true),
                 relative .. " spells the saved mode " .. literal .. " instead of GF.GRID_POSITION_MODES")
         end
+        for _, literal in ipairs({ '"RAID_RIGHT"', '"RAID_LEFT"', '"RAID_TOP"', '"RAID_BOTTOM"' }) do
+            Check(not text:find(literal, 1, true),
+                relative .. " spells the Priority anchor mode " .. literal .. " instead of GF.PRIORITY_ANCHOR_MODES")
+        end
     end
 end
 
@@ -199,6 +205,18 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
     local env, GF = world.env, world.core.GF
     Check(GF.GRID_POSITION_MODES.STABLE == "GRID_BOUNDS_V2" and GF.GRID_POSITION_MODES.LEGACY == "GRID_CENTER_V1",
         flavor .. ": the saved grid position mode values changed")
+    local anchorModes = GF.PRIORITY_ANCHOR_MODES
+    Check(anchorModes.RIGHT == "RAID_RIGHT" and anchorModes.LEFT == "RAID_LEFT" and anchorModes.TOP == "RAID_TOP"
+        and anchorModes.BOTTOM == "RAID_BOTTOM" and anchorModes.FREE == "FREE",
+        flavor .. ": the saved Priority anchor mode values changed")
+    GF.EnsureDB()
+    Check(GF.GetPriorityConf().anchorMode == "RAID_RIGHT", flavor .. ": the Priority strip no longer docks right by default")
+    for _, mode in pairs(anchorModes) do
+        Check(GF.SetPriorityOption("anchorMode", mode) == true, flavor .. ": Priority refused anchor mode " .. mode)
+    end
+    Check(GF.SetPriorityOption("anchorMode", "RAID_CENTER") == false and GF.SetPriorityOption("anchorMode", nil) == false,
+        flavor .. ": Priority accepted an unknown anchor mode")
+    GF.SetPriorityOption("anchorMode", anchorModes.RIGHT)
     Check(type(rawget(env, "MSUF_UFCore_GetSettingsCache")) == "function", flavor .. ": settings cache export missing")
     local resolve = rawget(env, "MSUF_ResolveStatusbarTextureKey")
     Check(type(resolve) == "function", flavor .. ": statusbar texture resolver export missing")
