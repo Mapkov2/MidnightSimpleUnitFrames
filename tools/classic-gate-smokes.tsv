@@ -32,6 +32,7 @@ clients+Forever	lua	tools/tests/group_header_combat_child_smoke.lua	{root} {flav
 -	lua	tools/tests/group_runtime_defer_merge_smoke.lua	{root}	Group runtime deferred scope merge smoke failed
 -	lua	tools/tests/group_event_cost_smoke.lua	{root}	Group runtime event cost smoke failed
 -	lua	tools/tests/group_db_split_smoke.lua	{root}	Group DB split load-order and export smoke failed
+-	lua	tools/tests/group_heal_absorb_migration_smoke.lua	{root}	Group heal-absorb scope migration smoke failed
 -	lua	tools/tests/group_quality_contract_smoke.lua	{root}	Group quality contract smoke failed
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline	Group roster settle and apply budget smoke failed: Mainline
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Vanilla	Group roster settle and apply budget smoke failed: Vanilla

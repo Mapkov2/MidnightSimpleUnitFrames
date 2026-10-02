@@ -176,6 +176,24 @@ local function MigrateTextureOverrideOwnership(conf)
     conf._barTextureOverrideMigrated = true
 end
 
+--- One-shot (stamped `_absorbMigrated`): early 6.0 profiles stored scope-level
+--- absorb toggles that shadowed the shared Bars values. The former pass stamped
+--- only its absorbEnabled branch and ran after the defaults step, so it cleared
+--- the healAbsorbEnabled the defaults had just refilled on every repair: a scope
+--- override of "Show negative heal absorbs" reverted at each login and profile
+--- switch. Runs before the defaults step, so a stored value is the user's and
+--- stays; a missing one is pinned to what the scope shows today (the shared
+--- value the cleared key fell back to), so the defaults fill never flips it.
+local function MigrateScopeAbsorbToggles(conf, _, db)
+    if type(conf) ~= "table" or conf._absorbMigrated == true then return end
+    if conf.absorbEnabled == true then conf.absorbEnabled = nil end
+    if conf.healAbsorbEnabled == nil then
+        local general = type(db) == "table" and db.general or nil
+        conf.healAbsorbEnabled = not (type(general) == "table" and general.healAbsorbEnabled == false)
+    end
+    conf._absorbMigrated = true
+end
+
 ---
 --- DB init
 ---
@@ -253,14 +271,6 @@ end
 
 --- Ensure spell filter fields exist on each aura sub-group.
 local function RepairAuraFilters(conf)
-    --- Migrate: remove legacy absorb/heal defaults that blocked global override
-    if conf.absorbEnabled == true and not conf._absorbMigrated then
-        conf.absorbEnabled = nil
-        conf._absorbMigrated = true
-    end
-    if conf.healAbsorbEnabled == true and not conf._absorbMigrated then
-        conf.healAbsorbEnabled = nil
-    end
     --- Remove absorb keys that shadow general when hlOverride is off
     if not conf.hlOverride then
         conf.absorbEnabled = nil
@@ -852,6 +862,8 @@ local DB_REPAIR_STEPS = {
     { name = "layoutPreset", run = RemoveLayoutPresetState },
     { name = "healPredOwnership", run = MigrateHealPredictionOwnership },
     { name = "textureOverrideOwnership", run = MigrateTextureOverrideOwnership },
+    --- Before "defaults": it must see the stored value, not the refilled default.
+    { name = "absorbToggleOwnership", run = MigrateScopeAbsorbToggles },
     { name = "splitDNDStatusText", run = MigrateSplitDNDStatusText },
     --- Party is the only scope that owns portrait config.
     { name = "portraitSizeMode", run = MigratePortraitSizeMode, scopes = PARTY_ONLY },
