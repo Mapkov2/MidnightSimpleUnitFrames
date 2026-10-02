@@ -20,6 +20,8 @@ local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
 --- UNIT_POWER_FREQUENT.
 local type = type
 local math_abs = math.abs
+local math_floor = math.floor
+local string_format = string.format
 local _issecretvalue = _G.issecretvalue
 
 local function CP_GetVisual(E)
@@ -121,6 +123,51 @@ local function CP_ApplyConfiguredText(mode, txt, current, maximum, suffix)
         CP_SetPassthroughText(txt, current)
     end
     return true
+end
+
+--- The resource count text every mode paints the same way (txt is the
+--- existing count FontString): hidden unless the compiled visual shows it; an
+--- explicit text mode (the Class Resource text setting) wins over the mode's
+--- default. predicted marks a Warlock shard prediction with a trailing "*".
+--- The default stamps the plain count on the cached FontString; a mode with
+--- another presentation passes writeDefault(txt, value, maximum, predicted).
+--- Returns true when the text is shown, so the caller can colour it.
+local function CP_PaintResourceText(txt, visual, textMode, value, maximum, predicted, writeDefault)
+    if not visual or visual.showText ~= true then
+        CP_StampShown(txt, false)
+        return false
+    end
+    if textMode then
+        CP_ApplyConfiguredText(textMode, txt, value, maximum, predicted and "*" or nil)
+    elseif writeDefault then
+        writeDefault(txt, value, maximum, predicted)
+    elseif predicted then
+        CP_StampText(txt, value .. "*")
+    else
+        CP_StampText(txt, value)
+    end
+    CP_StampShown(txt, true)
+    return true
+end
+
+--- Default writers of the other presentations: a restricted count goes
+--- straight to the native widget.
+local function WritePassthroughCount(txt, value, _, predicted)
+    if predicted then
+        CP_SetPassthroughFormattedText(txt, "%s*", value)
+    else
+        CP_SetPassthroughText(txt, value)
+    end
+end
+
+--- Destruction shards: one decimal while a shard is partly filled.
+local function WriteFractionalCount(txt, value, _, predicted)
+    local fullBars = math_floor(value)
+    if value - fullBars > 0.001 then
+        CP_StampText(txt, string_format(predicted and "%.1f*" or "%.1f", value))
+    else
+        CP_StampText(txt, predicted and (fullBars .. "*") or fullBars)
+    end
 end
 
 local function CP_StampTextColor(txt, r, g, b, a)
@@ -487,16 +534,8 @@ modeBuilders.SEGMENTED = function(E)
                 end
             end
             local txt = CP.text
-            if txt then
-                if visual and visual.showText == true then
-                    if not _cpDB.textMode or not CP_ApplyConfiguredText(_cpDB.textMode, txt, cur, maxPower) then
-                        CP_SetPassthroughText(txt, cur)
-                    end
-                    CP_StampShown(txt, true)
-                    CP_StampTextColor(txt, 1, 1, 1, 1)
-                else
-                    CP_StampShown(txt, false)
-                end
+            if txt and CP_PaintResourceText(txt, visual, _cpDB.textMode, cur, maxPower, nil, WritePassthroughCount) then
+                CP_StampTextColor(txt, 1, 1, 1, 1)
             end
             --- A secret power value only blocks the full/empty rules; the combat
             --- rule still has to run, so pass nil instead of dropping the check.
@@ -619,17 +658,8 @@ modeBuilders.SEGMENTED = function(E)
         CP.essenceOUAAny = needOnUpdate
 
         local txt = CP.text
-        if txt then
-            local showText = visual and visual.showText == true
-            if showText then
-                if not _cpDB.textMode or not CP_ApplyConfiguredText(_cpDB.textMode, txt, cur, maxPower) then
-                    CP_StampText(txt, cur)
-                end
-                CP_StampShown(txt, true)
-                CP_StampTextColor(txt, 1, 1, 1, 1)
-            else
-                CP_StampShown(txt, false)
-            end
+        if txt and CP_PaintResourceText(txt, visual, _cpDB.textMode, cur, maxPower) then
+            CP_StampTextColor(txt, 1, 1, 1, 1)
         end
         CP_CheckAutoHide(cur, maxPower)
     end
@@ -658,21 +688,11 @@ modeBuilders.SEGMENTED = function(E)
             end
             local txt = CP.text
             if txt then
-                if visual and visual.showText == true then
-                    local predictionActive = PLAYER_CLASS == "WARLOCK"
-                        and visual.showPrediction ~= false
-                        and CP.wlPredDelta ~= 0
-                    if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, cur, maxPower, predictionActive and "*" or nil) then
-                        -- Explicit text modes are written by the shared helper.
-                    elseif predictionActive then
-                        CP_SetPassthroughFormattedText(txt, "%s*", cur)
-                    else
-                        CP_SetPassthroughText(txt, cur)
-                    end
-                    CP_StampShown(txt, true)
+                local predictionActive = PLAYER_CLASS == "WARLOCK"
+                    and visual and visual.showPrediction ~= false
+                    and CP.wlPredDelta ~= 0
+                if CP_PaintResourceText(txt, visual, _cpDB.textMode, cur, maxPower, predictionActive, WritePassthroughCount) then
                     CP_StampTextColor(txt, 1, 1, 1, 1)
-                else
-                    CP_StampShown(txt, false)
                 end
             end
             --- A secret power value only blocks the full/empty rules; the combat
@@ -732,16 +752,14 @@ modeBuilders.SEGMENTED = function(E)
         end
         local txt = CP.text
         if txt then
-            local showText = visual and visual.showText == true
-            if showText then
-                local predOn = visual.showPrediction ~= false
-                local predDelta = CP.wlPredDelta
-                local predictionActive = predOn and predDelta ~= 0 and PLAYER_CLASS == "WARLOCK"
-                if not _cpDB.textMode or not CP_ApplyConfiguredText(_cpDB.textMode, txt, cur, maxPower, predictionActive and "*" or nil) then
-                    if predictionActive then CP_StampText(txt, cur .. "*") else CP_StampText(txt, cur) end
-                end
-                CP_StampShown(txt, true)
-                if PLAYER_CLASS == "WARLOCK" and predOn then
+            -- Only a Warlock predicts shards (Jay's approach).
+            local predOn, predictionActive
+            if PLAYER_CLASS == "WARLOCK" then
+                predOn = visual and visual.showPrediction ~= false
+                predictionActive = predOn and CP.wlPredDelta ~= 0
+            end
+            if CP_PaintResourceText(txt, visual, _cpDB.textMode, cur, maxPower, predictionActive) then
+                if predOn then
                     local spec = GetSpec and GetSpec()
                     local threshold = spec and CPConst.WL_LOW_SHARD_THRESHOLD[spec]
                     if threshold and cur < threshold then CP_StampTextColor(txt, 1, 0.1, 0.1, 1)
@@ -749,7 +767,7 @@ modeBuilders.SEGMENTED = function(E)
                 else
                     CP_StampTextColor(txt, 1, 1, 1, 1)
                 end
-            else CP_StampShown(txt, false) end
+            end
         end
         CP_CheckAutoHide(cur, maxPower)
     end
@@ -796,22 +814,16 @@ modeBuilders.FRACTIONAL = function(E)
             end
             local txt = CP.text
             if txt then
+                -- The unmodified value drives fractional fill natively; the regular
+                -- UnitPower result is the user-facing shard count, read only when shown.
+                local displayPower
                 if visual and visual.showText == true then
-                    -- The unmodified value drives fractional fill natively; the
-                    -- regular UnitPower result is the user-facing shard count.
-                    local displayPower = UnitPower("player", powerType)
-                    local predictionActive = visual.showPrediction ~= false and CP.wlPredDelta ~= 0
-                    if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, displayPower, maxPower, predictionActive and "*" or nil) then
-                        -- Explicit text modes are written by the shared helper.
-                    elseif predictionActive then
-                        CP_SetPassthroughFormattedText(txt, "%s*", displayPower)
-                    else
-                        CP_SetPassthroughText(txt, displayPower)
-                    end
-                    CP_StampShown(txt, true)
+                    displayPower = UnitPower("player", powerType)
+                end
+                local predictionActive = visual and visual.showPrediction ~= false and CP.wlPredDelta ~= 0
+                if CP_PaintResourceText(txt, visual, _cpDB.textMode, displayPower, maxPower, predictionActive,
+                    WritePassthroughCount) then
                     CP_StampTextColor(txt, 1, 1, 1, 1)
-                else
-                    CP_StampShown(txt, false)
                 end
             end
             --- A secret power value only blocks the full/empty rules; the combat
@@ -853,25 +865,16 @@ modeBuilders.FRACTIONAL = function(E)
         end
         local txt = CP.text
         if txt then
-            local showText = visual and visual.showText == true
-            if showText then
-                local predOn = visual.showPrediction ~= false
-                local predDelta = CP.wlPredDelta
-                local predictionActive = predOn and predDelta ~= 0
-                if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, fractional, maxPower, predictionActive and "*" or nil) then
-                    -- Explicit text modes are written by the shared helper.
-                elseif predictionActive then
-                    if partial > 0.001 then CP_StampText(txt, string_format("%.1f*", fractional)) else CP_StampText(txt, fullBars .. "*") end
-                else
-                    if partial > 0.001 then CP_StampText(txt, string_format("%.1f", fractional)) else CP_StampText(txt, fullBars) end
-                end
-                CP_StampShown(txt, true)
+            local predOn = visual and visual.showPrediction ~= false
+            local predictionActive = predOn and CP.wlPredDelta ~= 0
+            if CP_PaintResourceText(txt, visual, _cpDB.textMode, fractional, maxPower, predictionActive,
+                WriteFractionalCount) then
                 if predOn then
                     local threshold = CPConst.WL_LOW_SHARD_THRESHOLD[CPK.SPEC.WARLOCK_DESTRUCTION]
                     if threshold and fullBars < threshold then CP_StampTextColor(txt, 1, 0.1, 0.1, 1)
                     else CP_StampTextColor(txt, 1, 1, 1, 1) end
                 else CP_StampTextColor(txt, 1, 1, 1, 1) end
-            else CP_StampShown(txt, false) end
+            end
         end
         CP_CheckAutoHide(fullBars, maxPower)
     end
@@ -1211,17 +1214,7 @@ modeBuilders.RUNE = function(E)
         end
 
         local txt = CP.text
-        if txt then
-            local showText = visual and visual.showText == true
-            if showText then
-                if not _cpDB.textMode or not CP_ApplyConfiguredText(_cpDB.textMode, txt, readyCount, maxPower) then
-                    CP_StampText(txt, readyCount)
-                end
-                CP_StampShown(txt, true)
-            else
-                CP_StampShown(txt, false)
-            end
-        end
+        if txt then CP_PaintResourceText(txt, visual, _cpDB.textMode, readyCount, maxPower) end
 
         CP_CheckAutoHide(readyCount, maxPower)
     end
@@ -1258,6 +1251,21 @@ modeBuilders.AURA = function(E)
     local MAX_FRAGMENT_NOTCHES = (E.CPConst and tonumber(E.CPConst.MAX_FRAGMENT_NOTCHES)) or 64
     --- Top of the Pip gap slider; the divider budget is shared across it.
     local MAX_PIP_GAP = 8
+
+    --- Aura count writers for CP_PaintResourceText: a plain count is cached,
+    --- a restricted one goes straight to the native widget.
+    local function WriteRestrictedCurMax(txt, value, maximum)
+        if NotSecret(value) then
+            CP_SetPassthroughFormattedText(txt, "%d / %d", tonumber(value) or 0, maximum)
+        else
+            CP_SetPassthroughFormattedText(txt, "%s / %d", value, maximum)
+        end
+    end
+
+    local function WriteAuraCount(txt, value)
+        if NotSecret(value) then CP_StampText(txt, tonumber(value) or 0)
+        else CP_SetPassthroughText(txt, value) end
+    end
 
     --- Resolved once, on the Classic clients only: no Classic game type loads a
     --- Blizzard call site for either entry point, so the Classic build must not
@@ -1428,21 +1436,7 @@ modeBuilders.AURA = function(E)
                 end
             end
             local txt = CP.text
-            if txt then
-                local showText = visual and visual.showText == true
-                if showText then
-                    if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, rawCur, maxPower) then
-                        -- Explicit text modes are written by the shared helper.
-                    elseif NotSecret(rawCur) then
-                        CP_SetPassthroughFormattedText(txt, "%d / %d", tonumber(rawCur) or 0, maxPower)
-                    else
-                        CP_SetPassthroughFormattedText(txt, "%s / %d", rawCur, maxPower)
-                    end
-                    CP_StampShown(txt, true)
-                else
-                    CP_StampShown(txt, false)
-                end
-            end
+            if txt then CP_PaintResourceText(txt, visual, _cpDB.textMode, rawCur, maxPower, nil, WriteRestrictedCurMax) end
             CP_CheckAutoHide(curSafe and tonumber(rawCur) or nil, maxPower)
         else
             local cur = 0
@@ -1523,18 +1517,7 @@ modeBuilders.AURA = function(E)
                 end
             end
             local txt = CP.text
-            if txt then
-                local showText = visual and visual.showText == true
-                if showText then
-                    if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, textValue, maxPower) then
-                        -- Explicit text modes are written by the shared helper.
-                    elseif NotSecret(textValue) then CP_StampText(txt, tonumber(textValue) or 0)
-                    else CP_SetPassthroughText(txt, textValue) end
-                    CP_StampShown(txt, true)
-                else
-                    CP_StampShown(txt, false)
-                end
-            end
+            if txt then CP_PaintResourceText(txt, visual, _cpDB.textMode, textValue, maxPower, nil, WriteAuraCount) end
             local autoHideCur = cur
             if restrictedApplications then autoHideCur = nil end
             CP_CheckAutoHide(autoHideCur, maxPower)
@@ -1612,18 +1595,7 @@ modeBuilders.AURA = function(E)
             CP._singleVisualMode = CP.renderMode
         end
         local txt = CP.text
-        if txt then
-            local showText = visual and visual.showText == true
-            if showText then
-                if _cpDB.textMode and CP_ApplyConfiguredText(_cpDB.textMode, txt, textValue, progressMax or 1) then
-                    -- Explicit text modes are written by the shared helper.
-                elseif NotSecret(textValue) then CP_StampText(txt, tonumber(textValue) or 0)
-                else CP_SetPassthroughText(txt, textValue) end
-                CP_StampShown(txt, true)
-            else
-                CP_StampShown(txt, false)
-            end
-        end
+        if txt then CP_PaintResourceText(txt, visual, _cpDB.textMode, textValue, progressMax or 1, nil, WriteAuraCount) end
         CP_CheckAutoHide(cur, 1)
     end
 
