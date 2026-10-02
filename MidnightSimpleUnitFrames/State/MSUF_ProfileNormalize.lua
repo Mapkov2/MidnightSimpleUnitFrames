@@ -305,6 +305,10 @@ local MSUF_PROFILEIO_UNIT_AURA_RESET_BASELINE_REVISION = 1
 local MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION = 1
 local MSUF_PROFILEIO_GROUP_AURA_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
 local MSUF_PROFILEIO_GROUP_AURA_FILTER_LANES = { "buff", "debuff" }
+--- The Group Aura filter tokens a stored profile may keep. Profile normalization
+--- owns this list: it runs before the Auras3 menu model loads (factory and
+--- fresh-install profiles are built from State alone), and the menu model's
+--- stored-token check (MSUF_GF_AuraFilter.NormalizeFilterToken) is the same list.
 local MSUF_PROFILEIO_GF_CURRENT_FILTER_TOKENS = {
     buff = {
         ALL = "ALL",
@@ -335,14 +339,9 @@ local function MSUF_ProfileIO_HasCanonicalUnitAuraBaseline(auras)
         and (tonumber(auras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) or 0)
             >= MSUF_PROFILEIO_UNIT_AURA_RESET_BASELINE_REVISION
 end
+--- A retired or unknown token resets to the lane's visible default, "ALL".
 local function MSUF_ProfileIO_NormalizeGFAuraFilterToken(lane, token)
     if lane ~= "buff" and lane ~= "debuff" then return token end
-    local auraFilter = (type(MSUF) == "table" and type(MSUF.GF) == "table" and MSUF.GF.AuraFilter)
-        or _G.MSUF_GF_AuraFilter
-    local normalize = auraFilter and auraFilter.NormalizeFilterToken
-    if type(normalize) == "function" then
-        return normalize(lane, token)
-    end
     local key = tostring(token or "ALL"):upper():gsub("[^A-Z0-9]", "")
     return MSUF_PROFILEIO_GF_CURRENT_FILTER_TOKENS[lane][key] or "ALL"
 end

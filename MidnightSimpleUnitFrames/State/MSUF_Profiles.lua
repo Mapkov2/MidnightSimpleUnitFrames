@@ -1223,21 +1223,6 @@ local function MSUF_ProfileIO_EnsureBlizzardAuraPositionDefaults(auras)
     if auras.blizzardContainerY == nil then auras.blizzardContainerY = 0 end
 end
 
-local function MSUF_ProfileIO_GetGFAuraFilter()
-    local gf = (type(MSUF) == "table" and MSUF.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF)
-    return (gf and gf.AuraFilter) or _G.MSUF_GF_AuraFilter
-end
-
-local function MSUF_ProfileIO_CopyDefaultBlacklistCats(groupKey)
-    local af = MSUF_ProfileIO_GetGFAuraFilter()
-    local defs = af and ((groupKey == "buff") and af.DEFAULT_BLACKLIST_BUFF
-        or (groupKey == "debuff") and af.DEFAULT_BLACKLIST_DEBUFF
-        or nil)
-    if type(defs) ~= "table" then
-        return {}
-    end
-    return MSUF_DeepCopy(defs)
-end
 
 local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, defaultToken)
     local group = auras and auras[groupKey]
@@ -1257,8 +1242,10 @@ local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, def
     end
     group.filterToken = MSUF_ProfileIO_NormalizeGFAuraFilterToken(groupKey, group.filterToken)
 
+    -- No default categories: MSUF_GF_AuraFilter.DEFAULT_BLACKLIST_BUFF/DEBUFF,
+    -- which this used to copy, are gone since 6.0 alpha 1 and read as nil.
     if type(group.blacklistCats) ~= "table" then
-        group.blacklistCats = MSUF_ProfileIO_CopyDefaultBlacklistCats(groupKey)
+        group.blacklistCats = {}
     end
     if group.strata == nil then group.strata = "AUTO" end
     if groupKey == "buff" and group.trackedStrata == nil then group.trackedStrata = "AUTO" end
@@ -1961,10 +1948,9 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
         AddKind("priority")
     end
     MSUF_ProfileIO_EnsureGroupFramesDB()
-    local af = MSUF_ProfileIO_GetGFAuraFilter()
-    if af and type(af.InvalidateAllBlacklistHashes) == "function" then
-        af.InvalidateAllBlacklistHashes()
-    end
+    -- No blacklist hash flush: MSUF_GF_AuraFilter.BuildBlacklistHash re-checks
+    -- each group's blacklist signature on every call (and
+    -- InvalidateAllBlacklistHashes, called here before, exists nowhere).
     -- Group frames load after this file; Kernel/MSUF_RuntimeContracts.lua
     -- requires this provider once the core TOC has loaded.
     MSUF.Require("MSUF_GF_InvalidateConfCache", "State/MSUF_Profiles.lua")()
