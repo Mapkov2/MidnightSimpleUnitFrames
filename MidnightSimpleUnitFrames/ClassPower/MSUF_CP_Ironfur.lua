@@ -275,7 +275,10 @@ modeBuilders.IRONFUR = function(E)
         if spellID == IRONFUR_SPELL then
             local duration = baseDuration
             local hasGoE = goeUntil > now and guardianOfEluneKnown
-            if hasGoE then duration = duration + GOE_BONUS; goeUntil = 0 end
+            if hasGoE then
+                duration = duration + GOE_BONUS
+                goeUntil = 0
+            end
             if tickCount < MAX_TRACKED_CASTS then
                 tickCount = tickCount + 1
             else
@@ -296,6 +299,29 @@ modeBuilders.IRONFUR = function(E)
             goeUntil = 0
         end
     end)
+
+    --- Ironfur paints pip 1, its background, the other pips' visibility and
+    --- the count text directly, not through the stamp helpers of
+    --- MSUF_CP_Modes.lua. When it hands the bar back (Bear -> Cat), those
+    --- stamps no longer describe the widgets: clear them so the next mode's
+    --- painter writes every field again instead of skipping it.
+    local function ReleasePaintStamps()
+        local bars = CP and CP.bars
+        local bar = bars and bars[1]
+        if bar then
+            bar._msufCPR, bar._msufCPG, bar._msufCPB, bar._msufCPA = nil, nil, nil, nil
+            bar._msufCPAlpha, bar._msufCPValue = nil, nil
+            bar._msufCPMin, bar._msufCPMax = nil, nil
+            bar._msufCPShown, bar._msufCPVisualVersion = nil, nil
+            local bg = bar._bg
+            if bg then bg._msufCPR, bg._msufCPG, bg._msufCPB, bg._msufCPA = nil, nil, nil, nil end
+        end
+        for barIndex = 2, (bars and CP.maxBars) or 1 do
+            if bars[barIndex] then bars[barIndex]._msufCPShown = nil end
+        end
+        local text = CP and CP.text
+        if text then text._msufCPText, text._msufCPShown = nil, nil end
+    end
 
     local function SetActive(want)
         want = want == true
@@ -323,13 +349,17 @@ modeBuilders.IRONFUR = function(E)
                 eventsBound = false
             end
             ClearState()
+            ReleasePaintStamps()
         end
     end
 
     return {
         Update = Update,
         SetActive = SetActive,
-        InvalidateLayout = function() layoutDirty = true; staticDirty = true end,
+        InvalidateLayout = function()
+            layoutDirty = true
+            staticDirty = true
+        end,
         RefreshVisual = function()
             cachedVisual = GetVisual and GetVisual() or CP.visual
             visualVersion = -1

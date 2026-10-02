@@ -39,7 +39,10 @@ function MSUF.CPBuilders.NativeAuras(E)
     end
 
     local function Style(state, maximum)
-        if not state.bar then pending = true; return false end
+        if not state.bar then
+            pending = true
+            return false
+        end
         local b, v = db.bars or {}, CP.visual or {}
         local texture = E.Texture(b.classPowerTexture)
         local font = (_G.MSUF_GetFontPath and _G.MSUF_GetFontPath()) or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
@@ -57,7 +60,10 @@ function MSUF.CPBuilders.NativeAuras(E)
             tostring(b.classPowerFillReverse == true), b.classPowerTextOffsetX or 0,
             b.classPowerTextOffsetY or 0, textLevel }, ":")
         if state.signature == signature then return true end
-        if not Mutable(state) then pending = true; return false end
+        if not Mutable(state) then
+            pending = true
+            return false
+        end
         local bar, text = state.bar, state.text
         bar:SetStatusBarTexture(texture)
         bar:SetStatusBarColor(r, g, blue, v.filledAlpha or 1)
@@ -82,10 +88,19 @@ function MSUF.CPBuilders.NativeAuras(E)
 
     local function Ensure(key, maximum)
         local state = states[key]
-        if state and state.sensor then Style(state, maximum); return state end
-        if not Mutable() then pending = true; return nil end
+        if state and state.sensor then
+            Style(state, maximum)
+            return state
+        end
+        if not Mutable() then
+            pending = true
+            return nil
+        end
         local A3 = _G.MSUF_Auras3
-        if not (A3 and A3.CreateClassPowerAuraSensor) then pending = true; return nil end
+        if not (A3 and A3.CreateClassPowerAuraSensor) then
+            pending = true
+            return nil
+        end
         if not state then
             state = { proxy = PixelLayoutRegion(CreateFrame("Frame", nil, CP.container)), ticks = {} }
             state.chrome = PixelLayoutRegion(CreateFrame("Frame", nil, state.proxy))
@@ -108,7 +123,11 @@ function MSUF.CPBuilders.NativeAuras(E)
                 state.text = PixelLayoutRegion(state.textOwner:CreateFontString(nil, "OVERLAY"))
                 Style(state, maximum)
             end)
-        if not state.sensor then state.proxy:Hide(); pending = true; return nil end
+        if not state.sensor then
+            state.proxy:Hide()
+            pending = true
+            return nil
+        end
         return state
     end
 
@@ -165,7 +184,12 @@ function MSUF.CPBuilders.NativeAuras(E)
                     bar._msufCPValue = nil
                 end
             end
-            if CP.text then CP.text:Hide() end
+            --- Keep the painters' shown stamp truthful: the segmented painter
+            --- skips a Show its stamp already records (vehicle combo points).
+            if CP.text then
+                CP.text:Hide()
+                CP.text._msufCPShown = false
+            end
         end
         CP.nativeAuraPending = pending
     end

@@ -18,6 +18,7 @@ if type(builders) ~= "table" then
 end
 
 local type, tonumber, tostring = type, tonumber, tostring
+local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
 
 --- CONTROLLER_COLORS is built once at controller load with the shared cached
 --- config table and the power-type token map.
@@ -30,7 +31,6 @@ builders.CONTROLLER_COLORS = function(E)
     local _cachedColorToken = nil
     local _cachedBgColorToken = nil
     local _cachedBgColorR, _cachedBgColorG, _cachedBgColorB = 0, 0, 0
-    local _staggerCachedTier = 0  --- Stagger: avoid redundant SetStatusBarColor when tier unchanged
     local _cachedChargedR, _cachedChargedG, _cachedChargedB
 
     --- Maelstrom Weapon 5+ threshold color (cached independently)
@@ -40,16 +40,10 @@ builders.CONTROLLER_COLORS = function(E)
     local function ResolveMWAbove5Color()
         if _mwAbove5Resolved then return _mwAbove5R, _mwAbove5G, _mwAbove5B end
         _mwAbove5Resolved = true
-        local ov = _cpDB.colorOverrides
-        if type(ov) == "table" then
-            local c = ov["MAELSTROM_ABOVE_5"]
-            if type(c) == "table" then
-                local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                    _mwAbove5R, _mwAbove5G, _mwAbove5B = r, g, b
-                    return r, g, b
-                end
-            end
+        local r, g, b = OverrideRGB(_cpDB.colorOverrides, "MAELSTROM_ABOVE_5")
+        if r then
+            _mwAbove5R, _mwAbove5G, _mwAbove5B = r, g, b
+            return r, g, b
         end
         _mwAbove5R, _mwAbove5G, _mwAbove5B = 1.00, 0.50, 0.00  --- Sensei orange default
         return _mwAbove5R, _mwAbove5G, _mwAbove5B
@@ -68,16 +62,10 @@ builders.CONTROLLER_COLORS = function(E)
 
         --- 1. Custom class-power color override (from Colors panel)
         if _cpDB.general then
-            local ov = _cpDB.colorOverrides
-            if type(ov) == "table" and token then
-                local c = ov[token]
-                if type(c) == "table" then
-                    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                        _cachedColorR, _cachedColorG, _cachedColorB = r, g, b
-                        return r, g, b
-                    end
-                end
+            local r, g, b = OverrideRGB(_cpDB.colorOverrides, token)
+            if r then
+                _cachedColorR, _cachedColorG, _cachedColorB = r, g, b
+                return r, g, b
             end
         end
 
@@ -126,16 +114,10 @@ builders.CONTROLLER_COLORS = function(E)
         _cachedBgColorToken = token
 
         if _cpDB.general then
-            local ov = _cpDB.bgColorOverrides
-            if type(ov) == "table" and token then
-                local c = ov[token]
-                if type(c) == "table" then
-                    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                        _cachedBgColorR, _cachedBgColorG, _cachedBgColorB = r, g, b
-                        return r, g, b
-                    end
-                end
+            local r, g, b = OverrideRGB(_cpDB.bgColorOverrides, token)
+            if r then
+                _cachedBgColorR, _cachedBgColorG, _cachedBgColorB = r, g, b
+                return r, g, b
             end
         end
 
@@ -149,7 +131,6 @@ builders.CONTROLLER_COLORS = function(E)
         _cachedChargedR = nil
         _cachedChargedG = nil
         _cachedChargedB = nil
-        _staggerCachedTier = 0
         _mwAbove5Resolved = false
     end
 
@@ -177,16 +158,10 @@ builders.CONTROLLER_COLORS = function(E)
 
         --- 1. Custom override from Colors panel
         if _cpDB.general then
-            local ov = _cpDB.colorOverrides
-            if type(ov) == "table" then
-                local c = ov["CHARGED"]
-                if type(c) == "table" then
-                    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                        _cachedChargedR, _cachedChargedG, _cachedChargedB = r, g, b
-                        return r, g, b
-                    end
-                end
+            local r, g, b = OverrideRGB(_cpDB.colorOverrides, "CHARGED")
+            if r then
+                _cachedChargedR, _cachedChargedG, _cachedChargedB = r, g, b
+                return r, g, b
             end
         end
 
@@ -221,16 +196,10 @@ builders.CONTROLLER_COLORS = function(E)
         if slot < 1 then slot = 1 elseif slot > 10 then slot = 10 end
 
         if mode == "custom" then
-            local ov = _cpDB.colorOverrides
             local slotToken = powerToken == "COMBO_POINTS" and COMBO_POINT_SLOT_TOKENS[slot]
                 or (powerToken and (powerToken .. "_" .. tostring(slot)))
-            local c = slotToken and ov and ov[slotToken]
-            if type(c) == "table" then
-                local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                    return r, g, b
-                end
-            end
+            local r, g, b = OverrideRGB(_cpDB.colorOverrides, slotToken or nil)
+            if r then return r, g, b end
             if powerToken ~= "COMBO_POINTS" then return baseR, baseG, baseB end
         end
 
@@ -243,17 +212,13 @@ builders.CONTROLLER_COLORS = function(E)
     local function ResolveFullResourceColor(powerToken, baseR, baseG, baseB)
         local enabled = _cpDB.fullColorEnabled
         if not (powerToken and enabled and enabled[powerToken] == true) then return false, baseR, baseG, baseB end
-        local overrides = _cpDB.colorOverrides
-        local color = overrides and overrides[powerToken .. "_FULL"]
-        if type(color) == "table" then
-            local r, g, b = color[1] or color.r, color[2] or color.g, color[3] or color.b
-            if type(r) == "number" and type(g) == "number" and type(b) == "number" then return true, r, g, b end
-        end
+        local r, g, b = OverrideRGB(_cpDB.colorOverrides, powerToken .. "_FULL")
+        if r then return true, r, g, b end
         return true, baseR, baseG, baseB
     end
 
-    --- Profile refresh/shutdown drop only the token caches; the charged,
-    --- Maelstrom and Stagger caches survive until the next full invalidation.
+    --- Profile refresh/shutdown drop only the token caches; the charged and
+    --- Maelstrom caches survive until the next full invalidation.
     local function CP_ResetColorTokens()
         _cachedColorToken = nil
         _cachedBgColorToken = nil

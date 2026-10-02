@@ -107,6 +107,7 @@ if IS_CLASSIC then
     ClientCP = assert(MSUF.CPClassicRouting, "Classic ClassPower routing must load first")
     UnitPower = ClientCP.UnitPower or UnitPower
     UnitPowerDisplayMod = ClientCP.UnitPowerDisplayMod or UnitPowerDisplayMod
+    UnitPowerMax = ClientCP.UnitPowerMax or UnitPowerMax
 end
 
 --- Resolved once, on the Classic clients only: no Classic game type loads a
@@ -247,6 +248,7 @@ local CP = {
     augCompositeActive = false, --- Ebon Might owns the Player Power bar
     ebonSensorDesired = false,
     ebonTextLayerRetryPending = false,
+    ebonStyleRetryPending = false,
     augLifecycleRetryPending = false,
     augLifecycleDisablePending = false,
     augLifecycleTarget = nil,
@@ -361,6 +363,9 @@ end
 --- builder of ClassPower/MSUF_CP_Core.lua.
 local CP_ApplyFont
 local CP_ApplyColors
+--- Active-mode dispatch (assigned below MODE_UPDATE_FN); forward-declared so
+--- the presentation builder's colour refresh can reach it.
+local CP_RunActiveUpdate
 local CP_RefreshTexture
 
 --- Auto-Hide: visibility check after each update (OOC / Full / Empty)
@@ -560,7 +565,7 @@ do
             tonumber = tonumber,
             ResolveClassPowerColor = CPColors.ResolveClassPowerColor,
             CP_ResolveTexture = CPConfig.ResolveTexture,
-            GetUpdateFn = function() return CP_UpdateValues end,
+            RunActiveUpdate = function(powerType, maxP) return CP_RunActiveUpdate(powerType, maxP) end,
         })
     if presentation then
         CDM_GetScaledWidth = presentation.CDM_GetScaledWidth or CDM_GetScaledWidth
@@ -673,7 +678,6 @@ local CPTicker = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_TICKER, {
 local CP_StopCentralTick = CPTicker.Stop
 local CP_SyncRuntimeOnUpdates = CPTicker.SyncRuntimeOnUpdates
 
-local CP_RunActiveUpdate
 
 --- Phase 5 CP split: class/resource specials now live in the SPECIALS builder
 --- of ClassPower/MSUF_CP_Core.lua. The core builds the handlers from a
@@ -1002,8 +1006,11 @@ function Refresh.ApplyAugLifecycle(b, cpEnabled, powerType, playerManaOverride, 
     return true
 end
 
---- Resolve max power based on render mode
-function Refresh.ResolveMaxPower(powerType, renderMode)
+--- Resolve max power based on render mode: the one segment-count rule of the
+--- full refresh and of the light refresh (RUNTIME's GetResolvedVisibleMax).
+--- fallbackMax answers a segmented resource whose maximum is secret or
+--- missing: the full refresh guesses 5, a light refresh keeps its count.
+function Refresh.ResolveMaxPower(powerType, renderMode, fallbackMax)
     local maxP
     if renderMode == CPK.MODE.NATIVE_AURA then
         maxP = 1 -- one native fill; separators do not need aura slots
@@ -1041,8 +1048,6 @@ function Refresh.ResolveMaxPower(powerType, renderMode)
             maxP = 6  --- Vengeance: 6 soul fragment segments
         elseif powerType == "TIP_OF_THE_SPEAR" then
             maxP = TIP.MAX_STACKS  --- Survival Hunter: 3 Tip of the Spear stacks
-            CP.spStacks = 0
-            CP.spExpires = nil
         elseif powerType == "ICICLES" then
             maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
         elseif IS_CLASSIC and powerType == "MISTS_ARCANE_CHARGES" then
@@ -1057,7 +1062,7 @@ function Refresh.ResolveMaxPower(powerType, renderMode)
             --- Heuristic fallback (safe; most are 5-6)
             if powerType == PT.Runes then maxP = 6
             elseif powerType == PT.ComboPoints then maxP = 7
-            else maxP = 5 end
+            else maxP = fallbackMax or 5 end
         end
     end
     maxP = math_floor(maxP)
@@ -1071,6 +1076,11 @@ function Refresh.ShowClassPower(playerFrame, b, cpHeight, powerType, renderMode,
     CP_Create(playerFrame)
 
     local maxP = Refresh.ResolveMaxPower(powerType, renderMode)
+    --- A rebuilt Tip of the Spear starts without tracked stacks.
+    if powerType == "TIP_OF_THE_SPEAR" then
+        CP.spStacks = 0
+        CP.spExpires = nil
+    end
 
     CP_EnsureBars(playerFrame, maxP)
     CP._outlineEdge = -1  --- force outline rebuild on mode/size changes
@@ -1368,13 +1378,29 @@ CP_RefreshEventBindings = CPEvents.RefreshEventBindings
 CP_ShouldUseFrequentPowerEvents = CPEvents.ShouldUseFrequentPowerEvents
 CP_ShouldUseLiteBindings = CPEvents.ShouldUseLiteBindings
 
---- Throttle for rare events (spec/form changes)
+--- Throttle for rare events (spec/form changes). A structural event inside the
+--- window still describes a state the bar must show: one trailing FullRefresh
+--- runs when the window ends instead of dropping it.
 local _lastFullRefresh = 0
 local FULL_REFRESH_THROTTLE = 0.15
+local _trailingRefreshPending = false
+
+local function TrailingFullRefresh()
+    _trailingRefreshPending = false
+    _lastFullRefresh = GetTime()
+    FullRefresh()
+end
 
 ThrottledFullRefresh = function()
     local now = GetTime()
-    if now - _lastFullRefresh < FULL_REFRESH_THROTTLE then return end
+    local elapsed = now - _lastFullRefresh
+    if elapsed < FULL_REFRESH_THROTTLE then
+        if not _trailingRefreshPending then
+            _trailingRefreshPending = true
+            C_Timer.After(FULL_REFRESH_THROTTLE - elapsed, TrailingFullRefresh)
+        end
+        return
+    end
     _lastFullRefresh = now
     FullRefresh()
 end
@@ -1386,15 +1412,10 @@ do
             _cpDB = _cpDB,
             CPK = CPK,
             PT = PT,
-            TIP = TIP,
-                CPConst = CPConst,
             POWER_TYPE_TOKENS = POWER_TYPE_TOKENS,
             PLAYER_CLASS = PLAYER_CLASS,
-            UnitPowerMax = UnitPowerMax,
             NotSecret = NotSecret,
-            C_Spell = C_Spell,
             tonumber = tonumber,
-            math_floor = math_floor,
             C_Timer = C_Timer,
             GetPlayerFrame = GetPlayerFrame,
             CP_EnsureBars = CP_EnsureBars,
@@ -1406,6 +1427,7 @@ do
                     return CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
                 end
             end,
+            ResolveMaxPower = Refresh.ResolveMaxPower,
             AM_UpdateValue = AM_UpdateValue,
             CP_ComputeStructuralSignature = CPConfig.ComputeStructuralSignature,
             CP_RefreshEventBindings = function() return CP_RefreshEventBindings() end,
@@ -1505,9 +1527,12 @@ local function ClassPowerOnRareEvent(event, arg1)
             if CP.augLifecycleRetryPending == true
                 or CP.ebonSensorRetryPending == true
                 or CP.ebonTextLayerRetryPending == true
+                or CP.ebonStyleRetryPending == true
             then
                 CP.augLifecycleRetryPending = false
                 CP.augLifecycleTarget = nil
+                --- The Ebon Might restyle re-queues itself if still denied.
+                CP.ebonStyleRetryPending = nil
                 FullRefresh()
                 return
             end
@@ -1785,7 +1810,6 @@ CP.RefreshCDMWidthBindings = function(syncNow)
         CP.CDMWidthSyncLayouts(true)
     end
 end
-ExportPublic("MSUF_ClassPower_RefreshCDMWidthBindings", CP.RefreshCDMWidthBindings)
 
 CP.PlayerHPRefreshPublic = function()
     CPConfig.RefreshConfig()
@@ -1793,7 +1817,6 @@ CP.PlayerHPRefreshPublic = function()
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(CPConfig.AnyFeatureEnabled())
 end
-ExportPublic("MSUF_ClassPower_PlayerHP_Refresh", CP.PlayerHPRefreshPublic)
 
 CP.PlayerHPRefreshTextures = function()
     CPConfig.RefreshConfig()
@@ -1802,7 +1825,6 @@ CP.PlayerHPRefreshTextures = function()
         CP_PlayerHPRefresh(GetPlayerFrame())
     end
 end
-ExportPublic("MSUF_ClassPower_PlayerHP_RefreshTextures", CP.PlayerHPRefreshTextures)
 
 --- Refresh bar textures (call after texture change in settings)
 CP.RefreshTexturesPublic = function()
@@ -1886,6 +1908,8 @@ CP.ApplyFontsPublic = function()
         if CP.RefreshEbonStyle then CP.RefreshEbonStyle() end
         CP.ApplyEbonTextStyle()
         CP.SyncNativeAuras()
+        --- A restyle the restricted slot denied waits for combat end.
+        if CP.ebonStyleRetryPending == true then CP_RefreshEventBindings() end
     end
     if PHP.visible then
         PHP._fontStamp = nil
@@ -1906,6 +1930,7 @@ CP.RefreshVisualsPublic = function()
         if CP.RefreshEbonStyle then CP.RefreshEbonStyle() end
         CP.ApplyEbonTextStyle()
         CP.SyncNativeAuras()
+        if CP.ebonStyleRetryPending == true then CP_RefreshEventBindings() end
         if CP.powerType == "IRONFUR" and CP.ironfur and CP.ironfur.RefreshVisual then
             CP.ironfur.RefreshVisual()
         end
@@ -1918,7 +1943,6 @@ CP.RefreshVisualsPublic = function()
     end
     if CP.resourceExtras then CP.resourceExtras.Refresh() end
 end
-ExportPublic("MSUF_ClassPower_RefreshVisuals", CP.RefreshVisualsPublic)
 
 CP.ApplyRoundedSurfacePublic = function(masterEnabled)
     local rounded = MSUF and MSUF.RoundedSurface
@@ -2031,17 +2055,6 @@ do
         CP._origFullRefresh()
     end
 end
-
---- Smooth Player Power compatibility entry point.
---- UFCore owns the actual StatusBar interpolation. Class Resources only owns
---- the detached Player bar's layout and exposes the same per-player setting.
-CP.SmoothPowerBarApply = function()
-    --- Refresh the cached flags in UFCore's DIRECT_APPLY hot path.
-    if _G.MSUF_UFCore_RefreshSettingsCache then
-        _G.MSUF_UFCore_RefreshSettingsCache("SMOOTH_POWER")
-    end
-end
-ExportPublic("MSUF_SmoothPowerBar_Apply", CP.SmoothPowerBarApply)
 
 --- Complete the ClassPower module teardown. Active Aug is never routed here in
 --- combat: Disable() retains the live surface and the event driver calls this

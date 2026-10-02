@@ -283,8 +283,11 @@ builders.PLAYER_HP = function(E)
     end
 
     --- Some clients can return protected/secret health values. When raw values
-    --- are unavailable, use Blizzard's percent helper if it exposes a safe
-    --- scalar and let text fall back to percent-only output.
+    --- are unavailable, use Blizzard's percent helper and let text fall back
+    --- to percent-only output. Returns the plain rounded percent, or nil plus
+    --- the secret 0-100 value (UnitHealthPercent is SecretReturns on Midnight)
+    --- for SetFormattedText; without the ScaleTo100 curve a secret 0-1 value
+    --- cannot be scaled, so nothing is returned.
     local function UnitPercent()
         if not UnitHealthPercent then return nil end
         local pct
@@ -293,7 +296,10 @@ builders.PLAYER_HP = function(E)
         else
             pct = UnitHealthPercent("player", true)
         end
-        if issecretvalue(pct) == true then return nil end
+        if issecretvalue(pct) == true then
+            if SCALE_100 then return nil, pct end
+            return nil
+        end
         pct = tonumber(pct)
         if not pct then return nil end
         if pct <= 1 then pct = pct * 100 end
@@ -380,6 +386,19 @@ builders.PLAYER_HP = function(E)
         fs:SetText(text)
     end
 
+    --- Percent-only text while health is secret. A plain percent is stamped
+    --- like any text; a secret one goes unformatted to the native formatter,
+    --- which rounds it like Percent().
+    local function SetPercentText(fs, pct, secretPct, hidePercentSymbol)
+        if issecretvalue(secretPct) == true then
+            if not fs then return end
+            fs._msufPHPText = nil
+            fs:SetFormattedText(hidePercentSymbol and "%.0f" or "%.0f%%", secretPct)
+            return
+        end
+        SetText(fs, PercentText(pct, hidePercentSymbol))
+    end
+
     --- Mirroring the already-rendered player-frame text avoids reimplementing
     --- every text mode twice. The runtime stamp check makes sure we only copy
     --- text that was rendered for the same health inputs.
@@ -415,6 +434,9 @@ builders.PLAYER_HP = function(E)
         dst._phpTextR, dst._phpTextG, dst._phpTextB, dst._phpTextA = r, g, b, a
     end
 
+    --- A slot painted from secret health reads back as a secret string
+    --- (FontString:GetText). It is handed to SetText as it is: the empty and
+    --- nil checks run only on plain text.
     local function ReadTextSlot(src)
         local text = ""
         local r, g, b, a
@@ -423,7 +445,7 @@ builders.PLAYER_HP = function(E)
                 text = src._aText
                 if text == nil and src.GetText then text = src:GetText() end
             end
-            if text == nil then text = "" end
+            if issecretvalue(text) ~= true and text == nil then text = "" end
             r, g, b, a = src._msufTextR, src._msufTextG, src._msufTextB, src._msufTextA
             if r == nil and src.GetTextColor then
                 r, g, b, a = src:GetTextColor()
@@ -443,8 +465,12 @@ builders.PLAYER_HP = function(E)
     local function CopyCompactText(playerFrame)
         if not (PHP.center and playerFrame) then return false end
         local text, r, g, b, a = ReadTextSlot(playerFrame.hpTextCenter)
-        if text == "" then text, r, g, b, a = ReadTextSlot(playerFrame.hpTextRight) end
-        if text == "" then text, r, g, b, a = ReadTextSlot(playerFrame.hpTextLeft) end
+        if issecretvalue(text) ~= true and text == "" then
+            text, r, g, b, a = ReadTextSlot(playerFrame.hpTextRight)
+        end
+        if issecretvalue(text) ~= true and text == "" then
+            text, r, g, b, a = ReadTextSlot(playerFrame.hpTextLeft)
+        end
         ApplyCopiedTextColor(PHP.center, r, g, b, a)
         SetText(PHP.left, "")
         SetText(PHP.right, "")
@@ -999,18 +1025,30 @@ builders.PLAYER_HP = function(E)
             if compactMode == "NONE" then
                 SetText(PHP.center, "")
             elseif hpSecret or maxSecret then
-                local pct = UnitPercent()
-                SetText(PHP.center, PercentText(pct, compactHide))
+                local pct, secretPct = UnitPercent()
+                SetPercentText(PHP.center, pct, secretPct, compactHide)
             else
                 SetText(PHP.center, ModeText(compactMode, hp, maxHP, delimiter, compactHide))
             end
             return
         end
         if hpSecret or maxSecret then
-            local pct = UnitPercent()
-            SetText(PHP.left, left:find("PERCENT", 1, true) and PercentText(pct, hideLeft) or "")
-            SetText(PHP.center, center:find("PERCENT", 1, true) and PercentText(pct, hideCenter) or "")
-            SetText(PHP.right, right:find("PERCENT", 1, true) and PercentText(pct, hideRight) or "")
+            local pct, secretPct = UnitPercent()
+            if left:find("PERCENT", 1, true) then
+                SetPercentText(PHP.left, pct, secretPct, hideLeft)
+            else
+                SetText(PHP.left, "")
+            end
+            if center:find("PERCENT", 1, true) then
+                SetPercentText(PHP.center, pct, secretPct, hideCenter)
+            else
+                SetText(PHP.center, "")
+            end
+            if right:find("PERCENT", 1, true) then
+                SetPercentText(PHP.right, pct, secretPct, hideRight)
+            else
+                SetText(PHP.right, "")
+            end
             return
         end
         SetText(PHP.left, ModeText(left, hp, maxHP, delimiter, hideLeft))

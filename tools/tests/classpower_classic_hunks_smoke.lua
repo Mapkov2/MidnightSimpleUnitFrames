@@ -183,16 +183,16 @@ end
 local function NotSecret() return true end
 
 -- The RUNTIME feature builder only binds locals from its env and returns them,
--- so it can be built directly. C_Spell is deliberately empty: that is both the
--- resolution the Classic build performs once at build time and the guard case.
+-- so it can be built directly. Its visible maximum is the controller's one
+-- resolver (Refresh.ResolveMaxPower), loaded with an empty C_Spell: that is
+-- both the resolution the Classic build performs once at load and the guard case.
 local function BuildRuntime(t, CP)
     return t.featureBuilders.RUNTIME({
         CP = CP, AM = { visible = false }, _cpDB = {},
-        CPK = t.K.CPK, PT = t.K.PT, TIP = t.K.TIP, CPConst = t.K,
+        CPK = t.K.CPK, PT = t.K.PT,
         POWER_TYPE_TOKENS = t.K.POWER_TYPE_TOKENS,
-        UnitPowerMax = function() return 5 end,
-        NotSecret = NotSecret, C_Spell = {},
-        tonumber = tonumber, math_floor = math.floor,
+        NotSecret = NotSecret, tonumber = tonumber,
+        ResolveMaxPower = t.ResolveMaxPower,
     })
 end
 
@@ -235,7 +235,7 @@ local function Run(client)
         renderMode = SIGNED_CONTINUOUS, currentMax = 5 }).GetResolvedVisibleMax()
     Check(where, signedMax == (isClassic and 1 or 5), "render mode " .. SIGNED_CONTINUOUS
         .. " resolved " .. tostring(signedMax) .. " visible segments, expected "
-        .. (isClassic and "the signed Eclipse bar's 1" or "Mainline's untouched currentMax 5"))
+        .. (isClassic and "the signed Eclipse bar's 1" or "Mainline's UnitPowerMax 5"))
     t.AM.visible = false
     t.CP.visible, t.CP.renderMode, t.CP.powerType = true, SIGNED_CONTINUOUS, "MISTS_ARCANE_CHARGES"
     -- No flavor provider claims this power type, so the fallback chain decides.
@@ -278,9 +278,8 @@ local function Run(client)
         { "the Maelstrom Weapon visible maximum", BuildRuntime(t, { visible = true,
             powerType = "MAELSTROM_WEAPON", renderMode = CPK.MODE.AURA_SEGMENTED,
             currentMax = 3 }).GetResolvedVisibleMax },
-        -- Refresh.ResolveMaxPower runs first on the activation path
-        -- (Refresh.ShowClassPower calls it before any core refresh), so the core
-        -- net above is only ever reached on a client this one survives too.
+        -- The activation path (Refresh.ShowClassPower) and the light refresh
+        -- above share Refresh.ResolveMaxPower, so both entry points carry the net.
         { "the Maelstrom Weapon activation maximum",
             function() return t.ResolveMaxPower("MAELSTROM_WEAPON", CPK.MODE.AURA_SEGMENTED) end },
     }

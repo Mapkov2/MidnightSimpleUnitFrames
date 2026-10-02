@@ -23,6 +23,7 @@ local math_abs = math.abs
 local math_floor = math.floor
 local string_format = string.format
 local _issecretvalue = _G.issecretvalue
+local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
 
 local function CP_GetVisual(E)
     local getVisual = E and E.GetVisual
@@ -191,6 +192,8 @@ local function CP_StampVertexColor(tex, r, g, b, a)
     end
 end
 
+--- Plain bounds only: type() answers "number" for a secret number too, so a
+--- possibly secret bound goes through CP_SetSecretMinMax instead.
 local function CP_StampMinMax(bar, minValue, maxValue)
     if not bar then return end
     if type(minValue) == "number" and type(maxValue) == "number" then
@@ -199,6 +202,15 @@ local function CP_StampMinMax(bar, minValue, maxValue)
     else
         bar._msufCPMin, bar._msufCPMax = nil, nil
     end
+    bar:SetMinMaxValues(minValue, maxValue)
+end
+
+--- A restricted range (a secret UnitHealthMax or UnitPowerMax) goes straight
+--- to the native bar and clears the cache: it must never be cached, or the
+--- next CP_StampMinMax would compare it.
+local function CP_SetSecretMinMax(bar, minValue, maxValue)
+    if not bar then return end
+    bar._msufCPMin, bar._msufCPMax = nil, nil
     bar:SetMinMaxValues(minValue, maxValue)
 end
 
@@ -731,9 +743,12 @@ modeBuilders.SEGMENTED = function(E)
                     if isFilled then
                         CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                     else
-                        local dR = chargedR * 0.45; if dR < 0.05 then dR = 0.05 end
-                        local dG = chargedG * 0.45; if dG < 0.05 then dG = 0.05 end
-                        local dB = chargedB * 0.45; if dB < 0.05 then dB = 0.05 end
+                        local dR = chargedR * 0.45
+                        if dR < 0.05 then dR = 0.05 end
+                        local dG = chargedG * 0.45
+                        if dG < 0.05 then dG = 0.05 end
+                        local dB = chargedB * 0.45
+                        if dB < 0.05 then dB = 0.05 end
                         CP_StampVertexColor(bar._bg, dR, dG, dB, 1)
                     end
                 elseif useSlotColors then
@@ -849,9 +864,16 @@ modeBuilders.FRACTIONAL = function(E)
             local bar = CP.bars[i]
             if bar then
                 CP_StampMinMax(bar, 0, 1)
-                if i <= fullBars then CP_SetPowerValue(bar, 1, smoothInterp); CP_StampAlpha(bar, filledAlpha)
-                elseif i == fullBars + 1 and partial > 0.001 then CP_SetPowerValue(bar, partial, smoothInterp); CP_StampAlpha(bar, filledAlpha)
-                else CP_SetPowerValue(bar, 0, smoothInterp); CP_StampAlpha(bar, emptyAlpha) end
+                if i <= fullBars then
+                    CP_SetPowerValue(bar, 1, smoothInterp)
+                    CP_StampAlpha(bar, filledAlpha)
+                elseif i == fullBars + 1 and partial > 0.001 then
+                    CP_SetPowerValue(bar, partial, smoothInterp)
+                    CP_StampAlpha(bar, filledAlpha)
+                else
+                    CP_SetPowerValue(bar, 0, smoothInterp)
+                    CP_StampAlpha(bar, emptyAlpha)
+                end
                 if bar._msufCPVisualVersion ~= visualVersion or bar._msufCPFullColor ~= isFull then
                     local slotR = useSlotColors and visual.slotR and visual.slotR[i]
                     CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
@@ -1389,15 +1411,8 @@ modeBuilders.AURA = function(E)
     end
 
     local function ResolveDHColor(isVoidMeta)
-        local ov = _cpDB.colorOverrides
-        if type(ov) == "table" then
-            local token = isVoidMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS"
-            local c = ov[token]
-            if type(c) == "table" then
-                local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
-            end
-        end
+        local r, g, b = OverrideRGB(_cpDB.colorOverrides, isVoidMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS")
+        if r then return r, g, b end
         if isVoidMeta then return 0.60, 0.20, 0.93 end
         return 0.00, 0.80, 0.00
     end
@@ -1679,7 +1694,7 @@ modeBuilders.CONTINUOUS = function(E)
             if mx <= 0 then mx = 100 end
             CP_StampMinMax(bar, 0, mx)
         else
-            CP_StampMinMax(bar, 0, rawMx)
+            CP_SetSecretMinMax(bar, 0, rawMx)
             mx = nil
         end
         local visual = CP_GetVisual(E)
@@ -1778,8 +1793,15 @@ modeBuilders.CONTINUOUS = function(E)
             if txt then
                 local showText = visual and visual.showText == true
                 if showText and cur and mx then
-                    txt:SetFormattedText("%d / %d", cur, mx)
-                    txt._msufCPText = nil
+                    --- An explicit Class Resource text mode wins, as on every
+                    --- other bar; AUTO keeps the signed current / max.
+                    local textMode = _cpDB.textMode
+                    if textMode then
+                        CP_ApplyConfiguredText(textMode, txt, cur, mx)
+                    else
+                        txt:SetFormattedText("%d / %d", cur, mx)
+                        txt._msufCPText = nil
+                    end
                     CP_StampShown(txt, true)
                 else
                     CP_StampShown(txt, false)
@@ -1813,20 +1835,14 @@ modeBuilders.STAGGER = function(E)
     local STAGGER_CONST = E.STAGGER_CONST or {}
     local GetFilledAlpha = E.GetFilledAlpha
 
-    local staggerCachedTier = 0
+    --- The tier colour is resolved once per tier and compiled visual: every
+    --- FullRefresh, mode entry and colour edit compiles a new visual version,
+    --- so a colour edit or a return to Brewmaster repaints the current tier.
+    local staggerCachedTier, staggerCachedVersion = 0, nil
 
     local function ResolveStaggerColor(tier)
-        local ov = _cpDB.colorOverrides
-        if type(ov) == "table" then
-            local token = STAGGER_CONST.TOKENS and STAGGER_CONST.TOKENS[tier]
-            local c = token and ov[token]
-            if type(c) == "table" then
-                local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                    return r, g, b
-                end
-            end
-        end
+        local r, g, b = OverrideRGB(_cpDB.colorOverrides, STAGGER_CONST.TOKENS and STAGGER_CONST.TOKENS[tier])
+        if r then return r, g, b end
         local def = STAGGER_CONST.COLOR_DEFAULTS and STAGGER_CONST.COLOR_DEFAULTS[tier]
         if def then
             return def[1], def[2], def[3]
@@ -1856,7 +1872,7 @@ modeBuilders.STAGGER = function(E)
             if mx <= 0 then mx = 1 end
             CP_StampMinMax(bar, 0, mx)
         else
-            CP_StampMinMax(bar, 0, rawMx)
+            CP_SetSecretMinMax(bar, 0, rawMx)
         end
 
         if curSafe then
@@ -1870,6 +1886,7 @@ modeBuilders.STAGGER = function(E)
         local visual = CP_GetVisual(E)
         CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
         CP_StampShown(bar, true)
+        local visualVersion = visual and visual.version or 0
 
         if curSafe and mxSafe then
             local perc = cur / mx
@@ -1878,14 +1895,13 @@ modeBuilders.STAGGER = function(E)
             elseif perc >= (STAGGER_CONST.YELLOW_TRANSITION or 0.3) then tier = 2
             else tier = 1 end
 
-            if tier ~= staggerCachedTier then
-                staggerCachedTier = tier
+            if tier ~= staggerCachedTier or visualVersion ~= staggerCachedVersion then
+                staggerCachedTier, staggerCachedVersion = tier, visualVersion
                 local r, g, b = ResolveStaggerColor(tier)
                 CP_StampStatusBarColor(bar, r, g, b, 1)
             end
         end
 
-        local visualVersion = visual and visual.version or 0
         if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
             CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
             for i = 2, CP.maxBars do

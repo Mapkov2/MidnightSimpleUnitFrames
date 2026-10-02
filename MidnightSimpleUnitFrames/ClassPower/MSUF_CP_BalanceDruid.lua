@@ -89,9 +89,15 @@ local function GetColorOverrides()
 end
 
 local function _checkActive()
-    if not _featureOn then _active = false; return end
+    if not _featureOn then
+        _active = false
+        return
+    end
     local spec = GetSpec and GetSpec()
-    if spec ~= 1 then _active = false; return end
+    if spec ~= 1 then
+        _active = false
+        return
+    end
     local pType = UnitPowerType("player")
     _active = (NotSecret(pType) and pType == LUNAR_POWER) and true or false
 end
@@ -102,16 +108,8 @@ local function _getPowerBar()
 end
 
 local function _resolveEclColor(token)
-    local ov = GetColorOverrides()
-    if type(ov) == "table" then
-        local c = token and ov[token]
-        if type(c) == "table" then
-            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                return r, g, b
-            end
-        end
-    end
+    local r, g, b = CPConst.OverrideRGB(GetColorOverrides(), token)
+    if r then return r, g, b end
     if token == "ECLIPSE_SOLAR" then return CPK.BAL.CLR_SOLAR[1], CPK.BAL.CLR_SOLAR[2], CPK.BAL.CLR_SOLAR[3] end
     if token == "ECLIPSE_LUNAR" then return CPK.BAL.CLR_LUNAR[1], CPK.BAL.CLR_LUNAR[2], CPK.BAL.CLR_LUNAR[3] end
     if token == "ECLIPSE_CA" then return CPK.BAL.CLR_CA[1], CPK.BAL.CLR_CA[2], CPK.BAL.CLR_CA[3] end
@@ -337,16 +335,8 @@ local function _computeAP(spellID)
 end
 
 local function _resolvePredColor()
-    local ov = GetColorOverrides()
-    if type(ov) == "table" then
-        local c = ov["AP_PREDICTION"]
-        if type(c) == "table" then
-            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                return r, g, b
-            end
-        end
-    end
+    local pr, pg, pb = CPConst.OverrideRGB(GetColorOverrides(), "AP_PREDICTION")
+    if pr then return pr, pg, pb end
     if _G.MSUF_GetPowerBarColor then
         local r, g, b = _G.MSUF_GetPowerBarColor(LUNAR_POWER, "LUNAR_POWER")
         if type(r) == "number" then return r, g, b end
@@ -354,10 +344,30 @@ local function _resolvePredColor()
     return 0.30, 0.52, 0.90
 end
 
+--- The Player Power bar belongs to the Power element, which dedupes its colour
+--- writes on the bar's _msufR/_msufG/_msufB/_msufA stamp. The eclipse colour
+--- is painted over the bar and leaves that stamp alone, so when the eclipse
+--- ends the bar takes the Power element's own colour back from it; otherwise
+--- the element's next write matched the stamp and was skipped.
+local _eclPaintedBar = nil
+
+local function _restorePowerColor()
+    local bar = _eclPaintedBar
+    if not bar then return end
+    _eclPaintedBar = nil
+    local r, g, b = bar._msufR, bar._msufG, bar._msufB
+    if r ~= nil then bar:SetStatusBarColor(r, g, b, bar._msufA or 1) end
+end
+
 local function _applyEclipseColor()
     local bar = _getPowerBar()
-    if not bar or not _eclColor then return end
+    if not bar then return end
+    if not _eclColor then
+        _restorePowerColor()
+        return
+    end
     bar:SetStatusBarColor(_eclColor[1], _eclColor[2], _eclColor[3], 1)
+    _eclPaintedBar = bar
 end
 
 local function _updateOverlay()
@@ -385,7 +395,10 @@ local function _updateOverlay()
         return
     end
     local rawMx = UnitPowerMax("player", LUNAR_POWER)
-    if not NotSecret(rawMx) then _predTex:Hide(); return end
+    if not NotSecret(rawMx) then
+        _predTex:Hide()
+        return
+    end
     local mx = tonumber(rawMx) or 100
     if mx <= 0 then mx = 100 end
     local predFrac = _predAmt / mx
@@ -397,11 +410,20 @@ local function _updateOverlay()
         if remainingFrac < 0 then remainingFrac = 0 end
         if predFrac > remainingFrac then predFrac = remainingFrac end
     end
-    if predFrac <= 0 then _predTex:Hide(); return end
+    if predFrac <= 0 then
+        _predTex:Hide()
+        return
+    end
     local barW, barH = bar:GetWidth(), bar:GetHeight()
-    if barW <= 0 or barH <= 0 then _predTex:Hide(); return end
+    if barW <= 0 or barH <= 0 then
+        _predTex:Hide()
+        return
+    end
     local predW = barW * predFrac
-    if predW < 1 then _predTex:Hide(); return end
+    if predW < 1 then
+        _predTex:Hide()
+        return
+    end
     if _eclColor then
         _predTex:SetVertexColor(_eclColor[1], _eclColor[2], _eclColor[3], CPK.BAL.PRED_ALPHA)
     else
@@ -416,6 +438,7 @@ end
 
 local function _cleanup()
     _castSpell, _predAmt, _eclColor = nil, 0, nil
+    _restorePowerColor()
     if _predTex then _predTex:Hide() end
 end
 

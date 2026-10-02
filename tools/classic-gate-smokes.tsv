@@ -206,6 +206,15 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua	tools/tests/locale_english_overwrite_smoke.lua	{root}	Translated packs turned translations back into English
 -	lua	tools/tests/keybind_labels_locale_smoke.lua	{root}	Key binding labels ignore the menu language
 -	lua	tools/tests/classpower_client_resource_gates_smoke.lua	{root/}	Class resource client gates failed
+-	lua	tools/tests/classpower_visual_refresh_smoke.lua	{root}	ClassPower visual refresh repaints the active mode failed
+-	lua	tools/tests/classpower_player_hp_secret_smoke.lua	{root}	ClassPower Player HP secret text smoke failed
+-	lua	tools/tests/classpower_paint_stamps_smoke.lua	{root}	ClassPower paint stamp smoke failed
+-	lua	tools/tests/classpower_secret_minmax_smoke.lua	{root}	ClassPower secret min/max smoke failed
+-	lua	tools/tests/classpower_warlock_prediction_smoke.lua	{root}	ClassPower Warlock shard prediction smoke failed
+-	lua	tools/tests/classpower_mists_embers_smoke.lua	{root}	ClassPower Mists Burning Embers smoke failed
+-	lua	tools/tests/classpower_ebon_slot_smoke.lua	{root}	ClassPower Ebon Might sealed slot smoke failed
+-	lua	tools/tests/classpower_max_resolution_smoke.lua	{root}	ClassPower max resolution smoke failed
+-	lua	tools/tests/resource_extra_aura_names_smoke.lua	{root}	Resource extra aura fallback names smoke failed
 -	lua	tools/tests/pixel_layout_profile_smoke.lua	{root}	Pixel layout profile preservation smoke failed
 -	python	tools/tests/pixel_layout_coverage_smoke.py	{root}	Pixel layout creation coverage failed
 -	lua	tools/tests/suite_cooldown_anchor_smoke.lua	{root/}	MSUF Suite cooldown anchor smoke failed

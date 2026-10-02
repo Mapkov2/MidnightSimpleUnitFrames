@@ -20,6 +20,7 @@ local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
 --- InCombatLockdown stays a global read on purpose: the layout gate is cold
 --- and the combat harnesses swap that function at runtime.
 local type, tostring, tonumber = type, tostring, tonumber
+local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
 local math_floor, math_max, math_abs = math.floor, math.max, math.abs
 
 --- Single owner of the player-frame resolver for the whole ClassPower module.
@@ -351,7 +352,6 @@ builders.LAYOUT = function(E)
             --- into the protected anchor family; then the post-combat pass
             --- replays the geometry.
             CP._layoutDirty = true
-            ExportPublic("MSUF_ClassPowerLayoutDirty", true)
             RequestUFReanchorAfterCombat()
             return false
         end
@@ -573,7 +573,6 @@ builders.LAYOUT = function(E)
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
         CP._layoutDirty = positionDeferred and true or nil
-        ExportPublic("MSUF_ClassPowerLayoutDirty", positionDeferred and true or nil)
         if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
             layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end
@@ -871,7 +870,10 @@ builders.PRESENTATION = function(E)
     local tonumber = E.tonumber or tonumber
 
     local CP_ResolveTexture = E.CP_ResolveTexture
-    local GetUpdateFn = E.GetUpdateFn
+    --- The controller's active-mode dispatch (CP_RunActiveUpdate): Stagger,
+    --- runes, aura, continuous and native modes each repaint with their own
+    --- painter, never the segmented one.
+    local RunActiveUpdate = E.RunActiveUpdate
 
     local _cpFontRev = 0
 
@@ -1007,18 +1009,8 @@ builders.PRESENTATION = function(E)
 
         local tr, tg, tb = fr, fg, fb
         if _cpDB.general then
-            local ov = _cpDB.colorOverrides
-            if type(ov) == "table" then
-                local c = ov["RESOURCE_TEXT"]
-                if type(c) == "table" then
-                    local cr = c[1] or c.r
-                    local cg = c[2] or c.g
-                    local cb = c[3] or c.b
-                    if type(cr) == "number" and type(cg) == "number" and type(cb) == "number" then
-                        tr, tg, tb = cr, cg, cb
-                    end
-                end
-            end
+            local cr, cg, cb = OverrideRGB(_cpDB.colorOverrides, "RESOURCE_TEXT")
+            if cr then tr, tg, tb = cr, cg, cb end
         end
 
         ApplyClassPowerTextStyle(fs, tr, tg, tb, textAlpha, useShadow, shadowAlpha, shadowX, shadowY)
@@ -1031,10 +1023,7 @@ builders.PRESENTATION = function(E)
     end
 
     local function CP_ApplyColors(powerType)
-        local updateFn = GetUpdateFn and GetUpdateFn() or nil
-        if type(updateFn) == "function" then
-            updateFn(powerType, CP.currentMax)
-        end
+        if RunActiveUpdate then RunActiveUpdate(powerType, CP.currentMax) end
     end
 
     --- Texture refresh is shared by bar and shape modes. Layout decides sizes;
@@ -1109,16 +1098,11 @@ builders.RUNTIME = function(env)
     local AM = env.AM
     local CPK = env.CPK
     local PT = env.PT
-    local TIP = env.TIP
-    local CPConst = env.CPConst
     local POWER_TYPE_TOKENS = env.POWER_TYPE_TOKENS
     local PLAYER_CLASS = env.PLAYER_CLASS
-    local UnitPowerMax = env.UnitPowerMax
     local UnitPower = env.UnitPower
     local NotSecret = env.NotSecret
-    local C_Spell = env.C_Spell
     local tonumber = env.tonumber
-    local math_floor = env.math_floor
     local C_Timer = env.C_Timer
 
     local GetPlayerFrame = env.GetPlayerFrame
@@ -1127,6 +1111,7 @@ builders.RUNTIME = function(env)
     local RefreshChargedPoints = env.RefreshChargedPoints
     local RunActiveUpdate = env.RunActiveUpdate
     local RunAuraSegmentedUpdate = env.RunAuraSegmentedUpdate
+    local ResolveMaxPower = env.ResolveMaxPower
     local AM_UpdateValue = env.AM_UpdateValue
     local CP_ComputeStructuralSignature = env.CP_ComputeStructuralSignature
     local CP_RefreshEventBindings = env.CP_RefreshEventBindings
@@ -1143,67 +1128,13 @@ builders.RUNTIME = function(env)
     --- nil on Midnight.
     local AcceptPowerToken = env.AcceptPowerToken
 
-    --- Resolved once, on the Classic clients only: no Classic game type loads
-    --- a Blizzard call site for this entry point, so the Classic build must not
-    --- assume it and keeps the client decision off the render path.
-    local ClassicSpellMaxApplications
-    if IS_CLASSIC then
-        local maxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
-        if type(maxApplications) == "function" then ClassicSpellMaxApplications = maxApplications end
-    end
-
-    --- Resolve the visible segment count for the active render mode. This is
-    --- intentionally separate from layout so rare max-power changes can be
-    --- handled without a full ClassPower rebuild.
+    --- The visible segment count for the active render mode comes from the
+    --- controller's one resolver (Refresh.ResolveMaxPower); it is separate
+    --- from layout so rare max-power changes skip a full ClassPower rebuild.
+    --- A secret or missing maximum keeps the current count here.
     local function GetResolvedVisibleMax()
         if not CP.visible or not CP.powerType then return CP.currentMax end
-        local mode = CP.renderMode
-        local powerType = CP.powerType
-        local maxP = CP.currentMax or 1
-
-        if mode == CPK.MODE.RUNE_CD then
-            maxP = 6
-        elseif mode == CPK.MODE.AURA_SINGLE then
-            maxP = 1
-        elseif mode == CPK.MODE.CONTINUOUS or (IS_CLASSIC and mode == CPK.MODE.SIGNED_CONTINUOUS)
-            or mode == CPK.MODE.STAGGER or mode == CPK.MODE.TIMER_BAR then
-            maxP = 1  --- Mists Balance is one signed Eclipse bar (ResolveMaxPower).
-        elseif mode == CPK.MODE.AURA_SEGMENTED then
-            if powerType == "MAELSTROM_WEAPON" then
-                maxP = 10
-                local spellMax
-                if not IS_CLASSIC then
-                    spellMax = C_Spell.GetSpellMaxCumulativeAuraApplications(CPK.SPELL.MAELSTROM_WEAPON)
-                elseif ClassicSpellMaxApplications then
-                    spellMax = ClassicSpellMaxApplications(CPK.SPELL.MAELSTROM_WEAPON)
-                end
-                if NotSecret(spellMax) and type(spellMax) == "number" and spellMax > 0 then maxP = spellMax end
-            elseif powerType == "SOUL_FRAGMENTS_VENG" then
-                maxP = 6
-            --- WHIRLWIND never reaches this branch: the config routes it to
-            --- NATIVE_AURA only, whose fill count Blizzard's slot owns.
-            elseif powerType == "TIP_OF_THE_SPEAR" then
-                maxP = TIP.MAX_STACKS
-            elseif powerType == "ICICLES" then
-                maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
-            elseif IS_CLASSIC and powerType == "MISTS_ARCANE_CHARGES" then
-                maxP = CPConst.MISTS_ARCANE_CHARGES and CPConst.MISTS_ARCANE_CHARGES.MAX_STACKS or 4
-            else
-                maxP = 10
-            end
-        elseif mode == CPK.MODE.SEGMENTED or mode == CPK.MODE.FRACTIONAL then
-            maxP = UnitPowerMax("player", powerType)
-            if not NotSecret(maxP) or maxP == nil then
-                if powerType == PT.Runes then maxP = 6
-                elseif powerType == PT.ComboPoints then maxP = 7
-                else maxP = CP.currentMax or 5 end
-            end
-        end
-
-        maxP = math_floor(tonumber(maxP) or 0)
-        if maxP < 1 then maxP = 1 end
-        if maxP > CPConst.MAX_CLASS_POWER then maxP = CPConst.MAX_CLASS_POWER end
-        return maxP
+        return ResolveMaxPower(CP.powerType, CP.renderMode, CP.currentMax or 5)
     end
 
     --- Lightweight refresh for cases where the mode is still valid but the
