@@ -969,8 +969,6 @@ end
 ExportPublic("MSUF_GetCastbarSpellNameShorteningConfig", GetSpellNameShorteningConfig)
 
 local function ShortenCastbarSpellName(frame, text)
-    if text == nil then return text end
-
     local isSecret = _G.issecretvalue
     if type(isSecret) == "function" and isSecret(text) == true then
         -- A secret name is neither measured nor cached, but the previous plain
@@ -983,6 +981,7 @@ local function ShortenCastbarSpellName(frame, text)
         end
         return text
     end
+    if text == nil then return text end
 
     local valueType = type(text)
     if valueType ~= "string" and valueType ~= "number" and valueType ~= "boolean" then return text end

@@ -383,4 +383,59 @@ do
     end
 end
 
+---------------------------------------------------------------------------
+-- 5. Possibly secret values are tested with issecretvalue before any nil
+--    comparison (AGENTS_QUALITY.md §1.5: never compare a secret). Lua 5.1
+--    never calls a metamethod for a comparison with nil, so no stub can make
+--    such a comparison raise; the order is pinned in the source instead, and
+--    the secret cases are checked for behaviour.
+---------------------------------------------------------------------------
+local function ReadSource(relativePath)
+    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/" .. relativePath, "rb"))
+    local source = handle:read("*a"):gsub("\r\n", "\n")
+    handle:close()
+    return source
+end
+
+local function FunctionBody(source, header, label)
+    local start = source:find(header, 1, true)
+    Check(start ~= nil, label .. ": function header not found")
+    local finish = source:find("\nend\n", start, true) or source:find("\n    end\n", start, true)
+    return source:sub(start, finish or #source)
+end
+
+local function AssertSecretTestFirst(body, value, label)
+    local secretAt = body:find("issecret[%w_]*%(" .. value .. "%)") or body:find("[Ii]sSecret[%w_]*%(" .. value .. "%)")
+    Check(secretAt ~= nil, label .. ": " .. value .. " is never tested with issecretvalue")
+    local compareAt = body:find(value .. " [=~]= nil")
+    Check(compareAt == nil or secretAt < compareAt,
+        label .. ": " .. value .. " is compared with nil before issecretvalue")
+end
+
+do
+    local castbars = ReadSource("Castbars/MSUF_Castbars.lua")
+    AssertSecretTestFirst(FunctionBody(castbars, "local function CheckChannelHardStop(", "CheckChannelHardStop"),
+        "channelName", "CheckChannelHardStop")
+    local driver = ReadSource("Castbars/MSUF_CastbarDriver.lua")
+    AssertSecretTestFirst(FunctionBody(driver, "function _G.MSUF_Castbar_ResolveInterruptLabel(", "ResolveInterruptLabel"),
+        "interruptedBy", "MSUF_Castbar_ResolveInterruptLabel")
+    local utils = ReadSource("Castbars/MSUF_CastbarUtils.lua")
+    AssertSecretTestFirst(FunctionBody(utils, "local function ShortenCastbarSpellName(", "ShortenCastbarSpellName"),
+        "text", "ShortenCastbarSpellName")
+
+    -- Behaviour: a secret interrupter falls back to the plain label, and a
+    -- channel whose name is secret is still running for the hard-stop check.
+    local world = World.New(root, "timer")
+    local SECRET_GUID = setmetatable({}, { __tostring = function() return "<secret guid>" end })
+    _G.issecretvalue = function(value) return rawequal(value, SECRET_GUID) end
+    _G.INTERRUPTED = "Interrupted"
+    _G.MSUF_DB.target.showInterruptSource = true
+    _G.UnitNameFromGUID = function() error("a secret interrupter GUID reached UnitNameFromGUID") end
+    Equal(_G.MSUF_Castbar_ResolveInterruptLabel(SECRET_GUID, "target"), "Interrupted",
+        "a secret interrupter did not fall back to the plain label")
+    _G.INTERRUPTED = nil
+    _G.UnitNameFromGUID = nil
+    Check(world.loaded["MSUF_Castbars.lua"], "castbar manager not loaded")
+end
+
 print("castbar correctness smoke: ok")

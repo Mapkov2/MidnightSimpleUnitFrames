@@ -1124,7 +1124,10 @@ local function CheckChannelHardStop(frame, sampleTime)
     end
     if not unit or unit == "" then return false end
 
-    local channelActive = UnitChannelInfo(unit) ~= nil
+    -- The name is SecretWhenUnitSpellCastRestricted: a secret name is a
+    -- running channel and is never compared with nil.
+    local channelName = UnitChannelInfo(unit)
+    local channelActive = issecretvalue(channelName) == true or channelName ~= nil
     if not channelActive and frame.unit == "player" then
         -- Vehicle transitions are event-owned, but the hard-stop guard must not
         -- produce a false completion during the narrow hand-off window. Probe

@@ -1122,7 +1122,7 @@ end
 function _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
     fallback = fallback or _G.INTERRUPTED
     local issecret = _G.issecretvalue
-    if interruptedBy == nil or (issecret and issecret(interruptedBy) == true) then
+    if (issecret and issecret(interruptedBy) == true) or interruptedBy == nil then
         return fallback
     end
     local db = _G.MSUF_DB
