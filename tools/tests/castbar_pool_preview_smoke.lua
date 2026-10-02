@@ -48,6 +48,12 @@ end
 local BASE_GLOBALS = {}
 for key in pairs(_G) do BASE_GLOBALS[key] = true end
 
+-- The sample cast target names are locale keys (every Locales pack).
+local LOCALE = {
+    ["Cleave Training Dummy"] = "Cleave-Trainingspuppe",
+    ["Arena Ally"] = "Arena-Verbuendeter",
+}
+
 local function NewWorld(arenaSlots)
     local extra = {}
     for key in pairs(_G) do if not BASE_GLOBALS[key] then extra[#extra + 1] = key end end
@@ -116,6 +122,8 @@ local function NewWorld(arenaSlots)
     local ns = {
         ExportPublic = function(name, value) _G[name] = value; return value end,
         UF = { frames = W.unitFrames, GetFrame = function(unit) return W.unitFrames[unit] end },
+        -- MSUF.Translate (Locales/MSUF_Localization.lua) with a deDE pack.
+        Translate = function(text) return LOCALE[text] or text end,
     }
     for _, file in ipairs(LOAD_ORDER) do
         assert(loadfile(root .. "/" .. CASTBARS .. file))("MidnightSimpleUnitFrames", ns)
@@ -127,11 +135,11 @@ end
 local KINDS = {
     {
         kind = "boss", cap = "Boss", slots = 5, first = "MSUF_BossCastbarPreview", second = "MSUF_BossCastbarPreview2",
-        label = "Celestial Ruin", target = "Cleave Training Dummy", fallbackY = -220, batch = true,
+        label = "Celestial Ruin", target = "Cleave-Trainingspuppe", fallbackY = -220, batch = true,
     },
     {
         kind = "arena", cap = "Arena", slots = 5, first = "MSUF_ArenaCastbarPreview1", second = "MSUF_ArenaCastbarPreview2",
-        label = "Greater Pyroblast", target = "Arena Ally", fallbackY = -320, batch = false,
+        label = "Greater Pyroblast", target = "Arena-Verbuendeter", fallbackY = -320, batch = false,
     },
 }
 

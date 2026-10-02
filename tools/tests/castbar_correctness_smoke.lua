@@ -385,7 +385,7 @@ end
 
 ---------------------------------------------------------------------------
 -- 5. Possibly secret values are tested with issecretvalue before any nil
---    comparison (AGENTS_QUALITY.md §1.5: never compare a secret). Lua 5.1
+--    comparison (AGENTS_QUALITY.md section 1.5: never compare a secret). Lua 5.1
 --    never calls a metamethod for a comparison with nil, so no stub can make
 --    such a comparison raise; the order is pinned in the source instead, and
 --    the secret cases are checked for behaviour.
@@ -436,6 +436,61 @@ do
     _G.INTERRUPTED = nil
     _G.UnitNameFromGUID = nil
     Check(world.loaded["MSUF_Castbars.lua"], "castbar manager not loaded")
+end
+
+---------------------------------------------------------------------------
+-- 6. The Focus Interrupt Tracker preview messages are translated (keys in
+--    every Locales pack). Before the fix both UIErrorsFrame messages were
+--    English literals.
+---------------------------------------------------------------------------
+do
+    WipeAddonGlobals()
+    local LOCALE = {
+        ["In combat - cannot move Focus Interrupt Tracker preview."] = "Im Kampf - Vorschau gesperrt.",
+        ["Enable Focus Interrupt Tracker first to use the on-screen preview."] = "Erst den Tracker aktivieren.",
+    }
+    local messages = {}
+    _G.UIErrorsFrame = { AddMessage = function(_, message) messages[#messages + 1] = message end }
+    local function PermissiveWidget(name)
+        local widget = { scripts = {}, shown = false, name = name }
+        setmetatable(widget, { __index = function(_, key)
+            if type(key) == "string" and key:match("^%u") then return function() end end
+            return nil
+        end })
+        function widget:SetScript(script, handler) self.scripts[script] = handler end
+        function widget:Show() self.shown = true end
+        function widget:Hide() self.shown = false end
+        function widget:IsShown() return self.shown end
+        function widget:CreateTexture() return PermissiveWidget() end
+        function widget:CreateFontString() return PermissiveWidget() end
+        function widget:CreateAnimationGroup() return PermissiveWidget() end
+        function widget:CreateAnimation() return PermissiveWidget() end
+        if name then _G[name] = widget end
+        return widget
+    end
+    _G.UIParent = PermissiveWidget("UIParent")
+    _G.CreateFrame = function(_, name) return PermissiveWidget(name) end
+    _G.C_Timer = { After = function() end }
+    local combat = false
+    _G.InCombatLockdown = function() return combat end
+    _G.MSUF_DB = { general = { enableFocusKickIcon = false }, focus = {} }
+    _G.MSUF_SetFontChecked = function() return true end
+    local ns = NewNamespace()
+    ns.Translate = function(text) return LOCALE[text] or text end
+    LoadAddonFile("Castbars/MSUF_FocusKickIcon.lua", ns)
+
+    -- Turning the preview on while the tracker is off.
+    _G.MSUF_FocusKick_SetPreviewEnabled(true)
+    Equal(messages[#messages], "Erst den Tracker aktivieren.", "focus-kick disabled preview message")
+
+    -- Dragging the preview in combat.
+    _G.MSUF_DB.general.enableFocusKickIcon = true
+    _G.MSUF_FocusKick_SetPreviewEnabled(true)
+    local preview = assert(_G.MSUF_FocusKickPreviewFrame, "focus-kick preview frame missing")
+    combat = true
+    preview.scripts.OnDragStart(preview)
+    Equal(messages[#messages], "Im Kampf - Vorschau gesperrt.", "focus-kick combat drag message")
+    _G.UIErrorsFrame = nil
 end
 
 print("castbar correctness smoke: ok")

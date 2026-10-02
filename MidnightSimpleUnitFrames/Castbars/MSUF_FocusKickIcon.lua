@@ -6,7 +6,8 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- owns the draggable icon frame, copied time text, border coloring, and short
 --- interrupt feedback animation.
 
-local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic)
+local MSUF = select(2, ...) or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic
 
 local ParentFrame = UIParent
 local After = C_Timer and C_Timer.After
@@ -394,6 +395,12 @@ local function PlayInterruptFeedback()
     shake()
 end
 
+local function Translate(text)
+    local translate = MSUF.Translate
+    if type(translate) == "function" then return translate(text) end
+    return text
+end
+
 local function PrintMoveError(message)
     if UIErrorsFrame and UIErrorsFrame.AddMessage then
         UIErrorsFrame:AddMessage(message, 1, 0.2, 0.2, 1)
@@ -498,7 +505,7 @@ local function EnsurePreviewFrame()
     previewFrame:SetScript("OnDragStart", function(frame)
         if not previewEnabled then return end
         if InCombatLockdown and InCombatLockdown() then
-            PrintMoveError("In combat - cannot move Focus Interrupt Tracker preview.")
+            PrintMoveError(Translate("In combat - cannot move Focus Interrupt Tracker preview."))
             return
         end
         SetPreviewSelected(true)
@@ -571,7 +578,7 @@ local function SetPreviewEnabled(enabled)
         end
         SetPreviewSelected(false)
         previewFrame:Hide()
-        PrintMoveError("Enable Focus Interrupt Tracker first to use the on-screen preview.")
+        PrintMoveError(Translate("Enable Focus Interrupt Tracker first to use the on-screen preview."))
         return
     end
 
