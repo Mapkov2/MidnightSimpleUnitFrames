@@ -5,7 +5,14 @@
 -- that paints the same widgets without those helpers must leave the stamps
 -- truthful, or the next mode on the same bar skips a write it needs:
 --   * Ironfur (Guardian Bear) paints pip 1 and the count text directly;
---     after Bear -> Cat the combo points must repaint pip 1 and the text.
+--     after Bear -> Cat the combo points must repaint pip 1 and the text;
+--   * Stagger caches its colour tier: a colour edit or a return to
+--     Brewmaster repaints it;
+--   * Balance eclipse colours the Power element's bar: the end of an eclipse
+--     restores the colour the element's _msufR stamp records;
+--   * native aura modes hide the count text: a vehicle's combo points show it.
+-- Also: a structural refresh inside the 150 ms throttle gets a trailing one,
+-- and the one colour-override reader (MSUF_CP_CONST.OverrideRGB).
 --
 -- Runs the real ClassPower stack (tools/tests/classpower_world.lua).
 -- Plain Lua 5.1, repo root as arg 1.
