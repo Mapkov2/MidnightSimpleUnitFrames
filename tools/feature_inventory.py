@@ -14,12 +14,16 @@ What is extracted, from MidnightSimpleUnitFrames/ and MidnightSimpleUnitFrames_O
             sub-commands (as "/msuf name") and RegisterExternal({usage=}) command lines
   bindings  <Binding name=> in Bindings.xml and BINDING_NAME_x / BINDING_HEADER_x globals
   settings  the settingKey column of the generated Menu2 search index (one set per client index)
-  labels    page and label of every row of the generated Menu2 search index (the menu controls)
+  rows      every row of that index as one stable identity: client, page, section path, label, control
+            kind, setting key, action key and the route that names the control. Losing one control
+            changes the inventory even when another row shares its label or key; identical rows
+            count once each (#2, #3). A control that moves section or route is a removal plus an add.
   actions   the actionKey column of the same index (the menu buttons)
   defaults  the keys the defaults files seed: x.key == nil, x.key = v and { key = v } in
             State/MSUF_Defaults.lua, State/Defaults/ and State/MSUF_AuraDefaults.lua
   exports   Export("n"), ExportPublic("n") and PublishCompat("n") public global names
-Comments are removed before matching. Each category is a set of strings; nothing else is compared.
+Lua and XML comments are removed before matching (a commented-out key, binding or assignment is a
+removal); strings that contain "--" survive. Each category is a set of strings; nothing else is compared.
 
 Check. The frozen baseline tools/feature_inventory_baseline.json (made from the commit named in it,
 default 1908d740, the Classic state before the quality program) is compared with the current tree.
@@ -47,15 +51,16 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_ROOT = HERE.parent
 BASELINE_NAME = "feature_inventory_baseline.json"
 ALLOWLIST_NAME = "feature_inventory_allowlist.json"
 DEFAULT_REV = "1908d740"
-EXTRACTOR_VERSION = 1
+EXTRACTOR_VERSION = 2
 ADDONS = ("MidnightSimpleUnitFrames", "MidnightSimpleUnitFrames_Options")
-CATEGORIES = ("locale", "slash", "bindings", "settings", "labels", "actions", "defaults", "exports")
+CATEGORIES = ("locale", "slash", "bindings", "settings", "rows", "actions", "defaults", "exports")
 BASES = ("migration", "owner", "dead", "moved")
 LOCALE_FILE = "MidnightSimpleUnitFrames/Locales/enUS.lua"
 DEFAULTS_FILES = re.compile(r"^MidnightSimpleUnitFrames/State/(?:MSUF_Defaults\.lua|MSUF_AuraDefaults\.lua|Defaults/[^/]+\.lua)$")
@@ -114,7 +119,8 @@ def read_revision(root, rev):
 
 
 # ------------------------------------------------------------------ extraction
-COMMENTS = re.compile(r"--\[(=*)\[.*?\]\1\]|--[^\n]*", re.S)
+LUA_TOKEN = re.compile(r"--\[(=*)\[|--[^\n]*|\[(=*)\[|\"(?:[^\"\\\n]|\\.)*\"|'(?:[^'\\\n]|\\.)*'", re.S)
+XML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 LOCALE_KEY = re.compile(r'^[ \t]*L\[\s*"((?:[^"\\\n]|\\.)*)"\s*\]\s*=', re.M)
 SLASH_COMMAND = re.compile(r'(?<![A-Za-z_])SLASH_(\w*?)\d+\s*=\s*"(/[^"]*)"')
 SLASH_HANDLER = re.compile(r'SlashCmdList\[\s*"(\w+)"\s*\]\s*=')
@@ -131,7 +137,36 @@ INDEX_BLOB = re.compile(r"StaticIndexBlob\s*=\s*\[(=*)\[\n(.*?)\]\1\]", re.S)
 
 
 def strip_comments(text):
-    return COMMENTS.sub("", text)
+    """Lua source without comments. Strings are skipped as tokens, so a "--" inside one is kept;
+    every line break is kept too, so line-anchored patterns still work."""
+    out, position = [], 0
+    for match in LUA_TOKEN.finditer(text):
+        start, end = match.span()
+        if start < position:
+            continue
+        out.append(text[position:start])
+        token = match.group(0)
+        if token.startswith("--"):
+            if match.group(1) is not None:
+                close = text.find("]" + match.group(1) + "]", end)
+                end = len(text) if close < 0 else close + len(match.group(1)) + 2
+                out.append("\n" * text.count("\n", start, end))
+            position = end
+            continue
+        if match.group(2) is not None:
+            close = text.find("]" + match.group(2) + "]", end)
+            end = len(text) if close < 0 else close + len(match.group(2)) + 2
+            out.append(text[start:end])
+            position = end
+            continue
+        out.append(token)
+        position = end
+    out.append(text[position:])
+    return "".join(out)
+
+
+def strip_xml_comments(text):
+    return XML_COMMENT.sub("", text)
 
 
 def index_rows(text):
@@ -141,9 +176,29 @@ def index_rows(text):
     rows = []
     for line in match.group(2).split("\n"):
         columns = line.split("\t")
-        if len(columns) >= 6:
+        if len(columns) >= 8:
             rows.append(columns)
     return rows
+
+
+def row_route(columns):
+    """The route that names a control: column 7 is "id", the page and "menu2.<page>.<route>" joined by
+    the unit separator, with the dots percent-encoded. The fixed prefix is dropped, the rest decoded."""
+    identity = unquote(columns[7]).replace("\x1f", "/")
+    prefix = "id/%s/menu2.%s." % (columns[0], columns[0])
+    return identity[len(prefix):] if identity.startswith(prefix) else identity
+
+
+def row_items(tag, rows):
+    """One stable identity per index row; a row seen twice gets #2, #3 so losing one is visible."""
+    items, seen = [], {}
+    for columns in rows:
+        page, label, kind, setting, action, hint = columns[:6]
+        key = " ".join(part for part in (setting, "action " + action if action else "") if part) or "no key"
+        item = "%s: %s | %s | %s | %s | %s | %s" % (tag, page, hint, label, kind, key, row_route(columns))
+        seen[item] = seen.get(item, 0) + 1
+        items.append(item if seen[item] == 1 else "%s #%d" % (item, seen[item]))
+    return items
 
 
 def extract(files):
@@ -153,15 +208,16 @@ def extract(files):
         if not wanted_path(path):
             continue
         if path.endswith(".xml"):
-            items["bindings"].update("binding " + name for name in BINDING_XML.findall(text))
+            items["bindings"].update("binding " + name for name in BINDING_XML.findall(strip_xml_comments(text)))
             continue
         if path == LOCALE_FILE:
-            items["locale"].update(LOCALE_KEY.findall(text))
+            items["locale"].update(LOCALE_KEY.findall(strip_comments(text)))
         index = INDEX_FILE.search(path)
         if index:
             tag = "classic" if index.group(1) else "main"
-            for columns in index_rows(text):
-                items["labels"].add("%s: %s | %s" % (tag, columns[0], columns[1]))
+            rows = index_rows(text)
+            items["rows"].update(row_items(tag, rows))
+            for columns in rows:
                 if columns[3]:
                     items["settings"].add("%s: %s" % (tag, columns[3]))
                 if columns[4]:
@@ -274,8 +330,8 @@ def provenance(root, rev, removed_items):
         raise SystemExit("FAIL git log failed; is %s in this clone?" % rev)
     needles = {}
     for category, item in removed_items:
-        if category == "labels":
-            needle = item.split(" | ", 1)[1]
+        if category == "rows":
+            needle = item.split(" | ")[2]
         elif category in ("settings", "actions"):
             needle = item.split(": ", 1)[1]
         elif category == "slash":

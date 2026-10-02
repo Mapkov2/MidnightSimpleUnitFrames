@@ -2,10 +2,10 @@
  "about": "Removals the feature inventory (tools/feature_inventory.py) accepts, each with a basis (migration, owner, dead, moved), evidence and a reason; see the tool docstring. Frozen against 1908d740.",
  "removed": [
   {
-   "category": "labels",
+   "category": "rows",
    "items": [
-    "classic: gf_layout | Text color",
-    "main: gf_layout | Text color"
+    "classic: gf_layout | Layout > Color | Text color | color | no key | group.color.healermanatext",
+    "main: gf_layout | Layout > Color | Text color | color | no key | group.color.healermanatext"
    ],
    "basis": "moved",
    "evidence": "94dfce09a fix(menu): repair page layouts, previews and accordion controls",

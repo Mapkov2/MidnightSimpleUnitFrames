@@ -33,8 +33,12 @@ def index_text(rows):
     return "Search.StaticIndexBlob = [==[\n" + body + "\n]==]\n"
 
 
-def row(page, label, kind="toggle", setting="", action="", hint="Section > Part"):
-    return [page, label, kind, setting, action, hint, label.lower(), "id", "sec", "", "", "hay"]
+def row(page, label, kind="toggle", setting="", action="", hint="Section > Part", route=None):
+    # Column 8 is the search identity: "id", page and route joined by the unit separator, with the
+    # route's dots percent-encoded, as the index generator writes it.
+    route = route or label.lower().replace(" ", "-")
+    identity = "id\x1f%s\x1fmenu2%%2E%s%%2E%s" % (page, page, route.replace(".", "%2E"))
+    return [page, label, kind, setting, action, hint, label.lower(), identity, "sec", "", "", "hay"]
 
 
 def tree():
@@ -58,7 +62,9 @@ def tree():
         MAIN + "State/MSUF_Profiles.lua": "if g.notADefault == nil then g.notADefault = 1 end\n",
         MAIN + "Libs/Vendor.lua": 'ExportPublic("MSUF_Vendor", 1)\n',
         INDEX: index_text([row("auras", "Border", setting="auras.border"), row("auras", "Reset", "button", action="auras_reset"),
-                           row("bars", "Height", "slider", "bars.height")]),
+                           row("bars", "Height", "slider", "bars.height"),
+                           row("bars", "Delimiter", "dropdown", "bars.sep", hint="Hp > Text", route="hp.sep"),
+                           row("bars", "Delimiter", "dropdown", "bars.sep", hint="Power > Text", route="power.sep")]),
         INDEX_CLASSIC: index_text([row("bars", "Height", "slider", "bars.height")]),
     }
 
@@ -106,10 +112,31 @@ class Extractors(unittest.TestCase):
         self.assertEqual(self.items["defaults"], {"alpha", "beta", "gamma", "delta"})
 
     def test_index_rows_per_client(self):
-        self.assertEqual(self.items["settings"], {"main: auras.border", "main: bars.height", "classic: bars.height"})
+        self.assertEqual(self.items["settings"], {"main: auras.border", "main: bars.height", "main: bars.sep",
+                                                  "classic: bars.height"})
         self.assertEqual(self.items["actions"], {"main: auras_reset"})
-        self.assertEqual(self.items["labels"], {"main: auras | Border", "main: auras | Reset", "main: bars | Height",
-                                                "classic: bars | Height"})
+        self.assertEqual(self.items["rows"], {
+            "main: auras | Section > Part | Border | toggle | auras.border | border",
+            "main: auras | Section > Part | Reset | button | action auras_reset | reset",
+            "main: bars | Section > Part | Height | slider | bars.height | height",
+            "main: bars | Hp > Text | Delimiter | dropdown | bars.sep | hp.sep",
+            "main: bars | Power > Text | Delimiter | dropdown | bars.sep | power.sep",
+            "classic: bars | Section > Part | Height | slider | bars.height | height"})
+
+    def test_identical_rows_keep_their_multiplicity(self):
+        twin = row("bars", "Twin", "toggle", "bars.twin")
+        items = inventory.extract({INDEX: index_text([twin, twin])})
+        self.assertEqual(len(items["rows"]), 2)
+
+    def test_locale_keys_with_dashes_and_commented_out_ones(self):
+        files = {MAIN + "Locales/enUS.lua": 'L["Dash -- inside"] = "x"\n--[[\nL["Blocked"] = "y"\n]]\n--[==[ L["Long"] = "z" ]==]\n'
+                                            '-- L["Line"] = "w"\nL["After"] = "v"\n'}
+        self.assertEqual(inventory.extract(files)["locale"], {"Dash -- inside", "After"})
+
+    def test_xml_comments_hide_bindings(self):
+        files = {MAIN + "Bindings.xml": '<Bindings>\n<!-- <Binding name="MSUF_OLD"/> -->\n<Binding name="MSUF_NEW"/>\n'
+                                        '<!--\n<Binding name="MSUF_BLOCK"/>\n-->\n</Bindings>\n'}
+        self.assertEqual(inventory.extract(files)["bindings"], {"binding MSUF_NEW"})
 
     def test_line_endings_do_not_matter(self):
         crlf = {path: text.replace("\n", "\r\n") for path, text in tree().items()}
@@ -163,7 +190,7 @@ class Check(unittest.TestCase):
                  ("exports", MAIN + "Kernel/Exports.lua", 'Export("MSUF_Two", Two)\n', ""),
                  ("defaults", MAIN + "State/MSUF_Defaults.lua", "g.beta = 2\n", ""),
                  ("settings", INDEX, "\tauras.border\t", "\t\t"),
-                 ("labels", INDEX, "auras\tReset\t", "auras\tReset again\t"),
+                 ("rows", INDEX, "auras\tReset\t", "auras\tReset again\t"),
                  ("actions", INDEX, "\tauras_reset\t", "\t\t")]
         for category, rel, old, new in cases:
             with self.subTest(category):
@@ -172,6 +199,51 @@ class Check(unittest.TestCase):
                 code, text = run_tool(self.root)
                 self.assertEqual(code, 1, text)
                 self.assertIn("FAIL removed %s:" % category, text)
+
+    def drop_line(self, rel, needle):
+        path = self.root / rel
+        lines = path.read_text(encoding="utf-8").split("\n")
+        kept = [line for line in lines if needle not in line]
+        self.assertEqual(len(kept), len(lines) - 1, needle)
+        path.write_text("\n".join(kept), encoding="utf-8", newline="\n")
+
+    def test_losing_one_route_row_is_detected_although_label_and_key_survive(self):
+        # Two rows share page, label and setting key and differ in route only: the old independent
+        # sets (label, key, action) stayed unchanged when one of them went.
+        self.drop_line(INDEX, "power%2Esep")
+        code, text = run_tool(self.root)
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL removed rows: main: bars | Power > Text | Delimiter | dropdown | bars.sep | power.sep", text)
+        self.assertNotIn("FAIL removed settings", text)
+
+    def test_a_control_that_moves_route_or_section_is_a_removal(self):
+        self.change(INDEX, "Hp > Text", "Hp > Layout")
+        code, text = run_tool(self.root)
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL removed rows: main: bars | Hp > Text | Delimiter", text)
+
+    def test_losing_one_of_two_identical_rows_is_detected(self):
+        twin = row("bars", "Twin", "toggle", "bars.twin")
+        files = dict(tree(), **{INDEX: index_text([twin, twin])})
+        write_tree(self.root, files)
+        inventory.write_snapshot(self.root / "baseline.json",
+                                 inventory.snapshot_from(inventory.extract(files), "base", "0" * 40))
+        write_tree(self.root, {INDEX: index_text([twin])})
+        code, text = run_tool(self.root)
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL removed rows:", text)
+
+    def test_commenting_out_a_binding_or_a_locale_assignment_is_a_removal(self):
+        self.change(MAIN + "Bindings.xml", '<Binding name="MSUF_TOGGLE" header="MSUF"/>',
+                    '<!-- <Binding name="MSUF_TOGGLE" header="MSUF"/> -->')
+        code, text = run_tool(self.root)
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL removed bindings: binding MSUF_TOGGLE", text)
+        self.fresh()
+        self.change(MAIN + "Locales/enUS.lua", 'L["Hello"] = "Hello"\n', '--[[ L["Hello"] = "Hello" ]]\n')
+        code, text = run_tool(self.root)
+        self.assertEqual(code, 1, text)
+        self.assertIn("FAIL removed locale: Hello", text)
 
     def test_additions_never_fail(self):
         self.change(MAIN + "Locales/enUS.lua", 'L["Hello"]', 'L["Brand new"] = "x"\nL["Hello"]')
