@@ -22,6 +22,13 @@ local GetCastbarCountsDown = Require("MSUF_GetCastbarCountsDown", FILE)
 local RefreshCastbarSpellNameText = Require("MSUF_RefreshCastbarSpellNameText", FILE)
 local GetInterruptUnavailableTintArgs = Require("MSUF_Castbar_GetInterruptUnavailableTintArgs", FILE)
 local ApplyNonInterruptibleTint = Require("MSUF_Castbar_ApplyNonInterruptibleTint", FILE)
+-- Kernel/MSUF_Util.lua loads before every castbar file. Resolved on the first
+-- cast target text write (castbar harnesses without that text skip it).
+local setTextIfChanged
+local function SetTextIfChanged(fontString, text)
+    setTextIfChanged = setTextIfChanged or Require("MSUF_SetTextIfChanged", FILE)
+    setTextIfChanged(fontString, text)
+end
 
 local ExportPublic = MSUF.ExportPublic
 
@@ -660,11 +667,7 @@ local function StopDriverFrame(frame, reason)
     ClearStartRetry(frame)
     HideChannelHasteMarkers(frame)
     if frame.castTargetText then
-        if type(_G.MSUF_SetTextIfChanged) == "function" then
-            _G.MSUF_SetTextIfChanged(frame.castTargetText, "")
-        else
-            frame.castTargetText:SetText("")
-        end
+        SetTextIfChanged(frame.castTargetText, "")
         frame.castTargetText:Hide()
     end
     _G.MSUF_CB_ResetStateOnStop(frame, reason)
@@ -844,11 +847,7 @@ end
 local function SetCastTargetText(frame, text)
     local fs = frame and frame.castTargetText
     if not fs then return end
-    if type(_G.MSUF_SetTextIfChanged) == "function" then
-        _G.MSUF_SetTextIfChanged(fs, text)
-    else
-        fs:SetText(text)
-    end
+    SetTextIfChanged(fs, text)
 end
 
 local function SetCastTargetTextPlainColorIfChanged(fs, red, green, blue)
@@ -1329,11 +1328,10 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
 
 end
 
+--- Castbars/MSUF_CastbarFrames.lua (loaded before this file) builds the
+--- regions; resolved when a castbar is built, a cold path.
 local function BuildCastbarFrameElements(frame)
-    if type(_G.MSUF_BuildCastbarFrameElements) == "function" then
-        return _G.MSUF_BuildCastbarFrameElements(frame)
-    end
-    return nil
+    return Require("MSUF_BuildCastbarFrameElements", FILE)(frame)
 end
 
 --- CreateCastBar build stage 1: the driver frame plus the identity fields the
@@ -1772,37 +1770,19 @@ local function ApplyDriverBackendState(unit)
     return nil
 end
 
-local function ApplyCastbarUnitCold(unit)
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
-        return true
-    end
-    if unit == "target" and type(_G.MSUF_ReanchorTargetCastBarBase) == "function" then
-        _G.MSUF_ReanchorTargetCastBarBase()
-    elseif unit == "focus" and type(_G.MSUF_ReanchorFocusCastBarBase) == "function" then
-        _G.MSUF_ReanchorFocusCastBarBase()
-    elseif unit == "player" and type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then
-        _G.MSUF_ReanchorPlayerCastBarBase()
-    end
-    if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        return true
-    end
-    return false
-end
-
+--- Login re-anchor and visual pass per unit. Castbars/MSUF_Castbars_Core.lua
+--- loads before this file in every TOC and owns MSUF_ApplyCastbarUnitAndSync,
+--- so its old per-function fallbacks never ran; resolved at login (cold path).
 local function MSUF_CastbarDriver_OnLogin()
     local any = _G.MSUF_AreAnyCastbarsEnabled
     if type(any) == "function" and not any() then return end
     ApplyDriverBackendState("target")
     ApplyDriverBackendState("focus")
-    local applied = false
-    applied = ApplyCastbarUnitCold("target") or applied
-    applied = ApplyCastbarUnitCold("focus") or applied
-    applied = ApplyCastbarUnitCold("player") or applied
-    if not applied then
-        if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
-    end
+    -- Castbars/MSUF_Castbars_Core.lua loads before this file.
+    local applyUnit = Require("MSUF_ApplyCastbarUnitAndSync", FILE)
+    applyUnit("target")
+    applyUnit("focus")
+    applyUnit("player")
     if _G.MSUF_UpdateCastbarTextures then _G.MSUF_UpdateCastbarTextures() end
 end
 

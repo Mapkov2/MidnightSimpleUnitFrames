@@ -21,6 +21,18 @@ local _G = _G
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+
+--- Every provider this file calls is addon code: State defaults, Kernel Util,
+--- the unit-frame factory and the Edit Mode castbar popup load before it;
+--- Castbars/MSUF_CastbarStyle.lua and _Visuals.lua (and the Classic visual
+--- compat, which replaces the outline inset and spark exports) are resolved
+--- when they are used. A missing one fails loudly instead of silently
+--- skipping a layout step.
+local FILE = "Castbars/MSUF_CastbarAnchors.lua"
+local Require = MSUF.Require
+local function Later(name)
+    return Require(name, FILE)
+end
 local floor = math.floor
 local ceil = math.ceil
 local type = type
@@ -93,18 +105,12 @@ local function Round(value)
 end
 
 local function GeneralDB()
-    if type(_G.MSUF_EnsureDB) == "function" then _G.MSUF_EnsureDB() end
+    Later("MSUF_EnsureDB")()
     return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 end
 
 local function CastbarFrameInset(frame, g)
-    if type(_G.MSUF_GetCastbarOutlineInset) == "function" then
-        local inset = _G.MSUF_GetCastbarOutlineInset(frame, g)
-        return tonumber(inset) or 0
-    end
-    local thickness = tonumber(g and g.castbarOutlineThickness)
-    if thickness == nil then thickness = 1 end
-    return thickness > 0 and 1 or 0
+    return tonumber(Later("MSUF_GetCastbarOutlineInset")(frame, g)) or 0
 end
 
 local function GetUnitFrames()
@@ -273,13 +279,11 @@ local function UnitframeNormalBorderInsetForTarget(frame, sourceFrame, targetFra
     local inset = UnitframeNormalBorderInset(frame, sourceFrame)
     if inset <= 0 then return 0 end
 
-    if frame and frame._msufBossPhysicalGeometryApplied == true
-        and type(_G.MSUF_GetPhysicalPixelSize) == "function"
-    then
+    if frame and frame._msufBossPhysicalGeometryApplied == true then
         -- Mirror the boss border's own conversion: the setting is a unitframe-unit
         -- value, so it becomes a physical-pixel count through the unitframe's
         -- scale, not one pixel per configured unit.
-        local framePixel = _G.MSUF_GetPhysicalPixelSize(frame, 1)
+        local framePixel = Later("MSUF_GetPhysicalPixelSize")(frame, 1)
         local pixels = inset
         if type(framePixel) == "number" and framePixel > 0 then
             pixels = inset / framePixel
@@ -801,9 +805,7 @@ function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
     -- installing duplicate hooks. Its generation fastpath makes unchanged
     -- castbar applies O(1), while profile/import changes still activate the
     -- newly selected viewer immediately.
-    if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
-        _G.MSUF_EnsureCooldownWidthObservers()
-    end
+    Later("MSUF_EnsureCooldownWidthObservers")()
     if SyncWidthSourceLifecycle and not SyncWidthSourceLifecycle(g) then
         InvalidateWidthSourceSignature(unit)
         return
@@ -975,9 +977,7 @@ ApplyCastbarEffectiveSizeUnit = function(unit, g)
             local barH = (frame.GetHeight and frame:GetHeight()) or h or 18
             SetWidth(frame.statusBar, math.max(1, (w or 240) - barH - 1))
         end
-        if preview and type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-            _G.MSUF_ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth)
-        end
+        if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
         return true
     end
 
@@ -1083,9 +1083,7 @@ local function ReanchorTargetOrFocusCastbarBase(unit)
     if not preserveWidth and type(snap) == "function" then width = snap(frame, width) end
     SetWidth(frame, width)
     SetHeight(frame, desiredHeight)
-    if preview and type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-        _G.MSUF_ApplyPlayerCastbarSizeAndLayout(preview, g, width, desiredHeight, preserveWidth)
-    end
+    if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, width, desiredHeight, preserveWidth) end
 
     local positionPreview = unit == "target" and _G.MSUF_PositionTargetCastbarPreview or _G.MSUF_PositionFocusCastbarPreview
     if preview and positionPreview then positionPreview() end
@@ -1094,14 +1092,10 @@ end
 
 local function RefreshCastbarVisualFollowers(frame, unit, general)
     if not frame then return end
-    local refreshFrame = _G.MSUF_RefreshCastbarFrame
-    if type(refreshFrame) == "function" then
-        refreshFrame(frame)
-    elseif type(_G.MSUF_ApplyCastbarDetailLayout) == "function" then
-        _G.MSUF_ApplyCastbarDetailLayout(frame, unit)
-    end
-    local applySpark = _G.MSUF_ApplyCastbarSparkVisual
-    if type(applySpark) == "function" then applySpark(frame, general) end
+    -- Castbars/MSUF_CastbarVisuals.lua owns the refresh (the Classic compat
+    -- wraps it); its detail-layout fallback never ran after the file loaded.
+    Later("MSUF_RefreshCastbarFrame")(frame)
+    Later("MSUF_ApplyCastbarSparkVisual")(frame, general)
 end
 
 local function ReanchorTargetCastBarBase()
@@ -1191,9 +1185,7 @@ local function ReanchorPoolCastBar(kind)
     if not InCombat() and pool and pool.preview then
         pool.preview:Update()
     end
-    if type(MSUF_SyncCastbarPositionPopup) == "function" then
-        MSUF_SyncCastbarPositionPopup(kind)
-    end
+    Later("MSUF_SyncCastbarPositionPopup")(kind)
 end
 
 function MSUF_ReanchorBossCastBar()

@@ -381,6 +381,8 @@ AssertFinished(target, "hard-stopped channel")
 -- no delayTimeMS, so UNIT_SPELLCAST_DELAYED only moves startTimeMS; the driver
 -- measures that shift and repaints the cast text with the "+x.x" suffix.
 _G.MSUF_DB.general.castbarShowPushback = true
+-- Castbars/MSUF_CastbarFrames.lua is not loaded; the regions come below.
+_G.MSUF_BuildCastbarFrameElements = function() end
 local driven = assert(_G.MSUF_CreateCastBar("MSUF_TargetCastBar", "target"), "driver castbar missing")
 driven.statusBar = NewWidget("StatusBar")
 driven.castText = NewWidget("FontString")

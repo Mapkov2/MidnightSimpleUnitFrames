@@ -219,6 +219,8 @@ do
     -- the driver measures that shift and repaints the "+x.x" suffix, and a new
     -- castID starts without one.
     do
+        -- Castbars/MSUF_CastbarFrames.lua is not loaded; the regions come below.
+        _G.MSUF_BuildCastbarFrameElements = function() end
         local driven = assert(_G.MSUF_CreateCastBar("MSUF_EngineSmokeTargetCastBar", "target"),
             "driver castbar missing")
         driven.statusBar = NewWidget()
