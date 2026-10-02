@@ -261,12 +261,22 @@ for _, check in ipairs(checks) do
         assert(check.runtime.STYLE_SHARED_LAYOUT_KEYS == source.STYLE_SHARED_LAYOUT_KEYS,
             check.path .. ": runtime STYLE_SHARED_LAYOUT_KEYS is not the source table")
         for key in pairs(check.runtime.DEFAULT_SHARED) do derivedKeys[key] = true end
+        assert(check.runtime.UNIT_FLAG == source.UNIT_FLAG and check.runtime.MANAGED_UNITS == source.MANAGED_UNITS,
+            check.path .. ": the runtime unit tables are not the source tables")
     end
+    for _, flag in pairs(source.UNIT_FLAG) do derivedKeys[flag] = true end
     for _, name in ipairs({ "LAYOUT_KEYS", "SHARED_LAYOUT_KEYS", "DEFAULT_SHARED" }) do
         for key in pairs(menu[name]) do derivedKeys[key] = true end
     end
 end
 derivedKeys.filters = nil
+-- The Classic compiler takes the unit tables from the source too: no unit
+-- maps to a show flag there again.
+local compileSource = ReadSource("Game/Classic/Auras/MSUF_Auras3_Compile.lua")
+for _, flag in ipairs({ "showPlayer", "showPet", "showTarget", "showFocus", "showBoss", "showArena" }) do
+    assert(not compileSource:find('[^=~<>]=%s*"' .. flag .. '"'),
+        "Game/Classic/Auras/MSUF_Auras3_Compile.lua maps a unit to the show flag " .. flag .. " again")
+end
 for _, path in ipairs({ "Auras3/MenuModel/MSUF_Auras3_Menu_Schema.lua", "Auras3/Runtime/MSUF_Auras3_Runtime_Schema.lua" }) do
     local source = ReadSource(path)
     for key in pairs(derivedKeys) do

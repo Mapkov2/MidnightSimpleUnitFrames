@@ -420,6 +420,16 @@ local function BuildLaneKeySchema()
         schema.LANE_STYLE_KEYS[kind] = styleKeys
     end
 
+    -- The runtime units and the saved show flag of each: boss1-5, and arena1-3
+    -- or as many arena slots as the client fields (5 on TBC and Mists).
+    local unitFlag = { player = "showPlayer", pet = "showPet", target = "showTarget", focus = "showFocus" }
+    for index = 1, 5 do unitFlag["boss" .. index] = "showBoss" end
+    for index = 1, math.max(3, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3) do
+        unitFlag["arena" .. index] = "showArena"
+    end
+    schema.UNIT_FLAG, schema.MANAGED_UNITS = unitFlag, {}
+    for unit in pairs(unitFlag) do schema.MANAGED_UNITS[unit] = true end
+
     -- Each default-table build hands out fresh value tables, so no reader can
     -- change another's defaults through a shared color table.
     local function Copy(values)

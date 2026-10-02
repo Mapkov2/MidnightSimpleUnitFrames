@@ -11,33 +11,25 @@ if not Factories then
 end
 
 function Factories.Schema(A3)
+    -- Unit lane keys, their owners, the lane specs, the show flags and the legacy
+    -- Shared defaults come from the one lane-key schema in Auras3/MSUF_Auras3_Core.lua.
+    -- The runtime schema takes the same tables on Mainline, so controls and
+    -- compiled config agree on every key's scope.
+    local LaneKeySchema = assert(A3.LaneKeySchema, "Auras3 core must load before the menu schema")
     local BOSS_UNITS = { "boss1", "boss2", "boss3", "boss4", "boss5" }
     local BOSS_LOOKUP = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
     local ARENA_UNITS = { "arena1", "arena2", "arena3" }
     local ARENA_LOOKUP = { arena1=true, arena2=true, arena3=true }
-    local UNIT_FLAG = {
-        player = "showPlayer",
-        pet = "showPet",
-        target = "showTarget",
-        focus = "showFocus",
-        boss = "showBoss",
-        boss1 = "showBoss",
-        boss2 = "showBoss",
-        boss3 = "showBoss",
-        boss4 = "showBoss",
-        boss5 = "showBoss",
-        arena = "showArena",
-        arena1 = "showArena",
-        arena2 = "showArena",
-        arena3 = "showArena",
-    }
     -- Arena slots 4..N follow the client arena fact (5 on TBC/Mists, 3 on Mainline).
     for arenaIndex = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
         local arenaUnit = "arena" .. arenaIndex
         ARENA_UNITS[#ARENA_UNITS + 1] = arenaUnit
         ARENA_LOOKUP[arenaUnit] = true
-        UNIT_FLAG[arenaUnit] = "showArena"
     end
+    -- Each runtime unit's show flag (the lane-key schema in the Auras3 core),
+    -- plus the menu's Boss and Arena scopes.
+    local UNIT_FLAG = { boss = LaneKeySchema.UNIT_FLAG.boss1, arena = LaneKeySchema.UNIT_FLAG.arena1 }
+    for unit, flag in pairs(LaneKeySchema.UNIT_FLAG) do UNIT_FLAG[unit] = flag end
 
     local PUBLIC_UNITS = {
         { value = "player", text = "Player" },
@@ -138,11 +130,6 @@ function Factories.Schema(A3)
         DOWN = { "DOWN", "DOWN" },
     }
 
-    -- Unit lane keys, their owners, the lane specs and the legacy Shared
-    -- defaults come from the one lane-key schema in Auras3/MSUF_Auras3_Core.lua.
-    -- The runtime schema takes the same tables on Mainline, so controls and
-    -- compiled config agree on every key's scope.
-    local LaneKeySchema = assert(A3.LaneKeySchema, "Auras3 core must load before the menu schema")
     local LAYOUT_KEYS = LaneKeySchema.LAYOUT_KEYS
     local SHARED_LAYOUT_KEYS = LaneKeySchema.SHARED_LAYOUT_KEYS
     local STYLE_LAYOUT_KEYS = LaneKeySchema.STYLE_LAYOUT_KEYS

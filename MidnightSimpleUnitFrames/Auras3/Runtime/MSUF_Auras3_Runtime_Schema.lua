@@ -16,11 +16,12 @@ local COLD_APPLY_REASONS = {
     MSUF_ELEMENT_REFRESH = true,
 }
 
-local MANAGED_UNITS = {
-    player = true, pet = true, target = true, focus = true,
-    boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-    arena1 = true, arena2 = true, arena3 = true,
-}
+-- Unit lane keys, their owners, the managed units with their show flags and
+-- the fallback defaults come from the one lane-key schema in
+-- Auras3/MSUF_Auras3_Core.lua. The menu schema takes the same tables, so a
+-- new lane key cannot reach one side only.
+local LaneKeySchema = assert(A3.LaneKeySchema, "Auras3 core must load before the runtime schema")
+local MANAGED_UNITS = LaneKeySchema.MANAGED_UNITS
 
 -- The menu exposes one Boss filter scope, while layout remains frame-local for
 -- boss1..boss5. Keep boss1 as the persisted token/blacklist rule owner so an
@@ -31,24 +32,7 @@ local BOSS_FILTER_SCOPE_OWNER = {
     arena1 = "arena1", arena2 = "arena1", arena3 = "arena1",
 }
 
-local UNIT_FLAG = {
-    player = "showPlayer", pet = "showPet",
-    target = "showTarget",
-    focus = "showFocus",
-    boss1 = "showBoss",
-    boss2 = "showBoss",
-    boss3 = "showBoss",
-    boss4 = "showBoss",
-    boss5 = "showBoss",
-    arena1 = "showArena",
-    arena2 = "showArena",
-    arena3 = "showArena",
-}
-
--- Unit lane keys, their owners and the fallback defaults come from the one
--- lane-key schema in Auras3/MSUF_Auras3_Core.lua. The menu schema takes the
--- same tables, so a new lane key cannot reach one side only.
-local LaneKeySchema = assert(A3.LaneKeySchema, "Auras3 core must load before the runtime schema")
+local UNIT_FLAG = LaneKeySchema.UNIT_FLAG
 local DEFAULT_SHARED = LaneKeySchema.FallbackDefaults()
 local LANE_SPECS = LaneKeySchema.LANE_SPECS
 local STYLE_SHARED_LAYOUT_KEYS = LaneKeySchema.STYLE_SHARED_LAYOUT_KEYS
