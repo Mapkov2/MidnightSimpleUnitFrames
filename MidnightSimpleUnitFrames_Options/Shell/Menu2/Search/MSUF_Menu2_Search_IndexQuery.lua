@@ -2071,8 +2071,8 @@ local function RefreshSearchResultsPage()
     local query = TrimText(M.searchQuery or "")
     if query == "" or SearchText.QueryLength(query) < MIN_SEARCH_QUERY_LEN then return end
     SetSearchResults(SearchPages(query), query)
-    if M.InvalidatePage then M.InvalidatePage("search") end
-    if M.SelectPage then M.SelectPage("search") end
+    -- The results page repaints in place (Search_Render); it is never rebuilt.
+    Search._Render.ShowSearchPage()
 end
 
 -- The background indexer used to build every unvisited page just to register its
@@ -2288,9 +2288,8 @@ local function ShowSearchPageForQuery(query)
     if query ~= "" and M.activeKey ~= "search" then
         M.searchReturnKey = M.activeKey or M.searchReturnKey or "home"
     end
-    M.InvalidatePage("search")
     if query ~= "" then
-        M.SelectPage("search")
+        Search._Render.ShowSearchPage()
     elseif M.activeKey == "search" then
         M.SelectPage(M.searchReturnKey or "home")
     end
