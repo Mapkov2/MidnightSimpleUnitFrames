@@ -218,6 +218,8 @@ Kernel\MSUF_OptionsLoader.lua
 # ---------------------------------------------------------------
 Castbars\MSUF_InterruptReady.lua
 Castbars\MSUF_FocusKickIcon.lua
+UnitFrames\Effects\MSUF_UF_RoundedSurface.lua
+UnitFrames\Effects\MSUF_UF_RoundedResources.lua
 UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
 Castbars\MSUF_CastbarRounded.lua
 Game\Classic\Castbars\MSUF_CastbarVisualCompat.lua
