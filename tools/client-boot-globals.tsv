@@ -191,7 +191,6 @@ UnitThreatSituation	*	unit	Blizzard unit-state API; the harness answers it with 
 UnitWatchRegistered	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnregisterStateDriver	*	api	Blizzard client API the harness does not model
 _ECME_GetBarFrame	*	thirdparty	third-party addon global MSUF probes to detect that addon
-canaccesstable	*	secret	12.x secret-value API the harness does not model
 hasanysecretvalues	*	secret	12.x secret-value API the harness does not model
 hash_SlashCmdList	*	table	Blizzard slash-token hash; MSUF probes it before claiming /rl
 issecure	*	secret	12.x secret-value API the harness does not model

@@ -84,6 +84,7 @@ classics	lua	tools/tests/classic_classpower_runtime_smoke.lua	{root} {flavor}	Cl
 classics	lua	tools/tests/classic_classpower_enabled_smoke.lua	{root} {flavor}	Classic ClassPower enabled routes failed: {flavor}
 -	lua	tools/tests/mainline_classpower_ooc_autohide_smoke.lua	{root}	Mainline ClassPower OOC auto-hide smoke failed
 -	lua	tools/tests/classpower_target_combo_trace_smoke.lua	{root/}	ClassPower target-combo behaviour trace smoke failed
+-	lua	tools/tests/classpower_hotpath_budget_smoke.lua	{root}	ClassPower hotpath budget smoke failed
 classics	lua	tools/tests/classic_classpower_controller_smoke.lua	{root} {flavor}	Classic ClassPower controller contract failed: {flavor}
 -	lua	tools/tests/classpower_classic_hunks_smoke.lua	{root}	ClassPower Classic hunks smoke failed
 classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic fresh profile smoke failed: {flavor}
