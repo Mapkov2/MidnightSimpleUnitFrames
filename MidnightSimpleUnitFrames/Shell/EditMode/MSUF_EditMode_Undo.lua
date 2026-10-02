@@ -3,9 +3,6 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
-local function PublishCompat(name, value)
-    return ExportPublic(name, value)
-end
 local EM2 = _G.MSUF_EM2
 local Util = EM2.Util
 
@@ -221,7 +218,7 @@ end
 
 local function RestoreState(snap)
     if not snap then return end
-    PublishCompat("MSUF__UndoRestoring", true)
+    ExportPublic("MSUF__UndoRestoring", true)
     if snap.category == "external" then
         local external = EM2.ExternalElements
         if external and type(external.RestoreHistoryState) == "function" then
@@ -230,11 +227,11 @@ local function RestoreState(snap)
         if EM2.Focus and EM2.Focus.NotifyPositionChanged then
             EM2.Focus.NotifyPositionChanged(snap.key, true)
         end
-        PublishCompat("MSUF__UndoRestoring", false)
+        ExportPublic("MSUF__UndoRestoring", false)
         return
     end
     local db = _G.MSUF_DB
-    if not db then PublishCompat("MSUF__UndoRestoring", false); return end
+    if not db then ExportPublic("MSUF__UndoRestoring", false); return end
 
     if snap.category == "unit" then
         db[snap.key] = db[snap.key] or {}
@@ -289,7 +286,7 @@ local function RestoreState(snap)
     if EM2.ResourcePopup and EM2.ResourcePopup.Sync then EM2.ResourcePopup.Sync() end
     Util.SyncMovers()
 
-    PublishCompat("MSUF__UndoRestoring", false)
+    ExportPublic("MSUF__UndoRestoring", false)
 end
 
 -- Two-phase snapshots are used by fail-closed callers which can only know
