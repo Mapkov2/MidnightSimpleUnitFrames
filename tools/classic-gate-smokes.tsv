@@ -290,6 +290,7 @@ clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}
 -	lua	tools/tests/castbar_hotpath_budget_smoke.lua	{root}	Castbar hotpath budget smoke failed
 -	lua	tools/tests/castbar_hotpath_smoke.lua	{root}	Castbar hotpath smoke failed
 -	lua	tools/tests/castbar_correctness_smoke.lua	{root}	Castbar correctness smoke failed
+-	lua	tools/tests/castbar_pool_residue_smoke.lua	{root}	Castbar boss/arena pool walkers changed the recorded trace
 clients+Forever,MistsDuration	lua	tools/tests/interrupt_ready_classic_cooldown_smoke.lua	{root} {flavor}	Interrupt-ready cooldown source: {flavor}
 -	lua	tools/tests/resource_marks_smoke.lua	{root}	Resource marks: restricted colours, overlay, fill axis, combat shapeshift
 clients+Forever	lua	tools/tests/resource_extras_lifecycle_smoke.lua	{root} {flavor}	Resource helper lifecycle: {flavor}

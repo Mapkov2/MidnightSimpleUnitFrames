@@ -48,8 +48,14 @@ local function IsPoolFile(name)
 end
 
 -- options:
---   pools   also load the boss and arena castbar pools
---   flavor  client TOC (default Mists)
+--   pools       also load the boss and arena castbar pools
+--   flavor      client TOC (default Mists)
+--   extra       further castbar file names to load, in TOC order
+--   arenaSlots  MSUF_MAX_ARENA_FRAMES the client model publishes (default 3)
+--   setup       function(ns, world) run before any file loads
+--   richWidgets region factories (CreateTexture, CreateFontString, ...) and
+--               GetStatusBarTexture return child widgets instead of nil, and
+--               sizes are stored, for smokes that build full castbar frames
 function World.New(root, backend, options)
     options = options or {}
     WipeAddonGlobals()
@@ -67,10 +73,13 @@ function World.New(root, backend, options)
         exists = { target = true, focus = true, boss1 = true, arena1 = true },
     }, World)
 
+    -- Names the permissive widget answers with a no-op method. Rich widgets
+    -- skip all-caps prefixes ("MSUFSpec") so data fields read as nil.
+    local methodPattern = options.richWidgets and "^%u%l%a*$" or "^%u%a*$"
     local function NewWidget(kind, name)
         local widget = { kind = kind, name = name, scripts = {}, hooks = {}, shown = true, events = {} }
         setmetatable(widget, { __index = function(_, key)
-            if type(key) == "string" and key:match("^%u%a*$")
+            if type(key) == "string" and key:match(methodPattern)
                 and key ~= "SetTimerDuration" and key ~= "ClearTimerDuration" then
                 return NoOp
             end
@@ -113,6 +122,32 @@ function World.New(root, backend, options)
         function widget:GetPoint() return nil end
         function widget:CreateAnimationGroup() return NewWidget("AnimationGroup") end
         function widget:CreateAnimation() return NewWidget("Animation") end
+        if options.richWidgets then
+            function widget:CreateTexture() return NewWidget("Texture") end
+            function widget:CreateMaskTexture() return NewWidget("MaskTexture") end
+            function widget:CreateFontString() return NewWidget("FontString") end
+            function widget:CreateLine() return NewWidget("Line") end
+            function widget:GetStatusBarTexture()
+                self.statusBarTexture = self.statusBarTexture or NewWidget("Texture")
+                return self.statusBarTexture
+            end
+            function widget:SetSize(width, height) self.width, self.height = width, height end
+            function widget:SetWidth(width) self.width = width end
+            function widget:SetHeight(height) self.height = height end
+            function widget:GetWidth() return self.width or 200 end
+            function widget:GetHeight() return self.height or 18 end
+            function widget:GetSize() return self:GetWidth(), self:GetHeight() end
+            function widget:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "OUTLINE" end
+            function widget:SetFont() return true end
+            function widget:GetStringWidth() return 40 end
+            function widget:GetFrameStrata() return self.strata or "MEDIUM" end
+            function widget:SetFrameStrata(strata) self.strata = strata end
+            function widget:GetFrameLevel() return self.level or 1 end
+            function widget:SetFrameLevel(level) self.level = level end
+            function widget:GetParent() return self.parent end
+            function widget:SetParent(parent) self.parent = parent end
+            function widget:GetName() return self.name end
+        end
         world.frames[#world.frames + 1] = widget
         if type(name) == "string" then _G[name] = widget end
         return widget
@@ -190,12 +225,15 @@ function World.New(root, backend, options)
         },
     }
     world.ns = ns
-    _G.MSUF_MAX_ARENA_FRAMES = 3
+    if options.setup then options.setup(ns, world) end
+    _G.MSUF_MAX_ARENA_FRAMES = options.arenaSlots or 3
+    local extra = {}
+    for index = 1, #(options.extra or {}) do extra[options.extra[index]] = true end
     local loaded = {}
     for _, path in ipairs(manifest.Paths(root, options.flavor or World.FLAVOR)) do
         local name = path:match("([^/]+)$")
         local inCastbars = path:find("/Castbars/", 1, true) or path:find("/Kernel/", 1, true)
-        if inCastbars and (BASE_FILES[name] or (options.pools and IsPoolFile(name))) then
+        if inCastbars and (BASE_FILES[name] or extra[name] or (options.pools and IsPoolFile(name))) then
             assert(loadfile(path))("MidnightSimpleUnitFrames", ns)
             loaded[name] = true
         end
