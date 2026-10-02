@@ -162,8 +162,11 @@ assert(main:IsShown() and off:IsShown() and not ranged:IsShown(), "both hands by
 assert(off.Lane == nil, "the off-hand lane is built only when it is chosen")
 for _,frame in ipairs(nativeFrames) do
     assert(not frame:IsShown() and not frame.receivingSwings, "all Blizzard bars suppressed")
+    -- SwingTimerMixin:SetIsInEditMode sets the field, then shows the bar.
+    frame.isInEditMode = true
     frame:Show()
     assert(not frame:IsShown(), "Edit Mode cannot reshow a native bar")
+    frame.isInEditMode = nil
 end
 event("PLAYER_SWING",2,0)
 event("PLAYER_SWING",3,1)

@@ -236,16 +236,25 @@ local function CreateBar(hand)
     return frame
 end
 
+-- Blizzard owns its bars' visibility through the showSwingTimer CVar: its own
+-- CVarCallbackRegistry handler runs UpdateFrameState on every bar
+-- (Blizzard_SwingTimer.lua OnShowSwingTimerCVarChanged), so turning the CVar
+-- off hides them and restoring it shows them again. Showing or hiding a bar
+-- from addon code would run the bottom managed-frame container layout (which
+-- also places ExtraAbilityContainer) tainted. Only Blizzard's Edit Mode shows a
+-- bar while the CVar is off (ShouldBeShown: isInEditMode); that one case is
+-- hidden here. Hooked bars are kept in a side table, never on Blizzard's frame.
+local nativeHooked = setmetatable({}, { __mode = "k" })
 local function HideNative(frame)
-    if active and frame:IsShown() then frame:Hide() end
+    if active and frame.isInEditMode and frame:IsShown() then frame:Hide() end
 end
 local function SuppressNative()
     if _G.GetCVarBool("showSwingTimer") then _G.SetCVar("showSwingTimer", "0") end
     for i = 1, #HANDS do
         local frame = _G["SwingTimer" .. NAMES[HANDS[i]] .. "Frame"]
         if frame then
-            if not frame._msufSwingHideHook then
-                frame._msufSwingHideHook = true
+            if not nativeHooked[frame] then
+                nativeHooked[frame] = true
                 frame:HookScript("OnShow", HideNative)
             end
             HideNative(frame)
@@ -594,11 +603,8 @@ local function Disable()
     end
     if frames.main and frames.main.Cue then frames.main.Cue:Hide() end
     cueSpell, cueTitled = nil, false
+    -- Blizzard's CVar callback shows its bars and re-registers PLAYER_SWING.
     _G.SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
-    for i = 1, #HANDS do
-        local frame = _G["SwingTimer" .. NAMES[HANDS[i]] .. "Frame"]
-        if frame then frame:UpdateShownStateAndRegistration() end
-    end
 end
 function Swing.SetEnabled(value)
     local cfg = DB()
