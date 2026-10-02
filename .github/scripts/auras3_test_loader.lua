@@ -328,7 +328,7 @@ local function PrepareDirectContracts(source, namespace)
         M.Tr = provider.Translate
     end
     if M and Uses("M.SetFixedPreviewExpandedPreference") and not M.SetFixedPreviewExpandedPreference then
-        BindPublic("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua", "M", "SetFixedPreviewExpandedPreference", M)
+        BindPublic("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_PreviewDock.lua", "M", "SetFixedPreviewExpandedPreference", M)
     end
     if M and Uses("M.ApplyLocaleSelection") and not M.ApplyLocaleSelection then
         local text = Read(SourcePath("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme.lua"))
@@ -397,9 +397,12 @@ local function PrepareDirectContracts(source, namespace)
         end
         if Uses("M.Widgets.SetTextLayout") or Uses("M.Widgets.ResolveContextColorOption") then
             M.Widgets = M.Widgets or {}
-            local owner = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua"
+            local owners = {
+                SetTextLayout = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua",
+                ResolveContextColorOption = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_ContextColors.lua",
+            }
             for _, name in ipairs({ "SetTextLayout", "ResolveContextColorOption" }) do
-                M.Widgets[name] = M.Widgets[name] or Bind(owner, name)
+                M.Widgets[name] = M.Widgets[name] or Bind(owners[name], name)
             end
         end
         if Uses("PreviewHelpers.ExactPreviewDelta") then

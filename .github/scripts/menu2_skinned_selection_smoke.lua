@@ -62,7 +62,7 @@ assert(#nav.textures == 2 and nav._msuf2SkinnedSelectionCue.line.color[1] == 0.9
 paint(nav, false, false)
 assert(not CueShown(nav), "old Unitframes selection remains visible")
 
-local widgetsSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets.lua")
+local widgetsSource = Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Controls.lua")
 local barStart = assert(widgetsSource:find("function W.ScopeOverrideBar", 1, true), "unit scope bar missing")
 local barEnd = assert(widgetsSource:find("function W.ScopeOverrideTooltipBody", barStart, true),
     "unit scope bar end missing")
