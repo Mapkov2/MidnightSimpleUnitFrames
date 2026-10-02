@@ -20,7 +20,11 @@ local MODE = {
     NONE = 0, SEGMENTED = 1, FRACTIONAL = 2, RUNE_CD = 3, AURA_SEGMENTED = 4,
     CONTINUOUS = 6, SIGNED_CONTINUOUS = 12,
 }
-local AFFLICTION_SPELL = 74434
+--- Blizzard Mists ShardBar.lua gates the Affliction shard bar on
+--- WARLOCK_SOULBURN (Blizzard_FrameXMLBase/Classic/Constants.lua), and the
+--- Soulburn ability itself is a different spell.
+local AFFLICTION_SPELL = 117198
+local SOULBURN_ABILITY = 74434
 local BURNING_EMBERS_SPELL = 108647
 local ARCANE_CHARGE = 36032
 
@@ -482,6 +486,16 @@ Case("affliction learns the shard spell", MISTS, function()
     t.env:AdvanceTime(1)
     Fire(t, "SPELLS_CHANGED")
     assert(t.containerShows == shows, "an unchanged SPELLS_CHANGED rebuilt the bar")
+    return t
+end)
+
+Case("affliction with only the Soulburn ability", MISTS, function()
+    local t = Start({ class = "WARLOCK", spec = 1, primary = PT.Mana, known = false,
+        power = { [PT.SoulShards] = 2 }, max = { [PT.SoulShards] = 3 } })
+    C_SpellBook.IsSpellKnown = function(spellID) return spellID == SOULBURN_ABILITY end
+    t.env:AdvanceTime(1)
+    Fire(t, "SPELLS_CHANGED")
+    ExpectHidden(t, "affliction without Blizzard's shard spell")
     return t
 end)
 
