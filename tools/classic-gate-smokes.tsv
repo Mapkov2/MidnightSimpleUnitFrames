@@ -173,6 +173,7 @@ clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/editmode_shell_locale_smoke.lua	{root}	Edit Mode shell locale smoke failed
 -	lua	tools/tests/editmode_popup_focus_combat_smoke.lua	{root}	Edit Mode popup focus and combat smoke failed
 -	lua	tools/tests/editmode_hud_toolbar_smoke.lua	{root}	Edit Mode toolbar wiring smoke failed
+-	lua	tools/tests/editmode_group_geometry_util_smoke.lua	{root}	Edit Mode group geometry refresh lost its single Util owner
 -	lua	tools/tests/editmode_castbar_edit_info_smoke.lua	{root}	Edit Mode castbar mover and readout refresh smoke failed
 -	lua	tools/tests/classic_resource_editmode_smoke.lua	{root/}	Class Resource and detached Power Edit Mode smoke failed
 -	lua+driver	tools/tests/arena_editmode_exit_restore_smoke.lua	{root/}	Arena Edit Mode exit restore smoke failed

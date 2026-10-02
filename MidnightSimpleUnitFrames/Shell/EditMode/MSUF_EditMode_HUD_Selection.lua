@@ -44,49 +44,9 @@ local GROUP_KEY_TO_KIND = {
     gf_priority = "priority",
 }
 
-local function GroupGeometryMask(gf)
-    return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
-end
-
-local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
-
+--- Settings and Reset re-apply a group kind's geometry (EditMode_Core Util).
 local function RefreshGroupGeometryScoped(kind)
-    if not kind then return false end
-    if RequestGroupGeometryApply(kind, "EM2_HUD_GROUP_GEOMETRY") then
-        return true
-    end
-    local gf = MSUF and MSUF.GF
-    if gf and type(gf.RefreshGeometry) == "function" then
-        gf.RefreshGeometry(kind)
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshGeometry) == "function" then
-        _G.MSUF_GF_RefreshGeometry(kind)
-        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
-            _G.MSUF_GF_RefreshUnitBindings(kind)
-        end
-        if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-            _G.MSUF_GF_RefreshVisuals(kind, GroupGeometryMask(gf))
-        end
-        return true
-    end
-    if gf and type(gf.RefreshVisuals) == "function" then
-        gf.RefreshVisuals(kind, GroupGeometryMask(gf))
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-        _G.MSUF_GF_RefreshVisuals(kind)
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshAll) == "function" then
-        _G.MSUF_GF_RefreshAll()
-        return true
-    end
-    if type(_G.MSUF_GF_Refresh) == "function" then
-        _G.MSUF_GF_Refresh()
-        return true
-    end
-    return false
+    return U.RefreshGroupGeometryScoped(kind, "EM2_HUD_GROUP_GEOMETRY")
 end
 
 local LABEL_BY_KEY = {

@@ -125,6 +125,50 @@ end
 
 local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
 
+--- Re-applies one group kind's geometry after an Edit Mode change: through the
+--- menu's apply service while the Options addon is loaded, else on GF directly
+--- (its public aliases and full refreshes are the fallbacks). The layout drag
+--- commit and the HUD Settings/Reset actions share it; reason names the caller.
+function Util.RefreshGroupGeometryScoped(kind, reason)
+    if not kind then return false end
+    if RequestGroupGeometryApply(kind, reason) then
+        return true
+    end
+    local gf = MSUF and MSUF.GF
+    local mask = (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
+    if gf and type(gf.RefreshGeometry) == "function" then
+        gf.RefreshGeometry(kind)
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshGeometry) == "function" then
+        _G.MSUF_GF_RefreshGeometry(kind)
+        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
+            _G.MSUF_GF_RefreshUnitBindings(kind)
+        end
+        if type(_G.MSUF_GF_RefreshVisuals) == "function" then
+            _G.MSUF_GF_RefreshVisuals(kind, mask)
+        end
+        return true
+    end
+    if gf and type(gf.RefreshVisuals) == "function" then
+        gf.RefreshVisuals(kind, mask)
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshVisuals) == "function" then
+        _G.MSUF_GF_RefreshVisuals(kind)
+        return true
+    end
+    if type(_G.MSUF_GF_RefreshAll) == "function" then
+        _G.MSUF_GF_RefreshAll()
+        return true
+    end
+    if type(_G.MSUF_GF_Refresh) == "function" then
+        _G.MSUF_GF_Refresh()
+        return true
+    end
+    return false
+end
+
 local function ApplyGroupSettingsForKeySafe(kind)
     if RequestGroupGeometryApply(kind, "EM2_CORE_GROUP_GEOMETRY") then
         return true
