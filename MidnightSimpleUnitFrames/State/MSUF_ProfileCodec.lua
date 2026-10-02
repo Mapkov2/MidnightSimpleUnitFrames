@@ -15,8 +15,17 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local ExportPublic = MSUF.ExportPublic
 
+--- compressedBytes caps a deflate stream BEFORE it is inflated. Neither
+--- C_EncodingUtil.DecompressString nor LibDeflate takes an output limit, so
+--- decodedBytes can only reject a result that was already built, and deflate
+--- expands up to 1032:1: an 8 MiB stream could inflate to about 8 GiB first.
+--- 192 KiB bounds one inflate at about 198 MiB. A full profile export is about
+--- 37 KB of deflate (the factory profile strings), and the menu's profile box
+--- holds 200,000 characters (W.TextInput), at most 150,000 base64 bytes, so
+--- every string a player can paste still fits.
 local MSUF_PROFILE_IMPORT_LIMITS = {
     encodedBytes = 8 * 1024 * 1024,
+    compressedBytes = 192 * 1024,
     decodedBytes = 32 * 1024 * 1024,
     depth = 64,
     nodes = 250000,
@@ -343,7 +352,7 @@ do
     -- native CBOR raises and goes through the Kernel boundary below.
 
     local function TryBlizzardDecompress(E, compressed)
-        if type(compressed) ~= "string" or #compressed > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
+        if type(compressed) ~= "string" or #compressed > MSUF_PROFILE_IMPORT_LIMITS.compressedBytes then return nil end
         local plain = E.DecompressString(compressed, Enum.CompressionMethod.Deflate)
         if type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return plain end
     end
@@ -364,7 +373,7 @@ do
     local function TryLibDeflateDecompress(compressed)
         local lib = GetLibDeflate()
         if not lib or type(compressed) ~= "string" then return nil end
-        if #compressed > MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then return nil end
+        if #compressed > MSUF_PROFILE_IMPORT_LIMITS.compressedBytes then return nil end
         local plain = lib.DecompressDeflate(lib, compressed)
         if type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then return plain end
         return nil
@@ -493,7 +502,7 @@ do
             local ld = _G.LibDeflate
             if ld and type(ld.DecodeForPrint) == "function" and type(ld.DecompressDeflate) == "function" then
                 local raw = ld.DecodeForPrint(ld, payload)
-                if type(raw) == "string" and #raw <= MSUF_PROFILE_IMPORT_LIMITS.encodedBytes then
+                if type(raw) == "string" and #raw <= MSUF_PROFILE_IMPORT_LIMITS.compressedBytes then
                     local plain = ld.DecompressDeflate(ld, raw)
                     if type(plain) == "string" and #plain <= MSUF_PROFILE_IMPORT_LIMITS.decodedBytes then
                         local t = TryDeserialize(E, plain)
