@@ -3377,6 +3377,10 @@ local function MSUF_EnsureDB(force, allowPersistedFastPath)
     if type(profile) ~= "table" then
         profile = {}
         ExportPublic("MSUF_DB", profile)
+        -- A file that reads settings while the addon loads gets here before the
+        -- SavedVariables exist; State/MSUF_FirstLoad.lua must not count this
+        -- table as saved data on ADDON_LOADED.
+        MSUF.ProfilePolicy.NoteSessionProfileDB(profile)
     end
     if force ~= true and MSUF_DB_LastHeavyRun == profile then return profile end
     MSUF_Defaults_MigrateDispelPriorityProfiles()

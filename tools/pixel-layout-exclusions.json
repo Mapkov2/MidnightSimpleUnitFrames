@@ -544,5 +544,11 @@
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented profile variant lifecycle event dispatcher; no visual regions"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented ADDON_LOADED driver that settles the SavedVariables"
   }
 ]

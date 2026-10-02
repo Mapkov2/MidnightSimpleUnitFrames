@@ -352,6 +352,14 @@ function Methods:EnterCombat() self.widgets:EnterCombat() end
 function Methods:LeaveCombat() self.widgets:LeaveCombat() end
 function Methods:FireEvent(event, ...) return self.widgets:FireEvent(event, ...) end
 
+-- The client's SavedVariables step for one addon: it runs after every Lua file
+-- of the addon ran. Each saved global the client has a value for replaces what
+-- the files assigned (a missing one keeps it), then ADDON_LOADED fires.
+function Methods:LoadSavedVariables(addonName, saved)
+    for name, value in pairs(saved or {}) do rawset(self.env, name, value) end
+    return self.widgets:FireEvent("ADDON_LOADED", addonName, false)
+end
+
 --------------------------------------------------------------------------
 -- Factory
 --------------------------------------------------------------------------
