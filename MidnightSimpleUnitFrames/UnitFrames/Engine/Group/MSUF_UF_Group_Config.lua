@@ -406,16 +406,7 @@ end
 local ResolvePowerTextColorByType = Shared.ResolvePowerTextColorByType
 local ResolveTextSlotHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol
 
-local function GetRole(unit)
-  if GF.GetUnitGroupRole then
-    return GF.GetUnitGroupRole(unit)
-  end
-  local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
-  if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
-    return role
-  end
-  return "DAMAGER"
-end
+local GetRole = GF.GetUnitGroupRole
 
 local function EffectivePowerHeight(kind, unit, role, conf)
   if conf.powerBarEnabled == false then

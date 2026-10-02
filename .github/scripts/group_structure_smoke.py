@@ -83,6 +83,10 @@ def main():
         assert item["longest"] <= 150, f"{item['file']}: split long function by responsibility"
         if not args.limits_only and item["file"] in owned | overrides:
             assert item["wide"] == 0 and item["semicolons"] == 0, f"{item['file']}: layout limits"
+    em2 = (args.root / "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua").read_text()
+    assert not re.search(r'type\(gf\.[A-Za-z_]+\)', em2), "stable group module exports must not be optional"
+    config = (args.root / "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua").read_text()
+    assert "local GetRole = GF.GetUnitGroupRole" in config, "use the shared secret-safe role resolver"
     if not args.limits_only:
         assert share <= .01, "group clone-line share exceeds one percent"
     print("group_structure_smoke: PASS")
