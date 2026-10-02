@@ -208,6 +208,7 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua	tools/tests/classpower_client_resource_gates_smoke.lua	{root/}	Class resource client gates failed
 -	lua	tools/tests/classpower_visual_refresh_smoke.lua	{root}	ClassPower visual refresh repaints the active mode failed
 -	lua	tools/tests/classpower_player_hp_secret_smoke.lua	{root}	ClassPower Player HP secret text smoke failed
+-	lua	tools/tests/classpower_paint_stamps_smoke.lua	{root}	ClassPower paint stamp smoke failed
 -	lua	tools/tests/pixel_layout_profile_smoke.lua	{root}	Pixel layout profile preservation smoke failed
 -	python	tools/tests/pixel_layout_coverage_smoke.py	{root}	Pixel layout creation coverage failed
 -	lua	tools/tests/suite_cooldown_anchor_smoke.lua	{root/}	MSUF Suite cooldown anchor smoke failed
