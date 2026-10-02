@@ -737,10 +737,14 @@ local function ApplyTimeTextLayout(frame, g, unit, prefix)
 
     if fs.SetMaxLines then fs:SetMaxLines(1) end
     if fs.SetWordWrap then fs:SetWordWrap(false) end
-    local fallbackX = unit == "boss" and 0 or -2
-    local x = DetailNum(g, prefix, "TimeOffsetX", unit ~= "boss" and "castbarPlayerTimeOffsetX" or nil, fallbackX)
-    local y = DetailNum(g, prefix, "TimeOffsetY", unit ~= "boss" and "castbarPlayerTimeOffsetY" or nil, 0)
-    if unit == "boss" then x = -2 + (tonumber(x) or 0) end
+    -- Boss and arena time offsets are stored relative to a -2 base, without
+    -- the player-offset fallback; the Unit preview and its drag handle
+    -- (bossBaseX) read and write them the same way.
+    local poolUnit = POOL_SHOW_KEYS[unit] ~= nil
+    local fallbackX = poolUnit and 0 or -2
+    local x = DetailNum(g, prefix, "TimeOffsetX", not poolUnit and "castbarPlayerTimeOffsetX" or nil, fallbackX)
+    local y = DetailNum(g, prefix, "TimeOffsetY", not poolUnit and "castbarPlayerTimeOffsetY" or nil, 0)
+    if poolUnit then x = -2 + (tonumber(x) or 0) end
     local position = NormalizeTextPosition(DetailString(g, prefix, "TimePosition", nil, "RIGHT"), "RIGHT")
     AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))
     return fontReady

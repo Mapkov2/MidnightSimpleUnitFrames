@@ -217,6 +217,29 @@ do
         Equal(frame.castText.alpha, 0, label .. "unset Show spell name ignored castbarShowSpellName")
     end
 
+    -- Boss and arena time offsets sit on the same -2 base the Unit preview
+    -- and its drag handle use (MSUF_Menu2_UnitPreview_Render.lua: timeX =
+    -- -2 + <kind>CastTimeOffsetX), and never fall back to the player offset.
+    for _, case in ipairs({ { unit = "boss", name = "MSUF_BossCastbar1" },
+                            { unit = "arena", name = "MSUF_ArenaCastbar1" } }) do
+        local offsets = General({ castbarPlayerTimeOffsetX = 9, castbarPlayerTimeOffsetY = 7 })
+        offsets[case.unit .. "CastTimeOffsetX"] = 5
+        offsets[case.unit .. "CastTimeOffsetY"] = 3
+        local frame = NewCastbarFrame(case.name, case.unit .. "1")
+        apply(frame, case.unit, offsets)
+        local point = LastPoint(frame.timeText)
+        Check(point ~= nil, case.unit .. ": time text not anchored")
+        Equal(point[4], 3, case.unit .. ": time X offset not on the -2 base")
+        Equal(point[5], 3, case.unit .. ": time Y offset")
+        offsets[case.unit .. "CastTimeOffsetX"] = nil
+        offsets[case.unit .. "CastTimeOffsetY"] = nil
+        frame = NewCastbarFrame(case.name, case.unit .. "1")
+        apply(frame, case.unit, offsets)
+        point = LastPoint(frame.timeText)
+        Equal(point[4], -2, case.unit .. ": unset time X fell back to the player offset")
+        Equal(point[5], 0, case.unit .. ": unset time Y fell back to the player offset")
+    end
+
     -- Unit castbars keep their per-prefix keys.
     local target = NewCastbarFrame("MSUF_TargetCastBar", "target")
     apply(target, "target", General({ castbarTargetShowIcon = false, castbarTargetShowSpellName = false,
