@@ -279,9 +279,9 @@ local function ForEachCastbar(callback)
     Visit(_G.MSUF_PlayerCastbarPreview)
     Visit(_G.MSUF_TargetCastbarPreview)
     Visit(_G.MSUF_FocusCastbarPreview)
-    Visit(_G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1)
+    Visit(_G.MSUF_BossCastbarPreview)
     local bossCastbars = _G.MSUF_BossCastbars
-    local maxBoss = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+    local maxBoss = tonumber(_G.MAX_BOSS_FRAMES) or 5
     if maxBoss < 1 or maxBoss > 12 then maxBoss = 5 end
     for index = 1, maxBoss do
         Visit(type(bossCastbars) == "table" and bossCastbars[index] or nil)

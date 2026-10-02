@@ -252,17 +252,15 @@ if type(CastbarsForceHideAll) ~= "function" then
         Hide(_G.MSUF_FocusCastbar)
         Hide((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
 
-        local bossCastbars = _G.MSUF_BossCastbars
-        if type(bossCastbars) == "table" then
-            for index = 1, #bossCastbars do
-                Hide(bossCastbars[index])
-            end
-        end
-
-        local arenaCastbars = _G.MSUF_ArenaCastbars
-        if type(arenaCastbars) == "table" then
-            for index = 1, #arenaCastbars do
-                Hide(arenaCastbars[index])
+        -- Boss and arena: every built pool (MSUF_CastbarPools.lua).
+        local pools = ns.Castbars and ns.Castbars.Pools
+        local poolOrder = pools and pools.order
+        for poolIndex = 1, poolOrder and #poolOrder or 0 do
+            local castbars = poolOrder[poolIndex].Castbars()
+            if type(castbars) == "table" then
+                for index = 1, #castbars do
+                    Hide(castbars[index])
+                end
             end
         end
     end
@@ -302,14 +300,11 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
             applyUnitState("focus")
         end
 
-        local applyBossState = _G.MSUF_ApplyBossCastbarsEnabled
-        if type(applyBossState) == "function" then
-            applyBossState()
-        end
-
-        local applyArenaState = _G.MSUF_ApplyArenaCastbarsEnabled
-        if type(applyArenaState) == "function" then
-            applyArenaState()
+        -- Boss, then arena: backend flags, lifecycle and frames of each pool.
+        local pools = ns.Castbars and ns.Castbars.Pools
+        local poolOrder = pools and pools.order
+        for poolIndex = 1, poolOrder and #poolOrder or 0 do
+            poolOrder[poolIndex].ApplyEnabled()
         end
 
         if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then

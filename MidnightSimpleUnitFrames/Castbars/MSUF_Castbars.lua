@@ -509,10 +509,10 @@ local function StopCastbarIfUnitMissing(frame)
         )
     if not missing then return false end
 
-    if frame._msufIsBossCastbar and type(_G.MSUF_BossCastbar_Stop) == "function" then
-        _G.MSUF_BossCastbar_Stop(frame)
-    elseif frame._msufIsArenaCastbar and type(_G.MSUF_ArenaCastbar_Stop) == "function" then
-        _G.MSUF_ArenaCastbar_Stop(frame)
+    -- Boss and arena bars (and their previews) stop through the pool module.
+    local pools = (frame._msufIsBossCastbar or frame._msufIsArenaCastbar) and MSUF.Castbars and MSUF.Castbars.Pools
+    if pools then
+        pools.Stop(frame)
     elseif type(_G.MSUF_CB_ResetStateOnStop) == "function" then
         _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
     else

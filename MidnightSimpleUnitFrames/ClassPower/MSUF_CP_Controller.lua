@@ -11,6 +11,10 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- 7. Stagger: Brewmaster Monk stagger bar (3-color threshold).
 --- Architecture:
 --- - Self-contained: own event frame, own DB defaults, own layout.
+--- - This file orchestrates: refresh stages, event dispatch and the public
+---   API. Cold configuration, colours, surfaces, the player-aura cache, the
+---   central OnUpdate driver and the event bindings live in the
+---   MSUF_CP_Controller_*.lua modules it binds at load.
 --- - Independent overlay (Unhalted approach): no HP bar reservation.
 --- - Render modes: each class/spec resolves to a render mode at FullRefresh.
 --- Hot-path dispatch is a single mode check - zero branching for inactive.
@@ -33,43 +37,29 @@ local CoreUnitFrame = _G.MSUF_CP_CoreUnitFrame
 
 --- Perf locals (eliminate global lookups in hot paths)
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
+--- APIs read only to build the split modules below stay plain global reads.
 local GetUnitChargedPowerPoints = GetUnitChargedPowerPoints
 local math_floor = math.floor
 local math_min = math.min
-local string_format = string.format
 local wipe = wipe
 local CreateFrame = CreateFrame
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
-local UnitPartialPower = UnitPartialPower
-local UnitHealth = UnitHealth
-local UnitPowerType = UnitPowerType
 local UnitPowerDisplayMod = UnitPowerDisplayMod
-local UnitClass = UnitClass
-local UnitStagger = UnitStagger
-local UnitHealthMax = UnitHealthMax
 local UnitHasVehicleUI = UnitHasVehicleUI
-local GetRuneCooldown = GetRuneCooldown
 local InCombatLockdown = InCombatLockdown
 local UnitAffectingCombat = UnitAffectingCombat
 local GetTime = GetTime
 local C_Timer = C_Timer
-local GetPowerRegenForPowerType = GetPowerRegenForPowerType
 local SMOOTH_INTERP = _G.Enum and _G.Enum.StatusBarInterpolation
 SMOOTH_INTERP = SMOOTH_INTERP and SMOOTH_INTERP.ExponentialEaseOut or nil
 
---- Aura API (player-only class resources; unitframe aura display is native 12.1)
-local C_UnitAuras = C_UnitAuras
+--- Spell API (player-only class resources; unitframe aura display is native 12.1)
 local C_Spell = C_Spell
-local C_SpellBook = C_SpellBook
 
 --- Secret-value guard (Midnight/12.1)
-local _issecretvalue = _G.issecretvalue
-local _canaccesstable = _G.canaccesstable
 local NotSecret = MSUF.Secrets.NotSecret
 
 local CanAccessTableValue = MSUF.Secrets.CanAccessTable
-
-local CanAccessOptionalTableValue = MSUF.Secrets.CanAccessOptionalTable
 
 --- Spec API (12.0: C_SpecializationInfo preferred, fallback to global)
 local GetSpec = (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization)
@@ -130,21 +120,9 @@ if IS_CLASSIC then
 end
 
 --- Cached split registries (load-time only; avoids repeated global table lookups
---- and keeps the post-split core wiring easier to follow).
-
---- ---
---- ALT_MANA builder - registered EARLY so the consumer ~line 1134
---- (CP_CallBuilder(CPCoreBuilders.ALT_MANA, ...)) sees it at file-parse
---- time. Previous layout had this block at file bottom -> builder was
---- nil when consumer ran -> AM_Create/AM_Layout/AM_ApplyColor/AM_UpdateValue
---- stayed nil -> FullRefresh crashed for every spec with a mana pool
---- (Shadow Priest, Druid, Monk WW, Ret Pala, Shaman Ele/Enh, Aug Evoker)
---- whenever needsAlt==true. Wrapped in do...end to scope the 'builders'
---- local (avoids shadowing the 'builders' locals at later file sections).
---- ---
-
---- AltMana builder moved to ClassPower\\MSUF_CP_AltMana.lua.
-
+--- and keeps the post-split core wiring easier to follow). Every builder file
+--- loads before this one (TOC order); the AltMana builder lives in
+--- ClassPower/MSUF_CP_AltMana.lua.
 local CPCoreBuilders = (type(_G.MSUF_CP_CORE_BUILDERS) == "table") and _G.MSUF_CP_CORE_BUILDERS or {}
 local CPModeBuilders = (type(_G.MSUF_CP_MODE_BUILDERS) == "table") and _G.MSUF_CP_MODE_BUILDERS or {}
 local CPFeatureBuilders = (type(_G.MSUF_CP_FEATURE_BUILDERS) == "table") and _G.MSUF_CP_FEATURE_BUILDERS or {}
@@ -277,329 +255,19 @@ local CP = {
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
 }
 
-local CPAuras = {
-    watched = {},
-    bySpell = {},
-    spellByInstance = {},
-}
-
-function CPAuras.NormalizeID(value)
-    if value == nil then return nil end
-    if NotSecret(value) == false then return nil end
-    return tonumber(value)
-end
-
-function CPAuras.AddSpell(spellID)
-    spellID = CPAuras.NormalizeID(spellID)
-    if spellID then CPAuras.watched[spellID] = true end
-end
-
-function CPAuras.AuraSpellID(aura)
-    return aura and CPAuras.NormalizeID(aura.spellId or aura.spellID or aura.id) or nil
-end
-
-function CPAuras.AuraInstanceID(aura)
-    return aura and CPAuras.NormalizeID(aura.auraInstanceID) or nil
-end
-
-function CPAuras.ClearSpell(spellID, auraInstanceID)
-    spellID = CPAuras.NormalizeID(spellID)
-    auraInstanceID = CPAuras.NormalizeID(auraInstanceID)
-    if auraInstanceID then CPAuras.spellByInstance[auraInstanceID] = nil end
-    if spellID then
-        local current = CPAuras.bySpell[spellID]
-        if not auraInstanceID or not current or CPAuras.AuraInstanceID(current) == auraInstanceID then
-            CPAuras.bySpell[spellID] = nil
-        end
-    end
-end
-
-function CPAuras.Store(aura)
-    if not CanAccessTableValue(aura) then return false end
-    local spellID = CPAuras.AuraSpellID(aura)
-    if not (spellID and CPAuras.watched[spellID]) then return false end
-
-    local auraInstanceID = CPAuras.AuraInstanceID(aura)
-    if auraInstanceID then
-        local oldSpellID = CPAuras.spellByInstance[auraInstanceID]
-        if oldSpellID and oldSpellID ~= spellID then
-            CPAuras.ClearSpell(oldSpellID, auraInstanceID)
-        end
-        CPAuras.spellByInstance[auraInstanceID] = spellID
-    end
-
-    CPAuras.bySpell[spellID] = aura
-    return true
-end
-
-function CPAuras.ClearAll()
-    if wipe then
-        wipe(CPAuras.bySpell)
-        wipe(CPAuras.spellByInstance)
-        return
-    end
-    for k in pairs(CPAuras.bySpell) do CPAuras.bySpell[k] = nil end
-    for k in pairs(CPAuras.spellByInstance) do CPAuras.spellByInstance[k] = nil end
-end
-
-function CPAuras.Fetch(spellID)
-    spellID = CPAuras.NormalizeID(spellID)
-    if not (spellID and C_UnitAuras) then return nil end
-
-    local aura
-    if type(C_UnitAuras.GetPlayerAuraBySpellID) == "function" then
-        aura = C_UnitAuras.GetPlayerAuraBySpellID(spellID)
-    elseif type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
-        aura = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
-    end
-    if CanAccessTableValue(aura) then
-        CPAuras.Store(aura)
-    else
-        aura = nil
-    end
-    return aura
-end
-
-local function CPAuraFieldEqual(left, right, key)
-    local a = left and left[key]
-    local b = right and right[key]
-    if NotSecret(a) == false or NotSecret(b) == false then return false end
-    return a == b
-end
-
-function CPAuras.SameState(left, right, stateKind)
-    if left == right then return true end
-    if not left or not right then return false end
-    if stateKind == "timer" then
-        return CPAuraFieldEqual(left, right, "expirationTime")
-    end
-    if stateKind == "tip" then
-        return CPAuraFieldEqual(left, right, "applications")
-            and CPAuraFieldEqual(left, right, "expirationTime")
-    end
-    --- Stack resources only render presence/application changes. Aura-instance
-    --- and duration churn must not repaint ten Enhancement segments.
-    return CPAuraFieldEqual(left, right, "applications")
-end
-
-function CPAuras.RefreshSpell(spellID, stateKind)
-    spellID = CPAuras.NormalizeID(spellID)
-    if not spellID then return false end
-
-    local previous = CPAuras.bySpell[spellID]
-    CPAuras.ClearSpell(spellID, previous and CPAuras.AuraInstanceID(previous))
-    local current = CPAuras.Fetch(spellID)
-    return not CPAuras.SameState(previous, current, stateKind)
-end
-
-function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
-    spellID = CPAuras.NormalizeID(spellID)
-    if not spellID then return nil end
-    if powerType == "MAELSTROM_WEAPON" and spellID == CPK.SPELL.MAELSTROM_WEAPON then return "stacks" end
-    if powerType == "ICICLES" and CPConst.ICICLES and spellID == CPConst.ICICLES.AURA_ID then return "stacks" end
-    if powerType == "SOUL_FRAGMENTS" then
-        if spellID == CPK.SPELL.VOID_METAMORPHOSIS
-            or spellID == CPK.SPELL.SILENCE_THE_WHISPERS
-            or spellID == CPK.SPELL.DARK_HEART then
-            return "stacks"
-        end
-    end
-    return nil
-end
-
-function CPAuras.RefreshActive(powerType, renderMode)
-    local changed = false
-    local handled = true
-    local function Refresh(spellID, stateKind)
-        if CPAuras.RefreshSpell(spellID, stateKind) then changed = true end
-    end
-
-    if powerType == "MAELSTROM_WEAPON" then
-        Refresh(CPK.SPELL.MAELSTROM_WEAPON, "stacks")
-    elseif powerType == "ICICLES" then
-        Refresh(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
-    elseif powerType == "SOUL_FRAGMENTS" then
-        Refresh(CPK.SPELL.VOID_METAMORPHOSIS, "stacks")
-        Refresh(CPK.SPELL.SILENCE_THE_WHISPERS, "stacks")
-        Refresh(CPK.SPELL.DARK_HEART, "stacks")
-    elseif powerType == "SOUL_FRAGMENTS_VENG" then
-        --- Vengeance reads the native spell cast count; UNIT_AURA is only a
-        --- value-change signal and does not require any aura-cache queries.
-        changed = true
-    else
-        handled = false
-    end
-
-    if not handled then
-        CPAuras.Rebuild()
-        return true
-    end
-    return changed
-end
-
-function CPAuras.IsExpired(aura)
-    local expirationTime = aura and aura.expirationTime
-    if NotSecret(expirationTime) == false or expirationTime == nil then return false end
-    expirationTime = tonumber(expirationTime)
-    return expirationTime and expirationTime > 0 and expirationTime <= GetTime()
-end
-
-function CPAuras.Get(spellID)
-    spellID = CPAuras.NormalizeID(spellID)
-    if not spellID then return nil end
-
-    local aura = CPAuras.bySpell[spellID]
-    if aura then
-        if not CPAuras.IsExpired(aura) then return aura end
-        CPAuras.ClearSpell(spellID, CPAuras.AuraInstanceID(aura))
-    end
-
-    return CPAuras.Fetch(spellID)
-end
-
-function CPAuras.Rebuild()
-    CPAuras.ClearAll()
-    local canFetchBySpell = C_UnitAuras and (
-        type(C_UnitAuras.GetPlayerAuraBySpellID) == "function"
-        or type(C_UnitAuras.GetUnitAuraBySpellID) == "function"
-    )
-    if canFetchBySpell then
-        --- Only the small watched set matters to ClassPower. This avoids a
-        --- full helpful-aura scan on secret UNIT_AURA fallback updates.
-        for spellID in pairs(CPAuras.watched) do
-            CPAuras.Fetch(spellID)
-        end
-    else
-        CPAuras.ScanUnitAuras()
-    end
-end
-
-function CPAuras.FetchByInstanceID(auraInstanceID)
-    auraInstanceID = CPAuras.NormalizeID(auraInstanceID)
-    if not (auraInstanceID and C_UnitAuras and type(C_UnitAuras.GetAuraDataByAuraInstanceID) == "function") then
-        return nil
-    end
-    return C_UnitAuras.GetAuraDataByAuraInstanceID("player", auraInstanceID)
-end
-
-function CPAuras.CanProcessIncrementalUpdate(unitAuraUpdateInfo)
-    if not CanAccessTableValue(unitAuraUpdateInfo) then return false end
-
-    --- Midnight/PTR can mark UNIT_AURA update fields secret. Addon code may
-    --- pass those values to issecretvalue, but it must not branch on them or
-    --- iterate secret tables. Fall back to the small player-aura rebuild.
-    local isFullUpdate = unitAuraUpdateInfo.isFullUpdate
-    if NotSecret(isFullUpdate) == false or isFullUpdate then return false end
-
-    local addedAuras = unitAuraUpdateInfo.addedAuras
-    local updatedAuraInstanceIDs = unitAuraUpdateInfo.updatedAuraInstanceIDs
-    local removedAuraInstanceIDs = unitAuraUpdateInfo.removedAuraInstanceIDs
-    return CanAccessOptionalTableValue(addedAuras)
-        and CanAccessOptionalTableValue(updatedAuraInstanceIDs)
-        and CanAccessOptionalTableValue(removedAuraInstanceIDs)
-end
-
-function CPAuras.ScanUnitAuras()
-    if not (C_UnitAuras and type(C_UnitAuras.GetUnitAuras) == "function") then return end
-    local auras = C_UnitAuras.GetUnitAuras("player", "HELPFUL")
-    if not CanAccessTableValue(auras) then return end
-    for i = 1, #auras do
-        CPAuras.Store(auras[i])
-    end
-end
-
-function CPAuras.ProcessUnitAuraUpdate(unitAuraUpdateInfo, powerType, renderMode)
-    if powerType == "ICICLES" then
-        --- Icicles owns one exact player aura. Refresh it directly on each
-        --- UNIT_AURA signal instead of relying on incremental aura identity,
-        --- which can be restricted, incomplete, or unrelated on Midnight.
-        --- The returned applications value remains secret-safe because the
-        --- segmented renderer passes it only to native StatusBar setters.
-        CPAuras.RefreshSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
-        return true
-    end
-
-    if not CPAuras.CanProcessIncrementalUpdate(unitAuraUpdateInfo) then
-        --- Midnight can hide the incremental payload. Refresh only the aura(s)
-        --- consumed by the active resource instead of querying every class.
-        return CPAuras.RefreshActive(powerType, renderMode)
-    end
-
-    local changed = powerType == "SOUL_FRAGMENTS_VENG"
-    local addedAuras = unitAuraUpdateInfo.addedAuras
-    if addedAuras then
-        for i = 1, #addedAuras do
-            local aura = addedAuras[i]
-            local spellID = CanAccessTableValue(aura) and CPAuras.AuraSpellID(aura) or nil
-            if CPAuras.Store(aura) and CPAuras.ActiveSpellKind(powerType, renderMode, spellID) then
-                changed = true
-            end
-        end
-    end
-
-    local updatedAuraInstanceIDs = unitAuraUpdateInfo.updatedAuraInstanceIDs
-    if updatedAuraInstanceIDs then
-        for i = 1, #updatedAuraInstanceIDs do
-            local auraInstanceID = CPAuras.NormalizeID(updatedAuraInstanceIDs[i])
-            local spellID = auraInstanceID and CPAuras.spellByInstance[auraInstanceID]
-            if spellID then
-                local previous = CPAuras.bySpell[spellID]
-                local aura = CPAuras.FetchByInstanceID(auraInstanceID)
-                local current
-                if CanAccessTableValue(aura) then
-                    CPAuras.Store(aura)
-                    current = aura
-                else
-                    CPAuras.ClearSpell(spellID, auraInstanceID)
-                end
-                local stateKind = CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
-                if stateKind and not CPAuras.SameState(previous, current, stateKind) then changed = true end
-            end
-        end
-    end
-
-    local removedAuraInstanceIDs = unitAuraUpdateInfo.removedAuraInstanceIDs
-    if removedAuraInstanceIDs then
-        for i = 1, #removedAuraInstanceIDs do
-            local auraInstanceID = CPAuras.NormalizeID(removedAuraInstanceIDs[i])
-            local spellID = auraInstanceID and CPAuras.spellByInstance[auraInstanceID]
-            if spellID then
-                CPAuras.ClearSpell(spellID, auraInstanceID)
-                if CPAuras.ActiveSpellKind(powerType, renderMode, spellID) then changed = true end
-            end
-        end
-    end
-    return changed
-end
-
-CPAuras.AddSpell(CPK.SPELL.MAELSTROM_WEAPON)
-CPAuras.AddSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID)
-CPAuras.AddSpell(CPK.SPELL.VOID_METAMORPHOSIS)
-CPAuras.AddSpell(CPK.SPELL.SILENCE_THE_WHISPERS)
-CPAuras.AddSpell(CPK.SPELL.DARK_HEART)
-for spellID in pairs(CPConst.ECLIPSE_AURAS or {}) do
-    CPAuras.AddSpell(spellID)
-end
---- Classic: Mists Arcane Charges is the only aura resource a Classic provider
---- routes, so it is the whole watched set there, and its incremental and
---- fallback aura updates are answered before the Retail resources are asked.
-if IS_CLASSIC then
-    CPAuras.watched = {}
-    CPAuras.AddSpell(CPK.SPELL.MISTS_ARCANE_CHARGE)
-    local RetailActiveSpellKind, RetailRefreshActive = CPAuras.ActiveSpellKind, CPAuras.RefreshActive
-    function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
-        if powerType == "MISTS_ARCANE_CHARGES" then
-            return CPAuras.NormalizeID(spellID) == CPK.SPELL.MISTS_ARCANE_CHARGE and "stacks" or nil
-        end
-        return RetailActiveSpellKind(powerType, renderMode, spellID)
-    end
-    function CPAuras.RefreshActive(powerType, renderMode)
-        if powerType == "MISTS_ARCANE_CHARGES" then
-            return CPAuras.RefreshSpell(CPK.SPELL.MISTS_ARCANE_CHARGE, "stacks") == true
-        end
-        return RetailRefreshActive(powerType, renderMode)
-    end
-end
+--- The player-aura cache of the aura-driven resources lives in
+--- ClassPower/MSUF_CP_Controller_Auras.lua.
+local CPAuras = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_AURAS, {
+    CPConst = CPConst,
+    CPK = CPK,
+    IS_CLASSIC = IS_CLASSIC,
+    NotSecret = NotSecret,
+    CanAccessTableValue = CanAccessTableValue,
+    CanAccessOptionalTableValue = MSUF.Secrets.CanAccessOptionalTable,
+    C_UnitAuras = C_UnitAuras,
+    GetTime = GetTime,
+    wipe = wipe,
+}), "MSUF_CP_Controller_Auras.lua must load first")
 
 ExportPublic("MSUF_CP_GetTrackedPlayerAura", CPAuras.Get)
 
@@ -950,52 +618,6 @@ end
 --- Ebon Might is fully native in 12.1 and never enters this driver.
 local CP_StopRuneOnUpdates
 
---- Central CP runtime tick for Stagger and guarded degraded fallbacks.
-local _cpTickFrame
-local _cpTickActive = false
-local _cpTickFn = nil
-local _cpTickElapsed = 0
-local CP_TICK_INTERVAL = 1 / 30
-local CP_StopCentralTick
-
-local function CP_CentralTickOnUpdate(_, elapsed)
-    if not _cpTickFn then return end
-    _cpTickElapsed = _cpTickElapsed + (elapsed or 0)
-    if _cpTickElapsed < CP_TICK_INTERVAL then return end
-    local dt = _cpTickElapsed
-    _cpTickElapsed = 0
-    if _cpTickFn(dt) == false then
-        CP_StopCentralTick()
-    end
-end
-
-local function CP_StartCentralTick(tickFn)
-    if type(tickFn) ~= "function" then return end
-    local previousTickFn = _cpTickFn
-    _cpTickFn = tickFn
-    if not _cpTickActive then
-        _cpTickElapsed = 0
-        if not _cpTickFrame then
-            _cpTickFrame = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent))
-        end
-        _cpTickFrame:SetScript("OnUpdate", CP_CentralTickOnUpdate)
-        _cpTickFrame:Show()
-        _cpTickActive = true
-    elseif previousTickFn ~= tickFn then
-        --- Mode switch mid-tick: swap function and restart its elapsed budget.
-        _cpTickElapsed = 0
-    end
-end
-
-CP_StopCentralTick = function()
-    if not _cpTickActive then return end
-    _cpTickFn = nil
-    _cpTickElapsed = 0
-    _cpTickFrame:SetScript("OnUpdate", nil)
-    _cpTickFrame:Hide()
-    _cpTickActive = false
-end
-
 local _runeRuntimeTick
 
 do
@@ -1034,48 +656,22 @@ do
     end
 end
 
-local function CP_SyncRuntimeOnUpdates(timerActive)
-    local mode = CP.renderMode
-
-    --- Determine active tick function based on current mode + animation state.
-    if mode == CPK.MODE.RUNE_CD then
-        --- Rune mode: stop others, tick runes if any active.
-        if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
-        if CP.runeOUAAny and _runeRuntimeTick then
-            CP_StartCentralTick(_runeRuntimeTick)
-        else
-            CP_StopCentralTick()
-        end
-        return
-    end
-
-    --- Not rune mode: stop rune animations.
-    if (CP.runeOUAAny or CP.runeNativeAny) and CP_StopRuneOnUpdates then
-        CP_StopRuneOnUpdates(false)
-    end
-
-    if mode == CPK.MODE.STAGGER then
-        if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
-        if timerActive and _staggerRuntimeTick then
-            CP_StartCentralTick(_staggerRuntimeTick)
-        else
-            CP_StopCentralTick()
-        end
-        return
-    end
-
-    if mode == CPK.MODE.TIMER_BAR then
-        if (CP.essenceOUAAny or CP.essenceNativeAny) and CP_StopEssenceOnUpdates then CP_StopEssenceOnUpdates() end
-        CP_StopCentralTick()
-    else
-        --- SEGMENTED mode: essence may tick.
-        if CP.essenceOUAAny and _essenceRuntimeTick then
-            CP_StartCentralTick(_essenceRuntimeTick)
-        else
-            CP_StopCentralTick()
-        end
-    end
-end
+--- The central OnUpdate driver (Rune, Stagger and degraded Essence ticks)
+--- and the per-mode OnUpdate policy live in
+--- ClassPower/MSUF_CP_Controller_Ticker.lua.
+local CPTicker = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_TICKER, {
+    CP = CP,
+    CPK = CPK,
+    CreateFrame = CreateFrame,
+    PixelLayoutRegion = PixelLayoutRegion,
+    StopRuneOnUpdates = CP_StopRuneOnUpdates,
+    StopEssenceOnUpdates = CP_StopEssenceOnUpdates,
+    RuneRuntimeTick = _runeRuntimeTick,
+    EssenceRuntimeTick = _essenceRuntimeTick,
+    StaggerRuntimeTick = _staggerRuntimeTick,
+}), "MSUF_CP_Controller_Ticker.lua must load first")
+local CP_StopCentralTick = CPTicker.Stop
+local CP_SyncRuntimeOnUpdates = CPTicker.SyncRuntimeOnUpdates
 
 local CP_RunActiveUpdate
 
@@ -1238,8 +834,7 @@ end
 --- that transition - the cooldown-width observers watch Blizzard viewers - so
 --- notify the Power element from the show/hide path itself. Width-only: no config
 --- compile and no element routing.
---- Lives on CP instead of a file-scope local: this file is at the Lua 5.1
---- 200-local ceiling.
+--- Lives on CP: Options and the Power element reach it there.
 function CP.RefreshSyncedPowerWidth(playerFrame)
     playerFrame = playerFrame or GetPlayerFrame()
     local spec = playerFrame and playerFrame.MSUFSpec
@@ -1284,7 +879,7 @@ do
             tostring = tostring,
             pairs = pairs,
             math_floor = math_floor,
-            string_format = string_format,
+            string_format = string.format,
         })
     if playerHP then
         PHP = playerHP.PHP or PHP
@@ -1296,9 +891,8 @@ end
 
 --- Full refresh (called on spec change, form change, config change)
 --- FullRefresh runs a fixed sequence of cold stages. The stage functions live
---- on one table so the split spends a single main-chunk local (this file sits
---- near the Lua 5.1 local ceiling). Execution order is unchanged: every stage
---- runs exactly where its body used to sit inline.
+--- on one table, so they cost a single main-chunk local. Execution order is
+--- unchanged: every stage runs exactly where its body used to sit inline.
 local Refresh = {}
 
 --- Player Power source override. Missing/AUTO preserves the exact existing
@@ -1749,73 +1343,30 @@ local CP_ShouldUseLiteBindings
 
 --- Event frame (single frame handles all events)
 local eventFrame = CreateFrame("Frame")
-local _cpStructuralEventsBound = false
-
-CP_SetStructuralEventsBound = function(active)
-    active = active and true or false
-    if _cpStructuralEventsBound == active then return end
-    _cpStructuralEventsBound = active
-    if active then
-        eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        eventFrame:RegisterUnitEvent("UNIT_ENTERED_VEHICLE", "player")
-        eventFrame:RegisterUnitEvent("UNIT_EXITED_VEHICLE", "player")
-        eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-        eventFrame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-        eventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
-        eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
-        eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
-    else
-        eventFrame:UnregisterEvent("PLAYER_ENTERING_WORLD")
-        eventFrame:UnregisterEvent("UNIT_ENTERED_VEHICLE")
-        eventFrame:UnregisterEvent("UNIT_EXITED_VEHICLE")
-        eventFrame:UnregisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-        eventFrame:UnregisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-        eventFrame:UnregisterEvent("PLAYER_TALENT_UPDATE")
-        eventFrame:UnregisterEvent("TRAIT_CONFIG_UPDATED")
-        eventFrame:UnregisterEvent("UPDATE_SHAPESHIFT_FORM")
-    end
-end
-
---- Classic: an event the client's MSUF.Client.SupportsEvent rejects is never
---- registered or unregistered, the provider may add structural events (Mists
---- Warlock SPELLS_CHANGED for the shard spell gate), and the flag is set last
---- so a registration that throws does not block the next attempt.
-if IS_CLASSIC then
-    local function SetSupportedEvent(event, active, unit)
-        local client = MSUF.Client
-        if client and type(client.SupportsEvent) == "function" and not client.SupportsEvent(event) then
-            return
-        end
-        if not active then
-            eventFrame:UnregisterEvent(event)
-        elseif unit then
-            eventFrame:RegisterUnitEvent(event, unit)
-        else
-            eventFrame:RegisterEvent(event)
-        end
-    end
-
-    CP_SetStructuralEventsBound = function(active)
-        active = active and true or false
-        if _cpStructuralEventsBound == active then return end
-        SetSupportedEvent("PLAYER_ENTERING_WORLD", active)
-        SetSupportedEvent("UNIT_ENTERED_VEHICLE", active, "player")
-        SetSupportedEvent("UNIT_EXITED_VEHICLE", active, "player")
-        SetSupportedEvent("PLAYER_SPECIALIZATION_CHANGED", active)
-        SetSupportedEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", active)
-        SetSupportedEvent("PLAYER_TALENT_UPDATE", active)
-        SetSupportedEvent("TRAIT_CONFIG_UPDATED", active)
-        SetSupportedEvent("UPDATE_SHAPESHIFT_FORM", active)
-        local provider = MSUF.CPClient
-        local extras = provider and provider.StructuralEvents
-        if type(extras) == "table" then
-            for i = 1, #extras do
-                SetSupportedEvent(extras[i], active)
-            end
-        end
-        _cpStructuralEventsBound = active
-    end
-end
+--- Event binding policy lives in ClassPower/MSUF_CP_Controller_Events.lua:
+--- the structural events, the per-mode hot-path bindings and the startup
+--- events, all on this one event frame.
+local CPEvents = assert(CP_CallBuilder(CPCoreBuilders.CONTROLLER_EVENTS, {
+    eventFrame = eventFrame,
+    CP = CP,
+    AM = AM,
+    PHP = PHP,
+    _cpDB = _cpDB,
+    CPK = CPK,
+    PT = PT,
+    PLAYER_CLASS = PLAYER_CLASS,
+    ClientCP = ClientCP,
+    IS_CLASSIC = IS_CLASSIC,
+    supportsCharged = supportsCharged,
+    supportsRunes = supportsRunes,
+    CP_GetModeEventProfile = CP_GetModeEventProfile,
+    ClassPowerUnit = ClassPowerUnit,
+    GetAutoHideActive = function() return _autoHideActive end,
+}), "MSUF_CP_Controller_Events.lua must load first")
+CP_SetStructuralEventsBound = CPEvents.SetStructuralEventsBound
+CP_RefreshEventBindings = CPEvents.RefreshEventBindings
+CP_ShouldUseFrequentPowerEvents = CPEvents.ShouldUseFrequentPowerEvents
+CP_ShouldUseLiteBindings = CPEvents.ShouldUseLiteBindings
 
 --- Throttle for rare events (spec/form changes)
 local _lastFullRefresh = 0
@@ -1912,243 +1463,6 @@ local function _CP_DeferredPBRelayout()
     end
 end
 
---- Dynamic hot-path event binding (CP-1): only keep runtime events that the
---- currently active class-power / alt-mana mode actually needs. Structural and
---- hot events are both detached when the complete Class Resources feature is off.
-local _cpBoundEvents = {}
-local _cpBoundUnits = {}
-
-local function CP_SetEventBound(frame, event, want, unit)
-    if _cpBoundEvents[event] == want and _cpBoundUnits[event] == unit then return end
-    frame:UnregisterEvent(event)
-    if want then
-        if unit then
-            frame:RegisterUnitEvent(event, unit)
-        else
-            frame:RegisterEvent(event)
-        end
-        _cpBoundEvents[event] = true
-        _cpBoundUnits[event] = unit
-    else
-        _cpBoundEvents[event] = false
-        _cpBoundUnits[event] = nil
-    end
-end
-
---- Classic: an event the client's MSUF.Client.SupportsEvent rejects is recorded
---- as unbound and never touched, a never-bound event is not unregistered, and
---- vehicle combo points (Mists) add the vehicle unit to UNIT_POWER_FREQUENT,
---- the way Blizzard's ComboFrame listens. The unit key is a constant string.
-if IS_CLASSIC then
-    CP_SetEventBound = function(frame, event, want, unit)
-        local client = MSUF.Client
-        if client and type(client.SupportsEvent) == "function" and not client.SupportsEvent(event) then
-            _cpBoundEvents[event] = false
-            _cpBoundUnits[event] = nil
-            return
-        end
-        local unitKey = unit
-        if unit == "player" and event == "UNIT_POWER_FREQUENT"
-            and ClassPowerUnit() == "vehicle" then
-            unitKey = "player+vehicle"
-        end
-        if _cpBoundEvents[event] == want and _cpBoundUnits[event] == unitKey then return end
-        if _cpBoundEvents[event] ~= nil then
-            frame:UnregisterEvent(event)
-        end
-        if want then
-            if unitKey == "player+vehicle" then
-                frame:RegisterUnitEvent(event, unit, "vehicle")
-            elseif unit then
-                frame:RegisterUnitEvent(event, unit)
-            else
-                frame:RegisterEvent(event)
-            end
-            _cpBoundEvents[event] = true
-            _cpBoundUnits[event] = unitKey
-        else
-            _cpBoundEvents[event] = false
-            _cpBoundUnits[event] = nil
-        end
-    end
-end
-
---- WoW Forever and the Classic flavors: target-owned combo points refresh when
---- the target changes. Never bound on Midnight.
-if ClientCP then
-    function ClientCP.SetTargetEventsBound(want)
-        want = want == true
-        CP_SetEventBound(eventFrame, "PLAYER_TARGET_CHANGED", want)
-        if ClientCP.comboTargetEvent then
-            CP_SetEventBound(eventFrame, "COMBO_TARGET_CHANGED", want)
-        end
-    end
-end
-
---- The CP.CDMWidth* sync helpers are installed by the CONTROLLER_SURFACE builder
---- above; only their event (un)binding stays here next to the event frame.
-function CP.CDMWidthSetEvents()
-    CP_SetEventBound(eventFrame, "SPELL_UPDATE_COOLDOWN", false)
-    CP_SetEventBound(eventFrame, "ACTIONBAR_UPDATE_COOLDOWN", false)
-    CP_SetEventBound(eventFrame, "BAG_UPDATE_COOLDOWN", false)
-end
-
-local function CP_ShouldUseValuePowerEvents()
-    if AM.visible then return true end
-    local profile = CP.modeProfile
-    return CP.visible and profile and profile.power == true or false
-end
-
-local function CP_ShouldUseMaxPowerEvent()
-    if AM.visible then return true end
-    local profile = CP.modeProfile
-    return CP.visible and profile and profile.maxPower == true or false
-end
-
-CP_ShouldUseFrequentPowerEvents = function(classOnly)
-    if not classOnly and AM.visible then return true end
-    if not CP.visible then return false end
-    local mode = CP.renderMode
-    if IS_CLASSIC then
-        --- The Classic provider decides per resource first (Mists keeps Holy
-        --- Power on UNIT_POWER_UPDATE; its Eclipse is the frequent one).
-        local provider = MSUF.CPClient
-        if provider and type(provider.UseFrequentPower) == "function" then
-            local choice = provider.UseFrequentPower(CP.powerType, mode, PLAYER_CLASS)
-            if choice ~= nil then return choice == true end
-        end
-    end
-    return mode == CPK.MODE.CONTINUOUS
-        --- Mists Balance: the signed Eclipse bar is a continuous resource. The
-        --- Classic provider claims PT.Balance above, so this is the fallback for
-        --- a signed resource the provider does not decide.
-        or (IS_CLASSIC and mode == CPK.MODE.SIGNED_CONTINUOUS)
-        or mode == CPK.MODE.FRACTIONAL
-        or (mode == CPK.MODE.SEGMENTED and CP.powerType == PT.Essence)
-        --- Target-owned combo points follow Blizzard's ComboFrame (UNIT_POWER_FREQUENT).
-        or (ClientCP ~= nil and mode == CPK.MODE.SEGMENTED and CP.powerType == PT.ComboPoints)
-end
-
-CP_ShouldUseLiteBindings = function()
-    local g = _cpDB.general
-    if g and g.perfLiteClassPowerEvents == false then
-        return false
-    end
-    return true
-end
-
-CP_RefreshEventBindings = function()
-    local useLite = CP_ShouldUseLiteBindings()
-    CP._liteBindingsActive = useLite
-
-    if not CP.visible and not AM.visible and not PHP.visible then
-        local wantAugLifecycleRegen = CP.augLifecycleRetryPending == true
-            or CP.augLifecycleDisablePending == true
-            or CP.ebonSensorRetryPending == true
-            or CP.ebonTextLayerRetryPending == true
-        CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_DISPLAYPOWER", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_AURA", false, "player")
-        CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", false)
-        --- RUNE_TYPE_UPDATE exists only where the provider owns rune types
-        --- (Mists): an unknown event must never reach Register/UnregisterEvent.
-        if ClientCP and ClientCP.RuneTypes then CP_SetEventBound(eventFrame, "RUNE_TYPE_UPDATE", false) end
-        CP_SetEventBound(eventFrame, "UNIT_HEALTH", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_START", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_STOP", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_INTERRUPTED", false, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", false, "player")
-        CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantAugLifecycleRegen)
-        CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", false)
-        CP_SetEventBound(eventFrame, "PLAYER_DEAD", false)
-        CP_SetEventBound(eventFrame, "PLAYER_ALIVE", false)
-        if ClientCP then ClientCP.SetTargetEventsBound(false) end
-        CP.CDMWidthSetEvents()
-        return
-    end
-
-    if not useLite then
-        CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_DISPLAYPOWER", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", supportsCharged, "player")
-        CP_SetEventBound(eventFrame, "UNIT_AURA", true, "player")
-        CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", supportsRunes)
-        if ClientCP and ClientCP.RuneTypes then CP_SetEventBound(eventFrame, "RUNE_TYPE_UPDATE", supportsRunes) end
-        CP_SetEventBound(eventFrame, "UNIT_HEALTH", true, "player")
-        local wantMaxHealth = PHP.visible or (CP.visible and CP.renderMode == CPK.MODE.STAGGER)
-        CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", wantMaxHealth, "player")
-        CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", wantMaxHealth, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_START", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_STOP", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_INTERRUPTED", true, "player")
-        CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", true, "player")
-        CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", true)
-        CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", true)
-        CP_SetEventBound(eventFrame, "PLAYER_DEAD", true)
-        CP_SetEventBound(eventFrame, "PLAYER_ALIVE", true)
-        if ClientCP then ClientCP.SetTargetEventsBound(CP.visible and CP.powerType == PT.ComboPoints) end
-        CP.CDMWidthSetEvents()
-        return
-    end
-
-    local profile = CP.modeProfile or CP_GetModeEventProfile(CP.renderMode, CP.powerType, CP.isAuraPower)
-    local wantPower = CP_ShouldUseValuePowerEvents()
-    local wantMaxPower = CP_ShouldUseMaxPowerEvent()
-    local wantAura = CP.visible and profile.aura == true
-    local wantRune = CP.visible and profile.rune == true
-    local wantHealth = (CP.visible and profile.health == true) or PHP.visible
-    local wantMaxHealth = (CP.visible and profile.health == true) or PHP.visible
-    local wantPointCharge = CP.visible
-        and profile.pointCharge == true
-        and PLAYER_CLASS == "ROGUE"
-        and CP.powerType == PT.ComboPoints
-        and CP.visual ~= nil
-        and CP.visual.showCharged == true
-    local wantWarlockPred = CP.visible and profile.warlockPred == true
-    local wantSpellSucceeded = CP.visible and profile.spellSucceeded == true
-    local wantDisplayPower = CP.visible or AM.visible
-    local wantRegen = CP.nativeAuraPending == true
-        or (_autoHideActive and CP.visible)
-        or CP.ebonSensorRetryPending == true
-        or CP.ebonTextLayerRetryPending == true
-        or CP.augLifecycleRetryPending == true
-        or CP.augLifecycleDisablePending == true
-    local wantDeadAlive = (CP.visible and profile.deadAlive == true) or PHP.visible
-
-    local wantFrequentPower = wantPower and CP_ShouldUseFrequentPowerEvents()
-    CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", wantPower and not wantFrequentPower, "player")
-    CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", wantFrequentPower, "player")
-    CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", wantMaxPower, "player")
-    CP_SetEventBound(eventFrame, "UNIT_DISPLAYPOWER", wantDisplayPower, "player")
-    CP_SetEventBound(eventFrame, "UNIT_POWER_POINT_CHARGE", wantPointCharge, "player")
-    CP_SetEventBound(eventFrame, "UNIT_AURA", wantAura, "player")
-    CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", wantRune)
-    if ClientCP and ClientCP.RuneTypes then CP_SetEventBound(eventFrame, "RUNE_TYPE_UPDATE", wantRune) end
-    CP_SetEventBound(eventFrame, "UNIT_HEALTH", wantHealth, "player")
-    CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", wantMaxHealth, "player")
-    CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", wantMaxHealth, "player")
-    CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_START", wantWarlockPred, "player")
-    CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_STOP", wantWarlockPred, "player")
-    CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", wantWarlockPred, "player")
-    CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_INTERRUPTED", wantWarlockPred, "player")
-    CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_SUCCEEDED", wantSpellSucceeded, "player")
-    CP_SetEventBound(eventFrame, "PLAYER_REGEN_ENABLED", wantRegen)
-    CP_SetEventBound(eventFrame, "PLAYER_REGEN_DISABLED", wantRegen)
-    CP_SetEventBound(eventFrame, "PLAYER_DEAD", wantDeadAlive)
-    CP_SetEventBound(eventFrame, "PLAYER_ALIVE", wantDeadAlive)
-    if ClientCP then ClientCP.SetTargetEventsBound(CP.visible and profile.targetChanged == true) end
-    CP.CDMWidthSetEvents()
-end
-
 local _cpAuraDeferred = false
 local function CP_RunDeferredAuraUpdate()
     _cpAuraDeferred = false
@@ -2166,6 +1480,137 @@ local function CP_DeferAuraUpdate()
         scheduleOnce("MSUF_CP_AURA_UPDATE", CP_RunDeferredAuraUpdate)
     else
         C_Timer.After(0, CP_RunDeferredAuraUpdate)
+    end
+end
+
+--- Rare events: vehicle, combat, death, structural, target and startup.
+--- ClassPowerOnEvent hands them over once every hot event has returned.
+local function ClassPowerOnRareEvent(event, arg1)
+    --- Vehicle enter/exit: rebuild everything (CP type may change)
+    if event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
+        if arg1 == "player" then
+            C_Timer.After(0.1, FullRefresh)
+        end
+        return
+    end
+
+    --- Combat state change: re-evaluate auto-hide (OOC toggle)
+    if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
+        if event == "PLAYER_REGEN_ENABLED" then
+            if CP.nativeAuraPending then CP.SyncNativeAuras() end
+            if CP.augLifecycleDisablePending == true and CP.DisableNow then
+                CP.DisableNow()
+                return
+            end
+            if CP.augLifecycleRetryPending == true
+                or CP.ebonSensorRetryPending == true
+                or CP.ebonTextLayerRetryPending == true
+            then
+                CP.augLifecycleRetryPending = false
+                CP.augLifecycleTarget = nil
+                FullRefresh()
+                return
+            end
+        end
+        CP_RefreshEventBindings()
+        if event == "PLAYER_REGEN_ENABLED" then
+            CP.CDMWidthSyncLayouts(true)
+        end
+        if _autoHideActive and CP.visible and CP.container then
+            --- Re-run the current mode's update to trigger CP_CheckAutoHide
+            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+        end
+        return
+    end
+
+    --- Death/resurrection: reset spell tracker state (Sensei pattern)
+    if event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" then
+        OnSpellTrackerReset()
+        if PHP.visible then
+            CP_PlayerHPUpdate(event)
+        end
+        if CP.visible then
+            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+        end
+        return
+    end
+
+    --- Rare: only rebuild on actual structural changes; otherwise do a light re-sync.
+    if event == "PLAYER_SPECIALIZATION_CHANGED"
+    or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+    or event == "PLAYER_TALENT_UPDATE"
+    or event == "TRAIT_CONFIG_UPDATED"
+    or event == "UPDATE_SHAPESHIFT_FORM"
+    then
+        CP_HandleRareStructuralEvent(true)
+        return
+    end
+
+    --- WoW Forever and the Classic flavors (never registered on Midnight):
+    --- target-owned combo points change with the target, or move to a new one,
+    --- without a power event.
+    if event == "PLAYER_TARGET_CHANGED" or event == "COMBO_TARGET_CHANGED" then
+        if CP.visible and CP.powerType == PT.ComboPoints then
+            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+        end
+        return
+    end
+
+    if event == "PLAYER_ENTERING_WORLD" then
+        CPConfig.EnsureDefaults()
+        --- Retry until the Core player frame is available after login load.
+        local retries = 0
+        local function TryRefresh()
+            retries = retries + 1
+            local pf = CoreUnitFrame("player") or _G.MSUF_player
+            if pf then
+                FullRefresh()
+                --- Deferred re-layout: frame dimensions and CDM frames may not
+                --- have settled on the first FullRefresh. Schedule a second pass
+                --- that clears the PBEmbedLayout stamp so the detached power bar
+                --- re-computes its width from the now-correct frame geometry.
+                --- Uses pre-allocated _CP_DeferredPBRelayout (zero closures).
+                if CP.visible or AM.visible or PHP.visible or CP.CDMWidthWantsSync() then
+                    C_Timer.After(0.35, _CP_DeferredPBRelayout)
+                end
+            elseif retries < 20 then
+                --- Not ready yet - retry quickly (total max about 1s)
+                C_Timer.After(0.05, TryRefresh)
+            end
+        end
+        C_Timer.After(0.05, TryRefresh)
+        return
+    end
+
+    if event == "PLAYER_LOGIN" then
+        CPConfig.EnsureDefaults()
+        return
+    end
+
+    if event == "ADDON_LOADED" then
+        if arg1 ~= "Blizzard_CooldownViewer" and arg1 ~= "Blizzard_EditMode" then return end
+        if CP.CDMWidthHasConfiguredSync and CP.CDMWidthHasConfiguredSync() then
+            if type(CP.RefreshCDMWidthBindings) == "function" then
+                CP.RefreshCDMWidthBindings(false)
+            else
+                CPConfig.RefreshConfig()
+                if CP_RefreshEventBindings then CP_RefreshEventBindings() end
+            end
+        end
+        return
+    end
+
+    --- Classic provider structural extra (Mists Warlock): rebuild only when a
+    --- learned or lost spell really changes the route, e.g. the Affliction
+    --- shard gate. Every Mainline event returns above.
+    if IS_CLASSIC and event == "SPELLS_CHANGED" then
+        local flags, powerType, renderMode = CPConfig.ComputeStructuralSignature()
+        if flags ~= CP.structuralFlags
+            or powerType ~= CP.structuralPowerType
+            or renderMode ~= CP.structuralRenderMode then
+            ThrottledFullRefresh()
+        end
+        return
     end
 end
 
@@ -2301,155 +1746,13 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
         return
     end
 
-    --- Vehicle enter/exit: rebuild everything (CP type may change)
-    if event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
-        if arg1 == "player" then
-            C_Timer.After(0.1, FullRefresh)
-        end
-        return
-    end
-
-    --- Combat state change: re-evaluate auto-hide (OOC toggle)
-    if event == "PLAYER_REGEN_ENABLED" or event == "PLAYER_REGEN_DISABLED" then
-        if event == "PLAYER_REGEN_ENABLED" then
-            if CP.nativeAuraPending then CP.SyncNativeAuras() end
-            if CP.augLifecycleDisablePending == true and CP.DisableNow then
-                CP.DisableNow()
-                return
-            end
-            if CP.augLifecycleRetryPending == true
-                or CP.ebonSensorRetryPending == true
-                or CP.ebonTextLayerRetryPending == true
-            then
-                CP.augLifecycleRetryPending = false
-                CP.augLifecycleTarget = nil
-                FullRefresh()
-                return
-            end
-        end
-        CP_RefreshEventBindings()
-        if event == "PLAYER_REGEN_ENABLED" then
-            CP.CDMWidthSyncLayouts(true)
-        end
-        if _autoHideActive and CP.visible and CP.container then
-            --- Re-run the current mode's update to trigger CP_CheckAutoHide
-            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
-        end
-        return
-    end
-
-    --- Death/resurrection: reset spell tracker state (Sensei pattern)
-    if event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" then
-        OnSpellTrackerReset()
-        if PHP.visible then
-            CP_PlayerHPUpdate(event)
-        end
-        if CP.visible then
-            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
-        end
-        return
-    end
-
-    --- Rare: only rebuild on actual structural changes; otherwise do a light re-sync.
-    if event == "PLAYER_SPECIALIZATION_CHANGED"
-    or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
-    or event == "PLAYER_TALENT_UPDATE"
-    or event == "TRAIT_CONFIG_UPDATED"
-    or event == "UPDATE_SHAPESHIFT_FORM"
-    then
-        CP_HandleRareStructuralEvent(true)
-        return
-    end
-
-    --- WoW Forever and the Classic flavors (never registered on Midnight):
-    --- target-owned combo points change with the target, or move to a new one,
-    --- without a power event.
-    if event == "PLAYER_TARGET_CHANGED" or event == "COMBO_TARGET_CHANGED" then
-        if CP.visible and CP.powerType == PT.ComboPoints then
-            CP_RunActiveUpdate(CP.powerType, CP.currentMax)
-        end
-        return
-    end
-
-    if event == "PLAYER_ENTERING_WORLD" then
-        CPConfig.EnsureDefaults()
-        --- Retry until the Core player frame is available after login load.
-        local retries = 0
-        local function TryRefresh()
-            retries = retries + 1
-            local pf = CoreUnitFrame("player") or _G.MSUF_player
-            if pf then
-                FullRefresh()
-                --- Deferred re-layout: frame dimensions and CDM frames may not
-                --- have settled on the first FullRefresh. Schedule a second pass
-                --- that clears the PBEmbedLayout stamp so the detached power bar
-                --- re-computes its width from the now-correct frame geometry.
-                --- Uses pre-allocated _CP_DeferredPBRelayout (zero closures).
-                if CP.visible or AM.visible or PHP.visible or CP.CDMWidthWantsSync() then
-                    C_Timer.After(0.35, _CP_DeferredPBRelayout)
-                end
-            elseif retries < 20 then
-                --- Not ready yet - retry quickly (total max about 1s)
-                C_Timer.After(0.05, TryRefresh)
-            end
-        end
-        C_Timer.After(0.05, TryRefresh)
-        return
-    end
-
-    if event == "PLAYER_LOGIN" then
-        CPConfig.EnsureDefaults()
-        return
-    end
-
-    if event == "ADDON_LOADED" then
-        if arg1 ~= "Blizzard_CooldownViewer" and arg1 ~= "Blizzard_EditMode" then return end
-        if CP.CDMWidthHasConfiguredSync and CP.CDMWidthHasConfiguredSync() then
-            if type(CP.RefreshCDMWidthBindings) == "function" then
-                CP.RefreshCDMWidthBindings(false)
-            else
-                CPConfig.RefreshConfig()
-                if CP_RefreshEventBindings then CP_RefreshEventBindings() end
-            end
-        end
-        return
-    end
-
-    --- Classic provider structural extra (Mists Warlock): rebuild only when a
-    --- learned or lost spell really changes the route, e.g. the Affliction
-    --- shard gate. Every Mainline event returns above.
-    if IS_CLASSIC and event == "SPELLS_CHANGED" then
-        local flags, powerType, renderMode = CPConfig.ComputeStructuralSignature()
-        if flags ~= CP.structuralFlags
-            or powerType ~= CP.structuralPowerType
-            or renderMode ~= CP.structuralRenderMode then
-            ThrottledFullRefresh()
-        end
-        return
-    end
+    return ClassPowerOnRareEvent(event, arg1)
 end
 
 -- Bound directly: the handler already takes the (frame, event, arg1..arg3)
 -- shape OnEvent hands it, so a forwarding closure would only add a call frame
 -- to every UNIT_POWER_FREQUENT.
 eventFrame:SetScript("OnEvent", ClassPowerOnEvent)
-
-CP.SyncControllerEvents = function(active)
-    active = active == true
-    if not active then
-        eventFrame:UnregisterAllEvents()
-        _cpStructuralEventsBound = false
-        for event in pairs(_cpBoundEvents) do
-            _cpBoundEvents[event] = nil
-            _cpBoundUnits[event] = nil
-        end
-        return false
-    end
-    eventFrame:RegisterEvent("PLAYER_LOGIN")
-    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    eventFrame:RegisterEvent("ADDON_LOADED")
-    return true
-end
 
 --- Startup events exist only while at least one Class Resource feature is enabled.
 CP.SyncControllerEvents(CPConfig.AnyFeatureEnabled())
@@ -2460,8 +1763,8 @@ CP.IsRuntimeActive = function()
     return CP.visible == true
         or AM.visible == true
         or PHP.visible == true
-        or _cpTickActive == true
-        or _cpStructuralEventsBound == true
+        or CPTicker.IsActive() == true
+        or CPEvents.StructuralEventsBound() == true
 end
 ExportPublic("MSUF_ClassPower_IsRuntimeActive", CP.IsRuntimeActive)
 

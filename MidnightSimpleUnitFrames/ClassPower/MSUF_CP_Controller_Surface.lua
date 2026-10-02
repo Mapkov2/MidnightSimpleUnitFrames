@@ -230,9 +230,6 @@ builders.CONTROLLER_SURFACE = function(E)
     end
 
     function CP.CDMWidthIsPositionLocked()
-        if type(_G.MSUF_IsUnitFramePositionLocked) == "function" and _G.MSUF_IsUnitFramePositionLocked() then
-            return true
-        end
         return (InCombatLockdown and InCombatLockdown()) and true or false
     end
 

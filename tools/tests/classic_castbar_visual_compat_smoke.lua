@@ -58,7 +58,7 @@ _G.MSUF_DB = { general = general }
 _G.MSUF_TargetCastbar = frame
 _G.MSUF_BossCastbars = { frame }
 _G.MSUF_ArenaCastbars = { frame }
-_G.MSUF_MAX_BOSS_FRAMES = 1
+_G.MAX_BOSS_FRAMES = 1
 _G.MSUF_MAX_ARENA_FRAMES = 1
 
 -- Shared implementations intentionally reproduce the unsafe geometry. The
@@ -124,6 +124,17 @@ spark.height = 12.6
 callbacks.Castbars("boss1")
 assert(math.abs(spark.height - 4.2) < 0.001,
     "boss table castbar bypassed the final Classic spark geometry")
+-- Boss preview slot 1 is MSUF_BossCastbarPreview, without an index.
+local previewSpark = {}
+for key, value in pairs(spark) do previewSpark[key] = value end
+previewSpark.height = 12.6
+local bossPreview = { height = 6, statusBar = statusBar, spark = previewSpark }
+function bossPreview:GetHeight() return self.height end
+_G.MSUF_BossCastbarPreview = bossPreview
+callbacks.Castbars("boss1")
+assert(math.abs(previewSpark.height - 4.2) < 0.001,
+    "the first boss castbar preview bypassed the final Classic spark geometry")
+_G.MSUF_BossCastbarPreview = nil
 spark.height = 12.6
 callbacks.Castbars("arena1")
 assert(math.abs(spark.height - 4.2) < 0.001,

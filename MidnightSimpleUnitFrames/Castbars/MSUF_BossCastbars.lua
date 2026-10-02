@@ -11,24 +11,29 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local Pools = assert(MSUF.Castbars and MSUF.Castbars.Pools, "MSUF_CastbarPools.lua must load first")
 
 --- Boss units are a client fact: Classic Era and TBC have none. Read once at
 --- load, never per refresh.
 local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit and not MSUF.Client.SupportsUnit("boss"))
-local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+local MAX_BOSS_FRAMES = tonumber(_G.MAX_BOSS_FRAMES) or 5
 if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
     MAX_BOSS_FRAMES = 5
 end
 
-Pools.Define({
+local pool = Pools.Define({
     kind = "boss",
     unitPrefix = "boss",
     maxFrames = MAX_BOSS_FRAMES,
     hasUnits = HAS_BOSS_UNITS,
     framePrefix = "MSUF_BossCastbar",
     poolGlobal = "MSUF_BossCastbars",
+    publishPool = function(castbars) ExportPublic("MSUF_BossCastbars", castbars) end,
     kindFlag = "_msufIsBossCastbar",
     frameLevelBase = 50,
     fallbackY = -220,
@@ -52,10 +57,9 @@ Pools.Define({
         -- A UNIT_* event: the bus needs the pool's own boss tokens as filter.
         { event = "UNIT_TARGETABLE_CHANGED", key = "MSUF_BOSS_CASTBARS_TARGETABLE", action = "unit", units = true },
     },
-    exports = {
-        positionSetting = "MSUF_ApplyBossCastbarPositionSetting",
-        applyEnabled = "MSUF_ApplyBossCastbarsEnabled",
-        stop = "MSUF_BossCastbar_Stop",
-        syncLifecycle = "MSUF_BossCastbars_SyncLifecycle",
-    },
 })
+
+ExportPublic("MSUF_ApplyBossCastbarPositionSetting", pool.ApplyPositionSetting)
+ExportPublic("MSUF_ApplyBossCastbarsEnabled", pool.ApplyEnabled)
+ExportPublic("MSUF_BossCastbar_Stop", pool.Stop)
+ExportPublic("MSUF_BossCastbars_SyncLifecycle", pool.SyncLifecycle)

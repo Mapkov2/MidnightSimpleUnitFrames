@@ -47,6 +47,11 @@ local FILES = {
     editMovers = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Movers.lua",
     arenaMatch = "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
     arenaTrinkets = "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
+    -- The arena preview is the arena descriptor of the pool preview module; it
+    -- loads after the pool module and the arena pool, as in every TOC.
+    castbarPools = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua",
+    arenaCastbars = "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
+    castbarPoolPreviews = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPoolPreviews.lua",
     arenaCastbarPreview = "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
     metadata = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua",
 }
@@ -656,6 +661,9 @@ local function NewWorld(flavor, roster)
         em2.Movers.SyncAll = function() end
         Load(FILES.arenaMatch)
         Load(FILES.arenaTrinkets)
+        Load(FILES.castbarPools)
+        Load(FILES.arenaCastbars)
+        Load(FILES.castbarPoolPreviews)
         Load(FILES.arenaCastbarPreview)
         W.SpawnArenaFrames()
         W.Fire("PLAYER_ENTERING_WORLD")

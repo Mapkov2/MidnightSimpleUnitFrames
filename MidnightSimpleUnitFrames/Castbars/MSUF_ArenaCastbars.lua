@@ -13,6 +13,10 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local Pools = assert(MSUF.Castbars and MSUF.Castbars.Pools, "MSUF_CastbarPools.lua must load first")
 
@@ -39,13 +43,14 @@ local function MatchIsComplete()
     return type(isComplete) == "function" and isComplete() == true
 end
 
-Pools.Define({
+local pool = Pools.Define({
     kind = "arena",
     unitPrefix = "arena",
     maxFrames = MAX_ARENA_FRAMES,
     hasUnits = HAS_ARENA_UNITS,
     framePrefix = "MSUF_ArenaCastbar",
     poolGlobal = "MSUF_ArenaCastbars",
+    publishPool = function(castbars) ExportPublic("MSUF_ArenaCastbars", castbars) end,
     kindFlag = "_msufIsArenaCastbar",
     indexField = "_msufArenaIndex",
     -- Above the boss band (51..55), so arena1..5 never share a level with it.
@@ -71,10 +76,9 @@ Pools.Define({
         { event = "PVP_MATCH_STATE_CHANGED", key = "MSUF_ARENA_CASTBARS_MATCH", action = "terminal",
             terminalWhen = MatchIsComplete, supported = HAS_PVP_MATCH_STATE_CHANGED },
     },
-    exports = {
-        positionSetting = "MSUF_ApplyArenaCastbarPositionSetting",
-        applyEnabled = "MSUF_ApplyArenaCastbarsEnabled",
-        stop = "MSUF_ArenaCastbar_Stop",
-        syncLifecycle = "MSUF_ArenaCastbars_SyncLifecycle",
-    },
 })
+
+ExportPublic("MSUF_ApplyArenaCastbarPositionSetting", pool.ApplyPositionSetting)
+ExportPublic("MSUF_ApplyArenaCastbarsEnabled", pool.ApplyEnabled)
+ExportPublic("MSUF_ArenaCastbar_Stop", pool.Stop)
+ExportPublic("MSUF_ArenaCastbars_SyncLifecycle", pool.SyncLifecycle)

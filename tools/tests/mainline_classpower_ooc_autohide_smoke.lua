@@ -36,6 +36,9 @@ local LOAD_ORDER = {
     "ClassPower/MSUF_CP_Controller_Config.lua",
     "ClassPower/MSUF_CP_Controller_Colors.lua",
     "ClassPower/MSUF_CP_Controller_Surface.lua",
+    "ClassPower/MSUF_CP_Controller_Auras.lua",
+    "ClassPower/MSUF_CP_Controller_Ticker.lua",
+    "ClassPower/MSUF_CP_Controller_Events.lua",
     "ClassPower/MSUF_CP_Controller.lua",
 }
 

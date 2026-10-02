@@ -85,6 +85,8 @@ classics	lua	tools/tests/classic_classpower_runtime_smoke.lua	{root} {flavor}	Cl
 classics	lua	tools/tests/classic_classpower_enabled_smoke.lua	{root} {flavor}	Classic ClassPower enabled routes failed: {flavor}
 -	lua	tools/tests/mainline_classpower_ooc_autohide_smoke.lua	{root}	Mainline ClassPower OOC auto-hide smoke failed
 -	lua	tools/tests/classpower_target_combo_trace_smoke.lua	{root/}	ClassPower target-combo behaviour trace smoke failed
+-	lua	tools/tests/classpower_hotpath_budget_smoke.lua	{root}	ClassPower hotpath budget smoke failed
+-	lua	tools/tests/classpower_resource_text_smoke.lua	{root}	ClassPower resource text smoke failed
 classics	lua	tools/tests/classic_classpower_controller_smoke.lua	{root} {flavor}	Classic ClassPower controller contract failed: {flavor}
 -	lua	tools/tests/classpower_classic_hunks_smoke.lua	{root}	ClassPower Classic hunks smoke failed
 classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic fresh profile smoke failed: {flavor}
@@ -272,6 +274,7 @@ clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}
 -	lua	tools/tests/castbar_time_axis_smoke.lua	{root}	Castbar time-axis decorations follow the fill direction
 -	lua	tools/tests/castbar_driver_lifecycle_smoke.lua	{root}	Castbar driver lifecycle smoke failed
 -	lua	tools/tests/castbar_module_topology_smoke.lua	{root}	Castbar module topology smoke failed
+-	lua	tools/tests/castbar_pool_preview_smoke.lua	{root}	Castbar pool preview smoke failed
 -	lua	tools/tests/interrupt_ready_perf_smoke.lua	{root}	Interrupt-ready perf smoke failed
 -	lua	tools/tests/castbar_hotpath_budget_smoke.lua	{root}	Castbar hotpath budget smoke failed
 -	lua	tools/tests/castbar_hotpath_smoke.lua	{root}	Castbar hotpath smoke failed

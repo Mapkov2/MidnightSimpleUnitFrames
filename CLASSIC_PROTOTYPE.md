@@ -227,10 +227,14 @@ calculator would be less correct and more expensive.
   presets, selectable on every client; only Forever defaults to Classic Glass), the WoW Forever aura
   data (`Game/Forever/Auras/MSUF_Auras3_ForeverData.lua` and the thirteen
   `Game/Forever/Auras/AliasData` files, which return at once on every other
-  client), and the four Arena modules
+  client), the four Arena modules
   (`Castbars/MSUF_ArenaCastbars.lua`, `Castbars/MSUF_ArenaCastbars_Preview.lua`,
   `Features/Gameplay/MSUF_Feature_ArenaMatch.lua`,
-  `Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua`). No other owned file may
+  `Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua`), the boss/arena castbar
+  pool and preview modules (`Castbars/MSUF_CastbarPools.lua`,
+  `Castbars/MSUF_CastbarPoolPreviews.lua`) and the ClassPower controller modules
+  (`ClassPower/MSUF_CP_Controller_Auras.lua`, `_Ticker.lua`, `_Events.lua`;
+  the full list is `$mainlineOwnedLuaExtras` in the gate). No other owned file may
   enter Mainline, and it never parses `Game/Classic`, `Game/Vanilla`,
   `Game/Mists`, or `Game/TBC`. A module that Classic clients and Mainline both
   need therefore lives in `Game/Shared`, as the pet happiness module does:

@@ -16,6 +16,10 @@ local EMBER_POWER_SCALE = 10
 --- Blizzard_FrameXMLBase/Classic/Constants.lua WARLOCK_BURNING_EMBERS: Mists
 --- ShardBar.lua shows the ember bar only while this spell is known.
 local BURNING_EMBERS_SPELL = 108647
+--- Blizzard_FrameXMLBase/Classic/Constants.lua WARLOCK_SOULBURN: Mists
+--- ShardBar.lua shows the Affliction shard bar only while this spell is known
+--- (not the Soulburn ability spell 74434).
+local AFFLICTION_SHARD_SPELL = 117198
 
 local Provider = {
     Flavor = "Mists",
@@ -62,7 +66,7 @@ function Provider.Resolve(env)
         if spec == 3 and env.isPlayerSpell(BURNING_EMBERS_SPELL) then
             return true, PT.BurningEmbers, MODE.FRACTIONAL, false
         end
-        if spec == 1 and env.isPlayerSpell(74434) then
+        if spec == 1 and env.isPlayerSpell(AFFLICTION_SHARD_SPELL) then
             return true, PT.SoulShards, MODE.SEGMENTED, false
         end
         return true, nil, MODE.NONE, false
@@ -151,7 +155,7 @@ elseif playerClass == "WARLOCK" then
     Provider.BlizzardFrames = {
         { name = "WarlockPowerFrame", restore = function(frame) RestoreShown(frame, "SetUpCurrentPower") end },
     }
-    --- Affliction shards (74434) and Destruction embers (108647) require a
+    --- Affliction shards (117198) and Destruction embers (108647) require a
     --- known spell. Blizzard Mists ShardBar.lua re-checks on SPELLS_CHANGED;
     --- the controller binds it as a structural event and rebuilds only when the
     --- route really changed.

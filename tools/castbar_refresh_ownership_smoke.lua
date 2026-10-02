@@ -90,14 +90,14 @@ assert(contains(anyBody, 'ShouldUseMSUF("arena")') and contains(anyBody, "MSUF_D
 local hideStart = assert(bridge:find("local CastbarsForceHideAll", 1, true))
 local hideEnd = assert(bridge:find('ExportPublic("MSUF_Castbars_ForceHideAll"', hideStart, true))
 local hideBody = bridge:sub(hideStart, hideEnd - 1)
-assert(contains(hideBody, "_G.MSUF_ArenaCastbars"),
-    "central castbar force-hide must include the Arena frame pool")
+assert(contains(hideBody, "local castbars = poolOrder[poolIndex].Castbars()"),
+    "central castbar force-hide must include every castbar pool (Boss and Arena)")
 
 local settingsStart = assert(bridge:find("local CastbarsOnSettingsChanged", 1, true))
 local settingsEnd = assert(bridge:find('ExportPublic("MSUF_Castbars_OnSettingsChanged"', settingsStart, true))
 local settingsBody = bridge:sub(settingsStart, settingsEnd - 1)
-assert(contains(settingsBody, "_G.MSUF_ApplyArenaCastbarsEnabled"),
-    "central settings refresh must apply Arena backend and lifecycle state")
+assert(contains(settingsBody, "poolOrder[poolIndex].ApplyEnabled()"),
+    "central settings refresh must apply every pool's (Boss and Arena) backend and lifecycle state")
 
 local spawnStart = assert(factory:find("function Factory.SpawnAll", 1, true))
 local spawnEnd = assert(factory:find("function Factory.Apply", spawnStart, true))
@@ -107,7 +107,7 @@ assert(contains(spawnBody, "MSUF_FocusKickDriver_ForceUpdate")
     "post-profile startup must refresh the saved focus tracker state")
 
 local coldStart = assert(core:find("local function ApplyCastbarVisualFrameCold", 1, true))
-local coldEnd = assert(core:find("local function MaxBossFrames", coldStart, true))
+local coldEnd = assert(core:find("local function BumpCastbarVisualRevisions", coldStart, true))
 local coldBody = core:sub(coldStart, coldEnd - 1)
 local _, coldRefreshCount = coldBody:gsub("MSUF_RefreshCastbarFrame%(", "")
 assert(coldRefreshCount == 1, "each Core frame pass must invoke exactly one Visuals follower")

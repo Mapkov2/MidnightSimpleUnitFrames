@@ -45,7 +45,7 @@ local function UnitFromFrame(frame)
     if frame._msufIsArenaCastbar then return "arena" end
     unit = NormalizeUnit(frame.unit or frame.MSUF_unit or frame._msufUnit)
     if unit then return unit end
-    if frame == _G.MSUF_BossCastbarPreview or frame == _G.MSUF_BossCastbarPreview1 then return "boss" end
+    if frame == _G.MSUF_BossCastbarPreview then return "boss" end
     if frame == _G.MSUF_ArenaCastbarPreview or frame == _G.MSUF_ArenaCastbarPreview1 then return "arena" end
     local name = frame.GetName and frame:GetName() or nil
     if type(name) == "string" then

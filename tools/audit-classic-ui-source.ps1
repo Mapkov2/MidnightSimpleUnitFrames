@@ -210,6 +210,14 @@ foreach ($target in $branches) {
             $content = Read-BranchFile $ref $resource.Path
             Assert-Contains $content @($resource.Name) "$($target.Name) $($resource.Path)"
         }
+        # Game/Mists/ClassPower.lua mirrors the warlock spell gates of the shard bar.
+        $constants = Read-BranchFile $ref "Interface/AddOns/Blizzard_FrameXMLBase/Classic/Constants.lua"
+        Assert-Contains $constants @('WARLOCK_SOULBURN = 117198;', 'WARLOCK_BURNING_EMBERS = 108647;') "Mists warlock spell constants"
+        $shardBar = Read-BranchFile $ref "Interface/AddOns/Blizzard_UnitFrame/Mists/ShardBar.lua"
+        Assert-Contains $shardBar @(
+            'if ( C_SpellBook.IsSpellKnown(WARLOCK_SOULBURN) ) then',
+            'if ( C_SpellBook.IsSpellKnown(WARLOCK_BURNING_EMBERS) ) then'
+        ) "Mists warlock shard bar spell gates"
     }
 
     Write-Host "Blizzard source contract passed: $($target.Name) ($ref)"
