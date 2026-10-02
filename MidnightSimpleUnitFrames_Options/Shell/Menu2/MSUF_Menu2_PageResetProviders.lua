@@ -7,11 +7,20 @@
 --       provider = { pages = { [pageKey] = true, ... },
 --                    canReset = fn(key) -> bool,
 --                    warning = fn(key) -> string | nil,
---                    reset = fn(key) -> bool }
---       Registering an id again replaces that provider. A page two providers
---       claim belongs to the latest registration.
+--                    reset = fn(key) -> bool,
+--                    prepare = fn(key) -> bool,        optional
+--                    finish = fn(key),                 optional
+--                    historyLabel = fn(key) -> string } optional
+--       A reset runs: combat refusal, canReset, prepare (before the undo
+--       snapshot, so what it loads is part of the state Undo restores), reset
+--       inside one undo history entry, then finish (the provider's refresh and
+--       feedback) after that entry is committed. historyLabel names the entry
+--       (already translated); the host's "Reset %s" is the fallback.
+--       Registering an id again replaces that provider; a page two providers
+--       claim belongs to the latest registration. A malformed provider raises
+--       and leaves the registry as it was.
 --   M.RefreshPageResetProvider(id) -> registered
---       Re-reads provider.pages after the provider changed it.
+--       Re-reads that provider after it changed its pages.
 --
 -- MSUF_Menu2_Bindings_Reset.lua owns the four functions and the pageKey ->
 -- provider map they read first (one table lookup, nothing allocated); a key
@@ -20,29 +29,58 @@
 local _, MSUF = ...
 local M = MSUF.MSUF2
 local byPage = M.PageResetProviders
-local providers, order = {}, {}
+-- Kernel/MSUF_Boundary.lua: a raising provider step is reported and returns nil.
+local RunStep = MSUF.RunPageResetProviderStep
+-- Runtime/MSUF_HostAPI.lua: the host API's combat question.
+local PlayerInCombat = MSUF.HostAPIPlayerInCombat
+local records, order = {}, {}
 M.HOST_API_VERSION = 1
 
-local function RebuildPageMap()
-    for key in pairs(byPage) do byPage[key] = nil end
-    -- Registration order settles overlaps, so a refresh that drops a page
-    -- hands it back to the earlier provider that still claims it.
-    for index = 1, #order do
-        local provider = providers[order[index]]
-        for key, owned in pairs(provider.pages) do
-            if owned == true and type(key) == "string" then byPage[key] = provider end
-        end
+local function OptionalFunction(value)
+    return value == nil or type(value) == "function"
+end
+
+-- A checked copy of a provider: its callbacks and the pages it owns now. It
+-- raises before anything changes, so a malformed provider never disturbs the
+-- pages the other providers own.
+local function Snapshot(id, provider, caller)
+    if type(id) ~= "string" or id == "" or type(provider) ~= "table" or type(provider.pages) ~= "table"
+        or type(provider.canReset) ~= "function" or type(provider.warning) ~= "function"
+        or type(provider.reset) ~= "function" or not OptionalFunction(provider.prepare)
+        or not OptionalFunction(provider.finish) or not OptionalFunction(provider.historyLabel) then
+        error("MSUF " .. caller .. ": expected (id, { pages, canReset, warning, reset"
+            .. " [, prepare, finish, historyLabel] })", 3)
     end
+    local pages = {}
+    for key, owned in pairs(provider.pages) do
+        if owned == true and type(key) == "string" then pages[key] = true end
+    end
+    return {
+        id = id, source = provider, pages = pages,
+        canReset = provider.canReset, warning = provider.warning, reset = provider.reset,
+        prepare = provider.prepare, finish = provider.finish, historyLabel = provider.historyLabel,
+    }
+end
+
+-- Builds the new page map from the checked copies only, then publishes it into
+-- the table the reset functions read. Registration order settles overlaps, so
+-- a refresh that drops a page hands it back to the earlier provider.
+local function RebuildPageMap()
+    local staged = {}
+    for index = 1, #order do
+        local record = records[order[index]]
+        for key in pairs(record.pages) do staged[key] = record end
+    end
+    for key in pairs(byPage) do
+        if staged[key] == nil then byPage[key] = nil end
+    end
+    for key, record in pairs(staged) do byPage[key] = record end
     if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
 end
 
 function M.RegisterPageResetProvider(id, provider)
-    if type(id) ~= "string" or id == "" or type(provider) ~= "table" or type(provider.pages) ~= "table"
-        or type(provider.canReset) ~= "function" or type(provider.warning) ~= "function"
-        or type(provider.reset) ~= "function" then
-        error("MSUF RegisterPageResetProvider: expected (id, { pages, canReset, warning, reset })", 2)
-    end
-    if providers[id] then
+    local record = Snapshot(id, provider, "RegisterPageResetProvider")
+    if records[id] then
         for index = 1, #order do
             if order[index] == id then
                 table.remove(order, index)
@@ -50,21 +88,26 @@ function M.RegisterPageResetProvider(id, provider)
             end
         end
     end
-    providers[id] = provider
+    records[id] = record
     order[#order + 1] = id
     RebuildPageMap()
     return true
 end
 
 function M.RefreshPageResetProvider(id)
-    local provider = providers[id]
-    if not provider then return false end
-    if type(provider.pages) ~= "table" then
-        error("MSUF RefreshPageResetProvider: provider '" .. id .. "' has no pages table", 2)
-    end
+    local current = records[id]
+    if not current then return false end
+    records[id] = Snapshot(id, current.source, "RefreshPageResetProvider")
     RebuildPageMap()
     return true
 end
+
+-- The host's standard page warning: the locale key MSUF_Menu2_Bindings_Reset.lua
+-- builds its own page warnings from ("Reset %s to defaults?\n\nThis resets %s
+-- for the active profile. ..."), written as a long string to keep the lines short.
+local STANDARD_PAGE_WARNING = [[Reset %s to defaults?
+
+This resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically.]]
 
 -- provider.warning(key), else the host's standard text: nil when the host has
 -- reset info of its own for the key (the caller then builds that warning),
@@ -74,20 +117,41 @@ function M.ProviderPageResetWarning(key, provider, hostHasInfo)
     if warning ~= nil or hostHasInfo then return warning end
     local page = M.pages and M.pages[key]
     local title = M.Tr((page and page.title) or key)
-    return string.format(M.Tr("Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
-        title, title)
+    return string.format(M.Tr(STANDARD_PAGE_WARNING), title, title)
 end
 
--- The host's rules around provider.reset: combat refuses and the reset is one
--- undo history entry, "Reset <page title>". The provider refreshes its page
--- and reports the reset itself, as it did before this API, so the host adds
--- no second refresh, feedback or history entry.
-function M.ResetProviderPage(key, provider)
-    if M.BlockCombatAction() or provider.canReset(key) ~= true then return false end
+-- The menu's combat refusal, including the PLAYER_REGEN_DISABLED dispatch.
+local function RefusedInCombat()
+    if not PlayerInCombat() then return false end
+    M.ShowConfigCombatLockMessage()
+    return true
+end
+
+-- The undo entry's name: the provider's own (already translated), else the
+-- host's "Reset %s" with the translated page title.
+local function HistoryLabel(provider, key)
+    local label = provider.historyLabel and provider.historyLabel(key)
+    if type(label) == "string" and label ~= "" then return label end
     local page = M.pages and M.pages[key]
-    return M.RunWithHistory("Reset " .. ((page and page.title) or key), "page:reset:" .. key, function()
-        return provider.reset(key) == true
+    return string.format(M.Tr("Reset %s"), M.Tr((page and page.title) or key))
+end
+
+-- The host's rules around the provider's steps: combat refuses, prepare runs
+-- before the undo snapshot, reset is one undo history entry, and finish (the
+-- provider's refresh and feedback) runs after that entry is committed. The
+-- steps run through the boundary, so a raising one is reported and the
+-- history never stays open; a reset that raised still records what it
+-- changed, so Undo can restore it.
+function M.ResetProviderPage(key, provider)
+    if RefusedInCombat() or provider.canReset(key) ~= true then return false end
+    if provider.prepare and RunStep(provider.prepare, key, "prepare") ~= true then return false end
+    local ok = M.RunWithHistory(HistoryLabel(provider, key), "page:reset:" .. key, function()
+        local result = RunStep(provider.reset, key, "reset")
+        if result == false then return false end
+        return result == true or nil
     end) == true
+    if ok and provider.finish then RunStep(provider.finish, key, "finish") end
+    return ok
 end
 
 -- Blizzard's generic confirmation (Blizzard_StaticPopup SharedDialogDefs.lua
@@ -102,7 +166,7 @@ local confirmation = {
     callback = function() M.ResetPageToDefaults(confirmKey) end,
 }
 function M.ShowProviderPageResetConfirm(key, provider)
-    if M.BlockCombatAction() or provider.canReset(key) ~= true then return false end
+    if RefusedInCombat() or provider.canReset(key) ~= true then return false end
     local warning = M.BuildPageResetWarning(key)
     if warning == nil then return false end
     confirmKey = key

@@ -45,3 +45,17 @@ MSUF.TryDecodeFactoryPayload = TryDecodeFactoryPayload
 -- payload must come back as a failed decode (an import message), never as a
 -- Lua error from inside the codec.
 MSUF.TryDeserializeNativeCBOR = TryDeserializeFactoryPayload
+
+-- Another addon's step that the host runs inside its own state: Menu2 runs
+-- the prepare, reset and finish steps of a host API v1 page-reset provider
+-- around its undo history. A step that raises is reported like any other
+-- Lua error and the host gets nil back, so its own state (the history depth)
+-- always closes again. Every other runtime error keeps the normal path.
+local function RunPageResetProviderStep(step, pageKey, label)
+    local ok, result = pcall(step, pageKey)
+    if ok then return result end
+    ReportError("page-reset provider " .. tostring(label) .. " " .. tostring(pageKey), result)
+    return nil
+end
+
+MSUF.RunPageResetProviderStep = RunPageResetProviderStep

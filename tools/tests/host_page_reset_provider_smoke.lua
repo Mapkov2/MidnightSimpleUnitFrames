@@ -12,6 +12,11 @@
 --     registration, RefreshPageResetProvider re-reads the pages;
 --   * the provider's reset runs in one host history entry, and the host adds
 --     no refresh, feedback or second entry of its own (the provider does those);
+--   * prepare runs before the undo snapshot (a dormant state it loads is what
+--     Undo restores), finish after the committed entry, historyLabel names it;
+--   * a raising step is reported through Kernel/MSUF_Boundary.lua and never
+--     leaves the history capturing; PLAYER_REGEN_DISABLED refuses before the
+--     lockdown starts; a malformed provider leaves the others' pages alone;
 --   * the confirmation uses Blizzard's generic dialog with nothing written to
 --     StaticPopupDialogs;
 --   * an old Suite's wrap of the four functions (MSUF-Suite a7aee25
@@ -24,6 +29,11 @@
 
 local root = ((arg and arg[1]) or "."):gsub("\\", "/"):gsub("/$", "")
 local MENU2 = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/"
+-- The core files the provider path uses, loaded as the core does: the step
+-- boundary (Kernel/MSUF_Boundary.lua) and the host API's combat question.
+local CORE = { root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua",
+    root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua",
+    root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua" }
 local CHAIN = { "MSUF_Menu2_Bindings.lua", "MSUF_Menu2_Bindings_History.lua",
     "MSUF_Menu2_Bindings_Reset.lua", "MSUF_Menu2_PageResetProviders.lua" }
 
@@ -71,7 +81,9 @@ end
 
 -- One menu world: the real chain plus the host collaborators it reaches.
 local function Boot()
-    local world = { log = {}, combat = false, popupWrites = {}, shown = nil, frameShown = true }
+    -- combat: the lockdown. regenEdge: PLAYER_REGEN_DISABLED is being
+    -- dispatched (the player is flagged in combat, the lockdown not yet on).
+    local world = { log = {}, combat = false, regenEdge = false, popupWrites = {}, shown = nil, frameShown = true }
     local function Log(text) world.log[#world.log + 1] = text end
     world.Log = Log
     local globals = {}
@@ -81,6 +93,9 @@ local function Boot()
     end
     globals.print = function(...) Log("print " .. table.concat({ ... }, " ")) end
     globals.InCombatLockdown = function() return world.combat end
+    globals.UnitAffectingCombat = function(unit) return unit == "player" and (world.combat or world.regenEdge) end
+    -- MSUF.ReportError reports through the client's error handler.
+    globals.geterrorhandler = function() return function(message) Log("error " .. tostring(message)) end end
     globals.C_Timer = {
         After = function(_, fn) Log("timer") fn() end,
         NewTimer = function(_, fn) Log("timer") fn() return { Cancel = function() end } end,
@@ -114,8 +129,12 @@ local function Boot()
     globals._G = env
     world.env, world.globals = env, globals
 
-    local namespace = { MSUF2 = {} }
+    local namespace = { MSUF2 = {}, Util = { InCombat = function() return world.combat end } }
     namespace.ExportPublic = function(name, value) globals[name] = value return value end
+    for _, path in ipairs(CORE) do
+        local chunk = assert(LoadChunk(path))
+        setfenv(chunk, env)("MidnightSimpleUnitFrames", namespace)
+    end
     local M = namespace.MSUF2
     M.KeySet = function(...) local out = {} for i = 1, select("#", ...) do out[select(i, ...)] = true end return out end
     M.KeySetFromWords = function(text) local out = {} for w in text:gmatch("%S+") do out[w] = true end return out end
@@ -233,7 +252,7 @@ Check(M.RegisterPageResetProvider("msuf-suite", suite) == true and toolbar == 1,
 Check(M.PageHasReset == world.own[1] and M.BuildPageResetWarning == world.own[2]
     and M.ResetPageToDefaults == world.own[3] and M.ShowPageResetConfirm == world.own[4],
     "registration must not wrap or replace the host's four functions")
-Check(M.PageResetProviders.suite_alpha == suite and M.PageResetProviders.ignored == nil,
+Check(M.PageResetProviders.suite_alpha.source == suite and M.PageResetProviders.ignored == nil,
     "only pages marked true belong to the provider")
 Check(M.PageHasReset("suite_alpha") == true and M.BuildPageResetWarning("suite_alpha") == "Suite warning suite_alpha",
     "the provider does not own PageHasReset/BuildPageResetWarning")
@@ -330,7 +349,7 @@ Check(M.PageHasReset("suite_alpha") == false and M.PageResetProviders.suite_alph
 replacement.pages.suite_gamma = true
 Check(M.PageResetProviders.suite_gamma == nil, "a pages change must wait for RefreshPageResetProvider")
 toolbar = 0
-Check(M.RefreshPageResetProvider("msuf-suite") == true and M.PageResetProviders.suite_gamma == replacement
+Check(M.RefreshPageResetProvider("msuf-suite") == true and M.PageResetProviders.suite_gamma.source == replacement
     and toolbar == 1, "RefreshPageResetProvider must re-read the pages and refresh the toolbar")
 Check(M.RefreshPageResetProvider("missing") == false, "refreshing an unknown id must report false")
 local other = Provider(world, { suite_gamma = true }, { text = "Other" })
@@ -338,16 +357,16 @@ M.RegisterPageResetProvider("other", other)
 Check(M.BuildPageResetWarning("suite_gamma") == "Other suite_gamma", "the latest registration must own an overlap")
 other.pages.suite_gamma = nil
 M.RefreshPageResetProvider("other")
-Check(M.PageResetProviders.suite_gamma == replacement, "a dropped overlap must return to the earlier provider")
+Check(M.PageResetProviders.suite_gamma.source == replacement, "a dropped overlap must return to the earlier provider")
 M.RegisterPageResetProvider("msuf-suite", replacement)
-Check(M.PageResetProviders.suite_gamma == replacement, "re-registration must keep the provider's pages")
+Check(M.PageResetProviders.suite_gamma.source == replacement, "re-registration must keep the provider's pages")
 for _, bad in ipairs({ { nil, replacement }, { "", replacement }, { "x", nil }, { "x", { pages = {} } },
     { "x", { pages = 1, canReset = print, warning = print, reset = print } },
     { "x", { pages = {}, canReset = print, warning = print } } }) do
     local ok = pcall(M.RegisterPageResetProvider, bad[1], bad[2])
     Check(not ok, "an invalid registration was accepted: " .. Show(bad))
 end
-Check(M.PageResetProviders.suite_beta == replacement and M.PageResetProviders.x == nil,
+Check(M.PageResetProviders.suite_beta.source == replacement and M.PageResetProviders.x == nil,
     "an invalid registration changed the registry")
 replacement.pages = "broken"
 Check(not pcall(M.RefreshPageResetProvider, "msuf-suite"), "a provider without a pages table must raise on refresh")
@@ -458,7 +477,183 @@ do
 end
 
 ------------------------------------------------------------------------------
--- 6. O(1) lookup, 0 KB per call.
+-- 6. The provider steps around the history entry (review CX-R9).
+local function StepProvider(w, key, steps)
+    local provider = {
+        pages = { [key] = true },
+        canReset = function() return true end,
+        warning = function() return "Reset " .. key .. "?" end,
+        reset = function() return true end,
+    }
+    for name, fn in pairs(steps or {}) do provider[name] = fn end
+    w.M.RegisterPageResetProvider("msuf-suite", provider)
+    return provider
+end
+local function Errors(w)
+    local out = {}
+    for _, line in ipairs(w.log) do if line:find("^error ") then out[#out + 1] = line end end
+    return out
+end
+local function Entries(w) return #(w.M.historyUndo or {}) end
+
+do
+    -- prepare runs before the undo snapshot, so a dormant state it loads (the
+    -- Suite's Skin profile) is what Undo restores; finish runs after the
+    -- committed entry. One entry only.
+    local w = Boot()
+    local WM = w.M
+    local skin, loaded, trace = { profile = 7 }, false, {}
+    WM.RegisterHistoryProvider("suite-skin", function()
+        return loaded and { profile = skin.profile } or nil
+    end, function(state) skin.profile = state.profile end)
+    local function Note(step) trace[#trace + 1] = step .. ":" .. tostring(WM.IsHistoryCapturing()) .. ":" .. Entries(w) end
+    StepProvider(w, "suite_skin", {
+        prepare = function() Note("prepare") loaded = true return true end,
+        reset = function() Note("reset") skin.profile = 0 return true end,
+        finish = function() Note("finish") w.Log("suite:refresh") end,
+        historyLabel = function() return "Skinning zur\195\188cksetzen" end,
+    })
+    Check(WM.ResetPageToDefaults("suite_skin") == true, "the prepared provider reset failed")
+    Check(table.concat(trace, " ") == "prepare:false:0 reset:true:0 finish:false:1",
+        "prepare must run before the history, reset inside it, finish after the committed entry: " .. table.concat(trace, " "))
+    Check(Entries(w) == 1 and WM.historyUndo[1].label == "Skinning zur\195\188cksetzen"
+        and WM.historyUndo[1].source == "page:reset:suite_skin", "one entry under the provider's own label")
+    Check(WM.Undo() and skin.profile == 7, "Undo did not restore the state prepare loaded: 7 -> 0 -> " .. tostring(skin.profile))
+    -- prepare refusing (anything but true) stops the reset before the history.
+    for _, answer in ipairs({ false, "yes" }) do
+        local resets = 0
+        StepProvider(w, "suite_skin", { prepare = function() return answer end,
+            reset = function() resets = resets + 1 return true end })
+        local before = Entries(w)
+        Check(WM.ResetPageToDefaults("suite_skin") == false and resets == 0 and Entries(w) == before,
+            "prepare answering " .. tostring(answer) .. " must refuse the reset")
+    end
+end
+
+do
+    -- The undo label: the provider's own, else the host's translated "Reset %s"
+    -- with the translated page title.
+    local w = Boot()
+    local WM = w.M
+    local TR = { ["Reset %s"] = "%s zur\195\188ckgesetzt", Alpha = "Alpha-DE" }
+    WM.Tr = function(text) return TR[text] or text end
+    for _, label in ipairs({ false, "" }) do
+        StepProvider(w, "suite_alpha", { historyLabel = function() return label or nil end,
+            reset = function() w.globals.MSUF_DB.general.marker = w.globals.MSUF_DB.general.marker + 1 return true end })
+        Check(WM.ResetPageToDefaults("suite_alpha") == true, "the labelled reset failed")
+        Check(WM.historyUndo[#WM.historyUndo].label == "Alpha-DE zur\195\188ckgesetzt",
+            "the fallback label must be the translated host phrase: " .. tostring(WM.historyUndo[#WM.historyUndo].label))
+    end
+end
+
+do
+    -- A raising step is reported through the boundary; the history closes, a
+    -- partial reset stays undoable, and later changes still make entries.
+    local function Later(w)
+        local before = Entries(w)
+        w.M.RunWithHistory("Later change", "test:later", function()
+            w.globals.MSUF_DB.general.later = (w.globals.MSUF_DB.general.later or 0) + 1
+            return true
+        end)
+        return Entries(w) == before + 1
+    end
+    local w = Boot()
+    local WM = w.M
+    StepProvider(w, "suite_alpha", { reset = function()
+        w.globals.MSUF_DB.general.marker = 99
+        error("injected reset failure")
+    end })
+    Check(WM.ResetPageToDefaults("suite_alpha") == false, "a raising reset must report false")
+    local errors = Errors(w)
+    Check(#errors == 1 and errors[1]:find("page-reset provider reset suite_alpha", 1, true)
+        and errors[1]:find("injected reset failure", 1, true), "the reset error was not reported: " .. Logged(w))
+    Check(WM.IsHistoryCapturing() == false, "a raising reset left the history capturing")
+    Check(Entries(w) == 1 and WM.Undo() and w.globals.MSUF_DB.general.marker == 1,
+        "the partial reset must stay undoable")
+    Check(Later(w), "the history took no entry after a raising reset")
+
+    w = Boot()
+    WM = w.M
+    local resets = 0
+    StepProvider(w, "suite_alpha", { prepare = function() error("injected prepare failure") end,
+        reset = function() resets = resets + 1 return true end })
+    Check(WM.ResetPageToDefaults("suite_alpha") == false and resets == 0 and Entries(w) == 0,
+        "a raising prepare must stop the reset before the history")
+    Check(#Errors(w) == 1 and Errors(w)[1]:find("page-reset provider prepare suite_alpha", 1, true),
+        "the prepare error was not reported")
+    Check(WM.IsHistoryCapturing() == false and Later(w), "a raising prepare broke the history")
+
+    w = Boot()
+    WM = w.M
+    StepProvider(w, "suite_alpha", {
+        reset = function() w.globals.MSUF_DB.general.marker = 2 return true end,
+        finish = function() error("injected refresh failure") end,
+    })
+    Check(WM.ResetPageToDefaults("suite_alpha") == true, "a raising finish must not undo the committed reset")
+    Check(#Errors(w) == 1 and Errors(w)[1]:find("page-reset provider finish suite_alpha", 1, true),
+        "the finish error was not reported")
+    Check(Entries(w) == 1 and WM.IsHistoryCapturing() == false and Later(w), "a raising finish broke the history")
+end
+
+do
+    -- PLAYER_REGEN_DISABLED: the lockdown has not started, the player is in
+    -- combat. Reset, confirmation and a pending Yes all refuse.
+    local w = Boot()
+    local WM = w.M
+    local steps = 0
+    StepProvider(w, "suite_alpha", {
+        prepare = function() steps = steps + 1 return true end,
+        reset = function() steps = steps + 1 return true end,
+    })
+    Check(WM.ShowPageResetConfirm("suite_alpha") == true, "the confirmation did not open out of combat")
+    local yes = w.generic.data.callback
+    w.generic = nil
+    w.regenEdge = true
+    Clear(w)
+    Check(WM.ResetPageToDefaults("suite_alpha") == false and WM.ShowPageResetConfirm("suite_alpha") == false
+        and w.generic == nil, "the PLAYER_REGEN_DISABLED dispatch did not refuse the provider page")
+    yes()
+    Check(steps == 0 and Entries(w) == 0, "a step ran during the PLAYER_REGEN_DISABLED dispatch")
+    Check(Has(w, "combatlock") or Has(w, "print "), "the edge refusal must show the host's combat message")
+    w.regenEdge = false
+    Check(WM.ResetPageToDefaults("suite_alpha") == true and steps == 2, "the reset did not run after the edge")
+end
+
+do
+    -- A malformed provider never disturbs the others: every registration and
+    -- refresh is checked before the page map changes.
+    local w = Boot()
+    local WM = w.M
+    local function Owner(key) return WM.PageResetProviders[key] and WM.PageResetProviders[key].source end
+    local a = { pages = { a1 = true }, canReset = function() return true end,
+        warning = function() return "A" end, reset = function() return true end }
+    local b = { pages = { b1 = true }, canReset = function() return true end,
+        warning = function() return "B" end, reset = function() return true end }
+    WM.RegisterPageResetProvider("a", a)
+    WM.RegisterPageResetProvider("b", b)
+    a.pages = nil
+    Check(WM.RefreshPageResetProvider("b") == true and Owner("a1") == a and Owner("b1") == b,
+        "refreshing one provider must not depend on another's pages")
+    Check(not pcall(WM.RefreshPageResetProvider, "a"), "refreshing a provider without pages must raise")
+    Check(Owner("a1") == a and Owner("b1") == b and WM.PageHasReset("a1") and WM.PageHasReset("b1"),
+        "a failed refresh changed the page map")
+    for _, bad in ipairs({ { pages = {}, canReset = print, warning = print, reset = print, prepare = 5 },
+        { pages = {}, canReset = print, warning = print, reset = print, finish = "x" },
+        { pages = {}, canReset = print, warning = print, reset = print, historyLabel = {} },
+        { pages = { a1 = true }, warning = print, reset = print } }) do
+        Check(not pcall(WM.RegisterPageResetProvider, "c", bad), "a malformed provider was accepted: " .. Show(bad))
+        Check(not pcall(WM.RegisterPageResetProvider, "a", bad), "a malformed replacement was accepted: " .. Show(bad))
+        Check(Owner("a1") == a and Owner("b1") == b, "a malformed registration changed the page map")
+    end
+    -- The checked copy keeps the callbacks the provider registered with.
+    b.canReset = nil
+    Check(WM.PageHasReset("b1") == true, "the registry must keep the callbacks it checked")
+    a.pages = { a2 = true }
+    Check(WM.RefreshPageResetProvider("a") and Owner("a2") == a and Owner("a1") == nil, "a fixed provider did not refresh")
+end
+
+------------------------------------------------------------------------------
+-- 7. O(1) lookup, 0 KB per call.
 do
     local perf = Boot()
     local pages = { target = true }
@@ -500,6 +695,7 @@ do
     collectgarbage("restart")
     Check(allocated == 0, ("the provider lookup allocated %.3f KB in 10000 calls"):format(allocated))
     print(("host_page_reset_provider_smoke: PASS (4 functions, unowned keys unchanged, combat, history, "
-        .. "generic dialog, re-registration, old Suite wrap; lookup %d VM instructions per 300 calls at 1 and 2051 pages, 0 KB)")
+        .. "generic dialog, re-registration, old Suite wrap, prepare/finish/label, contained steps, REGEN edge, "
+        .. "malformed providers; lookup %d VM instructions per 300 calls at 1 and 2051 pages, 0 KB)")
         :format(small))
 end

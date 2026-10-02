@@ -20,6 +20,9 @@ REJECTION_BOUNDARIES = {
         "local decoded, blob = pcall(encoding.DecodeBase64, cleaned)",
         "inflated, payload = pcall(encoding.DecompressString, blob, method)",
         "inflated, payload = pcall(encoding.DecompressString, blob)",
+        # Host API v1: a page-reset provider is another addon; Menu2 runs its
+        # steps inside its undo history, so a raising step must not leave it open.
+        "local ok, result = pcall(step, pageKey)",
     },
 }
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")

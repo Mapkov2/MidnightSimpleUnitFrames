@@ -74,7 +74,20 @@ local LEGACY_SCALE = assert(unitSmoke:match("local LEGACY_SCALE = %[==%[\n(.-)%]
 local LEGACY_STACK = assert(unitSmoke:match("local LEGACY_STACK = %[==%[\n(.-)%]==%]"), "LEGACY_STACK oracle missing")
 
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"), "tools/tests/client_world.lua is missing")()
-local world = World.New(root, flavor):Boot()
+-- The client flags the player in combat before it sends PLAYER_REGEN_DISABLED;
+-- the lockdown starts after that dispatch (the world's EnterCombat order).
+local playerInCombat = false
+local world = World.New(root, flavor)
+rawset(world.env, "UnitAffectingCombat", function(unit) return unit == "player" and playerInCombat end)
+world:Boot()
+local function EnterCombat()
+    playerInCombat = true
+    world:EnterCombat()
+end
+local function LeaveCombat()
+    playerInCombat = false
+    world:LeaveCombat()
+end
 local failure = world:FirstFailure()
 Check(failure == nil, "load failed in " .. tostring(failure and failure.file) .. ": " .. tostring(failure and failure.message))
 local env = world.env
@@ -158,10 +171,19 @@ Check(changed == true, "SetResourceStack did not report its change")
 api.SetResourceStack("cooldown")
 Check(api.GetResourceStack() == "cooldown" and api.SetResourceStack("cooldown") == false,
     "GetResourceStack did not round-trip, or a complete stack changed again")
-world:EnterCombat()
+-- A forced apply on a complete stack: the former code's writes and appliers.
+local forcedApplied
+local forcedChanged = Compare("forced resource stack", function() end, function() RunLegacy(LEGACY_STACK)() end,
+    function()
+        local c, a = api.SetResourceStack("cooldown", true)
+        forcedApplied = a
+        return c
+    end)
+Check(forcedChanged == false and forcedApplied == true, "a forced apply on a complete stack must report false, true")
+EnterCombat()
 local ok, reason = api.ApplyUIScaleProfile({})
 Check(ok == false and reason == "combat", "ApplyUIScaleProfile did not refuse in combat")
-world:LeaveCombat()
+LeaveCombat()
 recording = false
 
 -- 3. A provider on the real Menu2.
@@ -193,15 +215,69 @@ Check(M.ResetPageToDefaults("suite_probe") == true and resets == 1 and capturing
     "the provider reset did not run inside the host history")
 local undo = M.historyUndo and M.historyUndo[#M.historyUndo]
 Check(undo and undo.source == "page:reset:suite_probe", "the provider reset left no host history entry")
-world:EnterCombat()
+EnterCombat()
 Check(M.ResetPageToDefaults("suite_probe") == false and M.ShowPageResetConfirm("suite_probe") == false and resets == 1,
     "combat did not refuse the provider page")
-world:LeaveCombat()
+LeaveCombat()
 Check(M.ShowPageResetConfirm("suite_probe") == true and asked and asked.text_arg1 == "Probe suite_probe" and #writes == 0,
     "the provider confirmation did not use the generic dialog, or wrote StaticPopupDialogs")
 asked.callback()
 Check(resets == 2, "Yes did not reset the provider page")
 Check(M.PageHasReset("uf_player") == true and resets == 2, "a host page left the host's own code")
 
-print(("host_api_client_boot_smoke: %s PASS (real owners resolved and called; legacy-oracle parity; Menu2 provider on the real graph)")
-    :format(flavor))
+-- 4. The new provider steps on the real graph: prepare before the history,
+-- finish after the committed entry, the provider's label, and a raising step
+-- reported through Kernel/MSUF_Boundary.lua without leaving the history open.
+local trace, reported = {}, {}
+rawset(env, "geterrorhandler", function() return function(message) reported[#reported + 1] = tostring(message) end end)
+local function Note(step) trace[#trace + 1] = step .. ":" .. tostring(M.IsHistoryCapturing()) end
+local stepped = {
+    pages = { suite_probe = true },
+    canReset = function() return true end,
+    warning = function(key) return "Probe " .. key end,
+    prepare = function() Note("prepare") return true end,
+    reset = function()
+        Note("reset")
+        db.general.hostApiProbe = (db.general.hostApiProbe or 0) + 1
+        return true
+    end,
+    finish = function() Note("finish") end,
+    historyLabel = function() return "Probe zur\195\188cksetzen" end,
+}
+M.RegisterPageResetProvider("msuf-suite", stepped)
+Check(M.ResetPageToDefaults("suite_probe") == true and table.concat(trace, " ") == "prepare:false reset:true finish:false",
+    "the provider steps ran out of order on the real graph: " .. table.concat(trace, " "))
+Check(M.historyUndo[#M.historyUndo].label == "Probe zur\195\188cksetzen", "the provider's history label was not used")
+stepped.reset = function() error("injected reset failure") end
+M.RefreshPageResetProvider("msuf-suite")
+Check(M.ResetPageToDefaults("suite_probe") == false and M.IsHistoryCapturing() == false
+    and #reported == 1 and reported[1]:find("injected reset failure", 1, true),
+    "a raising reset was not reported, or left the history open")
+
+-- 5. PLAYER_REGEN_DISABLED, dispatched for real: inside that handler the
+-- lockdown has not started, and every host API v1 entry refuses.
+local edge = {}
+local probe = env.CreateFrame("Frame")
+probe:RegisterEvent("PLAYER_REGEN_DISABLED")
+probe:SetScript("OnEvent", function(_, event)
+    if event ~= "PLAYER_REGEN_DISABLED" then return end
+    local before = db.general.msufUiScale
+    edge.lockdown = env.InCombatLockdown()
+    edge.scale, edge.reason = api.ApplyUIScaleProfile({ msufScale = 1.5 })
+    edge.scaleWritten = db.general.msufUiScale ~= before
+    edge.reset = M.ResetPageToDefaults("suite_probe")
+    edge.confirm = M.ShowPageResetConfirm("suite_probe")
+end)
+stepped.reset = function() edge.resetRan = true return true end
+M.RefreshPageResetProvider("msuf-suite")
+EnterCombat()
+LeaveCombat()
+probe:UnregisterEvent("PLAYER_REGEN_DISABLED")
+Check(edge.lockdown == false, "the PLAYER_REGEN_DISABLED handler already saw the lockdown; the edge was not tested")
+Check(edge.scale == false and edge.reason == "combat" and edge.scaleWritten == false,
+    "ApplyUIScaleProfile wrote during the PLAYER_REGEN_DISABLED dispatch")
+Check(edge.reset == false and edge.confirm == false and edge.resetRan == nil,
+    "the provider page reset or asked during the PLAYER_REGEN_DISABLED dispatch")
+
+print(("host_api_client_boot_smoke: %s PASS (real owners resolved and called; legacy-oracle parity incl. forced stack; "
+    .. "Menu2 provider steps, contained errors and the REGEN edge on the real graph)"):format(flavor))
