@@ -15,6 +15,12 @@
 -- Vanilla. Each instruction limit sits 2% above. KB limits are for 32-bit
 -- Lua; on any interpreter the value events (health, power) must stay
 -- allocation-free (one table per dispatch would cost 16 KB or more).
+-- 2026-10-02 (wave 3, group): UNIT_NAME_UPDATE KB 1 -> 3, as for UNIT_MAXHEALTH
+-- and UNIT_FLAGS. Their windows share one one-time 2.2-2.6 KB allocation of the
+-- interpreter, traced to the call into the identity path (BarsCommon UnitNPCKind),
+-- never per dispatch; an unrelated edit of the group config compile moved it from
+-- the UNIT_FLAGS window into this one: instructions are identical (927k) and the
+-- five windows together allocate less (5.03 -> 4.87 KB).
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -27,7 +33,7 @@ local BUDGETS = {
     UNIT_HEALTH = { 97, 1 },
     UNIT_MAXHEALTH = { 1419, 3 },
     UNIT_POWER_UPDATE = { 123, 1 },
-    UNIT_NAME_UPDATE = { 946, 1 },
+    UNIT_NAME_UPDATE = { 946, 3 },
     UNIT_FLAGS = { 1241, 3 },
 }
 local EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_NAME_UPDATE", "UNIT_FLAGS" }

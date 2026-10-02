@@ -1059,88 +1059,11 @@ local function SpellIndicatorModule()
   return GF.SpellIndicators or _G.MSUF_GF_SpellIndicators
 end
 
-local function AddSpellIDToHash(hash, spellID)
-  spellID = tonumber(spellID)
-  if not spellID then return 0 end
-  spellID = floor(spellID + 0.5)
-  if spellID <= 0 or hash[spellID] == true then return 0 end
-  hash[spellID] = true
-  return 1
-end
-
-local function AddSpellIDAliasesToHash(hash, si, spellID)
-  spellID = tonumber(spellID)
-  if not spellID then return 0 end
-  spellID = floor(spellID + 0.5)
-  local aliases = si and ((si.AuraSpellIDAliases and si.AuraSpellIDAliases[spellID])
-    or (si.CustomAuraAliases and si.CustomAuraAliases[spellID]))
-  if aliases == nil then return 0 end
-  if type(aliases) ~= "table" then return AddSpellIDToHash(hash, aliases) end
-  local count = 0
-  for key, value in pairs(aliases) do
-    if value == true then
-      count = count + AddSpellIDToHash(hash, key)
-    elseif value ~= false then
-      count = count + AddSpellIDToHash(hash, value)
-    end
-  end
-  return count
-end
-
-local function AddSpellIDToHashWithAliases(hash, si, spellID)
-  local count = AddSpellIDToHash(hash, spellID)
-  count = count + AddSpellIDAliasesToHash(hash, si, spellID)
-  return count
-end
-
+--- Spell indicator aura IDs come from the indicator compiler (Group_Config_Indicators,
+--- which loads first): one resolver for both. The aura compile reads an entry's
+--- `spells` string for custom entries only, as it always did.
 local function AddSpellIDsForAura(hash, si, specKey, auraName, entry)
-  if not (hash and si and specKey and auraName) then return 0 end
-  local count = 0
-  local includeAliases = type(entry) == "table" and entry.custom == true
-  local function AddResolved(spellID)
-    if includeAliases then return AddSpellIDToHashWithAliases(hash, si, spellID) end
-    return AddSpellIDToHash(hash, spellID)
-  end
-  local id = tonumber(auraName)
-  if id then count = count + AddResolved(id) end
-  if type(entry) == "table" then
-    count = count + AddResolved(entry.spellID or entry.spellId or entry.id)
-    if includeAliases and type(entry.spells) == "string" then
-      for token in entry.spells:gmatch("%d+") do
-        count = count + AddResolved(token)
-      end
-    end
-  end
-  local ids = si.SpellIDs and si.SpellIDs[specKey]
-  if ids then count = count + AddResolved(ids[auraName]) end
-  local secretIDs = si.SecretSpellIDs and si.SecretSpellIDs[specKey]
-  if secretIDs then count = count + AddResolved(secretIDs[auraName]) end
-  local altIDs = si.AltSpellIDs and si.AltSpellIDs[specKey]
-  if type(altIDs) == "table" then
-    for spellID, mappedAuraName in pairs(altIDs) do
-      if mappedAuraName == auraName then count = count + AddResolved(spellID) end
-    end
-  end
-  local linked = si.LinkedAuraRules and si.LinkedAuraRules[specKey] and si.LinkedAuraRules[specKey][auraName]
-  if type(linked) == "table" then
-    count = count + AddResolved(linked.sourceSpellID)
-    if type(linked.targetSpellIDs) == "table" then
-      for i = 1, #linked.targetSpellIDs do
-        count = count + AddResolved(linked.targetSpellIDs[i])
-      end
-    end
-  end
-  local trackable = si.TrackableAuras and si.TrackableAuras[specKey]
-  if type(trackable) == "table" then
-    for i = 1, #trackable do
-      local info = trackable[i]
-      if info and info.name == auraName then
-        count = count + AddResolved(info.spellID or info.spellId or info.id)
-        break
-      end
-    end
-  end
-  return count
+  return GF.AddSpellIndicatorAuraSpellIDs(hash, nil, si, specKey, auraName, entry, true)
 end
 
 local function CollectSpellIndicatorSpecs(siCfg, si)

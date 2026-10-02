@@ -70,13 +70,14 @@ local CI_SLOT_FIELDS = {
   { "C", "CENTER", 0, 0 },
 }
 
+--- `list` is optional: the aura compile (Group_Config) collects a hash only.
 local function AddCustomSpellID(hash, list, spellID)
   spellID = tonumber(spellID)
   if not spellID then return 0 end
   spellID = floor(spellID + 0.5)
   if spellID <= 0 or hash[spellID] == true then return 0 end
   hash[spellID] = true
-  list[#list + 1] = spellID
+  if list then list[#list + 1] = spellID end
   return 1
 end
 
@@ -252,8 +253,14 @@ local function AddSpellIDWithAliases(hash, list, si, spellID)
   return count
 end
 
-local function AddSpellIDsForAura(hash, list, si, specKey, auraName, entry)
-  if not (hash and list and si and specKey and auraName) then return 0 end
+--- The spell IDs of one tracked aura, into `hash` and, when given, the sorted
+--- `list`: the numeric name, the entry's own IDs, the spec tables (SpellIDs,
+--- SecretSpellIDs, AltSpellIDs, LinkedAuraRules, TrackableAuras); a custom entry
+--- adds its aliases. One resolver for the indicator compile below and the aura
+--- compile in Group_Config (GF.AddSpellIndicatorAuraSpellIDs), which reads an
+--- entry's `spells` string for custom entries only (customSpellsOnly).
+local function AddSpellIDsForAura(hash, list, si, specKey, auraName, entry, customSpellsOnly)
+  if not (hash and si and specKey and auraName) then return 0 end
   local count = 0
   local includeAliases = type(entry) == "table" and entry.custom == true
   local function AddResolved(spellID)
@@ -264,7 +271,7 @@ local function AddSpellIDsForAura(hash, list, si, specKey, auraName, entry)
   if id then count = count + AddResolved(id) end
   if type(entry) == "table" then
     count = count + AddResolved(entry.spellID or entry.spellId or entry.id)
-    if type(entry.spells) == "string" then
+    if type(entry.spells) == "string" and (includeAliases or customSpellsOnly ~= true) then
       for token in entry.spells:gmatch("%d+") do
         count = count + AddResolved(token)
       end
@@ -299,9 +306,10 @@ local function AddSpellIDsForAura(hash, list, si, specKey, auraName, entry)
       end
     end
   end
-  if count > 0 then table_sort(list) end
+  if list and count > 0 then table_sort(list) end
   return count
 end
+GF.AddSpellIndicatorAuraSpellIDs = AddSpellIDsForAura
 
 local SpellIDSignature = CustomSpellIDSignature
 
