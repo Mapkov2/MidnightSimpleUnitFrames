@@ -25,10 +25,18 @@ local function Read(path)
     return text
 end
 
+local Secrets = dofile(root .. "/tools/tests/classpower_secrets.lua")
+Secrets.Install()
+local secretValues = false
+local secretHealth, secretMax = Secrets.New("number"), Secrets.New("number")
+local secretName, secretPower = Secrets.New("string"), Secrets.New("number")
+
 local combat, raid, group, size = false, false, true, 3
 local counters = {}
 local function Count(name) counters[name] = (counters[name] or 0) + 1 end
 local function Reset() counters = {} end
+local isSecret = issecretvalue
+issecretvalue = function(value) Count("issecretvalue"); return isSecret(value) end
 
 local methods = {}
 local frames = {}
@@ -64,8 +72,8 @@ function methods:Hide() if self.secure then assert(not combat, "secure Hide in c
 function methods:SetShown(v) if v then self:Show() else self:Hide() end end
 function methods:IsShown() return self.shown end
 function methods:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) end
-function methods:SetValue(v) self.value = v end
-function methods:SetMinMaxValues(_, v) self.maxValue = v end
+function methods:SetValue(v) Count("SetValue"); self.value = v end
+function methods:SetMinMaxValues(_, v) Count("SetMinMaxValues"); self.maxValue = v end
 -- As in the client, a FontString without a font refuses SetText ("Font not set").
 function methods:SetText(v)
     if self.kind == "FontString" then assert(self.font, "FontString:SetText(): Font not set") end
@@ -122,12 +130,12 @@ local timers = {}
 C_Timer = { After = function(_, fn) timers[#timers + 1] = fn end }
 local function RunTimers() local due = timers; timers = {}; for _, fn in ipairs(due) do fn() end end
 local health = { party1target = 70, target = 50, pet = 30, partypet1 = 40 }
-function UnitHealth(unit) Count("UnitHealth"); return health[unit] or 100 end
-function UnitHealthMax(unit) Count("UnitHealthMax"); return 100 end
-function UnitName(unit) Count("UnitName"); return unit end
+function UnitHealth(unit) Count("UnitHealth"); if secretValues then return secretHealth end; return health[unit] or 100 end
+function UnitHealthMax(unit) Count("UnitHealthMax"); if secretValues then return secretMax end; return 100 end
+function UnitName(unit) Count("UnitName"); if secretValues then return secretName end; return unit end
 function UnitClass() return "Hunter", "HUNTER" end
-function UnitPower(unit) return "MANA:" .. unit end
-function UnitPowerMax() return 1000 end
+function UnitPower(unit) Count("UnitPower"); if secretValues then return secretPower end; return "MANA:" .. unit end
+function UnitPowerMax() Count("UnitPowerMax"); if secretValues then return secretMax end; return 1000 end
 local roles = { player = "HEALER", party1 = "DAMAGER", party2 = "HEALER" }
 function RegisterUnitWatch(b) assert(not combat, "unit watch in combat"); b.watched = true end
 function UnregisterUnitWatch(b) assert(not combat, "unit watch in combat"); b.watched = false end
@@ -231,6 +239,41 @@ assert(counters.Paint == 1, "an empty bar repainted on every tick")
 Reset()
 pet.scripts.OnEvent(pet, "UNIT_CONNECTION", "partypet1")
 assert(counters.UnitName == 1 and counters.Paint == 1, "identity event skipped the repaint")
+
+-- The cached maximum is secret too. Identity seeds it before any health event;
+-- only UNIT_MAXHEALTH replaces it. A number-shaped secret catches nil checks.
+secretValues = true
+local stopSecrets = Secrets.Watch(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua")
+pet.scripts.OnEvent(pet, "UNIT_NAME_UPDATE", "partypet1")
+pet.scripts.OnEvent(pet, "UNIT_HEALTH", "partypet1")
+pet.scripts.OnEvent(pet, "UNIT_MAXHEALTH", "partypet1")
+assert(rawequal(pet.Health.value, secretHealth) and rawequal(pet.Health.maxValue, secretMax), "secret values missed bar sinks")
+assert(rawequal(pet.Name.text, secretName), "secret name missed text sink")
+local violations = stopSecrets()
+assert(#violations == 0, table.concat(violations, "\n"))
+secretValues = false
+pet.scripts.OnEvent(pet, "UNIT_NAME_UPDATE", "partypet1")
+
+-- Steady health work: freeze VM, allocation and native-call costs separately.
+local function MeasureHealth()
+    Reset()
+    local ticks = 0
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local kb = collectgarbage("count")
+    debug.sethook(function() ticks = ticks + 1 end, "", 1)
+    for _ = 1, 100 do pet.scripts.OnEvent(pet, "UNIT_HEALTH", "partypet1") end
+    debug.sethook()
+    kb = collectgarbage("count") - kb
+    collectgarbage("restart")
+    assert(counters.UnitHealth == 100 and counters.SetValue == 100, "health native read/write budget changed")
+    assert(not counters.UnitHealthMax and not counters.UnitName and not counters.Paint, "health event did identity work")
+    print(string.format("group additional health: %.2f instructions / %.3f KB / 3 native calls per event", ticks / 100, kb / 100))
+    assert(counters.issecretvalue == 100, "health secret-query budget changed")
+    -- Baseline: 8611 instructions including counter stubs; allow at most 2%.
+    assert(ticks <= 8783 and kb <= 1, "steady health VM/allocation budget exceeded")
+end
+MeasureHealth()
 
 ---------------------------------------------------------------------------
 -- Idempotent refresh, previews, coalescing (P2-5) and the pet anchor (P2-6)

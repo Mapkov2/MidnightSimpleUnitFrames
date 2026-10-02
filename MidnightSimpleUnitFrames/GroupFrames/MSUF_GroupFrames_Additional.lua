@@ -109,7 +109,9 @@ local function PaintValue(button, event)
     local unit = button.unit
     if not unit then return end
     local hp, maxHP = UnitHealth(unit), button._msufMaxHP
-    if event ~= "UNIT_HEALTH" or maxHP == nil then
+    -- BindHealth seeds the maximum before unit events can run. Never inspect
+    -- the cached value: UnitHealthMax can return a secret number.
+    if event ~= "UNIT_HEALTH" then
         maxHP = UnitHealthMax(unit)
         button._msufMaxHP = maxHP
         button.Health:SetMinMaxValues(0, maxHP)
