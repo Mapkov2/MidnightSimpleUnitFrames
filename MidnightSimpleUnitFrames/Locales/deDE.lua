@@ -6815,6 +6815,8 @@ L["Profile: %s"] = "Profil: %s"
 L["Support"] = "Unterstützung"
 L["Utility"] = "Hilfsmittel"
 L["Other"] = "Sonstiges"
+-- Group aura filter tooltips.
+L["Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. The exact list overrides duration filters so temporary states Blizzard reports without a duration, such as Shroud membership, remain visible."] = "Zeigt die von MSUF kuratierten wertvollen Buffs aller Party- oder Raidmitglieder: wichtige defensive, heilende, offensive und unterstützende Abklingzeiten, dazu taktische Zustände wie die Gruppentarnung des Schurken und häufige wertvolle Abklingzeiten wie Schattentanz. Nutzt Blizzards native Aurenfilterung. Die exakte Liste hat Vorrang vor Dauerfiltern, damit vorübergehende Zustände, die Blizzard ohne Dauer meldet, wie die Gruppentarnung des Schurken, sichtbar bleiben."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

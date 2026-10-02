@@ -58,11 +58,10 @@ end
 local BOSS_UNITS = {
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
-local MANAGED_UNITS = {
-    player = true, pet = true, target = true, focus = true,
-    boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-    arena1 = true, arena2 = true, arena3 = true,
-}
+-- The managed units and their show flags, arena slots included (5 on TBC and
+-- Mists), come from the lane-key schema in Auras3/MSUF_Auras3_Core.lua.
+local MANAGED_UNITS = A3.LaneKeySchema.MANAGED_UNITS
+local UNIT_FLAG = A3.LaneKeySchema.UNIT_FLAG
 
 local DISPEL_POINTS = {
     { 0, "None", 0.80, 0.00, 0.00 },
@@ -73,25 +72,6 @@ local DISPEL_POINTS = {
     { 9, "Enrage", 0.95, 0.37, 0.96 },
     { 11, "Bleed", 0.80, 0.10, 0.10 },
 }
-
-local UNIT_FLAG = {
-    player = "showPlayer", pet = "showPet",
-    target = "showTarget",
-    focus = "showFocus",
-    boss1 = "showBoss",
-    boss2 = "showBoss",
-    boss3 = "showBoss",
-    boss4 = "showBoss",
-    boss5 = "showBoss",
-    arena1 = "showArena",
-    arena2 = "showArena",
-    arena3 = "showArena",
-}
--- TBC and Mists field five arena opponents (Game/Shared/Initialize.lua).
-for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-    MANAGED_UNITS["arena" .. i] = true
-    UNIT_FLAG["arena" .. i] = "showArena"
-end
 
 --- Classic aura sort modes. SortMode parses the sort names the shared menu
 --- writes into these, and every lane carries one as lane.sortOrder.
@@ -419,22 +399,7 @@ local function SortMode(value, fallback)
     return fallback
 end
 
-local function PlainNumber(value)
-    if IsSecret(value) then return nil end
-    return type(value) == "number" and value or nil
-end
-
-local function PlainString(value)
-    if IsSecret(value) then return nil end
-    return type(value) == "string" and value or nil
-end
-
-local function PlainBool(value)
-    if IsSecret(value) then return nil end
-    if value == true then return true end
-    if value == false then return false end
-    return nil
-end
+local PlainNumber, PlainString, PlainBool = Visuals.PlainNumber, Visuals.PlainString, Visuals.PlainBool
 
 local function ReadGeneralColor(key, defaultR, defaultG, defaultB)
     local general = _G.MSUF_DB and _G.MSUF_DB.general
@@ -1599,7 +1564,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     local rawKind = tostring(kind or "buff"):lower()
     local customIndex = rawKind:match("^custom(%d)$")
     if customIndex then
-        customIndex = math_min(4, math_max(1, tonumber(customIndex) or 1))
+        customIndex = math_min(A3.CUSTOM_CONTAINER_COUNT, math_max(1, tonumber(customIndex) or 1))
         kind = "custom" .. tostring(customIndex)
     else
         kind = (rawKind == "debuff" or rawKind == "debuffs") and "debuff" or "buff"

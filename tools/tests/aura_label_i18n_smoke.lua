@@ -61,6 +61,34 @@ assert(GroupTitle("target", "buff", groups.buff) == "Ziel · Stärkungen", "the 
 assert(GroupTitle("player", "custom4", groups.custom4) == "Player · Defensive",
     "the player defensive header is not translated: " .. GroupTitle("player", "custom4", groups.custom4))
 
+-- 1c. Every Party/Raid aura filter tooltip has a key in each translated pack
+-- (re-review 2026-10-02: the MSUF Highlights tooltip had none, so it read
+-- English in every language). The menu translates item tooltips at display.
+_G.MSUF_GF_AuraFilter = nil
+assert(loadfile(ADDON .. "Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua"))("MidnightSimpleUnitFrames", namespace)
+namespace.Auras3MenuModelFactories.GroupFilters({}, {}, {}, {}, function(name, value) _G[name] = value; return value end)
+local groupFilters = assert(_G.MSUF_GF_AuraFilter, "the group aura filter list did not load")
+local tooltips = {}
+for _, list in ipairs({ groupFilters.BUFF_FILTER_ITEMS, groupFilters.DEBUFF_FILTER_ITEMS }) do
+    for _, item in ipairs(list) do
+        if item.tooltip then tooltips[#tooltips + 1] = item.tooltip end
+    end
+end
+assert(#tooltips > 0, "the group aura filter list carries no tooltip")
+for _, locale in ipairs({ "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }) do
+    local pack = {}
+    _G.MSUF_NS = {
+        RegisterLocale = function() return pack end,
+        RegisterLocaleLoader = function(_, loader) loader() end,
+    }
+    assert(loadfile(ADDON .. "Locales/" .. locale .. ".lua"))("MidnightSimpleUnitFrames", _G.MSUF_NS)
+    for _, tooltip in ipairs(tooltips) do
+        assert(type(pack[tooltip]) == "string" and pack[tooltip] ~= tooltip,
+            locale .. " has no translation of the group aura filter tooltip: " .. tooltip:sub(1, 60))
+    end
+end
+_G.MSUF_NS = namespace
+
 -- 2. No aura file concatenates these labels again.
 local FORBIDDEN = {
     { pattern = '%.%.%s*" %(#"', label = '.. " (#" (use SpellIDText)' },

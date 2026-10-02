@@ -83,11 +83,81 @@ Shape.SetTexture(probed, "BLIZZARD", false)
 assert(probed.atlas == nil, "the atlas probe result was not cached")
 assert(A3.AuraShapeBorderPath("round") == Shape.MEDIA.CIRCLE.border, "the shared border path lookup changed")
 
--- 2. No backend defines its own copy again.
+-- The shape stamp. A never-shaped RECTANGLE icon is left alone on Mainline
+-- (native AuraButtons keep Blizzard's swipe) and always takes the flat swipe
+-- on Classic; once shaped, both clear the mask and restore the flat swipe.
+local function NewCooldown()
+    local cooldown = setmetatable({ regions = {} }, Region)
+    function cooldown:SetSwipeTexture(path) self.swipe = path; self.swipeWrites = (self.swipeWrites or 0) + 1 end
+    function cooldown:GetNumRegions() return #self.regions end
+    function cooldown:GetRegions() return unpack(self.regions) end
+    return cooldown
+end
+local FLAT = "Interface\\Buttons\\WHITE8X8"
+local nativeOwner, nativeCooldown, nativeIcon = NewButton(), NewCooldown(), setmetatable({}, Region)
+assert(Shape.ApplyIconShape(nativeOwner, "square", nativeCooldown, true, nativeIcon) == "RECTANGLE"
+    and nativeCooldown.swipeWrites == nil and nativeOwner._msufA3AuraShapeMask == nil
+    and nativeOwner._msufA3IconShape == "RECTANGLE", "Mainline touched a never-shaped rectangular icon")
+local classicOwner, classicCooldown = NewButton(), NewCooldown()
+Shape.ApplyIconShape(classicOwner, "RECTANGLE", classicCooldown, false, setmetatable({}, Region))
+assert(classicCooldown.swipe == FLAT and classicCooldown.swipeWrites == 1 and classicOwner._msufA3AuraShapeMask == nil,
+    "Classic did not stamp the flat swipe on a rectangular icon")
+Shape.ApplyIconShape(nativeOwner, "CIRCLE", nativeCooldown, true, nativeIcon)
+local circleMask = assert(nativeOwner._msufA3AuraShapeMask, "a CIRCLE stamp made no mask")
+assert(nativeIcon.mask == circleMask and nativeCooldown.swipe == Shape.MEDIA.CIRCLE.mask and circleMask.shown,
+    "the CIRCLE stamp did not mask the icon and shape the swipe")
+Shape.ApplyIconShape(nativeOwner, "RECTANGLE", nativeCooldown, true, nativeIcon)
+assert(nativeIcon.mask == nil and circleMask.shown == false and nativeCooldown.swipe == FLAT
+    and nativeOwner._msufA3IconShape == "RECTANGLE", "a shaped icon did not return to the flat rectangle")
+
+-- The icon style painters: a shaped shadow is one silhouette outside the
+-- border, a rectangular one an edge band; the border is the flat quad when
+-- the style has no band texture.
+local applied = {}
+namespace.BorderStyles = {
+    Create = function(_, layer, sublevel, texture) return { layer = layer, sublevel = sublevel, texture = texture } end,
+    Hide = function(pieces) pieces.hidden = true end,
+    SetTexture = function(pieces, texture) pieces.texture = texture end,
+    Apply = function(pieces, _, edge) pieces.hidden = false; pieces.edge = edge; applied[#applied + 1] = pieces end,
+}
+local styled = NewButton()
+local iconStyle = { shadowEnabled = true, shadowSize = 4, borderEnabled = true, borderThickness = 2,
+    shadowR = 0, shadowG = 0, shadowB = 0, shadowA = 0.8, borderR = 1, borderG = 1, borderB = 1, borderA = 1 }
+A3.ApplyIconStylePreview(styled, iconStyle, 24, "round")
+local shapedShadow = assert(styled._msufA3ShapedStyleShadow, "no shaped shadow")
+assert(shapedShadow.shown and shapedShadow.layer == "BACKGROUND" and shapedShadow.sublevel == -7
+    and shapedShadow.points.TOPLEFT[1] == -6 and shapedShadow.texture == Shape.MEDIA.CIRCLE.mask,
+    "the shaped shadow is not the silhouette 6 px out on BACKGROUND(-7)")
+assert(#styled._msufA3ShapedStyleBorders == 2, "the shaped border did not draw two rings")
+A3.ApplyIconStylePreview(styled, iconStyle, 24, "RECTANGLE")
+local band = assert(styled._msufA3StyleShadow, "no rectangular shadow band")
+assert(shapedShadow.shown == false and band.edge == 12 and band.layer == "BACKGROUND" and band.sublevel == -7
+    and band.texture == Shape.MEDIA_ROOT .. "\\Media\\Borders\\msuf_aura_border_shadow.tga",
+    "the rectangular shadow is not a 12 px band behind the icon")
+local flat = assert(styled._msufA3StyleBorder, "no flat border quad")
+assert(flat.shown and flat.points.TOPLEFT[1] == -2 and styled._msufA3ShapedStyleBorders[1].shown == false,
+    "the flat border is not 2 px outside, or a shaped ring stayed shown")
+A3.ApplyIconStylePreview(styled, nil, 24, "RECTANGLE")
+assert(band.hidden and flat.shown == false, "a cleared style left the shadow or border shown")
+
+-- 2. No backend defines its own copy again, and each backend's stamp names
+-- its rectangle choice.
 local COPIES = {
     "function Shape%.EnsureMask", "function Shape%.ApplyCooldown", "function A3%.AuraShapeBorderPath",
     "local function SetShapeTexture", "local function SetAuraShapeTexture", "local function AtlasKnown",
+    "function A3%.ApplyIconStylePreview", "local function ApplyIconStyleShadow", "local function ApplyIconStyleBorder",
+    "local function ApplyShadow", "local function ApplyBorder", "ICON_INNER_BAND_MAX", "Shape%.ApplyCooldownShape%(",
 }
+local STAMPS = {
+    ["MidnightSimpleUnitFrames/Auras3/Runtime/MSUF_Auras3_Runtime_Appearance.lua"] = "ApplyIconShape(owner, shape, cooldown, true, ...)",
+    ["MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua"] = "ApplyIconShape(owner, shape, cooldown, false, ...)",
+}
+for path, call in pairs(STAMPS) do
+    local handle = assert(io.open(root .. "/" .. path, "rb"))
+    local source = handle:read("*a")
+    handle:close()
+    assert(source:find(call, 1, true), path .. " no longer stamps through Shape.ApplyIconShape: " .. call)
+end
 local pipe = assert(io.popen('git -C "' .. root .. '" ls-files -- MidnightSimpleUnitFrames/Auras3 "MidnightSimpleUnitFrames/Game/*/Auras/*"'))
 local failures, files = {}, 0
 for path in pipe:lines() do

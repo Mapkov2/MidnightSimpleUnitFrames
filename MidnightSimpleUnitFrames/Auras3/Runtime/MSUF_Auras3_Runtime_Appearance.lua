@@ -22,30 +22,15 @@ local Shape = A3.IconShape
 
 
 
--- Shape.EnsureMask, Shape.ApplyCooldownShape and A3.AuraShapeBorderPath are
--- shared with the Classic backend in Auras3/MSUF_Auras3_IconShape.lua.
+-- The shape painters are shared with the Classic backend in
+-- Auras3/MSUF_Auras3_IconShape.lua.
+local ApplyIconShape = Shape.ApplyIconShape
 
 --- Cold-path-only shape stamp for runtime AuraButtons and reusable previews.
---- RECTANGLE deliberately creates no mask and leaves the normal renderer alone.
+--- RECTANGLE deliberately creates no mask and leaves the normal renderer alone
+--- (Shape.ApplyIconShape names the one difference to the Classic stamp).
 function A3.ApplyAuraIconShape(owner, shape, cooldown, ...)
-    if not owner then return Shape.RECTANGLE end
-    shape = Shape.Normalize(shape)
-    local previousShape = owner._msufA3IconShape
-    if shape == Shape.RECTANGLE
-        and (previousShape == nil or previousShape == Shape.RECTANGLE)
-    then
-        owner._msufA3IconShape = Shape.RECTANGLE
-        return Shape.RECTANGLE
-    end
-    local mask = shape ~= Shape.RECTANGLE and Shape.EnsureMask(owner, shape) or nil
-    if not mask and owner._msufA3AuraShapeMask then owner._msufA3AuraShapeMask:Hide() end
-    for index = 1, select("#", ...) do
-        local texture = select(index, ...)
-        if mask then Shape.ApplyMask(texture, mask) else Shape.ClearMask(texture) end
-    end
-    Shape.ApplyCooldownShape(cooldown, shape, mask)
-    owner._msufA3IconShape = shape
-    return shape
+    return ApplyIconShape(owner, shape, cooldown, true, ...)
 end
 
 -- Blizzard's AuraButtonArtTemplate uses a 30px icon inside a 40px debuff

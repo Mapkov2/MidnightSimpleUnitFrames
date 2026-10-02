@@ -25,7 +25,8 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
-if not Backend or not Backend.Lanes or Backend.Element then return end
+assert(Backend and Backend.Lanes, "the Classic aura element requires Game/Classic/Auras/MSUF_Auras3_Lanes.lua")
+if Backend.Element then return end
 local Compile = A3._ClassicCompile
 local Lanes, FrameVisuals = Backend.Lanes, Backend.FrameVisuals
 
@@ -77,8 +78,10 @@ end
 --- secret GUIDs; a secret one would read as unknown on both sides of the check.
 local function RosterGUID(unit)
     local unitGUID = _G.UnitGUID
-    local guid = unit ~= nil and type(unitGUID) == "function" and unitGUID(unit) or nil
-    if guid == nil or IsSecret(guid) then return nil end
+    if unit == nil or type(unitGUID) ~= "function" then return nil end
+    -- UnitGUID is SecretWhenUnitIdentityRestricted: read it, then guard it.
+    local guid = unitGUID(unit)
+    if IsSecret(guid) then return nil end
     return guid
 end
 

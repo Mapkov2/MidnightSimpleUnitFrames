@@ -13,7 +13,8 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
-if not Backend or Backend.FrameVisuals then return end
+assert(Backend, "Classic aura frame visuals require Game/Classic/Auras/MSUF_Auras3_Buttons.lua")
+if Backend.FrameVisuals then return end
 local Compile, Buttons, Filters = A3._ClassicCompile, Backend.Buttons, Backend.Filters
 local FrameVisuals = {}
 

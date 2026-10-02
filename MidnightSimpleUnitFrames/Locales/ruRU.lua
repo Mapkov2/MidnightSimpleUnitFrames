@@ -6464,6 +6464,8 @@ L["Profile: %s"] = "Профиль: %s"
 L["Support"] = "Поддержка"
 L["Utility"] = "Полезное"
 L["Other"] = "Прочее"
+-- Group aura filter tooltips.
+L["Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. The exact list overrides duration filters so temporary states Blizzard reports without a duration, such as Shroud membership, remain visible."] = "Показывает отобранные MSUF ценные баффы всех участников группы или рейда: важные защитные, исцеляющие, атакующие и вспомогательные кулдауны, а также тактические состояния, например групповую незаметность разбойника, и частые ценные кулдауны, например «Танец теней». Использует встроенную фильтрацию аур Blizzard. Точный список имеет приоритет над фильтрами длительности, поэтому временные состояния, которые Blizzard сообщает без длительности, например групповая незаметность разбойника, остаются видимыми."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

@@ -29,26 +29,40 @@ local function Clamp01(value, fallback)
     return Clamp(value, fallback, 0, 1)
 end
 
+--- AuraData fields and unit answers can be secret (12.x engine clients). These
+--- readers return a plain value of the asked kind, or nil for a secret or any
+--- other kind, so the result can be compared and cached. The compiler and the
+--- button code import them from here (Compile.lua loads after this file).
+local IsSecret = _G.issecretvalue or function() return false end
+function V.PlainNumber(value)
+    if IsSecret(value) then return nil end
+    return type(value) == "number" and value or nil
+end
+function V.PlainString(value)
+    if IsSecret(value) then return nil end
+    return type(value) == "string" and value or nil
+end
+function V.PlainBool(value)
+    if IsSecret(value) then return nil end
+    if value == true then return true end
+    if value == false then return false end
+    return nil
+end
+
 local Shape = A3.IconShape
 
 
 
--- The atlas probe, the mask, the cooldown swipe, the shape textures and the
--- shaped border rings are shared with Retail (Auras3/MSUF_Auras3_IconShape.lua).
+-- The atlas probe, the shape stamp, the icon style painters and
+-- A3.ApplyIconStylePreview are shared with Retail
+-- (Auras3/MSUF_Auras3_IconShape.lua).
 local AtlasKnown = Shape.AtlasKnown
+local ApplyIconShape = Shape.ApplyIconShape
 
+--- Classic buttons always take the flat swipe, even on an icon never shaped
+--- (Shape.ApplyIconShape names the one difference to the Mainline stamp).
 function A3.ApplyAuraIconShape(owner, shape, cooldown, ...)
-    if not owner then return Shape.RECTANGLE end
-    shape = Shape.Normalize(shape)
-    local mask = shape ~= Shape.RECTANGLE and Shape.EnsureMask(owner, shape) or nil
-    if not mask and owner._msufA3AuraShapeMask then owner._msufA3AuraShapeMask:Hide() end
-    for index = 1, select("#", ...) do
-        local texture = select(index, ...)
-        if mask then Shape.ApplyMask(texture, mask) else Shape.ClearMask(texture) end
-    end
-    Shape.ApplyCooldownShape(cooldown, shape, mask)
-    owner._msufA3IconShape = shape
-    return shape
+    return ApplyIconShape(owner, shape, cooldown, false, ...)
 end
 
 
@@ -161,110 +175,6 @@ function V.EnrichCustomLane(lane, entry, frameSpec)
     return lane
 end
 
-local SHADOW_TEXTURE = Shape.MEDIA_ROOT .. "\\Media\\Borders\\msuf_aura_border_shadow.tga"
-
-local SetShapeTexture = Shape.SetTexture
-
-local function HidePieces(pieces)
-    if MSUF.BorderStyles and pieces then MSUF.BorderStyles.Hide(pieces) end
-end
-
-local function ApplyShadow(button, style, size, shape)
-    local pieces = button._msufA3StyleShadow
-    local shapedTexture = button._msufA3ShapedStyleShadow
-    if shape ~= Shape.RECTANGLE then
-        HidePieces(pieces)
-        if not (style and style.shadowEnabled) then if shapedTexture then shapedTexture:Hide() end; return end
-        if not shapedTexture then
-            shapedTexture = PixelLayoutRegion(button:CreateTexture(nil, "BACKGROUND", nil, -7))
-            button._msufA3ShapedStyleShadow = shapedTexture
-        end
-        if not SetShapeTexture(shapedTexture, shape, false) then shapedTexture:Hide(); return end
-        local extent = style.shadowSize + (style.borderEnabled and style.borderThickness or 0)
-        shapedTexture:ClearAllPoints()
-        shapedTexture:SetPoint("TOPLEFT", button, "TOPLEFT", -extent, extent)
-        shapedTexture:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", extent, -extent)
-        shapedTexture:SetVertexColor(style.shadowR, style.shadowG, style.shadowB, style.shadowA)
-        shapedTexture:Show()
-        return
-    end
-    if shapedTexture then shapedTexture:Hide() end
-    if not (style and style.shadowEnabled and MSUF.BorderStyles) then HidePieces(pieces); return end
-    if not pieces then
-        pieces = MSUF.BorderStyles.Create(button, "BACKGROUND", -7, SHADOW_TEXTURE)
-        button._msufA3StyleShadow = pieces
-    end
-    local extent = style.shadowSize + (style.borderEnabled and style.borderThickness or 0)
-    MSUF.BorderStyles.Apply(pieces, button, extent * 2, size, size,
-        style.shadowR, style.shadowG, style.shadowB, style.shadowA)
-end
-
---- Largest inner band, as a share of the icon: an inner style shades the
---- artwork itself, so an unclamped thickness would black the icon out.
-local ICON_INNER_BAND_MAX = 0.3
-
---- The border ring, drawn like Retail's ApplyIconStyleBorder
---- (Auras3/Runtime/MSUF_Auras3_Runtime_ButtonVisuals.lua). Outer styles frame
---- the icon behind it at BORDER(-1); inner styles (Shadow) sit wholly inside,
---- clamped, on top at ARTWORK(7). A shaped icon draws one ring per pixel of
---- thickness.
-local function ApplyBorder(button, style, size, shape)
-    local flat = button._msufA3StyleBorder
-    local pieces = button._msufA3StyleBorderPieces
-    local rings = button._msufA3ShapedStyleBorders
-    if shape ~= Shape.RECTANGLE then
-        if flat then flat:Hide() end
-        HidePieces(pieces)
-        return Shape.ApplyBorderRings(button, style, shape)
-    end
-    for i = 1, rings and #rings or 0 do rings[i]:Hide() end
-    if not (style and style.borderEnabled) then if flat then flat:Hide() end; HidePieces(pieces); return end
-    if style.borderTexture and MSUF.BorderStyles then
-        if flat then flat:Hide() end
-        local inner = style.borderPlacement == "inner"
-        local edge = style.borderEdge or 8
-        local inset = 0
-        if inner then
-            edge = math_max(1, math_min(edge, math_floor(size * ICON_INNER_BAND_MAX)))
-            inset = edge * 0.5
-        end
-        -- The draw layer is baked into the pieces: a placement change rebuilds them.
-        if pieces and button._msufA3StyleBorderInner ~= inner then
-            HidePieces(pieces)
-            pieces = nil
-        end
-        if not pieces then
-            pieces = MSUF.BorderStyles.Create(button, inner and "ARTWORK" or "BORDER", inner and 7 or -1, style.borderTexture)
-            button._msufA3StyleBorderPieces = pieces
-            button._msufA3StyleBorderInner = inner
-        else
-            MSUF.BorderStyles.SetTexture(pieces, style.borderTexture)
-        end
-        MSUF.BorderStyles.Apply(pieces, button, edge, size, size,
-            style.borderR, style.borderG, style.borderB, style.borderA, inset)
-        return
-    end
-    HidePieces(pieces)
-    if not flat then
-        flat = PixelLayoutRegion(button:CreateTexture(nil, "BORDER", nil, -1))
-        flat:SetTexture("Interface\\Buttons\\WHITE8X8")
-        button._msufA3StyleBorder = flat
-    end
-    local extent = style.borderThickness
-    flat:ClearAllPoints()
-    flat:SetPoint("TOPLEFT", button, "TOPLEFT", -extent, extent)
-    flat:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", extent, -extent)
-    flat:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
-    flat:Show()
-end
-
-function A3.ApplyIconStylePreview(button, style, size, shape)
-    if not button then return end
-    shape = Shape.Normalize(shape)
-    ApplyShadow(button, style, size, shape)
-    ApplyBorder(button, style, size, shape)
-end
-
 --- Shaped dispel-border geometry only: ring texture, texcoords and anchors.
 --- It never colours or shows the texture. The live per-aura border caches the
 --- colour it last wrote, so a colour painted behind that cache would survive
@@ -299,7 +209,7 @@ function V.ApplyButtonLayout(lane, button)
     local inset = (1 - (100 / zoom)) * 0.5
     if button.Icon and button.Icon.SetTexCoord then button.Icon:SetTexCoord(inset, 1 - inset, inset, 1 - inset) end
     local shape = cfg.iconShape or Shape.RECTANGLE
-    A3.ApplyAuraIconShape(button, shape, button.Cooldown, button.Icon)
+    ApplyIconShape(button, shape, button.Cooldown, false, button.Icon)
     A3.ApplyIconStylePreview(button, cfg.iconStyle, math_min(cfg.buttonWidth or cfg.size, cfg.buttonHeight or cfg.size), shape)
     if button.Cooldown and button.Cooldown.SetReverse then button.Cooldown:SetReverse(cfg.cooldownSwipeReverse == true) end
     local barOnly = cfg.showDurationBar == true and cfg.durationBarDisplay == "BAR_ONLY"
@@ -794,10 +704,17 @@ function V.UpdateButtonVisual(lane, button, unit, data)
     end
     local visual = ApplyIndicatorVisual(button, cfg)
     if visual == "number" and button.Count then
-        local applications = tonumber(data and data.applications) or 1
-        if button._msufA3NumberText ~= applications then
+        local applications = data and data.applications
+        if IsSecret(applications) then
+            -- A secret count goes to the C sink as it is and is never cached.
             button.Count:SetText(applications)
-            button._msufA3NumberText = applications
+            button._msufA3NumberText = nil
+        else
+            applications = tonumber(applications) or 1
+            if button._msufA3NumberText ~= applications then
+                button.Count:SetText(applications)
+                button._msufA3NumberText = applications
+            end
         end
         button.Count:Show()
     end
@@ -805,8 +722,11 @@ function V.UpdateButtonVisual(lane, button, unit, data)
     ApplyFrameEffect(lane, button, data)
     if cfg.showDurationBar == true then
         local bar = DurationBar(button, cfg)
-        local rawDuration = tonumber(data and data.duration)
-        local expiration = tonumber(data and data.expirationTime)
+        -- A secret duration or expiration cannot drive the Lua bar: such an
+        -- aura shows no bar, like a permanent one.
+        local rawDuration, expiration = data and data.duration, data and data.expirationTime
+        if IsSecret(rawDuration) or IsSecret(expiration) then rawDuration, expiration = nil, nil end
+        rawDuration, expiration = tonumber(rawDuration), tonumber(expiration)
         local timed = rawDuration and expiration and rawDuration > 0 and expiration > 0
         if timed then
             local elapsedMode = cfg.durationBarDirection == "ELAPSED"

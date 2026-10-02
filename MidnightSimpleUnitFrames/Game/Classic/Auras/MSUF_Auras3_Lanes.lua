@@ -14,7 +14,8 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
-if not Backend or Backend.Lanes then return end
+assert(Backend, "Classic aura lanes require Game/Classic/Auras/MSUF_Auras3_Buttons.lua")
+if Backend.Lanes then return end
 local Compile = A3._ClassicCompile
 local Buttons, Filters, FrameVisuals = Backend.Buttons, Backend.Filters, Backend.FrameVisuals
 local Lanes = {}
@@ -44,6 +45,7 @@ local HideTrailingButtons = Buttons.HideTrailingButtons
 local UpdateButton = Buttons.UpdateButton
 local BuildButtonUpdater = Buttons.BuildButtonUpdater
 local ProcessData = Filters.ProcessData
+local SourceMemo = Filters.SourceMemo
 local ShouldShowAura = Filters.ShouldShowAura
 local DataMatchesLane = Filters.DataMatchesLane
 local ResetLaneVisualCache = FrameVisuals.ResetLaneVisualCache
@@ -396,6 +398,8 @@ end
 local function FullScanLane(lane, unit, renderInline)
     local cfg = lane.config
     if not (cfg and cfg.enabled) then return false end
+    -- One scan shares the source-is-player answers (Filters.ProcessData).
+    SourceMemo.serial = SourceMemo.serial + 1
 
     local inlineRender = renderInline == true
         and cfg.naturalOrder == true
