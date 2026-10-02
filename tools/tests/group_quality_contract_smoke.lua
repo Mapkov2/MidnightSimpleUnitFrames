@@ -206,6 +206,43 @@ do
 end
 
 ---------------------------------------------------------------------------
+-- The popup can open Options before its persistence method has loaded.
+---------------------------------------------------------------------------
+do
+    local source = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua")
+    local body = assert(source:match("\nfunction GroupPopup%.OpenMenu2Page%(popup, pageKey%)\n(.-)\nend\n"),
+        "group popup menu entry moved")
+    local menu, opened, persisted = {}, 0, 0
+    local popup = { _msufGFMode = "raid" }
+    local scope
+    local context = {
+        _G = { MSUF2 = menu }, EM2 = {}, KIND_TO_KEY = { raid = "gf_raid" },
+        ExportPublic = function() end,
+        GF_EM2_SetActivePreviewKind = function(mode) scope = mode end,
+        GroupPopup = {
+            Apply = function() end,
+            GroupComponentForPage = function() return "layout" end,
+            GroupSectionForPage = function() return "layout" end,
+            QuickPopup = function() return { OpenPage = function(page, owner)
+                Check(page == "gf_layout" and owner == popup, "popup opened the wrong page")
+                Check(menu.gfScope == "raid" and scope == "raid", "popup lost its selected scope")
+                opened = opened + 1
+            end } end,
+        },
+    }
+    setmetatable(context, { __index = _G })
+    local open = setfenv(assert(loadstring("return function(popup, pageKey)\n" .. body .. "\nend")), context)()
+    open(popup)
+    Check(opened == 1, "popup did not open Options without the persistence method")
+    menu.PersistMenuStateValue = function(key, value)
+        Check(key == "gfScope" and value == "raid", "popup persisted the wrong scope")
+        persisted = persisted + 1
+    end
+    open(popup)
+    Check(opened == 2 and persisted == 1, "popup did not resolve the newly loaded persistence method")
+end
+
+---------------------------------------------------------------------------
 -- Every client: the required exports resolve on the real load graph
 ---------------------------------------------------------------------------
 for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
