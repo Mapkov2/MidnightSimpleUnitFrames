@@ -895,8 +895,12 @@ local function RuntimeOnEvent(self, event, unit)
     return
   elseif event == "PLAYER_REGEN_DISABLED" then
     SyncCombatState(true)
-    if type(GF.HidePreviewsForCombat) == "function" then
-      GF.HidePreviewsForCombat()
+    -- A preview retires its scope's live header (PreviewSuppressesHeader), and
+    -- combat hides every preview. Hand the block back to the live header now:
+    -- REGEN_DISABLED fires before InCombatLockdown() is true, and once lockdown
+    -- begins the header could not come back before regen.
+    if type(GF.HidePreviewsForCombat) == "function" and GF.HidePreviewsForCombat() == true then
+      SetupWantedHeaders()
     end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
