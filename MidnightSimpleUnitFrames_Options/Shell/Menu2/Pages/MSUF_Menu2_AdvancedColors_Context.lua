@@ -978,26 +978,13 @@ local function RegisterPowerContextFactories()
     end)
     -- A single unit has one resource, so "power.current" resolves it from context.
     -- A party or raid roster mixes every resource type at once, so group cards name
-    -- each color instead. Labels are spelled out rather than read from the page's
-    -- COLOR_POWER_TOKENS list: this registry is an IIFE that holds 28 of Lua 5.1's
-    -- 60 upvalues, and a file-level local for the list would add another. They must
-    -- stay in sync with that list, and each entry edits the same shared override table.
-    local POWER_TOKEN_CONTEXT_IDS = {
-        { "power.token.mana", "MANA", "Mana" },
-        { "power.token.rage", "RAGE", "Rage" },
-        { "power.token.energy", "ENERGY", "Energy" },
-        { "power.token.focus", "FOCUS", "Focus" },
-        { "power.token.runic_power", "RUNIC_POWER", "Runic Power" },
-        { "power.token.insanity", "INSANITY", "Insanity" },
-        { "power.token.fury", "FURY", "Fury" },
-        { "power.token.pain", "PAIN", "Pain" },
-        { "power.token.essence", "ESSENCE", "Essence" },
-        { "power.token.lunar_power", "LUNAR_POWER", "Astral Power" },
-        { "power.token.maelstrom", "MAELSTROM", "Maelstrom" },
-    }
-    for i = 1, #POWER_TOKEN_CONTEXT_IDS do
-        local entry = POWER_TOKEN_CONTEXT_IDS[i]
-        local id, token, label = entry[1], entry[2], entry[3]
+    -- each color instead: one "power.token.<token>" id per power the Colors page
+    -- lists (COLOR_POWER_TOKENS, MSUF_Menu2_AdvancedColors), with its label. Each
+    -- entry edits the same shared override table.
+    local powerTokens = CP.COLOR_POWER_TOKENS or {}
+    for i = 1, #powerTokens do
+        local token, label = powerTokens[i].value, powerTokens[i].text
+        local id = "power.token." .. token:lower()
         ContextFactory(id, function() return PowerTokenTarget(id, token, label) end)
     end
     ContextFactory("class_power.current", function(context)

@@ -304,6 +304,7 @@ clients	lua	tools/tests/defaults_pass_trust_smoke.lua	{root} {flavor}	Defaults p
 -	lua	tools/tests/blizzard_aura_visibility_load_smoke.lua	{root}	Blizzard aura visibility load smoke failed
 -	lua	tools/tests/global_links_smoke.lua	{root}	Global link smoke failed (a _G.MSUF_* name is read but defined nowhere)
 -	lua	tools/tests/menu_theme_names_smoke.lua	{root}	Menu theme or UI kit field is read but set nowhere
+-	lua	tools/tests/color_power_token_contexts_smoke.lua	{root}	Group power color contexts drifted from the Colors page power list
 -	lua	tools/tests/deprecated_aliases_smoke.lua	{root}	Deprecated alias smoke failed
 clients+Forever	lua	tools/tests/bugreport_layout_smoke.lua	{root} {flavor}	Bug report menu geometry regression: {flavor}
 clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game menu cold Options open boundary: {flavor}
