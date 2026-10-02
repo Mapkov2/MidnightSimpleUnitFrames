@@ -168,6 +168,10 @@ do
         local partOK, partResult = pcall(partChunk, "MidnightSimpleUnitFrames", MSUF)
         assert(partOK, partPath .. ": " .. tostring(partResult))
     end
+    -- The group migrations resolve MSUF_GF_AuraFilter (Auras3 GroupFilters, which the
+    -- client loads first) on use. The menu model fills this table in later; until then
+    -- the repair seeds empty blacklists, as it did while the table was absent.
+    _G.MSUF_GF_AuraFilter = _G.MSUF_GF_AuraFilter or {}
     local groupMigrationsPath = Join(CORE, "GroupFrames/MSUF_GroupFrames_DB_Migrations.lua")
     local groupMigrationsChunk, groupMigrationsErr = loadfile(groupMigrationsPath)
     assert(groupMigrationsChunk, groupMigrationsPath .. ": " .. tostring(groupMigrationsErr))
