@@ -1,10 +1,16 @@
 --- ClassPower/MSUF_CP_Controller_Auras.lua - controller player-aura cache
 --- The player auras the aura-driven class resources read: Maelstrom Weapon,
---- Icicles, the Devourer Soul Fragment auras and the Eclipse auras (Mists
---- Arcane Charges on the Classic clients). The cache keeps the watched spells
---- by spell and by aura instance and turns a UNIT_AURA payload into "did the
---- active resource change". Restricted IDs, payloads and fields are never
---- compared or iterated.
+--- Icicles and the Devourer Soul Fragment auras (Mists Arcane Charges on the
+--- Classic clients). The cache keeps the watched spells by spell and by aura
+--- instance and turns a UNIT_AURA payload into "did the active resource
+--- change". Restricted IDs, payloads and fields are never compared or
+--- iterated.
+---
+--- Only a resource the controller follows through UNIT_AURA is watched: the
+--- cache is exactly as fresh as those events. Any other spell (the Balance
+--- runtime's Eclipse auras, which it tracks with its own UNIT_AURA cache) is
+--- read live, so an aura that ends before its expiration time (death, a
+--- dispel) is never handed back from here.
 ---
 --- The controller binds it once at load (CONTROLLER_AURAS) and keeps the
 --- returned cache as CPAuras; the mode runners read it through
@@ -334,9 +340,6 @@ builders.CONTROLLER_AURAS = function(E)
     CPAuras.AddSpell(CPK.SPELL.VOID_METAMORPHOSIS)
     CPAuras.AddSpell(CPK.SPELL.SILENCE_THE_WHISPERS)
     CPAuras.AddSpell(CPK.SPELL.DARK_HEART)
-    for spellID in pairs(CPConst.ECLIPSE_AURAS or {}) do
-        CPAuras.AddSpell(spellID)
-    end
     --- Classic: Mists Arcane Charges is the only aura resource a Classic provider
     --- routes, so it is the whole watched set there, and its incremental and
     --- fallback aura updates are answered before the Retail resources are asked.

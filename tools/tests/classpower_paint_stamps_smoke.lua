@@ -131,6 +131,21 @@ do
         Aura()
         Check(SameColor(bar.color, BASE), "the Player Power bar kept the eclipse colour after the eclipse ended")
         Check(bar._msufR == BASE[1] and bar._msufB == BASE[3], "the Power element's colour stamp no longer matches the bar")
+
+        -- An eclipse that ends early (death, a dispel, a cancel) is gone before
+        -- its expiration time. The controller does not follow UNIT_AURA for a
+        -- Balance Druid, so its player-aura cache must not hand the ended
+        -- aura back to the Balance runtime (MSUF_CP_GetTrackedPlayerAura).
+        for _, payload in ipairs({ { isFullUpdate = true }, { removedAuraInstanceIDs = { 77 } } }) do
+            solarUntil = GetTime() + 15
+            Aura()
+            Check(not SameColor(bar.color, BASE), "a second Solar Eclipse did not colour the Player Power bar")
+            solarUntil = nil
+            balanceFrame.scripts.OnEvent(balanceFrame, "UNIT_AURA", "player", payload)
+            t.env:RunTimers()
+            Check(SameColor(bar.color, BASE), "the Player Power bar kept the colour of an eclipse that ended early ("
+                .. (payload.isFullUpdate and "full update" or "removed instance") .. ")")
+        end
     end
 end
 
