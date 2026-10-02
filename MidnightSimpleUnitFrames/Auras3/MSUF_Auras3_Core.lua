@@ -305,21 +305,61 @@ function A3.RequestScope()
     return true
 end
 
-local REQUEST_APPLY_SCOPE_KEYS = {
-    player = true, pet = true, target = true, focus = true, boss = true,
+--- Request helpers both client backends share: Retail's
+--- Auras3/Runtime/MSUF_Auras3_Runtime_Facade.lua and Classic's
+--- Game/Classic/Auras/MSUF_Auras3_Requests.lua each kept a copy, and this
+--- core's own scope list had drifted from them (no arena).
+A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
+    player = true, pet = true, target = true, focus = true, boss = true, arena = true,
     party = true, raid = true, mythicraid = true,
     gf_party = true, gf_raid = true, gf_mythicraid = true,
     group = true, groups = true,
     shared = true, global = true, all = true, ["*"] = true,
 }
 
-local function LooksLikeApplyScope(value)
+A3._LooksLikeApplyScope = function(value)
     value = tostring(value or ""):lower()
     if value == "" then return false end
-    if REQUEST_APPLY_SCOPE_KEYS[value] then return true end
+    if A3._requestApplyScopeKeys[value] then return true end
     return value:match("^boss%d+$") ~= nil
+        or value:match("^arena%d+$") ~= nil
         or value:match("^party%d+$") ~= nil
         or value:match("^raid%d+$") ~= nil
+end
+
+--- The group frame kind a preview refresh for `scope` touches, and whether it
+--- touches the group previews at all.
+function A3._AuraPreviewGroupKind(scope)
+    local key = tostring(scope or ""):lower()
+    if key == "party" or key == "gf_party" or key:match("^party%d+$") then return "party", true end
+    if key == "raid" or key == "gf_raid" or key:match("^raid%d+$") then return "raid", true end
+    if key == "mythicraid" or key == "gf_mythicraid" then return "mythicraid", true end
+    if key == "" or key == "shared" or key == "global" or key == "all" or key == "*"
+        or key == "group" or key == "groups" then
+        return nil, true
+    end
+    return nil, false
+end
+
+--- Queues aura runtime work that combat blocked. The backend owns the driver
+--- (A3._EnsureDeferredAuraRuntimeDriver) and the flush, and names the reason a
+--- request without one carries (A3._deferredAuraDefaultReason).
+function A3._QueueDeferredAuraRuntime(scope, reason, visuals)
+    scope = tostring(scope or "shared"):lower()
+    A3._deferredAuraRuntime = true
+    A3._deferredAuraRuntimeReason = reason or A3._deferredAuraRuntimeReason
+        or A3._deferredAuraDefaultReason or "AURAS3_DEFERRED"
+    if visuals == true then A3._deferredAuraRuntimeVisuals = true end
+    if scope == "" or scope == "shared" or scope == "global" or scope == "all" or scope == "*" then
+        A3._deferredAuraRuntimeAll = true
+        A3._deferredAuraRuntimeScopes = nil
+    elseif A3._deferredAuraRuntimeAll ~= true then
+        A3._deferredAuraRuntimeScopes = A3._deferredAuraRuntimeScopes or {}
+        A3._deferredAuraRuntimeScopes[scope] = true
+    end
+    local frame = A3._EnsureDeferredAuraRuntimeDriver()
+    if frame then frame:RegisterEvent("PLAYER_REGEN_ENABLED") end
+    return false
 end
 
 function A3.RefreshAll()
@@ -328,7 +368,7 @@ function A3.RefreshAll()
 end
 
 function A3.RequestApply(scopeOrReason, reason)
-    if LooksLikeApplyScope(scopeOrReason) and type(A3.RequestScope) == "function" then
+    if A3._LooksLikeApplyScope(scopeOrReason) and type(A3.RequestScope) == "function" then
         return A3.RequestScope(scopeOrReason, reason or "AURAS3_REQUEST_APPLY")
     end
     return A3.RefreshAll()

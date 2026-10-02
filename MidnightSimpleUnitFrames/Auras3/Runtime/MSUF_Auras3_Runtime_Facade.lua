@@ -140,35 +140,9 @@ function A3._EnsureDeferredAuraRuntimeDriver()
     return frame
 end
 
-function A3._QueueDeferredAuraRuntime(scope, reason, visuals)
-    scope = tostring(scope or "shared"):lower()
-    reason = reason or A3._deferredAuraRuntimeReason or "AURAS3_DEFERRED"
-    A3._deferredAuraRuntime = true
-    A3._deferredAuraRuntimeReason = reason
-    if visuals == true then A3._deferredAuraRuntimeVisuals = true end
-    if scope == "" or scope == "shared" or scope == "global" or scope == "all" or scope == "*" then
-        A3._deferredAuraRuntimeAll = true
-        A3._deferredAuraRuntimeScopes = nil
-    elseif A3._deferredAuraRuntimeAll ~= true then
-        A3._deferredAuraRuntimeScopes = A3._deferredAuraRuntimeScopes or {}
-        A3._deferredAuraRuntimeScopes[scope] = true
-    end
-    local frame = A3._EnsureDeferredAuraRuntimeDriver()
-    if frame then frame:RegisterEvent("PLAYER_REGEN_ENABLED") end
-    return false
-end
-
-function A3._AuraPreviewGroupKind(scope)
-    local key = tostring(scope or ""):lower()
-    if key == "party" or key == "gf_party" or key:match("^party%d+$") then return "party", true end
-    if key == "raid" or key == "gf_raid" or key:match("^raid%d+$") then return "raid", true end
-    if key == "mythicraid" or key == "gf_mythicraid" then return "mythicraid", true end
-    if key == "" or key == "shared" or key == "global" or key == "all" or key == "*"
-        or key == "group" or key == "groups" then
-        return nil, true
-    end
-    return nil, false
-end
+-- The queue, the scope test and the preview group kind are shared with the
+-- Classic backend in Auras3/MSUF_Auras3_Core.lua.
+A3._deferredAuraDefaultReason = "AURAS3_DEFERRED"
 
 function A3._NotifyAuraColdpathPreview(reason, scope)
     if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_PREVIEW") end
@@ -404,30 +378,8 @@ function A3.RefreshRoundedDispelOverlayMasks()
     return A3.RefreshAll()
 end
 
-A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
-    player = true, pet = true, target = true, focus = true, boss = true, arena = true,
-    party = true, raid = true, mythicraid = true,
-    gf_party = true, gf_raid = true, gf_mythicraid = true,
-    group = true, groups = true,
-    shared = true, global = true, all = true, ["*"] = true,
-}
-
-A3._LooksLikeApplyScope = function(value)
-    value = tostring(value or ""):lower()
-    if value == "" then return false end
-    if A3._requestApplyScopeKeys[value] then return true end
-    return value:match("^boss%d+$") ~= nil
-        or value:match("^arena%d+$") ~= nil
-        or value:match("^party%d+$") ~= nil
-        or value:match("^raid%d+$") ~= nil
-end
-
-function A3.RequestApply(scopeOrReason, reason)
-    if A3._LooksLikeApplyScope(scopeOrReason) then
-        return A3.RequestScope(scopeOrReason, reason or "AURAS3_REQUEST_APPLY")
-    end
-    return A3.RefreshAll()
-end
+-- A3.RequestApply is the core's (Auras3/MSUF_Auras3_Core.lua): it routes a
+-- scope to this file's RequestScope and anything else to its RefreshAll.
 
 function A3.RequestScope(scope, reason)
     scope = tostring(scope or "shared"):lower()

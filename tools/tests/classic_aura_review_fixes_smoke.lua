@@ -1177,6 +1177,19 @@ do
         "F14: the Classic backend calls the A3.CooldownText hook again, which no Classic file defines")
     -- Re-review 2026-10-02 (W3): no addon file, test or sibling repo calls these.
     assert(not source:find("PostCreateButton", 1, true), "F14: the never-set lane.PostCreateButton hook is back")
+    -- The request helpers both backends copied live once, in the shared core.
+    local facadeHandle = assert(io.open(ADDON .. "Auras3/Runtime/MSUF_Auras3_Runtime_Facade.lua", "rb"))
+    local backends = source .. facadeHandle:read("*a")
+    facadeHandle:close()
+    for _, copy in ipairs({ "function A3._AuraPreviewGroupKind", "A3._LooksLikeApplyScope = function",
+        "A3._requestApplyScopeKeys = ", "function A3._QueueDeferredAuraRuntime", "function A3.RequestApply(" }) do
+        local hits = 0
+        for _ in backends:gmatch(copy:gsub("[%(%)%.%-%[%]%*%+%?%^%$]", "%%%0")) do hits = hits + 1 end
+        assert(hits == (copy == "function A3.RequestApply(" and 1 or 0),
+            "F14: a backend defines its own copy of the shared core's " .. copy)
+    end
+    assert(A3._LooksLikeApplyScope("arena2") == true and A3._AuraPreviewGroupKind("party3") == "party",
+        "F14: precondition: the shared request helpers are missing")
     for _, name in ipairs({ "MSUF_A3_RequestUnit", "MSUF_Auras3_RefreshUnit", "MSUF_Auras3_RefreshAll",
         "MSUF_Auras3_ApplyFontsFromGlobal" }) do
         assert(_G[name] == nil, "F14: the uncalled global " .. name .. " is back")

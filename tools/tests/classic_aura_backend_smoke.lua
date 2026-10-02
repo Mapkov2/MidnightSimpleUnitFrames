@@ -16,16 +16,20 @@ local namespace = {
         return value
     end,
 }
--- The Auras3 core is not loaded here; its EnsureDB returns the profile's tree.
-namespace.MSUF_Auras3.EnsureDB = function()
+-- The shared core loads below for the helpers it shares with the backends, but
+-- this smoke reads the profile's tree as written: its normalizing EnsureDB and
+-- its generation counter are replaced right after it loads.
+local function StubEnsureDB()
     local auras = _G.MSUF_DB.auras3
     return auras, auras.shared
 end
-namespace.MSUF_Auras3.BumpRuntimeConfig = function()
+local function StubBumpRuntimeConfig()
     local A3 = namespace.MSUF_Auras3
     A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
     return A3._runtimeConfigGen
 end
+namespace.MSUF_Auras3.EnsureDB = StubEnsureDB
+namespace.MSUF_Auras3.BumpRuntimeConfig = StubBumpRuntimeConfig
 
 -- No live group frames until the Group bridge section below: the group
 -- runtime (MSUF.GF, loaded after the aura backend in game) has nothing to redraw.
@@ -108,6 +112,11 @@ local classicPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_A
 local featuresPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
 local retailPath = root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
 local classicAuras = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_"
+-- The shipped chain (Game/Classic/UnitFrames/MSUF_UFCore_Elements.xml): the
+-- shared core first, then the icon shapes and the Classic backend.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"))("MidnightSimpleUnitFrames", namespace)
+namespace.MSUF_Auras3.EnsureDB = StubEnsureDB
+namespace.MSUF_Auras3.BumpRuntimeConfig = StubBumpRuntimeConfig
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(classicAuras .. "DataShared.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(classicAuras .. "Visuals.lua"))("MidnightSimpleUnitFrames", namespace)
