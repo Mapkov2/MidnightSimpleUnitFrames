@@ -61,7 +61,8 @@ filters), `_FrameVisuals` (frame-level dispel border, overlay, stripe and
 symbols), `_Lanes` (lane state, full scans, deltas and rendering),
 `_UnitFrames` (the Auras element: `UNIT_AURA` and identity dispatch, enable and
 disable, event lists) and `_Requests` (the refresh and apply service and its
-combat deferral). They share internals only through `A3._ClassicCompile` and
+combat deferral). `_Preview` follows them (the menu dispel overlay and symbol
+previews). They share internals only through `A3._ClassicCompile` and
 `A3._ClassicBackend`. The compile file owns lane config compilation: the one
 lane schema that unit, group and custom-container lanes all fill, lane specs,
 filters, blacklist hashes, dispel visuals and sort comparators. The backend

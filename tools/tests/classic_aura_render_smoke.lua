@@ -304,8 +304,7 @@ _G.AuraUtil = {}
 assert(loadfile(corePath))("MidnightSimpleUnitFrames", namespace)
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(root, "Vanilla", namespace, {
-    "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_Preview.lua",
-    "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
+    "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
 })
 if visualsPath then
     assert(loadfile(visualsPath))("MidnightSimpleUnitFrames", namespace)
@@ -320,6 +319,7 @@ for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes" }) do
 end
 assert(loadfile(backendPath))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(classicBackend .. "Requests.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(classicBackend .. "Preview.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(registered, "Classic aura element did not register")
 
 local frame = setmetatable({

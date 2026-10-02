@@ -229,7 +229,7 @@ local function Boot(withFeatures, client)
         assert(loadfile(base .. "MSUF_Auras3_Features.lua"))("MidnightSimpleUnitFrames", namespace)
     end
     assert(loadfile(base .. "MSUF_Auras3_Compile.lua"))("MidnightSimpleUnitFrames", namespace)
-    for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests" }) do
+    for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests", "Preview" }) do
         assert(loadfile(base .. "MSUF_Auras3_" .. module .. ".lua"))("MidnightSimpleUnitFrames", namespace)
     end
     Check(element, "Classic aura element did not register")

@@ -1,11 +1,28 @@
--- InstallClassicAuraPreview: isolated ownership, bound once during addon initialization.
+--- Game/Classic/Auras/MSUF_Auras3_Preview.lua
+--- The Menu2 dispel overlay and dispel symbol previews of the Classic aura
+--- backend: the preview modes and scopes the menu pages set, the per-frame
+--- preview render through the Classic visuals, and the symbol drag handler.
+--- Every entry point is a cold path; UNIT_AURA never reaches this file.
+---
+--- Game/<Flavor>/Auras.xml loads it after the unit-frame aura backend
+--- (Requests.lua last). It imports the compiler at load time and installs only
+--- when that backend loaded, as Requests.lua's installer call used to.
+if not (select(2, ...) and select(2, ...).Client and select(2, ...).Client.IsClassic) then return end
 local _, MSUF = ...
-MSUF.InstallClassicAuraPreview = function(dependencies)
-local A3 = dependencies.A3
-local CompileFrameAuraVisual = dependencies.CompileFrameAuraVisual
-local ExportPublic = dependencies.ExportPublic
-local UF = dependencies.UF
-local CombatBlocked = dependencies.CombatBlocked
+MSUF = MSUF or (_G.MSUF_NS) or {}
+local A3 = MSUF.MSUF_Auras3
+local Backend = type(A3) == "table" and A3._ClassicBackend
+if not (Backend and Backend.Requests) or Backend.Preview then return end
+local Compile = A3._ClassicCompile
+local Preview = {}
+
+local UF = MSUF.UF
+local ExportPublic = MSUF.ExportPublic
+local type, tostring, pairs = type, tostring, pairs
+
+local CompileFrameAuraVisual = Compile.CompileFrameAuraVisual
+local CombatBlocked = Compile.AuraRuntimeCombatBlocked
+
 local function NormalizePreviewScope(scope)
     scope = tostring(scope or "shared"):lower()
     if scope == "" or scope == "all" or scope == "global" then return "shared" end
@@ -108,4 +125,5 @@ ExportPublic("MSUF_SetDispelSymbolPreview", A3.SetDispelSymbolPreview)
 ExportPublic("MSUF_RefreshDispelSymbolPreview", A3.RefreshDispelSymbolPreview)
 ExportPublic("MSUF_ApplyDispelSymbolPreviewToFrame", ApplySymbolPreview)
 ExportPublic("MSUF_SetDispelSymbolPreviewMoveHandler", A3.SetDispelSymbolPreviewMoveHandler)
-end
+
+Backend.Preview = Preview

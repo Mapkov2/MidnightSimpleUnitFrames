@@ -18,7 +18,6 @@ local Compile = A3._ClassicCompile
 local Requests = {}
 
 local UF = MSUF.UF
-local ExportPublic = MSUF.ExportPublic
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local math_max = math.max
 local CreateFrame = _G.CreateFrame
@@ -27,7 +26,6 @@ local C_Timer = _G.C_Timer
 local MANAGED_UNITS = Compile.MANAGED_UNITS
 local NormalizeRuntimeUnit = Compile.NormalizeRuntimeUnit
 local WipeTable = Compile.WipeTable
-local CompileFrameAuraVisual = Compile.CompileFrameAuraVisual
 local CombatBlocked = Compile.AuraRuntimeCombatBlocked
 
 function A3._EnsureDeferredAuraRuntimeDriver()
@@ -397,14 +395,6 @@ function A3._FlushDeferredAuraRuntime()
     A3._NotifyAuraColdpathPreview(reason, previewScope)
     return true
 end
-
-MSUF.InstallClassicAuraPreview({
-    A3 = A3,
-    CompileFrameAuraVisual = CompileFrameAuraVisual,
-    ExportPublic = ExportPublic,
-    UF = UF,
-    CombatBlocked = CombatBlocked,
-})
 
 --- Drops one unit's cached configs (the menu apply service and scoped
 --- refreshes call it before re-applying that unit). Every other unit keeps its

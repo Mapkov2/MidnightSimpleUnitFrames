@@ -304,9 +304,6 @@ local function PrepareDirectContracts(source, namespace)
     if Uses("local Shape = A3.IconShape") then
         assert(originalLoadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
     end
-    if Uses("MSUF.InstallClassicAuraPreview({") then
-        assert(originalLoadfile("MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Preview.lua"))("MidnightSimpleUnitFrames", namespace)
-    end
     if Uses("M.InstallColorPicker({") then
         assert(originalLoadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua"))("MidnightSimpleUnitFrames", namespace)
     end

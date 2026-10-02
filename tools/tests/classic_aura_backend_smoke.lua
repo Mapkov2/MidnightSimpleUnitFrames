@@ -107,6 +107,7 @@ for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes" }) do
 end
 assert(loadfile(classicPath))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(classicBackend .. "Requests.lua"))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(classicBackend .. "Preview.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(retailPath))("MidnightSimpleUnitFrames", namespace)
 
 assert(registrations == 1, "Retail aura backend registered after Classic ownership")

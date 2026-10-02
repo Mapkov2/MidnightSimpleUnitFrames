@@ -239,10 +239,11 @@ local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 local chain = {
     "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
-    "Game/Classic/Auras/MSUF_Auras3_Preview.lua", "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
     "Game/Classic/Auras/MSUF_Auras3_Buttons.lua", "Game/Classic/Auras/MSUF_Auras3_Filters.lua",
     "Game/Classic/Auras/MSUF_Auras3_FrameVisuals.lua", "Game/Classic/Auras/MSUF_Auras3_Lanes.lua",
     "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua", "Game/Classic/Auras/MSUF_Auras3_Requests.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Preview.lua",
 }
 local overridePaths = {}
 for relative, path in pairs(overrides) do overridePaths[ADDON .. relative] = path end
@@ -1164,6 +1165,10 @@ do
         "F14: the Classic backend calls the A3.CooldownText hook again, which no Classic file defines")
     assert(type(_G.MSUF_SetDispelOverlayPreview) == "function" and type(_G.MSUF_SetDispelSymbolPreview) == "function",
         "F14: precondition: the live Classic dispel previews are gone")
+    -- The dispel previews are an ordinary module loaded after the backend, not an
+    -- installer closure the backend calls.
+    assert(namespace.InstallClassicAuraPreview == nil and type(A3._ClassicBackend.Preview) == "table",
+        "F14: the Classic dispel previews are installed by a closure again")
 end
 
 -- F8, F9, F4. Visuals drawn once per config, one shared timer driver, live buckets -------
