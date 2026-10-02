@@ -93,6 +93,27 @@ for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
     UNIT_FLAG["arena" .. i] = "showArena"
 end
 
+--- Classic aura sort modes. SortMode parses the sort names the shared menu
+--- writes into these, and every lane carries one as lane.sortOrder.
+local SORT_MODE = {
+    ARRIVAL = 0,         -- aura instance ID; Reverse turns it into newest first
+    PLAYER_FIRST = 1,    -- the menu's Default: own auras, then castable ones, then ID
+    DURATION = 2,        -- longest first, own auras first on ties
+    EXPIRATION = 3,      -- soonest expiry first, own auras first on ties
+    EXPIRATION_ONLY = 4, -- soonest expiry first, then ID
+    NAME = 5,            -- by name, own auras first on ties
+    NAME_ONLY = 6,       -- by name, then ID
+}
+--- The modes whose comparators read the lane's "cast by the player" answers.
+local SORT_READS_OWNERSHIP = {
+    [SORT_MODE.PLAYER_FIRST] = true, [SORT_MODE.DURATION] = true,
+    [SORT_MODE.EXPIRATION] = true, [SORT_MODE.NAME] = true,
+}
+--- The time-keyed modes, the only ones an in-place refresh can reorder.
+local SORT_REORDERS_ON_UPDATE = {
+    [SORT_MODE.DURATION] = true, [SORT_MODE.EXPIRATION] = true, [SORT_MODE.EXPIRATION_ONLY] = true,
+}
+
 local DEFAULT_SHARED = {
     showBuffs = true,
     showDebuffs = true,
@@ -111,7 +132,7 @@ local DEFAULT_SHARED = {
     perRow = 12,
     maxBuffs = 12,
     maxDebuffs = 12,
-    sortOrder = 1,
+    sortOrder = SORT_MODE.PLAYER_FIRST,
     growth = "RIGHT",
     rowWrap = "DOWN",
     offsetX = 0,
@@ -388,13 +409,13 @@ end
 --- slots: a Custom Priority container keeps arrival order, like INSTANCE_ID.
 local function SortMode(value, fallback)
     value = tostring(value or ""):upper():gsub("[%s%-]+", "_")
-    if value == "DEFAULT" or value == "PLAYER" then return 1 end
-    if value == "DURATION" or value == "DURATION_ONLY" or value == "BIG_DEFENSIVE" then return 2 end
-    if value == "EXPIRATION" or value == "TIME_REMAINING" or value == "TIME" then return 3 end
-    if value == "EXPIRATION_ONLY" then return 4 end
-    if value == "NAME" then return 5 end
-    if value == "NAME_ONLY" then return 6 end
-    if value == "INSTANCE_ID" or value == "CUSTOM_PRIORITY" then return 0 end
+    if value == "DEFAULT" or value == "PLAYER" then return SORT_MODE.PLAYER_FIRST end
+    if value == "DURATION" or value == "DURATION_ONLY" or value == "BIG_DEFENSIVE" then return SORT_MODE.DURATION end
+    if value == "EXPIRATION" or value == "TIME_REMAINING" or value == "TIME" then return SORT_MODE.EXPIRATION end
+    if value == "EXPIRATION_ONLY" then return SORT_MODE.EXPIRATION_ONLY end
+    if value == "NAME" then return SORT_MODE.NAME end
+    if value == "NAME_ONLY" then return SORT_MODE.NAME_ONLY end
+    if value == "INSTANCE_ID" or value == "CUSTOM_PRIORITY" then return SORT_MODE.ARRIVAL end
     return fallback
 end
 
@@ -833,14 +854,14 @@ local function SortAurasNameOnly(a, b)
 end
 
 SortComparator = function(mode)
-    if mode == 1 then return SortAurasDefault end
-    if mode == 2 then return SortAurasDurationDesc end
-    if mode == 3 then return SortAurasExpiration end
-    if mode == 4 then return SortAurasExpirationOnly end
-    if mode == 5 then return SortAurasName end
-    if mode == 6 then return SortAurasNameOnly end
+    if mode == SORT_MODE.PLAYER_FIRST then return SortAurasDefault end
+    if mode == SORT_MODE.DURATION then return SortAurasDurationDesc end
+    if mode == SORT_MODE.EXPIRATION then return SortAurasExpiration end
+    if mode == SORT_MODE.EXPIRATION_ONLY then return SortAurasExpirationOnly end
+    if mode == SORT_MODE.NAME then return SortAurasName end
+    if mode == SORT_MODE.NAME_ONLY then return SortAurasNameOnly end
     -- Arrival order (instance ID); what Reverse turns into newest first.
-    if mode == 0 then return SortAurasID end
+    if mode == SORT_MODE.ARRIVAL then return SortAurasID end
     return SortAuras
 end
 
@@ -866,15 +887,15 @@ function LaneSchema.FilterTokens(lane, filter, nativePlayerFilter, bossFilter)
 end
 
 --- Sort mode (SortMode) and Reverse. Arrival order renders unsorted unless it
---- is reversed. A refresh can move an aura only in the time-keyed modes (2
---- duration, 3 expiration, 4 expiration only); every other key is fixed for
---- the aura's lifetime, and an ownership flip is caught by the update path.
+--- is reversed. A refresh can move an aura only in the time-keyed modes
+--- (SORT_REORDERS_ON_UPDATE); every other key is fixed for the aura's
+--- lifetime, and an ownership flip is caught by the update path.
 function LaneSchema.Ordering(lane, sortOrder, sortReverse)
     lane.sortOrder = sortOrder
     lane.sortComparator = SortComparator(sortOrder)
     lane.sortReverse = sortReverse == true
-    lane.naturalOrder = sortOrder == 0 and sortReverse ~= true
-    lane.reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4
+    lane.naturalOrder = sortOrder == SORT_MODE.ARRIVAL and sortReverse ~= true
+    lane.reorderOnUpdate = SORT_REORDERS_ON_UPDATE[sortOrder] == true
 end
 
 --- The global text colours (Colors page): the countdown colour buckets with
@@ -1173,7 +1194,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         ReadBool(sharedLayout, nil, "useDebuffTypeBorders", false), false) or "OFF"
     local needsPlayerFlag = (filterPlan and filterPlan.needsPlayerFlag == true)
         or onlyMine == true or ownHighlight == true or (visualNeedsPlayer == true and visualDirect ~= true)
-        or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
+        or SORT_READS_OWNERSHIP[sortOrder] == true
 
     local lane = {
         kind = kind,
@@ -1336,7 +1357,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local needsPlayerFlag = source.preferPlayer == true
         or (filterPlan and filterPlan.needsPlayerFlag == true)
         or (kind == "debuff" and visual and visual.needsPlayerFlag == true and visualDirect ~= true)
-        or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
+        or SORT_READS_OWNERSHIP[sortOrder] == true
 
     local lane = {
         kind = kind,
@@ -1645,6 +1666,8 @@ A3._ClassicCompile = {
     LaneSchema = LaneSchema,
     BASE_LANE_ORDER = BASE_LANE_ORDER,
     SortMode = SortMode,
+    SORT_MODE = SORT_MODE,
+    SORT_READS_OWNERSHIP = SORT_READS_OWNERSHIP,
     BindFrameUnit = BindFrameUnit,
     ReadBlacklistHidePermanent = ReadBlacklistHidePermanent,
     AuraRuntimeCombatBlocked = AuraRuntimeCombatBlocked,

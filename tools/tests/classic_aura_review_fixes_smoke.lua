@@ -1678,6 +1678,12 @@ end
 -- with a third while ranking against each other.
 do
     local Compile = assert(A3._ClassicCompile, "W3.5: the Classic compile module is missing")
+    -- The named modes keep the values every lane compiles (lane.sortOrder).
+    local M = assert(Compile.SORT_MODE, "W3.5: the Classic sort modes are not named")
+    assert(M.ARRIVAL == 0 and M.PLAYER_FIRST == 1 and M.DURATION == 2 and M.EXPIRATION == 3
+        and M.EXPIRATION_ONLY == 4 and M.NAME == 5 and M.NAME_ONLY == 6, "W3.5: a Classic sort mode changed its value")
+    assert(Compile.SortMode("DEFAULT") == M.PLAYER_FIRST and Compile.SortMode("INSTANCE_ID") == M.ARRIVAL,
+        "W3.5: the sort-name parser changed")
     local auras, mine = {}, {}
     local canApply, durations, expirations, names = { true, false, nil }, { 30, 10 }, { 70, 0, 50 }, { "B", "A" }
     for i = 1, 12 do
