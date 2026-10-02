@@ -153,32 +153,8 @@ local function GFDispelSymbolSectionHeight(ctx)
     return width >= 760 and 368 or 564
 end
 local function BindExclusivePowerFill(ctx, parent, label, x, y, width, key, peerKey, historyLabel)
-    local control = W.ToggleAt(parent, label, x, y, width)
-    M.BindBoolWidget(ctx, control,
-        function() return Bool(CurrentScope(), key, false) end,
-        function(value)
-            value = value == true
-            local scope = CurrentScope()
-            local function Write()
-                local conf = Conf(scope)
-                local changed = conf[key] ~= value
-                conf[key] = value
-                if value and conf[peerKey] ~= false then
-                    conf[peerKey] = false
-                    changed = true
-                end
-                if not changed then return false end
-                QueueGF(scope, "visual")
-                RequestGroupBarsRefresh(ctx, "gf-power-fill-mode")
-                return true
-            end
-            if type(M.RunWithHistory) == "function" then
-                return M.RunWithHistory(historyLabel, "group:" .. tostring(scope) .. ":powerFillMode", Write)
-            end
-            return Write()
-        end,
-        ControlMeta(ctx, "field." .. tostring(key)))
-    return control
+    return GP.BindExclusiveScopeToggle(ctx, W.ToggleAt(parent, label, x, y, width), key, peerKey, historyLabel,
+        "powerFillMode", function() RequestGroupBarsRefresh(ctx, "gf-power-fill-mode") end)
 end
 
 local function BuildGFDispelSymbolSection(ctx, b)

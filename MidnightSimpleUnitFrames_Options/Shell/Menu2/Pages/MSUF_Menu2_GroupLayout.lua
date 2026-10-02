@@ -61,31 +61,9 @@ local function AttachGroupFocus(widget, component)
 end
 local function BindExclusiveFillToggle(ctx, parent, label, x, y, width, key, peerKey, historyLabel)
     local control = AttachGroupFocus(W.ToggleAt(parent, label, x, y, width), "bars")
-    M.BindBoolWidget(ctx, control,
-        function() return Bool(CurrentScope(), key, false) end,
-        function(value)
-            value = value == true
-            local scope = CurrentScope()
-            local function Write()
-                local conf = Conf(scope)
-                local changed = conf[key] ~= value
-                conf[key] = value
-                if value and conf[peerKey] ~= false then
-                    conf[peerKey] = false
-                    changed = true
-                end
-                if not changed then return false end
-                QueueGF(scope, "visual")
-                if M.RequestRefresh then M.RequestRefresh(ctx, "group-health-fill-mode") end
-                return true
-            end
-            if type(M.RunWithHistory) == "function" then
-                return M.RunWithHistory(historyLabel, "group:" .. tostring(scope) .. ":healthFillMode", Write)
-            end
-            return Write()
-        end,
-        ControlMeta(ctx, "field." .. tostring(key)))
-    return control
+    return GP.BindExclusiveScopeToggle(ctx, control, key, peerKey, historyLabel, "healthFillMode", function()
+        if M.RequestRefresh then M.RequestRefresh(ctx, "group-health-fill-mode") end
+    end)
 end
 local function CurrentGroupHealthMode()
     return tostring(Val(CurrentScope(), "gfBarMode", "GLOBAL") or "GLOBAL"):upper()

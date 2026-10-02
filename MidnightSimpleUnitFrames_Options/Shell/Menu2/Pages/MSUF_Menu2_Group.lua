@@ -936,6 +936,35 @@ local function BindScopeToggle(ctx, widget, key, default, mode, semanticPath)
         ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key)))
     return widget
 end
+--- Binds one of two mutually exclusive fill toggles (smooth vs chunked):
+--- turning key on turns peerKey off, in one history step named historyField.
+local function BindExclusiveScopeToggle(ctx, control, key, peerKey, historyLabel, historyField, refresh)
+    M.BindBoolWidget(ctx, control,
+        function() return Bool(CurrentScope(), key, false) end,
+        function(value)
+            value = value == true
+            local scope = CurrentScope()
+            local function Write()
+                local conf = Conf(scope)
+                local changed = conf[key] ~= value
+                conf[key] = value
+                if value and conf[peerKey] ~= false then
+                    conf[peerKey] = false
+                    changed = true
+                end
+                if not changed then return false end
+                QueueGF(scope, "visual")
+                refresh()
+                return true
+            end
+            if type(M.RunWithHistory) == "function" then
+                return M.RunWithHistory(historyLabel, "group:" .. tostring(scope) .. ":" .. historyField, Write)
+            end
+            return Write()
+        end,
+        GroupControlMeta(ctx, "field." .. tostring(key)))
+    return control
+end
 local function BindScopeSlider(ctx, widget, key, default, mode, semanticPath)
     local metadata = ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key))
     metadata.step, metadata.roundStep = 1, true
@@ -1801,6 +1830,7 @@ M.Assign(GroupPage, {
     RefreshContext = RefreshContext,
     ScopeSection = ScopeSection,
     BindScopeToggle = BindScopeToggle,
+    BindExclusiveScopeToggle = BindExclusiveScopeToggle,
     BindScopeSlider = BindScopeSlider,
     BindScopeDropdown = BindScopeDropdown,
     ScopeDropdown = ScopeDropdown,
