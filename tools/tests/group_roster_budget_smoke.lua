@@ -130,7 +130,7 @@ Check(pairScans == 0, "the repaired DB did not return to the scan-free path")
 -- Measurements
 ---------------------------------------------------------------------------
 local results = {}
-local function Measure(case, fn)
+local function MeasureOnce(fn)
     local ticks = 0
     local function Tick() ticks = ticks + 1 end
     collectgarbage("collect")
@@ -146,6 +146,22 @@ local function Measure(case, fn)
     debug.sethook()
     kb = collectgarbage("count") - kb
     collectgarbage("restart")
+    return ticks, kb
+end
+
+-- repeatable: the case leaves the state it found (a settle), so it runs twice
+-- and keeps the smaller reading. The full collect before each run can shrink
+-- Lua 5.1's string table; regrowing it then lands in whichever run crosses the
+-- next power of two, which depends on how many strings the whole tree holds,
+-- not on the measured path. A resize happens at most once per pair, so the
+-- minimum is the path's own cost.
+local function Measure(case, fn, repeatable)
+    local ticks, kb = MeasureOnce(fn)
+    if repeatable then
+        local ticks2, kb2 = MeasureOnce(fn)
+        if ticks2 < ticks then ticks = ticks2 end
+        if kb2 < kb then kb = kb2 end
+    end
     results[#results + 1] = { case = case, k = ticks, kb = kb }
     if h.nativeCounts then
         h.nativeCounts[case] = h.nativeCalls
@@ -178,7 +194,7 @@ Check(#h:Children(partyHeader) == 5 and GF.FrameForUnit("party4") ~= nil, "the j
 Measure("party_settle", function()
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
-end)
+end, true)
 Measure("party_apply", function()
     GF.RefreshVisuals(nil, GF.DIRTY_ALL)
 end)
@@ -193,13 +209,14 @@ local raidChildren = 0
 GF.ForEachHeader("raid", function(header) raidChildren = raidChildren + #h:Children(header) end)
 Check(raidChildren >= 20 and GF.FrameForUnit("raid20") ~= nil, "the raid did not build twenty styled frames")
 -- Warm the unchanged-roster path before measuring its steady-state cost.
--- This keeps one-time VM/string-table growth out of the allocation budget.
+-- This keeps one-time VM growth out of the allocation budget; the repeat
+-- inside Measure keeps a string-table resize out of it.
 h:Event("GROUP_ROSTER_UPDATE")
 h:RunTimers()
 Measure("raid_settle", function()
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
-end)
+end, true)
 Measure("raid_apply", function()
     GF.RefreshVisuals(nil, GF.DIRTY_ALL)
 end)
