@@ -2248,8 +2248,18 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
   -- This compiled non-stripe route opens for the plain-positive absorb verdict
   -- published by the data-event owner, and for a protected absorb while the
   -- partial overlay is on: that one renders through the calculator flag and
-  -- must never reach the plain dedupe compare below.
+  -- must never reach the plain dedupe compare below. With the glow anchored
+  -- for the live layout, a protected tick is exactly the calculator render;
+  -- anything else takes the authoritative UpdateOverAbsorbGlow.
   if frame._msufPredictionAbsorbSecret == true then
+    local holder = frame.overAbsorbGlowBar
+    if holder and frame._msufPredictionOverAbsorbOverlay == true
+      and holder._msufOverAbsorbReverse == (frame._msufPredictionHpReverse == true)
+      and holder._msufOverAbsorbAnchor == (frame.hpBar or frame.Health) then
+      frame._msufPredictionFullHealthAlphaDirty = true
+      if not ShowProtectedOverAbsorb(frame, holder, unit, false) then HideOverAbsorbGlow(frame) end
+      return
+    end
     return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true, nil, true)
   end
   -- Steady-tick dedupe (pure overlay, plain absorb). The overshield verdict is

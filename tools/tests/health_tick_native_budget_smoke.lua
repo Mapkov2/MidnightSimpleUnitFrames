@@ -82,13 +82,14 @@ local PLAIN_BUDGETS = {
 local BUDGETS = {
     Mainline = {
         -- W4-C1 glow: one calculator read, the step curve on that calculator,
-        -- one flag sink, the cached texture (6 glow natives -> 4).
+        -- one flag sink, the cached texture (6 glow natives -> 4); the health
+        -- follower renders a warm protected tick directly (VM 875 -> 846).
         ["group protected"] = { natives = { UnitHealthPercent = 4, UnitGetDetailedHealPrediction = 1,
             ["calc:GetDamageAbsorbs"] = 1, ["calc:EvaluateCurrentHealthPercent"] = 1, SetAlphaFromBoolean = 1,
-            SetValue = 2, SetVertexColor = 1, UnitIsDeadOrGhost = 1, UnitIsDead = 1 }, predicates = 8, k = 893 },
+            SetValue = 2, SetVertexColor = 1, UnitIsDeadOrGhost = 1, UnitIsDead = 1 }, predicates = 8, k = 863 },
         ["unit protected"] = { natives = { UnitHealthPercent = 4, UnitGetDetailedHealPrediction = 1,
             ["calc:GetDamageAbsorbs"] = 1, ["calc:EvaluateCurrentHealthPercent"] = 1, SetAlphaFromBoolean = 1,
-            SetValue = 2, SetVertexColor = 1 }, predicates = 4, k = 692 },
+            SetValue = 2, SetVertexColor = 1 }, predicates = 4, k = 662 },
     },
     Vanilla = {},
 }

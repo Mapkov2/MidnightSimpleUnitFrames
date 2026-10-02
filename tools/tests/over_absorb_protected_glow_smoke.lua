@@ -208,6 +208,22 @@ local function Run(label, fn)
     Check(ok, label .. ": " .. tostring(err))
 end
 
+-- What the client draws: holder fill, holder alpha and texture alpha, each
+-- secret resolved to the plain value behind it.
+local function Drawn(frame)
+    local holder = frame.overAbsorbGlowBar
+    if not (holder and holder.shown) then return false end
+    -- The holder is a 0..1 StatusBar fed the raw absorb: a zero draws no fill.
+    if holder.value ~= nil and not (Plain(holder.value) > 0) then return false end
+    local holderAlpha = Plain(holder.alpha)
+    local glow = holder.fill
+    local glowAlpha = glow and glow.alpha or 1
+    if glow and glowAlpha == "from flag" then
+        if Plain(glow.alphaBoolean) == true then glowAlpha = Plain(glow.alphaIfTrue) else glowAlpha = Plain(glow.alphaIfFalse) end
+    end
+    return (holderAlpha or 0) * (glowAlpha or 0) > 0
+end
+
 -- 1. Overlay only, protected absorb and health.
 Run("overlay only", function()
     unitState.protected, unitState.hp, unitState.absorb, unitState.incoming = true, 0.5, 0.6, 0
@@ -285,6 +301,41 @@ Run("health follower", function()
     registered.UpdateGlowHealthFast(frame, "UNIT_HEALTH", "target")
     Check(frame.overAbsorbGlowBar and frame.overAbsorbGlowBar:IsShown(),
         "health follower: a health tick with a protected absorb does not render the glow")
+
+    -- Warm layout: the tick is the calculator render alone, and it draws.
+    unitState.hp, unitState.absorb, unitState.incoming = 0.55, 0.6, 0
+    local holder = frame.overAbsorbGlowBar
+    -- The absorb-data owner feeds the holder its raw absorb on
+    -- UNIT_ABSORB_AMOUNT_CHANGED (writeAbsorbValue).
+    UpdateOverAbsorbGlow(frame, {}, "target", nil, nil, Secret("absorb", 600), false, true, true)
+    local reads = detailedReads
+    registered.UpdateGlowHealthFast(frame, "UNIT_HEALTH", "target")
+    Check(detailedReads == reads + 1 and Drawn(frame),
+        "health follower: a warm protected tick does not render the overflow from one calculator read")
+    unitState.hp = 1
+    registered.UpdateGlowHealthFast(frame, "UNIT_HEALTH", "target")
+    Check(not Drawn(frame), "health follower: a warm protected tick at full health still draws the partial glow")
+
+    -- No calculator on a warm layout: hide, never keep the last flag up.
+    unitState.hp = 0.55
+    registered.UpdateGlowHealthFast(frame, "UNIT_HEALTH", "target")
+    local calc = frame._msufPredictionOverAbsorbCalc
+    frame._msufPredictionOverAbsorbCalc, calculatorAvailable = nil, false
+    registered.UpdateGlowHealthFast(frame, "UNIT_HEALTH", "target")
+    Check(not holder:IsShown(), "health follower: a warm tick without a calculator kept the old glow")
+    frame._msufPredictionOverAbsorbCalc, calculatorAvailable = calc, true
+
+    -- A changed layout goes through the authoritative path, which re-anchors.
+    unitState.hp = 0.55
+    frame._msufPredictionHpReverse = true
+    registered.UpdateGlowHealthFast(frame, "UNIT_HEALTH", "target")
+    Check(holder._msufOverAbsorbReverse == true and Drawn(frame),
+        "health follower: a reversed health bar kept the glow on the old edge")
+
+    -- Overlay switched off: the authoritative path hides.
+    frame._msufPredictionOverAbsorbOverlay = nil
+    registered.UpdateGlowHealthFast(frame, "UNIT_HEALTH", "target")
+    Check(not holder:IsShown(), "health follower: the glow stays up after the overlay was switched off")
 end)
 
 -- 5. Without the calculator nothing is guessed.
@@ -298,21 +349,7 @@ Run("no calculator", function()
     calculatorAvailable = true
 end)
 
--- 6. What the client draws, against the plain rule.
-local function Drawn(frame)
-    local holder = frame.overAbsorbGlowBar
-    if not (holder and holder.shown) then return false end
-    -- The holder is a 0..1 StatusBar fed the raw absorb: a zero draws no fill.
-    if holder.value ~= nil and not (Plain(holder.value) > 0) then return false end
-    local holderAlpha = Plain(holder.alpha)
-    local glow = holder.fill
-    local glowAlpha = glow and glow.alpha or 1
-    if glow and glowAlpha == "from flag" then
-        if Plain(glow.alphaBoolean) == true then glowAlpha = Plain(glow.alphaIfTrue) else glowAlpha = Plain(glow.alphaIfFalse) end
-    end
-    return (holderAlpha or 0) * (glowAlpha or 0) > 0
-end
-
+-- 6. What the client draws, against the plain rule (Drawn is above).
 local function Rule(hp, absorb, incoming, overlay, stripe)
     if absorb <= 0 then return false end
     if hp >= 1 then return stripe end
