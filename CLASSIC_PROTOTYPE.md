@@ -280,7 +280,11 @@ beta), reads the `_Mainline.toc` files and reports the Standard game mode.
 `GameEvent.RegisterCamelotEvents`, which the LoadFirst Blizzard_Game addon
 defines only in its camelot-gated file, before any addon loads. On Forever,
 `Family` and `Flavor` stay `Mainline` and `IsRetail` stays true, whatever
-project ID the client reports; a Classic `X-MSUF-Client` tag still wins. Forever
+project ID the client reports; a Classic `X-MSUF-Client` tag still wins. Build
+1.60.1.70170 declares `WOW_PROJECT_CAMELOT` (18). With the Forever marker,
+that declared project is recognized without a login warning; earlier builds
+using the Mainline project remain supported. The project constant alone does
+not replace the marker. Forever
 has no arena UI, so arena units are unsupported there (0 arena slots). It has
 5-player groups and raids only, so `Client.SupportsGroupKind("mythicraid")` is
 false there and the Mythic Raid scope stays out of the menu. Hunter pet

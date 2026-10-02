@@ -190,6 +190,7 @@ UnitStagger	*	unit	Blizzard unit-state API; the harness answers it with a stub i
 UnitThreatSituation	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitWatchRegistered	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnregisterStateDriver	*	api	Blizzard client API the harness does not model
+WOW_PROJECT_CAMELOT	*	constant	Optional Forever 1.60.1.70170 project constant from Blizzard_ProjectConstants; Initialize compares it only when present and the camelot marker places Forever
 _ECME_GetBarFrame	*	thirdparty	third-party addon global MSUF probes to detect that addon
 hasanysecretvalues	*	secret	12.x secret-value API the harness does not model
 hash_SlashCmdList	*	table	Blizzard slash-token hash; MSUF probes it before claiming /rl

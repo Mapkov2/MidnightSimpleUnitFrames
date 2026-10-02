@@ -4,6 +4,9 @@ This directory is the client boundary for MSUF, following ElvUI's layout:
 `Game/Shared` plus one folder per client family or flavor that needs its own
 source. `Classic`, `Vanilla`, `TBC` and `Mists` belong to the Classic family;
 `Forever` is Mainline-family source and loads in the Mainline build.
+The camelot-only `GameEvent.RegisterCamelotEvents` marker owns Forever
+placement. From build 1.60.1.70170, its declared `WOW_PROJECT_CAMELOT`
+project is also recognized; older Mainline-project builds remain supported.
 
 - `Shared` contains bootstrap code that must behave identically everywhere,
   plus the modules that Classic clients and the Mainline build both load
