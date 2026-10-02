@@ -1114,10 +1114,16 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
         end
     end
     if #selected == 0 then return V.HideDispelSymbols(frame, preview) end
+    --- An explicit strata stays on the host until it is written again, so AUTO
+    --- restores the frame's strata instead of keeping the last explicit one.
+    --- The signature keys on the resolved strata: keyed on "AUTO", a later
+    --- change of the frame's own strata never reached the host.
+    local strata = cfg.strata
+    if strata == nil or strata == "AUTO" then strata = A3.ReadParentFrameStrata(frame) end
     local signature = table.concat(selected, ",") .. ":" .. tostring(cfg.style) .. ":"
         .. tostring(cfg.size) .. ":" .. tostring(cfg.spacing) .. ":" .. tostring(cfg.growth)
         .. ":" .. tostring(cfg.anchor) .. ":" .. tostring(cfg.x) .. ":" .. tostring(cfg.y)
-        .. ":" .. tostring(cfg.alpha) .. ":" .. tostring(cfg.layer) .. ":" .. tostring(cfg.strata)
+        .. ":" .. tostring(cfg.alpha) .. ":" .. tostring(cfg.layer) .. ":" .. tostring(strata)
         -- Stamped by the compile, never rebuilt here: a colour override has to
         -- invalidate the cached signature or the tiles never repaint.
         .. ":" .. tostring(cfg.tintKey or "")
@@ -1151,13 +1157,7 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
     host:SetSize(horizontal and (#selected * size + math_max(0, #selected - 1) * spacing) or size,
         horizontal and size or (#selected * size + math_max(0, #selected - 1) * spacing))
     if host.SetAlpha then host:SetAlpha(Clamp01(cfg.alpha, 1)) end
-    if host.SetFrameStrata then
-        --- An explicit strata stays on the host until it is written again, so AUTO
-        --- restores the frame's strata instead of keeping the last explicit one.
-        local strata = cfg.strata
-        if strata == nil or strata == "AUTO" then strata = A3.ReadParentFrameStrata(frame) end
-        if strata then host:SetFrameStrata(strata) end
-    end
+    if host.SetFrameStrata and strata then host:SetFrameStrata(strata) end
     if host.SetFrameLevel and frame.GetFrameLevel then host:SetFrameLevel((frame:GetFrameLevel() or 0) + Clamp(cfg.layer, 8, 0, 30)) end
     for i = 1, #selected do
         local tile = host.tiles[i]

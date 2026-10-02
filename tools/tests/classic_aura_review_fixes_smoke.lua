@@ -1447,6 +1447,13 @@ do
         V.UpdateDispelSymbols(frame, visual, { Magic = true, Curse = true }, preview)
         assert(host:GetFrameStrata() == "MEDIUM",
             "C3.5: an AUTO " .. label .. " symbol did not take its frame's strata")
+        -- W3.6 (re-review 2026-10-02): the signature keyed on "AUTO", so the same
+        -- symbols on a frame that changed strata kept the old one.
+        frame:SetFrameStrata("DIALOG")
+        V.UpdateDispelSymbols(frame, visual, { Magic = true, Curse = true }, preview)
+        assert(host:GetFrameStrata() == "DIALOG",
+            "W3.6: an AUTO " .. label .. " symbol kept " .. tostring(host:GetFrameStrata())
+            .. " after its frame moved to DIALOG")
     end
     Widget.SetFrameStrata, Widget.GetFrameStrata = savedSet, savedGet
     Widget.SetMovable, Widget.RegisterForDrag = savedMovable, savedDrag
