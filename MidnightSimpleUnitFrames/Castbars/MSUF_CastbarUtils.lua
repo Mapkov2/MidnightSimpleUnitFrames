@@ -912,6 +912,22 @@ local function FitToBoxWidth(fs, text, fitWidth)
     return best, true
 end
 
+--- general.castbarSpellNameShortening / bossCastSpellNameShortening (saved):
+--- the menu writes OFF or ON; older profiles may hold true/false or a larger
+--- mode number, which counts as on. MODE_KEY_MAX bounds the field the cache
+--- key packs (modes above it fold onto it: only on/off is decided).
+local SPELL_NAME_SHORTENING = { OFF = 0, ON = 1, MODE_KEY_MAX = 3 }
+MSUF.Castbars = MSUF.Castbars or {}
+MSUF.Castbars.SpellNameShortening = SPELL_NAME_SHORTENING
+
+local function ShorteningMode(value, fallback)
+    local mode = tonumber(value)
+    if mode then return mode end
+    if value == true then return SPELL_NAME_SHORTENING.ON end
+    if value == false then return SPELL_NAME_SHORTENING.OFF end
+    return fallback
+end
+
 local function GetSpellNameShorteningConfig(frame)
     if not frame then return false end
 
@@ -923,13 +939,11 @@ local function GetSpellNameShorteningConfig(frame)
     -- This runs on every castbar text write, so resolve "is this a boss bar"
     -- once with a plain prefix compare instead of two tostring+pattern passes.
     local isBoss = unit ~= nil and string_sub(tostring(unit), 1, 4) == "boss"
-    local modeValue = general.castbarSpellNameShortening
-    local mode = tonumber(modeValue) or (modeValue == true and 1 or 0)
+    local mode = ShorteningMode(general.castbarSpellNameShortening, SPELL_NAME_SHORTENING.OFF)
     if isBoss and general.bossCastSpellNameShortening ~= nil then
-        local bossMode = general.bossCastSpellNameShortening
-        mode = tonumber(bossMode) or (bossMode == true and 1 or bossMode == false and 0 or mode)
+        mode = ShorteningMode(general.bossCastSpellNameShortening, mode)
     end
-    if mode <= 0 then return false end
+    if mode <= SPELL_NAME_SHORTENING.OFF then return false end
 
     local maxLen = tonumber(general.castbarSpellNameMaxLen) or 30
     local reserved = tonumber(general.castbarSpellNameReservedSpace) or 8
@@ -956,11 +970,12 @@ local function GetSpellNameShorteningConfig(frame)
     if fitWidth < 0 then fitWidth = 0 elseif fitWidth > 4000 then fitWidth = 4000 end
     -- Packed as a number rather than a concatenated string: that concatenation
     -- was the one allocation every text write paid before the cache could even
-    -- be consulted. Every field is clamped below its factor (mode < 4,
-    -- maxLen <= 80 < 128, reserved <= 160 < 256, fitWidth <= 4000 < 4096) so no
-    -- two configurations can pack to the same number. mode only ever decides
-    -- on/off above, so folding 4+ onto 3 costs nothing.
-    local modeKey = mode > 3 and 3 or mode
+    -- be consulted. Every field is clamped below its factor (mode <= MODE_KEY_MAX
+    -- < 4, maxLen <= 80 < 128, reserved <= 160 < 256, fitWidth <= 4000 < 4096)
+    -- so no two configurations can pack to the same number. mode only ever
+    -- decides on/off above, so folding larger modes onto MODE_KEY_MAX costs nothing.
+    local modeKeyMax = SPELL_NAME_SHORTENING.MODE_KEY_MAX
+    local modeKey = mode > modeKeyMax and modeKeyMax or mode
     local revision = tonumber(_G.MSUF_CastbarStyleRevision) or 1
     local cacheKey = (((revision * 4 + modeKey) * 128 + maxLen) * 256 + reserved)
         * 4096 + math_floor(fitWidth + 0.5)

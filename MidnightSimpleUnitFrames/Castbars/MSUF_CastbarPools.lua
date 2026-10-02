@@ -226,6 +226,13 @@ local function SetEventsRegistered(frame, enabled)
     frame._msufCastLifecycleOwned = nil
 end
 
+--- Shows a bar's cast state through the driver (MSUF_CastbarDriver.lua, loaded
+--- before this file): identity and engine publication as on the driver's own
+--- events. Resolved at use, when every castbar file has loaded.
+local function ShowState(frame, state)
+    MSUF.Castbars.Driver.ShowState(frame, state)
+end
+
 local function BuildCastState(frame)
     local unit = frame and frame.unit
     local getEngine = _G.MSUF_GetCastbarEngine
@@ -527,7 +534,7 @@ function Pools.Define(desc)
         -- full visual refresh is only necessary when that geometry changed.
         -- Visual settings already own their explicit force-layout path.
         if refreshLayout then frame:UpdateAnchor(false) end
-        if frame.Cast then frame:Cast(state) end
+        ShowState(frame, state)
         return true
     end
 
@@ -592,8 +599,8 @@ function Pools.Define(desc)
             local frame = EnsureCastbar(index, true)
             castbars[index] = frame
 
-            if frame and UnitExists(frame.unit) and frame.Cast then
-                frame:Cast()
+            if frame and UnitExists(frame.unit) then
+                ShowState(frame)
             end
         end
 
@@ -907,8 +914,8 @@ function Pools.Define(desc)
 
                 if enabled then
                     if frame.UpdateAnchorBase then frame:UpdateAnchorBase() else frame:UpdateAnchor(true) end
-                    if UnitExists(frame.unit) and frame.Cast then
-                        frame:Cast()
+                    if UnitExists(frame.unit) then
+                        ShowState(frame)
                     end
                 else
                     StopCastbar(frame)

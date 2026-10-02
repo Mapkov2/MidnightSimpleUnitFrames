@@ -376,9 +376,26 @@ do
     _G.issecretvalue = function(value) return rawequal(value, SECRET) end
     _G.C_Timer = { After = function() end }
     _G.MSUF_DB = { general = {} }
-    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", NewNamespace())
+    local utilsNamespace = NewNamespace()
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", utilsNamespace)
     local applyTexts = assert(_G.MSUF_CB_ApplyTexts, "MSUF_CB_ApplyTexts missing")
     local refresh = assert(_G.MSUF_RefreshCastbarSpellNameText, "MSUF_RefreshCastbarSpellNameText missing")
+
+    -- The saved shortening modes are named (OFF/ON); legacy booleans and
+    -- larger mode numbers keep their meaning, and the boss override wins.
+    local modes = assert(utilsNamespace.Castbars and utilsNamespace.Castbars.SpellNameShortening,
+        "the spell name shortening modes are not named")
+    Check(modes.OFF == 0 and modes.ON == 1, "the shortening mode values changed")
+    local config = assert(_G.MSUF_GetCastbarSpellNameShorteningConfig, "shortening config missing")
+    local cases = { { 0, false }, { 1, true }, { true, true }, { false, false }, { 3, true }, { 7, true } }
+    for _, case in ipairs(cases) do
+        _G.MSUF_DB.general.castbarSpellNameShortening = case[1]
+        Check((config({ unit = "target" }) == true) == case[2], "shortening " .. tostring(case[1]) .. " decided wrongly")
+    end
+    _G.MSUF_DB.general.castbarSpellNameShortening = modes.ON
+    _G.MSUF_DB.general.bossCastSpellNameShortening = false
+    Check(config({ unit = "boss1" }) == false, "the boss shortening override was ignored")
+    _G.MSUF_DB.general.bossCastSpellNameShortening = nil
 
     for _, mode in ipairs({ 0, 1 }) do
         _G.MSUF_DB.general.castbarSpellNameShortening = mode

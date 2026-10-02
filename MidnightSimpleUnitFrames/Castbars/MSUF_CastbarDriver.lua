@@ -624,6 +624,18 @@ local function ShowActiveState(frame, state)
     PublishState(frame, state)
 end
 
+--- The driver's entry for code that shows a unit's state outside the driver's
+--- own events: the boss and arena pool lifecycle (encounter, opponent and
+--- settings passes). It stores the shown cast's identity and publishes it like
+--- every driver path, so an engine subscriber of a pool unit sees those casts
+--- too. state nil reads the unit's state.
+MSUF.Castbars = MSUF.Castbars or {}
+local Driver = MSUF.Castbars.Driver or {}
+MSUF.Castbars.Driver = Driver
+function Driver.ShowState(frame, state)
+    ShowActiveState(frame, state or BuildState(frame))
+end
+
 local function RefreshFromEngine(frame, event)
     if frame.interrupted then return end
 
