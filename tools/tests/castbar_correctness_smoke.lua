@@ -507,6 +507,13 @@ do
     _G.InCombatLockdown = function() return combat end
     _G.MSUF_DB = { general = { enableFocusKickIcon = false }, focus = {} }
     _G.MSUF_SetFontChecked = function() return true end
+    -- The font providers the preview's time text calls (Castbars_Core and
+    -- Runtime/MSUF_FontRegistry.lua, both loaded before the icon) and the
+    -- focus kick state driver.
+    _G.MSUF_GetFontPath = function() return "Fonts\\FRIZQT__.TTF" end
+    _G.MSUF_GetFontFlags = function() return "OUTLINE" end
+    _G.MSUF_GetConfiguredFontColor = function() return 1, 1, 1 end
+    _G.MSUF_FocusKickDriver_ForceUpdate = function() end
     local ns = NewNamespace()
     ns.Translate = function(text) return LOCALE[text] or text end
     LoadAddonFile("Castbars/MSUF_FocusKickIcon.lua", ns)

@@ -51,6 +51,20 @@ _G.C_Timer = { After = function(_, fn) pending[#pending + 1] = fn end }
 _G.InCombatLockdown = function() return false end
 _G.MSUF_SetFontChecked = function() return true end
 _G.MSUF_DB = { general = { enableFocusKickIcon = true }, focus = {} }
+-- The providers the icon calls; each loads before it in every TOC (Kernel
+-- Util and Libs, Runtime/MSUF_FontRegistry.lua, Castbars_Core, the castbar
+-- manager, the state driver, the interrupt-ready indicator).
+_G.MSUF_GetFontPath = function() return "Fonts\\FRIZQT__.TTF" end
+_G.MSUF_GetFontFlags = function() return "OUTLINE" end
+_G.MSUF_GetConfiguredFontColor = function() return 1, 1, 1 end
+_G.MSUF_MarkFontApplyFailed = NoOp
+_G.MSUF_GetCastbarTimeFormat = function() return "CURRENT" end
+_G.MSUF_RegisterCastbar = NoOp
+_G.MSUF_SetIconTexture = function(texture, icon) texture:SetTexture(icon) end
+_G.MSUF_KickReady_Init = NoOp
+_G.MSUF_KickReady_IsReady = function() return true end
+_G.MSUF_KickReady_EvaluateRGBA = function() return 0.2, 1, 0.2, 1 end
+_G.MSUF_FocusKickDriver_ForceUpdate = NoOp
 
 local ns = { ExportPublic = function(name, value) _G[name] = value return value end }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_FocusKickIcon.lua"))("MidnightSimpleUnitFrames", ns)
