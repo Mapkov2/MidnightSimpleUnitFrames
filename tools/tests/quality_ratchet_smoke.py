@@ -213,7 +213,7 @@ class Check(Tree):
     def test_report_lists_totals_limits_and_the_worst_files(self):
         code, text = run_tool(self.root, "--report", "--top", "2")
         self.assertEqual(code, 0, text)
-        for needle in ("files measured: 2", "totals: lines=", "files above the new-file limits", "worst lines:",
+        for needle in ("files measured: 2", "totals: lines=", "files above the limits", "worst lines:",
                        self.rel):
             self.assertIn(needle, text)
 
@@ -342,6 +342,173 @@ class Update(Tree):
         first = (self.root / "baseline.json").read_bytes()
         self.assertEqual(run_tool(self.root, "--update")[0], 0)
         self.assertEqual((self.root / "baseline.json").read_bytes(), first)
+
+
+LIMITS = ratchet.PROFILES[PROFILE]["limits"]
+LIMITED = [metric for metric in ratchet.SIZE_METRICS if metric in LIMITS]
+REPORT_ONLY = [metric for metric in ratchet.SIZE_METRICS if metric not in LIMITS]
+
+
+def sized(metric, count, tag=""):
+    """Source whose size `metric` is exactly `count`; its other metrics stay far below every limit
+    and no two tags share a line, so two files never clone each other."""
+    if metric == "lines":
+        return "-- filler %s\n" % tag * count
+    if metric == "main_locals":
+        return "".join("local v%s%d = %d\n" % (tag, i, i) for i in range(count))
+    if metric == "max_function":
+        body = "".join("    local v%s%d = %d\n" % (tag, i, i) for i in range(count - 2))
+        return "local function f%s()\n%send\nUse(f%s)\n" % (tag, body, tag)
+    if metric == "max_upvalues":
+        locals_ = "".join("local u%s%d = %d\n" % (tag, i, i) for i in range(count))
+        uses = "".join("    s = s + u%s%d\n" % (tag, i) for i in range(count))
+        return locals_ + "local function f%s()\n    local s = 0\n%s    return s\nend\nUse(f%s)\n" % (tag, uses, tag)
+    raise AssertionError(metric)
+
+
+class Policy(unittest.TestCase):
+    """Size metrics have headroom up to the profile limit; defect metrics stay strict ratchets."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def reset(self, files):
+        """A fresh baseline of exactly these files ({name: text} below the addon folder)."""
+        for stale in (self.root / ADDON).glob("*.lua") if (self.root / ADDON).is_dir() else []:
+            stale.unlink()
+        for name, text in files.items():
+            write(self.root, ADDON + "/" + name, text)
+        allowlist(self.root, [])
+        code, text = run_tool(self.root, "--update", "--accept-regressions")
+        self.assertEqual(code, 0, text)
+
+    def put(self, text, name="Size.lua"):
+        write(self.root, ADDON + "/" + name, text)
+
+    def check(self):
+        return run_tool(self.root, "--check")
+
+    def test_the_profile_has_limited_and_report_only_size_metrics(self):
+        self.assertTrue(LIMITED)
+        self.assertEqual(sorted(LIMITED + REPORT_ONLY), sorted(ratchet.SIZE_METRICS))
+        self.assertEqual(REPORT_ONLY, ["max_upvalues"] if PROFILE == "suite" else ["lines"])
+
+    def test_growth_up_to_the_limit_passes(self):
+        for metric in LIMITED:
+            with self.subTest(metric):
+                self.reset({"Size.lua": sized(metric, 6)})
+                self.put(sized(metric, LIMITS[metric] - 5))
+                code, text = self.check()
+                self.assertEqual(code, 0, text)
+                self.assertIn("0 improved", text)
+                self.put(sized(metric, LIMITS[metric]))
+                self.assertEqual(self.check()[0], 0)
+
+    def test_shrinking_below_a_baseline_that_is_under_the_limit_is_no_improvement(self):
+        for metric in LIMITED:
+            with self.subTest(metric):
+                self.reset({"Size.lua": sized(metric, LIMITS[metric] - 5)})
+                self.put(sized(metric, 6))
+                code, text = self.check()
+                self.assertEqual(code, 0, text)
+                self.assertIn("0 improved", text)
+
+    def test_a_bug_fix_that_adds_a_line_passes(self):
+        self.reset({"Size.lua": sized("lines", 20)})
+        self.put(sized("lines", 21))
+        code, text = self.check()
+        self.assertEqual(code, 0, text)
+
+    def test_growth_past_the_limit_fails(self):
+        for metric in LIMITED:
+            with self.subTest(metric):
+                self.reset({"Size.lua": sized(metric, LIMITS[metric] - 2)})
+                self.put(sized(metric, LIMITS[metric] + 1))
+                code, text = self.check()
+                self.assertEqual(code, 1, text)
+                self.assertIn("%s %d is worse than the baseline %d (+3) and above the limit %d"
+                              % (metric, LIMITS[metric] + 1, LIMITS[metric] - 2, LIMITS[metric]), text)
+
+    def test_an_over_limit_file_may_not_grow_but_may_regrow_to_its_baseline(self):
+        for metric in LIMITED:
+            limit = LIMITS[metric]
+            over = limit + 8
+            with self.subTest(metric):
+                self.reset({"Size.lua": sized(metric, over)})
+                self.assertEqual(self.check()[0], 0)
+                self.put(sized(metric, over + 3))
+                code, text = self.check()
+                self.assertEqual(code, 1, text)
+                self.assertIn("%s %d is worse than the baseline %d (+3) and above the limit %d"
+                              % (metric, over + 3, over, limit), text)
+                self.put(sized(metric, over - 3))
+                code, text = self.check()
+                self.assertEqual(code, 0, text)
+                self.assertIn("1 improved", text)
+                self.put(sized(metric, over))
+                code, text = self.check()
+                self.assertEqual(code, 0, text)
+                self.assertIn("0 improved", text)
+
+    def test_an_allowlist_entry_still_covers_a_size_regression(self):
+        metric = LIMITED[0]
+        over = LIMITS[metric] + 8
+        self.reset({"Size.lua": sized(metric, over)})
+        self.put(sized(metric, over + 3))
+        allowlist(self.root, [entry(ADDON + "/Size.lua", metric, over + 3)])
+        code, text = self.check()
+        self.assertEqual(code, 0, text)
+
+    def test_report_only_size_metrics_never_fail(self):
+        for metric in REPORT_ONLY:
+            count = 1200 if metric == "lines" else 50
+            with self.subTest(metric):
+                self.reset({"Size.lua": sized(metric, 6)})
+                self.put(sized(metric, count))
+                code, text = self.check()
+                self.assertEqual(code, 0, text)
+                self.assertIn("0 improved", text)
+                # A new file is not held to it either, and the value is still baselined and reported.
+                self.put(sized(metric, count, "n"), "NewBig.lua")
+                code, text = self.check()
+                self.assertEqual(code, 0, text)
+                self.assertIn("1 new", text)
+                self.assertEqual(run_tool(self.root, "--update")[0], 0)
+                data = json.loads((self.root / "baseline.json").read_text(encoding="utf-8"))
+                recorded = data["files"][ADDON + "/Size.lua"][data["metrics"].index(metric)]
+                self.assertEqual(recorded, count)
+                code, text = run_tool(self.root, "--report")
+                self.assertIn("report-only size metrics (measured and baselined, never a failure): " + metric, text)
+                (self.root / ADDON / "NewBig.lua").unlink()
+
+    def test_every_defect_metric_fails_on_plus_one(self):
+        shared = "".join("local value%d = Compute(%d)\n" % (i, i) for i in range(6))
+        long_function = sized("max_function", LIMITS["max_function"] + 8)
+        cases = {
+            "g_reads": ({"Size.lua": "local a = _G.One\n"}, {"Size.lua": "local a = _G.One\nlocal b = _G.Two\n"}, 1),
+            "type_guards": ({"Size.lua": 'local a = 1\nlocal ok = type(a) == "function"\n'},
+                            {"Size.lua": 'local a = 1\nlocal ok = type(a) == "function"\nlocal no = type(a) ~= "function"\n'}, 1),
+            "semicolon_lines": ({"Size.lua": "local a = 1\n"}, {"Size.lua": "local a = 1\nlocal b = 2; local c = 3\n"}, 0),
+            "long_lines": ({"Size.lua": "local a = 1\n"}, {"Size.lua": 'local a = 1\nlocal s = "' + "x" * 170 + '"\n'}, 0),
+            "long_functions": ({"Size.lua": long_function},
+                               {"Size.lua": long_function + sized("max_function", LIMITS["max_function"] + 8, "b")}, 1),
+            "clone_windows": ({"Size.lua": shared, "Other.lua": "local other = Other()\n"},
+                              {"Size.lua": shared, "Other.lua": "local other = Other()\n" + shared}, 0),
+        }
+        self.assertEqual(sorted(cases), sorted(ratchet.DEFECT_METRICS))
+        for metric, (before, after, was) in cases.items():
+            with self.subTest(metric):
+                self.reset(before)
+                self.assertEqual(self.check()[0], 0)
+                for name, text in after.items():
+                    self.put(text, name)
+                code, text = self.check()
+                self.assertEqual(code, 1, text)
+                self.assertIn("%s %d is worse than the baseline %d (+1)" % (metric, was + 1, was), text)
 
 
 if __name__ == "__main__":
