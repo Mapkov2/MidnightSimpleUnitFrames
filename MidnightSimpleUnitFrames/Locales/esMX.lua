@@ -2079,6 +2079,7 @@ L["|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & se
 L["|cffff0000MSUF:|r Analytics module not loaded."] = "|cffff0000MSUF:|r Módulo de Analytics no cargado."
 L["|cffff0000MSUF:|r Cannot do FULL reset while in combat."] = "|cffff0000MSUF:|r No se puede hacer un reinicio completo en combate."
 L["|cffff0000MSUF:|r Cannot reset while in combat."] = "|cffff0000MSUF:|r No se puede restablecer en combate."
+L["|cffff0000MSUF:|r Factory defaults are not available; nothing was reset."] = "|cffff0000MSUF:|r Los valores de fábrica no están disponibles; no se restableció nada."
 L["|cffff0000MSUF:|r DB not initialized."] = "|cffff0000MSUF:|r Base de datos no inicializada."
 L["|cffff0000MSUF:|r FULL RESET executed - all MSUF profiles & settings deleted for this account."] = "|cffff0000MSUF:|r REINICIO COMPLETO ejecutado: todos los perfiles y ajustes de MSUF de esta cuenta se han eliminado."
 L["|cffff0000MSUF:|r Usage: /msuf gfhoverdebug on|off|status"] = "|cffff0000MSUF:|r Uso: /msuf gfhoverdebug on|off|status"

@@ -60,17 +60,23 @@ local function MSUF_Chat_RunApplyAllSettings()
     return false
 end
 
-local MSUF_RESET_DEFAULTS = {
-    player = { width=275, height=40, offsetX=-260, offsetY=80, showName=true, showHP=true, showPower=true },
-    target = { width=275, height=40, offsetX= 260, offsetY=80, showName=true, showHP=true, showPower=true },
-    focus  = { width=220, height=30, offsetX= 260, offsetY=135, showName=true, showHP=false, showPower=false },
-    pet    = { width=220, height=30, offsetX=-260, offsetY=135, showName=true, showHP=false, showPower=false },
-    targettarget = { width=220, height=30, offsetX=260, offsetY=225, showName=true, showHP=true, showPower=false },
-    focustarget = { width=180, height=30, offsetX=260, offsetY=180, showName=true, showHP=true, showPower=false },
-    pettarget = { enabled=false, width=180, height=30, offsetX=-275, offsetY=-290, showName=true, showHP=true, showPower=false },
-    boss   = { width=180, height=30, offsetX=360, offsetY=230, spacing=-96, bossLayoutMode="VERTICAL_DOWN", showName=true, showHP=true, showPower=false },
-    arena  = { width=180, height=30, offsetX=360, offsetY=-40, spacing=-96, bossLayoutMode="VERTICAL_DOWN", showName=true, showHP=true, showPower=true },
-}
+--- /msuf reset puts each frame's size, position, layout and text visibility
+--- back to the factory default profile (MSUF_CreateFactoryDefaultProfile, the
+--- profile a new install, a new profile and "reset profile" start from). A
+--- hand-kept copy of these values had drifted far from it.
+local MSUF_RESET_UNITS = { "player", "target", "focus", "pet", "targettarget", "focustarget", "pettarget", "boss", "arena" }
+local MSUF_RESET_FRAME_KEYS = { "width", "height", "offsetX", "offsetY", "showName", "showHP", "showPower" }
+local MSUF_RESET_GROUP_KEYS = { "spacing", "bossLayoutMode" }
+local MSUF_RESET_GROUP_UNITS = { boss = true, arena = true }
+--- Pet target is off by default and the reset always turns it off; every other
+--- frame keeps the player's on/off choice and gets the default only without one.
+local MSUF_RESET_FORCES_ENABLED = { pettarget = true }
+local function MSUF_ResetCopyKeys(target, source, keys)
+    for i = 1, #keys do
+        local value = source[keys[i]]
+        if value ~= nil then target[keys[i]] = value end
+    end
+end
 local MSUF_RESET_ANCHOR_UNITS = { "player", "target", "focus", "focustarget", "pet", "pettarget", "targettarget", "boss", "arena" }
 local MSUF_FullResetPending = false
 local function MSUF_ResetPositionAnchorsToScreen()
@@ -569,19 +575,28 @@ Commands.Register({
             return
         end
         MSUF_Chat_RunEnsureDB()
+        local factory = MSUF.Require("MSUF_CreateFactoryDefaultProfile", "Runtime/MSUF_SlashCommands.lua")()
+        if type(factory) ~= "table" then
+            print(Tr("|cffff0000MSUF:|r Factory defaults are not available; nothing was reset."))
+            return
+        end
+        -- The defaults pass gives every frame its code default where the factory
+        -- snapshot has none (Pet Target), exactly as a fresh profile gets it.
+        MSUF.Require("MSUF_NormalizeProfileDefaults", "Runtime/MSUF_SlashCommands.lua")(factory, true)
         if MSUF_DB then
             local client = MSUF.Client
-            for unit, defaults in pairs(MSUF_RESET_DEFAULTS) do
+            for i = 1, #MSUF_RESET_UNITS do
+                local unit = MSUF_RESET_UNITS[i]
+                local defaults = type(factory[unit]) == "table" and factory[unit] or {}
                 -- A unit this client cannot show (arena on Era and Forever, boss
                 -- on Era and TBC) keeps its stored settings.
                 if not (client and client.SupportsUnit) or client.SupportsUnit(unit) then
                     MSUF_DB[unit] = MSUF_DB[unit] or {}
                     local t = MSUF_DB[unit]
-                    for k, v in pairs(defaults) do
-                        t[k] = v
-                    end
-                    if t.enabled == nil then
-                        t.enabled = true
+                    MSUF_ResetCopyKeys(t, defaults, MSUF_RESET_FRAME_KEYS)
+                    if MSUF_RESET_GROUP_UNITS[unit] then MSUF_ResetCopyKeys(t, defaults, MSUF_RESET_GROUP_KEYS) end
+                    if MSUF_RESET_FORCES_ENABLED[unit] or t.enabled == nil then
+                        t.enabled = defaults.enabled == true
                     end
                 end
             end

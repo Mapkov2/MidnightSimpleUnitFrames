@@ -1986,6 +1986,7 @@ L["|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & se
 L["|cffff0000MSUF:|r Analytics module not loaded."] = "|cffff0000MSUF：|rAnalytics 模組未載入。"
 L["|cffff0000MSUF:|r Cannot do FULL reset while in combat."] = "|cffff0000MSUF：|r戰鬥中無法執行完整重設。"
 L["|cffff0000MSUF:|r Cannot reset while in combat."] = "|cffff0000MSUF：|r戰鬥中無法重設。"
+L["|cffff0000MSUF:|r Factory defaults are not available; nothing was reset."] = "|cffff0000MSUF：|r原廠預設值無法使用，未重設任何內容。"
 L["|cffff0000MSUF:|r DB not initialized."] = "|cffff0000MSUF：|r資料庫未初始化。"
 L["|cffff0000MSUF:|r FULL RESET executed - all MSUF profiles & settings deleted for this account."] = "|cffff0000MSUF：|r完整重設已執行 - 此帳號的所有 MSUF 設定檔和設定已刪除。"
 L["|cffff0000MSUF:|r Usage: /msuf gfhoverdebug on|off|status"] = "|cffff0000MSUF:|r 用法：/msuf gfhoverdebug on|off|status"

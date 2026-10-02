@@ -1936,6 +1936,7 @@ L["|cffff0000MSUF WARNING:|r This will delete |cffff0000ALL|r MSUF profiles & se
 L["|cffff0000MSUF:|r Analytics module not loaded."] = "|cffff0000MSUF:|r Analytics 모듈이 로드되지 않았습니다."
 L["|cffff0000MSUF:|r Cannot do FULL reset while in combat."] = "|cffff0000MSUF:|r 전투 중에는 전체 초기화를 할 수 없습니다."
 L["|cffff0000MSUF:|r Cannot reset while in combat."] = "|cffff0000MSUF:|r 전투 중에는 초기화할 수 없습니다."
+L["|cffff0000MSUF:|r Factory defaults are not available; nothing was reset."] = "|cffff0000MSUF:|r 기본 설정을 사용할 수 없어 아무것도 초기화하지 않았습니다."
 L["|cffff0000MSUF:|r DB not initialized."] = "|cffff0000MSUF:|r 데이터베이스가 초기화되지 않았습니다."
 L["|cffff0000MSUF:|r FULL RESET executed - all MSUF profiles & settings deleted for this account."] = "|cffff0000MSUF:|r 전체 초기화 완료 - 이 계정의 모든 MSUF 프로필과 설정이 삭제되었습니다."
 L["|cffff0000MSUF:|r Usage: /msuf gfhoverdebug on|off|status"] = "|cffff0000MSUF:|r 사용법: /msuf gfhoverdebug on|off|status"
