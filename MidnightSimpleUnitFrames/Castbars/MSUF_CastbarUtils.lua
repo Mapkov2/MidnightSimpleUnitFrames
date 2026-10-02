@@ -651,14 +651,15 @@ local toPlainHuge = math.huge
 --- export instead of carrying a body of their own. A harness that loads one of
 --- those files standalone has to load this file first.
 local function PlainNumber(value)
-    if value == nil then
+    -- A secret is rejected before anything compares it, nil included.
+    if toPlainIsSecret(value) == true or value == nil then
         return nil
     end
 
     -- The duration APIs normally return an ordinary number. Avoid ToPlain and
     -- the allocating tostring/tonumber round-trip on that overwhelmingly hot
     -- path while retaining the wrapper fallback below.
-    if type(value) == "number" and toPlainIsSecret(value) ~= true
+    if type(value) == "number"
         and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
         return value
     end
@@ -684,11 +685,10 @@ local function PlainNumber(value)
 
     local valueType = type(value)
     if valueType == "number" then
-        if toPlainIsSecret(value) ~= true
-            and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
+        if value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
             return value
         end
-    elseif valueType == "string" and toPlainIsSecret(value) ~= true then
+    elseif valueType == "string" then
         return tonumber(value)
     end
 
@@ -1117,7 +1117,9 @@ local function ApplyCastbarTexts(frame, source, castText, timeText)
         if castText == nil then castText = source.castText end
         if timeText == nil then timeText = source.timeText end
     end
-    if castText ~= nil and frame.castText then SetText(frame.castText, ComposeCastText(frame, castText)) end
+    if ((IsSecretValue and IsSecretValue(castText)) or castText ~= nil) and frame.castText then
+        SetText(frame.castText, ComposeCastText(frame, castText))
+    end
     if timeText ~= nil and frame.timeText then SetText(frame.timeText, timeText) end
 end
 ExportPublic("MSUF_CB_ApplyTexts", ApplyCastbarTexts)

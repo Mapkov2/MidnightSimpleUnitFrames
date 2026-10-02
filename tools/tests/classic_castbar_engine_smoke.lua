@@ -317,7 +317,8 @@ local unitGuard = assert(runtimeSource:find("if not ActiveUnitMatches(frame, eve
 assert(not runtimeSource:sub(interrupted, unitGuard):find("HasActivePlayerCast", 1, true),
     "late player interrupt feedback still requires an API-active cast after STOP")
 assert(runtimeSource:find("frame._msufPlayerInterruptCastGUID = interruptCastGUID", 1, true)
-    and runtimeSource:find("select(2, ...) == frame._msufPlayerInterruptCastGUID", 1, true)
+    and runtimeSource:find("MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)))", 1, true)
+    and runtimeSource:find("and castGUID == pendingGUID", 1, true)
     and runtimeSource:find("GetTime() <= frame._msufPlayerInterruptCastDeadline", 1, true),
     "player castbar does not retain and verify the stopped cast identity")
 

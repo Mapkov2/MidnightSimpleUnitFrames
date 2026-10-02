@@ -419,11 +419,20 @@ local function ActiveCastBarIDMatches(frame, castBarID)
     return castBarID == frame._msufActiveCastBarID
 end
 
+--- castGUID and spellID are SecretWhenUnitSpellCastRestricted in the payload
+--- and in the stored identity (castBarID is NeverSecret). Two values differ
+--- only when both are known and plain; a secret on either side is no
+--- information, like a missing one.
+local function KnownDifferent(left, right)
+    if issecretvalue(left) or issecretvalue(right) then return false end
+    return left ~= nil and right ~= nil and left ~= right
+end
+
 local function IsDifferentActiveCast(frame, castGUID, spellID, castBarID)
     if not frame then return false end
     if castBarID and frame._msufActiveCastBarID and castBarID ~= frame._msufActiveCastBarID then return true end
-    if castGUID and frame._msufActiveCastGUID and castGUID ~= frame._msufActiveCastGUID then return true end
-    if spellID and frame._msufActiveSpellID and spellID ~= frame._msufActiveSpellID then return true end
+    if KnownDifferent(castGUID, frame._msufActiveCastGUID) then return true end
+    if KnownDifferent(spellID, frame._msufActiveSpellID) then return true end
     return false
 end
 
@@ -692,9 +701,11 @@ local function StopPlayerCastbar(frame)
     -- Some player terminal sequences deliver STOP before INTERRUPTED. Preserve
     -- the real displayed cast's identity for that short event burst before the
     -- normal stop cleanup clears it. Instant/GCD casts never populate this.
+    -- castGUID is SecretWhenUnitSpellCastRestricted: a secret identity is never
+    -- kept, because no later payload could be matched against it.
     local interruptUnit = frame._msufActiveCastUnit
     local interruptCastGUID = frame._msufActiveCastGUID
-    if interruptUnit ~= nil and interruptCastGUID ~= nil then
+    if interruptUnit ~= nil and not issecretvalue(interruptCastGUID) and interruptCastGUID ~= nil then
         frame._msufPlayerInterruptCastUnit = interruptUnit
         frame._msufPlayerInterruptCastGUID = interruptCastGUID
         frame._msufPlayerInterruptCastDeadline = GetTime() + INTERRUPT_IDENTITY_GRACE
@@ -986,6 +997,17 @@ local function HandleActiveEmpowerEvent(frame, event, ...)
     return false
 end
 
+--- The identity StopPlayerCastbar kept for an INTERRUPTED that follows its
+--- STOP (always plain, see there). Only a plain payload castGUID can match it.
+local function MatchesPendingInterrupt(frame, eventUnit, castGUID)
+    local pendingGUID = frame._msufPlayerInterruptCastGUID
+    if pendingGUID == nil or issecretvalue(castGUID) then return false end
+    return eventUnit == frame._msufPlayerInterruptCastUnit
+        and castGUID == pendingGUID
+        and frame._msufPlayerInterruptCastDeadline ~= nil
+        and GetTime() <= frame._msufPlayerInterruptCastDeadline
+end
+
 local function PlayerCastbarOnEventImpl(frame, event, ...)
     if not _G.MSUF_IsCastbarEnabledForUnit("player") then
         DisablePlayerCastbar(frame)
@@ -1004,11 +1026,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
             or event == "UNIT_SPELLCAST_CHANNEL_STOP")
         and not HasActivePlayerCast(frame)
         and not (event == "UNIT_SPELLCAST_INTERRUPTED"
-            and eventUnit == frame._msufPlayerInterruptCastUnit
-            and frame._msufPlayerInterruptCastGUID ~= nil
-            and select(2, ...) == frame._msufPlayerInterruptCastGUID
-            and frame._msufPlayerInterruptCastDeadline ~= nil
-            and GetTime() <= frame._msufPlayerInterruptCastDeadline) then
+            and MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)))) then
         return
     end
     if event == "UNIT_SPELLCAST_START"

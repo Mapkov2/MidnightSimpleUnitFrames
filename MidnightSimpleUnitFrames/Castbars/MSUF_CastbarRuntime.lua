@@ -920,7 +920,9 @@ function Runtime:ApplyActive(frame, state, options)
 
     local durationObj = StableDuration(frame, state.durationObj)
     local spellName = state.spellName
-    if not durationObj or not spellName then
+    -- A secret name (SecretWhenUnitSpellCastRestricted) is a spell; only a
+    -- plain name is tested.
+    if not durationObj or (not issecretvalue(spellName) and not spellName) then
         return false
     end
 

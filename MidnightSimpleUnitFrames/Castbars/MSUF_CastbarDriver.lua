@@ -317,7 +317,9 @@ local function CastStateActive(state)
 end
 
 local function CastStateHasSpell(state)
-    return CastStateActive(state) and state.spellName ~= nil
+    -- The name is SecretWhenUnitSpellCastRestricted: a secret name is a cast
+    -- with a spell and is never compared, not even with nil.
+    return CastStateActive(state) and (toPlainIsSecret(state.spellName) or state.spellName ~= nil)
 end
 
 local function GetRemainingFromStatusBar(frame)

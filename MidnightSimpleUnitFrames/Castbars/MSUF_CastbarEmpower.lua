@@ -12,6 +12,7 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
 local C_Timer = _G.C_Timer
+local issecretvalue = _G.issecretvalue
 local type = type
 local tonumber = tonumber
 local tostring = tostring
@@ -487,7 +488,8 @@ local function PlayerCastbarEmpowerStart(frame)
     local castState = type(_G.MSUF_BuildCastState) == "function" and _G.MSUF_BuildCastState("player") or nil
     local spellName = castState and castState.spellName
     local icon = castState and castState.icon
-    if not spellName then
+    -- SecretWhenUnitSpellCastRestricted: only a plain missing name falls back.
+    if not issecretvalue(spellName) and not spellName then
         spellName, _, icon = _G.UnitCastingInfo("player")
         if not spellName then spellName, _, icon = _G.UnitChannelInfo("player") end
     end

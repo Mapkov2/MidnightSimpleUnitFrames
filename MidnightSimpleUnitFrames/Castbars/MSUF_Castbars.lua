@@ -1262,10 +1262,12 @@ local function UpdateDurationObjectFrame(frame, now)
         end
 
         if not remaining and not remainingFromEnd then
+            -- A secret remaining time still goes to the text sink below; it is
+            -- never compared, not even with nil.
             if frame.timeText
                 and frame._msufCastTimeEnabled ~= false
                 and frame._msufNativeTimeBound ~= true
-                and rawRemaining ~= nil
+                and (issecretvalue(rawRemaining) == true or rawRemaining ~= nil)
             then
                 if type(rawRemaining) == "number" and frame.timeText.SetFormattedText then
                     frame.timeText:SetFormattedText("%.1f", rawRemaining)

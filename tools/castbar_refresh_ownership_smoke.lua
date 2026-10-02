@@ -163,7 +163,8 @@ assert(not contains(player, "HideIfNoLongerCasting({"), "player interrupt callba
 assert(contains(player, "local INTERRUPT_IDENTITY_GRACE = 0.25"),
     "player interrupt feedback must retain a bounded STOP-before-INTERRUPTED identity window")
 assert(contains(player, "frame._msufPlayerInterruptCastGUID = interruptCastGUID")
-    and contains(player, "select(2, ...) == frame._msufPlayerInterruptCastGUID")
+    and contains(player, "MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)))")
+    and contains(player, "and castGUID == pendingGUID")
     and contains(player, "GetTime() <= frame._msufPlayerInterruptCastDeadline"),
     "player interrupt feedback must match the stopped cast GUID before accepting the late terminal event")
 local playerEventStart = assert(player:find("local function PlayerCastbarOnEventImpl", 1, true))
