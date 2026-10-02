@@ -13,7 +13,9 @@
 --   * native aura modes hide the count text: a vehicle's combo points show it;
 --   * a relayout paints the pip backgrounds and visibility directly: a
 --     charged pip keeps its dimmed background on the next update;
---   * an eclipse that ends early is not handed back by the controller cache.
+--   * an eclipse that ends early is not handed back by the controller cache;
+--   * rune pips paint the configured background on the first paint, after a
+--     relayout and on the rune events that follow.
 -- Also: a structural refresh inside the 150 ms throttle gets a trailing one,
 -- and the one colour-override reader (MSUF_CP_CONST.OverrideRGB).
 --
@@ -181,6 +183,43 @@ do
     Check(SameColor(CP.bars[2]._bg.vertexColor, plainBg), "a filled pip did not keep the plain background")
 end
 
+-- Rune pips take the Colors page background (classPowerBgColorOverrides.RUNES)
+-- like every other resource. Layout paints the backgrounds directly and the
+-- rune painter repaints them behind its own gate (_runeColorVersion), so both
+-- must paint the same colour: on the first paint, after a relayout and on the
+-- rune events that follow it.
+do
+    local RED = { 0.8, 0.1, 0.2 }
+    local t = World.Start(repo, "Mainline", "DEATHKNIGHT", 3, 6)
+    local CP = t.CP
+    MSUF_DB.general.classPowerBgColorOverrides = { RUNES = RED }
+    CP.RefreshPublic()
+    t.env:RunTimers()
+    Check(CP.visible and CP.powerType == 5, "Unholy did not route runes")
+    local function Backgrounds(stage)
+        for i = 1, 6 do
+            local color = CP.bars[i] and CP.bars[i]._bg and CP.bars[i]._bg.vertexColor
+            if not SameColor(color, RED) then
+                Check(false, ("rune %d background is %s, not the configured colour, %s"):format(i,
+                    color and ("%.2f/%.2f/%.2f"):format(color[1], color[2], color[3]) or "unset", stage))
+                return
+            end
+        end
+    end
+    Backgrounds("on the first paint")
+    _G.MSUF_ClassPower_RefreshLayout()
+    Backgrounds("after a relayout")
+    Check(CP._runeColorVersion == nil, "a relayout repainted the rune backgrounds but left the rune colour pass closed")
+    for rune = 1, 6 do t.onEvent(t.eventFrame, "RUNE_POWER_UPDATE", rune, false) end
+    t.env:RunTimers()
+    Backgrounds("on the rune events after a relayout")
+    Check(CP._runeColorVersion == CP.visual.version, "the rune colour pass did not run again after a relayout")
+    MSUF_DB.general.classPowerBgColorOverrides = nil
+    _G.MSUF_ClassPower_InvalidateColors()
+    t.env:RunTimers()
+    Check(SameColor(CP.bars[1]._bg.vertexColor, { 0, 0, 0 }), "clearing the rune background override kept the colour")
+end
+
 -- Native aura modes (Fury Whirlwind) hide the count text directly. A vehicle
 -- with combo points hands the bar to the segmented painter, whose shown stamp
 -- must not still say "shown" from the previous vehicle.
@@ -238,4 +277,4 @@ end
 if #failures > 0 then
     error("classpower_paint_stamps_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour, charged relayout, native aura text, throttle)")
+print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour, charged relayout, rune background, native aura text, throttle)")

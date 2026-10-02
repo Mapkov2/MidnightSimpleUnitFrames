@@ -1088,9 +1088,12 @@ do
 
     --- Rune colours: the full colour, a per-slot colour, the Mists rune type
     --- colour or the base colour, repainted when the visual, the full state or
-    --- a rune's type changed.
+    --- a rune's type changed. The background is the compiled one (the Colors
+    --- page RUNES background, black by default), the colour Layout paints too;
+    --- Layout reopens this pass (CP._runeColorVersion) whenever it repaints.
     local function RecolorRunes(maxPower, visual, isFull, typeColors, recolorAll, runeMap, visualVersion, bgA)
         local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
+        local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
         local useSlotColors = visual and visual.useSlotColors == true
         for displayIdx = 1, maxPower do
             local bar = CP.bars[displayIdx]
@@ -1107,7 +1110,7 @@ do
                     r, g, bl = typeColor[1], typeColor[2], typeColor[3]
                 end
                 CP_StampStatusBarColor(bar, r, g, bl, 1)
-                CP_StampVertexColor(bar._bg, 0, 0, 0, bgA)
+                CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                 bar._msufCPVisualVersion = visualVersion
                 bar._msufCPFullColor = isFull
                 bar._msufCPRuneTypeColor = typeColor
