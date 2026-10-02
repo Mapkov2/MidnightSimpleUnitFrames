@@ -1738,6 +1738,35 @@ do
     Compile.SetSortOwnership(nil)
 end
 
+-- W3.8 (re-review 2026-10-02). One host-rect offset helper for both dispel previews ----
+-- Classic's Visuals and Retail's EffectPreview each turned a dragged symbol
+-- host back into saved offsets with their own copy of the edge math.
+do
+    local function Rect(left, bottom, width, height)
+        return { GetLeft = function() return left end, GetRight = function() return left and left + width end,
+            GetBottom = function() return bottom end, GetTop = function() return bottom + height end }
+    end
+    local parent, host = Rect(100, 100, 200, 50), Rect(250.5, 130, 20, 12)
+    local x, y = A3.HostAnchorOffset(host, parent, "TOPRIGHT")
+    assert(x == -29.5 and y == -8, "W3.8: the shared host offset changed: " .. tostring(x) .. ", " .. tostring(y))
+    x, y = A3.HostAnchorOffset(host, parent, "CENTER")
+    assert(x == 60.5 and y == 11, "W3.8: the shared centre offset changed")
+    assert(A3.HostAnchorOffset(Rect(nil, 0, 1, 1), parent, "TOP") == nil, "W3.8: an unresolved rect gave an offset")
+    -- Classic rounds half away from zero, as before.
+    local V = assert(A3.ClassicVisuals, "W3.8: precondition: the Classic visuals are missing")
+    x, y = V.DispelPreviewAnchorOffset(host, parent, "topright")
+    assert(x == -30 and y == -8, "W3.8: the Classic preview offset changed: " .. tostring(x))
+    local handle = assert(io.open(ADDON .. "Auras3/Runtime/MSUF_Auras3_Runtime_EffectPreview.lua", "rb"))
+    local effectPreview = handle:read("*a")
+    handle:close()
+    handle = assert(io.open(overrides["Game/Classic/Auras/MSUF_Auras3_Visuals.lua"]
+        or (ADDON .. "Game/Classic/Auras/MSUF_Auras3_Visuals.lua"), "rb"))
+    local visuals = handle:read("*a")
+    handle:close()
+    assert(not (effectPreview .. visuals):find("host:GetLeft(), host:GetRight()", 1, true),
+        "W3.8: a dispel preview carries its own copy of the host-rect offset math again")
+end
+
 -- F6. Edit Mode and menu group test frames never run the live backend -------------------
 do
     world.player = {

@@ -468,6 +468,34 @@ end
 A3.AnchorOffset = AnchorOffset
 ExportPublic("MSUF_AuraAnchorOffset", AnchorOffset)
 
+--- The offset pair that reproduces `host`'s on-screen rect from `anchor` on
+--- `parent`, unrounded, or nil while either rect is unresolved. The dispel
+--- symbol previews of both backends turn a drag into saved offsets with it;
+--- the host is parented to the frame, so the raw edges share one scale.
+function A3.HostAnchorOffset(host, parent, anchor)
+    local hl, hr, ht, hb = host:GetLeft(), host:GetRight(), host:GetTop(), host:GetBottom()
+    local pl, pr, pt, pb = parent:GetLeft(), parent:GetRight(), parent:GetTop(), parent:GetBottom()
+    if not (hl and hr and ht and hb and pl and pr and pt and pb) then return nil, nil end
+    anchor = tostring(anchor or "TOPRIGHT")
+    local x
+    if anchor:find("LEFT", 1, true) then
+        x = hl - pl
+    elseif anchor:find("RIGHT", 1, true) then
+        x = hr - pr
+    else
+        x = ((hl + hr) * 0.5) - ((pl + pr) * 0.5)
+    end
+    local y
+    if anchor:find("TOP", 1, true) then
+        y = ht - pt
+    elseif anchor:find("BOTTOM", 1, true) then
+        y = hb - pb
+    else
+        y = ((ht + hb) * 0.5) - ((pt + pb) * 0.5)
+    end
+    return x, y
+end
+
 local function PaddingInset(anchor, pad)
     pad = tonumber(pad) or 0
     if pad == 0 then return 0, 0 end
