@@ -457,12 +457,7 @@ local function RefreshPreviewTexts(self, unit, kind, g, S, barWLocal, progress, 
         timeW = max(minTimeW, min(maxTimeW, timeW))
         self.time:SetWidth(timeW)
         self.time:ClearAllPoints()
-        local timeX = ReadCastbarNum(g, unit, "TimeOffsetX", "bossCastTimeOffsetX", -2)
-        local timeY = ReadCastbarNum(g, unit, "TimeOffsetY", "bossCastTimeOffsetY", 0)
-        if unit == "boss" then
-            timeX = -2 + (tonumber(g.bossCastTimeOffsetX) or 0)
-            timeY = tonumber(g.bossCastTimeOffsetY) or 0
-        end
+        local timeX, timeY = CastbarPreview.TimeOffsets(g, unit)
         local timePosition = CastbarPreview.NormalizeTextPosition(
             CastbarPreview.ReadString(g, unit, "TimePosition", "bossCastTimePosition", "RIGHT"), "RIGHT")
         CastbarPreview.AnchorText(self.time, self.statusBar or self.bar,

@@ -190,8 +190,7 @@ local render = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF
 for _, contract in ipairs({
     '(key == "arena" and "Greater Pyroblast")',
     '(key == "arena" and g.showArenaCastTime ~= false)',
-    "timeX = -2 + (tonumber(g.arenaCastTimeOffsetX) or 0)",
-    "timeY = tonumber(g.arenaCastTimeOffsetY) or 0",
+    "local timeX, timeY = CastbarPreview.TimeOffsets(g, key)",
     '((key == "boss" or key == "arena") and 180 or (key == "focus" and 180 or 275))',
     '((key == "boss" or key == "arena") and 30 or (key == "focus" and 30 or 40))',
     'ReadCastbarSize(key, g, w, (key == "boss" or key == "arena") and 12 or 18)',
@@ -202,6 +201,12 @@ for _, contract in ipairs({
     assert(render:find(contract, 1, true),
         "Classic unit preview lost an Arena or Retail parity branch: " .. contract)
 end
+-- The arena time offsets sit on the boss -2 base in the shared helper both
+-- menu castbar previews read (castbar_preview_time_offset_smoke drives it).
+local previewCastbar = ReadLF("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua")
+assert(previewCastbar:find('if key == "boss" or key == "arena" then\n'
+    .. '        return -2 + (tonumber(g[key .. "CastTimeOffsetX"]) or 0), tonumber(g[key .. "CastTimeOffsetY"]) or 0', 1, true),
+    "Classic castbar preview helper lost the Arena time offset base")
 assert(CountPlain(render, '(key == "arena" and "arena1")') == 2,
     "Classic unit preview must resolve arena to arena1 for the live frame and the spell-name shortener")
 assert(CountPlain(render, '(key == "arena" and g.showArenaCastTargetName == true)') == 2,

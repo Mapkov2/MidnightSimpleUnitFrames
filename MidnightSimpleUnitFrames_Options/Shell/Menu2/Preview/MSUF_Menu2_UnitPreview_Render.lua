@@ -975,15 +975,7 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
     ApplyPreviewFont(mock.cast.time, max(7, S(timeSize)))
     ApplyCastbarPreviewProgress(mock.cast, g, key, S, animState, FormatCastbarPreviewTime)
     if showTime then
-        local timeX = ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", g.castbarPlayerTimeOffsetX or -2)
-        local timeY = ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", g.castbarPlayerTimeOffsetY or 0)
-        if key == "boss" then
-            timeX = -2 + (tonumber(g.bossCastTimeOffsetX) or 0)
-            timeY = tonumber(g.bossCastTimeOffsetY) or 0
-        elseif key == "arena" then
-            timeX = -2 + (tonumber(g.arenaCastTimeOffsetX) or 0)
-            timeY = tonumber(g.arenaCastTimeOffsetY) or 0
-        end
+        local timeX, timeY = CastbarPreview.TimeOffsets(g, key)
         local tr, tg, tb = g[(detailPrefix or "") .. "TimeColorR"], g[(detailPrefix or "") .. "TimeColorG"], g[(detailPrefix or "") .. "TimeColorB"]
         if tr or tg or tb then mock.cast.time:SetTextColor(tr or fr, tg or fg, tb or fb, 1) else mock.cast.time:SetTextColor(fr, fg, fb, 1) end
         local timePosition = NormalizeCastbarPreviewTextPos(CastbarPreview.ReadString(g, key, "TimePosition", "bossCastTimePosition", "RIGHT"), "RIGHT")
