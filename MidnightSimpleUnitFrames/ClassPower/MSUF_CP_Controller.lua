@@ -1006,8 +1006,11 @@ function Refresh.ApplyAugLifecycle(b, cpEnabled, powerType, playerManaOverride, 
     return true
 end
 
---- Resolve max power based on render mode
-function Refresh.ResolveMaxPower(powerType, renderMode)
+--- Resolve max power based on render mode: the one segment-count rule of the
+--- full refresh and of the light refresh (RUNTIME's GetResolvedVisibleMax).
+--- fallbackMax answers a segmented resource whose maximum is secret or
+--- missing: the full refresh guesses 5, a light refresh keeps its count.
+function Refresh.ResolveMaxPower(powerType, renderMode, fallbackMax)
     local maxP
     if renderMode == CPK.MODE.NATIVE_AURA then
         maxP = 1 -- one native fill; separators do not need aura slots
@@ -1045,8 +1048,6 @@ function Refresh.ResolveMaxPower(powerType, renderMode)
             maxP = 6  --- Vengeance: 6 soul fragment segments
         elseif powerType == "TIP_OF_THE_SPEAR" then
             maxP = TIP.MAX_STACKS  --- Survival Hunter: 3 Tip of the Spear stacks
-            CP.spStacks = 0
-            CP.spExpires = nil
         elseif powerType == "ICICLES" then
             maxP = CPConst.ICICLES and CPConst.ICICLES.MAX_STACKS or 5
         elseif IS_CLASSIC and powerType == "MISTS_ARCANE_CHARGES" then
@@ -1061,7 +1062,7 @@ function Refresh.ResolveMaxPower(powerType, renderMode)
             --- Heuristic fallback (safe; most are 5-6)
             if powerType == PT.Runes then maxP = 6
             elseif powerType == PT.ComboPoints then maxP = 7
-            else maxP = 5 end
+            else maxP = fallbackMax or 5 end
         end
     end
     maxP = math_floor(maxP)
@@ -1075,6 +1076,11 @@ function Refresh.ShowClassPower(playerFrame, b, cpHeight, powerType, renderMode,
     CP_Create(playerFrame)
 
     local maxP = Refresh.ResolveMaxPower(powerType, renderMode)
+    --- A rebuilt Tip of the Spear starts without tracked stacks.
+    if powerType == "TIP_OF_THE_SPEAR" then
+        CP.spStacks = 0
+        CP.spExpires = nil
+    end
 
     CP_EnsureBars(playerFrame, maxP)
     CP._outlineEdge = -1  --- force outline rebuild on mode/size changes
@@ -1406,15 +1412,10 @@ do
             _cpDB = _cpDB,
             CPK = CPK,
             PT = PT,
-            TIP = TIP,
-                CPConst = CPConst,
             POWER_TYPE_TOKENS = POWER_TYPE_TOKENS,
             PLAYER_CLASS = PLAYER_CLASS,
-            UnitPowerMax = UnitPowerMax,
             NotSecret = NotSecret,
-            C_Spell = C_Spell,
             tonumber = tonumber,
-            math_floor = math_floor,
             C_Timer = C_Timer,
             GetPlayerFrame = GetPlayerFrame,
             CP_EnsureBars = CP_EnsureBars,
@@ -1426,6 +1427,7 @@ do
                     return CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
                 end
             end,
+            ResolveMaxPower = Refresh.ResolveMaxPower,
             AM_UpdateValue = AM_UpdateValue,
             CP_ComputeStructuralSignature = CPConfig.ComputeStructuralSignature,
             CP_RefreshEventBindings = function() return CP_RefreshEventBindings() end,
