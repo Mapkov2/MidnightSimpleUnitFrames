@@ -249,4 +249,48 @@ do
     Equal(target.timeText.alpha, 0, "target: showTargetCastTime ignored")
 end
 
+---------------------------------------------------------------------------
+-- 2. UNIT_SPELLCAST_INTERRUPTED shows feedback only on a bar that shows a
+--    cast (MSUF_castActive), as CHANNEL_STOP does and as Blizzard's
+--    CastingBarMixin:HandleInterruptOrSpellFailed requires (IsShown() and
+--    self.casting). A profession cast hidden by castbarHideTradeSkills never
+--    showed the bar, so its interrupt must not flash "Interrupted" either.
+---------------------------------------------------------------------------
+local World = assert(loadfile(root .. "/tools/tests/castbar_world.lua"))()
+
+do
+    for _, backend in ipairs({ "timer", "signal" }) do
+        local world = World.New(root, backend)
+        _G.MSUF_DB.general.castbarHideTradeSkills = true
+        local bar = world:Driver("target")
+        local label = backend .. ": "
+
+        -- A hidden profession cast never shows the bar ...
+        world:StartCast("target", "Smelt Copper", 3, 71, true)
+        world:Fire(bar, "UNIT_SPELLCAST_START")
+        world:Advance(0.05)
+        Check(bar.MSUF_castActive ~= true, label .. "a hidden profession cast showed the bar")
+        -- ... and its interrupt shows no feedback.
+        world.casting.target = nil
+        world:Fire(bar, "UNIT_SPELLCAST_INTERRUPTED", "Smelt Copper-guid", 133, nil, 71)
+        Check(bar.interrupted ~= true, label .. "an interrupt of a hidden cast showed interrupt feedback")
+        Check(bar.castText.text == nil or bar.castText.text == "",
+            label .. "an interrupt of a hidden cast wrote " .. tostring(bar.castText.text))
+        world:Advance(1.0)
+
+        -- An idle bar ignores a stray interrupt as well.
+        world:Fire(bar, "UNIT_SPELLCAST_INTERRUPTED", "Other-guid", 133, nil, 72)
+        Check(bar.interrupted ~= true, label .. "an idle bar showed interrupt feedback")
+
+        -- A shown cast still gets its feedback.
+        world:StartCast("target", "Fireball", 3, 73)
+        world:Fire(bar, "UNIT_SPELLCAST_START")
+        Check(bar.MSUF_castActive == true, label .. "the cast was not shown")
+        world.casting.target = nil
+        world:Fire(bar, "UNIT_SPELLCAST_INTERRUPTED", "Fireball-guid", 133, nil, 73)
+        Check(bar.interrupted == true and bar.shown == true, label .. "a shown cast's interrupt was ignored")
+        world:Advance(1.0)
+    end
+end
+
 print("castbar correctness smoke: ok")

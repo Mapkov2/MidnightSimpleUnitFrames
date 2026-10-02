@@ -156,7 +156,8 @@ function World.New(root, backend, options)
     _G.UnitCastingInfo = function(unit)
         local cast = world.casting[unit]
         if not cast then return nil end
-        return cast.name, cast.name, 135812, cast.startMS, cast.endMS, false, cast.guid, false, cast.spellID, cast.castBarID
+        return cast.name, cast.name, 135812, cast.startMS, cast.endMS, cast.tradeskill == true, cast.guid, false,
+            cast.spellID, cast.castBarID
     end
     _G.UnitChannelInfo = function(unit)
         local channel = world.channeling[unit]
@@ -257,10 +258,11 @@ function World:Advance(seconds)
     until false
 end
 
-function World:StartCast(unit, name, seconds, castBarID)
+-- tradeskill marks a profession cast (UnitCastingInfo's isTradeskill).
+function World:StartCast(unit, name, seconds, castBarID, tradeskill)
     local startMS = math.floor(self.clock * 1000)
     self.casting[unit] = { name = name, startMS = startMS, endMS = startMS + seconds * 1000,
-        guid = name .. "-guid", spellID = 133, castBarID = castBarID }
+        guid = name .. "-guid", spellID = 133, castBarID = castBarID, tradeskill = tradeskill }
 end
 
 function World:StartChannel(unit, name, seconds, castBarID, empowered)

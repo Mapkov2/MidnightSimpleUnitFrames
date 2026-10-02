@@ -1299,6 +1299,10 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
         if eventUnit ~= frame.unit or NamesOtherCastBar(frame, castBarID) then return end
         -- A kicked channel may already show its feedback from CHANNEL_STOP.
         if frame.interrupted then return end
+        -- Only a cast this bar shows gets feedback (as CHANNEL_STOP above and
+        -- CastingBarMixin:HandleInterruptOrSpellFailed: IsShown and casting).
+        -- A profession cast hidden by castbarHideTradeSkills never showed it.
+        if frame.MSUF_castActive ~= true then return end
         ClearStopExpectation(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         frame:SetInterrupted(interruptedBy)
