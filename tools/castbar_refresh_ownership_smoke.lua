@@ -107,7 +107,7 @@ assert(contains(spawnBody, "MSUF_FocusKickDriver_ForceUpdate")
     "post-profile startup must refresh the saved focus tracker state")
 
 local coldStart = assert(core:find("local function ApplyCastbarVisualFrameCold", 1, true))
-local coldEnd = assert(core:find("local function MaxBossFrames", coldStart, true))
+local coldEnd = assert(core:find("local function BumpCastbarVisualRevisions", coldStart, true))
 local coldBody = core:sub(coldStart, coldEnd - 1)
 local _, coldRefreshCount = coldBody:gsub("MSUF_RefreshCastbarFrame%(", "")
 assert(coldRefreshCount == 1, "each Core frame pass must invoke exactly one Visuals follower")

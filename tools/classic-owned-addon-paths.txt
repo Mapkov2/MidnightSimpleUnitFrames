@@ -1,6 +1,7 @@
 MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua
 MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua
 MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua
+MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPoolPreviews.lua
 MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ExtraAuras.lua
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ManaExtras.lua

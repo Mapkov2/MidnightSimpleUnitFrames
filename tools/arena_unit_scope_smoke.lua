@@ -127,16 +127,45 @@ end
 local CASTBAR_PREVIEWS = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua"
 local castbarPagePreview = Read(CASTBAR_PREVIEWS)
 local compile = loadstring or load
--- Reason: the preview detail resolver is one function, cut at its own `end`.
+
+--- The real boss and arena preview objects: the pool modules and their
+--- preview descriptors in TOC order, against a minimal load-time client.
+local function PoolPreviewNamespace()
+    _G.MSUF_EventBus_Register = function() return true end
+    _G.MSUF_EventBus_Unregister = function() return true end
+    local namespace = {
+        ExportPublic = function(name, value)
+            _G[name] = value
+            return value
+        end,
+    }
+    for _, path in ipairs({
+        "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua",
+        "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPoolPreviews.lua",
+        "MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua",
+        "MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars_Preview.lua",
+        "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
+        "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
+    }) do
+        assert(loadfile(path))("MidnightSimpleUnitFrames", namespace)
+    end
+    return namespace
+end
+
+-- Reason: the preview detail resolver and its pool-preview lookup are
+-- functions, each cut at its own `end`.
 local detailsChunk, detailsError = compile([[
+local MSUF = ...
 local PREVIEW_UNITS = {}
+local NO_POOL_PREVIEWS = {}
 ]] .. Slice.Declarations(castbarPagePreview, {
+    "local function PoolPreviews",
     "local function ResolvePreviewTestDetails",
 }, CASTBAR_PREVIEWS) .. [[
 return ResolvePreviewTestDetails
 ]], "@arena_castbar_preview_details")
 Check(detailsChunk ~= nil, detailsError)
-local resolvePreviewTestDetails = detailsChunk()
+local resolvePreviewTestDetails = detailsChunk(PoolPreviewNamespace())
 local showTime, showTargetName, targetLabel = resolvePreviewTestDetails(
     { unit = "arena", _msufIsArenaCastbar = true },
     { showArenaCastTime = false, showArenaCastTargetName = false })
@@ -198,16 +227,19 @@ Check(externalProvider:find('arena  = { x = "arenaCastbarOffsetX",   y = "arenaC
 Check(externalProvider:find('arena = "enableArenaCastbar"', 1, true),
     "external Edit Mode providers do not honor Arena castbar enablement")
 
+-- Boss and arena share one page-preview path over their pool preview objects
+-- (tools/tests/castbar_pool_preview_smoke.lua drives it for both kinds).
 for _, marker in ipairs({
     'and unit ~= "arena" then unit = nil end',
-    'ClearPreviewTest(frame, "arena")',
-    'local createArenaPreview = _G.MSUF_CreateArenaCastbarPreview',
-    '_G.MSUF_ApplyArenaCastbarPreviewLayout(frame, index)',
-    '_G.MSUF_PositionArenaCastbarPreview(frame, index)',
-    '_G.MSUF_UpdateArenaCastbarPreview()',
+    'local preview = PoolPreview(unit)',
+    'ClearPreviewTest(frame, unit)',
+    'preview:ApplyLayout(frame, index)',
+    'preview:Position(frame, index)',
+    'preview:Update()',
     'general.arenaCastbarTestMode = false',
-    '_G.MSUF_HideAllArenaCastbarPreviews()',
-    'HideCastbarPreviewFrame(_G["MSUF_ArenaCastbarPreview" .. index])',
+    'previews[index]:HideAll()',
+    'previews[index]:ForEach(HideCastbarPreviewFrame)',
+    'local SetArenaCastbarTestMode = PoolKindEntry("arena", SetPoolPreviewTestMode)',
 }) do
     Check(castbarPagePreview:find(marker, 1, true),
         "Arena global castbar-page preview lifecycle is incomplete: " .. marker)
@@ -373,6 +405,7 @@ for _, toc in ipairs(classicTocs) do
     local previousCastbar
     for _, module in ipairs({
         "Castbars\\MSUF_CastbarPools.lua",
+        "Castbars\\MSUF_CastbarPoolPreviews.lua",
         "Castbars\\MSUF_BossCastbars.lua",
         "Castbars\\MSUF_BossCastbars_Preview.lua",
         "Castbars\\MSUF_ArenaCastbars.lua",
@@ -449,7 +482,6 @@ for _, path in ipairs({
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
-    "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
 }) do
     local source = Read(path)
     Check(source:find(ARENA_SLOT_READ, 1, true),
@@ -457,6 +489,10 @@ for _, path in ipairs({
     Check(not source:find("MAX_ARENA = 3\n", 1, true) and not source:find("MAX_ARENA_FRAMES = 3\n", 1, true),
         "arena module still hardcodes three arena slots: " .. path)
 end
+-- The arena previews take their slot count from the arena pool descriptor.
+Check(Read("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua")
+        :find("Pools.DefinePreview(Pools.kinds.arena,", 1, true),
+    "arena castbar previews do not follow the arena pool slot count")
 Check(not match:find('LiveUnitExists("arena3")', 1, true),
     "arena match live-unit check does not loop over the arena slots")
 Check(not trinkets:find("WOW_PROJECT_ID", 1, true),
@@ -537,8 +573,15 @@ local function ExerciseArenaPreviewHide(slots, expected)
     for index = 1, 6 do
         _G["MSUF_ArenaCastbarPreview" .. index] = { Hide = function() hidden[index] = true end }
     end
-    assert(loadfile("MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua"))(
-        "MidnightSimpleUnitFrames", ArenaNamespace())
+    local namespace = ArenaNamespace()
+    for _, path in ipairs({
+        "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua",
+        "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
+        "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPoolPreviews.lua",
+        "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
+    }) do
+        assert(loadfile(path))("MidnightSimpleUnitFrames", namespace)
+    end
     _G.MSUF_HideAllArenaCastbarPreviews()
     for index = 1, 6 do
         Check((hidden[index] == true) == (index <= expected),

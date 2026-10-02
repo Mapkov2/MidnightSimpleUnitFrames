@@ -115,6 +115,24 @@ local function IsArenaCastbarUnit(unit)
 end
 ExportPublic("MSUF_IsArenaCastbarUnit", IsArenaCastbarUnit)
 
+--- Boss and arena castbars are indexed pools (MSUF_CastbarPools.lua) with
+--- indexed previews (MSUF_CastbarPoolPreviews.lua); both load after this file.
+--- Every boss/arena path below goes through these lookups.
+local NO_POOLS = {}
+
+--- The pool modules in definition order (boss, then arena).
+local function CastbarPools()
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    return pools and pools.order or NO_POOLS
+end
+
+--- The pool module of a castbar config key ("boss", "arena"), nil otherwise.
+local function CastbarPool(kind)
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    local kinds = pools and pools.kinds
+    return kind and kinds and kinds[kind] or nil
+end
+
 local function NormalizeCastbarUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit:match("^boss") then return "boss" end
@@ -161,31 +179,19 @@ local function ApplyCastbarUnitAndSync(unit)
     if not unit then return end
     if not _G.MSUF_DB then _G.MSUF_EnsureDB() end
 
-    if IsBossCastbarUnit(unit) then
-        if _G.MSUF_ApplyBossCastbarPositionSetting then
-            _G.MSUF_ApplyBossCastbarPositionSetting(nil, true, true)
+    local poolKind = (IsBossCastbarUnit(unit) and "boss") or (IsArenaCastbarUnit(unit) and "arena") or nil
+    if poolKind then
+        local pool = CastbarPool(poolKind)
+        if pool then
+            pool.ApplyPositionSetting(nil, true, true)
         end
         if ApplyCastbarVisualsForUnit then
-            ApplyCastbarVisualsForUnit("boss")
+            ApplyCastbarVisualsForUnit(poolKind)
         elseif _G.MSUF_UpdateCastbarVisuals then
-            _G.MSUF_UpdateCastbarVisuals("boss")
+            _G.MSUF_UpdateCastbarVisuals(poolKind)
         end
-        if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo("boss") end
-        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup("boss") end
-        return
-    end
-
-    if IsArenaCastbarUnit(unit) then
-        if _G.MSUF_ApplyArenaCastbarPositionSetting then
-            _G.MSUF_ApplyArenaCastbarPositionSetting(nil, true, true)
-        end
-        if ApplyCastbarVisualsForUnit then
-            ApplyCastbarVisualsForUnit("arena")
-        elseif _G.MSUF_UpdateCastbarVisuals then
-            _G.MSUF_UpdateCastbarVisuals("arena")
-        end
-        if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo("arena") end
-        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup("arena") end
+        if type(_G.MSUF_UpdateCastbarEditInfo) == "function" then _G.MSUF_UpdateCastbarEditInfo(poolKind) end
+        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then _G.MSUF_SyncCastbarPositionPopup(poolKind) end
         return
     end
 
@@ -507,17 +513,13 @@ local function UpdateCastbarTextures()
         UpdateTextureForFrame(frame, texture, bgTexture, revision)
     end)
 
-    local bossCastbars = _G.MSUF_BossCastbars
-    if type(bossCastbars) == "table" then
-        for index = 1, #bossCastbars do
-            UpdateTextureForFrame(bossCastbars[index], texture, bgTexture, revision)
-        end
-    end
-
-    local arenaCastbars = _G.MSUF_ArenaCastbars
-    if type(arenaCastbars) == "table" then
-        for index = 1, #arenaCastbars do
-            UpdateTextureForFrame(arenaCastbars[index], texture, bgTexture, revision)
+    local pools = CastbarPools()
+    for poolIndex = 1, #pools do
+        local castbars = pools[poolIndex].Castbars()
+        if type(castbars) == "table" then
+            for index = 1, #castbars do
+                UpdateTextureForFrame(castbars[index], texture, bgTexture, revision)
+            end
         end
     end
 end
@@ -842,12 +844,6 @@ local function ApplyCastbarVisualFrameCold(frame, general, forcedUnit)
     return true
 end
 
-local function MaxBossFrames()
-    local count = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
-    if count < 1 or count > 12 then return 5 end
-    return count
-end
-
 local function BumpCastbarVisualRevisions()
     BumpCastbarStyleRevision()
 
@@ -858,72 +854,50 @@ local function BumpCastbarVisualRevisions()
     if type(bumpTime) == "function" then bumpTime() end
 end
 
-local function ApplyBossRuntimeVisuals(general)
+--- The live bars of one pool. MSUF_<kind><n>CastBar is the pre-pool frame name.
+local function ApplyPoolRuntimeVisuals(pool, general)
     local did = false
-    local bossCastbars = _G.MSUF_BossCastbars
-    for index = 1, MaxBossFrames() do
-        local frame = (bossCastbars and bossCastbars[index])
-            or _G["MSUF_BossCastbar" .. index]
-            or _G["MSUF_boss" .. index .. "CastBar"]
-        did = ApplyCastbarVisualFrameCold(frame, general, "boss") or did
+    local kind = pool.kind
+    local castbars = pool.Castbars()
+    local framePrefix = pool.descriptor.framePrefix
+    for index = 1, pool.maxFrames do
+        local frame = (castbars and castbars[index])
+            or _G[framePrefix .. index]
+            or _G["MSUF_" .. kind .. index .. "CastBar"]
+        did = ApplyCastbarVisualFrameCold(frame, general, kind) or did
     end
     return did
 end
 
-local function ApplyExistingBossPreviewVisuals(general)
-    local did = ApplyCastbarVisualFrameCold(
-        _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1,
-        general,
-        "boss"
-    )
-    for index = 2, MaxBossFrames() do
-        did = ApplyCastbarVisualFrameCold(_G["MSUF_BossCastbarPreview" .. index], general, "boss") or did
-    end
-    return did
-end
+-- The preview refresh re-enters Core through the preview layout; one lock per
+-- pool kind stops that recursion.
+local poolPreviewRefreshLocked = {}
+-- Boss re-runs its Edit Mode preview setup after a refresh (the Retail
+-- behaviour); arena never did.
+local SETUP_AFTER_PREVIEW_REFRESH = { boss = "MSUF_SetupBossCastbarPreviewEditMode" }
 
-local function RefreshBossPreviews(general)
+--- Rebuilds the pool's previews out of combat, or restyles the ones that exist
+--- while the preview module is missing or busy.
+local function RefreshPoolPreviews(pool, general)
     if IsInCombat() then return false end
 
-    local updatePreview = _G.MSUF_UpdateBossCastbarPreview
-    if type(updatePreview) == "function" and not _G.MSUF_BossPreviewRefreshLock then
-        ExportPublic("MSUF_BossPreviewRefreshLock", true)
-        updatePreview()
-        local setupEditMode = _G.MSUF_SetupBossCastbarPreviewEditMode
+    local kind = pool.kind
+    local preview = pool.preview
+    if preview and not poolPreviewRefreshLocked[kind] then
+        poolPreviewRefreshLocked[kind] = true
+        preview:Update()
+        local setupName = SETUP_AFTER_PREVIEW_REFRESH[kind]
+        local setupEditMode = setupName and _G[setupName]
         if type(setupEditMode) == "function" then setupEditMode() end
-        ExportPublic("MSUF_BossPreviewRefreshLock", false)
-        return true
-    end
-
-    return ApplyExistingBossPreviewVisuals(general)
-end
-
-local function ApplyArenaRuntimeVisuals(general)
-    local did = false
-    local arenaCastbars = _G.MSUF_ArenaCastbars
-    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-        local frame = (arenaCastbars and arenaCastbars[index])
-            or _G["MSUF_ArenaCastbar" .. index]
-            or _G["MSUF_arena" .. index .. "CastBar"]
-        did = ApplyCastbarVisualFrameCold(frame, general, "arena") or did
-    end
-    return did
-end
-
-local function RefreshArenaPreviews(general)
-    if IsInCombat() then return false end
-
-    local updatePreview = _G.MSUF_UpdateArenaCastbarPreview
-    if type(updatePreview) == "function" and not _G.MSUF_ArenaPreviewRefreshLock then
-        ExportPublic("MSUF_ArenaPreviewRefreshLock", true)
-        updatePreview()
-        ExportPublic("MSUF_ArenaPreviewRefreshLock", false)
+        poolPreviewRefreshLocked[kind] = false
         return true
     end
 
     local did = false
-    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-        did = ApplyCastbarVisualFrameCold(_G["MSUF_ArenaCastbarPreview" .. index], general, "arena") or did
+    if preview then
+        for index = 1, preview.maxFrames do
+            did = ApplyCastbarVisualFrameCold(_G[preview:Name(index)], general, kind) or did
+        end
     end
     return did
 end
@@ -948,12 +922,12 @@ ApplyCastbarVisualsForUnit = function(unit, revisionsReady, general)
     elseif unit == "focus" then
         did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar, general, unit) or did
         if not IsInCombat() then did = ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbarPreview, general, unit) or did end
-    elseif unit == "boss" then
-        did = ApplyBossRuntimeVisuals(general) or did
-        did = RefreshBossPreviews(general) or did
-    elseif unit == "arena" then
-        did = ApplyArenaRuntimeVisuals(general) or did
-        did = RefreshArenaPreviews(general) or did
+    else
+        local pool = CastbarPool(unit)
+        if pool then
+            did = ApplyPoolRuntimeVisuals(pool, general) or did
+            did = RefreshPoolPreviews(pool, general) or did
+        end
     end
     return did
 end
@@ -970,10 +944,11 @@ local function ApplyAllCastbarVisuals(general)
         ApplyCastbarVisualFrameCold(_G.MSUF_FocusCastbarPreview, general, "focus")
     end
 
-    ApplyBossRuntimeVisuals(general)
-    RefreshBossPreviews(general)
-    ApplyArenaRuntimeVisuals(general)
-    RefreshArenaPreviews(general)
+    local pools = CastbarPools()
+    for index = 1, #pools do
+        ApplyPoolRuntimeVisuals(pools[index], general)
+        RefreshPoolPreviews(pools[index], general)
+    end
 end
 
 local function UpdateCastbarVisuals(unit)
@@ -1003,11 +978,9 @@ local function ApplyAllCastbarsAndSync()
     if type(_G.MSUF_ReanchorPlayerCastBarBase) == "function" then _G.MSUF_ReanchorPlayerCastBarBase() end
     if type(_G.MSUF_ReanchorTargetCastBarBase) == "function" then _G.MSUF_ReanchorTargetCastBarBase() end
     if type(_G.MSUF_ReanchorFocusCastBarBase) == "function" then _G.MSUF_ReanchorFocusCastBarBase() end
-    if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
-        _G.MSUF_ApplyBossCastbarPositionSetting(nil, true, true)
-    end
-    if type(_G.MSUF_ApplyArenaCastbarPositionSetting) == "function" then
-        _G.MSUF_ApplyArenaCastbarPositionSetting(nil, true, true)
+    local pools = CastbarPools()
+    for index = 1, #pools do
+        pools[index].ApplyPositionSetting(nil, true, true)
     end
 
     BumpCastbarVisualRevisions()

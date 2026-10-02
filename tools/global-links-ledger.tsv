@@ -9,7 +9,7 @@ MSUF_ApplyBossCastbarPositionSetting	dynamic	A-C2	MidnightSimpleUnitFrames/Castb
 MSUF_ApplyBossCastbarsEnabled	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua::applyEnabled = "MSUF_ApplyBossCastbarsEnabled"	exported by MSUF_CastbarPools from the descriptor
 MSUF_ApplyCommitState	dead	A-C6	-	Shell/EditMode/MSUF_EditMode_Core.lua reads a batched commit state nothing creates (FontRuntime and TextureRuntime dropped their reads)
 MSUF_ArenaCastbar1	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua::framePrefix = "MSUF_ArenaCastbar"	castbar frame named from the pool descriptor's prefix and index
-MSUF_ArenaCastbarPreview1	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua::local name = "MSUF_ArenaCastbarPreview" .. index	preview frame named from its index
+MSUF_ArenaCastbarPreview1	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua::namePrefix = "MSUF_ArenaCastbarPreview"	preview frame named from the descriptor prefix and its index (MSUF_CastbarPoolPreviews)
 MSUF_ArenaCastbar_Stop	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua::stop = "MSUF_ArenaCastbar_Stop"	exported by MSUF_CastbarPools from the descriptor
 MSUF_ArenaCastbars	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua::poolGlobal = "MSUF_ArenaCastbars"	pool table exported by MSUF_CastbarPools from the descriptor
 MSUF_Bars_RefreshAbsorbTextureTestPreview	dead	A-C7	-	Pages/MSUF_Menu2_Global.lua guards a preview refresh nothing defines

@@ -161,8 +161,13 @@ for _, flavor in ipairs({ "Mainline", "Mists" }) do
     general.castbarPlayerPreviewEnabled = true
     env.MSUF_UnitEditModeActive = true
     local positioned = 0
-    env.MSUF_PositionBossCastbarPreview = function() positioned = positioned + 1 end
-    env.MSUF_PositionArenaCastbarPreview = function() positioned = positioned + 1 end
+    -- The drag path positions through each kind's preview object
+    -- (Castbars/MSUF_CastbarPoolPreviews.lua); the instance field shadows the
+    -- shared Position method.
+    local previews = world.core.Castbars.Pools.previews
+    local function CountPosition() positioned = positioned + 1 end
+    previews.boss.Position = CountPosition
+    previews.arena.Position = CountPosition
     for i = 1, 5 do
         env["MSUF_BossCastbarPreview" .. i] = env["MSUF_BossCastbarPreview" .. i] or env.CreateFrame("Frame")
         env["MSUF_ArenaCastbarPreview" .. i] = env["MSUF_ArenaCastbarPreview" .. i] or env.CreateFrame("Frame")

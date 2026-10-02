@@ -270,6 +270,7 @@ clients+Forever	lua	tools/tests/auras3_normalize_stamp_smoke.lua	{root} {flavor}
 -	lua	tools/tests/castbar_time_axis_smoke.lua	{root}	Castbar time-axis decorations follow the fill direction
 -	lua	tools/tests/castbar_driver_lifecycle_smoke.lua	{root}	Castbar driver lifecycle smoke failed
 -	lua	tools/tests/castbar_module_topology_smoke.lua	{root}	Castbar module topology smoke failed
+-	lua	tools/tests/castbar_pool_preview_smoke.lua	{root}	Castbar pool preview smoke failed
 -	lua	tools/tests/interrupt_ready_perf_smoke.lua	{root}	Interrupt-ready perf smoke failed
 -	lua	tools/tests/castbar_hotpath_budget_smoke.lua	{root}	Castbar hotpath budget smoke failed
 -	lua	tools/tests/castbar_hotpath_smoke.lua	{root}	Castbar hotpath smoke failed

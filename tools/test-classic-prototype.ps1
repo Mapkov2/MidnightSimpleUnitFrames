@@ -1219,6 +1219,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
     "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua",
+    "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPoolPreviews.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
     "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
     "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua",

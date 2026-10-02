@@ -64,6 +64,7 @@ local FALLBACK_X = -420
 local UNITFRAME_GAP = 3
 Pools.ROW_PITCH = ROW_PITCH
 Pools.FALLBACK_X = FALLBACK_X
+Pools.UNITFRAME_GAP = UNITFRAME_GAP
 
 local CAST_EVENTS = {
     "UNIT_SPELLCAST_START",
@@ -97,6 +98,7 @@ local function InCombat()
         or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
         or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
 end
+Pools.InCombat = InCombat
 
 local function SetPointIfChanged(frame, point, relativeTo, relativePoint, offsetX, offsetY, preserveOffsets)
     if not frame then
