@@ -32,6 +32,7 @@ clients+Forever	lua	tools/tests/group_header_combat_child_smoke.lua	{root} {flav
 -	lua	tools/tests/group_runtime_defer_merge_smoke.lua	{root}	Group runtime deferred scope merge smoke failed
 -	lua	tools/tests/group_event_cost_smoke.lua	{root}	Group runtime event cost smoke failed
 -	lua	tools/tests/group_db_split_smoke.lua	{root}	Group DB split load-order and export smoke failed
+-	lua	tools/tests/group_require_contract_smoke.lua	{root}	Group require-instead-of-guard contract smoke failed
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline	Group roster settle and apply budget smoke failed: Mainline
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Vanilla	Group roster settle and apply budget smoke failed: Vanilla
 -	lua	tools/tests/forever_raid_manager_gamepad_smoke.lua	{root}	Forever Raid Manager gamepad smoke failed

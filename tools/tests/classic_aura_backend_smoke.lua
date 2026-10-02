@@ -350,6 +350,10 @@ assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_M
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"))(
     "MidnightSimpleUnitFrames", namespace)
+-- The group compiler requires the UF settings-cache export (MSUF_UF_Config.lua
+-- loads first in every TOC); an empty cache leaves the profile values in charge.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
+_G.MSUF_UFCore_GetSettingsCache = function() return {} end
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 local compiledGroupSpec = namespace.GF.CompileSpec("party")

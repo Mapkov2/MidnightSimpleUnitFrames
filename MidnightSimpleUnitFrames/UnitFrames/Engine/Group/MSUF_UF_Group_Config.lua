@@ -126,13 +126,18 @@ local function ResolveHighlightRGB()
   return 1, 1, 1
 end
 
+--- Hard dependencies on exports of files that load before this one: the UF
+--- settings cache (UnitFrames/Engine/MSUF_UF_Config.lua) and the statusbar
+--- texture resolver (Castbars/MSUF_Castbars_Core.lua). Resolved once, on first
+--- use, so a fixture that never compiles those parts need not stub them.
+local CONFIG_FILE = "UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"
+local GetSettingsCache, ResolveTextureKeyExport
+
 local function SettingsCache()
-  local getter = _G.MSUF_UFCore_GetSettingsCache
-  if type(getter) == "function" then
-    local cache = getter()
-    if type(cache) == "table" then
-      return cache
-    end
+  GetSettingsCache = GetSettingsCache or MSUF.Require("MSUF_UFCore_GetSettingsCache", CONFIG_FILE)
+  local cache = GetSettingsCache()
+  if type(cache) == "table" then
+    return cache
   end
   return nil
 end
@@ -697,8 +702,9 @@ local function CompileTempMaxHealth(kind, conf, texture)
   local textureKey = ScopedValue(conf, general, "tempMaxHealthTexture", "")
   local resolvedTexture = texture
   if type(textureKey) == "string" and textureKey ~= "" then
-    local resolve = _G.MSUF_ResolveStatusbarTextureKey
-    local candidate = type(resolve) == "function" and resolve(textureKey) or textureKey
+    ResolveTextureKeyExport = ResolveTextureKeyExport
+      or MSUF.Require("MSUF_ResolveStatusbarTextureKey", CONFIG_FILE)
+    local candidate = ResolveTextureKeyExport(textureKey) or textureKey
     if type(candidate) == "string" and candidate ~= "" then resolvedTexture = candidate end
   end
   local test = AbsorbTextureTestEnabledForScope(kind, "tempMaxHealth")
