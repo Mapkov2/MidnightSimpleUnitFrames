@@ -686,7 +686,10 @@ do
             end
         end)
     end
-    MSUF_RecomputeHoverInert()
+    -- No recompute at file load: the SavedVariables are not loaded yet, so it
+    -- built a throwaway profile through MSUF_EnsureDB on every login and read
+    -- that profile's mode. PLAYER_ENTERING_WORLD settles the flag with the
+    -- real one before the first hover can happen.
 end
 
 --- ==========================================================================
