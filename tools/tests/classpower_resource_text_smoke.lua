@@ -123,7 +123,20 @@ do
     Check(Text(shaman) == 2, "the Maelstrom Weapon stack count is " .. tostring(Text(shaman)))
 end
 
+-- Mists Balance: the signed Eclipse bar honours the Class Resource text mode
+-- too; AUTO keeps its current / max presentation.
+do
+    local PT_BALANCE = 26
+    for mode, expected in pairs({ AUTO = "3 / 5", CURRENT = 3, MAX = 5, CURMAX = "3 / 5" }) do
+        local t = World.Start(repo, "Mists", "DRUID", 1, PT.MANA,
+            { classPowerShowText = true, classPowerTextMode = mode })
+        Check(t.CP.visible and t.CP.powerType == PT_BALANCE, "Mists Balance did not route Eclipse")
+        Power(t, "BALANCE")
+        Check(Text(t) == expected, "Mists Eclipse " .. mode .. " text is " .. tostring(Text(t)))
+    end
+end
+
 if #failures > 0 then
     error("classpower_resource_text_smoke failed:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_resource_text_smoke: ok (combo, restricted, shard, rune and aura counts)")
+print("classpower_resource_text_smoke: ok (combo, restricted, shard, rune, aura and Eclipse counts)")

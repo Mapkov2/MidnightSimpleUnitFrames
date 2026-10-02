@@ -1789,8 +1789,15 @@ modeBuilders.CONTINUOUS = function(E)
             if txt then
                 local showText = visual and visual.showText == true
                 if showText and cur and mx then
-                    txt:SetFormattedText("%d / %d", cur, mx)
-                    txt._msufCPText = nil
+                    --- An explicit Class Resource text mode wins, as on every
+                    --- other bar; AUTO keeps the signed current / max.
+                    local textMode = _cpDB.textMode
+                    if textMode then
+                        CP_ApplyConfiguredText(textMode, txt, cur, mx)
+                    else
+                        txt:SetFormattedText("%d / %d", cur, mx)
+                        txt._msufCPText = nil
+                    end
                     CP_StampShown(txt, true)
                 else
                     CP_StampShown(txt, false)
