@@ -220,7 +220,9 @@ MSUF.AuraCore.Auras3 = A3
 ---      table (Menu_Storage, Model.EnsureDB)
 ---   F  the fallbacks the runtime compiler reads when a key is absent
 --- Both sets are saved-profile contracts: change one only with a migration.
-local function BuildLaneKeySchema()
+---
+--- The rows of the lane-key schema: data only, read once by BuildLaneKeySchema.
+local function LaneKeySchemaRows()
     local SF, S, F = "SF", "S", "F"
 
     -- Shared keys without a lane prefix: key, owner, default, defaults.
@@ -339,7 +341,12 @@ local function BuildLaneKeySchema()
     -- The Debuffs lane has no prefixed copy of these; its style key is the
     -- Shared key itself.
     local LANE_STYLE_ALIASES = { debuff = { "debuffTypeBorderMode", "useDebuffTypeBorders" } }
+    return SHARED_KEYS, LANES, LANE_FIELDS, LANE_EXTRA_KEYS, LANE_STYLE_ALIASES
+end
 
+local function BuildLaneKeySchema()
+    local SHARED_KEYS, LANES, LANE_FIELDS, LANE_EXTRA_KEYS, LANE_STYLE_ALIASES = LaneKeySchemaRows()
+    local SF, S, F = "SF", "S", "F"
     local schema = {
         LANE_SPECS = {},
         LANE_LAYOUT_FIELDS = {},

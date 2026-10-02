@@ -332,6 +332,7 @@ local function PrepareDirectContracts(source, namespace)
         local text = Read(SourcePath(owner))
         local parts = {
             Slice.Function(text, "local function DeepCopy", owner),
+            Slice.Function(text, "local function LaneKeySchemaRows", owner),
             Slice.Function(text, "local function BuildLaneKeySchema", owner),
             "return BuildLaneKeySchema()",
         }
