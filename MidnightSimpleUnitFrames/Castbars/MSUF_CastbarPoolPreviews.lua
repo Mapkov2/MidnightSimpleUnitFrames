@@ -101,6 +101,11 @@ function Preview:UnitFrame(index)
     return CoreFrame(unit) or _G["MSUF_" .. unit]
 end
 
+--- The preview frame of one slot, nil until it is created.
+function Preview:Frame(index)
+    return _G[self:Name(index)]
+end
+
 --- Calls fn(frame, index) for every preview that exists, in slot order.
 function Preview:ForEach(fn)
     for index = 1, self.maxFrames do

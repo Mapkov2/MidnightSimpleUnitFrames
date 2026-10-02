@@ -98,9 +98,13 @@ interruptedFrame:SetInterrupted("arena-guid")
 assert(interruptedFrame.hidden == true and interruptedFrame.interrupted == nil,
     "arena.showInterrupt=false does not suppress Arena interrupt feedback")
 
--- Reason: the cast-target colour fan-out is one walker function.
+-- Reason: the cast-target colour fan-out is one walker function. It walks the
+-- real pool modules (tools/tests/castbar_pool_namespace.lua), which read the
+-- pool tables and named frames published below.
+local PoolNamespace = assert(loadfile("tools/tests/castbar_pool_namespace.lua"))()
 local refreshAllSource = Slice(driver, { "local function RefreshAllCastTargetTextColors" })
 local refreshAllHarness = [[
+local MSUF = ...
 local liveVisited, previewVisited = {}, {}
 local function RefreshCastTargetText(frame) liveVisited[#liveVisited + 1] = frame end
 local function ApplyCastTargetTextColor(frame) previewVisited[#previewVisited + 1] = frame end
@@ -108,7 +112,7 @@ local function ApplyCastTargetTextColor(frame) previewVisited[#previewVisited + 
 return RefreshAllCastTargetTextColors, liveVisited, previewVisited
 ]]
 local refreshAll, liveVisited, previewVisited =
-    Compile(refreshAllHarness, "Arena cast-target color refresh harness")()
+    Compile(refreshAllHarness, "Arena cast-target color refresh harness")(PoolNamespace(".", nil))
 -- 3-slot pass: MSUF_MAX_ARENA_FRAMES unset (Mainline fallback 3); slots 4..5
 -- are decoys that must stay untouched.
 _G.MSUF_MAX_ARENA_FRAMES = nil
@@ -146,7 +150,7 @@ _G.MSUF_ArenaCastbars = { arenaLive5[1], nil, arenaLive5[3], arenaLive5[4], nil,
 _G.MSUF_ArenaCastbarPreview = arenaPreview5[1]
 _G.MSUF_MAX_ARENA_FRAMES = 5
 local refreshAll5, liveVisited5, previewVisited5 =
-    Compile(refreshAllHarness, "Arena cast-target color refresh 5-slot harness")()
+    Compile(refreshAllHarness, "Arena cast-target color refresh 5-slot harness")(PoolNamespace(".", 5))
 refreshAll5()
 AssertList(liveVisited5, expectedLive5, "5-slot Arena live cast-target color refresh")
 AssertList(previewVisited5, expectedPreview5, "5-slot Arena preview cast-target color refresh")

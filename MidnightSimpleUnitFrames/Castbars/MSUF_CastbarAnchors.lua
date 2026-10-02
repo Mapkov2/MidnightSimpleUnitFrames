@@ -467,6 +467,21 @@ end
 -- Width-source signatures (skip redundant re-anchors)
 ------------------------------------------------------------------------
 
+--- The pool module of a castbar kind (boss, arena), nil for single bars. The
+--- pools load after this file; every caller runs later.
+local function CastbarPool(unit)
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    return pools and pools.kinds and pools.kinds[unit] or nil
+end
+
+--- Unit-frame width sources of one castbar kind: a pool reads the unit frame
+--- of every slot (boss1..N), a single bar its own unit frame.
+local function WidthSourceSlots(unit)
+    local pool = CastbarPool(unit)
+    if pool then return pool.maxFrames, pool.unitPrefix end
+    return 1, nil
+end
+
 local function InvalidateWidthSourceSignature(unit)
     if unit then
         widthSourceSignatures[NormalizeUnit(unit)] = nil
@@ -541,16 +556,11 @@ local function WidthSourceNeedsReanchor(g, unit)
     local offset = 1
 
     if matchSrc == "unitframe" then
-        local count = (unit == "boss" and 5) or (unit == "arena" and (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)) or 1
+        local count, slotPrefix = WidthSourceSlots(unit)
         if state.count ~= count then changed = true end
         state.count = count
         for i = 1, count do
-            local sourceUnit = unit
-            if unit == "boss" then
-                sourceUnit = "boss" .. i
-            elseif unit == "arena" then
-                sourceUnit = "arena" .. i
-            end
+            local sourceUnit = slotPrefix and (slotPrefix .. i) or unit
             local frame = GetUnitframe(sourceUnit)
             local source = GetUnitframeWidthSourceFromFrame(frame)
             local sliceChanged
@@ -695,14 +705,9 @@ local function EnsureWidthSourceHooks(g, unit)
 
     if matchSrc == "unitframe" then
         local found = false
-        local count = (unit == "boss" and 5) or (unit == "arena" and (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)) or 1
+        local count, slotPrefix = WidthSourceSlots(unit)
         for i = 1, count do
-            local sourceUnit = unit
-            if unit == "boss" then
-                sourceUnit = "boss" .. i
-            elseif unit == "arena" then
-                sourceUnit = "arena" .. i
-            end
+            local sourceUnit = slotPrefix and (slotPrefix .. i) or unit
             local frame = GetUnitframe(sourceUnit)
             found = HookWidthSourceFrame(frame, unit, generation) or found
             found = HookWidthSourceFrame(GetUnitframeWidthSourceFromFrame(frame), unit, generation) or found
@@ -976,45 +981,23 @@ ApplyCastbarEffectiveSizeUnit = function(unit, g)
         return true
     end
 
-    if unit == "boss" then
+    local pool = CastbarPool(unit)
+    if pool then
         local applied = false
-        local maxBoss = tonumber(_G.MAX_BOSS_FRAMES) or 5
-        if maxBoss < 1 or maxBoss > 12 then maxBoss = 5 end
-        for i = 1, maxBoss do
-            local frame = (_G.MSUF_BossCastbars and _G.MSUF_BossCastbars[i]) or _G["MSUF_BossCastbar" .. i]
+        for index = 1, pool.maxFrames do
+            local frame = pool.Bar(index)
             if frame then
                 local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240
                 local fallbackH = (frame.GetHeight and frame:GetHeight()) or 12
-                local w, h = MSUF_GetCastbarDesiredSize("boss" .. i, g, frame, fallbackW, fallbackH)
+                local w, h = MSUF_GetCastbarDesiredSize(pool.unitPrefix .. index, g, frame, fallbackW, fallbackH)
                 if SetOuterSize(frame, w, h) then
                     applied = true
                     if frame.ApplyLayout then frame:ApplyLayout() end
                 end
             end
         end
-        if _G.MSUF_UnitEditModeActive == true and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-            _G.MSUF_UpdateBossCastbarPreview()
-            applied = true
-        end
-        return applied
-    end
-
-    if unit == "arena" then
-        local applied = false
-        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-            local frame = (_G.MSUF_ArenaCastbars and _G.MSUF_ArenaCastbars[i]) or _G["MSUF_ArenaCastbar" .. i]
-            if frame then
-                local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240
-                local fallbackH = (frame.GetHeight and frame:GetHeight()) or 12
-                local w, h = MSUF_GetCastbarDesiredSize("arena" .. i, g, frame, fallbackW, fallbackH)
-                if SetOuterSize(frame, w, h) then
-                    applied = true
-                    if frame.ApplyLayout then frame:ApplyLayout() end
-                end
-            end
-        end
-        if _G.MSUF_UnitEditModeActive == true and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
-            _G.MSUF_UpdateArenaCastbarPreview()
+        if _G.MSUF_UnitEditModeActive == true and pool.preview then
+            pool.preview:Update()
             applied = true
         end
         return applied

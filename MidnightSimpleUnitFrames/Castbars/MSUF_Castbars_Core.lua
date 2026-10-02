@@ -727,11 +727,11 @@ ExportPublic("MSUF_GetCastbarFrameLevelOffset", GetCastbarFrameLevelOffset)
 
 local function CastbarAnchorFrame(frame, unit)
     local frameUnit = frame and tostring(frame.unit or "") or ""
-    if unit == "boss" and not frameUnit:match("^boss%d+$") then
-        frameUnit = "boss" .. tostring(tonumber(frame and frame._msufBossIndex) or 1)
-    end
-    if unit == "arena" and not frameUnit:match("^arena%d+$") then
-        frameUnit = "arena" .. tostring(tonumber(frame and frame._msufArenaIndex) or 1)
+    -- A pool bar carries its slot unit; a pool preview carries its slot index.
+    local pool = CastbarPool(unit)
+    if pool and not frameUnit:match(pool.slotUnitPattern) then
+        local indexField = pool.preview and pool.preview.indexField
+        frameUnit = pool.unitPrefix .. tostring(tonumber(frame and indexField and frame[indexField]) or 1)
     end
     if frameUnit == "" then frameUnit = unit end
 

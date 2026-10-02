@@ -976,21 +976,16 @@ local function RefreshAllCastTargetTextColors()
     RefreshPreview(_G.MSUF_TargetCastbarPreview)
     RefreshPreview(_G.MSUF_FocusCastbarPreview)
 
-    local bossCastbars = _G.MSUF_BossCastbars
-    local maxBossFrames = tonumber(_G.MAX_BOSS_FRAMES) or 5
-    if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
-    for index = 1, maxBossFrames do
-        RefreshLive((bossCastbars and bossCastbars[index])
-            or _G["MSUF_BossCastbar" .. index]
-            or _G["MSUF_boss" .. index .. "CastBar"])
-        RefreshPreview(index == 1 and _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview" .. index])
-    end
-
-    local arenaCastbars = _G.MSUF_ArenaCastbars
-    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-        RefreshLive((arenaCastbars and arenaCastbars[index]) or _G["MSUF_ArenaCastbar" .. index])
-        RefreshPreview(index == 1 and (_G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1)
-            or _G["MSUF_ArenaCastbarPreview" .. index])
+    -- Boss, then arena: every slot's live bar and preview (MSUF_CastbarPools.lua).
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    local order = pools and pools.order
+    for poolIndex = 1, order and #order or 0 do
+        local pool = order[poolIndex]
+        local preview = pool.preview
+        for index = 1, pool.maxFrames do
+            RefreshLive(pool.Bar(index))
+            if preview then RefreshPreview(preview:Frame(index)) end
+        end
     end
 end
 ExportPublic("MSUF_RefreshAllCastTargetTextColors", RefreshAllCastTargetTextColors)

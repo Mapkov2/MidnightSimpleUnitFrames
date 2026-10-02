@@ -143,10 +143,14 @@ AssertVisitedExactlyOnce(
 local ROUNDED_CASTBARS = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarRounded.lua"
 local roundedCastbars = Read(ROUNDED_CASTBARS)
 -- Reason: ApplyAll walks every castbar through ForEachCastbar, so the contract
--- is those two functions; the four doubles record which frames they reach.
+-- is those two functions; the four doubles record which frames they reach. The
+-- walker iterates the real pool modules (tools/tests/castbar_pool_namespace.lua),
+-- which read the pool tables and named frames published below.
+local PoolNamespace = assert(loadfile("tools/tests/castbar_pool_namespace.lua"))()
 local roundedWalker = Slice.Function(roundedCastbars, "local function ForEachCastbar", ROUNDED_CASTBARS)
 local roundedApplyAll = Slice.Function(roundedCastbars, "local function ApplyAll", ROUNDED_CASTBARS)
 local roundedHarness = [[
+local MSUF = ...
 local roundedRuntimeActive = false
 local applied, cleared = {}, {}
 local function SettingEnabled() return true end
@@ -157,7 +161,7 @@ local function ClearFrame(frame) cleared[#cleared + 1] = frame end
 return ApplyAll, applied, cleared
 ]]
 local applyAllRoundedCastbars, appliedRounded, clearedRounded =
-    assert(compile(roundedHarness, "Arena rounded castbar harness"))()
+    assert(compile(roundedHarness, "Arena rounded castbar harness"))(PoolNamespace(".", nil))
 local expectedArenaFrames = {
     arenaLive[1], arenaLive[2], arenaLive[3],
     arenaPreview[1], arenaPreview[2], arenaPreview[3],
@@ -188,7 +192,7 @@ for index = 1, 5 do expectedArenaFrames5[#expectedArenaFrames5 + 1] = arenaPrevi
 AssertVisitedExactlyOnce(collectScaleFrames(), expectedArenaFrames5, "5-slot UI scale collector")
 
 local applyAllRoundedCastbars5, appliedRounded5, clearedRounded5 =
-    assert(compile(roundedHarness, "Arena rounded castbar 5-slot harness"))()
+    assert(compile(roundedHarness, "Arena rounded castbar 5-slot harness"))(PoolNamespace(".", 5))
 applyAllRoundedCastbars5(true)
 AssertVisitedExactlyOnce(appliedRounded5, expectedArenaFrames5, "5-slot rounded castbar enable")
 applyAllRoundedCastbars5(false)
