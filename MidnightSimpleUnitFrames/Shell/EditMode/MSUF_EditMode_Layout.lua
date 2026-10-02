@@ -488,14 +488,6 @@ local function ApplyCastbarDragPosition(d, centerX, centerY)
     local nextX = round((d.castbarStartX or 0) + dx)
     local nextY = round((d.castbarStartY or 0) + dy)
 
-    if d.castbarUnit == "boss" then
-        local sx = _G.MSUF_CastbarBossXOffsetSlider
-        local sy = _G.MSUF_CastbarBossYOffsetSlider
-        local clamp = _G.MSUF_ClampToSlider
-        if sx and type(clamp) == "function" then nextX = clamp(sx, nextX) end
-        if sy and type(clamp) == "function" then nextY = clamp(sy, nextY) end
-    end
-
     if g[d.castbarXKey] == nextX and g[d.castbarYKey] == nextY then
         return true
     end
