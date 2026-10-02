@@ -112,6 +112,31 @@ Check(early.attributes.unit == nil and GF.frames[early] == nil, "a cleared slot 
 Check(#h.violations == 0, "protected write while a member left in combat:\n" .. tostring(h.violations[1]))
 h:LeaveCombat()
 
+-- An out-of-combat birth whose next-frame settle the combat start overtakes:
+-- the roster event births the child and writes its unit at once, the settle
+-- then runs in lockdown and defers. The unit hook goes on at birth in every
+-- state, so the unit write itself builds the frame; before, such a child was
+-- an unstyled, clickable slot for the whole fight.
+local raidConf = GF.GetConf("raid")
+raidConf.enabled = true
+h:SetRaid(6)
+h:Event("GROUP_ROSTER_UPDATE")
+h:RunTimers()
+local raidHeader = GF.headers.raid
+Check(raidHeader ~= nil and #h:Children(raidHeader) >= 6, "the raid header did not build out of combat")
+h:SetRaid(7)
+h:Event("GROUP_ROSTER_UPDATE")
+Check(h.born[#h.born].combat == false and h.born[#h.born].header == raidHeader,
+    "the seventh raid child was not born out of combat")
+h:EnterCombat()
+h:RunTimers()
+local overtaken = h:Children(raidHeader)[7]
+AssertStyled(overtaken, "raid7", "child born out of combat, settle overtaken by combat")
+Check(#h.violations == 0, "protected write while combat overtook a settle:\n" .. tostring(h.violations[1]))
+h:LeaveCombat()
+AssertRegenFinished(overtaken)
+raidConf.enabled = false
+
 print(string.format("group_header_combat_child_smoke: ok (%s: %d children, %d born in lockdown, 0 protected writes)",
     flavor, #h:Children(header), (function()
         local count = 0

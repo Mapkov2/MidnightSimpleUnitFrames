@@ -18,6 +18,13 @@
 -- measured 64-bit limits for the same baseline/current and identical harness.
 -- Lua object sizes differ with pointer width, so a 32-bit KB limit cannot
 -- validate a 64-bit interpreter. An empty-table allocation identifies the layout.
+-- 2026-10-02 (wave 3, group): Mainline party_join 158k -> 164k (Vanilla's
+-- 164k already holds the new 160k). An
+-- out-of-combat birth is now built at its own unit write instead of by the
+-- next-frame settle (a combat start in between left it blank for the fight), so
+-- the joining frame's first build and its once-per-frame catch-up moved from the
+-- following settle into the join: Mainline join+settle 154k+41k -> 160k+36k
+-- (195k -> 196k), Vanilla 154k+42k -> 160k+37k. Every other case is unchanged.
 --
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
@@ -29,7 +36,7 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 -- [flavor] = { [case] = { k instructions, KB } }
 local BUDGETS = {
     Mainline = {
-        party_join = { 158, 220 }, party_settle = { 42, 10 }, party_apply = { 401, 207 }, raid_build = { 1871, 3912 },
+        party_join = { 164, 220 }, party_settle = { 42, 10 }, party_apply = { 401, 207 }, raid_build = { 1871, 3912 },
         raid_settle = { 64, 8 }, raid_apply = { 1397, 582 }, raid_shift = { 84, 26 },
     },
     Vanilla = {

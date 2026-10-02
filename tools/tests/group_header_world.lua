@@ -242,7 +242,11 @@ function Harness.New(root, flavor, options)
                     local childName = name and (name .. "UnitButton" .. index) or nil
                     local child = widgets:CreateFrame(attributes.templateType or "Button", childName, header,
                         attributes.template)
-                    child.shown = false
+                    -- CreateFrame returns a shown frame: SecureUnitButtonTemplate and
+                    -- SecureFrameTemplate carry no hidden="true" (SecureTemplates.xml,
+                    -- SecureTemplatesBase.xml), and configureChildren writes the unit
+                    -- before its Show() call, so the first unit write meets a shown child.
+                    child.shown = true
                     if childName then env[childName] = child end
                     Protect(child)
                     header[index] = child
