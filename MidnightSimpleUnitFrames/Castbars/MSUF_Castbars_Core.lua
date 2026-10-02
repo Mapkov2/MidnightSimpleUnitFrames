@@ -45,7 +45,7 @@ local FILE = "Castbars/MSUF_Castbars_Core.lua"
 local Require = MSUF.Require
 local EnsureDBProvider = Require("MSUF_EnsureDB", FILE)
 local NormalizeFontPath = Require("MSUF_NormalizeFontPath", FILE)
-local GetInternalFontPathByKey = Require("MSUF_GetInternalFontPathByKey", FILE)
+local InternalFontPathByKey = Require("MSUF_GetInternalFontPathByKey", FILE)
 local UpdateCastbarEditInfo = Require("MSUF_UpdateCastbarEditInfo", FILE)
 local SyncCastbarPositionPopup = Require("MSUF_SyncCastbarPositionPopup", FILE)
 
@@ -252,7 +252,7 @@ local function GetFontPath()
         if path then return ResolveFontPath(path, general.fontSize or 14, GetGlobalFontFlags()) end
     end
 
-    local internalPath = GetInternalFontPathByKey(fontKey)
+    local internalPath = InternalFontPathByKey(fontKey)
     if internalPath then return ResolveFontPath(internalPath, general.fontSize or 14, GetGlobalFontFlags()) end
 
     local media = lsm or (MSUF and MSUF.LSM) or _G.MSUF_LSM
