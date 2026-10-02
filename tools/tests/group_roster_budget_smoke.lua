@@ -186,6 +186,10 @@ end)
 local raidChildren = 0
 GF.ForEachHeader("raid", function(header) raidChildren = raidChildren + #h:Children(header) end)
 Check(raidChildren >= 20 and GF.FrameForUnit("raid20") ~= nil, "the raid did not build twenty styled frames")
+-- Warm the unchanged-roster path before measuring its steady-state cost.
+-- This keeps one-time VM/string-table growth out of the allocation budget.
+h:Event("GROUP_ROSTER_UPDATE")
+h:RunTimers()
 Measure("raid_settle", function()
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()

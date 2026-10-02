@@ -1546,7 +1546,11 @@ function GroupPopup.OpenMenu2Page(popup, pageKey)
   })
   if M then
     M.gfScope = mode
-    M.PersistMenuStateValue("gfScope", mode)
+    -- The Options addon may not be loaded yet; keep the scope on its facade
+    -- and let OpenPage below load the menu even without the persistence method.
+    if type(M.PersistMenuStateValue) == "function" then
+      M.PersistMenuStateValue("gfScope", mode)
+    end
   end
   GF_EM2_SetActivePreviewKind(mode)
   GroupPopup.QuickPopup().OpenPage(pageKey, popup)

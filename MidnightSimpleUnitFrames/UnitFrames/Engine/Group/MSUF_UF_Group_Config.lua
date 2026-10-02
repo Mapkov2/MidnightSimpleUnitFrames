@@ -191,8 +191,6 @@ local function BackgroundColorMode(cache, general)
   return "custom"
 end
 
---- Resolve the effective health-color model once per compile. Runtime visual
---- code receives concrete mode/color fields instead of profile fallback logic.
 local function ApplyFixedBarColor(out, conf, cache, general, mode)
   if mode == "dark" then
     local gray = Num(general and (general.darkBarGray or general.darkBgBrightness), 0.07)
@@ -206,6 +204,8 @@ local function ApplyFixedBarColor(out, conf, cache, general, mode)
   end
 end
 
+--- Resolve the effective health-color model once per compile. Runtime visual
+--- code receives concrete mode/color fields instead of profile fallback logic.
 local function ResolveHealthVisual(conf)
   conf = conf or {}
   local cache = SettingsCache()

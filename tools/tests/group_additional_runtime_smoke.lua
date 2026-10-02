@@ -368,7 +368,19 @@ local runtimeEvents
 for _, f in ipairs(frames) do if f.events.PLAYER_REGEN_DISABLED then runtimeEvents = f; break end end
 conf.targetsEnabled = true
 GF.RefreshAdditionalGroups()
+-- Start with an existing sample so the edge must hide it, not merely avoid birth.
+local previewParent = Frame("Frame", nil, UIParent)
+local sample = assert(GF.RenderAdditionalPreview(previewParent, "party", "targets", 5))
+assert(sample:IsShown(), "preview fixture did not render before combat")
 runtimeEvents.scripts.OnEvent(runtimeEvents, "PLAYER_REGEN_DISABLED")
+assert(not InCombatLockdown() and startingCombat, "fixture missed the combat-start edge")
+local frameCount = #frames
+assert(GF.RenderAdditionalPreview(previewParent, "party", "targets", 5) == nil,
+    "RenderAdditionalPreview accepted the combat-start edge")
+assert(not sample:IsShown(), "RenderAdditionalPreview left the sample visible at combat start")
+assert(GF.ShowAdditionalGroupPreview("party", 5) == false,
+    "ShowAdditionalGroupPreview accepted the combat-start edge")
+assert(#frames == frameCount, "a refused combat-start preview created frames")
 conf.targetsEnabled = false
 GF.RefreshAdditionalGroups()
 assert(MSUF_GroupAdditional_Targets.shown, "combat-start settings refresh hid a protected holder")
