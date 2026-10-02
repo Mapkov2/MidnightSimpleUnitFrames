@@ -8,6 +8,7 @@
 # Evidence is the provider file that defines the name. Rows only shrink or follow new Optional reads.
 Name	Kind	Evidence	Reason
 MSUF_Analytics_HandleSlash	optional-module	MidnightSimpleUnitFrames/Features/Telemetry/MSUF_Analytics.lua	/msuf analytics reports a missing telemetry module instead of failing
+MSUF_BAL_RefreshRuntime	optional-module	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_BalanceDruid.lua	the Balance runtime loads for Druids on Midnight only
 MSUF_ClassPower_Apply	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
 MSUF_ClassPower_RefreshLayout	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
 MSUF_ClassPower_RefreshTextures	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua	media registered while the core loads refreshes at once in combat

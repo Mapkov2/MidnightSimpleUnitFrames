@@ -160,6 +160,7 @@ local function Start(spec)
         assert(name == "ClassPower", "unexpected module " .. tostring(name))
         module = callbacks
     end
+    assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().Install(repo, ns)
     for i = 1, #LOAD_ORDER do
         assert(loadfile(LOAD_ORDER[i]))("MSUF", ns)
     end

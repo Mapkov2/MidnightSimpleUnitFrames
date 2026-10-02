@@ -28,10 +28,13 @@
 -- An optional seventh argument { beforeLoad = function(env, S) end } runs after
 -- the stubs are installed and before the first addon file loads, so a smoke can
 -- swap in stricter globals (classpower_secrets.lua) that the files capture.
+-- The cross-file providers ClassPower requires come from
+-- classpower_collaborators.lua unless the hook defined its own.
 --
 -- Plain Lua 5.1.
 
 local World = {}
+local Collaborators
 World.PT = { MANA = 0, RAGE = 1, ENERGY = 3, COMBO = 4, SHARDS = 7, ESSENCE = 19 }
 
 local CLEARED_GLOBALS = {
@@ -167,6 +170,7 @@ end
 --- Loads toc's ClassPower stack for one class and spec, with MSUF_DB.bars
 --- overrides, and enables the module.
 function World.Start(repo, toc, class, spec, primary, bars, hooks)
+    Collaborators = Collaborators or assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))()
     local Stubs = assert(loadfile(repo .. "/.github/scripts/msuf_test_stubs.lua"))()
     local env = Stubs.New({ timer = "queue", registerGlobalNames = true, time = 1000 })
     env:InstallGlobals({ secretValue = true, time = true })
@@ -198,6 +202,7 @@ function World.Start(repo, toc, class, spec, primary, bars, hooks)
     }
     InstallClient(S)
     if hooks and hooks.beforeLoad then hooks.beforeLoad(env, S) end
+    Collaborators.Install(repo, ns)
     MSUF_DB = {
         general = {},
         bars = { showClassPower = true, showAltMana = false, playerHPBarEnabled = false },

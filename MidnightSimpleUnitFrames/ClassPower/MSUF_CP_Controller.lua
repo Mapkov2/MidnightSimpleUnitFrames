@@ -1342,9 +1342,9 @@ local function FullRefresh()
     local anyFeatureEnabled = CPConfig.AnyFeatureEnabled(playerManaEnabled)
     CP_SetStructuralEventsBound(anyFeatureEnabled)
     if CP.SyncControllerEvents then CP.SyncControllerEvents(anyFeatureEnabled) end
-    if type(_G.MSUF_BAL_RefreshRuntime) == "function" then
-        _G.MSUF_BAL_RefreshRuntime()
-    end
+    --- The Balance runtime loads for Druids on Midnight only.
+    local refreshBalance = MSUF.Optional("MSUF_BAL_RefreshRuntime")
+    if refreshBalance then refreshBalance() end
 end
 
 --- Event-driven updates (hot path: minimal work)
@@ -2019,8 +2019,8 @@ CP.ApplyPublic = function(opts)
 end
 ExportPublic("MSUF_ClassPower_Apply", CP.ApplyPublic)
 
-if type(_G.MSUF_RegisterAnyEditModeListener) == "function" then
-    _G.MSUF_RegisterAnyEditModeListener(function(active)
+do
+    MSUF.Require("MSUF_RegisterAnyEditModeListener", "ClassPower/MSUF_CP_Controller.lua")(function(active)
         if not (CP.visible and CP.container) then return end
         if active == true then
             CP.container:SetAlpha(1)
@@ -2098,8 +2098,8 @@ end
 
 --- Phase 4: Module Registration
 do
-    if type(_G.MSUF_RegisterModule) == "function" then
-        _G.MSUF_RegisterModule("ClassPower", {
+    do
+        MSUF.Require("MSUF_RegisterModule", "ClassPower/MSUF_CP_Controller.lua")("ClassPower", {
             order = 30,
             IsEnabled = function()
                 return CPConfig.AnyFeatureEnabled()

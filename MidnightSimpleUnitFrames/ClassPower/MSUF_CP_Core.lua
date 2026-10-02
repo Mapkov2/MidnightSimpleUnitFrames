@@ -32,6 +32,20 @@ local math_floor, math_max, math_abs = math.floor, math.max, math.abs
 local CoreUnitFrame = MSUF.UF.GetFrame
 ExportPublic("MSUF_CP_CoreUnitFrame", CoreUnitFrame)
 
+--- Cross-file collaborators. Every provider loads before ClassPower in each
+--- client TOC (Kernel, Runtime, the unit-frame runtime, Castbars), so a missing
+--- one is a load-order break and fails loudly here.
+local FILE = "ClassPower/MSUF_CP_Core.lua"
+local Require = MSUF.Require
+local GetProfileScopedCache = Require("MSUF_GetProfileScopedCache", FILE)
+local GetEffectiveCooldownFrame = Require("MSUF_GetEffectiveCooldownFrame", FILE)
+local ApplyCachedScreenPosition = Require("MSUF_ApplyCachedUnitFrameScreenPosition", FILE)
+local CacheScreenPosition = Require("MSUF_CacheUnitFrameScreenPosition", FILE)
+local ApplyPowerBarEmbedLayout = Require("MSUF_ApplyPowerBarEmbedLayout", FILE)
+local FontPathEquals = Require("MSUF_FontPathEquals", FILE)
+local MarkFontApplyFailed = Require("MSUF_MarkFontApplyFailed", FILE)
+local GetGlobalFontSettings = Require("MSUF_GetGlobalFontSettings", FILE)
+
 local function CP_IsUsableCooldownAnchorFrame(frame)
     local getSize = _G.MSUF_GetUsableCooldownAnchorSize
     return type(getSize) == "function" and getSize(frame, true) ~= nil
@@ -382,7 +396,7 @@ builders.LAYOUT = function(E)
         local playerFrame, powerType = pass.playerFrame, pass.powerType
         local b = _cpDB.bars or {}
         pass.b = b
-        pass.layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
+        pass.layoutCache = GetProfileScopedCache("classPowerLayoutCache") or nil
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
         if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
         levelOffset = math_floor(levelOffset + 0.5)
@@ -450,7 +464,7 @@ builders.LAYOUT = function(E)
             if inLockdown and cachedW and cachedW >= 30 then
                 userW = cachedW
             else
-                local cdmFrame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
+                local cdmFrame = GetEffectiveCooldownFrame(cdmName) or _G[cdmName]
                 local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
                 if type(cdmWidthFn) == "function" then
                     userW = cdmWidthFn(cdmFrame, CP.container)
@@ -506,9 +520,7 @@ builders.LAYOUT = function(E)
         CP.container:SetSize(userW, h)
         if inLockdown and CP.container._msufPositionInitialized ~= true
             and b.classPowerAnchorToCooldown == true then
-            if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
-                and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
-            then
+            if ApplyCachedScreenPosition(CP.container, "classpower", "classpower") then
                 CP.container._msufDirectCooldownAnchor = true
                 CP.container._msufHardLockPoint = IS_CLASSIC
                     and (CP.container._msufHardLockPoint or "TOP") or "BOTTOM"
@@ -526,8 +538,7 @@ builders.LAYOUT = function(E)
         if not positionFrozen then CP.container:ClearAllPoints() end
         if b.classPowerAnchorToCooldown == true and not positionFrozen then
             local ecv = not inLockdown and (
-                (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
-                or _G["EssentialCooldownViewer"]
+                GetEffectiveCooldownFrame("EssentialCooldownViewer") or _G["EssentialCooldownViewer"]
             ) or nil
             local anchorFrame = nil
             if CP_IsUsableCooldownAnchorFrame(ecv) then
@@ -551,9 +562,7 @@ builders.LAYOUT = function(E)
                     CP.container._msufDirectCooldownAnchor = true
                     CP.container._msufHardLockPoint = lockPoint
                     CP.container._msufStableExternalAnchor = anchorFrame
-                    if type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
-                        _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", lockPoint)
-                    end
+                    CacheScreenPosition(CP.container, "classpower", "classpower", lockPoint)
                 else
                     CP.container:ClearAllPoints()
                     CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", insetX + oX, -(2 - oY))
@@ -562,9 +571,7 @@ builders.LAYOUT = function(E)
                     CP.container._msufStableExternalAnchor = nil
                 end
             else
-                if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
-                    and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
-                then
+                if ApplyCachedScreenPosition(CP.container, "classpower", "classpower") then
                     CP.container._msufDirectCooldownAnchor = true
                     CP.container._msufHardLockPoint = IS_CLASSIC
                         and (CP.container._msufHardLockPoint or "TOP") or "BOTTOM"
@@ -844,14 +851,14 @@ builders.LAYOUT = function(E)
                 needPBRefresh = true
             end
         end
-        if needPBRefresh and type(_G.MSUF_ApplyPowerBarEmbedLayout) == "function" then
+        if needPBRefresh then
             if pf and pf.targetPowerBar then
                 local sc = pf._msufStampCache
                 if sc then sc["PBEmbedLayout"] = nil end
                 --- The detached power bar is an insecure child StatusBar; the
                 --- element pipeline applies combat-safe elements immediately
                 --- and queues anything secure for the regen driver itself.
-                _G.MSUF_ApplyPowerBarEmbedLayout(pf)
+                ApplyPowerBarEmbedLayout(pf)
             end
         end
     end
@@ -952,8 +959,7 @@ builders.PRESENTATION = function(E)
         if actualSize and math_abs((tonumber(actualSize) or 0) - size) > 0.01 then return false end
         if (actualFlags or "") ~= (fontFlags or "") then return false end
         if actual == fontPath then return true end
-        if type(_G.MSUF_FontPathMatches) == "function" and _G.MSUF_FontPathMatches(fontPath, actual) == true then return true end
-        if type(_G.MSUF_FontPathEquals) == "function" and _G.MSUF_FontPathEquals(fontPath, actual) == true then return true end
+        if FontPathEquals(fontPath, actual) == true then return true end
         return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(fontPath or ""):gsub("/", "\\"):lower()
     end
 
@@ -967,7 +973,7 @@ builders.PRESENTATION = function(E)
         if _G.MSUF_SetFontChecked(region, fontPath, size, fontFlags) and ClassPowerFontApplied(region, fontPath, size, fontFlags) then return true end
         local fallback = _G.MSUF_ResolveSafeFontPath and _G.MSUF_ResolveSafeFontPath("Fonts\\FRIZQT__.TTF", size, fontFlags, "FRIZQT") or "Fonts\\FRIZQT__.TTF"
         _G.MSUF_SetFontChecked(region, fallback, size, fontFlags)
-        if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
+        MarkFontApplyFailed()
         return false
     end
 
@@ -978,9 +984,7 @@ builders.PRESENTATION = function(E)
         local fs = CP.text
 
         local path, flags, fr, fg, fb, baseSize, useShadow
-        if type(_G.MSUF_GetGlobalFontSettings) == "function" then
-            path, flags, fr, fg, fb, baseSize, useShadow = _G.MSUF_GetGlobalFontSettings()
-        end
+        path, flags, fr, fg, fb, baseSize, useShadow = GetGlobalFontSettings()
         path     = path or "Fonts\\FRIZQT__.TTF"
         flags    = flags or "OUTLINE"
         fr       = fr or 1

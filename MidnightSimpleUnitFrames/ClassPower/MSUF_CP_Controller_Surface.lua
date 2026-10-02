@@ -24,6 +24,13 @@ end
 
 local type, tonumber = type, tonumber
 local math_floor = math.floor
+
+--- Cross-file collaborators; every provider loads before ClassPower in each
+--- client TOC (Castbars, the unit-frame runtime), so a missing one fails here.
+local FILE = "ClassPower/MSUF_CP_Controller_Surface.lua"
+local GetFontPath = MSUF.Require("MSUF_GetFontPath", FILE)
+local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", FILE)
+local ApplyPowerBarEmbedLayoutAll = MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_All", FILE)
 local table_sort = table.sort
 local InCombatLockdown = InCombatLockdown
 
@@ -125,8 +132,8 @@ builders.CONTROLLER_SURFACE = function(E)
             r, g, blue = ResolveClassPowerColor("EBON_MIGHT")
         end
 
-        local fontPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or nil
-        local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or nil
+        local fontPath = GetFontPath()
+        local fontFlags = GetFontFlags()
         if not fontPath or fontPath == "" then fontPath = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF" end
         if not fontFlags or fontFlags == "" then fontFlags = "OUTLINE" end
         local fontSize = tonumber(p and p.powerFontSize) or tonumber(general and general.powerFontSize) or 14
@@ -314,8 +321,8 @@ builders.CONTROLLER_SURFACE = function(E)
                 CP.ironfur.InvalidateLayout()
             end
         end
-        if pbChanged and type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
-            _G.MSUF_ApplyPowerBarEmbedLayout_All()
+        if pbChanged then
+            ApplyPowerBarEmbedLayoutAll()
         end
     end
 

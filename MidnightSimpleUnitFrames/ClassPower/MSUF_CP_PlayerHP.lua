@@ -22,6 +22,14 @@ if type(builders) ~= "table" then
     ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
 end
 
+--- Font collaborators; Kernel and Castbars load before ClassPower in each
+--- client TOC, so a missing one fails here.
+local FILE = "ClassPower/MSUF_CP_PlayerHP.lua"
+local GetFontPath = MSUF.Require("MSUF_GetFontPath", FILE)
+local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", FILE)
+local FontPathEquals = MSUF.Require("MSUF_FontPathEquals", FILE)
+local MarkFontApplyFailed = MSUF.Require("MSUF_MarkFontApplyFailed", FILE)
+
 --- Global abbreviation style (see Runtime/MSUF_NumberFormat.lua). Registered at
 --- file scope, not inside the builder, so rebuilding the HP bar never stacks a
 --- second sink.
@@ -516,8 +524,8 @@ builders.PLAYER_HP = function(E)
             if size == nil then size = general and general.hpFontSize or nil end
         end
         size = Clamp(size, 14, 6, 48)
-        local fontPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
-        local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
+        local fontPath = GetFontPath() or _G.STANDARD_TEXT_FONT
+        local fontFlags = GetFontFlags() or "OUTLINE"
         if not fontPath or fontPath == "" then fontPath = "Fonts\\FRIZQT__.TTF" end
         if not fontFlags or fontFlags == "" then fontFlags = "OUTLINE" end
         local resolveSafe = _G.MSUF_ResolveSafeFontPath
@@ -536,9 +544,7 @@ builders.PLAYER_HP = function(E)
             if actualSize and math.abs((tonumber(actualSize) or 0) - px) > 0.01 then return false end
             if (actualFlags or "") ~= (fontFlags or "") then return false end
             if actual == path then return true end
-            local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
-            if type(matches) == "function" then return matches(path, actual) == true end
-            return tostring(actual or ""):gsub("/", "\\"):lower() == tostring(path or ""):gsub("/", "\\"):lower()
+            return FontPathEquals(path, actual) == true
         end
         local general = _G.MSUF_DB and _G.MSUF_DB.general
         for _, fs in pairs({ PHP.left, PHP.center, PHP.right }) do
@@ -549,7 +555,7 @@ builders.PLAYER_HP = function(E)
                 else
                     if not _G.MSUF_SetFontChecked(fs, fontPath, size, fontFlags) or not FontApplied(fs, fontPath, size, fontFlags) then
                         _G.MSUF_SetFontChecked(fs, "Fonts\\FRIZQT__.TTF", size, fontFlags)
-                        if type(_G.MSUF_MarkFontApplyFailed) == "function" then _G.MSUF_MarkFontApplyFailed() end
+                        MarkFontApplyFailed()
                     end
                 end
             end

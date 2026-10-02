@@ -49,6 +49,7 @@ local function Build(bars, player)
         return S.percent
     end
     local ns = { ExportPublic = function(name, value) _G[name] = value return value end }
+    assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().Install(repo, ns)
     assert(loadfile(PLAYER_HP))("MidnightSimpleUnitFrames", ns)
 
     local b = { playerHPBarEnabled = true, playerHPBarWidthMode = "custom", playerHPBarWidth = 180,
