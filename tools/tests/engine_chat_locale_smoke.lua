@@ -10,7 +10,8 @@
 --      developer diagnostics listed in DIAGNOSTICS (English on purpose, each
 --      row must still match a line). The tooltip and status words are wrapped.
 --   2. A German client: profile commands, the key binding labels and the
---      tooltip/status words come out of the German pack.
+--      tooltip/status words come out of the German pack, and every fixed
+--      import failure reason prints one translated full sentence.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -146,6 +147,130 @@ Check(line == "|cffff0000MSUF:|r "
     .. De("Import failed: could not decode compact profile string (%s)."):format("MSUF4"),
     "deDE: a failed compact import prints " .. tostring(line))
 Check(not line:find("could not decode", 1, true), "deDE: the compact import line keeps English words: " .. line)
+
+-- Every fixed import failure reason the chat path prints, driven in the German
+-- client: the line is the translated full sentence (a frame key or a value
+-- type goes in after), no English word of the sentence is left, and callers
+-- still receive the English reason. Each sentence State/MSUF_Profiles.lua
+-- lists must have a case here.
+local profilesSource = World.Read(root .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"):gsub("\r\n", "\n")
+local listBody = assert(profilesSource:match("for _, sentence in ipairs%((%b{})%) do IMPORT_FAILED_SENTENCES"),
+    "the import failure sentence list in State/MSUF_Profiles.lua moved")
+local listed, driven = {}, {}
+for sentence in listBody:gmatch('\n%s*"([^"\n]+)",') do listed[sentence] = true end
+local fixture
+local decode = env.MSUF_TryDecodeCompactString
+env.MSUF_TryDecodeCompactString = function(str)
+    if str == "fixture" then return fixture end
+    if decode then return decode(str) end
+end
+local function Snapshot(kind, payload) return { addon = "MSUF", fmt = 2, schema = 600, kind = kind, payload = payload } end
+local function Full(value) return { _msufProfileSchema = 600, general = {}, extra = value } end
+local function Nested(depth)
+    local value = {}
+    for _ = 1, depth do value = { value } end
+    return value
+end
+local many = {}
+for index = 1, 125001 do many["k" .. index] = 1 end
+local huge = string.rep("x", 32 * 1024 * 1024 + 1)
+local function Fn() end
+local shared = {}
+local cyclic = {}
+cyclic.self = cyclic
+local colors = "{ addon = 'MSUF', fmt = 2, schema = 600, kind = 'colors', payload = {} }"
+local function LiveBad(value)
+    return function() env.MSUF_DB.msufSmokeBad = value end, function() env.MSUF_DB.msufSmokeBad = nil end
+end
+local function Unsupported(unit)
+    local saved = ns.Client.SupportsUnit
+    return function() ns.Client.SupportsUnit = function(key) return key ~= unit end end,
+        function() ns.Client.SupportsUnit = saved end
+end
+local function ExternalFails()
+    local saved = ns.ProfileFields.CaptureExternal
+    return function() ns.ProfileFields.CaptureExternal = function() return false end end,
+        function() ns.ProfileFields.CaptureExternal = saved end
+end
+local A, P = "Import failed: ", "Profile import failed: "
+-- { sentence, import string or "fixture", decoded fixture, inserted text, setup, teardown }
+local cases = {
+    { A .. "could not decode compact profile string (%s).", "MSUF4:@@@@", nil, "MSUF4" },
+    { A .. "profile import is too large", "{" .. string.rep(" ", 8 * 1024 * 1024) },
+    { A .. "unterminated comment", "--[[ open" },
+    { A .. "profile table has too many values", "{" .. string.rep("1,", 250000) .. "}" },
+    { A .. "unterminated string", "{ 'open" },
+    { A .. "unterminated escape", "{ 'open\\" },
+    { A .. "invalid decimal escape", "{ '\\300' }" },
+    { A .. "unsupported string escape", "{ '\\q' }" },
+    { A .. "invalid number", "{ 1e999 }" },
+    { A .. "profile table is too deep", string.rep("{", 70) },
+    { A .. "unterminated table", "{ 1," },
+    { A .. "unsupported table key", "{ [true] = 1 }" },
+    { A .. "unsupported value", "{ x }" },
+    { A .. "profile import must contain a table", "return 5" },
+    { A .. "MSUF 6.x profile required (schema 600).", "{ _msufProfileSchema = 577 }" },
+    { A .. "unknown kind", "{ addon = 'MSUF', fmt = 2, schema = 600, kind = 'bogus', payload = {} }" },
+    { A .. "profile has too many values", "fixture", Snapshot("colors", many) },
+    { P .. "profile has too many values", "fixture", Full(many) },
+    { A .. "profile strings are too large", "fixture", Snapshot("colors", { text = huge }) },
+    { P .. "profile strings are too large", "fixture", Full(huge) },
+    { A .. "profile contains an invalid number", "fixture", Snapshot("colors", { value = 0 / 0 }) },
+    { P .. "profile contains an invalid number", "fixture", Full(0 / 0) },
+    { A .. "profile contains unsupported %s", "fixture", Snapshot("colors", { value = Fn }), "function" },
+    { P .. "profile contains unsupported %s", "fixture", Full(Fn), "function" },
+    { A .. "profile is too deep", "fixture", Snapshot("colors", Nested(70)) },
+    { P .. "profile is too deep", "fixture", Full(Nested(70)) },
+    { A .. "profile contains a cyclic or shared table", "fixture", Snapshot("colors", { a = shared, b = shared }) },
+    { P .. "profile contains a cyclic or shared table", "fixture", Full({ a = shared, b = shared }) },
+    { A .. "profile contains an unsupported table key", "fixture", Snapshot("colors", { [true] = 1 }) },
+    { P .. "profile contains an unsupported table key", "fixture", Full({ [true] = 1 }) },
+    { A .. "unsupported unitframe: %s.", "fixture", Snapshot("unitselection", { arena = {} }), "arena",
+        Unsupported("arena") },
+    { A .. "invalid unitframe: %s.", "fixture", Snapshot("unitselection", { player = 5 }), "player" },
+    { A .. "unexpected selected-frame setting: %s.", "fixture",
+        Snapshot("unitselection", { player = {}, bogus = {} }), "bogus" },
+    { A .. "invalid selected-frame settings: %s.", "fixture",
+        Snapshot("unitselection", { player = {}, general = 5 }), "general" },
+    { A .. "select at least one unitframe.", "fixture", Snapshot("unitselection", {}) },
+    { A .. "setting outside selected unitframes: %s.", "fixture",
+        Snapshot("unitselection", { player = {}, general = { bogusKey = 1 } }), "bogusKey" },
+    { A .. "aura settings outside selected unitframes: %s.", "fixture",
+        Snapshot("unitselection", { player = {}, auras3 = { perUnit = { target = {} } } }), "target" },
+    { A .. "unexpected selected-frame aura setting: %s.", "fixture",
+        Snapshot("unitselection", { player = {}, auras3 = { bogus = true } }), "bogus" },
+    { A .. "profile contains an invalid number", colors, nil, nil, LiveBad(0 / 0) },
+    { A .. "profile contains a value that cannot be saved", colors, nil, nil, LiveBad(Fn) },
+    { A .. "profile contains a table that refers to itself", colors, nil, nil, LiveBad(cyclic) },
+    { A .. "profile exceeds snapshot limits", colors, nil, nil, LiveBad(Nested(40)) },
+    { A .. "an add-on part of the profile could not be copied", colors, nil, nil, ExternalFails() },
+}
+for _, case in ipairs(cases) do
+    local sentence, input, decoded, inserted, setup, teardown = case[1], case[2], case[3], case[4], case[5], case[6]
+    Check(listed[sentence], "deDE: the import sentence list has no " .. sentence)
+    driven[sentence] = true
+    local reason = sentence:gsub("^Profile import failed: ", ""):gsub("^Import failed: ", ""):gsub("%.$", "")
+    local expected = inserted and reason:format(inserted) or reason
+    fixture = decoded
+    if setup then setup() end
+    before = #world.prints
+    local ok, why = env.MSUF_ImportFromString(input)
+    line = world.prints[before + 1]
+    if teardown then teardown() end
+    fixture = nil
+    Check(ok == false and why == expected, "deDE: " .. sentence .. " was not the rejection: " .. tostring(why))
+    local german = De(sentence)
+    Check(line == "|cffff0000MSUF:|r " .. (inserted and german:format(inserted) or german),
+        "deDE: " .. sentence .. " prints " .. tostring(line))
+    for word in ("failed " .. reason):gmatch("%f[%a]%l%l%l+%f[%A]") do
+        Check(not line:find("%f[%a]" .. word .. "%f[%A]"), "deDE: " .. sentence .. " keeps the English word '"
+            .. word .. "': " .. line)
+    end
+end
+for sentence in pairs(listed) do
+    Check(driven[sentence], "deDE: no case drives the listed import sentence " .. sentence)
+end
+env.MSUF_TryDecodeCompactString = decode
 Check(env.BINDING_NAME_MSUF_TOGGLE_OPTIONS == De("Toggle MSUF Options")
     and env.BINDING_NAME_MSUF_TOGGLE_EDITMODE == De("Toggle MSUF Edit Mode"),
     "deDE: the options and Edit Mode binding labels stayed English")
@@ -154,4 +279,5 @@ for _, key in ipairs({ "Level %d", "Level %d (%s)", "Elite", "Rare", "Rare Elite
     ns.Translate(key)
     Check(ns.L[key] ~= nil, "deDE: the pack has no entry for " .. key)
 end
-print("engine_chat_locale_smoke: ok (" .. scanned .. " files scanned, " .. #DIAGNOSTICS .. " diagnostic rows)")
+print("engine_chat_locale_smoke: ok (" .. scanned .. " files scanned, " .. #DIAGNOSTICS .. " diagnostic rows, "
+    .. #cases .. " German import failure lines)")
