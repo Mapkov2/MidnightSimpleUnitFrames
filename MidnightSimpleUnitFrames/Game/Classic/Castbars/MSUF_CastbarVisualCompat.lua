@@ -140,27 +140,15 @@ local function ApplyToUnit(unit, general)
     elseif unit == "focus" then
         ApplyClassicSparkVisual(G.MSUF_FocusCastbar or G.MSUF_FocusCastBar, general)
         ApplyClassicSparkVisual(G.MSUF_FocusCastbarPreview, general)
-    elseif unit == "boss" then
-        local count = tonumber(G.MAX_BOSS_FRAMES) or 5
-        count = math_max(1, math_min(12, count))
-        local frames = G.MSUF_BossCastbars
-        for index = 1, count do
-            ApplyClassicSparkVisual((frames and frames[index])
-                or G["MSUF_BossCastbar" .. index]
-                or G["MSUF_BossCastBar" .. index], general)
-            -- Boss preview slot 1 carries no index (MSUF_BossCastbars_Preview.lua).
-            ApplyClassicSparkVisual(G[index == 1 and "MSUF_BossCastbarPreview" or ("MSUF_BossCastbarPreview" .. index)],
-                general)
-        end
-    elseif unit == "arena" then
-        local count = tonumber(G.MSUF_MAX_ARENA_FRAMES) or 3
-        count = math_max(1, math_min(12, count))
-        local frames = G.MSUF_ArenaCastbars
-        for index = 1, count do
-            ApplyClassicSparkVisual((frames and frames[index])
-                or G["MSUF_ArenaCastbar" .. index]
-                or G["MSUF_ArenaCastBar" .. index], general)
-            ApplyClassicSparkVisual(G["MSUF_ArenaCastbarPreview" .. index], general)
+    else
+        -- Boss and arena: every slot's live bar and preview (MSUF_CastbarPools.lua).
+        local pools = MSUF.Castbars and MSUF.Castbars.Pools
+        local pool = pools and pools.kinds and pools.kinds[unit]
+        if not pool then return end
+        local preview = pool.preview
+        for index = 1, pool.maxFrames do
+            ApplyClassicSparkVisual(pool.Bar(index), general)
+            if preview then ApplyClassicSparkVisual(preview:Frame(index), general) end
         end
     end
 end

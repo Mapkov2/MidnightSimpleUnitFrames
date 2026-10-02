@@ -214,11 +214,8 @@ end
 
 ExportPublic("MSUF_NormalizeCastbarBackend", Backend.Normalize)
 ExportPublic("MSUF_NormalizeCastbarBackendForUnit", Backend.NormalizeForUnit)
-ExportPublic("MSUF_GetCastbarBackendKey", Backend.BackendKey)
-ExportPublic("MSUF_GetCastbarEnableKey", Backend.LegacyEnableKey)
 ExportPublic("MSUF_GetCastbarBackend", Backend.Get)
 ExportPublic("MSUF_SetCastbarBackend", Backend.Set)
 ExportPublic("MSUF_SyncCastbarBackendLegacyFlags", Backend.Sync)
 ExportPublic("MSUF_ShouldUseMSUFCastbar", Backend.IsMSUF)
 ExportPublic("MSUF_ShouldUseBlizzardCastbar", Backend.IsBlizzard)
-ExportPublic("MSUF_ShouldHideCastbar", Backend.IsHide)

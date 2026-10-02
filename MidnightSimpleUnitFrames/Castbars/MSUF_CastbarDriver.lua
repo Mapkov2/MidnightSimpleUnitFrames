@@ -10,6 +10,19 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
+--- The castbar Utils load before this file in every client TOC; a missing
+--- helper is a load-order bug, so it fails here, loudly, and the cast paths
+--- call the resolved function instead of a guarded global.
+local FILE = "Castbars/MSUF_CastbarDriver.lua"
+local Require = MSUF.Require
+local EnsureDBLazy = Require("MSUF_EnsureDBLazy", FILE)
+local ApplyCastbarTexts = Require("MSUF_CB_ApplyTexts", FILE)
+local GetReverseFillSafe = Require("MSUF_GetReverseFillSafe", FILE)
+local GetCastbarCountsDown = Require("MSUF_GetCastbarCountsDown", FILE)
+local RefreshCastbarSpellNameText = Require("MSUF_RefreshCastbarSpellNameText", FILE)
+local GetInterruptUnavailableTintArgs = Require("MSUF_Castbar_GetInterruptUnavailableTintArgs", FILE)
+local ApplyNonInterruptibleTint = Require("MSUF_Castbar_ApplyNonInterruptibleTint", FILE)
+
 local ExportPublic = MSUF.ExportPublic
 
 local C_Timer = _G.C_Timer
@@ -75,11 +88,7 @@ local function IsCastbarEnabledForUnit(unit)
         end
     end
 
-    if type(_G.MSUF_EnsureDBLazy) == "function" then
-        _G.MSUF_EnsureDBLazy()
-    elseif type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-    end
+    EnsureDBLazy()
 
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     if not general then
@@ -359,7 +368,7 @@ local function MSUF_UpdateCastTimeText_FromStatusBar(frame)
     if not (frame and frame.timeText) then return end
     if frame._msufNativeTimeBound == true then return end
 
-    if not (type(_G.MSUF_IsCastTimeEnabled) == "function" and _G.MSUF_IsCastTimeEnabled(frame)) then
+    if not Require("MSUF_IsCastTimeEnabled", FILE)(frame) then
         _G.MSUF_SetTextIfChanged(frame.timeText, "")
         return
     end
@@ -508,20 +517,15 @@ local function ApplyFallbackActiveDuration(frame, state, isChannel)
     if frame.icon and state.icon then
         frame.icon:SetTexture(state.icon)
     end
-    if type(_G.MSUF_CB_ApplyTexts) == "function" then
-        _G.MSUF_CB_ApplyTexts(frame, nil, state.text or state.spellName or "", nil)
-    elseif frame.castText and frame.castText.SetText then
-        frame.castText:SetText(state.text or state.spellName or "")
-    end
+    ApplyCastbarTexts(frame, nil, state.text or state.spellName or "", nil)
 
     local reverseFill = state.reverseFill
-    if reverseFill == nil and type(_G.MSUF_GetReverseFillSafe) == "function" then
-        reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChannel)
+    if reverseFill == nil then
+        reverseFill = GetReverseFillSafe(frame, isChannel)
     end
     reverseFill = reverseFill == true
     frame._msufStripeReverseFill = reverseFill
-    local countsDown = type(_G.MSUF_GetCastbarCountsDown) == "function"
-        and _G.MSUF_GetCastbarCountsDown(frame, isChannel and true or false) == true
+    local countsDown = GetCastbarCountsDown(frame, isChannel and true or false) == true
     frame._msufCountsDown = countsDown
     local resolvePushback = _G.MSUF_Castbar_ResolvePushbackMS
     if type(resolvePushback) == "function" then
@@ -534,9 +538,8 @@ local function ApplyFallbackActiveDuration(frame, state, isChannel)
     if state.delayTimeMS == nil
         and frame._msufPushbackMS ~= nil
         and frame.castText
-        and type(_G.MSUF_RefreshCastbarSpellNameText) == "function"
     then
-        _G.MSUF_RefreshCastbarSpellNameText(frame)
+        RefreshCastbarSpellNameText(frame)
     end
     if not SetFallbackStatusBar(frame, remaining, total, reverseFill, countsDown) then
         return false
@@ -976,21 +979,16 @@ local function RefreshAllCastTargetTextColors()
     RefreshPreview(_G.MSUF_TargetCastbarPreview)
     RefreshPreview(_G.MSUF_FocusCastbarPreview)
 
-    local bossCastbars = _G.MSUF_BossCastbars
-    local maxBossFrames = tonumber(_G.MAX_BOSS_FRAMES) or 5
-    if maxBossFrames < 1 or maxBossFrames > 12 then maxBossFrames = 5 end
-    for index = 1, maxBossFrames do
-        RefreshLive((bossCastbars and bossCastbars[index])
-            or _G["MSUF_BossCastbar" .. index]
-            or _G["MSUF_boss" .. index .. "CastBar"])
-        RefreshPreview(index == 1 and _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview" .. index])
-    end
-
-    local arenaCastbars = _G.MSUF_ArenaCastbars
-    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-        RefreshLive((arenaCastbars and arenaCastbars[index]) or _G["MSUF_ArenaCastbar" .. index])
-        RefreshPreview(index == 1 and (_G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1)
-            or _G["MSUF_ArenaCastbarPreview" .. index])
+    -- Boss, then arena: every slot's live bar and preview (MSUF_CastbarPools.lua).
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    local order = pools and pools.order
+    for poolIndex = 1, order and #order or 0 do
+        local pool = order[poolIndex]
+        local preview = pool.preview
+        for index = 1, pool.maxFrames do
+            RefreshLive(pool.Bar(index))
+            if preview then RefreshPreview(preview:Frame(index)) end
+        end
     end
 end
 ExportPublic("MSUF_RefreshAllCastTargetTextColors", RefreshAllCastTargetTextColors)
@@ -1120,9 +1118,9 @@ end
 --- per-unit toggle is off or identity is restricted (secret GUID/name), so a
 --- PvP-restricted interrupter can never raise.
 function _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, unit, fallback)
-    fallback = fallback or "Interrupted"
+    fallback = fallback or _G.INTERRUPTED
     local issecret = _G.issecretvalue
-    if interruptedBy == nil or (issecret and issecret(interruptedBy) == true) then
+    if (issecret and issecret(interruptedBy) == true) or interruptedBy == nil then
         return fallback
     end
     local db = _G.MSUF_DB
@@ -1299,6 +1297,10 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
         if eventUnit ~= frame.unit or NamesOtherCastBar(frame, castBarID) then return end
         -- A kicked channel may already show its feedback from CHANNEL_STOP.
         if frame.interrupted then return end
+        -- Only a cast this bar shows gets feedback (as CHANNEL_STOP above and
+        -- CastingBarMixin:HandleInterruptOrSpellFailed: IsShown and casting).
+        -- A profession cast hidden by castbarHideTradeSkills never showed it.
+        if frame.MSUF_castActive ~= true then return end
         ClearStopExpectation(frame)
         frame.MSUF_kickInterruptibleConfirmed = nil
         frame:SetInterrupted(interruptedBy)
@@ -1337,9 +1339,7 @@ local function InstallDriverColorMethod(frame)
             return
         end
 
-        if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
-            _G.MSUF_EnsureDB()
-        end
+        EnsureDBLazy()
 
         local forcedNotInterruptible = self.isNotInterruptible == true
         local castR, castG, castB, nonR, nonG, nonB = _G.MSUF_ResolveCastbarColors()
@@ -1348,37 +1348,28 @@ local function InstallDriverColorMethod(frame)
             rawApiNotInterruptible = true
         end
 
-        local unavailableR, unavailableG, unavailableB, unavailableA, interruptReadyBool, useUnavailableColor
-        if type(_G.MSUF_Castbar_GetInterruptUnavailableTintArgs) == "function" then
-            unavailableR, unavailableG, unavailableB, unavailableA, interruptReadyBool, useUnavailableColor =
-                _G.MSUF_Castbar_GetInterruptUnavailableTintArgs(self)
-        end
+        local unavailableR, unavailableG, unavailableB, unavailableA, interruptReadyBool, useUnavailableColor =
+            GetInterruptUnavailableTintArgs(self)
 
-        if type(_G.MSUF_Castbar_ApplyNonInterruptibleTint) == "function" then
-            _G.MSUF_Castbar_ApplyNonInterruptibleTint(
-                self,
-                rawApiNotInterruptible,
-                nonR,
-                nonG,
-                nonB,
-                1,
-                castR,
-                castG,
-                castB,
-                1,
-                forcedNotInterruptible,
-                unavailableR,
-                unavailableG,
-                unavailableB,
-                unavailableA,
-                interruptReadyBool,
-                useUnavailableColor
-            )
-        elseif forcedNotInterruptible then
-            _G.MSUF_SetStatusBarColorIfChanged(self.statusBar, nonR, nonG, nonB, 1)
-        else
-            _G.MSUF_SetStatusBarColorIfChanged(self.statusBar, castR, castG, castB, 1)
-        end
+        ApplyNonInterruptibleTint(
+            self,
+            rawApiNotInterruptible,
+            nonR,
+            nonG,
+            nonB,
+            1,
+            castR,
+            castG,
+            castB,
+            1,
+            forcedNotInterruptible,
+            unavailableR,
+            unavailableG,
+            unavailableB,
+            unavailableA,
+            interruptReadyBool,
+            useUnavailableColor
+        )
     end
 end
 
@@ -1543,7 +1534,7 @@ local function InstallDriverCastMethods(frame)
         self.MSUF_kickInterruptibleConfirmed = nil
         if self.kickReadyBox then self.kickReadyBox:Hide() end
         if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(self, nil) end
-        if type(_G.MSUF_EnsureDBLazy) == "function" then _G.MSUF_EnsureDBLazy() end
+        EnsureDBLazy()
 
         local configUnit = CastbarConfigUnitKey(self.unit)
         local unitDB = (configUnit and _G.MSUF_DB and _G.MSUF_DB[configUnit]) or nil
@@ -1560,10 +1551,7 @@ local function InstallDriverCastMethods(frame)
         end
 
         local reverseFill = _G.MSUF_GetReverseFillSafe(self, false)
-        local interruptLabel = "Interrupted"
-        if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
-            interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, self.unit, interruptLabel)
-        end
+        local interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, self.unit, _G.INTERRUPTED)
         if ApplyInterruptValues then
             ApplyInterruptValues(castbarRuntime, self, 1, reverseFill, interruptLabel)
         else

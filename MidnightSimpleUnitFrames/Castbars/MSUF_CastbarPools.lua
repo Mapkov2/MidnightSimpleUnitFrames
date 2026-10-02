@@ -302,7 +302,15 @@ function Pools.Define(desc)
     local SCHEDULE_PREWARM = desc.scheduleKeys.prewarm
     local PUBLISH_POOL = desc.publishPool
 
-    local pool = { descriptor = desc, kind = KIND, maxFrames = MAX_FRAMES }
+    local pool = {
+        descriptor = desc,
+        kind = KIND,
+        maxFrames = MAX_FRAMES,
+        unitPrefix = UNIT_PREFIX,
+        -- One slot's unit token (boss1 .. bossN), for callers that map a bar
+        -- or a preview back to its unit frame.
+        slotUnitPattern = "^" .. UNIT_PREFIX .. "%d+$",
+    }
     kinds[KIND] = pool
     order[#order + 1] = pool
 
@@ -595,6 +603,14 @@ function Pools.Define(desc)
 
     function pool.Castbars()
         return _G[POOL_GLOBAL]
+    end
+
+    --- The live bar of one slot, nil until the pool is built. The pool table
+    --- and the named frame are the same bar; the name covers callers that run
+    --- while EnsureCastbars is still filling the table.
+    function pool.Bar(index)
+        local castbars = _G[POOL_GLOBAL]
+        return (castbars and castbars[index]) or _G[FRAME_PREFIX .. index]
     end
 
     --------------------------------------------------------------------

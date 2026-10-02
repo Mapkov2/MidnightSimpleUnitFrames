@@ -123,6 +123,7 @@ local ns = {
 
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 manifest.LoadSelected(root, "Vanilla", ns, {
+    "Kernel/MSUF_Require.lua",
     "Castbars/MSUF_CastbarUtils.lua",
     "Castbars/MSUF_CastbarRuntime.lua",
     "Castbars/MSUF_CastbarEngine.lua",

@@ -18,9 +18,33 @@ local issecretvalue = _G.issecretvalue
 
 local IsSecretValue = _G.issecretvalue
 
+--- Providers that load before this file in every client TOC (State defaults,
+--- Kernel, the Runtime colours and font registry, the castbar Core, Style and
+--- Utils). A missing one is a load-order bug, so it fails here, loudly.
+local FILE = "Castbars/MSUF_CastbarVisuals.lua"
+local Require = MSUF.Require
+local EnsureDB = Require("MSUF_EnsureDB", FILE)
+local SetTextIfChangedFn = Require("MSUF_SetTextIfChanged", FILE)
+local MarkFontApplyFailed = Require("MSUF_MarkFontApplyFailed", FILE)
+local GetCastbarTextColor = Require("MSUF_GetCastbarTextColor", FILE)
+local GetCastbarBackgroundColor = Require("MSUF_GetCastbarBackgroundColor", FILE)
+local GetFontPath = Require("MSUF_GetFontPath", FILE)
+local GetFontFlags = Require("MSUF_GetFontFlags", FILE)
+local RefreshCastbarStyleCache = Require("MSUF_RefreshCastbarStyleCache", FILE)
+local ApplyCastbarOutline = Require("MSUF_ApplyCastbarOutline", FILE)
+local GetSpellNameShorteningConfig = Require("MSUF_GetCastbarSpellNameShorteningConfig", FILE)
+local RefreshCastbarSpellNameText = Require("MSUF_RefreshCastbarSpellNameText", FILE)
+
+--- Providers that load after this file (Driver, InterruptReady, Rounded),
+--- resolved when a castbar is laid out: every layout runs after the core
+--- finished loading.
+local function Later(name)
+    return Require(name, FILE)
+end
+
 local function GeneralDB()
-    if type(_G.MSUF_EnsureDB) == "function" and not _G.MSUF_DB then
-        _G.MSUF_EnsureDB()
+    if not _G.MSUF_DB then
+        EnsureDB()
     end
     ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
@@ -106,10 +130,19 @@ local function DetailString(g, prefix, suffix, globalKey, fallback)
     return tostring(value or fallback or "")
 end
 
+--- Boss and arena castbars keep their show toggles in flat keys (the Unit
+--- page castbar keys and Defaults_Bars.lua), not in the per-prefix
+--- <prefix>ShowIcon / <prefix>ShowSpellName family the other units use.
+local POOL_SHOW_KEYS = {
+    boss = { icon = "showBossCastIcon", name = "showBossCastName", time = "showBossCastTime" },
+    arena = { icon = "showArenaCastIcon", name = "showArenaCastName", time = "showArenaCastTime" },
+}
+
 local function ShowIconForUnit(g, unit, prefix)
     local show = g.castbarShowIcon ~= false
-    if unit == "boss" then
-        if g.showBossCastIcon ~= nil then show = g.showBossCastIcon ~= false end
+    local poolKeys = POOL_SHOW_KEYS[unit]
+    if poolKeys then
+        if g[poolKeys.icon] ~= nil then show = g[poolKeys.icon] ~= false end
     elseif prefix and g[prefix .. "ShowIcon"] ~= nil then
         show = g[prefix .. "ShowIcon"] ~= false
     end
@@ -118,8 +151,9 @@ end
 
 local function ShowSpellForUnit(g, unit, prefix)
     local show = g.castbarShowSpellName ~= false
-    if unit == "boss" then
-        if g.showBossCastName ~= nil then show = g.showBossCastName ~= false end
+    local poolKeys = POOL_SHOW_KEYS[unit]
+    if poolKeys then
+        if g[poolKeys.name] ~= nil then show = g[poolKeys.name] ~= false end
     elseif prefix and g[prefix .. "ShowSpellName"] ~= nil then
         show = g[prefix .. "ShowSpellName"] ~= false
     end
@@ -130,7 +164,8 @@ local function ShowTimeForUnit(g, unit)
     if unit == "player" then return g.showPlayerCastTime ~= false end
     if unit == "target" then return g.showTargetCastTime ~= false end
     if unit == "focus" then return g.showFocusCastTime ~= false end
-    if unit == "boss" then return g.showBossCastTime ~= false end
+    local poolKeys = POOL_SHOW_KEYS[unit]
+    if poolKeys then return g[poolKeys.time] ~= false end
     return true
 end
 
@@ -188,15 +223,8 @@ local function CastbarTextColor(g, prefix, suffix)
     if r ~= nil or green ~= nil or b ~= nil then
         return Num(r, 1), Num(green, 1), Num(b, 1)
     end
-    if type(_G.MSUF_GetCastbarTextColor) == "function" then
-        local cr, cg, cb = _G.MSUF_GetCastbarTextColor()
-        return cr or 1, cg or 1, cb or 1
-    end
-    if type(_G.MSUF_GetConfiguredFontColor) == "function" then
-        local cr, cg, cb = _G.MSUF_GetConfiguredFontColor()
-        return cr or 1, cg or 1, cb or 1
-    end
-    return 1, 1, 1
+    local cr, cg, cb = GetCastbarTextColor()
+    return cr or 1, cg or 1, cb or 1
 end
 
 local function MonochromeFromFlags(flags)
@@ -265,8 +293,8 @@ end
 --- place so text layout functions only choose geometry.
 local function ApplyFont(fontString, g, unit, prefix, suffix, size, colorSuffix)
     if not fontString then return true end
-    local globalPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
-    local globalFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
+    local globalPath = GetFontPath() or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
+    local globalFlags = GetFontFlags() or "OUTLINE"
     local selected = DetailString(g, prefix, suffix .. "Font", nil, "GLOBAL")
     local fontPath, fontKey = FontPathForSelection(selected, globalPath)
     local outline = DetailString(g, prefix, suffix .. "Outline", nil, "GLOBAL")
@@ -308,8 +336,8 @@ local function ApplyFont(fontString, g, unit, prefix, suffix, size, colorSuffix)
             if requestedReady and type(matches) == "function" then
                 requestedReady = matches(fontString, fontPath, size) == true
             end
-            if not requestedReady and type(_G.MSUF_MarkFontApplyFailed) == "function" then
-                _G.MSUF_MarkFontApplyFailed()
+            if not requestedReady then
+                MarkFontApplyFailed()
             end
         end
     end
@@ -534,11 +562,7 @@ local function ApplyIconLayout(frame, g, unit, prefix)
 end
 
 local function SetTextIfChanged(fontString, text)
-    if type(_G.MSUF_SetTextIfChanged) == "function" then
-        _G.MSUF_SetTextIfChanged(fontString, text or "")
-    elseif fontString and fontString.SetText then
-        fontString:SetText(text or "")
-    end
+    SetTextIfChangedFn(fontString, text or "")
 end
 
 local function AnchorFontString(fs, relativeTo, position, x, y, defaultJustify)
@@ -641,10 +665,7 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     local statusW = RegionNumber(statusBar, "GetWidth", nil) or RegionNumber(frame, "GetWidth", 250)
     local maxWidth = DetailNum(g, prefix, "SpellNameMaxWidth", nil, 0)
     local truncate = NormalizeSpellNameTruncate(DetailString(g, prefix, "SpellNameTruncate", nil, "AUTO"))
-    local shortening, shorteningMaxLen, shorteningReserved
-    if type(_G.MSUF_GetCastbarSpellNameShorteningConfig) == "function" then
-        shortening, shorteningMaxLen, shorteningReserved = _G.MSUF_GetCastbarSpellNameShorteningConfig(frame)
-    end
+    local shortening, shorteningMaxLen, shorteningReserved = GetSpellNameShorteningConfig(frame)
     --- Returns the comfortable auto width plus the hard edge the spell text may
     --- never cross. Both keep the time text's own pixels and the user's
     --- "Reserved space"; only the fixed 8px edge padding separates them, so a
@@ -701,11 +722,7 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     -- before the refresh below, which is what consumes it.
     frame._msufSpellTextFitWidth = (shortening and truncate ~= "NONE") and width or nil
 
-    if type(_G.MSUF_RefreshCastbarSpellNameText) == "function" then
-        _G.MSUF_RefreshCastbarSpellNameText(frame)
-    elseif frame._msufRawCastText ~= nil then
-        SetTextIfChanged(fs, frame._msufRawCastText)
-    end
+    RefreshCastbarSpellNameText(frame)
     return fontReady
 end
 
@@ -726,10 +743,14 @@ local function ApplyTimeTextLayout(frame, g, unit, prefix)
 
     if fs.SetMaxLines then fs:SetMaxLines(1) end
     if fs.SetWordWrap then fs:SetWordWrap(false) end
-    local fallbackX = unit == "boss" and 0 or -2
-    local x = DetailNum(g, prefix, "TimeOffsetX", unit ~= "boss" and "castbarPlayerTimeOffsetX" or nil, fallbackX)
-    local y = DetailNum(g, prefix, "TimeOffsetY", unit ~= "boss" and "castbarPlayerTimeOffsetY" or nil, 0)
-    if unit == "boss" then x = -2 + (tonumber(x) or 0) end
+    -- Boss and arena time offsets are stored relative to a -2 base, without
+    -- the player-offset fallback; the Unit preview and its drag handle
+    -- (bossBaseX) read and write them the same way.
+    local poolUnit = POOL_SHOW_KEYS[unit] ~= nil
+    local fallbackX = poolUnit and 0 or -2
+    local x = DetailNum(g, prefix, "TimeOffsetX", not poolUnit and "castbarPlayerTimeOffsetX" or nil, fallbackX)
+    local y = DetailNum(g, prefix, "TimeOffsetY", not poolUnit and "castbarPlayerTimeOffsetY" or nil, 0)
+    if poolUnit then x = -2 + (tonumber(x) or 0) end
     local position = NormalizeTextPosition(DetailString(g, prefix, "TimePosition", nil, "RIGHT"), "RIGHT")
     AnchorFontString(fs, statusBar, position, x, y, JustifyForTextPosition(position))
     return fontReady
@@ -776,8 +797,8 @@ local function ApplyCastbarDetailLayout(frame, forcedUnit, general)
     frame._msufCastbarDetailFontsReady = timeFontReady ~= false
         and spellFontReady ~= false
         and targetFontReady ~= false
-    if frame._msufIsPreview ~= true and type(_G.MSUF_RefreshCastTargetText) == "function" then
-        _G.MSUF_RefreshCastTargetText(frame)
+    if frame._msufIsPreview ~= true then
+        Later("MSUF_RefreshCastTargetText")(frame)
     end
 end
 
@@ -792,25 +813,21 @@ local function RefreshCastbarFrame(frame, forcedUnit, general)
         return
     end
 
-    if type(_G.MSUF_ApplyCastbarOutline) == "function" then
-        _G.MSUF_ApplyCastbarOutline(frame, false)
+    ApplyCastbarOutline(frame, false)
+
+    Later("MSUF_KickReady_ApplyLayout")(frame)
+
+    if frame.MSUF_castActive then
+        Later("MSUF_KickReady_RefreshFrame")(frame, nil)
     end
 
-    if type(_G.MSUF_KickReady_ApplyLayout) == "function" then
-        _G.MSUF_KickReady_ApplyLayout(frame)
-    end
-
-    if type(_G.MSUF_KickReady_RefreshFrame) == "function" and frame.MSUF_castActive then
-        _G.MSUF_KickReady_RefreshFrame(frame, nil)
-    end
-
-    if frame.backgroundBar and type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
-        local red, green, blue, alpha = _G.MSUF_GetCastbarBackgroundColor()
+    if frame.backgroundBar then
+        local red, green, blue, alpha = GetCastbarBackgroundColor()
         frame.backgroundBar:SetVertexColor(red or 0.176, green or 0.176, blue or 0.176, alpha or 1)
     end
 
-    if frame.statusBar and type(_G.MSUF_RefreshCastbarStyleCache) == "function" then
-        _G.MSUF_RefreshCastbarStyleCache(frame)
+    if frame.statusBar then
+        RefreshCastbarStyleCache(frame)
 
         if frame.MSUF_cachedCastbarTexture then
             frame.statusBar:SetStatusBarTexture(frame.MSUF_cachedCastbarTexture)
@@ -821,9 +838,7 @@ local function RefreshCastbarFrame(frame, forcedUnit, general)
         end
     end
 
-    if type(_G.MSUF_RoundedCastbar_RefreshFrame) == "function" then
-        _G.MSUF_RoundedCastbar_RefreshFrame(frame)
-    end
+    Later("MSUF_RoundedCastbar_RefreshFrame")(frame)
 
     ApplyCastbarDetailLayout(frame, forcedUnit, general)
 end

@@ -5,7 +5,8 @@
 --   * bytes allocated per operation, with the collector stopped.
 -- The real stack runs in tools/tests/castbar_world.lua (Mists TOC order, Lua
 -- fill: no Classic client has duration objects). Covered:
---   * the castbar manager tick for one target cast (per rendered frame);
+--   * the castbar manager tick for one target cast and one focus channel
+--     (per rendered frame);
 --   * target, boss and arena driver events: START, DELAYED, the active-cast
 --     UNIT_HEALTH death signal and the pool's UNIT_FLAGS hook;
 --   * the pool lifecycle: a boss encounter engage pass (five bars plus the
@@ -23,6 +24,9 @@ local World = assert(loadfile(root .. "/tools/tests/castbar_world.lua"))()
 -- instructions, bytes per operation (8 bytes: below any per-operation table)
 local BUDGETS = {
     ["manager tick: target cast"] = { 181, 8 },
+    -- Added 2026-10-02 from the cost measured before the channel hard-stop
+    -- check learned to test a secret name (304 instructions), plus 2 %.
+    ["manager tick: focus channel"] = { 310, 8 },
     ["target START"] = { 2176, 8 },
     ["target DELAYED"] = { 2040, 8 },
     ["boss1 START"] = { 2279, 8 },
@@ -91,6 +95,22 @@ end, function()
     world.clock = world.clock + World.STEP
     manager.scripts.OnUpdate(manager, World.STEP)
 end)
+
+-- Manager tick: one focus channel. The 0.15 s channel hard-stop check reads
+-- UnitChannelInfo and tests the (possibly secret) name; 240 ticks at 1/120 s
+-- span 13 checks.
+local focus = world:Driver("focus")
+Measure("manager tick: focus channel", function()
+    world:StartChannel("focus", "Mind Flay", 600, 8)
+    world:Fire(focus, "UNIT_SPELLCAST_CHANNEL_START")
+end, function()
+    world.clock = world.clock + World.STEP
+    manager.scripts.OnUpdate(manager, World.STEP)
+end)
+assert(focus.MSUF_castActive == true and focus.MSUF_isChanneled == true, "focus channel is not active")
+world.channeling.focus = nil
+world:Fire(focus, "UNIT_SPELLCAST_CHANNEL_STOP")
+world:Advance(2)
 
 Measure("target START", nil, function() world:Fire(target, "UNIT_SPELLCAST_START") end)
 Measure("target DELAYED", nil, function() world:Fire(target, "UNIT_SPELLCAST_DELAYED") end)

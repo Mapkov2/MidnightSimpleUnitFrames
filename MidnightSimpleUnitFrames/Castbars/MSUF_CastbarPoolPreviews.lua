@@ -43,6 +43,12 @@ local InCombat = Pools.InCombat
 local DEFAULT_WIDTH = 240
 local DEFAULT_HEIGHT = 18
 
+local function Translate(text)
+    local translate = MSUF.Translate
+    if type(translate) == "function" then return translate(text) end
+    return text
+end
+
 local function GeneralDB()
     local ensure = _G.MSUF_EnsureCastbarGeneralDB
     if type(ensure) == "function" then return ensure() end
@@ -93,6 +99,11 @@ end
 function Preview:UnitFrame(index)
     local unit = self.unitPrefix .. index
     return CoreFrame(unit) or _G["MSUF_" .. unit]
+end
+
+--- The preview frame of one slot, nil until it is created.
+function Preview:Frame(index)
+    return _G[self:Name(index)]
 end
 
 --- Calls fn(frame, index) for every preview that exists, in slot order.
@@ -250,7 +261,7 @@ function Preview:ApplyLayout(frame, index)
     local targetText = frame.castTargetText
     if targetText then
         local showTargetName = general[self.showTargetKey] == true
-        targetText:SetText(showTargetName and self.targetLabel or "")
+        targetText:SetText(showTargetName and Translate(self.targetLabel) or "")
         if type(_G.MSUF_ApplyCastTargetTextColor) == "function" then
             _G.MSUF_ApplyCastTargetTextColor(frame)
         end

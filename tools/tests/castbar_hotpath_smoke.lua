@@ -517,7 +517,6 @@ local function ReadSource(relativePath)
 end
 
 local castbarVisualSource = ReadSource("Castbars/MSUF_CastbarVisuals.lua")
-local castbarAnchorSource = ReadSource("Castbars/MSUF_CastbarAnchors.lua")
 local castbarDriverSource = ReadSource("Castbars/MSUF_CastbarDriver.lua")
 local immediateRefresh = assert(castbarDriverSource:find("local function RefreshTargetFocusChanged", 1, true))
 local identityInvalidation = assert(castbarDriverSource:find("InvalidateTargetFocusState(frame)", immediateRefresh, true))
@@ -532,7 +531,8 @@ Check(castbarDriverSource:find("if self.PrepareForCast then self:PrepareForCast(
 Check(castbarVisualSource:find('DetailNum(g, prefix, "IconZoom", "castbarIconZoom", 100)', 1, true)
     and castbarVisualSource:find("texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)", 1, true),
     "live Castbar Icon Zoom is not resolved per scope")
-Check(castbarAnchorSource:find("g.castbarPlayerIconZoom", 1, true),
+-- The player bar resolves castbarPlayerIconZoom through the Visuals prefix.
+Check(castbarVisualSource:find('if unit == "player" then return "castbarPlayer" end', 1, true),
     "player Castbar icon layout omits its zoom scope")
 Check(castbarVisualSource:find('DetailNum(g, prefix, "IconBorderThickness", nil, 0)', 1, true)
     and castbarVisualSource:find('DetailString(g, prefix, "IconBorderStyle", nil, "NONE")', 1, true)

@@ -67,6 +67,35 @@ local EnsureGeneralDB = _G.MSUF_EnsureCastbarGeneralDB
 
 local IsInCombat = _G.MSUF_IsPlayerInCombat
 
+--- Providers that load before this file in every client TOC (Kernel/MSUF_Util,
+--- the castbar Utils, Core, Frames, Anchors, PreviewEdit and the player
+--- runtime). A missing one is a load-order bug, so it fails here, loudly,
+--- instead of silently skipping a per-call guard.
+local FILE = "Castbars/MSUF_CastbarPreviews.lua"
+local Require = MSUF.Require
+local SetTextIfChangedFn = Require("MSUF_SetTextIfChanged", FILE)
+local GetCastbarTimeFormat = Require("MSUF_GetCastbarTimeFormat", FILE)
+local FormatCastbarTimeText = Require("MSUF_FormatCastbarTimeText", FILE)
+local CreateCastbarPreviewFrame = Require("MSUF_CreateCastbarPreviewFrame", FILE)
+local GetCastbarDesiredSize = Require("MSUF_GetCastbarDesiredSize", FILE)
+local ApplyPlayerCastbarSizeAndLayout = Require("MSUF_ApplyPlayerCastbarSizeAndLayout", FILE)
+local GetCastbarAutoAnchorOffsetX = Require("MSUF_GetCastbarAutoAnchorOffsetX", FILE)
+local HardSyncCastbarPreview = Require("MSUF_HardSyncCastbarPreview", FILE)
+local ApplyCastbarFrameLayer = Require("MSUF_ApplyCastbarFrameLayer", FILE)
+local ApplyCastbarTexts = Require("MSUF_CB_ApplyTexts", FILE)
+local ApplyCastbarGlowFade = Require("MSUF_ApplyCastbarGlowFade", FILE)
+local ResetCastbarGlowFade = Require("MSUF_ResetCastbarGlowFade", FILE)
+local UpdateCastbarTextures = Require("MSUF_UpdateCastbarTextures", FILE)
+local SetupCastbarPreviewEditHandlers = Require("MSUF_SetupCastbarPreviewEditHandlers", FILE)
+local UpdateLatencyZone = Require("MSUF_PlayerCastbar_UpdateLatencyZone", FILE)
+
+--- Providers that load after this file (Driver, Visuals, Castbars.lua); the
+--- Classic visual compat also wraps MSUF_RefreshCastbarFrame. Resolved when a
+--- preview is used, which is always after the core finished loading.
+local function Later(name)
+    return Require(name, FILE)
+end
+
 local function GetPreviewScale()
     local general = EnsureGeneralDB()
     local scale = tonumber(general.msufUiScale or general.uiScale) or 1
@@ -79,43 +108,17 @@ local function SetTextIfChanged(fontString, text)
     if not fontString then return end
     text = text or ""
 
-    if type(_G.MSUF_SetTextIfChanged) == "function" then
-        _G.MSUF_SetTextIfChanged(fontString, text)
-    elseif fontString.SetText then
-        fontString:SetText(text)
-    end
+    SetTextIfChangedFn(fontString, text)
 end
 
 local function FormatTimeText(frame, remaining, total)
-    local format = "CURRENT"
-    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
-        format = _G.MSUF_GetCastbarTimeFormat(frame and frame.unit)
-    end
+    local format = GetCastbarTimeFormat(frame and frame.unit)
     if frame then frame._msufCastTimeFormat = format end
-
-    if type(_G.MSUF_FormatCastbarTimeText) == "function" then
-        return _G.MSUF_FormatCastbarTimeText(format, remaining, total)
-    end
-    return string.format("%.1f", tonumber(remaining) or 0)
+    return FormatCastbarTimeText(format, remaining, total)
 end
 
 local function GetDesiredPreviewSize(unit, frame)
-    local general = EnsureGeneralDB()
-    local config = PREVIEW_UNITS[unit]
-
-    if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-        return _G.MSUF_GetCastbarDesiredSize(unit, general, frame, 250, 18)
-    end
-
-    local width = tonumber(general[config.width]) or tonumber(general.castbarGlobalWidth) or 250
-    local height = tonumber(general[config.height]) or tonumber(general.castbarGlobalHeight) or 18
-    local unitFrame = CoreFrame(unit)
-
-    if not general[config.detached] and unitFrame and unitFrame.GetWidth then
-        width = tonumber(general[config.width]) or unitFrame:GetWidth() or width
-    end
-
-    return width, height
+    return GetCastbarDesiredSize(unit, EnsureGeneralDB(), frame, 250, 18)
 end
 
 local function CreatePreview(unit)
@@ -124,10 +127,7 @@ local function CreatePreview(unit)
     if existing then return existing end
 
     local width, height = GetDesiredPreviewSize(unit)
-    local createFrame = _G.MSUF_CreateCastbarPreviewFrame
-    if type(createFrame) ~= "function" then return nil end
-
-    local frame = createFrame(unit, config.name, {
+    local frame = CreateCastbarPreviewFrame(unit, config.name, {
         parent = UIParent,
         strata = "DIALOG",
         width = width,
@@ -142,24 +142,8 @@ local function CreatePreview(unit)
 
     frame:SetScale(GetPreviewScale())
     ExportPublic(config.name, frame)
-
-    if type(_G.MSUF_SetupCastbarPreviewEditHandlers) == "function" then
-        _G.MSUF_SetupCastbarPreviewEditHandlers(frame, unit)
-    end
-
+    SetupCastbarPreviewEditHandlers(frame, unit)
     return frame
-end
-
-local function CreatePlayerCastbarPreview()
-    return CreatePreview("player")
-end
-
-local function CreateTargetCastbarPreview()
-    return CreatePreview("target")
-end
-
-local function CreateFocusCastbarPreview()
-    return CreatePreview("focus")
 end
 
 local function SourceCastbarForUnit(unit)
@@ -175,11 +159,7 @@ local function PositionPreview(unit, frame)
     local config = PREVIEW_UNITS[unit]
     local width, height, preserveWidth = GetDesiredPreviewSize(unit, frame)
 
-    if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-        _G.MSUF_ApplyPlayerCastbarSizeAndLayout(frame, general, width, height, preserveWidth)
-    else
-        frame:SetSize(width or 250, height or 18)
-    end
+    ApplyPlayerCastbarSizeAndLayout(frame, general, width, height, preserveWidth)
 
     local parent = general[config.detached] and UIParent or CoreFrame(unit)
     if not parent then return end
@@ -203,19 +183,12 @@ local function PositionPreview(unit, frame)
     elseif unit == "player" then
         frame:SetPoint("BOTTOM", parent, "TOP", offsetX, offsetY)
     else
-        local autoX = 0
-        if type(_G.MSUF_GetCastbarAutoAnchorOffsetX) == "function" then
-            autoX = _G.MSUF_GetCastbarAutoAnchorOffsetX(general, unit, frame)
-        end
+        local autoX = GetCastbarAutoAnchorOffsetX(general, unit, frame)
         frame:SetPoint("BOTTOMLEFT", parent, "TOPLEFT", offsetX + autoX, offsetY)
     end
 
-    if type(_G.MSUF_HardSyncCastbarPreview) == "function" then
-        _G.MSUF_HardSyncCastbarPreview(frame, SourceCastbarForUnit(unit))
-    end
-    if type(_G.MSUF_ApplyCastbarFrameLayer) == "function" then
-        _G.MSUF_ApplyCastbarFrameLayer(frame, general, unit)
-    end
+    HardSyncCastbarPreview(frame, SourceCastbarForUnit(unit))
+    ApplyCastbarFrameLayer(frame, general, unit)
 end
 
 local function PositionPlayerCastbarPreview()
@@ -231,11 +204,7 @@ local function PositionFocusCastbarPreview()
 end
 
 local function ApplyPreviewCastText(frame, label)
-    if type(_G.MSUF_CB_ApplyTexts) == "function" then
-        _G.MSUF_CB_ApplyTexts(frame, nil, label, nil)
-    else
-        SetTextIfChanged(frame and frame.castText, label)
-    end
+    ApplyCastbarTexts(frame, nil, label, nil)
 end
 
 local function ClearPreviewTest(frame, unit)
@@ -252,9 +221,7 @@ local function ClearPreviewTest(frame, unit)
         frame.statusBar:SetMinMaxValues(0, 1)
         frame.statusBar:SetValue(0.5)
     end
-    if type(_G.MSUF_ResetCastbarGlowFade) == "function" then
-        _G.MSUF_ResetCastbarGlowFade(frame)
-    end
+    ResetCastbarGlowFade(frame)
     if frame.latencyBar then frame.latencyBar:Hide() end
 
     SetTextIfChanged(frame.timeText, "")
@@ -333,18 +300,14 @@ local function UpdatePreviewTest(frame)
     end
     if frame.castTargetText then
         SetTextIfChanged(frame.castTargetText, showTargetName and Translate(targetLabel) or "")
-        if type(_G.MSUF_ApplyCastTargetTextColor) == "function" then
-            _G.MSUF_ApplyCastTargetTextColor(frame)
-        end
+        Later("MSUF_ApplyCastTargetTextColor")(frame)
         frame.castTargetText:SetShown(showTargetName == true)
     end
 
-    if frame.latencyBar and type(_G.MSUF_PlayerCastbar_UpdateLatencyZone) == "function" then
-        _G.MSUF_PlayerCastbar_UpdateLatencyZone(frame, false, duration)
+    if frame.latencyBar then
+        UpdateLatencyZone(frame, false, duration)
     end
-    if type(_G.MSUF_ApplyCastbarGlowFade) == "function" then
-        _G.MSUF_ApplyCastbarGlowFade(frame, remaining, duration)
-    end
+    ApplyCastbarGlowFade(frame, remaining, duration)
 end
 
 local function StartPreviewTest(frame)
@@ -382,9 +345,7 @@ local function SetUnitTestMode(unit, enabled, transient)
     local active = _G.MSUF_UnitEditModeActive == true and requested
     local frame
     if unit == "player" and not (general.castbarPlayerPreviewEnabled and _G.MSUF_PlayerCastbarPreview) then
-        if type(_G.MSUF_InitSafePlayerCastbar) == "function" then
-            _G.MSUF_InitSafePlayerCastbar()
-        end
+        Later("MSUF_InitSafePlayerCastbar")()
         frame = _G.MSUF_PlayerCastbar
     else
         frame = _G[config.name] or CreatePreview(unit)
@@ -397,13 +358,7 @@ local function SetUnitTestMode(unit, enabled, transient)
 
     PositionPreview(unit, frame)
     StartPreviewTest(frame)
-    if type(_G.MSUF_RefreshCastbarFrame) == "function" then
-        _G.MSUF_RefreshCastbarFrame(frame)
-    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals(unit)
-    end
+    Later("MSUF_RefreshCastbarFrame")(frame)
 end
 
 local function SetPlayerCastbarTestMode(enabled, transient)
@@ -535,9 +490,7 @@ local function SetupPoolPreviewEditMode(preview)
     local kind = preview.kind
     preview:ForEach(function(frame)
         HidePreviewFill(frame)
-        if type(_G.MSUF_SetupCastbarPreviewEditHandlers) == "function" then
-            _G.MSUF_SetupCastbarPreviewEditHandlers(frame, kind)
-        end
+        SetupCastbarPreviewEditHandlers(frame, kind)
     end)
 end
 
@@ -580,12 +533,12 @@ local function UpdatePlayerCastbarPreview()
         return
     end
 
-    local refreshFrame = _G.MSUF_RefreshCastbarFrame
+    local refreshFrame = Later("MSUF_RefreshCastbarFrame")
     for unit in pairs(PREVIEW_UNITS) do
         local frame = CreatePreview(unit)
         if frame then
             PositionPreview(unit, frame)
-            if type(refreshFrame) == "function" then refreshFrame(frame) end
+            refreshFrame(frame)
             frame:Show()
         end
     end
@@ -597,19 +550,7 @@ local function UpdatePlayerCastbarPreview()
             SetupPoolPreviewEditMode(previews[index])
         end
     end
-    if type(refreshFrame) ~= "function" then
-        local applyUnit = _G.MSUF_ApplyCastbarVisualsForUnit
-        if type(applyUnit) == "function" then
-            for unit in pairs(PREVIEW_UNITS) do applyUnit(unit) end
-            applyUnit("boss")
-            applyUnit("arena")
-        elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-            for unit in pairs(PREVIEW_UNITS) do _G.MSUF_UpdateCastbarVisuals(unit) end
-            _G.MSUF_UpdateCastbarVisuals("boss")
-            _G.MSUF_UpdateCastbarVisuals("arena")
-        end
-    end
-    if type(_G.MSUF_UpdateCastbarTextures) == "function" then _G.MSUF_UpdateCastbarTextures() end
+    UpdateCastbarTextures()
 end
 
 --- Boss and arena castbar drags position their previews every tick: one
@@ -653,31 +594,7 @@ local function PositionCastbarPreviewUnit(unit)
     return false
 end
 
-local function SyncBossCastbarSliders()
-    local general = EnsureGeneralDB()
-    local values = {
-        MSUF_CastbarBossXOffsetSlider = general.bossCastbarOffsetX or 0,
-        MSUF_CastbarBossYOffsetSlider = general.bossCastbarOffsetY or 0,
-        MSUF_CastbarBossWidthSlider = general.bossCastbarWidth or 240,
-        MSUF_CastbarBossHeightSlider = general.bossCastbarHeight or 18,
-    }
-
-    local setSilent = _G.MSUF_SetSliderValueSilent
-    local clamp = _G.MSUF_ClampToSlider
-    if type(setSilent) ~= "function" or type(clamp) ~= "function" then return end
-
-    for sliderName, value in pairs(values) do
-        local slider = _G[sliderName]
-        if slider then
-            setSilent(slider, clamp(slider, tonumber(value) or 0))
-        end
-    end
-end
-
 ExportPublic("MSUF_HideBlizzardPlayerCastbar", HideBlizzardPlayerCastbar)
-ExportPublic("MSUF_CreatePlayerCastbarPreview", _G.MSUF_CreatePlayerCastbarPreview or CreatePlayerCastbarPreview)
-ExportPublic("MSUF_CreateTargetCastbarPreview", _G.MSUF_CreateTargetCastbarPreview or CreateTargetCastbarPreview)
-ExportPublic("MSUF_CreateFocusCastbarPreview", _G.MSUF_CreateFocusCastbarPreview or CreateFocusCastbarPreview)
 ExportPublic("MSUF_PositionPlayerCastbarPreview", PositionPlayerCastbarPreview)
 ExportPublic("MSUF_PositionTargetCastbarPreview", PositionTargetCastbarPreview)
 ExportPublic("MSUF_PositionFocusCastbarPreview", PositionFocusCastbarPreview)
@@ -685,19 +602,8 @@ ExportPublic("MSUF_PositionCastbarPreviewUnit", PositionCastbarPreviewUnit)
 ExportPublic("MSUF_UpdatePlayerCastbarPreview", UpdatePlayerCastbarPreview)
 ExportPublic("MSUF_SetupBossCastbarPreviewEditMode", SetupBossCastbarPreviewEditMode)
 ExportPublic("MSUF_SetupArenaCastbarPreviewEditMode", SetupArenaCastbarPreviewEditMode)
-ExportPublic("MSUF_SyncBossCastbarSliders", SyncBossCastbarSliders)
 
 InstallPoolPreviewEventDriver()
-
-if hooksecurefunc
-    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
-    and not _G.MSUF_BossPreviewSetupHooked
-then
-    ExportPublic("MSUF_BossPreviewSetupHooked", true)
-    hooksecurefunc("MSUF_UpdateBossCastbarPreview", function()
-        if not IsInCombat() then SetupBossCastbarPreviewEditMode() end
-    end)
-end
 
 local function HideCastbarPreviewFrame(frame)
     if not frame then return end
@@ -802,9 +708,7 @@ local function PagePreviewActivate(unit)
         if not frame then return false end
         PositionPreview(unit, frame)
         StartPreviewTest(frame)
-        if type(_G.MSUF_RefreshCastbarFrame) == "function" then
-            _G.MSUF_RefreshCastbarFrame(frame)
-        end
+        Later("MSUF_RefreshCastbarFrame")(frame)
         frame:Show()
         return true
     end

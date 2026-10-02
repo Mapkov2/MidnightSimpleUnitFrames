@@ -553,7 +553,6 @@ driver:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- ============================================================
 local ExportPublic = ns.ExportPublic
 
-ExportPublic("MSUF_IsGCDBarEnabled", IsGCDBarEnabled)
 ExportPublic("MSUF_GCDBar_IsSupported", GCDBarSupported)
 ExportPublic("MSUF_GCDBar_SyncRegistration", SyncRegistration)
 ExportPublic("MSUF_GCDBar_RefreshLayout", function()

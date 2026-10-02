@@ -258,6 +258,7 @@ clients+Forever	lua	tools/tests/portrait_details_smoke.lua	{root} {flavor}	Portr
 clients+Forever	lua	tools/tests/alpha_text_layer_smoke.lua	{root} {flavor}	Alpha text layer smoke failed: {flavor}
 clients+Forever	lua	tools/tests/status_atlas_memo_smoke.lua	{root} {flavor}	Status atlas memo smoke failed: {flavor}
 -	lua	tools/tests/forever_swing_details_smoke.lua	{root}	Forever swing range, latency and background details
+-	lua	tools/tests/forever_swing_native_ownership_smoke.lua	{root}	Forever swing timer leaves Blizzard bar layout to the CVar path
 -	lua	tools/tests/profile_fields_smoke.lua	{root}	Sparse profile fields and import bounds
 -	lua	tools/tests/profile_fields_roots_smoke.lua	{root}	Variants or sync miss a profile root
 -	lua	tools/tests/profile_snapshot_reason_smoke.lua	{root}	Profile snapshot failures report the wrong reason
@@ -311,8 +312,13 @@ clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}
 -	lua	tools/tests/castbar_module_topology_smoke.lua	{root}	Castbar module topology smoke failed
 -	lua	tools/tests/castbar_pool_preview_smoke.lua	{root}	Castbar pool preview smoke failed
 -	lua	tools/tests/interrupt_ready_perf_smoke.lua	{root}	Interrupt-ready perf smoke failed
+-	lua	tools/tests/interrupt_ready_visual_cache_smoke.lua	{root}	Interrupt-ready visual cache smoke failed
+-	lua	tools/tests/focus_kick_cast_state_budget_smoke.lua	{root}	Focus interrupt tracker cast-state budget or layout ownership failed
+-	lua	tools/tests/empower_tick_blink_smoke.lua	{root}	Empower stage tick blink or its budget failed
 -	lua	tools/tests/castbar_hotpath_budget_smoke.lua	{root}	Castbar hotpath budget smoke failed
 -	lua	tools/tests/castbar_hotpath_smoke.lua	{root}	Castbar hotpath smoke failed
+-	lua	tools/tests/castbar_correctness_smoke.lua	{root}	Castbar correctness smoke failed
+-	lua	tools/tests/castbar_pool_residue_smoke.lua	{root}	Castbar boss/arena pool walkers changed the recorded trace
 clients+Forever,MistsDuration	lua	tools/tests/interrupt_ready_classic_cooldown_smoke.lua	{root} {flavor}	Interrupt-ready cooldown source: {flavor}
 -	lua	tools/tests/resource_marks_smoke.lua	{root}	Resource marks: restricted colours, overlay, fill axis, combat shapeshift
 clients+Forever	lua	tools/tests/resource_extras_lifecycle_smoke.lua	{root} {flavor}	Resource helper lifecycle: {flavor}

@@ -359,7 +359,6 @@ end
 ExportPublic("MSUF_PlayerCastbar_ApplyBackendState", PlayerCastbarApplyBackendState)
 
 ExportPublic("MSUF__castbarStyleGlobalRev", _G.MSUF__castbarStyleGlobalRev or 1)
-ExportPublic("MSUF_CastbarStyleRev", _G.MSUF__castbarStyleGlobalRev)
 local castbarStyleRev = _G.MSUF__castbarStyleGlobalRev
 
 ExportPublic("MSUF__castTimeGlobalRev", _G.MSUF__castTimeGlobalRev or 1)
@@ -381,7 +380,6 @@ end)
 
 local function BumpCastbarStyleRev()
     ExportPublic("MSUF__castbarStyleGlobalRev", (_G.MSUF__castbarStyleGlobalRev or 1) + 1)
-    ExportPublic("MSUF_CastbarStyleRev", _G.MSUF__castbarStyleGlobalRev)
     castbarStyleRev = _G.MSUF__castbarStyleGlobalRev
 end
 
@@ -1124,7 +1122,10 @@ local function CheckChannelHardStop(frame, sampleTime)
     end
     if not unit or unit == "" then return false end
 
-    local channelActive = UnitChannelInfo(unit) ~= nil
+    -- The name is SecretWhenUnitSpellCastRestricted: a secret name is a
+    -- running channel and is never compared with nil.
+    local channelName = UnitChannelInfo(unit)
+    local channelActive = issecretvalue(channelName) == true or channelName ~= nil
     if not channelActive and frame.unit == "player" then
         -- Vehicle transitions are event-owned, but the hard-stop guard must not
         -- produce a false completion during the narrow hand-off window. Probe

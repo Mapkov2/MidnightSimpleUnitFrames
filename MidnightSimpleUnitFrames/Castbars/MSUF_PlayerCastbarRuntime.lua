@@ -339,12 +339,6 @@ local function UpdateColorForInterruptible(frame)
     end
 end
 
-local function GetInterruptFeedbackColor()
-    local resolveColor = _G.MSUF_ResolveInterruptFeedbackCastColor
-    if type(resolveColor) == "function" then return resolveColor() end
-    return 1.0, 0.82, 0.0, 1
-end
-
 local function InvalidateCastState(unit)
     if not unit then return end
     local engine = CastbarEngine()
@@ -846,10 +840,6 @@ local function HidePlayerFrameIfNoLongerCasting(frame)
     frame:Hide()
 end
 
-local function HideIfNoLongerCasting(owner)
-    HidePlayerFrameIfNoLongerCasting(owner and owner.msuCastbarFrame)
-end
-
 local function EnsureInterruptHideCallback(frame)
     if frame._msufPlayerInterruptHideCB then return end
     frame._msufPlayerInterruptHideCB = function()
@@ -977,7 +967,7 @@ local function HandleActiveEmpowerEvent(frame, event, ...)
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
         if type(_G.MSUF_PlayerCastbar_ShowInterruptFeedback) == "function" then
-            local label = "Interrupted"
+            local label = INTERRUPTED
             if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
                 label = _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", label)
             end
@@ -1114,10 +1104,6 @@ end
 
 ExportPublic("MSUF_PlayerCastbar_UpdateLatencyZone", UpdateLatencyZone)
 ExportPublic("MSUF_PlayerCastbar_UpdateColorForInterruptible", UpdateColorForInterruptible)
-ExportPublic("MSUF_GetInterruptFeedbackColor", GetInterruptFeedbackColor)
-ExportPublic("MSUF_PlayerCastbar_HideIfNoLongerCasting", HideIfNoLongerCasting)
 ExportPublic("MSUF_PlayerCastbar_ShowInterruptFeedback", ShowInterruptFeedback)
-ExportPublic("MSUF_PlayerCastbar_GetEffectiveUnit", GetEffectiveUnit)
-ExportPublic("MSUF_PlayerCastbar_UnhaltedUpdate", UnhaltedUpdate)
 ExportPublic("MSUF_PlayerCastbar_Cast", CastPlayerCastbar)
 ExportPublic("MSUF_PlayerCastbar_OnEvent", PlayerCastbarOnEvent)

@@ -6,7 +6,8 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- owns the draggable icon frame, copied time text, border coloring, and short
 --- interrupt feedback animation.
 
-local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic)
+local MSUF = select(2, ...) or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic
 
 local ParentFrame = UIParent
 local After = C_Timer and C_Timer.After
@@ -169,6 +170,21 @@ local function AttachTimeDriver(state)
     end
 end
 
+--- One time-text font apply (file scope: a cast state must not build a closure).
+local function ApplyTimeTextFontTo(fs, applyResolved, fontPath, fontSize, fontFlags, fontKey)
+    if not fs then return end
+    if type(applyResolved) == "function" then
+        applyResolved(fs, fontPath, fontSize, fontFlags, fontKey)
+        return
+    end
+    local ready = _G.MSUF_SetFontChecked(fs, fontPath, fontSize, fontFlags)
+    local matches = _G.MSUF_FontApplicationMatches
+    if ready and type(matches) == "function" then ready = matches(fs, fontPath, fontSize) == true end
+    if not ready and type(_G.MSUF_MarkFontApplyFailed) == "function" then
+        _G.MSUF_MarkFontApplyFailed()
+    end
+end
+
 local function ApplyTimeTextFont()
     local general = EnsureOptions()
     local fontPath = (type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath())
@@ -184,21 +200,9 @@ local function ApplyTimeTextFont()
 
     local g = _G.MSUF_DB and _G.MSUF_DB.general
     local applyResolved = _G.MSUF_ApplyResolvedFont
-    local function ApplyOne(fs)
-        if not fs then return end
-        if type(applyResolved) == "function" then
-            applyResolved(fs, fontPath, fontSize, fontFlags, g and g.fontKey)
-            return
-        end
-        local ready = _G.MSUF_SetFontChecked(fs, fontPath, fontSize, fontFlags)
-        local matches = _G.MSUF_FontApplicationMatches
-        if ready and type(matches) == "function" then ready = matches(fs, fontPath, fontSize) == true end
-        if not ready and type(_G.MSUF_MarkFontApplyFailed) == "function" then
-            _G.MSUF_MarkFontApplyFailed()
-        end
-    end
-    ApplyOne(iconFrame and iconFrame.timeText)
-    ApplyOne(previewFrame and previewFrame.timeText)
+    local fontKey = g and g.fontKey
+    ApplyTimeTextFontTo(iconFrame and iconFrame.timeText, applyResolved, fontPath, fontSize, fontFlags, fontKey)
+    ApplyTimeTextFontTo(previewFrame and previewFrame.timeText, applyResolved, fontPath, fontSize, fontFlags, fontKey)
 
     if type(_G.MSUF_GetConfiguredFontColor) == "function" then
         local red, green, blue = _G.MSUF_GetConfiguredFontColor()
@@ -289,6 +293,26 @@ local function ApplyIconLayout()
 
     LayoutBorderEdges()
     ApplyTimeTextFont()
+    -- The settings this geometry came from; a drag or the interrupt shake
+    -- clears them while they move the icon themselves.
+    iconFrame._msufFocusKickLayoutW = general.focusKickIconWidth
+    iconFrame._msufFocusKickLayoutH = general.focusKickIconHeight
+    iconFrame._msufFocusKickLayoutX = general.focusKickIconOffsetX
+    iconFrame._msufFocusKickLayoutY = general.focusKickIconOffsetY
+    iconFrame._msufFocusKickLayoutValid = true
+end
+
+local function InvalidateIconLayout()
+    if iconFrame then iconFrame._msufFocusKickLayoutValid = nil end
+end
+
+--- True while the icon still sits where the current settings put it.
+local function IconLayoutCurrent(general)
+    return iconFrame._msufFocusKickLayoutValid == true
+        and iconFrame._msufFocusKickLayoutW == general.focusKickIconWidth
+        and iconFrame._msufFocusKickLayoutH == general.focusKickIconHeight
+        and iconFrame._msufFocusKickLayoutX == general.focusKickIconOffsetX
+        and iconFrame._msufFocusKickLayoutY == general.focusKickIconOffsetY
 end
 
 local function EnsureIconFrame()
@@ -326,6 +350,7 @@ local function EnsureIconFrame()
     iconFrame:SetMovable(true)
     iconFrame:RegisterForDrag("LeftButton")
     iconFrame:SetScript("OnDragStart", function(frame)
+        InvalidateIconLayout()
         frame:StartMoving()
     end)
     iconFrame:SetScript("OnDragStop", function(frame)
@@ -375,6 +400,7 @@ local function PlayInterruptFeedback()
 
         shakeStep = shakeStep + 1
         local direction = (shakeStep % 2 == 0) and -1 or 1
+        InvalidateIconLayout()
         iconFrame:ClearAllPoints()
         iconFrame:SetPoint(
             "CENTER",
@@ -392,6 +418,12 @@ local function PlayInterruptFeedback()
     end
 
     shake()
+end
+
+local function Translate(text)
+    local translate = MSUF.Translate
+    if type(translate) == "function" then return translate(text) end
+    return text
 end
 
 local function PrintMoveError(message)
@@ -498,7 +530,7 @@ local function EnsurePreviewFrame()
     previewFrame:SetScript("OnDragStart", function(frame)
         if not previewEnabled then return end
         if InCombatLockdown and InCombatLockdown() then
-            PrintMoveError("In combat - cannot move Focus Interrupt Tracker preview.")
+            PrintMoveError(Translate("In combat - cannot move Focus Interrupt Tracker preview."))
             return
         end
         SetPreviewSelected(true)
@@ -571,7 +603,7 @@ local function SetPreviewEnabled(enabled)
         end
         SetPreviewSelected(false)
         previewFrame:Hide()
-        PrintMoveError("Enable Focus Interrupt Tracker first to use the on-screen preview.")
+        PrintMoveError(Translate("Enable Focus Interrupt Tracker first to use the on-screen preview."))
         return
     end
 
@@ -611,7 +643,7 @@ local function IsPreviewEnabled()
 end
 
 local function ApplyCastState(state)
-    EnsureOptions()
+    local general = EnsureOptions()
 
     if not IsFocusKickEnabled() then
         if iconFrame then
@@ -646,7 +678,15 @@ local function ApplyCastState(state)
         or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
     ApplyInterruptibilityColor(state.isNotInterruptible == true, state.apiNotInterruptibleRaw)
     iconFrame:Show()
-    ApplyIconLayout()
+    -- The option, font, drag and shake paths own the geometry; a cast state
+    -- only re-lays the icon out when it no longer matches the settings (a
+    -- profile switch, a drag or a shake in flight). The time-text font is
+    -- reapplied on every cast state as before.
+    if IconLayoutCurrent(general) then
+        ApplyTimeTextFont()
+    else
+        ApplyIconLayout()
+    end
     AttachTimeDriver(state)
 end
 

@@ -622,24 +622,13 @@ local function FeatureEnabled(general)
     return target or focus or boss or arena
 end
 
+--- The fill style follows the unit's own toggle: ShouldShow without the Focus
+--- Interrupt Tracker, which shows its readiness on the focus castbar.
 local function UnitSupportsFillStyle(general, unit)
-    if unit == "target" then
-        return general.kickReadyShowTarget == true
-    end
-
     if unit == "focus" then
         return general.kickReadyShowFocus == true
     end
-
-    if unit == "boss" or (type(unit) == "string" and unit:match("^boss%d+$")) then
-        return general.kickReadyShowBoss == true
-    end
-
-    if unit == "arena" or (type(unit) == "string" and unit:match("^arena%d+$")) then
-        return general.kickReadyShowArena == true
-    end
-
-    return false
+    return ShouldShow(general, unit)
 end
 
 local function IndicatorStyle(general)
@@ -1137,18 +1126,31 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
     local rawNotInterruptible = ResolveRawNotInterruptible(frame, castStateTable)
     local red, green, blue, alpha, cacheable = EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
     local rawKey = cacheable and RawInterruptibleKey(rawNotInterruptible) or nil
-    local visualKey
-    if rawKey ~= nil then
-        visualKey = style .. "|"
-            .. (isReady == true and "1" or "0") .. "|"
-            .. rawKey .. "|"
-            .. tostring(red) .. "|"
-            .. tostring(green) .. "|"
-            .. tostring(blue) .. "|"
-            .. tostring(alpha)
-        if frame._msufKickReadyVisualKey == visualKey then
-            return
-        end
+    local ready = isReady == true
+    -- The last painted visual, field by field (plain values only: rawKey is nil
+    -- for anything secret). _msufKickReadyVisualKey is its validity flag; the
+    -- outline and layout owners reset it to nil to force the next paint.
+    if rawKey ~= nil
+        and frame._msufKickReadyVisualKey == true
+        and frame._msufKickReadyVisualStyle == style
+        and frame._msufKickReadyVisualReady == ready
+        and frame._msufKickReadyVisualRaw == rawKey
+        and frame._msufKickReadyVisualR == red
+        and frame._msufKickReadyVisualG == green
+        and frame._msufKickReadyVisualB == blue
+        and frame._msufKickReadyVisualA == alpha
+    then
+        return
+    end
+    local remember = rawKey ~= nil
+    if remember then
+        frame._msufKickReadyVisualStyle = style
+        frame._msufKickReadyVisualReady = ready
+        frame._msufKickReadyVisualRaw = rawKey
+        frame._msufKickReadyVisualR = red
+        frame._msufKickReadyVisualG = green
+        frame._msufKickReadyVisualB = blue
+        frame._msufKickReadyVisualA = alpha
     end
 
     if style == "border" then
@@ -1158,7 +1160,7 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
         end
 
         TintOutline(frame, red, green, blue, alpha)
-        frame._msufKickReadyVisualKey = frame._kickReadyBorderTinted and visualKey or nil
+        frame._msufKickReadyVisualKey = (remember and frame._kickReadyBorderTinted) and true or nil
         return
     end
 
@@ -1175,7 +1177,7 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
 
     box:Show()
     box._kickReadyShown = true
-    frame._msufKickReadyVisualKey = visualKey
+    frame._msufKickReadyVisualKey = remember or nil
 end
 
 --- PERF: RefreshAll/RefreshActive/KickReady_RefreshFrame run per cooldown or
@@ -1488,10 +1490,6 @@ local function KickReady_GetReadyBoolForTint()
     return InterruptReadyBoolForTint()
 end
 
-local function KickReady_EvaluateColor(ready)
-    return ColorForReady(ready)
-end
-
 local function KickReady_EvaluateRGBA(ready, rawNotInterruptible)
     local red, green, blue, alpha = EvaluateIndicatorRGBA(ready, rawNotInterruptible)
     return red, green, blue, alpha
@@ -1580,7 +1578,6 @@ ExportPublic("MSUF_KickReady_Init", KickReady_Init)
 ExportPublic("MSUF_KickReady_IsReady", KickReady_IsReady)
 ExportPublic("MSUF_KickReady_GetSpellID", KickReady_GetSpellID)
 ExportPublic("MSUF_KickReady_GetReadyBoolForTint", KickReady_GetReadyBoolForTint)
-ExportPublic("MSUF_KickReady_EvaluateColor", KickReady_EvaluateColor)
 ExportPublic("MSUF_KickReady_EvaluateRGBA", KickReady_EvaluateRGBA)
 ExportPublic("MSUF_KickReady_ApplyLayout", KickReady_ApplyLayout)
 ExportPublic("MSUF_KickReady_RefreshFrame", KickReady_RefreshFrame)

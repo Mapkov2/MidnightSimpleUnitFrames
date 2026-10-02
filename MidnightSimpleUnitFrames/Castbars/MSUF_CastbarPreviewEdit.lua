@@ -138,23 +138,6 @@ local function ThrottledApplyUnitAndSync(frame, unit, elapsed)
     return true
 end
 
-local function ClampBossOffsets(general, config)
-    if type(MSUF_ClampToSlider) ~= "function" then
-        return
-    end
-
-    local xSlider = _G.MSUF_CastbarBossXOffsetSlider
-    local ySlider = _G.MSUF_CastbarBossYOffsetSlider
-
-    if xSlider then
-        general[config.x] = MSUF_ClampToSlider(xSlider, tonumber(general[config.x]) or 0)
-    end
-
-    if ySlider then
-        general[config.y] = MSUF_ClampToSlider(ySlider, tonumber(general[config.y]) or 0)
-    end
-end
-
 local function PulsePreview(unit)
     if not _G.MSUF_UnitEditModeActive then
         return
@@ -229,10 +212,6 @@ local function RegisterPreviewNudgeTarget(frame, unit, config)
 
             general[config.x] = Round(OffsetX(general, config) + (deltaX or 0))
             general[config.y] = Round(OffsetY(general, config) + (deltaY or 0))
-
-            if unit == "boss" then
-                ClampBossOffsets(general, config)
-            end
 
             ApplyUnitAndSync(unit)
         end,
@@ -377,10 +356,6 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
 
                 liveGeneral[config.x] = Round((dragFrame.dragStartOffsetX or 0) + snappedDeltaX)
                 liveGeneral[config.y] = Round((dragFrame.dragStartOffsetY or 0) + snappedDeltaY)
-
-                if unit == "boss" then
-                    ClampBossOffsets(liveGeneral, config)
-                end
             end
 
             if dragFrame.dragMode == "MOVE" and PositionPreviewOnly(unit) then
