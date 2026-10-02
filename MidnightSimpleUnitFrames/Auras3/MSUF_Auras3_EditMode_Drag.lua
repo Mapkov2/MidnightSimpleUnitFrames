@@ -579,16 +579,33 @@ local function SetLaneMouseSuppressed(container, suppressed)
     else
         if not RestoreAuraMouse(container, nil, false) then restored = false end
     end
-    -- The lane's buttons are never rewired. A native AuraButton is sealed once
-    -- initializeFrame returns: its frame provider applies the access
-    -- restrictions right after that callback
+    -- A native AuraContainer's buttons are never rewired. A native AuraButton
+    -- is sealed once initializeFrame returns: its frame provider applies the
+    -- access restrictions right after that callback
     -- (Blizzard_AuraContainerFrameProviders.lua), the AuraButton intrinsic
     -- forbids untrusted scripts and AlwaysPropagateInput (Blizzard_AuraButton.xml),
     -- and a SetScript or HookScript on it then raises "blocked by secret
     -- aspects". Its input is final from initializeFrame (PrepareStage
-    -- BindLaneIdentity and BindPandemicAndTooltip, Runtime_ButtonVisuals). An
-    -- MSUF-built Classic lane keeps its buttons on the lane table, not on this
-    -- frame, so the container is the only surface either backend rewires.
+    -- BindLaneIdentity and BindPandemicAndTooltip, Runtime_ButtonVisuals), so
+    -- the container is the only surface rewired there.
+    if type(container.AddAuraSlot) == "function" then return restored end
+
+    -- A Classic lane frame (MSUF_Auras3_Lanes.lua) enumerates its own plain
+    -- Buttons through the same small contract. They stay writable, so their
+    -- clicks are forwarded too and their stored input is restored as it was.
+    local count = (type(container.GetAuraFrameCount) == "function" and container:GetAuraFrameCount())
+        or tonumber(container.createdButtons) or 0
+    for i = 1, count do
+        local button = type(container.GetAuraFrame) == "function" and container:GetAuraFrame(i) or container[i]
+        if button and button._msufA3NativeButton ~= true then
+            if suppressed then
+                if canForward then WireNativeAuraEditForward(button, container) end
+                SuppressAuraMouse(button, canForward)
+            elseif not RestoreAuraMouse(button, nil, false) then
+                restored = false
+            end
+        end
+    end
     return restored
 end
 

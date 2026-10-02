@@ -69,6 +69,7 @@ function container:GetAuraFrameCount() return 1 end
 function container:GetAuraFrame() return slotButton end
 function container:GetAuraGroupFrameCount() return 1 end
 function container:GetAuraGroupFrame() return flowButton end
+function container:AddAuraSlot() end
 local element = { Buffs = container, alpha = 1, _msufA3Config = { lanes = { buffs = { showTooltip = true } } } }
 function element:GetAlpha() return self.alpha end
 function element:SetAlpha(value) self.alpha = value end
@@ -158,5 +159,26 @@ listener.callback(listener, "PLAYER_REGEN_ENABLED")
 assert(element.alpha == 1 and element._msufA3EditModeAlpha == nil)
 assert(container.click == false and container.motion == true)
 ButtonsUntouched("lockdown")
+
+-- A Classic lane frame (MSUF_Auras3_Lanes.lua) is no native container: its
+-- plain Buttons stay writable, so Edit Mode forwards their clicks to the preview
+-- group and restores their own input afterwards.
+local classicButton = NewMouseFrame(false)
+classicButton.click, classicButton.motion = false, false
+local classicLane = NewMouseFrame(false)
+classicLane._msufA3NativeLane = "buff"
+classicLane._msufA3NativeLaneConfig = { unit = "boss1", [1] = classicButton, createdButtons = 1 }
+function classicLane:GetAuraFrameCount() return 1 end
+function classicLane:GetAuraFrame(index) return index == 1 and classicButton or nil end
+element.Buffs = classicLane
+forwarded = {}
+drag.SetRuntimeAuraHidden("boss1", true)
+assert(classicButton.click == true and classicButton.propagate == true and classicButton.hooks.OnMouseDown,
+    "a Classic aura button can eat Edit Mode drag clicks")
+classicButton.hooks.OnMouseDown(classicButton, "LeftButton")
+assert(forwarded[1] == "OnMouseDown:LeftButton", "a Classic aura button click did not reach the preview group")
+drag.SetRuntimeAuraHidden("boss1", false)
+assert(classicButton.click == false and classicButton.motion == false and classicButton.propagate == false,
+    "leaving Edit Mode did not restore a Classic aura button's own input")
 
 print("classic aura edit forbidden mouse smoke: OK")
