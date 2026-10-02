@@ -551,15 +551,17 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
         if box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
     end
 end
-M2.AssignNamedValues(Chrome, [[
-    PreviewGuidesEnabled SetPreviewGuidesEnabled PreviewGuidesVisible DefaultPreviewHint UpdateHandleHint
-    RequestPreviewLayoutRefresh ApplyPreviewTextFocus
-    PreviewAnimationActive RefreshPreviewAnimationButton StopPreviewAnimationDriver KillPreviewAnimationForCombat
-    SyncUnitPreviewLiveState ReleaseUnitPreviewLiveState StartPreviewAnimationDriver CreatePreviewAnimationButton
-    ApplyUnitPinnedPresentation SetUnitCanvasToolsShown LayoutUnitHeaderControls ApplyUnitCompactPresentation
-]],
-    PreviewGuidesEnabled, SetPreviewGuidesEnabled, PreviewGuidesVisible, DefaultPreviewHint, UpdateHandleHint,
-    RequestPreviewLayoutRefresh, ApplyPreviewTextFocus,
-    PreviewAnimationActive, RefreshPreviewAnimationButton, StopPreviewAnimationDriver, KillPreviewAnimationForCombat,
-    SyncUnitPreviewLiveState, ReleaseUnitPreviewLiveState, StartPreviewAnimationDriver, CreatePreviewAnimationButton,
-    ApplyUnitPinnedPresentation, SetUnitCanvasToolsShown, LayoutUnitHeaderControls, ApplyUnitCompactPresentation)
+M2.Assign(Chrome, {
+    PreviewGuidesEnabled = PreviewGuidesEnabled, SetPreviewGuidesEnabled = SetPreviewGuidesEnabled,
+    PreviewGuidesVisible = PreviewGuidesVisible, DefaultPreviewHint = DefaultPreviewHint,
+    UpdateHandleHint = UpdateHandleHint, RequestPreviewLayoutRefresh = RequestPreviewLayoutRefresh,
+    ApplyPreviewTextFocus = ApplyPreviewTextFocus, PreviewAnimationActive = PreviewAnimationActive,
+    RefreshPreviewAnimationButton = RefreshPreviewAnimationButton,
+    StopPreviewAnimationDriver = StopPreviewAnimationDriver,
+    KillPreviewAnimationForCombat = KillPreviewAnimationForCombat,
+    SyncUnitPreviewLiveState = SyncUnitPreviewLiveState, ReleaseUnitPreviewLiveState = ReleaseUnitPreviewLiveState,
+    StartPreviewAnimationDriver = StartPreviewAnimationDriver,
+    CreatePreviewAnimationButton = CreatePreviewAnimationButton,
+    ApplyUnitPinnedPresentation = ApplyUnitPinnedPresentation, SetUnitCanvasToolsShown = SetUnitCanvasToolsShown,
+    LayoutUnitHeaderControls = LayoutUnitHeaderControls, ApplyUnitCompactPresentation = ApplyUnitCompactPresentation,
+})

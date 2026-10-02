@@ -39,7 +39,6 @@ local ViewChrome = MSUF.UFPreviewViewChrome or {}
 -- when its handle exists, so a client without boss units never shows one.
 local HAS_BOSS_UNITS = not (MSUF.Client and MSUF.Client.SupportsUnit) or MSUF.Client.SupportsUnit("boss1")
 
-local AssignNamedValues = M2.AssignNamedValues
 local F = M2.Fallbacks or {}
 local PreviewModel = Preview.Model or {}
 local UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed = PreviewModel.UNIT_LABELS, PreviewModel.UNIT_DATA, PreviewModel.PreviewRaidGroupNameAllowed
@@ -1521,32 +1520,57 @@ local PreviewInCombat = PreviewCore.InCombat
 do
     local deps = Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
-    AssignNamedValues(deps, [[
-        PreviewInCombat TR PortraitStyleGet RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls ZOOM_MIN
-        max min abs floor format TEX_W8 FONT STATUS_PREVIEW CurrentPanelKey UnitDB UNIT_DATA UNIT_LABELS ReadPowerBarEnabled ReadPowerBarHeight LiveUnitData SyncLiveStateDriver
-    ]],
-        PreviewInCombat, TR, PortraitStyleGet, RuntimeSpecForPreviewKey, PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil, RuntimeVisualScaleForPreviewKey, PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey, ClampPreviewZoom, PreviewZoomPan.ResolveDefaultLock or F.Noop, UpdatePreviewZoomControls, ZOOM_MIN,
-        max, min, abs, floor, format, TEX_W8, FONT, STATUS_PREVIEW, CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS, ReadPowerBarEnabled, ReadPowerBarHeight, PreviewModel.LiveUnitData, ViewChrome.SyncUnitPreviewLiveState)
-    AssignNamedValues(deps, [[
-        PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizeRaidGroupNameAnchor CastbarEnabled CastbarShowIcon CastbarShowText ReadCastbarSize ReadCastbarNum FormatCastbarPreviewTime
-        CastbarOffsetFields CastbarDetached CanDetachPowerBarKey ClampPreviewLayer SetTex PlaceHandle PlaceHandleAroundRegions UnitPreviewText UnitPreviewTextMovesTogether
-        NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor ClassColor HealthColor
-    ]],
-        PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor, CastbarEnabled, CastbarShowIcon, CastbarShowText, ReadCastbarSize, ReadCastbarNum, FormatCastbarPreviewTime,
-        CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey, ClampPreviewLayer, SetTex, PlaceHandle, UnitPreviewText.PlaceHandleAroundRegions, UnitPreviewText, ViewHandles.UnitPreviewTextMovesTogether,
-        NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet, FormatMode, ShortenPreviewName, ToTInlineSeparator, ResolveNameAnchor, ClassColor, HealthColor)
-    AssignNamedValues(deps, [[
-        DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
-        UnitPreviewPortraitTexture ClassPortraitVisual PreviewNameColor PreviewToTInlineColor LayoutUnitPreviewOverlay PositionFromAnchor PositionRuntimeLayoutIconPreview
-        PositionStatusCornerPreview PositionSameAnchorPreview PositionLevelPreview ResolveStatusPreviewAnchor SetPreviewIconTexture NormalizeStatusPreviewId
-        ApplyPreviewTextFocus ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide SetShownSafe ApplyPreviewLayerVisibility
-        ApplyPreviewTransparency RefreshHandleSelectionVisuals Auras
-    ]],
-        DarkMatchHPColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor, FontColor, PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewHealPredictionEnabled, PreviewAbsorbBarEnabled,
-        UnitPreviewPortraitTexture, ClassPortraitVisual, PreviewNameColor, PreviewToTInlineColor, LayoutUnitPreviewOverlay, PositionFromAnchor, PositionRuntimeLayoutIconPreview,
-        PositionStatusCornerPreview, PositionSameAnchorPreview, PositionLevelPreview, ResolveStatusPreviewAnchor, SetPreviewIconTexture, NormalizeStatusPreviewId,
-        ViewChrome.ApplyPreviewTextFocus, ApplyPreviewRounded, ApplyPreviewFrameBorder, PreviewRoundedOutlineThickness, ApplyPreviewBoundsGuide, SetShownSafe, ApplyPreviewLayerVisibility,
-        Preview.ApplyPreviewTransparency, RefreshHandleSelectionVisuals, PreviewAuras)
+    M2.Assign(deps, {
+        PreviewInCombat = PreviewInCombat, TR = TR, PortraitStyleGet = PortraitStyleGet,
+        RuntimeSpecForPreviewKey = RuntimeSpecForPreviewKey,
+        RuntimeAppliedPortraitSizeForPreviewKey = PreviewRuntime.AppliedPortraitSizeForPreviewKey or F.Nil,
+        RuntimeVisualScaleForPreviewKey = RuntimeVisualScaleForPreviewKey,
+        RuntimeCastbarVisualScaleForPreviewKey = PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey,
+        ClampPreviewZoom = ClampPreviewZoom,
+        ResolveDefaultPreviewZoomLock = PreviewZoomPan.ResolveDefaultLock or F.Noop,
+        UpdatePreviewZoomControls = UpdatePreviewZoomControls, ZOOM_MIN = ZOOM_MIN, max = max, min = min, abs = abs,
+        floor = floor, format = format, TEX_W8 = TEX_W8, FONT = FONT, STATUS_PREVIEW = STATUS_PREVIEW,
+        CurrentPanelKey = CurrentPanelKey, UnitDB = UnitDB, UNIT_DATA = UNIT_DATA, UNIT_LABELS = UNIT_LABELS,
+        ReadPowerBarEnabled = ReadPowerBarEnabled, ReadPowerBarHeight = ReadPowerBarHeight,
+        LiveUnitData = PreviewModel.LiveUnitData, SyncLiveStateDriver = ViewChrome.SyncUnitPreviewLiveState,
+    })
+    M2.Assign(deps, {
+        PreviewRaidGroupNameAllowed = PreviewRaidGroupNameAllowed,
+        PreviewRaidGroupNameText = PreviewRaidGroupNameText,
+        NormalizeRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor, CastbarEnabled = CastbarEnabled,
+        CastbarShowIcon = CastbarShowIcon, CastbarShowText = CastbarShowText, ReadCastbarSize = ReadCastbarSize,
+        ReadCastbarNum = ReadCastbarNum, FormatCastbarPreviewTime = FormatCastbarPreviewTime,
+        CastbarOffsetFields = CastbarOffsetFields, CastbarDetached = CastbarDetached,
+        CanDetachPowerBarKey = CanDetachPowerBarKey, ClampPreviewLayer = ClampPreviewLayer, SetTex = SetTex,
+        PlaceHandle = PlaceHandle, PlaceHandleAroundRegions = UnitPreviewText.PlaceHandleAroundRegions,
+        UnitPreviewText = UnitPreviewText, UnitPreviewTextMovesTogether = ViewHandles.UnitPreviewTextMovesTogether,
+        NormalizeHpMode = NormalizeHpMode, NormalizePowerMode = NormalizePowerMode, TextScopeGet = TextScopeGet,
+        TextScopeHasSlots = TextScopeHasSlots, TextScopeSlotGet = TextScopeSlotGet, FormatMode = FormatMode,
+        ShortenPreviewName = ShortenPreviewName, ToTInlineSeparator = ToTInlineSeparator,
+        ResolveNameAnchor = ResolveNameAnchor, ClassColor = ClassColor, HealthColor = HealthColor,
+    })
+    M2.Assign(deps, {
+        DarkMatchHPColor = DarkMatchHPColor, HealthBackgroundColor = HealthBackgroundColor,
+        PowerBackgroundColor = PowerBackgroundColor, PowerColor = PowerColor, FontColor = FontColor,
+        PreviewResolveHealPredAnchorMode = PreviewResolveHealPredAnchorMode,
+        PreviewResolveAbsorbAnchorMode = PreviewResolveAbsorbAnchorMode,
+        PreviewHealPredictionEnabled = PreviewHealPredictionEnabled,
+        PreviewAbsorbBarEnabled = PreviewAbsorbBarEnabled, UnitPreviewPortraitTexture = UnitPreviewPortraitTexture,
+        ClassPortraitVisual = ClassPortraitVisual, PreviewNameColor = PreviewNameColor,
+        PreviewToTInlineColor = PreviewToTInlineColor, LayoutUnitPreviewOverlay = LayoutUnitPreviewOverlay,
+        PositionFromAnchor = PositionFromAnchor, PositionRuntimeLayoutIconPreview = PositionRuntimeLayoutIconPreview,
+        PositionStatusCornerPreview = PositionStatusCornerPreview,
+        PositionSameAnchorPreview = PositionSameAnchorPreview, PositionLevelPreview = PositionLevelPreview,
+        ResolveStatusPreviewAnchor = ResolveStatusPreviewAnchor, SetPreviewIconTexture = SetPreviewIconTexture,
+        NormalizeStatusPreviewId = NormalizeStatusPreviewId,
+        ApplyPreviewTextFocus = ViewChrome.ApplyPreviewTextFocus, ApplyPreviewRounded = ApplyPreviewRounded,
+        ApplyPreviewFrameBorder = ApplyPreviewFrameBorder,
+        PreviewRoundedOutlineThickness = PreviewRoundedOutlineThickness,
+        ApplyPreviewBoundsGuide = ApplyPreviewBoundsGuide, SetShownSafe = SetShownSafe,
+        ApplyPreviewLayerVisibility = ApplyPreviewLayerVisibility,
+        ApplyPreviewTransparency = Preview.ApplyPreviewTransparency,
+        RefreshHandleSelectionVisuals = RefreshHandleSelectionVisuals, Auras = PreviewAuras,
+    })
 end
 if MSUF.UFPreviewRender and MSUF.UFPreviewRender.Install then MSUF.UFPreviewRender.Install(Preview, Preview.RefreshDeps) end
 Preview._BuildPreview = BuildPreview
