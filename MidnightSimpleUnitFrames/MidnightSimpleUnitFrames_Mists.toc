@@ -117,6 +117,7 @@ Runtime\MSUF_UnitTooltips.lua
 Runtime\MSUF_BlizzEditModeBridge.lua
 Libs\MSUFUnitFrames\MSUFUnitFrames.xml
 UnitFrames\Engine\MSUF_UF_Shared.lua
+UnitFrames\Engine\MSUF_UF_Config_Status.lua
 UnitFrames\Engine\MSUF_UF_Config.lua
 UnitFrames\Engine\MSUF_UF_PreviewAnimation.lua
 Runtime\MSUF_Colors.lua

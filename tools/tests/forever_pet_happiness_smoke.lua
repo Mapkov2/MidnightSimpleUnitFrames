@@ -280,6 +280,7 @@ local function CompilePetStatus(isForever)
     load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
     load("UnitFrames/Engine/MSUF_UF_Shared.lua")
     load("UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua")
+    load("UnitFrames/Engine/MSUF_UF_Config_Status.lua")
     load("UnitFrames/Engine/MSUF_UF_Config.lua")
     local seeded = { showPetHappinessIndicator = true, petHappinessIndicatorSize = 24, petHappinessIndicatorAnchor = "RIGHT",
         petHappinessIndicatorOffsetX = -7, petHappinessIndicatorOffsetY = -4, petHappinessIndicatorLayer = 7 }

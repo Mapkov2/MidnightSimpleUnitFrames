@@ -880,6 +880,7 @@ local function CompileStatus(configRelative, namespace, db)
     load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
     load("UnitFrames/Engine/MSUF_UF_Shared.lua")
     load("UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua")
+    load("UnitFrames/Engine/MSUF_UF_Config_Status.lua")
     load(configRelative)
     _G.MSUF_DB = db or { general = {}, player = {}, target = {}, focus = {}, boss = {}, pet = {}, targettarget = {} }
     _G.MSUF_EnsureDB = function() return _G.MSUF_DB end
