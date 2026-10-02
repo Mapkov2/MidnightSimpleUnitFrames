@@ -362,7 +362,10 @@ local function ReadDeadCached(frame, unit, state)
   if not (UnitIsDeadOrGhost or UnitIsDead) then
     dead, known = false, true
   else
-    local raw = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) or nil
+    -- An `api and api(unit) or nil` read would turn the common alive `false`
+    -- into nil and pay a second native read for every living unit.
+    local raw
+    if UnitIsDeadOrGhost then raw = UnitIsDeadOrGhost(unit) end
     if (issecretvalue(raw) == true or raw == nil) and UnitIsDead then
       raw = UnitIsDead(unit)
     end
