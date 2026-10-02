@@ -723,11 +723,6 @@ local function EnsureCopyDialog()
 end
 local function ConfirmCopyToAll(callback)
     if type(callback) ~= "function" then return end
-    local legacy = _G.MSUF_ConfirmCopyToAll
-    if type(legacy) == "function" then
-        legacy(callback)
-        return
-    end
     EnsureCopyDialog()
     if StaticPopup_Show then
         StaticPopup_Show("MSUF2_COPY_TO_ALL_CONFIRM", nil, nil, callback)
@@ -1199,10 +1194,10 @@ local function RefreshStatusRuntime(unit, spec)
     M.RequestUnitApply(unit, "MSUF2_STATUS_INDICATOR", { preview = true, text = true, fonts = spec and spec.value == "level" })
 end
 local SetControlEnabled = W.SetControlEnabled
+-- Text keys are read with a general fallback (ReadText), so no seeding step
+-- writes the general values into the unit config.
 local function SeedText(unit)
-    local conf = GetConf(unit)
-    if type(_G.MSUF_Bars_SeedTextFromGeneral) == "function" then _G.MSUF_Bars_SeedTextFromGeneral(conf) end
-    return conf
+    return GetConf(unit)
 end
 local function ReadText(unit, key, default)
     local conf = SeedText(unit)

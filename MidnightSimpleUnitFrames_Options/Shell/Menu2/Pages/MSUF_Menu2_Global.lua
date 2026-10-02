@@ -820,11 +820,7 @@ local function SetAbsorbTextureTest(enabled, category)
     elseif type(_G.MSUF_RefreshPredictionBars) == "function" then
         _G.MSUF_RefreshPredictionBars(scope, "MSUF2_PREDICTION_TEST")
     end
-    if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then
-        _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
-    else
-        ApplyBars("MSUF2_PREDICTION_TEST")
-    end
+    ApplyBars("MSUF2_PREDICTION_TEST")
 end
 local function ClearAbsorbTextureTest()
     local wasEnabled = _G.MSUF_AbsorbTextureTestMode and true or false
@@ -841,11 +837,7 @@ local function ClearAbsorbTextureTest()
         if type(_G.MSUF_RefreshTempMaxHealth) == "function" then
             _G.MSUF_RefreshTempMaxHealth(nil, "MSUF2_TEMP_MAX_HEALTH_TEST")
         end
-        if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then
-            _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
-        else
-            ApplyBars("MSUF2_ABSORB_TEST_CLEAR")
-        end
+        ApplyBars("MSUF2_ABSORB_TEST_CLEAR")
     end
 end
 local SetControlEnabled = W.SetControlEnabled

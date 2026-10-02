@@ -334,26 +334,22 @@ local function UnitDB(key)
 end
 local function SeedTextFromGeneral(db)
     if not db then return end
-    if type(_G.MSUF_Bars_SeedTextFromGeneral) == "function" then
-        _G.MSUF_Bars_SeedTextFromGeneral(db)
-    else
-        local g = M.EnsureDB().general or {}
-        if db.hpTextMode == nil then db.hpTextMode = g.hpTextMode end
-        if db.hpTextReverse == nil then db.hpTextReverse = g.hpTextReverse end
-        if db.powerTextMode == nil then db.powerTextMode = g.powerTextMode end
-        if db.textLeft == nil and db.textCenter == nil and db.textRight == nil then
-            db.textLeft = "NONE"
-            db.textCenter = "NONE"
-            db.textRight = db.hpTextMode or g.hpTextMode or "CURPERCENT"
-        end
-        if db.powerTextLeft == nil and db.powerTextCenter == nil and db.powerTextRight == nil then
-            db.powerTextLeft = "NONE"
-            db.powerTextCenter = "NONE"
-            db.powerTextRight = db.powerTextMode or g.powerTextMode or "CURPERCENT"
-        end
-        if db.hpTextSeparator == nil then db.hpTextSeparator = g.hpTextSeparator end
-        if db.powerTextSeparator == nil then db.powerTextSeparator = g.powerTextSeparator end
+    local g = M.EnsureDB().general or {}
+    if db.hpTextMode == nil then db.hpTextMode = g.hpTextMode end
+    if db.hpTextReverse == nil then db.hpTextReverse = g.hpTextReverse end
+    if db.powerTextMode == nil then db.powerTextMode = g.powerTextMode end
+    if db.textLeft == nil and db.textCenter == nil and db.textRight == nil then
+        db.textLeft = "NONE"
+        db.textCenter = "NONE"
+        db.textRight = db.hpTextMode or g.hpTextMode or "CURPERCENT"
     end
+    if db.powerTextLeft == nil and db.powerTextCenter == nil and db.powerTextRight == nil then
+        db.powerTextLeft = "NONE"
+        db.powerTextCenter = "NONE"
+        db.powerTextRight = db.powerTextMode or g.powerTextMode or "CURPERCENT"
+    end
+    if db.hpTextSeparator == nil then db.hpTextSeparator = g.hpTextSeparator end
+    if db.powerTextSeparator == nil then db.powerTextSeparator = g.powerTextSeparator end
     if db.nameTextLayer == nil then db.nameTextLayer = 5 end
     if db.hpTextLayer == nil then db.hpTextLayer = 5 end
     if db.powerTextLayer == nil then db.powerTextLayer = 2 end

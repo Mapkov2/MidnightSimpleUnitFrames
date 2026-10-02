@@ -49,8 +49,6 @@ end
 local function NormalizeGFDispelOverlayTrigger(value)
     local gf = GF and GF()
     if gf and type(gf.NormalizeDispelOverlayTrigger) == "function" then return gf.NormalizeDispelOverlayTrigger(value) end
-    local fn = _G.MSUF_NormalizeUnitDispelOverlayTrigger
-    if type(fn) == "function" then return fn(value) end
     if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
     if value == "BY_RAID" or value == "RAID" or value == "GROUP" or value == "BY_GROUP" then return "BY_RAID" end
     if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end

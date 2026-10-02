@@ -244,8 +244,6 @@ local function HealthColorModeOptions()
     return HEALTH_COLOR_OPTIONS
 end
 local function ToTInlineNPCColorAvailable()
-    local fn = _G.MSUF_UFCore_IsToTInlineNPCColorModeAvailable
-    if type(fn) == "function" then return fn() == true end
     local db = EnsureDB()
     local gen = db and db.general
     local wantNpc = gen and gen.npcNameRed
