@@ -127,7 +127,15 @@ end
 --- texture resolver (Castbars/MSUF_Castbars_Core.lua). Resolved once, on first
 --- use, so a fixture that never compiles those parts need not stub them.
 local CONFIG_FILE = "UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"
-local GetSettingsCache, ResolveTextureKeyExport
+local GetSettingsCache, ResolveTextureKeyExport, AuraFilterExport
+
+--- The group aura filter helpers: MSUF_GF_AuraFilter, owned by
+--- Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua, which loads before the
+--- group files on every client. GF carries no copy of it.
+local function AuraFilter()
+  AuraFilterExport = AuraFilterExport or MSUF.Require("MSUF_GF_AuraFilter", CONFIG_FILE)
+  return AuraFilterExport
+end
 
 local function SettingsCache()
   GetSettingsCache = GetSettingsCache or MSUF.Require("MSUF_UFCore_GetSettingsCache", CONFIG_FILE)
@@ -873,7 +881,7 @@ local function AuraBlacklistHash(kind, groupKey, group)
   -- pass only the resolved hash into the compiled spec.
   if not NATIVE_AURA_BLACKLIST_HASHES_ENABLED then return nil end
 
-  local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+  local filter = AuraFilter()
   if filter and filter.GetBlacklistHashForGroup then
     return filter.GetBlacklistHashForGroup(kind, groupKey)
   end
@@ -884,7 +892,7 @@ local function AuraBlacklistHash(kind, groupKey, group)
 end
 
 local function AuraFilterString(groupKey, group)
-  local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+  local filter = AuraFilter()
   local token = group and group.filterToken
   if groupKey == "buff" or groupKey == "trackedBuff" then
     return filter and filter.ResolveBuffFilter and filter.ResolveBuffFilter(token) or "HELPFUL"
@@ -900,7 +908,7 @@ end
 local function AuraIncludeHash(groupKey, group)
   if groupKey ~= "buff" then return nil, nil, false end
 
-  local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+  local filter = AuraFilter()
   local token = group and group.filterToken
   local isGroupHighlights
   if filter and type(filter.IsGroupHighlightsFilter) == "function" then
@@ -1012,7 +1020,7 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
     out[prefix .. "MaxDuration"] = Num(blacklist and blacklist.maxDuration, 0)
   end
   if prefix == "debuff" then
-    local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+    local filter = AuraFilter()
     local nonPlayer = tostring(group.filterToken or ""):upper():gsub("[^A-Z0-9]", "") == "NONPLAYER"
     if filter and filter.IsNonPlayerDebuffFilter then
       nonPlayer = filter.IsNonPlayerDebuffFilter(group.filterToken) == true

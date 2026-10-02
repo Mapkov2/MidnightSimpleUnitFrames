@@ -31,6 +31,7 @@ if type(GF.PARTY_DEFAULTS) ~= "table"
 end
 
 local PARTY_DEFAULTS = GF.PARTY_DEFAULTS
+local MIGRATIONS_FILE = "GroupFrames/MSUF_GroupFrames_DB_Migrations.lua"
 local RAID_DEFAULTS = GF.RAID_DEFAULTS
 local MYTHIC_RAID_DEFAULTS = GF.MYTHIC_RAID_DEFAULTS
 local PRIORITY_DEFAULTS = GF.PRIORITY_DEFAULTS
@@ -269,6 +270,15 @@ local function NormalizeAuraRenderer(conf)
     end
 end
 
+--- The group aura filter helpers: MSUF_GF_AuraFilter, owned by
+--- Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua, which loads before the
+--- group files on every client. Resolved on first use by the repair below.
+local AuraFilterExport
+local function AuraFilter()
+    AuraFilterExport = AuraFilterExport or MSUF.Require("MSUF_GF_AuraFilter", MIGRATIONS_FILE)
+    return AuraFilterExport
+end
+
 --- Ensure spell filter fields exist on each aura sub-group.
 local function RepairAuraFilters(conf)
     --- Remove absorb keys that shadow general when hlOverride is off
@@ -327,7 +337,7 @@ local function RepairAuraFilters(conf)
                 --- Retired/unknown native filters must not remain active
                 --- invisibly after their controls were removed from Menu2.
                 if gk == "buff" or gk == "debuff" then
-                    local AF = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+                    local AF = AuraFilter()
                     local normalize = AF and AF.NormalizeFilterToken
                     if type(normalize) == "function" then
                         g.filterToken = normalize(gk, g.filterToken)
@@ -335,7 +345,7 @@ local function RepairAuraFilters(conf)
                 end
                 if type(g.blacklistCats) ~= "table" then
                     --- Apply sensible defaults from AuraFilter module
-                    local AF = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+                    local AF = AuraFilter()
                     if AF then
                         local defs = (gk == "buff") and AF.DEFAULT_BLACKLIST_BUFF
                                   or (gk == "debuff") and AF.DEFAULT_BLACKLIST_DEBUFF
