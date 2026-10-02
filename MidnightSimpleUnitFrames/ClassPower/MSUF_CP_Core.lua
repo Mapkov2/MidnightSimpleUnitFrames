@@ -812,6 +812,10 @@ do
                 if CP.ticks[i] then CP_LayoutShown(CP.ticks[i], false) end
             end
         end
+        --- The rune painter recolours only when its gate opens; the pip
+        --- backgrounds were just repainted, so the next rune update owns them
+        --- again.
+        CP._runeColorVersion = nil
     end
 
     --- Stage 9: publish the resolved geometry to the runtime, the Devourer
