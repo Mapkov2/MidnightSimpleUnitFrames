@@ -165,7 +165,12 @@ function MSUF.CPBuilders.NativeAuras(E)
                     bar._msufCPValue = nil
                 end
             end
-            if CP.text then CP.text:Hide() end
+            --- Keep the painters' shown stamp truthful: the segmented painter
+            --- skips a Show its stamp already records (vehicle combo points).
+            if CP.text then
+                CP.text:Hide()
+                CP.text._msufCPShown = false
+            end
         end
         CP.nativeAuraPending = pending
     end

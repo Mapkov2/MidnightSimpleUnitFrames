@@ -127,6 +127,27 @@ do
     end
 end
 
+-- Native aura modes (Fury Whirlwind) hide the count text directly. A vehicle
+-- with combo points hands the bar to the segmented painter, whose shown stamp
+-- must not still say "shown" from the previous vehicle.
+do
+    local t = World.Start(repo, "Mainline", "WARRIOR", 2, PT.RAGE, { classPowerShowText = true })
+    local CP = t.CP
+    Check(CP.visible and CP.powerType == "WHIRLWIND", "Fury did not route Whirlwind")
+    local function Vehicle(inVehicle)
+        t.S.vehicle = inVehicle
+        World.Dispatcher(t, inVehicle and "UNIT_ENTERED_VEHICLE" or "UNIT_EXITED_VEHICLE", "player")()
+        t.env:RunTimers()
+    end
+    Vehicle(true)
+    Check(CP.powerType == PT.COMBO and CP.text and CP.text.shown == true, "vehicle combo points show no count")
+    Vehicle(false)
+    Check(CP.powerType == "WHIRLWIND" and CP.text.shown == false, "Whirlwind did not hide the count")
+    Vehicle(true)
+    Check(CP.powerType == PT.COMBO and CP.text.shown == true,
+        "the vehicle count stayed hidden after Whirlwind hid it")
+end
+
 -- Structural refreshes are throttled to one per 150 ms. A second form change
 -- inside the window must still be shown: a trailing refresh follows.
 do
@@ -149,4 +170,4 @@ end
 if #failures > 0 then
     error("classpower_paint_stamps_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour)")
+print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour, native aura text, throttle)")
