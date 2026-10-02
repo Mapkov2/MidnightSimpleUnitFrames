@@ -29,9 +29,7 @@ local _G = _G
 --- noticeably heavier than simple substring/tonumber checks.
 --- Returns bossIndex (number) if u is "bossN" (N>=1), otherwise nil.
 --- NOTE: Keep global names stable so call-sites across files can use them.
-local GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
-if type(GetBossIndexFromToken) ~= "function" then
-    function GetBossIndexFromToken(u)
+local function GetBossIndexFromToken(u)
     if type(u) ~= "string" then
         return nil
     end
@@ -45,20 +43,14 @@ if type(GetBossIndexFromToken) ~= "function" then
     end
     return nil
 end
-end
 ExportPublic("MSUF_GetBossIndexFromToken", GetBossIndexFromToken)
 
-local IsBossUnitToken = _G.MSUF_IsBossUnitToken
-if type(IsBossUnitToken) ~= "function" then
-    function IsBossUnitToken(u)
+local function IsBossUnitToken(u)
     return GetBossIndexFromToken(u) ~= nil
-    end
 end
 ExportPublic("MSUF_IsBossUnitToken", IsBossUnitToken)
 
-local GetArenaIndexFromToken = _G.MSUF_GetArenaIndexFromToken
-if type(GetArenaIndexFromToken) ~= "function" then
-    function GetArenaIndexFromToken(u)
+local function GetArenaIndexFromToken(u)
     if type(u) ~= "string" then
         return nil
     end
@@ -72,14 +64,10 @@ if type(GetArenaIndexFromToken) ~= "function" then
     end
     return nil
 end
-end
 ExportPublic("MSUF_GetArenaIndexFromToken", GetArenaIndexFromToken)
 
-local IsArenaUnitToken = _G.MSUF_IsArenaUnitToken
-if type(IsArenaUnitToken) ~= "function" then
-    function IsArenaUnitToken(u)
+local function IsArenaUnitToken(u)
     return GetArenaIndexFromToken(u) ~= nil
-    end
 end
 ExportPublic("MSUF_IsArenaUnitToken", IsArenaUnitToken)
 
@@ -113,9 +101,7 @@ local MSUF_POWER_BAR_UNIT_KEYS = {
     arena = true,
 }
 
-local CanonPowerBarUnitKey = _G.MSUF_CanonPowerBarUnitKey
-if type(CanonPowerBarUnitKey) ~= "function" then
-    function CanonPowerBarUnitKey(unitKey)
+local function CanonPowerBarUnitKey(unitKey)
     if type(unitKey) ~= "string" then return nil end
     unitKey = unitKey:lower()
     if unitKey == "tot" or unitKey == "targetoftarget" or unitKey == "target_of_target" then
@@ -130,23 +116,17 @@ if type(CanonPowerBarUnitKey) ~= "function" then
     if MSUF_POWER_BAR_UNIT_KEYS[unitKey] then return unitKey end
     return nil
 end
-end
 ExportPublic("MSUF_CanonPowerBarUnitKey", CanonPowerBarUnitKey)
 
 --- One capability contract for runtime, Edit Mode, and Options previews.  The
 --- shared Power element detaches every managed single-unit frame; Player-only
 --- shape/Class Resource options are separate capabilities.
-local CanDetachUnitPowerBar = _G.MSUF_CanDetachUnitPowerBar
-if type(CanDetachUnitPowerBar) ~= "function" then
-    function CanDetachUnitPowerBar(unitKey)
-        return CanonPowerBarUnitKey(unitKey) ~= nil
-    end
+local function CanDetachUnitPowerBar(unitKey)
+    return CanonPowerBarUnitKey(unitKey) ~= nil
 end
 ExportPublic("MSUF_CanDetachUnitPowerBar", CanDetachUnitPowerBar)
 
-local ReadUnitPowerBarEnabled = _G.MSUF_ReadUnitPowerBarEnabled
-if type(ReadUnitPowerBarEnabled) ~= "function" then
-    function ReadUnitPowerBarEnabled(unitKey, db)
+local function ReadUnitPowerBarEnabled(unitKey, db)
     db = db or _G.MSUF_DB
     local k = CanonPowerBarUnitKey(unitKey)
     if not k then return true end
@@ -160,7 +140,6 @@ if type(ReadUnitPowerBarEnabled) ~= "function" then
         return bars[legacyKey] ~= false
     end
     return MSUF_POWER_BAR_DEFAULTS[k] ~= false
-end
 end
 ExportPublic("MSUF_ReadUnitPowerBarEnabled", ReadUnitPowerBarEnabled)
 
@@ -192,56 +171,44 @@ local function MSUF_ReadUnitPowerBarBool(unitKey, field, legacyField, defaultVal
     return v == true
 end
 
-local ReadUnitPowerBarHeight = _G.MSUF_ReadUnitPowerBarHeight
-if type(ReadUnitPowerBarHeight) ~= "function" then
-    function ReadUnitPowerBarHeight(unitKey, db)
-        return MSUF_ReadUnitPowerBarNumber(unitKey, "powerBarHeight", "powerBarHeight", 3, 1, 80, db)
-    end
+local function ReadUnitPowerBarHeight(unitKey, db)
+    return MSUF_ReadUnitPowerBarNumber(unitKey, "powerBarHeight", "powerBarHeight", 3, 1, 80, db)
 end
 ExportPublic("MSUF_ReadUnitPowerBarHeight", ReadUnitPowerBarHeight)
 
-local ReadUnitPowerBarEmbed = _G.MSUF_ReadUnitPowerBarEmbed
-if type(ReadUnitPowerBarEmbed) ~= "function" then
-    function ReadUnitPowerBarEmbed(unitKey, db)
-        return MSUF_ReadUnitPowerBarBool(unitKey, "embedPowerBarIntoHealth", "embedPowerBarIntoHealth", true, db)
-    end
+local function ReadUnitPowerBarEmbed(unitKey, db)
+    return MSUF_ReadUnitPowerBarBool(unitKey, "embedPowerBarIntoHealth", "embedPowerBarIntoHealth", true, db)
 end
 ExportPublic("MSUF_ReadUnitPowerBarEmbed", ReadUnitPowerBarEmbed)
 
-local ReadUnitPowerBarBorderEnabled = _G.MSUF_ReadUnitPowerBarBorderEnabled
-if type(ReadUnitPowerBarBorderEnabled) ~= "function" then
-    function ReadUnitPowerBarBorderEnabled(unitKey, db)
-        db = db or _G.MSUF_DB
-        local k = CanonPowerBarUnitKey(unitKey)
-        local u = k and db and db[k]
-        if k == "player" and u and u.powerBarDetached == true then
-            local outline = tonumber(db and db.bars and db.bars.detachedPowerBarOutline)
-            if outline ~= nil then return outline > 0 end
-        end
-        return MSUF_ReadUnitPowerBarBool(unitKey, "powerBarBorderEnabled", "powerBarBorderEnabled", false, db)
+local function ReadUnitPowerBarBorderEnabled(unitKey, db)
+    db = db or _G.MSUF_DB
+    local k = CanonPowerBarUnitKey(unitKey)
+    local u = k and db and db[k]
+    if k == "player" and u and u.powerBarDetached == true then
+        local outline = tonumber(db and db.bars and db.bars.detachedPowerBarOutline)
+        if outline ~= nil then return outline > 0 end
     end
+    return MSUF_ReadUnitPowerBarBool(unitKey, "powerBarBorderEnabled", "powerBarBorderEnabled", false, db)
 end
 ExportPublic("MSUF_ReadUnitPowerBarBorderEnabled", ReadUnitPowerBarBorderEnabled)
 
-local ReadUnitPowerBarBorderThickness = _G.MSUF_ReadUnitPowerBarBorderThickness
-if type(ReadUnitPowerBarBorderThickness) ~= "function" then
-    function ReadUnitPowerBarBorderThickness(unitKey, db)
-        db = db or _G.MSUF_DB
-        local k = CanonPowerBarUnitKey(unitKey)
-        local u = k and db and db[k]
-        local v
-        if k == "player" and u and u.powerBarDetached == true then
-            v = tonumber(db and db.bars and db.bars.detachedPowerBarOutline)
-        end
-        if type(v) ~= "number" then v = u and u.powerBarBorderThickness end
-        if type(v) ~= "number" then
-            local bars = db and db.bars
-            v = bars and (bars.powerBarBorderThickness or bars.powerBarBorderSize)
-        end
-        v = tonumber(v) or 1
-        if v < 0 then v = 0 elseif v > 10 then v = 10 end
-        return v
+local function ReadUnitPowerBarBorderThickness(unitKey, db)
+    db = db or _G.MSUF_DB
+    local k = CanonPowerBarUnitKey(unitKey)
+    local u = k and db and db[k]
+    local v
+    if k == "player" and u and u.powerBarDetached == true then
+        v = tonumber(db and db.bars and db.bars.detachedPowerBarOutline)
     end
+    if type(v) ~= "number" then v = u and u.powerBarBorderThickness end
+    if type(v) ~= "number" then
+        local bars = db and db.bars
+        v = bars and (bars.powerBarBorderThickness or bars.powerBarBorderSize)
+    end
+    v = tonumber(v) or 1
+    if v < 0 then v = 0 elseif v > 10 then v = 10 end
+    return v
 end
 ExportPublic("MSUF_ReadUnitPowerBarBorderThickness", ReadUnitPowerBarBorderThickness)
 
@@ -256,22 +223,17 @@ ExportPublic("MSUF_Util", U)
 --- Shared frame layering for visual effects (highlight borders, overlays, stripes).
 --- Keep this in Foundation so UnitFrames and GroupFrames use identical strata/level
 --- behavior without duplicating hot-path helpers.
-if type(_G.MSUF_FRAME_STRATA_RANK) ~= "table" then
-    ExportPublic("MSUF_FRAME_STRATA_RANK", {
-        BACKGROUND = 1,
-        LOW = 2,
-        MEDIUM = 3,
-        HIGH = 4,
-        DIALOG = 5,
-        FULLSCREEN = 6,
-        FULLSCREEN_DIALOG = 7,
-        TOOLTIP = 8,
-    })
-end
-
-if type(_G.MSUF_EFFECT_FRAME_STRATA) ~= "string" or _G.MSUF_EFFECT_FRAME_STRATA == "" then
-    ExportPublic("MSUF_EFFECT_FRAME_STRATA", "HIGH")
-end
+local FRAME_STRATA_RANK = ExportPublic("MSUF_FRAME_STRATA_RANK", {
+    BACKGROUND = 1,
+    LOW = 2,
+    MEDIUM = 3,
+    HIGH = 4,
+    DIALOG = 5,
+    FULLSCREEN = 6,
+    FULLSCREEN_DIALOG = 7,
+    TOOLTIP = 8,
+})
+ExportPublic("MSUF_EFFECT_FRAME_STRATA", "HIGH")
 
 local function IsSecretValue(value)
     local issecretvalue = _G.issecretvalue
@@ -283,19 +245,15 @@ local function NormalizeFrameStrata(value, fallback)
     if value == nil or value == "" then return fallback end
     value = tostring(value):upper()
     if value == "AUTO" then return "AUTO" end
-    local rank = _G.MSUF_FRAME_STRATA_RANK
-    return rank and rank[value] and value or fallback
+    return FRAME_STRATA_RANK[value] and value or fallback
 end
 ExportPublic("MSUF_NormalizeFrameStrata", NormalizeFrameStrata)
 
-local ClampFrameLevel = _G.MSUF_ClampFrameLevel
-if type(ClampFrameLevel) ~= "function" then
-    ClampFrameLevel = function(level)
-        level = tonumber(level) or 0
-        if level < 0 then return 0 end
-        if level > 10000 then return 10000 end
-        return level
-    end
+local function ClampFrameLevel(level)
+    level = tonumber(level) or 0
+    if level < 0 then return 0 end
+    if level > 10000 then return 10000 end
+    return level
 end
 ExportPublic("MSUF_ClampFrameLevel", ClampFrameLevel)
 
@@ -403,51 +361,45 @@ do
         return path
     end
 
-    local ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
-    if type(ResolveIconTexturePath) ~= "function" then
-        ResolveIconTexturePath = function(texture)
-            if not MSUF_CanReadTextureValue(texture) then
-                return texture
-            end
-
-            local vt = type(texture)
-            if vt == "string" then
-                return MSUF_NormalizeInterfaceIconPath(texture) or texture
-            end
-            if vt ~= "number" or texture <= 0 then
-                return texture
-            end
-
-            local cached = _fileDataIconPathCache[texture]
-            if cached ~= nil then
-                return cached or texture
-            end
-
-            local resolver = MSUF_GetFilenameResolver()
-            if type(resolver) == "function" then
-                local path = MSUF_NormalizeInterfaceIconPath(resolver(texture))
-                if path then
-                    _fileDataIconPathCache[texture] = path
-                    return path
-                end
-            end
-
-            _fileDataIconPathCache[texture] = false
+    local function ResolveIconTexturePath(texture)
+        if not MSUF_CanReadTextureValue(texture) then
             return texture
         end
+
+        local vt = type(texture)
+        if vt == "string" then
+            return MSUF_NormalizeInterfaceIconPath(texture) or texture
+        end
+        if vt ~= "number" or texture <= 0 then
+            return texture
+        end
+
+        local cached = _fileDataIconPathCache[texture]
+        if cached ~= nil then
+            return cached or texture
+        end
+
+        local resolver = MSUF_GetFilenameResolver()
+        if type(resolver) == "function" then
+            local path = MSUF_NormalizeInterfaceIconPath(resolver(texture))
+            if path then
+                _fileDataIconPathCache[texture] = path
+                return path
+            end
+        end
+
+        _fileDataIconPathCache[texture] = false
+        return texture
     end
 
-    local SetIconTexture = _G.MSUF_SetIconTexture
-    if type(SetIconTexture) ~= "function" then
-        SetIconTexture = function(textureRegion, texture, fallback)
-            if not (textureRegion and textureRegion.SetTexture) then return end
-            local resolver = ResolveIconTexturePath
-            local value = (type(resolver) == "function") and resolver(texture) or texture
-            if MSUF_CanReadTextureValue(value) and (value == nil or value == "") then
-                value = fallback or ""
-            end
-            textureRegion:SetTexture(value)
+    local function SetIconTexture(textureRegion, texture, fallback)
+        if not (textureRegion and textureRegion.SetTexture) then return end
+        local resolver = ResolveIconTexturePath
+        local value = (type(resolver) == "function") and resolver(texture) or texture
+        if MSUF_CanReadTextureValue(value) and (value == nil or value == "") then
+            value = fallback or ""
         end
+        textureRegion:SetTexture(value)
     end
 
     U.ResolveIconTexturePath = ResolveIconTexturePath
@@ -1149,147 +1101,129 @@ end
 --- bookkeeping is committed before invocation so errors cannot strand it.
 
 --- Global helper: "any edit mode" (MSUF Edit Mode OR Blizzard Edit Mode)
-local IsInAnyEditMode = _G.MSUF_IsInAnyEditMode
-if type(IsInAnyEditMode) ~= "function" then
-    IsInAnyEditMode = function()
-        local st = rawget(_G, "MSUF_EditState")
-        if st and st.active == true then
-             return true
-        end
-        if rawget(_G, "MSUF_UnitEditModeActive") == true then
-             return true
-        end
-         return false
+local function IsInAnyEditMode()
+    local st = rawget(_G, "MSUF_EditState")
+    if st and st.active == true then
+         return true
     end
+    if rawget(_G, "MSUF_UnitEditModeActive") == true then
+         return true
+    end
+     return false
 end
 ExportPublic("MSUF_IsInAnyEditMode", IsInAnyEditMode)
 
 do
     local _lastConfigCombatMessage = 0
 
-    local IsConfigCombatLocked = _G.MSUF_IsConfigCombatLocked
-    if type(IsConfigCombatLocked) ~= "function" then
-        IsConfigCombatLocked = function()
-            if InCombatLockdown and InCombatLockdown() then return true end
-            return false
-        end
+    local function IsConfigCombatLocked()
+        if InCombatLockdown and InCombatLockdown() then return true end
+        return false
     end
     ExportPublic("MSUF_IsConfigCombatLocked", IsConfigCombatLocked)
 
-    local ShowConfigCombatLockMessage = _G.MSUF_ShowConfigCombatLockMessage
-    if type(ShowConfigCombatLockMessage) ~= "function" then
-        ShowConfigCombatLockMessage = function()
-            local now = (GetTime and GetTime()) or 0
-            if now > 0 and (now - _lastConfigCombatMessage) < 1.25 then return end
-            _lastConfigCombatMessage = now
+    local function ShowConfigCombatLockMessage()
+        local now = (GetTime and GetTime()) or 0
+        if now > 0 and (now - _lastConfigCombatMessage) < 1.25 then return end
+        _lastConfigCombatMessage = now
 
-            local msg = "|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."
-            local tr = MSUF and MSUF.Translate
-            if type(tr) == "function" then msg = tr(msg) or msg end
-            local shownInline = false
-            local m2 = (MSUF and MSUF.MSUF2) or _G.MSUF2
-            if m2 and type(m2.ShowStatusFeedback) == "function" then
-                m2.ShowStatusFeedback("Combat locked", "combat", 1.6)
-                shownInline = true
-            end
-            if _G.UIErrorsFrame and _G.UIErrorsFrame.AddMessage then
-                _G.UIErrorsFrame:AddMessage(msg, 1, 0.82, 0.1)
-            end
-            if (not shownInline) and print then print(msg) end
+        local msg = "|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."
+        local tr = MSUF and MSUF.Translate
+        if type(tr) == "function" then msg = tr(msg) or msg end
+        local shownInline = false
+        local m2 = (MSUF and MSUF.MSUF2) or _G.MSUF2
+        if m2 and type(m2.ShowStatusFeedback) == "function" then
+            m2.ShowStatusFeedback("Combat locked", "combat", 1.6)
+            shownInline = true
         end
+        if _G.UIErrorsFrame and _G.UIErrorsFrame.AddMessage then
+            _G.UIErrorsFrame:AddMessage(msg, 1, 0.82, 0.1)
+        end
+        if (not shownInline) and print then print(msg) end
     end
     ExportPublic("MSUF_ShowConfigCombatLockMessage", ShowConfigCombatLockMessage)
 
-    local BlockConfigCombatLocked = _G.MSUF_BlockConfigCombatLocked
-    if type(BlockConfigCombatLocked) ~= "function" then
-        BlockConfigCombatLocked = function()
-            local locked = IsConfigCombatLocked and IsConfigCombatLocked()
-            if locked then
-                if ShowConfigCombatLockMessage then ShowConfigCombatLockMessage() end
-                return true
-            end
-            return false
+    local function BlockConfigCombatLocked()
+        local locked = IsConfigCombatLocked and IsConfigCombatLocked()
+        if locked then
+            if ShowConfigCombatLockMessage then ShowConfigCombatLockMessage() end
+            return true
         end
+        return false
     end
     ExportPublic("MSUF_BlockConfigCombatLocked", BlockConfigCombatLocked)
 end
 
 --- Global helper: restore UIPanelButtonTemplate pieces if another skin/hide pass removed them.
 --- This is defensive and safe to call repeatedly; it only touches obvious regions (Left/Middle/Right/Normal/Font).
-local ForceShowUIPanelButtonPieces = _G.MSUF_ForceShowUIPanelButtonPieces
-if type(ForceShowUIPanelButtonPieces) ~= "function" then
-    ForceShowUIPanelButtonPieces = function(btn)
-        if not btn then return end
+local function ForceShowUIPanelButtonPieces(btn)
+    if not btn then return end
 
-        local name = (btn.GetName and btn:GetName()) or nil
-        local left  = btn.Left   or (name and _G[name .. "Left"])   or nil
-        local mid   = btn.Middle or (name and _G[name .. "Middle"]) or nil
-        local right = btn.Right  or (name and _G[name .. "Right"])  or nil
+    local name = (btn.GetName and btn:GetName()) or nil
+    local left  = btn.Left   or (name and _G[name .. "Left"])   or nil
+    local mid   = btn.Middle or (name and _G[name .. "Middle"]) or nil
+    local right = btn.Right  or (name and _G[name .. "Right"])  or nil
 
-        local function ShowTex(t)
-            if not t then return end
-            if t.SetAlpha then t:SetAlpha(1) end
-            if t.Show then t:Show() end
-        end
-
-        ShowTex(left)
-        ShowTex(mid)
-        ShowTex(right)
-
-        local nt = (btn.GetNormalTexture and btn:GetNormalTexture()) or nil
-        ShowTex(nt)
-
-        local fs = (btn.GetFontString and btn:GetFontString()) or btn.Text or nil
-        if fs then
-            if fs.SetAlpha then fs:SetAlpha(1) end
-            if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
-            if fs.Show then fs:Show() end
-        end
-
-        if btn.SetAlpha then btn:SetAlpha(1) end
+    local function ShowTex(t)
+        if not t then return end
+        if t.SetAlpha then t:SetAlpha(1) end
+        if t.Show then t:Show() end
     end
+
+    ShowTex(left)
+    ShowTex(mid)
+    ShowTex(right)
+
+    local nt = (btn.GetNormalTexture and btn:GetNormalTexture()) or nil
+    ShowTex(nt)
+
+    local fs = (btn.GetFontString and btn:GetFontString()) or btn.Text or nil
+    if fs then
+        if fs.SetAlpha then fs:SetAlpha(1) end
+        if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
+        if fs.Show then fs:Show() end
+    end
+
+    if btn.SetAlpha then btn:SetAlpha(1) end
 end
 ExportPublic("MSUF_ForceShowUIPanelButtonPieces", ForceShowUIPanelButtonPieces)
 
-local GetProfileScopedCache = _G.MSUF_GetProfileScopedCache
-if type(GetProfileScopedCache) ~= "function" then
-    GetProfileScopedCache = function(rootKey)
-        if type(rootKey) ~= "string" or rootKey == "" then return nil end
-        ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})
-        local gdb = _G.MSUF_GlobalDB
-        gdb[rootKey] = type(gdb[rootKey]) == "table" and gdb[rootKey] or {}
+local function GetProfileScopedCache(rootKey)
+    if type(rootKey) ~= "string" or rootKey == "" then return nil end
+    ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})
+    local gdb = _G.MSUF_GlobalDB
+    gdb[rootKey] = type(gdb[rootKey]) == "table" and gdb[rootKey] or {}
 
-        local charKey = "global"
-        local charFn = _G.MSUF_GetCharKey
-        if type(charFn) == "function" then
-            local key = charFn()
-            if type(key) == "string" and key ~= "" then
-                charKey = key
-            end
+    local charKey = "global"
+    local charFn = _G.MSUF_GetCharKey
+    if type(charFn) == "function" then
+        local key = charFn()
+        if type(key) == "string" and key ~= "" then
+            charKey = key
         end
-
-        local profile = _G.MSUF_ActiveProfile
-        if type(profile) ~= "string" or profile == "" then
-            local char = type(gdb.char) == "table" and gdb.char[charKey]
-            profile = type(char) == "table" and char.activeProfile or nil
-        end
-        if type(profile) ~= "string" or profile == "" then
-            profile = "Default"
-        end
-
-        local byChar = gdb[rootKey][charKey]
-        if type(byChar) ~= "table" then
-            byChar = {}
-            gdb[rootKey][charKey] = byChar
-        end
-
-        local bucket = byChar[profile]
-        if type(bucket) ~= "table" then
-            bucket = {}
-            byChar[profile] = bucket
-        end
-        return bucket
     end
+
+    local profile = _G.MSUF_ActiveProfile
+    if type(profile) ~= "string" or profile == "" then
+        local char = type(gdb.char) == "table" and gdb.char[charKey]
+        profile = type(char) == "table" and char.activeProfile or nil
+    end
+    if type(profile) ~= "string" or profile == "" then
+        profile = "Default"
+    end
+
+    local byChar = gdb[rootKey][charKey]
+    if type(byChar) ~= "table" then
+        byChar = {}
+        gdb[rootKey][charKey] = byChar
+    end
+
+    local bucket = byChar[profile]
+    if type(bucket) ~= "table" then
+        bucket = {}
+        byChar[profile] = bucket
+    end
+    return bucket
 end
 ExportPublic("MSUF_GetProfileScopedCache", GetProfileScopedCache)
 
