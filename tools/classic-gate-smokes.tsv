@@ -303,3 +303,4 @@ clients	lua	tools/tests/defaults_pass_trust_smoke.lua	{root} {flavor}	Defaults p
 clients+Forever	lua	tools/tests/bugreport_layout_smoke.lua	{root} {flavor}	Bug report menu geometry regression: {flavor}
 clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game menu cold Options open boundary: {flavor}
 -	lua	tools/tests/combat_regen_edge_smoke.lua	{root}	Combat regen edge smoke failed
+-	lua	tools/tests/general_key_ownership_smoke.lua	{root}	General key ownership smoke failed

@@ -21,6 +21,110 @@ for root in pairs(ROOT_MODULES) do ROOTS[root] = true end
 -- Roots that hold one value instead of a table; their path is the root alone.
 local SCALAR_ROOTS = { shortenNames=true }
 F.RootModules, F.ScalarRoots = ROOT_MODULES, SCALAR_ROOTS
+
+-- The one owner registry for keys under profile.general. Partial profile
+-- exports and imports (Unit Frames, Castbars, Colors) carry exactly the keys
+-- their owner names, and profile sync asks the same owner. An owner names the
+-- partial export kinds that carry its keys and the sync module that owns them:
+--   unitframes     Unit Frames export (also the owner of undeclared plain keys)
+--   castbars       Castbars export
+--   colors         Colors export
+--   castbarColors  Colors export; synced with the castbars
+--   auraColors     Unit Frames and Colors exports; synced with the auras
+--   profile        no partial export: the menu, the slash menu, integrations,
+--                  Blizzard Edit Mode and the global UI scale stay with their
+--                  profile and travel only with a full profile export
+local GENERAL_OWNERS = {
+    unitframes = { kinds = { unitframe = true }, sync = "unitframes" },
+    castbars = { kinds = { castbar = true }, sync = "castbars" },
+    colors = { kinds = { colors = true }, sync = "colors" },
+    castbarColors = { kinds = { colors = true }, sync = "castbars" },
+    auraColors = { kinds = { unitframe = true, colors = true }, sync = "auras" },
+    profile = { kinds = {} },
+}
+local GENERAL_OWNER = {}
+local function DeclareGeneral(owner, words)
+    for key in words:gmatch("%S+") do GENERAL_OWNER[key] = owner end
+end
+DeclareGeneral("profile", [[
+    UIScale locale menuLocale menuFontKey hideAdvancedMenu showGameMenuButton slashMenuScale
+    slashMenuSnapEnabled disableScaling globalUiScalePreset globalUiScaleValue
+    blizzardEditModeIntegration blizzardEditModeSnapshot dandersEditModeIntegration
+    detailsEditModeIntegration dominosEditModeIntegration ellesmereEditModeIntegration
+    grid2EditModeIntegration nsrtNicknameIntegration
+]])
+DeclareGeneral("auraColors", "aurasOwnBuffHighlightColor aurasOwnDebuffHighlightColor aurasStackCountColor")
+DeclareGeneral("castbarColors", [[
+    castbarInterruptColor castbarInterruptibleColor castbarNonInterruptibleColor empowerColorStages
+]])
+-- Unit frame settings whose names read like colours to the fallback rule.
+DeclareGeneral("unitframes", [[
+    useBarBorder portraitFillBorder dispelBorderTrigger fontSlug fontTextAlpha editModeBgAlpha
+    hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars
+]])
+DeclareGeneral("colors", [[
+    absorbBarColorMigrationV2 barBgClassColor barBgColorMode barBgMatchHPColor barMode
+    bossTargetHighlightColor classBarBgR classBarBgG classBarBgB colorHealthTextByHealth
+    colorPowerTextByType darkBarTone darkBgBrightness darkBgCustomColor darkMode
+    enableHealthGradient fontColor fontColorCustomR fontColorCustomG fontColorCustomB
+    gradientStrength healthBarGradientColorR healthBarGradientColorG healthBarGradientColorB
+    healthGradientHighR healthGradientHighG healthGradientHighB healthGradientLowR
+    healthGradientLowG healthGradientLowB healthGradientMidR healthGradientMidG healthGradientMidB
+    healthLossColorR healthLossColorG healthLossColorB highlightColor kickNotReadyColor kickReadyColor
+    nameClassColor nameNpcClassColor npcClassColorBar npcColorMode npcNameRed npcTypeColorBar
+    npcTypeColorText portraitBgColorR portraitBgColorG portraitBgColorB portraitBgColorA
+    portraitBorderColorR portraitBorderColorG portraitBorderColorB portraitBorderColorA
+    powerBarGradientColorR powerBarGradientColorG powerBarGradientColorB powerLossColorR
+    powerLossColorG powerLossColorB tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
+    useClassColors useCustomFontColor
+]])
+
+-- Every key whose name holds castbar, bossCast, arenaCast or empower is a
+-- castbars key (castbarColors when it is a colour) without a row of its own.
+-- Any other undeclared key (a migration stamp, a key a menu writes but no
+-- default seeds) is decided by the name rule the exports used before this
+-- registry; general_key_ownership_smoke requires a row for every seeded key
+-- that rule would not place in unitframes or castbars.
+local function FallbackGeneralOwner(key)
+    local lower = key:lower()
+    if lower:find("menu", 1, true) or lower:find("slash", 1, true) or lower:find("integration", 1, true)
+        or lower:find("blizzardeditmode", 1, true) then return "profile" end
+    local castbar = lower:find("castbar", 1, true) or lower:find("bosscast", 1, true)
+        or lower:find("arenacast", 1, true) or lower:find("empower", 1, true)
+        or lower:find("spellnamefontsize", 1, true) or lower:find("timefontsize", 1, true)
+    local color = lower:find("color", 1, true) or lower == "barmode" or lower == "darkmode"
+        or lower == "darkbartone" or lower == "darkbgbrightness" or lower == "enablehealthgradient"
+        or lower == "gradientstrength" or lower == "npcnamered"
+    if not color then
+        local last = lower:sub(-1)
+        if last == "r" or last == "g" or last == "b" or last == "a" then
+            color = lower:find("font", 1, true) or lower:find("bg", 1, true) or lower:find("border", 1, true)
+                or lower:find("outline", 1, true) or lower:find("gradient", 1, true)
+        end
+    end
+    if castbar then return color and "castbarColors" or "castbars" end
+    return color and "colors" or "unitframes"
+end
+F.FallbackGeneralOwner = FallbackGeneralOwner
+
+-- The owner of profile.general[key]: its declaration, else the fallback rule.
+function F.GeneralOwner(key)
+    if type(key) ~= "string" then return nil end
+    return GENERAL_OWNER[key] or FallbackGeneralOwner(key)
+end
+function F.IsDeclaredGeneralKey(key)
+    return GENERAL_OWNER[key] ~= nil
+end
+-- Whether a partial export kind ("unitframe", "castbar", "colors") carries the key.
+function F.GeneralKeyInKind(key, kind)
+    local owner = GENERAL_OWNERS[F.GeneralOwner(key)]
+    return owner ~= nil and owner.kinds[kind] == true
+end
+-- The profile sync module that owns the key, nil for a profile-local key.
+function F.GeneralSyncOwner(key)
+    local owner = GENERAL_OWNERS[F.GeneralOwner(key)]
+    return owner and owner.sync
+end
 -- A unit frame's own on/off switch (player.enabled, boss.enabled, ...). Variants
 -- record and apply it like any field; the Factory keeps a frame a variant
 -- switches attached while it is off, so it comes back without a reload.

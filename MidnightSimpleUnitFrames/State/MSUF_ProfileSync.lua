@@ -13,12 +13,13 @@ function S.Owner(path)
     if path[1]~="general" then return roots[path[1]] end
     local key=path[2]
     if type(key)~="string" or key:match("^_") then return end
-    -- Menu/account integration preferences are local to each profile. Use the
-    -- existing export classifiers after the more specific runtime owners.
+    -- Menu/account integration preferences are local to each profile. The general
+    -- key owner registry (State/MSUF_ProfileFields.lua) decides after the more
+    -- specific runtime owners.
     local lower=key:lower()
     if lower:find("classpower",1,true) or lower:find("resource",1,true) then return "resources" end
     if lower:find("aura",1,true) then return "auras" end
-    if MSUF.ProfileGeneralOwner then return MSUF.ProfileGeneralOwner(key) end
+    return F.GeneralSyncOwner(key)
 end
 local function Report(message,detail)
     local translate=type(MSUF.Translate)=="function" and MSUF.Translate or function(text) return text end

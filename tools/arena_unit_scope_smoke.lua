@@ -90,8 +90,9 @@ local profiles = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
     .. Read("MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua")
 Check(profiles:find('"focus", "pet", "pettarget", "boss", "arena" }', 1, true),
     "MSUF_PROFILEIO_UNIT_KEYS lost the arena scope")
-Check(profiles:find('lk:find("arenacast", 1, true)', 1, true),
-    "MSUF_IsCastbarKey no longer recognizes arenaCast keys")
+-- General key ownership lives in the owner registry (State/MSUF_ProfileFields.lua).
+Check(Read("MidnightSimpleUnitFrames/State/MSUF_ProfileFields.lua"):find('lower:find("arenacast", 1, true)', 1, true),
+    "the general key owner registry no longer recognizes arenaCast keys as castbar keys")
 Check(profiles:find('"arena", "arena1", "arena2", "arena3",', 1, true),
     "profile text-scope ledger lost the arena scopes")
 Check(profiles:find("alphaExcludePredictionBars = true", 1, true)
