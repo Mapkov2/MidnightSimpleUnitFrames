@@ -108,16 +108,8 @@ local function _getPowerBar()
 end
 
 local function _resolveEclColor(token)
-    local ov = GetColorOverrides()
-    if type(ov) == "table" then
-        local c = token and ov[token]
-        if type(c) == "table" then
-            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                return r, g, b
-            end
-        end
-    end
+    local r, g, b = CPConst.OverrideRGB(GetColorOverrides(), token)
+    if r then return r, g, b end
     if token == "ECLIPSE_SOLAR" then return CPK.BAL.CLR_SOLAR[1], CPK.BAL.CLR_SOLAR[2], CPK.BAL.CLR_SOLAR[3] end
     if token == "ECLIPSE_LUNAR" then return CPK.BAL.CLR_LUNAR[1], CPK.BAL.CLR_LUNAR[2], CPK.BAL.CLR_LUNAR[3] end
     if token == "ECLIPSE_CA" then return CPK.BAL.CLR_CA[1], CPK.BAL.CLR_CA[2], CPK.BAL.CLR_CA[3] end
@@ -343,16 +335,8 @@ local function _computeAP(spellID)
 end
 
 local function _resolvePredColor()
-    local ov = GetColorOverrides()
-    if type(ov) == "table" then
-        local c = ov["AP_PREDICTION"]
-        if type(c) == "table" then
-            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                return r, g, b
-            end
-        end
-    end
+    local pr, pg, pb = CPConst.OverrideRGB(GetColorOverrides(), "AP_PREDICTION")
+    if pr then return pr, pg, pb end
     if _G.MSUF_GetPowerBarColor then
         local r, g, b = _G.MSUF_GetPowerBarColor(LUNAR_POWER, "LUNAR_POWER")
         if type(r) == "number" then return r, g, b end

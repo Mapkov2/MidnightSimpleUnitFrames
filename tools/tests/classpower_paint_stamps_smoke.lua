@@ -167,6 +167,20 @@ do
         "a form change inside the refresh throttle window was dropped (Cat form shows no combo points)")
 end
 
+-- The one colour-override reader every painter above resolves through.
+do
+    World.Start(repo, "Mainline", "ROGUE", 1, PT.ENERGY)
+    local OverrideRGB = MSUF_CP_CONST.OverrideRGB
+    local map = { A = { 0.1, 0.2, 0.3 }, B = { r = 0.4, g = 0.5, b = 0.6 }, C = { 0.1, 0.2 }, D = "red" }
+    local r, g, b = OverrideRGB(map, "A")
+    Check(r == 0.1 and g == 0.2 and b == 0.3, "an array override was not read")
+    r, g, b = OverrideRGB(map, "B")
+    Check(r == 0.4 and g == 0.5 and b == 0.6, "a keyed override was not read")
+    Check(OverrideRGB(map, "C") == nil and OverrideRGB(map, "D") == nil and OverrideRGB(map, "E") == nil,
+        "an incomplete, foreign or missing override was accepted")
+    Check(OverrideRGB(nil, "A") == nil and OverrideRGB(map, nil) == nil, "a missing map or token was accepted")
+end
+
 if #failures > 0 then
     error("classpower_paint_stamps_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end

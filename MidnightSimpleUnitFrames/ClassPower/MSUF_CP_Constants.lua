@@ -9,6 +9,19 @@ local ExportPublic = MSUF.ExportPublic
 ExportPublic("MSUF_CP_CONST", _G.MSUF_CP_CONST or {})
 local K = _G.MSUF_CP_CONST
 
+--- The one reader of a class resource colour override: map[token] as
+--- { r, g, b } or { r = , g = , b = }. Returns r, g, b, or nothing unless all
+--- three are numbers. Every Colors panel override (class power, background,
+--- charged, per slot, full, Stagger tiers, eclipse, text) is read through it.
+function K.OverrideRGB(map, token)
+    if type(map) ~= "table" or token == nil then return nil end
+    local c = map[token]
+    if type(c) ~= "table" then return nil end
+    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
+    return nil
+end
+
 K.CPK = {
     MODE = {
         NONE           = 0,

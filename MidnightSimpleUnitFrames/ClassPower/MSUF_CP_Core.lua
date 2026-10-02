@@ -20,6 +20,7 @@ local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
 --- InCombatLockdown stays a global read on purpose: the layout gate is cold
 --- and the combat harnesses swap that function at runtime.
 local type, tostring, tonumber = type, tostring, tonumber
+local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
 local math_floor, math_max, math_abs = math.floor, math.max, math.abs
 
 --- Single owner of the player-frame resolver for the whole ClassPower module.
@@ -1008,18 +1009,8 @@ builders.PRESENTATION = function(E)
 
         local tr, tg, tb = fr, fg, fb
         if _cpDB.general then
-            local ov = _cpDB.colorOverrides
-            if type(ov) == "table" then
-                local c = ov["RESOURCE_TEXT"]
-                if type(c) == "table" then
-                    local cr = c[1] or c.r
-                    local cg = c[2] or c.g
-                    local cb = c[3] or c.b
-                    if type(cr) == "number" and type(cg) == "number" and type(cb) == "number" then
-                        tr, tg, tb = cr, cg, cb
-                    end
-                end
-            end
+            local cr, cg, cb = OverrideRGB(_cpDB.colorOverrides, "RESOURCE_TEXT")
+            if cr then tr, tg, tb = cr, cg, cb end
         end
 
         ApplyClassPowerTextStyle(fs, tr, tg, tb, textAlpha, useShadow, shadowAlpha, shadowX, shadowY)

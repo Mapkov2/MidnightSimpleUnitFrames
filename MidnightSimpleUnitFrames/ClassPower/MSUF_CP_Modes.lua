@@ -23,6 +23,7 @@ local math_abs = math.abs
 local math_floor = math.floor
 local string_format = string.format
 local _issecretvalue = _G.issecretvalue
+local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
 
 local function CP_GetVisual(E)
     local getVisual = E and E.GetVisual
@@ -1410,15 +1411,8 @@ modeBuilders.AURA = function(E)
     end
 
     local function ResolveDHColor(isVoidMeta)
-        local ov = _cpDB.colorOverrides
-        if type(ov) == "table" then
-            local token = isVoidMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS"
-            local c = ov[token]
-            if type(c) == "table" then
-                local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
-            end
-        end
+        local r, g, b = OverrideRGB(_cpDB.colorOverrides, isVoidMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS")
+        if r then return r, g, b end
         if isVoidMeta then return 0.60, 0.20, 0.93 end
         return 0.00, 0.80, 0.00
     end
@@ -1847,17 +1841,8 @@ modeBuilders.STAGGER = function(E)
     local staggerCachedTier, staggerCachedVersion = 0, nil
 
     local function ResolveStaggerColor(tier)
-        local ov = _cpDB.colorOverrides
-        if type(ov) == "table" then
-            local token = STAGGER_CONST.TOKENS and STAGGER_CONST.TOKENS[tier]
-            local c = token and ov[token]
-            if type(c) == "table" then
-                local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                    return r, g, b
-                end
-            end
-        end
+        local r, g, b = OverrideRGB(_cpDB.colorOverrides, STAGGER_CONST.TOKENS and STAGGER_CONST.TOKENS[tier])
+        if r then return r, g, b end
         local def = STAGGER_CONST.COLOR_DEFAULTS and STAGGER_CONST.COLOR_DEFAULTS[tier]
         if def then
             return def[1], def[2], def[3]
