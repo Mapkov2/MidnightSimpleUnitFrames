@@ -711,9 +711,8 @@ local function RestoreOutline(frame)
 
     frame._kickReadyBorderTinted = nil
 
-    if type(_G.MSUF_ApplyCastbarOutline) == "function" then
-        _G.MSUF_ApplyCastbarOutline(frame, true)
-    end
+    -- Castbars/MSUF_CastbarStyle.lua loads before this file in every TOC.
+    _G.MSUF_ApplyCastbarOutline(frame, true)
 end
 
 --- Raw interruptibility can be nil, false, true, or a wrapped/secret value

@@ -136,8 +136,9 @@ local function LayoutDetached(frame, g)
     frame:SetAlpha((tonumber(g.gcdBarOpacity) or 100) / 100)
     frame.icon:SetSize(height, height)
     -- The castbars' configured font; the size follows the bar height.
-    local font = (type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath()) or _G.STANDARD_TEXT_FONT
-    local flags = (type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags()) or "OUTLINE"
+    -- Castbars/MSUF_Castbars_Core.lua (loads before this file) owns both.
+    local font = _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
+    local flags = _G.MSUF_GetFontFlags() or "OUTLINE"
     local size = math.min(12, math.max(8, height - 2))
     frame.castText:SetFont(font, size, flags)
     frame.timeText:SetFont(font, size, flags)

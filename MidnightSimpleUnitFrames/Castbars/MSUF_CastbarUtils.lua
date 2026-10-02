@@ -47,7 +47,8 @@ local function GetInterruptFeedbackDuration()
 end
 ExportPublic("MSUF_GetInterruptFeedbackDuration", GetInterruptFeedbackDuration)
 
-if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
+-- The castbar preview hard sync; this file is its only provider.
+do
     local function HardSyncCastbarPreview(preview, source)
         if not preview or not source then return end
 
@@ -171,9 +172,8 @@ local function SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, alpha
     statusBar:SetStatusBarColor(red, green, blue, alpha)
 end
 
-if type(_G.MSUF_SetStatusBarColorIfChanged) ~= "function" then
-    ExportPublic("MSUF_SetStatusBarColorIfChanged", SetStatusBarColorIfChangedImpl)
-end
+-- This file is the only provider; its own writes below call the local.
+ExportPublic("MSUF_SetStatusBarColorIfChanged", SetStatusBarColorIfChangedImpl)
 
 -- Castbar colors are global settings, so all target/focus/boss bars can share
 -- the same three ColorObjects. Keep only one object per semantic color and
@@ -611,9 +611,8 @@ local function ResolveInterruptUnavailableCastColor()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
     local red, green, blue
 
-    if type(_G.MSUF_GetInterruptUnavailableCastColor) == "function" then
-        red, green, blue = _G.MSUF_GetInterruptUnavailableCastColor()
-    end
+    -- This file's getter (it replaces Runtime/MSUF_Colors.lua's export).
+    red, green, blue = GetInterruptUnavailableCastColor()
 
     if not (red and green and blue) then
         local key = general.castbarInterruptUnavailableColor
@@ -742,11 +741,7 @@ local function ResetCastbarGlowFade(frame)
 
     if alpha == nil then alpha = 1 end
     statusBar._msufGlowSkipBase = true
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, alpha)
-    else
-        statusBar:SetStatusBarColor(red, green, blue, alpha)
-    end
+    SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, alpha)
     statusBar._msufGlowSkipBase = nil
     statusBar._msufGlowApplied = nil
     statusBar._msufGlowLastP = nil
@@ -805,11 +800,7 @@ local function ApplyCastbarGlowFade(frame, remainingSeconds, totalSeconds)
     local blue = baseB + (1 - baseB) * progress
 
     statusBar._msufGlowSkipBase = true
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, baseA)
-    else
-        statusBar:SetStatusBarColor(red, green, blue, baseA)
-    end
+    SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, baseA)
     statusBar._msufGlowSkipBase = nil
     statusBar._msufGlowApplied = true
 end

@@ -253,7 +253,8 @@ local function EnsureEmpowerStageSegments(frame, count)
     for index = count + 1, #frame.empowerSegments do
         frame.empowerSegments[index]:Hide()
     end
-    if created and type(_G.MSUF_RoundedCastbar_RefreshFrame) == "function" then
+    if created then
+        -- Castbars/MSUF_CastbarRounded.lua (loads after this file).
         _G.MSUF_RoundedCastbar_RefreshFrame(frame)
     end
 end
@@ -268,10 +269,8 @@ local function IsEmpowerColorStagesEnabled()
         return cachedColorStages
     end
 
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-        db = _G.MSUF_DB
-    end
+    _G.MSUF_EnsureDB()
+    db = _G.MSUF_DB
     cachedColorStages = not (db and db.general and db.general.empowerColorStages == false)
     return cachedColorStages
 end
@@ -485,7 +484,8 @@ local function PlayerCastbarEmpowerStart(frame)
     frame.interruptFeedbackEndTime = nil
     if frame.latencyBar then frame.latencyBar:Hide() end
 
-    local castState = type(_G.MSUF_BuildCastState) == "function" and _G.MSUF_BuildCastState("player") or nil
+    -- Castbars/MSUF_CastbarEngine.lua (loads after this file).
+    local castState = _G.MSUF_BuildCastState("player")
     local spellName = castState and castState.spellName
     local icon = castState and castState.icon
     -- SecretWhenUnitSpellCastRestricted: only a plain missing name falls back.
@@ -498,11 +498,7 @@ local function PlayerCastbarEmpowerStart(frame)
         frame.icon:SetTexture(icon)
     end
     if frame.castText then
-        if type(_G.MSUF_CB_ApplyTexts) == "function" then
-            _G.MSUF_CB_ApplyTexts(frame, nil, spellName or "", nil)
-        else
-            _G.MSUF_SetTextIfChanged(frame.castText, spellName or "")
-        end
+        _G.MSUF_CB_ApplyTexts(frame, nil, spellName or "", nil)
     end
 
     local timeline = BuildEmpowerTimeline("player", castState)
@@ -561,8 +557,9 @@ local function PlayerCastbarEmpowerStart(frame)
 
     frame:SetScript("OnUpdate", nil)
     frame:Show()
-    if type(_G.MSUF_RegisterCastbar) == "function" then _G.MSUF_RegisterCastbar(frame) end
-    if type(_G.MSUF_UpdateCastbarFrame) == "function" then _G.MSUF_UpdateCastbarFrame(frame, 0) end
+    -- Castbars/MSUF_Castbars.lua (loads after this file) owns the manager.
+    _G.MSUF_RegisterCastbar(frame)
+    _G.MSUF_UpdateCastbarFrame(frame, 0)
 
     local updateColor = _G.MSUF_PlayerCastbar_UpdateColorForInterruptible
     if type(updateColor) == "function" then
@@ -609,9 +606,7 @@ local function PlayerCastbarClearEmpower(frame, hideFrame)
     if frame.SetScript then
         frame:SetScript("OnUpdate", nil)
     end
-    if type(_G.MSUF_UnregisterCastbar) == "function" then
-        _G.MSUF_UnregisterCastbar(frame)
-    end
+    _G.MSUF_UnregisterCastbar(frame)
     if frame.timeText then
         _G.MSUF_SetTextIfChanged(frame.timeText, "")
     end

@@ -19,9 +19,10 @@ local function Translate(text)
     return (type(locale) == "table" and rawget(locale, text)) or text
 end
 
+-- Castbars/MSUF_Castbars_Core.lua (the texture) and Castbars/MSUF_CastbarUtils.lua
+-- (the fill direction) load before this file in every TOC.
 local function CastbarTexture()
-    return (type(MSUF_GetCastbarTexture) == "function" and MSUF_GetCastbarTexture())
-        or "Interface\\TargetingFrame\\UI-StatusBar"
+    return MSUF_GetCastbarTexture() or "Interface\\TargetingFrame\\UI-StatusBar"
 end
 
 local function CastbarBackgroundTexture()
@@ -113,9 +114,9 @@ function G.MSUF_BuildCastbarFrameElements(frame)
         G.MSUF_ApplyCastbarTimerDirection(
             statusBar,
             nil,
-            type(MSUF_GetCastbarReverseFillForFrame) == "function" and MSUF_GetCastbarReverseFillForFrame(frame, false)
+            MSUF_GetCastbarReverseFillForFrame(frame, false)
         )
-    elseif statusBar.SetReverseFill and type(MSUF_GetCastbarReverseFillForFrame) == "function" then
+    elseif statusBar.SetReverseFill then
         statusBar:SetReverseFill(MSUF_GetCastbarReverseFillForFrame(frame, false))
     end
 

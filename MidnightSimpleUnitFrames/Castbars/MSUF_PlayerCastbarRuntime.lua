@@ -272,11 +272,7 @@ local function UpdateColorForInterruptible(frame)
             end
 
             if red and green and blue then
-                if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-                    _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, 1)
-                else
-                    frame.statusBar:SetStatusBarColor(red, green, blue, 1)
-                end
+                _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, 1)
                 return
             end
         end
@@ -332,11 +328,8 @@ local function UpdateColorForInterruptible(frame)
         end
     end
 
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, alpha or 1)
-    else
-        frame.statusBar:SetStatusBarColor(red, green, blue, alpha or 1)
-    end
+    -- Castbars/MSUF_CastbarUtils.lua (loads first) owns the colour write.
+    _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, alpha or 1)
 end
 
 local function InvalidateCastState(unit)
@@ -556,8 +549,7 @@ local function ApplyActiveCast(
     local reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChannel)
     -- The anchor never flips per cast type any more, so the drain has to come
     -- from the value: channels count down unless unified direction is on.
-    local countsDown = type(_G.MSUF_GetCastbarCountsDown) == "function"
-        and _G.MSUF_GetCastbarCountsDown(frame, isChannel) == true
+    local countsDown = _G.MSUF_GetCastbarCountsDown(frame, isChannel) == true
     local timerDriven = false
 
     if durationObj then
@@ -584,11 +576,7 @@ local function ApplyActiveCast(
         frame.MSUF_timerDriven = nil
         if frame.icon then frame.icon:SetTexture(icon or nil) end
         if frame.castText then
-            if type(_G.MSUF_CB_ApplyTexts) == "function" then
-                _G.MSUF_CB_ApplyTexts(frame, nil, spellName or "", nil)
-            else
-                _G.MSUF_SetTextIfChanged(frame.castText, spellName or "")
-            end
+            _G.MSUF_CB_ApplyTexts(frame, nil, spellName or "", nil)
         end
     end
 
@@ -675,7 +663,7 @@ local function ApplyCastState(frame, state)
     else
         frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
     end
-    if frame.castText and type(_G.MSUF_RefreshCastbarSpellNameText) == "function" then
+    if frame.castText then
         _G.MSUF_RefreshCastbarSpellNameText(frame)
     end
     return true
@@ -977,15 +965,7 @@ local function HandleActiveEmpowerEvent(frame, event, ...)
     if not frame.isEmpower then return false end
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
-        if type(_G.MSUF_PlayerCastbar_ShowInterruptFeedback) == "function" then
-            local label = INTERRUPTED
-            if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
-                label = _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", label)
-            end
-            _G.MSUF_PlayerCastbar_ShowInterruptFeedback(frame, label)
-        else
-            ClearEmpower(frame, true)
-        end
+        ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", INTERRUPTED))
         return true
     elseif event == "UNIT_SPELLCAST_STOP"
         or event == "UNIT_SPELLCAST_FAILED"
@@ -1056,11 +1036,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
         if IsDifferentActiveCast(frame, castGUID, spellID, castBarID) then return end
 
         ClearActiveCastIdentity(frame)
-        local interruptLabel = INTERRUPTED
-        if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
-            interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", interruptLabel)
-        end
-        ShowInterruptFeedback(frame, interruptLabel)
+        ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", INTERRUPTED))
         return
     end
 

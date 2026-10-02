@@ -27,6 +27,7 @@ local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local UnitHasVehicleUI = _G.UnitHasVehicleUI
 local UnitChannelInfo = _G.UnitChannelInfo
 
+local FILE = "Castbars/MSUF_Castbars.lua"
 local PlayerCastbarCast = _G.MSUF_PlayerCastbar_Cast
 local PlayerCastbarOnEvent = _G.MSUF_PlayerCastbar_OnEvent
 local UpdateLatencyZone = _G.MSUF_PlayerCastbar_UpdateLatencyZone
@@ -511,11 +512,9 @@ local function StopCastbarIfUnitMissing(frame)
     local pools = (frame._msufIsBossCastbar or frame._msufIsArenaCastbar) and MSUF.Castbars and MSUF.Castbars.Pools
     if pools then
         pools.Stop(frame)
-    elseif type(_G.MSUF_CB_ResetStateOnStop) == "function" then
-        _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
     else
-        if UnregisterCastbar then UnregisterCastbar(frame) end
-        if frame.Hide then frame:Hide() end
+        -- Castbars/MSUF_CastbarRuntime.lua loads before this file in every TOC.
+        MSUF.Require("MSUF_CB_ResetStateOnStop", FILE)(frame, "STOPPED")
     end
     return true
 end

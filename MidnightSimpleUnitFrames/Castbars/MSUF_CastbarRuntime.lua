@@ -212,6 +212,21 @@ end
 --- (secret/nan/inf -> nil, wrappers unwrapped). Harnesses that load Runtime
 --- standalone load Utils first.
 local PlainNumber = _G.MSUF_Castbar_PlainNumber
+-- The same file owns the fill direction, the status-bar colour write, the
+-- interrupt shake and the empower teardown.
+local GetCastbarReverseFillForFrame = _G.MSUF_GetCastbarReverseFillForFrame
+local SetStatusBarColorIfChanged = _G.MSUF_SetStatusBarColorIfChanged
+local PlayCastbarShake = _G.MSUF_PlayCastbarShake
+local ClearEmpowerState = _G.MSUF_ClearEmpowerState
+
+--- The castbar manager (Castbars/MSUF_Castbars.lua) and the driver's time
+--- text load after this file, before any cast: resolved on first use.
+local FILE = "Castbars/MSUF_CastbarRuntime.lua"
+local RegisterCastbar, UpdateCastTimeText
+local function Register(frame)
+    RegisterCastbar = RegisterCastbar or ns.Require("MSUF_RegisterCastbar", FILE)
+    return RegisterCastbar(frame)
+end
 
 local nativeTextFormats
 local nativeTextFormatsUnavailable
@@ -644,9 +659,7 @@ local function NativeCompletionCallback(frame)
         -- path.  Do not guess whether it expired.
         frame._msufNativeCompletionUnsafe = true
         Runtime:PrepareWork(frame)
-        if type(_G.MSUF_RegisterCastbar) == "function" then
-            _G.MSUF_RegisterCastbar(frame)
-        end
+        Register(frame)
         return
     end
 
@@ -793,15 +806,7 @@ local function ResolveReverseFill(frame, state, isChanneled)
         return state.reverseFill == true
     end
 
-    if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-        return _G.MSUF_GetCastbarReverseFillForFrame(frame, isChanneled and true or false) == true
-    end
-
-    if type(_G.MSUF_GetReverseFillSafe) == "function" then
-        return _G.MSUF_GetReverseFillSafe(frame, isChanneled and true or false) == true
-    end
-
-    return false
+    return GetCastbarReverseFillForFrame(frame, isChanneled and true or false) == true
 end
 
 --- Prefer Blizzard's StatusBar timer object when available. That lets the
@@ -1039,16 +1044,16 @@ function Runtime:ApplyActive(frame, state, options)
         frame:Show()
     end
 
-    if options.skipRegister ~= true and type(_G.MSUF_RegisterCastbar) == "function" then
-        _G.MSUF_RegisterCastbar(frame)
+    if options.skipRegister ~= true then
+        Register(frame)
     end
 
     if options.skipTimeText ~= true
         and frame.timeText
         and frame._msufNativeTimeBound ~= true
-        and type(_G.MSUF_UpdateCastTimeText_FromStatusBar) == "function"
     then
-        _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
+        UpdateCastTimeText = UpdateCastTimeText or ns.Require("MSUF_UpdateCastTimeText_FromStatusBar", FILE)
+        UpdateCastTimeText(frame)
     end
 
     if type(_G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
@@ -1098,11 +1103,7 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
         red, green, blue = 1.0, 0.82, 0.0
     end
 
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, 1)
-    elseif statusBar.SetStatusBarColor then
-        statusBar:SetStatusBarColor(red, green, blue, 1)
-    end
+    SetStatusBarColorIfChanged(statusBar, red, green, blue, 1)
 
     SetText(frame, "castText", label or _G.INTERRUPTED)
     SetText(frame, "timeText", "")
@@ -1119,8 +1120,8 @@ function Runtime:ApplyInterruptValues(frame, barValue, reverseFill, label, color
         _G.MSUF_UF_ApplyCastbarRangeAlpha(frame, nil, true)
     end
 
-    if skipShake ~= true and type(_G.MSUF_PlayCastbarShake) == "function" then
-        _G.MSUF_PlayCastbarShake(frame)
+    if skipShake ~= true then
+        PlayCastbarShake(frame)
     end
 end
 
@@ -1247,8 +1248,8 @@ function Runtime:Stop(frame, reasonOrOptions)
         return
     end
 
-    if frame.isEmpower and type(_G.MSUF_ClearEmpowerState) == "function" then
-        _G.MSUF_ClearEmpowerState(frame)
+    if frame.isEmpower then
+        ClearEmpowerState(frame)
     end
 
     if reason == REASON_SUCCEEDED or reason == REASON_FAILED then

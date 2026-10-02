@@ -107,6 +107,9 @@ end
 
 local interruptNamespace = { ExportPublic = function(name, value) _G[name] = value return value end,
     Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end } }
+-- Castbars/MSUF_CastbarStyle.lua (not loaded here) owns the castbar outline the
+-- border style restores; every TOC loads it before the indicator.
+_G.MSUF_ApplyCastbarOutline = function() end
 -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))(
     "MidnightSimpleUnitFrames", interruptNamespace)
