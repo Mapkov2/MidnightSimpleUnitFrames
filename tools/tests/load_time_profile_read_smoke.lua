@@ -12,6 +12,8 @@
 --      Before wave 4: Runtime/MSUF_UnitTooltips.lua recomputed its hover
 --      fast path at load, and Features/Gameplay/MSUF_Feature_TargetSound.lua
 --      applied the target sounds at load.
+--      The castbar readers (Anchors, InterruptReady, Boss and Arena pools)
+--      left with W4-C3 143756be; KNOWN is empty since.
 --   2. Target sounds a player turned on are active after login. At load the
 --      driver read the throwaway profile (off) and nothing applied the saved
 --      value until the menu toggle or a profile switch.
@@ -23,16 +25,7 @@ local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 
 -- Load-time readers in files another package owns. Each row names the file,
 -- the owner and the fix; delete the row when the reader is gone.
-local KNOWN = {
-    ["MidnightSimpleUnitFrames/Castbars/MSUF_CastbarAnchors.lua"] =
-        "W4-C3: SyncWidthSourceLifecycle(GeneralDB()) at file load (:898); its boot frame already listens for ADDON_LOADED",
-    ["MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"] =
-        "W4-C3: FeatureEnabled() -> GeneralDB() at file load (:1682)",
-    ["MidnightSimpleUnitFrames/Castbars/MSUF_BossCastbars.lua"] =
-        "W4-C3: Pools.Define -> Enabled -> EnsureDB at file load (MSUF_CastbarPools.lua:952, :319, :91)",
-    ["MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua"] =
-        "W4-C3: Pools.Define -> Enabled -> EnsureDB at file load (MSUF_CastbarPools.lua:952, :319, :91)",
-}
+local KNOWN = {}
 
 local function Check(condition, message)
     if not condition then error(message, 2) end
