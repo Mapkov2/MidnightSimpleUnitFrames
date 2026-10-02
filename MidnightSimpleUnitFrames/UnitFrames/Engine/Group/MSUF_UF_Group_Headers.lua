@@ -593,7 +593,7 @@ local function ResolveGroupFilter(conf)
   elseif type(value) == "table" then
     local out = {}
     for i = 1, 8 do
-      if (not groupLimit or i <= groupLimit) and (value[i] == true or value[tostring(i)] == true) then
+      if (not groupLimit or i <= groupLimit) and GF.GroupFilterAllowsSubgroup(value, i) then
         out[#out + 1] = tostring(i)
       end
     end
@@ -618,11 +618,7 @@ local function GroupFilterAllows(conf, groupIndex, classFile, role, ignoreGroupL
   end
   local filter = conf and conf.groupFilter
   if type(filter) == "table" then
-    local value = filter[groupIndex]
-    if value == nil then
-      value = filter[tostring(groupIndex)]
-    end
-    return value ~= false
+    return GF.GroupFilterAllowsSubgroup(filter, groupIndex)
   elseif type(filter) == "string" and filter ~= "" then
     local wanted = tostring(groupIndex)
     classFile = type(classFile) == "string" and classFile:upper() or nil
@@ -643,21 +639,8 @@ RaidGroupAllowed = function(conf, groupIndex)
   if not conf then return true end
   if conf.hideMythicGroupsFiveToEight == true and GF.IsMythicRaidContext and GF.IsMythicRaidContext() and groupIndex > 4 then return false end
   local filter = conf.groupFilter
-  if type(filter) == "table" then
-    local value = filter[groupIndex]
-    return value ~= false and (value ~= nil or filter[tostring(groupIndex)] ~= false)
-  elseif type(filter) == "string" then
-    local hasGroups = false
-    for token in filter:gmatch("[^,]+") do
-      local group = tonumber(token)
-      if group and group >= 1 and group <= 8 then
-        hasGroups = true
-        if group == groupIndex then return true end
-      end
-    end
-    return not hasGroups
-  end
-  return true
+  if filter == nil then return true end
+  return GF.GroupFilterAllowsSubgroup(filter, groupIndex)
 end
 
 local function UnitFullName(unit)
