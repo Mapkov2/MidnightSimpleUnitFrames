@@ -1552,6 +1552,39 @@ do
     assert(Lane(target, "buff").config.anchor == "BOTTOMRIGHT", "W3.1: an unknown anchor did not fall back")
 end
 
+-- W3.2 (re-review 2026-10-02). "Raid in combat" lanes follow the combat edge ---------
+-- RAID_IN_COMBAT membership flips with the player's combat state. The edge
+-- handler re-rendered each lane's cached active set without re-running the
+-- filters or bumping the unit's token serial, so the container kept showing
+-- the other side's auras until an unrelated full update.
+do
+    LoadProfile(Profile({ focus = { layout = {}, filters = {}, layoutShared = { showBuffs = false, showDebuffs = false } } }))
+    local hot = Aura(true, { spellId = 672001, tokens = { RAID_IN_COMBAT = false } })
+    local plain = Aura(true, { spellId = 672002, tokens = {} })
+    world.focus = { hot, plain }
+    _G.MSUF_DB.auras3.customContainers = { perUnit = { focus = { items = {
+        [1] = { enabled = true, auraType = "BUFF", spellIDs = "672001 672002",
+            filters = { enabled = true, raidInCombat = true }, placed = { size = 20, max = 8, perRow = 8 } },
+    } } } }
+    A3.BumpRuntimeConfig()
+    local focus = NewFrame("focus", {})
+    local events = registered.GetUnitlessEvents(focus)
+    local hearsEdge = false
+    for i = 1, #events do if events[i] == "PLAYER_REGEN_DISABLED" then hearsEdge = true end end
+    assert(hearsEdge, "W3.2: precondition: a Raid in combat container does not hear the combat edge")
+    assert(VisibleIDs(Lane(focus, "custom1")) == "",
+        "W3.2: precondition: the out-of-combat container shows " .. VisibleIDs(Lane(focus, "custom1")))
+    hot.tokens.RAID_IN_COMBAT = true
+    registered.Update(focus, "PLAYER_REGEN_DISABLED")
+    assert(VisibleIDs(Lane(focus, "custom1")) == IDs(hot),
+        "W3.2: entering combat kept the out-of-combat Raid in combat set: " .. VisibleIDs(Lane(focus, "custom1")))
+    hot.tokens.RAID_IN_COMBAT = false
+    registered.Update(focus, "PLAYER_REGEN_ENABLED")
+    assert(VisibleIDs(Lane(focus, "custom1")) == "",
+        "W3.2: leaving combat kept the in-combat Raid in combat set: " .. VisibleIDs(Lane(focus, "custom1")))
+    _G.MSUF_DB.auras3.customContainers = nil
+end
+
 -- F6. Edit Mode and menu group test frames never run the live backend -------------------
 do
     world.player = {
