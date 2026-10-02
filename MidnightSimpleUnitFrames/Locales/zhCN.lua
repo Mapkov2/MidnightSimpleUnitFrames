@@ -6613,6 +6613,11 @@ L["Priority Frames are full (%s)."] = "优先框体已满（%s）。"
 L["Join a party or raid before selecting a Priority Frame."] = "请先加入小队或团队，再选择优先框体。"
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "将鼠标悬停在 MSUF 小队、团队或优先框体上，然后按优先框体快捷键。"
 L["The saved Priority Frames list is full."] = "已保存的优先框体列表已满。"
+
+-- Aura spell lists and Edit Mode aura preview labels.
+L["%s (unresolved)"] = "%s（未解析）"
+L["Arena %s"] = "竞技场%s"
+L["Custom Aura %d"] = "自定义光环 %d"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

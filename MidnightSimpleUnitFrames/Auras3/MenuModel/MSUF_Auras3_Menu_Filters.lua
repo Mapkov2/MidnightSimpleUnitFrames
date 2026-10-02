@@ -30,7 +30,9 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
     local RuntimeUnit = Common.RuntimeUnit
     local SpellIDFromInput = Common.SpellIDFromInput
     local SpellInfo = Common.SpellInfo
+    local SpellIDText = Common.SpellIDText
     local SpellLabel = Common.SpellLabel
+    local UnresolvedSpellText = Common.UnresolvedSpellText
     local DefaultsIntoOnce = Storage.DefaultsIntoOnce
     local PerUnit = Storage.PerUnit
 
@@ -403,8 +405,7 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
                 name = name or staticName
                 icon = icon or staticIcon
             end
-            local text = (type(name) == "string" and name ~= "" and name or "Spell")
-                .. " (#" .. tostring(auraID) .. ")"
+            local text = SpellIDText(name, auraID)
             values[#values + 1] = { value = auraID, text = text, name = name, icon = icon }
         end)
         table_sort(values, function(a, b) return tostring(a.text) < tostring(b.text) end)
@@ -491,7 +492,7 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
         for key, enabled in pairs(spells) do
             if enabled == true then
                 local spellID = SpellIDFromInput(key)
-                out[#out + 1] = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)")
+                out[#out + 1] = spellID and SpellLabel(spellID) or UnresolvedSpellText(key)
             end
         end
         table_sort(out)
@@ -513,13 +514,13 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
                     out[#out + 1] = {
                         value = tostring(id),
                         spellID = id,
-                        text = (type(name) == "string" and name ~= "" and name or "Spell") .. " (#" .. tostring(id) .. ")",
+                        text = SpellIDText(name, id),
                         icon = icon,
                     }
                 else
                     out[#out + 1] = {
                         value = tostring(key),
-                        text = tostring(key) .. " (unresolved)",
+                        text = UnresolvedSpellText(key),
                     }
                 end
             end

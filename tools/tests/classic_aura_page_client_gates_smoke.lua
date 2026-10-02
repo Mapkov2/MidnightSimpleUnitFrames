@@ -422,11 +422,16 @@ assert(clicked > 0, flavor .. ": no group blacklist action queued a group apply"
 local presetNS = {}
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Presets.lua"))(
     "MidnightSimpleUnitFrames", presetNS)
+-- The shipped spell label helper (MSUF_Auras3_Menu_Common.lua) names the rows.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua"))(
+    "MidnightSimpleUnitFrames", presetNS)
+local shippedCommon = presetNS.Auras3MenuModelFactories.Common({})
 local presetModel = {}
 local Presets = presetNS.Auras3MenuModelFactories.Presets(presetModel, {
     AuraFilter = function() return nil end,
     NormalizeKind = function(kind) return tostring(kind) == "debuff" and "debuff" or "buff" end,
     NormalizeScope = function(scope) return scope end,
+    SpellIDText = shippedCommon.SpellIDText,
     SpellInfo = function(id) return id, "Spell " .. tostring(id), 136000 end,
 })
 -- MSUF_Auras3_Menu_GroupFilters.lua GroupBlacklistPresetValues and GroupBlacklistSpellValues.

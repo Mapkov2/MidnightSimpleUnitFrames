@@ -6414,6 +6414,11 @@ L["Priority Frames are full (%s)."] = "優先框架已滿（%s）。"
 L["Join a party or raid before selecting a Priority Frame."] = "請先加入隊伍或團隊，再選擇優先框架。"
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "將滑鼠游標移到 MSUF 隊伍、團隊或優先框架上，然後按優先框架快捷鍵。"
 L["The saved Priority Frames list is full."] = "已儲存的優先框架清單已滿。"
+
+-- Aura spell lists and Edit Mode aura preview labels.
+L["%s (unresolved)"] = "%s（未解析）"
+L["Arena %s"] = "競技場 %s"
+L["Custom Aura %d"] = "自訂光環 %d"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

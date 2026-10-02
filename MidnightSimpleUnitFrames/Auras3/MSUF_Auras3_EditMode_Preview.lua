@@ -38,8 +38,7 @@ local NormalizeKind = config.NormalizeKind
 local CustomItem = config.CustomItem
 local CustomPreviewEntries = config.CustomPreviewEntries
 local CustomPreviewEntriesSignature = config.CustomPreviewEntriesSignature
-local UnitLabel = config.UnitLabel
-local GroupLabel = config.GroupLabel
+local GroupTitle = config.GroupTitle
 local EnsureDB = config.EnsureDB
 local UnitEnabled = config.UnitEnabled
 local UnitHasCustomPreview = config.UnitHasCustomPreview
@@ -407,7 +406,7 @@ local function CreateGroup(unit, kind)
     label:SetPoint("RIGHT", header, "RIGHT", -6, 0)
     label:SetJustifyH("LEFT")
     StyleLabel(label)
-    label:SetText(UnitLabel(unit) .. " " .. GroupLabel(unit, kind, spec))
+    label:SetText(GroupTitle(unit, kind, spec))
     group.Label = label
 
     local body = PixelLayoutRegion(CreateFrame("Frame", nil, group))
@@ -718,7 +717,7 @@ function EM.RefreshUnit(unit)
                     group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
                 end
                 if group.Label then
-                    group.Label:SetText(UnitLabel(unit) .. " " .. GroupLabel(unit, kind, spec))
+                    group.Label:SetText(GroupTitle(unit, kind, spec))
                     StyleLabel(group.Label)
                 end
                 ApplyGroupChrome(group, spec, chrome)

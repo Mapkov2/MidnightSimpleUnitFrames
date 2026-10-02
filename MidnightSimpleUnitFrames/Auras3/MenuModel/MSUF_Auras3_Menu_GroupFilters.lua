@@ -28,6 +28,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     local SpellIDFromInput = Common.SpellIDFromInput
     local SpellInfo = Common.SpellInfo
     local SpellLabel = Common.SpellLabel
+    local UnresolvedSpellText = Common.UnresolvedSpellText
     local BlacklistPresetKeysForKind = Presets.BlacklistPresetKeysForKind
     local BuildBlacklistPresetValues = Presets.BuildBlacklistPresetValues
     local FALLBACK_PUBLIC_AURA_META = Presets.FALLBACK_PUBLIC_AURA_META
@@ -409,7 +410,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         for key, enabled in pairs(spells) do
             if enabled == true then
                 local spellID = SpellIDFromInput(key)
-                out[#out + 1] = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)")
+                out[#out + 1] = spellID and SpellLabel(spellID) or UnresolvedSpellText(key)
             end
         end
         table_sort(out)
@@ -484,7 +485,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
                 end
                 out[#out + 1] = {
                     value = spellID and tostring(spellID) or tostring(key),
-                    text = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)"),
+                    text = spellID and SpellLabel(spellID) or UnresolvedSpellText(key),
                     icon = icon,
                 }
             end

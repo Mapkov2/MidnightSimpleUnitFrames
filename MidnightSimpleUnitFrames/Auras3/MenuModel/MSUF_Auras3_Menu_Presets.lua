@@ -18,6 +18,7 @@ function Factories.Presets(Model, Common)
     local AuraFilter = Common.AuraFilter
     local NormalizeKind = Common.NormalizeKind
     local NormalizeScope = Common.NormalizeScope
+    local SpellIDText = Common.SpellIDText
     local SpellInfo = Common.SpellInfo
 
     local FALLBACK_PUBLIC_AURA_SPELLS = {
@@ -299,7 +300,7 @@ function Factories.Presets(Model, Common)
             if id then
                 values[#values + 1] = {
                     value = tostring(id),
-                    text = (type(name) == "string" and name ~= "" and name or "Spell") .. " (#" .. tostring(id) .. ")",
+                    text = SpellIDText(name, id),
                     icon = icon,
                 }
             end
