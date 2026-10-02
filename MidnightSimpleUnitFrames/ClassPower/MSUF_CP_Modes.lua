@@ -373,29 +373,22 @@ local function CreateNativeTimerSupport(E)
     return support
 end
 
-modeBuilders.SEGMENTED = function(E)
+do
     local tonumber = tonumber
-    local _cpDB = E._cpDB or {}
-    local PLAYER_CLASS = E.PLAYER_CLASS
-    local PT = E.PT
-    local CPConst = E.CPConst
-    local CP = E.CP
-    local UnitPower = E.UnitPower
-    local UnitPartialPower = E.UnitPartialPower
-    local NotSecret = E.NotSecret
-    local CP_CheckAutoHide = E.CP_CheckAutoHide
-    local GetSpec = E.GetSpec
-    local GetTime = E.GetTime
-    local GetPowerRegenForPowerType = E.GetPowerRegenForPowerType
-    local nativeTimer = CreateNativeTimerSupport(E)
+    --- Bound once by SEGMENTED at controller load: the mode env (E) and the
+    --- values the painters read from it on every update.
+    local E, _cpDB, PLAYER_CLASS, PT, CPConst, CP
+    local UnitPower, UnitPartialPower, NotSecret, CP_CheckAutoHide
+    local GetSpec, GetTime, GetPowerRegenForPowerType
+    local nativeTimer
 
-    --- Essence smooth recharge (Evoker only)
-    local _essPrevCur    = nil
-    local _essRechargeAt = 0
-    local _essRate       = 0
-    local _essActiveBar  = nil
-    local _essNativeBar  = nil
-    local _essRestricted = false
+    --- Essence smooth recharge (Evoker only); fresh on every build.
+    local _essPrevCur
+    local _essRechargeAt
+    local _essRate
+    local _essActiveBar
+    local _essNativeBar
+    local _essRestricted
     local SetEssenceOnUpdate
 
     local function StopNativeEssence(bar)
@@ -789,7 +782,24 @@ modeBuilders.SEGMENTED = function(E)
         end
         CP_CheckAutoHide(cur, maxPower)
     end
-    return { Update = Update, StopEssenceOnUpdates = StopEssenceOnUpdates, RuntimeTick = RuntimeTick }
+    local API = {
+        Update = Update,
+        StopEssenceOnUpdates = StopEssenceOnUpdates,
+        RuntimeTick = RuntimeTick,
+    }
+
+    modeBuilders.SEGMENTED = function(boundE)
+        E = boundE
+        _cpDB = E._cpDB or {}
+        PLAYER_CLASS, PT, CPConst, CP = E.PLAYER_CLASS, E.PT, E.CPConst, E.CP
+        UnitPower, UnitPartialPower, NotSecret = E.UnitPower, E.UnitPartialPower, E.NotSecret
+        CP_CheckAutoHide, GetSpec, GetTime = E.CP_CheckAutoHide, E.GetSpec, E.GetTime
+        GetPowerRegenForPowerType = E.GetPowerRegenForPowerType
+        nativeTimer = CreateNativeTimerSupport(E)
+        _essPrevCur, _essRechargeAt, _essRate = nil, 0, 0
+        _essActiveBar, _essNativeBar, _essRestricted = nil, nil, false
+        return API
+    end
 end
 
 --- MSUF_CP_Mode_Fractional.lua
@@ -909,28 +919,18 @@ end
 --- MSUF_CP_Mode_Rune.lua
 --- DK rune mode. Native durations drive fill/text; RuntimeTick is degraded-only.
 
-modeBuilders.RUNE = function(E)
+do
     local math_floor = math.floor
     local string_format = string.format
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local GetTime = E.GetTime
-    local GetRuneCooldown = E.GetRuneCooldown
-    local UnitHasVehicleUI = E.UnitHasVehicleUI
-    local CP_CheckAutoHide = E.CP_CheckAutoHide
-    local CP_ApplyRuneSortOrder = E.CP_ApplyRuneSortOrder
-    local GetRuneMap = E.GetRuneMap
-    local GetFilledAlpha = E.GetFilledAlpha
-    local GetEmptyAlpha = E.GetEmptyAlpha
-    local EnsureRuneText = E.EnsureRuneText
-    local ApplyFont = E.ApplyFont
-    --- Mists only: { Get = GetRuneType, colors = { [runeType] = { r, g, b } } }.
-    local RuneTypes = E.RuneTypes
-    local GetRuneType = RuneTypes and RuneTypes.Get
-    local RUNE_TYPE_COLORS = RuneTypes and RuneTypes.colors
-    local nativeTimer = CreateNativeTimerSupport(E)
-    local _runeTimeTextCache = {}
-    local runeTextPresentationDirty = false
+    --- Bound once by RUNE at controller load. RuneTypes (Mists only):
+    --- { Get = GetRuneType, colors = { [runeType] = { r, g, b } } }.
+    local E, CP, _cpDB, GetTime, GetRuneCooldown, UnitHasVehicleUI, CP_CheckAutoHide
+    local CP_ApplyRuneSortOrder, GetRuneMap, GetFilledAlpha, GetEmptyAlpha
+    local EnsureRuneText, ApplyFont
+    local RuneTypes, GetRuneType, RUNE_TYPE_COLORS
+    local nativeTimer
+    local _runeTimeTextCache
+    local runeTextPresentationDirty
 
     local function GetRuneTimeText(q)
         local s = _runeTimeTextCache[q]
@@ -1244,11 +1244,27 @@ modeBuilders.RUNE = function(E)
         CP_CheckAutoHide(readyCount, maxPower)
     end
 
-    return {
+    local API = {
         Update = Update,
         StopOnUpdates = StopOnUpdates,
         RuntimeTick = RuntimeTick,
     }
+
+    modeBuilders.RUNE = function(boundE)
+        E = boundE
+        CP, _cpDB, GetTime = E.CP, E._cpDB, E.GetTime
+        GetRuneCooldown, UnitHasVehicleUI = E.GetRuneCooldown, E.UnitHasVehicleUI
+        CP_CheckAutoHide, CP_ApplyRuneSortOrder = E.CP_CheckAutoHide, E.CP_ApplyRuneSortOrder
+        GetRuneMap, GetFilledAlpha, GetEmptyAlpha = E.GetRuneMap, E.GetFilledAlpha, E.GetEmptyAlpha
+        EnsureRuneText, ApplyFont = E.EnsureRuneText, E.ApplyFont
+        RuneTypes = E.RuneTypes
+        GetRuneType = RuneTypes and RuneTypes.Get
+        RUNE_TYPE_COLORS = RuneTypes and RuneTypes.colors
+        nativeTimer = CreateNativeTimerSupport(E)
+        _runeTimeTextCache = {}
+        runeTextPresentationDirty = false
+        return API
+    end
 end
 
 --- MSUF_CP_Mode_Aura.lua
@@ -1256,24 +1272,16 @@ end
 --- Secret-safe: C_UnitAuras fields (applications) and C_Spell returns can be
 --- secret in Midnight/12.1. All Lua-side comparisons/arithmetic guarded with NotSecret.
 
-modeBuilders.AURA = function(E)
+do
     local type = type
     local tonumber = tonumber
-    local GetTime = E.GetTime
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local C_UnitAuras = E.C_UnitAuras
-    local GetTrackedPlayerAura = E.GetTrackedPlayerAura
-    local C_Spell = E.C_Spell
-    local CPK = E.CPK
-    local NotSecret = E.NotSecret
-    local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
-    local ResolveMWAbove5Color = E.ResolveMWAbove5Color
-    local CP_CheckAutoHide = E.CP_CheckAutoHide
     local math_floor = math.floor
-    --- Devourer reads the Collapsing Star cost on every Meta aura update.
-    local GetCollapsingStarCost = GetCollapsingStarCost
-    local MAX_FRAGMENT_NOTCHES = (E.CPConst and tonumber(E.CPConst.MAX_FRAGMENT_NOTCHES)) or 64
+    --- Bound once by AURA at controller load. Devourer reads the Collapsing
+    --- Star cost on every Meta aura update.
+    local E, GetTime, CP, _cpDB, C_UnitAuras, GetTrackedPlayerAura, C_Spell, CPK, NotSecret
+    local ResolveClassPowerBgColor, ResolveMWAbove5Color, CP_CheckAutoHide
+    local GetCollapsingStarCost
+    local MAX_FRAGMENT_NOTCHES
     --- Top of the Pip gap slider; the divider budget is shared across it.
     local MAX_PIP_GAP = 8
 
@@ -1292,16 +1300,11 @@ modeBuilders.AURA = function(E)
         else CP_SetPassthroughText(txt, value) end
     end
 
-    --- Resolved once, on the Classic clients only: no Classic game type loads a
-    --- Blizzard call site for either entry point, so the Classic build must not
-    --- assume them and keeps the client decision off the per-pip render path.
+    --- Resolved once by AURA, on the Classic clients only: no Classic game type
+    --- loads a Blizzard call site for either entry point, so the Classic build
+    --- must not assume them and keeps the client decision off the per-pip
+    --- render path.
     local ClassicSpellCastCount, ClassicSpellMaxApplications
-    if IS_CLASSIC then
-        local castCount = C_Spell and C_Spell.GetSpellCastCount
-        if type(castCount) == "function" then ClassicSpellCastCount = castCount end
-        local maxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
-        if type(maxApplications) == "function" then ClassicSpellMaxApplications = maxApplications end
-    end
 
     --- Devourer's fragment separators.
     --- Its Soul Fragment maximum is talent-dependent (30/35/50), far above
@@ -1314,7 +1317,7 @@ modeBuilders.AURA = function(E)
     --- count, so a stack change costs one comparison and touches no texture;
     --- only a Meta transition, a changed Collapsing Star cost or a relayout
     --- moves a notch.
-    local fragCount = -1
+    local fragCount
     local function ApplyFragmentNotches(count)
         local bar = CP.bars and CP.bars[1]
         if not (bar and type(bar.CreateTexture) == "function") then return end
@@ -1390,11 +1393,9 @@ modeBuilders.AURA = function(E)
         for i = shown + 1, #pool do pool[i]:Hide() end
     end
 
-    --- Layout owns the geometry, so it hands the new one straight back here
-    --- instead of leaving the notches stale until the next aura event. Passing
-    --- false is how every other resource and every shape mode drops them again
-    --- when it takes the single bar over.
-    CP.RefreshFragmentNotches = function(active)
+    --- Passing false is how every other resource and every shape mode drops the
+    --- notches again when it takes the single bar over.
+    local function RefreshFragmentNotches(active)
         ApplyFragmentNotches((active and fragCount > 1) and fragCount or 0)
     end
 
@@ -1617,7 +1618,33 @@ modeBuilders.AURA = function(E)
         CP_CheckAutoHide(cur, 1)
     end
 
-    return { UpdateSegmented = UpdateSegmented, UpdateSingle = UpdateSingle }
+    local API = {
+        UpdateSegmented = UpdateSegmented,
+        UpdateSingle = UpdateSingle,
+    }
+
+    modeBuilders.AURA = function(boundE)
+        E = boundE
+        GetTime, CP, _cpDB = E.GetTime, E.CP, E._cpDB
+        C_UnitAuras, GetTrackedPlayerAura, C_Spell = E.C_UnitAuras, E.GetTrackedPlayerAura, E.C_Spell
+        CPK, NotSecret = E.CPK, E.NotSecret
+        ResolveClassPowerBgColor, ResolveMWAbove5Color = E.ResolveClassPowerBgColor, E.ResolveMWAbove5Color
+        CP_CheckAutoHide = E.CP_CheckAutoHide
+        GetCollapsingStarCost = _G.GetCollapsingStarCost
+        MAX_FRAGMENT_NOTCHES = (E.CPConst and tonumber(E.CPConst.MAX_FRAGMENT_NOTCHES)) or 64
+        ClassicSpellCastCount, ClassicSpellMaxApplications = nil, nil
+        if IS_CLASSIC then
+            local castCount = C_Spell and C_Spell.GetSpellCastCount
+            if type(castCount) == "function" then ClassicSpellCastCount = castCount end
+            local maxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
+            if type(maxApplications) == "function" then ClassicSpellMaxApplications = maxApplications end
+        end
+        fragCount = -1
+        --- Layout owns the geometry, so it hands the new one straight back here
+        --- instead of leaving the notches stale until the next aura event.
+        CP.RefreshFragmentNotches = RefreshFragmentNotches
+        return API
+    end
 end
 
 --- 12.1 Ebon presentation host. Aura discovery and the countdown are owned by
