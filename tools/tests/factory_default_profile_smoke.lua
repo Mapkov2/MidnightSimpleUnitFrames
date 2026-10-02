@@ -78,7 +78,8 @@ Check(ns.Client.Flavor == flavor, "client detection reported " .. tostring(ns.Cl
 function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return value end
 _G.MSUF_NS, _G.MSUF = ns, ns
 manifest.LoadSelected(repo, flavor, ns, {
-    "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
+    -- Kernel/MSUF_Util.lua publishes MSUF_PixelLayoutRegion, which the group DB files require.
+    "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "Kernel/MSUF_Util.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua",
     "State/MSUF_Defaults.lua",

@@ -371,6 +371,36 @@ assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MSUF
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Menu_Compat.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 namespace.GF = namespace.GF or {}
+-- The group compiler reads GF.PREDICTION_ANCHOR_MODES, GF.ABSORB_DISPLAY_MODES and
+-- GF.GetUnitGroupRole at load. Their owners, GroupFrames/MSUF_GroupFrames_DB.lua and
+-- MSUF_GroupFrames_DB_Geometry.lua, need the whole group DB behind them (defaults,
+-- EnsureDB, repairs) and this fixture keeps the profile's tree as written, so the real
+-- mode tables, role functions and captured API locals are compiled out of those files.
+do
+    local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
+    local dbPath = root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"
+    local db = Slice.Read(dbPath)
+    local modeTables = {
+        "local GF = ...",
+        assert(db:match("GF%.PREDICTION_ANCHOR_MODES = %b{}"), "DB no longer names the prediction anchor modes"),
+        (assert(db:match("GF%.ABSORB_DISPLAY_MODES = %b{}"), "DB no longer names the absorb display modes")),
+    }
+    assert(loadstring(table.concat(modeTables, "\n"), "@" .. dbPath .. " (mode tables)"))(namespace.GF)
+    local geometryPath = root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Geometry.lua"
+    local geometry = Slice.Read(geometryPath)
+    local rolesApi = assert(geometry:match("local _GF_UnitGroupRolesAssigned = [^\n]+"),
+        "Geometry no longer captures UnitGroupRolesAssigned")
+    local secretApi = assert(geometry:match("local _GF_issecretvalue = [^\n]+"),
+        "Geometry no longer captures issecretvalue")
+    local roleChunk = table.concat({
+        "local GF = ...",
+        rolesApi,
+        secretApi,
+        Slice.Function(geometry, "function GF.NormalizeGroupRole", geometryPath),
+        Slice.Function(geometry, "function GF.GetUnitGroupRole", geometryPath),
+    }, "\n")
+    assert(loadstring(roleChunk, "@" .. geometryPath .. " (role functions)"))(namespace.GF)
+end
 namespace.GF.GetConf = function() return _G.MSUF_DB.gf_party end
 namespace.GF.GetScaledFrameMetrics = function() return 80, 32 end
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("MidnightSimpleUnitFrames", namespace)
