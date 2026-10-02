@@ -921,7 +921,7 @@ function Page:BuildHeader()
     preview:SetValue(M.GetClassPowerPreviewSpecKey())
     AddTooltip(preview, "Class Resource Preview", "Shows the selected class/spec resource below without changing your character, spec or saved settings.")
     M.TrackRefresh(ctx, function() preview:SetValue(M.GetClassPowerPreviewSpecKey()) end)
-    local quick = T.Button(head, "Quick Setup: Class Bar", 158, 24)
+    local quick = T.Button(head, "Quick Setup: Class Bar", 158, 24, { history = true })
     if W.StyleTopSuccessButton then W.StyleTopSuccessButton(quick) elseif W.StyleTopActionButton then W.StyleTopActionButton(quick) end
     quick:SetPoint("TOPRIGHT", head, "TOPRIGHT", -16, -16)
     quick:SetScript("OnClick", ExecuteQuickSetup)

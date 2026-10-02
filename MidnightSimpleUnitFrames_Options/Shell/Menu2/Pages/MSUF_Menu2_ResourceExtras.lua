@@ -110,7 +110,7 @@ function R.BuildMarks(page,Bars,Apply)
     W.MoveWidget(selector,section,24,-40,280)
     M.BindDropdownWidget(ctx,selector,function() return selected end,function(value) selected=value;Refresh() end,Meta("marks.select",nil,"ephemeral"))
     local function Button(label,x,path,callback)
-        local button=M.Theme.Button(section,label,130,26);button:SetPoint("TOPLEFT",section,"TOPLEFT",x,-98)
+        local button=M.Theme.Button(section,label,130,26,{history=true});button:SetPoint("TOPLEFT",section,"TOPLEFT",x,-98)
         button:SetScript("OnClick",callback)
         AP.RegisterControl(button,Meta(path,nil,"action"),label,"button")
     end

@@ -1036,7 +1036,7 @@ local function BuildTextureSection(ctx, b)
         local centerColor = T.colors.coreRim or { 0.043, 0.096, 0.150 }
         center:SetColorTexture(centerColor[1], centerColor[2], centerColor[3], 0.95)
         local function PadButton(text, value, x, buttonY)
-            local btn = T.Button(pad, text, padButtonW, padButtonH)
+            local btn = T.Button(pad, text, padButtonW, padButtonH, { history = true })
             btn:SetPoint("TOPLEFT", pad, "TOPLEFT", x, buttonY)
             T.CenterButtonLabel(btn)
             btn:SetScript("OnClick", function()

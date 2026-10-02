@@ -26,6 +26,14 @@ end
 
 local mw = MenuWorld.Open(root, flavor, { page = "home", clientScriptBindings = true })
 local M, env = mw.M, mw.env
+-- Page buttons that record an undo step ask for it explicitly: opts.history is
+-- what the page built the button with (nil means the page-content default).
+local builtWithHistory = {}
+local ThemeButton = M.Theme.Button
+M.Theme.Button = function(parent, text, width, height, opts)
+    if type(text) == "string" and opts and opts.history ~= nil then builtWithHistory[text] = opts.history end
+    return ThemeButton(parent, text, width, height, opts)
+end
 -- Harness gap: preview frames keep child regions in fields named left and
 -- bottom, which the stub geometry reads; the client's GetCenter is native.
 local Methods = mw.world.widgets.Methods
@@ -116,6 +124,17 @@ end
 ExpectUndoable("opt_bars", "<")
 ExpectUndoable("opt_bars", "Target")
 cases = cases + 2
+-- Class Power quick setup, resource-mark buttons and the gradient direction pad
+-- do not rely on the page-content default.
+local explicit = { "<", ">", "^", "v" }
+if M.pages.classpower then
+    explicit[#explicit + 1] = "Quick Setup: Class Bar"
+    explicit[#explicit + 1] = "Add resource mark"
+    explicit[#explicit + 1] = "Remove resource mark"
+end
+for i = 1, #explicit do
+    Check(builtWithHistory[explicit[i]] == true, "'" .. explicit[i] .. "' is not built with an explicit history = true")
+end
 
 ---------------------------------------------------------------------------
 -- 2. Core widgets take no snapshot on a click
