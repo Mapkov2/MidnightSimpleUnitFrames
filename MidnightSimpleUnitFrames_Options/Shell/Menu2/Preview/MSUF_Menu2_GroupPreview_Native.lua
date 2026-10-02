@@ -709,7 +709,7 @@ local function GrowthFromCompiled(primary, wrap, fallback)
     end
     return wrap == "UP" and "RIGHTUP" or (fallback or "RIGHTDOWN")
 end
-local function CompiledAuraLane(auras, key, fallback)
+local function CompiledAuraLane(auras, key, fallback, out)
     if type(auras) ~= "table" then return fallback or {} end
     local prefix, showKey
     if key == "buff" then
@@ -727,46 +727,47 @@ local function CompiledAuraLane(auras, key, fallback)
         or (key == "buff" and "maxBuffs")
         or (key == "debuff" and "maxDebuffs")
         or "maxExternals"
-    local out = {
-        _compiled = true,
-        enabled = auras[showKey] == true,
-        max = auras[maxKey],
-        perRow = auras[prefix .. "PerRow"],
-        size = auras[prefix .. "IconSize"],
-        iconZoom = auras.iconZoom,
-        spacing = auras[prefix .. "Spacing"],
-        anchor = auras[prefix .. "Anchor"],
-        growth = GrowthFromCompiled(auras[prefix .. "GrowthX"], auras[prefix .. "GrowthY"], fallback and fallback.growth),
-        x = auras[prefix .. "OffsetX"],
-        y = auras[prefix .. "OffsetY"],
-        layer = auras[prefix .. "Layer"],
-        strata = auras[prefix .. "Strata"],
-        showCooldownSwipe = auras[prefix .. "ShowCooldownSwipe"],
-        cooldownSwipeReverse = auras[prefix .. "CooldownSwipeReverse"],
-        showCooldown = auras[prefix .. "ShowCooldown"],
-        showCooldownText = auras[prefix .. "ShowCooldown"],
-        showStacks = auras[prefix .. "ShowStacks"],
-        showTooltip = auras[prefix .. "ShowTooltip"],
-        showDurationBar = auras[prefix .. "ShowDurationBar"],
-        durationBarHeight = auras[prefix .. "DurationBarHeight"],
-        durationBarDisplay = auras[prefix .. "DurationBarDisplay"],
-        durationBarPosition = auras[prefix .. "DurationBarPosition"],
-        durationBarDirection = auras[prefix .. "DurationBarDirection"],
-        cooldownSize = auras[prefix .. "CooldownSize"],
-        cooldownAnchor = auras[prefix .. "CooldownAnchor"],
-        cooldownX = auras[prefix .. "CooldownX"],
-        cooldownY = auras[prefix .. "CooldownY"],
-        cooldownDecimalSeconds = auras[prefix .. "CooldownDecimalSeconds"],
-        stackSize = auras[prefix .. "StackSize"],
-        stackAnchor = auras[prefix .. "StackAnchor"],
-        stackX = auras[prefix .. "StackX"],
-        stackY = auras[prefix .. "StackY"],
-        dispelBorderMode = key == "debuff" and auras.debuffDispelBorderMode or nil,
-        showDispelBorder = key == "debuff" and auras.debuffShowDispelBorder or nil,
-        showDispelSymbol = key == "debuff" and auras.debuffShowDispelSymbol or nil,
-        alpha = tonumber(auras[prefix .. "Alpha"]) or 1,
-        behindBar = (tonumber(auras[prefix .. "Alpha"]) or 1) < 1,
-    }
+    -- A caller that keeps one table per lane passes it as out: the lane is
+    -- rebuilt in place, so a preview repaint allocates no lane table.
+    if out then wipe(out) else out = {} end
+    out._compiled = true
+    out.enabled = auras[showKey] == true
+    out.max = auras[maxKey]
+    out.perRow = auras[prefix .. "PerRow"]
+    out.size = auras[prefix .. "IconSize"]
+    out.iconZoom = auras.iconZoom
+    out.spacing = auras[prefix .. "Spacing"]
+    out.anchor = auras[prefix .. "Anchor"]
+    out.growth = GrowthFromCompiled(auras[prefix .. "GrowthX"], auras[prefix .. "GrowthY"], fallback and fallback.growth)
+    out.x = auras[prefix .. "OffsetX"]
+    out.y = auras[prefix .. "OffsetY"]
+    out.layer = auras[prefix .. "Layer"]
+    out.strata = auras[prefix .. "Strata"]
+    out.showCooldownSwipe = auras[prefix .. "ShowCooldownSwipe"]
+    out.cooldownSwipeReverse = auras[prefix .. "CooldownSwipeReverse"]
+    out.showCooldown = auras[prefix .. "ShowCooldown"]
+    out.showCooldownText = auras[prefix .. "ShowCooldown"]
+    out.showStacks = auras[prefix .. "ShowStacks"]
+    out.showTooltip = auras[prefix .. "ShowTooltip"]
+    out.showDurationBar = auras[prefix .. "ShowDurationBar"]
+    out.durationBarHeight = auras[prefix .. "DurationBarHeight"]
+    out.durationBarDisplay = auras[prefix .. "DurationBarDisplay"]
+    out.durationBarPosition = auras[prefix .. "DurationBarPosition"]
+    out.durationBarDirection = auras[prefix .. "DurationBarDirection"]
+    out.cooldownSize = auras[prefix .. "CooldownSize"]
+    out.cooldownAnchor = auras[prefix .. "CooldownAnchor"]
+    out.cooldownX = auras[prefix .. "CooldownX"]
+    out.cooldownY = auras[prefix .. "CooldownY"]
+    out.cooldownDecimalSeconds = auras[prefix .. "CooldownDecimalSeconds"]
+    out.stackSize = auras[prefix .. "StackSize"]
+    out.stackAnchor = auras[prefix .. "StackAnchor"]
+    out.stackX = auras[prefix .. "StackX"]
+    out.stackY = auras[prefix .. "StackY"]
+    out.dispelBorderMode = key == "debuff" and auras.debuffDispelBorderMode or nil
+    out.showDispelBorder = key == "debuff" and auras.debuffShowDispelBorder or nil
+    out.showDispelSymbol = key == "debuff" and auras.debuffShowDispelSymbol or nil
+    out.alpha = tonumber(auras[prefix .. "Alpha"]) or 1
+    out.behindBar = (tonumber(auras[prefix .. "Alpha"]) or 1) < 1
     return out
 end
 local function RuntimeStatusConfig(status, spec)

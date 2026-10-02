@@ -916,6 +916,23 @@ function Stage.BindDrag(st)
     st.StartHandleDrag, st.StopHandleDrag = StartHandleDrag, StopHandleDrag
 end
 
+-- Runtime AuraButtons keep the duration bar, cooldown swipe and text on
+-- separate child frames inside the selected universal Layer slot.  The
+-- preview used to create every region directly on the handle, which
+-- made all of them inherit the icon's base level and let overlapping
+-- text lie about the real runtime ordering.
+local function EnsureIconDetailLayer(handle, key)
+    local layer = handle[key]
+    if not layer then
+        layer = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
+        layer:SetAllPoints(handle)
+        layer:EnableMouse(false)
+        if layer.SetMouseMotionEnabled then layer:SetMouseMotionEnabled(false) end
+        handle[key] = layer
+    end
+    return layer
+end
+
 --- Handle factory: the preview handle button (scripts, tooltip, quick actions,
 --- control registration) and its pooled aura icon regions.
 function Stage.BindHandleFactory(st)
@@ -1061,25 +1078,9 @@ function Stage.BindHandleFactory(st)
         handle._iconStacks = handle._iconStacks or {}
         handle._iconTimers = handle._iconTimers or {}
         handle._iconDurationBars = handle._iconDurationBars or {}
-        -- Runtime AuraButtons keep the duration bar, cooldown swipe and text on
-        -- separate child frames inside the selected universal Layer slot.  The
-        -- preview used to create every region directly on the handle, which
-        -- made all of them inherit the icon's base level and let overlapping
-        -- text lie about the real runtime ordering.
-        local function EnsureDetailLayer(key)
-            local layer = handle[key]
-            if not layer then
-                layer = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
-                layer:SetAllPoints(handle)
-                layer:EnableMouse(false)
-                if layer.SetMouseMotionEnabled then layer:SetMouseMotionEnabled(false) end
-                handle[key] = layer
-            end
-            return layer
-        end
-        local durationLayer = EnsureDetailLayer("_iconDurationLayer")
-        local swipeLayer = EnsureDetailLayer("_iconSwipeLayer")
-        local textLayer = EnsureDetailLayer("_iconTextLayer")
+        local durationLayer = EnsureIconDetailLayer(handle, "_iconDurationLayer")
+        local swipeLayer = EnsureIconDetailLayer(handle, "_iconSwipeLayer")
+        local textLayer = EnsureIconDetailLayer(handle, "_iconTextLayer")
         for i = 1, count do
             local tex = handle._icons[i] or PixelLayoutRegion(handle:CreateTexture(nil, "ARTWORK"))
             tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
