@@ -1,4 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 --- ClassPower/MSUF_CP_Modes.lua - class power render modes
 
 --- MSUF_CP_Mode_Segmented.lua
@@ -1777,7 +1780,8 @@ modeBuilders.CONTINUOUS = function(E)
             local visualVersion = visual and visual.version or 0
             if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
                 CP_StampStatusBarColor(bar, visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1, 1)
-                CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
+                CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0,
+                    visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
                 for i = 2, CP.maxBars do
                     local other = CP.bars[i]
                     if other then CP_StampShown(other, false) end

@@ -1,4 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 --- ClassPower/MSUF_CP_PlayerHP.lua
 --- Optional second Player HP bar owned by Class Resources.
 --- Loaded before the controller; exposes a small builder so the controller does
@@ -826,7 +829,8 @@ builders.PLAYER_HP = function(E)
         PHP._layoutWidth = width
         PHP._layoutHeight = h
         PHP._compactText = compactText
-        local layoutStamp = tostring(anchor) .. ":" .. anchorMode .. ":" .. shape .. ":" .. width .. ":" .. h .. ":" .. gap .. ":" .. x .. ":" .. y .. ":" .. levelOffset .. ":" .. baseLevel
+        local layoutStamp = tostring(anchor) .. ":" .. anchorMode .. ":" .. shape .. ":" .. width .. ":" .. h
+            .. ":" .. gap .. ":" .. x .. ":" .. y .. ":" .. levelOffset .. ":" .. baseLevel
         if PHP._layoutStamp ~= layoutStamp then
             PHP._layoutStamp = layoutStamp
             PHP.frame:ClearAllPoints()

@@ -1,4 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 --- MSUF_CP_AltMana.lua
 --- Alt Mana class-power builder. Loaded before the controller so the controller
 --- can bind the builder without carrying AltMana implementation details inline.

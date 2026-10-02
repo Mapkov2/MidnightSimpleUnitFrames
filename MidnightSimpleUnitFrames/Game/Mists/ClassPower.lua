@@ -162,7 +162,10 @@ elseif playerClass == "DEATHKNIGHT" then
     end
 elseif playerClass == "PALADIN" then
     Provider.BlizzardFrames = {
-        { name = "PaladinPowerBar", restore = function(frame) frame:Show(); RestoreShown(frame, "Update") end },
+        { name = "PaladinPowerBar", restore = function(frame)
+            frame:Show()
+            RestoreShown(frame, "Update")
+        end },
     }
 elseif playerClass == "WARLOCK" then
     Provider.BlizzardFrames = {
@@ -175,7 +178,10 @@ elseif playerClass == "WARLOCK" then
     Provider.StructuralEvents = { "SPELLS_CHANGED" }
 elseif playerClass == "MONK" then
     Provider.BlizzardFrames = {
-        { name = "MonkHarmonyBar", restore = function(frame) frame:Show(); RestoreShown(frame, "Update") end },
+        { name = "MonkHarmonyBar", restore = function(frame)
+            frame:Show()
+            RestoreShown(frame, "Update")
+        end },
     }
 elseif playerClass == "PRIEST" then
     Provider.BlizzardFrames = {

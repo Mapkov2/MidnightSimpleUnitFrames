@@ -1,4 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 --- ClassPower/MSUF_CP_EbonMight.lua
 --- Native 12.1 Ebon Might duration bar and text.
 ---

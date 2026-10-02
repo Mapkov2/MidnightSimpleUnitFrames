@@ -5,7 +5,10 @@
 -- Soul slot above, so the bar takes the Arcane Soul colour in that phase) run
 -- where the client has the aura container and the spell.
 local _, MSUF = ...
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 MSUF.CPBuilders = MSUF.CPBuilders or {}
 
 local IGNORE_PAIN, ARCANE_SURGE, ARCANE_SOUL = 190456, 365362, 451038

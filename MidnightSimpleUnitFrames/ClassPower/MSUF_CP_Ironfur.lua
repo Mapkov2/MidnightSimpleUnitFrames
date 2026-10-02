@@ -1,4 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 --- Guardian Druid Ironfur duration tracker.
 --- Each successful Ironfur cast owns one estimated lifetime marker. The
 --- moving display is active-only and never reads restricted aura durations.

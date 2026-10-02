@@ -4,7 +4,10 @@
 -- curve: a restricted percentage is evaluated inside UnitPowerPercent and the
 -- resulting colour goes straight to the bar; only plain values reach Lua.
 local _, MSUF = ...
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 MSUF.CPBuilders = MSUF.CPBuilders or {}
 
 -- Class resource pips draw one level above their container and its outline

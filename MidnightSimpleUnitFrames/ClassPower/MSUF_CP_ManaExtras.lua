@@ -1,7 +1,10 @@
 -- Public mana observations and native-fill cast-cost previews. Duration objects
 -- animate the short displays; no ticker or aura scan is involved.
 local _, MSUF = ...
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
+local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...)
+    if type(policy) == "string" then return region[policy](region, ...) end
+    return region
+end
 MSUF.CPBuilders = MSUF.CPBuilders or {}
 -- The regeneration pause after spending Mana and the two-second regeneration
 -- pulses are game rules of Classic Era, TBC and WoW Forever (no other client
