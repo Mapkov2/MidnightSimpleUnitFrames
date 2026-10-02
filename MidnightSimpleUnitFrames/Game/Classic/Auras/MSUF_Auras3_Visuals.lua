@@ -853,8 +853,8 @@ local function UpdateStealableMarker(button, cfg, data)
         return
     end
 
-    local style = type(A3.NormalizeClassicStealableStyle) == "function"
-        and A3.NormalizeClassicStealableStyle(cfg.stealableStyle) or "BORDER_ICON"
+    -- Compile.lua defines the normalizer; buttons render only after it loaded.
+    local style = A3.NormalizeClassicStealableStyle(cfg.stealableStyle)
     if style == "BORDER" or style == "BORDER_ICON" then
         border = border or EnsureStealableTexture(button, "_msufA3ClassicStealableBorder", 5)
         border:ClearAllPoints()
@@ -1084,7 +1084,8 @@ function V.OnDispelPreviewDragStop(host)
     if type(handler) == "function" then
         handler(_G.MSUF_DispelSymbolPreviewScope, x, y, frame)
     end
-    if type(A3.RefreshDispelSymbolPreview) == "function" then A3.RefreshDispelSymbolPreview() end
+    -- Only the preview host is draggable, and Preview.lua renders it.
+    A3.RefreshDispelSymbolPreview()
 end
 
 function V.UpdateDispelSymbols(frame, visual, present, preview)

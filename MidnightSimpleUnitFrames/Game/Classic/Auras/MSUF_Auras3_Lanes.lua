@@ -64,7 +64,7 @@ local function ApplyLaneLayout(lane)
     -- (ResolveFrameStrata, Auras3/Runtime/MSUF_Auras3_Runtime_Platform.lua): a
     -- stored per-lane strata is a legacy value no menu edits, and it must not
     -- lift one container out of the frame's 0..30 layer order.
-    if A3.SyncFrameStrata then A3.SyncFrameStrata(lane.frame, A3.ReadParentFrameStrata(lane.root)) end
+    A3.SyncFrameStrata(lane.frame, A3.ReadParentFrameStrata(lane.root))
     if lane.root.GetFrameLevel and lane.frame.SetFrameLevel then
         lane.frame:SetFrameLevel((lane.root:GetFrameLevel() or 0) + cfg.layer)
     end

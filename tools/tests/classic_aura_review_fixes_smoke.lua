@@ -237,7 +237,7 @@ _G.MSUF_DB = Profile()
 -- Load the real chain in the shipped TOC order -------------------------------------------
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 local chain = {
-    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
+    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
     "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
     "Game/Classic/Auras/MSUF_Auras3_Buttons.lua", "Game/Classic/Auras/MSUF_Auras3_Filters.lua",
@@ -298,9 +298,19 @@ namespace.GF = {
         return any
     end,
     CompileSpec = function(_, frame) return frame.MSUFSpec end,
+    FrameForUnit = function(unit)
+        for i = 1, #groupFrames do
+            if groupFrames[i].MSUFUnitKey == unit then return groupFrames[i] end
+        end
+    end,
+    -- No live group runtime or preview here: their refreshes have nothing to redraw.
+    RefreshVisuals = function() end,
+    RefreshPreviewLayout = function() end,
+    DIRTY_AURAS = 0x40,
 }
 local currentFont = "Fonts\\FontA.ttf"
-_G.MSUF_GetGlobalFontSettings = function() return currentFont, "OUTLINE", 1, 1, 1, nil, false end
+-- Castbars_Core.lua publishes this as MSUF.MSUF_GetGlobalFontSettings in game.
+namespace.MSUF_GetGlobalFontSettings = function() return currentFont, "OUTLINE", 1, 1, 1, nil, false end
 local function Config(frame) return frame._msufA3State and frame._msufA3State.config end
 local function Lane(frame, kind) return frame._msufA3State and frame._msufA3State.lanes[kind] end
 local function ReplayUnitAura(frame) return Update(frame, { updatedAuraInstanceIDs = { UnitList(frame.MSUFUnitKey)[1].auraInstanceID } }) end

@@ -131,7 +131,7 @@ _G.MSUF_DB = {
 
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
 local chain = {
-    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua",
+    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
     "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
     "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
     "Game/Classic/Auras/MSUF_Auras3_Buttons.lua", "Game/Classic/Auras/MSUF_Auras3_Filters.lua",

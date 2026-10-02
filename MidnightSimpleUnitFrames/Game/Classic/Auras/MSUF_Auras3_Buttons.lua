@@ -32,6 +32,9 @@ A3.__unitFrameBackendLoaded = true
 
 local Compile = A3._ClassicCompile
 assert(type(Compile) == "table", "Classic aura backend requires Game/Classic/Auras/MSUF_Auras3_Compile.lua")
+local Visuals = A3.ClassicVisuals
+assert(type(Visuals) == "table", "Classic aura backend requires Game/Classic/Auras/MSUF_Auras3_Visuals.lua")
+local HideButtonVisual, UpdateButtonVisual = Visuals.HideButtonVisual, Visuals.UpdateButtonVisual
 local Buttons = {}
 A3._ClassicBackend = { Buttons = Buttons }
 
@@ -104,11 +107,9 @@ end
 
 local function ApplyFont(fs, size)
     if not fs then return end
-    local fontPath, fontFlags, r, g, b, _, useShadow
-    local gfs = _G.MSUF_GetGlobalFontSettings
-    if type(gfs) == "function" then
-        fontPath, fontFlags, r, g, b, _, useShadow = gfs()
-    end
+    -- Castbars_Core.lua owns the global font settings; it loads after this
+    -- file, before any aura button exists.
+    local fontPath, fontFlags, r, g, b, _, useShadow = MSUF.MSUF_GetGlobalFontSettings()
     fontPath = fontPath or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     fontFlags = fontFlags or "OUTLINE"
     if fs.SetFont then fs:SetFont(fontPath, size or 14, fontFlags) end
@@ -264,10 +265,7 @@ local function ApplyButtonLayout(lane, button, index)
         button._msufA3OwnHighlight:Hide()
     end
     PositionButton(lane, button, index)
-    local visuals = A3.ClassicVisuals
-    if visuals and type(visuals.ApplyButtonLayout) == "function" then
-        visuals.ApplyButtonLayout(lane, button)
-    end
+    Visuals.ApplyButtonLayout(lane, button)
 end
 
 local function CreateAuraButton(lane, index)
@@ -370,8 +368,7 @@ local function ShowButton(button)
 end
 
 local function HideButton(button)
-    local visuals = A3.ClassicVisuals
-    if visuals and type(visuals.HideButtonVisual) == "function" then visuals.HideButtonVisual(button) end
+    HideButtonVisual(button)
     -- ClearLane intentionally invalidates auraInstanceID before reaching this
     -- helper. Always hide here so a stale/missing visibility marker cannot
     -- leave a pooled Classic aura button visible after its container is off.
@@ -440,13 +437,12 @@ end
 local function UpdateDispelTypeSymbol(button, cfg, data)
     local tex = button and button._msufA3DispelTypeSymbol
     local dispelName = cfg and cfg.showDispelTypeSymbol == true and PlainString(data and data.dispelName) or nil
-    local visuals = A3.ClassicVisuals
-    if not (dispelName and visuals and type(visuals.SetDispelSymbolArt) == "function") then
+    if not dispelName then
         if tex then tex:Hide() end
         return false
     end
     tex = tex or EnsureDispelTypeSymbol(button)
-    if not (tex and visuals.SetDispelSymbolArt(tex, "BLIZZARD", dispelName)) then
+    if not (tex and Visuals.SetDispelSymbolArt(tex, "BLIZZARD", dispelName)) then
         if tex then tex:Hide() end
         return false
     end
@@ -479,8 +475,7 @@ local function UpdateDispelTypeOverlay(button, lane, unit, data)
         -- every later repaint of the same dispel type.
         local shape, size = cfg.iconShape or "RECTANGLE", cfg.size
         if tex._msufA3BorderShape ~= shape or tex._msufA3BorderSize ~= size then
-            local shaped = type(A3.ApplyAuraDispelShape) == "function"
-                and A3.ApplyAuraDispelShape(tex, button.Icon or button, size, shape) == true
+            local shaped = A3.ApplyAuraDispelShape(tex, button.Icon or button, size, shape) == true
             if not shaped then
                 tex:SetTexture(DEBUFF_OVERLAY_TEXTURE)
                 if tex.SetTexCoord then tex:SetTexCoord(0.296875, 0.5703125, 0, 0.515625) end
@@ -642,15 +637,13 @@ local function ApplyCooldownTextColor(cooldown, cfg, data)
     end
 end
 
-if A3.ClassicVisuals then
-    A3.ClassicVisuals.RepaintCooldownBucket = function(cooldown, now)
-        local cfg, expiration = cooldown._msufA3BucketConfig, cooldown._msufA3BucketExpiration
-        if not (cfg and expiration) then return TrackCooldownBucket(cooldown, nil, nil) end
-        local remaining = expiration - now
-        if remaining < 0 then remaining = 0 end
-        PaintCooldownTextColor(cooldown, CooldownTextRGB(cfg, remaining))
-        if remaining <= (cfg.cooldownUrgentSeconds or 5) then TrackCooldownBucket(cooldown, nil, nil) end
-    end
+Visuals.RepaintCooldownBucket = function(cooldown, now)
+    local cfg, expiration = cooldown._msufA3BucketConfig, cooldown._msufA3BucketExpiration
+    if not (cfg and expiration) then return TrackCooldownBucket(cooldown, nil, nil) end
+    local remaining = expiration - now
+    if remaining < 0 then remaining = 0 end
+    PaintCooldownTextColor(cooldown, CooldownTextRGB(cfg, remaining))
+    if remaining <= (cfg.cooldownUrgentSeconds or 5) then TrackCooldownBucket(cooldown, nil, nil) end
 end
 
 local function SetIcon(button, icon)
@@ -831,13 +824,10 @@ local function BuildButtonUpdater(cfg)
         core = cfg.showStacks ~= false and UpdateButtonStacksOnly or UpdateButtonBasic
     end
 
-    local visuals = A3.ClassicVisuals
-    if visuals and type(visuals.UpdateButtonVisual) == "function" then
-        local rawCore = core
-        core = function(lane, button, unit, data)
-            rawCore(lane, button, unit, data)
-            visuals.UpdateButtonVisual(lane, button, unit, data)
-        end
+    local rawCore = core
+    core = function(lane, button, unit, data)
+        rawCore(lane, button, unit, data)
+        UpdateButtonVisual(lane, button, unit, data)
     end
 
     local own = cfg.ownHighlight == true

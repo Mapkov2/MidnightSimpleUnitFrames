@@ -19,6 +19,11 @@ end
 
 if not (MSUF.UF and MSUF.UF.RegisterElement) then return end
 if A3.__unitFrameBackendLoaded or A3._ClassicCompile then return end
+--- Visuals.lua and Features.lua load right before this file in every
+--- Game/<Flavor>/Auras.xml; the lane compilers call both directly.
+local Visuals, Features = A3.ClassicVisuals, A3.ClassicFeatures
+assert(type(Visuals) == "table" and type(Features) == "table",
+    "Classic aura compiler requires Game/Classic/Auras/MSUF_Auras3_Visuals.lua and MSUF_Auras3_Features.lua")
 
 local type, tostring, tonumber, pairs, select = type, tostring, tonumber, pairs, select
 local math_floor, math_ceil, math_min, math_max = math.floor, math.ceil, math.min, math.max
@@ -681,9 +686,7 @@ local function ReadBlacklistHidePermanent(scope, kind)
         or NormalizeRuntimeUnit(scope)
     if not runtimeUnit then return false end
 
-    local auras
-    if type(A3.EnsureDB) == "function" then auras = A3.EnsureDB() end
-    if type(auras) ~= "table" then auras = EnsureRootDB() end
+    local auras = A3.EnsureDB()
     local _, _, blacklist, filters = EffectiveTables(auras, runtimeUnit)
     return ResolveHidePermanent(blacklist, filters, kind)
 end
@@ -1122,8 +1125,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local ownHighlight = kind == "buff"
         and ReadBool(nil, shared, "highlightOwnBuffs", false)
         or (kind == "debuff" and ReadBool(nil, shared, "highlightOwnDebuffs", false))
-    local filterPlan = A3.ClassicFeatures and A3.ClassicFeatures.CompileSettingsFilter
-        and A3.ClassicFeatures.CompileSettingsFilter(filters, kind == "buff") or nil
+    local filterPlan = Features.CompileSettingsFilter(filters, kind == "buff") or nil
     local visualNeedsPlayer = kind == "debuff" and visual and visual.needsPlayerFlag == true
     local hasInclusive = (filterPlan and filterPlan.hasRequirements == true) or onlyMine == true
     local black = CompileBlacklist(laneBlacklist)
@@ -1261,18 +1263,12 @@ local function GroupIncludeSpells(hash)
             local id = tonumber(key)
             if id and id > 0 then
                 includeSpellIDs = includeSpellIDs or {}
-                if type(A3.AddAuraSpellIDAndAliases) == "function" then
-                    A3.AddAuraSpellIDAndAliases(includeSpellIDs, id)
-                else
-                    includeSpellIDs[math_floor(id + 0.5)] = true
-                end
+                A3.AddAuraSpellIDAndAliases(includeSpellIDs, id)
             end
         end
     end
     local includeSpellNames
-    if includeSpellIDs and A3.ClassicFeatures and type(A3.ClassicFeatures.NameHash) == "function" then
-        includeSpellNames = A3.ClassicFeatures.NameHash(includeSpellIDs)
-    end
+    if includeSpellIDs then includeSpellNames = Features.NameHash(includeSpellIDs) end
     return includeSpellIDs, includeSpellNames
 end
 
@@ -1297,8 +1293,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local layer = ClampNumber(source[spec.layerKey], spec.defaultLayer, 1, 15)
     local alpha = ClampNumber(source[spec.alphaKey], 1, 0, 1)
     local rawFilter = GroupLaneRawFilter(kind, spec, source[spec.filterKey] or spec.filter)
-    local filterPlan = A3.ClassicFeatures and A3.ClassicFeatures.CompileRawFilter
-        and A3.ClassicFeatures.CompileRawFilter(rawFilter, spec.harmful ~= true) or nil
+    local filterPlan = Features.CompileRawFilter(rawFilter, spec.harmful ~= true) or nil
     local filter = filterPlan and filterPlan.scanFilter or spec.filter
     local nativePlayerFilter = filterPlan and filterPlan.nativePlayerFilter == true or false
     local black = CompileBlacklistHash(source[spec.blacklistKey])
@@ -1449,14 +1444,11 @@ local function ResolveGroupFrameConfig(frame, unit)
             and CompileGroupLane(unit, source, "debuff", needDebuffScan, visual, sourceEnabled == true) or nil
         local external = sourceEnabled and source.showExternals == true
             and CompileGroupLane(unit, source, "external", false, nil, true) or nil
-        local visuals = A3.ClassicVisuals
-        if visuals and type(visuals.EnrichGroupLane) == "function" then
-            local scope = frame._msufGFKind or frame._msufCoreKind or "party"
-            if buff then visuals.EnrichGroupLane(buff, source, "buff", spec, scope) end
-            if trackedBuff then visuals.EnrichGroupLane(trackedBuff, source, "trackedBuff", spec, scope) end
-            if debuff then visuals.EnrichGroupLane(debuff, source, "debuff", spec, scope) end
-            if external then visuals.EnrichGroupLane(external, source, "external", spec, scope) end
-        end
+        local scope = frame._msufGFKind or frame._msufCoreKind or "party"
+        if buff then Visuals.EnrichGroupLane(buff, source, "buff", spec, scope) end
+        if trackedBuff then Visuals.EnrichGroupLane(trackedBuff, source, "trackedBuff", spec, scope) end
+        if debuff then Visuals.EnrichGroupLane(debuff, source, "debuff", spec, scope) end
+        if external then Visuals.EnrichGroupLane(external, source, "external", spec, scope) end
         cfg.showTooltip = source.showTooltip ~= false
         cfg.lanes.buff = buff
         cfg.lanes.trackedBuff = trackedBuff
@@ -1471,14 +1463,12 @@ local function ResolveGroupFrameConfig(frame, unit)
             or (debuff and debuff.enabled == true) or (external and external.enabled == true)
             or cfg.visualDirect == true
     end
-    if A3.ClassicFeatures and type(A3.ClassicFeatures.CompileGroupIndicatorLanes) == "function" then
-        local extraLanes, extraOrder = A3.ClassicFeatures.CompileGroupIndicatorLanes(frame, unit)
-        for i = 1, type(extraOrder) == "table" and #extraOrder or 0 do
-            local kind = extraOrder[i]
-            cfg.lanes[kind] = extraLanes[kind]
-            cfg.laneOrder[#cfg.laneOrder + 1] = kind
-            cfg.enabled = cfg.enabled == true or (extraLanes[kind] and extraLanes[kind].enabled == true)
-        end
+    local extraLanes, extraOrder = Features.CompileGroupIndicatorLanes(frame, unit)
+    for i = 1, type(extraOrder) == "table" and #extraOrder or 0 do
+        local kind = extraOrder[i]
+        cfg.lanes[kind] = extraLanes[kind]
+        cfg.laneOrder[#cfg.laneOrder + 1] = kind
+        cfg.enabled = cfg.enabled == true or (extraLanes[kind] and extraLanes[kind].enabled == true)
     end
 
     frame._msufA3GroupSource = source
@@ -1513,11 +1503,8 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         local buff = auraIconsEnabled and CompileLane(unit, shared, layout, sharedLayout, blacklist, filtersRoot, "buff", false, nil, true) or nil
         local debuff = (auraIconsEnabled or needDebuffScan)
             and CompileLane(unit, shared, layout, sharedLayout, blacklist, filtersRoot, "debuff", needDebuffScan, visual, auraIconsEnabled == true) or nil
-        local visuals = A3.ClassicVisuals
-        if visuals and type(visuals.EnrichUnitLane) == "function" then
-            if buff then visuals.EnrichUnitLane(buff, layout, sharedLayout, shared, "buff", frameSpec) end
-            if debuff then visuals.EnrichUnitLane(debuff, layout, sharedLayout, shared, "debuff", frameSpec) end
-        end
+        if buff then Visuals.EnrichUnitLane(buff, layout, sharedLayout, shared, "buff", frameSpec) end
+        if debuff then Visuals.EnrichUnitLane(debuff, layout, sharedLayout, shared, "debuff", frameSpec) end
         cfg.showTooltip = ReadBool(nil, shared, "showTooltip", true)
         cfg.lanes.buff = buff
         cfg.lanes.debuff = debuff
@@ -1527,20 +1514,15 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         cfg.enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true) or cfg.visualDirect == true
     end
 
-    if A3.ClassicFeatures and type(A3.ClassicFeatures.CompileUnitLanes) == "function" then
-        local lanePadding = ReadRaw(layout, nil, "buffStylePadding")
-        local extraLanes, extraOrder, extraSource = A3.ClassicFeatures.CompileUnitLanes(
-            auras, unit, frameSpec, lanePadding)
-        if type(extraLanes) == "table" then
-            if type(A3.ClassicFeatures.ApplyAutoExclusions) == "function" then
-                A3.ClassicFeatures.ApplyAutoExclusions(cfg.lanes.buff, cfg.lanes.debuff, extraLanes, extraSource, unit)
-            end
-            for i = 1, type(extraOrder) == "table" and #extraOrder or 0 do
-                local kind = extraOrder[i]
-                cfg.lanes[kind] = extraLanes[kind]
-                cfg.laneOrder[#cfg.laneOrder + 1] = kind
-                cfg.enabled = cfg.enabled == true or (extraLanes[kind] and extraLanes[kind].enabled == true)
-            end
+    local lanePadding = ReadRaw(layout, nil, "buffStylePadding")
+    local extraLanes, extraOrder, extraSource = Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
+    if type(extraLanes) == "table" then
+        Features.ApplyAutoExclusions(cfg.lanes.buff, cfg.lanes.debuff, extraLanes, extraSource, unit)
+        for i = 1, type(extraOrder) == "table" and #extraOrder or 0 do
+            local kind = extraOrder[i]
+            cfg.lanes[kind] = extraLanes[kind]
+            cfg.laneOrder[#cfg.laneOrder + 1] = kind
+            cfg.enabled = cfg.enabled == true or (extraLanes[kind] and extraLanes[kind].enabled == true)
         end
     end
 

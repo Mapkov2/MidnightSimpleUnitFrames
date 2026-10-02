@@ -2,9 +2,11 @@ local root = assert(arg[1], "repository root argument missing")
 local backendPath = arg[2]
     or (root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
 local featuresPath = arg[3]
+    or (root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua")
 local corePath = arg[4]
     or (root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua")
 local visualsPath = arg[5]
+    or (root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua")
 
 local registered
 local namespace = {
@@ -15,6 +17,13 @@ local namespace = {
             assert(name == "Auras", "unexpected element registration")
             registered = element
         end,
+        -- No live unit or group frames: the smoke renders its one frame directly.
+        ForEachFrame = function() end,
+    },
+    GF = {
+        ForEachFrame = function() return false end, FrameForUnit = function() end,
+        RefreshVisuals = function() end, RefreshPreviewLayout = function() end,
+        DIRTY_AURAS = 0x40, _previewFrames = {},
     },
     ExportPublic = function(name, value)
         _G[name] = value
@@ -303,15 +312,13 @@ _G.AuraUtil = {}
 
 assert(loadfile(corePath))("MidnightSimpleUnitFrames", namespace)
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
+-- The shipped order: data, visuals and features load before the compiler.
 manifest.LoadSelected(root, "Vanilla", namespace, {
-    "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
+    "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
 })
-if visualsPath then
-    assert(loadfile(visualsPath))("MidnightSimpleUnitFrames", namespace)
-end
-if featuresPath then
-    assert(loadfile(featuresPath))("MidnightSimpleUnitFrames", namespace)
-end
+assert(loadfile(visualsPath))("MidnightSimpleUnitFrames", namespace)
+assert(loadfile(featuresPath))("MidnightSimpleUnitFrames", namespace)
+manifest.LoadSelected(root, "Vanilla", namespace, { "Game/Classic/Auras/MSUF_Auras3_Compile.lua" })
 -- The backend set in its Auras.xml order; backendPath stands in for UnitFrames.
 local classicBackend = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_"
 for _, module in ipairs({ "Buttons", "Filters", "FrameVisuals", "Lanes" }) do

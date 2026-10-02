@@ -545,8 +545,7 @@ function AurasElement.GetEvents(frame)
     local cfg = unit and FrameAuraConfig(frame, unit)
     local visual = cfg and cfg.enabled == true and cfg.visual
     local faction = visual and visual.borderShowOn ~= nil or false
-    local client = MSUF.Client
-    if faction and client and type(client.SupportsEvent) == "function" and not client.SupportsEvent("UNIT_FACTION") then
+    if faction and not MSUF.Client.SupportsEvent("UNIT_FACTION") then
         faction = false
     end
     -- Every such frame but the player's own also hears the player's side, which

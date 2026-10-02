@@ -33,9 +33,10 @@ local FillAuraSlots = Compile.FillAuraSlots
 local PlainNumber = Compile.PlainNumber
 local PlainString = Compile.PlainString
 local RemainingTime = Buttons.RemainingTime
--- Features.lua loads before this file; ShouldShowAura falls back to the live
--- field only if a harness loads the backend without it.
+-- Features.lua loads before Compile.lua, which requires it.
 local Features = A3.ClassicFeatures
+local IsAutoExcluded, MatchAura = Features.IsAutoExcluded, Features.MatchAura
+local MatchFilterRequirements = Features.MatchFilterRequirements
 
 -- Intentional cross-client data kept in step with the Retail list: an ID that
 -- this Classic client never applies simply never matches, so no per-flavor split.
@@ -282,16 +283,11 @@ end
 
 local function ShouldShowAura(lane, unit, data)
     local cfg = lane.config
-    local features = Features or A3.ClassicFeatures
-    if features and type(features.IsAutoExcluded) == "function"
-        and features.IsAutoExcluded(cfg, data) then
-        return false
-    end
+    if IsAutoExcluded(cfg, data) then return false end
     if Blacklisted(cfg, data) then return false end
     local mine = lane.mine[data.auraInstanceID] == true
-    if cfg.classicFeatureMatch == true and features
-        and type(features.MatchAura) == "function" then
-        return features.MatchAura(cfg, unit, data, MatchFilter, TimedAura, mine)
+    if cfg.classicFeatureMatch == true then
+        return MatchAura(cfg, unit, data, MatchFilter, TimedAura, mine)
     end
     if type(cfg.includeSpellIDs) == "table" then
         local spellID = data and data.spellId
@@ -318,10 +314,8 @@ local function ShouldShowAura(lane, unit, data)
         local remaining = threshold > 0 and RemainingTime(data) or nil
         if remaining and remaining > threshold then return false end
     end
-    if cfg.filterRequirements and features
-        and type(features.MatchFilterRequirements) == "function" then
-        return features.MatchFilterRequirements(
-            cfg.filterPlan or cfg.filterRequirements, unit, data, MatchFilter, mine)
+    if cfg.filterRequirements then
+        return MatchFilterRequirements(cfg.filterPlan or cfg.filterRequirements, unit, data, MatchFilter, mine)
     end
     if not cfg.hasFilterWork then return true end
     local auraInstanceID = data.auraInstanceID

@@ -75,17 +75,15 @@ function A3._NotifyAuraColdpathPreview(reason, scope)
         return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_CLASSIC_PREVIEW")
     end
     local didWork = false
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-        _G.MSUF_UFPreview_RequestRefresh(reason or "AURAS3_CLASSIC_PREVIEW")
+    -- The unit preview belongs to the Options addon, which loads on demand.
+    local refreshUnitPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+    if refreshUnitPreview then
+        refreshUnitPreview(reason or "AURAS3_CLASSIC_PREVIEW")
         didWork = true
     end
-    local gf = A3._GroupAPI()
     local kind, touchesGroup = A3._AuraPreviewGroupKind(scope)
-    if touchesGroup and gf and type(gf.RefreshPreviewLayout) == "function" then
-        gf.RefreshPreviewLayout(kind)
-        didWork = true
-    elseif touchesGroup and type(_G.MSUF_GF_RefreshPreviewLayout) == "function" then
-        _G.MSUF_GF_RefreshPreviewLayout()
+    if touchesGroup then
+        MSUF.GF.RefreshPreviewLayout(kind)
         didWork = true
     end
     return didWork
@@ -108,11 +106,6 @@ local function ApplyRuntimeUnit(runtimeUnit)
     return true
 end
 
-function A3._GroupAPI()
-    local ns = MSUF or _G.MSUF_NS or _G.MSUF
-    return ns and ns.GF or nil
-end
-
 function A3._ApplyGroupAuraFrame(frame, unit, kind)
     if not (frame and type(unit) == "string" and unit ~= "") then return false end
     if CombatBlocked() then
@@ -121,10 +114,7 @@ function A3._ApplyGroupAuraFrame(frame, unit, kind)
     frame._msufIsGroupFrame = true
     if kind then frame._msufGFKind = kind end
     local spec = frame.MSUFSpec
-    local gf = A3._GroupAPI()
-    if gf and type(gf.CompileSpec) == "function" and kind then
-        spec = gf.CompileSpec(kind, frame, unit)
-    end
+    if kind then spec = MSUF.GF.CompileSpec(kind, frame, unit) end
     if UF.ApplyElementToFrame then
         UF.ApplyElementToFrame(frame, "Auras", spec, nil)
     else
@@ -133,24 +123,20 @@ function A3._ApplyGroupAuraFrame(frame, unit, kind)
     return true
 end
 
+--- The group frame modules (MSUF.GF) load after this file; every request
+--- arrives after they did.
 function A3._RequestGroupKindNow(kind)
-    local gf = A3._GroupAPI()
-    if not gf then return false end
     if CombatBlocked() then
         return A3._QueueDeferredAuraRuntime(kind or "group", "AURAS3_CLASSIC_GROUP_KIND")
     end
-
-    local didWork = false
-    if type(gf.ForEachFrame) == "function" then
-        didWork = gf.ForEachFrame(function(frame, frameUnit, frameKind)
-            if kind == nil or frameKind == kind then
-                return A3._ApplyGroupAuraFrame(frame, frameUnit, frameKind)
-            end
-            return false
-        end, true) == true
-    end
-
-    if not didWork and type(gf.RefreshVisuals) == "function" then
+    local gf = MSUF.GF
+    local didWork = gf.ForEachFrame(function(frame, frameUnit, frameKind)
+        if kind == nil or frameKind == kind then
+            return A3._ApplyGroupAuraFrame(frame, frameUnit, frameKind)
+        end
+        return false
+    end, true) == true
+    if not didWork then
         gf.RefreshVisuals(kind, gf.DIRTY_AURAS)
         return true
     end
@@ -158,12 +144,11 @@ function A3._RequestGroupKindNow(kind)
 end
 
 function A3._RequestGroupUnitNow(unit)
-    local gf = A3._GroupAPI()
-    if not (gf and type(unit) == "string" and unit ~= "") then return false end
+    if not (type(unit) == "string" and unit ~= "") then return false end
     if CombatBlocked() then
         return A3._QueueDeferredAuraRuntime(unit, "AURAS3_CLASSIC_GROUP_UNIT")
     end
-    local frame = type(gf.FrameForUnit) == "function" and gf.FrameForUnit(unit) or nil
+    local frame = MSUF.GF.FrameForUnit(unit)
     return frame and A3._ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) or false
 end
 
