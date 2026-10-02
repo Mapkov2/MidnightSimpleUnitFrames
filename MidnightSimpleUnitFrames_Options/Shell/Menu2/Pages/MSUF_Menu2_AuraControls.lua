@@ -326,6 +326,19 @@ end
 --- state text, a scroll list of rows (icon, name, Spell ID, Remove) built on
 --- demand, and its repaint through the search query. opts.remove(spellID)
 --- removes one entry; opts.removePath(value) names its Remove button.
+--- The trimmed lower-case search query and the spell list entries whose
+--- name or spell ID contains it (every entry for an empty query).
+local function FilterSpellEntries(entries, searchValue)
+    local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    local visible = {}
+    for i = 1, #entries do
+        local entry = entries[i]
+        local haystack = (tostring(entry.text or "") .. " "
+            .. tostring(entry.spellID or entry.value or "")):lower()
+        if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
+    end
+    return query, visible
+end
 local function BlockedSpellList(ctx, section, inner, offsetY, emptyText, opts)
     local Tr, MatchSuffix = M.AuraSettings.Tr, M.AuraSettings.MatchSuffix
     local empty = W.Text(section, emptyText, 24, -284 + offsetY, inner, T.colors.muted)
@@ -365,14 +378,7 @@ local function BlockedSpellList(ctx, section, inner, offsetY, emptyText, opts)
     --- Repaints the rows for the entries matching searchValue and the
     --- prepared header's count.
     function list.Paint(entries, searchValue, prepared)
-        local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-        local visible = {}
-        for i = 1, #entries do
-            local entry = entries[i]
-            local haystack = (tostring(entry.text or "") .. " "
-                .. tostring(entry.spellID or entry.value or "")):lower()
-            if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-        end
+        local query, visible = FilterSpellEntries(entries, searchValue)
         T.SetTranslatedText(prepared, M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
         T.SetTranslatedText(empty, #entries == 0 and Tr(emptyText) or M.Format("No results for \"%s\".", query))
         empty:SetShown(#visible == 0)
@@ -447,6 +453,7 @@ M.AuraControls = {
     BlockedSpellList = BlockedSpellList,
     BuildLaneTabs = BuildLaneTabs,
     Card = Card,
+    FilterSpellEntries = FilterSpellEntries,
     FirstUnblockedSpell = FirstUnblockedSpell,
     PaintPresetSummary = PaintPresetSummary,
     ConfigureAuraSpellPriorityDrag = ConfigureAuraSpellPriorityDrag,

@@ -26,6 +26,8 @@ local AURA_SORT_DIRECTION_VALUES, ActionButton = M.AuraSettings.AURA_SORT_DIRECT
 local AddAuraTooltipHelp, AddTooltip, AnchorLabel = M.AuraControls.AddAuraTooltipHelp, M.AuraControls.AddTooltip, M.AuraSettings.AnchorLabel
 local ApplyUnit, AuraCatalogToken, AuraControlMeta = M.AuraControls.ApplyUnit, M.AuraControls.AuraCatalogToken, M.AuraControls.AuraControlMeta
 local AuraControlMetaAtVisiblePath, AuraSortMethodValues = M.AuraControls.AuraControlMetaAtVisiblePath, M.AuraSettings.AuraSortMethodValues
+-- Custom container entries always carry their spell ID.
+local FilterSpellEntries = M.AuraControls.FilterSpellEntries
 local COOLDOWN_SWIPE_DIRECTION_VALUES, CUSTOM_FRAME_EFFECTS = M.AuraSettings.COOLDOWN_SWIPE_DIRECTION_VALUES, M.AuraSettings.CUSTOM_FRAME_EFFECTS
 local ChoiceLabel, ConfigureAuraSpellPriorityDrag = M.AuraSettings.ChoiceLabel, M.AuraControls.ConfigureAuraSpellPriorityDrag
 local ConfigureMaxDurationSlider, DEBUFF_TYPE_BORDER_MODE_VALUES = M.AuraControls.ConfigureMaxDurationSlider, M.AuraSettings.DEBUFF_TYPE_BORDER_MODE_VALUES
@@ -201,13 +203,7 @@ local function BuildCustomDefensivesTool(C)
             local entries = Model.CustomContainerSpellEntries(unit, index)
             local enabledPredefined = type(Model.PlayerDefensivePreviewEntries) == "function"
                 and #Model.PlayerDefensivePreviewEntries() or 0
-            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-            local visible = {}
-            for i = 1, #entries do
-                local entry = entries[i]
-                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
-                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-            end
+            local query, visible = FilterSpellEntries(entries, searchValue)
             T.SetTranslatedText(status, M.Format("%d predefined enabled · %d custom · click a custom entry to remove",
                 enabledPredefined, #entries) .. MatchSuffix(query, #visible))
             T.SetTranslatedText(empty, #entries == 0 and Tr("No custom buffs added.")
@@ -370,13 +366,7 @@ local function BuildCustomDotsTool(C)
         end
         refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
-            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-            local visible = {}
-            for i = 1, #entries do
-                local entry = entries[i]
-                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
-                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-            end
+            local query, visible = FilterSpellEntries(entries, searchValue)
             local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
             T.SetTranslatedText(status, M.Format("%d tracked DoTs", #entries)
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
@@ -654,14 +644,8 @@ local function BuildCustomWhitelistTool(C)
         end
         refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
-            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local query, visible = FilterSpellEntries(entries, searchValue)
             local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
-            local visible = {}
-            for i = 1, #entries do
-                local entry = entries[i]
-                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
-                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-            end
             T.SetTranslatedText(status, tostring("Tracked ") .. auraPlural .. " (" .. tostring(#entries) .. " of 40)"
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
                     or customPriority and Tr(" - dynamic priority active")
