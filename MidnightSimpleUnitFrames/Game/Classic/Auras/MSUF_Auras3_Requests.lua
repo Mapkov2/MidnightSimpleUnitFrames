@@ -13,7 +13,8 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
-if not Backend or Backend.Requests or not Backend.Element then return end
+assert(Backend and Backend.Element, "Classic aura requests require Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
+if Backend.Requests then return end
 local Compile = A3._ClassicCompile
 local Requests = {}
 
@@ -68,16 +69,13 @@ local function ApplyRuntimeUnit(runtimeUnit)
     if CombatBlocked() then
         return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_CLASSIC_RUNTIME_UNIT")
     end
-    local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
-        or (UF.frames and UF.frames[runtimeUnit])
-        or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[runtimeUnit])
-        or _G["MSUF_" .. runtimeUnit]
+    -- The frame that owns the unit's auras, else the unit frame itself. The
+    -- unit-frame factory registers every frame in UF.frames together with its
+    -- MSUF_<unit> global and _G.MSUF_UnitFrames, the same table
+    -- (RegisterGlobals in UnitFrames/Engine/MSUF_UF_Factory.lua).
+    local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit]) or UF.frames[runtimeUnit]
     if not frame then return false end
-    if UF.ApplyElementToFrame then
-        UF.ApplyElementToFrame(frame, "Auras", frame.MSUFSpec, nil)
-    else
-        A3.EnableFrame(frame)
-    end
+    UF.ApplyElementToFrame(frame, "Auras", frame.MSUFSpec, nil)
     return true
 end
 
@@ -90,11 +88,7 @@ function A3._ApplyGroupAuraFrame(frame, unit, kind)
     if kind then frame._msufGFKind = kind end
     local spec = frame.MSUFSpec
     if kind then spec = MSUF.GF.CompileSpec(kind, frame, unit) end
-    if UF.ApplyElementToFrame then
-        UF.ApplyElementToFrame(frame, "Auras", spec, nil)
-    else
-        A3.RenderFrame(frame)
-    end
+    UF.ApplyElementToFrame(frame, "Auras", spec, nil)
     return true
 end
 

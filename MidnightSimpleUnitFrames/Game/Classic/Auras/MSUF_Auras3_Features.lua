@@ -280,7 +280,7 @@ end
 
 local function PlayerDefensiveHash(entry)
     local class = PlayerClass()
-    local spells = class and A3.PlayerDefensiveData and A3.PlayerDefensiveData[class]
+    local spells = class and A3.PlayerDefensiveData[class]
     local base = {}
     for i = 1, type(spells) == "table" and #spells or 0 do
         local spellID = tonumber(spells[i] and spells[i][1])

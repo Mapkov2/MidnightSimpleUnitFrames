@@ -18,7 +18,17 @@ local registered
 local namespace = {
     Client = { IsClassic = true, DispellableDebuffFilter = "HARMFUL|RAID_PLAYER_DISPELLABLE" },
     MSUF_Auras3 = {},
-    UF = { RegisterElement = function(_, element) registered = element end, Config = { serial = 1 } },
+    UF = {
+        RegisterElement = function(_, element) registered = element end, Config = { serial = 1 },
+        -- UF.ApplyElementToFrame as the core runs it for the aura element: the
+        -- spec, then Enable, and Disable when Enable declines.
+        frames = {},
+        ApplyElementToFrame = function(frame, _, spec)
+            if spec then frame.MSUFSpec = spec end
+            if registered.Enable(frame) == false then registered.Disable(frame) end
+            return true
+        end,
+    },
     ExportPublic = function(name, value) _G[name] = value; return value end,
 }
 _G.MSUF_NS, _G.MSUF = namespace, namespace

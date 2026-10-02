@@ -25,7 +25,8 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
-if not Backend or not Backend.Lanes or Backend.Element then return end
+assert(Backend and Backend.Lanes, "the Classic aura element requires Game/Classic/Auras/MSUF_Auras3_Lanes.lua")
+if Backend.Element then return end
 local Compile = A3._ClassicCompile
 local Lanes, FrameVisuals = Backend.Lanes, Backend.FrameVisuals
 
