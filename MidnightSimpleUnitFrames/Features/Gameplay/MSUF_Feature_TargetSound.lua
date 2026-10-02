@@ -2,8 +2,8 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
-local F = (MSUF.Cache and MSUF.Cache.F) or {}
-local UnitExists = type(F.UnitExists) == "function" and F.UnitExists or _G.UnitExists
+local CachedAPI = (MSUF.Cache and MSUF.Cache.F) or {}
+local UnitExists = type(CachedAPI.UnitExists) == "function" and CachedAPI.UnitExists or _G.UnitExists
 local UnitIsEnemy = _G.UnitIsEnemy
 local UnitIsFriend = _G.UnitIsFriend
 local PlaySound = _G.PlaySound

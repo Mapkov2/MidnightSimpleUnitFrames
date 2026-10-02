@@ -1,8 +1,8 @@
 -- Sparse profile fields. Used only for explicit edits, imports and profile/context
 -- transitions; no frame, timer or gameplay event belongs to this data layer.
 local _, MSUF = ...
-local F = {}
-MSUF.ProfileFields = F
+local Fields = {}
+MSUF.ProfileFields = Fields
 -- The one registry of profile roots variants and sync work on, each with the
 -- sync module that owns it (general is split per key by ProfileSync, and
 -- suiteModules belongs to its providers). A feature that keeps settings in a
@@ -20,7 +20,7 @@ local ROOTS = { general=true, suiteModules=true }
 for root in pairs(ROOT_MODULES) do ROOTS[root] = true end
 -- Roots that hold one value instead of a table; their path is the root alone.
 local SCALAR_ROOTS = { shortenNames=true }
-F.RootModules, F.ScalarRoots = ROOT_MODULES, SCALAR_ROOTS
+Fields.RootModules, Fields.ScalarRoots = ROOT_MODULES, SCALAR_ROOTS
 
 -- The one owner registry for keys under profile.general. Partial profile
 -- exports and imports (Unit Frames, Castbars, Colors) carry exactly the keys
@@ -105,24 +105,24 @@ local function FallbackGeneralOwner(key)
     if castbar then return color and "castbarColors" or "castbars" end
     return color and "colors" or "unitframes"
 end
-F.FallbackGeneralOwner = FallbackGeneralOwner
+Fields.FallbackGeneralOwner = FallbackGeneralOwner
 
 -- The owner of profile.general[key]: its declaration, else the fallback rule.
-function F.GeneralOwner(key)
+function Fields.GeneralOwner(key)
     if type(key) ~= "string" then return nil end
     return GENERAL_OWNER[key] or FallbackGeneralOwner(key)
 end
-function F.IsDeclaredGeneralKey(key)
+function Fields.IsDeclaredGeneralKey(key)
     return GENERAL_OWNER[key] ~= nil
 end
 -- Whether a partial export kind ("unitframe", "castbar", "colors") carries the key.
-function F.GeneralKeyInKind(key, kind)
-    local owner = GENERAL_OWNERS[F.GeneralOwner(key)]
+function Fields.GeneralKeyInKind(key, kind)
+    local owner = GENERAL_OWNERS[Fields.GeneralOwner(key)]
     return owner ~= nil and owner.kinds[kind] == true
 end
 -- The profile sync module that owns the key, nil for a profile-local key.
-function F.GeneralSyncOwner(key)
-    local owner = GENERAL_OWNERS[F.GeneralOwner(key)]
+function Fields.GeneralSyncOwner(key)
+    local owner = GENERAL_OWNERS[Fields.GeneralOwner(key)]
     return owner and owner.sync
 end
 -- A unit frame's own on/off switch (player.enabled, boss.enabled, ...). Variants
@@ -131,7 +131,7 @@ end
 local UNIT_ROOTS = { player=true, target=true, targettarget=true, focus=true, focustarget=true,
     pet=true, pettarget=true, boss=true, arena=true }
 for i=1,5 do UNIT_ROOTS["boss"..i], UNIT_ROOTS["arena"..i] = true, true end
-function F.UnitSwitchRoot(path)
+function Fields.UnitSwitchRoot(path)
     if type(path) == "table" and #path == 2 and path[2] == "enabled" and UNIT_ROOTS[path[1]] == true then
         return path[1]
     end
@@ -150,7 +150,7 @@ local function Key(value)
         or (type(value) == "number" and value >= 1 and value <= MAX_NUMERIC_KEY and value == math.floor(value))
 end
 
-function F.Path(path)
+function Fields.Path(path)
     if type(path) ~= "table" or getmetatable(path) ~= nil or #path > 12 or not ROOTS[path[1]]
         or #path < (SCALAR_ROOTS[path[1]] and 1 or 2) then return false end
     for i = 1, #path do
@@ -162,7 +162,7 @@ function F.Path(path)
     return true
 end
 
-function F.ID(path)
+function Fields.ID(path)
     local result = {}
     for i = 1, #path do
         local text = tostring(path[i])
@@ -171,9 +171,9 @@ function F.ID(path)
     return table.concat(result, "|")
 end
 
-function F.Read(db, path)
+function Fields.Read(db, path)
     local value
-    if F.ProfileRoot then value=F.ProfileRoot(db,path[1],false) else value=db[path[1]] end
+    if Fields.ProfileRoot then value=Fields.ProfileRoot(db,path[1],false) else value=db[path[1]] end
     for i = 2, #path do
         if type(value) ~= "table" then return nil end
         value = value[path[i]]
@@ -181,10 +181,10 @@ function F.Read(db, path)
     return value
 end
 
-function F.Write(db, path, value)
+function Fields.Write(db, path, value)
     if #path==1 then db[path[1]]=value; return end
     local owner
-    if F.ProfileRoot then owner=F.ProfileRoot(db,path[1],value~=nil)
+    if Fields.ProfileRoot then owner=Fields.ProfileRoot(db,path[1],value~=nil)
     else
         owner=db[path[1]]
         if type(owner)~="table" and value~=nil then owner={}; db[path[1]]=owner end
@@ -201,7 +201,7 @@ function F.Write(db, path, value)
     owner[path[#path]] = value
 end
 
-function F.Copy(value, depth, seen, budget)
+function Fields.Copy(value, depth, seen, budget)
     if value == nil or Scalar(value) then return value, true end
     if type(value) ~= "table" or getmetatable(value) ~= nil
         or (depth or 0) >= (budget and budget.maxDepth or 12) then return nil, false end
@@ -212,7 +212,7 @@ function F.Copy(value, depth, seen, budget)
     for key, entry in pairs(value) do
         budget.count = budget.count + 1
         if not Key(key) or budget.count > (budget.limit or 16384) then seen[value]=nil; return nil, false end
-        local copy, valid = F.Copy(entry, (depth or 0)+1, seen, budget)
+        local copy, valid = Fields.Copy(entry, (depth or 0)+1, seen, budget)
         if not valid then seen[value]=nil; return nil, false end
         out[key] = copy
     end
@@ -224,7 +224,7 @@ end
 -- Native Edit Mode settings legitimately use enum keys such as zero. A failed
 -- copy also returns why: "number" (not finite), "value" (cannot be saved),
 -- "cycle" (a table inside itself) or "limits".
-function F.CopySnapshot(value, budget)
+function Fields.CopySnapshot(value, budget)
     budget=budget or {count=0,limit=131072,maxDepth=32,bytes=0,maxBytes=8388608}
     budget.bytes=budget.bytes or 0
     local why
@@ -261,18 +261,18 @@ function F.CopySnapshot(value, budget)
     return copy,valid,why
 end
 
-function F.Equal(a, b, depth)
+function Fields.Equal(a, b, depth)
     if type(a) ~= type(b) then return false end
     if type(a) ~= "table" then return a == b end
     if (depth or 0) >= 12 then return false end
-    for key, value in pairs(a) do if not F.Equal(value,b[key],(depth or 0)+1) then return false end end
+    for key, value in pairs(a) do if not Fields.Equal(value,b[key],(depth or 0)+1) then return false end end
     for key in pairs(b) do if a[key] == nil then return false end end
     return true
 end
 
 -- Imported patches are copied before use and cannot contain expressions,
 -- metatables, cyclic values, non-finite numbers or overlapping parent paths.
-function F.ValidatePatch(patch)
+function Fields.ValidatePatch(patch)
     if type(patch) ~= "table" or #patch > 512 then return nil, "too many fields" end
     local clean, ids = {}, {}
     for key in pairs(patch) do
@@ -280,12 +280,12 @@ function F.ValidatePatch(patch)
     end
     for i = 1, #patch do
         local entry = patch[i]
-        if type(entry) ~= "table" or getmetatable(entry) ~= nil or not F.Path(entry.path) then return nil, "invalid setting path" end
-        local path = F.Copy(entry.path)
-        local id = F.ID(path)
+        if type(entry) ~= "table" or getmetatable(entry) ~= nil or not Fields.Path(entry.path) then return nil, "invalid setting path" end
+        local path = Fields.Copy(entry.path)
+        local id = Fields.ID(path)
         if ids[id] then return nil, "duplicate setting path" end
         ids[id] = true
-        local value, valid = F.Copy(entry.value)
+        local value, valid = Fields.Copy(entry.value)
         if not valid or (value == nil and entry.remove ~= true)
             or (value ~= nil and entry.remove == true) then return nil, "invalid setting value" end
         clean[i] = { path=path, value=value, remove=entry.remove == true }
@@ -294,19 +294,19 @@ function F.ValidatePatch(patch)
         local prefix = {}
         for i = 1, #entry.path - 1 do
             prefix[i] = entry.path[i]
-            if ids[F.ID(prefix)] then return nil, "overlapping setting paths" end
+            if ids[Fields.ID(prefix)] then return nil, "overlapping setting paths" end
         end
     end
-    table.sort(clean, function(a,b) return F.ID(a.path) < F.ID(b.path) end)
+    table.sort(clean, function(a,b) return Fields.ID(a.path) < Fields.ID(b.path) end)
     return clean
 end
 
 -- Diff only known settings roots. Metadata, migrations and session caches never
 -- become variant fields. Numeric table keys retain their type in saved patches.
-function F.Diff(before, after)
+function Fields.Diff(before, after)
     local patch, path, failed, skipped = {}, {}, false, 0
     local function Visit(a,b,depth)
-        if failed or F.Equal(a,b) then return end
+        if failed or Fields.Equal(a,b) then return end
         if depth > 12 or #patch >= 512 then failed=true; return end
         if type(a) == "table" and type(b) == "table" then
             local keys = {}
@@ -315,16 +315,16 @@ function F.Diff(before, after)
             for key in pairs(keys) do
                 if Key(key) and not (type(key)=="string" and key:match("^_")) then
                     path[depth+1]=key; Visit(a[key],b[key],depth+1); path[depth+1]=nil
-                elseif not Key(key) and not F.Equal(a[key],b[key]) then
+                elseif not Key(key) and not Fields.Equal(a[key],b[key]) then
                     -- A change under a key a field path cannot name (an enum
                     -- zero, a long string) is counted, never dropped silently.
                     skipped = skipped + 1
                 end
             end
         elseif depth >= 2 then
-            local value, valid = F.Copy(b)
+            local value, valid = Fields.Copy(b)
             if not valid then failed=true; return end
-            patch[#patch+1] = { path=F.Copy(path), value=value, remove=b==nil }
+            patch[#patch+1] = { path=Fields.Copy(path), value=value, remove=b==nil }
         end
     end
     for root in pairs(ROOTS) do
@@ -339,11 +339,11 @@ function F.Diff(before, after)
         end
     end
     if failed then return nil, "variant exceeds field limits" end
-    local clean, why = F.ValidatePatch(patch)
+    local clean, why = Fields.ValidatePatch(patch)
     return clean, why, skipped
 end
 
-function F.Overlaps(path, other)
+function Fields.Overlaps(path, other)
     for i = 1, math.min(#path,#other) do if path[i] ~= other[i] then return false end end
     return true
 end

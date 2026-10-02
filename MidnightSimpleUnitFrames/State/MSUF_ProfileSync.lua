@@ -1,15 +1,15 @@
 -- Profile synchronization is a cold-path delta transfer. Groups never subscribe
 -- to gameplay events and never copy effective specialization/context overrides.
 local _, MSUF = ...
-local F, V, S = MSUF.ProfileFields, MSUF.ProfileVariants, {}
-MSUF.ProfileSync = S
+local Fields, Variants, Sync = MSUF.ProfileFields, MSUF.ProfileVariants, {}
+MSUF.ProfileSync = Sync
 local baseline, activeName, logoutFrame
-S.Modules = { "unitframes", "groupframes", "castbars", "colors", "auras", "resources", "gameplay" }
-local modules = {}; for _,id in ipairs(S.Modules) do modules[id]=true end
+Sync.Modules = { "unitframes", "groupframes", "castbars", "colors", "auras", "resources", "gameplay" }
+local modules = {}; for _,id in ipairs(Sync.Modules) do modules[id]=true end
 -- Root ownership is shared with the variants (State/MSUF_ProfileFields.lua).
-local roots = F.RootModules
-function S.Owner(path)
-    if F.ExternalOwner then local owner=F.ExternalOwner(path); if owner then return owner end end
+local roots = Fields.RootModules
+function Sync.Owner(path)
+    if Fields.ExternalOwner then local owner=Fields.ExternalOwner(path); if owner then return owner end end
     if path[1]~="general" then return roots[path[1]] end
     local key=path[2]
     if type(key)~="string" or key:match("^_") then return end
@@ -19,7 +19,7 @@ function S.Owner(path)
     local lower=key:lower()
     if lower:find("classpower",1,true) or lower:find("resource",1,true) then return "resources" end
     if lower:find("aura",1,true) then return "auras" end
-    return F.GeneralSyncOwner(key)
+    return Fields.GeneralSyncOwner(key)
 end
 local function Report(message,detail)
     local translate=type(MSUF.Translate)=="function" and MSUF.Translate or function(text) return text end
@@ -71,7 +71,7 @@ local function Sanitize(groups)
                     if type(key)~="number" or key<1 or key>#exclusions or key~=math.floor(key) then changed=true end
                 end
                 for _,path in ipairs(exclusions) do
-                    if #out.exclude<512 and F.Path(path) then out.exclude[#out.exclude+1]=F.Copy(path) else changed=true end
+                    if #out.exclude<512 and Fields.Path(path) then out.exclude[#out.exclude+1]=Fields.Copy(path) else changed=true end
                 end
             elseif exclusions~=nil then changed=true end
             clean[#clean+1]=out
@@ -92,7 +92,7 @@ local function Groups()
     end
     return clean
 end
-function S.Validate(groups)
+function Sync.Validate(groups)
     if type(groups)~="table" or getmetatable(groups) or #groups>16 then return nil,"invalid sync groups" end
     local clean, names, ownership = {}, {}, {}
     for i,group in ipairs(groups) do
@@ -119,8 +119,8 @@ function S.Validate(groups)
         local exclusions=group.exclude or {}
         if type(exclusions)~="table" or #exclusions>512 then return nil,"too many sync exclusions" end
         for index,path in ipairs(exclusions) do
-            if not F.Path(path) then return nil,"invalid sync exclusion" end
-            out.exclude[index]=F.Copy(path)
+            if not Fields.Path(path) then return nil,"invalid sync exclusion" end
+            out.exclude[index]=Fields.Copy(path)
         end
         for index in pairs(exclusions) do
             if type(index)~="number" or index<1 or index>#out.exclude or index~=math.floor(index) then return nil,"invalid sync exclusions" end
@@ -133,11 +133,11 @@ function S.Validate(groups)
     return clean
 end
 local function Excluded(path,group,source,target)
-    for _,excluded in ipairs(group.exclude) do if F.Overlaps(path,excluded) then return true end end
+    for _,excluded in ipairs(group.exclude) do if Fields.Overlaps(path,excluded) then return true end end
     for _,db in ipairs({source,target}) do
         local entries=db.profileVariants and db.profileVariants.entries or {}
         for _,entry in ipairs(entries) do
-            for _,field in ipairs(entry.patch or {}) do if F.Overlaps(path,field.path) then return true end end
+            for _,field in ipairs(entry.patch or {}) do if Fields.Overlaps(path,field.path) then return true end end
         end
     end
     return false
@@ -164,10 +164,10 @@ local function Changes(before,after)
                 end
                 path[depth+1]=nil
             end
-        elseif F.Path(path) and not F.Equal(a,b) then
-            local value,valid=F.Copy(b)
+        elseif Fields.Path(path) and not Fields.Equal(a,b) then
+            local value,valid=Fields.Copy(b)
             if not valid then return false end
-            out[#out+1]={path=F.Copy(path),value=value,remove=b==nil}
+            out[#out+1]={path=Fields.Copy(path),value=value,remove=b==nil}
         end
         return true
     end
@@ -175,7 +175,7 @@ local function Changes(before,after)
         path[1]=root
         if not Visit(before[root],after[root],1) then return nil,"sync exceeds field limits" end
     end
-    for root in pairs(F.ExternalRoots and F.ExternalRoots() or {}) do
+    for root in pairs(Fields.ExternalRoots and Fields.ExternalRoots() or {}) do
         path[1]=root
         if not Visit(before[root],after[root],1) then return nil,"sync exceeds field limits" end
     end
@@ -194,23 +194,23 @@ local function FillLazyDefaults()
     if MSUF.GF and MSUF.GF.EnsureDB then MSUF.GF.EnsureDB() end
     if MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.EnsureDB then MSUF.MSUF_Auras3.EnsureDB() end
 end
-function S.Activate(force)
+function Sync.Activate(force)
     local name=MSUF_ActiveProfile
     if force or name~=activeName or not baseline then
         activeName=name
         local enabled=next(Groups())~=nil
         if enabled then FillLazyDefaults() end
-        baseline=enabled and V.BaseSnapshot(MSUF_DB,true) or nil
+        baseline=enabled and Variants.BaseSnapshot(MSUF_DB,true) or nil
     end
 end
 -- A reset or import replaces the active profile on purpose; it stays in that
 -- profile. Re-basing makes only the edits after it reach the other members.
-function S.Rebase() S.Activate(true) end
-function S.Flush(full)
-    if V.IsRecording and V.IsRecording() then return false,"finish editing the variant first" end
+function Sync.Rebase() Sync.Activate(true) end
+function Sync.Flush(full)
+    if Variants.IsRecording and Variants.IsRecording() then return false,"finish editing the variant first" end
     local groups=Groups()
     if #groups==0 then baseline=nil; return true end
-    local source,why=V.BaseSnapshot(MSUF_DB,true)
+    local source,why=Variants.BaseSnapshot(MSUF_DB,true)
     if not source then return false,why end
     local before=full and {} or (activeName==MSUF_ActiveProfile and baseline or nil)
     if not before then baseline,activeName=source,MSUF_ActiveProfile; return true end
@@ -223,8 +223,8 @@ function S.Flush(full)
                 local target=profiles[name]
                 if name~=MSUF_ActiveProfile and type(target)=="table" then
                     for _,field in ipairs(changes) do
-                        if group.modules[S.Owner(field.path)] and not Excluded(field.path,group,source,target) then
-                            F.Write(target,field.path,F.Copy(field.value))
+                        if group.modules[Sync.Owner(field.path)] and not Excluded(field.path,group,source,target) then
+                            Fields.Write(target,field.path,Fields.Copy(field.value))
                         end
                     end
                 end
@@ -234,48 +234,48 @@ function S.Flush(full)
     baseline,activeName=source,MSUF_ActiveProfile
     return true
 end
-function S.RegisterModule(id,label)
+function Sync.RegisterModule(id,label)
     if modules[id] then return end
     modules[id]=true
-    S.Modules[#S.Modules+1]=id
-    S.Labels=S.Labels or {}; S.Labels[id]=label
+    Sync.Modules[#Sync.Modules+1]=id
+    Sync.Labels=Sync.Labels or {}; Sync.Labels[id]=label
 end
-function S.RebaseExternal(root)
+function Sync.RebaseExternal(root)
     if baseline and baseline[root]==nil and activeName==MSUF_ActiveProfile then
-        local snapshot=V.BaseSnapshot(MSUF_DB,true)
+        local snapshot=Variants.BaseSnapshot(MSUF_DB,true)
         if snapshot then baseline[root]=snapshot[root] end
     end
 end
-function S.RefreshEvents()
+function Sync.RefreshEvents()
     local enabled=next(Groups())~=nil
     if not enabled and not logoutFrame then return end
     if not logoutFrame then
         logoutFrame=CreateFrame("Frame")
-        logoutFrame:SetScript("OnEvent",function() S.Flush() end)
+        logoutFrame:SetScript("OnEvent",function() Sync.Flush() end)
     end
     logoutFrame:UnregisterAllEvents()
     if enabled then logoutFrame:RegisterEvent("PLAYER_LOGOUT") end
 end
-function S.Replace(groups)
+function Sync.Replace(groups)
     if InCombatLockdown() then return false,"sync groups cannot be edited in combat" end
-    if V.IsRecording and V.IsRecording() then return false,"finish editing the variant first" end
-    local clean,err=S.Validate(groups)
+    if Variants.IsRecording and Variants.IsRecording() then return false,"finish editing the variant first" end
+    local clean,err=Sync.Validate(groups)
     if not clean then return false,err end
     -- Pending edits reach the members of the saved (repaired) groups first; a
     -- flush that cannot run is reported and never locks the editor.
-    local ok,why=S.Flush()
+    local ok,why=Sync.Flush()
     if not ok then Report("Profile sync skipped (%s).",why) end
     MSUF_GlobalDB.global=MSUF_GlobalDB.global or {}
     MSUF_GlobalDB.global.profileSyncGroups=clean
     baseline,activeName=nil,nil
-    S.Activate(); S.RefreshEvents()
+    Sync.Activate(); Sync.RefreshEvents()
     return true
 end
-S.Report=Report
-function S.RenameOrDelete(name,replacement)
+Sync.Report=Report
+function Sync.RenameOrDelete(name,replacement)
     for _,group in ipairs(Groups()) do
         if group.members[name] then group.members[name]=nil; if replacement then group.members[replacement]=true end end
     end
     if activeName==name and replacement then activeName=replacement end
 end
-function S.GetGroups() return F.Copy(Groups(),0,nil,{count=0,limit=16384,maxDepth=16}) end
+function Sync.GetGroups() return Fields.Copy(Groups(),0,nil,{count=0,limit=16384,maxDepth=16}) end

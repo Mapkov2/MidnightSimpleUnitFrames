@@ -39,6 +39,11 @@ local floor = Text.floor
 local max = Text.max
 local SCALE_100 = Text.SCALE_100
 local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
+--- What a text writer's change check keys on (rt.healthDispatchKeyMode and
+--- rt.powerDispatchKeyMode): compiled here from the slots' modes, read on every
+--- value update by Text_Runtime and the class power health text.
+local DISPATCH_KEY = { NONE = 0, CURRENT = 1, MAX = 2, CURRENT_MAX = 3, PERCENT = 4, PERCENT_MAX = 5 }
+Text.DISPATCH_KEY = DISPATCH_KEY
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue
@@ -1279,15 +1284,15 @@ local function CompileTextRuntime(frame, spec, text)
   rt.healthColorByHealth = text.healthColorByHealth == true
   rt.healthColorByClass = text.healthColorByClass == true
   if (needsPercent == true or rt.healthColorByHealth == true) and needsCurrent ~= true then
-    rt.healthDispatchKeyMode = needsMax == true and 5 or 4
+    rt.healthDispatchKeyMode = needsMax == true and DISPATCH_KEY.PERCENT_MAX or DISPATCH_KEY.PERCENT
   elseif needsCurrent == true and needsMax == true then
-    rt.healthDispatchKeyMode = 3
+    rt.healthDispatchKeyMode = DISPATCH_KEY.CURRENT_MAX
   elseif needsMax == true then
-    rt.healthDispatchKeyMode = 2
+    rt.healthDispatchKeyMode = DISPATCH_KEY.MAX
   elseif needsCurrent == true then
-    rt.healthDispatchKeyMode = 1
+    rt.healthDispatchKeyMode = DISPATCH_KEY.CURRENT
   else
-    rt.healthDispatchKeyMode = 0
+    rt.healthDispatchKeyMode = DISPATCH_KEY.NONE
   end
   local baseTextColor = spec and spec.textColor
   rt.textColorR = baseTextColor and baseTextColor.r or 1
@@ -1329,15 +1334,15 @@ local function CompileTextRuntime(frame, spec, text)
   rt.powerNeedsCurrent = needsCurrent
   rt.powerNeedsMax = needsMax
   if needsPercent == true and needsCurrent ~= true then
-    rt.powerDispatchKeyMode = needsMax == true and 5 or 4
+    rt.powerDispatchKeyMode = needsMax == true and DISPATCH_KEY.PERCENT_MAX or DISPATCH_KEY.PERCENT
   elseif needsCurrent == true and needsMax == true then
-    rt.powerDispatchKeyMode = 3
+    rt.powerDispatchKeyMode = DISPATCH_KEY.CURRENT_MAX
   elseif needsMax == true then
-    rt.powerDispatchKeyMode = 2
+    rt.powerDispatchKeyMode = DISPATCH_KEY.MAX
   elseif needsCurrent == true then
-    rt.powerDispatchKeyMode = 1
+    rt.powerDispatchKeyMode = DISPATCH_KEY.CURRENT
   else
-    rt.powerDispatchKeyMode = 0
+    rt.powerDispatchKeyMode = DISPATCH_KEY.NONE
   end
   if text.directLayout == true and text.powerColorByType ~= true then
     rt.powerColorByType = "STATIC"

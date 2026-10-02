@@ -86,7 +86,7 @@ local GATES = {
     {
         key = "portrait", name = "LEGACY_BLIZZARD_PORTRAIT",
         statement = Statement("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua",
-            "local LEGACY_BLIZZARD_PORTRAIT = ", "\n\nlocal V = "),
+            "local LEGACY_BLIZZARD_PORTRAIT = ", "\n\nlocal Visuals = "),
         forever = false, harness = false,
     },
 }

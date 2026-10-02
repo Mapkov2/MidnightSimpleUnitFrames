@@ -5,17 +5,17 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
 
-local V = MSUF.UFVisuals or {}
-local UF = V.UF or MSUF.UF
+local Visuals = MSUF.UFVisuals or {}
+local UF = Visuals.UF or MSUF.UF
 
 -- Unitframe alpha element.
 -- Combines configured opacity, range fade, combat/target modifiers, and linked castbar alpha.
 -- Keep this as a visual-only layer; load conditions decide whether frames exist/show.
-local tonumber = V.tonumber or tonumber
-local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
-local Clamp01 = V.Clamp01
-local SetFrameAlpha = V.SetFrameAlpha
-local SetAlphaCached = V.SetAlphaCached
+local tonumber = Visuals.tonumber or tonumber
+local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
+local Clamp01 = Visuals.Clamp01
+local SetFrameAlpha = Visuals.SetFrameAlpha
+local SetAlphaCached = Visuals.SetAlphaCached
 local CreateFrame = _G.CreateFrame
 -- The one combat-state source (Kernel/MSUF_Util.lua). Asking it with the
 -- regen event also marks the combat edge for the group pokes below.

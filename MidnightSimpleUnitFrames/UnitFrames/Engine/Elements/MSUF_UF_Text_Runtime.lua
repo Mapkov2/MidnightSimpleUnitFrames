@@ -14,6 +14,7 @@ local UnitHealthMax = Text.UnitHealthMax
 local UnitHealthMissing = _G.UnitHealthMissing
 local UnitGetTotalAbsorbs = Text.UnitGetTotalAbsorbs
 local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
+local DISPATCH_KEY = Text.DISPATCH_KEY
 local UnitPower = Text.UnitPower
 local UnitPowerMax = Text.UnitPowerMax
 local UnitPowerType = Text.UnitPowerType
@@ -1087,14 +1088,14 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
     local keyHP, keyMax = false, false
     local canCompareText = true
-    local mode = rt.healthDispatchKeyMode or 0
-    if mode == 1 then
+    local mode = rt.healthDispatchKeyMode or DISPATCH_KEY.NONE
+    if mode == DISPATCH_KEY.CURRENT then
       keyHP = hp
-    elseif mode == 2 then
+    elseif mode == DISPATCH_KEY.MAX then
       keyMax = hpMax
-    elseif mode == 3 then
+    elseif mode == DISPATCH_KEY.CURRENT_MAX then
       keyHP, keyMax = hp, hpMax
-    elseif mode == 4 or mode == 5 then
+    elseif mode == DISPATCH_KEY.PERCENT or mode == DISPATCH_KEY.PERCENT_MAX then
       if pctOverrideSet and issecretvalue(pctOverride) ~= true then
         keyHP = PercentCacheKeyFromValue(pctOverride, rt.healthPercentDecimals)
       else
@@ -1104,7 +1105,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
         canCompareText = false
         keyHP = false
       end
-      keyMax = canCompareText and mode == 5 and hpMax or false
+      keyMax = canCompareText and mode == DISPATCH_KEY.PERCENT_MAX and hpMax or false
     end
     local valueRefreshEvent = healthTick or event == "UNIT_CONNECTION" or event == "UNIT_MAXHEALTH"
     if valueRefreshEvent
@@ -1376,14 +1377,14 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     end
     local keyPower, keyMax = false, false
     local canCompareText = true
-    local mode = rt.powerDispatchKeyMode or 0
-    if mode == 1 then
+    local mode = rt.powerDispatchKeyMode or DISPATCH_KEY.NONE
+    if mode == DISPATCH_KEY.CURRENT then
       keyPower = power
-    elseif mode == 2 then
+    elseif mode == DISPATCH_KEY.MAX then
       keyMax = powerMax
-    elseif mode == 3 then
+    elseif mode == DISPATCH_KEY.CURRENT_MAX then
       keyPower, keyMax = power, powerMax
-    elseif mode == 4 or mode == 5 then
+    elseif mode == DISPATCH_KEY.PERCENT or mode == DISPATCH_KEY.PERCENT_MAX then
       if pctOverrideSet and issecretvalue(pctOverride) ~= true then
         keyPower = PercentCacheKeyFromValue(pctOverride, 0)
         if keyPower == false then
@@ -1392,7 +1393,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       else
         canCompareText = false
       end
-      keyMax = mode == 5 and powerMax or false
+      keyMax = mode == DISPATCH_KEY.PERCENT_MAX and powerMax or false
     end
     local powerValueRefreshEvent = animate
       or event == "UNIT_MAXPOWER"
@@ -1701,7 +1702,7 @@ local function BuildGFHotHealthTextFromPercent(frame, rt)
     and (rt.healthCombinedAbsorbSlotCount or 0) == 0
     and rt.healthValueSlotCount == 1
     and rt.healthColorByHealth ~= true
-    and rt.healthDispatchKeyMode == 4
+    and rt.healthDispatchKeyMode == DISPATCH_KEY.PERCENT
     and rt.healthNeedsCurrent ~= true
     and rt.healthNeedsMax ~= true
     and rt.healthNeedsMissing ~= true) then
@@ -1814,7 +1815,7 @@ local function BuildGFHotPowerTextFromPercent(frame, rt)
   if not (rt
     and rt.powerSlotCount == 1
     and rt.powerColorByType ~= true
-    and rt.powerDispatchKeyMode == 4
+    and rt.powerDispatchKeyMode == DISPATCH_KEY.PERCENT
     and rt.powerNeedsCurrent ~= true
     and rt.powerNeedsMax ~= true) then
     return nil

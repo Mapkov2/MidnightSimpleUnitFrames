@@ -2,7 +2,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
-local S = MSUF.MSUF_GameplayShared or MSUF.Gameplay or {}
+local GameplayShared = MSUF.MSUF_GameplayShared or MSUF.Gameplay or {}
 
 -- Blizzard totem/statue preview controller.
 -- Lets edit mode display and move Blizzard's totem-style frame without taking ownership of
@@ -31,14 +31,14 @@ local _EnsureGameplayDefaults = MSUF.MSUF_EnsureGameplayDefaults
 -- EnsureGameplayDefaults re-seeds ~33 keys on every call; the fast variant returns the cached
 -- table and only falls back to the full seed before the first one has run.
 local _GetGameplayDB = MSUF.MSUF_GetGameplayDBFast or _EnsureGameplayDefaults
-local _GetPlayerSpecID = S.GetPlayerSpecID
-local _Clamp = S.Clamp
-local _RoundInt = S.RoundInt
-local _SetupArrowNudge = S.SetupArrowNudge
-local _BeginHistory = S.BeginHistory
-local _CommitHistory = S.CommitHistory
-local _CheckpointHistory = S.CheckpointHistory
-local _SelectNudgeFrame = S.SelectNudgeFrame
+local _GetPlayerSpecID = GameplayShared.GetPlayerSpecID
+local _Clamp = GameplayShared.Clamp
+local _RoundInt = GameplayShared.RoundInt
+local _SetupArrowNudge = GameplayShared.SetupArrowNudge
+local _BeginHistory = GameplayShared.BeginHistory
+local _CommitHistory = GameplayShared.CommitHistory
+local _CheckpointHistory = GameplayShared.CheckpointHistory
+local _SelectNudgeFrame = GameplayShared.SelectNudgeFrame
 
 local function _SyncTotemOffsetSliders()
     -- Menu2 owns the offset sliders. RequestRefresh coalesces through a queued flag, so calling
