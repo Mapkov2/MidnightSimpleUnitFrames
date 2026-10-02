@@ -191,6 +191,8 @@ local function CP_StampVertexColor(tex, r, g, b, a)
     end
 end
 
+--- Plain bounds only: type() answers "number" for a secret number too, so a
+--- possibly secret bound goes through CP_SetSecretMinMax instead.
 local function CP_StampMinMax(bar, minValue, maxValue)
     if not bar then return end
     if type(minValue) == "number" and type(maxValue) == "number" then
@@ -199,6 +201,15 @@ local function CP_StampMinMax(bar, minValue, maxValue)
     else
         bar._msufCPMin, bar._msufCPMax = nil, nil
     end
+    bar:SetMinMaxValues(minValue, maxValue)
+end
+
+--- A restricted range (a secret UnitHealthMax or UnitPowerMax) goes straight
+--- to the native bar and clears the cache: it must never be cached, or the
+--- next CP_StampMinMax would compare it.
+local function CP_SetSecretMinMax(bar, minValue, maxValue)
+    if not bar then return end
+    bar._msufCPMin, bar._msufCPMax = nil, nil
     bar:SetMinMaxValues(minValue, maxValue)
 end
 
@@ -1679,7 +1690,7 @@ modeBuilders.CONTINUOUS = function(E)
             if mx <= 0 then mx = 100 end
             CP_StampMinMax(bar, 0, mx)
         else
-            CP_StampMinMax(bar, 0, rawMx)
+            CP_SetSecretMinMax(bar, 0, rawMx)
             mx = nil
         end
         local visual = CP_GetVisual(E)
@@ -1859,7 +1870,7 @@ modeBuilders.STAGGER = function(E)
             if mx <= 0 then mx = 1 end
             CP_StampMinMax(bar, 0, mx)
         else
-            CP_StampMinMax(bar, 0, rawMx)
+            CP_SetSecretMinMax(bar, 0, rawMx)
         end
 
         if curSafe then
