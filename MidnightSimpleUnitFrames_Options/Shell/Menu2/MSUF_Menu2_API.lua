@@ -268,7 +268,7 @@ RegisterMenuCommand({
     help = "Report how much of the current language is translated.",
     run = function()
         local total, missing = 0, 0
-        if type(M.GetLocaleCoverage) == "function" then total, missing = M.GetLocaleCoverage() end
+        total, missing = M.GetLocaleCoverage()
         local locale = MSUF.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
         print("|cff00b7ebMSUF|r " .. Fmt("Locale %s: %d keys seen, %d missing translations.", locale, total or 0, missing or 0))
     end,
@@ -280,13 +280,7 @@ RegisterMenuCommand({
     dev = true,
     usage = "/msuf versiontest",
     help = "Fake an available update to test the version-check popup.",
-    run = function()
-        if type(_G.MSUF_VersionCheck_DebugFakeUpdate) == "function" then
-            _G.MSUF_VersionCheck_DebugFakeUpdate()
-        else
-            print("|cffffd700MSUF:|r " .. M.Tr("Version test helper is not loaded."))
-        end
-    end,
+    run = function() _G.MSUF_VersionCheck_DebugFakeUpdate() end,
 })
 
 RegisterMenuCommand({
@@ -339,7 +333,7 @@ RegisterMenuCommand({
                 highlights:ResetCurrent()
             end
         end
-        if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
+        M.InvalidatePage("home")
         M.Open("home")
         print(Fmt("|cff00b7ebMSUF|r: First-start preview re-armed (%s). Guided-tour progress was reset.", tostring(firstLoad:GetInstallKind())))
     end,

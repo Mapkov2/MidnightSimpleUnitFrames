@@ -42,11 +42,11 @@ local function QueueVisiblePageLayoutSettle(key, entry)
         -- before its glyph metrics are renderable. Reapply this page's fonts
         -- once after visibility and fall back immediately when the requested
         -- face still cannot render text. Cached pages pay this cost only once.
-        if not entry._msuf2VisibleFontSettled and T and type(T.RefreshMenuFonts) == "function" then
+        if not entry._msuf2VisibleFontSettled and T then
             -- This is the one-shot visibility retry for freshly created font
             -- strings, not a font-setting change. Preserve the resolved-path
             -- cache populated while the page was built.
-            if type(T.RefreshMenuFontStrings) == "function" and type(entry.fontStrings) == "table" then
+            if type(entry.fontStrings) == "table" then
                 T.RefreshMenuFontStrings(entry.fontStrings, true, true)
             else
                 T.RefreshMenuFonts(entry.wrapper, true, true)
@@ -101,7 +101,7 @@ end
 function M.ConsumeFixedPreviewExpansionForSelection(pageKey)
     local restore = ActiveFixedPreviewIsExpanded()
         or fixedPreviewRebuildExpandPageKey == pageKey
-        or (type(M.ShouldExpandFixedPreview) == "function" and M.ShouldExpandFixedPreview())
+        or (M.ShouldExpandFixedPreview())
     fixedPreviewRebuildExpandPageKey = nil
     return restore == true
 end
@@ -395,7 +395,7 @@ function M.SelectPage(key)
             and req.explicit == true
             and req.consumed ~= true
             and (not req.pageKey or tostring(req.pageKey) == tostring(key))
-        if not hasPendingFocus and type(M.CloseAutoFocusedSections) == "function" then M.CloseAutoFocusedSections(key) end
+        if not hasPendingFocus then M.CloseAutoFocusedSections(key) end
     end
     if key ~= "search" and M.activeKey == "search" then
         BumpSearchInputSerial()
@@ -424,7 +424,7 @@ function M.SelectPage(key)
         M.RunStickyHeaderActivation()
         M.RequestBossPagePreviewForKey(key)
         M.RequestGFPagePreviewForKey(key)
-        if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+        if hasPendingFocus then M.FocusRequestedSection(key, { flash = true }) end
         if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
         M.GuidedTourOnPageSelected(key)
         M.RefreshLayerOverviewContext()
@@ -483,7 +483,7 @@ function M.SelectPage(key)
     if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
     M.RequestBossPagePreviewForKey(key)
     M.RequestGFPagePreviewForKey(key)
-    if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+    if hasPendingFocus then M.FocusRequestedSection(key, { flash = true }) end
     M.GuidedTourOnPageSelected(key)
     -- A spec-version invalidation may have occurred inside this SelectPage.
     -- The local restore decision already owns that transition, so do not leave

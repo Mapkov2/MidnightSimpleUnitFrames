@@ -152,12 +152,7 @@ local function CreatePaletteController(parent, searchBox)
         palette:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", 0, -6)
         palette:SetWidth(PALETTE_W)
         palette:SetHeight(HEADER_H + ROW_H + FOOTER_H + PANEL_PAD * 2)
-        if type(M.ApplyMenuPopupFramePriority) == "function" then
-            M.ApplyMenuPopupFramePriority(palette)
-        else
-            palette:SetFrameStrata("DIALOG")
-            palette:SetFrameLevel(math.max(searchBox:GetFrameLevel() + 20, 40))
-        end
+        M.ApplyMenuPopupFramePriority(palette)
         palette:SetClampedToScreen(true)
         palette:EnableMouse(true)
         palette:Hide()

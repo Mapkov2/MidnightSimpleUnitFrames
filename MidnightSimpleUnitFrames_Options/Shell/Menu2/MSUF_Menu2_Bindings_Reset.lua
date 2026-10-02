@@ -577,11 +577,10 @@ local function ApplyAfterPageReset(pageKey, info)
 end
 local function ResetProfilePage()
     local name = _G.MSUF_ActiveProfile or "Default"
-    if type(_G.MSUF_ResetProfile) ~= "function" then return false end
     _G.MSUF_ResetProfile(name)
     M.ClearHistory()
     ApplyAfterPageReset("profiles", PAGE_RESET_INFO.profiles)
-    if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then _G.MSUF_ShowReloadRecommendedPopup("Profile reset") end
+    _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
     return true
 end
 -- A deliberate "Reset to defaults" must leave no stale runtime cache behind, or

@@ -465,7 +465,7 @@ function W.PreviewImage(parent, spec, x, y, width)
     local well = T.Panel(parent, nil, T.colors.coreShadow or T.colors.bg, T.colors.pillEdge or T.colors.borderSoft)
     well:SetPoint("TOPLEFT", parent, "TOPLEFT", floor((tonumber(x) or 0) + 0.5), floor((tonumber(y) or 0) + 0.5))
     well:SetSize(frameWidth, frameHeight)
-    if type(T.ApplySurface) == "function" then T.ApplySurface(well, "card") end
+    T.ApplySurface(well, "card")
     if well.EnableMouse then well:EnableMouse(false) end
     local image = PixelLayoutRegion(well:CreateTexture(nil, "ARTWORK", nil, 2))
     image:SetPoint("TOPLEFT", well, "TOPLEFT", 3, -3)

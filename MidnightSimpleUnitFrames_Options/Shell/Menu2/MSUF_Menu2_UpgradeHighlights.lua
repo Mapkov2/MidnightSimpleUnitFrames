@@ -42,7 +42,7 @@ local function TourControls(item)
     local spec = type(id) == "string" and TOUR_CONTROLS[id] or nil
     if type(spec) ~= "table" then return nil end
     local W = M.Widgets
-    if not (type(W) == "table" and type(W.SettingsRows) == "function") then return nil end
+    if not (type(W) == "table") then return nil end
     return spec
 end
 
@@ -64,12 +64,12 @@ local function Controller()
 end
 
 local function BlockedByCombat()
-    return type(M.BlockCombatAction) == "function" and M.BlockCombatAction() == true
+    return M.BlockCombatAction() == true
 end
 
 local function RefreshHome()
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
-    if type(M.SelectPage) == "function" then M.SelectPage("home") end
+    M.InvalidatePage("home")
+    M.SelectPage("home")
 end
 
 local function ApplyTargetRoute(item)
@@ -116,13 +116,13 @@ end
 local function OpenPage(item)
     local pageKey = type(item) == "table" and item.pageKey or item
     ApplyTargetRoute(item)
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
-    if type(item) == "table" and type(item.route) == "table" and type(M.InvalidatePage) == "function" then
+    M.InvalidatePage("home")
+    if type(item) == "table" and type(item.route) == "table" then
         M.InvalidatePage(pageKey)
     end
     -- A refused page change (combat) must not leave the focus request armed, or
     -- it fires at the next unrelated navigation.
-    if type(M.SelectPage) == "function" and M.SelectPage(pageKey or "home") == false then
+    if M.SelectPage(pageKey or "home") == false then
         _G.MSUF_EM2_MenuFocusRequest = nil
     end
 end
@@ -464,9 +464,7 @@ local function BuildActive(ctx, scene, T, releaseKey, spec, record, contentWidth
     local function ConfigureCurrent()
         Controller():Advance("opened")
         OpenPage(item)
-        if item.id == "page_history"
-            and type(M.SetPageHistoryTourCue) == "function"
-        then
+        if item.id == "page_history" then
             M.SetPageHistoryTourCue(true)
         end
         -- Edit Mode has no page to land on, so its action starts the mode

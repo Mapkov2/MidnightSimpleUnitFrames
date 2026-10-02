@@ -259,7 +259,6 @@ end
 -- Status test mode is a temporary visual aid from the menu. Clear it when Menu2 closes so
 -- runtime frames do not keep fake dead/ghost/AFK indicators after the preview is gone.
 local function ResetStatusIndicatorTestModeOnMenuExit()
-    if type(M.EnsureDB) ~= "function" then return false end
     local db = M.EnsureDB()
     if type(db) ~= "table" then return false end
     local changed = false
@@ -291,7 +290,6 @@ local function ResetStatusIndicatorTestModeOnMenuExit()
         end
     end
     if not changed then return false end
-    if type(M.RequestUnitApply) ~= "function" then return true end
     for i = 1, #unitsToApply do
         M.RequestUnitApply(unitsToApply[i], "MSUF2_STATUS_TEST_MENU_EXIT", {
             preview = false,

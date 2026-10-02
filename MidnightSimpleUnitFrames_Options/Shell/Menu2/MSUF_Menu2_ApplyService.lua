@@ -517,7 +517,7 @@ local function RefreshGroupPreview(kind, reason, dirtyMask)
     local opts = { reason = reason or "MSUF2_GROUP", dirtyMask = dirtyMask }
     if gf and type(gf.RefreshPreviewLayout) == "function" then
         gf.RefreshPreviewLayout(kind, opts)
-    elseif type(_G.MSUF_GF_RefreshPreviewLayout) == "function" then
+    else
         _G.MSUF_GF_RefreshPreviewLayout(kind, opts)
     end
     if type(M.RefreshGFNativePreviews) == "function" then

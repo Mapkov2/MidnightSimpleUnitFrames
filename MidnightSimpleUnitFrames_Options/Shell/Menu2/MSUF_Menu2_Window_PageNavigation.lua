@@ -26,7 +26,7 @@ end
 -- it names the page exactly as the rail and search results do. Each part is
 -- translated on its own; the separator stays.
 local function BreadcrumbTitle(key)
-    local crumb = type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(key) or nil
+    local crumb = M.GetMenuBreadcrumb(key) or nil
     if type(crumb) ~= "string" or crumb == "" then return nil end
     local parts = {}
     for part in (crumb .. " > "):gmatch("(.-) > ") do parts[#parts + 1] = M.Tr(part) end

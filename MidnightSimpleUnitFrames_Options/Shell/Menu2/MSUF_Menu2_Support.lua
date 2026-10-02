@@ -858,17 +858,7 @@ function M.GetGameplayPlayerSpecID()
     if MSUF and type(MSUF.MSUF_GetPlayerSpecID) == "function" then
         return MSUF.MSUF_GetPlayerSpecID()
     end
-    if type(_G.MSUF_GetPlayerSpecID) == "function" then
-        return _G.MSUF_GetPlayerSpecID()
-    end
-    if GetSpecialization and GetSpecializationInfo then
-        local spec = GetSpecialization()
-        if spec then
-            local id = GetSpecializationInfo(spec)
-            return id
-        end
-    end
-    return nil
+    return _G.MSUF_GetPlayerSpecID()
 end
 function M.ResolveGameplaySpellInput(value)
     local text = tostring(value or ""):match("^%s*(.-)%s*$")
@@ -1399,7 +1389,7 @@ local function EnsureCopyLinkPopup()
     ok:RegisterForClicks("LeftButtonUp")
     ok:SetScript("OnClick", function() frame:Hide() end)
     frame._msufOkButton = ok
-    if type(_G.MSUF_SkinButton) == "function" then _G.MSUF_SkinButton(ok) end
+    _G.MSUF_SkinButton(ok)
     frame:SetScript("OnShow", function(self)
         if self._msufTitleFS then self._msufTitleFS:SetText(Tr(self._msufTitle or "Link")) end
         if self._msufEditBox then
@@ -1454,7 +1444,7 @@ do
             button1 = Tr("Copy Discord Link"),
             button2 = _G.CLOSE or Tr("Close"),
             OnAccept = function()
-                if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
+                _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz")
             end,
         })
     end

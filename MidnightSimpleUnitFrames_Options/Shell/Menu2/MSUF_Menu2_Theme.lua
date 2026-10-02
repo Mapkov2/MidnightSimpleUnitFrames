@@ -1556,7 +1556,7 @@ function T.ApplySurface(frame, material, glass)
 end
 local function CollapseHintLearned()
     local state = M.collapseHintClickState
-    if type(state) ~= "table" and type(M.GetPersistentMenuStateTable) == "function" then state = M.GetPersistentMenuStateTable("collapseHintClickState") end
+    if type(state) ~= "table" then state = M.GetPersistentMenuStateTable("collapseHintClickState") end
     return (tonumber(state and state.total) or 0) >= (tonumber(T.collapseHintClickHideThreshold) or 8)
 end
 function T.ApplyCollapseVisual(chevron, hint, open)
@@ -3143,7 +3143,7 @@ end
 -- accent family. BuildWindow keeps a guarded second call as a fallback.
 do
     local function ApplySavedAccent()
-        if type(T.ApplyMenuAccent) == "function" then T.ApplyMenuAccent() end
+        T.ApplyMenuAccent()
         if MenuSkin then MenuSkin.BindColors(T.colors) end
     end
     if type(_G.IsLoggedIn) == "function" and _G.IsLoggedIn() then
