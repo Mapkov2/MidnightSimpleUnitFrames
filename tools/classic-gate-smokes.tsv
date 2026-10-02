@@ -346,3 +346,4 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 -	lua	tools/tests/over_absorb_protected_glow_smoke.lua	{root}	Protected over-absorb glow smoke failed
 -	lua	tools/tests/health_dispatch_free_death_smoke.lua	{root}	Dispatch-free health death smoke failed
 -	lua	tools/tests/castbar_secret_paths_smoke.lua	{root}	Castbar runtime paths on a strict-secret Midnight and Forever client
+-	lua	tools/tests/castbar_cast_path_budget_smoke.lua	{root}	Castbar cast paths over their instruction, byte, native-object or field-churn budget

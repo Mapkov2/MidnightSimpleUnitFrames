@@ -108,7 +108,18 @@ local client = {
     IsMists = flavor == "Mists" or flavor == "MistsDuration",
     IsClassic = flavor == "Vanilla" or flavor == "TBC" or flavor == "Mists" or flavor == "MistsDuration",
 }
-local ns = { Client = client, ExportPublic = function(name, value) _G[name] = value end }
+-- Kernel/MSUF_Scheduler.lua's keyed deadlines: the plain-cooldown wake is
+-- one scheduled callback (recorded like the timers above).
+local scheduled = {}
+local ns = { Client = client, ExportPublic = function(name, value) _G[name] = value end,
+    Scheduler = {
+        ScheduleAfter = function(key, delay, callback)
+            timers[#timers + 1] = { delay = delay, callback = callback, at = now, key = key }
+            scheduled[#scheduled + 1] = callback
+            return true
+        end,
+        CancelScheduled = function() return false end,
+    } }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF", ns)
 local eventFrame = Check(named.MSUF_InterruptReady_EventFrame, "interrupt-ready event frame is missing")
 Check(_G.MSUF_KickReady_GetSpellID() == PUMMEL, "Warriors must interrupt with Pummel")
@@ -168,6 +179,12 @@ if not withDurationAPI then
     Event()
     now = now + 5.2
     Check(Paint() == true, "a doubled cooldown rate was ignored")
+
+    -- Every wake reuses one callback: an arm builds no closure.
+    Check(#scheduled >= 2, "the plain cooldown wakes were not scheduled through the Kernel scheduler")
+    for index = 2, #scheduled do
+        Check(scheduled[index] == scheduled[1], "the plain cooldown wake built a new callback for arm " .. index)
+    end
 
     Check(plainReads > 0 and nativeReads == 0, "the plain fallback was not the cooldown reader")
     Check(wakeArms == 0, "the plain cooldown view armed a native completion frame")

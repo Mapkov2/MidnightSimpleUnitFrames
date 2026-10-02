@@ -211,7 +211,7 @@ do
     runtime:DisableNativeTimeText(frame)
     runtime:DisableNativeTimeText(frame)
     Equal(disableCalls, 1, "steady disabled binding repeated native Disable")
-    Equal(frame._msufNativeTimeBound, nil, "successful disable retained bound flag")
+    Check(frame._msufNativeTimeBound ~= true, "successful disable retained bound flag")
     Equal(frame.timeText._msufLastText, nil, "native disable did not invalidate Lua text cache")
 
     -- 12.1 contract model: binding methods cannot reject; the failure surface
@@ -225,7 +225,7 @@ do
         "missing-method binding reported success")
     Check(partialFrame._msufNativeTextUnsafe == true,
         "missing-method binding did not mark native text unsafe")
-    Equal(partialFrame._msufNativeTimeBound, nil, "missing-method binding marked binding live")
+    Check(partialFrame._msufNativeTimeBound ~= true, "missing-method binding marked binding live")
 
     local secretDuration = { secret = true }
     local nativeDuration

@@ -14,6 +14,8 @@ local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 
 local SpellAPI = _G.C_Spell
 local TimerAPI = _G.C_Timer
+-- Kernel/MSUF_Scheduler.lua loads first in every TOC.
+local Scheduler = MSUF.Scheduler
 local CurveAPI = _G.C_CurveUtil
 local EvaluateColorValueFromBoolean = CurveAPI and CurveAPI.EvaluateColorValueFromBoolean
 local EvaluateColorFromBoolean = CurveAPI and CurveAPI.EvaluateColorFromBoolean
@@ -91,6 +93,7 @@ local spellSetGeneration = 0
 local spellBookEventRegistered = false
 local cooldownWakeUnsupported = false
 local cooldownTimerGeneration = 0
+local cooldownTimerArmedGeneration
 local cooldownTimerEndTime
 local eventFrame
 local cooldownEventRegistered = false
@@ -1357,7 +1360,23 @@ ClearCooldownWake = function()
     end
 end
 
-local function ScheduleCooldownRefresh(remaining, remainingResolved, cooldown, cooldownResolved)
+local ScheduleCooldownRefresh
+
+--- The plain-cooldown wake (clients without a native completion frame). One
+--- stable callback keyed in the Kernel scheduler: a reschedule replaces the
+--- deadline, and a newer generation (a reschedule or ClearCooldownWake)
+--- retires a wake that is already due.
+local function OnCooldownTimer()
+    if cooldownTimerArmedGeneration ~= cooldownTimerGeneration then return end
+    cooldownTimerEndTime = nil
+    local remaining, resolved, nextCooldown, nextCooldownResolved = RefreshAll(true)
+    RefreshExternalReadyConsumers()
+    if resolved then
+        ScheduleCooldownRefresh(remaining, true, nextCooldown, nextCooldownResolved)
+    end
+end
+
+ScheduleCooldownRefresh = function(remaining, remainingResolved, cooldown, cooldownResolved)
     if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 then
         ClearCooldownWake()
         return false
@@ -1438,20 +1457,11 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved, cooldown, c
     end
 
     cooldownTimerGeneration = cooldownTimerGeneration + 1
-    local generation = cooldownTimerGeneration
+    cooldownTimerArmedGeneration = cooldownTimerGeneration
     local delay = math.min(remaining + 0.05, 90)
     cooldownTimerEndTime = Now() + delay
 
-    TimerAPI.After(delay, function()
-        if generation == cooldownTimerGeneration then
-            cooldownTimerEndTime = nil
-            local remaining, resolved, nextCooldown, nextCooldownResolved = RefreshAll(true)
-            RefreshExternalReadyConsumers()
-            if resolved then
-                ScheduleCooldownRefresh(remaining, true, nextCooldown, nextCooldownResolved)
-            end
-        end
-    end)
+    Scheduler.ScheduleAfter(OnCooldownTimer, delay, OnCooldownTimer)
     return true
 end
 

@@ -69,6 +69,8 @@ local function Namespace(client)
     return {
         Client = client,
         ExportPublic = function(name, value) _G[name] = value; return value end,
+        -- Kernel/MSUF_Scheduler.lua's keyed deadlines (the GCD bar's finish).
+        Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end },
     }
 end
 

@@ -278,7 +278,8 @@ do
     C_Spell = { GetSpellCooldownDuration = function() return cooldownFactory() end }
     MSUF_DB = { general = { kickReadyShowTarget = true, kickReadyStyle = "border",
         kickReadyTimeMarker = true, kickReadyTimeSegment = true } }
-    local ns = { Client = { IsRetail = true }, ExportPublic = function(name, value) _G[name] = value end }
+    local ns = { Client = { IsRetail = true }, ExportPublic = function(name, value) _G[name] = value end,
+        Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end } }
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))("MSUF", ns)
     local refresh = Check(_G.MSUF_KickReady_RefreshFrame, "interrupt-ready refresh export is missing")
     local eventFrame = Check(named.MSUF_InterruptReady_EventFrame, "interrupt-ready event frame is missing")

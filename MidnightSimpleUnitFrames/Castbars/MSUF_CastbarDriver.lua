@@ -863,10 +863,17 @@ local function SetCastTargetTextPlainColorIfChanged(fs, red, green, blue)
     fs._msufCastTargetColorR = red
     fs._msufCastTargetColorG = green
     fs._msufCastTargetColorB = blue
+    fs._msufCastTargetClassSequence = false
     fs:SetTextColor(red, green, blue)
 end
 
-local function ApplyCastTargetTextColor(frame, classFilename)
+--- sequenceID and generation (optional) name the cast whose spell target is
+--- being coloured: its castBarID-or-generation sequence and the engine
+--- generation its START advanced. UnitSpellTargetClass is SecretReturns, so
+--- the class colour comes from C_ClassColor.GetClassColor, which builds a new
+--- ColorMixin table per call; a cast's spell target does not change, so one
+--- cast asks for it once (pushback and interruptibility repaints reuse it).
+local function ApplyCastTargetTextColor(frame, classFilename, sequenceID, generation)
     local fs = frame and frame.castTargetText
     if not fs then return end
     -- A per-castbar target-name color is the most specific choice the user can
@@ -890,6 +897,10 @@ local function ApplyCastTargetTextColor(frame, classFilename)
         end
     end
     if classFilename and type(C_ClassColor_GetClassColor) == "function" then
+        if sequenceID ~= nil and fs._msufCastTargetClassSequence == sequenceID
+            and fs._msufCastTargetClassGeneration == generation then
+            return
+        end
         -- UnitSpellTargetClass returns a secret value. Passing it directly to
         -- C_ClassColor is allowed for tainted callers; indexing any Lua table
         -- with it is not.
@@ -898,7 +909,9 @@ local function ApplyCastTargetTextColor(frame, classFilename)
             -- GetRGB may return secret numbers. SetTextColor explicitly accepts
             -- them, but Lua comparisons do not. Mark the plain cache invalid
             -- and forward the tuple without retaining or inspecting it.
-            fs._msufCastTargetColorPlain = nil
+            fs._msufCastTargetColorPlain = false
+            fs._msufCastTargetClassSequence = sequenceID ~= nil and sequenceID or false
+            fs._msufCastTargetClassGeneration = generation ~= nil and generation or false
             fs:SetTextColor(classColor:GetRGB())
             return
         end
@@ -941,6 +954,8 @@ local function UpdateCastTargetText(frame, state)
     local fs = frame and frame.castTargetText
     if not fs then return end
     if not CastTargetTextEnabled(frame) or not CastStateHasSpell(state) then
+        -- The cast is over: the next one asks for its target's class again.
+        if fs._msufCastTargetClassSequence then fs._msufCastTargetClassSequence = false end
         SetCastTargetText(frame, "")
         fs:Hide()
         return
@@ -948,13 +963,15 @@ local function UpdateCastTargetText(frame, state)
 
     local targetName, targetClass, targetNameAllowed = ResolveCastTargetInfo(state)
     if targetNameAllowed ~= true then
+        if fs._msufCastTargetClassSequence then fs._msufCastTargetClassSequence = false end
         SetCastTargetText(frame, "")
         fs:Hide()
         return
     end
 
     SetCastTargetText(frame, targetName)
-    ApplyCastTargetTextColor(frame, targetClass)
+    local identity = state.identity
+    ApplyCastTargetTextColor(frame, targetClass, state.spellSequenceID, identity and identity.generation)
     fs:Show()
 end
 

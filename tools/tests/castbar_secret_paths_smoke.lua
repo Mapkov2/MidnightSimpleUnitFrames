@@ -212,9 +212,13 @@ local function GCDLife(world)
     for _, secret in ipairs({ false, true }) do
         world.secretCooldowns = secret
         world.cooldowns[61304] = { startTime = world.clock, total = 1.5 }
-        -- The player's own instant cast: the spell ID payload is readable.
+        -- The player's own instant cast: the spell ID payload is readable. The
+        -- bar shows for the GCD and ends with it, readable or secret.
         world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", "player", world.Secrets.New("string"), 1449)
+        local bar = env.MSUF_DB.general.gcdBarDetached and world:Named("MSUF_DetachedGCDBar") or env.MSUF_PlayerCastbar
+        if not (bar and bar._msufGCDActive == true) then Fail("GCD bar did not start (secret " .. tostring(secret) .. ")") end
         world:Advance(1.8)
+        if bar and bar._msufGCDActive == true then Fail("GCD bar did not end (secret " .. tostring(secret) .. ")") end
         -- A restricted payload: the spell ID is secret.
         world.cooldowns[61304] = { startTime = world.clock, total = 1.5 }
         world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", world:Payload("UNIT_SPELLCAST_SUCCEEDED", "player", nil))
@@ -236,13 +240,8 @@ local function InterruptReadyLife(world)
         world:Fire(eventFrame, "SPELL_UPDATE_COOLDOWN", 2139, 2139)
         world:Fire(eventFrame, "SPELL_UPDATE_COOLDOWN", nil, nil)
         env.MSUF_KickReady_RefreshAll()
+        -- The native completion wake of every armed slot fires on its own.
         world:Advance(0.8)
-        -- The native completion wake of every armed slot.
-        for index = 1, #world.widgets.frames do
-            local frame = world.widgets.frames[index]
-            local done = rawget(frame, "scripts") and frame.scripts.OnCooldownDone
-            if done and frame.cooldownDuration then done(frame) end
-        end
         world:Fire(eventFrame, "SPELLS_CHANGED")
         world:Fire(eventFrame, "PLAYER_SPECIALIZATION_CHANGED", "player")
         world.casting.target = nil
@@ -291,8 +290,8 @@ local REQUIRED = {
         "PlayerCastbarClearEmpower" },
     ["MSUF_InterruptReady.lua"] = { "RefreshFrame", "EvaluateIndicatorRGBA", "CombinedStatus",
         "ScheduleCooldownRefresh", "HandleCooldownWakeDone", "RefreshTimeProjection", "CooldownEventAlreadyDisplayed" },
-    ["MSUF_CastbarGCD.lua"] = { "OnSucceeded", "StartGCDBar", "ArmFinish", "OnPollTicker", "OnFinishTimer",
-        "FinishGCDBar", "GCDStillActive", "RefreshDetached" },
+    ["MSUF_CastbarGCD.lua"] = { "OnSucceeded", "StartGCDBar", "ArmFinish", "FinishWake", "OnFinishTimer",
+        "FinishGCDBar", "GCDStillActive", "GCDActive", "RefreshDetached" },
     ["MSUF_FocusKickIcon.lua"] = { "ApplyCastState", "ApplyInterruptibilityColor", "AttachTimeDriver",
         "PlayInterruptFeedback", "RefreshReadyColor" },
     ["MSUF_FocusKick_StateDriver.lua"] = { "OnEngineState", "ApplyState" },

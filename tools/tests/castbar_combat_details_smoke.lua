@@ -55,7 +55,9 @@ MSUF_EnsureDBLazy=function() end
 GetCVar=function() return "400" end
 local reads=0
 GetNetStats=function() reads=reads+1;return 0,0,28,43 end
-local ns={Client={IsRetail=true},ExportPublic=function(k,v) _G[k]=v end}
+-- Kernel/MSUF_Scheduler.lua's keyed deadlines (provider of the castbar timers).
+local ns={Client={IsRetail=true},ExportPublic=function(k,v) _G[k]=v end,
+    Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end }}
 assert(loadfile(root.."/MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua"))("MSUF",ns)
 MSUF_DB={general={castbarShowLatency=false,castbarShowLatencyText=true}}
 local player={statusBar=Frame(),latencyBar=Frame(),timeText=Frame()}

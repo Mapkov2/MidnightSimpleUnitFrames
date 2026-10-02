@@ -60,7 +60,18 @@ local function Normalize(path) return (tostring(path):gsub("\\", "/")) end
 
 local Secrets
 
-local function S(kind) return Secrets.New(kind or "number") end
+-- Budget mode (world.budget): one secret per kind, reused, so a measurement
+-- counts only what the addon allocates.
+local reusedSecrets
+local function S(kind)
+    kind = kind or "number"
+    if reusedSecrets then
+        local secret = reusedSecrets[kind]
+        if not secret then secret = Secrets.New(kind); reusedSecrets[kind] = secret end
+        return secret
+    end
+    return Secrets.New(kind)
+end
 local function IsSecret(value) return Secrets.IsSecret(value) end
 local function AnySecret(...)
     for index = 1, select("#", ...) do
@@ -266,20 +277,21 @@ end
 --------------------------------------------------------------------------
 
 -- Fields of the cast tuple that stay plain (NeverSecret in UnitDocumentation).
+local function V(secret, value, kind) if secret then return S(kind) end return value end
+
 local function CastTuple(world, cast)
     local secret = world.secretCasts
-    local function V(value, kind) if secret then return S(kind) end return value end
-    return V(cast.name, "string"), V(cast.name, "string"), V(135812), V(cast.startMS), V(cast.endMS),
-        cast.tradeskill == true, V(cast.name .. "-guid", "string"), V(cast.notInterruptible == true, "boolean"),
-        V(cast.spellID), cast.castBarID, cast.delayMS or 0
+    cast.guid = cast.guid or (cast.name .. "-guid")
+    return V(secret, cast.name, "string"), V(secret, cast.name, "string"), V(secret, 135812), V(secret, cast.startMS),
+        V(secret, cast.endMS), cast.tradeskill == true, V(secret, cast.guid, "string"),
+        V(secret, cast.notInterruptible == true, "boolean"), V(secret, cast.spellID), cast.castBarID, cast.delayMS or 0
 end
 
 local function ChannelTuple(world, cast)
     local secret = world.secretCasts
-    local function V(value, kind) if secret then return S(kind) end return value end
-    return V(cast.name, "string"), V(cast.name, "string"), V(136208), V(cast.startMS), V(cast.endMS),
-        false, V(cast.notInterruptible == true, "boolean"), V(cast.spellID), cast.empowered == true,
-        cast.empowered and 3 or 0, cast.castBarID
+    return V(secret, cast.name, "string"), V(secret, cast.name, "string"), V(secret, 136208), V(secret, cast.startMS),
+        V(secret, cast.endMS), false, V(secret, cast.notInterruptible == true, "boolean"), V(secret, cast.spellID),
+        cast.empowered == true, cast.empowered and 3 or 0, cast.castBarID
 end
 
 local function InstallClient(world, env)
@@ -287,34 +299,65 @@ local function InstallClient(world, env)
     env.GetTime = clock
     env.GetTimePreciseSec = clock
 
-    -- Deadline-ordered timers: C_Timer.After, NewTimer and NewTicker.
-    local timers = world.timers
-    local function Queue(delay, fn, handle)
+    -- Deadline-ordered timers: C_Timer.After, NewTimer and NewTicker. Queue
+    -- entries and handles are pooled, so in budget mode the harness allocates
+    -- nothing; NewTimer/NewTicker (the client allocates their handles) are
+    -- counted instead.
+    -- Fields are reset to false, never nil: a cleared key that the collector
+    -- marks dead makes its table grow again when it is set.
+    local timers, pool, poolCount = world.timers, {}, 0
+    local function Queue(delay, fn, handle, period)
         world.timerSequence = world.timerSequence + 1
-        timers[#timers + 1] = { due = world.clock + (delay or 0), fn = fn, handle = handle,
-            sequence = world.timerSequence }
+        local entry
+        if poolCount > 0 then
+            entry = pool[poolCount]
+            pool[poolCount] = false
+            poolCount = poolCount - 1
+        else
+            entry = { due = 0, fn = false, handle = false, period = false, sequence = 0 }
+        end
+        entry.due, entry.fn, entry.handle, entry.period = world.clock + (delay or 0), fn, handle or false, period or false
+        entry.sequence = world.timerSequence
+        world.timerCount = world.timerCount + 1
+        timers[world.timerCount] = entry
+    end
+    world.ReleaseTimer = function(entry)
+        entry.fn, entry.handle, entry.period = false, false, false
+        poolCount = poolCount + 1
+        pool[poolCount] = entry
+    end
+    world.QueueTimer = Queue
+    local handlePool, handleCount = {}, 0
+    local function Handle(iterations)
+        local handle
+        if handleCount > 0 then
+            handle = handlePool[handleCount]
+            handlePool[handleCount] = false
+            handleCount = handleCount - 1
+        else
+            -- The client allocates this handle; its bytes are the harness's
+            -- (world.harnessBytes), the call is counted as an object native.
+            local before = collectgarbage("count")
+            handle = { cancelled = false, remaining = false,
+                Cancel = function(self) self.cancelled = true end,
+                IsCancelled = function(self) return self.cancelled == true end }
+            world.harnessBytes = world.harnessBytes + (collectgarbage("count") - before) * 1024
+        end
+        handle.cancelled, handle.remaining = false, iterations or false
+        return handle
     end
     env.C_Timer = {
         After = function(delay, fn) world.counts.After = world.counts.After + 1; Queue(delay, fn) end,
         NewTimer = function(delay, fn)
             world.counts.NewTimer = world.counts.NewTimer + 1
-            local handle = { Cancel = function(self) self.cancelled = true end,
-                IsCancelled = function(self) return self.cancelled == true end }
-            Queue(delay, function() if not handle.cancelled then fn(handle) end end, handle)
+            local handle = Handle(1)
+            Queue(delay, fn, handle, nil)
             return handle
         end,
         NewTicker = function(delay, fn, iterations)
             world.counts.NewTicker = world.counts.NewTicker + 1
-            local handle = { Cancel = function(self) self.cancelled = true end,
-                IsCancelled = function(self) return self.cancelled == true end }
-            local remaining = iterations
-            local function Tick()
-                if handle.cancelled then return end
-                fn(handle)
-                if remaining then remaining = remaining - 1 end
-                if not handle.cancelled and (not remaining or remaining > 0) then Queue(delay, Tick, handle) end
-            end
-            Queue(delay, Tick, handle)
+            local handle = Handle(iterations)
+            Queue(delay, fn, handle, delay)
             return handle
         end,
     }
@@ -367,7 +410,15 @@ local function InstallClient(world, env)
     end
     local function UnitDuration(cast)
         if not cast then return nil end
-        return NewDuration(world, world.secretCasts, cast.startMS / 1000, (cast.endMS - cast.startMS) / 1000)
+        world.counts.UnitDuration = world.counts.UnitDuration + 1
+        local startTime, total = cast.startMS / 1000, (cast.endMS - cast.startMS) / 1000
+        if world.budget then
+            local reused = cast.durationObject or NewDuration(world, false, 0, 0)
+            cast.durationObject = reused
+            reused.secret, reused.startTime, reused.total = world.secretCasts, startTime, total
+            return reused
+        end
+        return NewDuration(world, world.secretCasts, startTime, total)
     end
     env.UnitCastingDuration = function(unit) return UnitDuration(world.casting[unit]) end
     env.UnitChannelDuration = function(unit) return UnitDuration(world.channeling[unit]) end
@@ -393,7 +444,19 @@ local function InstallClient(world, env)
     env.SPELL_INTERRUPTED_BY = "%s interrupted"
     env.INTERRUPTED = "Interrupted"
 
-    local function Color(r, g, b, a)
+    local reusedColors = {}
+    local Color
+    local function NewColor(r, g, b, a)
+        if world.budget then
+            local key = (IsSecret(r) and "secret" or tostring(r)) .. ":" .. (IsSecret(g) and "" or tostring(g))
+                .. ":" .. (IsSecret(b) and "" or tostring(b))
+            local color = reusedColors[key]
+            if not color then color = Color(r, g, b, a); reusedColors[key] = color end
+            return color
+        end
+        return Color(r, g, b, a)
+    end
+    Color = function(r, g, b, a)
         local color = { r = r, g = g, b = b, a = a or 1 }
         function color:GetRGB() return self.r, self.g, self.b end
         function color:GetRGBA() return self.r, self.g, self.b, self.a end
@@ -408,8 +471,8 @@ local function InstallClient(world, env)
     env.C_ClassColor = {
         GetClassColor = function(className)
             world.counts.GetClassColor = world.counts.GetClassColor + 1
-            if IsSecret(className) then return Color(S(), S(), S(), 1) end
-            return Color(0.9, 0.8, 0.5, 1)
+            if IsSecret(className) then return NewColor(S(), S(), S(), 1) end
+            return NewColor(0.9, 0.8, 0.5, 1)
         end,
     }
     env.C_CurveUtil = {
@@ -418,7 +481,8 @@ local function InstallClient(world, env)
             return value and ifTrue or ifFalse
         end,
         EvaluateColorFromBoolean = function(value, ifTrue, ifFalse)
-            if IsSecret(value) then return Color(S(), S(), S(), S()) end
+            world.counts.EvaluateColorFromBoolean = world.counts.EvaluateColorFromBoolean + 1
+            if IsSecret(value) then return NewColor(S(), S(), S(), S()) end
             return value and ifTrue or ifFalse
         end,
         CreateCurve = function()
@@ -434,24 +498,37 @@ local function InstallClient(world, env)
     -- Spell API. The interrupt (Counterspell) and the GCD dummy share the
     -- world's cooldown model.
     env.C_Spell = {
+        -- Both return a new object in the client (counted); budget mode reuses one.
         GetSpellCooldown = function(spellID)
             world.counts.GetSpellCooldown = world.counts.GetSpellCooldown + 1
             local cooldown = world.cooldowns[spellID]
             local active = cooldown ~= nil and cooldown.startTime + cooldown.total > world.clock
-            local function V(value) if world.secretCooldowns then return S() end return value end
-            return { startTime = V(active and cooldown.startTime or 0), duration = V(active and cooldown.total or 0),
-                isEnabled = true, isActive = active, modRate = V(1) }
+            local secret = world.secretCooldowns
+            local info = world.budget and world.reusedCooldownInfo[spellID] or {}
+            if world.budget then world.reusedCooldownInfo[spellID] = info end
+            info.startTime = secret and S() or (active and cooldown.startTime or 0)
+            info.duration = secret and S() or (active and cooldown.total or 0)
+            info.isEnabled, info.isActive = true, active
+            info.modRate = secret and S() or 1
+            return info
         end,
         GetSpellCooldownDuration = function(spellID)
             world.counts.GetSpellCooldownDuration = world.counts.GetSpellCooldownDuration + 1
             local cooldown = world.cooldowns[spellID]
             local active = cooldown ~= nil and cooldown.startTime + cooldown.total > world.clock
-            return NewDuration(world, world.secretCooldowns, active and cooldown.startTime or 0,
-                active and cooldown.total or 0)
+            local duration = world.budget and world.reusedCooldownDurations[spellID] or NewDuration(world, false, 0, 0)
+            if world.budget then world.reusedCooldownDurations[spellID] = duration end
+            duration.secret = world.secretCooldowns
+            duration.startTime, duration.total = active and cooldown.startTime or 0, active and cooldown.total or 0
+            return duration
         end,
         GetSpellInfo = function(spellID)
             if IsSecret(spellID) then return { name = S("string"), castTime = S(), iconID = S() } end
-            return { name = "Spell " .. tostring(spellID), castTime = world.castTimes[spellID] or 0, iconID = 1 }
+            local info = world.budget and world.reusedSpellInfo[spellID]
+                or { name = "Spell " .. tostring(spellID), iconID = 1 }
+            if world.budget then world.reusedSpellInfo[spellID] = info end
+            info.castTime = world.castTimes[spellID] or 0
+            return info
         end,
         GetSpellName = function(spellID) if IsSecret(spellID) then return S("string") end return "Spell " .. spellID end,
         GetSpellTexture = function(spellID) if IsSecret(spellID) then return S(), S() end return 1, 1 end,
@@ -527,6 +604,50 @@ local function InstallWidgets(world)
         if IsSecret(self.text) then return S() end
         return plainStringWidth(self)
     end
+    -- Budget mode: the stubs' setters that build a table per call reuse one
+    -- per widget, and points come from a per-widget pool.
+    if world.budget then
+        local function Reuse(widget, field, a, b, c, d)
+            local t = rawget(widget, field)
+            if not t then t = {}; widget[field] = t end
+            t[1], t[2], t[3], t[4] = a, b, c, d
+            return t
+        end
+        local fourTuple = { SetStatusBarColor = "color", SetVertexColor = "vertexColor", SetTextColor = "textColor",
+            SetShadowColor = "shadowColor", SetBackdropColor = "backdropColor",
+            SetBackdropBorderColor = "backdropBorderColor", SetSwipeColor = "swipeColor" }
+        for method, field in pairs(fourTuple) do
+            Methods[method] = function(self, r, g, b, a) Reuse(self, field, r, g, b, a) end
+        end
+        function Methods:SetColorTexture(r, g, b, a)
+            Reuse(self, "colorTexture", r, g, b, a)
+            Reuse(self, "vertexColor", r, g, b, a)
+        end
+        function Methods:SetTexCoord(a, b, c, d) Reuse(self, "texCoord", a, b, c, d) end
+        function Methods:SetShadowOffset(x, y) Reuse(self, "shadowOffset", x, y) end
+        function Methods:SetOffset(x, y) Reuse(self, "offset", x, y) end
+        function Methods:SetPoint(point, relativeTo, relativePoint, x, y)
+            if type(relativeTo) == "string" or type(relativeTo) == "number" then
+                relativeTo, relativePoint, x, y = self.parent, point, relativeTo, relativePoint
+            end
+            local pool = rawget(self, "pointPool")
+            if not pool then pool = {}; self.pointPool = pool end
+            local entry = pool[#pool]
+            if entry then pool[#pool] = nil else entry = {} end
+            entry.point, entry.relativeTo, entry.relativePoint = point, relativeTo, relativePoint or point
+            entry.x, entry.y = x or 0, y or 0
+            self.points[#self.points + 1] = entry
+        end
+        function Methods:ClearAllPoints()
+            local pool = rawget(self, "pointPool")
+            if not pool then pool = {}; self.pointPool = pool end
+            for index = #self.points, 1, -1 do
+                pool[#pool + 1] = self.points[index]
+                self.points[index] = nil
+            end
+            self.allPoints = false
+        end
+    end
     -- A bar bound to a secret duration reads its range and value back secret.
     local function SecretTimer(bar) local timer = bar.timerDuration return timer ~= nil and timer.secret == true end
     local plainSetValue = Methods.SetValue
@@ -544,8 +665,10 @@ local function InstallWidgets(world)
     end
     function Methods:SetTimerDuration(duration, interpolation, direction)
         world.counts.SetTimerDuration = world.counts.SetTimerDuration + 1
-        -- The bar snapshots the duration's contents (a value type).
-        self.timerDuration = duration and duration:Copy() or nil
+        -- The bar snapshots the duration's contents (a value type); budget
+        -- mode keeps the reference.
+        if world.budget then self.timerDuration = duration
+        else self.timerDuration = duration and duration:Copy() or nil end
         self.timerDirection = direction
     end
     function Methods:ClearTimerDuration() self.timerDuration = nil end
@@ -555,7 +678,15 @@ local function InstallWidgets(world)
     function Methods:SetAlphaFromBoolean(value, ifTrue, ifFalse)
         self.alphaBoolean, self.alphaIfTrue, self.alphaIfFalse = value, ifTrue, ifFalse
     end
-    function Methods:SetCooldownFromDurationObject(duration) self.cooldownDuration = duration end
+    -- A Cooldown frame runs its OnCooldownDone when the bound duration ends
+    -- (the harness knows the end of a secret duration; addon code does not).
+    function Methods:SetCooldownFromDurationObject(duration)
+        self.cooldownDuration = duration
+        self.cooldownEnd = duration.startTime + duration.total
+        self.cooldownArmed = duration.total > 0
+        world.cooldownFrames[self] = true
+    end
+    function Methods:Clear() self.cooldownArmed = false end
     function Methods:SetDrawBling() end
     function Methods:EnableKeyboard() end
     function Methods:SetPropagateKeyboardInput() end
@@ -591,6 +722,8 @@ end
 ---   flavor       "Mainline" (default) or "Forever"
 ---   playerClass  the player's class token (default "MAGE")
 ---   setup        function(env, world) run after the client model, before boot
+---   budget       reuse every object a native would return and every secret,
+---                so allocation measurements see only the addon's own
 function SecretWorld.New(root, options)
     options = options or {}
     root = Normalize(root):gsub("/$", "")
@@ -634,13 +767,29 @@ function SecretWorld.New(root, options)
         counts = setmetatable({}, { __index = function() return 0 end }),
         errors = {},
         timerSequence = 0,
+        timerCount = 0,
+        harnessBytes = 0,
+        cooldownFrames = {},
         Secrets = Secrets,
         playerClass = options.playerClass or "MAGE",
+        budget = options.budget == true,
+        reusedCooldownInfo = {},
+        reusedCooldownDurations = {},
+        reusedSpellInfo = {},
     }, SecretWorld)
+    reusedSecrets = world.budget and {} or nil
     for index = 1, 5 do world.exists["boss" .. index] = true end
     for index = 1, 3 do world.exists["arena" .. index] = true end
     InstallClient(world, world.env)
     InstallWidgets(world)
+    if world.budget then
+        -- tostring of a secret is a secret string; reuse one.
+        local plainToString = world.env.tostring
+        world.env.tostring = function(value)
+            if IsSecret(value) then return S("string") end
+            return plainToString(value)
+        end
+    end
     if options.setup then options.setup(world.env, world) end
 
     local corePaths = ClientWorld.Graph(root, ClientWorld.CoreTOC(base.client.tocSuffix or options.flavor or "Mainline"),
@@ -651,6 +800,42 @@ function SecretWorld.New(root, options)
     if failure then error("castbar secret world: " .. failure.file .. ": " .. failure.message, 2) end
     world.corePaths = corePaths
     return world
+end
+
+--- Lua VM instructions fn executes inside addon files (MidnightSimpleUnitFrames/),
+--- harness code excluded: a call/return hook keeps a stack of "is this frame
+--- addon code", and the count hook adds an instruction only while the top is.
+function SecretWorld:AddonInstructions(fn, ...)
+    local prefix = "@" .. self.root .. "/MidnightSimpleUnitFrames/"
+    local stack, top, count = {}, 0, 0
+    local cache = {}
+    local getinfo = debug.getinfo
+    local function IsAddon(source)
+        local known = cache[source]
+        if known == nil then
+            known = source:sub(1, #prefix) == prefix
+            cache[source] = known
+        end
+        return known
+    end
+    -- The frame that runs fn itself is harness code.
+    top = 1
+    stack[1] = false
+    debug.sethook(function(event)
+        if event == "count" then
+            if stack[top] then count = count + 1 end
+        elseif event == "call" then
+            local info = getinfo(2, "S")
+            top = top + 1
+            stack[top] = info ~= nil and IsAddon(info.source)
+        else
+            -- "return" and "tail return" each close one frame.
+            if top > 1 then top = top - 1 end
+        end
+    end, "cr", 1)
+    fn(...)
+    debug.sethook()
+    return count
 end
 
 --- Source paths of every castbar file this client loads (Castbars/**, the
@@ -666,26 +851,40 @@ function SecretWorld:CastbarPaths()
     return list
 end
 
---- Runs every timer due at the current clock, earliest deadline first. A
---- timer armed while this pass runs waits for the next rendered frame, as in
---- the client (the clock does not move inside one frame).
+--- Runs every timer due at the current clock, earliest deadline first (ties
+--- in arming order). A timer armed while this pass runs waits for the next
+--- rendered frame, as in the client (the clock does not move inside one frame).
 function SecretWorld:RunDue()
     local last = self.timerSequence
+    local timers = self.timers
     for _ = 1, 20000 do
         local best, bestIndex
-        for index = 1, #self.timers do
-            local timer = self.timers[index]
-            if timer.sequence <= last and timer.due <= self.clock + 1e-9 and (not best or timer.due < best.due) then
+        for index = 1, self.timerCount do
+            local timer = timers[index]
+            if timer.sequence <= last and timer.due <= self.clock + 1e-9
+                and (not best or timer.due < best.due or (timer.due == best.due and timer.sequence < best.sequence)) then
                 best, bestIndex = timer, index
             end
         end
         if not best then return end
-        table.remove(self.timers, bestIndex)
-        local ok, message = pcall(best.fn)
-        if not ok then self.errors[#self.errors + 1] = tostring(message) end
+        timers[bestIndex] = timers[self.timerCount]
+        timers[self.timerCount] = false
+        self.timerCount = self.timerCount - 1
+        local fn, handle, period = best.fn, best.handle, best.period
+        self.ReleaseTimer(best)
+        if not (handle and handle.cancelled) then
+            local ok, message = pcall(fn, handle or nil)
+            if not ok then self.errors[#self.errors + 1] = tostring(message) end
+            if handle then
+                if handle.remaining then handle.remaining = handle.remaining - 1 end
+                if period and not handle.cancelled and (not handle.remaining or handle.remaining > 0) then
+                    self.QueueTimer(period, fn, handle, period)
+                end
+            end
+        end
     end
     local sources = {}
-    for index = 1, math.min(5, #self.timers) do
+    for index = 1, math.min(5, self.timerCount) do
         local info = debug.getinfo(self.timers[index].fn, "S")
         sources[#sources + 1] = info.short_src .. ":" .. info.linedefined
     end
@@ -698,10 +897,20 @@ local function CastbarScript(fn)
         or source:find("SwingTimer.lua", 1, true)
 end
 
---- One rendered frame: due timers, then every shown castbar or scheduler
---- OnUpdate script, then due timers again.
+--- One rendered frame: due timers, Cooldown completions, then every shown
+--- castbar or scheduler OnUpdate script, then due timers again.
 function SecretWorld:Frame()
     self:RunDue()
+    for frame in pairs(self.cooldownFrames) do
+        if frame.cooldownArmed and self.clock >= frame.cooldownEnd then
+            frame.cooldownArmed = false
+            local done = frame.scripts.OnCooldownDone
+            if done then
+                local ok, message = pcall(done, frame)
+                if not ok then self.errors[#self.errors + 1] = tostring(message) end
+            end
+        end
+    end
     local frames = self.widgets.frames
     for index = 1, #frames do
         local frame = frames[index]

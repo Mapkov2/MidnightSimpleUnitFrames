@@ -107,7 +107,8 @@ end
 
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_InterruptReady.lua"))(
     "MidnightSimpleUnitFrames",
-    { ExportPublic = function(name, value) _G[name] = value return value end }
+    { ExportPublic = function(name, value) _G[name] = value return value end,
+        Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end } }
 )
 
 -- Preserve the existing scalar-composition contract for secret
