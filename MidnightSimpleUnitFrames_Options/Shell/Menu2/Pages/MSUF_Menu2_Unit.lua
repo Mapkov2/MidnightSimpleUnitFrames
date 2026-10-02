@@ -1256,6 +1256,53 @@ local function UpdateLoadActive(unit)
 end
 local UnitPage = M.UnitPage or {}
 M.UnitPage = UnitPage
+-- Status icon helpers the unit and group status pages share.
+--- Every icon asset the status preview entries offer (the first entry's
+--- list first, no repeats), or the single "Use default icon" row.
+function UnitPage.StatusIconAssetValues(entries)
+    local valuesFn = _G.MSUF_GetStatusIconAssetValues
+    if type(valuesFn) ~= "function" or type(entries) ~= "table" then
+        return { { value = "", text = "Use default icon" } }
+    end
+    local out, used = {}, {}
+    for i = 1, #entries do
+        local entry = entries[i]
+        local values = valuesFn(entry[1], entry[2], i == 1, true)
+        for j = 1, #(values or {}) do
+            local item = values[j]
+            local value = item and item.value
+            if type(value) == "string" and not used[value] then
+                used[value] = true
+                out[#out + 1] = item
+            end
+        end
+    end
+    if #out == 0 then out[1] = { value = "", text = "Use default icon" } end
+    return out
+end
+
+--- The five-slot icon preview strip of a status card, at (16, y) inside the
+--- card: dark holders with a centred 22 px texture each.
+function UnitPage.CreateStatusIconStrip(card, y, width)
+    local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region) return region end
+    local iconPreviewStrip = PixelLayoutRegion(CreateFrame("Frame", nil, card))
+    iconPreviewStrip:SetPoint("TOPLEFT", card, "TOPLEFT", 16, y)
+    iconPreviewStrip:SetSize(width, 24)
+    local holders = {}
+    for i = 1, 5 do
+        local holder = PixelLayoutRegion(CreateFrame("Frame", nil, iconPreviewStrip))
+        holder:SetSize(24, 24)
+        holder:SetPoint("LEFT", iconPreviewStrip, "LEFT", (i - 1) * 28, 0)
+        holder.bg = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND"))
+        holder.bg:SetAllPoints()
+        holder.bg:SetColorTexture(0.020, 0.026, 0.052, 0.70)
+        holder.tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
+        holder.tex:SetPoint("CENTER", holder, "CENTER", 0, 0)
+        holder.tex:SetSize(22, 22)
+        holders[i] = holder
+    end
+    return iconPreviewStrip, holders
+end
 M.Assign(UnitPage, {
     SectionFields = {
         portrait = table.concat(COPY_PORTRAIT_FIELDS, " "),
