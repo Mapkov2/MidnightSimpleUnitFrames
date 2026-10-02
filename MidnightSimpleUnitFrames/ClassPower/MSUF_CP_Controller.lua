@@ -1808,7 +1808,6 @@ CP.RefreshCDMWidthBindings = function(syncNow)
         CP.CDMWidthSyncLayouts(true)
     end
 end
-ExportPublic("MSUF_ClassPower_RefreshCDMWidthBindings", CP.RefreshCDMWidthBindings)
 
 CP.PlayerHPRefreshPublic = function()
     CPConfig.RefreshConfig()
@@ -1816,7 +1815,6 @@ CP.PlayerHPRefreshPublic = function()
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(CPConfig.AnyFeatureEnabled())
 end
-ExportPublic("MSUF_ClassPower_PlayerHP_Refresh", CP.PlayerHPRefreshPublic)
 
 CP.PlayerHPRefreshTextures = function()
     CPConfig.RefreshConfig()
@@ -1825,7 +1823,6 @@ CP.PlayerHPRefreshTextures = function()
         CP_PlayerHPRefresh(GetPlayerFrame())
     end
 end
-ExportPublic("MSUF_ClassPower_PlayerHP_RefreshTextures", CP.PlayerHPRefreshTextures)
 
 --- Refresh bar textures (call after texture change in settings)
 CP.RefreshTexturesPublic = function()
@@ -1944,7 +1941,6 @@ CP.RefreshVisualsPublic = function()
     end
     if CP.resourceExtras then CP.resourceExtras.Refresh() end
 end
-ExportPublic("MSUF_ClassPower_RefreshVisuals", CP.RefreshVisualsPublic)
 
 CP.ApplyRoundedSurfacePublic = function(masterEnabled)
     local rounded = MSUF and MSUF.RoundedSurface
@@ -2057,17 +2053,6 @@ do
         CP._origFullRefresh()
     end
 end
-
---- Smooth Player Power compatibility entry point.
---- UFCore owns the actual StatusBar interpolation. Class Resources only owns
---- the detached Player bar's layout and exposes the same per-player setting.
-CP.SmoothPowerBarApply = function()
-    --- Refresh the cached flags in UFCore's DIRECT_APPLY hot path.
-    if _G.MSUF_UFCore_RefreshSettingsCache then
-        _G.MSUF_UFCore_RefreshSettingsCache("SMOOTH_POWER")
-    end
-end
-ExportPublic("MSUF_SmoothPowerBar_Apply", CP.SmoothPowerBarApply)
 
 --- Complete the ClassPower module teardown. Active Aug is never routed here in
 --- combat: Disable() retains the live surface and the event driver calls this

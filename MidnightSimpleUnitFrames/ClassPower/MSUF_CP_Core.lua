@@ -351,7 +351,6 @@ builders.LAYOUT = function(E)
             --- into the protected anchor family; then the post-combat pass
             --- replays the geometry.
             CP._layoutDirty = true
-            ExportPublic("MSUF_ClassPowerLayoutDirty", true)
             RequestUFReanchorAfterCombat()
             return false
         end
@@ -573,7 +572,6 @@ builders.LAYOUT = function(E)
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
         CP._layoutDirty = positionDeferred and true or nil
-        ExportPublic("MSUF_ClassPowerLayoutDirty", positionDeferred and true or nil)
         if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
             layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end
