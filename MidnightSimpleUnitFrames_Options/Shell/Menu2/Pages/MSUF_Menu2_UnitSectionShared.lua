@@ -3,6 +3,11 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitSectionShared.lua", {
+    "MSUF_EnsureAnchorPicker",
+})
 local W = M.Widgets or {}
 local T = M.Theme or {}
 local Shared = M.UnitSectionsShared or {}
@@ -785,7 +790,7 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     end
     local pick = SmallButton(box, opts.pickLabel or "Pick", opts.pickWidth or 50, 6)
     pick:SetScript("OnClick", function()
-        local overlay = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker() or nil
+        local overlay = _G.MSUF_EnsureAnchorPicker()
         if not overlay then return end
         overlay._isCandidateAllowed = opts.isCandidateAllowed
         overlay._onPick = function(frameName)

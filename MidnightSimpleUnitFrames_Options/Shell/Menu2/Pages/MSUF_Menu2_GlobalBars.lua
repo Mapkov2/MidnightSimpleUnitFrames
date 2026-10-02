@@ -5,6 +5,13 @@ addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.
     or "MidnightSimpleUnitFrames"
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua", {
+    "MSUF_RefreshTempMaxHealth",
+    "MSUF_UFPreview_RequestRefresh",
+    "MSUF_ApplyRoundedUnitframes",
+})
 
 -- Menu2 global Bars page.
 -- Binds shared/scoped texture, gradient, outline, absorb, and highlight controls. Page code
@@ -1129,14 +1136,8 @@ local function BuildTempMaxHealthSection(ctx, b)
 
     local function Refresh(reason)
         local scope = CurrentBarsScope()
-        if type(_G.MSUF_RefreshTempMaxHealth) == "function" then
-            _G.MSUF_RefreshTempMaxHealth(scope, reason or "MSUF2_TEMP_MAX_HEALTH")
-        else
-            ApplyBars(reason or "MSUF2_TEMP_MAX_HEALTH")
-        end
-        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-            _G.MSUF_UFPreview_RequestRefresh(reason or "MSUF2_TEMP_MAX_HEALTH")
-        end
+        _G.MSUF_RefreshTempMaxHealth(scope, reason or "MSUF2_TEMP_MAX_HEALTH")
+        _G.MSUF_UFPreview_RequestRefresh(reason or "MSUF2_TEMP_MAX_HEALTH")
         if type(M.RefreshGFNativePreviews) == "function" then
             M.RefreshGFNativePreviews(reason or "MSUF2_TEMP_MAX_HEALTH")
         end
@@ -1846,7 +1847,7 @@ local function BuildSlantedSection(ctx, b)
         return ApplySlantedToScope(SLANTED_PRESET_GROUPS) or units
     end
     local function RefreshSlanted(reason)
-        if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then _G.MSUF_ApplyRoundedUnitframes() end
+        _G.MSUF_ApplyRoundedUnitframes()
         SyncSlantedControls()
         if M.RequestRefresh then M.RequestRefresh(ctx, reason) end
     end
@@ -1925,7 +1926,7 @@ local function BuildSlantedSection(ctx, b)
             if not allowed or Bars().slantedBarDirection == value then return end
             Bars().slantedBarDirection = value
             if preview and preview.RefreshSlantedPreview then preview:RefreshSlantedPreview() end
-            if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then _G.MSUF_ApplyRoundedUnitframes() end
+            _G.MSUF_ApplyRoundedUnitframes()
             if M.RequestRefresh then M.RequestRefresh(ctx, "slanted-bar-direction") end
         end,
         Meta("slanted.direction"))

@@ -7,6 +7,13 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GroupPriority.lua", {
+    "MSUF_SetManagedBinding",
+    "MSUF_ClearManagedBinding",
+    "MSUF_EM2_SetFocusSelection",
+})
 
 local W = M.Widgets
 local T = M.Theme
@@ -133,7 +140,6 @@ local function EnsureBindingConflictPopup()
         OnAccept = function(_, data)
             if not data then return end
             if type(data.commit) == "function" then data.commit(data.key, true); return end
-            if type(_G.MSUF_SetManagedBinding) ~= "function" then return end
             local ok = _G.MSUF_SetManagedBinding(PRIORITY_BINDING, data.key, true)
             if ok and type(data.refresh) == "function" then data.refresh("priority-binding-replaced") end
         end,
@@ -220,7 +226,6 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
     end
     local function ClearBinding()
         if not CurrentKey() then StopListening(); return true end
-        if type(_G.MSUF_ClearManagedBinding) ~= "function" then return false end
         local ok, code = _G.MSUF_ClearManagedBinding(PRIORITY_BINDING)
         if ok then Changed("priority-binding-cleared") end
         if not ok then BindingFailed(code) end
@@ -300,7 +305,7 @@ end
 local function OpenPriorityEditMode()
     if type(M.SetMSUFEditModeActive) ~= "function" then return false end
     local ok = M.SetMSUFEditModeActive(true, "gf_priority", { source = "priority-page" })
-    if ok and type(_G.MSUF_EM2_SetFocusSelection) == "function" then
+    if ok then
         _G.MSUF_EM2_SetFocusSelection("gf_priority", "placement", nil, {
             source = "priority-page",
             menu = false,

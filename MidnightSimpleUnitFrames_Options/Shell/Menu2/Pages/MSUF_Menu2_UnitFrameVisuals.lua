@@ -2,6 +2,12 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", {
+    "MSUF_SuppressBlizzardPlayerCastbars",
+    "MSUF_ShowReloadRecommendedPopup",
+})
 
 -- Menu2 Unit visual sections.
 -- Builds controls for portrait, castbar detail, detached power, border/shape, and related
@@ -1011,7 +1017,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
         end
         M.RequestUnitApply(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
         _G.MSUF_Castbars_OnSettingsChanged("menu2_backend")
-        if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
+        if unit == "player" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
         if state.refresh then state.refresh() end
     end
     local function ReadCastbarProvider()
@@ -1030,11 +1036,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
         local previousBackend = ReadCastbarBackend()
         SetCastbarBackend(backend)
         if backend == "BLIZZARD" and previousBackend ~= "BLIZZARD" then
-            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-                _G.MSUF_ShowReloadRecommendedPopup("Player Blizzard castbar")
-            elseif _G.print then
-                _G.print("|cffffd700MSUF:|r Switching to the Blizzard player castbar requires a /reload.")
-            end
+            _G.MSUF_ShowReloadRecommendedPopup("Player Blizzard castbar")
         end
     end
     local function SetCastbarEnabled(enabled)

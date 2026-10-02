@@ -3,6 +3,13 @@ MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Unit.lua", {
+    "MSUF_SetMSUFEditModeDirect",
+    "MSUF_ApplyBossUnitframePreviewState",
+    "MSUF_ApplyArenaUnitframePreviewState",
+})
 local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Menu2 Unit page definitions.
@@ -898,13 +905,13 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
     return CompleteUnitCopy(onComplete, applied, result)
 end
 local function ToggleEditMode(unit)
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return end
+    if M.BlockCombatAction() then return end
     if _G.InCombatLockdown and _G.InCombatLockdown() then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+        M.ShowConfigCombatLockMessage()
         return
     end
     local active = _G.MSUF_UnitEditModeActive == true
-    if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then _G.MSUF_SetMSUFEditModeDirect(not active, CanonUnitKey(unit)) end
+    _G.MSUF_SetMSUFEditModeDirect(not active, CanonUnitKey(unit))
 end
 local function IsEditModeActive()
     return _G.MSUF_UnitEditModeActive == true
@@ -929,11 +936,7 @@ local function SyncBossPagePreview()
         if active or cleared then bossPagePreviewPendingCleanup = true end
         return
     end
-    if not BossPagePreviewInCombat() and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then
-        _G.MSUF_ApplyBossUnitframePreviewState(active, active and "MSUF2_BOSS_PAGE" or "MSUF2_BOSS_PAGE_OFF")
-        return
-    end
-    if type(_G.MSUF_SyncBossUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncBossUnitframePreviewWithUnitEdit() end
+    _G.MSUF_ApplyBossUnitframePreviewState(active, active and "MSUF2_BOSS_PAGE" or "MSUF2_BOSS_PAGE_OFF")
 end
 local function EnsureBossPagePreviewEvents()
     if bossPagePreviewEvents then return bossPagePreviewEvents end
@@ -1025,11 +1028,7 @@ local function SyncArenaPagePreview()
         if active or cleared then arenaPagePreviewPendingCleanup = true end
         return
     end
-    if type(_G.MSUF_ApplyArenaUnitframePreviewState) == "function" then
-        _G.MSUF_ApplyArenaUnitframePreviewState(active, active and "MSUF2_ARENA_PAGE" or "MSUF2_ARENA_PAGE_OFF")
-        return
-    end
-    if type(_G.MSUF_SyncArenaUnitframePreviewWithUnitEdit) == "function" then _G.MSUF_SyncArenaUnitframePreviewWithUnitEdit() end
+    _G.MSUF_ApplyArenaUnitframePreviewState(active, active and "MSUF2_ARENA_PAGE" or "MSUF2_ARENA_PAGE_OFF")
 end
 local function EnsureArenaPagePreviewEvents()
     if arenaPagePreviewEvents then return arenaPagePreviewEvents end
@@ -1198,7 +1197,7 @@ local function RefreshStatusRuntime(unit, spec)
         _G.MSUF_RefreshStatusIndicators(unit, "MSUF2_STATUS_INDICATOR")
     end
     if spec and spec.value == "level" then
-        if unit == "boss" and _G.MSUF_BossTestMode and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR") end
+        if unit == "boss" and _G.MSUF_BossTestMode then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_LEVEL_INDICATOR") end
     end
     M.RequestUnitApply(unit, "MSUF2_STATUS_INDICATOR", { preview = true, text = true, fonts = spec and spec.value == "level" })
 end

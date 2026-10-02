@@ -83,6 +83,8 @@ local namespace = {
     ExportPublic = function(name, value) _G[name] = value end,
     UF = { GetFrame = function(key) if key == "player" then return player end end },
 }
+-- Edit Mode resolves the functions other modules publish through MSUF.Require.
+assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().Install(root, namespace)
 for _, file in ipairs({ "Movers", "Elements", "Compat" }) do
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_" .. file .. ".lua"))("MSUF", namespace)
 end

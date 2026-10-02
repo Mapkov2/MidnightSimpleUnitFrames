@@ -3,6 +3,17 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua", {
+    "MSUF_GetAllProfiles",
+    "MSUF_ShowReloadRecommendedPopup",
+    "MSUF_ExportSelectionToString",
+    "MSUF_IsSpecAutoSwitchEnabled",
+    "MSUF_GetSpecProfile",
+    "MSUF_ImportFromString",
+    "MSUF_ImportIntoNewProfile",
+})
 
 -- Advanced Profiles page.
 -- Builds profile copy/import/export/spec-switch controls and Wago import affordances.
@@ -105,7 +116,7 @@ end
 local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = "None", text = "None" } end
-    local list = type(_G.MSUF_GetAllProfiles) == "function" and _G.MSUF_GetAllProfiles() or { "Default" }
+    local list = _G.MSUF_GetAllProfiles() or { "Default" }
     for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i] } end
     return values
 end
@@ -152,18 +163,9 @@ local function PrintProfileMessage(color, message, ...)
     end
     print((color or "|cffffd700") .. "MSUF:|r " .. message)
 end
+-- M.BlockCombatAction (MSUF_Menu2_Bindings.lua) loads before every page.
 local function BlockCombatAction()
-    if M.BlockCombatAction then return M.BlockCombatAction() and true or false end
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then return _G.MSUF_BlockConfigCombatLocked() and true or false end
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
-        return true
-    end
-    if _G.UnitAffectingCombat and _G.UnitAffectingCombat("player") then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
-        return true
-    end
-    return false
+    return M.BlockCombatAction() and true or false
 end
 local function StyleProfileInput(editBox, width, height, multiline)
     if not editBox then return editBox end
@@ -305,11 +307,7 @@ local function ShowImportReloadPrompt()
         _G.StaticPopup_Show("MSUF2_IMPORT_RELOAD_PROMPT")
         return
     end
-    if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-        _G.MSUF_ShowReloadRecommendedPopup("Profile import")
-    else
-        PrintProfileMessage("|cffffd700", "Profile imported. Reload the UI with /reload.")
-    end
+    _G.MSUF_ShowReloadRecommendedPopup("Profile import")
 end
 -- A profile switch swaps the whole DB under a live UI. Frames re-apply, but anything baked
 -- at load time (group headers, module gating) only settles after a reload, so offer one.
@@ -389,10 +387,6 @@ function ProfilesPage.Prepare(ctx)
     local function ExportProfileString(kind)
         kind = kind or M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all")
         local suiteKind = kind == "suite_all" or kind:match("^suite_module:") ~= nil
-        if not suiteKind and type(_G.MSUF_ExportSelectionToString) ~= "function" then
-            if M.ShowStatusFeedback then M.ShowStatusFeedback("Export unavailable", "danger", 1.8) end
-            return false
-        end
         local selected = M.profileExportUnits or { player = true }
         if kind == "unitselection" then
             local any = false
@@ -794,7 +788,7 @@ end
         local profiles = ProfileValues(false)
         local profileCount = #profiles
         local profileCountText = profileCount == 1 and M.Tr("1 profile") or M.Format("%d profiles", profileCount)
-        local specAuto = type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled() or false
+        local specAuto = _G.MSUF_IsSpecAutoSwitchEnabled() or false
         local locked = ConfigLocked()
         activeName:SetText(active)
         if currentStatus then
@@ -848,7 +842,7 @@ function ProfilesPage.Specializations(state)
         min(380, max(220, specInnerW - 40)))
     M.BindBoolWidget(ctx, auto,
         function()
-            return type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled() or false
+            return _G.MSUF_IsSpecAutoSwitchEnabled() or false
         end,
         function(v)
             _G.MSUF_SetSpecAutoSwitchEnabled(v and true or false)
@@ -876,8 +870,7 @@ function ProfilesPage.Specializations(state)
             MoveWidget(drop, assignmentCard, 18, -58, dropW)
             M.BindDropdownWidget(ctx, drop,
                 function()
-                    if type(_G.MSUF_GetSpecProfile) == "function" then return _G.MSUF_GetSpecProfile(s.id) or "None" end
-                    return "None"
+                    return _G.MSUF_GetSpecProfile(s.id) or "None"
                 end,
                 function(v)
                     _G.MSUF_SetSpecProfile(s.id, (v ~= "None") and v or nil)
@@ -889,13 +882,11 @@ function ProfilesPage.Specializations(state)
         end
     end
     local function RefreshSpecState()
-        local enabled = type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled() or false
+        local enabled = _G.MSUF_IsSpecAutoSwitchEnabled() or false
         local assigned = 0
-        if type(_G.MSUF_GetSpecProfile) == "function" then
-            for i = 1, #specs do
-                local value = _G.MSUF_GetSpecProfile(specs[i].id)
-                if value and value ~= "" and value ~= "None" then assigned = assigned + 1 end
-            end
+        for i = 1, #specs do
+            local value = _G.MSUF_GetSpecProfile(specs[i].id)
+            if value and value ~= "" and value ~= "None" then assigned = assigned + 1 end
         end
         if W.SetCollapsibleBadges then
             W.SetCollapsibleBadges(spec, {
@@ -1064,10 +1055,6 @@ function ProfilesPage.ImportActions(state)
             RefreshAfterProfileChange(ctx)
             return true
         end
-        if type(_G.MSUF_ImportFromString) ~= "function" then
-            PrintProfileMessage("|cffff0000", "Import failed: profile import API is not available.")
-            return false
-        end
         -- `text` is a string the user pasted
         local imported = _G.MSUF_ImportFromString(text)
         if imported ~= true then return false end
@@ -1103,10 +1090,6 @@ function ProfilesPage.ImportActions(state)
             importProfileName:SetText("")
             ReloadAfterNewProfileImport(name)
             return true
-        end
-        if type(_G.MSUF_ImportIntoNewProfile) ~= "function" then
-            PrintProfileMessage("|cffff0000", "Import failed: profile API is not available.")
-            return false
         end
 
         -- MSUF_ImportIntoNewProfile decodes, validates and stages the string before it creates

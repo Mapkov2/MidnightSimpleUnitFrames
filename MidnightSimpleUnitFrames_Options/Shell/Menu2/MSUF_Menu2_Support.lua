@@ -44,6 +44,15 @@ local function BlockConfigCombatLocked(silent)
 end
 M.IsConfigCombatLocked = M.IsConfigCombatLocked or IsConfigCombatLocked
 M.ShowConfigCombatLockMessage = ShowConfigCombatLockMessage
+-- A menu file lists the core functions it calls by their global names. Each
+-- must exist when the file loads: the core loads before this load-on-demand
+-- addon on every client, so a missing one is a wiring bug and MSUF.Require
+-- raises naming the file. The calls still go through _G, so a hook installed
+-- on the global later applies.
+function M.RequireGlobals(context, names)
+    local Require = MSUF.Require
+    for i = 1, #names do Require(names[i], context) end
+end
 
 -- Every delayed Menu2-only task goes through this registry. C_Timer.After
 -- cannot be cancelled, so a callback queued while the menu is open would

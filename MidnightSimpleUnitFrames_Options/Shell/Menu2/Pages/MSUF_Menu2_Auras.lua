@@ -5,6 +5,11 @@ addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.
     or "MidnightSimpleUnitFrames"
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Auras.lua", {
+    "MSUF_UFPreview_RequestRefresh",
+})
 local EnsureDB = M.EnsureDB
 
 -- Menu2 Auras page.
@@ -430,7 +435,7 @@ local function CreateUnitStyleState(ctx, b, scope, options)
             local refreshOwnedPreview = ctx and ctx._msuf2RefreshUnitPreview
             if type(refreshOwnedPreview) == "function" then
                 refreshOwnedPreview("AURAS3_UNIT_STYLE_DUMMY")
-            elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+            else
                 _G.MSUF_UFPreview_RequestRefresh("AURAS3_UNIT_STYLE_DUMMY")
             end
         end
@@ -1296,7 +1301,7 @@ local function BuildUnitOrdering(ctx, b, unit, lane)
         local refreshOwnedPreview = ctx and ctx._msuf2RefreshUnitPreview
         if type(refreshOwnedPreview) == "function" then
             refreshOwnedPreview(reason)
-        elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+        else
             _G.MSUF_UFPreview_RequestRefresh(reason)
         end
     end
@@ -2306,7 +2311,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         local refreshOwnedPreview = ctx._msuf2RefreshUnitPreview
         if type(refreshOwnedPreview) == "function" then
             refreshOwnedPreview(reason or "AURAS3_UNIT_STYLE_DUMMY")
-        elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+        else
             _G.MSUF_UFPreview_RequestRefresh("AURAS3_UNIT_STYLE_DUMMY")
         end
     end

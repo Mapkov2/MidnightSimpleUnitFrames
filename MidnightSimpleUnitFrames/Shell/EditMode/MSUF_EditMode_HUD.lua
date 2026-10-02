@@ -4,6 +4,10 @@
 --- Builds EditMode HUD widgets only; secure frame mutation stays behind EditMode helpers.
 --- Loads last of the toolbar files in MSUF_EditMode.xml.
 local addonName, MSUF = ...
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_HUD.lua"
 local ExportPublic = (MSUF or _G.MSUF_NS or {}).ExportPublic
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -426,7 +430,7 @@ local function BuildPreviewCluster(advancedHUD)
             return
         end
         local ok, reason = toggle("edit_mode")
-        local active = type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true
+        local active = MSUF.Require("MSUF_IsPreviewAnimationEnabled", CALLER)() == true
         SetActive(previewAnimBtn, active)
         if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
         if ok == false and reason == "combat" then
@@ -531,7 +535,7 @@ local function BuildToolsCluster()
     end
 
     anchorBtn = AddRowButton(linksItems, linksCluster, "Anchor", 60, CLUSTER_BTN_H, "caption", function()
-        local ov = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker()
+        local ov = MSUF.Require("MSUF_EnsureAnchorPicker", CALLER)()
         if not ov then return end
         ov._isCandidateAllowed = function(frame)
             local factory = MSUF and MSUF.UF and MSUF.UF.Factory
@@ -802,7 +806,7 @@ function HUD.RefreshControls(force)
     RegisterPreviewAnimationRefreshOwner()
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
     if previewAnimBtn then
-        local active = type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true
+        local active = MSUF.Require("MSUF_IsPreviewAnimationEnabled", CALLER)() == true
         SetActive(previewAnimBtn, active)
     end
     if cdmBtn then

@@ -4,6 +4,11 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua", {
+    "MSUF_ApplyRoundedUnitframes",
+})
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
@@ -277,7 +282,7 @@ local function BuildGFGeneralSection(ctx, b)
         function(value)
             if value ~= "SQUARE" and value ~= "ROUNDED" and value ~= "SLANTED" then value = "DEFAULT" end
             Set(CurrentScope(), "frameBarShape", value, "visual")
-            if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then _G.MSUF_ApplyRoundedUnitframes() end
+            _G.MSUF_ApplyRoundedUnitframes()
             RefreshContext(ctx)
         end,
         ControlMeta(ctx, "basics.frame_bar_shape"))

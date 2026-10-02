@@ -1,8 +1,20 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Global.lua", {
+    "MSUF_SetDispelBorderTestMode",
+    "MSUF_SetAggroBorderTestMode",
+    "MSUF_SetPurgeBorderTestMode",
+    "MSUF_ShouldShowAbsorbTextureTest",
+    "MSUF_SetAbsorbTextureTestMode",
+    "MSUF_ClearAbsorbTextureTestMode",
+    "MSUF_RefreshTempMaxHealth",
+    "MSUF_RefreshPredictionBars",
+    "MSUF_UFPreview_RequestRefresh",
+})
 
 -- GlobalPage helper module.
 -- Provides DB readers/writers, scope override helpers, and apply fanout used by the global
@@ -782,9 +794,9 @@ local function RefreshBorderTestModes()
     if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then return end
     local scope = CurrentBarsScope()
     if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" or scope == "gf_mythicraid" then scope = "raid" end
-    if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(true, scope) end
-    if _G.MSUF_AggroBorderTestMode and type(_G.MSUF_SetAggroBorderTestMode) == "function" then _G.MSUF_SetAggroBorderTestMode(true, scope) end
-    if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(true, scope) end
+    if _G.MSUF_DispelBorderTestMode then _G.MSUF_SetDispelBorderTestMode(true, scope) end
+    if _G.MSUF_AggroBorderTestMode then _G.MSUF_SetAggroBorderTestMode(true, scope) end
+    if _G.MSUF_PurgeBorderTestMode then _G.MSUF_SetPurgeBorderTestMode(true, scope) end
 end
 local function CurrentAbsorbTestScope()
     local scope = CurrentBarsScope()
@@ -794,49 +806,29 @@ local function CurrentAbsorbTestScope()
 end
 local function IsAbsorbTextureTestEnabled(category)
     local scope = CurrentAbsorbTestScope()
-    if type(_G.MSUF_ShouldShowAbsorbTextureTest) == "function" then
-        return _G.MSUF_ShouldShowAbsorbTextureTest(nil, scope, category) == true
-    end
-    return _G.MSUF_AbsorbTextureTestMode == true
+    return _G.MSUF_ShouldShowAbsorbTextureTest(nil, scope, category) == true
 end
 local function SetAbsorbTextureTest(enabled, category)
     if enabled and (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then enabled = false end
     local scope = CurrentAbsorbTestScope()
-    if type(_G.MSUF_SetAbsorbTextureTestMode) == "function" then
-        _G.MSUF_SetAbsorbTextureTestMode(enabled and true or false, scope, category)
-    else
-        ExportPublic("MSUF_AbsorbTextureTestMode", enabled and true or false)
-        ExportPublic("MSUF_AbsorbTextureTestScope", enabled and scope or nil)
-    end
-    if category == "tempMaxHealth" and type(_G.MSUF_RefreshTempMaxHealth) == "function" then
+    _G.MSUF_SetAbsorbTextureTestMode(enabled and true or false, scope, category)
+    if category == "tempMaxHealth" then
         _G.MSUF_RefreshTempMaxHealth(scope, "MSUF2_TEMP_MAX_HEALTH_TEST")
-        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-            _G.MSUF_UFPreview_RequestRefresh("MSUF2_TEMP_MAX_HEALTH_TEST")
-        end
+        _G.MSUF_UFPreview_RequestRefresh("MSUF2_TEMP_MAX_HEALTH_TEST")
         if type(M.RefreshGFNativePreviews) == "function" then
             M.RefreshGFNativePreviews("MSUF2_TEMP_MAX_HEALTH_TEST")
         end
         return
-    elseif type(_G.MSUF_RefreshPredictionBars) == "function" then
-        _G.MSUF_RefreshPredictionBars(scope, "MSUF2_PREDICTION_TEST")
     end
+    _G.MSUF_RefreshPredictionBars(scope, "MSUF2_PREDICTION_TEST")
     ApplyBars("MSUF2_PREDICTION_TEST")
 end
 local function ClearAbsorbTextureTest()
     local wasEnabled = _G.MSUF_AbsorbTextureTestMode and true or false
-    if type(_G.MSUF_ClearAbsorbTextureTestMode) == "function" then
-        _G.MSUF_ClearAbsorbTextureTestMode()
-    elseif wasEnabled then
-        ExportPublic("MSUF_AbsorbTextureTestMode", false)
-        ExportPublic("MSUF_AbsorbTextureTestScope", nil)
-    end
+    _G.MSUF_ClearAbsorbTextureTestMode()
     if wasEnabled then
-        if type(_G.MSUF_RefreshPredictionBars) == "function" then
-            _G.MSUF_RefreshPredictionBars(nil, "MSUF2_ABSORB_TEST_CLEAR")
-        end
-        if type(_G.MSUF_RefreshTempMaxHealth) == "function" then
-            _G.MSUF_RefreshTempMaxHealth(nil, "MSUF2_TEMP_MAX_HEALTH_TEST")
-        end
+        _G.MSUF_RefreshPredictionBars(nil, "MSUF2_ABSORB_TEST_CLEAR")
+        _G.MSUF_RefreshTempMaxHealth(nil, "MSUF2_TEMP_MAX_HEALTH_TEST")
         ApplyBars("MSUF2_ABSORB_TEST_CLEAR")
     end
 end

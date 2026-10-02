@@ -3,6 +3,11 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua", {
+    "MSUF_SetIconTexture",
+})
 
 -- Menu2 Group Status & Indicators page.
 -- Builds party/raid status icon, placed indicator, frame effect, and spell-indicator controls.
@@ -1502,8 +1507,7 @@ function SpellTileGrid:Refresh()
         tile.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         tile.icon:SetVertexColor(1, 1, 1, 1)
         if runtime and type(runtime.GetAuraIcon) == "function" then
-            if type(MSUF_SetIconTexture) == "function" then MSUF_SetIconTexture(tile.icon, runtime.GetAuraIcon(specKey, info.name), "")
-            else tile.icon:SetTexture(runtime.GetAuraIcon(specKey, info.name)) end
+            _G.MSUF_SetIconTexture(tile.icon, runtime.GetAuraIcon(specKey, info.name), "")
         else
             tile.icon:SetTexture(136243)
         end

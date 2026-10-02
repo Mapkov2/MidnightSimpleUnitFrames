@@ -257,7 +257,9 @@ local function ReapplyAuras(units)
         end
     end
     SyncMovers()
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh("EM2_AURA_POPUP_APPLY") end
+    -- The unit preview belongs to the load-on-demand menu.
+    local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+    if refreshPreview then refreshPreview("EM2_AURA_POPUP_APPLY") end
 end
 
 local function ReadBox(box, fallback, low, high)

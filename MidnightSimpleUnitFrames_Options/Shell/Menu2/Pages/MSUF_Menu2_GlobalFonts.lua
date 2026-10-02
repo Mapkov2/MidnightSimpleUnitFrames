@@ -2,6 +2,13 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua", {
+    "MSUF_GetClassBarColor",
+    "MSUF_GetNPCReactionColor",
+    "MSUF_NormalizeStoredFontKeys",
+})
 local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Menu2 global Fonts page.
@@ -170,7 +177,7 @@ local function PlayerClassColorPreview()
         classToken = token
     end
     classToken = classToken or "WARRIOR"
-    if type(_G.MSUF_GetClassBarColor) == "function" then
+    do
         local r, g, b = _G.MSUF_GetClassBarColor(classToken)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
@@ -192,7 +199,7 @@ local function NPCReactionColorPreview()
             end
         end
     end
-    if type(_G.MSUF_GetNPCReactionColor) == "function" then
+    do
         local r, g, b = _G.MSUF_GetNPCReactionColor(kind)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
@@ -689,7 +696,7 @@ local function BuildFonts(ctx)
         function() return FontKeyGet() end,
         function(v)
             FontKeySet(v)
-            if type(_G.MSUF_NormalizeStoredFontKeys) == "function" then _G.MSUF_NormalizeStoredFontKeys() end
+            _G.MSUF_NormalizeStoredFontKeys()
             ApplyFonts("MSUF2_FONT_KEY")
             RefreshFontPreview()
         end,

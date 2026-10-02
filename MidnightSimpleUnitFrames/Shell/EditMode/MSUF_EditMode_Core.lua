@@ -2,6 +2,10 @@
 --- Registry, State and Undo, the next files in MSUF_EditMode.xml, build on Util.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Core.lua"
 local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
@@ -140,30 +144,8 @@ function Util.RefreshGroupGeometryScoped(kind, reason)
         gf.RefreshGeometry(kind)
         return true
     end
-    if type(_G.MSUF_GF_RefreshGeometry) == "function" then
-        _G.MSUF_GF_RefreshGeometry(kind)
-        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
-            _G.MSUF_GF_RefreshUnitBindings(kind)
-        end
-        if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-            _G.MSUF_GF_RefreshVisuals(kind, mask)
-        end
-        return true
-    end
     if gf and type(gf.RefreshVisuals) == "function" then
         gf.RefreshVisuals(kind, mask)
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-        _G.MSUF_GF_RefreshVisuals(kind)
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshAll) == "function" then
-        _G.MSUF_GF_RefreshAll()
-        return true
-    end
-    if type(_G.MSUF_GF_Refresh) == "function" then
-        _G.MSUF_GF_Refresh()
         return true
     end
     return false
@@ -195,18 +177,8 @@ end
 local function ApplyCastbarSettingsForKeySafe(unit)
     unit = EditCastbarUnitForKey(unit)
     if not unit then return false end
-    local did = false
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
-        did = true
-    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        did = true
-    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals(unit)
-        did = true
-    end
-    return did
+    MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(unit)
+    return true
 end
 
 --- Edit Mode writes offsets/sizes straight into MSUF_DB and never routes through
@@ -239,10 +211,6 @@ function Util.ApplySettingsForKeySafe(key)
         RefreshUnitConfigSpec(UF, key)
         return UF.Apply(key) == true
     end
-    if type(_G.MSUF_ApplyUnitFrameKey_Immediate) == "function" and key then
-        _G.MSUF_ApplyUnitFrameKey_Immediate(key)
-        return true
-    end
     return false
 end
 
@@ -258,31 +226,18 @@ function Util.ThemeColor(key, fallback)
     return fallback
 end
 
+-- The combat lock and its message belong to the core (Kernel/MSUF_Util.lua,
+-- loaded before Edit Mode on every client).
 function Util.IsConfigCombatLocked()
-    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
-        return _G.MSUF_IsConfigCombatLocked() and true or false
-    end
-    if InCombatLockdown and InCombatLockdown() then return true end
-    return false
+    return MSUF.Require("MSUF_IsConfigCombatLocked", CALLER)() and true or false
 end
 
 function Util.ShowConfigCombatLockMessage()
-    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-        _G.MSUF_ShowConfigCombatLockMessage()
-    elseif print then
-        print("|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
-    end
+    MSUF.Require("MSUF_ShowConfigCombatLockMessage", CALLER)()
 end
 
 function Util.BlockConfigCombatLocked()
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-        return _G.MSUF_BlockConfigCombatLocked() and true or false
-    end
-    if Util.IsConfigCombatLocked() then
-        Util.ShowConfigCombatLockMessage()
-        return true
-    end
-    return false
+    return MSUF.Require("MSUF_BlockConfigCombatLocked", CALLER)() and true or false
 end
 
 function Util.RefreshUFPreview(reason)

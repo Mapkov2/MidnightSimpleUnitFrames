@@ -2,6 +2,18 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", {
+    "MSUF_Tooltip_ShowEditPreview",
+    "MSUF_SetGameMenuButtonEnabled",
+    "MSUF_Grid2EditMode_SetEnabled",
+    "MSUF_DetailsEditMode_SetEnabled",
+    "MSUF_DominosEditMode_SetEnabled",
+    "MSUF_DandersEditMode_SetEnabled",
+    "MSUF_BlizzardEditMode_SetEnabled",
+    "MSUF_SetMinimapIconEnabled",
+})
 
 -- Menu2 global Misc page.
 -- Binds tooltip provider/anchor/modifier behavior and small global UI options. Tooltip
@@ -84,7 +96,7 @@ local function RefreshTooltipPreview()
     local tooltips = MSUF and MSUF.Tooltips
     if tooltips and type(tooltips.Refresh) == "function" then tooltips.Refresh() end
     local editActive = (_G.MSUF_UnitEditModeActive == true)
-    if editActive and type(_G.MSUF_Tooltip_ShowEditPreview) == "function" then _G.MSUF_Tooltip_ShowEditPreview() end
+    if editActive then _G.MSUF_Tooltip_ShowEditPreview() end
 end
 local function RefreshAuraTooltipSettings(reason)
     local a3 = MSUF and MSUF.MSUF_Auras3
@@ -204,7 +216,7 @@ local function BuildMisc(ctx)
         local NumberFormat = MSUF.NumberFormat
         if NumberFormat and NumberFormat.Refresh then NumberFormat.Refresh() end
         M.RequestGeneralApply("MSUF2_NUMBER_ABBREV_TEXT", { text = true })
-        if type(_G.MSUF_GF_RefreshVisuals) == "function" then _G.MSUF_GF_RefreshVisuals() end
+        MSUF.GF.RefreshVisuals()
         RefreshAbbrevSample()
     end, Meta("setting.numberAbbrevStyle"))
     local abbrevHelp = W.Text(language, "Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales.", 30, -186, languageW - 70, T.colors.muted)
@@ -233,9 +245,7 @@ local function BuildMisc(ctx)
         function() M.RefreshNavIconVisibility() end)
     BindMiscToggle(menuBehavior, "Show MSUF button in game menu", "showGameMenuButton", true, "MSUF2_GAME_MENU_BUTTON", 14, -178, 320, MENU_WRITE_OPTS,
         function(v)
-            if type(_G.MSUF_SetGameMenuButtonEnabled) == "function" then
-                _G.MSUF_SetGameMenuButtonEnabled(v)
-            end
+            _G.MSUF_SetGameMenuButtonEnabled(v)
         end)
     BindMiscToggle(menuBehavior, "Reduce menu motion", "reduceMotion", false, "MSUF2_REDUCE_MOTION", 14, -208, 280, MENU_WRITE_OPTS)
     local menuFontRightX = max(350, floor(menuBehaviorW * 0.52))
@@ -433,15 +443,15 @@ local function BuildMisc(ctx)
     M.AddTooltip(nsrtNicknames, "NSRT nickname integration",
         "On (default): names supplied by Northern Sky Raid Tools replace character names on MSUF unit and group frames. Turn this off to always show character names in MSUF. NSRT and its settings are not modified.",
         { hook = true })
-    if type(_G.MSUF_EllesmereEditMode_IsAvailable) == "function"
-        and _G.MSUF_EllesmereEditMode_IsAvailable() then
+    -- The EllesmereUI bridge loads on the Mainline TOC only (Midnight and WoW
+    -- Forever); the section exists only where it does and EllesmereUI is loaded.
+    local ellesmereAvailable = MSUF.Optional("MSUF_EllesmereEditMode_IsAvailable")
+    if ellesmereAvailable and ellesmereAvailable() then
         local ellesmere = b:CollapsibleSection("misc_ellesmere_ui", "EllesmereUI", 138, true)
         local integration = BindMiscToggle(ellesmere, "Use EllesmereUI Unlock Mode for MSUF",
             "ellesmereEditModeIntegration", true, "MSUF2_ELLESMERE_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
             function(value)
-                if type(_G.MSUF_EllesmereEditMode_SetEnabled) == "function" then
-                    _G.MSUF_EllesmereEditMode_SetEnabled(value)
-                end
+                MSUF.Require("MSUF_EllesmereEditMode_SetEnabled", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")(value)
             end)
         M.AddTooltip(integration, "EllesmereUI Unlock Mode",
             "On (default): MSUF frames appear in EllesmereUI Unlock Mode. Turn this off to keep using the native MSUF Edit Mode. MSUF profile positions remain the source of truth.",
@@ -455,9 +465,7 @@ local function BuildMisc(ctx)
     local grid2 = BindMiscToggle(external, "Show Grid2 in MSUF Edit Mode",
         "grid2EditModeIntegration", true, "MSUF2_GRID2_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
         function(value)
-            if type(_G.MSUF_Grid2EditMode_SetEnabled) == "function" then
-                _G.MSUF_Grid2EditMode_SetEnabled(value)
-            end
+            _G.MSUF_Grid2EditMode_SetEnabled(value)
         end)
     M.AddTooltip(grid2, "Grid2 Edit Mode integration",
         "On (default): MSUF Edit Mode can move the Grid2 layout and its active detached groups. Grid2 remains the owner of its layout and saved positions.",
@@ -465,9 +473,7 @@ local function BuildMisc(ctx)
     local details = BindMiscToggle(external, "Show Details! in MSUF Edit Mode",
         "detailsEditModeIntegration", true, "MSUF2_DETAILS_EDIT_MODE", 14, -78, 430, PREVIEW_FALSE,
         function(value)
-            if type(_G.MSUF_DetailsEditMode_SetEnabled) == "function" then
-                _G.MSUF_DetailsEditMode_SetEnabled(value)
-            end
+            _G.MSUF_DetailsEditMode_SetEnabled(value)
         end)
     M.AddTooltip(details, "Details! Edit Mode integration",
         "On (default): MSUF Edit Mode can move every active Details! window. Windows snapped together by Details! move as one native group.",
@@ -475,9 +481,7 @@ local function BuildMisc(ctx)
     local dominos = BindMiscToggle(external, "Show Dominos in MSUF Edit Mode",
         "dominosEditModeIntegration", true, "MSUF2_DOMINOS_EDIT_MODE", 14, -114, 430, PREVIEW_FALSE,
         function(value)
-            if type(_G.MSUF_DominosEditMode_SetEnabled) == "function" then
-                _G.MSUF_DominosEditMode_SetEnabled(value)
-            end
+            _G.MSUF_DominosEditMode_SetEnabled(value)
         end)
     M.AddTooltip(dominos, "Dominos Edit Mode integration",
         "On (default): MSUF Edit Mode can move every Dominos bar that is not docked to another bar. Docked bars follow their host bar, and Dominos remains the owner of all bar positions.",
@@ -485,9 +489,7 @@ local function BuildMisc(ctx)
     local danders = BindMiscToggle(external, "Show DandersFrames in MSUF Edit Mode",
         "dandersEditModeIntegration", true, "MSUF2_DANDERS_EDIT_MODE", 14, -150, 430, PREVIEW_FALSE,
         function(value)
-            if type(_G.MSUF_DandersEditMode_SetEnabled) == "function" then
-                _G.MSUF_DandersEditMode_SetEnabled(value)
-            end
+            _G.MSUF_DandersEditMode_SetEnabled(value)
         end)
     M.AddTooltip(danders, "DandersFrames Edit Mode integration",
         "On (default): MSUF Edit Mode can move the DandersFrames party and raid containers and free pinned sets. Sets glued to the frames follow them, and DandersFrames remains the owner of all saved positions.",
@@ -495,9 +497,7 @@ local function BuildMisc(ctx)
     local blizzardEM = BindMiscToggle(external, "Show Blizzard frames in MSUF Edit Mode",
         "blizzardEditModeIntegration", true, "MSUF2_BLIZZARD_EDIT_MODE", 14, -186, 430, PREVIEW_FALSE,
         function(value)
-            if type(_G.MSUF_BlizzardEditMode_SetEnabled) == "function" then
-                _G.MSUF_BlizzardEditMode_SetEnabled(value)
-            end
+            _G.MSUF_BlizzardEditMode_SetEnabled(value)
         end)
     M.AddTooltip(blizzardEM, "Blizzard Edit Mode integration",
         "On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically.",
@@ -614,16 +614,12 @@ local function BuildMisc(ctx)
         local tooltipSpellIDs = BindMiscToggle(tooltips, "Show spell IDs in aura tooltips", "tooltipShowAuraSpellIDs", false,
             "MSUF2_TOOLTIP_SPELL_IDS", 14, -226, 360, PREVIEW_FALSE,
             function(v)
-                if type(_G.MSUF_ApplyTooltipSpellIDs) == "function" then
-                    _G.MSUF_ApplyTooltipSpellIDs(v and true or false)
-                end
+                MSUF.Require("MSUF_ApplyTooltipSpellIDs", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")(v and true or false)
             end)
         local tooltipCasterNames = BindMiscToggle(tooltips, "Show caster names in aura tooltips", "tooltipShowAuraCasterNames", false,
             "MSUF2_TOOLTIP_CASTER_NAMES", 14, -252, 360, PREVIEW_FALSE,
             function(v)
-                if type(_G.MSUF_ApplyTooltipCasterNames) == "function" then
-                    _G.MSUF_ApplyTooltipCasterNames(v and true or false)
-                end
+                MSUF.Require("MSUF_ApplyTooltipCasterNames", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")(v and true or false)
             end)
         M.AddTooltip(tooltipCasterNames, "Aura tooltip caster names",
             "On: aura tooltips name who applied the aura, coloured by reaction or class, through the game's own 12.1.5 option, and MSUF re-enables it after every login. Off (default): MSUF never touches the game option, so other addons or a manual console setting keep control; turning this switch off clears the option once.",
@@ -638,13 +634,7 @@ local function BuildMisc(ctx)
     local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 170, false)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,
         function(v)
-            if type(_G.MSUF_SetMinimapIconEnabled) == "function" then
-                _G.MSUF_SetMinimapIconEnabled(v)
-            else
-                local g = G()
-                g.minimapIconDB = g.minimapIconDB or {}
-                g.minimapIconDB.hide = not v
-            end
+            _G.MSUF_SetMinimapIconEnabled(v)
         end)
     BindMiscToggle(blizzard, "Play sound on Target/Target Lost", "playTargetSelectLostSounds", false, "MSUF2_TARGET_SOUNDS", nil, nil, nil, nil,
         function(v)

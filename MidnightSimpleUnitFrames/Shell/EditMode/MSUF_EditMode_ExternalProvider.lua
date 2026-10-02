@@ -429,9 +429,9 @@ function Controller:ScheduleMenuPreviewReconcile()
         if menu and type(menu.RequestGFPagePreviewForKey) == "function" then
             menu.RequestGFPagePreviewForKey(activeKey, true)
         end
-        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-            _G.MSUF_UFPreview_RequestRefresh(self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE")
-        end
+        -- The unit preview belongs to the load-on-demand menu.
+        local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+        if refreshPreview then refreshPreview(self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE") end
         if menu and type(menu.RefreshGFNativePreviews) == "function" then
             menu.RefreshGFNativePreviews(self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE")
         end

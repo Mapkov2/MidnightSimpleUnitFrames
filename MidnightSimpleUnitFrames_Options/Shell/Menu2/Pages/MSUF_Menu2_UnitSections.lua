@@ -3,6 +3,13 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua", {
+    "MSUF_UFCore_NotifyConfigChanged",
+    "MSUF_ShowReloadRecommendedPopup",
+    "MSUF_ApplyRoundedUnitframes",
+})
 local EnsureDB = M.EnsureDB
 local C_Timer = M.MenuTimer or _G.C_Timer
 
@@ -152,11 +159,8 @@ local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
         if flushNow and type(apply.Flush) == "function" then apply.Flush() end
         return true
     end
-    if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
-        _G.MSUF_UFCore_NotifyConfigChanged(unit, true, true, reason or "MSUF2_UNIT_SECTION")
-        return true
-    end
-    return false
+    _G.MSUF_UFCore_NotifyConfigChanged(unit, true, true, reason or "MSUF2_UNIT_SECTION")
+    return true
 end
 local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "pettarget", "all" }
 -- The Copy To popup offers only frames the client can produce
@@ -919,11 +923,7 @@ local function BuildBasics(ctx, builder, unit, label)
             if ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
             SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
             local reloadLabel = M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit))
-            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-                _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
-            elseif print then
-                print("|cffffd700MSUF:|r Changing Blizzard frame ownership requires a /reload.")
-            end
+            _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
         end,
         SettingMeta(ctx, "basics.force_blizzard_frame", unit, "useBlizzardFrame"))
     local blizzardHint = "Independent from MSUF Enable; /reload required."
@@ -997,7 +997,7 @@ local function BuildBasics(ctx, builder, unit, label)
             if conf.frameBarShape == value then return end
             conf.frameBarShape = value
             M.RequestUnitApply(unit, "MSUF2_FRAME_BAR_SHAPE", { preview = true })
-            if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then _G.MSUF_ApplyRoundedUnitframes() end
+            _G.MSUF_ApplyRoundedUnitframes()
             if M.Refresh then M.Refresh(ctx) end
         end,
         SettingMeta(ctx, "basics.frame_bar_shape", unit, "frameBarShape"))

@@ -3,6 +3,10 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 -- Owns popup composition only; protected frame edits route through EditMode apply helpers.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Popups.lua"
 local ExportPublic = MSUF.ExportPublic
 
 local EM2 = _G.MSUF_EM2
@@ -147,7 +151,7 @@ function Popups.IsAnyOpen()
         or (EM2.UnitPopup and EM2.UnitPopup.IsOpen())
         or (EM2.CastPopup and EM2.CastPopup.IsOpen())
         or (EM2.AuraPopup and EM2.AuraPopup.IsOpen())
-        or (type(_G.MSUF_EM2_GFPopupIsOpen) == "function" and _G.MSUF_EM2_GFPopupIsOpen())
+        or MSUF.Require("MSUF_EM2_GFPopupIsOpen", CALLER)()
         or false
 end
 
@@ -211,17 +215,7 @@ local function ApplyPowerLayoutForUnitKey(key, detached)
     if ApplyService and type(ApplyService.ApplyPowerLayout) == "function" then
         return ApplyService.ApplyPowerLayout(key, detached == true, true)
     end
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
-        return _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true)
-    end
-    local frame = FrameForUnitKey(key) or (pf and pf.parent)
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout) == "function" and frame then
-        return _G.MSUF_ApplyPowerBarEmbedLayout(frame)
-    end
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
-        return _G.MSUF_ApplyPowerBarEmbedLayout_All()
-    end
-    return false
+    return MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", CALLER)(key, true)
 end
 
 local function Apply()
@@ -281,11 +275,11 @@ local function Apply()
     --- Full layout re-apply (power bar embed, text anchors, borders, etc.)
     if sharedDetachedWidthSourceChanged then
         ApplyAllSettingsSafe()
-        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then _G.MSUF_EnsureCooldownWidthObservers() end
+        MSUF.Require("MSUF_EnsureCooldownWidthObservers", CALLER)()
     elseif not ApplySettingsForKeySafe(key) then
         ApplyAllSettingsSafe()
     end
-    if type(_G.MSUF_ForceTextLayoutForUnitKey)=="function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
+    MSUF.Require("MSUF_ForceTextLayoutForUnitKey", CALLER)(key)
     --- Clear PBEmbedLayout stamp so width/height changes are re-applied
     if frame then
         local cs=_G.MSUF_NS and _G.MSUF_NS.Cache; if cs and cs.ClearStamp then cs.ClearStamp(frame, "PBEmbedLayout") end
@@ -359,9 +353,7 @@ function Sync()
 end
 
 local function SetHUDStatus(text, kind)
-    if type(_G.MSUF_EM2_SetHUDStatus) == "function" then
-        _G.MSUF_EM2_SetHUDStatus(Tr(text), kind)
-    end
+    MSUF.Require("MSUF_EM2_SetHUDStatus", CALLER)(Tr(text), kind)
 end
 
 local function ApplyMenu2UnitSelection(component, slot)
@@ -446,8 +438,7 @@ local function ResetPosition()
     local conf = key and Conf(key)
     if not conf then return end
     _G.MSUF_EM_UndoBeforeChange("unit", key)
-    local dx, dy = 0, 0
-    if type(_G.MSUF_GetDefaultUnitOffsets) == "function" then dx, dy = _G.MSUF_GetDefaultUnitOffsets(key) end
+    local dx, dy = MSUF.Require("MSUF_GetDefaultUnitOffsets", CALLER)(key)
     conf.offsetX, conf.offsetY = dx, dy
     if not ApplySettingsForKeySafe(key) then ApplyAllSettingsSafe() end
     if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP_RESETPOS") end

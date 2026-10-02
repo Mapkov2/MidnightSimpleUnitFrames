@@ -385,6 +385,17 @@ local function NewWorld(flavor, roster)
         return nil
     end
     _G.MSUF_ShowConfigCombatLockMessage = function() end
+    -- Kernel/MSUF_OptionsLoader.lua: Edit Mode opens only once the menu addon
+    -- could load; this harness needs no menu.
+    _G.MSUF_EnsureOptionsLoaded = function() return true end
+    -- The core's combat lock (Kernel/MSUF_Util.lua): locked while in combat
+    -- lockdown, and the blocking variant shows the message.
+    _G.MSUF_IsConfigCombatLocked = function() return (InCombatLockdown and InCombatLockdown()) and true or false end
+    _G.MSUF_BlockConfigCombatLocked = function()
+        if not _G.MSUF_IsConfigCombatLocked() then return false end
+        _G.MSUF_ShowConfigCombatLockMessage()
+        return true
+    end
 
     -- Harness-only arena opponent data; the values only have to be internally
     -- consistent for the prep display path.

@@ -4,6 +4,10 @@
 --- toolbar syncs. Loads last of the layout family (Grid, Snap, Nudge).
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Layout.lua"
 
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -120,8 +124,7 @@ local EDIT_COOLDOWN_ANCHORS = {
 local function ResolveNamedEditAnchor(name)
     if type(name) ~= "string" or name == "" then return nil end
     if EDIT_COOLDOWN_ANCHORS[name] then
-        local cooldownFrame = type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(name) or nil
-        cooldownFrame = cooldownFrame or _G[name]
+        local cooldownFrame = MSUF.Require("MSUF_GetEffectiveCooldownFrame", CALLER)(name) or _G[name]
         local getSize = _G.MSUF_GetUsableCooldownAnchorSize
         return type(getSize) == "function" and getSize(cooldownFrame) ~= nil and cooldownFrame or nil
     end
@@ -276,17 +279,13 @@ local function SetStackedPreviewPosition(unitPrefix, count, layoutDelta, point, 
                             local restoreDX, restoreDY = layoutDelta(restoreIndex, conf)
                             TryApplyFramePoint(restoreFrame, point, anchor, relativePoint,
                                 rollbackX + (restoreDX or 0), rollbackY + (restoreDY or 0))
-                            if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
-                                _G.MSUF_ApplyBossPhysicalBarGeometry(restoreFrame)
-                            end
+                            MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", CALLER)(restoreFrame)
                         end
                     end
                 end
                 return false
             end
-            if type(_G.MSUF_ApplyBossPhysicalBarGeometry) == "function" then
-                _G.MSUF_ApplyBossPhysicalBarGeometry(frame)
-            end
+            MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", CALLER)(frame)
             moved = true
         end
     end
@@ -464,9 +463,7 @@ local function SyncGFPopupDuringDrag(d, elapsed)
     d.popupSyncAcc = (d.popupSyncAcc or 0) + (elapsed or 0)
     if d.popupSyncAcc >= 0.05 then
         d.popupSyncAcc = 0
-        if type(_G.MSUF_EM2_SyncGFPopups) == "function" then
-            _G.MSUF_EM2_SyncGFPopups()
-        end
+        MSUF.Require("MSUF_EM2_SyncGFPopups", CALLER)()
     end
 end
 
@@ -495,25 +492,8 @@ local function ApplyCastbarDragPosition(d, centerX, centerY)
     g[d.castbarXKey] = nextX
     g[d.castbarYKey] = nextY
 
-    local positioned = false
-    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then
-        positioned = _G.MSUF_PositionCastbarPreviewUnit(d.castbarUnit) and true or false
-    end
-    if not positioned then
-        local rfName = d.castbarReanchorFunc
-        local rf = rfName and _G[rfName] or nil
-        if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-            _G.MSUF_ApplyCastbarUnitAndSync(d.castbarUnit)
-        else
-            if type(rf) == "function" then
-                rf()
-            end
-            if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-                _G.MSUF_ApplyCastbarVisualsForUnit(d.castbarUnit)
-            elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-                _G.MSUF_UpdateCastbarVisuals(d.castbarUnit)
-            end
-        end
+    if not MSUF.Require("MSUF_PositionCastbarPreviewUnit", CALLER)(d.castbarUnit) then
+        MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(d.castbarUnit)
     end
 
     return true
@@ -599,11 +579,7 @@ local function SyncCastbarPopupDuringDrag(d, elapsed)
     d.popupSyncAcc = (d.popupSyncAcc or 0) + (elapsed or 0)
     if d.popupSyncAcc < 0.05 then return end
     d.popupSyncAcc = 0
-    if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
-        _G.MSUF_SyncCastbarPositionPopup(d.castbarUnit)
-    elseif EM2.CastPopup and EM2.CastPopup.IsOpen and EM2.CastPopup.IsOpen() and EM2.CastPopup.Sync then
-        EM2.CastPopup.Sync()
-    end
+    MSUF.Require("MSUF_SyncCastbarPositionPopup", CALLER)(d.castbarUnit)
 end
 
 local function NotifyFocusDuringDrag(d, elapsed)
@@ -1082,19 +1058,10 @@ function Ticker.EndDrag()
             if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
             RefreshUFPreview("EM2_RESOURCE_DRAG_END", d.cfg.resourceUnit or "player")
         elseif d.isCastbar then
-            local centralized = false
-            if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-                _G.MSUF_ApplyCastbarUnitAndSync(d.castbarUnit)
-                centralized = true
-            else
-                ApplyCastbarDragPosition(d, cx, cy)
-            end
+            MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(d.castbarUnit)
             C_Timer.After(0.06, function()
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             end)
-            if not centralized and type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
-                _G.MSUF_SyncCastbarPositionPopup(d.castbarUnit)
-            end
             if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
             RefreshUFPreview("EM2_CASTBAR_DRAG_END", d.castbarUnit)
         elseif d.isGroupFrame then
@@ -1104,9 +1071,7 @@ function Ticker.EndDrag()
             C_Timer.After(0.06, function()
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             end)
-            if type(_G.MSUF_EM2_SyncGFPopups) == "function" then
-                _G.MSUF_EM2_SyncGFPopups()
-            end
+            MSUF.Require("MSUF_EM2_SyncGFPopups", CALLER)()
             if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
         else
             ApplySettingsForKeySafe(d.key)

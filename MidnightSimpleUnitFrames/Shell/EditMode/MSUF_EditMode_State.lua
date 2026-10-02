@@ -62,13 +62,10 @@ local anyEditModeListeners = _G.MSUF_AnyEditModeListeners
 if type(anyEditModeListeners) ~= "table" then anyEditModeListeners = {} end
 PublishCompat("MSUF_AnyEditModeListeners", anyEditModeListeners)
 
-local MSUF_RegisterAnyEditModeListener = _G.MSUF_RegisterAnyEditModeListener
-if type(MSUF_RegisterAnyEditModeListener) ~= "function" then
-    MSUF_RegisterAnyEditModeListener = function(fn)
-        if type(fn) ~= "function" then return end
-        local t = _G.MSUF_AnyEditModeListeners
-        t[#t + 1] = fn
-    end
+local function MSUF_RegisterAnyEditModeListener(fn)
+    if type(fn) ~= "function" then return end
+    local t = _G.MSUF_AnyEditModeListeners
+    t[#t + 1] = fn
 end
 ExportPublic("MSUF_RegisterAnyEditModeListener", MSUF_RegisterAnyEditModeListener)
 
@@ -596,8 +593,10 @@ function State.SuspendExternalPreview()
     local suspendBridge = _G.MSUF_EllesmereEditMode_SuspendPreview
     if type(suspendBridge) == "function" then
         suspendBridge()
-    elseif type(_G.MSUF_EllesmereEditMode_ClearMoveState) == "function" then
-        _G.MSUF_EllesmereEditMode_ClearMoveState()
+    else
+        -- The EllesmereUI bridge loads on the Mainline TOC only.
+        local clearMoveState = MSUF.Optional("MSUF_EllesmereEditMode_ClearMoveState")
+        if clearMoveState then clearMoveState() end
     end
     externalPreviewSuspended = true
     SyncLegacy()

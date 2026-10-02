@@ -4,6 +4,10 @@
 --- by Core, which loads first.)
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Compat.lua"
 local ExportPublic = MSUF.ExportPublic
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -87,22 +91,21 @@ ExportPublic("MSUF_SyncAuras3PositionPopup", MSUF_SyncAuras3PositionPopup)
 --- --- MSUF_SetMSUFEditModeDirect (THE primary entry point) ---
 local function MSUF_SetMSUFEditModeDirect(active, unitKey)
     if not EM2.State then return end
-    if active and type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return false end
+    if active and MSUF.Require("MSUF_BlockConfigCombatLocked", CALLER)() then return false end
     if active and IsConfigCombatLocked() then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+        MSUF.Require("MSUF_ShowConfigCombatLockMessage", CALLER)()
         return false
     end
-    if active and type(_G.MSUF_EnsureOptionsLoaded) == "function"
-        and not _G.MSUF_EnsureOptionsLoaded("edit-mode")
-    then
+    if active and not MSUF.Require("MSUF_EnsureOptionsLoaded", CALLER)("edit-mode") then
         return false
     end
-    if active and type(_G.MSUF_TryOpenExternalEditMode) == "function"
-        and _G.MSUF_TryOpenExternalEditMode(unitKey) then
+    -- The EllesmereUI bridge loads on the Mainline TOC only.
+    local tryOpenExternal = active and MSUF.Optional("MSUF_TryOpenExternalEditMode")
+    if tryOpenExternal and tryOpenExternal(unitKey) then
         return true
     end
-    if not active and type(_G.MSUF_TryCloseExternalEditMode) == "function"
-        and _G.MSUF_TryCloseExternalEditMode() then
+    local tryCloseExternal = not active and MSUF.Optional("MSUF_TryCloseExternalEditMode")
+    if tryCloseExternal and tryCloseExternal() then
         return true
     end
     if active then EM2.State.Enter(unitKey)
@@ -206,9 +209,7 @@ local function MSUF_SyncAllUnitPreviews()
         ExportPublic("MSUF_PreviewTestMode", false)
         ExportPublic("MSUF_BossTestMode", false)
         ExportPublic("MSUF_ArenaTestMode", false)
-        if type(_G.MSUF_HideAllCastbarPreviews) == "function" then
-            _G.MSUF_HideAllCastbarPreviews()
-        end
+        MSUF.Require("MSUF_HideAllCastbarPreviews", CALLER)()
         return
     end
 
@@ -368,9 +369,7 @@ do
             ExportPublic("MSUF_PreviewTestMode", false)
             ExportPublic("MSUF_BossTestMode", false)
             ExportPublic("MSUF_ArenaTestMode", false)
-            if type(_G.MSUF_HideAllCastbarPreviews) == "function" then
-                _G.MSUF_HideAllCastbarPreviews()
-            end
+            MSUF.Require("MSUF_HideAllCastbarPreviews", CALLER)()
             UninstallPipelineWrappers()
             return
         end
@@ -467,19 +466,9 @@ function SyncCastbarEditModeWithUnitEdit()
     local g = db.general
     local active = EM2.State and EM2.State.IsActive()
     g.castbarPlayerPreviewEnabled = active and true or false
-    if not active and type(_G.MSUF_HideAllCastbarPreviews) == "function" then
-        _G.MSUF_HideAllCastbarPreviews()
-    end
+    if not active then MSUF.Require("MSUF_HideAllCastbarPreviews", CALLER)() end
 
-    if type(_G.MSUF_UpdatePlayerCastbarPreview) == "function" then
-        _G.MSUF_UpdatePlayerCastbarPreview()
-    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals()
-    elseif not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
-        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
-    then
-        _G.MSUF_UpdateBossCastbarPreview()
-    end
+    MSUF.Require("MSUF_UpdatePlayerCastbarPreview", CALLER)()
 end
 
 --- --- Castbar anchor toggle (detach/attach to unitframe) ---
@@ -518,28 +507,8 @@ local function CastbarToggleFrameCenter(unit)
 end
 
 local function ApplyCastbarAnchorState(unit)
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
-    else
-        local reanchorFns = {
-            player = "MSUF_ReanchorPlayerCastBar",
-            target = "MSUF_ReanchorTargetCastBar",
-            focus  = "MSUF_ReanchorFocusCastBar",
-            boss   = "MSUF_ApplyBossCastbarPositionSetting",
-            arena  = "MSUF_ApplyArenaCastbarPositionSetting",
-        }
-        local ra = reanchorFns[unit]
-        if ra and type(_G[ra]) == "function" then _G[ra]() end
-        if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-            _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        elseif _G.MSUF_UpdateCastbarVisuals then
-            _G.MSUF_UpdateCastbarVisuals(unit)
-        end
-    end
-
-    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then
-        _G.MSUF_PositionCastbarPreviewUnit(unit)
-    end
+    MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(unit)
+    MSUF.Require("MSUF_PositionCastbarPreviewUnit", CALLER)(unit)
 end
 
 local RoundCastbarOffset = _G.MSUF_RoundOffset
@@ -584,10 +553,7 @@ local MSUF_EM_SetCastbarAnchoredToUnit = function(unit, anchored)
             if not frameScale or frameScale <= 0 then frameScale = 1 end
             if not uiScale or uiScale <= 0 then uiScale = 1 end
 
-            local defaultX, defaultY = 0, 0
-            if type(_G.MSUF_GetCastbarDefaultOffsets) == "function" then
-                defaultX, defaultY = _G.MSUF_GetCastbarDefaultOffsets(unit)
-            end
+            local defaultX, defaultY = MSUF.Require("MSUF_GetCastbarDefaultOffsets", CALLER)(unit)
             local currentX = tonumber(g[oxKey]) or tonumber(defaultX) or 0
             local currentY = tonumber(g[oyKey]) or tonumber(defaultY) or 0
             local localPerUI = uiScale / frameScale

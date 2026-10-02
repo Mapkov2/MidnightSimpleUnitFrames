@@ -6,7 +6,7 @@
 -- it runs the shipped Schema, Common, Presets and GroupFilters factories into
 -- a private model (the fixture's own model stubs stay untouched), publishes
 -- the real MSUF_GF_AuraFilter into env, and gives ns the shipped
--- MSUF.Require / MSUF.Optional from Kernel/MSUF_Require.lua.
+-- MSUF.Require / MSUF.Optional (tools/tests/require_fixture.lua).
 --
 --   local Fixture = assert(loadfile(root .. "/tools/tests/gf_aura_filter_fixture.lua"))()
 --   local filter = Fixture.Install(root, _G, namespace)
@@ -24,16 +24,7 @@ function Fixture.Install(root, env, ns)
     env = env or _G
     ns = ns or {}
     local function ExportPublic(name, value) env[name] = value end
-    if type(ns.Require) ~= "function" then
-        -- The shipped file also publishes _G.MSUF when it is unset; a fixture
-        -- that never had one keeps it unset.
-        local addedExport = type(ns.ExportPublic) ~= "function"
-        local hadMSUF = rawget(_G, "MSUF") ~= nil
-        if addedExport then ns.ExportPublic = ExportPublic end
-        Load(root, "MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua", ns)
-        if addedExport then ns.ExportPublic = nil end
-        if not hadMSUF then rawset(_G, "MSUF", nil) end
-    end
+    assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().Install(root, ns)
     if type(env.MSUF_GF_AuraFilter) ~= "table" then
         local private = { ExportPublic = ExportPublic }
         for _, file in ipairs({ "Schema", "Common", "Presets", "GroupFilters" }) do

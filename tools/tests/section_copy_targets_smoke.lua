@@ -97,8 +97,12 @@ local M = {
     ApplyPopupFramePriority = noop,
 }
 _G.UIParent = NewFrame()
+-- Menu files require their core collaborators at load (M.RequireGlobals).
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+local sharedNamespace = RequireFixture.Install(root, { MSUF2 = M }, M)
+RequireFixture.StubRequirements(root, { OPTIONS .. "MSUF_Menu2_UnitSectionShared.lua", OPTIONS .. "MSUF_Menu2_Unit.lua" })
 assert(loadstring(Read(OPTIONS .. "MSUF_Menu2_UnitSectionShared.lua"), "@MSUF_Menu2_UnitSectionShared.lua"))(
-    "MidnightSimpleUnitFrames_Options", { MSUF2 = M })
+    "MidnightSimpleUnitFrames_Options", sharedNamespace)
 local Shared = M.UnitSectionsShared
 Check(type(Shared) == "table" and type(Shared.AttachSectionUX) == "function", "AttachSectionUX missing")
 
@@ -230,6 +234,7 @@ for _, client in ipairs(CLIENTS) do
     Check(ns.Client.IsForever == (client.forever == true), client.name .. ": client detection")
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua"))("MidnightSimpleUnitFrames_Options", {})
     local menu = ns.MSUF2
+    RequireFixture.Install(root, ns, menu)
     local pageSource = Read(OPTIONS .. client.pages)
     pageSource = pageSource:sub(1, assert(pageSource:find("local POWER_UNITS", 1, true), client.pages) - 1) .. "\nreturn UNIT_PAGES"
     local pages = assert(loadstring(pageSource, "@" .. client.pages))("MidnightSimpleUnitFrames_Options", ns)

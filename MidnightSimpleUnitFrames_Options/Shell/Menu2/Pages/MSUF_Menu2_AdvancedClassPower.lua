@@ -5,6 +5,13 @@ MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", {
+    "MSUF_UFPreview_RequestRefresh",
+    "MSUF_GetEffectiveCooldownFrame",
+    "MSUF_IsCooldownAnchorSupported",
+})
 local C_Timer = M.MenuTimer or _G.C_Timer
 local W = M.Widgets
 local T = M.Theme
@@ -291,11 +298,7 @@ local function ClassPowerPreviewClassTokenForSpec(spec)
 end
 local function RequestClassPowerPreviewRefresh()
     RefreshClassPowerInlinePreview()
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-        _G.MSUF_UFPreview_RequestRefresh("MSUF2_CLASSPOWER_PREVIEW_SPEC")
-    elseif type(M.RequestGeneralApply) == "function" then
-        M.RequestGeneralApply("MSUF2_CLASSPOWER_PREVIEW_SPEC", { preview = true, applyAll = false, notify = false, classpower = true })
-    end
+    _G.MSUF_UFPreview_RequestRefresh("MSUF2_CLASSPOWER_PREVIEW_SPEC")
 end
 function M.GetClassPowerPreviewSpecKey() return NormalizeClassPowerPreviewSpecKey(M._msuf2ClassPowerPreviewSpecKey or "rogue_combo") end
 function M.SetClassPowerPreviewSpecKey(key)
@@ -519,8 +522,7 @@ local function QuickRestore(snapshot)
     end
 end
 local function QuickGetVisibleCDM()
-    local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
-        or _G.EssentialCooldownViewer
+    local ecv = _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer") or _G.EssentialCooldownViewer
     if not (MSUF.Client and MSUF.Client.IsClassic) then
         local usable = _G.MSUF_GetUsableCooldownAnchorSize
         return type(usable) == "function" and usable(ecv, true) and ecv or nil
@@ -699,8 +701,7 @@ local function ExecuteQuickSetup()
     QuickOffered(true)
     local ecv = QuickGetVisibleCDM()
     local retail = not (MSUF.Client and MSUF.Client.IsClassic)
-    local supportsCooldown = retail and type(_G.MSUF_IsCooldownAnchorSupported) == "function"
-        and _G.MSUF_IsCooldownAnchorSupported()
+    local supportsCooldown = retail and _G.MSUF_IsCooldownAnchorSupported()
     local offsets = (ecv or supportsCooldown) and QuickCalcCPAboveCDM(ecv) or QuickCalcScreenCenter()
     quickSetupUndoSnapshot = QuickSnapshot()
     QuickApplyPhase1(offsets)

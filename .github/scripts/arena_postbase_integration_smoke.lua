@@ -218,6 +218,14 @@ local MSUF = { MSUF_Auras3 = {
     RequestScope = function(unit) refreshRequests[#refreshRequests + 1] = unit end,
     RefreshEditPreview = function(unit) previewRequests[#previewRequests + 1] = unit end,
 } }
+-- Kernel/MSUF_Require.lua's soft resolver: the unit preview belongs to the
+-- load-on-demand menu, which this harness does not load.
+function MSUF.Optional(name)
+    local value = _G[name]
+    local kind = type(value)
+    if kind == "function" or kind == "table" then return value end
+    return nil
+end
 local function SyncMovers() end
 ]] .. auraScopeHelpers .. affectedUnitsSource .. reapplySource .. [[
 return AffectedUnits, ReapplyAuras, refreshRequests, previewRequests

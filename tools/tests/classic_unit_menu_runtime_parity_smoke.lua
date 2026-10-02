@@ -25,6 +25,10 @@ local function LoadUnitPage(client)
         Translate = function(text) return text end,
         MSUF2 = { Widgets = {} },
     }
+    -- The page requires its core collaborators at load (M.RequireGlobals).
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.Install(root, namespace)
+    RequireFixture.StubRequirements(root, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua" })
     assert(loadfile(root .. "/" .. MENU .. "MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", namespace)
     assert(loadfile(root .. "/" .. MENU .. "Pages/MSUF_Menu2_Unit.lua"))("MidnightSimpleUnitFrames_Options", namespace)
     return namespace.MSUF2, assert(namespace.MSUF2.UnitPage, "Classic Unit page did not publish M.UnitPage")

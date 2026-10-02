@@ -3,6 +3,12 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua", {
+    "MSUF_GetBarTexture",
+    "MSUF_GetBarBackgroundTexture",
+})
 local EnsureDB = M.EnsureDB
 
 -- Advanced Colors page.
@@ -391,10 +397,8 @@ function M.RefreshHealthBackgroundInlinePreview(preview)
     end
     backgroundAlpha = max(0, min(1, backgroundAlpha)) * max(0, min(1, tonumber(tintAlpha) or 1))
     local foregroundAlpha = max(0, min(1, tonumber(player.hpBarAlpha) or 1))
-    local foregroundTexture = type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()
-        or "Interface\\Buttons\\WHITE8X8"
-    local backgroundTexture = type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()
-        or foregroundTexture
+    local foregroundTexture = _G.MSUF_GetBarTexture() or "Interface\\Buttons\\WHITE8X8"
+    local backgroundTexture = _G.MSUF_GetBarBackgroundTexture() or foregroundTexture
 
     if bar.SetMinMaxValues then bar:SetMinMaxValues(0, 1) end
     if bar.SetValue then bar:SetValue(pct) end

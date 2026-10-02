@@ -57,8 +57,96 @@ for _, rule in ipairs(FORBIDDEN) do
     if Read(path):find(needle, 1, true) then Fail(path .. ": " .. label .. " is back (" .. needle .. ")") end
 end
 
+---------------------------------------------------------------------------
+-- 3. No type(...) == "function" guard on an MSUF_ global in the menu pages
+--    or Edit Mode (wave 4 took them from 89 and 94 sites to 1 and 0; the one
+--    left is MSUF_Menu2_AuraSettings.lua, a byte-identical Retail mirror whose
+--    dead MSUF_IsConfigCombatLocked fallback goes with a Retail port)
+---------------------------------------------------------------------------
+local GUARD_AREAS = {
+    { dir = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/", ceiling = 1 },
+    { dir = "MidnightSimpleUnitFrames/Shell/EditMode/", ceiling = 0 },
+}
+local function TrackedLua(dir)
+    local files = {}
+    local pipe = assert(io.popen('git -C "' .. root .. '" ls-files -- "' .. dir .. '*.lua"', "r"))
+    for path in pipe:lines() do files[#files + 1] = path end
+    pipe:close()
+    return files
+end
+local guardSites = 0
+for _, area in ipairs(GUARD_AREAS) do
+    local count, first = 0, nil
+    for _, path in ipairs(TrackedLua(area.dir)) do
+        local lineNo = 0
+        for line in (Read(path) .. "\n"):gmatch("([^\n]*)\n") do
+            lineNo = lineNo + 1
+            if not line:match("^%s*%-%-") then
+                for expr in line:gmatch("type%(%s*([%w_%.%[%]\"]+)%s*%)%s*[~=]=%s*[\"']function[\"']") do
+                    local name = expr:gsub("^_G%.", ""):gsub("^_G%[\"", ""):gsub("\"%]$", "")
+                    if name:match("^MSUF_[%w_]+$") then
+                        count = count + 1
+                        first = first or (path .. ":" .. lineNo .. " " .. name)
+                    end
+                end
+            end
+        end
+    end
+    guardSites = guardSites + count
+    if count > area.ceiling then
+        Fail(string.format("%s guards %d MSUF_ global(s) with type(...) == \"function\" (ceiling %d), first %s",
+            area.dir, count, area.ceiling, tostring(first)))
+    end
+end
+
+---------------------------------------------------------------------------
+-- 4. Every function the pages and Edit Mode require exists once a client's
+--    core and Options addon have loaded
+---------------------------------------------------------------------------
+-- Required only inside a Mainline-family block (Midnight, WoW Forever).
+local MAINLINE_ONLY = {
+    MSUF_ApplyTooltipSpellIDs = true, MSUF_ApplyTooltipCasterNames = true,
+    MSUF_EllesmereEditMode_SetEnabled = true,
+}
+local required = {}
+local function Note(name, path)
+    if not required[name] then required[name] = path end
+end
+for _, path in ipairs(TrackedLua("MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/")) do
+    local text = Read(path)
+    for list in text:gmatch("M%.RequireGlobals%(%s*\"[^\"]+\"%s*,%s*(%b{})") do
+        for name in list:gmatch("\"(MSUF_[%w_]+)\"") do Note(name, path) end
+    end
+    for name in text:gmatch("MSUF%.Require%(%s*\"(MSUF_[%w_]+)\"") do Note(name, path) end
+end
+for _, path in ipairs(TrackedLua("MidnightSimpleUnitFrames/Shell/EditMode/")) do
+    for name in Read(path):gmatch("MSUF%.Require%(%s*\"(MSUF_[%w_]+)\"%s*,%s*CALLER%s*%)") do Note(name, path) end
+end
+local names = {}
+for name in pairs(required) do names[#names + 1] = name end
+table.sort(names)
+if #names < 60 then Fail("only " .. #names .. " required names found; the scan patterns no longer match") end
+local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
+local flavors = 0
+for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
+    local world = World.New(root, flavor):Boot()
+    local failure = world:FirstFailure()
+    if failure then
+        Fail(flavor .. ": boot failed in " .. tostring(failure.file) .. ": " .. tostring(failure.message))
+    else
+        local classic = flavor == "Vanilla" or flavor == "TBC" or flavor == "Mists"
+        for _, name in ipairs(names) do
+            local kind = type(rawget(world.env, name))
+            if not (classic and MAINLINE_ONLY[name]) and kind ~= "function" and kind ~= "table" then
+                Fail(flavor .. ": " .. name .. " (required by " .. required[name] .. ") does not exist after load")
+            end
+        end
+        flavors = flavors + 1
+    end
+end
+
 if #failures > 0 then
     error("menu_required_owners_smoke: " .. #failures .. " problem(s):\n  " .. table.concat(failures, "\n  "))
 end
-print(string.format("menu_required_owners_smoke: ok (%d required owners, %d forbidden fallbacks)",
-    #REQUIRED, #FORBIDDEN))
+print(string.format("menu_required_owners_smoke: ok (%d required owners, %d forbidden fallbacks, %d guards,"
+    .. " %d required functions on %d clients)", #REQUIRED, #FORBIDDEN, guardSites, #names, flavors))

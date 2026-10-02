@@ -3,6 +3,17 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalCastbars_Preview.lua", {
+    "MSUF_ResolveInterruptUnavailableCastColor",
+    "MSUF_GetColorFromKey",
+    "MSUF_GetFontPath",
+    "MSUF_GetFontFlags",
+    "MSUF_GetCastbarTextColor",
+    "MSUF_ResolveCastbarColors",
+    "MSUF_GetCastbarBackgroundColor",
+})
 local EnsureDB = M.EnsureDB
 
 -- Menu2 global Castbars page preview.
@@ -246,15 +257,17 @@ local function PreviewSetRowOffset(self, x)
         if type(CastbarPreview.FormatPreviewTime) == "function" then return CastbarPreview.FormatPreviewTime(g or G(), unit, current, total) end
         return string.format("%.1f", tonumber(current) or 0)
     end
+    -- The empower castbar module loads on the Mainline TOC only (Midnight and
+    -- WoW Forever); the Classic clients read the stored settings directly.
     local function EmpowerBlinkEnabled()
-        if type(_G.MSUF_IsEmpowerStageBlinkEnabled) == "function" then
-            return _G.MSUF_IsEmpowerStageBlinkEnabled() and true or false
-        end
+        local isEnabled = MSUF.Optional("MSUF_IsEmpowerStageBlinkEnabled")
+        if isEnabled then return isEnabled() and true or false end
         return ReadGBool("empowerStageBlink", true)
     end
     local function EmpowerBlinkTime()
-        if type(_G.MSUF_GetEmpowerStageBlinkTime) == "function" then
-            local value = tonumber(_G.MSUF_GetEmpowerStageBlinkTime())
+        local blinkTime = MSUF.Optional("MSUF_GetEmpowerStageBlinkTime")
+        if blinkTime then
+            local value = tonumber(blinkTime())
             if value then return max(0.05, min(1.00, value)) end
         end
         local value = tonumber(ReadG("empowerStageBlinkTime", 0.25)) or 0.25
@@ -297,7 +310,7 @@ local function PreviewSetRowOffset(self, x)
                tonumber(tbl["3"]) or tonumber(tbl[3]) or db
     end
     local function ResolveUnavailablePreviewColor(gdb)
-        if type(_G.MSUF_ResolveInterruptUnavailableCastColor) == "function" then
+        do
             local r, g, b = _G.MSUF_ResolveInterruptUnavailableCastColor()
             if r and g and b then return r, g, b end
         end
@@ -309,7 +322,7 @@ local function PreviewSetRowOffset(self, x)
         if r and g and b then return r, g, b end
 
         local key = gdb.castbarInterruptUnavailableColor
-        local color = key and type(_G.MSUF_GetColorFromKey) == "function" and _G.MSUF_GetColorFromKey(key) or nil
+        local color = key and _G.MSUF_GetColorFromKey(key) or nil
         if color and color.GetRGB then
             r, g, b = color:GetRGB()
             if r and g and b then return r, g, b end
@@ -408,15 +421,14 @@ local function PreviewSetRowOffset(self, x)
 local function RefreshPreviewTexts(self, unit, kind, g, S, barWLocal, progress, duration)
     local remaining = max(0, (1 - progress) * duration)
     local previewTimeText = FormatPreviewTime(unit, g, remaining, duration)
-    local fontPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
-    local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
+    local fontPath = _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
+    local fontFlags = _G.MSUF_GetFontFlags() or "OUTLINE"
     local resolveSafe = _G.MSUF_ResolveSafeFontPath
     if type(resolveSafe) == "function" then
         local gdb = EnsureDB().general
         fontPath = resolveSafe(fontPath, 14, fontFlags, gdb and gdb.fontKey)
     end
-    local tr, tg, tb = 1, 1, 1
-    if type(_G.MSUF_GetCastbarTextColor) == "function" then tr, tg, tb = _G.MSUF_GetCastbarTextColor() end
+    local tr, tg, tb = _G.MSUF_GetCastbarTextColor()
     local showTargetName = CastbarShowTargetName(unit, g)
     self.castTargetText:SetShown(showTargetName)
     if showTargetName then
@@ -564,7 +576,7 @@ local function PreviewRefresh(self)
         visual = max(0.01, min(1, visual))
         local fillW = max(1, floor(barWLocal * visual + 0.5))
         local baseR, baseG, baseB = 0.20, 0.78, 0.94
-        if type(_G.MSUF_ResolveCastbarColors) == "function" then
+        do
             local r, g, b = _G.MSUF_ResolveCastbarColors()
             if r then baseR, baseG, baseB = r, g or baseG, b or baseB end
         end
@@ -592,11 +604,9 @@ local function PreviewRefresh(self)
         self.barBg:ClearAllPoints()
         self.barBg:SetPoint("TOPLEFT", self.bar, "TOPLEFT", statusX, -outlineInset)
         self.barBg:SetPoint("BOTTOMRIGHT", self.bar, "TOPLEFT", statusX + barWLocal, -outlineInset - barHLocal)
-        if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+        do
             local br, bg, bb, ba = _G.MSUF_GetCastbarBackgroundColor()
             self.barBg:SetVertexColor(br or 0.10, bg or 0.10, bb or 0.10, ba or 0.85)
-        else
-            self.barBg:SetVertexColor(0.10, 0.10, 0.10, 0.85)
         end
         LayoutIconOutline(self, scale, unit, g)
     RefreshPreviewTexts(self, unit, kind, g, S, barWLocal, progress, duration)

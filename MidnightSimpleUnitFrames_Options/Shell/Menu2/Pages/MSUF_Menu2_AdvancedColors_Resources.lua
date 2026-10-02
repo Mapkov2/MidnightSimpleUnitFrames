@@ -2,6 +2,11 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors_Resources.lua", {
+    "MSUF_GetDefaultPowerColor",
+})
 
 -- Advanced Colors page: Power and Class Resource colors.
 -- Owns the power-type and class-power override readers and writers, the
@@ -52,7 +57,7 @@ COLOR_DATA.CP_SLOT_TOKENS = COLOR_CP_SLOT_TOKENS
 COLOR_DATA.CP_SLOT_MODES = COLOR_CP_SLOT_MODES
 local function PowerDefaultRGB(token)
     --- MSUF's own class-resource defaults (runes, soul shards) come first.
-    if token and type(_G.MSUF_GetDefaultPowerColor) == "function" then
+    if token then
         local r, g, b = _G.MSUF_GetDefaultPowerColor(token)
         if tonumber(r) and tonumber(g) and tonumber(b) then return tonumber(r), tonumber(g), tonumber(b) end
     end

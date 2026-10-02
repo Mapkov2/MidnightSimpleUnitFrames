@@ -3,6 +3,12 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Group.lua", {
+    "MSUF_ShowGroupFrameReloadRequiredPopup",
+    "MSUF_GF_EM2_SetActivePreviewKind",
+})
 local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Menu2 Group page foundation.
@@ -184,12 +190,8 @@ local function RefreshGFPreview(kind, opts)
     local gf = GF()
     if opts and opts.auraOnly == true and gf and type(gf.RefreshPreviewAuras) == "function" then
         gf.RefreshPreviewAuras(kind)
-    elseif opts and opts.auraOnly == true and type(_G.MSUF_GF_RefreshPreviewAuras) == "function" then
-        _G.MSUF_GF_RefreshPreviewAuras(kind)
     elseif opts and opts.spellOnly == true and gf and type(gf.RefreshPreviewSpellIndicators) == "function" then
         gf.RefreshPreviewSpellIndicators(kind)
-    elseif opts and opts.spellOnly == true and type(_G.MSUF_GF_RefreshPreviewSpellIndicators) == "function" then
-        _G.MSUF_GF_RefreshPreviewSpellIndicators(kind)
     elseif gf and type(gf.RefreshPreviewLayout) == "function" then
         gf.RefreshPreviewLayout(kind)
     end
@@ -339,9 +341,7 @@ local function Set(kind, key, value, mode)
             conf.hlOverride = true
         end
         QueueGF(kind, mode or "visual")
-        if key == "enabled" and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
-            _G.MSUF_ShowGroupFrameReloadRequiredPopup()
-        end
+        if key == "enabled" then _G.MSUF_ShowGroupFrameReloadRequiredPopup() end
         return true
     end
     return M.RunWithHistory(M.Format("Group %s", tostring(key)), "group:" .. tostring(kind) .. ":" .. tostring(key), Write)
@@ -455,9 +455,7 @@ local function SetFrameProvider(kind, provider)
         conf.enabled = nextEnabled
         if not nextEnabled then conf.blizzardFallbackMode = provider end
         QueueGF(kind, "rebuild")
-        if (enabledChanged or fallbackChanged) and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
-            _G.MSUF_ShowGroupFrameReloadRequiredPopup()
-        end
+        if enabledChanged or fallbackChanged then _G.MSUF_ShowGroupFrameReloadRequiredPopup() end
         return true
     end
     return M.RunWithHistory("Group frame provider", "group:" .. tostring(kind) .. ":frameProvider", Write)
@@ -503,7 +501,6 @@ local GF_COPY_CATEGORIES = {
 local function DeepCopy(value)
     local gf = GF()
     if gf and type(gf._DeepCopyTable) == "function" then return gf._DeepCopyTable(value) end
-    if type(_G.MSUF_DeepCopy) == "function" then return _G.MSUF_DeepCopy(value) end
     return M.DeepCopy(value)
 end
 local function NewGFCopyScopes()
@@ -832,7 +829,7 @@ local function ScopeSection(ctx, builder, opts)
         if previousScope ~= M.gfScope and W.CloseTextQuickSettings then W.CloseTextQuickSettings() end
         if previousScope ~= M.gfScope and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format("%s scope", ScopeShortLabel(M.gfScope)), "info", 1.1) end
         local gf = GF()
-        if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
+        _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope)
         RequestGFPagePreview()
         if gf and type(gf.PreviewScopeChanged) == "function" then
             gf.PreviewScopeChanged()
