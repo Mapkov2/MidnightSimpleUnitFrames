@@ -92,6 +92,8 @@ local function Load(client)
         UF = UF,
         ExportPublic = function(name, value) _G[name] = value end,
         Secrets = { UnitExistsPlain = function() return false end },
+        -- Auras3/MSUF_Auras3_Core.lua defines RequestScope on every client.
+        MSUF_Auras3 = { RequestScope = function() end },
     }
     -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
