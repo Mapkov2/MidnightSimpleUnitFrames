@@ -1147,8 +1147,14 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
             profile._msufDefaultsRevision = nil
             changed = true
         end
+        --- The dispel priority stamp is the payload's portable data-format
+        --- version, not a fast-path marker: dropping it re-ran the one-time
+        --- TOP -> ALL lift on every import of a current profile. Migrate the
+        --- payload from its own version now; the forced run still repeats
+        --- every idempotent normalization, so a copied stamp skips nothing
+        --- but the lift.
         if profile._msufDispelPriorityMigration ~= nil then
-            profile._msufDispelPriorityMigration = nil
+            MSUF.Require("MSUF_MigrateDispelPriorityProfile", "State/MSUF_ProfileNormalize.lua")(profile, true)
             changed = true
         end
         --- Navigation icons are the supported Menu2 baseline for imports.

@@ -100,15 +100,23 @@ MSUF_NormalizeProfileTo60Defaults(stored)
 Check(stored._msufDispelPriorityMigration == stamp and stored.general.showNavigationIcons == false,
     "the defaults normalizer treated a stored profile as an import payload")
 
--- Imports stay untrusted: copied metadata and an old navigation choice are normalized away.
+-- Imports stay untrusted: a copied defaults revision and an old navigation
+-- choice are normalized away. The dispel priority stamp is the payload's
+-- data-format version: the payload is migrated from it at once, so a current
+-- payload keeps a deliberate TOP and an older one is lifted.
 local payload = {
-    general = { showNavigationIcons = false },
+    general = { showNavigationIcons = false, unitDispelSymbolMode = "TOP" },
     _msufDispelPriorityMigration = stamp,
     _msufDefaultsRevision = 999,
 }
 MSUF_ProfileIO_TranslateProfileToCurrent(payload, { source = "profile_import", markProfile = true })
-Check(payload._msufDispelPriorityMigration == nil and payload._msufDefaultsRevision == nil,
-    "an import payload kept its copied migration stamps")
+Check(payload._msufDefaultsRevision == nil, "an import payload kept its copied defaults revision")
+Check(payload._msufDispelPriorityMigration == stamp and payload.general.unitDispelSymbolMode == "TOP",
+    "an import of a current payload re-ran the TOP lift or lost its dispel priority version")
+local oldPayload = { general = { unitDispelSymbolMode = "TOP" }, _msufDispelPriorityMigration = 4 }
+MSUF_ProfileIO_TranslateProfileToCurrent(oldPayload, { source = "profile_import", markProfile = true })
+Check(oldPayload._msufDispelPriorityMigration == stamp and oldPayload.general.unitDispelSymbolMode == "ALL",
+    "an import of a migration-4 payload kept the Beta 38 TOP default")
 Check(payload.general.showNavigationIcons == true, "an import payload kept showNavigationIcons = false")
 
 print = realPrint
