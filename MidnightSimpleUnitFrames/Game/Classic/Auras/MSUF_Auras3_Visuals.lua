@@ -149,14 +149,16 @@ end
 
 function V.EnrichGroupLane(lane, source, kind, frameSpec, scope)
     local prefix = kind
-    local root = _G.MSUF_DB and _G.MSUF_DB.auras3
+    local db = _G.MSUF_DB
+    local root = db and db.auras3
     local shared = root and root.shared or {}
     return Enrich(lane, source, shared, prefix, frameSpec and frameSpec.portrait and frameSpec.portrait.shape, scope)
 end
 
 function V.EnrichCustomLane(lane, entry, frameSpec)
     local placed = type(entry) == "table" and type(entry.placed) == "table" and entry.placed or {}
-    local root = _G.MSUF_DB and _G.MSUF_DB.auras3
+    local db = _G.MSUF_DB
+    local root = db and db.auras3
     local shared = root and root.shared or {}
     local appearanceKind = lane.appearanceKind
         or (lane.harmful == true and "debuff" or "buff")
