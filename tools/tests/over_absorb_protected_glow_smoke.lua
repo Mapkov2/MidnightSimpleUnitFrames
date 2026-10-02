@@ -289,6 +289,10 @@ Run("health follower", function()
     for _ in text:gmatch("absorbSecret and %(fullStripe or frame%._msufPredictionOverAbsorbOverlay == true%)") do opened = opened + 1 end
     for _ in text:gmatch("absorbSecret and %(frame%._msufPredictionFullHealthStripe == true\n%s*or frame%._msufPredictionOverAbsorbOverlay == true%)") do opened = opened + 1 end
     Check(opened == 2, "health follower: a protected absorb does not open the health follower for the overlay")
+    -- _msufPredictionHealthVisualActive is the one health-follower gate; the
+    -- write-only partial-glow twin is gone (W4-C1, grep proof over the addons).
+    Check(not text:find("_msufPredictionPartialGlowHealthActive", 1, true),
+        "health follower: the write-only partial-glow flag is written again")
     local frame = NewFrame(true, false)
     frame._msufPredictionHealthVisualActive = true
     frame._msufPredictionAbsorb = Secret("absorb")

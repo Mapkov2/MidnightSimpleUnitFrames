@@ -1585,7 +1585,6 @@ local function ClearPredictionCache(frame)
   frame._msufPredictionAbsorbSecret = nil
   frame._msufPredictionHealAbsorb = nil
   frame._msufPredictionHealthVisualActive = nil
-  frame._msufPredictionPartialGlowHealthActive = nil
   frame._msufPredictionHealthMax = nil
   frame._msufPredictionHealthMaxUnit = nil
   ClearBarValueCache(frame.incomingHealBar)
@@ -2415,11 +2414,6 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
     frame._msufPredictionHealthVisualActive = (absorbPositive
       or (absorbSecret and (frame._msufPredictionFullHealthStripe == true
         or frame._msufPredictionOverAbsorbOverlay == true))) and true or nil
-    if frame._msufPredictionFullHealthStripe ~= true and absorbPositive then
-      frame._msufPredictionPartialGlowHealthActive = true
-    else
-      frame._msufPredictionPartialGlowHealthActive = nil
-    end
   end
   if refreshHealAbsorb then
     frame._msufPredictionHealAbsorb = ReadHealAbsorbs(unit)
@@ -2717,7 +2711,6 @@ local function CreateAbsorbDataWriter(followAbsorb, withGlow, fullStripe)
     local absorbPositive = not absorbSecret and type(absorb) == "number" and absorb > 0
     frame._msufPredictionHealthVisualActive = (absorbPositive
       or (absorbSecret and (fullStripe or frame._msufPredictionOverAbsorbOverlay == true))) and true or nil
-    frame._msufPredictionPartialGlowHealthActive = not fullStripe and absorbPositive and true or nil
     -- The guard already established CacheReady/Unit/Cfg. Only the glow's
     -- health-tick dedupe becomes stale when its absorb payload changes.
     frame._msufGlowTickBucket, frame._msufGlowTickUnit = nil, nil
