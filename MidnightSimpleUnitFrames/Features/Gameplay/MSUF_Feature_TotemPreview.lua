@@ -261,7 +261,10 @@ do
         if info.scale and frame.SetScale then frame:SetScale(info.scale) end
         if info.strata and frame.SetFrameStrata then frame:SetFrameStrata(info.strata) end
         if info.level and frame.SetFrameLevel then frame:SetFrameLevel(info.level) end
-        frame.ignoreFramePositionManager = info.ignoreFramePositionManager
+        -- Hand the managed-frame flag back only if it still holds MSUF's value.
+        if frame.ignoreFramePositionManager ~= info.ignoreFramePositionManager then
+            frame.ignoreFramePositionManager = info.ignoreFramePositionManager
+        end
         if frame.Layout then frame:Layout() end
         _ReturnToTotemManagedContainer(frame)
 
@@ -305,7 +308,16 @@ do
         -- the first apply. Both sides are self-guarding: AddManagedFrame bails on
         -- ignoreFramePositionManager, RemoveManagedFrame bails when the frame is not tracked, so
         -- repeat calls cost one table lookup and never trigger a container Layout.
-        frame.ignoreFramePositionManager = true
+        -- The flag is a field on Blizzard's frame that Blizzard reads
+        -- (ManagedFrameContainerMixin:AddManagedFrame, ManagedFrameSystem.lua:58; Classic
+        -- UIParent.lua:163), and it is the only way AddManagedFrame offers to keep the frame in
+        -- place: without it the first totem of a fight hands TotemFrame back to the hidden Blizzard
+        -- PlayerFrame for the whole fight, because nothing may move it in combat. Blizzard sets the
+        -- same field on PlayerCastingBarFrame (PlayerFrame.lua:36). It is written once per
+        -- ownership, never on Blizzard's rebuilds, and restored on release.
+        if frame.ignoreFramePositionManager ~= true then
+            frame.ignoreFramePositionManager = true
+        end
         _RemoveFromTotemManagedContainers(frame)
 
         local wantParent = playerFrame or UIParent
