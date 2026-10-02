@@ -19,6 +19,7 @@ local InCombatLockdown = InCombatLockdown
 local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetNumGroupMembers = GetNumGroupMembers
 local UnitName = UnitName
+local issecretvalue = _G.issecretvalue
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
 local C_Timer = _G.C_Timer
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
@@ -1218,6 +1219,9 @@ local function ApplyPreviewData(frame, index, kind)
   local class = PREVIEW_CLASSES[((index - 1) % #PREVIEW_CLASSES) + 1]
   local role = PREVIEW_ROLES[((index - 1) % #PREVIEW_ROLES) + 1]
   local playerName = UnitName and UnitName("player")
+  -- Preview identities are synthetic; an unreadable player name uses the same
+  -- sample as an unavailable name, before shortening or caching it.
+  if issecretvalue(playerName) then playerName = nil end
   local name = (index == 1 and playerName) or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
 
   frame._msufGFPreviewActive = true
