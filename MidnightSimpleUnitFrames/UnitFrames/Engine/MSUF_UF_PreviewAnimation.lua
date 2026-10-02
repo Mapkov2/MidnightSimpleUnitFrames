@@ -922,7 +922,7 @@ local function RefreshCastbarPreviewFrames()
     any = ApplyCastbarPreviewFrame(_G[spec.name], i + 20, spec.unit, spec.label) or any
   end
 
-  local bossMax = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or #BOSS_UNITS
+  local bossMax = tonumber(_G.MAX_BOSS_FRAMES) or #BOSS_UNITS
   if bossMax < 1 then bossMax = #BOSS_UNITS elseif bossMax > 12 then bossMax = 12 end
   for i = 1, bossMax do
     any = ApplyCastbarPreviewFrame(BossCastbarPreview(i), i + 30, "boss", "Celestial Ruin") or any
@@ -937,7 +937,7 @@ local function RestoreCastbarPreviewFrames()
   for i = 1, #CASTBAR_PREVIEWS do
     RestoreCastbarFrame(_G[CASTBAR_PREVIEWS[i].name])
   end
-  local bossMax = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or #BOSS_UNITS
+  local bossMax = tonumber(_G.MAX_BOSS_FRAMES) or #BOSS_UNITS
   if bossMax < 1 then bossMax = #BOSS_UNITS elseif bossMax > 12 then bossMax = 12 end
   for i = 1, bossMax do
     RestoreCastbarFrame(BossCastbarPreview(i))

@@ -91,33 +91,35 @@ local ApplyTexture = Apply.Texture
 local ApplyText = Apply.Text
 
 local EMPTY_EVENTS = {}
-local WHITE = "Interface\\Buttons\\WHITE8x8"
-local ADDON_PATH = "Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames")
-local RAID_MARKER_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
-local LEADER_TEXTURE = "Interface\\GroupFrame\\UI-Group-LeaderIcon"
-local ASSIST_TEXTURE = "Interface\\GroupFrame\\UI-Group-AssistantIcon"
-local LEADER_ATLAS = "UI-HUD-UnitFrame-Player-Group-LeaderIcon"
-local ASSIST_ATLAS = "UI-HUD-UnitFrame-Player-Group-GuideIcon"
-local COMBAT_ATLAS = "UI-HUD-UnitFrame-Player-CombatIcon"
-local READY_TEXTURES = {
-  ready = "Interface\\RaidFrame\\ReadyCheck-Ready",
-  notready = "Interface\\RaidFrame\\ReadyCheck-NotReady",
-  waiting = "Interface\\RaidFrame\\ReadyCheck-Waiting",
+-- Texture paths and atlas names of the indicators: one table of constants.
+local Media = {
+  WHITE = "Interface\\Buttons\\WHITE8x8",
+  RAID_MARKER_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons",
+  LEADER_TEXTURE = "Interface\\GroupFrame\\UI-Group-LeaderIcon",
+  ASSIST_TEXTURE = "Interface\\GroupFrame\\UI-Group-AssistantIcon",
+  LEADER_ATLAS = "UI-HUD-UnitFrame-Player-Group-LeaderIcon",
+  ASSIST_ATLAS = "UI-HUD-UnitFrame-Player-Group-GuideIcon",
+  COMBAT_ATLAS = "UI-HUD-UnitFrame-Player-CombatIcon",
+  READY_TEXTURES = {
+    ready = "Interface\\RaidFrame\\ReadyCheck-Ready",
+    notready = "Interface\\RaidFrame\\ReadyCheck-NotReady",
+    waiting = "Interface\\RaidFrame\\ReadyCheck-Waiting",
+  },
+  READY_REZ_TEXTURE = "Interface\\RaidFrame\\Raid-Icon-Rez",
+  PHASE_TEXTURE = "Interface\\TargetingFrame\\UI-PhasingIcon",
+  STATE_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon",
+  RESTING_ANIMATED_SYMBOL = "rested_blizzard_animated",
+  RESTING_FLIPBOOK_ATLAS = "UI-HUD-UnitFrame-Player-Rest-Flipbook",
+  PVP_FFA_ATLAS = "UI-HUD-UnitFrame-Player-PVP-FFAIcon",
+  PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon",
+  PVP_HORDE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-HordeIcon",
+  SYMBOL_BASE = "Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Symbols\\",
 }
-local READY_REZ_TEXTURE = "Interface\\RaidFrame\\Raid-Icon-Rez"
-local PHASE_TEXTURE = "Interface\\TargetingFrame\\UI-PhasingIcon"
-local STATE_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
-local RESTING_ANIMATED_SYMBOL = "rested_blizzard_animated"
-local RESTING_FLIPBOOK_ATLAS = "UI-HUD-UnitFrame-Player-Rest-Flipbook"
-local PVP_FFA_ATLAS = "UI-HUD-UnitFrame-Player-PVP-FFAIcon"
-local PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
-local PVP_HORDE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-HordeIcon"
-local PVP_ATLAS_BY_FACTION = { Horde = PVP_HORDE_ATLAS, Alliance = PVP_ALLIANCE_ATLAS }
-local PVP_TEXTURE_BY_ATLAS = {
-  [PVP_HORDE_ATLAS] = "Interface\\TargetingFrame\\UI-PVP-Horde",
-  [PVP_ALLIANCE_ATLAS] = "Interface\\TargetingFrame\\UI-PVP-Alliance",
+Media.PVP_ATLAS_BY_FACTION = { Horde = Media.PVP_HORDE_ATLAS, Alliance = Media.PVP_ALLIANCE_ATLAS }
+Media.PVP_TEXTURE_BY_ATLAS = {
+  [Media.PVP_HORDE_ATLAS] = "Interface\\TargetingFrame\\UI-PVP-Horde",
+  [Media.PVP_ALLIANCE_ATLAS] = "Interface\\TargetingFrame\\UI-PVP-Alliance",
 }
-local SYMBOL_BASE = ADDON_PATH .. "\\Media\\Symbols\\"
 -- These are the complete symbol identifiers written by native MSUF 5.5.
 -- Never synthesize a texture path for an unknown value: WoW renders a missing
 -- file assigned to an existing Texture region as an opaque white rectangle.
@@ -170,17 +172,14 @@ local STATUS_REFRESH = {
   "GroupStatusRuntime",
 }
 local SYMBOL_PATH_CACHE = {}
-local READY_CHECK_TIMERS = setmetatable({}, { __mode = "k" })
-local READY_CHECK_LIST = {}
-local READY_CHECK_HEAD = 1
-local READY_CHECK_TAIL = 0
-local READY_CHECK_TIMER_AT
+-- Ready-check hide queue: frames by hide time, one shared timer.
+local ReadyCheckQueue = { timers = setmetatable({}, { __mode = "k" }), list = {}, head = 1, tail = 0, timerAt = nil }
 
 local Status = {}
 --- Exported runtime (MSUF.UFStatusRuntime). The per-indicator updaters, their
 --- event lists and the event resolvers live on it directly instead of as file
 --- locals: group status and the indicator registrations below read them from
---- here, and the main chunk stays clear of Lua's 200-local ceiling.
+--- here.
 local Runtime = {}
 
 local function ClampLayer(layer, fallback)
@@ -291,11 +290,11 @@ end
 
 local function ApplyRestingFlipbook(tex, play)
   if not (tex and tex.SetAtlas and tex.CreateAnimationGroup) then return false end
-  if not AtlasAvailable(tex, RESTING_FLIPBOOK_ATLAS) then return false end
+  if not AtlasAvailable(tex, Media.RESTING_FLIPBOOK_ATLAS) then return false end
   if tex._msufRestingFlipbookAtlas ~= true then
-    tex:SetAtlas(RESTING_FLIPBOOK_ATLAS)
+    tex:SetAtlas(Media.RESTING_FLIPBOOK_ATLAS)
     tex._msufRestingFlipbookAtlas = true
-    tex._msufStatusAtlas = RESTING_FLIPBOOK_ATLAS
+    tex._msufStatusAtlas = Media.RESTING_FLIPBOOK_ATLAS
     tex._msufStatusTexture, tex._aTex, tex._aColorTexture = nil, nil, nil
     tex._msufStatusL, tex._msufStatusR, tex._msufStatusT, tex._msufStatusB = nil, nil, nil, nil
   end
@@ -588,7 +587,7 @@ local function EnsureTexture(frame, field, layer)
     return tex
   end
   tex = PixelLayoutRegion((holder or frame):CreateTexture(nil, "OVERLAY"))
-  tex:SetTexture(WHITE)
+  tex:SetTexture(Media.WHITE)
   tex:Hide()
   frame[field] = tex
   return tex
@@ -724,7 +723,7 @@ local function SymbolPath(symbol, useMidnight)
     folder = "Ress"
     suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
   end
-  local path = SYMBOL_BASE .. folder .. "\\" .. symbol .. suffix
+  local path = Media.SYMBOL_BASE .. folder .. "\\" .. symbol .. suffix
   SYMBOL_PATH_CACHE[cacheKey] = path
   return path
 end
@@ -737,27 +736,27 @@ local function ApplyStateIconTexture(tex, kind, cfg, status)
     return
   end
   if kind == "combat" then
-    if AtlasAvailable(tex, COMBAT_ATLAS) then
-      SetAtlas(tex, COMBAT_ATLAS)
+    if AtlasAvailable(tex, Media.COMBAT_ATLAS) then
+      SetAtlas(tex, Media.COMBAT_ATLAS)
     else
-      SetTexture(tex, STATE_TEXTURE)
+      SetTexture(tex, Media.STATE_TEXTURE)
       SetTexCoord(tex, 0.5, 1, 0, 0.5)
     end
   elseif kind == "resting" then
-    SetTexture(tex, STATE_TEXTURE)
+    SetTexture(tex, Media.STATE_TEXTURE)
     SetTexCoord(tex, 0, 0.5, 0, 0.5)
   elseif kind == "incomingRes" then
-    SetTexture(tex, READY_REZ_TEXTURE)
+    SetTexture(tex, Media.READY_REZ_TEXTURE)
     SetTexCoord(tex, 0, 1, 0, 1)
   end
 end
 
 local function PVPAtlasForFaction(factionGroup)
-  return PVP_ATLAS_BY_FACTION[factionGroup]
+  return Media.PVP_ATLAS_BY_FACTION[factionGroup]
 end
 
 local function PVPFallbackTextureForAtlas(atlas)
-  return PVP_TEXTURE_BY_ATLAS[atlas]
+  return Media.PVP_TEXTURE_BY_ATLAS[atlas]
 end
 
 local function ResolvePVPAtlas(frame, unit, unitState)
@@ -765,7 +764,7 @@ local function ResolvePVPAtlas(frame, unit, unitState)
     return nil
   end
   if UnitIsPVPFreeForAll and BoolTrue(UnitIsPVPFreeForAll(unit)) then
-    return PVP_FFA_ATLAS
+    return Media.PVP_FFA_ATLAS
   end
   if not (UnitIsPVP and UnitFactionGroup and BoolTrue(UnitIsPVP(unit))) then
     return nil
@@ -792,7 +791,7 @@ local function ResolvePVPTestAtlas(unit)
   if issecretvalue(factionGroup) == true then
     factionGroup = nil
   end
-  return PVPAtlasForFaction(factionGroup) or PVP_ALLIANCE_ATLAS
+  return PVPAtlasForFaction(factionGroup) or Media.PVP_ALLIANCE_ATLAS
 end
 
 local function ApplyPVPTexture(tex, atlas)
@@ -843,11 +842,11 @@ local function ApplyLeaderTexture(tex, cfg, status, assist)
       end
     end
   end
-  local atlas = assist and ASSIST_ATLAS or LEADER_ATLAS
+  local atlas = assist and Media.ASSIST_ATLAS or Media.LEADER_ATLAS
   if AtlasAvailable(tex, atlas) then
     SetAtlas(tex, atlas)
   else
-    SetTexture(tex, assist and ASSIST_TEXTURE or LEADER_TEXTURE)
+    SetTexture(tex, assist and Media.ASSIST_TEXTURE or Media.LEADER_TEXTURE)
     SetTexCoord(tex, 0, 1, 0, 1)
   end
 end
@@ -915,7 +914,7 @@ end
 
 local function ApplyStateOrPackIconTexture(tex, kind, cfg, status, variant, playAnimation)
   if kind == "resting" then
-    if cfg and cfg.symbol == RESTING_ANIMATED_SYMBOL
+    if cfg and cfg.symbol == Media.RESTING_ANIMATED_SYMBOL
       and ApplyRestingFlipbook(tex, playAnimation) then
       return true
     end
@@ -944,7 +943,7 @@ end
 
 local CONFIGURED_REGION_DEFS = {
   -- key, field, groupField, hide, aliases, texture, text, state, clearSummon, resetTexCoord
-  { "raidMarker", "raidTargetIcon", "raidIcon", { "raidIcon", "raidTargetIcon" }, { "raidTargetIcon", "raidMarkerIndicator" }, RAID_MARKER_TEXTURE },
+  { "raidMarker", "raidTargetIcon", "raidIcon", { "raidIcon", "raidTargetIcon" }, { "raidTargetIcon", "raidMarkerIndicator" }, Media.RAID_MARKER_TEXTURE },
   { "role", "roleIcon" },
   { "leader", "LeaderIndicator", "leaderIcon", { "leaderIcon", "LeaderIndicator" }, { "LeaderIndicator", "leaderIcon" } },
   { "assist", "assistIcon" },
@@ -962,7 +961,7 @@ local CONFIGURED_REGION_DEFS = {
   { "stance", "stanceIndicatorText", nil, nil, nil, nil, true },
   { "readyCheck", "readyCheckIcon" },
   { "summon", "summonIcon", nil, nil, nil, nil, nil, nil, true },
-  { "phase", "phaseIcon", nil, nil, nil, PHASE_TEXTURE, nil, nil, nil, true },
+  { "phase", "phaseIcon", nil, nil, nil, Media.PHASE_TEXTURE, nil, nil, nil, true },
 }
 
 local NAME_FONT_STATUS = {
@@ -1084,7 +1083,7 @@ local function ApplyDefaultRaidMarkerTexture(tex, index)
   -- stock marker sheet first (cached no-op while it is already set, and required after a custom
   -- icon or pack texture was on this region), then drop the coord cache so a later custom/pack
   -- application cannot be dedupe-skipped against coords the sprite-cell call changed underneath.
-  SetTexture(tex, RAID_MARKER_TEXTURE)
+  SetTexture(tex, Media.RAID_MARKER_TEXTURE)
   SetRaidTargetIconTexture(tex, index)
   tex._msufStatusL, tex._msufStatusR, tex._msufStatusT, tex._msufStatusB = nil, nil, nil, nil
 end
@@ -1219,15 +1218,15 @@ end
 
 local function CancelReadyCheckTimer(frame)
   if frame then
-    READY_CHECK_TIMERS[frame] = nil
+    ReadyCheckQueue.timers[frame] = nil
   end
 end
 
 local ReadyCheckTimerCallback
 
 local function ArmReadyCheckTimer(when)
-  if READY_CHECK_TIMER_AT and READY_CHECK_TIMER_AT <= when then return end
-  READY_CHECK_TIMER_AT = when
+  if ReadyCheckQueue.timerAt and ReadyCheckQueue.timerAt <= when then return end
+  ReadyCheckQueue.timerAt = when
   local now = GetTime and GetTime() or 0
   local delay = when - now
   C_Timer.After(delay > 0 and delay or 0, ReadyCheckTimerCallback)
@@ -1236,25 +1235,25 @@ end
 ReadyCheckTimerCallback = function()
   -- Ready-check icons share one compact timer queue instead of one timer per frame. The
   -- callback compacts sparse slots so raid-size checks do not leave long-lived table holes.
-  READY_CHECK_TIMER_AT = nil
+  ReadyCheckQueue.timerAt = nil
   local now = GetTime and GetTime() or 0
   local nextAt
-  local out = READY_CHECK_HEAD
-  local last = READY_CHECK_TAIL
+  local out = ReadyCheckQueue.head
+  local last = ReadyCheckQueue.tail
 
-  for i = READY_CHECK_HEAD, last do
-    local frame = READY_CHECK_LIST[i]
-    local due = frame and READY_CHECK_TIMERS[frame]
+  for i = ReadyCheckQueue.head, last do
+    local frame = ReadyCheckQueue.list[i]
+    local due = frame and ReadyCheckQueue.timers[frame]
     if not due then
-      READY_CHECK_LIST[i] = nil
+      ReadyCheckQueue.list[i] = nil
     elseif now >= due then
-      READY_CHECK_TIMERS[frame] = nil
-      READY_CHECK_LIST[i] = nil
+      ReadyCheckQueue.timers[frame] = nil
+      ReadyCheckQueue.list[i] = nil
       SetShown(frame.readyCheckIcon, false)
     else
       if out ~= i then
-        READY_CHECK_LIST[out] = frame
-        READY_CHECK_LIST[i] = nil
+        ReadyCheckQueue.list[out] = frame
+        ReadyCheckQueue.list[i] = nil
       end
       out = out + 1
       if not nextAt or due < nextAt then
@@ -1263,30 +1262,30 @@ ReadyCheckTimerCallback = function()
     end
   end
 
-  local appendedTail = READY_CHECK_TAIL
+  local appendedTail = ReadyCheckQueue.tail
   if appendedTail > last then
     for i = last + 1, appendedTail do
-      local frame = READY_CHECK_LIST[i]
-      local due = frame and READY_CHECK_TIMERS[frame]
+      local frame = ReadyCheckQueue.list[i]
+      local due = frame and ReadyCheckQueue.timers[frame]
       if due then
         if out ~= i then
-          READY_CHECK_LIST[out] = frame
-          READY_CHECK_LIST[i] = nil
+          ReadyCheckQueue.list[out] = frame
+          ReadyCheckQueue.list[i] = nil
         end
         out = out + 1
         if not nextAt or due < nextAt then
           nextAt = due
         end
       else
-        READY_CHECK_LIST[i] = nil
+        ReadyCheckQueue.list[i] = nil
       end
     end
   end
 
-  READY_CHECK_HEAD = 1
-  READY_CHECK_TAIL = out - 1
-  if READY_CHECK_TAIL <= 0 then
-    READY_CHECK_TAIL = 0
+  ReadyCheckQueue.head = 1
+  ReadyCheckQueue.tail = out - 1
+  if ReadyCheckQueue.tail <= 0 then
+    ReadyCheckQueue.tail = 0
   end
   if nextAt then
     ArmReadyCheckTimer(nextAt)
@@ -1297,11 +1296,11 @@ local function QueueReadyCheckHide(frame)
   if not frame then return end
   local now = GetTime and GetTime() or 0
   local due = now + 6
-  local known = READY_CHECK_TIMERS[frame] ~= nil
-  READY_CHECK_TIMERS[frame] = due
+  local known = ReadyCheckQueue.timers[frame] ~= nil
+  ReadyCheckQueue.timers[frame] = due
   if not known then
-    READY_CHECK_TAIL = READY_CHECK_TAIL + 1
-    READY_CHECK_LIST[READY_CHECK_TAIL] = frame
+    ReadyCheckQueue.tail = ReadyCheckQueue.tail + 1
+    ReadyCheckQueue.list[ReadyCheckQueue.tail] = frame
   end
   ArmReadyCheckTimer(due)
 end
@@ -1403,7 +1402,7 @@ function Runtime.UpdateReadyCheck(frame, status, event)
   end
 
   local ready = GetReadyCheckStatus and GetReadyCheckStatus(unit)
-  local texture = READY_TEXTURES[ready]
+  local texture = Media.READY_TEXTURES[ready]
   if texture then
     CancelReadyCheckTimer(frame)
     if not ApplyStatusIconPackTexture(tex, cfg, status, "readyCheck", ready) then
@@ -1467,7 +1466,7 @@ function Runtime.UpdatePhase(frame, status)
   end
   if issecretvalue(reason) ~= true and reason then
     if not ApplyStatusIconPackTexture(tex, cfg, status, "phase", reason) then
-      SetTexture(tex, PHASE_TEXTURE)
+      SetTexture(tex, Media.PHASE_TEXTURE)
       SetTexCoord(tex, 0, 1, 0, 1)
     end
     SetShown(tex, true)
@@ -1515,9 +1514,8 @@ end
 local IDENTITY_TEXT_FIELDS = { "levelText", "levelBackdrop", "levelBackdropRing", "raceText", "classStatusText" }
 
 --- Level difficulty tier, mirroring TargetFrameMixin:CheckLevel. Returns an
---- index into Shared.LEVEL_DIFFICULTY_TIERS. Hung on Runtime rather than kept
---- as file-scope locals, like the other cold helpers here, to leave this
---- chunk room under Lua 5.1's 200-local ceiling.
+--- index into Shared.LEVEL_DIFFICULTY_TIERS. Hung on Runtime, like the other
+--- cold helpers here.
 function Runtime.BuildLevelTierMap()
   local map = {}
   local difficulty = _G.Enum and _G.Enum.RelativeContentDifficulty
@@ -2012,7 +2010,9 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
       AdoptRegion(frame, fs, layout.layer)
     end
     LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
-    SetText(fs, text)
+    -- text stays the state token (DEAD, GHOST, OFFLINE, AFK, DND) that the
+    -- health element compares; only the font string gets the translation.
+    SetText(fs, MSUF.Translate(text))
     SetShown(fs, true)
     if StatusTextIsGone(oldValue) and not StatusTextIsGone(text) then
       RefreshHealthAfterGoneStatus(frame, oldValue)
@@ -2101,8 +2101,8 @@ function Runtime.UpdateIncomingRes(frame, status)
 end
 
 local function PVPVariantForAtlas(atlas)
-  if atlas == PVP_HORDE_ATLAS then return "Horde" end
-  if atlas == PVP_FFA_ATLAS then return "FFA" end
+  if atlas == Media.PVP_HORDE_ATLAS then return "Horde" end
+  if atlas == Media.PVP_FFA_ATLAS then return "FFA" end
   return "Alliance"
 end
 
@@ -2138,8 +2138,7 @@ end
 --- reads are the player's own action-bar state, so they stay valid in combat
 --- and the text updates live while stance-dancing. Region creation, font,
 --- color and anchoring are owned by ApplyConfiguredRegions - this only moves
---- the text. Lives on Status rather than as a local, like the per-indicator
---- updaters on Runtime, to keep the main chunk clear of Lua's 200-local ceiling.
+--- the text. Lives on Status, like the per-indicator updaters on Runtime.
 function Status.UpdateStanceText(frame, status)
   local cfg = status and status.stance
   local fs = frame.stanceIndicatorText

@@ -1,9 +1,9 @@
 local _, MSUF = ...
-local F, V = MSUF.ProfileFields, {}
-MSUF.ProfileVariants = V
+local Fields, Variants = MSUF.ProfileFields, {}
+MSUF.ProfileVariants = Variants
 local activeDB, journal, manual = nil, {}, nil
 local DARK_PATH = { "general", "darkMode" }
-local DARK_ID = F.ID(DARK_PATH)
+local DARK_ID = Fields.ID(DARK_PATH)
 local NO_CONDITIONS, NO_ENTRIES = {}, {}
 -- Precise reasons for a profile snapshot that cannot be taken.
 local SNAPSHOT_PROBLEMS = {
@@ -33,7 +33,7 @@ local function Entry(db, name)
     for _, entry in ipairs(Entries(db) or {}) do if entry.name == name then return entry end end
 end
 
-function V.Validate(schema)
+function Variants.Validate(schema)
     if schema == nil then return nil end
     if type(schema) ~= "table" or getmetatable(schema) ~= nil or schema.version ~= 1 or type(schema.entries) ~= "table"
         or #schema.entries > 16 then return nil, "invalid profile variants" end
@@ -42,7 +42,7 @@ function V.Validate(schema)
         if type(entry) ~= "table" or getmetatable(entry) ~= nil or type(entry.name) ~= "string" or #entry.name < 1
             or #entry.name > 64 or entry.name:find("[%c]") or names[entry.name] then return nil, "invalid variant name" end
         names[entry.name] = true
-        local patch, err = F.ValidatePatch(entry.patch or {})
+        local patch, err = Fields.ValidatePatch(entry.patch or {})
         if not patch then return nil, err end
         for _, field in ipairs(patch) do
             if not AddPath(allPaths,field.path) then return nil,"overlapping variant table paths" end
@@ -107,13 +107,13 @@ end
 local function CaptureEdits()
     if not activeDB then return end
     for _, record in pairs(journal) do
-        local value = F.Read(activeDB, record.path)
-        if not F.Equal(value, record.applied) then
+        local value = Fields.Read(activeDB, record.path)
+        if not Fields.Equal(value, record.applied) then
             local owner = Entry(activeDB, record.owner)
             if owner then
                 for _, field in ipairs(owner.patch) do
-                    if F.ID(field.path) == record.id then
-                        local copied, valid = F.Copy(value)
+                    if Fields.ID(field.path) == record.id then
+                        local copied, valid = Fields.Copy(value)
                         if valid then field.value, field.remove = copied, value == nil end
                         break
                     end
@@ -126,68 +126,68 @@ end
 local function RestoreInto(db)
     local created={}
     for _, record in pairs(journal) do
-        F.Write(db, record.path, F.CopySnapshot(record.base))
+        Fields.Write(db, record.path, Fields.CopySnapshot(record.base))
         for _,path in ipairs(record.created) do created[#created+1]=path end
     end
     table.sort(created,function(a,b) return #a>#b end)
     for _,path in ipairs(created) do
-        local value=F.Read(db,path)
-        if type(value)=="table" and next(value)==nil then F.Write(db,path,nil) end
+        local value=Fields.Read(db,path)
+        if type(value)=="table" and next(value)==nil then Fields.Write(db,path,nil) end
     end
 end
 
-function V.Restore(capture)
+function Variants.Restore(capture)
     if not activeDB then return end
     if capture ~= false then CaptureEdits() end
     RestoreInto(activeDB)
     journal, activeDB = {}, nil
 end
 
-function V.Resolve(db, context)
-    V.Restore()
+function Variants.Resolve(db, context)
+    Variants.Restore()
     if type(db) ~= "table" or db.profileVariants == nil then return false end
-    local schema, err = V.Validate(db.profileVariants)
+    local schema, err = Variants.Validate(db.profileVariants)
     if not schema then return false, err end
     db.profileVariants = schema
     local entries = schema.entries
     if not entries or #entries == 0 then return false end
     activeDB = db
-    context = context or V.Context(db)
+    context = context or Variants.Context(db)
     local applied = false
     for _, entry in ipairs(entries) do
         if Matches(entry, context) then
             for _, field in ipairs(entry.patch) do
-              if not F.ExternalAvailable or F.ExternalAvailable(db,field.path) then
-                local id = F.ID(field.path)
+              if not Fields.ExternalAvailable or Fields.ExternalAvailable(db,field.path) then
+                local id = Fields.ID(field.path)
                 local record = journal[id]
                 if not record then
-                    local base,valid=F.CopySnapshot(F.Read(db,field.path))
-                    if not valid then V.Restore(false); return false,"setting base exceeds copy limits" end
+                    local base,valid=Fields.CopySnapshot(Fields.Read(db,field.path))
+                    if not valid then Variants.Restore(false); return false,"setting base exceeds copy limits" end
                     record = { id=id, path=field.path, base=base, created={} }
                     local prefix={}
                     for i=1,#field.path-1 do
                         prefix[i]=field.path[i]
-                        local parent=F.Read(db,prefix)
+                        local parent=Fields.Read(db,prefix)
                         if parent~=nil and type(parent)~="table" then
-                            V.Restore(false)
+                            Variants.Restore(false)
                             return false,"setting parent is not a table"
                         end
-                        if parent==nil then record.created[#record.created+1]=F.Copy(prefix) end
+                        if parent==nil then record.created[#record.created+1]=Fields.Copy(prefix) end
                     end
                     journal[id] = record
                 end
-                local value=F.Copy(field.value)
+                local value=Fields.Copy(field.value)
                 if field.remove then value=nil end
-                if F.CheckExternal then
+                if Fields.CheckExternal then
                     local valid
-                    value,valid=F.CheckExternal(field.path,value,field.remove)
-                    if not valid then V.Restore(false); return false,"invalid setting value" end
+                    value,valid=Fields.CheckExternal(field.path,value,field.remove)
+                    if not valid then Variants.Restore(false); return false,"invalid setting value" end
                 end
                 if record.base~=nil and value~=nil and type(record.base)~=type(value) then
-                    V.Restore(false); return false,"invalid setting value"
+                    Variants.Restore(false); return false,"invalid setting value"
                 end
-                F.Write(db,field.path,value)
-                record.applied, record.owner = F.Copy(value), entry.name
+                Fields.Write(db,field.path,value)
+                record.applied, record.owner = Fields.Copy(value), entry.name
                 applied = true
               end
             end
@@ -196,7 +196,7 @@ function V.Resolve(db, context)
     return applied
 end
 
-function V.ContextValues(db)
+function Variants.ContextValues(db)
     local _, location = IsInInstance()
     if not CONTEXTS[location] then location=IsInGroup() and "world" or "solo" end
     local spec=MSUF_GetPlayerSpecID()
@@ -205,16 +205,16 @@ function V.ContextValues(db)
     if record then dark=record.base==true end
     return location, spec, dark
 end
-function V.Context(db)
-    local location, spec, dark = V.ContextValues(db)
+function Variants.Context(db)
+    local location, spec, dark = Variants.ContextValues(db)
     return { location=location, spec=spec, dark=dark }
 end
 -- Which entries match right now, as a bit set (at most 16 entries). The
 -- overlay is fully decided by it, so an unchanged set needs no apply.
-function V.MatchSignature(db)
+function Variants.MatchSignature(db)
     local entries = Entries(db)
     if not entries then return 0 end
-    local location, spec, dark = V.ContextValues(db)
+    local location, spec, dark = Variants.ContextValues(db)
     local signature, bit = 0, 1
     for i = 1, #entries do
         if MatchValues(entries[i], location, spec, dark) then signature = signature + bit end
@@ -224,7 +224,7 @@ function V.MatchSignature(db)
 end
 -- Whether any entry depends on the location or the specialization: only
 -- those conditions need game events.
-function V.ConditionKinds(db)
+function Variants.ConditionKinds(db)
     local location, spec = false, false
     for _, entry in ipairs(Entries(db) or NO_ENTRIES) do
         local c = type(entry) == "table" and entry.conditions
@@ -238,14 +238,14 @@ end
 
 -- Snapshots export the base even while the live table carries active overrides.
 -- Do not add a setting to partial exports that did not include it in the first place.
-function V.BaseSnapshot(db, include)
+function Variants.BaseSnapshot(db, include)
     if db == activeDB then CaptureEdits() end
     -- A complete trusted profile includes the schema/entry/path wrappers around
     -- already validated bounded values; their nesting is not value nesting.
     local budget={count=0,limit=131072,maxDepth=32,bytes=0,maxBytes=8388608}
-    local copy, valid, problem = F.CopySnapshot(db,budget)
+    local copy, valid, problem = Fields.CopySnapshot(db,budget)
     if not valid then return nil, SNAPSHOT_PROBLEMS[problem] or "profile exceeds snapshot limits" end
-    if F.CaptureExternal and not F.CaptureExternal(db,copy,budget) then return nil, "an add-on part of the profile could not be copied" end
+    if Fields.CaptureExternal and not Fields.CaptureExternal(db,copy,budget) then return nil, "an add-on part of the profile could not be copied" end
     if db == activeDB then
         RestoreInto(copy)
     end
@@ -255,11 +255,11 @@ end
 
 -- Reject incompatible values before replacing metadata or staging an import.
 -- The base snapshot avoids comparing a new patch with a temporary live overlay.
-function V.ValidateForProfile(db,schema)
-    local clean,why=V.Validate(schema)
+function Variants.ValidateForProfile(db,schema)
+    local clean,why=Variants.Validate(schema)
     if schema==nil or not clean then return clean,why end
     local base
-    base,why=V.BaseSnapshot(db,true)
+    base,why=Variants.BaseSnapshot(db,true)
     if not base then return nil,why end
     for _,entry in ipairs(clean.entries) do
         for _,field in ipairs(entry.patch) do
@@ -269,17 +269,17 @@ function V.ValidateForProfile(db,schema)
                 if parent~=nil and type(parent)~="table" then return nil,"setting parent is not a table" end
             end
             local value,valid=field.value,true
-            if F.CheckExternal then value,valid=F.CheckExternal(field.path,value,field.remove) end
+            if Fields.CheckExternal then value,valid=Fields.CheckExternal(field.path,value,field.remove) end
             if not valid then return nil,"invalid setting value" end
-            local original=F.Read(base,field.path)
+            local original=Fields.Read(base,field.path)
             if original~=nil and value~=nil and type(original)~=type(value) then return nil,"invalid setting value" end
-            if not field.remove then field.value=F.Copy(value) end
+            if not field.remove then field.value=Fields.Copy(value) end
         end
     end
     return clean
 end
 
-function V.HasExternalOverlay(root)
+function Variants.HasExternalOverlay(root)
     for _,record in pairs(journal) do if record.path[1]==root then return true end end
     return false
 end
@@ -290,8 +290,8 @@ end
 -- While a variant is being recorded any unit frame may become one. Cached per
 -- schema table: every save, import or Resolve installs a new one.
 local switchSchema, switchRoots = nil, {}
-function V.SwitchesUnitFrame(root)
-    if V.IsRecording and V.IsRecording() then return true end
+function Variants.SwitchesUnitFrame(root)
+    if Variants.IsRecording and Variants.IsRecording() then return true end
     local db = MSUF_DB
     local schema = type(db) == "table" and db.profileVariants or nil
     if type(schema) ~= "table" then return false end
@@ -301,7 +301,7 @@ function V.SwitchesUnitFrame(root)
         for _, entry in ipairs(type(schema.entries) == "table" and schema.entries or NO_ENTRIES) do
             local fields = type(entry) == "table" and type(entry.patch) == "table" and entry.patch or NO_ENTRIES
             for _, field in ipairs(fields) do
-                local unit = type(field) == "table" and F.UnitSwitchRoot(field.path)
+                local unit = type(field) == "table" and Fields.UnitSwitchRoot(field.path)
                 if unit then switchRoots[unit] = true end
             end
         end
@@ -309,11 +309,11 @@ function V.SwitchesUnitFrame(root)
     return switchRoots[root] == true
 end
 
-function V.SetManual(name)
+function Variants.SetManual(name)
     if name ~= nil and not Entry(MSUF_DB,name) then return false end
     if manual == name then manual=nil else manual=name end
     return true
 end
-function V.GetManual() return manual end
-function V.Find(db,name) return Entry(db,name) end
-function V.IsMaterialized(db) return activeDB == db and next(journal) ~= nil end
+function Variants.GetManual() return manual end
+function Variants.Find(db,name) return Entry(db,name) end
+function Variants.IsMaterialized(db) return activeDB == db and next(journal) ~= nil end

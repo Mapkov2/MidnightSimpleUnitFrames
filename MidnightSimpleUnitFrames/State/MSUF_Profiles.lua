@@ -65,6 +65,19 @@ function MSUF.ProfileIOCompleteFirstLoadImport()
     return completed == true
 end
 local ApplyProfileRuntime = MSUF.ProfileRuntime.Apply
+--- Chat lines of the profile commands. The sentence is translated first and
+--- formatted after, so a language places the names where it needs them; the
+--- coloured "MSUF:" tag is not part of the sentence. Locales/MSUF_Localization.lua
+--- loads ahead of State/ in every core TOC; the selected pack fills its table
+--- at ADDON_LOADED, before any of these lines can print.
+local Translate = MSUF.Translate
+local PROFILE_CHAT_TAG = { error = "|cffff0000MSUF:|r ", ok = "|cff00ff00MSUF:|r ", note = "|cffffd700MSUF:|r " }
+local function ProfileChatLine(tone, text, ...)
+    return PROFILE_CHAT_TAG[tone] .. string.format(Translate(text), ...)
+end
+local function ProfileChat(tone, text, ...)
+    print(ProfileChatLine(tone, text, ...))
+end
 local Variants, ProfileSync = MSUF.ProfileVariants, MSUF.ProfileSync
 local function PrepareProfileMutation(rebindOnly)
     local beforeMutation = MSUF.ProfileRuntime.BeforeMutation
@@ -139,7 +152,7 @@ function MSUF_SetDefaultProfileForNewCharacters(name)
         return true
     end
     if type(profiles[name]) ~= "table" then
-        print("|cffff0000MSUF:|r Unknown profile: " .. tostring(name))
+        ProfileChat("error", "Unknown profile: %s", tostring(name))
         return false, "unknown profile"
     end
     meta.defaultProfileForNewChars = name
@@ -266,14 +279,14 @@ function MSUF_CreateProfile(name)
     if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     if profiles[name] then
-        print("|cffff0000MSUF:|r Profile '"..name.."' already exists.")
+        ProfileChat("error", "Profile '%s' already exists.", name)
         return false, "profile already exists"
     end
     local createFactoryProfile = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile)
         or _G.MSUF_CreateFactoryDefaultProfile
     local profile = createFactoryProfile()
     if type(profile) ~= "table" then
-        print("|cffff0000MSUF:|r Factory defaults are not available; profile was not created.")
+        ProfileChat("error", "Factory defaults are not available; profile was not created.")
         return false, "factory defaults unavailable"
     end
     profiles[name] = profile
@@ -285,7 +298,7 @@ function MSUF_CreateProfile(name)
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[name])
     MSUF_ProfileIO_NotifySuiteLifecycle("create", name)
-    print("|cff00ff00MSUF:|r Created new profile '"..name.."'.")
+    ProfileChat("ok", "Created new profile '%s'.", name)
     return true
  end
 -- Profile mutations may cross combat for the core's existing deferred
@@ -321,7 +334,7 @@ function MSUF_SwitchProfile(name)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     if not name or type(profiles[name]) ~= "table" then
-        print("|cffff0000MSUF:|r Unknown profile: "..tostring(name))
+        ProfileChat("error", "Unknown profile: %s", tostring(name))
         return false, "unknown profile"
     end
     local prepared,why=BeforeProfileSwitch()
@@ -347,7 +360,7 @@ function MSUF_SwitchProfile(name)
     MSUF_ProfileIO_RunEnsureDB(false, true)
     ApplyProfileRuntime("PROFILE_SWITCH", false)
     MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_SWITCH", name)
-    print("|cff00ff00MSUF:|r Switched to profile '"..name.."'.")
+    ProfileChat("ok", "Switched to profile '%s'.", name)
     return true
  end
 function MSUF_ResetProfile(name)
@@ -364,7 +377,7 @@ function MSUF_ResetProfile(name)
             or _G.MSUF_CreateFactoryDefaultProfile
         local profile = type(createFactoryProfile) == "function" and createFactoryProfile() or nil
         if type(profile) ~= "table" then
-            print("|cffff0000MSUF:|r Factory defaults are not available; profile was not reset.")
+            ProfileChat("error", "Factory defaults are not available; profile was not reset.")
             return false, "factory defaults unavailable"
         end
         profiles[name] = profile
@@ -384,7 +397,7 @@ function MSUF_ResetProfile(name)
         MSUF_ProfileIO_NotifySuiteProfileChanged("PROFILE_RESET", name)
     end
     MSUF_ProfileIO_NotifySuiteLifecycle("reset", name)
-    print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
+    ProfileChat("note", "Profile '%s' reset to defaults.", name)
     return true
  end
 function MSUF_DeleteProfile(name)
@@ -393,7 +406,7 @@ function MSUF_DeleteProfile(name)
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     if not name or not profiles[name] then return false, "unknown profile" end
     if name == "Default" then
-        print("|cffff0000MSUF:|r You cannot delete the 'Default' profile. Use Reset instead.")
+        ProfileChat("error", "You cannot delete the 'Default' profile. Use Reset instead.")
         return false, "default profile is protected"
     end
     --- The survivor every affected character moves to must not depend on
@@ -413,7 +426,7 @@ function MSUF_DeleteProfile(name)
         end
     end
     if not fallbackName then
-        print("|cffff0000MSUF:|r Cannot delete the last remaining profile.")
+        ProfileChat("error", "Cannot delete the last remaining profile.")
         return false, "cannot delete last profile"
     end
     if MSUF_ActiveProfile == name then local ok,why=BeforeProfileSwitch(); if not ok then return false,why end end
@@ -443,27 +456,27 @@ function MSUF_DeleteProfile(name)
         MSUF_SwitchProfile(fallbackName)
     end
     MSUF_ProfileIO_NotifySuiteLifecycle("delete", name)
-    print("|cffffd700MSUF:|r Profile '"..name.."' deleted.")
+    ProfileChat("note", "Profile '%s' deleted.", name)
     return true
  end
 function MSUF_CopyProfile(sourceName, destName)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     if not sourceName or sourceName == "" then
-        print("|cffff0000MSUF:|r No source profile specified.")
+        ProfileChat("error", "No source profile specified.")
         return false
     end
     if not destName or destName == "" then
-        print("|cffff0000MSUF:|r No destination name specified.")
+        ProfileChat("error", "No destination name specified.")
         return false
     end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     local src = profiles[sourceName]
     if type(src) ~= "table" then
-        print("|cffff0000MSUF:|r Source profile '"..sourceName.."' not found.")
+        ProfileChat("error", "Source profile '%s' not found.", sourceName)
         return false
     end
     if profiles[destName] then
-        print("|cffff0000MSUF:|r Profile '"..destName.."' already exists.")
+        ProfileChat("error", "Profile '%s' already exists.", destName)
         return false
     end
     local copy,why
@@ -481,36 +494,36 @@ function MSUF_CopyProfile(sourceName, destName)
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[destName])
     local ok,reason=MSUF_ProfileIO_NotifySuiteLifecycle("copy", sourceName, destName)
     if ok==false then profiles[destName]=nil; return false,reason end
-    print("|cff00ff00MSUF:|r Copied '"..sourceName.."' -> '"..destName.."'.")
+    ProfileChat("ok", "Copied '%s' -> '%s'.", sourceName, destName)
     return true
 end
 function MSUF_RenameProfile(sourceName, destName)
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     if not sourceName or sourceName == "" then
-        print("|cffff0000MSUF:|r No source profile specified.")
+        ProfileChat("error", "No source profile specified.")
         return false
     end
     if not destName or destName == "" then
-        print("|cffff0000MSUF:|r No destination name specified.")
+        ProfileChat("error", "No destination name specified.")
         return false
     end
     if sourceName == destName then
-        print("|cffffd700MSUF:|r Profile is already named '"..sourceName.."'.")
+        ProfileChat("note", "Profile is already named '%s'.", sourceName)
         return true
     end
     if sourceName == "Default" then
-        print("|cffff0000MSUF:|r You cannot rename the 'Default' profile. Copy it instead.")
+        ProfileChat("error", "You cannot rename the 'Default' profile. Copy it instead.")
         return false
     end
 
     local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
     local src = profiles[sourceName]
     if type(src) ~= "table" then
-        print("|cffff0000MSUF:|r Source profile '"..sourceName.."' not found.")
+        ProfileChat("error", "Source profile '%s' not found.", sourceName)
         return false
     end
     if profiles[destName] then
-        print("|cffff0000MSUF:|r Profile '"..destName.."' already exists.")
+        ProfileChat("error", "Profile '%s' already exists.", destName)
         return false
     end
 
@@ -545,7 +558,7 @@ function MSUF_RenameProfile(sourceName, destName)
     if MSUF_ActiveProfile == sourceName then
         MSUF_SwitchProfile(destName)
     end
-    print("|cff00ff00MSUF:|r Renamed '"..sourceName.."' -> '"..destName.."'.")
+    ProfileChat("ok", "Renamed '%s' -> '%s'.", sourceName, destName)
     return true
 end
 function MSUF_GetAllProfiles()
@@ -832,12 +845,12 @@ local function MSUF_ProfileIO_ReportImportWarnings()
     local maxLines = count > 5 and 5 or count
     for i = 1, maxLines do
         local w = warnings[i]
-        local noun = (w.kind == "font") and "font" or "texture"
-        local fallback = (w.kind == "font") and "fallback font" or "fallback texture"
-        print("|cffffd700MSUF:|r Import warning: missing " .. noun .. " '" .. tostring(w.value) .. "' in " .. tostring(w.label) .. ". Using " .. fallback .. ".")
+        local text = (w.kind == "font") and "Import warning: missing font '%s' in %s. Using fallback font."
+            or "Import warning: missing texture '%s' in %s. Using fallback texture."
+        ProfileChat("note", text, tostring(w.value), tostring(w.label))
     end
     if count > maxLines then
-        print("|cffffd700MSUF:|r Import warning: " .. tostring(count - maxLines) .. " more missing media item(s).")
+        ProfileChat("note", "Import warning: %d more missing media item(s).", count - maxLines)
     end
 end
 
@@ -1223,21 +1236,6 @@ local function MSUF_ProfileIO_EnsureBlizzardAuraPositionDefaults(auras)
     if auras.blizzardContainerY == nil then auras.blizzardContainerY = 0 end
 end
 
-local function MSUF_ProfileIO_GetGFAuraFilter()
-    local gf = (type(MSUF) == "table" and MSUF.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF)
-    return (gf and gf.AuraFilter) or _G.MSUF_GF_AuraFilter
-end
-
-local function MSUF_ProfileIO_CopyDefaultBlacklistCats(groupKey)
-    local af = MSUF_ProfileIO_GetGFAuraFilter()
-    local defs = af and ((groupKey == "buff") and af.DEFAULT_BLACKLIST_BUFF
-        or (groupKey == "debuff") and af.DEFAULT_BLACKLIST_DEBUFF
-        or nil)
-    if type(defs) ~= "table" then
-        return {}
-    end
-    return MSUF_DeepCopy(defs)
-end
 
 local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, defaultToken)
     local group = auras and auras[groupKey]
@@ -1257,8 +1255,10 @@ local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, def
     end
     group.filterToken = MSUF_ProfileIO_NormalizeGFAuraFilterToken(groupKey, group.filterToken)
 
+    -- No default categories: MSUF_GF_AuraFilter.DEFAULT_BLACKLIST_BUFF/DEBUFF,
+    -- which this used to copy, are gone since 6.0 alpha 1 and read as nil.
     if type(group.blacklistCats) ~= "table" then
-        group.blacklistCats = MSUF_ProfileIO_CopyDefaultBlacklistCats(groupKey)
+        group.blacklistCats = {}
     end
     if group.strata == nil then group.strata = "AUTO" end
     if groupKey == "buff" and group.trackedStrata == nil then group.trackedStrata = "AUTO" end
@@ -1961,10 +1961,9 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
         AddKind("priority")
     end
     MSUF_ProfileIO_EnsureGroupFramesDB()
-    local af = MSUF_ProfileIO_GetGFAuraFilter()
-    if af and type(af.InvalidateAllBlacklistHashes) == "function" then
-        af.InvalidateAllBlacklistHashes()
-    end
+    -- No blacklist hash flush: MSUF_GF_AuraFilter.BuildBlacklistHash re-checks
+    -- each group's blacklist signature on every call (and
+    -- InvalidateAllBlacklistHashes, called here before, exists nowhere).
     -- Group frames load after this file; Kernel/MSUF_RuntimeContracts.lua
     -- requires this provider once the core TOC has loaded.
     MSUF.Require("MSUF_GF_InvalidateConfCache", "State/MSUF_Profiles.lua")()
@@ -2052,7 +2051,7 @@ end
 local function MSUF_ProfileIO_PrepareImport(str, mode)
     local external = (mode == "external")
     if type(str) ~= "string" or not str:match("%S") then
-        return nil, "empty string", "|cffff0000MSUF:|r Import failed (empty string)."
+        return nil, "empty string", ProfileChatLine("error", "Import failed (empty string).")
     end
     local decoded, why
     local tryDec = _G.MSUF_TryDecodeCompactString
@@ -2065,12 +2064,12 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
         local prefix = str:match("^%s*(MSUF%d+):")
         if prefix == "MSUF2" or prefix == "MSUF3" or prefix == "MSUF4" then
             why = "could not decode compact profile string (" .. prefix .. ")"
-            return nil, why, "|cffff0000MSUF:|r Import failed: " .. why .. "."
+            return nil, why, ProfileChatLine("error", "Import failed: %s.", Translate(why))
         end
         decoded, why = MSUF.ProfileIOParseTableLiteral(str)
         if type(decoded) ~= "table" then
             if external then return nil, "invalid lua table string" end
-            return nil, tostring(why), "|cffff0000MSUF:|r Import failed: " .. tostring(why)
+            return nil, tostring(why), ProfileChatLine("error", "Import failed: %s", Translate(tostring(why)))
         end
     end
     --- Source-client stamp: `decoded` is still the raw decoded envelope here.
@@ -2079,7 +2078,7 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     local selected = MSUF_ProfileIO_SelectSupportedProfile(decoded)
     local schemaWhy = "MSUF 6.x profile required (schema 600)"
     if type(selected) ~= "table" then
-        return nil, schemaWhy, "|cffff0000MSUF:|r Import failed: " .. schemaWhy .. "."
+        return nil, schemaWhy, ProfileChatLine("error", "Import failed: %s.", Translate(schemaWhy))
     end
     local isSnapshot = selected.addon == "MSUF" and tonumber(selected.fmt) == 2
         and type(selected.payload) == "table" and type(selected.kind) == "string"
@@ -2091,12 +2090,12 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     end
     if not isSnapshot and not external
         and tonumber(selected._msufProfileSchema) ~= MSUF_PROFILEIO_CURRENT_PROFILE_SCHEMA then
-        return nil, schemaWhy, "|cffff0000MSUF:|r Import failed: " .. schemaWhy .. "."
+        return nil, schemaWhy, ProfileChatLine("error", "Import failed: %s.", Translate(schemaWhy))
     end
     local valid, validationError = MSUF.ProfileIOValidateImportValue(selected)
     if not valid then
-        return nil, validationError, (isSnapshot and "|cffff0000MSUF:|r Import failed: "
-            or "|cffff0000MSUF:|r Profile import failed: ") .. tostring(validationError)
+        return nil, validationError, ProfileChatLine("error", isSnapshot and "Import failed: %s"
+            or "Profile import failed: %s", Translate(tostring(validationError)))
     end
     local staged = MSUF_DeepCopy(selected)
     local plan = {
@@ -2111,7 +2110,7 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
         end
         if kind ~= "unitselection" and kind ~= "unitframe" and kind ~= "groupframe" and kind ~= "castbar"
             and kind ~= "colors" and kind ~= "gameplay" and kind ~= "all" then
-            return nil, "unknown kind", "|cffff0000MSUF:|r Import failed: unknown kind"
+            return nil, "unknown kind", ProfileChatLine("error", "Import failed: %s", Translate("unknown kind"))
         end
         plan.snapshotKind, plan.payload = staged.kind, staged.payload
     else
@@ -2127,13 +2126,15 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
     if kind~="all" or not MSUF_ProfileIO_ImportVariants then payload.profileVariants=nil end
     if payload.profileVariants~=nil and Variants then
         local clean,variantError=Variants.ValidateForProfile(payload,payload.profileVariants)
-        if not clean then return nil,variantError,"|cffff0000MSUF:|r Import failed: "..variantError end
+        if not clean then
+            return nil, variantError, ProfileChatLine("error", "Import failed: %s", Translate(variantError))
+        end
         payload.profileVariants=clean
     end
     if kind == "unitselection" then
         local selectedUnits, selectionError = UnitSelection.Validate(payload)
         if not selectedUnits then
-            return nil, selectionError, "|cffff0000MSUF:|r Import failed: " .. selectionError .. "."
+            return nil, selectionError, ProfileChatLine("error", "Import failed: %s.", Translate(selectionError))
         end
         -- Normalize untrusted frame data, then project it back onto its explicit
         -- owners. Normalizers may seed shared defaults; those must never travel.
@@ -2344,9 +2345,8 @@ function ImportTx.FactoryBase()
 end
 function ImportTx.ReportKeptVariants(plan)
     if not plan.keptVariantsProblem then return end
-    local translate = type(MSUF.Translate) == "function" and MSUF.Translate or function(text) return text end
-    print("|cffffd700MSUF:|r " .. string.format(translate("Your profile variants were kept, but they do not match the imported settings and stay inactive (%s)."),
-        translate(tostring(plan.keptVariantsProblem))))
+    ProfileChat("note", "Your profile variants were kept, but they do not match the imported settings and stay inactive (%s).",
+        Translate(tostring(plan.keptVariantsProblem)))
 end
 --- Import transaction, step 3 of 3: swap the staged candidate into the active
 --- profile. Everything that can reject a string or raise already ran on the
@@ -2431,15 +2431,15 @@ function MSUF_ImportFromString(str)
     end
     local base, baseWhy = ImportTx.LiveBase(plan)
     if not base then
-        print("|cffff0000MSUF:|r Import failed: " .. tostring(baseWhy))
+        ProfileChat("error", "Import failed: %s", tostring(baseWhy))
         return false, baseWhy
     end
     ImportTx.Stage(plan, base)
     MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     if plan.isSnapshot then
-        print("|cff00ff00MSUF:|r Imported " .. tostring(plan.snapshotKind) .. " settings into the active profile.")
+        ProfileChat("ok", "Imported %s settings into the active profile.", tostring(plan.snapshotKind))
     else
-        print("|cff00ff00MSUF:|r Profile imported into the active profile.")
+        ProfileChat("ok", "Profile imported into the active profile.")
     end
     MSUF_ProfileIO_ReportImportWarnings()
     return true
@@ -2473,7 +2473,7 @@ function MSUF_ImportIntoNewProfile(name, str)
     if plan.kind ~= "all" then
         base = ImportTx.FactoryBase()
         if not base then
-            print("|cffff0000MSUF:|r Factory defaults are not available; profile was not created.")
+            ProfileChat("error", "Factory defaults are not available; profile was not created.")
             return false, "factory defaults unavailable", "create"
         end
     end
@@ -2494,9 +2494,9 @@ function MSUF_ImportIntoNewProfile(name, str)
     end
     MSUF_ProfileIO_CommitImportToActiveProfile(plan)
     if plan.isSnapshot then
-        print("|cff00ff00MSUF:|r Imported " .. tostring(plan.snapshotKind) .. " settings into the active profile.")
+        ProfileChat("ok", "Imported %s settings into the active profile.", tostring(plan.snapshotKind))
     else
-        print("|cff00ff00MSUF:|r Profile imported into the active profile.")
+        ProfileChat("ok", "Profile imported into the active profile.")
     end
     MSUF_ProfileIO_ReportImportWarnings()
     return true

@@ -11,36 +11,36 @@ MSUF = MSUF or _G.MSUF_NS or {}
 -- answer, the build this file belongs to.
 local LEGACY_BLIZZARD_PORTRAIT = MSUF.Client ~= nil and MSUF.Client.IsVanilla == true
 
-local V = MSUF.UFVisuals or {}
-local UF = V.UF or MSUF.UF
+local Visuals = MSUF.UFVisuals or {}
+local UF = Visuals.UF or MSUF.UF
 local Layers = UF and UF.Layers or {}
 
 -- Unitframe portrait element.
 -- Handles 2D/class portraits, shape masks, dynamic border colors, and portrait busts.
 -- It bridges identity events into cached visual updates without owning unitframe layout.
-local CreateFrame = V.CreateFrame or CreateFrame
-local UnitClass = V.UnitClass or UnitClass
-local UnitReaction = V.UnitReaction or UnitReaction
-local UnitGUID = V.UnitGUID or UnitGUID
-local UnitExists = V.UnitExists or UnitExists
-local UnitIsConnected = V.UnitIsConnected or UnitIsConnected
-local UnitIsVisible = V.UnitIsVisible or UnitIsVisible
-local UnitCastingInfo = V.UnitCastingInfo or UnitCastingInfo
-local UnitChannelInfo = V.UnitChannelInfo or UnitChannelInfo
-local SetPortraitTexture = V.SetPortraitTexture or SetPortraitTexture
-local tonumber = V.tonumber or tonumber
-local type = V.type or type
-local tostring = V.tostring or tostring
-local max = V.max or math.max
-local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
-local PORTRAIT_2D_EVENTS = V.PORTRAIT_2D_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
-local PORTRAIT_CLASS_EVENTS = V.PORTRAIT_CLASS_EVENTS or { "UNIT_PORTRAIT_UPDATE" }
+local CreateFrame = Visuals.CreateFrame or CreateFrame
+local UnitClass = Visuals.UnitClass or UnitClass
+local UnitReaction = Visuals.UnitReaction or UnitReaction
+local UnitGUID = Visuals.UnitGUID or UnitGUID
+local UnitExists = Visuals.UnitExists or UnitExists
+local UnitIsConnected = Visuals.UnitIsConnected or UnitIsConnected
+local UnitIsVisible = Visuals.UnitIsVisible or UnitIsVisible
+local UnitCastingInfo = Visuals.UnitCastingInfo or UnitCastingInfo
+local UnitChannelInfo = Visuals.UnitChannelInfo or UnitChannelInfo
+local SetPortraitTexture = Visuals.SetPortraitTexture or SetPortraitTexture
+local tonumber = Visuals.tonumber or tonumber
+local type = Visuals.type or type
+local tostring = Visuals.tostring or tostring
+local max = Visuals.max or math.max
+local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
+local PORTRAIT_2D_EVENTS = Visuals.PORTRAIT_2D_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
+local PORTRAIT_CLASS_EVENTS = Visuals.PORTRAIT_CLASS_EVENTS or { "UNIT_PORTRAIT_UPDATE" }
 local GROUP_PORTRAIT_2D_EVENTS = {
   "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION",
   "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE",
 }
-local PORTRAIT_2D_PLAYER_EVENTS = V.PORTRAIT_2D_PLAYER_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }
-local PORTRAIT_2D_DEPENDENT_EVENTS = V.PORTRAIT_2D_DEPENDENT_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
+local PORTRAIT_2D_PLAYER_EVENTS = Visuals.PORTRAIT_2D_PLAYER_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }
+local PORTRAIT_2D_DEPENDENT_EVENTS = Visuals.PORTRAIT_2D_DEPENDENT_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
 local PORTRAIT_CAST_EVENTS = {
   "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
   "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP",
@@ -68,11 +68,11 @@ local function WithPortraitClassificationEvent(events)
   end
   return combined
 end
-local WHITE = V.WHITE or "Interface\\Buttons\\WHITE8x8"
-local BOSS_PREVIEW_PORTRAIT = V.BOSS_PREVIEW_PORTRAIT or "Interface\\ICONS\\Achievement_Boss_LichKing"
-local BOSS_PREVIEW_CLASS = V.BOSS_PREVIEW_CLASS or "DEATHKNIGHT"
-local ADDON_PATH = V.ADDON_PATH or ("Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames"))
-local PORTRAIT_MASKS = V.PORTRAIT_MASKS or {
+local WHITE = Visuals.WHITE or "Interface\\Buttons\\WHITE8x8"
+local BOSS_PREVIEW_PORTRAIT = Visuals.BOSS_PREVIEW_PORTRAIT or "Interface\\ICONS\\Achievement_Boss_LichKing"
+local BOSS_PREVIEW_CLASS = Visuals.BOSS_PREVIEW_CLASS or "DEATHKNIGHT"
+local ADDON_PATH = Visuals.ADDON_PATH or ("Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames"))
+local PORTRAIT_MASKS = Visuals.PORTRAIT_MASKS or {
   SQUARE = WHITE,
   CIRCLE = ADDON_PATH .. "\\Media\\Masks\\circle_mask.tga",
   ROUNDED = ADDON_PATH .. "\\Media\\Masks\\rounded_mask.tga",
@@ -81,7 +81,7 @@ local PORTRAIT_MASKS = V.PORTRAIT_MASKS or {
 --- Shape-aware feather masks are resolved once at addon load. Portrait.Apply
 --- only indexes these tables when a compiled spec changes; gameplay events
 --- never build paths, calculate gradients, or revisit the mask selection.
-local PORTRAIT_SOFT_EDGE_MASKS = V.PORTRAIT_SOFT_EDGE_MASKS
+local PORTRAIT_SOFT_EDGE_MASKS = Visuals.PORTRAIT_SOFT_EDGE_MASKS
 if not PORTRAIT_SOFT_EDGE_MASKS then
   PORTRAIT_SOFT_EDGE_MASKS = { SQUARE = {}, CIRCLE = {}, ROUNDED = {}, DIAMOND = {} }
   local squareRoot = ADDON_PATH .. "\\Media\\Masks\\texture_layer_edge_softness_"
@@ -96,7 +96,7 @@ if not PORTRAIT_SOFT_EDGE_MASKS then
     PORTRAIT_SOFT_EDGE_MASKS.DIAMOND[level] = diamondRoot .. suffix
   end
 end
-local DYNAMIC_PORTRAIT_BORDER = V.DYNAMIC_PORTRAIT_BORDER or {
+local DYNAMIC_PORTRAIT_BORDER = Visuals.DYNAMIC_PORTRAIT_BORDER or {
   CLASS_COLOR = true,
   REACTION = true,
 }
@@ -115,7 +115,7 @@ local SHAPED_PORTRAIT_BORDER = {
 --- Beveled ring art, one file per portrait shape. The art is greyscale so the
 --- configured border colour tints it: white reads as steel, a warm colour gives
 --- the classic gold look, and Class/Reaction colour keep working unchanged.
-local PORTRAIT_RING_ART = V.PORTRAIT_RING_ART or {
+local PORTRAIT_RING_ART = Visuals.PORTRAIT_RING_ART or {
   SQUARE = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ring_square.tga",
   CIRCLE = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ring_circle.tga",
   ROUNDED = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ring_rounded.tga",
@@ -141,7 +141,7 @@ local BLIZZARD_PORTRAIT_RING = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ri
 local BLIZZARD_PORTRAIT_CORNER_ATLAS = "UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment"
 local BLIZZARD_CORNER_OFFSET = 34.5 / 60
 local BLIZZARD_CORNER_SIZE = 23 / 60
-local QUEUED_2D_PORTRAIT_EVENTS = V.QUEUED_2D_PORTRAIT_EVENTS or {
+local QUEUED_2D_PORTRAIT_EVENTS = Visuals.QUEUED_2D_PORTRAIT_EVENTS or {
   UNIT_PORTRAIT_UPDATE = true,
   UNIT_MODEL_CHANGED = true,
   UNIT_CONNECTION = true,
@@ -178,7 +178,7 @@ local PORTRAIT_DIRECT_IDENTITY_EVENTS = {
 }
 local PORTRAIT_UNITLESS_EVENTS = { "PORTRAITS_UPDATED" }
 local TARGET_PORTRAIT_EXTRA_EVENTS = { "PORTRAITS_UPDATED", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
-local SetShown = V.SetShown
+local SetShown = Visuals.SetShown
 local issecretvalue = _G.issecretvalue
 
 local Portrait = {}

@@ -6,31 +6,31 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
 
-local V = MSUF.UFVisuals or {}
-local UF = V.UF or MSUF.UF
+local Visuals = MSUF.UFVisuals or {}
+local UF = Visuals.UF or MSUF.UF
 local Layers = UF and UF.Layers or {}
 
 -- Unitframe border overlay element.
 -- Owns highlight, aggro, purge/dispel, and boss-target border layers for unitframes. Runtime
 -- updates are event-driven and secret-safe; page code only changes DB/style inputs.
-local CreateFrame = V.CreateFrame or CreateFrame
-local UnitIsUnit = V.UnitIsUnit or UnitIsUnit
-local UnitThreatSituation = V.UnitThreatSituation or UnitThreatSituation
-local tonumber = V.tonumber or tonumber
-local tostring = V.tostring or tostring
-local type = V.type or type
-local IsNil = V.IsNil
-local NotSecretValue = V.NotSecretValue
+local CreateFrame = Visuals.CreateFrame or CreateFrame
+local UnitIsUnit = Visuals.UnitIsUnit or UnitIsUnit
+local UnitThreatSituation = Visuals.UnitThreatSituation or UnitThreatSituation
+local tonumber = Visuals.tonumber or tonumber
+local tostring = Visuals.tostring or tostring
+local type = Visuals.type or type
+local IsNil = Visuals.IsNil
+local NotSecretValue = Visuals.NotSecretValue
 local IsSecretValue = _G.issecretvalue
-local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
-local BORDER_THREAT_EVENTS = V.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
+local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
+local BORDER_THREAT_EVENTS = Visuals.BORDER_THREAT_EVENTS or { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
 local GROUP_THREAT_EVENT = {
   UNIT_THREAT_SITUATION_UPDATE = true,
   UNIT_THREAT_LIST_UPDATE = true,
 }
 local TARGET_CHANGE_EVENTS = { "PLAYER_TARGET_CHANGED" }
-local SetShown = V.SetShown
-local ResolveGroupAggroThreat = V.ResolveGroupAggroThreat
+local SetShown = Visuals.SetShown
+local ResolveGroupAggroThreat = Visuals.ResolveGroupAggroThreat
 local BorderStyles = MSUF.BorderStyles or _G.MSUF_BorderStyles
 
 local Borders = {}

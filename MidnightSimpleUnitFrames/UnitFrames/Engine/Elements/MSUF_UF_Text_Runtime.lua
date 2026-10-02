@@ -14,6 +14,7 @@ local UnitHealthMax = Text.UnitHealthMax
 local UnitHealthMissing = _G.UnitHealthMissing
 local UnitGetTotalAbsorbs = Text.UnitGetTotalAbsorbs
 local ABSORB_HEALTH_MODE_BASE = Text.ABSORB_HEALTH_MODE_BASE or {}
+local DISPATCH_KEY = Text.DISPATCH_KEY
 local UnitPower = Text.UnitPower
 local UnitPowerMax = Text.UnitPowerMax
 local UnitPowerType = Text.UnitPowerType
@@ -59,10 +60,44 @@ local RefreshNameCenterClipFit = Text.RefreshNameCenterClipFit
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local POWER_EVENTS = Text.POWER_EVENTS
 local POWER_EVENTS_FREQUENT = Text.POWER_EVENTS_FREQUENT
-local POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
-local POWER_TEXT_VALUE_META_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
-local POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
-local GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" }
+-- Event lists the text elements hand to the route compiler (GetEvents, cold).
+-- One table instead of 33 file-scope locals; identities are stable, so the
+-- compiler's event-list interning sees the same tables as before.
+local EventLists = {
+  POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" },
+  POWER_TEXT_VALUE_META_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" },
+  POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" },
+  GROUP_LIFECYCLE_EVENTS = { "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE" },
+  NAME_EVENTS = { "UNIT_NAME_UPDATE" },
+  NAME_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" },
+  NAME_STATUS_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" },
+  NAME_STATUS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FLAGS", "UNIT_CONNECTION" },
+  NAME_STATUS_PLAYER_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FLAGS" },
+  HEALTH_TEXT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
+  HEALTH_TEXT_PLAYER_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" },
+  HEALTH_TEXT_VALUE_EVENTS = { "UNIT_HEALTH", "UNIT_CONNECTION" },
+  HEALTH_TEXT_VALUE_PLAYER_EVENTS = { "UNIT_HEALTH" },
+  HEALTH_TEXT_MAX_EVENTS = { "UNIT_MAXHEALTH" },
+  HEALTH_TEXT_CLASS_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" },
+  HEALTH_TEXT_CLASS_VALUE_EVENTS = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" },
+  HEALTH_TEXT_CLASS_MAX_EVENTS = { "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE" },
+  ABSORB_TEXT_EVENTS = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_CONNECTION" },
+  ABSORB_TEXT_PLAYER_EVENTS = { "UNIT_ABSORB_AMOUNT_CHANGED" },
+  ABSORB_TEXT_CLASS_EVENTS = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" },
+  HEALTH_TEXT_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" },
+  HEALTH_TEXT_PLAYER_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_ABSORB_AMOUNT_CHANGED" },
+  HEALTH_TEXT_VALUE_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" },
+  HEALTH_TEXT_VALUE_PLAYER_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_ABSORB_AMOUNT_CHANGED" },
+  HEALTH_TEXT_MAX_EVENTS_ABSORB = { "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" },
+  HEALTH_TEXT_MAX_PLAYER_EVENTS_ABSORB = { "UNIT_MAXHEALTH", "UNIT_ABSORB_AMOUNT_CHANGED" },
+  HEALTH_TEXT_CLASS_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED" },
+  HEALTH_TEXT_CLASS_VALUE_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED" },
+  HEALTH_TEXT_CLASS_MAX_EVENTS_ABSORB = { "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED" },
+  INLINE_TARGET_EVENTS = { "UNIT_TARGET" },
+  INLINE_NAME_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE" },
+  INLINE_COLOR_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" },
+}
+EventLists.NAME_STATUS_COLD_EVENTS = EventLists.NAME_STATUS_EVENTS
 local POWER_IDENTITY_EVENTS = {
   PARTY_MEMBER_ENABLE = true,
   PARTY_MEMBER_DISABLE = true,
@@ -1053,14 +1088,14 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
     local keyHP, keyMax = false, false
     local canCompareText = true
-    local mode = rt.healthDispatchKeyMode or 0
-    if mode == 1 then
+    local mode = rt.healthDispatchKeyMode or DISPATCH_KEY.NONE
+    if mode == DISPATCH_KEY.CURRENT then
       keyHP = hp
-    elseif mode == 2 then
+    elseif mode == DISPATCH_KEY.MAX then
       keyMax = hpMax
-    elseif mode == 3 then
+    elseif mode == DISPATCH_KEY.CURRENT_MAX then
       keyHP, keyMax = hp, hpMax
-    elseif mode == 4 or mode == 5 then
+    elseif mode == DISPATCH_KEY.PERCENT or mode == DISPATCH_KEY.PERCENT_MAX then
       if pctOverrideSet and issecretvalue(pctOverride) ~= true then
         keyHP = PercentCacheKeyFromValue(pctOverride, rt.healthPercentDecimals)
       else
@@ -1070,7 +1105,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
         canCompareText = false
         keyHP = false
       end
-      keyMax = canCompareText and mode == 5 and hpMax or false
+      keyMax = canCompareText and mode == DISPATCH_KEY.PERCENT_MAX and hpMax or false
     end
     local valueRefreshEvent = healthTick or event == "UNIT_CONNECTION" or event == "UNIT_MAXHEALTH"
     if valueRefreshEvent
@@ -1342,14 +1377,14 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
     end
     local keyPower, keyMax = false, false
     local canCompareText = true
-    local mode = rt.powerDispatchKeyMode or 0
-    if mode == 1 then
+    local mode = rt.powerDispatchKeyMode or DISPATCH_KEY.NONE
+    if mode == DISPATCH_KEY.CURRENT then
       keyPower = power
-    elseif mode == 2 then
+    elseif mode == DISPATCH_KEY.MAX then
       keyMax = powerMax
-    elseif mode == 3 then
+    elseif mode == DISPATCH_KEY.CURRENT_MAX then
       keyPower, keyMax = power, powerMax
-    elseif mode == 4 or mode == 5 then
+    elseif mode == DISPATCH_KEY.PERCENT or mode == DISPATCH_KEY.PERCENT_MAX then
       if pctOverrideSet and issecretvalue(pctOverride) ~= true then
         keyPower = PercentCacheKeyFromValue(pctOverride, 0)
         if keyPower == false then
@@ -1358,7 +1393,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax, powerType
       else
         canCompareText = false
       end
-      keyMax = mode == 5 and powerMax or false
+      keyMax = mode == DISPATCH_KEY.PERCENT_MAX and powerMax or false
     end
     local powerValueRefreshEvent = animate
       or event == "UNIT_MAXPOWER"
@@ -1516,35 +1551,6 @@ Text.UpdateHealth = UpdateHealthRuntime
 Text.UpdateAbsorb = UpdateAbsorbRuntime
 Text.UpdatePower = UpdatePowerRuntime
 
-local NAME_EVENTS = { "UNIT_NAME_UPDATE" }
-local NAME_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" }
-local NAME_STATUS_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" }
-local NAME_STATUS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FLAGS", "UNIT_CONNECTION" }
-local NAME_STATUS_PLAYER_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FLAGS" }
-local NAME_STATUS_COLD_EVENTS = NAME_STATUS_EVENTS
-local HEALTH_TEXT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" }
-local HEALTH_TEXT_PLAYER_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
-local HEALTH_TEXT_VALUE_EVENTS = { "UNIT_HEALTH", "UNIT_CONNECTION" }
-local HEALTH_TEXT_VALUE_PLAYER_EVENTS = { "UNIT_HEALTH" }
-local HEALTH_TEXT_MAX_EVENTS = { "UNIT_MAXHEALTH" }
-local HEALTH_TEXT_CLASS_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" }
-local HEALTH_TEXT_CLASS_VALUE_EVENTS = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" }
-local HEALTH_TEXT_CLASS_MAX_EVENTS = { "UNIT_MAXHEALTH", "UNIT_NAME_UPDATE" }
-local ABSORB_TEXT_EVENTS = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_CONNECTION" }
-local ABSORB_TEXT_PLAYER_EVENTS = { "UNIT_ABSORB_AMOUNT_CHANGED" }
-local ABSORB_TEXT_CLASS_EVENTS = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_CONNECTION", "UNIT_NAME_UPDATE" }
-local HEALTH_TEXT_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" }
-local HEALTH_TEXT_PLAYER_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_ABSORB_AMOUNT_CHANGED" }
-local HEALTH_TEXT_VALUE_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" }
-local HEALTH_TEXT_VALUE_PLAYER_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_ABSORB_AMOUNT_CHANGED" }
-local HEALTH_TEXT_MAX_EVENTS_ABSORB = { "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" }
-local HEALTH_TEXT_MAX_PLAYER_EVENTS_ABSORB = { "UNIT_MAXHEALTH", "UNIT_ABSORB_AMOUNT_CHANGED" }
-local HEALTH_TEXT_CLASS_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED" }
-local HEALTH_TEXT_CLASS_VALUE_EVENTS_ABSORB = { "UNIT_HEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED" }
-local HEALTH_TEXT_CLASS_MAX_EVENTS_ABSORB = { "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_NAME_UPDATE", "UNIT_ABSORB_AMOUNT_CHANGED" }
-local INLINE_TARGET_EVENTS = { "UNIT_TARGET" }
-local INLINE_NAME_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE" }
-local INLINE_COLOR_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" }
 
 local function NameNeedsNPCColorEvents(text)
   if not text then
@@ -1696,7 +1702,7 @@ local function BuildGFHotHealthTextFromPercent(frame, rt)
     and (rt.healthCombinedAbsorbSlotCount or 0) == 0
     and rt.healthValueSlotCount == 1
     and rt.healthColorByHealth ~= true
-    and rt.healthDispatchKeyMode == 4
+    and rt.healthDispatchKeyMode == DISPATCH_KEY.PERCENT
     and rt.healthNeedsCurrent ~= true
     and rt.healthNeedsMax ~= true
     and rt.healthNeedsMissing ~= true) then
@@ -1809,7 +1815,7 @@ local function BuildGFHotPowerTextFromPercent(frame, rt)
   if not (rt
     and rt.powerSlotCount == 1
     and rt.powerColorByType ~= true
-    and rt.powerDispatchKeyMode == 4
+    and rt.powerDispatchKeyMode == DISPATCH_KEY.PERCENT
     and rt.powerNeedsCurrent ~= true
     and rt.powerNeedsMax ~= true) then
     return nil
@@ -1842,14 +1848,14 @@ function Text.IsEnabled(frame, spec)
 end
 local Runtime = {
   EMPTY_EVENTS = EMPTY_EVENTS,
-  NAME_EVENTS = NAME_EVENTS,
-  NAME_COLOR_EVENTS = NAME_COLOR_EVENTS,
-  NAME_STATUS_EVENTS = NAME_STATUS_EVENTS,
-  NAME_STATUS_COLD_EVENTS = NAME_STATUS_COLD_EVENTS,
-  HEALTH_TEXT_EVENTS = HEALTH_TEXT_EVENTS,
-  INLINE_TARGET_EVENTS = INLINE_TARGET_EVENTS,
-  INLINE_NAME_UNITLESS_EVENTS = INLINE_NAME_UNITLESS_EVENTS,
-  INLINE_COLOR_UNITLESS_EVENTS = INLINE_COLOR_UNITLESS_EVENTS,
+  NAME_EVENTS = EventLists.NAME_EVENTS,
+  NAME_COLOR_EVENTS = EventLists.NAME_COLOR_EVENTS,
+  NAME_STATUS_EVENTS = EventLists.NAME_STATUS_EVENTS,
+  NAME_STATUS_COLD_EVENTS = EventLists.NAME_STATUS_COLD_EVENTS,
+  HEALTH_TEXT_EVENTS = EventLists.HEALTH_TEXT_EVENTS,
+  INLINE_TARGET_EVENTS = EventLists.INLINE_TARGET_EVENTS,
+  INLINE_NAME_UNITLESS_EVENTS = EventLists.INLINE_NAME_UNITLESS_EVENTS,
+  INLINE_COLOR_UNITLESS_EVENTS = EventLists.INLINE_COLOR_UNITLESS_EVENTS,
   POWER_EVENTS = POWER_EVENTS,
   POWER_EVENTS_FREQUENT = POWER_EVENTS_FREQUENT,
   HealthTextEnabled = HealthTextEnabled,
@@ -1885,14 +1891,14 @@ function NameText.GetEvents(frame, spec)
   local text = spec and spec.text
   if text and text.hideNameOnDeadOffline == true then
     if (frame and frame.MSUFUnitKey == "player") or (spec and spec.key == "player") then
-      return NAME_STATUS_PLAYER_EVENTS
+      return EventLists.NAME_STATUS_PLAYER_EVENTS
     end
-    return NameNeedsNPCColorEvents(text) and NAME_STATUS_COLOR_EVENTS or NAME_STATUS_EVENTS
+    return NameNeedsNPCColorEvents(text) and EventLists.NAME_STATUS_COLOR_EVENTS or EventLists.NAME_STATUS_EVENTS
   end
   if (frame and frame.MSUFUnitKey == "player") or (spec and spec.key == "player") then
-    return NAME_EVENTS
+    return EventLists.NAME_EVENTS
   end
-  return NameNeedsNPCColorEvents(text) and NAME_COLOR_EVENTS or NAME_EVENTS
+  return NameNeedsNPCColorEvents(text) and EventLists.NAME_COLOR_EVENTS or EventLists.NAME_EVENTS
 end
 
 function NameText.Update(frame, event, unit)
@@ -1923,33 +1929,33 @@ function HealthText.GetEvents(frame, spec)
   if not needsValue then
     if not needsMax then
       if not absorb then return EMPTY_EVENTS end
-      if player then return ABSORB_TEXT_PLAYER_EVENTS end
-      return classColor and ABSORB_TEXT_CLASS_EVENTS or ABSORB_TEXT_EVENTS
+      if player then return EventLists.ABSORB_TEXT_PLAYER_EVENTS end
+      return classColor and EventLists.ABSORB_TEXT_CLASS_EVENTS or EventLists.ABSORB_TEXT_EVENTS
     end
     if absorb then
-      if player then return HEALTH_TEXT_MAX_PLAYER_EVENTS_ABSORB end
-      return classColor and HEALTH_TEXT_CLASS_MAX_EVENTS_ABSORB or HEALTH_TEXT_MAX_EVENTS_ABSORB
+      if player then return EventLists.HEALTH_TEXT_MAX_PLAYER_EVENTS_ABSORB end
+      return classColor and EventLists.HEALTH_TEXT_CLASS_MAX_EVENTS_ABSORB or EventLists.HEALTH_TEXT_MAX_EVENTS_ABSORB
     end
-    return classColor and HEALTH_TEXT_CLASS_MAX_EVENTS or HEALTH_TEXT_MAX_EVENTS
+    return classColor and EventLists.HEALTH_TEXT_CLASS_MAX_EVENTS or EventLists.HEALTH_TEXT_MAX_EVENTS
   end
   if player then
     if not needsMax then
-      return absorb and HEALTH_TEXT_VALUE_PLAYER_EVENTS_ABSORB or HEALTH_TEXT_VALUE_PLAYER_EVENTS
+      return absorb and EventLists.HEALTH_TEXT_VALUE_PLAYER_EVENTS_ABSORB or EventLists.HEALTH_TEXT_VALUE_PLAYER_EVENTS
     end
-    return absorb and HEALTH_TEXT_PLAYER_EVENTS_ABSORB or HEALTH_TEXT_PLAYER_EVENTS
+    return absorb and EventLists.HEALTH_TEXT_PLAYER_EVENTS_ABSORB or EventLists.HEALTH_TEXT_PLAYER_EVENTS
   end
   if not needsMax then
     if absorb then
-      return classColor and HEALTH_TEXT_CLASS_VALUE_EVENTS_ABSORB or HEALTH_TEXT_VALUE_EVENTS_ABSORB
+      return classColor and EventLists.HEALTH_TEXT_CLASS_VALUE_EVENTS_ABSORB or EventLists.HEALTH_TEXT_VALUE_EVENTS_ABSORB
     end
-    return classColor and HEALTH_TEXT_CLASS_VALUE_EVENTS or HEALTH_TEXT_VALUE_EVENTS
+    return classColor and EventLists.HEALTH_TEXT_CLASS_VALUE_EVENTS or EventLists.HEALTH_TEXT_VALUE_EVENTS
   end
-  if absorb then return classColor and HEALTH_TEXT_CLASS_EVENTS_ABSORB or HEALTH_TEXT_EVENTS_ABSORB end
-  return classColor and HEALTH_TEXT_CLASS_EVENTS or HEALTH_TEXT_EVENTS
+  if absorb then return classColor and EventLists.HEALTH_TEXT_CLASS_EVENTS_ABSORB or EventLists.HEALTH_TEXT_EVENTS_ABSORB end
+  return classColor and EventLists.HEALTH_TEXT_CLASS_EVENTS or EventLists.HEALTH_TEXT_EVENTS
 end
 
 function HealthText.GetUnitlessEvents(frame, spec)
-  return HealthTextEnabled(spec) and spec and spec.scope == "group" and GROUP_LIFECYCLE_EVENTS or EMPTY_EVENTS
+  return HealthTextEnabled(spec) and spec and spec.scope == "group" and EventLists.GROUP_LIFECYCLE_EVENTS or EMPTY_EVENTS
 end
 
 UpdateHealthTextValues = function(frame, event, unit, hp, hpMax)
@@ -2057,10 +2063,10 @@ function PowerText.GetEvents(frame, spec)
     return EMPTY_EVENTS
   end
   if not PowerTextNeedsValueTicks(spec) then
-    return POWER_TEXT_MAX_EVENTS
+    return EventLists.POWER_TEXT_MAX_EVENTS
   end
   if not PowerTextNeedsMaxEvents(spec) then
-    return spec and spec.power and spec.power.frequent == true and POWER_TEXT_VALUE_META_EVENTS_FREQUENT or POWER_TEXT_VALUE_META_EVENTS
+    return spec and spec.power and spec.power.frequent == true and EventLists.POWER_TEXT_VALUE_META_EVENTS_FREQUENT or EventLists.POWER_TEXT_VALUE_META_EVENTS
   end
   return spec and spec.power and spec.power.frequent == true and POWER_EVENTS_FREQUENT or POWER_EVENTS
 end
@@ -2283,7 +2289,7 @@ local function ConfigureInlineToTDriver(frame, spec)
   inlineToTDriver:UnregisterAllEvents()
   inlineToTOwner = frame
   inlineToTUnit = inline.unit or "targettarget"
-  local events = InlineToTNeedsColorEvents(inline) and INLINE_COLOR_UNITLESS_EVENTS or INLINE_NAME_UNITLESS_EVENTS
+  local events = InlineToTNeedsColorEvents(inline) and EventLists.INLINE_COLOR_UNITLESS_EVENTS or EventLists.INLINE_NAME_UNITLESS_EVENTS
   for i = 1, #events do
     inlineToTDriver:RegisterUnitEvent(events[i], inlineToTUnit)
   end
@@ -2295,7 +2301,7 @@ function InlineToT.IsEnabled(frame, spec)
 end
 
 function InlineToT.GetEvents()
-  return INLINE_TARGET_EVENTS
+  return EventLists.INLINE_TARGET_EVENTS
 end
 
 function InlineToT.GetUnitlessEvents()

@@ -104,7 +104,7 @@ local function RequireReloadForReenable(frame, spec)
     if type(showReload) == "function" then
       showReload("Unit frame enable - reload required")
     elseif _G.print then
-      _G.print("|cffffd700MSUF:|r A unit frame was enabled. Reload the UI with /reload to apply it.")
+      _G.print("|cffffd700MSUF:|r " .. MSUF.Translate("A unit frame was enabled. Reload the UI with /reload to apply it."))
     end
   end
   return true
@@ -710,7 +710,7 @@ end
 
 local function RefreshBossPhysicalGeometry()
   local changed = false
-  local count = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+  local count = tonumber(_G.MAX_BOSS_FRAMES) or 5
   for index = 1, count do
     local unit = "boss" .. index
     local frame = (UF.frames and UF.frames[unit]) or _G["MSUF_" .. unit]
@@ -785,10 +785,6 @@ local function RegisterGlobals(unit, frame)
 end
 
 function UF.GetSecureUnitButtonTemplate()
-  return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
-end
-
-function UF.GetSecureHeaderUnitButtonTemplate()
   return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
 end
 

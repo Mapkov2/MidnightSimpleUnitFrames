@@ -360,11 +360,11 @@ local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
         if UnitIsAFK then
             local afk = UnitIsAFK(unit)
             if MSUF_UnitInfo_PlainBoolean(afk) == true then
-                nameLine = nameLine .. " <AFK>"
+                nameLine = string.format("%s <%s>", nameLine, Tr("AFK"))
             elseif UnitIsDND then
                 local dnd = UnitIsDND(unit)
                 if MSUF_UnitInfo_PlainBoolean(dnd) == true then
-                    nameLine = nameLine .. " <DND>"
+                    nameLine = string.format("%s <%s>", nameLine, Tr("DND"))
                 end
             end
         end
@@ -378,9 +378,9 @@ local function MSUF_UnitInfo_BuildLine4(faction, isPVP)
     local text = faction or ""
     if isPVP then
         if text ~= "" then
-            text = text .. "  PvP"
+            text = string.format("%s  %s", text, Tr("PvP"))
         else
-            text = "PvP"
+            text = Tr("PvP")
         end
     end
      return text
@@ -389,11 +389,11 @@ local function MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
     local n = MSUF_UnitInfo_PlainNumber(level)
     if n and n > 0 then
         if race and classLoc then
-            return string.format("Level %d %s %s", n, race, classLoc)
+            return string.format(Tr("Level %d %s %s"), n, race, classLoc)
         elseif classLoc then
-            return string.format("Level %d %s", n, classLoc)
+            return string.format(Tr("Level %d %s"), n, classLoc)
         else
-            return string.format("Level %d", n)
+            return string.format(Tr("Level %d"), n)
         end
     end
     return classLoc or ""
@@ -401,13 +401,13 @@ end
 local function MSUF_UnitInfo_ClassificationText(classification)
     classification = MSUF_UnitInfo_PlainString(classification)
     if classification == "elite" then
-         return "Elite"
+         return Tr("Elite")
     elseif classification == "rare" then
-         return "Rare"
+         return Tr("Rare")
     elseif classification == "rareelite" then
-         return "Rare Elite"
+         return Tr("Rare Elite")
     elseif classification == "worldboss" then
-         return "Boss"
+         return Tr("Boss")
     end
      return nil
 end
@@ -416,12 +416,11 @@ local function MSUF_UnitInfo_BuildLine2_NPC(level, classification)
     if not (n and n > 0) then
          return ""
     end
-    local line2 = string.format("Level %d", n)
     local clsText = MSUF_UnitInfo_ClassificationText(classification)
     if clsText then
-        line2 = line2 .. string.format(" (%s)", clsText)
+        return string.format(Tr("Level %d (%s)"), n, clsText)
     end
-     return line2
+     return string.format(Tr("Level %d"), n)
 end
 local function MSUF_UnitInfo_SetText(fontString, value)
     if MSUF_UnitInfo_IsSecret(value) then
@@ -453,7 +452,7 @@ local function ShowUnitInfoTooltip(unit, fallbackName)
         local creatureType = MSUF_UnitInfo_PlainString(UnitCreatureType(unit))
         local line2 = ""
         if level and level > 0 then
-            line2 = string.format("Level %d", level)
+            line2 = string.format(Tr("Level %d"), level)
         end
         MSUF_UnitInfo_ShowFrame(f, name, line2, creatureType or "", "", MSUF_UnitInfo_GetLocationText())
         return
@@ -686,7 +685,10 @@ do
             end
         end)
     end
-    MSUF_RecomputeHoverInert()
+    -- No recompute at file load: the SavedVariables are not loaded yet, so it
+    -- built a throwaway profile through MSUF_EnsureDB on every login and read
+    -- that profile's mode. PLAYER_ENTERING_WORLD settles the flag with the
+    -- real one before the first hover can happen.
 end
 
 --- ==========================================================================

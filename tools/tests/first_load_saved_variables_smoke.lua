@@ -39,8 +39,12 @@ end
 local function Run(flavor)
     -- 1. Clean install: no saved values; whatever the files built stays.
     local world, env = Boot(flavor)
+    -- A file that reads a setting while the addon loads builds MSUF_DB before the
+    -- SavedVariables exist (tools/tests/load_time_profile_read_smoke.lua lists
+    -- the ones left). Model one here so this case stays covered once they are gone.
+    if type(rawget(env, "MSUF_DB")) ~= "table" then env.MSUF_EnsureDB() end
     Check(type(rawget(env, "MSUF_DB")) == "table",
-        flavor .. ": no file built a profile while loading; the session-profile case is not exercised")
+        flavor .. ": a load-time read built no profile; the session-profile case is not exercised")
     world:LoadSavedVariables(ADDON, {})
     local FirstLoad = assert(world.core.FirstLoad6, flavor .. ": no MSUF.FirstLoad6")
     local detection = FirstLoad:GetDetection()

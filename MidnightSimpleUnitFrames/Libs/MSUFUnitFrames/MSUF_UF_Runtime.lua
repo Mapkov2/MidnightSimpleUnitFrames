@@ -458,8 +458,10 @@ local function GroupPredictionScopeMatches(kind, scope)
   return kind == scope
 end
 
+-- The group runtime (UnitFrames/Engine/Group: Config, Adapter, RangeFade) and the
+-- Alpha element belong to the MSUF host on every client and have loaded before
+-- any refresh below runs, so their entry points are called directly.
 local function InvalidateGroupPredictionSpecs(GF, scope)
-  if not (GF and type(GF.InvalidateCompiledSpecs) == "function") then return end
   if scope == nil or scope == "*" or scope == "shared" then
     GF.InvalidateCompiledSpecs()
   elseif scope == "gf_party" or scope == "party" then
@@ -480,35 +482,20 @@ function UF.RefreshPredictionBars(scope, reason, skipUnitFrames)
     if not (scope == "shared") then selectedValue2 = scope end
     did = UF.RefreshElements(selectedValue2, PREDICTION_ELEMENTS, reason) or false
   end
-  local GF = MSUF and MSUF.GF
-  if GF and type(GF.ForEachFrame) == "function" and type(GF.CompileSpec) == "function"
-    and (type(UF.ApplyElementsToFrame) == "function" or type(UF.ApplyElementToFrame) == "function") then
-    InvalidateGroupPredictionSpecs(GF, scope)
-    GF.ForEachFrame(function(frame, unit, kind)
-      if GroupPredictionScopeMatches(kind, scope) ~= true then return end
-      if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
-      local spec = GF.CompileSpec(kind, frame, unit)
-      if spec then
-        UF.SetFrameSpec(frame, spec, unit)
-        if type(UF.ApplyElementsToFrame) == "function" then
-          UF.ApplyElementsToFrame(frame, GROUP_PREDICTION_ELEMENTS, spec, reason)
-        else
-          UF.ApplyElementToFrame(frame, "Prediction", spec, reason)
-        end
-        local alpha = UF.elements and UF.elements.Alpha
-        local applyPredictionAlpha = UF.ApplyPredictionAlphaFills
-          or (alpha and alpha.ApplyPredictionFills)
-        if type(applyPredictionAlpha) == "function" then
-          applyPredictionAlpha(frame, spec, true)
-        end
-        local range = UF.elements and UF.elements.GroupRangeFade
-        if range and type(range.RecomposePredictionAlpha) == "function" then
-          range.RecomposePredictionAlpha(frame)
-        end
-        did = true
-      end
-    end, true)
-  end
+  local GF = MSUF.GF
+  InvalidateGroupPredictionSpecs(GF, scope)
+  GF.ForEachFrame(function(frame, unit, kind)
+    if GroupPredictionScopeMatches(kind, scope) ~= true then return end
+    if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
+    local spec = GF.CompileSpec(kind, frame, unit)
+    if spec then
+      UF.SetFrameSpec(frame, spec, unit)
+      UF.ApplyElementsToFrame(frame, GROUP_PREDICTION_ELEMENTS, spec, reason)
+      UF.ApplyPredictionAlphaFills(frame, spec, true)
+      UF.elements.GroupRangeFade.RecomposePredictionAlpha(frame)
+      did = true
+    end
+  end, true)
   return did
 end
 
@@ -517,21 +504,18 @@ function UF.RefreshTempMaxHealth(scope, reason)
   local selectedValue1
   if not (scope == "shared") then selectedValue1 = scope end
   local did = UF.RefreshElements(selectedValue1, TEMP_MAX_HEALTH_ELEMENTS, reason) or false
-  local GF = MSUF and MSUF.GF
-  if GF and type(GF.ForEachFrame) == "function" and type(GF.CompileSpec) == "function"
-    and type(UF.ApplyElementToFrame) == "function" then
-    InvalidateGroupPredictionSpecs(GF, scope)
-    GF.ForEachFrame(function(frame, unit, kind)
-      if GroupPredictionScopeMatches(kind, scope) ~= true then return end
-      if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
-      local spec = GF.CompileSpec(kind, frame, unit)
-      if spec then
-        UF.SetFrameSpec(frame, spec, unit)
-        UF.ApplyElementToFrame(frame, "TempMaxHealth", spec, reason)
-        did = true
-      end
-    end, true)
-  end
+  local GF = MSUF.GF
+  InvalidateGroupPredictionSpecs(GF, scope)
+  GF.ForEachFrame(function(frame, unit, kind)
+    if GroupPredictionScopeMatches(kind, scope) ~= true then return end
+    if issecretvalue(unit) == true or type(unit) ~= "string" or unit == "" then return end
+    local spec = GF.CompileSpec(kind, frame, unit)
+    if spec then
+      UF.SetFrameSpec(frame, spec, unit)
+      UF.ApplyElementToFrame(frame, "TempMaxHealth", spec, reason)
+      did = true
+    end
+  end, true)
   return did
 end
 

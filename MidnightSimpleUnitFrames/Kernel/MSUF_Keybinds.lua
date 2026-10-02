@@ -13,14 +13,14 @@ local ExportPublic = MSUF.ExportPublic
 local type, select = type, select
 local CreateFrame = CreateFrame
 
---- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC)
-BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
-BINDING_NAME_MSUF_TOGGLE_OPTIONS = "Toggle MSUF Options"
-BINDING_NAME_MSUF_TOGGLE_EDITMODE = "Toggle MSUF Edit Mode"
+--- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC).
 --- The menu language is known only once the saved locale is read at
 --- ADDON_LOADED, so the translated labels are set again then.
 local function ApplyBindingLabels()
     local translate = type(MSUF.Translate) == "function" and MSUF.Translate or function(text) return text end
+    BINDING_HEADER_MSUF_HEADER = translate("Midnight Simple Unit Frames")
+    BINDING_NAME_MSUF_TOGGLE_OPTIONS = translate("Toggle MSUF Options")
+    BINDING_NAME_MSUF_TOGGLE_EDITMODE = translate("Toggle MSUF Edit Mode")
     local variantLabel = translate("Toggle profile variant %d")
     for slot = 1, 8 do _G["BINDING_NAME_MSUF_VARIANT_" .. slot] = variantLabel:format(slot) end
     BINDING_NAME_MSUF_PRIORITY_TOGGLE = translate("Pin or unpin hovered group member")

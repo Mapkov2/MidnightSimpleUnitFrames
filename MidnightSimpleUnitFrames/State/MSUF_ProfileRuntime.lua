@@ -81,7 +81,7 @@ local function MSUF_ProfileIO_CheckLocaleReload()
     if menu and type(menu.ShowLocaleReloadRequired) == "function" then
         menu.ShowLocaleReloadRequired()
     elseif _G.print then
-        _G.print("|cffffd700MSUF:|r Menu language changed with the profile. Reload the UI to apply it.")
+        _G.print("|cffffd700MSUF:|r " .. MSUF.Translate("Menu language changed with the profile. Reload the UI to apply it."))
     end
     return true
 end

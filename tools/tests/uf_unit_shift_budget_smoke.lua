@@ -30,6 +30,12 @@
 -- and 43k / 31.2 KB. Each limit sits 2% above its measurement. KB limits are
 -- for 32-bit Lua; a 64-bit interpreter (wider objects) instead checks the
 -- retarget against the rebuild measured in the same run.
+-- 2026-10-02 (wave 4, W4-C2): the route compiler remembers functions that are
+-- no element export (IsRegisteredElementFunction walked every element field
+-- again on each per-frame closure), so the rebuild drops to 19k (Mainline) and
+-- 29k (Vanilla); the retarget is unchanged. Rebuild limits 35k -> 20k and
+-- 44k -> 30k. A retarget that fell back to the rebuild would cost the rebuild,
+-- so the ratio guard moves from 60% to 80% of the cheaper rebuild.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -39,8 +45,8 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 
 -- [flavor] = { [case] = { k instructions, KB (32-bit) } }
 local BUDGETS = {
-    Mainline = { retarget = { 13, 4 }, rebuild = { 35, 11 } },
-    Vanilla = { retarget = { 23, 24 }, rebuild = { 44, 32 } },
+    Mainline = { retarget = { 13, 4 }, rebuild = { 20, 11 } },
+    Vanilla = { retarget = { 23, 24 }, rebuild = { 30, 32 } },
 }
 local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1"
 
@@ -127,7 +133,7 @@ local ROUTE_FIELDS = {
     "_msufIdentityBarPath", "_msufRuntimeAllFns", "_msufRuntimeAllCount", "_msufRuntimeAllLabels",
     "_msufRuntimeAllPath", "_msufRuntimeOnShowNeedsFull", "_msufReshowPath", "_msufGroupIdentityFns",
     "_msufGroupIdentityCount", "_msufGroupIdentityLabels", "_msufGroupIdentityPath",
-    "_msufGroupLifecyclePlan", "_msufHealthLifecycleSink", "_msufGFRangeEventHandlerPVP",
+    "_msufGroupLifecyclePlan", "_msufGFRangeEventHandlerPVP",
 }
 
 local function Snapshot(frame)
@@ -395,7 +401,7 @@ if not MEASURE_ONLY then
     end
     -- Architecture-independent: a retarget that silently fell back to the
     -- rebuild would cost as much as the rebuild.
-    Check(retarget.k <= rebuild.k * 0.6, string.format("retarget %dk is not under 60%% of the rebuild %dk",
+    Check(retarget.k <= rebuild.k * 0.8, string.format("retarget %dk is not under 80%% of the rebuild %dk",
         retarget.k, rebuild.k))
     Check(retarget.kb <= rebuild.kb * 0.85, string.format("retarget %.1f KB is not under 85%% of the rebuild %.1f KB",
         retarget.kb, rebuild.kb))

@@ -18,8 +18,9 @@ local function Clamp(value, minValue, maxValue)
     if value > maxValue then return maxValue end
     return value
 end
-local function Print(msg)
-    if type(print) == "function" then print("|cff00ff00MSUF:|r " .. tostring(msg or "")) end
+--- Chat line: the sentence is translated first and formatted after.
+local function Print(text, ...)
+    if type(print) == "function" then print("|cff00ff00MSUF:|r " .. string.format(MSUF.Translate(text), ...)) end
 end
 local function ForEachCoreFrame(fn)
     local uf = MSUF and MSUF.UF
@@ -347,7 +348,7 @@ local function SetGlobalUiScale(scale, silent)
     EnforceUIParentScale(scale)
     if UpdateGlobalScaleEvents then UpdateGlobalScaleEvents() end
     ScheduleUnitframeReanchorAfterScale()
-    if not silent then Print(string.format("Global UI scale set to %.4f", scale)) end
+    if not silent then Print("Global UI scale set to %.4f", scale) end
 end
 ResetGlobalUiScale = function(silent)
     if _G.InCombatLockdown and _G.InCombatLockdown() then

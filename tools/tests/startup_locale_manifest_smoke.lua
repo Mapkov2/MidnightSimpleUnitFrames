@@ -36,7 +36,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 2026-10-02: 16,050,000 -> 16,150,000 for the wave-2 quality splits
         -- (Edit Mode, engine and class power modules: file headers and imports)
         -- plus translated group and Edit Mode feedback; no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16150000 or 14000000),
+        -- 2026-10-02 (wave 4, W4-C2): 16,150,000 -> 16,200,000 and 14,000,000 ->
+        -- 14,050,000 for about 49 KB of translations: the engine and state chat
+        -- lines, key binding labels, unit tooltip and status words in the ten
+        -- translated packs (every pack is parsed at startup); no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16200000 or 14050000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

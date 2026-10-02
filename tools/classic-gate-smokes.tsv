@@ -364,3 +364,9 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 -	python	.github/scripts/group_structure_smoke.py	{root}	Group structure headroom smoke failed
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline native	Group roster native-call budget failed: Mainline
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Vanilla native	Group roster native-call budget failed: Vanilla
+-	lua	tools/tests/load_time_profile_read_smoke.lua	{root}	A file reads the profile while the addon loads, before the SavedVariables exist
+-	lua	tools/tests/group_aura_filter_token_owner_smoke.lua	{root}	State reaches into the Auras3 menu model for the Group Aura filter tokens, or the two lists drifted
+-	lua	tools/tests/resource_extras_translator_smoke.lua	{root}	Former class power resource extras keys are not carried by the profile translator
+-	lua	tools/tests/totem_manager_flag_smoke.lua	{root}	TotemFrame managed-frame flag is rewritten on Blizzard rebuilds or not handed back
+-	lua	tools/tests/engine_chat_locale_smoke.lua	{root}	An engine or state chat line, binding label, tooltip or status word is untranslated
+-	lua	tools/tests/defaults_aura_lane_schema_smoke.lua	{root}	The defaults' unit aura lane keys drifted from the aura schema's lane specs

@@ -25,6 +25,12 @@
 -- the joining frame's first build and its once-per-frame catch-up moved from the
 -- following settle into the join: Mainline join+settle 154k+41k -> 160k+36k
 -- (195k -> 196k), Vanilla 154k+42k -> 160k+37k. Every other case is unchanged.
+-- 2026-10-02 (wave 4, W4-C2): the route compiler remembers functions that are
+-- no element export, so each frame build stops re-walking every element field
+-- for its per-frame closures. Measured: Mainline party_join 161k -> 136k,
+-- party_apply 397k -> 288k, raid_build 1863k -> 1502k, raid_apply 1383k -> 1075k;
+-- Vanilla 160k -> 135k, 413k -> 307k, 1801k -> 1455k, 1424k -> 1134k. KB and the
+-- settle/shift cases unchanged. Those four limits move to the new measurement +2%.
 --
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
@@ -36,12 +42,12 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 -- [flavor] = { [case] = { k instructions, KB } }
 local BUDGETS = {
     Mainline = {
-        party_join = { 164, 220 }, party_settle = { 42, 10 }, party_apply = { 401, 207 }, raid_build = { 1871, 3912 },
-        raid_settle = { 64, 8 }, raid_apply = { 1397, 582 }, raid_shift = { 84, 26 },
+        party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1533, 3912 },
+        raid_settle = { 64, 8 }, raid_apply = { 1097, 582 }, raid_shift = { 84, 26 },
     },
     Vanilla = {
-        party_join = { 164, 272 }, party_settle = { 43, 12 }, party_apply = { 464, 411 }, raid_build = { 1946, 4865 },
-        raid_settle = { 66, 18 }, raid_apply = { 1623, 1395 }, raid_shift = { 108, 75 },
+        party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1485, 4865 },
+        raid_settle = { 66, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 108, 75 },
     },
 }
 local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1" or arg[3] == "native"

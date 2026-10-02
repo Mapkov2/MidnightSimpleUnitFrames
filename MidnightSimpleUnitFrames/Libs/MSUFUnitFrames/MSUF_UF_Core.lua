@@ -622,7 +622,6 @@ local function BroadcastGroupLifecycleExceptUnit(event, mode, exceptUnit)
 end
 
 local RegisterFrameEvent
-local RefreshHealthLifecycleSinkRoutes
 
 local function HeaderLayoutRebindActive(frame)
   local GF = MSUF and MSUF.GF
@@ -767,9 +766,6 @@ local function FrameOnHide(frame)
   frame._msufCoreOnShowFollowupEvent = nil
   frame._msufCoreOnShowFollowupGUID = nil
   frame._msufCoreOnShowFollowupTime = nil
-  if RefreshHealthLifecycleSinkRoutes and frame._msufHealthLifecycleSink then
-    RefreshHealthLifecycleSinkRoutes(frame)
-  end
   if SuspendHiddenFrameEvents(frame) then return end
   -- Blizzard's CompactUnitFrame explicitly unregisters this event while
   -- hidden because every registered unit makes the client perform additional
@@ -905,39 +901,67 @@ local SelectElementEventUpdate
 -- per-frame closure still gets a private route and therefore cannot be retained
 -- here after its frame is detached.
 local NIL_ROUTE_KEY = {}
-local staticElementFunctions = {}
-local noDispatchElementFunctions = {}
-local directHealthRouteCache = {}
-local directGroupHealthRouteCache = {}
-local directPowerRouteCache = {}
-local directGroupThreatRouteCache = {}
-local singleRouteCache = {}
-local sharedFrameEventRoutes = {}
+-- The route compiler's caches (cold: read while routes compile).
+-- nonElementFunctions holds functions proved not to be an element export
+-- (per-frame closures), weakly keyed so a detached frame's closure is
+-- collected; each miss used to walk every field of every element again.
+-- Elements register while the addon loads, before any route compiles; a
+-- function added to an element later would only lose the shared route (its
+-- private route is equivalent), never behave differently.
+local RouteCache = {
+  elementFunctions = {},
+  nonElementFunctions = setmetatable({}, { __mode = "k" }),
+  noDispatchFunctions = {},
+  directHealth = {},
+  directGroupHealth = {},
+  directPower = {},
+  directGroupThreat = {},
+  single = {},
+  sharedRoutes = {},
+  healthVisibility = {},
+}
+-- Intern pools of immutable route data shared by identical frame archetypes.
+local Intern = {
+  groupLifecyclePlans = {},
+  runtimeSequencePlans = {},
+  runtimeSequenceBuildFns = {},
+  runtimeSequenceBuildLabels = {},
+  EMPTY_SEQUENCE_FNS = {},
+  EMPTY_SEQUENCE_LABELS = {},
+  identityBarPaths = {},
+  eventLists = {},
+  EMPTY_EVENT_LIST = {},
+  routeSnapshots = {},
+  sharedRouteSnapshots = {},
+  runtimeRoutePlans = {},
+}
 
 local function IsRegisteredElementFunction(fn)
   if type(fn) ~= "function" then return false end
-  if staticElementFunctions[fn] == true then return true end
+  if RouteCache.elementFunctions[fn] == true then return true end
+  if RouteCache.nonElementFunctions[fn] == true then return false end
   for i = 1, #UF.elementOrder do
     local element = UF.elements[UF.elementOrder[i]]
     if type(element) == "table" then
       for _, candidate in pairs(element) do
         if candidate == fn then
-          staticElementFunctions[fn] = true
+          RouteCache.elementFunctions[fn] = true
           return true
         end
       end
     end
   end
+  RouteCache.nonElementFunctions[fn] = true
   return false
 end
 
 local function IsNoDispatchElementFunction(fn)
-  if noDispatchElementFunctions[fn] == true then return true end
+  if RouteCache.noDispatchFunctions[fn] == true then return true end
   for i = 1, #UF.elementOrder do
     local element = UF.elements[UF.elementOrder[i]]
     local updates = type(element) == "table" and element.NoDispatchUpdates or nil
     if type(updates) == "table" and updates[fn] == true then
-      noDispatchElementFunctions[fn] = true
+      RouteCache.noDispatchFunctions[fn] = true
       return true
     end
   end
@@ -1198,68 +1222,6 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUni
   end
 end
 
--- Castbars can borrow an already-registered target/focus health route instead
--- of registering a second UNIT_HEALTH/UNIT_CONNECTION listener. The wrapper is
--- shared; mutable owner/sink state remains frame-local and exists only while a
--- non-player cast is active.
-local function HealthLifecycleSinkRoute(self, ev, unit, ...)
-  local base = ev == "UNIT_CONNECTION"
-    and self._msufHealthLifecycleConnectionBase
-    or self._msufHealthLifecycleHealthBase
-  if base then base(self, ev, unit, ...) end
-  local sink = self._msufHealthLifecycleSink
-  if sink then sink(self._msufHealthLifecycleSinkOwner, self, ev, unit or self.MSUFUnitKey, ...) end
-end
-
-local function ClearHealthLifecycleSink(frame, notify)
-  if not frame then return false end
-  local sink = frame._msufHealthLifecycleSink
-  local owner = frame._msufHealthLifecycleSinkOwner
-  if not sink then return false end
-
-  if frame.UNIT_HEALTH == HealthLifecycleSinkRoute then
-    frame.UNIT_HEALTH = frame._msufHealthLifecycleHealthBase
-  end
-  if frame.UNIT_CONNECTION == HealthLifecycleSinkRoute then
-    frame.UNIT_CONNECTION = frame._msufHealthLifecycleConnectionBase
-  end
-  frame._msufHealthLifecycleSink = nil
-  frame._msufHealthLifecycleSinkOwner = nil
-  frame._msufHealthLifecycleSinkUnit = nil
-  frame._msufHealthLifecycleHealthBase = nil
-  frame._msufHealthLifecycleConnectionBase = nil
-
-  if notify == true then sink(owner, frame, "MSUF_UF_LIFECYCLE_DETACH", frame.MSUFUnitKey) end
-  return true
-end
-
-
-RefreshHealthLifecycleSinkRoutes = function(frame)
-  if not (frame and frame._msufHealthLifecycleSink) then return false end
-  local health = frame.UNIT_HEALTH
-  local connection = frame.UNIT_CONNECTION
-  if health == HealthLifecycleSinkRoute then health = frame._msufHealthLifecycleHealthBase end
-  if connection == HealthLifecycleSinkRoute then connection = frame._msufHealthLifecycleConnectionBase end
-
-  local valid = UF.attachedFrames[frame] == true
-    and frame._msufCoreSpecEnabled == true
-    and frame._msufCoreVisible == true
-    and frame._msufHealthLifecycleSinkUnit == frame.MSUFUnitKey
-    and frame._msufActiveElements and frame._msufActiveElements.Health == true
-    and type(health) == "function"
-    and type(connection) == "function"
-  if not valid then
-    ClearHealthLifecycleSink(frame, true)
-    return false
-  end
-
-  frame._msufHealthLifecycleHealthBase = health
-  frame._msufHealthLifecycleConnectionBase = connection
-  frame.UNIT_HEALTH = HealthLifecycleSinkRoute
-  frame.UNIT_CONNECTION = HealthLifecycleSinkRoute
-  return true
-end
-
 local function BuildPowerRoute(barFn, textFn, _unused, _unusedFollower, routeUnitless, target)
   if target then
     return function(self, ev, _unit, eventPowerToken)
@@ -1295,7 +1257,7 @@ local function SharedDirectRoute(cache, builder, fn1, fn2, fn3, fn4, routeUnitle
       predictionGated, textDirtyGated)
     leaf[key] = route
   end
-  sharedFrameEventRoutes[route] = true
+  RouteCache.sharedRoutes[route] = true
   return route
 end
 
@@ -1390,7 +1352,7 @@ local function SharedGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, pr
   end
   local mode = predictionGated == true and "prediction-gated" or "direct"
   if textDirtyGated == true then mode = mode .. ":text-dirty-gated" end
-  local leaf, key = RouteCacheLeaf(directGroupHealthRouteCache,
+  local leaf, key = RouteCacheLeaf(RouteCache.directGroupHealth,
     barFn, textFn, predictionFn, visualsFn, mode, nil)
   local route = leaf[key]
   if not route then
@@ -1398,7 +1360,7 @@ local function SharedGroupHealthRoute(barFn, textFn, predictionFn, visualsFn, pr
       predictionGated, textDirtyGated)
     leaf[key] = route
   end
-  sharedFrameEventRoutes[route] = true
+  RouteCache.sharedRoutes[route] = true
   return route
 end
 
@@ -1417,14 +1379,14 @@ local function BuildGroupThreatRoute(borderFn, cornerFn, resolvePair)
 end
 
 local function SharedGroupThreatRoute(borderFn, cornerFn, resolvePair)
-  local leaf, key = RouteCacheLeaf(directGroupThreatRouteCache,
+  local leaf, key = RouteCacheLeaf(RouteCache.directGroupThreat,
     borderFn, cornerFn, resolvePair, nil, "unit", nil)
   local route = leaf[key]
   if not route then
     route = BuildGroupThreatRoute(borderFn, cornerFn, resolvePair)
     leaf[key] = route
   end
-  sharedFrameEventRoutes[route] = true
+  RouteCache.sharedRoutes[route] = true
   return route
 end
 
@@ -1469,8 +1431,8 @@ local function SharedSingleRoute(update, unitless, target)
   if not IsRegisteredElementFunction(update) then
     return BuildSingleRoute(update, unitless, target)
   end
-  local node = singleRouteCache[update]
-  if not node then node = {}; singleRouteCache[update] = node end
+  local node = RouteCache.single[update]
+  if not node then node = {}; RouteCache.single[update] = node end
   local mode = target and "target" or (unitless == true and "unitless" or "unit")
   local leaf = node[mode]
   if not leaf then leaf = {}; node[mode] = leaf end
@@ -1480,11 +1442,10 @@ local function SharedSingleRoute(update, unitless, target)
     route = BuildSingleRoute(update, unitless, target)
     leaf[key] = route
   end
-  sharedFrameEventRoutes[route] = true
+  RouteCache.sharedRoutes[route] = true
   return route
 end
 
-local healthVisibilityRouteCache = {}
 local function CompileFrameEventPath(frame, event, list)
   -- Strip the optional rendering gate before compiling the existing optimized
   -- health route. No extra dispatch context or option check when disabled.
@@ -1502,15 +1463,15 @@ local function CompileFrameEventPath(frame, event, list)
         end
         if #remaining == 0 then return SharedSingleRoute(gate, false, nil) end
         local base = CompileFrameEventPath(frame, event, remaining)
-        local route = healthVisibilityRouteCache[base]
+        local route = RouteCache.healthVisibility[base]
         if not route then
           route = function(self, ev, unit, ...)
             base(self, ev, unit, ...)
             gate(self)
           end
-          if sharedFrameEventRoutes[base] then healthVisibilityRouteCache[base] = route end
+          if RouteCache.sharedRoutes[base] then RouteCache.healthVisibility[base] = route end
         end
-        if sharedFrameEventRoutes[base] then sharedFrameEventRoutes[route] = true end
+        if RouteCache.sharedRoutes[base] then RouteCache.sharedRoutes[route] = true end
         return route
       end
     end
@@ -1608,11 +1569,11 @@ local function CompileFrameEventPath(frame, event, list)
             barFn, textFn, predictionFn, visualsFn,
             predictionGated == true, textDirtyGated == true)
         end
-        return SharedDirectRoute(directHealthRouteCache, BuildHealthRoute,
+        return SharedDirectRoute(RouteCache.directHealth, BuildHealthRoute,
           barFn, textFn, predictionFn, visualsFn, routeUnitless, target,
           predictionGated == true, textDirtyGated == true)
       end
-      return SharedDirectRoute(directPowerRouteCache, BuildPowerRoute,
+      return SharedDirectRoute(RouteCache.directPower, BuildPowerRoute,
         barFn, textFn, nil, nil, routeUnitless, target)
     end
   end
@@ -1642,7 +1603,6 @@ local function CompileFrameEventPath(frame, event, list)
   end
 end
 
-local groupLifecyclePlanIntern = {}
 
 local function LifecycleCachedHealth(frame, unit)
   local hpBar = frame.hpBar
@@ -1738,7 +1698,7 @@ end
 local function InternGroupLifecyclePlan(healthPath, powerUpdate,
     powerTextUpdate, nameUpdate, namePresenceUpdate, portraitUpdate, statusUpdate,
     rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
-  local shared = (not healthPath or sharedFrameEventRoutes[healthPath] == true)
+  local shared = (not healthPath or RouteCache.sharedRoutes[healthPath] == true)
   shared = shared
     and (not powerUpdate or IsRegisteredElementFunction(powerUpdate))
     and (not powerTextUpdate or IsRegisteredElementFunction(powerTextUpdate))
@@ -1756,7 +1716,7 @@ local function InternGroupLifecyclePlan(healthPath, powerUpdate,
       rangeUpdate, visualsUpdate, bordersUpdate, cornerUpdate)
   end
 
-  local node = InternLifecycleNode(groupLifecyclePlanIntern, healthPath)
+  local node = InternLifecycleNode(Intern.groupLifecyclePlans, healthPath)
   node = InternLifecycleNode(node, powerUpdate)
   node = InternLifecycleNode(node, powerTextUpdate)
   node = InternLifecycleNode(node, nameUpdate)
@@ -2172,14 +2132,9 @@ end
 -- immutable function/label sequences so identical raid children retain only
 -- references to one plan instead of four private arrays and two closures each.
 -- A frame-owned selector closure deliberately falls back to a private plan.
-local runtimeSequencePlanIntern = {}
-local runtimeSequenceBuildFns = {}
-local runtimeSequenceBuildLabels = {}
-local EMPTY_RUNTIME_SEQUENCE_FNS = {}
-local EMPTY_RUNTIME_SEQUENCE_LABELS = {}
-local EMPTY_RUNTIME_SEQUENCE_PLAN = {
-  functions = EMPTY_RUNTIME_SEQUENCE_FNS,
-  labels = EMPTY_RUNTIME_SEQUENCE_LABELS,
+Intern.EMPTY_SEQUENCE_PLAN = {
+  functions = Intern.EMPTY_SEQUENCE_FNS,
+  labels = Intern.EMPTY_SEQUENCE_LABELS,
   count = 0,
 }
 
@@ -2200,9 +2155,9 @@ local function NewRuntimeSequencePlan(functions, labels, count, identity)
 end
 
 local function InternRuntimeSequencePlan(functions, labels, count, identity)
-  if count <= 0 then return EMPTY_RUNTIME_SEQUENCE_PLAN end
+  if count <= 0 then return Intern.EMPTY_SEQUENCE_PLAN end
 
-  local node = runtimeSequencePlanIntern
+  local node = Intern.runtimeSequencePlans
   for i = 1, count do
     local update = functions[i]
     if not IsRegisteredElementFunction(update) then
@@ -2225,8 +2180,8 @@ local function InternRuntimeSequencePlan(functions, labels, count, identity)
 end
 
 local function BuildRuntimeSequencePlan(frame, include, identity)
-  local functions = runtimeSequenceBuildFns
-  local labels = runtimeSequenceBuildLabels
+  local functions = Intern.runtimeSequenceBuildFns
+  local labels = Intern.runtimeSequenceBuildLabels
   local active = frame and frame._msufActiveElements
   local count = 0
   if active then
@@ -2258,7 +2213,6 @@ local function AssignRuntimeSequencePlan(frame, plan, listKey, countKey, labelKe
   frame[pathKey] = plan.path
 end
 
-local identityBarPathIntern = {}
 local function CompileIdentityBarPath(frame)
   local active = frame and frame._msufActiveElements
   if not active then return nil end
@@ -2271,8 +2225,8 @@ local function CompileIdentityBarPath(frame)
   local byPower, key
   if shared then
     local healthKey = health or NIL_ROUTE_KEY
-    byPower = identityBarPathIntern[healthKey]
-    if not byPower then byPower = {}; identityBarPathIntern[healthKey] = byPower end
+    byPower = Intern.identityBarPaths[healthKey]
+    if not byPower then byPower = {}; Intern.identityBarPaths[healthKey] = byPower end
     key = power or NIL_ROUTE_KEY
     local path = byPower[key]
     if path then return path end
@@ -2336,25 +2290,20 @@ end
 -- Event providers mostly return module constants. Intern a defensive copy once
 -- per distinct sequence so 40 identical raid frames do not retain the same
 -- event-name arrays over and over. The interned arrays are immutable.
-local eventListIntern = {}
-local EMPTY_EVENT_LIST = {}
-eventListIntern["0\030"] = EMPTY_EVENT_LIST
+Intern.eventLists["0\030"] = Intern.EMPTY_EVENT_LIST
 
 local function InternEventList(events)
   if type(events) ~= "table" then return nil end
   local count = #events
   local key = tostring(count) .. "\030" .. table_concat(events, "\031", 1, count)
-  local interned = eventListIntern[key]
+  local interned = Intern.eventLists[key]
   if interned then return interned end
   interned = {}
   for i = 1, count do interned[i] = events[i] end
-  eventListIntern[key] = interned
+  Intern.eventLists[key] = interned
   return interned
 end
 
-local routeSnapshotIntern = {}
-local sharedRouteSnapshots = {}
-local runtimeRoutePlanIntern = {}
 
 local function RuntimeRouteSnapshot(update, events, unitlessEvents)
   events = InternEventList(events)
@@ -2362,8 +2311,8 @@ local function RuntimeRouteSnapshot(update, events, unitlessEvents)
   if not IsRegisteredElementFunction(update) then
     return { update = update, events = events, unitlessEvents = unitlessEvents }
   end
-  local byEvents = routeSnapshotIntern[update]
-  if not byEvents then byEvents = {}; routeSnapshotIntern[update] = byEvents end
+  local byEvents = Intern.routeSnapshots[update]
+  if not byEvents then byEvents = {}; Intern.routeSnapshots[update] = byEvents end
   local eventKey = events or NIL_ROUTE_KEY
   local byUnitless = byEvents[eventKey]
   if not byUnitless then byUnitless = {}; byEvents[eventKey] = byUnitless end
@@ -2372,16 +2321,16 @@ local function RuntimeRouteSnapshot(update, events, unitlessEvents)
   if not route then
     route = { update = update, events = events, unitlessEvents = unitlessEvents }
     byUnitless[unitlessKey] = route
-    sharedRouteSnapshots[route] = true
+    Intern.sharedRouteSnapshots[route] = true
   end
   return route
 end
 
 local function InternRuntimeRoutePlan(routes)
-  local node = runtimeRoutePlanIntern
+  local node = Intern.runtimeRoutePlans
   for i = 1, #UF.elementOrder do
     local route = routes[UF.elementOrder[i]]
-    if route and sharedRouteSnapshots[route] ~= true then
+    if route and Intern.sharedRouteSnapshots[route] ~= true then
       return routes
     end
     local key = route or NIL_ROUTE_KEY
@@ -2413,7 +2362,6 @@ local function RebuildFrameEvents(frame)
   if not active then
     frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes)
     frame._msufEventRouteNeedsIdentity = false
-    if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
     UF.RebuildRuntimeStatusState(frame)
     if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
     return true
@@ -2515,7 +2463,6 @@ local function RebuildFrameEvents(frame)
   -- A frame hidden while its routes are rebuilt (login, profile apply) stays
   -- inert until its next OnShow, exactly like one that hides later.
   if frame._msufCoreVisible == false then SuspendHiddenFrameEvents(frame) end
-  if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
   -- Compiled routes either capture only the one generic list they need or use
   -- a shared prototype. The event->builder map itself has no runtime reader.
   frame._msufEvents = nil
@@ -2686,7 +2633,6 @@ local function RetargetFrameUnitEvents(frame)
     end
     if hidden then SuspendHiddenFrameEvents(frame) end
   end
-  if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
   UF.RebuildRuntimeStatusState(frame)
   if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
   return true
@@ -2935,12 +2881,6 @@ function UF.DetachFrame(frame)
       FrameDisableElement(frame, name, true)
     end
   end
-  -- Element teardown makes this frame ineligible for immediate reattachment.
-  -- Notify an active castbar lifecycle owner before erasing the wrapped event
-  -- routes so it can promote itself to the minimal event fallback.
-  if frame._msufHealthLifecycleSink then
-    ClearHealthLifecycleSink(frame, true)
-  end
   ClearFrameEvents(frame)
   frame._msufIdentityFns = nil
   frame._msufIdentityCount = nil
@@ -2975,35 +2915,6 @@ end
 function UF.GetFrame(unit)
   if unit and issecretvalue(unit) == true then return nil end
   return UF.frames[unit]
-end
-
-function UF.SetHealthLifecycleSink(unit, sink, owner)
-  if type(sink) ~= "function" or owner == nil then return false end
-  local frame = UF.GetFrame(unit)
-  if not (frame
-    and UF.attachedFrames[frame] == true
-    and frame.MSUFUnitKey == unit
-    and frame._msufCoreSpecEnabled == true
-    and frame._msufCoreVisible == true
-    and frame._msufActiveElements and frame._msufActiveElements.Health == true
-    and type(frame.UNIT_HEALTH) == "function"
-    and type(frame.UNIT_CONNECTION) == "function") then
-    return false
-  end
-  if frame._msufHealthLifecycleSinkOwner ~= nil
-    and frame._msufHealthLifecycleSinkOwner ~= owner then
-    return false
-  end
-
-  frame._msufHealthLifecycleSink = sink
-  frame._msufHealthLifecycleSinkOwner = owner
-  frame._msufHealthLifecycleSinkUnit = unit
-  return RefreshHealthLifecycleSinkRoutes(frame) == true, frame
-end
-
-function UF.ClearHealthLifecycleSink(frame, owner)
-  if not frame or frame._msufHealthLifecycleSinkOwner ~= owner then return false end
-  return ClearHealthLifecycleSink(frame, false)
 end
 
 function UF.Apply(unit, applyMask)

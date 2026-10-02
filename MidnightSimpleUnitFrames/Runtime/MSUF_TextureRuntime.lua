@@ -42,8 +42,7 @@ local function UnitFrameInScope(frame, scope)
     if GroupKindsForScope(scope) then return false end
     local unit = frame and (frame.MSUFUnitKey or frame.unit)
     if unit == scope then return true end
-    local UF = MSUF and MSUF.UF
-    local units = UF and type(UF.UnitsForConfigKey) == "function" and UF.UnitsForConfigKey(scope) or nil
+    local units = MSUF.UF.UnitsForConfigKey(scope)
     for i = 1, #(units or {}) do
         if units[i] == unit then return true end
     end
@@ -68,23 +67,17 @@ local ScheduleApplyCommit = _G.MSUF_UF_ScheduleApplyCommit
 local _iterState = {}
 local PREDICTION_REFRESH_ELEMENTS = { "Prediction", "Alpha" }
 
+-- The unit-frame engine (Libs/MSUFUnitFrames, UnitFrames/Engine) and the group
+-- runtime load after this file on every client; these helpers run only once the
+-- addon has loaded, so they call the engine directly.
 local function RefreshPredictionElements(reason, scope, skipUnitFrames)
-    local UF = MSUF and MSUF.UF
-    if UF and type(UF.RefreshPredictionBars) == "function" then
-        return UF.RefreshPredictionBars(scope, reason or "MSUF2_ABSORB_TEXTURE", skipUnitFrames) or false
-    end
-    local kindA = GroupKindsForScope(scope)
-    if skipUnitFrames ~= true and not kindA and UF and type(UF.RefreshElements) == "function" then
-        return UF.RefreshElements(NormalizeScope(scope), PREDICTION_REFRESH_ELEMENTS, reason or "MSUF2_ABSORB_TEXTURE") or false
-    end
-    return false
+    return MSUF.UF.RefreshPredictionBars(scope, reason or "MSUF2_ABSORB_TEXTURE", skipUnitFrames) or false
 end
 
 local function RefreshGroupBarVisuals(scope)
     local kindA, kindB = GroupKindsForScope(scope)
     local normalized = NormalizeScope(scope)
-    local GF = MSUF and MSUF.GF
-    if not (GF and type(GF.RefreshVisuals) == "function") then return false end
+    local GF = MSUF.GF
     local refreshed = false
     if kindA then
         refreshed = GF.RefreshVisuals(kindA, GF.DIRTY_VISUAL) or refreshed
@@ -129,10 +122,7 @@ local function _Iter_ApplyAllBarTex(f)
     -- A swapped fill drops the Alpha element's cached texture object above;
     -- re-run the frame's alpha so the new fill gets its opacity now.
     if healthTextureChanged or powerTextureChanged then
-        local UF = MSUF and MSUF.UF
-        if UF and type(UF.ApplyAlphaFrame) == "function" then
-            UF.ApplyAlphaFrame(f, "MSUF_FORCE_UPDATE")
-        end
+        MSUF.UF.ApplyAlphaFrame(f, "MSUF_FORCE_UPDATE")
     end
 end
 
@@ -152,9 +142,8 @@ local function UpdateAllBarTextures(scope, skipUnitFrames, skipCastbars)
     -- owns the same Health/Power config dependency, so doing it first gives the
     -- direct texture pass current data without a second deferred full apply.
     if not NormalizeScope(scope) then
-        local UF = MSUF and MSUF.UF
-        if skipUnitFrames ~= true and UF and type(UF.RefreshElements) == "function" then
-            UF.RefreshElements(nil, PREDICTION_REFRESH_ELEMENTS, "MSUF2_BAR_TEXTURE")
+        if skipUnitFrames ~= true then
+            MSUF.UF.RefreshElements(nil, PREDICTION_REFRESH_ELEMENTS, "MSUF2_BAR_TEXTURE")
         end
         RefreshGroupBarVisuals(nil)
     else
@@ -242,10 +231,9 @@ if not _G.MSUF_UpdateAllBarTextures_Immediate then
     end
     local ScheduleOnce = MSUF.Scheduler.ScheduleOnce
     ExportPublic("MSUF_UpdateAllBarTextures", function(scope)
-        local UF = MSUF and MSUF.UF
         local normalized = NormalizeScope(scope)
-        if normalized and not GroupKindsForScope(normalized) and UF and type(UF.MarkDirty) == "function" then
-            UF.MarkDirty(normalized)
+        if normalized and not GroupKindsForScope(normalized) then
+            MSUF.UF.MarkDirty(normalized)
             ScheduleApplyCommit()
             return
         end
