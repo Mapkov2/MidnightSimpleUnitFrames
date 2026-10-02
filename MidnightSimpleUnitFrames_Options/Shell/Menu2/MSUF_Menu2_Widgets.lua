@@ -504,6 +504,38 @@ local function SetTileVisual(btn, active, hover)
 end
 W.SetTileVisual = SetTileVisual
 
+-- Growth and layout tiles (unit Boss layout, group Growth) mark the first
+-- frame of their mini preview with a "1" badge and the growth direction with
+-- an arrow. Both are built on first use and reused on every repaint.
+function W.EnsureTileFirstBadge(btn)
+    if not btn._firstText then
+        btn._firstText = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+        if btn._firstText.SetFont then btn._firstText:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
+        btn._firstText:SetText("1")
+        btn._firstText:SetTextColor(0, 0, 0, 1)
+    end
+    return btn._firstText
+end
+function W.PaintTileDirectionArrow(btn, info, labelH)
+    if not btn._arrow then
+        btn._arrow = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+        if btn._arrow.SetFont then btn._arrow:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
+        btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
+    end
+    btn._arrow:SetText(info.arrow)
+    btn._arrow:ClearAllPoints()
+    if info.dy == -1 then
+        btn._arrow:SetPoint("BOTTOM", btn, "BOTTOM", 0, labelH + 1)
+    elseif info.dy == 1 then
+        btn._arrow:SetPoint("TOP", btn, "TOP", 0, -4)
+    elseif info.dx == 1 then
+        btn._arrow:SetPoint("RIGHT", btn, "RIGHT", -4, labelH * 0.5)
+    else
+        btn._arrow:SetPoint("LEFT", btn, "LEFT", 4, labelH * 0.5)
+    end
+    btn._arrow:Show()
+end
+
 local function ToggleBadge(label, enabled)
     return { text = label .. (enabled and " On" or " Off"), kind = enabled and "accent" or "muted", showWhenClosed = true }
 end

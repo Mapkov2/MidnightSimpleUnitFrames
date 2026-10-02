@@ -1516,12 +1516,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
             end
             tex:Show()
         end
-        if not btn._firstText then
-            btn._firstText = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._firstText.SetFont then btn._firstText:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
-            btn._firstText:SetText("1")
-            btn._firstText:SetTextColor(0, 0, 0, 1)
-        end
+        W.EnsureTileFirstBadge(btn)
         local firstVisualIndex = (info.dy == 1 or info.dx == -1) and (count - 1) or 0
         btn._firstText:ClearAllPoints()
         btn._firstText:SetPoint("CENTER", btn, "TOPLEFT",
@@ -1529,23 +1524,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
             originY - ((info.dy ~= 0 and firstVisualIndex or 0) * (frameH + frameGap)) - (frameH * 0.5))
         btn._firstText:Show()
 
-        if not btn._arrow then
-            btn._arrow = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._arrow.SetFont then btn._arrow:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
-            btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
-        end
-        btn._arrow:SetText(info.arrow)
-        btn._arrow:ClearAllPoints()
-        if info.dy == -1 then
-            btn._arrow:SetPoint("BOTTOM", btn, "BOTTOM", 0, labelH + 1)
-        elseif info.dy == 1 then
-            btn._arrow:SetPoint("TOP", btn, "TOP", 0, -4)
-        elseif info.dx == 1 then
-            btn._arrow:SetPoint("RIGHT", btn, "RIGHT", -4, labelH * 0.5)
-        else
-            btn._arrow:SetPoint("LEFT", btn, "LEFT", 4, labelH * 0.5)
-        end
-        btn._arrow:Show()
+        W.PaintTileDirectionArrow(btn, info, labelH)
     end
 
     function control:SetValue(value)
