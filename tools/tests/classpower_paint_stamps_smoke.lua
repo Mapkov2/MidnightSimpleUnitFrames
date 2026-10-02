@@ -10,7 +10,10 @@
 --     Brewmaster repaints it;
 --   * Balance eclipse colours the Power element's bar: the end of an eclipse
 --     restores the colour the element's _msufR stamp records;
---   * native aura modes hide the count text: a vehicle's combo points show it.
+--   * native aura modes hide the count text: a vehicle's combo points show it;
+--   * a relayout paints the pip backgrounds and visibility directly: a
+--     charged pip keeps its dimmed background on the next update;
+--   * an eclipse that ends early is not handed back by the controller cache.
 -- Also: a structural refresh inside the 150 ms throttle gets a trailing one,
 -- and the one colour-override reader (MSUF_CP_CONST.OverrideRGB).
 --
@@ -235,4 +238,4 @@ end
 if #failures > 0 then
     error("classpower_paint_stamps_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour, native aura text, throttle)")
+print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour, charged relayout, native aura text, throttle)")
