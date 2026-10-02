@@ -195,7 +195,10 @@ local function FillPriorityPinView(out, groupType, featureEnabled, baseFramesEna
   local pins = Pins(false)
   for i = 1, #pins do
     local row = out[i]
-    if type(row) ~= "table" then row = {}; out[i] = row end
+    if type(row) ~= "table" then
+      row = {}
+      out[i] = row
+    end
     local guid, name = PinIdentity(pins[i])
     local entry = guid and rosterByGUID[guid] or nil
     if not entry and name then entry = rosterByName[name] or rosterByFoldedName[name:lower()] end
@@ -538,7 +541,10 @@ local function FindHoveredFrame(frame, unit, kind)
   if frame.IsShown and not frame:IsShown() then return end
   if frame.IsMouseOver and frame:IsMouseOver() then
     local candidate = unit or frame.MSUFUnitKey
-    if GF.IsPriorityGroupUnit(candidate) then hoveredUnit = candidate; return true end
+    if GF.IsPriorityGroupUnit(candidate) then
+      hoveredUnit = candidate
+      return true
+    end
   end
 end
 

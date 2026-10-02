@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua
 --- Ownership adapter for Blizzard party/raid frames.
 ---
@@ -8,6 +7,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local ExportPublic = MSUF.ExportPublic
 
 local GF = MSUF.GF or {}

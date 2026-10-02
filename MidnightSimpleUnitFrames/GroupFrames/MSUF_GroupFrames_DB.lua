@@ -977,7 +977,10 @@ function GF.SaveRaidLayout(conf, situationKey)
     if not conf then return end
     if type(conf.raidLayouts) ~= "table" then conf.raidLayouts = {} end
     local slot = conf.raidLayouts[situationKey]
-    if not slot then slot = {}; conf.raidLayouts[situationKey] = slot end
+    if not slot then
+        slot = {}
+        conf.raidLayouts[situationKey] = slot
+    end
     for _, k in ipairs(LAYOUT_GEO_KEYS) do
         slot[k] = conf[k]
     end

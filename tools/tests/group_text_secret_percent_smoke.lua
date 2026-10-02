@@ -56,6 +56,7 @@ _G.UnitPowerPercent = function(unit) return units[unit] and units[unit].ppPct en
 _G.UnitHealthMissing = function(unit) return units[unit] and units[unit].missing end
 _G.UnitPowerType = function() return 0 end
 local ns = { ExportPublic = function() end }
+dofile(root .. "/tools/tests/group_dependencies.lua")(ns)
 for _, part in ipairs({ "", "_Geometry", "_Text", "_Textures" }) do
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB" .. part .. ".lua"))("MSUF", ns)
 end

@@ -167,6 +167,7 @@ function GF.GetUnitGroupRole(unit) return roles[unit] or "DAMAGER" end
 function GF.RegisterRuntimeObserver(_, cb) GF.observer = cb end
 MSUF.UFBarTextCommon = { ApplyHealthStatusColor = function(bar) Count("Paint"); bar:SetStatusBarColor(.1, .2, .3) end }
 
+dofile(root .. "/tools/tests/group_dependencies.lua")(MSUF)
 local function Load(client)
     MSUF.Client = client
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua"))("MSUF", MSUF)

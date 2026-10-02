@@ -88,6 +88,7 @@ _G.CompactRaidFrameManager = manager
 -- A legacy global must never be touched on Mainline.
 _G.CompactRaidFrameManagerToggleButton = legacy
 
+dofile(root .. "/tools/tests/group_dependencies.lua")(_G.MSUF_NS)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"))(
     "MidnightSimpleUnitFrames", _G.MSUF_NS)
 local GF = assert(_G.MSUF_NS.GF)

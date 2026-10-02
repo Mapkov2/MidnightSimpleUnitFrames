@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua
 --- EditMode v2 integration for group frames.
 ---
@@ -8,6 +7,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 local ExportPublic = MSUF.ExportPublic
 
@@ -1189,8 +1189,16 @@ local function RegisterAdditionalMovers()
         end
         local function Dimension(field, label, low, high)
           return { id = field, kind = "number", label = label, min = low, max = high, step = 1,
-            get = function() local state = Capture(); return state and state[field] end,
-            set = function(value) local state = Capture(); if not state then return false end; state[field] = value; return Restore(state) end }
+            get = function()
+              local state = Capture()
+              return state and state[field]
+            end,
+            set = function(value)
+              local state = Capture()
+              if not state then return false end
+              state[field] = value
+              return Restore(state)
+            end }
         end
         elements[#elements + 1] = {
           -- Public Edit Mode elements show their labels as given: translate the
@@ -1198,8 +1206,14 @@ local function RegisterAdditionalMovers()
           id = kind .. "_" .. prefix,
           label = string.format(Translate("%s: %s"), Translate(LABELS[kind]), Translate(ADDITIONAL_BLOCK_NAMES[prefix] or prefix)),
           group = Translate(LABELS[kind]), order = 80,
-          getFrame = function() local live = GF(); return live and live.GetAdditionalEditPreviewFrame and live.GetAdditionalEditPreviewFrame(kind, prefix) end,
-          isEnabled = function() local conf = GetConf(kind); return conf and conf.enabled == true and conf[prefix .. "Enabled"] == true end,
+          getFrame = function()
+            local live = GF()
+            return live and live.GetAdditionalEditPreviewFrame and live.GetAdditionalEditPreviewFrame(kind, prefix)
+          end,
+          isEnabled = function()
+            local conf = GetConf(kind)
+            return conf and conf.enabled == true and conf[prefix .. "Enabled"] == true
+          end,
           getPosition = Capture, setPosition = Restore,
           extraControls = { Dimension("width", Translate("Width"), 20, 500), Dimension("height", Translate("Height"), 10, 200) },
         }

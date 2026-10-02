@@ -74,11 +74,14 @@ def main():
         args.json.write_text(json.dumps(dict(files=results, clones=duplicates, clone_lines=clone_lines), indent=2) + "\n")
     if args.report:
         return
+    owned = set((args.root / "tools/classic-owned-addon-paths.txt").read_text().splitlines())
+    overrides = {line.split("\t")[0] for line in
+                 (args.root / "tools/classic-retail-overrides.tsv").read_text().splitlines()}
     for item in results:
         assert item["locals"] <= 150, f"{item['file']}: main chunk needs headroom below 160"
         assert item["upvalues"] <= 45, f"{item['file']}: upvalue limit"
         assert item["longest"] <= 150, f"{item['file']}: split long function by responsibility"
-        if not args.limits_only:
+        if not args.limits_only and item["file"] in owned | overrides:
             assert item["wide"] == 0 and item["semicolons"] == 0, f"{item['file']}: layout limits"
     if not args.limits_only:
         assert share <= .01, "group clone-line share exceeds one percent"

@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- GroupFrames/MSUF_GroupFrames_Additional.lua
 --- Extra blocks of a group scope: the party members' targets, group pets,
 --- allied boss units and healer mana bars. The first three are small secure
@@ -16,6 +15,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- raise no unit events, so their values come from one 0.2 s ticker on the block
 --- while it is shown.
 local _, MSUF = ...
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local GF = MSUF.GF
 local Client = MSUF.Client
 local InCombat = MSUF.Util.InCombat
@@ -43,7 +43,10 @@ local BOSS_UNITS = not (Client and type(Client.SupportsUnit) == "function") or C
 GF.ADDITIONAL_HAS_BOSS_UNITS = BOSS_UNITS
 local PARTY_UNITS, PARTY_TARGETS, BOSS_TOKENS, BOSS_DRIVERS = {}, {}, {}, {}
 for i = 1, 4 do PARTY_UNITS[i], PARTY_TARGETS[i] = "party" .. i, "party" .. i .. "target" end
-for i = 1, 5 do BOSS_TOKENS[i] = "boss" .. i; BOSS_DRIVERS[i] = "[@boss" .. i .. ",help,exists] show; hide" end
+for i = 1, 5 do
+    BOSS_TOKENS[i] = "boss" .. i
+    BOSS_DRIVERS[i] = "[@boss" .. i .. ",help,exists] show; hide"
+end
 
 local function Number(conf, key, fallback, low, high)
     return max(low, min(high, tonumber(conf[key]) or fallback))
@@ -93,7 +96,10 @@ local function PaintColors(button, kind, prefix, class, pct, unit, hp, maxHP, ev
     end
     local texture = spec and spec.backgroundTexture
     if texture then
-        if button.bg._msufBgTexture ~= texture then button.bg:SetTexture(texture); button.bg._msufBgTexture = texture end
+        if button.bg._msufBgTexture ~= texture then
+            button.bg:SetTexture(texture)
+            button.bg._msufBgTexture = texture
+        end
         button.bg:SetVertexColor(br, bgc, bb, bg.a or .95)
     else button.bg:SetColorTexture(br, bgc, bb, bg.a or .95) end
     if unit and type(_G.UnitClass) == "function" then
@@ -166,7 +172,8 @@ local function StyleHealth(button, kind, conf, prefix)
     CacheColorUnit(button)
     button.Health:SetStatusBarTexture(GF.ResolveBarTexture(kind))
     button.Name:SetFont(GF.ResolveFontPath(kind), Number(conf, prefix .. "TextSize", 11, 7, 32), GF.ResolveFontFlags(kind))
-    PaintColors(button, kind, prefix, nil, .7, button.unit, button.unit and UnitHealth(button.unit), button.unit and UnitHealthMax(button.unit), "GROUP_ROSTER_UPDATE")
+    PaintColors(button, kind, prefix, nil, .7, button.unit, button.unit and UnitHealth(button.unit), button.unit and UnitHealthMax(button.unit),
+        "GROUP_ROSTER_UPDATE")
 end
 -- The XML template names this function as its OnLoad handler. Its regions sit
 -- on the health bar under parentKeys; the painters use them from the button.
@@ -188,7 +195,10 @@ MSUF.ExportPublic("MSUF_GroupAdditionalUnitOnLoad", GF.AdditionalUnitOnLoad)
 
 local function TickTargets(holder, elapsed)
     local wait = (holder._msufTickWait or 0) - elapsed
-    if wait > 0 then holder._msufTickWait = wait; return end
+    if wait > 0 then
+        holder._msufTickWait = wait
+        return
+    end
     holder._msufTickWait = TARGET_TICK
     for i = 1, 4 do
         local button = targetButtons[i]
@@ -262,9 +272,15 @@ function GF.RenderAdditionalPreview(parent, kind, prefix, count, options)
     if not parent then return nil end
     local spec = GF.GetAdditionalPreviewSpec(kind, prefix, count, options)
     if not spec then return nil end
-    if InCombat() or not spec.enabled then GF.HideAdditionalPreview(parent, prefix); return nil, spec end
+    if InCombat() or not spec.enabled then
+        GF.HideAdditionalPreview(parent, prefix)
+        return nil, spec
+    end
     local pools = previewPools[parent]
-    if not pools then pools = {}; previewPools[parent] = pools end
+    if not pools then
+        pools = {}
+        previewPools[parent] = pools
+    end
     local holder = pools[prefix]
     if not holder then
         holder = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
@@ -273,7 +289,8 @@ function GF.RenderAdditionalPreview(parent, kind, prefix, count, options)
     end
     holder:SetSize(spec.totalWidth, spec.totalHeight)
     if not options or options.position ~= false then
-        holder:ClearAllPoints(); holder:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+        holder:ClearAllPoints()
+        holder:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
     end
     local conf = GF.GetConf(kind)
     for i = 1, spec.count do
@@ -284,16 +301,19 @@ function GF.RenderAdditionalPreview(parent, kind, prefix, count, options)
             button.Health:SetAllPoints()
             local bg = PixelLayoutRegion(button.Health:CreateTexture(nil, "BACKGROUND"))
             button.bg = bg
-            bg:SetAllPoints(); bg:SetColorTexture(.04, .04, .04, .95)
+            bg:SetAllPoints()
+            bg:SetColorTexture(.04, .04, .04, .95)
             button.Name = PixelLayoutRegion(button.Health:CreateFontString(nil, "OVERLAY"))
-            button.Name:SetPoint("LEFT", 3, 0); button.Name:SetPoint("RIGHT", -3, 0)
+            button.Name:SetPoint("LEFT", 3, 0)
+            button.Name:SetPoint("RIGHT", -3, 0)
             holder.buttons[i] = button
         end
         StyleHealth(button, kind, conf, prefix)
         button:SetSize(spec.width, spec.height)
         button:ClearAllPoints()
         button:SetPoint("TOPLEFT", holder, "TOPLEFT", ((i - 1) % spec.columns) * (spec.width + 2), -floor((i - 1) / spec.columns) * (spec.height + 2))
-        button.Health:SetMinMaxValues(0, 100); button.Health:SetValue(80 - (i % 4) * 10)
+        button.Health:SetMinMaxValues(0, 100)
+        button.Health:SetValue(80 - (i % 4) * 10)
         PaintColors(button, kind, prefix, "HUNTER", (80 - (i % 4) * 10) / 100)
         if prefix == "healerMana" then
             if not button.Value then
@@ -301,14 +321,19 @@ function GF.RenderAdditionalPreview(parent, kind, prefix, count, options)
                 button.Value:SetPoint("RIGHT", -3, 0)
             end
             local r, g, b = Number(conf, "healerManaTextR", 1, 0, 1), Number(conf, "healerManaTextG", 1, 0, 1), Number(conf, "healerManaTextB", 1, 0, 1)
-            button.Name:ClearAllPoints(); button.Name:SetPoint("LEFT", 3, 0); button.Name:SetJustifyH("LEFT"); button.Name:SetWidth(spec.width * .62)
+            button.Name:ClearAllPoints()
+            button.Name:SetPoint("LEFT", 3, 0)
+            button.Name:SetJustifyH("LEFT")
+            button.Name:SetWidth(spec.width * .62)
             button.Name:SetTextColor(r, g, b)
             button.Value:SetFont(GF.ResolveFontPath(kind), spec.textSize, GF.ResolveFontFlags(kind))
-            button.Value:SetTextColor(r, g, b); button.Value:SetText(8000 - i * 1000)
+            button.Value:SetTextColor(r, g, b)
+            button.Value:SetText(8000 - i * 1000)
             button.Value:SetShown(conf.healerManaShowValue ~= false)
             button.Name:SetText((_G.HEALER or "Healer") .. " " .. i)
         else
-            button.Name:SetText((prefix == "pets" and (_G.PET or "Pet") or prefix == "friendlyBoss" and (_G.BOSS or "Boss") or (_G.TARGET or "Target")) .. " " .. i)
+            button.Name:SetText((prefix == "pets" and (_G.PET or "Pet") or prefix == "friendlyBoss" and (_G.BOSS or "Boss") or (_G.TARGET
+                or "Target")) .. " " .. i)
         end
         button:Show()
     end
@@ -319,7 +344,10 @@ end
 local function RefreshScreenPreviews()
     for kind, count in pairs(previewRequests) do
         local parent = screenPreviews[kind]
-        if not parent then parent = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent)); screenPreviews[kind] = parent end
+        if not parent then
+            parent = PixelLayoutRegion(CreateFrame("Frame", nil, UIParent))
+            screenPreviews[kind] = parent
+        end
         parent:SetFrameStrata("MEDIUM")
         local liveLevel = max(holders.Pets and holders.Pets:GetFrameLevel() or 0, holders.Targets and holders.Targets:GetFrameLevel() or 0)
         parent:SetFrameLevel(liveLevel + 10)
@@ -348,7 +376,10 @@ end
 function GF.HideAdditionalGroupPreview(kind)
     if previewRequests[kind] == nil then return end
     previewRequests[kind] = nil
-    if screenPreviews[kind] then GF.HideAdditionalPreview(screenPreviews[kind]); screenPreviews[kind]:Hide() end
+    if screenPreviews[kind] then
+        GF.HideAdditionalPreview(screenPreviews[kind])
+        screenPreviews[kind]:Hide()
+    end
 end
 
 local function StaticUnit(list, holder, index, unit, bind)
@@ -386,7 +417,10 @@ local function SuspendButtons(list)
     for i = 1, #list do
         local button = list[i]
         Watch(button, false)
-        if button._msufDriver then UnregisterStateDriver(button, "visibility"); button._msufDriver = nil end
+        if button._msufDriver then
+            UnregisterStateDriver(button, "visibility")
+            button._msufDriver = nil
+        end
         button:UnregisterAllEvents()
         button._msufIdentityEvent = nil
         button:Hide()
@@ -396,7 +430,11 @@ end
 local function ApplyTargets(kind, conf, enabled)
     local holder = Holder("Targets")
     holder._msufAdditionalKind, holder._msufAdditionalPrefix = kind, "targets"
-    if not enabled or conf.targetsEnabled ~= true or kind ~= "party" or IsInRaid() then SuspendButtons(targetButtons); holder:Hide(); return end
+    if not enabled or conf.targetsEnabled ~= true or kind ~= "party" or IsInRaid() then
+        SuspendButtons(targetButtons)
+        holder:Hide()
+        return
+    end
     local includePlayer = conf.targetsIncludePlayer == true
     local count = includePlayer and 5 or 4
     local width, height, columns, totalW, totalH = Geometry(conf, "targets", count)
@@ -443,7 +481,11 @@ local function ClearPetHeader(header)
     header:Hide()
     for i = 1, 40 do
         local child = header:GetAttribute(CHILD_KEYS[i])
-        if child then child:UnregisterAllEvents(); child.unit = nil; child._msufAdditionalColorUnit = nil end
+        if child then
+            child:UnregisterAllEvents()
+            child.unit = nil
+            child._msufAdditionalColorUnit = nil
+        end
     end
 end
 local PET_ATTRIBUTES = { "template", "templateType", "showRaid", "showParty", "showPlayer", "showSolo", "sortMethod",
@@ -467,12 +509,18 @@ local function ConfigurePetHeader(header, kind, conf, width, height, units, rows
     wanted.unitsPerColumn, wanted.maxColumns = units, rows
     wanted.initialConfigFunction = ("self:SetWidth(%d); self:SetHeight(%d); self:SetAttribute('type1','target')"):format(width, height)
     local cache = header._msufAttributes
-    if not cache then cache = {}; header._msufAttributes = cache end
+    if not cache then
+        cache = {}
+        header._msufAttributes = cache
+    end
     local changed = false
     for i = 1, #PET_ATTRIBUTES do
         local key = PET_ATTRIBUTES[i]
         if cache[key] ~= wanted[key] then
-            if not changed then header:SetAttribute("_ignore", true); changed = true end
+            if not changed then
+                header:SetAttribute("_ignore", true)
+                changed = true
+            end
             header:SetAttribute(key, wanted[key])
             cache[key] = wanted[key]
         end
@@ -496,7 +544,8 @@ local function ConfigurePetHeader(header, kind, conf, width, height, units, rows
 end
 local function ApplyPets(kind, conf, enabled)
     if not enabled or conf.petsEnabled ~= true then
-        ClearPetHeader(holders.Pets); ClearPetHeader(holders.PetsRest)
+        ClearPetHeader(holders.Pets)
+        ClearPetHeader(holders.PetsRest)
         if holders.PetsBlock then holders.PetsBlock:Hide() end
         return
     end
@@ -510,14 +559,16 @@ local function ApplyPets(kind, conf, enabled)
     block:Show()
     local header = PetHeader("Pets", "MSUF_GroupAdditional_Pets")
     if header._msufAnchor ~= block then
-        header:ClearAllPoints(); header:SetPoint("TOPLEFT", block, "TOPLEFT", 0, 0)
+        header:ClearAllPoints()
+        header:SetPoint("TOPLEFT", block, "TOPLEFT", 0, 0)
         header._msufAnchor = block
     end
     if split then
         ConfigurePetHeader(header, kind, conf, width, height, columns, full / columns, 1)
         local rest = PetHeader("PetsRest", "MSUF_GroupAdditional_PetsRest")
         if rest._msufAnchor ~= header then
-            rest:ClearAllPoints(); rest:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -2)
+            rest:ClearAllPoints()
+            rest:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -2)
             rest._msufAnchor = header
         end
         ConfigurePetHeader(rest, kind, conf, width, height, remainder, 1, full + 1)
@@ -532,7 +583,9 @@ local function ApplyBosses(kind, conf, enabled)
     holder._msufAdditionalKind, holder._msufAdditionalPrefix = kind, "friendlyBoss"
     local healer = GF.GetUnitGroupRole("player") == "HEALER"
     if not BOSS_UNITS or not enabled or conf.friendlyBossEnabled ~= true or (conf.friendlyBossHealerOnly ~= false and not healer) then
-        SuspendButtons(bossButtons); holder:Hide(); return
+        SuspendButtons(bossButtons)
+        holder:Hide()
+        return
     end
     local count = min(5, _G.MAX_BOSS_FRAMES or 5)
     local width, height, columns, totalW, totalH = Geometry(conf, "friendlyBoss", count)
@@ -619,8 +672,10 @@ local function ApplyMana(kind, conf, enabled, refreshIdentity)
                     local font, size, flags = GF.ResolveFontPath(kind), Number(conf, "healerManaTextSize", 11, 7, 32), GF.ResolveFontFlags(kind)
                     local r, g, b = Number(conf, "healerManaTextR", 1, 0, 1), Number(conf, "healerManaTextG", 1, 0, 1), Number(conf, "healerManaTextB", 1, 0, 1)
                     row.bar:SetStatusBarTexture(GF.ResolveBarTexture(kind))
-                    row.name:SetFont(font, size, flags); row.value:SetFont(font, size, flags)
-                    row.name:SetTextColor(r, g, b); row.value:SetTextColor(r, g, b)
+                    row.name:SetFont(font, size, flags)
+                    row.value:SetFont(font, size, flags)
+                    row.name:SetTextColor(r, g, b)
+                    row.value:SetTextColor(r, g, b)
                     row.value:SetShown(conf.healerManaShowValue ~= false)
                     row._msufStyleSerial, row._msufKind = styleSerial, kind
                 end
@@ -629,7 +684,8 @@ local function ApplyMana(kind, conf, enabled, refreshIdentity)
                 local y = -(rows - 1) * (height + 2)
                 if row._msufW ~= width or row._msufH ~= height or row._msufY ~= y then
                     row:SetSize(width, height)
-                    row:ClearAllPoints(); row:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, y)
+                    row:ClearAllPoints()
+                    row:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, y)
                     row.name:SetWidth(width * .62)
                     row._msufW, row._msufH, row._msufY = width, height, y
                 end
@@ -653,7 +709,10 @@ function GF.RefreshAdditionalGroups(refreshIdentity)
     -- The same rule as the group runtime: a scope is on only when enabled is true.
     local enabled = conf.enabled == true and (IsInGroup() or conf.showSolo == true)
     ApplyMana(kind, conf, enabled, refreshIdentity)
-    if combat then pending = true; return end
+    if combat then
+        pending = true
+        return
+    end
     pending = false
     activeKind = kind
     -- Keep protected live holders and unit watches ready for combat. Visual-only

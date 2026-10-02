@@ -814,13 +814,31 @@ function GF.MigrateAuraConfig(conf, isRaid)
         conf.privateAuras = LegacyPrivateAuraDefaults()
         changed = true
     end
-    if type(conf.auras.buff) ~= "table" then conf.auras.buff = LegacyBuffDefaults(); changed = true end
-    if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = LegacyDebuffDefaults(); changed = true end
-    if type(conf.auras.externals) ~= "table" then conf.auras.externals = LegacyExternalDefaults(); changed = true end
-    if conf.auras.iconZoom == nil then conf.auras.iconZoom = 100; changed = true end
+    if type(conf.auras.buff) ~= "table" then
+        conf.auras.buff = LegacyBuffDefaults()
+        changed = true
+    end
+    if type(conf.auras.debuff) ~= "table" then
+        conf.auras.debuff = LegacyDebuffDefaults()
+        changed = true
+    end
+    if type(conf.auras.externals) ~= "table" then
+        conf.auras.externals = LegacyExternalDefaults()
+        changed = true
+    end
+    if conf.auras.iconZoom == nil then
+        conf.auras.iconZoom = 100
+        changed = true
+    end
     local legacyIconZoom = tonumber(conf.auras.iconZoom) or 100
-    if conf.auras.buff.iconZoom == nil then conf.auras.buff.iconZoom = legacyIconZoom; changed = true end
-    if conf.auras.debuff.iconZoom == nil then conf.auras.debuff.iconZoom = legacyIconZoom; changed = true end
+    if conf.auras.buff.iconZoom == nil then
+        conf.auras.buff.iconZoom = legacyIconZoom
+        changed = true
+    end
+    if conf.auras.debuff.iconZoom == nil then
+        conf.auras.debuff.iconZoom = legacyIconZoom
+        changed = true
+    end
     FillMissingAuraFields(conf.auras.buff, LEGACY_BUFF_DEFAULTS)
     FillMissingAuraFields(conf.auras.debuff, LEGACY_DEBUFF_DEFAULTS)
     FillMissingAuraFields(conf.auras.externals, LEGACY_EXTERNAL_DEFAULTS)
@@ -828,8 +846,14 @@ function GF.MigrateAuraConfig(conf, isRaid)
         conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconZoom = 100, iconScale = 100 }
         changed = true
     end
-    if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100; changed = true end
-    if conf.spellIndicators.iconScale == nil then conf.spellIndicators.iconScale = 100; changed = true end
+    if conf.spellIndicators.iconZoom == nil then
+        conf.spellIndicators.iconZoom = 100
+        changed = true
+    end
+    if conf.spellIndicators.iconScale == nil then
+        conf.spellIndicators.iconScale = 100
+        changed = true
+    end
     local _, spellStyleChanged = GF.EnsureSpellIndicatorStyle(conf)
     changed = spellStyleChanged or changed
     return changed

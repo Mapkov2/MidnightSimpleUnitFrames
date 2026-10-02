@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua
 --- Non-combat preview frames for group-frame menu/edit workflows.
 ---
@@ -8,6 +7,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local ExportPublic = MSUF.ExportPublic
 
 local GF = MSUF.GF or {}
@@ -1075,7 +1075,8 @@ local function ApplyPreviewText(frame, hp, hpMax, power, powerMax, class)
     text.UpdateHealthTextColor(frame, rt, frame.MSUFUnitKey, hp, hpMax)
   end
 
-  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, PercentFactory((power / max(powerMax, 1)) * 100), rt.powerNeedsPercent, rt)
+  text.UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.MSUFUnitKey, PercentFactory((power / max(powerMax, 1)) * 100),
+      rt.powerNeedsPercent, rt)
 end
 
 local function ApplyRoleIcon(frame, kind, role)
@@ -1099,7 +1100,10 @@ local function ApplyLeaderIcon(frame, kind, assist)
   local tex = assist and frame.assistIcon or frame.leaderIcon
   if not tex then return end
   local fn = assist and GF.GetAssistTexture or GF.GetLeaderTexture
-  if type(fn) ~= "function" then tex:Hide(); return end
+  if type(fn) ~= "function" then
+    tex:Hide()
+    return
+  end
   local path, l, r, t, b = fn(kind)
   tex:SetTexture(path)
   tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)

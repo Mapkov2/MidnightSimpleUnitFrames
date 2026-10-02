@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Indicators.lua
 --- Runtime element for group corner indicators.
 ---
@@ -7,6 +6,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 local UF = MSUF.UF
 local GF = MSUF.GF or {}
@@ -235,7 +235,10 @@ end
 
 local function UpdateCornerIndicators(frame, event)
   local cfg = frame.MSUFSpec and frame.MSUFSpec.cornerIndicators
-  if not (cfg and cfg.enabled == true) then HideCorners(frame); return end
+  if not (cfg and cfg.enabled == true) then
+    HideCorners(frame)
+    return
+  end
   local fn = cfg.runtimeThreat
   if fn then
     return fn(frame, cfg, event)
@@ -244,7 +247,10 @@ end
 
 function GroupCornerIndicators.Apply(frame)
   local cfg = frame.MSUFSpec and frame.MSUFSpec.cornerIndicators
-  if not (cfg and cfg.enabled == true) then HideCorners(frame); return end
+  if not (cfg and cfg.enabled == true) then
+    HideCorners(frame)
+    return
+  end
   cfg.runtimeAggroMode = NormalizeAggroMode(cfg.aggroMode)
   cfg.runtimeThreat = cfg.needsThreat == true and RuntimeThreat or nil
   PrepareCornerIndicators(frame, cfg)

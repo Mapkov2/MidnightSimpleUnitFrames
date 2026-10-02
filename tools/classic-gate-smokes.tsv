@@ -347,4 +347,6 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 -	lua	tools/tests/health_dispatch_free_death_smoke.lua	{root}	Dispatch-free health death smoke failed
 -	lua	tools/tests/group_priority_secret_identity_smoke.lua	{root}	Priority group secret identity regression
 -	lua	tools/tests/group_preview_secret_name_smoke.lua	{root}	Group preview secret identity regression
--	python	.github/scripts/group_structure_smoke.py	{root} --limits-only	Group structure headroom smoke failed
+-	python	.github/scripts/group_structure_smoke.py	{root}	Group structure headroom smoke failed
+-	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline native	Group roster native-call budget failed: Mainline
+-	lua	tools/tests/group_roster_budget_smoke.lua	{root} Vanilla native	Group roster native-call budget failed: Vanilla

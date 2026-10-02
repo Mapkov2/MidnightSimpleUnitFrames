@@ -78,6 +78,7 @@ _G.C_Timer = { After = function(_, callback) callback() end }
 _G.CompactRaidFrameManager = manager
 _G.CompactRaidFrameManagerToggleButton = button
 
+dofile(root .. "/tools/tests/group_dependencies.lua")(_G.MSUF_NS)
 local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"
 local chunk = assert(loadfile(path))
 chunk("MidnightSimpleUnitFrames", _G.MSUF_NS)

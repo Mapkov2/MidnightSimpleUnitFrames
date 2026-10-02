@@ -79,6 +79,7 @@ function GF.ResolveFontPath() return "font" end
 function GF.ResolveFontFlags() return "OUTLINE" end
 function GF.GetUnitGroupRole(unit) return (unit=="player" or unit=="party1" or unit=="raid1") and "HEALER" or "DAMAGER" end
 function GF.RegisterRuntimeObserver(_,cb) GF.observer=cb end
+dofile(root .. "/tools/tests/group_dependencies.lua")(MSUF)
 assert(loadfile(root.."/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua"))("MSUF",MSUF)
 conf.petsEnabled=false
 GF.RefreshAdditionalGroups()

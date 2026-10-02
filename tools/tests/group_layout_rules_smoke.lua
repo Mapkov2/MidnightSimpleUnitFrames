@@ -7,6 +7,7 @@ IsInGroup=function() return count>0 end
 GetRaidRosterInfo=function(i) return "Member"..i,0, i<=10 and 1 or 5 end
 wipe=function(t) for k in pairs(t) do t[k]=nil end return t end
 local ns={ExportPublic=function() end}
+dofile(root .. "/tools/tests/group_dependencies.lua")(ns)
 for _,part in ipairs({"","_Geometry","_Text","_Textures"}) do assert(loadfile(root.."/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB"..part..".lua"))("MSUF",ns) end
 local GF=ns.GF
 -- The Party layout takes a small raid only while the Party scope is on.

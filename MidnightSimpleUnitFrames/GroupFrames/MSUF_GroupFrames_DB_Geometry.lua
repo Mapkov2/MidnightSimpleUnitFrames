@@ -266,7 +266,10 @@ function GF.GroupFilterAllowsSubgroup(filter, group)
         if not GROUP_FILTER_KEYS[group] then return true end
         local allowList = false
         for other = 1, 8 do
-            if GroupFilterEntry(filter, other) == true then allowList = true; break end
+            if GroupFilterEntry(filter, other) == true then
+                allowList = true
+                break
+            end
         end
         if TableFilterAllows(filter, group, allowList) then return true end
         for other = 1, 8 do
@@ -548,6 +551,25 @@ function GF.GetVisibleLayoutCount(kind, count, conf)
     return math_min(count, upc * columns)
 end
 
+local function GridCenterOffsets(kind, w, h, totalW, totalH, growth)
+    local firstDX, firstDY = GF.GetHeaderOriginToFirstCenter(kind, w, h)
+    local dx, dy = firstDX, firstDY
+    if growth == "DOWN" then
+        dx = dx + (totalW - w) * 0.5
+        dy = dy - (totalH - h) * 0.5
+    elseif growth == "UP" then
+        dx = dx + (totalW - w) * 0.5
+        dy = dy + (totalH - h) * 0.5
+    elseif growth == "RIGHT" then
+        dx = dx + (totalW - w) * 0.5
+        dy = dy - (totalH - h) * 0.5
+    elseif growth == "LEFT" then
+        dx = dx - (totalW - w) * 0.5
+        dy = dy - (totalH - h) * 0.5
+    end
+    return dx, dy, firstDX, firstDY
+end
+
 function GF.GetPreservedRaidGridMetrics(kind, count, preservedGroupCount)
     local conf = GF.GetConf(kind)
     local tierCount = (tonumber(count) or 0) > 0 and count or nil
@@ -578,21 +600,7 @@ function GF.GetPreservedRaidGridMetrics(kind, count, preservedGroupCount)
         totalH = groups * blockH + math_max(0, groups - 1) * sp
     end
 
-    local firstDX, firstDY = GF.GetHeaderOriginToFirstCenter(kind, w, h)
-    local dx, dy = firstDX, firstDY
-    if growth == "DOWN" then
-        dx = dx + (totalW - w) * 0.5
-        dy = dy - (totalH - h) * 0.5
-    elseif growth == "UP" then
-        dx = dx + (totalW - w) * 0.5
-        dy = dy + (totalH - h) * 0.5
-    elseif growth == "RIGHT" then
-        dx = dx + (totalW - w) * 0.5
-        dy = dy - (totalH - h) * 0.5
-    elseif growth == "LEFT" then
-        dx = dx - (totalW - w) * 0.5
-        dy = dy - (totalH - h) * 0.5
-    end
+    local dx, dy, firstDX, firstDY = GridCenterOffsets(kind, w, h, totalW, totalH, growth)
 
     return dx, dy, totalW, totalH, w, h, sp, growth, upc, count, firstDX, firstDY, primary, groups, blockColumns, blockW, blockH
 end
@@ -632,21 +640,7 @@ function GF.GetGridMetrics(kind, count, preservedGroupCount)
         totalH = numCols * h + math_max(0, numCols - 1) * sp
     end
 
-    local firstDX, firstDY = GF.GetHeaderOriginToFirstCenter(kind, w, h)
-    local dx, dy = firstDX, firstDY
-    if growth == "DOWN" then
-        dx = dx + (totalW - w) * 0.5
-        dy = dy - (totalH - h) * 0.5
-    elseif growth == "UP" then
-        dx = dx + (totalW - w) * 0.5
-        dy = dy + (totalH - h) * 0.5
-    elseif growth == "RIGHT" then
-        dx = dx + (totalW - w) * 0.5
-        dy = dy - (totalH - h) * 0.5
-    elseif growth == "LEFT" then
-        dx = dx - (totalW - w) * 0.5
-        dy = dy - (totalH - h) * 0.5
-    end
+    local dx, dy, firstDX, firstDY = GridCenterOffsets(kind, w, h, totalW, totalH, growth)
 
     return dx, dy, totalW, totalH, w, h, sp, growth, upc, count, firstDX, firstDY
 end
