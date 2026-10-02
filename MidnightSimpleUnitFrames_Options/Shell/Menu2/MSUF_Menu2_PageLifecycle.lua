@@ -42,11 +42,11 @@ local function QueueVisiblePageLayoutSettle(key, entry)
         -- before its glyph metrics are renderable. Reapply this page's fonts
         -- once after visibility and fall back immediately when the requested
         -- face still cannot render text. Cached pages pay this cost only once.
-        if not entry._msuf2VisibleFontSettled and T and type(T.RefreshMenuFonts) == "function" then
+        if not entry._msuf2VisibleFontSettled and T then
             -- This is the one-shot visibility retry for freshly created font
             -- strings, not a font-setting change. Preserve the resolved-path
             -- cache populated while the page was built.
-            if type(T.RefreshMenuFontStrings) == "function" and type(entry.fontStrings) == "table" then
+            if type(entry.fontStrings) == "table" then
                 T.RefreshMenuFontStrings(entry.fontStrings, true, true)
             else
                 T.RefreshMenuFonts(entry.wrapper, true, true)
@@ -101,7 +101,7 @@ end
 function M.ConsumeFixedPreviewExpansionForSelection(pageKey)
     local restore = ActiveFixedPreviewIsExpanded()
         or fixedPreviewRebuildExpandPageKey == pageKey
-        or (type(M.ShouldExpandFixedPreview) == "function" and M.ShouldExpandFixedPreview())
+        or (M.ShouldExpandFixedPreview())
     fixedPreviewRebuildExpandPageKey = nil
     return restore == true
 end
@@ -208,11 +208,33 @@ function M.ResolvePendingFixedPreviewExpansion(frame)
     })
     return true
 end
+--- Optional page spec fields read here:
+---   version         a bump drops every cached entry of the page;
+---   variantKey(key) names the page's current view state (a short string). Each
+---                   view keeps its own cached entry, so switching back to a view
+---                   built before shows that entry again (see RebuildPageKeepingScroll);
+---   rebuildsItself  true when the page's frame structure follows its saved data
+---                   from the first build on (see M.PageRebuildsItself).
 function M.RegisterPage(key, spec)
     if type(key) ~= "string" or type(spec) ~= "table" then return end
     if not M.pages[key] then M.pageOrder[#M.pageOrder + 1] = key end
     M.pages[key] = spec
 end
+-- A page rebuilds itself when an edit changes its frame structure, not just
+-- the values its controls show: a list row added or removed, a lane switched.
+-- The page then invalidates itself while on screen (directly or through
+-- RebuildPageKeepingScroll). Undo, redo and page resets rebuild exactly these
+-- pages; every other page repaints in place through its refreshers.
+local selfRebuildingPages = {}
+function M.PageRebuildsItself(key)
+    local spec = key and M.pages[key]
+    return selfRebuildingPages[key] == true or (spec ~= nil and spec.rebuildsItself == true)
+end
+local function MenuShown()
+    local frame = M.frame
+    return frame ~= nil and frame.IsShown ~= nil and frame:IsShown() == true
+end
+local InvalidatePageEntries
 local BUILD_LAYOUT_ONLY_RELAYOUT = { skipStateRefresh = true }
 local function BuildPageEntry(key, hidden)
     local CONTENT_W, CONTENT_H = M.GetContentMetrics()
@@ -221,10 +243,10 @@ local function BuildPageEntry(key, hidden)
     local spec = M.pages[key]
     local specVersion = spec and spec.version
     local layoutVersion = M._msuf2LayoutVersion or 0
-    local layoutSlot = M.CurrentPageLayoutSlot()
+    local layoutSlot = M.CurrentPageLayoutSlot(key)
     local cached = M.cache and M.cache[key]
     if cached and (cached._msuf2BuildIncomplete or (specVersion and cached.version ~= specVersion)) then
-        M.InvalidatePage(key)
+        InvalidatePageEntries(key)
         cached = nil
     end
     local registryCleared = false
@@ -330,8 +352,25 @@ local function BuildPageEntry(key, hidden)
         ctx:SetContentHeight(finalHeight)
     end
     if hidden and wrapper.Hide then wrapper:Hide() end
+    -- A builder may settle its own view state while it builds (the changelog
+    -- picks its selected release on the first build). Key the entry by the
+    -- view it was actually built for, or the next selection would miss it.
+    local builtSlot = M.CurrentPageLayoutSlot(key)
+    if builtSlot ~= layoutSlot then
+        local variants = M._msuf2PageLayoutVariants[key]
+        if type(variants) == "table" and variants[layoutSlot] == entry then variants[layoutSlot] = nil end
+        entry.layoutSlot = builtSlot
+        M.RememberPageLayoutVariant(key, entry)
+    end
     entry._msuf2BuildIncomplete = nil
     return entry
+end
+-- True when a page with declared views is still showing the view it was
+-- built for. Pages without variantKey keep the old rule: the cached entry of
+-- the active page is shown as it is.
+local function EntryShowsCurrentView(entry, key, spec)
+    if not (spec and spec.variantKey) then return true end
+    return entry.layoutSlot == M.CurrentPageLayoutSlot(key)
 end
 -- Cold-path public entry point used by Search. Callers must
 -- invoke it only after an explicit menu interaction; it intentionally creates
@@ -356,7 +395,7 @@ function M.SelectPage(key)
             and req.explicit == true
             and req.consumed ~= true
             and (not req.pageKey or tostring(req.pageKey) == tostring(key))
-        if not hasPendingFocus and type(M.CloseAutoFocusedSections) == "function" then M.CloseAutoFocusedSections(key) end
+        if not hasPendingFocus then M.CloseAutoFocusedSections(key) end
     end
     if key ~= "search" and M.activeKey == "search" then
         BumpSearchInputSerial()
@@ -367,11 +406,11 @@ function M.SelectPage(key)
     local cached = M.cache[key]
     local specVersion = spec and spec.version
     if cached and (cached._msuf2BuildIncomplete or (specVersion and cached.version ~= specVersion)) then
-        M.InvalidatePage(key)
+        InvalidatePageEntries(key)
         cached = nil
         if M.activeKey == key then M.activeKey = nil end
     end
-    if key == M.activeKey and cached then
+    if key == M.activeKey and cached and EntryShowsCurrentView(cached, key, spec) then
         M.sessionLastPage = key
         M.RememberPrimaryNavPage(key)
         M.SetActivePageHeader(cached)
@@ -385,7 +424,7 @@ function M.SelectPage(key)
         M.RunStickyHeaderActivation()
         M.RequestBossPagePreviewForKey(key)
         M.RequestGFPagePreviewForKey(key)
-        if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+        if hasPendingFocus then M.FocusRequestedSection(key, { flash = true }) end
         if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
         M.GuidedTourOnPageSelected(key)
         M.RefreshLayerOverviewContext()
@@ -444,7 +483,7 @@ function M.SelectPage(key)
     if M.RefreshToolbarPageReset then M.RefreshToolbarPageReset() end
     M.RequestBossPagePreviewForKey(key)
     M.RequestGFPagePreviewForKey(key)
-    if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+    if hasPendingFocus then M.FocusRequestedSection(key, { flash = true }) end
     M.GuidedTourOnPageSelected(key)
     -- A spec-version invalidation may have occurred inside this SelectPage.
     -- The local restore decision already owns that transition, so do not leave
@@ -458,7 +497,7 @@ function M.SelectPage(key)
     end
     return true
 end
-function M.InvalidatePage(key)
+InvalidatePageEntries = function(key)
     if key then
         M.RememberFixedPreviewExpansionForRebuild(key)
         if key ~= "search" then MarkSearchIndexDirty() end
@@ -480,12 +519,13 @@ function M.InvalidatePage(key)
             end
         end
         -- Invalidated wrappers are released (hidden and unparented), never
-        -- pooled: the next SelectPage builds the page from scratch. Known
-        -- limitation. Invalidation is cold and user-driven only -- an undo/redo
-        -- restore, a page reset, a page spec version bump, a search re-index,
-        -- guided-tour transitions, a layout-variant switch or a preview
-        -- texture-slot change -- so a pool would mostly hold frames whose
-        -- registrations and refreshers must be reconciled before reuse.
+        -- pooled: the next SelectPage builds the page from scratch, and WoW
+        -- never frees a frame. So invalidation stays rare and deliberate: a
+        -- page that rebuilds itself, a page spec version bump, a search
+        -- re-index, guided-tour transitions or a preview texture-slot change.
+        -- Undo, redo and page resets repaint in place instead
+        -- (M.RepaintPageAfterDataChange), and declared views switch between
+        -- cached entries (variantKey).
         for i = 1, #entries do
             local invalidated = entries[i]
             invalidated._msuf2Invalidated = true
@@ -502,8 +542,35 @@ function M.InvalidatePage(key)
         local keys = {}
         for k in pairs(M.cache) do keys[k] = true end
         for k in pairs(M._msuf2PageLayoutVariants) do keys[k] = true end
-        for k in pairs(keys) do M.InvalidatePage(k) end
+        for k in pairs(keys) do InvalidatePageEntries(k) end
     end
+end
+--- Drops every cached entry of a page (or of all pages, without a key). A page
+--- that invalidates itself while it is on screen is rebuilding itself; that
+--- marks it for M.PageRebuildsItself.
+function M.InvalidatePage(key)
+    if key and key == M.activeKey and MenuShown() then selfRebuildingPages[key] = true end
+    return InvalidatePageEntries(key)
+end
+--- Repaints the page on screen after saved values changed under it: undo, redo
+--- and page resets. Its refreshers re-read every bound control and the visible
+--- settle relayouts its sections, so no frame is created. A page that rebuilds
+--- itself (or a caller passing options.rebuild) is built again instead, the way
+--- every restore used to work. Returns false when the menu is hidden or shows
+--- another page; the caller then queues its ordinary refresh.
+function M.RepaintPageAfterDataChange(key, reason, options)
+    key = ALIASES[key or ""] or key
+    if not (key and key == M.activeKey and MenuShown()) then return false end
+    M.MarkMenuDataDirty(reason or "data-change")
+    if key ~= "search" then MarkSearchIndexDirty() end
+    local cached = M.cache[key]
+    local rebuild = (options and options.rebuild == true) or not cached or M.PageRebuildsItself(key)
+    if rebuild then
+        InvalidatePageEntries(key)
+        M.activeKey = nil
+    end
+    M.SelectPage(key)
+    return true
 end
 
 function M.RestoreFixedPreview(key, entry, options)

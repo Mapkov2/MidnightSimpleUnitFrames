@@ -259,7 +259,6 @@ end
 -- Status test mode is a temporary visual aid from the menu. Clear it when Menu2 closes so
 -- runtime frames do not keep fake dead/ghost/AFK indicators after the preview is gone.
 local function ResetStatusIndicatorTestModeOnMenuExit()
-    if type(M.EnsureDB) ~= "function" then return false end
     local db = M.EnsureDB()
     if type(db) ~= "table" then return false end
     local changed = false
@@ -291,7 +290,6 @@ local function ResetStatusIndicatorTestModeOnMenuExit()
         end
     end
     if not changed then return false end
-    if type(M.RequestUnitApply) ~= "function" then return true end
     for i = 1, #unitsToApply do
         M.RequestUnitApply(unitsToApply[i], "MSUF2_STATUS_TEST_MENU_EXIT", {
             preview = false,
@@ -400,9 +398,8 @@ local function ShowGFBarMenuPreviews(gf)
     ShowGFPreviewWhenNoLiveFrames(gf, "raid", BARS_MENU_PREVIEW_COUNT)
     gf.HidePreview("mythicraid")
 end
-local function SetGFPagePreviewFlag(active, kind)
+local function SetGFPagePreviewFlag(active)
     _G.MSUF2_GFPagePreviewActive = active and true or nil
-    _G.MSUF2_GFPagePreviewKind = active and kind or nil
 end
 local function GFPreviewRuntimeActive(gf)
     if _G.MSUF2_GFPagePreviewActive == true then return true end
@@ -479,7 +476,7 @@ local function SyncGroupPagePreviewForKey(key, force)
     end
     if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind((active and not dualMenuPreviews) and kind or nil) end
     if not hasRuntime then
-        SetGFPagePreviewFlag(active, kind)
+        SetGFPagePreviewFlag(active)
         return
     end
     if not active then
@@ -488,7 +485,7 @@ local function SyncGroupPagePreviewForKey(key, force)
         HideGFRuntimePreviews(gf, true)
         return
     end
-    SetGFPagePreviewFlag(true, kind)
+    SetGFPagePreviewFlag(true)
     RestoreGFHeaders(gf)
     if gf.SetPreviewAnchor then
         gf.SetPreviewAnchor("party", nil)

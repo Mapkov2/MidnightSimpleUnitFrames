@@ -102,7 +102,6 @@ local function CreatePaletteController(parent, searchBox)
         if self.frame then self.frame:Hide() end
         self.visibleResults = {}
         self.selectedIndex = 1
-        M.searchPaletteActive = nil
         local bridge = SearchBridge()
         if type(bridge.CancelSearchBackgroundIndex) == "function" then
             bridge.CancelSearchBackgroundIndex()
@@ -153,12 +152,7 @@ local function CreatePaletteController(parent, searchBox)
         palette:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", 0, -6)
         palette:SetWidth(PALETTE_W)
         palette:SetHeight(HEADER_H + ROW_H + FOOTER_H + PANEL_PAD * 2)
-        if type(M.ApplyMenuPopupFramePriority) == "function" then
-            M.ApplyMenuPopupFramePriority(palette)
-        else
-            palette:SetFrameStrata("DIALOG")
-            palette:SetFrameLevel(math.max(searchBox:GetFrameLevel() + 20, 40))
-        end
+        M.ApplyMenuPopupFramePriority(palette)
         palette:SetClampedToScreen(true)
         palette:EnableMouse(true)
         palette:Hide()
@@ -270,7 +264,6 @@ local function CreatePaletteController(parent, searchBox)
         end
 
         local palette = EnsurePalette(self)
-        M.searchPaletteActive = true
         local results = type(M.searchResults) == "table" and M.searchResults or {}
         if M.searchResultsQuery ~= query then results = {} end
         pending = pending == true or M.searchResultsPending == true
@@ -309,9 +302,6 @@ local function CreatePaletteController(parent, searchBox)
         return true
     end
 
-    M.RefreshNavSearchPalette = function(query)
-        return controller:Refresh(query or (searchBox.GetText and searchBox:GetText()) or "", false)
-    end
     M.HideNavSearchPalette = function() controller:Hide() end
     return controller
 end

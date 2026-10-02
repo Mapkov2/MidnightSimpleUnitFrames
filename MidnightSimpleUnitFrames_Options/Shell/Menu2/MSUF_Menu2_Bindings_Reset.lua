@@ -393,10 +393,17 @@ local PAGE_RESET_HANDLERS = {
     gameplay = ResetGameplayPage,
     modules = ResetModulesPage,
 }
-local function FinishPageResetApply(pageKey)
+-- The reset page on screen repaints in place from the restored defaults. A
+-- whole-profile reset replaces lists the Profiles page builds rows for, so it
+-- rebuilds; so does a page that rebuilds itself (M.RepaintPageAfterDataChange).
+-- A reset of a page that is not on screen opens it freshly built.
+local PROFILE_RESET_REPAINT = { rebuild = true }
+local function FinishPageResetApply(pageKey, info)
     M.ApplyLocaleSelection(M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     if M.ApplyMenuFrameScale and M.frame then M.ApplyMenuFrameScale(M.frame) end
-    if pageKey and M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
+    local repaint = info and info.kind == "profile" and PROFILE_RESET_REPAINT or nil
+    if pageKey and M.RepaintPageAfterDataChange(pageKey, "page-reset", repaint) then return end
+    if pageKey and M.frame and M.frame.IsShown and M.frame:IsShown() then
         M.InvalidatePage(pageKey)
         M.activeKey = nil
         M.SelectPage(pageKey)
@@ -495,15 +502,15 @@ local function ApplyAfterPageReset(pageKey, info)
                 classpowerApplied = info.unit == "player",
             })
         end
-        FinishPageResetApply(pageKey)
+        FinishPageResetApply(pageKey, info)
         return
     end
     if info and ApplyScopedFeatureRuntime(info.kind, reason) then
-        FinishPageResetApply(pageKey)
+        FinishPageResetApply(pageKey, info)
         return
     end
     if ApplyDomainPageResetRuntime(info, reason) then
-        FinishPageResetApply(pageKey)
+        FinishPageResetApply(pageKey, info)
         return
     end
     if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true, frames = true }) end
@@ -566,15 +573,14 @@ local function ApplyAfterPageReset(pageKey, info)
     end
     if info and info.kind == "modules" then _G.MSUF_ApplyModules() end
     FlushApplyServiceNow()
-    FinishPageResetApply(pageKey)
+    FinishPageResetApply(pageKey, info)
 end
 local function ResetProfilePage()
     local name = _G.MSUF_ActiveProfile or "Default"
-    if type(_G.MSUF_ResetProfile) ~= "function" then return false end
     _G.MSUF_ResetProfile(name)
     M.ClearHistory()
     ApplyAfterPageReset("profiles", PAGE_RESET_INFO.profiles)
-    if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then _G.MSUF_ShowReloadRecommendedPopup("Profile reset") end
+    _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
     return true
 end
 -- A deliberate "Reset to defaults" must leave no stale runtime cache behind, or

@@ -347,7 +347,7 @@ PREVIEW_BACKGROUND_CUSTOM_OWNER._msuf2OnColorChanged = function(r, g, b)
     RefreshPreviewBackgrounds()
 end
 local function PersistPreviewBackgroundCustomColor()
-    local state = type(M.EnsurePersistentMenuState) == "function" and M.EnsurePersistentMenuState() or nil
+    local state = M.EnsurePersistentMenuState() or nil
     if type(state) == "table" then
         state.previewBackgroundCustomR = M.previewBackgroundCustomR
         state.previewBackgroundCustomG = M.previewBackgroundCustomG
@@ -867,10 +867,8 @@ function CP.ResolveTexture(key, fallback)
         if path and path ~= "" then return path end
     end
     if fallback and fallback ~= "" then return fallback end
-    if type(_G.MSUF_GetBarTexture) == "function" then
-        local path = _G.MSUF_GetBarTexture()
-        if path and path ~= "" then return path end
-    end
+    local path = _G.MSUF_GetBarTexture()
+    if path and path ~= "" then return path end
     return CP.WHITE8
 end
 function H.StylePreviewPillButton(btn, T, opts)
@@ -1241,7 +1239,7 @@ end
 -- (not bare clicks) and retires itself after three; the tally is persisted.
 local PREVIEW_MOVE_HINT_TARGET = 3
 function H.PreviewMoveHintState()
-    if M and type(M.GetPersistentMenuStateTable) == "function" then
+    if M then
         return M.GetPersistentMenuStateTable("previewMoveHintState")
     end
     H._previewMoveHintFallback = H._previewMoveHintFallback or {}
@@ -1263,7 +1261,7 @@ function H.NotePreviewCanvasMoved(button)
     local done = tonumber(state.count) or 0
     if done >= PREVIEW_MOVE_HINT_TARGET then return 0 end
     state.count = done + 1
-    if M and type(M.SavePersistentMenuState) == "function" then M.SavePersistentMenuState() end
+    if M then M.SavePersistentMenuState() end
     return H.PreviewMoveHintRemaining()
 end
 

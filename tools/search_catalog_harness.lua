@@ -18,7 +18,8 @@ MSUF_EllesmereEditMode_SetEnabled MSUF_Grid2EditMode_SetEnabled MSUF_DetailsEdit
 MSUF_DominosEditMode_SetEnabled MSUF_DandersEditMode_SetEnabled MSUF_BlizzardEditMode_SetEnabled
 MSUF_BlizzardEditMode_ApplyProfileSnapshot MSUF_ClassPower_Apply MSUF_ApplyPowerBarEmbedLayout_All
 MSUF_Castbars_OnSettingsChanged MSUF_ApplyAllCastbarsAndSync MSUF_UpdateAllFonts_Immediate
-MSUF_RefreshStatusIndicators MSUF_UpdateAllBarTextures MSUF_RefreshAllFrameColors]])
+MSUF_RefreshStatusIndicators MSUF_UpdateAllBarTextures MSUF_RefreshAllFrameColors
+MSUF_InitProfiles]])
 local function Exists(path)
     local file = io.open(path, "rb")
     if file then file:close(); return true end

@@ -602,34 +602,26 @@ local function NotePickMiss(name)
     end
 end
 
-local function PickValues(source, names, fallbacks, defaultEmpty)
+function M.Pick(source, names)
     local values, count = {}, 0
     source = source or {}
     for name in tostring(names or ""):gmatch("%S+") do
         count = count + 1
         local value = source[name]
-        if fallbacks then value = value or fallbacks[name]
-        elseif defaultEmpty then value = value or {}
-        elseif value == nil then NotePickMiss(name) end
+        if value == nil then NotePickMiss(name) end
         values[count] = value
     end
     return unpack(values, 1, count)
 end
-local function PickTableValues(target, source, names, fallbacks, defaultEmpty)
+function M.PickFallbackTable(source, fallbacks, names, target)
     target = type(target) == "table" and target or {}
     source = source or {}
+    fallbacks = fallbacks or {}
     for name in tostring(names or ""):gmatch("%S+") do
-        local value = source[name]
-        if fallbacks then value = value or fallbacks[name]
-        elseif defaultEmpty then value = value or {} end
-        target[name] = value
+        target[name] = source[name] or fallbacks[name]
     end
     return target
 end
-function M.Pick(source, names) return PickValues(source, names) end
-function M.PickDefaults(source, names) return PickValues(source, names, nil, true) end
-function M.PickFallbacks(source, fallbacks, names) return PickValues(source, names, fallbacks or {}) end
-function M.PickFallbackTable(source, fallbacks, names, target) return PickTableValues(target, source, names, fallbacks or {}) end
 function M.Assign(target, values)
     if type(target) ~= "table" or type(values) ~= "table" then return target end
     for key, value in pairs(values) do target[key] = value end
@@ -826,7 +818,6 @@ function M.RequestOrRefresh(ctx, reason)
     return M.RequestRefresh(ctx, reason)
 end
 function M.NormalizeHpMode(mode)
-    if type(_G.MSUF_NormalizeHpTextMode) == "function" then return _G.MSUF_NormalizeHpTextMode(mode) end
     if mode == nil then return "CURPERCENT" end
     if mode == "FULL_ONLY" then return "CURRENT" end
     if mode == "PERCENT_ONLY" then return "PERCENT" end
@@ -835,7 +826,6 @@ function M.NormalizeHpMode(mode)
     return mode
 end
 function M.NormalizePowerMode(mode)
-    if type(_G.MSUF_NormalizePowerTextMode) == "function" then return _G.MSUF_NormalizePowerTextMode(mode) end
     if mode == nil then return "CURPERCENT" end
     if mode == "FULL_SLASH_MAX" then return "CURMAX" end
     if mode == "FULL_ONLY" then return "CURRENT" end
@@ -868,17 +858,7 @@ function M.GetGameplayPlayerSpecID()
     if MSUF and type(MSUF.MSUF_GetPlayerSpecID) == "function" then
         return MSUF.MSUF_GetPlayerSpecID()
     end
-    if type(_G.MSUF_GetPlayerSpecID) == "function" then
-        return _G.MSUF_GetPlayerSpecID()
-    end
-    if GetSpecialization and GetSpecializationInfo then
-        local spec = GetSpecialization()
-        if spec then
-            local id = GetSpecializationInfo(spec)
-            return id
-        end
-    end
-    return nil
+    return _G.MSUF_GetPlayerSpecID()
 end
 function M.ResolveGameplaySpellInput(value)
     local text = tostring(value or ""):match("^%s*(.-)%s*$")
@@ -1181,15 +1161,12 @@ function M.IsMSUFEditModeActive(includeBlizzard)
     local em2 = rawget(_G, "MSUF_EM2")
     local state = em2 and em2.State
     if state and type(state.IsActive) == "function" then return state.IsActive() and true or false end
-    local fn = rawget(_G, "MSUF_IsMSUFEditModeActive")
-        or rawget(_G, "MSUF_IsInEditMode")
-        or rawget(_G, "MSUF_IsEditModeActive")
+    local fn = rawget(_G, "MSUF_IsInEditMode")
         or (includeBlizzard and rawget(_G, "IsEditModeActive") or nil)
     if type(fn) == "function" then
         return fn() and true or false
     end
     return rawget(_G, "MSUF_UnitEditModeActive") == true
-        or rawget(_G, "MSUF_EDITMODE_ACTIVE") == true
 end
 function M.IsEditModeCombatLocked(includeBlizzard)
     local fn = includeBlizzard and rawget(_G, "IsEditModeCombatLocked") or nil
@@ -1210,7 +1187,7 @@ local function RefreshEditModeSurfaces()
 end
 function M.EditModeLifecycleStatus(includeBlizzard)
     local state = EditModeState()
-    local setFn = rawget(_G, "MSUF_SetMSUFEditModeDirect") or rawget(_G, "MSUF_SetEditMode")
+    local setFn = rawget(_G, "MSUF_SetMSUFEditModeDirect")
     local unitKey = rawget(_G, "MSUF_CurrentEditUnitKey")
     if state and type(state.GetUnitKey) == "function" then unitKey = state.GetUnitKey() or unitKey end
     return {
@@ -1236,7 +1213,7 @@ function M.SetMSUFEditModeActive(active, unitKey, opts)
         end
         return false, "combat_locked", before
     end
-    local fn = rawget(_G, "MSUF_SetMSUFEditModeDirect") or rawget(_G, "MSUF_SetEditMode")
+    local fn = rawget(_G, "MSUF_SetMSUFEditModeDirect")
     if type(fn) == "function" then
         local result = fn(active, unitKey)
         if result == false then return false, "helper_failed", before end
@@ -1256,19 +1233,6 @@ function M.SetMSUFEditModeActive(active, unitKey, opts)
     RefreshEditModeSurfaces()
     local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
     if after.active == active then return true, active and "enabled" or "disabled", after end
-    return false, "helper_failed", after
-end
-function M.CancelMSUFEditMode(opts)
-    opts = opts or {}
-    local before = M.EditModeLifecycleStatus(opts.includeBlizzard)
-    if not before.active then return true, "already_disabled", before end
-    local state = EditModeState()
-    if not (state and type(state.CancelAll) == "function") then return false, "missing_cancel_helper", before end
-    local result = state.CancelAll()
-    if result == false then return false, "helper_failed", before end
-    RefreshEditModeSurfaces()
-    local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
-    if not after.active then return true, "canceled", after end
     return false, "helper_failed", after
 end
 function M.ToggleMSUFEditMode(unitKey, opts)
@@ -1425,7 +1389,7 @@ local function EnsureCopyLinkPopup()
     ok:RegisterForClicks("LeftButtonUp")
     ok:SetScript("OnClick", function() frame:Hide() end)
     frame._msufOkButton = ok
-    if type(_G.MSUF_SkinButton) == "function" then _G.MSUF_SkinButton(ok) end
+    _G.MSUF_SkinButton(ok)
     frame:SetScript("OnShow", function(self)
         if self._msufTitleFS then self._msufTitleFS:SetText(Tr(self._msufTitle or "Link")) end
         if self._msufEditBox then
@@ -1480,7 +1444,7 @@ do
             button1 = Tr("Copy Discord Link"),
             button2 = _G.CLOSE or Tr("Close"),
             OnAccept = function()
-                if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
+                _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz")
             end,
         })
     end

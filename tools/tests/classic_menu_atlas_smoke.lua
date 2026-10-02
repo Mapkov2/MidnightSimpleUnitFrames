@@ -18,6 +18,9 @@ if arg[3] == "midnight" then general.menuAppearancePreset = "midnight" end
 if arg[3] == "midnightDark" then general.menuAppearancePreset = "midnightDark" end
 if arg[3] == "classicGlass" then general.menuAppearancePreset = "classicGlass" end
 MSUF_DB = { general = general }
+-- The core always loads before the LoadOnDemand Options; Theme_Forever reads
+-- the normalized profile through its EnsureDB at that early point.
+MSUF_EnsureDB = function() return MSUF_DB end
 local ns = { Translate = function(s) return s end }
 ns.ExportPublic = function(name, value) _G[name] = value end
 local function load(path)

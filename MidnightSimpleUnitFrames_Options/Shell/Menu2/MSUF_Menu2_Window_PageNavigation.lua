@@ -26,7 +26,7 @@ end
 -- it names the page exactly as the rail and search results do. Each part is
 -- translated on its own; the separator stays.
 local function BreadcrumbTitle(key)
-    local crumb = type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(key) or nil
+    local crumb = M.GetMenuBreadcrumb(key) or nil
     if type(crumb) ~= "string" or crumb == "" then return nil end
     local parts = {}
     for part in (crumb .. " > "):gmatch("(.-) > ") do parts[#parts + 1] = M.Tr(part) end
@@ -113,9 +113,8 @@ end
 local function CurrentMenuDataRevision()
     return tonumber(M._msuf2MenuDataRevision) or 0
 end
-function M.MarkMenuDataDirty(reason)
+function M.MarkMenuDataDirty()
     M._msuf2MenuDataRevision = CurrentMenuDataRevision() + 1
-    M._msuf2MenuDataDirtyReason = reason
     return M._msuf2MenuDataRevision
 end
 local function RunRefreshers(entry, opts)
@@ -258,12 +257,24 @@ local function RestorePageScroll(key, offset, serial)
     scroll:SetVerticalScroll(AccessibleNumber(offset, 0))
     M.RefreshPinnedPreviews(scroll)
 end
+-- True when the active page declares views (variantKey) and the view state
+-- now names another view than the one on screen: the page switches views
+-- instead of rebuilding.
+local function ActiveViewChanged(key)
+    local spec = M.pages and M.pages[key]
+    if not (spec and spec.variantKey and key == M.activeKey) then return false end
+    local entry = M.cache and M.cache[key]
+    return entry ~= nil and entry.layoutSlot ~= M.CurrentPageLayoutSlot(key)
+end
 --- Rebuilds a page in place and keeps the reader where they were. Disclosures
 --- that only grow or shrink a card need the rebuild for the new heights, but
 --- SelectPage's viewport reset then throws the page back to the top.
 --- Cards below the toggle settle their height after selection, so the immediate
 --- restore covers the common case and the two retries cover the settled layout;
 --- the serial drops stale retries once a newer rebuild has started.
+--- A page that declares views (spec.variantKey) and only changed its view
+--- shows that view's cached entry, or builds it once, and keeps the other
+--- views cached; any other call rebuilds the page from scratch.
 --- Returns false only when nothing was rebuilt, so callers keep their fallback.
 function M.RebuildPageKeepingScroll(key)
     key = key or M.activeKey
@@ -272,7 +283,7 @@ function M.RebuildPageKeepingScroll(key)
     local offset = AccessibleNumber(scroll and scroll.GetVerticalScroll and scroll:GetVerticalScroll() or 0, 0)
     pageScrollRestoreSerial = pageScrollRestoreSerial + 1
     local serial = pageScrollRestoreSerial
-    M.InvalidatePage(key)
+    if not ActiveViewChanged(key) then M.InvalidatePage(key) end
     if M.SelectPage(key) ~= false then
         RestorePageScroll(key, offset, serial)
         if C_Timer and C_Timer.After then

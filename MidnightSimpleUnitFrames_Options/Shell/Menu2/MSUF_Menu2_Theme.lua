@@ -1556,7 +1556,7 @@ function T.ApplySurface(frame, material, glass)
 end
 local function CollapseHintLearned()
     local state = M.collapseHintClickState
-    if type(state) ~= "table" and type(M.GetPersistentMenuStateTable) == "function" then state = M.GetPersistentMenuStateTable("collapseHintClickState") end
+    if type(state) ~= "table" then state = M.GetPersistentMenuStateTable("collapseHintClickState") end
     return (tonumber(state and state.total) or 0) >= (tonumber(T.collapseHintClickHideThreshold) or 8)
 end
 function T.ApplyCollapseVisual(chevron, hint, open)
@@ -1879,9 +1879,6 @@ end
 function T.StyleCheckmark(checkButton)
     if not checkButton then return end
     if MenuSkin then MenuSkin.TrackPaint(checkButton, T.StyleCheckmark) end
-    local UI = MSUF and MSUF.UI
-    local styleText = (_G and _G.MSUF_StyleToggleText) or (MSUF and MSUF.MSUF_StyleToggleText) or (UI and UI.StyleToggleText)
-    if type(styleText) == "function" then styleText(checkButton) end
     local function HideQuietCheckboxTexture(texture)
         if not texture then return end
         if texture.SetAlpha then texture:SetAlpha(0) end
@@ -1906,8 +1903,6 @@ function T.StyleCheckmark(checkButton)
         end
     end
     local function ApplyCheckTexture()
-        local oldStyle = (_G and _G.MSUF_StyleCheckmark) or (MSUF and MSUF.MSUF_StyleCheckmark) or (UI and UI.StyleCheckmark)
-        if type(oldStyle) == "function" then oldStyle(checkButton) end
         HideQuietCheckboxNative()
         local tick = (checkButton._msuf2QuietCheckBox and T.media.checkTickMedium) or T.media.checkTick
         if checkButton.SetCheckedTexture then checkButton:SetCheckedTexture(tick) end
@@ -3148,7 +3143,7 @@ end
 -- accent family. BuildWindow keeps a guarded second call as a fallback.
 do
     local function ApplySavedAccent()
-        if type(T.ApplyMenuAccent) == "function" then T.ApplyMenuAccent() end
+        T.ApplyMenuAccent()
         if MenuSkin then MenuSkin.BindColors(T.colors) end
     end
     if type(_G.IsLoggedIn) == "function" and _G.IsLoggedIn() then

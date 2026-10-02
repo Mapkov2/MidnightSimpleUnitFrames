@@ -916,9 +916,9 @@ local function BuildWindowShell()
 end
 
 local function InstallMenuScaleControl(f)
-    if not (f and T and type(T.Panel) == "function" and type(T.Font) == "function") then return end
+    if not (f and T) then return end
     local control = T.Panel(f, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
-    if type(T.ApplySurface) == "function" then T.ApplySurface(control, "status") end
+    T.ApplySurface(control, "status")
     control:SetSize(190, 22)
     control:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -28, 4)
     control:SetFrameLevel(f:GetFrameLevel() + 20)
@@ -941,7 +941,7 @@ local function InstallMenuScaleControl(f)
     if slider.EnableMouseWheel then slider:EnableMouseWheel(true) end
     if slider.SetPropagateMouseWheel then slider:SetPropagateMouseWheel(false) end
     slider._msuf2CursorDrag = true
-    if type(T.StyleSlider) == "function" then T.StyleSlider(slider) end
+    T.StyleSlider(slider)
 
     local function Percent(value)
         local pct = tonumber(value) or 100
@@ -1043,27 +1043,25 @@ local function InstallMenuScaleControl(f)
         M.AddTooltip(control, "MSUF Menu Scale", tooltip, { hook = true, owner = "ANCHOR_TOP" })
         M.AddTooltip(slider, "MSUF Menu Scale", tooltip, { hook = true, owner = "ANCHOR_TOP" })
     end
-    if type(M.RegisterMenuChromeControl) == "function" then
-        M.RegisterMenuChromeControl(slider, "window.menu-scale", "MSUF Menu Scale", "setting", {
-            kind = "slider",
-            settingKey = "general.slashMenuScale",
-            historyMode = "none",
-            help = "Reads and applies the MSUF configuration-menu scale percentage directly.",
-            command = {
-                kind = "slider", min = MENU_SCALE_MIN_PERCENT, max = MENU_SCALE_MAX_PERCENT,
-                step = MENU_SCALE_STEP_PERCENT, percentIsValue = true, historyMode = "none",
-                get = function()
-                    local g = M.GetGeneralDB and M.GetGeneralDB()
-                    return Percent(MenuScalePercent(type(g) == "table" and g.slashMenuScale or MENU_SCALE_REFERENCE))
-                end,
-                set = function(value)
-                    slider:SetValue(Percent(value))
-                    return Commit(slider:GetValue())
-                end,
-                refresh = Refresh,
-            },
-        })
-    end
+    M.RegisterMenuChromeControl(slider, "window.menu-scale", "MSUF Menu Scale", "setting", {
+        kind = "slider",
+        settingKey = "general.slashMenuScale",
+        historyMode = "none",
+        help = "Reads and applies the MSUF configuration-menu scale percentage directly.",
+        command = {
+            kind = "slider", min = MENU_SCALE_MIN_PERCENT, max = MENU_SCALE_MAX_PERCENT,
+            step = MENU_SCALE_STEP_PERCENT, percentIsValue = true, historyMode = "none",
+            get = function()
+                local g = M.GetGeneralDB and M.GetGeneralDB()
+                return Percent(MenuScalePercent(type(g) == "table" and g.slashMenuScale or MENU_SCALE_REFERENCE))
+            end,
+            set = function(value)
+                slider:SetValue(Percent(value))
+                return Commit(slider:GetValue())
+            end,
+            refresh = Refresh,
+        },
+    })
     control.slider, control.label, control.Refresh = slider, label, Refresh
     f.menuScaleControl, f.menuScaleSlider = control, slider
     f.RefreshMenuScaleControl = Refresh
@@ -1116,7 +1114,7 @@ local function InstallSupportLinkStrip(f)
         btn:SetScript("OnEnter", function() icon:SetAlpha(1) end)
         btn:SetScript("OnLeave", function() icon:SetAlpha(idleAlpha) end)
         btn:SetScript("OnClick", function()
-            if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink(data.title, data.url) end
+            _G.MSUF_ShowCopyLink(data.title, data.url)
         end)
         if type(M.AddTooltip) == "function" then
             M.AddTooltip(btn, data.title, data.tooltip, { hook = true, owner = "ANCHOR_TOP" })
@@ -1498,7 +1496,7 @@ local function BuildWindowChrome(state)
     M.pageHistoryBackButton = histBack
     M.pageHistoryForwardButton = histForward
     local function HistoryTargetTitle(field)
-        local history = type(M.GetPageHistoryState) == "function" and M.GetPageHistoryState() or nil
+        local history = M.GetPageHistoryState() or nil
         local spec = history and history[field] and M.pages and M.pages[history[field]]
         return spec and spec.title and M.Tr(spec.title) or ""
     end
@@ -1616,7 +1614,7 @@ local function BuildWindowToolbar(state)
     if M.AddTooltip then
         M.AddTooltip(toolbarReset, "Reset page", function()
             local key = M.activeKey
-            local route = key and type(M.GetMenuBreadcrumb) == "function" and M.GetMenuBreadcrumb(key) or ""
+            local route = key and M.GetMenuBreadcrumb(key) or ""
             if route == "" then return nil end
             return M.Format("Resets all settings on %s to their defaults. Asks for confirmation first.", route)
         end, { hook = true })
@@ -1782,7 +1780,7 @@ local function InstallWindowLifecycle(state)
         -- Reopening the window is a page-show for the docked previews too: the
         -- window frame is visible here, so their ownership gates pass again.
         M.RunStickyHeaderActivation()
-        if activeEntry and type(M.ShouldExpandFixedPreview) == "function" and M.ShouldExpandFixedPreview() then
+        if activeEntry and M.ShouldExpandFixedPreview() then
             M.RestoreFixedPreview(M.activeKey, activeEntry, {
                 reason = "WINDOW_SHOW_DEFAULT_EXPANDED",
             })
@@ -1811,12 +1809,12 @@ local function InstallWindowLifecycle(state)
         -- They must be torn down synchronously when their menu owner disappears;
         -- an animated close can otherwise outlive the hidden window and veil the
         -- cached page when it is shown again.
-        if W and type(W.CloseDropdown) == "function" then W.CloseDropdown({ immediate = true }) end
+        if W then W.CloseDropdown({ immediate = true }) end
         M.HideNavSearchPalette()
         M.HideMenuPreviewPopups()
         M.HideMenuCopyLinkPopup()
         if W and type(W.CloseMenuOwnedColorPicker) == "function" then W.CloseMenuOwnedColorPicker() end
-        if type(M.ResetFocusVeil) == "function" then M.ResetFocusVeil(nil, { force = true }) end
+        M.ResetFocusVeil(nil, { force = true })
         M.EndHistorySession("menu")
         ResetStatusIndicatorTestModeOnMenuExit()
         SavePersistentMenuState()

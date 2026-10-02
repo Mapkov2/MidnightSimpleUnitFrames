@@ -21,7 +21,7 @@ local pairs, ipairs, type, tostring = pairs, ipairs, type, tostring
 local sort = table.sort
 
 local function Tr(text)
-    return type(M.Tr) == "function" and M.Tr(tostring(text or "")) or tostring(text or "")
+    return M.Tr(tostring(text or "")) or tostring(text or "")
 end
 
 local STAGES = {
@@ -387,13 +387,6 @@ local function StageIncludesSection(stage, sectionId)
     local excluded = stage.excludeSections
     return type(excluded) ~= "table" or excluded[sectionId] ~= true
 end
-function M.IsGuidedTourSectionIncluded(stageId, sectionId)
-    return StageIncludesSection(STAGE_BY_ID[tostring(stageId or "")], tostring(sectionId or ""))
-end
-function M.GuidedTourIncludesEphemeralControls(stageId)
-    local stage = STAGE_BY_ID[tostring(stageId or "")]
-    return type(stage) == "table" and stage.includeEphemeralControls == true
-end
 
 local Runtime = M._guidedTourRuntime or {}
 M._guidedTourRuntime = Runtime
@@ -473,7 +466,7 @@ local function AutomaticCooldownProvider()
     return getter()
 end
 local function CooldownAnchorEnabled()
-    local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
+    local general = M.GetGeneralDB() or nil
     if type(general) ~= "table" then
         local db = _G.MSUF_DB
         general = type(db) == "table" and db.general or nil
@@ -520,10 +513,6 @@ end
 local function GroupEditModeMovementComplete()
     return Preference("groupEditModeMoved") == true
 end
-M.GetGuidedCooldownAnchorDecision = CooldownAnchorDecision
-M.IsGuidedEditModePlacementUnlocked = CooldownAnchorDecisionComplete
-M.IsGuidedEditModePlacementComplete = EditModePlacementComplete
-M.IsGuidedGroupEditModePlacementComplete = GroupEditModePlacementComplete
 
 local PREFERENCE_LABELS = {
     quick = "Quick Setup",
@@ -698,14 +687,14 @@ local function StageCue(stage, position, touched)
 end
 
 local function BlockedByCombat()
-    return type(M.BlockCombatAction) == "function" and M.BlockCombatAction() == true
+    return M.BlockCombatAction() == true
 end
 
 local function SetGuidedCooldownAnchorDecision(value)
     if not VALID_COOLDOWN_ANCHOR_DECISION[value] or BlockedByCombat() then return false end
     local previousDecision = CooldownAnchorDecision()
     local enabled = value == "cooldown"
-    local general = type(M.GetGeneralDB) == "function" and M.GetGeneralDB() or nil
+    local general = M.GetGeneralDB() or nil
     if type(general) ~= "table" then
         local db = _G.MSUF_DB
         if type(db) ~= "table" then return false end
@@ -716,11 +705,7 @@ local function SetGuidedCooldownAnchorDecision(value)
     if type(setter) == "function" then
         if setter(enabled, true) == false then return false end
     elseif general.anchorToCooldown ~= enabled then
-        if type(M.SetGeneralValue) == "function" then
-            if M.SetGeneralValue("anchorToCooldown", enabled, "MSUF2_GUIDED_COOLDOWN_ANCHOR") == false then return false end
-        else
-            general.anchorToCooldown = enabled
-        end
+        if M.SetGeneralValue("anchorToCooldown", enabled, "MSUF2_GUIDED_COOLDOWN_ANCHOR") == false then return false end
     end
     local stored = Invoke(Tour(), "SetPreference", COOLDOWN_ANCHOR_PREFERENCE, value)
     if not stored then return false end
@@ -750,7 +735,6 @@ local function ShouldShowEditModeOpenCue()
     local status = type(M.EditModeLifecycleStatus) == "function" and M.EditModeLifecycleStatus() or {}
     return status.active ~= true and status.combatLocked ~= true
 end
-M.ShouldShowGuidedEditModeOpenCue = ShouldShowEditModeOpenCue
 
 local function RefreshEditModeOpenCue(show)
     local T = M.Theme
@@ -800,7 +784,7 @@ function M.NotifyGuidedEditModeMoved(moverKey)
     local ok, marked = Invoke(Tour(), "MarkEditModePlacementComplete", moverKey)
     if not ok or marked ~= true then return false end
     RefreshEditModePlacementCue()
-    if M.activeKey == "guided_setup" and type(M.RequestRefresh) == "function" then
+    if M.activeKey == "guided_setup" then
         M.RequestRefresh(nil, "GUIDED_EDIT_MODE_MOVED")
     end
     if type(M.RefreshGuidedTourChrome) == "function" then
@@ -813,7 +797,7 @@ function M.NotifyGuidedEditModePopupOpened(moverKey)
     local ok, marked = Invoke(Tour(), "MarkEditModePopupOpened", moverKey)
     if not ok or marked ~= true then return false end
     RefreshEditModePlacementCue()
-    if M.activeKey == "guided_setup" and type(M.RequestRefresh) == "function" then
+    if M.activeKey == "guided_setup" then
         M.RequestRefresh(nil, "GUIDED_EDIT_MODE_POPUP_OPENED")
     end
     if type(M.RefreshGuidedTourChrome) == "function" then
@@ -1237,7 +1221,6 @@ local function GuidedWidgetIsActionable(widget)
     end
     return true
 end
-M.IsGuidedTourWidgetActionable = GuidedWidgetIsActionable
 
 local function GuidedDisplayLabel(value)
     value = tostring(value or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
@@ -1687,7 +1670,7 @@ local function FocusCurrentSection(stage)
     if stage.special then return end
     local cursor = ReadCursor(stage)
     if cursor.overview ~= false then
-        if type(M.CloseAutoFocusedSections) == "function" then M.CloseAutoFocusedSections(stage.pageKey) end
+        M.CloseAutoFocusedSections(stage.pageKey)
         ClearSectionEmphasis(stage.pageKey)
         return
     end
@@ -1715,7 +1698,7 @@ local function FocusCurrentSection(stage)
         })
     end
     local W = M.Widgets
-    if type(M.CloseAutoFocusedSections) == "function" then M.CloseAutoFocusedSections(stage.pageKey) end
+    M.CloseAutoFocusedSections(stage.pageKey)
     if W and type(W.FocusCollapsibleSection) == "function" then
         for i = 1, #sections do
             local ancestor = sections[i]
@@ -1739,7 +1722,7 @@ local function FocusCurrentSection(stage)
 end
 
 local function InvalidateGuidedPage()
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("guided_setup") end
+    M.InvalidatePage("guided_setup")
 end
 
 local function SelectExpectedPage(stage)
@@ -1757,13 +1740,9 @@ local function SelectExpectedPage(stage)
             if type(M.RefreshGuidedTourChrome) == "function" then M.RefreshGuidedTourChrome("SAME_PAGE_STAGE") end
             return true
         end
-        if type(M.SelectPage) == "function" then return M.SelectPage(pageKey) end
-    elseif type(M.Open) == "function" then
-        return M.Open(pageKey)
-    elseif type(M.SelectPage) == "function" then
         return M.SelectPage(pageKey)
     end
-    return false
+    return M.Open(pageKey)
 end
 
 local function SetStage(stage, resetCursor)
@@ -1785,8 +1764,8 @@ local function CompleteTour()
     Runtime.touchedSignature = nil
     Runtime.lastVisualSignature = nil
     M.RefreshGuidedTourChrome("COMPLETE")
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
-    if type(M.SelectPage) == "function" then M.SelectPage("home") end
+    M.InvalidatePage("home")
+    M.SelectPage("home")
     return true
 end
 
@@ -2056,12 +2035,7 @@ local function PauseTour()
     Runtime.warning = nil
     Runtime.manualAway = nil
     ClearSectionEmphasis()
-    local frame = M.frame
-    if type(M.HideSlashMenuAndMinibar) == "function" then
-        M.HideSlashMenuAndMinibar(frame)
-    elseif frame and type(frame.Hide) == "function" then
-        frame:Hide()
-    end
+    M.HideSlashMenuAndMinibar(M.frame)
     return true
 end
 
@@ -2379,7 +2353,7 @@ function M.RefreshGuidedTourChrome(reason)
         Runtime.popupReconcileRefreshQueued = true
         C_Timer.After(0, function()
             Runtime.popupReconcileRefreshQueued = nil
-            if type(M.RequestRefresh) == "function" then M.RequestRefresh(nil, "GUIDED_POPUP_RECONCILED") end
+            M.RequestRefresh(nil, "GUIDED_POPUP_RECONCILED")
         end)
     end
     local profileMismatch, tourProfile, activeProfile = ProfileMismatch()
@@ -2551,14 +2525,12 @@ local function ChromeButton(parent, T, label, handler)
 end
 
 local function RegisterChromeControl(button, suffix, label, help)
-    if type(M.RegisterMenuChromeControl) == "function" then
-        M.RegisterMenuChromeControl(button, "guided-tour." .. suffix, Tr(label), "action", {
-            actionKey = "guided_setup_step",
-            actionFixedArgs = { step = suffix },
-            historyMode = "none",
-            help = Tr(help),
-        })
-    end
+    M.RegisterMenuChromeControl(button, "guided-tour." .. suffix, Tr(label), "action", {
+        actionKey = "guided_setup_step",
+        actionFixedArgs = { step = suffix },
+        historyMode = "none",
+        help = Tr(help),
+    })
 end
 
 function M.RunGuidedTourStep(step)
@@ -2758,10 +2730,8 @@ function M.StartGuidedTour(opts)
     opts = type(opts) == "table" and opts or {}
     local stage = STAGE_BY_ID[tostring(opts.stageId or "")] or STAGES[1]
     local restorePoint
-    if type(M.CaptureGuidedTourRestorePoint) == "function" then
-        local value = M.CaptureGuidedTourRestorePoint()
-        if type(value) == "table" then restorePoint = value end
-    end
+    local value = M.CaptureGuidedTourRestorePoint()
+    if type(value) == "table" then restorePoint = value end
     local ok = Invoke(Tour(), "Start", ActiveProfileName(), stage.id, restorePoint)
     if not ok then return false end
     local requestedMode = tostring(opts.mode or "")
@@ -2779,10 +2749,8 @@ function M.StartGuidedTour(opts)
     Runtime.lastVisualSignature = nil
     Invoke(Tour(), "SetStage", stage.id, stage.index)
     WriteCursor(stage, InitialCursor(stage))
-    if type(M.InvalidatePage) == "function" then
-        M.InvalidatePage("home")
-        M.InvalidatePage("guided_setup")
-    end
+    M.InvalidatePage("home")
+    M.InvalidatePage("guided_setup")
     return SelectExpectedPage(stage)
 end
 
@@ -2990,7 +2958,7 @@ local function PersonalQuestion(ctx, builder, T, W, key, label, values, opts)
             M.RefreshGuidedTourChrome("PERSONAL_CHOICE")
         end)
     end
-    if opts.registerSearch ~= false and type(M.RegisterSearchWidget) == "function" then
+    if opts.registerSearch ~= false then
         local identity = "guided_setup.preference." .. key
         M.RegisterSearchWidget(segment, {
             controlId = "menu2." .. identity,
@@ -3052,20 +3020,18 @@ local function BuildChapterPage(ctx, T, W, stage)
 end
 
 local function RegisterGuidedPageButton(button, suffix, label, help)
-    if type(M.RegisterSearchWidget) == "function" then
-        local identity = "guided_setup." .. suffix
-        M.RegisterSearchWidget(button, {
-            controlId = "menu2." .. identity,
-            identityKey = identity,
-            controlPath = identity:gsub("%.", "/"),
-            pageKey = "guided_setup",
-            label = Tr(label),
-            kind = "button",
-            classification = "action",
-            help = Tr(help),
-            historyMode = "none",
-        })
-    end
+    local identity = "guided_setup." .. suffix
+    M.RegisterSearchWidget(button, {
+        controlId = "menu2." .. identity,
+        identityKey = identity,
+        controlPath = identity:gsub("%.", "/"),
+        pageKey = "guided_setup",
+        label = Tr(label),
+        kind = "button",
+        classification = "action",
+        help = Tr(help),
+        historyMode = "none",
+    })
 end
 
 local function CreateEditModeClick(Refresh)
@@ -3174,7 +3140,7 @@ local function BuildEditModePage(ctx, T, W)
             end
         end)
     end
-    if decision and type(M.RegisterSearchWidget) == "function" then
+    if decision then
         M.RegisterSearchWidget(decision, {
             controlId = "menu2.guided_setup.cooldown_anchor_decision",
             identityKey = "guided_setup.cooldown_anchor_decision",
@@ -3273,7 +3239,7 @@ local function BuildFinalReviewPage(ctx, T, W)
     InfoCard(b, T, "You trained on real settings", format(Tr("%d guided settings were changed or deliberately kept. Nothing was copied into a separate wizard."), handled), "uf_player", 82)
 
     local restorePoint = select(2, Invoke(Tour(), "GetRestorePoint"))
-    if type(restorePoint) == "table" and type(M.RestoreGuidedTourRestorePoint) == "function" then
+    if type(restorePoint) == "table" then
         local restoreAlreadyUsed = TourState().restorePointUsedAt ~= nil
         local restoreProfileMismatch = ProfileMismatch()
         local restore = b:Section("", 92)
@@ -3320,8 +3286,8 @@ local function BuildFinalReviewPage(ctx, T, W)
 
     -- The optional MSUF Suite gets one line and a way in, offered only while the
     -- Suite reports an overview and this menu has its module page registered.
-    local suiteOverview = type(M.GetSuiteOverview) == "function" and type(M.FormatSuiteTitle) == "function"
-        and type(M.GetSuiteModulesPageKey) == "function" and M.GetSuiteOverview() or nil
+    local suiteOverview = type(M.FormatSuiteTitle) == "function"
+        and M.GetSuiteOverview() or nil
     local suitePage = suiteOverview and M.GetSuiteModulesPageKey(suiteOverview) or nil
     if suitePage then
         local suite = b:Section("", 92)
@@ -3339,7 +3305,7 @@ local function BuildFinalReviewPage(ctx, T, W)
         suiteButton._msuf2SkipHistoryCheckpoint = true
         if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(suiteButton) end
         suiteButton:SetScript("OnClick", function()
-            if BlockedByCombat() or type(M.SelectPage) ~= "function" then return end
+            if BlockedByCombat() then return end
             M.SelectPage(suitePage)
         end)
         RegisterGuidedPageButton(suiteButton, "open_suite_modules", "Open Suite Modules", "Shows the Suite page that switches each optional module on or off.")
@@ -3349,7 +3315,7 @@ end
 
 function M.BuildGuidedSetupPage(ctx)
     local T, W = M.Theme, M.Widgets
-    if not (ctx and ctx.wrapper and T and W and type(W.PageBuilder) == "function") then return 240 end
+    if not (ctx and ctx.wrapper and T and W) then return 240 end
     local stage = CurrentStage()
     if stage.id == "unit_intro" or stage.id == "group_intro" or stage.id == "class_intro" then
         return BuildChapterPage(ctx, T, W, stage)
@@ -3363,6 +3329,4 @@ end
 
 M.navPrimaryForKey = type(M.navPrimaryForKey) == "table" and M.navPrimaryForKey or {}
 M.navPrimaryForKey.guided_setup = "home"
-if type(M.RegisterPage) == "function" then
-    M.RegisterPage("guided_setup", { title = "Guided Setup", build = M.BuildGuidedSetupPage, version = 1 })
-end
+M.RegisterPage("guided_setup", { title = "Guided Setup", build = M.BuildGuidedSetupPage, version = 1 })

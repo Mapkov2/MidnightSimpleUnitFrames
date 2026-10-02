@@ -67,7 +67,7 @@ function M.EnsureDB()
     if db ~= nil and db == lastEnsuredDB and type(db.general) == "table" and not ProfileSystemNeedsInit() then
         return db
     end
-    if ProfileSystemNeedsInit() and type(_G.MSUF_InitProfiles) == "function" then
+    if ProfileSystemNeedsInit() then
         _G.MSUF_InitProfiles()
     end
     local ensure = _G.MSUF_EnsureDB
@@ -371,27 +371,25 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
         end,
     }
     widget._msuf2CommandAction = command
-    if type(M.RegisterRuntimeControl) == "function" then
-        M.RegisterRuntimeControl(widget, {
-            controlId = command.controlId,
-            pageKey = ctx and ctx.key,
-            kind = kind,
-            label = opts.label or widget._msuf2SearchText or widget._msuf2SearchTitle,
-            identityLabel = widget._msuf2SearchText or widget._msuf2SearchTitle or opts.label,
-            identityKey = opts.identityKey,
-            controlPath = opts.controlPath,
-            settingKey = command.settingKey,
-            actionKey = command.actionKey,
-            actionInputArg = opts.actionInputArg,
-            actionFixedArgs = opts.actionFixedArgs,
-            navigationKey = command.navigationKey,
-            searchSettingKeys = command.searchSettingKeys,
-            searchSettingKeyPatterns = command.searchSettingKeyPatterns,
-            classification = command.classification,
-            confirmRequired = opts.confirmRequired == true,
-            command = command,
-        }, "binding")
-    end
+    M.RegisterRuntimeControl(widget, {
+        controlId = command.controlId,
+        pageKey = ctx and ctx.key,
+        kind = kind,
+        label = opts.label or widget._msuf2SearchText or widget._msuf2SearchTitle,
+        identityLabel = widget._msuf2SearchText or widget._msuf2SearchTitle or opts.label,
+        identityKey = opts.identityKey,
+        controlPath = opts.controlPath,
+        settingKey = command.settingKey,
+        actionKey = command.actionKey,
+        actionInputArg = opts.actionInputArg,
+        actionFixedArgs = opts.actionFixedArgs,
+        navigationKey = command.navigationKey,
+        searchSettingKeys = command.searchSettingKeys,
+        searchSettingKeyPatterns = command.searchSettingKeyPatterns,
+        classification = command.classification,
+        confirmRequired = opts.confirmRequired == true,
+        command = command,
+    }, "binding")
     MarkCommandSearchDirty()
 end
 local function AddRefreshCall(ctx, fn, a, b) if type(fn) == "function" then return M.AddRefresher(ctx, function() return fn(a, b) end) end end

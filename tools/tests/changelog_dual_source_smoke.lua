@@ -45,6 +45,8 @@ function menu.SelectPage(key) menu.selectedPage = key; return true end
 function menu.InvalidatePage(key) menu.invalidatedPage = key end
 function menu.RebuildPageKeepingScroll(key) menu.rebuiltPage = key end
 function menu.RefreshSeeNewFeaturesBadge() menu.badgeRefreshes = (menu.badgeRefreshes or 0) + 1 end
+-- Bindings publishes the combat block before the changelog page loads.
+function menu.BlockCombatAction() return false end
 local function Build()
     buttons, labels = {}, {}
     menu.pages.changelog.build({ wrapper = Widget(), width = 760, SetContentHeight = function() end })

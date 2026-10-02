@@ -76,29 +76,21 @@ local function FirstLoadActionAvailability(firstLoad)
 end
 
 local function InvalidateHomeCache()
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
+    M.InvalidatePage("home")
 end
 
 local function InvalidateHome()
     InvalidateHomeCache()
-    if type(M.SelectPage) == "function" then M.SelectPage("home") end
+    M.SelectPage("home")
 end
 
 local function CloseMenu()
-    local frame = M.frame
-    if type(M.HideSlashMenuAndMinibar) == "function" then
-        M.HideSlashMenuAndMinibar(frame)
-        return true
-    end
-    if frame and type(frame.Hide) == "function" then
-        frame:Hide()
-        return true
-    end
-    return false
+    M.HideSlashMenuAndMinibar(M.frame)
+    return true
 end
 
 local function BlockedByCombat()
-    return type(M.BlockCombatAction) == "function" and M.BlockCombatAction() == true
+    return M.BlockCombatAction() == true
 end
 
 local function ActiveProfileName()
@@ -365,13 +357,7 @@ local function OpenProfileImport(firstLoad)
     else
         M.profileImportCreateNew = true
     end
-    local accordion
-    if type(M.GetPersistentMenuStateTable) == "function" then
-        accordion = M.GetPersistentMenuStateTable("accordionState")
-    else
-        M.accordionState = type(M.accordionState) == "table" and M.accordionState or {}
-        accordion = M.accordionState
-    end
+    local accordion = M.GetPersistentMenuStateTable("accordionState")
     accordion["profiles:profiles_io"] = true
 
     local route = {
@@ -384,7 +370,7 @@ local function OpenProfileImport(firstLoad)
         called, opened = bridge.OpenSearchTarget("profiles", "Profile string", "Profile string", nil, route)
     end
     if not called or opened == false then
-        if type(M.SelectPage) == "function" then M.SelectPage("profiles") end
+        M.SelectPage("profiles")
     end
     return true
 end
@@ -402,7 +388,7 @@ function M.ExecuteFirstLoadDashboardAction(action)
         end
         CallLifecycle(firstLoad, "Complete", "personalize_fallback")
         InvalidateHomeCache()
-        if type(M.SelectPage) == "function" then M.SelectPage("uf_player") end
+        M.SelectPage("uf_player")
         return true, Tr("Opened Player settings.")
     elseif action == "import_profile" then
         OpenProfileImport(firstLoad)
@@ -429,7 +415,7 @@ function M.ExecuteFirstLoadDashboardAction(action)
     elseif action == "not_now" then
         CallLifecycle(firstLoad, "DeferForSession", "not_now")
         InvalidateHomeCache()
-        if not CloseMenu() and type(M.SelectPage) == "function" then M.SelectPage("home") end
+        CloseMenu()
         return true, Tr("Closed the first-time setup. Start Guided Setup from the Dashboard anytime.")
     elseif action == "full_settings" then
         CallLifecycle(firstLoad, "Dismiss", "full_settings")
@@ -457,7 +443,6 @@ local function FirstLoadVirtualSetter(suffix)
 end
 
 local function RegisterFirstLoadVirtualControls()
-    if type(M.RegisterVirtualRuntimeControl) ~= "function" then return false end
     for i = 1, #FIRST_LOAD_VIRTUAL_ACTIONS do
         local spec = FIRST_LOAD_VIRTUAL_ACTIONS[i]
         local suffix = spec.suffix

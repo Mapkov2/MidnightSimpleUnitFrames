@@ -177,11 +177,7 @@ end
 
 local function RunChange(label, source, fn)
     if Blocked() or type(fn) ~= "function" then return false end
-    if type(M.RunWithHistory) == "function" then
-        M.RunWithHistory(label, source, fn)
-    else
-        fn()
-    end
+    M.RunWithHistory(label, source, fn)
     return true
 end
 
@@ -189,7 +185,7 @@ local function ApplyTextColors()
     local api = (MSUF and MSUF._colorsAPI) or {}
     if type(api.PushVisualUpdates) == "function" then
         api.PushVisualUpdates()
-    elseif type(M.RequestGeneralApply) == "function" then
+    else
         M.RequestGeneralApply("MSUF2_TEXT_QUICK_COLOR", { colors = true, preview = true, applyAll = false })
     end
 end
@@ -547,9 +543,7 @@ local function SetShown(control, shown)
 end
 
 local function SetEnabled(control, enabled)
-    if type(W.SetControlEnabled) == "function" then W.SetControlEnabled(control, enabled); return end
-    if not control then return end
-    if enabled and control.Enable then control:Enable() elseif not enabled and control.Disable then control:Disable() end
+    W.SetControlEnabled(control, enabled)
 end
 
 local function BindDropdown(control, label, source, getter, setter)
@@ -588,7 +582,7 @@ local function TextColorPickerOptions(options, targets)
 end
 
 local function OpenResolvedTextColors(anchor, options, targets, onClosed)
-    if not (anchor and type(W.OpenContextColors) == "function" and type(targets) == "table" and #targets > 0) then return false end
+    if not (anchor and type(targets) == "table" and #targets > 0) then return false end
     return W.OpenContextColors(anchor:GetParent(), TextColorPickerOptions(options, targets), targets, onClosed)
 end
 
@@ -756,7 +750,7 @@ function W.OpenTextQuickSettings(anchor, options)
     local scope = CurrentScope()
     if general and general._fontScopeKey ~= scope then
         general._fontScopeKey = scope
-        if type(M.InvalidatePage) == "function" then M.InvalidatePage("opt_fonts") end
+        M.InvalidatePage("opt_fonts")
     end
 
     -- Spell text, Aura text, status text, and every other text without a real

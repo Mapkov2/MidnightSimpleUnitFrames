@@ -19,7 +19,7 @@ MSUF.ApplyClassicMenuTheme = function(T)
     end
     -- Bindings (and GetGeneralDB) load after tokens. Read the normalized saved
     -- profile directly at this early point in the Options load order.
-    if type(_G.MSUF_EnsureDB) == "function" then _G.MSUF_EnsureDB() end
+    _G.MSUF_EnsureDB()
     local g = _G.MSUF_DB and _G.MSUF_DB.general
     T.menuAppearancePreset = T.GetMenuAppearancePreset(g)
     -- The Midnight preset keeps the stock tokens: this return skips the whole

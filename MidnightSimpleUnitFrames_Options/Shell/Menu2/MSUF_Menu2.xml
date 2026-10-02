@@ -8,6 +8,12 @@
     <Script file="MSUF_Menu2_Theme.lua"/>
     <Script file="MSUF_Menu2_ColorPicker.lua"/>
     <Script file="MSUF_Menu2_Widgets.lua"/>
+    <Script file="MSUF_Menu2_Widgets_PageBuilder.lua"/>
+    <Script file="MSUF_Menu2_Widgets_Buttons.lua"/>
+    <Script file="MSUF_Menu2_Widgets_ContextColors.lua"/>
+    <Script file="MSUF_Menu2_Widgets_Controls.lua"/>
+    <Script file="MSUF_Menu2_Widgets_Gates.lua"/>
+    <Script file="MSUF_Menu2_Widgets_PreviewDock.lua"/>
     <Script file="MSUF_Menu2_LayerOverview.lua"/>
     <Script file="MSUF_Menu2_ControlGates.lua"/>
     <Script file="MSUF_Menu2_PreviewHelpers.lua"/>

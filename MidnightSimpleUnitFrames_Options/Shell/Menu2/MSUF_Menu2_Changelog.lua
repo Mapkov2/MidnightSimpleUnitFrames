@@ -72,12 +72,7 @@ end
 M.OpenChangelogMenuLink = OpenMenuLink
 
 local function RebuildKeepingScroll()
-    if type(M.RebuildPageKeepingScroll) == "function" then
-        M.RebuildPageKeepingScroll("changelog")
-        return
-    end
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("changelog") end
-    if type(M.SelectPage) == "function" then M.SelectPage("changelog") end
+    M.RebuildPageKeepingScroll("changelog")
 end
 
 local function BuildFullChangelog(ctx)
@@ -116,7 +111,7 @@ local function BuildFullChangelog(ctx)
         if fs.SetSpacing then fs:SetSpacing(3) end
         local height = max(14, (fs.GetStringHeight and fs:GetStringHeight()) or 0, (fs.GetHeight and fs:GetHeight()) or 0)
         button:SetHeight(height)
-        local PaintFeatureLink = type(T.StyleFeatureLink) == "function" and T.StyleFeatureLink(button, fs) or nil
+        local PaintFeatureLink = T.StyleFeatureLink(button, fs) or nil
         button:SetScript("OnClick", function()
             if not OpenMenuLink(link) and type(M.ShowStatusFeedback) == "function" then
                 M.ShowStatusFeedback(Tr("Menu link unavailable"), "danger", 1.6)
@@ -145,7 +140,7 @@ local function BuildFullChangelog(ctx)
             if T.CenterButtonLabel then T.CenterButtonLabel(button) end
             if source == tabKey and T.SkinPrimaryButton then T.SkinPrimaryButton(button) end
             button:SetScript("OnClick", function()
-                if type(M.BlockCombatAction) == "function" and M.BlockCombatAction() then return end
+                if M.BlockCombatAction() then return end
                 if M.changelogSource == tabKey then return end
                 M.changelogSource = tabKey
                 RebuildKeepingScroll()
@@ -300,7 +295,7 @@ function M.MarkChangelogSeen(source)
 end
 
 function M.OpenSeeNewFeatures()
-    if type(M.BlockCombatAction) == "function" and M.BlockCombatAction() then return false end
+    if M.BlockCombatAction() then return false end
     local source = HasUnseenSource("msuf") and "msuf"
         or HasUnseenSource("suite") and "suite"
         or (M.changelogSource == "suite" and SuiteChangelogData() and "suite") or "msuf"
@@ -309,12 +304,27 @@ function M.OpenSeeNewFeatures()
     if data and data.currentVersion then
         M[source == "suite" and "suiteChangelogSelectedVersion" or "changelogSelectedVersion"] = tostring(data.currentVersion)
     end
-    if type(M.InvalidatePage) == "function" then M.InvalidatePage("changelog") end
-    if type(M.SelectPage) == "function" and M.SelectPage("changelog") then
+    M.InvalidatePage("changelog")
+    if M.SelectPage("changelog") then
         M.MarkChangelogSeen(source)
         return true
     end
     return false
 end
 
-M.RegisterPage("changelog", { title = "See New Features", build = BuildFullChangelog, version = 1 })
+-- One cached view per notes source and selected release: picking a release
+-- again shows the view built for it instead of a new frame tree (review C5.2).
+local CHANGELOG_VIEWS = { msuf = {}, suite = {} }
+local function ChangelogViewKey()
+    local source = M.changelogSource == "suite" and "suite" or "msuf"
+    local selected = M[source == "suite" and "suiteChangelogSelectedVersion" or "changelogSelectedVersion"]
+    if selected == nil then return source end
+    local views = CHANGELOG_VIEWS[source]
+    local view = views[selected]
+    if not view then
+        view = source .. "|" .. tostring(selected)
+        views[selected] = view
+    end
+    return view
+end
+M.RegisterPage("changelog", { title = "See New Features", build = BuildFullChangelog, version = 1, variantKey = ChangelogViewKey })

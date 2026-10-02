@@ -140,7 +140,7 @@ end
 function M.SetNavHeaderOpen(section, open)
     local id, label, item = ResolveNavHeader(section)
     if not id then return false, "I do not know that navigation section." end
-    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
+    M.EnsurePersistentMenuState()
     M.navHeaderState = type(M.navHeaderState) == "table" and M.navHeaderState or {}
     if M.navHeaderState[id] == nil then M.navHeaderState[id] = not (item and item.defaultOpen == false) end
     if open == nil then
@@ -158,7 +158,7 @@ end
 -- navHeaderState table (MSUF_Menu2_State.lua) under the group id; unset is open.
 function M.SetNavGroupOpen(id, open)
     if id == nil or id == "" then return false end
-    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
+    M.EnsurePersistentMenuState()
     M.navHeaderState = type(M.navHeaderState) == "table" and M.navHeaderState or {}
     if open == nil then open = M.navHeaderState[id] == false end
     M.navHeaderState[id] = open and true or false
@@ -580,8 +580,7 @@ local function BuildNavRail(parent)
     search._msuf2SearchPlaceholder = placeholder
     UpdateSearchPlaceholder(search)
     parent.searchBox = search
-    local searchPalette = type(M.CreateNavSearchPalette) == "function"
-        and M.CreateNavSearchPalette(parent, search) or nil
+    local searchPalette = M.CreateNavSearchPalette(parent, search)
     local function SchedulePaletteQuery(searchBox, query)
         ScheduleSearchInputQuery(searchBox, query, false, function(latest)
             if searchPalette then searchPalette:Refresh(latest, false) end
@@ -762,7 +761,6 @@ local function BuildNavRail(parent)
         return true
     end
     clear:SetScript("OnClick", ClearSearchInput)
-    M.ClearNavSearch = ClearSearchInput
     if M.RegisterMenuChromeControl then
         M.RegisterMenuChromeControl(clear, "search.clear", "Clear menu search", "action", {
             actionKey = "menu_search_clear",

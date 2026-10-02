@@ -46,7 +46,7 @@ local function HSV(h, s, v)
 end
 
 local function Store()
-    local db = type(M.EnsureDB) == "function" and M.EnsureDB() or _G.MSUF_DB
+    local db = M.EnsureDB() or _G.MSUF_DB
     if type(db) ~= "table" then return nil end
     db.menu2ColorPicker = type(db.menu2ColorPicker) == "table" and db.menu2ColorPicker or {}
     local store = db.menu2ColorPicker
@@ -89,7 +89,7 @@ local function MenuFontStamp()
         .. "\030" .. tostring(tonumber(_G.MSUF_FontApplyEpoch) or 0)
 end
 local function RefreshPickerFonts(panel)
-    if not (panel and type(T.RefreshMenuFonts) == "function") then return end
+    if not (panel) then return end
     local stamp = MenuFontStamp()
     if panel._msuf2MenuFontStamp == stamp then return end
     T.RefreshMenuFonts(panel, true)
@@ -413,7 +413,7 @@ local function PickerMenuScale()
         if scale and scale > 0 then return scale * PICKER_REFERENCE_SCALE end
     end
     local general = M.GetGeneralDB and M.GetGeneralDB()
-    if type(general) == "table" and type(M.GetEffectiveMenuScale) == "function" then
+    if type(general) == "table" then
         local scale = tonumber(M.GetEffectiveMenuScale(general.slashMenuScale))
         if scale and scale > 0 then return scale * PICKER_REFERENCE_SCALE end
     end
@@ -778,7 +778,7 @@ function Picker.DefineContextList(panel)
             values[i] = item
         end
         for i = #owners + 1, #values do values[i] = nil end
-        if #values == 0 or type(W.OpenDropdown) ~= "function" then return end
+        if #values == 0 then return end
         local opened = W.OpenDropdown(self.selector, values, self.owner, function(owner)
             self._ownerDropdownOpen = nil
             self:SetOwner(owner)

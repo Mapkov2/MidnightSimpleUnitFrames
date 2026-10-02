@@ -215,7 +215,9 @@ InstallTimer()
 -- 2. Menu accessor
 ---------------------------------------------------------------------------
 local function LoadMenuFirstLoad(lifecycle)
-    local M = { Tr = function(text) return text end, Widgets = {} }
+    -- The control catalog loads before FirstLoad, which registers its
+    -- virtual actions at load.
+    local M = { Tr = function(text) return text end, Widgets = {}, RegisterVirtualRuntimeControl = function() return true end }
     local namespace = { MSUF2 = M, FirstLoad6 = lifecycle }
     assert(loadfile(MENU .. "MSUF_Menu2_FirstLoad.lua"))("MidnightSimpleUnitFrames_Options", namespace)
     return M
@@ -309,6 +311,9 @@ local M = {
     RefreshDashboardEditModeButton = function() end,
     SelectPage = function(key) selected[#selected + 1] = key; return true end,
     BlockCombatAction = function() return combat end,
+    -- FirstLoad and UpgradeHighlights load before the Dashboard; no scene runs here.
+    BuildUpgradeHighlightDashboardScene = function() return false end,
+    BuildFirstLoadDashboardScene = function() return false end,
     HideSlashMenuAndMinibar = function() hidden = hidden + 1 end,
     ShowStatusFeedback = function(text) feedback[#feedback + 1] = text end,
 }

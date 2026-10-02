@@ -479,7 +479,7 @@ local function EnsureDropdownFrame()
     return dropdownFrame
 end
 local function RefreshDropdownMenuFonts()
-    if not (dropdownFrame and type(T.RefreshMenuFonts) == "function") then return end
+    if not (dropdownFrame) then return end
     local db = _G.MSUF_DB
     local general = type(db) == "table" and db.general or nil
     local stamp = tostring(type(general) == "table" and general.menuFontKey or "")

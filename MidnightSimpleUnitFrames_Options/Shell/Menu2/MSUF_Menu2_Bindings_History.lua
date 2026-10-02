@@ -123,10 +123,8 @@ local function DeepReplace(dst, src, seen)
     end
 end
 local function HistoryCharacterKey()
-    if type(_G.MSUF_GetCharKey) == "function" then
-        local value = _G.MSUF_GetCharKey()
-        if type(value) == "string" and value ~= "" then return value end
-    end
+    local value = _G.MSUF_GetCharKey()
+    if type(value) == "string" and value ~= "" then return value end
     if type(_G.UnitName) == "function" and type(_G.GetRealmName) == "function" then
         local name = _G.UnitName("player")
         local realm = _G.GetRealmName()
@@ -295,9 +293,7 @@ end
 local function NotifyHistoryChanged(refreshMenu)
     if M.RefreshHistoryControls then M.RefreshHistoryControls() end
     if M.frame and M.frame.RefreshStatus then M.frame.RefreshStatus(M.frame) end
-    if type(_G.MSUF_EM_RefreshHistoryControls) == "function" then
-        _G.MSUF_EM_RefreshHistoryControls()
-    end
+    _G.MSUF_EM_RefreshHistoryControls()
     if refreshMenu == true then QueueMenuRefresh() end
 end
 
@@ -452,13 +448,10 @@ local function PushHistory(label, source, before, after)
     end
     return true
 end
-local function RebuildActivePage()
-    local key = M.activeKey
-    if key and M.frame and M.frame.IsShown and M.frame:IsShown() and M.InvalidatePage and M.SelectPage then
-        M.InvalidatePage(key)
-        M.activeKey = nil
-        M.SelectPage(key)
-    else
+-- The page on screen repaints in place from the restored values; only a page
+-- that rebuilds itself is built again (M.RepaintPageAfterDataChange).
+local function RepaintActivePage(reason)
+    if not M.RepaintPageAfterDataChange(M.activeKey, reason or "history") then
         NotifyHistoryChanged(true)
     end
 end
@@ -722,10 +715,8 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     if ApplyScopedHistoryRestore(reason, source) then
         FlushApplyServiceNow()
         M.MarkMenuDataDirty(reason or "history")
-        RebuildActivePage()
-        if type(_G.MSUF_EM_RefreshAfterHistoryRestore) == "function" then
-            _G.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
-        end
+        RepaintActivePage(reason)
+        _G.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
         return true
     end
     -- A restored profile snapshot may span UnitFrames, Auras3, ClassPower, GroupFrames, and
@@ -755,15 +746,11 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     end
     RequestHistoryGroupRuntime(reason or "MSUF2_HISTORY_GROUP")
     FlushApplyServiceNow()
-    if type(_G.MSUF_ApplySpecProfileIfEnabled) == "function" then
-        _G.MSUF_ApplySpecProfileIfEnabled("MSUF2_HISTORY_PROFILE_ROUTING")
-    end
+    _G.MSUF_ApplySpecProfileIfEnabled("MSUF2_HISTORY_PROFILE_ROUTING")
     M.ApplyLocaleSelection(M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     M.MarkMenuDataDirty(reason or "history")
-    RebuildActivePage()
-    if type(_G.MSUF_EM_RefreshAfterHistoryRestore) == "function" then
-        _G.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
-    end
+    RepaintActivePage(reason)
+    _G.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
     return true
 end
 

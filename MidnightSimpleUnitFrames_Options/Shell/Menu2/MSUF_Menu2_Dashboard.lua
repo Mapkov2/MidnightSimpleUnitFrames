@@ -72,7 +72,7 @@ local function MenuScaleStoredFromPercent(value)
         * MENU_SCALE_REFERENCE
 end
 local function DirectCombatLocked()
-    return type(M.IsConfigCombatLocked) == "function" and M.IsConfigCombatLocked() == true
+    return M.IsConfigCombatLocked() == true
 end
 local function DirectRunSlash(message)
     local slash = _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
@@ -111,7 +111,7 @@ local function ShowFactoryResetConfirm(kind)
             if M.BlockCombatAction and M.BlockCombatAction() then return end
             if suiteReset then
                 RunSuiteFactoryReset()
-            elseif type(M.StageFactoryReset) == "function" and M.StageFactoryReset() then
+            elseif M.StageFactoryReset() then
                 _G.ReloadUI()
             end
         end,
@@ -243,7 +243,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     local bodyColor = { T.colors.text[1], T.colors.text[2], T.colors.text[3], 0.94 }
     local function AddText(text, fontObject, color, indent, gap, translate, role)
         local rawText = tostring(text or "")
-        if translate and type(M.Tr) == "function" then rawText = M.Tr(rawText) end
+        if translate then rawText = M.Tr(rawText) end
         local fs = RawFont(child, fontObject or "GameFontHighlightSmall", rawText, color or T.colors.muted, 0, role or "body")
         indent = indent or 0
         fs:SetPoint("TOPLEFT", child, "TOPLEFT", indent, y)
@@ -288,7 +288,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
             if fs.SetSpacing then fs:SetSpacing(3) end
             local h = max((fs.GetStringHeight and fs:GetStringHeight()) or 0, (fs.GetHeight and fs:GetHeight()) or 0, 14)
             button:SetHeight(h)
-            local PaintFeatureLink = type(T.StyleFeatureLink) == "function" and T.StyleFeatureLink(button, fs) or nil
+            local PaintFeatureLink = T.StyleFeatureLink(button, fs) or nil
             button:SetScript("OnClick", function()
                 if type(M.OpenChangelogMenuLink) == "function" then M.OpenChangelogMenuLink(link) end
             end)
@@ -543,7 +543,7 @@ function Dashboard.PrepareActionHelpers(state)
     M.ToggleDashboardEditMode = ToggleEditMode
     local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
     local function CopyWagoLink()
-        if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end
+        _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf")
     end
     local function Percent(value, fallback)
         return math.floor(((tonumber(value) or fallback or 1) * 100) + 0.5)
@@ -748,7 +748,7 @@ function Dashboard.BuildSuiteCard(state, ctx, top)
             -- The setup window shares the menu's strata below its content, so
             -- the menu steps aside once the Suite confirms the window opened.
             if type(open) == "function" and open() == true then
-                if type(M.HideSlashMenuAndMinibar) == "function" then M.HideSlashMenuAndMinibar(M.frame) end
+                M.HideSlashMenuAndMinibar(M.frame)
             elseif M.ShowStatusFeedback then
                 M.ShowStatusFeedback(M.Tr("Suite setup unavailable"), "danger", 1.4)
             end
@@ -1175,7 +1175,7 @@ function Dashboard.BuildSupportCard(state)
         hover:SetAllPoints()
         hover:SetColorTexture(1, 1, 1, 0.10)
         btn:SetScript("OnClick", function()
-            if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink(data.title, data.url) end
+            _G.MSUF_ShowCopyLink(data.title, data.url)
         end)
         AddTooltip(btn, data.title, data.tooltip)
         RegisterDashboardControl(btn, DashboardMeta("support.link." .. tostring(data.title), "action", {
@@ -1195,10 +1195,10 @@ function Dashboard.BuildSupportCard(state)
     return supportH
 end
 function Dashboard.Build(ctx)
-    if type(M.BuildUpgradeHighlightDashboardScene) == "function" and M.BuildUpgradeHighlightDashboardScene(ctx) == true then
+    if M.BuildUpgradeHighlightDashboardScene(ctx) == true then
         return
     end
-    if type(M.BuildFirstLoadDashboardScene) == "function" and M.BuildFirstLoadDashboardScene(ctx) == true then
+    if M.BuildFirstLoadDashboardScene(ctx) == true then
         return
     end
     local root = ctx.wrapper
@@ -1229,4 +1229,13 @@ function Dashboard.Build(ctx)
     local bottom = state.supportTop - supportH
     ctx:SetContentHeight(math.abs(bottom) + 42)
 end
-M.RegisterPage("home", { title = "MSUF Menu", build = Dashboard.Build, version = 10 })
+-- Each combination of open disclosures is one cached Dashboard view, so a
+-- disclosure toggle switches views instead of building a new frame tree
+-- (review C5.2). Index bits: recovery 1, changelog 2, scaling 4.
+local DASHBOARD_VIEWS = { [0] = "---", "r--", "-c-", "rc-", "--s", "r-s", "-cs", "rcs" }
+local function DashboardViewKey()
+    return DASHBOARD_VIEWS[(M.dashboardRecoveryOpen == true and 1 or 0)
+        + (M.dashboardChangelogOpen == true and 2 or 0)
+        + (M.dashboardScalingOpen == true and 4 or 0)]
+end
+M.RegisterPage("home", { title = "MSUF Menu", build = Dashboard.Build, version = 10, variantKey = DashboardViewKey })

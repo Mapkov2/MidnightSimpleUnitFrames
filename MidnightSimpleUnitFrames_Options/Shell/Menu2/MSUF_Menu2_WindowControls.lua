@@ -35,7 +35,7 @@ local function ColorOr(name, fallback)
 end
 
 local function MenuAccentActive()
-    return T and type(T.MenuAccentActive) == "function" and T.MenuAccentActive()
+    return T and T.MenuAccentActive()
 end
 
 local function TintAtlasTexture(texture, color, enabled)
@@ -193,8 +193,7 @@ local function CreateWindowControlGroup(parent, segmentCount)
     base:SetPoint("BOTTOMRIGHT", group, "BOTTOMRIGHT", 3, 1)
     PrepareAtlasTexture(base, T.media.windowControls)
     base:SetTexCoord(0, GROUP_ATLAS_RIGHT, 0, 0.25)
-    local tintSurfaces = T and type(T.MenuAccentSurfacesTinted) == "function"
-        and T.MenuAccentSurfacesTinted()
+    local tintSurfaces = T and T.MenuAccentSurfacesTinted()
     TintAtlasTexture(base, ColorOr("coreSurface", { 0.035, 0.067, 0.114, 1 }), tintSurfaces)
     group._msuf2ControlGroupBase = base
     local hover = PixelLayoutRegion(group:CreateTexture(nil, "BORDER", nil, 1))
