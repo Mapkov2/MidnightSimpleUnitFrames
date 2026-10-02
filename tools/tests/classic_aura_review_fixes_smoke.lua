@@ -1648,6 +1648,54 @@ do
         "W3.4: an arrival-order lane lost its order: " .. VisibleIDs(lane))
 end
 
+-- W3.5 (re-review 2026-10-02). Every Classic sort mode is a strict weak order ----------
+-- table.sort needs one. The default ("Player first") mode compared
+-- canApplyAura as true, false or unknown, and unknown (a synthetic weapon
+-- enchant, a secret flag) tied with both other classes, so two auras tied
+-- with a third while ranking against each other.
+do
+    local Compile = assert(A3._ClassicCompile, "W3.5: the Classic compile module is missing")
+    local auras, mine = {}, {}
+    local canApply, durations, expirations, names = { true, false, nil }, { 30, 10 }, { 70, 0, 50 }, { "B", "A" }
+    for i = 1, 12 do
+        local aura = {
+            auraInstanceID = 9000 + i,
+            canApplyAura = canApply[(i % 3) + 1],
+            duration = durations[(i % 2) + 1],
+            expirationTime = expirations[(i % 3) + 1],
+            name = names[(i % 2) + 1],
+        }
+        if i % 4 == 0 then aura.canApplyAura = nil end
+        auras[i] = aura
+        mine[aura.auraInstanceID] = i % 5 == 0
+    end
+    Compile.SetSortOwnership(mine)
+    for mode = 0, 6 do
+        local less = Compile.SortComparator(mode)
+        local function Equivalent(a, b) return not less(a, b) and not less(b, a) end
+        for i = 1, #auras do
+            local a = auras[i]
+            assert(not less(a, a), "W3.5: sort mode " .. mode .. " ranks an aura before itself")
+            for j = 1, #auras do
+                local b = auras[j]
+                assert(not (less(a, b) and less(b, a)), "W3.5: sort mode " .. mode .. " is not asymmetric")
+                for k = 1, #auras do
+                    local c = auras[k]
+                    if less(a, b) and less(b, c) then
+                        assert(less(a, c), "W3.5: sort mode " .. mode .. " is not transitive")
+                    end
+                    if Equivalent(a, b) and Equivalent(b, c) then
+                        assert(Equivalent(a, c), "W3.5: sort mode " .. mode
+                            .. " ties are not transitive (auras " .. a.auraInstanceID .. ", "
+                            .. b.auraInstanceID .. ", " .. c.auraInstanceID .. ")")
+                    end
+                end
+            end
+        end
+    end
+    Compile.SetSortOwnership(nil)
+end
+
 -- F6. Edit Mode and menu group test frames never run the live backend -------------------
 do
     world.player = {

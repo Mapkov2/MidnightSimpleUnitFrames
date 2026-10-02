@@ -778,9 +778,12 @@ end
 local function SortAurasDefault(a, b)
     local am, bm = sortOwnership[a.auraInstanceID] == true, sortOwnership[b.auraInstanceID] == true
     if am ~= bm then return am end
-    local ca = PlainBool(a.canApplyAura)
-    local cb = PlainBool(b.canApplyAura)
-    if ca ~= cb then return ca == true end
+    -- A missing or secret canApplyAura (a synthetic weapon enchant) ranks as
+    -- false. As a third class it tied with both others, which broke the strict
+    -- weak order table.sort needs.
+    local ca = PlainBool(a.canApplyAura) == true
+    local cb = PlainBool(b.canApplyAura) == true
+    if ca ~= cb then return ca end
     return AuraID(a) < AuraID(b)
 end
 
