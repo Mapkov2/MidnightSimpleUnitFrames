@@ -421,7 +421,7 @@ end
 
 local function PrepareSharedDependencies(path, namespace)
     if type(namespace) ~= "table" then return end
-    if path:match("MSUF_Menu2_State%.lua$") or path:match("MSUF_EditMode_HUD%.lua$") then
+    if path:match("MSUF_Menu2_State%.lua$") or path:match("MSUF_EditMode_HUD_Dock%.lua$") then
         if not _G.MSUF_GetCharKey then
             local source = Read(SourcePath("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))
             local body = Slice.Function(source, "function MSUF_GetCharKey", "MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
@@ -459,7 +459,7 @@ local function DependencyChunk(path, ...)
     local direct = NeedsDirectContracts(source)
     if not direct and not (path:match("MSUF_UF_Shared%.lua$") or path:match("MSUF_UF_Group_Config%.lua$")
         or path:match("MSUF_EditMode_Core%.lua$") or path:match("MSUF_AnchorPicker%.lua$")
-        or path:match("MSUF_Menu2_State%.lua$") or path:match("MSUF_EditMode_HUD%.lua$")
+        or path:match("MSUF_Menu2_State%.lua$") or path:match("MSUF_EditMode_HUD_Dock%.lua$")
         or path:match("MSUF_Menu2_UnitPreview_Render%.lua$") or path:match("MSUF_Menu2_GroupPreview_Render%.lua$")
         or path:match("MSUF_Menu2_ClassPowerPreview%.lua$") or path:match("MSUF_Menu2_UnitPreview_View_Chrome%.lua$")) then
         return originalLoadfile(path, ...)
@@ -482,7 +482,8 @@ end
 
 function Loader.LoadFile(path, ...)
     path = SourcePath(path)
-    if path:match("MSUF_EditMode_Core%.lua$") or path:find("Shell/UI/EditMode/MSUF_EditMode_", 1, true) then
+    if path:match("MSUF_EditMode_Core%.lua$") or path:match("MSUF_EditMode_Layout%.lua$")
+        or path:match("MSUF_EditMode_HUD_Selection%.lua$") then
         local chunk, message = DependencyChunk(path, ...)
         if not chunk then return nil, message end
         return function(addon, namespace)

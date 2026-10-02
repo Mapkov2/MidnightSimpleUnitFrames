@@ -63,7 +63,12 @@ local external = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Ext
 Check(external:find('Tr("Open %s settings")', 1, true) ~= nil,
     "the external popup settings button does not translate its label")
 Check(not external:find('"Open " ..', 1, true), "the external popup still concatenates its settings label")
-local hud = Read("MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_HUD.lua")
+-- The toolbar files in their MSUF_EditMode.xml order.
+local hudFiles = {}
+for _, name in ipairs({ "HUD_Kit", "HUD_Selection", "HUD_Dock", "HUD_Picker", "HUD" }) do
+    hudFiles[#hudFiles + 1] = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_" .. name .. ".lua")
+end
+local hud = table.concat(hudFiles, "\n")
 Check(hud:find('string.format(HelpText("%s settings"), selectedCfg.label or key)', 1, true)
     and not hud:find('.. " settings")', 1, true), "the HUD settings tip concatenates its label")
 Check(hud:find('string.format(HelpText("%s Anchor"), providerLabel)', 1, true)

@@ -330,7 +330,7 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
-    "path": "MidnightSimpleUnitFrames/Shell/UI/EditMode/MSUF_EditMode_HUD.lua",
+    "path": "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Dock.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented event/dispatch driver"
