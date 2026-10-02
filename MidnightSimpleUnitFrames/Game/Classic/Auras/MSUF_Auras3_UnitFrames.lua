@@ -282,15 +282,12 @@ end
 
 --- UNIT_FACTION for the player. A duel or mind control flips the player's own
 --- side of UnitCanAssist("player", unit) while no event names the other unit.
---- Retail covers only half of that: IdentityEvents in Auras3/Runtime registers
---- UNIT_FACTION unfiltered, but on a "player" payload it re-checks every group
---- assist owner and routes its direct owners through the named unit alone, so a
---- Mainline target, focus, boss or arena dispel border stays stale until some
---- unrelated refresh. Classic follows Blizzard's own Classic TargetFrame
---- instead, which re-runs CheckFaction and UpdateAuras whenever UNIT_FACTION
---- names "player" (Blizzard_UnitFrame/Classic/TargetFrame.lua). That wider fan-
---- out is deliberate: it is a Classic-over-Mainline asymmetry, not a gap to
---- close by narrowing this back to group frames. A frame registers UNIT_FACTION
+--- Classic follows Blizzard's own Classic TargetFrame, which re-runs
+--- CheckFaction and UpdateAuras whenever UNIT_FACTION names "player"
+--- (Blizzard_UnitFrame/Classic/TargetFrame.lua); Retail's IdentityEvents in
+--- Auras3/Runtime fans a "player" payload out to its group assist owners and
+--- its unit-frame identity owners alike. Do not narrow this back to group
+--- frames. A frame registers UNIT_FACTION
 --- for its own unit only, so one shared driver listens for the player while any
 --- frame - a group frame or a target, focus, boss or arena frame - holds a
 --- Friendly or Enemy border (AurasElement.GetEvents keeps that set) and
