@@ -16,6 +16,7 @@ local type = type
 local tonumber = tonumber
 local tostring = tostring
 local floor = math.floor
+local string_format = string.format
 local pairs = pairs
 local table_concat = table.concat
 local table_remove = table.remove
@@ -31,6 +32,7 @@ local issecretvalue = _G.issecretvalue
 local wipe = _G.wipe or table.wipe
 
 local ExportPublic = MSUF.ExportPublic
+local Translate = MSUF.Translate
 
 local MAX_PRIORITY_FRAMES = 5
 local MAX_STORED_PINS = MAX_PRIORITY_FRAMES
@@ -570,21 +572,29 @@ function GF.GetHoveredPriorityUnit()
   return GF.IsPriorityGroupUnit(unit) and unit or nil
 end
 
+--- Hover-hotkey feedback: one locale key per TogglePriorityUnit result code.
+--- %s is the player name, or the slot limit for FULL. An unknown code shows
+--- the hover hint, the same text as INVALID_UNIT.
+local HOVER_HINT = "Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."
+local NOTIFY_FORMATS = {
+  ADDED = "Priority Frames: added %s",
+  REMOVED = "Priority Frames: removed %s",
+  AUTO_TANK = "%s is already included automatically as a tank.",
+  ADDED_AUTO_TANK = "Priority Frames enabled; %s is included as a tank.",
+  REMOVED_AUTO_TANK = "Manual pin removed; %s remains as an automatic tank.",
+  FULL = "Priority Frames are full (%s).",
+  NOT_IN_GROUP = "Join a party or raid before selecting a Priority Frame.",
+  INVALID_UNIT = HOVER_HINT,
+  PIN_LIMIT = "The saved Priority Frames list is full.",
+}
+local NOTIFY_SUCCESS = { ADDED = true, REMOVED = true, ADDED_AUTO_TANK = true, REMOVED_AUTO_TANK = true }
+
 local function Notify(code, name, limit)
-  local message
-  if code == "ADDED" then message = "Priority Frames: added " .. tostring(name)
-  elseif code == "REMOVED" then message = "Priority Frames: removed " .. tostring(name)
-  elseif code == "AUTO_TANK" then message = tostring(name) .. " is already included automatically as a tank."
-  elseif code == "ADDED_AUTO_TANK" then message = "Priority Frames enabled; " .. tostring(name) .. " is included as a tank."
-  elseif code == "REMOVED_AUTO_TANK" then message = "Manual pin removed; " .. tostring(name) .. " remains as an automatic tank."
-  elseif code == "FULL" then message = "Priority Frames are full (" .. tostring(limit or MAX_PRIORITY_FRAMES) .. ")."
-  elseif code == "NOT_IN_GROUP" then message = "Join a party or raid before selecting a Priority Frame."
-  elseif code == "INVALID_UNIT" then message = "Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."
-  elseif code == "PIN_LIMIT" then message = "The saved Priority Frames list is full."
-  else message = "Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key." end
+  local subject = code == "FULL" and tostring(limit or MAX_PRIORITY_FRAMES) or tostring(name)
+  local message = string_format(Translate(NOTIFY_FORMATS[code] or HOVER_HINT), subject)
   local errors = _G.UIErrorsFrame
   if errors and type(errors.AddMessage) == "function" then
-    local success = code == "ADDED" or code == "REMOVED" or code == "ADDED_AUTO_TANK" or code == "REMOVED_AUTO_TANK"
+    local success = NOTIFY_SUCCESS[code] == true
     errors:AddMessage(message, success and 0.3 or 1, success and 1 or 0.82, 0.2, 1)
   elseif _G.print then
     _G.print("|cff60a5ffMSUF:|r " .. message)

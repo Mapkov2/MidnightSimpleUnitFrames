@@ -6406,6 +6406,16 @@ L["%s: %s"] = "%s: %s"
 L["%s Indicator"] = "%s 표시기"
 L["Group %s"] = "그룹 %s"
 L["Texture: %s"] = "텍스처: %s"
+-- Priority hotkey feedback.
+L["Priority Frames: added %s"] = "우선순위 프레임: %s 추가됨"
+L["Priority Frames: removed %s"] = "우선순위 프레임: %s 제거됨"
+L["%s is already included automatically as a tank."] = "%s님은 이미 방어 담당으로 자동 포함되어 있습니다."
+L["Priority Frames enabled; %s is included as a tank."] = "우선순위 프레임이 켜졌습니다. %s님은 방어 담당으로 포함됩니다."
+L["Manual pin removed; %s remains as an automatic tank."] = "수동 고정이 해제되었습니다. %s님은 자동 방어 담당으로 남습니다."
+L["Priority Frames are full (%s)."] = "우선순위 프레임이 가득 찼습니다 (%s)."
+L["Join a party or raid before selecting a Priority Frame."] = "우선순위 프레임을 선택하려면 먼저 파티나 공격대에 참여하세요."
+L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "MSUF 파티, 공격대 또는 우선순위 프레임에 마우스를 올린 뒤 우선순위 프레임 단축키를 누르세요."
+L["The saved Priority Frames list is full."] = "저장된 우선순위 프레임 목록이 가득 찼습니다."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

@@ -47,7 +47,7 @@ end
 -- Source lines with comments removed; string literals kept, so a mode literal
 -- still counts as code.
 local function CodeLines(source)
-    source = source:gsub("%-%-%[(=*)%[.-%]%1%]", function(eq) return "" end)
+    source = source:gsub("%-%-%[(=*)%[.-%]%1%]", "")
     local lines = {}
     for line in (source .. "\n"):gmatch("([^\n]*)\n") do
         lines[#lines + 1] = (line:gsub("%-%-.*$", ""))
@@ -126,6 +126,65 @@ for _, relative in ipairs(GROUP_FILES) do
             Check(not text:find(literal, 1, true),
                 relative .. " spells the saved mode " .. literal .. " instead of GF.GRID_POSITION_MODES")
         end
+    end
+end
+
+---------------------------------------------------------------------------
+-- Priority Frames hotkey feedback is translated (UIErrors)
+---------------------------------------------------------------------------
+-- code, name, limit, the English text the hotkey always showed
+local FEEDBACK = {
+    { "ADDED", "Anna", nil, "Priority Frames: added Anna", "Priority Frames: added %s" },
+    { "REMOVED", "Anna", nil, "Priority Frames: removed Anna", "Priority Frames: removed %s" },
+    { "AUTO_TANK", "Tom", nil, "Tom is already included automatically as a tank.",
+        "%s is already included automatically as a tank." },
+    { "ADDED_AUTO_TANK", "Tom", nil, "Priority Frames enabled; Tom is included as a tank.",
+        "Priority Frames enabled; %s is included as a tank." },
+    { "REMOVED_AUTO_TANK", "Tom", nil, "Manual pin removed; Tom remains as an automatic tank.",
+        "Manual pin removed; %s remains as an automatic tank." },
+    { "FULL", "Anna", 3, "Priority Frames are full (3).", "Priority Frames are full (%s)." },
+    { "FULL", "Anna", nil, "Priority Frames are full (5).", "Priority Frames are full (%s)." },
+    { "NOT_IN_GROUP", nil, nil, "Join a party or raid before selecting a Priority Frame.",
+        "Join a party or raid before selecting a Priority Frame." },
+    { "PIN_LIMIT", "Anna", 5, "The saved Priority Frames list is full.", "The saved Priority Frames list is full." },
+}
+local HOVER_HINT = "Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."
+FEEDBACK[#FEEDBACK + 1] = { "INVALID_UNIT", nil, nil, HOVER_HINT, HOVER_HINT }
+FEEDBACK[#FEEDBACK + 1] = { "NOT_PINNED", "Anna", nil, HOVER_HINT, HOVER_HINT }
+
+-- Runs every result code through the real hotkey path and returns the
+-- UIErrors lines in FEEDBACK order.
+local function CollectFeedback(world)
+    local env, GF = world.env, world.core.GF
+    local lines = {}
+    env.UIErrorsFrame = { AddMessage = function(_, text) lines[#lines + 1] = text end }
+    local savedHovered, savedToggle = GF.GetHoveredPriorityUnit, GF.TogglePriorityUnit
+    for _, case in ipairs(FEEDBACK) do
+        GF.GetHoveredPriorityUnit = function() return "party1" end
+        GF.TogglePriorityUnit = function() return false, case[1], case[2], case[3] end
+        GF.ToggleHoveredPriorityFrame()
+    end
+    GF.GetHoveredPriorityUnit, GF.TogglePriorityUnit = savedHovered, savedToggle
+    env.UIErrorsFrame = nil
+    Check(#lines == #FEEDBACK, "the Priority hotkey showed " .. #lines .. " of " .. #FEEDBACK .. " UIErrors lines")
+    return lines
+end
+
+do
+    local english = CollectFeedback(World.New(root, "Mainline"):Boot())
+    for index, case in ipairs(FEEDBACK) do
+        Check(english[index] == case[4], "enUS " .. case[1] .. " feedback changed: " .. tostring(english[index]))
+    end
+    local world = World.New(root, "Mainline", { locale = "deDE" }):Boot()
+    world.core.FinalizeLocale()
+    Check(world.core.LOCALE == "deDE", "the deDE pack was not selected")
+    local german = CollectFeedback(world)
+    for index, case in ipairs(FEEDBACK) do
+        local translated = rawget(world.core.L, case[5])
+        Check(type(translated) == "string" and translated ~= case[5], "deDE does not translate " .. case[5])
+        local subject = case[1] == "FULL" and tostring(case[3] or 5) or tostring(case[2])
+        Check(german[index] == translated:format(subject),
+            "deDE " .. case[1] .. " feedback is not the translated text: " .. tostring(german[index]))
     end
 end
 

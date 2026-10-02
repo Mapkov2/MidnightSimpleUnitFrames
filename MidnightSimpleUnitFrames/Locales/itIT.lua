@@ -6464,6 +6464,16 @@ L["%s: %s"] = "%s: %s"
 L["%s Indicator"] = "Indicatore %s"
 L["Group %s"] = "Gruppo %s"
 L["Texture: %s"] = "Texture: %s"
+-- Priority hotkey feedback.
+L["Priority Frames: added %s"] = "Riquadri prioritari: aggiunto %s"
+L["Priority Frames: removed %s"] = "Riquadri prioritari: rimosso %s"
+L["%s is already included automatically as a tank."] = "%s è già incluso automaticamente come difensore."
+L["Priority Frames enabled; %s is included as a tank."] = "Riquadri prioritari attivati; %s è incluso come difensore."
+L["Manual pin removed; %s remains as an automatic tank."] = "Fissaggio manuale rimosso; %s resta come difensore automatico."
+L["Priority Frames are full (%s)."] = "I riquadri prioritari sono pieni (%s)."
+L["Join a party or raid before selecting a Priority Frame."] = "Entra in un gruppo o incursione prima di scegliere un riquadro prioritario."
+L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "Passa il puntatore su un riquadro gruppo, incursione o prioritario MSUF, poi premi il tasto dei riquadri prioritari."
+L["The saved Priority Frames list is full."] = "L'elenco salvato dei riquadri prioritari è pieno."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

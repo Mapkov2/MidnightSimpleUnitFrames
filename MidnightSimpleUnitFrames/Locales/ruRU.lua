@@ -6414,6 +6414,16 @@ L["%s: %s"] = "%s: %s"
 L["%s Indicator"] = "Индикатор: %s"
 L["Group %s"] = "Группа %s"
 L["Texture: %s"] = "Текстура: %s"
+-- Priority hotkey feedback.
+L["Priority Frames: added %s"] = "Приоритетные рамки: добавлен %s"
+L["Priority Frames: removed %s"] = "Приоритетные рамки: удалён %s"
+L["%s is already included automatically as a tank."] = "%s уже автоматически включён как танк."
+L["Priority Frames enabled; %s is included as a tank."] = "Приоритетные рамки включены; %s добавлен как танк."
+L["Manual pin removed; %s remains as an automatic tank."] = "Ручное закрепление снято; %s остаётся автоматическим танком."
+L["Priority Frames are full (%s)."] = "Приоритетные рамки заполнены (%s)."
+L["Join a party or raid before selecting a Priority Frame."] = "Вступите в группу или рейд, прежде чем выбирать приоритетную рамку."
+L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "Наведите курсор на рамку группы, рейда или приоритетную рамку MSUF и нажмите клавишу приоритетных рамок."
+L["The saved Priority Frames list is full."] = "Сохранённый список приоритетных рамок заполнен."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

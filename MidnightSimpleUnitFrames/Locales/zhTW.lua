@@ -6403,6 +6403,16 @@ L["%s: %s"] = "%s：%s"
 L["%s Indicator"] = "%s指示器"
 L["Group %s"] = "隊伍 %s"
 L["Texture: %s"] = "材質：%s"
+-- Priority hotkey feedback.
+L["Priority Frames: added %s"] = "優先框架：已新增 %s"
+L["Priority Frames: removed %s"] = "優先框架：已移除 %s"
+L["%s is already included automatically as a tank."] = "%s 已作為坦克自動包含。"
+L["Priority Frames enabled; %s is included as a tank."] = "優先框架已啟用；%s 已作為坦克包含。"
+L["Manual pin removed; %s remains as an automatic tank."] = "已取消手動釘選；%s 仍作為自動坦克保留。"
+L["Priority Frames are full (%s)."] = "優先框架已滿（%s）。"
+L["Join a party or raid before selecting a Priority Frame."] = "請先加入隊伍或團隊，再選擇優先框架。"
+L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "將滑鼠游標移到 MSUF 隊伍、團隊或優先框架上，然後按優先框架快捷鍵。"
+L["The saved Priority Frames list is full."] = "已儲存的優先框架清單已滿。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end
