@@ -96,7 +96,9 @@ local EXPECTED = {
     ["Mainline/DEATHKNIGHT"] = "a4aac5bb6719ba27",
     ["Mainline/SHAMAN"] = "496777e2752251e1",
     ["Mainline/MAGE"] = "016d2252aec0ef47",
-    ["Mainline/WARLOCK"] = "030beac69a7284fa",
+    --- 2026-10-02: Affliction and Demonology bind the shard prediction cast
+    --- events (classpower_warlock_prediction_smoke); the trace differs only there.
+    ["Mainline/WARLOCK"] = "413c74c01c4f4c7a",
     ["Mainline/MONK"] = "4b786ce893df75a2",
     ["Mainline/DRUID"] = "568009f0e4431047",
     ["Mainline/DEMONHUNTER"] = "456b96e68f5a2c5b",

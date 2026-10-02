@@ -211,9 +211,12 @@ local K = _G.MSUF_CP_CONST or {}
 local CPK = K.CPK or {}
 local MODE = CPK.MODE or {}
 
+--- warlockPred binds the shard prediction cast events; the profile builder
+--- keeps it for Warlocks only. Affliction and Demonology shards render
+--- SEGMENTED and predict there too (WL_SHARD_DELTAS[1] and [2]).
 ExportPublic("MSUF_CP_MODE_EVENT_PROFILE", {
     [MODE.NONE]           = { power = false, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
-    [MODE.SEGMENTED]      = { power = true,  maxPower = true,  aura = false, rune = false, health = false, pointCharge = true,  warlockPred = false },
+    [MODE.SEGMENTED]      = { power = true,  maxPower = true,  aura = false, rune = false, health = false, pointCharge = true,  warlockPred = true  },
     [MODE.FRACTIONAL]     = { power = true,  maxPower = true,  aura = false, rune = false, health = false, pointCharge = false, warlockPred = true  },
     [MODE.RUNE_CD]        = { power = false, maxPower = false, aura = false, rune = true,  health = false, pointCharge = false, warlockPred = false },
     [MODE.AURA_SEGMENTED] = { power = false, maxPower = false, aura = true,  rune = false, health = false, pointCharge = false, warlockPred = false },
@@ -249,4 +252,7 @@ if (MSUF.Client and MSUF.Client.IsClassic) == true then
     tokens[PT.ShadowOrbs]    = "SHADOW_ORBS"
     tokens.MISTS_ARCANE_CHARGES = "ARCANE_CHARGES"
     _G.MSUF_CP_MODE_EVENT_PROFILE[MODE.SIGNED_CONTINUOUS] = { power = true, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false }
+    --- WL_SHARD_DELTAS lists Midnight's shard generators only; Mists
+    --- Affliction shards keep their event set without the cast events.
+    _G.MSUF_CP_MODE_EVENT_PROFILE[MODE.SEGMENTED].warlockPred = false
 end
