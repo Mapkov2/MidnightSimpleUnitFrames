@@ -788,6 +788,13 @@ function UF.GetSecureUnitButtonTemplate()
   return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
 end
 
+-- No Classic caller: Classic's group headers build their buttons themselves. Kept
+-- for the Retail sibling, whose UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua
+-- (around line 1080) still asks the engine for the header button template.
+function UF.GetSecureHeaderUnitButtonTemplate()
+  return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
+end
+
 function UF.CreateSecureUnitButton(name, parent)
   local button = PixelLayoutRegion(CreateFrame("Button", name, parent or ResolvePetBattleFrameHider(), UF.GetSecureUnitButtonTemplate()))
   -- 12.1.5 rounds layout natively when the region carries the attribute, which
