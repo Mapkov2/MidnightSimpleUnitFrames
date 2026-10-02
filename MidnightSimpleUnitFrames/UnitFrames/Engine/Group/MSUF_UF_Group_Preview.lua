@@ -1787,9 +1787,7 @@ end
 
 PreviewsAllowed = function()
   if _G.MSUF_UnitEditModeActive == true then return true end
-  if _G.MSUF2_GFPagePreviewActive == true then return true end
-  local panel = _G.MSUF_GFOptionsPanel
-  return panel and panel.IsShown and panel:IsShown() or false
+  return _G.MSUF2_GFPagePreviewActive == true
 end
 
 function GF.HideOrphanedPreviews()

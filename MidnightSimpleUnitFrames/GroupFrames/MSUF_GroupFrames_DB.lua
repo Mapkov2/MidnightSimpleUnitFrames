@@ -775,7 +775,7 @@ function GF.EnsureDB()
     db._gfDefaultPresetApplied = nil
     GF._pendingDefaultPreset = nil
 
-    if GF.SeedCurrentSpecSpellIndicatorDefaults and not _G.MSUF_ProfileIO_SuppressRuntimeSideEffects then
+    if GF.SeedCurrentSpecSpellIndicatorDefaults then
         GF.SeedCurrentSpecSpellIndicatorDefaults()
     end
 

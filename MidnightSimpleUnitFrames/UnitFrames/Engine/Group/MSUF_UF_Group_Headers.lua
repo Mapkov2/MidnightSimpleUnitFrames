@@ -35,7 +35,6 @@ local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetNumArenaOpponentSpecs = GetNumArenaOpponentSpecs
 local GetRaidRosterInfo = GetRaidRosterInfo
-local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
 
 GF.headers = GF.headers or {}

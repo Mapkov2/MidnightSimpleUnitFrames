@@ -50,7 +50,6 @@ MSUF_NormalizeHpTextMode	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Support.lua guards a
 MSUF_NormalizePowerTextMode	dead	A-C5	-	Shell/Menu2/MSUF_Menu2_Support.lua guards a normalizer nothing defines
 MSUF_NormalizeUnitDispelOverlayTrigger	dead	A-C7	-	Pages/MSUF_Menu2_GroupBars.lua and UnitDispel.lua guard a normalizer nothing defines
 MSUF_PlayerCastbarPreview	dynamic	A-C2	MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua::name = "MSUF_PlayerCastbarPreview",	preview frame exported under its spec name (ExportPublic(config.name, frame))
-MSUF_ProfileIO_SuppressRuntimeSideEffects	dead	A-C1	-	GroupFrames/MSUF_GroupFrames_DB.lua reads it; the flag is never set since the temporary-profile transaction was removed (Defaults dropped its reads)
 MSUF_PurgeBorderTestMode	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua::SetBorderTestMode("MSUF_PurgeBorderTestMode", "MSUF_PurgeBorderTestScope"	test flag written through _G[flag] by SetBorderTestMode
 MSUF_PurgeBorderTestScope	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Borders.lua::SetBorderTestMode("MSUF_PurgeBorderTestMode", "MSUF_PurgeBorderTestScope"	test flag written through _G[flag] by SetBorderTestMode
 MSUF_RefreshStatusIndicators	dynamic	A-C4	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua::"MSUF_RefreshStatusIndicators",	status refresh alias written from STATUS_REFRESH_ALIASES

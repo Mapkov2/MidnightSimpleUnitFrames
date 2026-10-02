@@ -12,15 +12,12 @@ local Metadata = GF.Metadata or {}
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
 local InCombatLockdown = InCombatLockdown
-local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
-local GetNumGroupMembers = GetNumGroupMembers
 local floor = math.floor
 local pairs = pairs
 local tonumber = tonumber
 local tostring = tostring
 local type = type
-local issecretvalue = _G.issecretvalue
 
 local eventFrame
 local runtimeObservers = {}
@@ -786,7 +783,7 @@ function GF.EM2_NudgePreview(key, dx, dy)
   end
   conf.offsetX = floor(((tonumber(conf.offsetX) or 0) + (tonumber(dx) or 0)) + 0.5)
   conf.offsetY = floor(((tonumber(conf.offsetY) or 0) + (tonumber(dy) or 0)) + 0.5)
-  conf.positionMode = "GRID_BOUNDS_V2"
+  conf.positionMode = GF.GRID_POSITION_MODES.STABLE
   return GF.RefreshGeometry(kind)
 end
 

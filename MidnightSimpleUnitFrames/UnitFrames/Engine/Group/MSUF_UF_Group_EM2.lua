@@ -22,12 +22,10 @@ local C_Timer = C_Timer
 local CreateFrame = CreateFrame
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
-local InCombatLockdown = InCombatLockdown
 local GetTime = GetTime
 local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
 local UIParent = UIParent
-local hooksecurefunc = hooksecurefunc
 local floor, max, min = math.floor, math.max, math.min
 local type, tonumber, tostring = type, tonumber, tostring
 
@@ -81,12 +79,9 @@ local _childScratchCount = 0
 local _syncMoversSoonPending = {}
 local _pendingGroupDragFrame
 local _pendingGroupDragTarget
-local _pendingGroupDragKind
-local _pendingGroupDragSource
-local _pendingGroupDragStartX
-local _pendingGroupDragStartY
 
-local STABLE_GRID_POSITION_MODE = "GRID_BOUNDS_V2"
+-- The group DB (first group file in every load graph) owns the saved modes.
+local STABLE_GRID_POSITION_MODE = MSUF.GF.GRID_POSITION_MODES.STABLE
 
 local function GF()
   return MSUF and MSUF.GF
@@ -155,10 +150,6 @@ local function RefreshGroupBounds(gf, kind)
     return gf.MarkAllDirty(GroupGeometryMask(gf))
   end
   return RefreshGroupGeometry(gf, kind)
-end
-
-local function ShowConfigLock()
-  Dep("MSUF_ShowConfigCombatLockMessage")()
 end
 
 local function BlockConfigLocked()
@@ -849,10 +840,6 @@ end
 local function StopPendingGroupDrag(frame)
   if frame and _pendingGroupDragTarget and _pendingGroupDragTarget ~= frame then return end
   _pendingGroupDragTarget = nil
-  _pendingGroupDragKind = nil
-  _pendingGroupDragSource = nil
-  _pendingGroupDragStartX = nil
-  _pendingGroupDragStartY = nil
   if _pendingGroupDragFrame then
     _pendingGroupDragFrame:SetScript("OnUpdate", nil)
     _pendingGroupDragFrame:Hide()
