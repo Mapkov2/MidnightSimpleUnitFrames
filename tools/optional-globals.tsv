@@ -1,0 +1,33 @@
+# MSUF globals the addons read through MSUF.Optional (tools/tests/optional_globals_smoke.lua).
+# Every other cross-file MSUF global is a hard dependency read through MSUF.Require: a missing
+# provider must fail loudly. A name belongs here only when its absence is a designed state:
+#   lod-options      provided by the load-on-demand MidnightSimpleUnitFrames_Options addon
+#   module-toggle    exported only while its module is enabled
+#   optional-module  an optional feature module
+#   load-order       reachable while the core is still loading, before the provider's file
+# Evidence is the provider file that defines the name. Rows only shrink or follow new Optional reads.
+Name	Kind	Evidence	Reason
+MSUF_Analytics_HandleSlash	optional-module	MidnightSimpleUnitFrames/Features/Telemetry/MSUF_Analytics.lua	/msuf analytics reports a missing telemetry module instead of failing
+MSUF_ClassPower_Apply	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
+MSUF_ClassPower_RefreshLayout	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
+MSUF_ClassPower_RefreshTextures	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua	media registered while the core loads refreshes at once in combat
+MSUF_ClearResolvedStatusbarTextureCache	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	media registered while the core loads refreshes at once in combat
+MSUF_EnsureCooldownWidthObservers	load-order	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
+MSUF_EnsureDB	load-order	MidnightSimpleUnitFrames/State/MSUF_Defaults.lua	Kernel/MSUF_Util.lua EnsureDBSafe can run before State/MSUF_Defaults.lua loads
+MSUF_FocusKick_ApplyTimeTextFont	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_FocusKickIcon.lua	a font apply can run while the core loads, before the castbars
+MSUF_NormalizeFontKey	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua	Kernel/MSUF_Libs.lua resolves font paths before the font registry loads
+MSUF_OpenPage	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua	options entry point; Kernel/MSUF_OptionsLoader.lua forwards it until the menu loads
+MSUF_OpenStandaloneOptionsWindow	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua	options entry point; Kernel/MSUF_OptionsLoader.lua forwards it until the menu loads
+MSUF_RefreshStatusIconPacks	load-order	MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Textures.lua	media registered while the core loads refreshes at once in combat
+MSUF_RequestFontRecovery	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat
+MSUF_RequestStatusIconsRefreshForCurrent	load-order	MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Status.lua	media registered while the core loads refreshes at once in combat
+MSUF_ResolveStatusbarTextureKey	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	a defaults pass during the core load validates through LibSharedMedia instead
+MSUF_RoundedUF_OnApplyAll	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua	exported only while the rounded frames module is enabled
+MSUF_RoundedUF_OnDispelOverlayChanged	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua	exported only while the rounded frames module is enabled
+MSUF_ScheduleCooldownWidthRefresh	load-order	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
+MSUF_SetGlobalUiScale	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua	MSUF_InstallGlobalScaleGate reports whether the scale owner has loaded
+MSUF_UFPreview_RequestRefresh	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_API.lua	the unit preview exists only while the options addon is loaded
+MSUF_UpdateAbsorbBarTextures	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_TextureRuntime.lua	media registered while the core loads refreshes at once in combat
+MSUF_UpdateAllFonts	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat
+MSUF_UpdateAllFonts_Immediate	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat
+MSUF_UpdateCastbarTextures	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	a texture refresh during the core load leaves the castbars to their own first apply
