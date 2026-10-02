@@ -481,7 +481,14 @@ local function GroupDirtyForMode(gf, mode)
     return gf.DIRTY_VISUAL
 end
 
-local function MergeGroupDirty(gf, current, incoming)
+-- The bits a merged group dirty mask takes over from the incoming one, in
+-- merge order. The Group page's own pending queue leaves DIRTY_CONFIG out
+-- (skipConfig): a whole-config request arrives as DIRTY_CONFIG itself.
+local GROUP_DIRTY_MERGE_BITS = {
+    "DIRTY_VISUAL", "DIRTY_FONT", "DIRTY_COLOR", "DIRTY_BORDER", "DIRTY_GEOMETRY",
+    "DIRTY_LAYOUT", "DIRTY_AURAS", "DIRTY_UNIT_BINDING", "DIRTY_CONFIG", "DIRTY_AGGRO",
+}
+local function MergeGroupDirty(gf, current, incoming, skipConfig)
     if not current then return incoming end
     if not incoming then return current end
     if current == true or incoming == true then return true end
@@ -492,19 +499,18 @@ local function MergeGroupDirty(gf, current, incoming)
     if type(current) ~= "number" or type(incoming) ~= "number" then return incoming end
     local out = current
     if gf then
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_VISUAL) and gf.DIRTY_VISUAL or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_FONT) and gf.DIRTY_FONT or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_COLOR) and gf.DIRTY_COLOR or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_BORDER) and gf.DIRTY_BORDER or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_GEOMETRY) and gf.DIRTY_GEOMETRY or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_LAYOUT) and gf.DIRTY_LAYOUT or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AURAS) and gf.DIRTY_AURAS or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_UNIT_BINDING) and gf.DIRTY_UNIT_BINDING or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_CONFIG) and gf.DIRTY_CONFIG or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AGGRO) and gf.DIRTY_AGGRO or nil)
+        for i = 1, #GROUP_DIRTY_MERGE_BITS do
+            local name = GROUP_DIRTY_MERGE_BITS[i]
+            if not (skipConfig and name == "DIRTY_CONFIG") then
+                local bit = gf[name]
+                out = AddDirty(out, MaskHas(incoming, bit) and bit or nil)
+            end
+        end
     end
     return out
 end
+Apply.MergeGroupDirty = MergeGroupDirty
+Apply.AddDirty = AddDirty
 
 local function RefreshGroupPreview(kind, reason, dirtyMask)
     -- Preview work is menu/edit-only. Combat transactions already defer their

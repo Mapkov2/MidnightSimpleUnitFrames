@@ -134,35 +134,10 @@ local function CurrentApplyService()
     if type(apply) == "table" then return apply end
     return nil
 end
-local MaskHas = _G.MSUF_UF_MaskHas
-local function AddDirty(mask, flag)
-    if not flag then return mask or 0 end
-    mask = tonumber(mask) or 0
-    if MaskHas(mask, flag) then return mask end
-    return mask + flag
-end
+-- The apply service owns the group dirty-mask merge; this page's pending
+-- queue merges without the DIRTY_CONFIG bit.
 local function MergeDirtyMask(gf, current, incoming)
-    if not current then return incoming end
-    if not incoming then return current end
-    if current == true or incoming == true then return true end
-    if gf then
-        if current == gf.DIRTY_ALL or incoming == gf.DIRTY_ALL then return gf.DIRTY_ALL end
-        if current == gf.DIRTY_CONFIG or incoming == gf.DIRTY_CONFIG then return gf.DIRTY_CONFIG end
-    end
-    if type(current) ~= "number" or type(incoming) ~= "number" then return incoming end
-    local out = current
-    if gf then
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_VISUAL) and gf.DIRTY_VISUAL or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_FONT) and gf.DIRTY_FONT or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_COLOR) and gf.DIRTY_COLOR or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_BORDER) and gf.DIRTY_BORDER or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_GEOMETRY) and gf.DIRTY_GEOMETRY or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_LAYOUT) and gf.DIRTY_LAYOUT or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AURAS) and gf.DIRTY_AURAS or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_UNIT_BINDING) and gf.DIRTY_UNIT_BINDING or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AGGRO) and gf.DIRTY_AGGRO or nil)
-    end
-    return out
+    return M.ApplyService.MergeGroupDirty(gf, current, incoming, true)
 end
 local function ModeDirtyMask(gf, mode)
     if not gf then return nil end
@@ -172,7 +147,7 @@ local function ModeDirtyMask(gf, mode)
     if mode == "border" or mode == "borders" then return gf.DIRTY_BORDER end
     if mode == "aggro" then return gf.DIRTY_AGGRO or gf.DIRTY_COLOR end
     if mode == "auras" then return gf.DIRTY_AURAS end
-    if mode == "geometry" then return AddDirty(gf.DIRTY_GEOMETRY, gf.DIRTY_LAYOUT) end
+    if mode == "geometry" then return M.ApplyService.AddDirty(gf.DIRTY_GEOMETRY, gf.DIRTY_LAYOUT) end
     if mode == "config" then return gf.DIRTY_CONFIG end
     return nil
 end
@@ -519,8 +494,8 @@ local function GroupCopyDirtyMask(scopes)
         return gf.DIRTY_CONFIG or gf.DIRTY_ALL or gf.DIRTY_VISUAL
     end
     local dirty
-    if scopes.font then dirty = AddDirty(dirty, gf.DIRTY_FONT) end
-    if scopes.auras or scopes.aurastyle then dirty = AddDirty(dirty, gf.DIRTY_AURAS) end
+    if scopes.font then dirty = M.ApplyService.AddDirty(dirty, gf.DIRTY_FONT) end
+    if scopes.auras or scopes.aurastyle then dirty = M.ApplyService.AddDirty(dirty, gf.DIRTY_AURAS) end
     return dirty or gf.DIRTY_VISUAL
 end
 local GROUP_AURA_STYLE_ROOT_KEYS = { "dynamicScale", "showTooltip", "iconZoom" }
