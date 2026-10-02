@@ -3357,6 +3357,53 @@ function H.PaintPreviewDurationBar(bar, icon, cfg, width, height, auraState)
     bar:Show()
 end
 
+--- The rectangular power bar border of a unit or group preview: a mouse-free
+--- host frame on the mock with four edge textures, kept in mock[field].
+function H.EnsurePowerBorderHost(mock, field)
+    local host = mock[field]
+    if host then return host end
+    if type(_G.CreateFrame) ~= "function" then return nil end
+    host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
+    if host.EnableMouse then host:EnableMouse(false) end
+    host.edges = {}
+    for i = 1, 4 do
+        local line = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6))
+        line:SetTexture("Interface\\Buttons\\WHITE8X8")
+        host.edges[i] = line
+    end
+    mock[field] = host
+    return host
+end
+
+--- Lays the border edges out edge pixels thick: the top edge only over a
+--- rounded power bar, all four otherwise; then shows the host.
+function H.LayoutPowerBorderEdges(host, edge, roundedPower)
+    local top, bottom, left, right = host.edges[1], host.edges[2], host.edges[3], host.edges[4]
+    top:ClearAllPoints()
+    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+    top:SetHeight(edge)
+    top:Show()
+    if not roundedPower then
+        bottom:ClearAllPoints()
+        bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+        bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+        bottom:SetHeight(edge)
+        left:ClearAllPoints()
+        left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+        left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+        left:SetWidth(edge)
+        right:ClearAllPoints()
+        right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+        right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+        right:SetWidth(edge)
+        bottom:Show()
+        left:Show()
+        right:Show()
+    end
+    host:Show()
+end
+
 function H.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
     return function(box)
         if not (box and box._animationEnabled == true) then return end
