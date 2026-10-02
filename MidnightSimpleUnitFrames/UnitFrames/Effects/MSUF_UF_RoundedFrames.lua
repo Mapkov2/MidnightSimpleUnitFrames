@@ -649,6 +649,10 @@ local function ApplyGroupBlockRoundedBorder(host, conf, enabled)
     host._msufRGFBlockBorderState = state
   end
   state.enabled = true
+  -- RefreshGroupBlockRoundedBorders replays this state as its conf. Keep the
+  -- scope's shape with it, or the replay resolves a ROUNDED or SLANTED scope
+  -- under global Rounded off to SQUARE and removes the border it just drew.
+  state.frameBarShape = requested
   state.size = ClampEdgeSize(conf.groupBorderSize or conf.size, 1, 16)
   state.pad = tonumber(conf.groupBorderPadding or conf.pad) or 2
   state.r, state.g, state.b, state.a = conf.groupBorderR or conf.r or 0.38,
