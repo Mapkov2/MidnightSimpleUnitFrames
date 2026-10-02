@@ -35,6 +35,7 @@ clients+Forever	lua	tools/tests/group_header_combat_child_smoke.lua	{root} {flav
 -	lua	tools/tests/group_heal_absorb_migration_smoke.lua	{root}	Group heal-absorb scope migration smoke failed
 -	lua	tools/tests/group_status_raid_group_defer_smoke.lua	{root}	Group raid-group label combat deferral smoke failed
 clients	lua	tools/tests/group_filter_predicate_smoke.lua	{root} {flavor}	Group subgroup filter predicate smoke failed: {flavor}
+clients	lua	tools/tests/group_headers_secret_identity_smoke.lua	{root} {flavor}	Group header secret name/role smoke failed: {flavor}
 -	lua	tools/tests/group_quality_contract_smoke.lua	{root}	Group quality contract smoke failed
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline	Group roster settle and apply budget smoke failed: Mainline
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Vanilla	Group roster settle and apply budget smoke failed: Vanilla

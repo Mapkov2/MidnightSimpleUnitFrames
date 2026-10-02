@@ -643,9 +643,14 @@ RaidGroupAllowed = function(conf, groupIndex)
   return GF.GroupFilterAllowsSubgroup(filter, groupIndex)
 end
 
+--- UnitName is SecretWhenUnitNameIdentityRestricted and UnitGroupRolesAssigned
+--- SecretWhenUnitIdentityRestricted (UnitDocumentation.lua): test either result
+--- with issecretvalue before any truth test, comparison or concatenation. A
+--- secret name reads as no name, so the unit never enters a name list.
 local function UnitFullName(unit)
   if not (unit and UnitName) then return nil end
   local name, realm = UnitName(unit)
+  if issecretvalue(name) == true or issecretvalue(realm) == true then return nil end
   if not name or name == "" then
     return nil
   end
@@ -656,7 +661,9 @@ local function UnitFullName(unit)
 end
 
 local function UnitRole(unit)
-  local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
+  local role
+  if UnitGroupRolesAssigned and unit then role = UnitGroupRolesAssigned(unit) end
+  if issecretvalue(role) == true then return "DAMAGER" end
   if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
     return role
   end
