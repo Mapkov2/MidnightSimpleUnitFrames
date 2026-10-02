@@ -1180,7 +1180,8 @@ local IDENTITY_STABLE_HEALTH_EVENTS = {
   UNIT_MAX_HEALTH_MODIFIERS_CHANGED = true,
 }
 
-local function RefreshUnitState(frame, unit, spec, event)
+-- hp: the health value the caller already read for this UNIT_HEALTH, if any.
+local function RefreshUnitState(frame, unit, spec, event, hp)
   if not frame then
     return nil
   end
@@ -1213,6 +1214,16 @@ local function RefreshUnitState(frame, unit, spec, event)
       and event ~= "UNIT_POWER_UPDATE" then
     elseif needsIdentityRefresh then
     else
+      -- The dispatch-free UNIT_HEALTH routes (UF_Core BuildHealthRoute) skip
+      -- BeginFrameEvent, so the state is still the previous dispatch's. Health
+      -- can flip death: re-read it when the unit may just have died (no plain
+      -- positive health) or come back (it was dead); a plain alive tick stays
+      -- read-free.
+      if event == "UNIT_HEALTH" and dispatchToken == nil
+        and (state.deadKnown ~= true or state.dead == true
+          or issecretvalue(hp) == true or type(hp) ~= "number" or hp <= 0) then
+        state.dead, state.deadKnown = ReadUnitBool(UnitIsDeadOrGhost, unit, false)
+      end
       return state
     end
   end
@@ -1623,7 +1634,7 @@ end
 local function HealthColor(frame, unit, hp, maxHP, calc, event, percentReady)
   local spec = frame and frame.MSUFSpec
   local health = spec and spec.health or {}
-  local state = RefreshUnitState(frame, unit, spec, event or "UNIT_HEALTH")
+  local state = RefreshUnitState(frame, unit, spec, event or "UNIT_HEALTH", hp)
   if state and state.existsKnown and state.exists == false then
     frame._msufHealthStatusGone = true
     return 0.28, 0.28, 0.28
