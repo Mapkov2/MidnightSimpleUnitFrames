@@ -186,8 +186,11 @@ A3._UpdateGroupAuraPresencePhaseState = function(unit, forceApply, allowUnregist
     local state = A3._EnsureGroupAuraPresenceState(unit, allowUnregistered)
     if not state then return false end
     if unit == "player" then return A3._CommitGroupAuraPresenceState(unit, state, forceApply) end
+    -- UnitPhaseReason is SecretWhenUnitIdentityRestricted: assign its result
+    -- first, and test it only after issecretvalue says it is plain.
     local unitPhaseReason = _G.UnitPhaseReason
-    local phaseReason = type(unitPhaseReason) == "function" and unitPhaseReason(unit) or nil
+    local phaseReason = nil
+    if type(unitPhaseReason) == "function" then phaseReason = unitPhaseReason(unit) end
     if issecretvalue(phaseReason) ~= true then
         state.phaseAbsent = phaseReason ~= nil or nil
     end
@@ -262,7 +265,8 @@ A3._UpdateGroupAuraPresenceState = function(
             and playerMapID ~= unitMapID or nil
 
         local unitPhaseReason = _G.UnitPhaseReason
-        local phaseReason = type(unitPhaseReason) == "function" and unitPhaseReason(unit) or nil
+        local phaseReason = nil
+        if type(unitPhaseReason) == "function" then phaseReason = unitPhaseReason(unit) end
         state.phaseAbsent = issecretvalue(phaseReason) ~= true and phaseReason ~= nil or nil
 
         -- Blizzard checks this before its other party-frame not-present
