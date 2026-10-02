@@ -639,8 +639,15 @@ end
 -- Over-absorb glow with protected values (Midnight absorbs, and often health,
 -- are secret). The prediction calculator's MissingHealth clamp reports whether
 -- the absorb overflows the missing health, incoming heals counted: `clamped`,
--- the plain rule (hp + incoming + absorb >= max) as a possibly secret boolean.
--- The calculator documents it as "in excess of the clamp boundary"
+-- approximately the plain rule (hp + incoming + absorb >= max) as a possibly
+-- secret boolean. Incoming heals: the plain path adds the player's own
+-- (ReadIncomingHeals) unless "all healers" is on; the clamp subtracts the
+-- calculator's incoming heals, most likely the all-units amount (the healer
+-- passed to UnitGetDetailedHealPrediction only selects amountFromHealer;
+-- UnitDocumentation, UnitHealPredictionCalculatorAPIDocumentation); Blizzard's
+-- rule (CompactUnitFrame.lua:1257) adds all incoming heals less heal absorbs,
+-- so the plain path shares only its >= with it.
+-- The calculator documents `clamped` as "in excess of the clamp boundary"
 -- (UnitHealPredictionCalculatorAPIDocumentation). When the health and
 -- incoming-heal inputs agree with the plain path's, an absorb that exactly
 -- fills the missing health is the case where it differs from the plain rule's

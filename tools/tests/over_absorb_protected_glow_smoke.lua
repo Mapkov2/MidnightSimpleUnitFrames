@@ -29,7 +29,7 @@
 --      value behind it renders the glow for a grid of health, absorb and
 --      incoming heals, protected and plain, overlay with and without the
 --      stripe, and checks it against the plain rule (partial health:
---      hp + incoming + absorb >= max, the rule of Blizzard's CompactUnitFrame;
+--      hp + incoming + absorb >= max, the >= of Blizzard's CompactUnitFrame;
 --      full health: only with the stripe), including predicted health ahead
 --      of or behind the calculator's, and the exact absorb boundary, where the
 --      protected path follows the calculator ("in excess", strictly above)
@@ -371,9 +371,12 @@ end)
 -- 6. What the client draws, against the plain rule (Drawn is above).
 -- The intended rule. `current` is the calculator's health, `predicted` the
 -- health bar's (UnitHealthPercent usePredicted). The plain path knows only the
--- predicted value and uses Blizzard's CompactUnitFrame overflow rule
--- (health + incoming + absorb >= max, CompactUnitFrame.lua
--- CompactUnitFrame_UpdateHealPrediction). The protected path cannot compare:
+-- predicted value and uses health + incoming + absorb >= max; it shares the >=
+-- with Blizzard's rule (CompactUnitFrame.lua:1257), which adds all incoming
+-- heals less heal absorbs, while the plain path adds the player's incoming
+-- heals unless "all healers" is on and the calculator clamp most likely the
+-- all-units amount. This model uses one incoming value for every side, so it
+-- cannot tell those sources apart. The protected path cannot compare:
 -- predicted health gates full health through the step curve, and the overflow
 -- is the calculator's MissingHealth flag, documented as "in excess of the
 -- clamp boundary" (UnitHealPredictionCalculatorAPIDocumentation). When the
