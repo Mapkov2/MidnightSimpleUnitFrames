@@ -1,6 +1,6 @@
 -- castbar_world.lua -- a fake client for castbar smokes.
 --
--- Loads the real castbar stack (Kernel scheduler, castbar utils, runtime,
+-- Loads the real castbar stack (Kernel Require and scheduler, castbar utils, runtime,
 -- engine, driver, manager; optionally the boss and arena pools) in the order
 -- the flavor TOC lists them, into plain _G, and drives it with a fake clock:
 -- every C_Timer.After callback, TimedSignalMap signal and shown OnUpdate script
