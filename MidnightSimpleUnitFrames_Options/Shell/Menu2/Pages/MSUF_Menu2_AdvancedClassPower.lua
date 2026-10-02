@@ -1491,7 +1491,7 @@ function Page:RefreshControlState()
     if self.ironfurHashes then SetControlEnabled(self.ironfurHashes, cpOn and BoolValue(bars, "showGuardianIronfur", false)) end
     SetControlEnabled(self.cp.width, cpOn and (bars.classPowerWidthMode or "player") == "custom")
     local classBar = NormalizeClassPowerShape(bars.classPowerShape) == "BAR"
-    if self.cp.height and self.cp.height._msuf2Title then self.cp.height._msuf2Title:SetText(M.Tr(classBar and "Height" or "Pip size")) end
+    if self.cp.height and self.cp.height._msuf2Title then self.cp.height._msuf2Title:SetText(classBar and "Height" or "Pip size") end
     SetControlEnabled(self.cp.separator, cpOn and classBar); SetControlEnabled(self.cp.outline, cpOn and classBar)
     SetControlEnabled(self.cpAlign, cpOn and not classBar)
     -- Ebon Might owns a native duration text even when the optional aggregate

@@ -680,7 +680,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     end
     if showFilter then
         local filter = Card(section, M.Format("Native %s Filter", Tr(laneText)), M.Format("Filter token for %s group-frame %s.", Tr(ScopeLabel(scope)), Tr(LanePlural(lane))), 24, originY - 42, filterW, 296)
-        W.LabelAt(filter, fixedLane and M.Format("%s Content", Tr(laneText)) or Tr("Filter Type"), 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
+        W.LabelAt(filter, fixedLane and M.Format("%s Content", Tr(laneText)) or "Filter Type", 16, -72, fixedLane and 260 or 90, "GameFontNormalSmall", T.colors.accent)
         if not fixedLane then BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180)) end
         local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
         BindGroupDropdown(ctx, filter, M.Format("%s Filter", Tr(laneText)), 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
@@ -848,7 +848,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             W.SetControlsEnabled({ directInput, directAdd, directRemove }, NATIVE_EXACT_AURA_FILTERS_ENABLED)
         end
         local entries = type(Model.GroupBlacklistEntries) == "function" and Model.GroupBlacklistEntries(scope, lane) or {}
-        prepared:SetText(#entries == 1 and Tr("1 blocked spell · click an entry to remove")
+        T.SetTranslatedText(prepared, #entries == 1 and Tr("1 blocked spell · click an entry to remove")
             or M.Format("%d blocked spells · click an entry to remove", #entries))
         empty:SetShown(#entries == 0)
         listScroll:SetShown(#entries > 0)
@@ -1136,7 +1136,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         local setSpells = PresetSpellValues()
         local missing = 0
         for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
-        selectedSummary:SetText(missing == 0
+        T.SetTranslatedText(selectedSummary, missing == 0
             and M.Format("%d spells in this set - all already blocked", #setSpells)
             or M.Format("%d spells in this set - %d can still be added", #setSpells, missing))
         W.SetControlEnabled(addSet, missing > 0)
@@ -1150,8 +1150,8 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
                 .. tostring(entry.spellID or entry.value or "")):lower()
             if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
         end
-        prepared:SetText(M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
-        empty:SetText(#entries == 0 and Tr(emptyText) or M.Format(Tr("No results for \"%s\"."), query))
+        T.SetTranslatedText(prepared, M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
+        T.SetTranslatedText(empty, #entries == 0 and Tr(emptyText) or M.Format("No results for \"%s\".", query))
         empty:SetShown(#visible == 0)
         listScroll:SetShown(#visible > 0)
         listChild:SetHeight(max(150, #visible * 44))

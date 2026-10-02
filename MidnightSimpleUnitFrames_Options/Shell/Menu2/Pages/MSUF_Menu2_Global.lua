@@ -575,7 +575,7 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
         W.SetControlShown(override, not shared)
         overrideInfo:SetShown(shared)
         reset:SetShown(shared and #active > 0)
-        overrideInfo:SetText("|cffffffff" .. M.Tr("Overrides:") .. "|r " .. (#active > 0 and table.concat(active, ", ") or M.Tr("None")))
+        T.SetTranslatedText(overrideInfo, "|cffffffff" .. M.Tr("Overrides:") .. "|r " .. (#active > 0 and table.concat(active, ", ") or M.Tr("None")))
         if type(opts.updateHint) == "function" then opts.updateHint(hint, current, active, shared) end
         if segment and segment.Refresh then segment:Refresh() end
         hint:SetWidth(ctx.width - 28)

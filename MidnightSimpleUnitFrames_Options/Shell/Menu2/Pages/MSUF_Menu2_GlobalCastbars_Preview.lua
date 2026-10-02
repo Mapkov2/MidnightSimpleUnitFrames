@@ -427,7 +427,7 @@ local function RefreshPreviewTexts(self, unit, kind, g, S, barWLocal, progress, 
         end
         local targetR, targetG, targetB = CastbarPreview.ResolveTargetTextPreviewColor(unit, 1, 0.82, 0.20)
         self.castTargetText:SetTextColor(targetR, targetG, targetB, 1)
-        self.castTargetText:SetText(M.Tr("Cleave Training Dummy"))
+        self.castTargetText:SetText("Cleave Training Dummy")
         local targetX = ReadCastbarNum(g, unit, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0)
         local targetY = ReadCastbarNum(g, unit, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1)
         local targetPosition = CastbarPreview.NormalizeTextPosition(

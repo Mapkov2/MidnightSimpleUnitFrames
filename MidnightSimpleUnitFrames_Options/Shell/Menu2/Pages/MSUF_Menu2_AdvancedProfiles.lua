@@ -388,7 +388,7 @@ function ProfilesPage.Prepare(ctx)
         kind = kind or M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all")
         local suiteKind = kind == "suite_all" or kind:match("^suite_module:") ~= nil
         if not suiteKind and type(_G.MSUF_ExportSelectionToString) ~= "function" then
-            if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Export unavailable"), "danger", 1.8) end
+            if M.ShowStatusFeedback then M.ShowStatusFeedback("Export unavailable", "danger", 1.8) end
             return false
         end
         local selected = M.profileExportUnits or { player = true }
@@ -396,7 +396,7 @@ function ProfilesPage.Prepare(ctx)
             local any = false
             for _, enabled in pairs(selected) do if enabled == true then any = true end end
             if not any then
-                if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Select at least one unitframe."), "danger", 1.8) end
+                if M.ShowStatusFeedback then M.ShowStatusFeedback("Select at least one unitframe.", "danger", 1.8) end
                 return false
             end
         end
@@ -405,7 +405,7 @@ function ProfilesPage.Prepare(ctx)
         else value = _G.MSUF_ExportSelectionToString(kind, selected) end
         if type(value) ~= "string" then
             if reason then PrintProfileMessage("|cffff0000", "Export failed: " .. tostring(reason)) end
-            if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr("Export failed"), "danger", 1.8) end
+            if M.ShowStatusFeedback then M.ShowStatusFeedback("Export failed", "danger", 1.8) end
             return false
         end
         M.profileImportString = value
@@ -416,7 +416,7 @@ function ProfilesPage.Prepare(ctx)
             blob:HighlightText()
         end
         if M.ShowStatusFeedback then
-            M.ShowStatusFeedback(M.Tr("Profile string ready - press Ctrl+C"), "info", 1.8)
+            M.ShowStatusFeedback("Profile string ready - press Ctrl+C", "info", 1.8)
         end
         return true
     end
@@ -456,7 +456,7 @@ function ProfilesPage.Prepare(ctx)
         if not pill then return end
         local color = STATUS_PILL_COLORS[kind] or STATUS_PILL_COLORS.info
         if pill.text then
-            pill.text:SetText(Tr(text or ""))
+            T.SetTranslatedText(pill.text, text or "")
             pill.text:SetTextColor(color.text[1], color.text[2], color.text[3], color.text[4] or 1)
         end
         if pill._msuf2Fill then
@@ -791,16 +791,16 @@ end
         local active = ActiveProfileName()
         local profiles = ProfileValues(false)
         local profileCount = #profiles
-        local profileCountText = profileCount == 1 and "1 profile" or M.Format("%d profiles", profileCount)
+        local profileCountText = profileCount == 1 and M.Tr("1 profile") or M.Format("%d profiles", profileCount)
         local specAuto = type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled() or false
         local locked = ConfigLocked()
         activeName:SetText(active)
         if currentStatus then
-            currentStatus:SetText(M.Format("Currently loaded and applied: %s", active))
+            T.SetTranslatedText(currentStatus, M.Format("Currently loaded and applied: %s", active))
         end
         SetStatusPill(profileCountPill, profileCountText, "info")
-        SetStatusPill(specStatePill, specAuto and "Spec switching: On" or "Spec switching: Off", specAuto and "ok" or "warn")
-        SetStatusPill(safetyPill, locked and "Combat locked" or "Safe to manage now", locked and "danger" or "ok")
+        SetStatusPill(specStatePill, M.Tr(specAuto and "Spec switching: On" or "Spec switching: Off"), specAuto and "ok" or "warn")
+        SetStatusPill(safetyPill, M.Tr(locked and "Combat locked" or "Safe to manage now"), locked and "danger" or "ok")
         if delete.SetEnabled then delete:SetEnabled(active ~= "Default") end
         if W.SetCollapsibleBadges then
             W.SetCollapsibleBadges(current, {
@@ -1150,7 +1150,7 @@ function ProfilesPage.ImportActions(state)
         end
         M.SetMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
         self:SetChecked(M.profileImportCreateNew == true)
-        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off"), "info", 1.2) end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2) end
         if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
     end)
     --- Blizzard Edit Mode data is opt-in per session for BOTH directions
@@ -1208,9 +1208,9 @@ function ProfilesPage.ImportActions(state)
         W.SetControlShown(importProfileName, createNew)
         if not createNew and importProfileName.HasFocus and importProfileName:HasFocus() then importProfileName:ClearFocus() end
         if importModeHelp then
-            importModeHelp:SetText(Tr(createNew
+            importModeHelp:SetText(createNew
                 and "Safe mode: creates a separate profile before importing and leaves the current profile available."
-                or "Warning: importing now changes the active profile. Export or copy it first if you need a backup."))
+                or "Warning: importing now changes the active profile. Export or copy it first if you need a backup.")
         end
         if W.SetCollapsibleBadges then
             local exportKindValue = M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all")

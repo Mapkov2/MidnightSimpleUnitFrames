@@ -544,20 +544,20 @@ local function BuildTextureLayer(ctx, builder, unit)
         M.RequestRefresh(ctx, "MSUF2_TEXLAYER_ENABLE")
     end)
     W.LabelAt(setupCard, "Quick setup", 16, -88, colW - 16, "GameFontNormalSmall", T.colors and T.colors.accent)
-    local textBackgroundPreset = T.Button(setupCard, Tr("Text background"), 142, 24)
+    local textBackgroundPreset = T.Button(setupCard, "Text background", 142, 24)
     textBackgroundPreset:SetPoint("TOPLEFT", setupCard, "TOPLEFT", 16, -108)
     textBackgroundPreset._msuf2HistoryLabel = "Text background"
     textBackgroundPreset:SetScript("OnClick", function()
         ApplyPreset(TEXT_BACKGROUND_PRESET, "MSUF2_TEXLAYER_TEXT_BACKGROUND_PRESET")
     end)
-    local highlightPreset = T.Button(setupCard, Tr("Highlight"), 112, 24)
+    local highlightPreset = T.Button(setupCard, "Highlight", 112, 24)
     highlightPreset:SetPoint("TOPLEFT", setupCard, "TOPLEFT", 166, -108)
     highlightPreset._msuf2HistoryLabel = "Highlight"
     highlightPreset:SetScript("OnClick", function()
         SetHighlightTextureEnabled(true)
     end)
     -- Third quick setup: the bundled MSUF textures, each listed with a preview.
-    local texturePackPreset = T.Button(setupCard, Tr("MSUF textures"), 132, 24)
+    local texturePackPreset = T.Button(setupCard, "MSUF textures", 132, 24)
     texturePackPreset:SetPoint("TOPLEFT", setupCard, "TOPLEFT", 286, -108)
     texturePackPreset._msuf2HistoryLabel = "MSUF textures"
     texturePackPreset._msuf2DropdownPreferredWidth = 320
@@ -806,11 +806,11 @@ local function BuildTextureLayer(ctx, builder, unit)
         SetControlEnabled(healthThreshold, layerOn and thresholdUsed)
         SetControlEnabled(lowAlpha, layerOn and lowAlphaOn)
         if mode == "HEALTH" then
-            healthBehaviorSummary:SetText(Tr("HP color: Gradient"))
+            healthBehaviorSummary:SetText("HP color: Gradient")
         elseif lowAlphaOn or condition == "BELOW" then
-            healthBehaviorSummary:SetText(Tr("HP color: Off; threshold still affects opacity or visibility"))
+            healthBehaviorSummary:SetText("HP color: Off; threshold still affects opacity or visibility")
         else
-            healthBehaviorSummary:SetText(Tr("HP color: Off"))
+            healthBehaviorSummary:SetText("HP color: Off")
         end
         local parts = {}
         local visibility = conf[Key("Visibility")]

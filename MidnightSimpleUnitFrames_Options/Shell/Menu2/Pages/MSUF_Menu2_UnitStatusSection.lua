@@ -1054,9 +1054,9 @@ function StatusSection.BindRefreshState(state, ctx, unit)
         SetDropdownTitle(iconPack, StatusIconStyleLabel(spec))
         SetDropdownTitle(customIcon, SpecificIconLabel(spec))
         if iconPreviewLabel and iconPreviewLabel.SetText then
-            iconPreviewLabel:SetText(M.Tr(spec and spec.value == "eliteicon" and "Elite / Rare Elite / Rare / Boss previews"
+            iconPreviewLabel:SetText(spec and spec.value == "eliteicon" and "Elite / Rare Elite / Rare / Boss previews"
                 or (spec and spec.textIndicator and "Text preview"
-                or (IsRoleStatusSpec(spec) and "Role icon preview" or "Icon preview"))))
+                or (IsRoleStatusSpec(spec) and "Role icon preview" or "Icon preview")))
         end
         local hasSymbol = spec and spec.symbol
         local hasIconPack = false

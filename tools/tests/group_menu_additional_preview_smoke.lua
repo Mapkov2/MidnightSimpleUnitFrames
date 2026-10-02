@@ -48,7 +48,8 @@ local helpers=Read('MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Prev
 local zoomCode=assert(helpers:match('(function ZoomPan.Clamp.-)\n    function ZoomPan.UpdateControls'))
 local zoom={};local zoomChunk=assert(loadstring(zoomCode))
 setfenv(zoomChunk,setmetatable({ZoomPan=zoom,minZoom=.35,maxZoom=4,floor=math.floor},{__index=_G}));zoomChunk()
-local env={ClampZoom=zoom.Clamp,H={MockPowerHeight=function()return 0 end},M={},ResolveDefaultZoomLock=zoom.ResolveDefaultLock,Round=function(x)return x end,ScaleValue=function(x,s)return x*s end,UpdateZoomControls=function()end,WHITE8X8='white',max=math.max,min=math.min,width=600}
+local env={ClampZoom=zoom.Clamp,H={MockPowerHeight=function()return 0 end},M={},ResolveDefaultZoomLock=zoom.ResolveDefaultLock,Round=function(x)return x end,ScaleValue=function(x,s)return x*s end,UpdateZoomControls=function()end,WHITE8X8='white',max=math.max,min=math.min,width=600,
+ T={SetTranslatedText=function(fs,text) return fs:SetText(text) end}}
 
 local st={self=box,conf=conf,gf=gf,kind='party',label='Party',runtimeSpec={width=120,height=40},runtimeHealth={},runtimePower={enabled=false},runtimeBorder={},reason='SETTINGS'}
 conf.petsEnabled,conf.targetsEnabled=false,false;box._msuf2ZoomLockDefaultPending=true

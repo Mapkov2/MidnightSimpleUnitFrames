@@ -360,8 +360,12 @@ end
 local function ScopeLabel(kind)
     return M.Tr(SCOPE_LABELS[kind] or "Party")
 end
+-- Scope bars, Copy To targets and tooltips translate their label themselves.
+local function ScopeShortKey(kind)
+    return SCOPE_SHORT_LABELS[kind] or SCOPE_LABELS[kind] or "Party"
+end
 local function ScopeShortLabel(kind)
-    return M.Tr(SCOPE_SHORT_LABELS[kind] or SCOPE_LABELS[kind] or "Party")
+    return M.Tr(ScopeShortKey(kind))
 end
 local function NormalizeFrameProvider(value)
     if value == "MSUF" then return "MSUF" end
@@ -728,7 +732,7 @@ local function AttachGroupSectionUX(ctx)
         end },
     }
     local targets = {}
-    for _, scope in ipairs(SCOPE_VALUES) do targets[#targets + 1] = { value = scope.value, text = ScopeShortLabel(scope.value) } end
+    for _, scope in ipairs(SCOPE_VALUES) do targets[#targets + 1] = { value = scope.value, text = ScopeShortKey(scope.value) } end
     Shared.AttachSectionUX(ctx, {
         sections = sections, scope = CurrentScope, conf = Conf, label = ScopeShortLabel, targets = targets,
         -- The same switch ApplyScopeEnabledGate greys the scope's page with.
@@ -793,7 +797,7 @@ local function ScopeSection(ctx, builder, opts)
             local info = SCOPE_VALUES[i]
             scopeValues[i] = {
                 value = info.value,
-                text = ScopeShortLabel(info.value),
+                text = ScopeShortKey(info.value),
                 width = (info.value == "mythicraid") and 86 or 64,
             }
         end
@@ -863,7 +867,7 @@ local function ScopeSection(ctx, builder, opts)
         return sec
     end
 
-    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "success", 86, 24)) or W.TopButton(sec, M.Tr("Copy To"), 86, 24, {})
+    local copy = (W.RoleButton and W.RoleButton(sec, "Copy To", "success", 86, 24)) or W.TopButton(sec, "Copy To", 86, 24, {})
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -16)
     local scopeBtns = {}
     local scopeBar = W.ScopeOverrideBar(ctx, command, {
@@ -1426,7 +1430,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
     local y = opts.y or section._msuf2CursorY or -38
     local tileW, tileH, gap = opts.tileWidth or 64, opts.tileHeight or 64, opts.gap or 6
     if opts.advanceCursor ~= false then section._msuf2CursorY = y - tileH - 40 end
-    local label = T.Font(section, "GameFontNormalSmall", M.Tr("Growth Direction"), T.colors.accent)
+    local label = T.Font(section, "GameFontNormalSmall", "Growth Direction", T.colors.accent)
     label:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
     local holder = PixelLayoutRegion(CreateFrame("Frame", nil, section))
     holder:SetPoint("TOPLEFT", section, "TOPLEFT", x, y - 20)
@@ -1567,7 +1571,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         btn:SetScript("OnLeave", function(self)
             SetTileVisual(self, Val(CurrentScope(), "growth", "DOWN") == info.value, false)
         end)
-        M.AddTooltip(btn, function() return M.Format(M.Tr("Growth: %s"), M.Tr(info.text or "")) end, "Click to set group frame growth direction.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
+        M.AddTooltip(btn, function() return M.Format("Growth: %s", M.Tr(info.text or "")) end, "Click to set group frame growth direction.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
         btn:SetScript("OnClick", function()
             Set(CurrentScope(), "growth", info.value, "geometry")
             RefreshGrowthTiles()

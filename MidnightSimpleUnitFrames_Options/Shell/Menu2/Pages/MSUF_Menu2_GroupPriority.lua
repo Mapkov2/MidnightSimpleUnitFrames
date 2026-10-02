@@ -166,7 +166,7 @@ local MODIFIER_KEYS = {
 }
 local function BuildBindingCapture(ctx, parent, x, y, width)
     W.LabelAt(parent, "Hover hotkey", x, y, width, "GameFontNormalSmall", T.colors.accent)
-    local button = T.Button(parent, Tr("Not bound"), min(250, width), 26)
+    local button = T.Button(parent, "Not bound", min(250, width), 26)
     button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24)
     if button.RegisterForClicks then button:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     if button.EnableKeyboard then button:EnableKeyboard(false) end
@@ -188,7 +188,7 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
     end
     local function RefreshLabel()
         if listening then return end
-        button:SetText(FormatBindingKey(CurrentKey()))
+        button:SetText(FormatBindingKey(CurrentKey()), true)
     end
     local function StopListening(refresh)
         listening = false
@@ -200,7 +200,7 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
     local function BeginListening()
         if listening then return end
         listening = true
-        button:SetText(Tr("Press a key..."))
+        button:SetText("Press a key...")
         if button.EnableKeyboard then button:EnableKeyboard(true) end
         if button.EnableMouseWheel then button:EnableMouseWheel(true) end
         if button.SetPropagateKeyboardInput then button:SetPropagateKeyboardInput(false) end
@@ -208,14 +208,14 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
     local function Changed(reason)
         StopListening()
         RequestPageRefresh(ctx, reason or "priority-binding")
-        if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback(Tr("Priority hotkey updated"), "ok", 1.3) end
+        if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback("Priority hotkey updated", "ok", 1.3) end
     end
     local function BindingFailed(code)
         if type(M.ShowStatusFeedback) ~= "function" then return end
         if code == "COMBAT" then
-            M.ShowStatusFeedback(Tr("Keybindings cannot be changed during combat."), "danger", 1.8)
+            M.ShowStatusFeedback("Keybindings cannot be changed during combat.", "danger", 1.8)
         else
-            M.ShowStatusFeedback(Tr("Could not update that keybinding."), "danger", 1.8)
+            M.ShowStatusFeedback("Could not update that keybinding.", "danger", 1.8)
         end
     end
     local function ClearBinding()
@@ -313,8 +313,8 @@ local function OpenPriorityEditModeWithFeedback()
     local enabled = PriorityConf().enabled == true
     local ok = OpenPriorityEditMode()
     if ok and type(M.ShowStatusFeedback) == "function" then
-        M.ShowStatusFeedback(enabled and Tr("Priority Frames selected in Edit Mode")
-            or Tr("Priority Frames remain disabled; Edit Mode is showing the placement preview."),
+        M.ShowStatusFeedback(enabled and "Priority Frames selected in Edit Mode"
+            or "Priority Frames remain disabled; Edit Mode is showing the placement preview.",
             enabled and "ok" or "info", 1.8)
     end
     return ok
@@ -357,7 +357,7 @@ local function BuildPriorityPage(ctx)
         function() return PriorityConf().enabled == true end,
         function(value) SetPriorityOption(ctx, "enabled", value == true, "Enable Priority Frames") end,
         PriorityMeta(ctx, "overview.enabled", "gf_priority.enabled"))
-    local editMode = T.Button(overview, Tr("Open Edit Mode"), 146, 26)
+    local editMode = T.Button(overview, "Open Edit Mode", 146, 26)
     editMode:SetPoint("TOPRIGHT", overview, "TOPRIGHT", -22, -40)
     if T.CenterButtonLabel then T.CenterButtonLabel(editMode) end
     editMode:SetScript("OnClick", OpenPriorityEditModeWithFeedback)
@@ -377,20 +377,20 @@ local function BuildPriorityPage(ctx)
         local pins = tonumber(state.pinCount) or 0
         local inGroup = state.inGroup == true
         local inParty = state.inParty == true
-        editMode:SetText(Tr(enabled and "Open Edit Mode" or "Preview in Edit Mode"))
+        editMode:SetText(enabled and "Open Edit Mode" or "Preview in Edit Mode")
         if enabled and inGroup and state.baseFramesEnabled == false then
-            liveStatus:SetText(Tr(inParty and "Waiting — enable Party frames first."
-                or "Waiting — enable the active Raid or Mythic Raid frames first."))
+            liveStatus:SetText(inParty and "Waiting — enable Party frames first."
+                or "Waiting — enable the active Raid or Mythic Raid frames first.")
         elseif enabled and inGroup and active > 0 then
-            liveStatus:SetText(M.Format("Active now: %d / %d", active, tonumber(state.maxFrames) or 5))
+            T.SetTranslatedText(liveStatus, M.Format("Active now: %d / %d", active, tonumber(state.maxFrames) or 5))
         elseif enabled and inGroup and pins > 0 then
-            liveStatus:SetText(Tr("Waiting — none of your saved players are in the current group."))
+            liveStatus:SetText("Waiting — none of your saved players are in the current group.")
         elseif enabled and inGroup then
-            liveStatus:SetText(Tr("Ready — pin a group member or include tanks automatically."))
+            liveStatus:SetText("Ready — pin a group member or include tanks automatically.")
         elseif enabled then
-            liveStatus:SetText(Tr("Ready — join a party or raid to show Priority Frames."))
+            liveStatus:SetText("Ready — join a party or raid to show Priority Frames.")
         else
-            liveStatus:SetText(Tr("Disabled — your manual pins stay saved."))
+            liveStatus:SetText("Disabled — your manual pins stay saved.")
         end
         SetSectionBadgesAndStatus(overview, {
             OnOffBadge(enabled, "Enabled", "Disabled"),
@@ -422,8 +422,8 @@ local function BuildPriorityPage(ctx)
     local pinsCard = W.ControlCard(who, "Manual pins", nil, 20, -232, whoW - 40, 246)
     local pinsCardW = whoW - 40
     local pinsStatus = W.Text(pinsCard, "", 16, -42, pinsCardW - 260, T.colors.muted)
-    local prevPage = T.Button(pinsCard, Tr("Previous"), 72, 22)
-    local nextPage = T.Button(pinsCard, Tr("Next"), 58, 22)
+    local prevPage = T.Button(pinsCard, "Previous", 72, 22)
+    local nextPage = T.Button(pinsCard, "Next", 58, 22)
     local pageText = T.Font(pinsCard, "GameFontDisableSmall", "", T.colors.dim)
     nextPage:SetPoint("TOPRIGHT", pinsCard, "TOPRIGHT", -16, -36)
     pageText:SetPoint("RIGHT", nextPage, "LEFT", -8, 0)
@@ -453,9 +453,9 @@ local function BuildPriorityPage(ctx)
         status:SetPoint("RIGHT", row, "RIGHT", -176, 0)
         status:SetWidth(130)
         status:SetJustifyH("RIGHT")
-        local up = T.Button(row, Tr("Up"), 42, 20)
-        local down = T.Button(row, Tr("Down"), 48, 20)
-        local remove = T.Button(row, Tr("Remove"), 68, 20)
+        local up = T.Button(row, "Up", 42, 20)
+        local down = T.Button(row, "Down", 48, 20)
+        local remove = T.Button(row, "Remove", 68, 20)
         remove:SetPoint("RIGHT", row, "RIGHT", -4, 0)
         down:SetPoint("RIGHT", remove, "LEFT", -4, 0)
         up:SetPoint("RIGHT", down, "LEFT", -4, 0)
@@ -466,7 +466,7 @@ local function BuildPriorityPage(ctx)
         pinRows[i] = { frame = row, number = number, name = name, status = status, up = up, down = down, remove = remove }
     end
 
-    local clearPins = (W.RoleButton and W.RoleButton(who, Tr("Clear all"), "danger", 92, 24)) or T.Button(who, Tr("Clear all"), 92, 24)
+    local clearPins = (W.RoleButton and W.RoleButton(who, "Clear all", "danger", 92, 24)) or T.Button(who, "Clear all", 92, 24)
     clearPins:SetPoint("TOPLEFT", who, "TOPLEFT", 24, -500)
     if T.CenterButtonLabel then T.CenterButtonLabel(clearPins) end
     RegisterAction(clearPins, ctx, "pins.clear_all", "Clear all Priority Frame pins")
@@ -487,7 +487,7 @@ local function BuildPriorityPage(ctx)
         local pages = max(1, math.ceil(count / PIN_ROWS_PER_PAGE))
         if pinPage > pages then pinPage = pages; M.gfPriorityPinPage = pinPage end
         local first = (pinPage - 1) * PIN_ROWS_PER_PAGE + 1
-        pinsStatus:SetText(count == 1 and Tr("1 saved player") or (tostring(count) .. " " .. Tr("saved players")))
+        T.SetTranslatedText(pinsStatus, count == 1 and Tr("1 saved player") or (tostring(count) .. " " .. Tr("saved players")))
         pageText:SetText(tostring(pinPage) .. " / " .. tostring(pages))
         prevPage:SetShown(pages > 1)
         nextPage:SetShown(pages > 1)
@@ -504,25 +504,25 @@ local function BuildPriorityPage(ctx)
                 local active = entry.active == true
                 local statusText
                 if active and entry.isTank == true and stateScratch.autoTanks == true then
-                    statusText = Tr("Visible · auto tank")
+                    statusText = "Visible · auto tank"
                 elseif active then
-                    statusText = Tr("Visible")
+                    statusText = "Visible"
                 elseif entry.waitingReason == "CAPACITY" then
-                    statusText = Tr("Saved · slots full")
+                    statusText = "Saved · slots full"
                 elseif entry.waitingReason == "NOT_IN_GROUP" then
-                    statusText = Tr("Saved · not grouped")
+                    statusText = "Saved · not grouped"
                 elseif entry.waitingReason == "NOT_PRESENT" then
-                    statusText = Tr("Saved · not in current group")
+                    statusText = "Saved · not in current group"
                 elseif entry.waitingReason == "GROUP_FRAMES_DISABLED" then
-                    statusText = Tr(stateScratch.inParty == true and "Saved · Party frames disabled"
-                        or "Saved · Raid frames disabled")
+                    statusText = stateScratch.inParty == true and "Saved · Party frames disabled"
+                        or "Saved · Raid frames disabled"
                 elseif entry.waitingReason == "DISABLED" then
-                    statusText = Tr("Saved · Priority Frames disabled")
+                    statusText = "Saved · Priority Frames disabled"
                 else
-                    statusText = Tr("Saved")
+                    statusText = "Saved"
                 end
                 row.number:SetText(tostring(index))
-                row.name:SetText(entry.name or Tr("Unknown player"))
+                T.SetTranslatedText(row.name, entry.name or Tr("Unknown player"))
                 row.status:SetText(statusText)
                 local color = active and T.colors.accent or T.colors.muted
                 row.status:SetTextColor(color[1], color[2], color[3], color[4] or 1)
@@ -560,7 +560,7 @@ local function BuildPriorityPage(ctx)
         row.remove:SetScript("OnClick", function(self)
             local gf = GF()
             if self._pinIndex and gf and type(gf.RemovePriorityPin) == "function" and gf.RemovePriorityPin(self._pinIndex) then
-                if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback(Tr("Priority pin removed"), "ok", 1.2) end
+                if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback("Priority pin removed", "ok", 1.2) end
                 RequestPageRefresh(ctx, "priority-pin-removed")
             end
         end)
@@ -571,7 +571,7 @@ local function BuildPriorityPage(ctx)
         local function Clear()
             if gf.ClearPriorityPins() then
                 SetPinPage(1)
-                if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback(Tr("All Priority pins cleared"), "ok", 1.3) end
+                if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback("All Priority pins cleared", "ok", 1.3) end
             end
         end
         EnsureClearPinsPopup()
@@ -618,7 +618,7 @@ local function BuildPriorityPage(ctx)
         function() return tonumber(PriorityConf().attachOffset) or 0 end,
         function(value) SetPriorityOption(ctx, "attachOffset", floor((tonumber(value) or 0) + 0.5), "Priority Frames alignment offset") end,
         0, M.Assign(PriorityMeta(ctx, "placement.attach_offset", "gf_priority.attachOffset"), { step = 1, roundStep = true }))
-    local move = T.Button(placement, Tr("Position in Edit Mode"), 172, 26)
+    local move = T.Button(placement, "Position in Edit Mode", 172, 26)
     move:SetPoint("TOPLEFT", placement, "TOPLEFT", max(360, placementW - 342), -252)
     if T.CenterButtonLabel then T.CenterButtonLabel(move) end
     move:SetScript("OnClick", OpenPriorityEditModeWithFeedback)
@@ -644,11 +644,11 @@ local function BuildPriorityPage(ctx)
     local function RefreshPlacement()
         local conf = PriorityConf()
         local attached = conf.anchorMode ~= "FREE"
-        move:SetText(Tr(conf.enabled == true and "Position in Edit Mode" or "Preview position in Edit Mode"))
+        move:SetText(conf.enabled == true and "Position in Edit Mode" or "Preview position in Edit Mode")
         W.SetControlEnabled(attachGap, attached)
         W.SetControlEnabled(attachOffset, attached)
-        placementHint:SetText(attached and Tr("The strip follows the active Party, Raid, or Mythic Raid container automatically.")
-            or Tr("Free position uses the dedicated Priority Frames mover."))
+        placementHint:SetText(attached and "The strip follows the active Party, Raid, or Mythic Raid container automatically."
+            or "Free position uses the dedicated Priority Frames mover.")
         SetSectionBadgesAndStatus(placement, {
             { text = Tr(attached and "Attached" or "Free"), kind = attached and "info" or "accent" },
             { text = Tr("Growth: ") .. Tr((conf.growth or "DOWN"):sub(1, 1) .. (conf.growth or "DOWN"):sub(2):lower()), kind = "muted" },

@@ -1286,6 +1286,8 @@ M.Assign(UnitPage, {
     DeepCopy = DeepCopy,
     DefaultCopyTarget = DefaultCopyTarget,
     UnitTopLabel = UnitTopLabel,
+    -- The raw key of UnitTopLabel, for widgets that translate their own label.
+    UnitTopLabelKey = function(unit) return UNIT_LABELS[unit] or tostring(unit or "") end,
     UnitTopPillWidth = UnitTopPillWidth,
     ControlMeta = UnitControlMeta,
     SettingMeta = UnitSettingMeta,

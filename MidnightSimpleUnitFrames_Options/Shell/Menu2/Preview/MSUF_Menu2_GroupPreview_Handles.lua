@@ -1245,7 +1245,7 @@ function Stage.BindSpellDrop(st)
         guide:EnableMouse(false)
         if guide.SetFrameLevel then guide:SetFrameLevel(InteractionLevel(1)) end
         PixelLayoutRegion(guide, "SetBackdrop", { bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 2 })
-        guide._text = T.Font(guide, "GameFontNormal", Tr("Drop to place spell icon"), { 0.72, 0.90, 1, 1 })
+        guide._text = T.Font(guide, "GameFontNormal", "Drop to place spell icon", { 0.72, 0.90, 1, 1 })
         guide._text:SetPoint("BOTTOM", guide, "TOP", 0, 6)
         guide:Hide()
         box._spellDropGuide = guide
@@ -1266,12 +1266,12 @@ function Stage.BindSpellDrop(st)
             if inside then
                 guide:SetBackdropColor(0.12, 0.72, 0.38, 0.10)
                 guide:SetBackdropBorderColor(0.22, 1.00, 0.55, 1)
-                guide._text:SetText(Tr("Release to place and position"))
+                guide._text:SetText("Release to place and position")
                 guide._text:SetTextColor(0.42, 1.00, 0.65, 1)
             else
                 guide:SetBackdropColor(0.12, 0.50, 0.82, 0.07)
                 guide:SetBackdropBorderColor(0.32, 0.76, 1.00, 0.95)
-                guide._text:SetText(Tr("Drag onto the frame to place"))
+                guide._text:SetText("Drag onto the frame to place")
                 guide._text:SetTextColor(0.72, 0.90, 1.00, 1)
             end
         end

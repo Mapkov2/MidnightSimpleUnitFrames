@@ -404,7 +404,7 @@ function StatusIcons.StyleLabel(spec)
 end
 function StatusIcons.SetDropdownTitle(control, label)
     if control and control._msuf2Title and control._msuf2Title.SetText then
-        control._msuf2Title:SetText(Tr(label))
+        control._msuf2Title:SetText(label)
     end
 end
 --- Each style value carries its own Midnight flag now, so the support probe runs per entry
@@ -903,7 +903,7 @@ function StatusIcons.Refresh(state)
     StatusIcons.SetDropdownTitle(iconPack, StatusIcons.StyleLabel(spec))
     StatusIcons.SetDropdownTitle(customIcon, "Custom icon")
     if iconPreviewLabel and iconPreviewLabel.SetText then
-        iconPreviewLabel:SetText(StatusIcons.IsRoleSpec(spec) and Tr("Role icon preview") or Tr("Icon preview"))
+        iconPreviewLabel:SetText(StatusIcons.IsRoleSpec(spec) and "Role icon preview" or "Icon preview")
     end
     SetOptionsEnabled(state.statusPlacementControls, enabled)
     SetOptionsEnabled(state.statusActionControls, spec ~= nil)
@@ -1065,7 +1065,7 @@ local function CountCustomBuffs(specCfg)
     return count
 end
 local function SpellFeedback(text, kind)
-    if M.ShowStatusFeedback then M.ShowStatusFeedback(Tr(text), kind, 3) end
+    if M.ShowStatusFeedback then M.ShowStatusFeedback(text, kind, 3) end
 end
 local function RefreshSpellPage(refreshPage)
     RefreshGFPreview()
@@ -1237,8 +1237,8 @@ function SpellTileGrid.New(ctx, parent, x, y, width, refreshPage)
     frame._tiles = {}
     local self = setmetatable({
         ctx = ctx, parent = parent, frame = frame, refreshPage = refreshPage,
-        label = W.LabelAt(parent, Tr("Spells for this spec"), x, y + 48, width, "GameFontNormalSmall", T.colors.accent),
-        hint = W.Text(parent, Tr("Click: edit. Right-click: toggle. Drag: reorder or preview."), x, y + 27, width, T.colors.muted),
+        label = W.LabelAt(parent, "Spells for this spec", x, y + 48, width, "GameFontNormalSmall", T.colors.accent),
+        hint = W.Text(parent, "Click: edit. Right-click: toggle. Drag: reorder or preview.", x, y + 27, width, T.colors.muted),
         tileSize = 52, gap = 8,
     }, SpellTileGrid)
     self.perRow = max(1, floor((width + self.gap) / (self.tileSize + self.gap)))
@@ -1482,7 +1482,7 @@ function SpellTileGrid:Refresh()
     trackable = type(trackable) == "table" and trackable or {}
     local specCfg = type(siCfg.specs) == "table" and specKey and siCfg.specs[specKey]
     local customCount = CountCustomBuffs(specCfg)
-    self.hint:SetText(Tr(#trackable == 0 and "No spells for this spec." or "Click: edit. Right-click: toggle. Drag: reorder or preview."))
+    self.hint:SetText(#trackable == 0 and "No spells for this spec." or "Click: edit. Right-click: toggle. Drag: reorder or preview.")
     if self.hint.SetTextColor then
         local color = indicatorsOn and T.colors.muted or T.colors.dim
         self.hint:SetTextColor(color[1], color[2], color[3], color[4] or 1)
@@ -1544,17 +1544,17 @@ function SpellTileGrid:Refresh()
 end
 
 GP.BuildSpellIndicatorStyleSection = function(ctx, b)
-    local section = b:CollapsibleSection("si_style", Tr("Spell Icon Style"), 844, false)
+    local section = b:CollapsibleSection("si_style", "Spell Icon Style", 844, false)
     local sectionW = section._msuf2Width or ctx.width or 720
     local gap, leftX = 28, 30
     local innerW = max(320, sectionW - 60)
     local leftW = max(240, min(370, floor((innerW - gap) * 0.46)))
     local rightX = leftX + leftW + gap
     local rightW = max(240, min(390, innerW - leftW - gap))
-    W.ControlCard(section, Tr("Basics"), nil, leftX - 14, -38, leftW + 28, 322)
-    W.ControlCard(section, Tr("Cooldown Text"), nil, rightX - 14, -38, rightW + 28, 430)
-    W.ControlCard(section, Tr("Stack Count"), nil, leftX - 14, -376, leftW + 28, 296)
-    W.ControlCard(section, Tr("Duration Bar"), nil, rightX - 14, -484, rightW + 28, 312)
+    W.ControlCard(section, "Basics", nil, leftX - 14, -38, leftW + 28, 322)
+    W.ControlCard(section, "Cooldown Text", nil, rightX - 14, -38, rightW + 28, 430)
+    W.ControlCard(section, "Stack Count", nil, leftX - 14, -376, leftW + 28, 296)
+    W.ControlCard(section, "Duration Bar", nil, rightX - 14, -484, rightW + 28, 312)
 
     local function Style()
         local si = SpellIndicators(CurrentScope())
@@ -1584,7 +1584,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         return control
     end
     local function BindNumber(label, x, y, width, minValue, maxValue, step, key, default, path)
-        local control = Track(W.Slider(section, Tr(label), minValue, maxValue, step, width))
+        local control = Track(W.Slider(section, label, minValue, maxValue, step, width))
         local meta = StyleMeta(path or ("spell.style." .. key), step)
         M.BindNumberWidget(ctx, control,
             function() return tonumber(Style()[key]) or default end,
@@ -1597,7 +1597,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         return control
     end
     local function BindBool(label, x, y, width, key, default)
-        local control = Track(W.ToggleAt(section, Tr(label), x, y, width))
+        local control = Track(W.ToggleAt(section, label, x, y, width))
         local meta = StyleMeta("spell.style." .. key)
         M.BindBoolWidget(ctx, control,
             function()
@@ -1614,7 +1614,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         return control
     end
     local function BindChoice(label, x, y, width, values, key, default)
-        local control = Track(W.Dropdown(section, Tr(label), values, width))
+        local control = Track(W.Dropdown(section, label, values, width))
         local meta = StyleMeta("spell.style." .. key)
         M.BindDropdownWidget(ctx, control,
             function() return Style()[key] or default end,
@@ -1627,7 +1627,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         return control
     end
 
-    local iconZoom = Track(W.Slider(section, Tr("Icon Zoom (%)"), 100, 200, 1, leftW))
+    local iconZoom = Track(W.Slider(section, "Icon Zoom (%)", 100, 200, 1, leftW))
     local metadata = StyleMeta("spell.icon_zoom", 1)
     M.BindNumberWidget(ctx, iconZoom,
         function() return tonumber(SpellIndicators(CurrentScope()).iconZoom) or 100 end,
@@ -1638,7 +1638,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         100, metadata)
     W.MoveWidget(iconZoom, section, leftX, -72, leftW, "LEFT")
 
-    local iconScale = Track(W.Slider(section, Tr("Icon Scale (%)"), 20, 300, 1, leftW))
+    local iconScale = Track(W.Slider(section, "Icon Scale (%)", 20, 300, 1, leftW))
     do
         local pendingApply, pendingScope, releaseScheduled
         local meta = StyleMeta("spell.icon_scale", 1)
@@ -1684,7 +1684,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
     end
     W.MoveWidget(iconScale, section, leftX, -128, leftW, "LEFT")
 
-    local opacity = Track(W.Slider(section, Tr("Opacity"), 10, 100, 5, leftW))
+    local opacity = Track(W.Slider(section, "Opacity", 10, 100, 5, leftW))
     local metadata = StyleMeta("spell.style.alpha", 5)
     M.BindNumberWidget(ctx, opacity,
         function() return floor(((tonumber(Style().alpha) or 1) * 100) + 0.5) end,
@@ -1703,7 +1703,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
     local halfRight = max(100, floor((rightW - 12) / 2))
     local cooldownX = BindNumber("Cooldown X", rightX, -260, halfRight, -40, 40, 1, "cooldownX", 0)
     local cooldownY = BindNumber("Cooldown Y", rightX + halfRight + 12, -260, halfRight, -40, 40, 1, "cooldownY", 0)
-    local swipeDirection = Track(W.Dropdown(section, Tr("Swipe Direction"), VT("NORMAL", "Normal", "REVERSE", "Reverse"), rightW))
+    local swipeDirection = Track(W.Dropdown(section, "Swipe Direction", VT("NORMAL", "Normal", "REVERSE", "Reverse"), rightW))
     local metadata = StyleMeta("spell.style.cooldownSwipeReverse")
     M.BindDropdownWidget(ctx, swipeDirection,
         function() return Style().cooldownSwipeReverse == true and "REVERSE" or "NORMAL" end,
@@ -1765,7 +1765,7 @@ end
 -- callbacks bound in earlier stages reach the refresh body wired last.
 local SpellSection = {}
 function SpellSection.Open(state, ctx, b, RefreshPage)
-    local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 848, false)
+    local spells = b:CollapsibleSection("si", "Spell Indicators", 848, false)
     local siW = spells._msuf2Width or ctx.width or 720
     local siGap = 28
     local siLeftX = 30
@@ -1773,10 +1773,10 @@ function SpellSection.Open(state, ctx, b, RefreshPage)
     local siLeftW = max(240, min(370, floor((siInnerW - siGap) * 0.46)))
     local siRightX = siLeftX + siLeftW + siGap
     local siRightW = max(240, min(390, siInnerW - siLeftW - siGap))
-    state.spellSetCard = W.ControlCard(spells, Tr("Choose Spells"), nil, siLeftX - 14, -38, siLeftW + 28, 404)
-    W.ControlCard(spells, Tr("Edit Spell"), nil, siRightX - 14, -38, siRightW + 28, 404)
-    state.placedIndicatorCard = W.ControlCard(spells, Tr("Show on Frame"), nil, siLeftX - 14, -456, siLeftW + 28, 560)
-    state.frameHighlightCard = W.ControlCard(spells, Tr("Highlight Health Bar"), nil, siRightX - 14, -456, siRightW + 28, 360)
+    state.spellSetCard = W.ControlCard(spells, "Choose Spells", nil, siLeftX - 14, -38, siLeftW + 28, 404)
+    W.ControlCard(spells, "Edit Spell", nil, siRightX - 14, -38, siRightW + 28, 404)
+    state.placedIndicatorCard = W.ControlCard(spells, "Show on Frame", nil, siLeftX - 14, -456, siLeftW + 28, 560)
+    state.frameHighlightCard = W.ControlCard(spells, "Highlight Health Bar", nil, siRightX - 14, -456, siRightW + 28, 360)
     state.RefreshState = M.RefreshProxy()
     function state.RequestControlRefresh(reason)
         if M.RequestRefresh then
@@ -1794,7 +1794,7 @@ end
 function SpellSection.BuildSpecControls(state, ctx)
     local spells, siLeftX, siLeftW, siRightX, siRightW = state.spells, state.siLeftX, state.siLeftW, state.siRightX, state.siRightW
     local RefreshSpellIndicatorState, RequestSpellControlRefresh = state.RefreshState, state.RequestControlRefresh
-    local siEnable = W.SwitchAt(spells, Tr("Show spell indicators"), siLeftX, -72, siLeftW)
+    local siEnable = W.SwitchAt(spells, "Show spell indicators", siLeftX, -72, siLeftW)
     siEnable._msuf2GroupFrameGateAlwaysEnabled = true
     M.BindBoolWidget(ctx, siEnable,
         function()
@@ -1817,9 +1817,9 @@ function SpellSection.BuildSpecControls(state, ctx)
     local function SelectedSpellConfigTable()
         return CurrentSpellConfig(CurrentScope(), true) or SpellIndicators(CurrentScope())
     end
-    local siLayer = BindNestedSlider(ctx, W.Slider(spells, Tr("Layer (0-30)"), 0, 30, 1, siRightW), SelectedSpellConfigTable, "layer", 9, "visual", "spell.selected.layer")
+    local siLayer = BindNestedSlider(ctx, W.Slider(spells, "Layer (0-30)", 0, 30, 1, siRightW), SelectedSpellConfigTable, "layer", 9, "visual", "spell.selected.layer")
     W.MoveWidget(siLayer, spells, siRightX, -72, siRightW, "LEFT")
-    local specDrop = W.Dropdown(spells, Tr("Spec"), SpellSpecValues, siLeftW)
+    local specDrop = W.Dropdown(spells, "Spec", SpellSpecValues, siLeftW)
     M.BindDropdownWidget(ctx, specDrop,
         function() return SpellIndicators(CurrentScope()).spec or "auto" end,
         function(value)
@@ -1838,7 +1838,7 @@ function SpellSection.BuildSpecControls(state, ctx)
         local previewAllState = M.gfPreviewAllSpecSpellIcons
         return type(previewAllState) == "table" and previewAllState[CurrentScope()] == true
     end
-    local previewAll = T.Button(spells, Tr("Preview all spells"), siLeftW, 28)
+    local previewAll = T.Button(spells, "Preview all spells", siLeftW, 28)
     if T.CenterButtonLabel then T.CenterButtonLabel(previewAll) end
     previewAll:SetPoint("TOPLEFT", spells, "TOPLEFT", siLeftX, -162)
     local function RefreshPreviewAllButton()
@@ -1871,7 +1871,7 @@ function SpellSection.BuildSpecControls(state, ctx)
         M.AddTooltip(previewAll, "Preview all spells", "On previews every enabled spell of every tracked spec, including spells that only draw a frame effect. Off previews only the selected spell.", { hook = true })
     end
     RefreshPreviewAllButton()
-    local multiSpecDrop = W.Dropdown(spells, Tr("Multi-Spec Entry"), function() return SpellTrackedSpecValues() end, siRightW)
+    local multiSpecDrop = W.Dropdown(spells, "Multi-Spec Entry", function() return SpellTrackedSpecValues() end, siRightW)
     M.BindDropdownWidget(ctx, multiSpecDrop,
         function() return CurrentSpellMultiSpec(CurrentScope()) end,
         function(value)
@@ -1890,8 +1890,8 @@ function SpellSection.BuildSpecControls(state, ctx)
     -- above Choose spell. The multi-spec pair only shows in multi-spec mode, but
     -- it keeps its own rows so it never covers the ID input.
     W.MoveWidget(multiSpecDrop, spells, siRightX, -130, siRightW, "LEFT")
-    local multiSpecEnabled = W.ToggleAt(spells, Tr("Track selected multi spec"), siRightX, -184, siRightW)
-    local allSpecsHint = W.Text(spells, Tr("Shared entries apply to every spec."), siRightX, -184, siRightW, T.colors.accent)
+    local multiSpecEnabled = W.ToggleAt(spells, "Track selected multi spec", siRightX, -184, siRightW)
+    local allSpecsHint = W.Text(spells, "Shared entries apply to every spec.", siRightX, -184, siRightW, T.colors.accent)
     if allSpecsHint.SetWordWrap then allSpecsHint:SetWordWrap(true) end
     allSpecsHint:Hide()
     M.BindBoolWidget(ctx, multiSpecEnabled,
@@ -1923,7 +1923,7 @@ end
 function SpellSection.BuildSelectedSpell(state, ctx)
     local spells, siRightX, siRightW = state.spells, state.siRightX, state.siRightW
     local RefreshSpellIndicatorState, RequestSpellControlRefresh = state.RefreshState, state.RequestControlRefresh
-    local auraDrop = W.Dropdown(spells, Tr("Choose spell"), function() return SpellAuraValues(CurrentScope()) end, siRightW)
+    local auraDrop = W.Dropdown(spells, "Choose spell", function() return SpellAuraValues(CurrentScope()) end, siRightW)
     M.BindDropdownWidget(ctx, auraDrop,
         function() return CurrentSpellAura(CurrentScope()) end,
         function(value)
@@ -1934,7 +1934,7 @@ function SpellSection.BuildSelectedSpell(state, ctx)
         end,
         ControlMeta(ctx, "spell.selected_aura", "ephemeral"))
     W.MoveWidget(auraDrop, spells, siRightX, -282, siRightW, "LEFT")
-    local spellEnabled = W.SwitchAt(spells, Tr("Show this spell"), siRightX, -342, siRightW)
+    local spellEnabled = W.SwitchAt(spells, "Show this spell", siRightX, -342, siRightW)
     M.BindBoolWidget(ctx, spellEnabled,
         function()
             local cfg = CurrentSpellConfig(CurrentScope(), false)
@@ -1946,7 +1946,7 @@ function SpellSection.BuildSelectedSpell(state, ctx)
             QueueSpellIndicators(CurrentScope())
         end,
         ControlMeta(ctx, "spell.selected.enabled"))
-    local customSpellIDs = W.TextInput(spells, Tr("Aura Spell IDs"), siRightW)
+    local customSpellIDs = W.TextInput(spells, "Aura Spell IDs", siRightW)
     M.BindTextInput(ctx, customSpellIDs,
         function()
             local cfg = CurrentSpellConfig(CurrentScope(), false)
@@ -1966,7 +1966,7 @@ function SpellSection.BuildSelectedSpell(state, ctx)
         true,
         ControlMeta(ctx, "spell.selected.spell_ids"))
     W.MoveWidget(customSpellIDs, spells, siRightX, -222, siRightW)
-    local onlyMine = W.ToggleAt(spells, Tr("Only show my casts"), siRightX, -374, siRightW)
+    local onlyMine = W.ToggleAt(spells, "Only show my casts", siRightX, -374, siRightW)
     M.BindBoolWidget(ctx, onlyMine,
         function()
             local cfg = CurrentSpellConfig(CurrentScope(), false)
@@ -1983,7 +1983,7 @@ function SpellSection.BuildSelectedSpell(state, ctx)
             QueueSpellIndicators(CurrentScope())
         end,
         ControlMeta(ctx, "spell.selected.only_mine"))
-    local autoBlacklist = W.ToggleAt(spells, Tr("Hide duplicate Buff icon"), siRightX, -406, siRightW)
+    local autoBlacklist = W.ToggleAt(spells, "Hide duplicate Buff icon", siRightX, -406, siRightW)
     M.BindBoolWidget(ctx, autoBlacklist,
         function()
             local cfg = CurrentSpellConfig(CurrentScope(), false)
@@ -2010,7 +2010,7 @@ end
 function SpellSection.PrepareBinders(state, ctx)
     local spells, siLeftX, siLeftW, siRightX, siRightW = state.spells, state.siLeftX, state.siLeftW, state.siRightX, state.siRightW
     function state.BindPlacedDropdown(label, values, key, default, y, afterSet)
-        local control = W.Dropdown(spells, Tr(label), values, siLeftW)
+        local control = W.Dropdown(spells, label, values, siLeftW)
         M.BindDropdownWidget(ctx, control,
             function()
                 local placed = PlacedConfig(CurrentScope(), false)
@@ -2027,7 +2027,7 @@ function SpellSection.PrepareBinders(state, ctx)
         return control
     end
     local function BindConfigSlider(configFn, x, width, label, minValue, maxValue, step, key, default, y)
-        local control = W.Slider(spells, Tr(label), minValue, maxValue, step, width)
+        local control = W.Slider(spells, label, minValue, maxValue, step, width)
         M.BindNumberWidget(ctx, control,
             function()
                 local cfg = configFn(CurrentScope(), false)
@@ -2048,7 +2048,7 @@ function SpellSection.PrepareBinders(state, ctx)
     end
     function state.BindPlacedToggle(label, key, defaultWhenPlaced, y, x, width, afterSet)
         x, width = x or siRightX, width or siRightW
-        local control = W.ToggleAt(spells, Tr(label), x, y, width)
+        local control = W.ToggleAt(spells, label, x, y, width)
         M.BindBoolWidget(ctx, control,
             function()
                 local placed = PlacedConfig(CurrentScope(), false)
@@ -2071,7 +2071,7 @@ function SpellSection.PrepareBinders(state, ctx)
         return BindConfigSlider(FrameEffectConfig, siRightX, siRightW, label, minValue, maxValue, step, key, default, y)
     end
     function state.BindSpellSubType(label, values, x, y, width, field, applyDefaults, afterSet)
-        local control = W.Dropdown(spells, Tr(label), values, width)
+        local control = W.Dropdown(spells, label, values, width)
         M.BindDropdownWidget(ctx, control,
             function()
                 local cfg = CurrentSpellConfig(CurrentScope(), false)
@@ -2148,17 +2148,17 @@ function SpellSection.BuildPlacedCard(state, ctx)
         "Timer Y", -100, 100, 1, "barTimerY", 0, -896)
     state.placedColorRelevant = false
     state.placedColorShortcut = W.AttachContextColorShortcut(state.placedIndicatorCard, {
-        title = Tr("Selected Spell Color"),
-        note = Tr("The selected spell color is shared by its bar, square, and icon glow."),
-        tooltipTitle = Tr("Selected Spell Color"),
-        tooltipText = Tr("The selected spell color is shared by its bar, square, and icon glow."),
+        title = "Selected Spell Color",
+        note = "The selected spell color is shared by its bar, square, and icon glow.",
+        tooltipTitle = "Selected Spell Color",
+        tooltipText = "The selected spell color is shared by its bar, square, and icon glow.",
         scopeTag = state.ColorScopeTag,
         historySource = "menu:group-spell-indicator-color",
         isRelevant = function() return state.placedColorRelevant end,
         getTargets = function()
             local kind = CurrentScope()
             return {{
-                label = Tr("Selected Spell Color"),
+                label = "Selected Spell Color",
                 getRGB = function()
                     local cfg = CurrentSpellConfig(kind, false)
                     local color = cfg and type(cfg.color) == "table" and cfg.color or CurrentAuraColor(kind)
@@ -2178,7 +2178,7 @@ function SpellSection.BuildPlacedCard(state, ctx)
     RegisterControl(state.placedColorShortcut, ctx, "spell.selected.color", "Selected Spell Color", "button", "action")
     local function RefreshPlacedControlVisibility(placed)
         local iconSelected, barSelected, barTimerSelected = ResolvePlacedSpellIndicatorControlVisibility(placed)
-        if placedSize._msuf2Title then placedSize._msuf2Title:SetText(Tr(barSelected and "Height" or "Size")) end
+        if placedSize._msuf2Title then placedSize._msuf2Title:SetText(barSelected and "Height" or "Size") end
         W.SetControlShown(placedIconEffect, iconSelected)
         W.SetControlShown(placedBarSmoothFill, barSelected)
         W.SetControlShown(placedBarShowTimer, barSelected)
@@ -2222,15 +2222,15 @@ function SpellSection.BuildFrameCard(state, ctx)
         state.RefreshState)
     state.frameColorRelevant = false
     state.frameColorShortcut = W.AttachContextColorShortcut(state.frameHighlightCard, {
-        title = Tr("Health bar highlight"),
-        tooltipTitle = Tr("Health bar highlight"),
+        title = "Health bar highlight",
+        tooltipTitle = "Health bar highlight",
         scopeTag = state.ColorScopeTag,
         historySource = "menu:group-spell-frame-color",
         isRelevant = function() return state.frameColorRelevant end,
         getTargets = function()
             local kind = CurrentScope()
             return {{
-                label = Tr("Health bar highlight"),
+                label = "Health bar highlight",
                 getRGB = function()
                     local frame = FrameEffectConfig(kind, false)
                     local color = frame and frame.color or CurrentAuraColor(kind)
@@ -2250,7 +2250,7 @@ function SpellSection.BuildFrameCard(state, ctx)
     })
     RegisterControl(state.frameColorShortcut, ctx, "spell.frame.color", "Health bar highlight color", "button", "action")
     state.framePriority = BindFrameSlider("Priority", 1, 10, 1, "priority", 5, -544)
-    local frameAlpha = W.Slider(spells, Tr("Tint Alpha"), 5, 100, 5, siRightW)
+    local frameAlpha = W.Slider(spells, "Tint Alpha", 5, 100, 5, siRightW)
     M.BindNumberWidget(ctx, frameAlpha,
         function()
             local frame = FrameEffectConfig(CurrentScope(), false)
@@ -2556,10 +2556,10 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
             { text = OptionText(CICategoryValues, category, "None"), kind = showCustom and "accent" or (enabled and "info" or "muted") },
         })
         if showCustom then
-            customStatus:SetText(M.Format("%s is using Custom Spell. These settings are active.", Tr(slotLabel)))
+            T.SetTranslatedText(customStatus, M.Format("%s is using Custom Spell. These settings are active.", Tr(slotLabel)))
             customStatus:SetTextColor(T.colors.ok[1], T.colors.ok[2], T.colors.ok[3], 0.95)
         else
-            customStatus:SetText(M.Format("%s is set to %s. Set Selected Slot Indicator to Custom Spell to activate this editor.",
+            T.SetTranslatedText(customStatus, M.Format("%s is set to %s. Set Selected Slot Indicator to Custom Spell to activate this editor.",
                 Tr(slotLabel), Tr(OptionText(CICategoryValues, category, "None"))))
             customStatus:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.90)
         end

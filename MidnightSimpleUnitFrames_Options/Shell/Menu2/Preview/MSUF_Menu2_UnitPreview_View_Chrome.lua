@@ -443,7 +443,7 @@ local function EnsureUnitLayersButton(box)
     local T = MenuTheme()
     local btn
     if T and T.Button then
-        btn = T.Button(box, TR("Layers"), 76, 20)
+        btn = T.Button(box, "Layers", 76, 20)
     else
         btn = PixelLayoutRegion(CreateFrame("Button", nil, box, "BackdropTemplate"))
         btn:SetSize(76, 20)
@@ -467,7 +467,7 @@ local function LayoutUnitHeaderControls(box, compact)
     local layersBtn = box._msuf2LayersButton
     if compact and header then
         if layersBtn then
-            if layersBtn.SetText then layersBtn:SetText(TR("Layers") .. " v") end
+            if layersBtn.SetText then layersBtn:SetText(TR("Layers") .. " v", true) end
             layersBtn:SetParent(header)
             layersBtn:ClearAllPoints()
             if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
@@ -479,7 +479,7 @@ local function LayoutUnitHeaderControls(box, compact)
         return
     end
     if layersBtn then
-        if layersBtn.SetText then layersBtn:SetText(TR("Layers")) end
+        if layersBtn.SetText then layersBtn:SetText("Layers") end
         layersBtn:SetParent(box)
         layersBtn:ClearAllPoints()
         layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)

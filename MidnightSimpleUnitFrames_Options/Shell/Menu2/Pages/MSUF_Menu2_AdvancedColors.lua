@@ -604,8 +604,8 @@ local function AttachDefaultColorBehavior(ctx, control, defaultRGB)
         if type(baseClick) == "function" then baseClick(self, mouseButton, ...) end
     end)
     if M.AddTooltip and control._msuf2ColorLabel then
-        M.AddTooltip(control, TrText(control._msuf2ColorLabel),
-            TrText("Right-click resets this color to its default."), { hook = true })
+        M.AddTooltip(control, control._msuf2ColorLabel,
+            "Right-click resets this color to its default.", { hook = true })
     end
     RefreshDot()
 end
@@ -1404,7 +1404,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     local previewPanel = T.Panel(background, nil, T.colors.panel2 or { 0.014, 0.038, 0.072, 0.92 }, T.colors.borderSoft)
     previewPanel:SetPoint("TOPLEFT", background, "TOPLEFT", 12, -104)
     previewPanel:SetSize(previewWidth, 66)
-    local previewLabel = T.Font(previewPanel, "GameFontNormalSmall", TrText("Preview"), T.colors.muted)
+    local previewLabel = T.Font(previewPanel, "GameFontNormalSmall", "Preview", T.colors.muted)
     previewLabel:SetPoint("TOPLEFT", previewPanel, "TOPLEFT", 12, -8)
     local previewMode = T.Font(previewPanel, "GameFontHighlightSmall", "", T.colors.muted)
     previewMode:SetPoint("TOPRIGHT", previewPanel, "TOPRIGHT", -12, -8)
@@ -1559,7 +1559,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
         if modeRow and modeRow.SetValue then modeRow:SetValue(mode) end
         for i = 1, #BAR_MODE_CARDS do
             if BAR_MODE_CARDS[i].mode == mode and modeDescLabel and modeDescLabel.SetText then
-                modeDescLabel:SetText(TrText(BAR_MODE_CARDS[i].desc))
+                modeDescLabel:SetText(BAR_MODE_CARDS[i].desc)
             end
         end
     end
@@ -1698,7 +1698,7 @@ end
 -- separate settings.
 local function MarkSharedColor(control)
     if not control then return end
-    local tag = T.Font(control, "GameFontDisableSmall", TrText("Shared with group frames"), T.colors.muted)
+    local tag = T.Font(control, "GameFontDisableSmall", "Shared with group frames", T.colors.muted)
     tag:SetPoint("LEFT", control, "RIGHT", 8, 0)
     control._msuf2SharedColorTag = tag
 end
@@ -1938,11 +1938,18 @@ local function BuildHighlightAndGameplayColors(ctx, b, CH, part)
     }) do
         local rowY = -10 - (texIndex - 1) * 108
         local slotPrefix = texSlot.prefix
-        ColorValueAt(ctx, texLayer, M.Tr("Texture layer color") .. texSlot.suffix, 12, rowY,
+        -- The first slot passes the raw keys. Slots 2 and 3 show the translated name plus the
+        -- slot number: W.Color has no pre-translated label path, and a key per slot would cost
+        -- startup locale bytes in every pack.
+        local colorLabel, gradientLabel = "Texture layer color", "Texture layer gradient end"
+        if texSlot.suffix ~= "" then
+            colorLabel, gradientLabel = M.Tr(colorLabel) .. texSlot.suffix, M.Tr(gradientLabel) .. texSlot.suffix
+        end
+        ColorValueAt(ctx, texLayer, colorLabel, 12, rowY,
             function() return GeneralRGB(slotPrefix .. "Color", 1, 1, 1) end,
             function(r, g, c) M._SetAllTextureLayerRGB(slotPrefix .. "Color", r, g, c) end,
             nil, nil, Meta(texSlot.id .. ".color"), { 1, 1, 1 })
-        ColorValueAt(ctx, texLayer, M.Tr("Texture layer gradient end") .. texSlot.suffix, 12, rowY - 36,
+        ColorValueAt(ctx, texLayer, gradientLabel, 12, rowY - 36,
             function() return GeneralRGB(slotPrefix .. "Gradient2", 0, 0, 0) end,
             function(r, g, c) M._SetAllTextureLayerRGB(slotPrefix .. "Gradient2", r, g, c) end,
             nil, nil, Meta(texSlot.id .. ".gradient_color"), { 0, 0, 0 })

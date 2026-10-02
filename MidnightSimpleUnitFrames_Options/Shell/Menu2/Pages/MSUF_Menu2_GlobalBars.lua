@@ -903,13 +903,13 @@ local function BuildScopeSection(ctx, b)
         hint = "Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.",
         updateHint = function(hint, current, active, shared)
             if shared then
-                hint:SetText(M.Tr("Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope."))
+                hint:SetText("Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.")
             elseif IsGFScope(current) and ScopeHasOverride(current, "hlOverride") then
-                hint:SetText(M.Tr("This group scope can use custom textures and gradients. Raid also applies to Mythic Raid."))
+                hint:SetText("This group scope can use custom textures and gradients. Raid also applies to Mythic Raid.")
             elseif ScopeHasOverride(current, "hlOverride") then
-                hint:SetText(M.Tr("This scope can use custom gradients and bar settings. Textures still follow Shared."))
+                hint:SetText("This scope can use custom gradients and bar settings. Textures still follow Shared.")
             else
-                hint:SetText(M.Tr("This scope follows Shared bar settings. Turn on custom settings here when this scope needs different gradients or bar settings."))
+                hint:SetText("This scope follows Shared bar settings. Turn on custom settings here when this scope needs different gradients or bar settings.")
             end
         end,
     })
@@ -974,7 +974,7 @@ local function BuildTextureSection(ctx, b)
         M.AddTooltip(powerTexture, "Power Bar Texture", "Art for every unit's power bar. Leave on Use bar texture to keep the shared bar art. Each unit page can override this, and the Class Resources detached power texture still wins for a detached Player bar.", { hook = true, owner = "ANCHOR_RIGHT" })
         M.AddTooltip(powerBgTexture, "Power Background Texture", "Background art behind every unit's power bar. Overridable per unit on the unit page.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
-    local gradLabel = T.Font(textures, "GameFontHighlightSmall", M.Tr("Gradient"), T.colors.muted)
+    local gradLabel = T.Font(textures, "GameFontHighlightSmall", "Gradient", T.colors.muted)
     gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
     local SyncGradientControls = M.RefreshProxy()
     local function BindGradientToggle(label, y, width, key, reason, kind)
@@ -2329,7 +2329,7 @@ local function BuildHighlightSection(ctx, b)
             row.key = key
             row.slotIndex = i
             row.frame._stripe:SetColorTexture(r, g, bcol, 1)
-            row.frame._label:SetText(M.Tr(PRIORITY_LABELS[key] or key))
+            row.frame._label:SetText(PRIORITY_LABELS[key] or key)
             row.frame._numText:SetText(tostring(i))
         end
         prioContainer:SetActiveCount(prioCount)

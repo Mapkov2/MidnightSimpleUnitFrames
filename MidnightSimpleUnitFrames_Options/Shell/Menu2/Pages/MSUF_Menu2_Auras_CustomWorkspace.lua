@@ -109,7 +109,7 @@ local function BuildCustomDefensivesTool(C)
                 if icon then icon:SetShown(shown) end
                 if switch then switch:SetShown(shown) end
             end
-            predefinedStatus:SetText(M.Format("%d / %d predefined enabled", enabledCount, #predefined)
+            T.SetTranslatedText(predefinedStatus, M.Format("%d / %d predefined enabled", enabledCount, #predefined)
                 .. MatchSuffix(query, visibleCount))
             predefinedChild:SetHeight(max(184, visibleCount * 30))
         end
@@ -201,10 +201,10 @@ local function BuildCustomDefensivesTool(C)
                 local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
                 if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
             end
-            status:SetText(M.Format("%d predefined enabled · %d custom · click a custom entry to remove",
+            T.SetTranslatedText(status, M.Format("%d predefined enabled · %d custom · click a custom entry to remove",
                 enabledPredefined, #entries) .. MatchSuffix(query, #visible))
-            empty:SetText(#entries == 0 and Tr("No custom buffs added.")
-                or M.Format(Tr("No results for \"%s\"."), query))
+            T.SetTranslatedText(empty, #entries == 0 and Tr("No custom buffs added.")
+                or M.Format("No results for \"%s\".", query))
             empty:SetShown(#visible == 0)
             listScroll:SetShown(#visible > 0)
             listChild:SetHeight(max(118, #visible * 24))
@@ -371,13 +371,13 @@ local function BuildCustomDotsTool(C)
                 if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
             end
             local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
-            status:SetText(M.Format("%d tracked DoTs", #entries)
+            T.SetTranslatedText(status, M.Format("%d tracked DoTs", #entries)
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
                     or customPriority and Tr(" - dynamic priority active")
                     or Tr(" - drag to set Custom Priority"))
                 .. MatchSuffix(query, #visible))
-            empty:SetText(#entries == 0 and Tr("No DoT selected. Choose one above or add a custom Spell ID.")
-                or M.Format(Tr("No results for \"%s\"."), query))
+            T.SetTranslatedText(empty, #entries == 0 and Tr("No DoT selected. Choose one above or add a custom Spell ID.")
+                or M.Format("No results for \"%s\".", query))
             empty:SetShown(#visible == 0)
             listScroll:SetShown(#visible > 0)
             listChild:SetHeight(max(164, #visible * 34))
@@ -486,13 +486,13 @@ local function BuildCustomWhitelistEnchants(C)
                 W.SetControlsEnabled({ enchantInput, enchantSet, enchantDuration }, reminder and tracked > 0)
             end
             if not reminder then
-                enchantStatus:SetText(Tr("Needs Display set to Fixed slots in Setup · enchants have no aura to show otherwise."))
+                enchantStatus:SetText("Needs Display set to Fixed slots in Setup · enchants have no aura to show otherwise.")
             elseif tracked == 0 then
-                enchantStatus:SetText(Tr("No weapon slot tracked."))
+                enchantStatus:SetText("No weapon slot tracked.")
             elseif itemID then
-                enchantStatus:SetText(M.Format("Click uses %s.", tostring(itemName or ("item:" .. tostring(itemID)))))
+                T.SetTranslatedText(enchantStatus, M.Format("Click uses %s.", tostring(itemName or ("item:" .. tostring(itemID)))))
             else
-                enchantStatus:SetText(Tr("No item bound · these slots only indicate."))
+                enchantStatus:SetText("No item bound · these slots only indicate.")
             end
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(ench, {{
@@ -524,7 +524,7 @@ local function BuildCustomWhitelistTool(C)
         local removeBody = isDebuff and Tr("Stops tracking this debuff in the custom container.")
             or Tr("Stops tracking this buff in the custom container.")
         W.Text(section, auraType, 24, -36, 58, T.colors.accent)
-        W.Text(section, Tr(NATIVE_EXACT_AURA_FILTERS_TEXT), 88, -36, inner - 64, T.colors.muted)
+        W.Text(section, NATIVE_EXACT_AURA_FILTERS_TEXT, 88, -36, inner - 64, T.colors.muted)
         local inputValue = ""
         local inputW = max(140, min(floor(inner * 0.62), inner - 120))
         local input = BindTextInput(ctx, section, trackHint, 24, -76, inputW,
@@ -655,13 +655,13 @@ local function BuildCustomWhitelistTool(C)
                 local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
                 if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
             end
-            status:SetText(tostring("Tracked ") .. auraPlural .. " (" .. tostring(#entries) .. " of 40)"
+            T.SetTranslatedText(status, tostring("Tracked ") .. auraPlural .. " (" .. tostring(#entries) .. " of 40)"
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
                     or customPriority and Tr(" - dynamic priority active")
                     or Tr(" - drag to set Custom Priority"))
                 .. MatchSuffix(query, #visible))
-            empty:SetText(#entries == 0 and Tr("No spells tracked. Add up to 40 exact SpellIDs.")
-                or M.Format(Tr("No results for \"%s\"."), query))
+            T.SetTranslatedText(empty, #entries == 0 and Tr("No spells tracked. Add up to 40 exact SpellIDs.")
+                or M.Format("No results for \"%s\".", query))
             empty:SetShown(#visible == 0)
             listScroll:SetShown(#visible > 0)
             listChild:SetHeight(max(190, #visible * 44))
@@ -1120,7 +1120,7 @@ local function BuildCustomAppearanceTool(C)
             if durationBarSwitch then W.SetControlEnabled(durationBarSwitch, not reminder) end
             if durationBarControls then W.SetControlsEnabled(durationBarControls, enabled) end
             durationBarNote:SetText(reminder
-                and Tr("Reminder slots do not draw a duration bar.") or "")
+                and "Reminder slots do not draw a duration bar." or "")
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(durationBar, {{
                     text = reminder and Tr("Unavailable")
@@ -1324,7 +1324,7 @@ local function BuildCustomBehaviorTool(C)
                         or NormalizeAuraSortMethodForLane(sortLane, item.placed.sortMethod, supportsCustomPriority) ~= "CUSTOM_PRIORITY"))
             end
             orderingNote:SetText(reminder
-                and Tr("Sorting is off while this container shows fixed reminder slots \194\183 their order comes from the Whitelist.")
+                and "Sorting is off while this container shows fixed reminder slots \194\183 their order comes from the Whitelist."
                 or "")
         end)
         return true
@@ -1546,12 +1546,12 @@ local function BuildCustomContainerSetup(C)
         AuraControlMeta(ctx, "custom-container.reminder.enabled"))
     local modeNote = W.Text(section, "", 24, modeY - 44, inner, T.colors.muted)
     local count = #Model.CustomContainerSpellEntries(unit, index)
-    W.Text(section, count == 1 and Tr("1 whitelisted spell · style remains live in Menu Preview and Edit Mode.")
+    W.Text(section, count == 1 and "1 whitelisted spell · style remains live in Menu Preview and Edit Mode."
         or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count), 24, modeY - 66, inner, T.colors.muted)
     M.TrackRefresh(ctx, function()
         modeNote:SetText(item.placed.reminderEnabled == true
-            and Tr("Every whitelisted entry keeps its own place. A dimmed icon means that entry is missing.")
-            or Tr("Only auras that are currently active are shown, packed together."))
+            and "Every whitelisted entry keeps its own place. A dimmed icon means that entry is missing."
+            or "Only auras that are currently active are shown, packed together.")
     end)
 
     -- Buff Reminder. Exact Spell ID whitelists are the only aura source that
@@ -1647,7 +1647,7 @@ local function BuildCustomContainerSetup(C)
         -- One line, three facts: how many slots, how many of them react to a
         -- click, and where their order comes from.
         if not on then
-            reminderStatus:SetText(Tr("Off · switch Display to Fixed slots in Setup to use this."))
+            reminderStatus:SetText("Off · switch Display to Fixed slots in Setup to use this.")
         else
             local clickable, counted = 0, 0
             for i = 1, #allEntries do
@@ -1677,7 +1677,7 @@ local function BuildCustomContainerSetup(C)
             if hidden > 0 then
                 base = base .. " " .. M.Format("%d hidden: not castable by this character.", hidden)
             end
-            reminderStatus:SetText(base)
+            T.SetTranslatedText(reminderStatus, base)
         end
         if W.SetCollapsibleBadges then
             local badges = {{

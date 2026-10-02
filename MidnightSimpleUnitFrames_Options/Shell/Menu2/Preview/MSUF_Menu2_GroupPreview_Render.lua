@@ -2743,8 +2743,9 @@ function Stage.LayoutMockFrame(st, env)
         local conf, gf, kind, label, runtimeBorder, runtimeHealth, runtimePower, runtimeSpec = st.conf, st.gf, st.kind, st.label, st.runtimeBorder, st.runtimeHealth, st.runtimePower, st.runtimeSpec
         local self = st.self
         local ClampZoom, H, M, ResolveDefaultZoomLock, Round, ScaleValue, UpdateZoomControls, WHITE8X8 = env.ClampZoom, env.H, env.M, env.ResolveDefaultZoomLock, env.Round, env.ScaleValue, env.UpdateZoomControls, env.WHITE8X8
+        local T = env.T
         local max, min, width = env.max, env.min, env.width
-        self._title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
+        T.SetTranslatedText(self._title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
         local stageW = self._stage:GetWidth() or (width - 98)
         local stageH = self._stage:GetHeight() or 218
         if stageW <= 1 then stageW = math.max(260, width - 98) end

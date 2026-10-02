@@ -46,12 +46,12 @@ function P.EditorBar(ctx)
         end)
     end
     editorBar.ctx=ctx
-    editorBar.title:SetText(M.Format("Editing profile variant: %s",V.RecordingName()))
+    T.SetTranslatedText(editorBar.title,M.Format("Editing profile variant: %s",V.RecordingName()))
     editorBar:Show()
 end
 function P.Result(ctx,ok,err)
     if not ok then
-        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(tostring(err or "Action unavailable")),"danger",4) end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(tostring(err or "Action unavailable"),"danger",4) end
         return false
     end
     if M.ClearHistory then M.ClearHistory() end

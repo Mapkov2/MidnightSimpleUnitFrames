@@ -266,7 +266,7 @@ local function BuildMisc(ctx)
             T.ClearMenuFontCache()
             T.RefreshMenuFonts()
             if menuFontPreview and menuFontPreview.SetText then
-                menuFontPreview:SetText(M.Tr("AaBbCc 12345 - MSUF Menu"))
+                menuFontPreview:SetText("AaBbCc 12345 - MSUF Menu")
             end
         end,
         "menu.font")
