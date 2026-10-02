@@ -415,6 +415,9 @@ builders.PLAYER_HP = function(E)
         dst._phpTextR, dst._phpTextG, dst._phpTextB, dst._phpTextA = r, g, b, a
     end
 
+    --- A slot painted from secret health reads back as a secret string
+    --- (FontString:GetText). It is handed to SetText as it is: the empty and
+    --- nil checks run only on plain text.
     local function ReadTextSlot(src)
         local text = ""
         local r, g, b, a
@@ -423,7 +426,7 @@ builders.PLAYER_HP = function(E)
                 text = src._aText
                 if text == nil and src.GetText then text = src:GetText() end
             end
-            if text == nil then text = "" end
+            if issecretvalue(text) ~= true and text == nil then text = "" end
             r, g, b, a = src._msufTextR, src._msufTextG, src._msufTextB, src._msufTextA
             if r == nil and src.GetTextColor then
                 r, g, b, a = src:GetTextColor()
@@ -443,8 +446,12 @@ builders.PLAYER_HP = function(E)
     local function CopyCompactText(playerFrame)
         if not (PHP.center and playerFrame) then return false end
         local text, r, g, b, a = ReadTextSlot(playerFrame.hpTextCenter)
-        if text == "" then text, r, g, b, a = ReadTextSlot(playerFrame.hpTextRight) end
-        if text == "" then text, r, g, b, a = ReadTextSlot(playerFrame.hpTextLeft) end
+        if issecretvalue(text) ~= true and text == "" then
+            text, r, g, b, a = ReadTextSlot(playerFrame.hpTextRight)
+        end
+        if issecretvalue(text) ~= true and text == "" then
+            text, r, g, b, a = ReadTextSlot(playerFrame.hpTextLeft)
+        end
         ApplyCopiedTextColor(PHP.center, r, g, b, a)
         SetText(PHP.left, "")
         SetText(PHP.right, "")

@@ -17,8 +17,10 @@
 -- `secret == nil` or `secret == ""` stays silent at the VM level. Watch(path)
 -- closes that gap with a line hook: whenever a line of that file runs while a
 -- local named on it holds a secret, and the line compares that name with == or
--- ~= or truth-tests it with not, the line is recorded as a violation. A line
--- that calls issecretvalue(name) first is a guarded short-circuit and passes.
+-- ~= or truth-tests it with not, the line is recorded as a violation. Two
+-- short-circuits count as guards and pass: the line calls issecretvalue(name),
+-- or the use follows `flag or` with a true plain local flag (or `flag and` with
+-- a false one), as in `local changed = maxSecret or cache ~= maxValue`.
 --
 -- Plain Lua 5.1.
 
@@ -91,12 +93,29 @@ end
 
 local function Escape(name) return (name:gsub("%W", "%%%0")) end
 
-local function Misuses(line, name)
+-- True when the text before a use short-circuits it: `flag or` with a true
+-- plain local flag, or `flag and` with a false one.
+local function ShortCircuited(prefix, locals)
+    for flag, operator in prefix:gmatch("([%a_][%w_]*)%s+(%a+)%s") do
+        local value = locals[flag]
+        if not kinds[value] and flag ~= "not" then
+            if operator == "or" and value then return true end
+            if operator == "and" and value == false then return true end
+        end
+    end
+    return false
+end
+
+local USE_PATTERNS = { "%%f[%%w_]%s%%s*[=~]=", "[=~]=%%s*%s%%f[^%%w_]", "%%f[%%w_]not%%s+%s%%f[^%%w_]" }
+
+local function Misuses(line, name, locals)
     local n = Escape(name)
     if line:find("issecretvalue%(%s*" .. n .. "%s*%)") then return false end
-    return line:find("%f[%w_]" .. n .. "%s*[=~]=") ~= nil
-        or line:find("[=~]=%s*" .. n .. "%f[^%w_]") ~= nil
-        or line:find("%f[%w_]not%s+" .. n .. "%f[^%w_]") ~= nil
+    for i = 1, #USE_PATTERNS do
+        local start = line:find(USE_PATTERNS[i]:format(n))
+        if start and not ShortCircuited(line:sub(1, start - 1), locals) then return true end
+    end
+    return false
 end
 
 --- Records every executed line of `path` that compares or truth-tests a local
@@ -110,16 +129,21 @@ function Secrets.Watch(path)
         local info = debug.getinfo(2, "S")
         if not info or (info.source ~= wanted and info.source:gsub("\\", "/") ~= wanted:gsub("\\", "/")) then return end
         local text = lines[lineNumber]
-        if not text then return end
-        local index = 1
+        if not text or seen[lineNumber] then return end
+        -- Later locals shadow earlier ones of the same name.
+        local locals, index = {}, 1
         while true do
             local name, value = debug.getlocal(2, index)
             if not name then break end
-            if kinds[value] and Misuses(text, name) and not seen[lineNumber] then
+            locals[name] = value
+            index = index + 1
+        end
+        for name, value in pairs(locals) do
+            if kinds[value] and Misuses(text, name, locals) then
                 seen[lineNumber] = true
                 violations[#violations + 1] = ("%s:%d: %s"):format(path:match("[^/\\]+$"), lineNumber, text:match("^%s*(.-)%s*$"))
+                break
             end
-            index = index + 1
         end
     end, "l")
     return function()
