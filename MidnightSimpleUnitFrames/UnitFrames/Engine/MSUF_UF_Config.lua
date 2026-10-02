@@ -156,15 +156,12 @@ local dbInitialized = false
 
 --- Config can be asked for specs before every module has finished loading.
 --- EnsureDB centralizes that bootstrap without making the hot dispatch layer
---- know about profile initialization.
+--- know about profile initialization. State/MSUF_Profiles.lua and
+--- State/MSUF_Defaults.lua load ahead of this file in every core TOC.
 local function EnsureDB()
   if not dbInitialized or type(_G.MSUF_DB) ~= "table" then
-    if type(_G.MSUF_InitProfiles) == "function" then
-      _G.MSUF_InitProfiles()
-    end
-    if type(_G.MSUF_EnsureDB) == "function" then
-      _G.MSUF_EnsureDB()
-    end
+    MSUF.Require("MSUF_InitProfiles", "UnitFrames/Engine/MSUF_UF_Config.lua")()
+    MSUF.Require("MSUF_EnsureDB", "UnitFrames/Engine/MSUF_UF_Config.lua")()
     dbInitialized = true
   end
   if type(_G.MSUF_DB) ~= "table" then

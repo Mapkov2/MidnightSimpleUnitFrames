@@ -16,6 +16,14 @@ local UnitAffectingCombat = UnitAffectingCombat
 local floor, min, max = math.floor, math.min, math.max
 local format = string.format
 local type, tonumber, tostring = type, tonumber, tostring
+-- Kernel/MSUF_Util.lua formats every cast time and loads ahead of this file.
+local GetCastbarTimeFormat = MSUF.Require("MSUF_GetCastbarTimeFormat", "UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")
+local FormatCastbarTimeText = MSUF.Require("MSUF_FormatCastbarTimeText", "UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")
+--- Edit Mode, group, castbar and castbar preview owners: a preview animates
+--- only after the core has loaded, so each one resolves at use.
+local function Dep(name)
+  return MSUF.Require(name, "UnitFrames/Engine/MSUF_UF_PreviewAnimation.lua")
+end
 
 local UPDATE_INTERVAL = 1 / 20
 local NO_TARGET_GRACE = 0.35
@@ -303,21 +311,13 @@ local function PrepareEditModePreviewForAnimation()
     ExportPublic("MSUF_UnitPreviewActive", true)
   end
 
-  if type(_G.MSUF_SyncAllUnitPreviewsAsync) == "function" then
-    _G.MSUF_SyncAllUnitPreviewsAsync()
-  elseif type(_G.MSUF_SyncAllUnitPreviews) == "function" then
-    _G.MSUF_SyncAllUnitPreviews()
+  Dep("MSUF_SyncAllUnitPreviewsAsync")()
+
+  if Dep("MSUF_GF_EM2_IsPreviewShown")() == true then
+    Dep("MSUF_GF_EM2_ShowPreview")()
   end
 
-  if type(_G.MSUF_GF_EM2_IsPreviewShown) == "function"
-    and _G.MSUF_GF_EM2_IsPreviewShown() == true
-    and type(_G.MSUF_GF_EM2_ShowPreview) == "function" then
-    _G.MSUF_GF_EM2_ShowPreview()
-  end
-
-  if type(_G.MSUF_EM2_ReforcePreviewFrames) == "function" then
-    _G.MSUF_EM2_ReforcePreviewFrames()
-  end
+  Dep("MSUF_EM2_ReforcePreviewFrames")()
 end
 
 local function SetBar(bar, value, maxValue, animate)
@@ -693,15 +693,9 @@ local function CastbarTimeEnabled(unit)
 end
 
 local function FormatCastbarPreviewTime(frame, remaining, total)
-  local fmt = "CURRENT"
-  if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
-    fmt = _G.MSUF_GetCastbarTimeFormat(frame and frame.MSUFUnitKey) or fmt
-  end
+  local fmt = GetCastbarTimeFormat(frame and frame.MSUFUnitKey) or "CURRENT"
   if frame then frame._msufCastTimeFormat = fmt end
-  if type(_G.MSUF_FormatCastbarTimeText) == "function" then
-    return _G.MSUF_FormatCastbarTimeText(fmt, remaining, total)
-  end
-  return format("%.1f", tonumber(remaining) or 0)
+  return FormatCastbarTimeText(fmt, remaining, total)
 end
 
 local function StoreCastbarRestore(frame)
@@ -784,7 +778,7 @@ local function RestoreCastbarFrame(frame)
     frame.MSUF_testDur = restore.testDur
     if frame.SetScript and restore.onUpdate then frame:SetScript("OnUpdate", restore.onUpdate) end
   end
-  if type(_G.MSUF_ResetCastbarGlowFade) == "function" then _G.MSUF_ResetCastbarGlowFade(frame) end
+  Dep("MSUF_ResetCastbarGlowFade")(frame)
   frame._msufPreviewAnimCastState = nil
   frame._msufPreviewAnimCastRestore = nil
   frame._msufPreviewAnimCastLabel = nil
@@ -845,12 +839,10 @@ local function ApplyCastbarPreviewFrame(frame, index, kind, label)
   -- Spark creation, geometry, and visibility are owned by the cold castbar
   -- style pass. Preview animation only advances the fill and must not override
   -- the user's castbarShowSpark setting on every animation tick.
-  if frame.latencyBar and type(_G.MSUF_PlayerCastbar_UpdateLatencyZone) == "function" then
-    _G.MSUF_PlayerCastbar_UpdateLatencyZone(frame, false, duration)
+  if frame.latencyBar then
+    Dep("MSUF_PlayerCastbar_UpdateLatencyZone")(frame, false, duration)
   end
-  if type(_G.MSUF_ApplyCastbarGlowFade) == "function" then
-    _G.MSUF_ApplyCastbarGlowFade(frame, remaining, duration)
-  end
+  Dep("MSUF_ApplyCastbarGlowFade")(frame, remaining, duration)
   return true
 end
 
@@ -956,15 +948,15 @@ local function RestoreCastbarPreviewFrames()
 end
 
 local function RefreshStaticCastbarPreviews()
-  if EditModeAnimationTargetActive() and type(_G.MSUF_UpdatePlayerCastbarPreview) == "function" then
-    _G.MSUF_UpdatePlayerCastbarPreview()
+  if EditModeAnimationTargetActive() then
+    Dep("MSUF_UpdatePlayerCastbarPreview")()
     return
   end
-  if BossPreviewActive() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-    _G.MSUF_UpdateBossCastbarPreview()
+  if BossPreviewActive() then
+    Dep("MSUF_UpdateBossCastbarPreview")()
   end
-  if ArenaPreviewActive() and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
-    _G.MSUF_UpdateArenaCastbarPreview()
+  if ArenaPreviewActive() then
+    Dep("MSUF_UpdateArenaCastbarPreview")()
   end
 end
 
@@ -1007,7 +999,7 @@ end
 
 local function RefreshGroupRuntimeFrames()
   if not (PA.source == "edit_mode" and EditModePreviewActive()) then return false end
-  if type(_G.MSUF_GF_EM2_IsPreviewShown) == "function" and _G.MSUF_GF_EM2_IsPreviewShown() ~= true then return false end
+  if Dep("MSUF_GF_EM2_IsPreviewShown")() ~= true then return false end
   local gf = MSUF and MSUF.GF
   local each = gf and gf.ForEachFrame
   if type(each) ~= "function" then return false end

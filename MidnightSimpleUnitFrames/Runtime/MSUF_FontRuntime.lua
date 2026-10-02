@@ -21,6 +21,8 @@ local EnsureDBSafe = MSUF.Util.EnsureDBSafe
 --- REQUIRED: Kernel/MSUF_Util.lua is listed unconditionally in the TOC well
 --- ahead of this file and is the only writer of the boss-token helper.
 local GetBossIndexFromToken = MSUF.Require("MSUF_GetBossIndexFromToken", "Runtime/MSUF_FontRuntime.lua")
+-- The forced font recovery, exported as MSUF_RequestFontRecovery below.
+local RequestFontRecovery
 
 local function NormalizeFontScopeKey(key)
     if key == nil then return nil end
@@ -58,7 +60,8 @@ local function ApplyScopedFontFollowers(scope, skipCastbars, skipClassPower, ski
         if skipAuras ~= true and a3 and type(a3.ApplyFontsFromGlobal) == "function" then
             a3.ApplyFontsFromGlobal(scope, "FONT_RUNTIME_SCOPE")
         end
-        if skipClassPower ~= true and scope == "player" and type(_G.MSUF_ClassPower_Apply) == "function" then
+        -- Required by Kernel/MSUF_RuntimeContracts.lua like the castbar calls above.
+        if skipClassPower ~= true and scope == "player" then
             _G.MSUF_ClassPower_Apply({ fonts = true, playerHP = true })
         end
         return
@@ -112,9 +115,8 @@ local function _MSUF_ScheduleLateFontRecovery()
         _fontFailureRecoveryPending = false
         if not _fontSettle.active
             and _fontSettle.timedOutTuple ~= _fontSettle.tuple
-            and type(_G.MSUF_RequestFontRecovery) == "function"
         then
-            _G.MSUF_RequestFontRecovery("LATE_FONTSTRING_FAILURE")
+            RequestFontRecovery("LATE_FONTSTRING_FAILURE")
         end
     end
     _G.MSUF_ScheduleOnce("FONT_APPLY_FAILURE_RECOVERY", RecoverLateFontString)
@@ -165,8 +167,8 @@ local function _MSUF_DeferFontRecoveryAfterCombat(requested)
             self:UnregisterEvent("PLAYER_REGEN_ENABLED")
             local runRequest, runProbe = _fontSettle.deferredRequest, _fontSettle.deferredProbe
             _fontSettle.deferredRequest, _fontSettle.deferredProbe = nil, nil
-            if runRequest and type(_G.MSUF_RequestFontRecovery) == "function" then
-                _G.MSUF_RequestFontRecovery("PLAYER_REGEN_ENABLED")
+            if runRequest then
+                RequestFontRecovery("PLAYER_REGEN_ENABLED")
             elseif runProbe and type(_MSUF_RunFontProbe) == "function" then
                 _MSUF_RunFontProbe()
             end
@@ -245,9 +247,10 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
         end
     end
     if not onlyKey then
-        if type(_G.MSUF_FocusKick_ApplyTimeTextFont) == "function" then
-            _G.MSUF_FocusKick_ApplyTimeTextFont()
-        end
+        -- Castbars/MSUF_FocusKickIcon.lua loads after this file, and a media
+        -- refresh can apply fonts while the core is still loading.
+        local focusKickFont = MSUF.Optional("MSUF_FocusKick_ApplyTimeTextFont")
+        if focusKickFont then focusKickFont() end
     end
     if _fontSettle.active then
         _MSUF_ScheduleFontProbe()
@@ -318,14 +321,15 @@ _MSUF_ScheduleFontProbe = function()
     _fontSettle.pending = true
 end
 
-ExportPublic("MSUF_RequestFontRecovery", function()
+RequestFontRecovery = function()
     _fontSettle.forceNext = true
     if _MSUF_FontCombatLocked() then
         _MSUF_DeferFontRecoveryAfterCombat(true)
         return false
     end
     return UpdateAllFonts()
-end)
+end
+ExportPublic("MSUF_RequestFontRecovery", RequestFontRecovery)
 
 MSUF.MSUF_UpdateAllFonts = UpdateAllFonts
 ExportPublic("MSUF_UpdateAllFonts", UpdateAllFonts)

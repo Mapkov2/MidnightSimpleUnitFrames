@@ -179,10 +179,11 @@ local function UpdateAllBarTextures(scope, skipUnitFrames, skipCastbars)
         end
     end
 
-    if skipCastbars ~= true and not NormalizeScope(scope) and _G.MSUF_UpdateCastbarTextures_Immediate then
-        _G.MSUF_UpdateCastbarTextures_Immediate()
-    elseif skipCastbars ~= true and not NormalizeScope(scope) and type(_G.MSUF_UpdateCastbarTextures) == "function" then
-        _G.MSUF_UpdateCastbarTextures()
+    -- Castbars load after this file; a texture refresh during the core load
+    -- leaves them to their own first apply.
+    local updateCastbars = _G.MSUF_UpdateCastbarTextures_Immediate or MSUF.Optional("MSUF_UpdateCastbarTextures")
+    if skipCastbars ~= true and not NormalizeScope(scope) and updateCastbars then
+        updateCastbars()
     end
 end
 

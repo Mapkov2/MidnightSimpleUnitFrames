@@ -2017,9 +2017,9 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
     if af and type(af.InvalidateAllBlacklistHashes) == "function" then
         af.InvalidateAllBlacklistHashes()
     end
-    if type(_G.MSUF_GF_InvalidateConfCache) == "function" then
-        _G.MSUF_GF_InvalidateConfCache()
-    end
+    -- Group frames load after this file; Kernel/MSUF_RuntimeContracts.lua
+    -- requires this provider once the core TOC has loaded.
+    MSUF.Require("MSUF_GF_InvalidateConfCache", "State/MSUF_Profiles.lua")()
     local gf = (type(MSUF) == "table" and MSUF.GF) or (_G.MSUF_NS and _G.MSUF_NS.GF)
     if gf and type(gf.Rebuild) == "function" then
         local rebuilt = false
@@ -2047,26 +2047,6 @@ local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
         gf.RequestAuraRefresh()
     elseif gf and type(gf.MarkAllDirty) == "function" then
         gf.MarkAllDirty(gf.DIRTY_AURAS or gf.DIRTY_ALL or 0x3F)
-    end
-    if type(_G.MSUF_GF_RefreshGeometry) == "function" then
-        for i = 1, #touchedKinds do
-            local groupKind = touchedKinds[i]
-            _G.MSUF_GF_RefreshGeometry(groupKind)
-            if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
-                _G.MSUF_GF_RefreshUnitBindings(groupKind)
-            end
-            if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-                _G.MSUF_GF_RefreshVisuals(groupKind)
-            end
-        end
-        return
-    end
-    if type(_G.MSUF_GF_Refresh) == "function" then
-        _G.MSUF_GF_Refresh()
-    elseif type(_G.MSUF_GF_RefreshAll) == "function" then
-        _G.MSUF_GF_RefreshAll()
-    elseif type(_G.MSUF_GF_RefreshVisuals) == "function" then
-        _G.MSUF_GF_RefreshVisuals()
     end
 end
 local function MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
@@ -2231,12 +2211,10 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
             source = "external_import",
             markProfile = true,
         })
-        if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
-            _G.MSUF_NormalizePortraitRenderDB(payload)
-        end
-        if type(_G.MSUF_MigrateDispelPriorityProfile) == "function" then
-            _G.MSUF_MigrateDispelPriorityProfile(payload, true)
-        end
+        -- State/MSUF_Defaults.lua also owns the portrait render and dispel
+        -- priority migrations an external import runs after the translator.
+        MSUF.Require("MSUF_NormalizePortraitRenderDB", "State/MSUF_Profiles.lua")(payload)
+        MSUF.Require("MSUF_MigrateDispelPriorityProfile", "State/MSUF_Profiles.lua")(payload, true)
     elseif not plan.isSnapshot then
         MSUF_ProfileIO_TranslateProfileToCurrent(payload, {
             source = "profile_import",
@@ -2595,7 +2573,7 @@ local function MSUF_ProfileIO_EnsureProfileSystemInitialized()
         or active == ""
         or type(MSUF_DB) ~= "table"
         or type(profiles[active]) ~= "table"
-    if needsInit and type(MSUF_InitProfiles) == "function" then
+    if needsInit then
         MSUF_InitProfiles()
     end
 end

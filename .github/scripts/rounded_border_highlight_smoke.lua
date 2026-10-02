@@ -179,6 +179,11 @@ function MSUF.ExportPublic(name, value)
   return value
 end
 _G.MSUF_NS = MSUF
+-- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+assert(loadfile('MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua'))('MidnightSimpleUnitFrames', MSUF)
+-- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry each border
+-- apply calls; this harness builds no boss frames.
+_G.MSUF_ApplyBossPhysicalBarGeometry = function() end
 
 local engineRoot = "MidnightSimpleUnitFrames/UnitFrames/Engine/"
 local libraryRoot = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/"

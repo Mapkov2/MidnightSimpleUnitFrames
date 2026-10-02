@@ -43,19 +43,16 @@ local gameplayDBCache
 local function EnsureGameplayDefaults()
     -- Defaults are intentionally centralized so Menu2 and runtime all
     -- agree on missing-field behavior after profile import or version migration.
+    -- State/MSUF_Profiles.lua and State/MSUF_Defaults.lua load ahead of this
+    -- file and own the profile binding and the SavedVariable. Resolve them at
+    -- use, so a fixture hosting this file must load them too.
     if type(MSUF_DB) ~= "table" or type(_G.MSUF_ActiveProfile) ~= "string" then
-        if type(_G.MSUF_InitProfiles) == "function" then
-            _G.MSUF_InitProfiles()
-        elseif type(_G.MSUF_EnsureDB) == "function" then
-            _G.MSUF_EnsureDB()
-        end
+        MSUF.Require("MSUF_InitProfiles", "Features/Gameplay/MSUF_Feature_GameplayConfig.lua")()
     end
-    if type(MSUF_DB) ~= "table" and type(_G.MSUF_EnsureDB) == "function" then
-        -- State/MSUF_Defaults.lua owns the SavedVariable. Run its bootstrap
-        -- instead of assigning a bare table here: a hand-rolled MSUF_DB would
-        -- carry neither the defaults nor the profile binding. The lookup stays
-        -- late-bound because Features load after State but may be hosted alone.
-        _G.MSUF_EnsureDB()
+    if type(MSUF_DB) ~= "table" then
+        -- Run the Defaults bootstrap instead of assigning a bare table here: a
+        -- hand-rolled MSUF_DB would carry neither the defaults nor the profile binding.
+        MSUF.Require("MSUF_EnsureDB", "Features/Gameplay/MSUF_Feature_GameplayConfig.lua")()
     end
     if type(MSUF_DB.gameplay) ~= "table" then
         MSUF_DB.gameplay = {}

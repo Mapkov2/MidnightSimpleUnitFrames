@@ -3095,13 +3095,12 @@ local function ApplyElementSelection(frame, selection, spec, updateReason, selec
   -- funnel both full spec applies (UF.ApplySpec) and targeted element refreshes
   -- (UF.ApplyElementsToFrame, which is how unit-frame aura settings apply) pass
   -- through. A single boolean read whenever no preview is active.
-  if _G.MSUF_DispelOverlayPreviewMode == true
-    and type(_G.MSUF_ApplyDispelOverlayPreviewToFrame) == "function" then
-    _G.MSUF_ApplyDispelOverlayPreviewToFrame(frame)
+  -- Both preview painters belong to the aura preview, which loads after the core.
+  if _G.MSUF_DispelOverlayPreviewMode == true then
+    MSUF.Require("MSUF_ApplyDispelOverlayPreviewToFrame", "Libs/MSUFUnitFrames/MSUF_UF_Core.lua")(frame)
   end
-  if _G.MSUF_DispelSymbolPreviewMode == true
-    and type(_G.MSUF_ApplyDispelSymbolPreviewToFrame) == "function" then
-    _G.MSUF_ApplyDispelSymbolPreviewToFrame(frame)
+  if _G.MSUF_DispelSymbolPreviewMode == true then
+    MSUF.Require("MSUF_ApplyDispelSymbolPreviewToFrame", "Libs/MSUFUnitFrames/MSUF_UF_Core.lua")(frame)
   end
   return true
 end

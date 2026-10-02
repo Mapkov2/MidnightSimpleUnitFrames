@@ -4,6 +4,11 @@ local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF = _G.MSUF or MSUF
 local ExportPublic = MSUF.ExportPublic
+--- The font, texture, castbar, class power and status icon owners load after
+--- this file. Media can register (and in combat refresh synchronously) while
+--- the core is still loading, so each refresh below resolves its owners as
+--- optional and skips one that has not loaded yet.
+local Optional = MSUF.Optional
 
 local function GetLSM()
     local LSM = (MSUF and MSUF.LSM) or _G.MSUF_LSM
@@ -299,7 +304,8 @@ do
     local function ResolveFontKeyPath(value)
         if IsPath(value) then return FontAssetAllowed(value) end
         if type(value) ~= "string" or value == "" then return FontAssetAllowed(ALIAS_TO_PATH.FRIZQT) end
-        local normalized = type(_G.MSUF_NormalizeFontKey) == "function" and _G.MSUF_NormalizeFontKey(value) or value
+        local normalizeFontKey = Optional("MSUF_NormalizeFontKey")
+        local normalized = normalizeFontKey and normalizeFontKey(value) or value
         if IsPath(normalized) then return FontAssetAllowed(normalized) end
         return FontAssetAllowed(ALIAS_TO_PATH[normalized])
             or FontAssetAllowed(ALIAS_TO_PATH[value])
@@ -506,48 +512,43 @@ end
 local function RunStatusbarMediaRefresh()
     _MSUF_StatusbarMediaRefreshPending = false
 
-    if type(_G.MSUF_ClearResolvedStatusbarTextureCache) == "function" then
-        _G.MSUF_ClearResolvedStatusbarTextureCache()
-    end
+    local clearTextureCache = Optional("MSUF_ClearResolvedStatusbarTextureCache")
+    if clearTextureCache then clearTextureCache() end
 
     local updateBars = _G.MSUF_UpdateAllBarTextures_Immediate or _G.MSUF_UpdateAllBarTextures
     if type(updateBars) == "function" then updateBars() end
 
-    if type(_G.MSUF_UpdateAbsorbBarTextures) == "function" then
-        _G.MSUF_UpdateAbsorbBarTextures()
-    end
+    local updateAbsorb = Optional("MSUF_UpdateAbsorbBarTextures")
+    if updateAbsorb then updateAbsorb() end
 
     local updateCastbars = _G.MSUF_UpdateCastbarTextures_Immediate or _G.MSUF_UpdateCastbarTextures
     if type(updateCastbars) == "function" then updateCastbars() end
 
-    if type(_G.MSUF_ClassPower_RefreshTextures) == "function" then
-        _G.MSUF_ClassPower_RefreshTextures()
-    end
+    local refreshClassPower = Optional("MSUF_ClassPower_RefreshTextures")
+    if refreshClassPower then refreshClassPower() end
 
 end
 
 local function RunStatusIconMediaRefresh()
     _MSUF_StatusIconMediaRefreshPending = false
 
-    if type(_G.MSUF_RefreshStatusIconPacks) == "function" then
-        _G.MSUF_RefreshStatusIconPacks()
-    end
+    local refreshPacks = Optional("MSUF_RefreshStatusIconPacks")
+    if refreshPacks then refreshPacks() end
 
-    if type(_G.MSUF_RequestStatusIconsRefreshForCurrent) == "function" then
-        _G.MSUF_RequestStatusIconsRefreshForCurrent()
-    end
+    local refreshIcons = Optional("MSUF_RequestStatusIconsRefreshForCurrent")
+    if refreshIcons then refreshIcons() end
 
 end
 
 local function RunFontMediaRefresh()
     _MSUF_FontMediaRefreshPending = false
-    if type(_G.MSUF_RequestFontRecovery) == "function" then
-        _G.MSUF_RequestFontRecovery("LSM_FONT_REGISTERED")
-    elseif type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then
-        _G.MSUF_UpdateAllFonts_Immediate()
-    elseif type(_G.MSUF_UpdateAllFonts) == "function" then
-        _G.MSUF_UpdateAllFonts()
+    local recoverFonts = Optional("MSUF_RequestFontRecovery")
+    if recoverFonts then
+        recoverFonts("LSM_FONT_REGISTERED")
+        return
     end
+    local updateFonts = Optional("MSUF_UpdateAllFonts_Immediate") or Optional("MSUF_UpdateAllFonts")
+    if updateFonts then updateFonts() end
 end
 
 local function RefreshMediaGroupVisuals(statusbars)
@@ -633,9 +634,6 @@ local function RefreshFontMedia(key, forceApply, registeredPath)
 end
 
 local function RefreshStatusbarMedia()
-    if type(_G.MSUF_RebuildStatusbarChoices) == "function" then
-        _G.MSUF_RebuildStatusbarChoices()
-    end
     _MSUF_StatusbarMediaRefreshPending = true
     ScheduleMediaRefresh()
 end
@@ -866,7 +864,6 @@ end
 MSUF.UI = MSUF.UI or {}
 MSUF.UI.StatusBarTextureItems = StatusBarTextureItems
 ExportPublic("MSUF_StatusBarTextureItems", StatusBarTextureItems)
-ExportPublic("MSUF_RebuildStatusbarChoices", _G.MSUF_RebuildStatusbarChoices)
 
 --- Bundled fonts (Media/Fonts)
 
@@ -979,18 +976,14 @@ RegisterBundledFonts = function()
         end
 
         if changed then
-            if type(_G.MSUF_UpdateAllBarTextures) == "function" then
-                _G.MSUF_UpdateAllBarTextures()
-            end
-            local applyCastbarUnit = _G.MSUF_ApplyCastbarVisualsForUnit
-            if type(applyCastbarUnit) == "function" then
-                applyCastbarUnit("player")
-                applyCastbarUnit("target")
-                applyCastbarUnit("focus")
-                applyCastbarUnit("boss")
-            elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-                _G.MSUF_UpdateCastbarVisuals()
-            end
+            -- Runs one frame after the core loaded (C_Timer below), when the
+            -- texture and castbar owners are present.
+            MSUF.Require("MSUF_UpdateAllBarTextures", "Kernel/MSUF_Libs.lua")()
+            local applyCastbarUnit = MSUF.Require("MSUF_ApplyCastbarVisualsForUnit", "Kernel/MSUF_Libs.lua")
+            applyCastbarUnit("player")
+            applyCastbarUnit("target")
+            applyCastbarUnit("focus")
+            applyCastbarUnit("boss")
         end
     end
 
@@ -1073,7 +1066,7 @@ ExportPublic("MSUF_EnsureAddonLoaded", MSUF_EnsureAddonLoaded)
 --- watcher only while an apply is pending, so a second permanent gate/frame is
 --- unnecessary.
 local function MSUF_InstallGlobalScaleGate()
-    return type(_G.MSUF_SetGlobalUiScale) == "function"
+    return Optional("MSUF_SetGlobalUiScale") ~= nil
 end
 
 ExportPublic("MSUF_InstallGlobalScaleGate", MSUF_InstallGlobalScaleGate)

@@ -435,6 +435,8 @@ local function NewWorld(flavor, roster)
         preview.castTargetText = Widget(nil, false, preview)
         return preview
     end
+    -- The boss castbar preview follows a boss preview refresh; no boss castbars here.
+    _G.MSUF_UpdateBossCastbarPreview = function() end
     _G.MSUF_UpdatePlayerCastbarPreview = function()
         if not W.combat and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
             _G.MSUF_UpdateArenaCastbarPreview()
@@ -604,6 +606,8 @@ local function NewWorld(flavor, roster)
     }
     W.MSUF = MSUF
     _G.MSUF_NS = MSUF
+    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+    assert(loadfile(Path("MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua")))("MidnightSimpleUnitFrames", MSUF)
 
     local function Load(relative)
         local chunk = assert(loadfile(Path(relative)))

@@ -876,9 +876,8 @@ function UF.ApplyBossPreviewState(active, reason)
   end
   ReapplyBossPreviewAlpha(refreshReason)
   RefreshBossAuras()
-  if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-    _G.MSUF_UpdateBossCastbarPreview()
-  end
+  -- The castbar previews load after the unit-frame elements.
+  MSUF.Require("MSUF_UpdateBossCastbarPreview", "UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")()
   local em2 = _G.MSUF_EM2
   if em2 and em2.Movers and type(em2.Movers.SyncAll) == "function" then
     em2.Movers.SyncAll()
@@ -1216,9 +1215,7 @@ function UF.ApplyArenaPreviewState(active, reason)
   end
   ReapplyArenaPreviewAlpha(refreshReason)
   RefreshArenaAuras()
-  if type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
-    _G.MSUF_UpdateArenaCastbarPreview()
-  end
+  MSUF.Require("MSUF_UpdateArenaCastbarPreview", "UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")()
   local em2 = _G.MSUF_EM2
   if em2 and em2.Movers and type(em2.Movers.SyncAll) == "function" then
     em2.Movers.SyncAll()

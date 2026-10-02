@@ -153,6 +153,10 @@ local function LoadProvider(options)
         },
     }
     h.ns = ns
+    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+    ns.ExportPublic = function(name, value) _G[name] = value return value end
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", ns)
+    ns.ExportPublic = nil
     assert(loadfile(ANCHORS))("MidnightSimpleUnitFrames", ns)
     for i = 1, #env.frames do
         local frame = env.frames[i]

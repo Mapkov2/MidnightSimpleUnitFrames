@@ -699,16 +699,21 @@ do
     local tooltipEditPreviewActive = false
     local W8 = "Interface/Buttons/WHITE8X8"
 
+    --- The load-on-demand options entry points (Kernel/MSUF_OptionsLoader.lua
+    --- forwards them until the menu loads) are optional: open whichever exists.
+    local function OpenOptionsEntry(page)
+        local open = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow") or MSUF.Optional("MSUF_OpenPage")
+        if open then open(page) end
+    end
+
     local function MSUF_Tooltip_OpenTooltipSettings()
         local menu = _G.MSUF2
         if menu and type(menu.Open) == "function" then
             menu.Open("opt_misc")
         elseif type(_G.MSUF2_Open) == "function" then
             _G.MSUF2_Open("opt_misc")
-        elseif type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-            _G.MSUF_OpenStandaloneOptionsWindow("opt_misc")
-        elseif type(_G.MSUF_OpenPage) == "function" then
-            _G.MSUF_OpenPage("opt_misc")
+        else
+            OpenOptionsEntry("opt_misc")
         end
 
         local function OpenSection()
@@ -716,8 +721,9 @@ do
             local search = menu and menu.Search
             if search and type(search.OpenTarget) == "function" then
                 search.OpenTarget("opt_misc", "Unitframe tooltips", "Unitframe tooltips", "Unitframe tooltips")
-            elseif type(_G.MSUF_OpenPage) == "function" then
-                _G.MSUF_OpenPage("opt_misc")
+            else
+                local openPage = MSUF.Optional("MSUF_OpenPage")
+                if openPage then openPage("opt_misc") end
             end
         end
 
@@ -730,10 +736,8 @@ do
             menu.Open("opt_misc")
         elseif type(_G.MSUF2_Open) == "function" then
             _G.MSUF2_Open("opt_misc")
-        elseif type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-            _G.MSUF_OpenStandaloneOptionsWindow("opt_misc")
-        elseif type(_G.MSUF_OpenPage) == "function" then
-            _G.MSUF_OpenPage("opt_misc")
+        else
+            OpenOptionsEntry("opt_misc")
         end
     end
 
@@ -904,7 +908,8 @@ do
         p:SetMovable(true)
         p:RegisterForDrag("LeftButton")
         p:SetScript("OnDragStart", function(s)
-            if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return end
+            -- Kernel/MSUF_Util.lua owns the configuration combat lock.
+            if MSUF.Require("MSUF_BlockConfigCombatLocked", "Runtime/MSUF_UnitTooltips.lua")() then return end
             if InCombatLockdown and InCombatLockdown() then return end
             s:StartMoving()
         end)

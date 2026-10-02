@@ -83,6 +83,9 @@ local function Run(sourceRoot)
     RegisterElement=function(_,element) health=element end}}
   local function Load(path) assert(loadfile(base..path))("MSUF",ns) end
   Load("Kernel/MSUF_Bootstrap.lua")
+  Load("Kernel/MSUF_Require.lua")
+  -- The Factory owns the boss bar geometry each health apply calls; no boss frames here.
+  _G.MSUF_ApplyBossPhysicalBarGeometry=Noop
   Load("Libs/MSUFUnitFrames/MSUF_UF_Layers.lua")
   Load("UnitFrames/Engine/Elements/MSUF_UF_Elements_BarsCommon.lua")
   Load("Kernel/MSUF_Util.lua") -- BarBackgroundRuntime aliases MSUF.Util.EnsureDBSafe

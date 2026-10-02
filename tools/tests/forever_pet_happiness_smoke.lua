@@ -234,6 +234,8 @@ local function LoadDefaults(isForever, petConf)
     _G.GetRealmName = function() return "TestRealm" end
     _G.InCombatLockdown = function() return false end
     local function load(path) assert(loadfile(core .. path))("MidnightSimpleUnitFrames", namespace) end
+    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+    load("Kernel/MSUF_Require.lua")
     load("State/MSUF_StateHelpers.lua")
     load("State/MSUF_ProfileCodec.lua")
     local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
@@ -276,6 +278,8 @@ local function CompilePetStatus(isForever)
     _G.MSUF_CooldownAnchorSupported = function() return false end
     _G.MSUF_GlobalCooldownAnchorEnabled = function() return false end
     local function load(path) assert(loadfile(core .. path))("MidnightSimpleUnitFrames", namespace) end
+    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+    load("Kernel/MSUF_Require.lua")
     load("Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua")
     load("Libs/MSUFUnitFrames/MSUF_UF_Core.lua")
     load("UnitFrames/Engine/MSUF_UF_Shared.lua")
@@ -286,6 +290,7 @@ local function CompilePetStatus(isForever)
         petHappinessIndicatorOffsetX = -7, petHappinessIndicatorOffsetY = -4, petHappinessIndicatorLayer = 7 }
     _G.MSUF_DB = { general = {}, pet = seeded, player = {} }
     _G.MSUF_EnsureDB = function() return _G.MSUF_DB end
+    _G.MSUF_InitProfiles = function() end
     local config = namespace.UF.Config
     return config.GetSpec("pet").status.petHappiness, config.GetSpec("player").status.petHappiness
 end

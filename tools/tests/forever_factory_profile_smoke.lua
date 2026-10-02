@@ -113,6 +113,8 @@ end
 local function loadModule(path)
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MidnightSimpleUnitFrames", ns)
 end
+-- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+loadModule("Kernel/MSUF_Require.lua")
 loadModule("State/MSUF_StateHelpers.lua")
 loadModule("Kernel/MSUF_Boundary.lua")
 loadModule("State/MSUF_ProfileCodec.lua")

@@ -144,9 +144,7 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
     if MSUF.ProfileSync then MSUF.ProfileSync.Activate(); MSUF.ProfileSync.RefreshEvents() end
     MSUF.UF.DisableBlizzardFrames()
-    if type(_G.MSUF_ApplyCurrentProfileGlobalUiScale) == "function" then
-        _G.MSUF_ApplyCurrentProfileGlobalUiScale()
-    end
+    MSUF.Require("MSUF_ApplyCurrentProfileGlobalUiScale", "State/MSUF_ProfileRuntime.lua")()
     MSUF_ProfileIO_RunFrameScaleApply()
     _G.MSUF_TargetSoundDriver_ApplySetting()
     _G.MSUF_NSRTNicknames_ApplySetting()

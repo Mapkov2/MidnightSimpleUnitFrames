@@ -582,10 +582,11 @@ end
 --- Rounded clipping borrows the dispel-overlay mask hook from RoundedFrames.
 --- Masks cannot be detached through that hook, so un-clipping swaps in a fresh
 --- texture object (cold path, toggles are rare).
+--- RoundedFrames exports the hook only while its module is active.
 local function WantsRoundedClip(conf, prefix, keys)
   return conf[keys and keys.RoundedClip or (prefix .. "RoundedClip")] == true
     and _G.MSUF_RoundedUF_Active == true
-    and type(_G.MSUF_RoundedUF_OnDispelOverlayChanged) == "function"
+    and MSUF.Optional("MSUF_RoundedUF_OnDispelOverlayChanged") ~= nil
 end
 
 local function NewLayerTexture(holder, sublevel)

@@ -35,13 +35,9 @@ local function ForEachCoreFrame(fn)
     return true
 end
 local IsConfigCombatLocked = _G.InCombatLockdown
-local function ShowConfigCombatLockMessage()
-    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-        _G.MSUF_ShowConfigCombatLockMessage()
-    else
-        Print("Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
-    end
-end
+--- REQUIRED: Kernel/MSUF_Util.lua owns the combat lock message and loads ahead
+--- of this file in every core TOC.
+local ShowConfigCombatLockMessage = MSUF.Require("MSUF_ShowConfigCombatLockMessage", "Runtime/MSUF_UIScaleRuntime.lua")
 local function BlockConfigCombatLocked(silent)
     if not IsConfigCombatLocked() then return false end
     if not silent then ShowConfigCombatLockMessage() end
@@ -133,13 +129,13 @@ local function FlushUnitframeReanchorAfterScale()
         RefreshGroupFrameGeometryAfterScale()
         return
     end
-    if type(_G.MSUF_UpdateAllExternalAnchorProxies) == "function" then _G.MSUF_UpdateAllExternalAnchorProxies() end
-    if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
-        local previous = _G.MSUF_ExternalAnchorForceReanchor
-        ExportPublic("MSUF_ExternalAnchorForceReanchor", true)
-        _G.MSUF_ForceReanchorAllUnitFrames_Once(true)
-        ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
-    end
+    -- UnitFrames/Engine/MSUF_UF_Factory.lua owns both and loads ahead of this file.
+    MSUF.Require("MSUF_UpdateAllExternalAnchorProxies", "Runtime/MSUF_UIScaleRuntime.lua")()
+    local forceReanchor = MSUF.Require("MSUF_ForceReanchorAllUnitFrames_Once", "Runtime/MSUF_UIScaleRuntime.lua")
+    local previous = _G.MSUF_ExternalAnchorForceReanchor
+    ExportPublic("MSUF_ExternalAnchorForceReanchor", true)
+    forceReanchor(true)
+    ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
     RefreshGroupFrameGeometryAfterScale()
 end
 local function ScheduleUnitframeReanchorAfterScale()
@@ -500,7 +496,7 @@ ExportPublic("MSUF_ResetGlobalUiScale", ResetGlobalUiScale)
 ExportPublic("MSUF_RestoreBlizzardUiScale", RestoreBlizzardUiScale)
 ExportPublic("MSUF_ResetStandaloneWindowGeometry", ResetStandaloneWindowGeometry)
 ExportPublic("MSUF_GetPixelPerfectScale", GetPixelPerfectScale)
-if type(_G.MSUF_InstallGlobalScaleGate) == "function" then _G.MSUF_InstallGlobalScaleGate() end
+MSUF.Require("MSUF_InstallGlobalScaleGate", "Runtime/MSUF_UIScaleRuntime.lua")()
 local function ApplySavedScaleState(applyGlobalCVar)
     ApplyMsufScale(GetSavedMsufScale())
     local want = GetDesiredGlobalScaleFromDB()
