@@ -191,7 +191,7 @@ local function Apply(mode)
     local wKey, hKey = WidthKey(unit), HeightKey(unit)
     if not (xKey and yKey and wKey and hKey) then return end
 
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", unit) end
+    _G.MSUF_EM_UndoBeforeChange("castbar", unit)
 
     local dx, dy = DefaultOffsets(unit)
     local currentX = Quick.San(g[xKey], dx)
@@ -236,7 +236,7 @@ local function ResetPosition()
     local unit = pf.unit
     local xKey, yKey = OffsetKeys(unit)
     if not (xKey and yKey) then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", unit) end
+    _G.MSUF_EM_UndoBeforeChange("castbar", unit)
     local dx, dy = DefaultOffsets(unit)
     g[xKey], g[yKey] = dx, dy
     ReapplyCastbar(unit)
@@ -250,7 +250,7 @@ local function ApplyDetach(checked)
     local key = DetachedKey(pf.unit)
     if not key then return end
 
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", pf.unit) end
+    _G.MSUF_EM_UndoBeforeChange("castbar", pf.unit)
     local setAnchored = _G.MSUF_EM_SetCastbarAnchoredToUnit
     if type(setAnchored) == "function" then
         --- The canonical owner preserves the current on-screen center when a

@@ -385,8 +385,7 @@ local function CreateMover(key, cfg)
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         local externalHistoryStarted = false
         if cfg.externalPublicElement == true then
-            if type(_G.MSUF_EM_UndoBeginChange) ~= "function"
-                or _G.MSUF_EM_UndoBeginChange("external", key, "Move") ~= true then
+            if _G.MSUF_EM_UndoBeginChange("external", key, "Move") ~= true then
                 return false
             end
             externalHistoryStarted = true
@@ -411,11 +410,7 @@ local function CreateMover(key, cfg)
         else
             local historyCategory = cfg.historyCategory or (cfg.popupType == "castbar" and "castbar" or "unit")
             local historyKey = cfg.historyKey or (cfg.popupType == "castbar" and (cfg.castbarUnit or key:sub(9)) or key)
-            if type(_G.MSUF_EM_UndoBeginChange) == "function" then
-                self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
-            elseif _G.MSUF_EM_UndoBeforeChange then
-                _G.MSUF_EM_UndoBeforeChange(historyCategory, historyKey)
-            end
+            self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
         end
 
         if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "drag" }) end
@@ -433,7 +428,7 @@ local function CreateMover(key, cfg)
 
         local moved = false
         if EM2.Ticker then moved = EM2.Ticker.EndDrag() end
-        if self._msufHistoryDrag and type(_G.MSUF_EM_UndoCommitChange) == "function" then
+        if self._msufHistoryDrag then
             self._msufHistoryDrag = nil
             _G.MSUF_EM_UndoCommitChange()
         end

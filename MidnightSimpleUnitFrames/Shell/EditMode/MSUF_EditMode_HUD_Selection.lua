@@ -241,9 +241,7 @@ function HUD.ResetCurrentPosition()
             local db = _G.MSUF_DB
             local conf = db and db[key]
             if conf then
-                if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-                    _G.MSUF_EM_UndoBeforeChange("gf", groupKind)
-                end
+                _G.MSUF_EM_UndoBeforeChange("gf", groupKind)
                 conf.offsetX = groupKind == "party" and -400 or groupKind == "priority" and -120 or -500
                 conf.offsetY = 0
                 if groupKind == "priority" then
@@ -269,9 +267,7 @@ function HUD.ResetCurrentPosition()
     local db = _G.MSUF_DB
     local conf = db and db[key]
     if not conf then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-        _G.MSUF_EM_UndoBeforeChange("unit", key)
-    end
+    _G.MSUF_EM_UndoBeforeChange("unit", key)
     local defaultX, defaultY = 0, 0
     if type(_G.MSUF_GetDefaultUnitOffsets) == "function" then defaultX, defaultY = _G.MSUF_GetDefaultUnitOffsets(key) end
     conf.offsetX = defaultX

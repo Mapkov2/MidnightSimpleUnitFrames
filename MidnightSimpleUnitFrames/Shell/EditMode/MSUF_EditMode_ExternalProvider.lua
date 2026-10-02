@@ -396,7 +396,6 @@ end
 
 function Controller:InstallDirtyHooks()
     if self.dirtyHooked or type(_G.hooksecurefunc) ~= "function" then return self.dirtyHooked end
-    if type(_G.MSUF_EM_UndoBeforeChange) ~= "function" then return false end
     _G.hooksecurefunc("MSUF_EM_UndoBeforeChange", function(category, key)
         self:OnMSUFEditChange(category, key)
     end)

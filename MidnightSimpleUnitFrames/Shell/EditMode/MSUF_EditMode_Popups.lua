@@ -228,7 +228,7 @@ local function Apply()
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit then return end
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
-    if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", key) end
+    _G.MSUF_EM_UndoBeforeChange("unit", key)
     local frame = FrameForUnitKey(key) or pf.parent
     local currentX, currentY = San(conf.offsetX, 0), San(conf.offsetY, 0)
     local displayX = pf.xBox and tonumber(pf.xBox:GetText())
@@ -420,7 +420,7 @@ local function ApplyDetachPower(checked)
     if not CanDetachPower(key) then return end
     local conf = key and Conf(key)
     if not conf then return end
-    if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", key) end
+    _G.MSUF_EM_UndoBeforeChange("unit", key)
     conf.powerBarDetached = checked and true or false
     if conf.powerBarDetached then
         conf.detachedPowerBarOffsetX = tonumber(conf.detachedPowerBarOffsetX) or 0
@@ -445,7 +445,7 @@ local function ResetPosition()
     local key = CK(pf.unit)
     local conf = key and Conf(key)
     if not conf then return end
-    if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", key) end
+    _G.MSUF_EM_UndoBeforeChange("unit", key)
     local dx, dy = 0, 0
     if type(_G.MSUF_GetDefaultUnitOffsets) == "function" then dx, dy = _G.MSUF_GetDefaultUnitOffsets(key) end
     conf.offsetX, conf.offsetY = dx, dy
@@ -470,7 +470,7 @@ local function CopySizeTo(targetKey)
     local srcKey = CK(pf.unit)
     local src = srcKey and db[srcKey]
     if not src or targetKey == srcKey then return end
-    if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", targetKey) end
+    _G.MSUF_EM_UndoBeforeChange("unit", targetKey)
     local dst = db[targetKey]
     if not dst then db[targetKey] = {}; dst = db[targetKey] end
     if src.width ~= nil then dst.width = floor(max(SizeBounds.minW, min(SizeBounds.maxW, tonumber(src.width) or 250)) + 0.5) end
@@ -717,9 +717,7 @@ local function ApplyResource()
             or anchor ~= (conf.detachedPowerBarAnchorToClassPower == true)
     end
     if not changed then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-        _G.MSUF_EM_UndoBeforeChange(cfg.historyCategory, cfg.historyKey)
-    end
+    _G.MSUF_EM_UndoBeforeChange(cfg.historyCategory, cfg.historyKey)
     conf[xKey], conf[yKey], conf[heightKey] = x, y, height
     if kind == "classpower" and y ~= oldY then
         -- An explicit Edit Mode Y value uses the current cooldown-top offset,
