@@ -6,6 +6,9 @@
 --    addon's ADDON_LOADED arrives, keeps every other key, stamps the account
 --    and stops listening. Another addon's ADDON_LOADED does nothing, and a
 --    stamped account is left alone.
+--    The retired built-in profilers' payload (MSUF_GlobalDB.clickCoreProfilerLast,
+--    .cpTraceArm) goes on the same ADDON_LOADED: Kernel/MSUF_Util.lua dropped it
+--    at file load, before the client had loaded the SavedVariables.
 -- 2. The real profile pipeline (State/MSUF_Profiles.lua) never copies,
 --    exports or imports profile.assistant: profile copy, the full and the
 --    unit-frame export, the external (Wago) export and a full import of a
@@ -81,6 +84,9 @@ do
         assistantAutoCoverageManifest = { "x" },
         assistantAcceptanceGate = { ok = true },
         analytics = { kept = true },
+        -- The retired built-in profilers' last report and armed trace.
+        clickCoreProfilerLast = { report = 1 },
+        cpTraceArm = true,
     }
     local gdb = env.MSUF_GlobalDB
 
@@ -102,6 +108,8 @@ do
         "MSUF_GlobalDB.global kept the Assistant's no-match or queued-change log")
     Check(gdb.global.firstLoad6 == true and gdb.analytics.kept == true and gdb.char["Tester-Realm"].activeProfile == "Default",
         "the cleanup removed account data that is not the Assistant's")
+    Check(gdb.clickCoreProfilerLast == nil and gdb.cpTraceArm == nil,
+        "the retired profilers' saved report or armed trace survived the SavedVariables load")
     Check(gdb.global._msufRetiredAssistantDataCleared_v1 == true, "the account was not stamped")
     Check(not Subscribed(w), "the cleanup still listens after it ran")
 
