@@ -26,10 +26,16 @@ local function ClearPrefixedKeys(store)
     end
 end
 
+--- The account SavedVariable, read when a cleanup runs (it exists only once
+--- the client has loaded the SavedVariables).
+local function AccountDB()
+    return rawget(_G, "MSUF_GlobalDB")
+end
+
 --- Returns true when this call removed the data, false when there was no
 --- account table yet or the stamp says it already ran.
 local function ClearRetiredAssistantData()
-    local globalDB = rawget(_G, "MSUF_GlobalDB")
+    local globalDB = AccountDB()
     if type(globalDB) ~= "table" then return false end
     local global = globalDB.global
     if type(global) == "table" and global[STAMP] == true then return false end
@@ -60,7 +66,7 @@ MSUF.ClearRetiredAssistantData = ClearRetiredAssistantData
 -- SavedVariables, so it never saw them; it runs on every ADDON_LOADED instead,
 -- because an older build on the same account can write them again.
 local function ClearRetiredProfilerData()
-    local globalDB = rawget(_G, "MSUF_GlobalDB")
+    local globalDB = AccountDB()
     if type(globalDB) ~= "table" then return false end
     globalDB.clickCoreProfilerLast = nil
     globalDB.cpTraceArm = nil
