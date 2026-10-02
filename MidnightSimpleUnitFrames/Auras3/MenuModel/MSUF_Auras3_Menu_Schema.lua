@@ -70,10 +70,6 @@ function Factories.Schema(A3)
     }
     local GROWTH_OK = { RIGHT=true, LEFT=true, UP=true, DOWN=true }
 
-    local ROW_WRAP_VALUES = {
-        { value = "DOWN", text = "Down" },
-        { value = "UP", text = "Up" },
-    }
     local ROW_WRAP_OK = { DOWN=true, UP=true }
 
     local STACK_ANCHORS = {
@@ -476,11 +472,6 @@ function Factories.Schema(A3)
         },
     }
 
-    local RUNTIME_FILTER_KEYS = {
-        buffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "cancelable", "notCancelable", "externalDefensive", "bigDefensive", "exclusive" },
-        debuffs = { "onlyMine", "onlyImportant", "raid", "raidInCombat", "includeNameplateOnly", "includeDispellable", "dispellableAny", "crowdControl", "nonPlayer", "exclusive" },
-    }
-
     local DEFAULT_SHARED = {
         showBuffs = true,
         showDebuffs = true,
@@ -667,8 +658,6 @@ function Factories.Schema(A3)
         PLAYER_DEFENSIVE_CONTAINER_INDEX = PLAYER_DEFENSIVE_CONTAINER_INDEX,
         PUBLIC_UNITS = PUBLIC_UNITS,
         ROW_WRAP_OK = ROW_WRAP_OK,
-        ROW_WRAP_VALUES = ROW_WRAP_VALUES,
-        RUNTIME_FILTER_KEYS = RUNTIME_FILTER_KEYS,
         SCOPE_MATERIALIZED_LAYOUT_KEYS = SCOPE_MATERIALIZED_LAYOUT_KEYS,
         SHARED_LAYOUT_KEYS = SHARED_LAYOUT_KEYS,
         STACK_ANCHORS = STACK_ANCHORS,

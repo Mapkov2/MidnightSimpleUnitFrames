@@ -189,9 +189,6 @@ if type(MSUF.UFCore) == "table" then
 end
 
 A3.version = 3
-A3.frontendOnly = false
-A3.backendEnabled = true
-A3.unitFrameAuras = true
 A3._runtimeConfigGen = A3._runtimeConfigGen or 1
 A3._unitFrameOwners = A3._unitFrameOwners or {}
 A3.PlayerDefensiveCoreDefaultMarker = PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER
@@ -199,7 +196,6 @@ A3.PlayerDefensiveFactoryPolicyMarker = PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER
 A3.NewPlayerDefensiveContainer = NewPlayerDefensiveContainer
 A3.EnsurePlayerDefensiveCoreDefault = EnsurePlayerDefensiveCoreDefault
 
-MSUF.AuraBackendEnabled = true
 MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
 ExportPublic("MSUF_AuraCore", MSUF.AuraCore)
 MSUF.AuraCore.Auras3 = A3
@@ -255,13 +251,8 @@ function A3.EnsureDB()
         return cur, cur.shared
     end
     local current, shared = A3.NormalizeProfileDB(db)
-    A3.DBRef = current
     sDB, sAuras, sItem, sGen = db, current, DefensiveItem(current), A3._runtimeConfigGen
     return current, shared
-end
-
-function A3.BackendEnabled()
-    return A3.backendEnabled == true
 end
 
 function A3.BumpRuntimeConfig()
@@ -336,8 +327,6 @@ function A3.RefreshAll()
     return true
 end
 
-A3.RefreshRuntime = A3.RefreshAll
-
 function A3.RequestApply(scopeOrReason, reason)
     if LooksLikeApplyScope(scopeOrReason) and type(A3.RequestScope) == "function" then
         return A3.RequestScope(scopeOrReason, reason or "AURAS3_REQUEST_APPLY")
@@ -400,7 +389,6 @@ local function NormalizeDispelBorderMode(value, legacyEnabled)
   if value == "OFF" or value == "NONE" or value == "DISABLED" then return legacyEnabled == true and "SYMBOL" or "OFF" end
   return legacyEnabled == true and "SYMBOL" or "OFF"
 end
-A3.NormalizeLegacyDispelBorderMode = NormalizeDispelBorderMode
 ExportPublic("MSUF_NormalizeLegacyDispelBorderMode", NormalizeDispelBorderMode)
 
 local AuraStrataIsSecret = _G.issecretvalue

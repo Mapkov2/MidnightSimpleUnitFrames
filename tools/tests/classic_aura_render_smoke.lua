@@ -1167,8 +1167,8 @@ assert(namespace.MSUF_Auras3.RequestScope("target", "render-smoke-enable") == tr
     "Classic target scope enable did not apply")
 assert(state.root._shown == true and state.lanes.buff[1]._shown == true,
     "Classic RequestScope did not render re-enabled target auras")
-assert(namespace.MSUF_Auras3.RefreshRuntime == namespace.MSUF_Auras3.RefreshAll,
-    "Classic RefreshRuntime still points at the core no-op stub")
+-- Review 2026-10-02: nothing read the A3.RefreshRuntime alias; it stays gone.
+assert(namespace.MSUF_Auras3.RefreshRuntime == nil, "the unread A3.RefreshRuntime alias is back")
 
 combat = true
 assert(namespace.MSUF_Auras3.RequestScope("target", "render-smoke-combat") == false,

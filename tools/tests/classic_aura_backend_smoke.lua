@@ -123,8 +123,13 @@ assert(loadfile(classicBackend .. "Preview.lua"))("MidnightSimpleUnitFrames", na
 assert(loadfile(retailPath))("MidnightSimpleUnitFrames", namespace)
 
 assert(registrations == 1, "Retail aura backend registered after Classic ownership")
-assert(namespace.MSUF_Auras3.classicAuraBackend == true, "Classic backend marker missing")
-assert(namespace.MSUF_Auras3.nativeAuraBackend == false, "native backend must be disabled on Classic")
+assert(namespace.MSUF_Auras3._ClassicBackend and namespace.MSUF_Auras3._ClassicBackend.Element,
+    "Classic backend element missing")
+-- Review 2026-10-02: nothing read the backend marker flags; they stay gone.
+for _, key in ipairs({ "classicAuraBackend", "nativeAuraBackend", "backendEnabled", "frontendOnly", "unitFrameAuras" }) do
+    assert(namespace.MSUF_Auras3[key] == nil, "the unread A3." .. key .. " marker is back")
+end
+assert(namespace.AuraBackendEnabled == nil, "the unread MSUF.AuraBackendEnabled marker is back")
 assert(registered and registered.events[1] == "UNIT_AURA", "Classic backend must own UNIT_AURA")
 
 -- The shared Edit Mode preview hides the rendered lane and forwards clicks

@@ -572,12 +572,6 @@ end
 
 UF.RegisterElement("Auras", AurasElement)
 
-A3.frontendOnly = false
-A3.backendEnabled = true
-A3.unitFrameAuras = true
-A3.nativeAuraBackend = true
-A3.RefreshRuntime = A3.RefreshAll
-MSUF.AuraBackendEnabled = true
 MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
 MSUF.AuraCore.Auras3 = A3
 

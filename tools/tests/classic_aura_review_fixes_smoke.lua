@@ -1175,6 +1175,22 @@ do
     end
     assert(not source:find("A3.CooldownText", 1, true),
         "F14: the Classic backend calls the A3.CooldownText hook again, which no Classic file defines")
+    -- Re-review 2026-10-02 (W3): no addon file, test or sibling repo calls these.
+    assert(not source:find("PostCreateButton", 1, true), "F14: the never-set lane.PostCreateButton hook is back")
+    for _, name in ipairs({ "MSUF_A3_RequestUnit", "MSUF_Auras3_RefreshUnit", "MSUF_Auras3_RefreshAll",
+        "MSUF_Auras3_ApplyFontsFromGlobal" }) do
+        assert(_G[name] == nil, "F14: the uncalled global " .. name .. " is back")
+    end
+    assert(A3.BackendEnabled == nil and A3.NormalizeLegacyDispelBorderMode == nil and A3.DBRef == nil,
+        "F14: an unread A3 export (BackendEnabled, NormalizeLegacyDispelBorderMode, DBRef) is back")
+    local Model = assert(A3.MenuModel, "F14: precondition: the shared menu model is not loaded")
+    for _, name in ipairs({ "BlacklistSummary", "BlacklistPreparedCount", "UseSharedRules", "SetUseSharedRules",
+        "ScopeFiltersEnabled", "SetScopeFiltersEnabled", "UseSharedVisuals", "SetUseSharedVisuals",
+        "WriteGeneralBool", "WriteGeneralNumber", "WriteGeneralColor", "ReadSharedNumber", "WriteSharedNumber",
+        "ReadGrowth", "WriteGrowth", "ReadRowWrap", "WriteRowWrap", "RowWrapValues",
+        "GroupBlacklistSummary", "GroupBlacklistCategorySummary" }) do
+        assert(Model[name] == nil, "F14: the uncalled menu model export Model." .. name .. " is back")
+    end
     assert(type(_G.MSUF_SetDispelOverlayPreview) == "function" and type(_G.MSUF_SetDispelSymbolPreview) == "function",
         "F14: precondition: the live Classic dispel previews are gone")
     -- The dispel previews are an ordinary module loaded after the backend, not an

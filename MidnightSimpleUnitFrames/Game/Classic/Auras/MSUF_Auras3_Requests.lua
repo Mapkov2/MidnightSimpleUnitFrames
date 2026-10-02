@@ -327,7 +327,6 @@ function A3.ApplyFontsFromGlobal(scope, reason)
     A3._NotifyAuraColdpathPreview(reason or "AURAS3_CLASSIC_FONT_VISUALS", "shared")
     return didWork
 end
-MSUF.ExportPublic("MSUF_Auras3_ApplyFontsFromGlobal", A3.ApplyFontsFromGlobal)
 
 --- Applies the queue collected while combat blocked aura runtime work. The
 --- queue is consumed only as work completes: a scope entry is removed after its
@@ -392,11 +391,5 @@ function A3.InvalidateUnitRuntimeConfig(unit)
     end
     return runtimeUnit
 end
-
-A3.RefreshRuntime = A3.RefreshAll
-
-MSUF.ExportPublic("MSUF_A3_RequestUnit", A3.RequestUnit)
-MSUF.ExportPublic("MSUF_Auras3_RefreshUnit", A3.RefreshUnit)
-MSUF.ExportPublic("MSUF_Auras3_RefreshAll", A3.RefreshAll)
 
 Backend.Requests = Requests
