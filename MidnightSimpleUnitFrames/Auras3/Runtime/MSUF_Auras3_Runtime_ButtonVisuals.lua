@@ -77,20 +77,9 @@ local ICON_SHADOW_TEXTURE = "Interface\\AddOns\\" .. tostring(addonName or "Midn
 --- Soft drop shadow behind the icon. `shadowSize` is the visible extent in
 --- pixels, so the band is twice that: its inner half hides behind the icon and
 --- the whole falloff lands outside.
-local function SetAuraShapeTexture(texture, shape, useBorder)
-    local media = Shape.MEDIA[shape]
-    if not (texture and media) then return false end
-    if useBorder == true then
-        texture:SetTexture(media.border)
-    elseif media.maskAtlas and texture.SetAtlas then
-        texture:SetAtlas(media.maskAtlas)
-    else
-        texture:SetTexture(media.swipe or media.mask)
-    end
-    if texture.SetDesaturated then texture:SetDesaturated(media.desaturate == true) end
-    if texture.SetTexCoord then texture:SetTexCoord(0, 1, 0, 1) end
-    return true
-end
+-- Shared with the Classic backend (Auras3/MSUF_Auras3_IconShape.lua); it also
+-- probes the Blizzard portrait mask atlas before SetAtlas.
+local SetAuraShapeTexture = Shape.SetTexture
 
 local function ApplyIconStyleShadow(button, style, size, shape)
     local pieces = button._msufA3StyleShadow
@@ -155,33 +144,7 @@ local function ApplyIconStyleBorder(button, style, size, shape)
     if shaped then
         if flat then flat:Hide() end
         if pieces then MSUF.BorderStyles.Hide(pieces) end
-        if not (style and style.borderEnabled) then
-            for i = 1, #(shapedBorders or {}) do shapedBorders[i]:Hide() end
-            return
-        end
-        shapedBorders = shapedBorders or {}
-        button._msufA3ShapedStyleBorders = shapedBorders
-        local media = Shape.MEDIA[shape]
-        local inner = style.borderPlacement == "inner" and not (media and media.borderOuterOnly)
-        local count = math_max(1, math_min(8, math_floor((style.borderThickness or 1) + 0.5)))
-        for i = 1, count do
-            local border = shapedBorders[i]
-            if not border then
-                border = PixelLayoutRegion(button:CreateTexture(nil, inner and "ARTWORK" or "BORDER", nil, inner and 7 or -1))
-                shapedBorders[i] = border
-            elseif border.SetDrawLayer then
-                border:SetDrawLayer(inner and "ARTWORK" or "BORDER", inner and 7 or -1)
-            end
-            if not SetAuraShapeTexture(border, shape, true) then border:Hide(); return end
-            local inset = inner and (i - 1) or -i
-            border:ClearAllPoints()
-            border:SetPoint("TOPLEFT", button, "TOPLEFT", inset, -inset)
-            border:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -inset, inset)
-            border:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
-            border:Show()
-        end
-        for i = count + 1, #shapedBorders do shapedBorders[i]:Hide() end
-        return
+        return Shape.ApplyBorderRings(button, style, shape)
     end
     for i = 1, #(shapedBorders or {}) do shapedBorders[i]:Hide() end
     if not (style and style.borderEnabled) then

@@ -33,59 +33,9 @@ local Shape = A3.IconShape
 
 
 
---- Vanilla and TBC keep the pre-Dragonflight HUD art, so the Blizzard portrait
---- mask atlas may not exist there. SetAtlas raises on an unknown atlas name;
---- probe once per name and fall back to the shape's own circle media.
-local atlasKnown = {}
-local function AtlasKnown(name)
-    if type(name) ~= "string" or name == "" then return false end
-    local known = atlasKnown[name]
-    if known == nil then
-        local api = _G.C_Texture
-        if api and type(api.GetAtlasInfo) == "function" then
-            known = api.GetAtlasInfo(name) ~= nil
-        else
-            -- No probe API (test harness / very old client): keep the
-            -- pre-guard behavior and let SetAtlas decide.
-            known = true
-        end
-        atlasKnown[name] = known
-    end
-    return known
-end
-Shape.AtlasKnown = AtlasKnown
-
-function Shape.EnsureMask(owner, shape)
-    local media = Shape.MEDIA[shape]
-    if not (owner and media and owner.CreateMaskTexture) then return nil end
-    local mask = owner._msufA3AuraShapeMask
-    if not mask then
-        mask = owner:CreateMaskTexture(nil, "BACKGROUND")
-        owner._msufA3AuraShapeMask = mask
-    end
-    if media.maskAtlas and mask.SetAtlas and AtlasKnown(media.maskAtlas) then
-        mask:SetAtlas(media.maskAtlas)
-    else
-        mask:SetTexture(media.mask or media.swipe)
-    end
-    mask:ClearAllPoints()
-    mask:SetAllPoints(owner)
-    mask:Show()
-    return mask
-end
-
-function Shape.ApplyCooldown(cooldown, shape, mask)
-    if not cooldown then return end
-    local media = Shape.MEDIA[shape]
-    if cooldown.SetSwipeTexture then
-        cooldown:SetSwipeTexture(media and (media.swipe or media.mask) or "Interface\\Buttons\\WHITE8X8")
-    end
-    if not (cooldown.GetNumRegions and cooldown.GetRegions) then return end
-    for index = 1, cooldown:GetNumRegions() do
-        local region = select(index, cooldown:GetRegions())
-        if mask then Shape.ApplyMask(region, mask) else Shape.ClearMask(region) end
-    end
-end
+-- The atlas probe, the mask, the cooldown swipe, the shape textures and the
+-- shaped border rings are shared with Retail (Auras3/MSUF_Auras3_IconShape.lua).
+local AtlasKnown = Shape.AtlasKnown
 
 function A3.ApplyAuraIconShape(owner, shape, cooldown, ...)
     if not owner then return Shape.RECTANGLE end
@@ -96,20 +46,11 @@ function A3.ApplyAuraIconShape(owner, shape, cooldown, ...)
         local texture = select(index, ...)
         if mask then Shape.ApplyMask(texture, mask) else Shape.ClearMask(texture) end
     end
-    Shape.ApplyCooldown(cooldown, shape, mask)
+    Shape.ApplyCooldownShape(cooldown, shape, mask)
     owner._msufA3IconShape = shape
     return shape
 end
 
-function A3.AuraShapeBorderPath(shape)
-    local media = Shape.MEDIA[Shape.Normalize(shape)]
-    return media and media.border or nil
-end
-
-A3.NormalizeAuraIconShape = Shape.Normalize
-A3.ResolveAuraIconShape = Shape.Resolve
-A3.AURA_ICON_SHAPE_RECTANGLE = Shape.RECTANGLE
-A3.AURA_ICON_SHAPE_FOLLOW_PORTRAIT = Shape.FOLLOW_PORTRAIT
 
 local function Read(source, fallbackSource, key, fallback)
     local value = type(source) == "table" and source[key]
@@ -222,16 +163,7 @@ end
 
 local SHADOW_TEXTURE = Shape.MEDIA_ROOT .. "\\Media\\Borders\\msuf_aura_border_shadow.tga"
 
-local function SetShapeTexture(texture, shape, border)
-    local media = Shape.MEDIA[shape]
-    if not (texture and media) then return false end
-    if border then texture:SetTexture(media.border)
-    elseif media.maskAtlas and texture.SetAtlas and AtlasKnown(media.maskAtlas) then texture:SetAtlas(media.maskAtlas)
-    else texture:SetTexture(media.swipe or media.mask) end
-    if texture.SetDesaturated then texture:SetDesaturated(media.desaturate == true) end
-    if texture.SetTexCoord then texture:SetTexCoord(0, 1, 0, 1) end
-    return true
-end
+local SetShapeTexture = Shape.SetTexture
 
 local function HidePieces(pieces)
     if MSUF.BorderStyles and pieces then MSUF.BorderStyles.Hide(pieces) end
@@ -283,33 +215,7 @@ local function ApplyBorder(button, style, size, shape)
     if shape ~= Shape.RECTANGLE then
         if flat then flat:Hide() end
         HidePieces(pieces)
-        if not (style and style.borderEnabled) then
-            for i = 1, rings and #rings or 0 do rings[i]:Hide() end
-            return
-        end
-        rings = rings or {}
-        button._msufA3ShapedStyleBorders = rings
-        local media = Shape.MEDIA[shape]
-        local inner = style.borderPlacement == "inner" and not (media and media.borderOuterOnly)
-        local count = math_max(1, math_min(8, math_floor((style.borderThickness or 1) + 0.5)))
-        for i = 1, count do
-            local ring = rings[i]
-            if not ring then
-                ring = PixelLayoutRegion(button:CreateTexture(nil, inner and "ARTWORK" or "BORDER", nil, inner and 7 or -1))
-                rings[i] = ring
-            elseif ring.SetDrawLayer then
-                ring:SetDrawLayer(inner and "ARTWORK" or "BORDER", inner and 7 or -1)
-            end
-            if not SetShapeTexture(ring, shape, true) then ring:Hide(); return end
-            local inset = inner and (i - 1) or -i
-            ring:ClearAllPoints()
-            ring:SetPoint("TOPLEFT", button, "TOPLEFT", inset, -inset)
-            ring:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -inset, inset)
-            ring:SetVertexColor(style.borderR, style.borderG, style.borderB, style.borderA)
-            ring:Show()
-        end
-        for i = count + 1, #rings do rings[i]:Hide() end
-        return
+        return Shape.ApplyBorderRings(button, style, shape)
     end
     for i = 1, rings and #rings or 0 do rings[i]:Hide() end
     if not (style and style.borderEnabled) then if flat then flat:Hide() end; HidePieces(pieces); return end
