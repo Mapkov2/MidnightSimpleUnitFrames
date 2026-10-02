@@ -11,6 +11,8 @@ local function PublishCompat(name, value)
 end
 
 local Tr = MSUF.Translate
+-- One combat-state source (Kernel/MSUF_Util.lua); see MSUF_RecomputeHoverInert.
+local InCombat = MSUF.Util.InCombat
 
 --- REQUIRED: State/MSUF_Defaults.lua is listed unconditionally in the TOC and
 --- exports MSUF_EnsureDB at its top level, far ahead of this file. The tooltip
@@ -112,7 +114,7 @@ local function MSUF_TooltipModeAllowed(mode, modifier)
         return false
     end
     if mode == TOOLTIP_MODE_OOC then
-        return not (_G.InCombatLockdown and _G.InCombatLockdown())
+        return not InCombat()
     end
     if mode == TOOLTIP_MODE_MODIFIER then
         modifier = MSUF_NormalizeTooltipModifierValue(modifier)
@@ -646,14 +648,15 @@ end
 -- Runs only on combat transitions, world entry, and setting changes -- never
 -- per hover. When a config becomes inert we also drop any unit tooltip we own
 -- (never another addon's, hence the owner check) so nothing lingers while the
--- OnLeave hooks are short-circuited.
-MSUF_RecomputeHoverInert = function()
+-- OnLeave hooks are short-circuited. The combat watcher passes its event:
+-- PLAYER_REGEN_DISABLED arrives before InCombatLockdown() turns true.
+MSUF_RecomputeHoverInert = function(event)
     local mode = MSUF_GetTooltipCache().mode
     local inert
     if mode == TOOLTIP_MODE_NEVER then
         inert = true
     elseif mode == TOOLTIP_MODE_OOC then
-        inert = (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+        inert = InCombat(event) and true or false
     else
         inert = false
     end
@@ -677,7 +680,7 @@ do
         watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
         watcher:SetScript("OnEvent", function(_, event)
             if event ~= "MODIFIER_STATE_CHANGED" then
-                MSUF_RecomputeHoverInert()
+                MSUF_RecomputeHoverInert(event)
             else
                 MSUF_HandleTooltipModifier()
             end

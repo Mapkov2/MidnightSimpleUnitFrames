@@ -35,6 +35,7 @@ local function ResolveOptionsPath(relative)
 end
 
 local REQUIRE_PATH = ResolvePath("Kernel/MSUF_Require.lua")
+local UTIL_PATH = ResolvePath("Kernel/MSUF_Util.lua")
 local CHAT_PATH = ResolvePath("Runtime/MSUF_SlashCommands.lua")
 local TOOLTIP_PATH = ResolvePath("Runtime/MSUF_UnitTooltips.lua")
 local EDITMODE_BRIDGE_PATH = ResolvePath("Runtime/MSUF_BlizzEditModeBridge.lua")
@@ -157,6 +158,13 @@ MSUF.GetAddonVersion = function() return MSUF.Client.AddonVersion end
 local requireChunk, requireError = loadfile(REQUIRE_PATH)
 assert(requireChunk, requireError)
 requireChunk("MidnightSimpleUnitFrames", MSUF)
+
+--- Kernel/MSUF_Util.lua loads before Runtime in every TOC; the tooltip runtime
+--- asks its combat-state source (MSUF.Util.InCombat). It creates no frame,
+--- event, timer or hook, so the side-effect budget below is unchanged.
+local utilChunk, utilError = loadfile(UTIL_PATH)
+assert(utilChunk, utilError)
+utilChunk("MidnightSimpleUnitFrames", MSUF)
 
 local chunk, err = loadfile(CHAT_PATH)
 assert(chunk, err)

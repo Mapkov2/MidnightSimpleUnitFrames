@@ -345,6 +345,13 @@ function Methods:FirstFailure()
     return self.failures[1]
 end
 
+-- Combat edges in the client's order (msuf_test_stubs Environment:EnterCombat):
+-- PLAYER_REGEN_DISABLED reaches every registered frame while
+-- InCombatLockdown() is still false; PLAYER_REGEN_ENABLED after it is false.
+function Methods:EnterCombat() self.widgets:EnterCombat() end
+function Methods:LeaveCombat() self.widgets:LeaveCombat() end
+function Methods:FireEvent(event, ...) return self.widgets:FireEvent(event, ...) end
+
 --------------------------------------------------------------------------
 -- Factory
 --------------------------------------------------------------------------
