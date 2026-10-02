@@ -104,7 +104,7 @@ local function RequireReloadForReenable(frame, spec)
     if type(showReload) == "function" then
       showReload("Unit frame enable - reload required")
     elseif _G.print then
-      _G.print("|cffffd700MSUF:|r A unit frame was enabled. Reload the UI with /reload to apply it.")
+      _G.print("|cffffd700MSUF:|r " .. MSUF.Translate("A unit frame was enabled. Reload the UI with /reload to apply it."))
     end
   end
   return true

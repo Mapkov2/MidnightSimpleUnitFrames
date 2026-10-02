@@ -349,3 +349,4 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 -	lua	tools/tests/group_aura_filter_token_owner_smoke.lua	{root}	State reaches into the Auras3 menu model for the Group Aura filter tokens, or the two lists drifted
 -	lua	tools/tests/resource_extras_translator_smoke.lua	{root}	Former class power resource extras keys are not carried by the profile translator
 -	lua	tools/tests/totem_manager_flag_smoke.lua	{root}	TotemFrame managed-frame flag is rewritten on Blizzard rebuilds or not handed back
+-	lua	tools/tests/engine_chat_locale_smoke.lua	{root}	An engine or state chat line, binding label, tooltip or status word is untranslated

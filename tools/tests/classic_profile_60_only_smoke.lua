@@ -122,6 +122,9 @@ namespace.ProfileRuntime = { Apply = function() end }
 
 MSUF_DB = currentProfile
 MSUF_ActiveProfile = "Current"
+-- The translation core loads ahead of State/ in every core TOC; the profile chat lines use it.
+local localizationPath = repo .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"
+assert(loadstring(MSUF_Auras3TestLoader.ReadSource(localizationPath), "@" .. localizationPath))("MidnightSimpleUnitFrames", namespace)
 local normalizePath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"
 assert(loadstring(MSUF_Auras3TestLoader.ReadSource(normalizePath), "@" .. normalizePath))("MidnightSimpleUnitFrames", namespace)
 local profilesPath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"

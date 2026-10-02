@@ -2012,7 +2012,9 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
       AdoptRegion(frame, fs, layout.layer)
     end
     LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
-    SetText(fs, text)
+    -- text stays the state token (DEAD, GHOST, OFFLINE, AFK, DND) that the
+    -- health element compares; only the font string gets the translation.
+    SetText(fs, MSUF.Translate(text))
     SetShown(fs, true)
     if StatusTextIsGone(oldValue) and not StatusTextIsGone(text) then
       RefreshHealthAfterGoneStatus(frame, oldValue)

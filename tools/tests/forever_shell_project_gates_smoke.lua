@@ -254,6 +254,8 @@ local function OpenOptions(client, loadResult, reason)
         return loaded
     end
     print = function(message) lines[#lines + 1] = tostring(message) end
+    -- The translation core loads ahead of the loader in every core TOC; its failure line uses it.
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(LOADER))("MidnightSimpleUnitFrames", namespace)
     -- The loader exports MSUF_EnsureAddonLoaded-independent entry points; the
     -- wrapper above stands in for Kernel/MSUF_Libs.lua.
