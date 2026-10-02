@@ -153,6 +153,7 @@ classics	lua+driver	tools/tests/classic_aura_faction_smoke.lua	{root/} {flavor}	
 -	lua+driver	tools/tests/classic_aura_rank_name_match_smoke.lua	{root/}	Classic aura rank name-match smoke failed
 -	lua+driver	tools/tests/classic_group_indicator_data_smoke.lua	{root/}	Classic group indicator data smoke failed
 -	lua+driver	tools/tests/classic_raid_manager_mode_smoke.lua	{root/}	Classic Raid Manager mode smoke failed
+-	lua	tools/tests/group_raid_manager_toggles_smoke.lua	{root}	Mainline Raid Manager toggle-button mouse smoke failed
 clients+Forever	lua	tools/tests/uf_engine_client_gates_smoke.lua	{root/} {flavor}	Unit-frame engine client gates smoke failed: {flavor}
 clients+Forever	lua	tools/tests/uf_engine_preview_exports_smoke.lua	{root} {flavor}	Unit-frame engine preview exports smoke failed: {flavor}
 -	lua	tools/tests/uf_core_hidden_frame_smoke.lua	{root}	Unit-frame core hidden-frame contract smoke failed

@@ -664,7 +664,7 @@ Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwne
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative `
     -Pattern 'raidManagerMode' -Requirement "keep the RC4 Raid Manager visibility mode"
 Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwnershipRelative `
-    -Pattern 'manager\.toggleButton\s+or\s+_G\.CompactRaidFrameManagerToggleButton' `
+    -Pattern 'key\s*=\s*"toggleButton",\s*global\s*=\s*"CompactRaidFrameManagerToggleButton"' `
     -Requirement "keep the legacy Raid Manager toggle-button hook"
 
 $elementsRoot = Join-Path $root "MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore"
