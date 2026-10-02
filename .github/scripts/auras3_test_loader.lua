@@ -325,6 +325,18 @@ local function PrepareDirectContracts(source, namespace)
         auras3.ReadParentFrameStrata = auras3.ReadParentFrameStrata or Bind(owner, "ReadParentFrameStrata", preamble)
         auras3.SyncFrameStrata = Bind(owner, "SyncFrameStrata", preamble)
     end
+    -- The Auras3 core's unit lane-key schema, built from its owner for harnesses
+    -- that load the menu or runtime schema without the core.
+    if Uses("A3.LaneKeySchema") and type(auras3) == "table" and auras3.LaneKeySchema == nil then
+        local owner = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"
+        local text = Read(SourcePath(owner))
+        local parts = {
+            Slice.Function(text, "local function DeepCopy", owner),
+            Slice.Function(text, "local function BuildLaneKeySchema", owner),
+            "return BuildLaneKeySchema()",
+        }
+        auras3.LaneKeySchema = assert(compileSource(table.concat(parts, "\n")))()
+    end
     if Uses("local Shape = A3.IconShape") then
         assert(originalLoadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
     end
@@ -435,7 +447,8 @@ local function NeedsDirectContracts(source)
     for _, key in ipairs({ "CreateAnimationStarter", "_G.MSUF_EM2.ExternalProviders.Create", "MSUF_IsGroupUnitToken", "Text.ApplyNameTextColor", "Text.ApplyInlineTextColor", "MSUF.Secrets", "Layers.BorderOffset", "= Apply.ColorTexture", "_G.issecretvalue", "_G.wipe", "M.Lines", "M.KeySetFromWords", "M.FindPageEntry", "M.PageKeyForWidget", "MSUF_NormalizeFontKey", "A3.NormalizeProfileDB", "M.TranslateText", "M.Tr", "= MSUF.Translate", "= MSUF.UF.GetFrame", "MSUF.Secrets.PlainBool",
         "MSUF.MSUF_Auras3.GetDurationBarColor", "Layers.BaseFrameLevel", "= Apply.Text", "= Apply.Shown", "= Apply.Texture", "MSUF.UF.Clamp01", "MSUF.UFBarTextCommon.HealthModeNeedsIdentity", "UF.IsBossUnit", "GF.GetLiveGroupKind", "GF.GetAnchorPoint", "_G.MSUF_UF_ScheduleApplyCommit", "_G.MSUF_GetSharedMedia", "_G.MSUF_EnsureCastbarGeneralDB", "M.AuraCatalogToken", "M.GroupAuraSettingKeys", "M.TrimText", "PreviewHelpers.ReadPreviewBarsBool", "M.Widgets.SetTextLayout", "M.Widgets.ResolveContextColorOption", "M.NormalizeControlPath", "M.PortableControlToken", "M.AccessibleNumber",
         "M.ApplyService.CallGlobal", "= M.Format", "W.ThemedControlCard", "W.ToggleBadge", "W.SetTileVisual", "PreviewHelpers.ExactPreviewDelta",
-        "MSUF.Optional(", "MSUF.MSUF_GetGlobalFontSettings()", "A3.SyncFrameStrata(", "A3.ReadParentFrameStrata(" }) do
+        "MSUF.Optional(", "MSUF.MSUF_GetGlobalFontSettings()", "A3.SyncFrameStrata(", "A3.ReadParentFrameStrata(",
+        "A3.LaneKeySchema" }) do
         if source:find(key, 1, true) then return true end
     end
     return false

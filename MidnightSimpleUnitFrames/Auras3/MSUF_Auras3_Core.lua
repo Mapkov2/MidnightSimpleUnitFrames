@@ -200,6 +200,226 @@ MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
 ExportPublic("MSUF_AuraCore", MSUF.AuraCore)
 MSUF.AuraCore.Auras3 = A3
 
+--- Unit aura lane-key schema: the one source for the Buff and Debuff lane keys
+--- of the player, pet, target, focus, boss and arena frames. Every saved key is
+--- listed once with the profile table that owns it and its Shared default. The
+--- menu schema (MenuModel/MSUF_Auras3_Menu_Schema.lua) and the runtime schema
+--- (Runtime/MSUF_Auras3_Runtime_Schema.lua) take their key sets, lane specs and
+--- default tables from A3.LaneKeySchema. Every client loads this file before
+--- both; the Classic flavors load only the menu schema.
+---
+--- Owner: where Menu2 writes a unit-scope value.
+---   layout             perUnit.layout (frame-local placement)
+---   layoutShared       perUnit.layoutShared (counts and growth)
+---   styleLayout        perUnit.layout, inherited from Shared Style until the
+---                      unit overrides its style
+---   styleLayoutShared  perUnit.layoutShared, inherited the same way
+---   false              Shared only, never routed to a unit
+--- Defaults: the Shared default tables a key's value belongs to.
+---   S  the legacy defaults the menu seeds once into a pre-canonical Shared
+---      table (Menu_Storage, Model.EnsureDB)
+---   F  the fallbacks the runtime compiler reads when a key is absent
+--- Both sets are saved-profile contracts: change one only with a migration.
+local function BuildLaneKeySchema()
+    local SF, S, F = "SF", "S", "F"
+
+    -- Shared keys without a lane prefix: key, owner, default, defaults.
+    local SHARED_KEYS = {
+        { "iconSize", "layout", 26, SF },
+        { "spacing", "layout", 2, SF },
+        { "offsetX", "layout", 0, S },
+        { "offsetY", "layout", 6, S },
+        { "perRow", "layoutShared", 12, SF },
+        { "growth", "layoutShared", "RIGHT", SF },
+        { "rowWrap", "layoutShared", "DOWN", SF },
+        { "iconZoom", "styleLayout", 100, SF },
+        { "stylePadding", "styleLayout", 0, F },
+        { "durationBarHeight", "styleLayout", 2, SF },
+        { "stackTextSize", "styleLayout", 14, SF },
+        { "stackTextOffsetX", "styleLayout", -1, SF },
+        { "stackTextOffsetY", "styleLayout", 1, SF },
+        { "cooldownTextSize", "styleLayout", 14, SF },
+        { "cooldownTextOffsetX", "styleLayout", 0, SF },
+        { "cooldownTextOffsetY", "styleLayout", 0, SF },
+        { "showTooltip", "styleLayoutShared", true, SF },
+        { "showCooldownSwipe", "styleLayoutShared", true, SF },
+        { "cooldownSwipeReverse", "styleLayoutShared", false, SF },
+        { "sortMethod", "styleLayoutShared", "DEFAULT", F },
+        { "sortReverse", "styleLayoutShared", false, F },
+        { "showDurationBar", "styleLayoutShared", false, SF },
+        { "durationBarDisplay", "styleLayoutShared", "BAR_ONLY", SF },
+        { "durationBarPosition", "styleLayoutShared", "BOTTOM", SF },
+        { "durationBarDirection", "styleLayoutShared", "REMAINING", SF },
+        { "showCooldownText", "styleLayoutShared", true, SF },
+        { "showStackCount", "styleLayoutShared", true, SF },
+        { "debuffTypeBorderMode", "styleLayoutShared", "OFF", SF },
+        { "dispelBorderMode", "styleLayoutShared" },
+        { "useDebuffTypeBorders", "styleLayoutShared", false, SF },
+        { "stackCountAnchor", "styleLayoutShared", "TOPRIGHT", SF },
+        { "cooldownTextAnchor", "styleLayoutShared", "CENTER", SF },
+        { "cooldownDecimalSeconds", "styleLayoutShared", 3, SF },
+        { "iconShape", false, "RECTANGLE", S },
+        { "showWeaponEnchants", false, false, F },
+        { "styleBorderEnabled", false, false, F },
+        { "styleBorderStyle", false, "SOLID", F },
+        { "styleBorderThickness", false, 1, F },
+        { "styleBorderColor", false, { 0, 0, 0, 1 }, F },
+        { "styleShadowEnabled", false, false, F },
+        { "styleShadowSize", false, 4, F },
+        { "styleShadowColor", false, { 0, 0, 0, 0.8 }, F },
+    }
+
+    -- The two lanes. Lane defaults cover the fields whose default differs per lane.
+    local LANES = {
+        buff = { prefix = "buff", rootKey = "Buffs", filter = "HELPFUL",
+            defaults = { yKey = 36, anchorKey = "BOTTOMRIGHT", layerKey = 5 } },
+        debuff = { prefix = "debuff", rootKey = "Debuffs", filter = "HARMFUL",
+            defaults = { yKey = 6, anchorKey = "TOPLEFT", layerKey = 6 } },
+    }
+
+    -- Lane spec fields: field, key (prefix .. suffix; "%s" takes the lane's
+    -- rootKey instead), owner, the Shared key the lane field overrides, default,
+    -- defaults. A field with a Shared key and no default takes the Shared key's.
+    local LANE_FIELDS = {
+        { "xKey", "GroupOffsetX", "layout", nil, 0, SF },
+        { "yKey", "GroupOffsetY", "layout", nil, nil, SF },
+        { "sizeKey", "GroupIconSize", "layout", nil, 26, SF },
+        { "anchorKey", "Anchor", "layout", nil, nil, SF },
+        { "layerKey", "Layer", "layout", nil, nil, SF },
+        { "strataKey", "Strata", "layout" },
+        { "spacingKey", "Spacing", "layout" },
+        { "showKey", "show%s", "layoutShared", nil, true, SF },
+        { "maxKey", "max%s", "layoutShared", nil, 12, SF },
+        { "perRowKey", "PerRow", "layoutShared" },
+        { "growthKey", "GrowthX", "layoutShared" },
+        { "wrapKey", "GrowthY", "layoutShared" },
+        { "iconZoomKey", "IconZoom", "styleLayout", "iconZoom", nil, S },
+        { "paddingKey", "StylePadding", "styleLayout", "stylePadding" },
+        { "durationBarHeightKey", "DurationBarHeight", "styleLayout", "durationBarHeight", nil, S },
+        { "stackSizeKey", "StackTextSize", "styleLayout", "stackTextSize", nil, S },
+        { "stackXKey", "StackTextOffsetX", "styleLayout", "stackTextOffsetX", nil, S },
+        { "stackYKey", "StackTextOffsetY", "styleLayout", "stackTextOffsetY", nil, S },
+        { "cooldownSizeKey", "CooldownTextSize", "styleLayout", "cooldownTextSize", nil, S },
+        { "cooldownXKey", "CooldownTextOffsetX", "styleLayout", "cooldownTextOffsetX", nil, S },
+        { "cooldownYKey", "CooldownTextOffsetY", "styleLayout", "cooldownTextOffsetY", nil, S },
+        { "showTextKey", "ShowCooldownText", "styleLayoutShared", "showCooldownText", nil, S },
+        { "swipeKey", "ShowCooldownSwipe", "styleLayoutShared", "showCooldownSwipe", nil, S },
+        { "swipeReverseKey", "CooldownSwipeReverse", "styleLayoutShared", "cooldownSwipeReverse", nil, S },
+        { "sortMethodKey", "SortMethod", "styleLayoutShared", "sortMethod", nil, S },
+        { "sortReverseKey", "SortReverse", "styleLayoutShared", "sortReverse", nil, S },
+        { "showDurationBarKey", "ShowDurationBar", "styleLayoutShared", "showDurationBar", nil, S },
+        { "durationBarDisplayKey", "DurationBarDisplay", "styleLayoutShared", "durationBarDisplay", nil, S },
+        { "durationBarPositionKey", "DurationBarPosition", "styleLayoutShared", "durationBarPosition", nil, S },
+        { "durationBarDirectionKey", "DurationBarDirection", "styleLayoutShared", "durationBarDirection", nil, S },
+        { "tooltipKey", "ShowTooltip", "styleLayoutShared", "showTooltip", nil, SF },
+        { "showStackKey", "ShowStackCount", "styleLayoutShared", "showStackCount", nil, S },
+        { "stackAnchorKey", "StackCountAnchor", "styleLayoutShared", "stackCountAnchor", nil, S },
+        { "cooldownAnchorKey", "CooldownTextAnchor", "styleLayoutShared", "cooldownTextAnchor", nil, S },
+        { "cooldownDecimalKey", "CooldownDecimalSeconds", "styleLayoutShared", "cooldownDecimalSeconds", nil, S },
+        { "iconShapeKey", "IconShape", false, "iconShape", nil, S },
+        { "filterKey", "s", false },
+    }
+
+    -- Lane keys outside the spec: lanes, key suffix, owner, the menu's style
+    -- name for it, default, defaults.
+    local LANE_EXTRA_KEYS = {
+        { "buff debuff", "FrameEffectType", "styleLayoutShared", nil, "none", SF },
+        { "buff debuff", "FrameEffectColor", "styleLayoutShared", nil, { 0.69, 0.50, 0.88, 0.80 }, SF },
+        { "buff debuff", "FrameEffectPriority", "styleLayoutShared", nil, 5, SF },
+        { "buff debuff", "FrameEffectThickness", "styleLayoutShared", nil, 2, SF },
+        { "buff debuff", "FrameEffectLayer", "styleLayoutShared", nil, 0, SF },
+        { "buff debuff", "FrameEffectStrata", "styleLayoutShared", nil, "AUTO", SF },
+        { "buff", "ShowStealable", "styleLayoutShared", "showStealable", false, S },
+        { "buff", "StealableStyle", "styleLayoutShared", "stealableStyle", "BORDER_ICON", S },
+        -- Pre-6.0 Buffs lane offsets: seeded into old profiles, read by nothing new.
+        { "buff", "OffsetX", false, nil, 0, S },
+        { "buff", "OffsetY", false, nil, 30, S },
+    }
+
+    -- The Debuffs lane has no prefixed copy of these; its style key is the
+    -- Shared key itself.
+    local LANE_STYLE_ALIASES = { debuff = { "debuffTypeBorderMode", "useDebuffTypeBorders" } }
+
+    local schema = {
+        LANE_SPECS = {},
+        LANE_LAYOUT_FIELDS = {},
+        LANE_SHARED_LAYOUT_FIELDS = {},
+        LAYOUT_KEYS = {},
+        SHARED_LAYOUT_KEYS = {},
+        STYLE_LAYOUT_KEYS = {},
+        STYLE_SHARED_LAYOUT_KEYS = {},
+        SCOPE_MATERIALIZED_LAYOUT_KEYS = {},
+        LANE_STYLE_KEYS = {},
+    }
+    local OWNER_SETS = {
+        layout = { schema.LAYOUT_KEYS },
+        layoutShared = { schema.SHARED_LAYOUT_KEYS },
+        styleLayout = { schema.LAYOUT_KEYS, schema.STYLE_LAYOUT_KEYS },
+        styleLayoutShared = { schema.SHARED_LAYOUT_KEYS, schema.STYLE_SHARED_LAYOUT_KEYS },
+    }
+    local seedDefaults, fallbackDefaults, ownerOf = {}, {}, {}
+    local function AddKey(key, owner, default, defaults)
+        assert(ownerOf[key] == nil, "MSUF Auras3 lane key listed twice: " .. tostring(key))
+        ownerOf[key] = owner
+        assert(owner == false or OWNER_SETS[owner], "MSUF Auras3 lane key has an unknown owner: " .. tostring(key))
+        for _, set in ipairs(owner and OWNER_SETS[owner] or {}) do set[key] = true end
+        if defaults == SF or defaults == S then seedDefaults[key] = default end
+        if defaults == SF or defaults == F then fallbackDefaults[key] = default end
+    end
+
+    local sharedDefault = {}
+    for _, row in ipairs(SHARED_KEYS) do
+        AddKey(row[1], row[2], row[3], row[4])
+        sharedDefault[row[1]] = row[3]
+    end
+    for _, field in ipairs(LANE_FIELDS) do
+        if field[3] == "layout" then
+            schema.LANE_LAYOUT_FIELDS[#schema.LANE_LAYOUT_FIELDS + 1] = field[1]
+        elseif field[3] == "layoutShared" then
+            schema.LANE_SHARED_LAYOUT_FIELDS[#schema.LANE_SHARED_LAYOUT_FIELDS + 1] = field[1]
+        end
+    end
+    for kind, lane in pairs(LANES) do
+        local spec = { rootKey = lane.rootKey, filter = lane.filter,
+            defaultAnchor = lane.defaults.anchorKey, defaultLayer = lane.defaults.layerKey }
+        local styleKeys = {}
+        for _, field in ipairs(LANE_FIELDS) do
+            local name, suffix, owner, sharedKey = field[1], field[2], field[3], field[4]
+            local key = suffix:find("%s", 1, true) and suffix:format(lane.rootKey) or lane.prefix .. suffix
+            local default = lane.defaults[name]
+            if default == nil then default = field[5] end
+            if default == nil and sharedKey then default = sharedDefault[sharedKey] end
+            spec[name] = key
+            AddKey(key, owner, default, field[6])
+            if sharedKey then styleKeys[sharedKey] = key end
+        end
+        for _, extra in ipairs(LANE_EXTRA_KEYS) do
+            if (" " .. extra[1] .. " "):find(" " .. kind .. " ", 1, true) then
+                local key = lane.prefix .. extra[2]
+                AddKey(key, extra[3], extra[5], extra[6])
+                if extra[4] then styleKeys[extra[4]] = key end
+            end
+        end
+        for _, key in ipairs(LANE_STYLE_ALIASES[kind] or {}) do styleKeys[key] = key end
+        -- Per-lane spacing is materialized into every scope rather than inherited.
+        schema.SCOPE_MATERIALIZED_LAYOUT_KEYS[spec.spacingKey] = true
+        schema.LANE_SPECS[kind] = spec
+        schema.LANE_STYLE_KEYS[kind] = styleKeys
+    end
+
+    -- Each default-table build hands out fresh value tables, so no reader can
+    -- change another's defaults through a shared color table.
+    local function Copy(values)
+        local out = {}
+        for key, value in pairs(values) do out[key] = DeepCopy(value) end
+        return out
+    end
+    function schema.SeedDefaults() return Copy(seedDefaults) end
+    function schema.FallbackDefaults() return Copy(fallbackDefaults) end
+    return schema
+end
+A3.LaneKeySchema = BuildLaneKeySchema()
+
 local function EnsureRootDB()
     local db = _G.MSUF_DB
     if type(db) ~= "table" then

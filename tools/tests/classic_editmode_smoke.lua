@@ -721,9 +721,10 @@ for _, contract in ipairs({
     assert(profileSource:find(contract, 1, true),
         "Classic profile Edit Mode contract missing: " .. contract)
 end
-local auraModel = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua")
-assert(auraModel:find("buffSpacing = true", 1, true)
-    and auraModel:find("debuffSpacing = true", 1, true),
+-- The menu takes its lane keys from the one lane-key schema in the Auras3 core:
+-- per-lane spacing must stay a frame-local layout key.
+local auraLaneKeys = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua")
+assert(auraLaneKeys:find('{ "spacingKey", "Spacing", "layout" }', 1, true),
     "Classic profile model drops per-lane aura spacing")
 
 local editCore = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua")
