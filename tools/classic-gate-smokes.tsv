@@ -153,6 +153,7 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	tools/tests/classic_aura_lane_schema_smoke.lua	{root/}	Classic aura lane schema smoke failed
 -	lua	tools/tests/aura_lane_key_schema_smoke.lua	{root}	Aura lane-key schema smoke failed
 -	lua	tools/tests/classic_aura_module_refs_smoke.lua	{root}	Classic aura module refs smoke failed
+-	lua	tools/tests/aura_custom_container_constants_smoke.lua	{root}	Aura custom container constants smoke failed
 -	lua+driver	tools/tests/classic_dispel_symbol_chain_smoke.lua	{root/}	Classic dispel symbol chain smoke failed
 -	lua+driver	tools/tests/classic_aura_menu_filters_smoke.lua	{root/}	Classic Aura menu filter smoke failed
 clients+Forever	lua	tools/tests/classic_aura_page_client_gates_smoke.lua	{root} {flavor}	Classic aura page client gates smoke failed: {flavor}

@@ -12,6 +12,8 @@ A3.EditModeModules.Config = function()
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor = math.floor
 local string_format = string.format
+local CUSTOM_CONTAINER_COUNT = A3.CUSTOM_CONTAINER_COUNT
+local PRESET_CUSTOM_CONTAINER_INDEX = A3.PRESET_CUSTOM_CONTAINER_INDEX
 local AURA_UNITS = { "player", "pet", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5", "arena1", "arena2", "arena3" }
 local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
 local ARENA_UNITS = { arena1=true, arena2=true, arena3=true }
@@ -66,7 +68,9 @@ local GROUPS = {
     custom1 = { customIndex = 1, label = "Custom 1", texture = "Interface\\Icons\\INV_Misc_QuestionMark", color = { 0.45, 0.72, 1.00, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
     custom2 = { customIndex = 2, label = "Custom 2", texture = "Interface\\Icons\\INV_Misc_QuestionMark", color = { 0.70, 0.48, 1.00, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
     custom3 = { customIndex = 3, label = "Custom 3", texture = "Interface\\Icons\\INV_Misc_QuestionMark", color = { 1.00, 0.58, 0.28, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
-    custom4 = { customIndex = 4, label = "Dots on target", texture = "Interface\\Icons\\Ability_Rogue_Garrote", color = { 0.88, 0.24, 0.42, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
+    -- The preset slot (A3.PRESET_CUSTOM_CONTAINER_INDEX): Target DoTs, or
+    -- Defensive Buffs on the player frame.
+    custom4 = { customIndex = 4, preset = true, label = "Dots on target", texture = "Interface\\Icons\\Ability_Rogue_Garrote", color = { 0.88, 0.24, 0.42, 0.28 }, defaultAnchor = "TOPRIGHT", defaultLayer = 9 },
 }
 
 local LANE_STYLE_KEYS = {
@@ -230,7 +234,7 @@ local function UnitEnabled(auras, unit)
 end
 
 local function UnitHasCustomPreview(unit)
-    for index = 1, 4 do
+    for index = 1, CUSTOM_CONTAINER_COUNT do
         local item = CustomItem and CustomItem(unit, index, false)
         local placed = item and item.placed
         if item and (tonumber(placed and placed.max) or 8) > 0 then
@@ -238,7 +242,7 @@ local function UnitHasCustomPreview(unit)
             -- Tracked target DoTs keep their configuration preview while the
             -- lane is disabled. Player Defensives use `enabled` as a strict
             -- master switch, matching both Runtime and the Menu2 preview.
-            if unit ~= "player" and index == 4
+            if unit ~= "player" and index == PRESET_CUSTOM_CONTAINER_INDEX
                 and CustomPreviewEntries(unit, "custom4") then return true end
         end
     end
@@ -428,7 +432,7 @@ local function ReadGroupConfig(unit, kind)
             show = item and item.enabled == true or false,
             -- The dots container keeps its own placeholder (Garrote) instead of
             -- the generic debuff icon; tracked entries override it anyway.
-            texture = spec.customIndex == 4 and spec.texture
+            texture = spec.preset and spec.texture
                 or (auraType == "DEBUFF" and "Interface\\Icons\\Spell_Shadow_ShadowWordPain" or "Interface\\Icons\\Spell_Holy_WordFortitude"),
         }
     end

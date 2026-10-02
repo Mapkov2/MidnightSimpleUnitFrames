@@ -25,6 +25,10 @@ local FRAME_LIST_RUNTIME_UNITS = { "player", "pet", "target", "focus", "boss1", 
 local FRAME_LIST_SCOPES = { "player", "pet", "target", "focus", "boss" }
 local PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER = "_msufA3PlayerDefensivesCoreDefault_v1"
 local PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER = "_msufFactoryPlayerDefensivesEnabled_v1"
+--- Custom Aura containers per frame. The last one is the fixed preset slot:
+--- Defensive Buffs on the player frame, Target DoTs on every other frame.
+local CUSTOM_CONTAINER_COUNT = 4
+local PRESET_CUSTOM_CONTAINER_INDEX = 4
 
 local function FillMissing(dst, defaults)
     if type(dst) ~= "table" or type(defaults) ~= "table" then return dst end
@@ -51,10 +55,10 @@ local function EnsurePlayerDefensiveCoreDefault(auras, factoryEnabled)
     local record = type(root.perUnit.player) == "table" and root.perUnit.player or { items = {} }
     root.perUnit.player = record
     record.items = type(record.items) == "table" and record.items or {}
-    local item = record.items[4]
+    local item = record.items[PRESET_CUSTOM_CONTAINER_INDEX]
     if type(item) ~= "table" then
         item = NewPlayerDefensiveContainer()
-        record.items[4] = item
+        record.items[PRESET_CUSTOM_CONTAINER_INDEX] = item
     end
     local canonicalAuraModel = (tonumber(auras.profileModelRevision) or 0) >= 1
     if canonicalAuraModel then
@@ -192,6 +196,8 @@ A3.version = 3
 A3._runtimeConfigGen = A3._runtimeConfigGen or 1
 A3._unitFrameOwners = A3._unitFrameOwners or {}
 A3.PlayerDefensiveCoreDefaultMarker = PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER
+A3.CUSTOM_CONTAINER_COUNT = CUSTOM_CONTAINER_COUNT
+A3.PRESET_CUSTOM_CONTAINER_INDEX = PRESET_CUSTOM_CONTAINER_INDEX
 A3.PlayerDefensiveFactoryPolicyMarker = PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER
 A3.NewPlayerDefensiveContainer = NewPlayerDefensiveContainer
 A3.EnsurePlayerDefensiveCoreDefault = EnsurePlayerDefensiveCoreDefault
@@ -468,7 +474,7 @@ local sDB, sAuras, sItem, sGen
 local function DefensiveItem(a)
     a = a.customContainers; a = type(a) == "table" and a.perUnit
     a = type(a) == "table" and a.player; a = type(a) == "table" and a.items
-    return type(a) == "table" and a[4] or nil
+    return type(a) == "table" and a[PRESET_CUSTOM_CONTAINER_INDEX] or nil
 end
 function A3.EnsureDB()
     local db = EnsureRootDB()

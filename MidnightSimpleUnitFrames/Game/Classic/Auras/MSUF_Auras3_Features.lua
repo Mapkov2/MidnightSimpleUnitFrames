@@ -521,11 +521,12 @@ function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
     local source = EffectiveContainers(auras, unit)
     local lanes, order = {}, {}
     if type(source) == "table" then
-        for index = 1, 4 do
+        for index = 1, A3.CUSTOM_CONTAINER_COUNT do
             local entry = source[index]
             if type(entry) == "table" and entry.enabled == true then
-                local playerDefensive = unit == "player" and (index == 4 or entry.playerDefensives == true)
-                local targetDot = not playerDefensive and index == 4 and unit ~= "player"
+                local preset = index == A3.PRESET_CUSTOM_CONTAINER_INDEX
+                local playerDefensive = unit == "player" and (preset or entry.playerDefensives == true)
+                local targetDot = not playerDefensive and preset and unit ~= "player"
                 local spellIDs = playerDefensive and PlayerDefensiveHash(entry)
                     or (targetDot and TargetDotHash(entry) or SpellIDHash(entry.spellIDs or entry.includeSpellIDs))
                 if spellIDs then

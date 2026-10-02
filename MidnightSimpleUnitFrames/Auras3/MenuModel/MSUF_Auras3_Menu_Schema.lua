@@ -197,9 +197,9 @@ function Factories.Schema(A3)
     -- were removed from NeverSecret, but remain eligible for exact SpellID filters
     -- as helpful auras on assistable units. SATED below is the explicitly documented
     -- NeverSecret harmful-aura family unlocked for friendly-unit filtering in PTR 6.
-    local CUSTOM_CONTAINER_MAX = 4
-    local TARGET_DOT_CONTAINER_INDEX = 4
-    local PLAYER_DEFENSIVE_CONTAINER_INDEX = 4
+    local CUSTOM_CONTAINER_MAX = A3.CUSTOM_CONTAINER_COUNT
+    local TARGET_DOT_CONTAINER_INDEX = A3.PRESET_CUSTOM_CONTAINER_INDEX
+    local PLAYER_DEFENSIVE_CONTAINER_INDEX = A3.PRESET_CUSTOM_CONTAINER_INDEX
 
     -- Private dependency API; public menu methods remain on A3.MenuModel.
     return {

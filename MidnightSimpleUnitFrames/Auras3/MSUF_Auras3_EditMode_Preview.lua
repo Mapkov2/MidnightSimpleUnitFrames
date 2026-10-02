@@ -646,7 +646,7 @@ function EM.RefreshUnit(unit)
         -- Target DoTs retain their configuration preview while disabled.
         -- Player Defensives obey their master switch in Edit Mode as well.
         local laneShown = cfg.show
-            or (unit ~= "player" and spec.customIndex == 4 and entries ~= nil)
+            or (unit ~= "player" and spec.preset and entries ~= nil)
         -- Outside edit mode custom lanes stay strictly 1:1 with the runtime:
         -- nothing tracked means nothing to preview. Placeholder-only custom
         -- lanes exist purely as edit-mode drag surfaces.
@@ -686,8 +686,8 @@ function EM.RefreshUnit(unit)
             -- bar-only lane renders no icon chrome, so the style stays off.
             local padding = Clamp(metrics and metrics.padding, 0, 0, 16)
             local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
-            local appearanceKind = spec.customIndex == 4 and unit == "player" and "playerDefensives"
-                or spec.customIndex == 4 and "targetDots"
+            local appearanceKind = spec.preset and unit == "player" and "playerDefensives"
+                or spec.preset and "targetDots"
                 or ((kind == "debuff" or cfg.auraType == "DEBUFF") and "debuff" or "buff")
             local iconStyle = (not barOnly) and LaneIconStyle(metrics, unit, appearanceKind) or nil
             local requestedIconShape = (metrics and metrics.requestedIconShape) or cfg.iconShape

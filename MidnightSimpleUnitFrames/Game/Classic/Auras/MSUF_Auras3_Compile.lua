@@ -1599,7 +1599,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     local rawKind = tostring(kind or "buff"):lower()
     local customIndex = rawKind:match("^custom(%d)$")
     if customIndex then
-        customIndex = math_min(4, math_max(1, tonumber(customIndex) or 1))
+        customIndex = math_min(A3.CUSTOM_CONTAINER_COUNT, math_max(1, tonumber(customIndex) or 1))
         kind = "custom" .. tostring(customIndex)
     else
         kind = (rawKind == "debuff" or rawKind == "debuffs") and "debuff" or "buff"
