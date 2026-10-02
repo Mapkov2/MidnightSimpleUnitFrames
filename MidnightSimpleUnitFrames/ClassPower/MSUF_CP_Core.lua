@@ -185,12 +185,9 @@ end
 
 --- BUILD is the only block that creates ClassPower frames. It is cold-path code:
 --- create reusable bars and text once, then let layout/runtime reuse them.
-builders.BUILD = function(E)
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local CreateFrame = E.CreateFrame
-    local CP_ResolveTexture = E.CP_ResolveTexture
-    local math_floor = E.math_floor or math_floor
+do
+    --- Bound once by BUILD at controller load.
+    local CP, _cpDB, CreateFrame, CP_ResolveTexture
 
     local function CP_EnsureTextFrame()
         if CP.textFrame then return CP.textFrame end
@@ -332,30 +329,30 @@ builders.BUILD = function(E)
 
     end
 
-    return {
+    local API = {
         CP_EnsureBars = CP_EnsureBars,
         CP_Create = CP_Create,
         CP_EnsureRuneText = CP_EnsureRuneText,
         CP_EnsureMainText = CP_EnsureMainText,
     }
+
+    builders.BUILD = function(E)
+        CP, _cpDB = E.CP, E._cpDB
+        CreateFrame, CP_ResolveTexture = E.CreateFrame, E.CP_ResolveTexture
+        return API
+    end
 end
 
 --- LAYOUT computes geometry and anchoring for the already-created bars.
 --- The function also coordinates with detached power bars and external cooldown
 --- anchors, so keep combat-deferred work here rather than in value updates.
 
-builders.LAYOUT = function(E)
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local CPConst = E.CPConst
-    local math_floor = E.math_floor or math_floor
-    local tonumber = E.tonumber or tonumber
-    local CreateFrame = E.CreateFrame or CreateFrame
-    local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
-    local GetCDMScaledWidth = E.GetCDMScaledWidth
-    local SetFilledAlpha = E.SetFilledAlpha
-    local SetEmptyAlpha = E.SetEmptyAlpha
-    local SetAutoHideActive = E.SetAutoHideActive
+do
+    --- Bound once by LAYOUT at controller load: the shared state, the cached
+    --- config and the controller's alpha/auto-hide setters.
+    local CP, _cpDB, CPConst, CreateFrame
+    local ResolveClassPowerBgColor, GetCDMScaledWidth
+    local SetFilledAlpha, SetEmptyAlpha, SetAutoHideActive
 
     --- CP_Layout runs as a fixed sequence of named stages. They share one
     --- pass-state table that is allocated once here, so a layout pass adds no
@@ -879,28 +876,31 @@ builders.LAYOUT = function(E)
         Layout.Finish()
     end
 
-    return {
+    local API = {
         CP_Layout = CP_Layout,
     }
+
+    builders.LAYOUT = function(E)
+        CP, _cpDB, CPConst = E.CP, E._cpDB, E.CPConst
+        CreateFrame = E.CreateFrame or _G.CreateFrame
+        ResolveClassPowerBgColor, GetCDMScaledWidth = E.ResolveClassPowerBgColor, E.GetCDMScaledWidth
+        SetFilledAlpha, SetEmptyAlpha = E.SetFilledAlpha, E.SetEmptyAlpha
+        SetAutoHideActive = E.SetAutoHideActive
+        return API
+    end
 end
 
 --- PRESENTATION owns visual refresh that does not change geometry or values:
 --- fonts, text offsets, colors, textures, and media swaps.
 
-builders.PRESENTATION = function(E)
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local PT = E.PT
-    local math_floor = E.math_floor or math_floor
-    local tonumber = E.tonumber or tonumber
+do
+    --- Bound once by PRESENTATION at controller load. RunActiveUpdate is the
+    --- controller's active-mode dispatch (CP_RunActiveUpdate): Stagger, runes,
+    --- aura, continuous and native modes each repaint with their own painter,
+    --- never the segmented one.
+    local CP, _cpDB, PT, CP_ResolveTexture, RunActiveUpdate
 
-    local CP_ResolveTexture = E.CP_ResolveTexture
-    --- The controller's active-mode dispatch (CP_RunActiveUpdate): Stagger,
-    --- runes, aura, continuous and native modes each repaint with their own
-    --- painter, never the segmented one.
-    local RunActiveUpdate = E.RunActiveUpdate
-
-    local _cpFontRev = 0
+    local _cpFontRev
 
     local function CDM_GetScaledWidth(cdmFrame, targetFrame)
         local getScaledWidth = _G.MSUF_GetCooldownAnchorScaledWidth
@@ -1097,13 +1097,20 @@ builders.PRESENTATION = function(E)
         if type(applyRounded) == "function" then applyRounded() end
     end
 
-    return {
+    local API = {
         CDM_GetScaledWidth = CDM_GetScaledWidth,
         CP_ApplyTextOffset = CP_ApplyTextOffset,
         CP_ApplyFont = CP_ApplyFont,
         CP_ApplyColors = CP_ApplyColors,
         CP_RefreshTexture = CP_RefreshTexture,
     }
+
+    builders.PRESENTATION = function(E)
+        CP, _cpDB, PT = E.CP, E._cpDB, E.PT
+        CP_ResolveTexture, RunActiveUpdate = E.CP_ResolveTexture, E.RunActiveUpdate
+        _cpFontRev = 0
+        return API
+    end
 end
 
 --- RUNTIME exposes hot-path event handlers back to the controller. These
@@ -1115,40 +1122,21 @@ if type(builders) ~= "table" then
     ExportPublic("MSUF_CP_FEATURE_BUILDERS", builders)
 end
 
-builders.RUNTIME = function(env)
-    local CP = env.CP
-    local AM = env.AM
-    local CPK = env.CPK
-    local PT = env.PT
-    local POWER_TYPE_TOKENS = env.POWER_TYPE_TOKENS
-    local PLAYER_CLASS = env.PLAYER_CLASS
-    local UnitPower = env.UnitPower
-    local NotSecret = env.NotSecret
-    local tonumber = env.tonumber
-    local C_Timer = env.C_Timer
-
-    local GetPlayerFrame = env.GetPlayerFrame
-    local CP_EnsureBars = env.CP_EnsureBars
-    local CP_Layout = env.CP_Layout
-    local RefreshChargedPoints = env.RefreshChargedPoints
-    local RunActiveUpdate = env.RunActiveUpdate
-    local RunAuraSegmentedUpdate = env.RunAuraSegmentedUpdate
-    local ResolveMaxPower = env.ResolveMaxPower
-    local AM_UpdateValue = env.AM_UpdateValue
-    local CP_ComputeStructuralSignature = env.CP_ComputeStructuralSignature
-    local CP_RefreshEventBindings = env.CP_RefreshEventBindings
-    local ThrottledFullRefresh = env.ThrottledFullRefresh
-    local FullRefresh = env.FullRefresh
-    local CP_SyncRuntimeOnUpdates = env.CP_SyncRuntimeOnUpdates
-    local CP_ShouldUseLiteBindings = env.CP_ShouldUseLiteBindings
-
-    local OnWarlockCastStart = env.OnWarlockCastStart
-    local OnWarlockCastEnd = env.OnWarlockCastEnd
-    local OnTipOfTheSpearSpellCast = env.OnTipOfTheSpearSpellCast
-    local OnSpellTrackerReset = env.OnSpellTrackerReset
-    --- WoW Forever and the Classic flavors pass it (target-owned combo points);
-    --- nil on Midnight.
-    local AcceptPowerToken = env.AcceptPowerToken
+do
+    --- Bound once by RUNTIME at controller load: the controller's state, its
+    --- class facts and the entry points the handlers call back into.
+    --- AcceptPowerToken: WoW Forever and the Classic flavors pass it
+    --- (target-owned combo points); nil on Midnight.
+    local CP, AM, CPK, PT, POWER_TYPE_TOKENS, PLAYER_CLASS
+    local UnitPower, NotSecret, tonumber, C_Timer
+    local GetPlayerFrame, CP_EnsureBars, CP_Layout, RefreshChargedPoints
+    local RunActiveUpdate, RunAuraSegmentedUpdate, ResolveMaxPower, AM_UpdateValue
+    local CP_ComputeStructuralSignature, CP_RefreshEventBindings
+    local ThrottledFullRefresh, FullRefresh, CP_SyncRuntimeOnUpdates, CP_ShouldUseLiteBindings
+    local OnWarlockCastStart, OnWarlockCastEnd, OnTipOfTheSpearSpellCast, OnSpellTrackerReset
+    local AcceptPowerToken
+    --- The whole env, for the two values the handlers read late.
+    local runtimeEnv
 
     --- The visible segment count for the active render mode comes from the
     --- controller's one resolver (Refresh.ResolveMaxPower); it is separate
@@ -1170,7 +1158,8 @@ builders.RUNTIME = function(env)
             local pf = CP._pf or GetPlayerFrame()
             if pf then
                 CP_EnsureBars(pf, maxP)
-                CP_Layout(pf, maxP, CP._layoutH or ((env._cpDB.bars and env._cpDB.bars.classPowerHeight) or 4), CP.powerType)
+                CP_Layout(pf, maxP, CP._layoutH or ((runtimeEnv._cpDB.bars and runtimeEnv._cpDB.bars.classPowerHeight) or 4),
+                    CP.powerType)
             else
                 CP.currentMax = maxP
             end
@@ -1229,15 +1218,15 @@ builders.RUNTIME = function(env)
     --- UNIT_DISPLAYPOWER together and the display-power path usually rebuilds
     --- first, so the deferred rebuild re-checks the signature instead of
     --- rebuilding twice. Mainline defers FullRefresh itself.
-    local DeferredStructuralRefresh = FullRefresh
-    if IS_CLASSIC then
-        DeferredStructuralRefresh = function()
-            local flags, powerType, renderMode = CP_ComputeStructuralSignature()
-            if flags ~= CP.structuralFlags
-                or powerType ~= CP.structuralPowerType
-                or renderMode ~= CP.structuralRenderMode then
-                FullRefresh()
-            end
+    --- The Classic clients refresh a deferred structural change only when the
+    --- structural signature really moved; Midnight always refreshes.
+    local DeferredStructuralRefresh
+    local function ClassicDeferredStructuralRefresh()
+        local flags, powerType, renderMode = CP_ComputeStructuralSignature()
+        if flags ~= CP.structuralFlags
+            or powerType ~= CP.structuralPowerType
+            or renderMode ~= CP.structuralRenderMode then
+            FullRefresh()
         end
     end
 
@@ -1316,8 +1305,8 @@ builders.RUNTIME = function(env)
         if not CP.visible or CP.renderMode ~= CPK.MODE.RUNE_CD then return end
         if RunActiveUpdate then
             RunActiveUpdate(CP.powerType, CP.currentMax)
-        elseif env.CP_UpdateValues_RuneCD then
-            env.CP_UpdateValues_RuneCD(CP.powerType, CP.currentMax)
+        elseif runtimeEnv.CP_UpdateValues_RuneCD then
+            runtimeEnv.CP_UpdateValues_RuneCD(CP.powerType, CP.currentMax)
             if CP_SyncRuntimeOnUpdates then CP_SyncRuntimeOnUpdates(false) end
         end
     end
@@ -1336,7 +1325,7 @@ builders.RUNTIME = function(env)
         end
     end
 
-    return {
+    local API = {
         GetResolvedVisibleMax = GetResolvedVisibleMax,
         RefreshVisibleModeLight = RefreshVisibleModeLight,
         OnManaUpdate = OnManaUpdate,
@@ -1349,25 +1338,35 @@ builders.RUNTIME = function(env)
         OnSpellcastStart = OnSpellcastStart,
         OnSpellcastEnd = OnSpellcastEnd,
     }
+
+    builders.RUNTIME = function(env)
+        CP, AM, CPK, PT = env.CP, env.AM, env.CPK, env.PT
+        POWER_TYPE_TOKENS, PLAYER_CLASS = env.POWER_TYPE_TOKENS, env.PLAYER_CLASS
+        UnitPower, NotSecret, tonumber, C_Timer = env.UnitPower, env.NotSecret, env.tonumber, env.C_Timer
+        GetPlayerFrame, CP_EnsureBars, CP_Layout = env.GetPlayerFrame, env.CP_EnsureBars, env.CP_Layout
+        RefreshChargedPoints, RunActiveUpdate = env.RefreshChargedPoints, env.RunActiveUpdate
+        RunAuraSegmentedUpdate, ResolveMaxPower = env.RunAuraSegmentedUpdate, env.ResolveMaxPower
+        AM_UpdateValue, CP_ComputeStructuralSignature = env.AM_UpdateValue, env.CP_ComputeStructuralSignature
+        CP_RefreshEventBindings, ThrottledFullRefresh = env.CP_RefreshEventBindings, env.ThrottledFullRefresh
+        FullRefresh, CP_SyncRuntimeOnUpdates = env.FullRefresh, env.CP_SyncRuntimeOnUpdates
+        CP_ShouldUseLiteBindings = env.CP_ShouldUseLiteBindings
+        OnWarlockCastStart, OnWarlockCastEnd = env.OnWarlockCastStart, env.OnWarlockCastEnd
+        OnTipOfTheSpearSpellCast, OnSpellTrackerReset = env.OnTipOfTheSpearSpellCast, env.OnSpellTrackerReset
+        AcceptPowerToken = env.AcceptPowerToken
+        runtimeEnv = env
+        DeferredStructuralRefresh = IS_CLASSIC and ClassicDeferredStructuralRefresh or FullRefresh
+        return API
+    end
 end
 
 --- SPECIALS contains class-specific prediction/state that is not a generic
 --- power-token event. Keeping these rules isolated prevents RUNTIME from turning
 --- into a spec-by-spec rules table.
-builders.SPECIALS = function(env)
-    local CP = env.CP
-    local _cpDB = env._cpDB
-    local CPConst = env.CPConst
-    local TIP = env.TIP
-    local PLAYER_CLASS = env.PLAYER_CLASS
-    local GetSpec = env.GetSpec
-    local GetTime = env.GetTime
-    local math_min = env.math_min
-    local C_SpellBook = env.C_SpellBook
-    local C_Timer = env.C_Timer
-    local RunActiveUpdate = env.RunActiveUpdate
-    local RunAuraSegmentedUpdate = env.RunAuraSegmentedUpdate
-    local tipExpiryGeneration = 0
+do
+    --- Bound once by SPECIALS at controller load.
+    local CP, _cpDB, CPConst, TIP, PLAYER_CLASS, GetSpec, GetTime, math_min
+    local C_SpellBook, C_Timer, RunActiveUpdate, RunAuraSegmentedUpdate
+    local tipExpiryGeneration
 
     --- Warlock shard prediction is speculative UI only; it is cleared on cast
     --- end and never writes profile/runtime structure.
@@ -1460,10 +1459,19 @@ builders.SPECIALS = function(env)
         ResetTipState(false)
     end
 
-    return {
+    local API = {
         OnWarlockCastStart = OnWarlockCastStart,
         OnWarlockCastEnd = OnWarlockCastEnd,
         OnTipOfTheSpearSpellCast = OnTipOfTheSpearSpellCast,
         OnSpellTrackerReset = OnSpellTrackerReset,
     }
+
+    builders.SPECIALS = function(env)
+        CP, _cpDB, CPConst, TIP = env.CP, env._cpDB, env.CPConst, env.TIP
+        PLAYER_CLASS, GetSpec, GetTime = env.PLAYER_CLASS, env.GetSpec, env.GetTime
+        math_min, C_SpellBook, C_Timer = env.math_min, env.C_SpellBook, env.C_Timer
+        RunActiveUpdate, RunAuraSegmentedUpdate = env.RunActiveUpdate, env.RunAuraSegmentedUpdate
+        tipExpiryGeneration = 0
+        return API
+    end
 end
