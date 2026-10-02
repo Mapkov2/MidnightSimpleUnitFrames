@@ -136,6 +136,21 @@ local function ClearShapeEdge(bar)
     end
 end
 
+--- Layout paints the pip backgrounds and the pip/separator visibility
+--- directly. The mode painters (MSUF_CP_Modes.lua) skip the same writes when
+--- the widget's _msufCP* stamp already holds the value, so every direct write
+--- here records what it wrote: a charged pip's dimmed background or a pip a
+--- single-bar mode hid is repainted by the next update after a relayout.
+local function CP_LayoutBackground(bg, r, g, b, a)
+    bg:SetVertexColor(r, g, b, a)
+    bg._msufCPR, bg._msufCPG, bg._msufCPB, bg._msufCPA = r, g, b, a
+end
+
+local function CP_LayoutShown(region, shown)
+    if shown then region:Show() else region:Hide() end
+    region._msufCPShown = shown
+end
+
 local function CP_ResolveTextLayerLevel(frame, bars)
     local textLayer = tonumber(bars and bars.classPowerTextLayer) or 5
     if textLayer < 0 then textLayer = 0 elseif textLayer > 30 then textLayer = 30 end
@@ -719,7 +734,7 @@ builders.LAYOUT = function(E)
                             bar._bg:SetTexture(shapeBg)
                             bar._bg._msufCPTexturePath = shapeBg
                         end
-                        bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
+                        CP_LayoutBackground(bar._bg, bgR, bgG, bgB, bgA)
                     end
                     if fillReverse then
                         bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -(rightInset + xPos), 0)
@@ -728,12 +743,12 @@ builders.LAYOUT = function(E)
                     end
                     bar:SetSize(slot, h)
                     ClearShapeEdge(bar)
-                    bar:Show()
+                    CP_LayoutShown(bar, true)
                     xPos = xPos + slot + snapGap
                 end
             end
             for i = 1, #CP.ticks do
-                if CP.ticks[i] then CP.ticks[i]:Hide() end
+                if CP.ticks[i] then CP_LayoutShown(CP.ticks[i], false) end
             end
         else
             local xPos = 0
@@ -753,8 +768,8 @@ builders.LAYOUT = function(E)
                         bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", xPos, 0)
                     end
                     bar:SetSize(thisW, h)
-                    bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
-                    bar:Show()
+                    CP_LayoutBackground(bar._bg, bgR, bgG, bgB, bgA)
+                    CP_LayoutShown(bar, true)
                     if snapTickW > 0 and i < maxPower then
                         local tick = CP.ticks[i]
                         if tick then
@@ -766,7 +781,7 @@ builders.LAYOUT = function(E)
                                 tick:SetPoint("TOPLEFT", CP.container, "TOPLEFT", tickX, 0)
                             end
                             tick:SetSize(snapTickW, h)
-                            tick:Show()
+                            CP_LayoutShown(tick, true)
                         end
                     end
                     xPos = xPos + thisW + sepW
@@ -778,14 +793,14 @@ builders.LAYOUT = function(E)
         for i = maxPower + 1, CP.maxBars do
             if CP.bars[i] then
                 ClearShapeEdge(CP.bars[i])
-                CP.bars[i]:Hide()
+                CP_LayoutShown(CP.bars[i], false)
             end
         end
 
         if not shapeMode then
             local hideFrom = (snapTickW > 0) and maxPower or 1
             for i = hideFrom, #CP.ticks do
-                if CP.ticks[i] then CP.ticks[i]:Hide() end
+                if CP.ticks[i] then CP_LayoutShown(CP.ticks[i], false) end
             end
         end
     end

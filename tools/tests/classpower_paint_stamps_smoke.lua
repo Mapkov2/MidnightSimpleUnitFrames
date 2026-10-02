@@ -149,6 +149,35 @@ do
     end
 end
 
+-- A charged combo point that is not filled dims its background to the charged
+-- colour. A relayout (a width or height edit: MSUF_ClassPower_RefreshLayout)
+-- repaints every background with the plain colour; the stamps must say so, or
+-- the next power update skips the dim write and the charged pip looks plain.
+do
+    local charged = { 3 }
+    local t = World.Start(repo, "Mainline", "ROGUE", 1, PT.ENERGY, nil, { beforeLoad = function()
+        _G.GetUnitChargedPowerPoints = function() return charged end
+    end })
+    local CP = t.CP
+    t.S.combo = 1
+    World.Dispatcher(t, "UNIT_POWER_POINT_CHARGE", "player")()
+    World.Dispatcher(t, "UNIT_POWER_UPDATE", "player", "COMBO_POINTS")()
+    t.env:RunTimers()
+    local plainBg = CP.bars[2]._bg.vertexColor
+    local dimBg = CP.bars[3]._bg.vertexColor
+    Check(CP.visible and CP.powerType == PT.COMBO, "Rogue did not route combo points")
+    Check(dimBg and plainBg and not SameColor(dimBg, plainBg), "the unfilled charged pip has no dimmed background")
+    local dim = dimBg and { dimBg[1], dimBg[2], dimBg[3], dimBg[4] }
+
+    _G.MSUF_ClassPower_RefreshLayout()
+    t.S.combo = 2
+    World.Dispatcher(t, "UNIT_POWER_UPDATE", "player", "COMBO_POINTS")()
+    t.env:RunTimers()
+    Check(SameColor(CP.bars[3]._bg.vertexColor, dim) and CP.bars[3]._bg.vertexColor[4] == dim[4],
+        "the charged pip lost its dimmed background after a relayout")
+    Check(SameColor(CP.bars[2]._bg.vertexColor, plainBg), "a filled pip did not keep the plain background")
+end
+
 -- Native aura modes (Fury Whirlwind) hide the count text directly. A vehicle
 -- with combo points hands the bar to the segmented painter, whose shown stamp
 -- must not still say "shown" from the previous vehicle.
