@@ -46,6 +46,9 @@ local children = h:Children(header)
 Check(#children == 3, "expected 3 party children out of combat, got " .. #children)
 for index, child in ipairs(children) do
     Check(child.MSUFSpec ~= nil and GF.frames[child] == true, "out-of-combat child " .. index .. " was not styled")
+    -- A restricted handle has no SetRoundLayoutToNearestPixel: the scan rounds each child.
+    Check(not h.roundLayoutSupported or child.roundLayout == true,
+        "out-of-combat child " .. index .. " got no native pixel rounding")
 end
 Check(#h.violations == 0, "protected write out of combat?\n" .. tostring(h.violations[1]))
 Check(#h.callMethodErrors == 0, "CallMethod raised out of combat: " .. tostring(h.callMethodErrors[1]))
@@ -69,6 +72,8 @@ local function AssertRegenFinished(child)
     Check(child.attributes["*type1"] == "target" and child.attributes["*type2"] == "togglemenu",
         "secure click actions missing after regen for " .. tostring(child.attributes.unit))
     Check(GF.frames[child] == true and child.MSUFSpec ~= nil, "child lost its styling at the regen edge")
+    Check(not h.roundLayoutSupported or child.roundLayout == true, "the regen scan did not round "
+        .. tostring(child.attributes.unit))
 end
 
 -- In lockdown: Blizzard's header births the fourth child itself.
@@ -80,6 +85,7 @@ h:RunTimers()
 Check(#h.born == bornBefore + 1 and h.born[#h.born].combat == true, "the header did not birth a child in lockdown")
 local late = h:Children(header)[4]
 AssertStyled(late, "party3", "child born in lockdown")
+Check(late.roundLayout == nil, "pixel rounding (protected) ran in lockdown")
 Check(#h.callMethodErrors == 0, "CallMethod raised in combat: " .. tostring(h.callMethodErrors[1]))
 Check(#h.violations == 0, #h.violations .. " protected write(s) from insecure code in lockdown; first:\n"
     .. tostring(h.violations[1]))

@@ -1216,7 +1216,8 @@ end
 --- before it writes the child's unit. The last line is the oUF pattern: the
 --- restricted handle's CallMethod reaches the header's insecure method (RestrictedFrames.lua
 --- HANDLE:CallMethod, forceinsecure), which adopts the child; GetParent returns
---- the protected header in combat too. Present on every client branch.
+--- the protected header in combat too. Present on every client branch. A restricted
+--- handle has no SetRoundLayoutToNearestPixel; Adapter's scan sets it on each child.
 local _initCfgNonce = 0
 local function BuildInitialConfigFunction(w, h)
   _initCfgNonce = _initCfgNonce + 1
@@ -1224,7 +1225,6 @@ local function BuildInitialConfigFunction(w, h)
 self:ClearAllPoints()
 self:SetWidth(%.3f)
 self:SetHeight(%.3f)
-if self.SetRoundLayoutToNearestPixel then self:SetRoundLayoutToNearestPixel(true) end
 self:SetAttribute('type1', nil)
 self:SetAttribute('*type1', 'target')
 self:SetAttribute('type2', nil)

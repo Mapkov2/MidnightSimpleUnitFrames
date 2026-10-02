@@ -39,6 +39,7 @@ local PROTECTED_METHODS = {
     "SetScale", "SetHitRectInsets", "SetID", "SetAttribute", "ClearAttribute",
     "SetClampedToScreen", "SetToplevel", "Raise", "Lower", "SetIgnoreParentScale",
     "SetPropagateMouseClicks", "SetPropagateMouseMotion",
+    "SetRoundLayoutToNearestPixel",
 }
 local PROTECTED_GLOBALS = {
     "RegisterUnitWatch", "UnregisterUnitWatch", "RegisterStateDriver",
@@ -68,6 +69,7 @@ function Harness.New(root, flavor, options)
         units = { "player" }, secure = 0, violations = {}, headers = {}, born = {},
         callMethodErrors = {}, eventErrors = {},
     }, Methods)
+    h.roundLayoutSupported = not world.client.isClassic
 
     -- Group roster -------------------------------------------------------
     local function HasUnit(unit)
@@ -247,6 +249,11 @@ function Harness.New(root, flavor, options)
                     -- SecureTemplatesBase.xml), and configureChildren writes the unit
                     -- before its Show() call, so the first unit write meets a shown child.
                     child.shown = true
+                    -- Region:SetRoundLayoutToNearestPixel exists on the Mainline-family
+                    -- 12.1.5 engine only; Protect() below makes it a protected method.
+                    if h.roundLayoutSupported then
+                        child.SetRoundLayoutToNearestPixel = function(self, enabled) self.roundLayout = enabled end
+                    end
                     if childName then env[childName] = child end
                     Protect(child)
                     header[index] = child

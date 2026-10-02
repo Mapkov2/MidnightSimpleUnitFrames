@@ -14,6 +14,8 @@ local table_remove = table.remove
 local next = next
 local InCombatLockdown = InCombatLockdown
 local issecretvalue = _G.issecretvalue
+-- Kernel/MSUF_Util.lua export; the Kernel loads before every group file.
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "UnitFrames/Engine/Group/MSUF_UF_Group_Adapter.lua")
 
 GF.frames = GF.frames or setmetatable({}, { __mode = "k" })
 GF.frameList = GF.frameList or {}
@@ -844,6 +846,13 @@ end
 local function ScanOneChild(child, kind)
   if not (child and child.GetAttribute) then return false end
   InstallChildAttrHook(child, kind)
+  -- 12.1.5 native pixel rounding of the child's own rect. A restricted handle
+  -- has no SetRoundLayoutToNearestPixel, so the header snippet cannot set it;
+  -- the first structure apply does (UF.ApplySpec), but one built in lockdown is
+  -- refused and the regen rescan finds it applied. This scan is the "next normal
+  -- configuration pass" the Kernel pixel-layout policy retries on; a done child
+  -- returns after two field reads, and the Classic clients return at once.
+  PixelLayoutRegion(child)
   local unit = child:GetAttribute("unit")
   if not IsUnitToken(unit) then
     SuspendUnitBinding(child)
