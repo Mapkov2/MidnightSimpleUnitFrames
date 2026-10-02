@@ -1608,6 +1608,46 @@ do
     end
 end
 
+-- W3.4 (re-review 2026-10-02). A sorted lane keeps no arrival list ---------------------
+-- AddAuraToLane appended every new aura id to lane.ordered, which only the
+-- natural-order render reads and compacts. On a sorted lane (the default) the
+-- list grew with every delta-added aura until the next full scan.
+do
+    LoadProfile(Profile({ target = {
+        layout = {}, layoutShared = { showBuffs = true, maxBuffs = 4 }, filters = {},
+    } }))
+    A3.BumpRuntimeConfig()
+    world.target = { Aura(true) }
+    local target = NewFrame("target", {})
+    local lane = Lane(target, "buff")
+    assert(lane.config.naturalOrder ~= true, "W3.4: precondition: the default target buff lane is not sorted")
+    local list = UnitList("target")
+    for _ = 1, 200 do
+        local aura = Aura(true)
+        list[#list + 1] = aura
+        Update(target, { addedAuras = { aura } })
+        list[#list] = nil
+        Update(target, { removedAuraInstanceIDs = { aura.auraInstanceID } })
+    end
+    assert(Visible(target, "buff") == 1, "W3.4: precondition: the delta churn changed the visible buffs")
+    assert((lane.orderedCount or 0) <= 1 and #lane.ordered <= 1,
+        "W3.4: 200 delta-added auras grew a sorted lane's arrival list to " .. tostring(lane.orderedCount))
+    -- Arrival order still records and compacts its own list.
+    LoadProfile(Profile({ target = {
+        layout = {}, layoutShared = { showBuffs = true, maxBuffs = 4, buffSortMethod = "INSTANCE_ID" }, filters = {},
+    } }))
+    A3.BumpRuntimeConfig()
+    local first, second, third = Aura(true), Aura(true), Aura(true)
+    world.target = { first, second }
+    target = NewFrame("target", {})
+    lane = Lane(target, "buff")
+    assert(lane.config.naturalOrder == true, "W3.4: precondition: Arrival order is not a natural-order lane")
+    world.target[3] = third
+    Update(target, { addedAuras = { third } })
+    assert(VisibleIDs(lane) == IDs(first, second, third),
+        "W3.4: an arrival-order lane lost its order: " .. VisibleIDs(lane))
+end
+
 -- F6. Edit Mode and menu group test frames never run the live backend -------------------
 do
     world.player = {

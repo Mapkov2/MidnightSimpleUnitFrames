@@ -256,7 +256,12 @@ local function AddAuraToLane(lane, unit, data, fromLaneScan)
     local auraInstanceID = data.auraInstanceID
     local isNew = lane.all[auraInstanceID] == nil
     lane.all[auraInstanceID] = data
-    if isNew then
+    -- Arrival order is kept for the natural-order render alone, which also
+    -- compacts it (RenderLaneNatural). A sorted lane rebuilds its order from
+    -- lane.active on every render, so an id appended there was never read or
+    -- dropped again and the list grew with every delta-added aura until the
+    -- next full scan.
+    if isNew and lane.config.naturalOrder == true then
         local n = (lane.orderedCount or 0) + 1
         lane.ordered[n] = auraInstanceID
         lane.orderedCount = n
