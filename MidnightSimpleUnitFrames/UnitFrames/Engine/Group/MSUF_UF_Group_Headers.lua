@@ -780,6 +780,23 @@ local function ClassPriority(conf)
   return result
 end
 
+--- SecureGroupHeader's nameList attribute for sorted entries: each name once,
+--- in entry order; nil when no entry has a name.
+local function NameListFromEntries(entries)
+  local names, seen = {}, {}
+  for i = 1, #entries do
+    local name = entries[i].name
+    if name and not seen[name] then
+      seen[name] = true
+      names[#names + 1] = name
+    end
+  end
+  if #names == 0 then
+    return nil
+  end
+  return table_concat(names, ",")
+end
+
 local function BuildPlayerFirstRoleNameList(key, kind, conf, mode)
   if conf.playerFirstInRole ~= true and conf.sortClassPriority ~= true then
     return nil
@@ -835,19 +852,7 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf, mode)
     if mode == "NAME" and a.name ~= b.name then return a.name < b.name end
     return (a.index or 0) < (b.index or 0)
   end)
-
-  local names, seen = {}, {}
-  for i = 1, #entries do
-    local name = entries[i].name
-    if name and not seen[name] then
-      seen[name] = true
-      names[#names + 1] = name
-    end
-  end
-  if #names == 0 then
-    return nil
-  end
-  return table_concat(names, ",")
+  return NameListFromEntries(entries)
 end
 
 local function EntryRolePriority(entry, priority)
@@ -938,18 +943,7 @@ end
 local function BuildRaidFreezeNameList(kind, conf, mode, descending)
   local entries = BuildRaidFreezeEntries(kind, conf, mode, descending, false)
   if not entries then return nil end
-  local names, seen = {}, {}
-  for i = 1, #entries do
-    local name = entries[i].name
-    if name and not seen[name] then
-      seen[name] = true
-      names[#names + 1] = name
-    end
-  end
-  if #names == 0 then
-    return nil
-  end
-  return table_concat(names, ",")
+  return NameListFromEntries(entries)
 end
 
 local function ResolveSortMode(key, conf)
