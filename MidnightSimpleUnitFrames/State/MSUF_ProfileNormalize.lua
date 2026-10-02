@@ -439,6 +439,43 @@ local function MSUF_ProfileIO_ProfileHasDeprecatedUnitAliases(profile)
     return false
 end
 
+--- Class power resource extras saved under their former names (profile.bars):
+--- each value moves to its current key once and the former key goes. A player
+--- who had the Arcane helper on keeps its former look (seconds with the global
+--- cooldown count, the text from 6 seconds left, the warning in the last global
+--- cooldown) unless they had chosen otherwise. This ran inside the class power
+--- "is a helper wanted" check on every refresh (ClassPower/MSUF_CP_ResourceExtras.lua).
+local MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS = {
+    showArcaneSoul = "showArcaneWindow", arcaneSoulCountdownWindow = "arcaneWindowTextFrom",
+    arcaneSoulBeforeColor = "arcaneWindowColor", arcaneSoulActiveColor = "arcaneWindowSoulColor",
+    arcaneSoulLastColor = "arcaneWindowWarnColor", manaFiveSecondRule = "manaRegenPause",
+    manaRegenTicks = "manaGainPulse", manaFiveSecondColor = "manaRegenPauseColor", manaTickColor = "manaGainPulseColor",
+}
+local MSUF_PROFILEIO_FORMER_ARCANE_TEXT = { SECONDS = "seconds", GCD = "gcds", BOTH = "both" }
+local function MSUF_ProfileIO_HasFormerResourceExtras(bars)
+    if type(bars) ~= "table" then return false end
+    if bars.arcaneSoulDisplay ~= nil then return true end
+    for former in pairs(MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS) do
+        if bars[former] ~= nil then return true end
+    end
+    return false
+end
+local function MSUF_ProfileIO_CarryFormerResourceExtras(bars)
+    if not MSUF_ProfileIO_HasFormerResourceExtras(bars) then return false end
+    if bars.showArcaneSoul ~= nil or bars.arcaneSoulDisplay ~= nil then
+        local used = bars.showArcaneSoul == true
+        bars.arcaneWindowText = MSUF_PROFILEIO_FORMER_ARCANE_TEXT[bars.arcaneSoulDisplay or (used and "BOTH") or ""]
+            or bars.arcaneWindowText
+        if used and bars.arcaneSoulCountdownWindow == nil then bars.arcaneSoulCountdownWindow = 6 end
+        if used and bars.arcaneWindowWarnLastGCD == nil then bars.arcaneWindowWarnLastGCD = true end
+        bars.arcaneSoulDisplay = nil
+    end
+    for former, current in pairs(MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS) do
+        if bars[former] ~= nil then bars[current], bars[former] = bars[former], nil end
+    end
+    return true
+end
+
 local function MSUF_ProfileIO_ProfileNeedsNormalization(profile)
     if type(profile) ~= "table" then return false end
     if MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false) then return true end
@@ -461,6 +498,7 @@ local function MSUF_ProfileIO_ProfileNeedsNormalization(profile)
     end
     if MSUF_ProfileIO_AuraOverridesNeedRepair(profile) then return true end
     if MSUF_ProfileIO_ProfileHasDeprecatedUnitAliases(profile) then return true end
+    if MSUF_ProfileIO_HasFormerResourceExtras(profile.bars) then return true end
     for i = 1, #MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS do
         local scope = profile[MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS[i]]
         if type(scope) == "table"
@@ -1187,6 +1225,7 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     changed = StateHelpers.MigrateSplitStatusText(profile, MSUF_PROFILEIO_TEXT_SCOPE_KEYS) or changed
     changed = MSUF_ProfileIO_NormalizeProfileAuras(profile) or changed
     changed = MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true) or changed
+    changed = MSUF_ProfileIO_CarryFormerResourceExtras(profile.bars) or changed
     local normalizeLayers = _G.MSUF_NormalizeNumericLayers
     if type(normalizeLayers) ~= "function" and type(MSUF) == "table" then
         normalizeLayers = MSUF.MSUF_NormalizeNumericLayers
@@ -1231,6 +1270,7 @@ MSUF.ProfileNormalize = {
     EnsureProfileMenuDefaults = MSUF_ProfileIO_EnsureProfileMenuDefaults,
     NormalizeImportedFontSizes = MSUF_ProfileIO_NormalizeImportedFontSizes,
     NormalizeGFAuraFilterToken = MSUF_ProfileIO_NormalizeGFAuraFilterToken,
+    CarryFormerResourceExtras = MSUF_ProfileIO_CarryFormerResourceExtras,
     TranslateProfileToCurrent = MSUF_ProfileIO_TranslateProfileToCurrent,
     TranslateProfilesToCurrent = MSUF_ProfileIO_TranslateProfilesToCurrent,
 }
