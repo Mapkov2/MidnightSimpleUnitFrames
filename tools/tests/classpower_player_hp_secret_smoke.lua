@@ -4,7 +4,10 @@
 -- Midnight keeps player health secret (UnitHealth, UnitHealthMax and
 -- UnitHealthPercent are SecretReturns, Blizzard UnitDocumentation.lua):
 --   * mirroring the player frame's text copies a FontString whose GetText()
---     returns a secret string: it goes straight to SetText, never compared.
+--     returns a secret string: it goes straight to SetText, never compared;
+--   * its own text shows the percent through the C sink
+--     (SetFormattedText with UnitHealthPercent(..., ScaleTo100)) instead of
+--     going blank.
 -- Secrets come from tools/tests/classpower_secrets.lua (type() answers
 -- "number"/"string", comparisons raise, a line hook records == / ~= / not on a
 -- secret local).
@@ -117,7 +120,48 @@ for _, shape in ipairs({ "BAR", "ORB" }) do
     Check(PHP.center.text == secretText, shape .. ": the secret player text did not reach the centre slot")
 end
 
+-- 2. Own text: the percent goes through the C sink.
+do
+    local api = Build({ playerHPBarUsePlayerText = false, playerHPBarTextRight = "CURPERCENT" })
+    local PHP = api.PHP
+    S.hp, S.maxHP = 500, 1000
+    api.Update("UNIT_HEALTH")
+    Check(PHP.right.text == "500 50%", "plain own text changed: " .. tostring(PHP.right.text))
+    RecordFormatted(PHP.right)
+    SecretHealth()
+    local ok, err, violations = Watched(function() api.Update("UNIT_HEALTH") end)
+    Check(ok, "own text with secret health raised: " .. tostring(err))
+    Check(#violations == 0, "own text compared a secret:\n    " .. table.concat(violations, "\n    "))
+    local formatted = PHP.right.formatted
+    Check(formatted and formatted.pattern == "%.0f%%" and formatted[1] == S.percent100,
+        "own text with secret health is blank instead of the native percent")
+    Check(PHP.left.text == "" and PHP.center.text == "", "slots without a percent mode must stay empty")
+end
+
+do
+    local api = Build({ playerHPBarUsePlayerText = false, playerHPBarTextRight = "PERCENT",
+        playerHPBarTextRightHidePercentSymbol = true })
+    RecordFormatted(api.PHP.right)
+    SecretHealth()
+    api.Update("UNIT_HEALTH")
+    local formatted = api.PHP.right.formatted
+    Check(formatted and formatted.pattern == "%.0f" and formatted[1] == S.percent100,
+        "a hidden percent symbol must drop the % from the native format")
+end
+
+do
+    -- Compact (orb) text shows the percent while health is secret.
+    local api = Build({ playerHPBarUsePlayerText = false, playerHPBarShape = "ORB",
+        playerHPBarTextRight = "CURRENT" })
+    RecordFormatted(api.PHP.center)
+    SecretHealth()
+    api.Update("UNIT_HEALTH")
+    local formatted = api.PHP.center.formatted
+    Check(formatted and formatted.pattern == "%.0f%%" and formatted[1] == S.percent100,
+        "compact text with secret health is blank instead of the native percent")
+end
+
 if #failures > 0 then
     error("classpower_player_hp_secret_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_player_hp_secret_smoke: ok (secret copy)")
+print("classpower_player_hp_secret_smoke: ok (secret copy, own percent, hidden symbol, compact)")
