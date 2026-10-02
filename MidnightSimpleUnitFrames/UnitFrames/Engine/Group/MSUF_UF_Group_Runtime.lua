@@ -186,7 +186,6 @@ local function AnyGroupFrameEnabled()
   end
   return ConfEnabled("party") or ConfEnabled("raid") or ConfEnabled("mythicraid")
 end
-GF.AnyGroupRuntimeEnabled = AnyGroupFrameEnabled
 
 --- UNIT_NAME_UPDATE has no unit filter (RegisterUnitEvent takes two units), and
 --- nameplates raise it all the time. Only these tokens can change a party
@@ -496,8 +495,7 @@ local function AddPendingReason(reason)
   reasons[reason] = true
 end
 
---- Kinds a deferred pass can be scoped to. Anything else -- nil, MarkAllDirty's
---- "dirty", the event names RuntimeOnEvent hands to RefreshHeaderLayout -- means
+--- Kinds a deferred pass can be scoped to. Anything else, nil included, means
 --- every kind. The merged scope only widens: an unscoped request, or two
 --- different kinds, leave the pending kind at DEFER_ALL_KINDS until the flush.
 local DEFER_SCOPED_KINDS = { party = true, raid = true, mythicraid = true, priority = true, gf_priority = true }
@@ -719,7 +717,6 @@ GF.RefreshGeometry = function(kind) return GF.RefreshHeaderLayout(kind) end
 GF.RefreshOverlays = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_AURAS) end
 GF.RefreshColors = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_COLOR) end
 GF.RefreshBorder = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_BORDER) end
-GF.RefreshAggro = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_AGGRO) end
 GF.RefreshOutlineGeometry = GF.RefreshBorder
 GF.RefreshFonts = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_FONT) end
 
@@ -757,10 +754,6 @@ function GF.RefreshGroupNames(unit)
     return frame and RefreshGroupNameFrame(frame) or false
   end
   return GF.ForEachFrame(RefreshGroupNameFrame, true)
-end
-
-function GF.BuildFrameCache(frame)
-  return frame and frame.MSUFSpec
 end
 
 function GF.EM2_SetActivePreviewKind(kind)
@@ -895,8 +888,12 @@ local function RuntimeOnEvent(self, event, unit)
     return
   elseif event == "PLAYER_REGEN_DISABLED" then
     SyncCombatState(true)
-    if type(GF.HidePreviewsForCombat) == "function" then
-      GF.HidePreviewsForCombat()
+    -- A preview retires its scope's live header (PreviewSuppressesHeader), and
+    -- combat hides every preview. Hand the block back to the live header now:
+    -- REGEN_DISABLED fires before InCombatLockdown() is true, and once lockdown
+    -- begins the header could not come back before regen.
+    if type(GF.HidePreviewsForCombat) == "function" and GF.HidePreviewsForCombat() == true then
+      SetupWantedHeaders()
     end
     return
   elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then

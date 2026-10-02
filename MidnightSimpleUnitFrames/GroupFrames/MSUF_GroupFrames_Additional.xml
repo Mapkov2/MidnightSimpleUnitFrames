@@ -1,5 +1,11 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
-  <Button name="MSUF_GroupAdditionalUnitTemplate" inherits="SecureUnitButtonTemplate" virtual="true">
+  <!-- Secure buttons a SecureGroupHeader or SecureGroupPetHeader births, in combat
+       too. registerForClicks is applied when the button is created, so a child
+       born in lockdown answers right-click (togglemenu) and click-cast bindings at
+       once; RegisterForClicks itself is protected and a restricted handle cannot
+       call it (RestrictedFrames.lua HANDLE). -->
+  <Button name="MSUF_GroupHeaderUnitButtonTemplate" inherits="SecureUnitButtonTemplate, PingableUnitFrameTemplate" registerForClicks="AnyUp" virtual="true"/>
+  <Button name="MSUF_GroupAdditionalUnitTemplate" inherits="SecureUnitButtonTemplate" registerForClicks="AnyUp" virtual="true">
     <Size x="100" y="24"/>
     <Frames>
       <StatusBar parentKey="Health">

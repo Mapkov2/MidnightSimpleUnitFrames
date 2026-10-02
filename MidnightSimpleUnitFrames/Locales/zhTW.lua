@@ -6419,6 +6419,13 @@ L["The saved Priority Frames list is full."] = "已儲存的優先框架清單�
 L["%s (unresolved)"] = "%s（未解析）"
 L["Arena %s"] = "競技場 %s"
 L["Custom Aura %d"] = "自訂光環 %d"
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "團體框架：隊伍"
+L["Group: Raid"] = "團體框架：團隊"
+L["Group: Mythic Raid"] = "團體框架：傳奇團隊"
+L["Party Frames"] = "隊伍框架"
+L["Raid Frames"] = "團隊框架"
+L["Mythic Raid Frames"] = "傳奇團隊框架"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

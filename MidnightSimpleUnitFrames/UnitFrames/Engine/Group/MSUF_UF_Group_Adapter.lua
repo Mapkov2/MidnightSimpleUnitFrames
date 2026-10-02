@@ -14,6 +14,8 @@ local table_remove = table.remove
 local next = next
 local InCombatLockdown = InCombatLockdown
 local issecretvalue = _G.issecretvalue
+-- Kernel/MSUF_Util.lua export; the Kernel loads before every group file.
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "UnitFrames/Engine/Group/MSUF_UF_Group_Adapter.lua")
 
 GF.frames = GF.frames or setmetatable({}, { __mode = "k" })
 GF.frameList = GF.frameList or {}
@@ -197,10 +199,6 @@ function GF.UnregisterClickCastFrame(frame)
   if type(frames) == "table" then frames[frame] = nil end
   frame._msufGFClickCastRegistered = nil
   return true
-end
-
-function GF.RefreshClickCastFrames()
-  return false
 end
 
 local function NormalizeAttrUnit(value)
@@ -489,11 +487,6 @@ function GF.ResolveLifecycleFrame(unit)
     end
   end
   return exact, exact ~= nil
-end
-
-function GF.ValidateUnitFrameMap(frame, unit)
-  local visual = VisualFrame(frame)
-  return IsUnitToken(unit) and visual ~= nil and GF.unitFrames[unit] == visual and visual.MSUFUnitKey == unit
 end
 
 local function MarkApplied(frame, kind, unit, spec)
@@ -822,16 +815,18 @@ local function InstallChildAttrHook(child, kind)
 end
 
 --- Called from the header's secure snippet (Headers.lua OnHeaderChildInit) for
---- every child SecureGroupHeader births, before the header writes its unit.
---- Out of combat the roster settle scan adopts new children in one batched pass,
---- so this returns at once. A child born in combat (or after REGEN_DISABLED,
---- before lockdown) would stay an unstyled, clickable slot until regen: install
---- its unit hook now, and the unit write builds the visual layer through
+--- every child SecureGroupHeader births, before the header writes its unit, in
+--- and out of combat. HookScript is not protected, so the unit hook goes on at
+--- birth: the unit write then builds the visual layer through
 --- OnChildAttributeChanged -> ApplyUnitFrame, whose protected writes are all
---- combat-gated. The protected half (secure click attributes, RegisterForClicks)
---- comes with the regen rescan that the roster change behind every birth defers.
+--- combat-gated. Leaving out-of-combat births to the next-frame roster settle
+--- lost them when PLAYER_REGEN_DISABLED landed in between: the settle then ran in
+--- lockdown, deferred, and the child stayed an unstyled, clickable slot for the
+--- whole fight. The settle scan still runs and finds these children applied.
+--- The child template carries registerForClicks="AnyUp", and the snippet sets the
+--- secure click attributes; the regen rescan re-asserts both.
 function GF.AdoptHeaderChild(child, header)
-  if not child or not (InCombat() or _G.MSUF_InCombat == true) then return false end
+  if not child then return false end
   local kind = header and header._msufGFKind
   if header and header._msufGFPriorityHeader == true then child._msufGFPriorityFrame = true end
   if kind then child._msufGFKind = kind end
@@ -842,6 +837,13 @@ end
 local function ScanOneChild(child, kind)
   if not (child and child.GetAttribute) then return false end
   InstallChildAttrHook(child, kind)
+  -- 12.1.5 native pixel rounding of the child's own rect. A restricted handle
+  -- has no SetRoundLayoutToNearestPixel, so the header snippet cannot set it;
+  -- the first structure apply does (UF.ApplySpec), but one built in lockdown is
+  -- refused and the regen rescan finds it applied. This scan is the "next normal
+  -- configuration pass" the Kernel pixel-layout policy retries on; a done child
+  -- returns after two field reads, and the Classic clients return at once.
+  PixelLayoutRegion(child)
   local unit = child:GetAttribute("unit")
   if not IsUnitToken(unit) then
     SuspendUnitBinding(child)

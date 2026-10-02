@@ -6422,6 +6422,13 @@ L["The saved Priority Frames list is full."] = "저장된 우선순위 프레임
 L["%s (unresolved)"] = "%s (확인 불가)"
 L["Arena %s"] = "투기장 %s"
 L["Custom Aura %d"] = "사용자 지정 오라 %d"
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "그룹: 파티"
+L["Group: Raid"] = "그룹: 공격대"
+L["Group: Mythic Raid"] = "그룹: 신화 공격대"
+L["Party Frames"] = "파티 프레임"
+L["Raid Frames"] = "공격대 프레임"
+L["Mythic Raid Frames"] = "신화 공격대 프레임"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

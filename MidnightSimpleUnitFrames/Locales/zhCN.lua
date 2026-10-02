@@ -6618,6 +6618,13 @@ L["The saved Priority Frames list is full."] = "已保存的优先框体列表�
 L["%s (unresolved)"] = "%s（未解析）"
 L["Arena %s"] = "竞技场%s"
 L["Custom Aura %d"] = "自定义光环 %d"
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "团体框体：小队"
+L["Group: Raid"] = "团体框体：团队"
+L["Group: Mythic Raid"] = "团体框体：史诗团队"
+L["Party Frames"] = "小队框体"
+L["Raid Frames"] = "团队框体"
+L["Mythic Raid Frames"] = "史诗团队框体"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

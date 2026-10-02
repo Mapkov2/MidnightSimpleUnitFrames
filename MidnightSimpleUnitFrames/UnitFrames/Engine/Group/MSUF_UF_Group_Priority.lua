@@ -94,10 +94,6 @@ local function PriorityBaseKind(groupType)
   return nil
 end
 
-function GF.GetPriorityGroupType()
-  return CurrentGroupType()
-end
-
 function GF.GetPriorityBaseKind()
   return PriorityBaseKind()
 end
@@ -188,10 +184,6 @@ function GF.GetPriorityPins()
   return Pins(false)
 end
 
-function GF.GetPriorityPinCount()
-  return #Pins(false)
-end
-
 local function BaseFramesEnabled(groupType)
   local kind = PriorityBaseKind(groupType)
   local baseConf = kind and type(GF.GetConf) == "function" and GF.GetConf(kind) or nil
@@ -215,7 +207,8 @@ local function FillPriorityPinView(out, groupType, featureEnabled, baseFramesEna
     local active = selected and featureEnabled == true and groupType ~= nil and baseFramesEnabled == true
     row.index = i
     row.guid = guid
-    row.name = entry and entry.name or name or "Unknown"
+    -- nil when unknown: the Priority page paints its translated "Unknown player".
+    row.name = entry and entry.name or name
     row.present = entry ~= nil
     row.selected = selected
     row.active = active
@@ -610,7 +603,6 @@ function GF.ToggleHoveredPriorityFrame()
   Notify(code, name, limit)
   return ok, code
 end
-GF.TogglePriorityMouseover = GF.ToggleHoveredPriorityFrame
 
 function GF.RequestPriorityApply(_, reason)
   return RequestRefresh(reason or "menu")

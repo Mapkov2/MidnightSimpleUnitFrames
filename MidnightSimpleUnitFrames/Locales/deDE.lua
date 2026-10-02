@@ -6781,6 +6781,13 @@ L["The saved Priority Frames list is full."] = "Die gespeicherte Prioritätsfram
 L["%s (unresolved)"] = "%s (nicht aufgelöst)"
 L["Arena %s"] = "Arena %s"
 L["Custom Aura %d"] = "Eigene Aura %d"
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "Gruppe: Party"
+L["Group: Raid"] = "Gruppe: Raid"
+L["Group: Mythic Raid"] = "Gruppe: Mythic-Raid"
+L["Party Frames"] = "Partyframes"
+L["Raid Frames"] = "Raidframes"
+L["Mythic Raid Frames"] = "Mythic-Raid-Frames"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

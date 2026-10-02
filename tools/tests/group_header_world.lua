@@ -39,6 +39,7 @@ local PROTECTED_METHODS = {
     "SetScale", "SetHitRectInsets", "SetID", "SetAttribute", "ClearAttribute",
     "SetClampedToScreen", "SetToplevel", "Raise", "Lower", "SetIgnoreParentScale",
     "SetPropagateMouseClicks", "SetPropagateMouseMotion",
+    "SetRoundLayoutToNearestPixel",
 }
 local PROTECTED_GLOBALS = {
     "RegisterUnitWatch", "UnregisterUnitWatch", "RegisterStateDriver",
@@ -68,6 +69,7 @@ function Harness.New(root, flavor, options)
         units = { "player" }, secure = 0, violations = {}, headers = {}, born = {},
         callMethodErrors = {}, eventErrors = {},
     }, Methods)
+    h.roundLayoutSupported = not world.client.isClassic
 
     -- Group roster -------------------------------------------------------
     local function HasUnit(unit)
@@ -191,6 +193,31 @@ function Harness.New(root, flavor, options)
         return handle
     end
 
+    -- XML virtual templates MSUF ships for header children. The client applies a
+    -- template's registerForClicks when it creates the button, so a child born in
+    -- lockdown carries it without a (protected) RegisterForClicks call.
+    local templateClicks
+    local function TemplateClicks(template)
+        if not templateClicks then
+            templateClicks = {}
+            local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.xml", "rb"))
+            local xml = file:read("*a")
+            file:close()
+            for tag in xml:gmatch("<Button%s[^>]*>") do
+                local name, clicks = tag:match('name="([%w_]+)"'), tag:match('registerForClicks="([^"]+)"')
+                if name and clicks then
+                    local list = {}
+                    for button in clicks:gmatch("[^,%s]+") do list[#list + 1] = button end
+                    templateClicks[name] = list
+                end
+            end
+        end
+        for name in tostring(template or ""):gmatch("[^,%s]+") do
+            if templateClicks[name] then return templateClicks[name] end
+        end
+        return nil
+    end
+
     local function RunSnippet(code, owner)
         if type(code) ~= "string" then return end
         local chunk = assert(loadstring(code, "=initialConfigFunction"))
@@ -242,8 +269,19 @@ function Harness.New(root, flavor, options)
                     local childName = name and (name .. "UnitButton" .. index) or nil
                     local child = widgets:CreateFrame(attributes.templateType or "Button", childName, header,
                         attributes.template)
-                    child.shown = false
+                    -- CreateFrame returns a shown frame: SecureUnitButtonTemplate and
+                    -- SecureFrameTemplate carry no hidden="true" (SecureTemplates.xml,
+                    -- SecureTemplatesBase.xml), and configureChildren writes the unit
+                    -- before its Show() call, so the first unit write meets a shown child.
+                    child.shown = true
+                    -- Region:SetRoundLayoutToNearestPixel exists on the Mainline-family
+                    -- 12.1.5 engine only; Protect() below makes it a protected method.
+                    if h.roundLayoutSupported then
+                        child.SetRoundLayoutToNearestPixel = function(self, enabled) self.roundLayout = enabled end
+                    end
                     if childName then env[childName] = child end
+                    local clicks = TemplateClicks(attributes.template)
+                    if clicks then child.forClicks = { unpack(clicks) } end
                     Protect(child)
                     header[index] = child
                     if attributes.auraContainerTemplate then

@@ -233,6 +233,60 @@ local function RoundScaled(v, scale)
     return -math_floor((-v) + 0.5)
 end
 
+---
+--- Subgroup filter. conf.groupFilter is the native SecureGroupHeader string
+--- ("1,2,WARRIOR") or a per-subgroup table from older profile imports
+--- ({ [1] = true, [3] = false }, integer or string keys). This is the one reading
+--- of it, for the native header filter, name lists, preserved raid blocks and the
+--- grid size alike:
+---   * a table holding any true is an allow-list (only those subgroups);
+---   * any other table is a deny-list (every subgroup it does not mark false);
+---   * a table that would leave no subgroup is ignored, as the native filter
+---     always did;
+---   * in a string only the numeric tokens name subgroups, and a string without
+---     one allows every subgroup (class and role tokens filter units).
+---
+local GROUP_FILTER_KEYS = { "1", "2", "3", "4", "5", "6", "7", "8" }
+
+local function GroupFilterEntry(filter, group)
+    local value = filter[group]
+    if value == nil then value = filter[GROUP_FILTER_KEYS[group]] end
+    return value
+end
+
+local function TableFilterAllows(filter, group, allowList)
+    local value = GroupFilterEntry(filter, group)
+    if allowList then return value == true end
+    return value ~= false
+end
+
+function GF.GroupFilterAllowsSubgroup(filter, group)
+    group = tonumber(group)
+    if type(filter) == "table" then
+        if not GROUP_FILTER_KEYS[group] then return true end
+        local allowList = false
+        for other = 1, 8 do
+            if GroupFilterEntry(filter, other) == true then allowList = true; break end
+        end
+        if TableFilterAllows(filter, group, allowList) then return true end
+        for other = 1, 8 do
+            if TableFilterAllows(filter, other, allowList) then return false end
+        end
+        return true
+    elseif type(filter) == "string" then
+        local numeric = false
+        for token in filter:gmatch("[^,]+") do
+            local n = tonumber(token)
+            if n then
+                if n == group then return true end
+                numeric = true
+            end
+        end
+        return not numeric
+    end
+    return true
+end
+
 local layoutCountCache = {}
 function GF.InvalidateLayoutRoster() wipe(layoutCountCache) end
 function GF.GetLayoutGroupCount(kind)
@@ -246,16 +300,7 @@ function GF.GetLayoutGroupCount(kind)
         local _, _, group = _G.GetRaidRosterInfo(i)
         if (not _GF_issecretvalue or _GF_issecretvalue(group) ~= true) and type(group) == "number" then
             local allowed = not (kind == "mythicraid" and conf.hideMythicGroupsFiveToEight == true and group > 4)
-            local filter = conf.groupFilter
-            if allowed and type(filter) == "table" then allowed = filter[group] ~= false and filter[tostring(group)] ~= false
-            elseif allowed and type(filter) == "string" and filter ~= "" then
-                local numeric, match = false, false
-                for token in filter:gmatch("[^,]+") do
-                    local n = tonumber(token)
-                    if n then numeric = true; if n == group then match = true end end
-                end
-                if numeric then allowed = match end
-            end
+                and GF.GroupFilterAllowsSubgroup(conf.groupFilter, group)
             if allowed then visible = visible + 1 end
         else
             -- Incomplete/opaque roster: preserve the public total until settled.

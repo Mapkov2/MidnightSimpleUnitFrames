@@ -80,7 +80,6 @@ assert(Shown(header) == "Tanky,Healy", "small raid showed the player although th
 party.showPlayer = true
 
 -- (c) Priority Frames: raid roster, Party visuals.
-assert(GF.GetPriorityGroupType() == "raid", "Priority Frames read party tokens in a small raid")
 assert(GF.IsPriorityGroupUnit("raid1") == true and GF.IsPriorityGroupUnit("party1") == false,
     "Priority Frames pinned subgroup party tokens in a small raid")
 

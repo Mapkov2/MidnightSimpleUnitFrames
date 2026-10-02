@@ -1722,9 +1722,9 @@ function GF.HidePreview(kind)
   return true
 end
 
---- Combat is a hard ownership boundary for the visual-only preview pool.  The
+--- Combat is a hard ownership boundary for the visual-only preview pool. The
 --- options/edit-mode owner may still be logically open when combat starts, so
---- orphan detection alone is insufficient: detach every preview immediately.
+--- detach every preview immediately.
 function GF.HidePreviewsForCombat()
   local hidden = false
   for i = 1, #PREVIEW_KINDS do
@@ -1788,19 +1788,6 @@ end
 PreviewsAllowed = function()
   if _G.MSUF_UnitEditModeActive == true then return true end
   return _G.MSUF2_GFPagePreviewActive == true
-end
-
-function GF.HideOrphanedPreviews()
-  if PreviewsAllowed() then return false end
-  local hidden = false
-  for i = 1, #PREVIEW_KINDS do
-    local kind = PREVIEW_KINDS[i]
-    if GF._previewActive[kind] then
-      GF.HidePreview(kind)
-      hidden = true
-    end
-  end
-  return hidden
 end
 
 ExportPublic("MSUF_GF_ShowPreview", function(kind, count) return GF.ShowPreview(kind, count) end)

@@ -32,6 +32,13 @@ clients+Forever	lua	tools/tests/group_header_combat_child_smoke.lua	{root} {flav
 -	lua	tools/tests/group_runtime_defer_merge_smoke.lua	{root}	Group runtime deferred scope merge smoke failed
 -	lua	tools/tests/group_event_cost_smoke.lua	{root}	Group runtime event cost smoke failed
 -	lua	tools/tests/group_db_split_smoke.lua	{root}	Group DB split load-order and export smoke failed
+-	lua	tools/tests/group_heal_absorb_migration_smoke.lua	{root}	Group heal-absorb scope migration smoke failed
+-	lua	tools/tests/group_status_raid_group_defer_smoke.lua	{root}	Group raid-group label combat deferral smoke failed
+clients	lua	tools/tests/group_filter_predicate_smoke.lua	{root} {flavor}	Group subgroup filter predicate smoke failed: {flavor}
+clients	lua	tools/tests/group_headers_secret_identity_smoke.lua	{root} {flavor}	Group header secret name/role smoke failed: {flavor}
+-	lua	tools/tests/group_text_secret_percent_smoke.lua	{root}	Group text secret percent smoke failed
+clients+Forever	lua	tools/tests/group_preview_combat_restore_smoke.lua	{root} {flavor}	Group preview combat restore smoke failed: {flavor}
+-	lua	tools/tests/group_editmode_labels_locale_smoke.lua	{root}	Group Edit Mode label locale smoke failed
 -	lua	tools/tests/group_quality_contract_smoke.lua	{root}	Group quality contract smoke failed
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline	Group roster settle and apply budget smoke failed: Mainline
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Vanilla	Group roster settle and apply budget smoke failed: Vanilla
@@ -156,6 +163,7 @@ classics	lua+driver	tools/tests/classic_aura_faction_smoke.lua	{root/} {flavor}	
 -	lua+driver	tools/tests/classic_aura_rank_name_match_smoke.lua	{root/}	Classic aura rank name-match smoke failed
 -	lua+driver	tools/tests/classic_group_indicator_data_smoke.lua	{root/}	Classic group indicator data smoke failed
 -	lua+driver	tools/tests/classic_raid_manager_mode_smoke.lua	{root/}	Classic Raid Manager mode smoke failed
+-	lua	tools/tests/group_raid_manager_toggles_smoke.lua	{root}	Mainline Raid Manager toggle-button mouse smoke failed
 clients+Forever	lua	tools/tests/uf_engine_client_gates_smoke.lua	{root/} {flavor}	Unit-frame engine client gates smoke failed: {flavor}
 clients+Forever	lua	tools/tests/uf_engine_preview_exports_smoke.lua	{root} {flavor}	Unit-frame engine preview exports smoke failed: {flavor}
 -	lua	tools/tests/uf_core_hidden_frame_smoke.lua	{root}	Unit-frame core hidden-frame contract smoke failed

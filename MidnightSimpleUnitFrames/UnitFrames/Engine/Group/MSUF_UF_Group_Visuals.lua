@@ -839,6 +839,27 @@ local function CachedHealthValues(frame)
   return hp, maxHP
 end
 
+--- The plain seed of the last health-fade paint; cleared, the next update repaints.
+local function ClearHealthFadeSeed(frame)
+  frame._msufGFHealthFadeSeedHP = nil
+  frame._msufGFHealthFadeSeedMax = nil
+  frame._msufGFHealthFadeRangeAlpha = nil
+  frame._msufGFHealthFadeRangeBoolKnown = nil
+  frame._msufGFHealthFadeRangeBool = nil
+  frame._msufGFHealthFadeRangeBoolIn = nil
+  frame._msufGFHealthFadeRangeBoolOut = nil
+end
+
+--- Everything the health fade caches on a frame: the plain seed, the secret
+--- throttle's range key and the boolean-alpha mark (element apply and disable).
+local function ClearHealthFadeState(frame)
+  ClearHealthFadeSeed(frame)
+  frame._msufGFHealthFadeSecretRangeBoolKnown = nil
+  frame._msufGFHealthFadeSecretRangeBoolIn = nil
+  frame._msufGFHealthFadeSecretRangeBoolOut = nil
+  frame._msufGFVisualHealthBoolApplied = nil
+end
+
 --- Health fade is a hotpath visual. Use seeded dispatch values when available
 --- and throttle secret-value fallbacks to avoid expensive repeated reads.
 local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event, percentReady)
@@ -941,13 +962,7 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event, percentRea
     frame._msufGFHealthFadeSecretRangeBoolIn = nil
     frame._msufGFHealthFadeSecretRangeBoolOut = nil
   else
-    frame._msufGFHealthFadeSeedHP = nil
-    frame._msufGFHealthFadeSeedMax = nil
-    frame._msufGFHealthFadeRangeAlpha = nil
-    frame._msufGFHealthFadeRangeBoolKnown = nil
-    frame._msufGFHealthFadeRangeBool = nil
-    frame._msufGFHealthFadeRangeBoolIn = nil
-    frame._msufGFHealthFadeRangeBoolOut = nil
+    ClearHealthFadeSeed(frame)
   end
   if rangeBoolKnown then
     if SetAlphaFromBoolean(frame.hpBar, rangeBool, alpha * rangeBoolIn, alpha * rangeBoolOut, "_msufGFVisualHealthAlpha") then
@@ -1319,17 +1334,7 @@ end
 function GroupVisuals.Apply(frame)
   if frame then
     frame._msufGFDeadBgState = nil
-    frame._msufGFHealthFadeSeedHP = nil
-    frame._msufGFHealthFadeSeedMax = nil
-    frame._msufGFHealthFadeRangeAlpha = nil
-    frame._msufGFHealthFadeRangeBoolKnown = nil
-    frame._msufGFHealthFadeRangeBool = nil
-    frame._msufGFHealthFadeRangeBoolIn = nil
-    frame._msufGFHealthFadeRangeBoolOut = nil
-    frame._msufGFHealthFadeSecretRangeBoolKnown = nil
-    frame._msufGFHealthFadeSecretRangeBoolIn = nil
-    frame._msufGFHealthFadeSecretRangeBoolOut = nil
-    frame._msufGFVisualHealthBoolApplied = nil
+    ClearHealthFadeState(frame)
   end
   CompileVisualRuntime(frame and frame.MSUFSpec)
   local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.group
@@ -1365,17 +1370,7 @@ function GroupVisuals.Disable(frame)
     RestoreHealthBackground(frame)
   end
   frame._msufGFDeadBgState = nil
-  frame._msufGFHealthFadeSeedHP = nil
-  frame._msufGFHealthFadeSeedMax = nil
-  frame._msufGFHealthFadeRangeAlpha = nil
-  frame._msufGFHealthFadeRangeBoolKnown = nil
-  frame._msufGFHealthFadeRangeBool = nil
-  frame._msufGFHealthFadeRangeBoolIn = nil
-  frame._msufGFHealthFadeRangeBoolOut = nil
-  frame._msufGFHealthFadeSecretRangeBoolKnown = nil
-  frame._msufGFHealthFadeSecretRangeBoolIn = nil
-  frame._msufGFHealthFadeSecretRangeBoolOut = nil
-  frame._msufGFVisualHealthBoolApplied = nil
+  ClearHealthFadeState(frame)
   frame._msufGFVisualRuntimeGroup = nil
   frame._msufGFVisualRuntimeGone = nil
   frame._msufGFVisualHealthBackgroundTexture = nil

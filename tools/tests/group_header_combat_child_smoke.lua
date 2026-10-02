@@ -46,6 +46,9 @@ local children = h:Children(header)
 Check(#children == 3, "expected 3 party children out of combat, got " .. #children)
 for index, child in ipairs(children) do
     Check(child.MSUFSpec ~= nil and GF.frames[child] == true, "out-of-combat child " .. index .. " was not styled")
+    -- A restricted handle has no SetRoundLayoutToNearestPixel: the scan rounds each child.
+    Check(not h.roundLayoutSupported or child.roundLayout == true,
+        "out-of-combat child " .. index .. " got no native pixel rounding")
 end
 Check(#h.violations == 0, "protected write out of combat?\n" .. tostring(h.violations[1]))
 Check(#h.callMethodErrors == 0, "CallMethod raised out of combat: " .. tostring(h.callMethodErrors[1]))
@@ -61,6 +64,10 @@ local function AssertStyled(child, unit, label)
     Check(child._msufActiveElements and child._msufActiveElements.Health == true,
         label .. ": the Health element is not active")
     Check(env.ClickCastFrames[child] == true, label .. ": child is not registered with ClickCastFrames")
+    -- RegisterForClicks is protected and a restricted handle has none, so only the
+    -- child template (registerForClicks="AnyUp") can give a lockdown birth every button.
+    Check(child.forClicks and child.forClicks[1] == "AnyUp",
+        label .. ": child answers LeftButtonUp only (no right-click menu, no click-cast)")
 end
 
 local function AssertRegenFinished(child)
@@ -69,6 +76,8 @@ local function AssertRegenFinished(child)
     Check(child.attributes["*type1"] == "target" and child.attributes["*type2"] == "togglemenu",
         "secure click actions missing after regen for " .. tostring(child.attributes.unit))
     Check(GF.frames[child] == true and child.MSUFSpec ~= nil, "child lost its styling at the regen edge")
+    Check(not h.roundLayoutSupported or child.roundLayout == true, "the regen scan did not round "
+        .. tostring(child.attributes.unit))
 end
 
 -- In lockdown: Blizzard's header births the fourth child itself.
@@ -80,11 +89,11 @@ h:RunTimers()
 Check(#h.born == bornBefore + 1 and h.born[#h.born].combat == true, "the header did not birth a child in lockdown")
 local late = h:Children(header)[4]
 AssertStyled(late, "party3", "child born in lockdown")
+Check(late.roundLayout == nil, "pixel rounding (protected) ran in lockdown")
 Check(#h.callMethodErrors == 0, "CallMethod raised in combat: " .. tostring(h.callMethodErrors[1]))
 Check(#h.violations == 0, #h.violations .. " protected write(s) from insecure code in lockdown; first:\n"
     .. tostring(h.violations[1]))
 -- The protected half waits for the regen edge.
-Check(late.forClicks == nil, "RegisterForClicks ran in lockdown")
 h:LeaveCombat()
 Check(#h.violations == 0, "protected write in combat during the regen edge?\n" .. tostring(h.violations[1]))
 AssertRegenFinished(late)
@@ -111,6 +120,41 @@ h:RunTimers()
 Check(early.attributes.unit == nil and GF.frames[early] == nil, "a cleared slot stayed tracked")
 Check(#h.violations == 0, "protected write while a member left in combat:\n" .. tostring(h.violations[1]))
 h:LeaveCombat()
+
+-- An out-of-combat birth whose next-frame settle the combat start overtakes:
+-- the roster event births the child and writes its unit at once, the settle
+-- then runs in lockdown and defers. The unit hook goes on at birth in every
+-- state, so the unit write itself builds the frame; before, such a child was
+-- an unstyled, clickable slot for the whole fight.
+local raidConf = GF.GetConf("raid")
+raidConf.enabled = true
+h:SetRaid(6)
+h:Event("GROUP_ROSTER_UPDATE")
+h:RunTimers()
+local raidHeader = GF.headers.raid
+Check(raidHeader ~= nil and #h:Children(raidHeader) >= 6, "the raid header did not build out of combat")
+h:SetRaid(7)
+h:Event("GROUP_ROSTER_UPDATE")
+Check(h.born[#h.born].combat == false and h.born[#h.born].header == raidHeader,
+    "the seventh raid child was not born out of combat")
+h:EnterCombat()
+h:RunTimers()
+local overtaken = h:Children(raidHeader)[7]
+AssertStyled(overtaken, "raid7", "child born out of combat, settle overtaken by combat")
+Check(#h.violations == 0, "protected write while combat overtook a settle:\n" .. tostring(h.violations[1]))
+h:LeaveCombat()
+AssertRegenFinished(overtaken)
+raidConf.enabled = false
+
+-- SecureGroupPetHeader births the Additional pet buttons in combat as well, from
+-- MSUF_GroupAdditionalUnitTemplate; their OnLoad cannot register clicks in lockdown.
+do
+    local file = assert(io.open(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.xml", "rb"))
+    local xml = file:read("*a")
+    file:close()
+    local tag = assert(xml:match('<Button%s[^>]*name="MSUF_GroupAdditionalUnitTemplate"[^>]*>'), "pet template moved")
+    Check(tag:find('registerForClicks="AnyUp"', 1, true), "pet buttons born in combat never get RegisterForClicks(\"AnyUp\")")
+end
 
 print(string.format("group_header_combat_child_smoke: ok (%s: %d children, %d born in lockdown, 0 protected writes)",
     flavor, #h:Children(header), (function()

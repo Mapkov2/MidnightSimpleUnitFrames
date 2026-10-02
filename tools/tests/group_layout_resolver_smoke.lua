@@ -168,10 +168,10 @@ assert(groupDrag:find('local xKey, yKey = bar._msufGFOffsetKeyX or "offsetX", ba
     "group drags still write the base offsets")
 -- The popup's own reset button and "Copy size to..." follow the shown keys too.
 local em2 = World.Read(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua")
-local copySize = assert(em2:match("\n  local function CopySizeTo%(targetMode%)\n(.-)\n  end\n"), "Copy size moved")
+local copySize = assert(em2:match("\nfunction GroupPopup%.CopySizeTo%(popup, targetMode%)\n(.-)\nend\n"), "Copy size moved")
 assert(copySize:find("SizeKeys(mode, src)", 1, true) and copySize:find("SizeKeys(targetMode, dst)", 1, true)
     and not copySize:find("dst.width =", 1, true), "Copy size still copies the base size behind the shown tier")
-local popupReset = assert(em2:match("\n  local function ResetPosition%(%)\n(.-)\n  end\n"), "popup reset moved")
+local popupReset = assert(em2:match("\nfunction GroupPopup%.ResetPosition%(popup%)\n(.-)\nend\n"), "popup reset moved")
 assert(popupReset:find("PositionKeys(mode, conf)", 1, true) and not popupReset:find("conf.offsetX", 1, true),
     "the popup reset still writes the base offsets")
 

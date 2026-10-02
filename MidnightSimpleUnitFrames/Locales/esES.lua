@@ -6481,6 +6481,13 @@ L["The saved Priority Frames list is full."] = "La lista guardada de marcos prio
 L["%s (unresolved)"] = "%s (sin resolver)"
 L["Arena %s"] = "Arena %s"
 L["Custom Aura %d"] = "Aura personalizada %d"
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "Marcos de grupo: grupo"
+L["Group: Raid"] = "Marcos de grupo: banda"
+L["Group: Mythic Raid"] = "Marcos de grupo: banda mítica"
+L["Party Frames"] = "Marcos de grupo"
+L["Raid Frames"] = "Marcos de banda"
+L["Mythic Raid Frames"] = "Marcos de banda mítica"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end

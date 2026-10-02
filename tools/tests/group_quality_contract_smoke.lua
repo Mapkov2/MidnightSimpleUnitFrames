@@ -96,12 +96,23 @@ end
 -- No dead code
 ---------------------------------------------------------------------------
 local RETIRED_GLOBALS = { "MSUF_ProfileIO_SuppressRuntimeSideEffects", "MSUF_GFOptionsPanel" }
+-- Wave 3: GF exports no addon, XML, string dispatch, test or Suite sibling called
+-- (grep-proven); their behaviour stays reachable through the live entry points.
+local RETIRED_GF_EXPORTS = { "AnyGroupRuntimeEnabled", "BuildFrameCache", "DropCompiledSpecs",
+    "GetBlizzardAuraTypeFlags", "GetBlizzardRaidManagerMode", "GetPriorityGroupType", "GetPriorityPinCount",
+    "HasActiveTextSlot", "HasActivePowerTextSlot", "HasFontOverride", "HideBlizzardPartyFrames",
+    "HideBlizzardRaidFrames", "HideOrphanedPreviews", "InvalidateGroupSizeCache", "RefreshAggro",
+    "RefreshClickCastFrames", "TogglePriorityMouseover", "ValidateUnitFrameMap", "_AbbrevNumber" }
 local deadAliases = {}
 for _, relative in ipairs(GROUP_FILES) do
     local lines = codeByFile[relative]
     local text = table.concat(lines, "\n")
     for _, name in ipairs(RETIRED_GLOBALS) do
         Check(not text:find(name, 1, true), relative .. " still reads the retired global " .. name)
+    end
+    for _, name in ipairs(RETIRED_GF_EXPORTS) do
+        Check(not text:find("GF%.%f[%w_]" .. name:gsub("_", "%%_") .. "%f[^%w_]"),
+            relative .. " brings back the dead export GF." .. name)
     end
     for index, code in ipairs(lines) do
         local alias, global = code:match("^local%s+([%w_]+)%s*=%s*_G%.([%w_]+)%s*$")

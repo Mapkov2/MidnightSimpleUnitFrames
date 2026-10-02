@@ -6430,6 +6430,13 @@ L["The saved Priority Frames list is full."] = "Сохранённый спис�
 L["%s (unresolved)"] = "%s (не распознано)"
 L["Arena %s"] = "Арена %s"
 L["Custom Aura %d"] = "Своя аура %d"
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "Рамки групп: группа"
+L["Group: Raid"] = "Рамки групп: рейд"
+L["Group: Mythic Raid"] = "Рамки групп: эпохальный рейд"
+L["Party Frames"] = "Рамки группы"
+L["Raid Frames"] = "Рамки рейда"
+L["Mythic Raid Frames"] = "Рамки эпохального рейда"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

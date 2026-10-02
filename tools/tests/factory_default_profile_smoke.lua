@@ -184,6 +184,10 @@ Check(second.general._msufFactoryProfileApplied == true and second.player.width 
 AssertFactory(second, "new profile")
 
 -- Exercise the real group normalization and layout metrics, not just raw DB keys.
+-- The group repair resolves the aura filter helpers it owns no copy of: the
+-- public MSUF_GF_AuraFilter table of Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua,
+-- which loads before the group files. The factory check needs none of its filters.
+_G.MSUF_GF_AuraFilter = _G.MSUF_GF_AuraFilter or {}
 for _, part in ipairs({ "", "_Geometry", "_Text", "_Textures" }) do
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB" .. part .. ".lua"))("MidnightSimpleUnitFrames", ns)
 end
