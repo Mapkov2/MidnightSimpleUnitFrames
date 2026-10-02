@@ -119,12 +119,34 @@ local function NewWorld(arenaSlots)
     _G.MSUF_SetupCastbarPreviewEditHandlers = function(frame, unit) frame.editHandlers = unit end
     _G.MSUF_GetBossLayoutDelta = function(index) return 10 * index, -40 * index end
     _G.MSUF_GetArenaLayoutDelta = function(index) return 20 * index, -50 * index end
+    -- The providers MSUF_CastbarPreviews.lua requires at load (Kernel/MSUF_Util,
+    -- the castbar Utils, Core, Anchors and the player runtime), reduced to what
+    -- these preview paths use. Sizes follow the pool settings, as the preview's
+    -- own fallback does.
+    _G.MSUF_SetTextIfChanged = function(fontString, text) fontString:SetText(text) end
+    _G.MSUF_GetCastbarTimeFormat = function() return "CURRENT" end
+    _G.MSUF_FormatCastbarTimeText = function(_, remaining) return string.format("%.1f", tonumber(remaining) or 0) end
+    _G.MSUF_GetCastbarDesiredSize = function(unit, general, _, fallbackW, fallbackH)
+        local kind = tostring(unit):match("^(%a+)")
+        return tonumber(general[kind .. "CastbarWidth"]) or fallbackW, tonumber(general[kind .. "CastbarHeight"]) or fallbackH
+    end
+    _G.MSUF_ApplyPlayerCastbarSizeAndLayout = function(frame, _, width, height) frame:SetSize(width, height) end
+    _G.MSUF_GetCastbarAutoAnchorOffsetX = function() return 0 end
+    _G.MSUF_ApplyCastbarFrameLayer = function() end
+    _G.MSUF_CB_ApplyTexts = function(frame, _, castText)
+        if castText ~= nil and frame and frame.castText then frame.castText:SetText(castText) end
+    end
+    _G.MSUF_ApplyCastbarGlowFade = function() end
+    _G.MSUF_ResetCastbarGlowFade = function() end
+    _G.MSUF_UpdateCastbarTextures = function() end
+    _G.MSUF_PlayerCastbar_UpdateLatencyZone = function() end
     local ns = {
         ExportPublic = function(name, value) _G[name] = value; return value end,
         UF = { frames = W.unitFrames, GetFrame = function(unit) return W.unitFrames[unit] end },
         -- MSUF.Translate (Locales/MSUF_Localization.lua) with a deDE pack.
         Translate = function(text) return LOCALE[text] or text end,
     }
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", ns)
     for _, file in ipairs(LOAD_ORDER) do
         assert(loadfile(root .. "/" .. CASTBARS .. file))("MidnightSimpleUnitFrames", ns)
     end

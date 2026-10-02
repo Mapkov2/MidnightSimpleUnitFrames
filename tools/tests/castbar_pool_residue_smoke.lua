@@ -27,8 +27,9 @@ local mode = arg[2]
 local World = assert(loadfile(root .. "/tools/tests/castbar_world.lua"))()
 
 local EXTRA = {
-    "MSUF_Castbars_Core.lua", "MSUF_CastbarStyle.lua", "MSUF_CastbarFrames.lua",
-    "MSUF_CastbarAnchors.lua", "MSUF_CastbarPreviewEdit.lua", "MSUF_CastbarPreviews.lua",
+    "MSUF_Require.lua", "MSUF_Castbars_Core.lua", "MSUF_CastbarStyle.lua", "MSUF_CastbarFrames.lua",
+    "MSUF_CastbarAnchors.lua", "MSUF_PlayerCastbarRuntime.lua", "MSUF_CastbarPreviewEdit.lua",
+    "MSUF_CastbarPreviews.lua",
     "MSUF_CastbarVisuals.lua", "MSUF_CastbarPoolPreviews.lua", "MSUF_BossCastbars_Preview.lua",
     "MSUF_ArenaCastbars_Preview.lua", "MSUF_CastbarRounded.lua", "MSUF_CastbarVisualCompat.lua",
 }
@@ -167,6 +168,11 @@ local function NewWorld(arenaSlots)
         _G.MSUF_GetFontPath = function() return "Fonts\FRIZQT__.TTF" end
         _G.MSUF_GetFontFlags = function() return "OUTLINE" end
         _G.MSUF_IsPlayerInCombat = function() return false end
+        -- Kernel/MSUF_Util.lua providers the castbar previews require at load,
+        -- equal to the fallbacks the castbar files use without them.
+        _G.MSUF_SetTextIfChanged = function(fontString, text) fontString:SetText(text) end
+        _G.MSUF_GetCastbarTimeFormat = function() return "CURRENT" end
+        _G.MSUF_FormatCastbarTimeText = function(_, remaining) return string.format("%.1f", tonumber(remaining) or 0) end
     end
     local world = World.New(root, "timer", { pools = true, extra = EXTRA, arenaSlots = arenaSlots, setup = Setup, richWidgets = true })
     world.unitFrames = unitFrames
