@@ -452,13 +452,10 @@ local function PushHistory(label, source, before, after)
     end
     return true
 end
-local function RebuildActivePage()
-    local key = M.activeKey
-    if key and M.frame and M.frame.IsShown and M.frame:IsShown() and M.InvalidatePage and M.SelectPage then
-        M.InvalidatePage(key)
-        M.activeKey = nil
-        M.SelectPage(key)
-    else
+-- The page on screen repaints in place from the restored values; only a page
+-- that rebuilds itself is built again (M.RepaintPageAfterDataChange).
+local function RepaintActivePage(reason)
+    if not M.RepaintPageAfterDataChange(M.activeKey, reason or "history") then
         NotifyHistoryChanged(true)
     end
 end
@@ -722,7 +719,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     if ApplyScopedHistoryRestore(reason, source) then
         FlushApplyServiceNow()
         M.MarkMenuDataDirty(reason or "history")
-        RebuildActivePage()
+        RepaintActivePage(reason)
         if type(_G.MSUF_EM_RefreshAfterHistoryRestore) == "function" then
             _G.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
         end
@@ -760,7 +757,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     end
     M.ApplyLocaleSelection(M.GetLocaleSelection and M.GetLocaleSelection() or "auto")
     M.MarkMenuDataDirty(reason or "history")
-    RebuildActivePage()
+    RepaintActivePage(reason)
     if type(_G.MSUF_EM_RefreshAfterHistoryRestore) == "function" then
         _G.MSUF_EM_RefreshAfterHistoryRestore(reason or "MSUF2_HISTORY", source)
     end

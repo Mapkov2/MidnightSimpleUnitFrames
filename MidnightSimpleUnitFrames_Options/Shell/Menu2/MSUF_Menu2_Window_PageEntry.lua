@@ -2,7 +2,8 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Menu2/MSUF_Menu2_Window_PageEntry.lua
 --- Cold-path page entry construction support: the page context object, the
 --- secondary tab/rail navigation, the placeholder page and the normal/maximized
---- layout-variant cache used while a page is built.
+--- layout-variant cache (window slot plus the page's declared view state) used
+--- while a page is built.
 ---
 --- Split from MSUF_Menu2_Window.lua; it loads before the window shell and reads
 --- the live content metrics through M.GetContentMetrics at call time.
@@ -166,8 +167,26 @@ local function BuildPlaceholderPage(ctx, requestedKey)
     W.Text(sec, M.Format("Requested page: %s", tostring(requestedKey or "unknown")), 16, -68, ctx.width - 32, T.colors.dim)
     ctx:SetContentHeight(210)
 end
-local function CurrentPageLayoutSlot()
-    return M.frame and M.frame._msuf2WindowState == "maximized" and "maximized" or "normal"
+-- A page whose spec declares variantKey(key) caches one entry per view state
+-- (the Dashboard's open disclosures, for example) next to the window slot, so
+-- switching back to a view it already built shows that entry again instead of
+-- building a new frame tree. The composite slot strings are memoized: a page
+-- selection allocates nothing for them.
+local VARIANT_SLOTS = { normal = {}, maximized = {} }
+local function CurrentPageLayoutSlot(key)
+    local slot = M.frame and M.frame._msuf2WindowState == "maximized" and "maximized" or "normal"
+    local spec = key and M.pages and M.pages[key]
+    local variantKey = spec and spec.variantKey
+    if not variantKey then return slot end
+    local variant = variantKey(key)
+    if variant == nil or variant == "" then return slot end
+    local bySlot = VARIANT_SLOTS[slot]
+    local composite = bySlot[variant]
+    if not composite then
+        composite = slot .. "|" .. tostring(variant)
+        bySlot[variant] = composite
+    end
+    return composite
 end
 local function PageEntryMatchesLayout(entry, slot)
     local CONTENT_W, CONTENT_H = M.GetContentMetrics()

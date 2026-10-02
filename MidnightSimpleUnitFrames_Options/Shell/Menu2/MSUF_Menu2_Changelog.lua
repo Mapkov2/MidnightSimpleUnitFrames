@@ -317,4 +317,19 @@ function M.OpenSeeNewFeatures()
     return false
 end
 
-M.RegisterPage("changelog", { title = "See New Features", build = BuildFullChangelog, version = 1 })
+-- One cached view per notes source and selected release: picking a release
+-- again shows the view built for it instead of a new frame tree (review C5.2).
+local CHANGELOG_VIEWS = { msuf = {}, suite = {} }
+local function ChangelogViewKey()
+    local source = M.changelogSource == "suite" and "suite" or "msuf"
+    local selected = M[source == "suite" and "suiteChangelogSelectedVersion" or "changelogSelectedVersion"]
+    if selected == nil then return source end
+    local views = CHANGELOG_VIEWS[source]
+    local view = views[selected]
+    if not view then
+        view = source .. "|" .. tostring(selected)
+        views[selected] = view
+    end
+    return view
+end
+M.RegisterPage("changelog", { title = "See New Features", build = BuildFullChangelog, version = 1, variantKey = ChangelogViewKey })

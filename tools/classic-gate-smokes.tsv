@@ -179,6 +179,7 @@ clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}
 clients+Forever	lua	tools/tests/menu_refresh_queue_smoke.lua	{root} {flavor}	Menu refresh requests re-queue after a cancelled task: {flavor}
 clients+Forever	lua	tools/tests/menu_core_text_smoke.lua	{root} {flavor}	Menu core text, slider names and feedback settle: {flavor}
 clients+Forever	lua	tools/tests/menu_button_history_smoke.lua	{root} {flavor}	Menu button history checkpoint is opt-in and keeps undo: {flavor}
+clients+Forever	lua	tools/tests/menu_page_rebuild_leak_smoke.lua	{root} {flavor}	Undo, reset and view switches repaint pages without new frames: {flavor}
 -	lua	tools/tests/menu_search_page_side_effects_smoke.lua	{root} Mainline	Search keeps the page on screen and filters deleted variants: Mainline
 -	lua	tools/tests/menu_search_page_side_effects_smoke.lua	{root} Vanilla	Search keeps the page on screen and filters deleted variants: Vanilla
 -	lua	tools/tests/menu_popup_contracts_smoke.lua	{root}	Menu popup OnAccept and Edit Mode strata contracts failed

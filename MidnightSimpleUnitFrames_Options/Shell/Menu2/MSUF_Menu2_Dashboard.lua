@@ -1229,4 +1229,13 @@ function Dashboard.Build(ctx)
     local bottom = state.supportTop - supportH
     ctx:SetContentHeight(math.abs(bottom) + 42)
 end
-M.RegisterPage("home", { title = "MSUF Menu", build = Dashboard.Build, version = 10 })
+-- Each combination of open disclosures is one cached Dashboard view, so a
+-- disclosure toggle switches views instead of building a new frame tree
+-- (review C5.2). Index bits: recovery 1, changelog 2, scaling 4.
+local DASHBOARD_VIEWS = { [0] = "---", "r--", "-c-", "rc-", "--s", "r-s", "-cs", "rcs" }
+local function DashboardViewKey()
+    return DASHBOARD_VIEWS[(M.dashboardRecoveryOpen == true and 1 or 0)
+        + (M.dashboardChangelogOpen == true and 2 or 0)
+        + (M.dashboardScalingOpen == true and 4 or 0)]
+end
+M.RegisterPage("home", { title = "MSUF Menu", build = Dashboard.Build, version = 10, variantKey = DashboardViewKey })
