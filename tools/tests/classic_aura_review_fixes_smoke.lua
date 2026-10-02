@@ -1393,6 +1393,48 @@ do
     _G.MSUF_DB.auras3.customContainers = nil
 end
 
+-- C3.5 follow-up. A dispel symbol strata set back to AUTO returns to the frame's --------
+-- An explicit "Symbol strata" stays on the symbol host until the host is written
+-- again, so going back to AUTO has to restore the frame's strata; it used to keep
+-- the last explicit one. Both the live and the menu preview host share the path.
+do
+    local savedSet, savedGet = Widget.SetFrameStrata, Widget.GetFrameStrata
+    function Widget:SetFrameStrata(strata) self._strata = strata end
+    function Widget:GetFrameStrata()
+        return self._strata or (self._parent and self._parent:GetFrameStrata()) or "MEDIUM"
+    end
+    -- The menu preview host is draggable.
+    local savedMovable, savedDrag = Widget.SetMovable, Widget.RegisterForDrag
+    function Widget:SetMovable(movable) self._movable = movable end
+    function Widget:RegisterForDrag(button) self._dragButton = button end
+    local V = assert(A3.ClassicVisuals, "C3.5: precondition: the Classic aura visuals did not load")
+    local symbol = { enabled = true, mode = "ALL", style = "BLIZZARD", size = 14, spacing = 2, growth = "RIGHT",
+        anchor = "TOPRIGHT", x = 0, y = 0, alpha = 1, layer = 8, strata = "HIGH" }
+    local visual = { symbol = symbol }
+    for _, preview in ipairs({ false, true }) do
+        local label = preview and "preview" or "live"
+        local frame = setmetatable({ _shown = true }, Widget)
+        frame:SetFrameStrata("LOW")
+        symbol.strata = "HIGH"
+        assert(V.UpdateDispelSymbols(frame, visual, { Magic = true }, preview) == true,
+            "C3.5: precondition: the " .. label .. " dispel symbol did not render")
+        local host = assert(frame[preview and "_msufA3ClassicDispelSymbolPreviewHost" or "_msufA3ClassicDispelSymbolHost"],
+            "C3.5: precondition: no " .. label .. " dispel symbol host")
+        assert(host:GetFrameStrata() == "HIGH", "C3.5: precondition: an explicit symbol strata was not applied")
+        symbol.strata = "AUTO"
+        V.UpdateDispelSymbols(frame, visual, { Magic = true }, preview)
+        assert(host:GetFrameStrata() == "LOW",
+            "C3.5: Symbol strata back on AUTO kept the " .. label .. " symbol on " .. tostring(host:GetFrameStrata()))
+        -- A frame on another strata: AUTO follows it on the next render.
+        frame:SetFrameStrata("MEDIUM")
+        V.UpdateDispelSymbols(frame, visual, { Magic = true, Curse = true }, preview)
+        assert(host:GetFrameStrata() == "MEDIUM",
+            "C3.5: an AUTO " .. label .. " symbol did not take its frame's strata")
+    end
+    Widget.SetFrameStrata, Widget.GetFrameStrata = savedSet, savedGet
+    Widget.SetMovable, Widget.RegisterForDrag = savedMovable, savedDrag
+end
+
 -- F10. The icon-style border draws like Retail's ApplyIconStyleBorder ------------------
 -- Real border-style catalog; textures remember their draw layer and anchors.
 do
