@@ -354,10 +354,30 @@ local function _resolvePredColor()
     return 0.30, 0.52, 0.90
 end
 
+--- The Player Power bar belongs to the Power element, which dedupes its colour
+--- writes on the bar's _msufR/_msufG/_msufB/_msufA stamp. The eclipse colour
+--- is painted over the bar and leaves that stamp alone, so when the eclipse
+--- ends the bar takes the Power element's own colour back from it; otherwise
+--- the element's next write matched the stamp and was skipped.
+local _eclPaintedBar = nil
+
+local function _restorePowerColor()
+    local bar = _eclPaintedBar
+    if not bar then return end
+    _eclPaintedBar = nil
+    local r, g, b = bar._msufR, bar._msufG, bar._msufB
+    if r ~= nil then bar:SetStatusBarColor(r, g, b, bar._msufA or 1) end
+end
+
 local function _applyEclipseColor()
     local bar = _getPowerBar()
-    if not bar or not _eclColor then return end
+    if not bar then return end
+    if not _eclColor then
+        _restorePowerColor()
+        return
+    end
     bar:SetStatusBarColor(_eclColor[1], _eclColor[2], _eclColor[3], 1)
+    _eclPaintedBar = bar
 end
 
 local function _updateOverlay()
@@ -416,6 +436,7 @@ end
 
 local function _cleanup()
     _castSpell, _predAmt, _eclColor = nil, 0, nil
+    _restorePowerColor()
     if _predTex then _predTex:Hide() end
 end
 

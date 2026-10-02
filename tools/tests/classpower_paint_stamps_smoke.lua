@@ -80,7 +80,54 @@ do
     Check(SameColor(bar.color, yellow), "returning to Brewmaster kept the Chi colour on the Stagger bar")
 end
 
+-- Balance eclipse colours the Player Power bar, which the Power element owns
+-- and dedupes with its _msufR/_msufG/_msufB/_msufA stamp. When the eclipse
+-- ends the bar must show the Power element's colour again.
+do
+    local SOLAR = 1233346
+    local solarUntil
+    local auras = {}
+    local t = World.Start(repo, "Mainline", "DRUID", 1, 8, nil, { beforeLoad = function(_, S)
+        C_UnitAuras.GetPlayerAuraBySpellID = function(spellID)
+            if spellID == SOLAR and solarUntil then
+                auras[spellID] = auras[spellID] or { spellId = spellID, auraInstanceID = 77, duration = 15 }
+                auras[spellID].expirationTime = solarUntil
+                return auras[spellID]
+            end
+            return nil
+        end
+    end })
+    local playerFrame = MSUF_NS.UF.GetFrame("player")
+    local bar = CreateFrame("StatusBar", nil, playerFrame)
+    playerFrame.targetPowerBar = bar
+    local BASE = { 0.30, 0.52, 0.90, 1 }
+    -- What the Power element's SetColor leaves behind: colour and stamp.
+    bar:SetStatusBarColor(BASE[1], BASE[2], BASE[3], BASE[4])
+    bar._msufR, bar._msufG, bar._msufB, bar._msufA = BASE[1], BASE[2], BASE[3], BASE[4]
+    local balanceFrame
+    for _, frame in ipairs(t.env.frames) do
+        if frame ~= t.eventFrame and frame.events and frame.events.UNIT_AURA
+            and frame.events.UPDATE_SHAPESHIFT_FORM then balanceFrame = frame end
+    end
+    Check(balanceFrame ~= nil, "the Balance runtime did not bind its events")
+    if balanceFrame then
+        local function Aura()
+            balanceFrame.scripts.OnEvent(balanceFrame, "UNIT_AURA", "player", { isFullUpdate = true })
+            t.env:RunTimers()
+        end
+        solarUntil = GetTime() + 15
+        Aura()
+        Check(not SameColor(bar.color, BASE), "a Solar Eclipse did not colour the Player Power bar")
+        -- The eclipse runs out: its aura is gone once its time has passed.
+        t.env:AdvanceTime(16)
+        solarUntil = nil
+        Aura()
+        Check(SameColor(bar.color, BASE), "the Player Power bar kept the eclipse colour after the eclipse ended")
+        Check(bar._msufR == BASE[1] and bar._msufB == BASE[3], "the Power element's colour stamp no longer matches the bar")
+    end
+end
+
 if #failures > 0 then
     error("classpower_paint_stamps_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier)")
+print("classpower_paint_stamps_smoke: ok (Ironfur, Stagger tier, eclipse colour)")
