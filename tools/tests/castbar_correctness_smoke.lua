@@ -160,7 +160,22 @@ do
     _G.MSUF_GetFontPath = function() return "Fonts\\FRIZQT__.TTF" end
     _G.MSUF_GetFontFlags = function() return "OUTLINE" end
     _G.MSUF_DB = { general = {} }
-    local MSUF = LoadAddonFile("Castbars/MSUF_CastbarVisuals.lua", NewNamespace())
+    -- The providers MSUF_CastbarVisuals.lua requires at load (State, Kernel,
+    -- Runtime colours, the castbar Core, Style and Utils), reduced to no-ops
+    -- and plain values: these checks are about which elements show.
+    _G.MSUF_EnsureDB = function() end
+    _G.MSUF_SetTextIfChanged = function(fs, text) fs:SetText(text) end
+    _G.MSUF_MarkFontApplyFailed = function() end
+    _G.MSUF_GetCastbarTextColor = function() return 1, 1, 1 end
+    _G.MSUF_GetCastbarBackgroundColor = function() return 0.2, 0.2, 0.2, 1 end
+    _G.MSUF_RefreshCastbarStyleCache = function() end
+    _G.MSUF_ApplyCastbarOutline = function() end
+    _G.MSUF_GetCastbarSpellNameShorteningConfig = function() return false end
+    _G.MSUF_RefreshCastbarSpellNameText = function() end
+    _G.MSUF_RefreshCastTargetText = function() end
+    local namespace = NewNamespace()
+    LoadAddonFile("Kernel/MSUF_Require.lua", namespace)
+    local MSUF = LoadAddonFile("Castbars/MSUF_CastbarVisuals.lua", namespace)
     local apply = MSUF.Castbars.Visuals.ApplyDetailLayout
     Check(type(apply) == "function", "Visuals.ApplyDetailLayout missing")
     Check(_G.MSUF_ApplyCastbarDetailLayout == apply, "MSUF_ApplyCastbarDetailLayout alias missing")

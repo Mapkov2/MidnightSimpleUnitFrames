@@ -31,7 +31,8 @@ local EXTRA = {
     "MSUF_CastbarAnchors.lua", "MSUF_PlayerCastbarRuntime.lua", "MSUF_CastbarPreviewEdit.lua",
     "MSUF_CastbarPreviews.lua",
     "MSUF_CastbarVisuals.lua", "MSUF_CastbarPoolPreviews.lua", "MSUF_BossCastbars_Preview.lua",
-    "MSUF_ArenaCastbars_Preview.lua", "MSUF_CastbarRounded.lua", "MSUF_CastbarVisualCompat.lua",
+    "MSUF_ArenaCastbars_Preview.lua", "MSUF_InterruptReady.lua", "MSUF_CastbarRounded.lua",
+    "MSUF_CastbarVisualCompat.lua",
 }
 
 ---------------------------------------------------------------------------
@@ -168,11 +169,16 @@ local function NewWorld(arenaSlots)
         _G.MSUF_GetFontPath = function() return "Fonts\FRIZQT__.TTF" end
         _G.MSUF_GetFontFlags = function() return "OUTLINE" end
         _G.MSUF_IsPlayerInCombat = function() return false end
-        -- Kernel/MSUF_Util.lua providers the castbar previews require at load,
-        -- equal to the fallbacks the castbar files use without them.
+        -- Kernel, State and Runtime providers the castbar files require at
+        -- load, reduced to what these sites use.
         _G.MSUF_SetTextIfChanged = function(fontString, text) fontString:SetText(text) end
         _G.MSUF_GetCastbarTimeFormat = function() return "CURRENT" end
         _G.MSUF_FormatCastbarTimeText = function(_, remaining) return string.format("%.1f", tonumber(remaining) or 0) end
+        _G.MSUF_EnsureDB = function() end
+        _G.MSUF_MarkFontApplyFailed = function() end
+        _G.MSUF_GetCastbarTextColor = function() return 1, 1, 1 end
+        _G.MSUF_GetConfiguredFontColor = function() return 1, 1, 1 end
+        _G.MSUF_GetCastbarBackgroundColor = function() return 0.176, 0.176, 0.176, 1 end
     end
     local world = World.New(root, "timer", { pools = true, extra = EXTRA, arenaSlots = arenaSlots, setup = Setup, richWidgets = true })
     world.unitFrames = unitFrames
@@ -274,39 +280,42 @@ if mode == "sums" then
     return
 end
 
--- Recorded from the boss/arena twins before the fold (commit 5498ae81).
+-- Recorded from the boss/arena twins before the fold (commit 5498ae81) and
+-- re-recorded once, unchanged code, when the world gained the Runtime colour
+-- providers and the real InterruptReady (the only difference: each castbar
+-- refresh now paints its background colour).
 local EXPECTED = {
-    { "3 slots: effective size boss", "12151:898680211" },
-    { "3 slots: effective size arena", "7340:623039201" },
-    { "3 slots: width source boss", "13299:600623632" },
-    { "3 slots: width source arena", "7925:2001148923" },
+    { "3 slots: effective size boss", "12541:1457924746" },
+    { "3 slots: effective size arena", "7574:1991236288" },
+    { "3 slots: width source boss", "13689:2011494408" },
+    { "3 slots: width source arena", "8159:1682611460" },
     { "3 slots: width source resize", "1791:30200776" },
     { "3 slots: cast target colours", "1060:1272740194" },
     { "3 slots: rounded on", "2662:803476627" },
     { "3 slots: rounded off", "5258:566203803" },
-    { "3 slots: classic spark boss", "14625:606960255" },
-    { "3 slots: classic spark arena", "8319:1825541278" },
+    { "3 slots: classic spark boss", "15015:1625056145" },
+    { "3 slots: classic spark arena", "8553:567403717" },
     { "3 slots: frame layer", "5368:1345619038" },
-    { "5 slots: effective size boss", "12151:898680211" },
-    { "5 slots: effective size arena", "12234:1425550537" },
-    { "5 slots: width source boss", "13299:600623632" },
-    { "5 slots: width source arena", "13209:923465352" },
+    { "5 slots: effective size boss", "12541:1457924746" },
+    { "5 slots: effective size arena", "12624:1972685996" },
+    { "5 slots: width source boss", "13689:2011494408" },
+    { "5 slots: width source arena", "13599:862559" },
     { "5 slots: width source resize", "2011:1006890774" },
     { "5 slots: cast target colours", "1328:949083875" },
     { "5 slots: rounded on", "3336:1957103341" },
     { "5 slots: rounded off", "6584:207953388" },
-    { "5 slots: classic spark boss", "14625:606960255" },
-    { "5 slots: classic spark arena", "13859:405069398" },
+    { "5 slots: classic spark boss", "15015:1625056145" },
+    { "5 slots: classic spark arena", "14249:1166163312" },
     { "5 slots: frame layer", "6698:1013118119" },
-    { "0 slots: effective size boss", "12151:898680211" },
+    { "0 slots: effective size boss", "12541:1457924746" },
     { "0 slots: effective size arena", "0:0" },
-    { "0 slots: width source boss", "13299:600623632" },
+    { "0 slots: width source boss", "13689:2011494408" },
     { "0 slots: width source arena", "0:0" },
     { "0 slots: width source resize", "1314:1828393128" },
     { "0 slots: cast target colours", "658:295835695" },
     { "0 slots: rounded on", "1651:205973700" },
     { "0 slots: rounded off", "3269:646221331" },
-    { "0 slots: classic spark boss", "14625:606960255" },
+    { "0 slots: classic spark boss", "15015:1625056145" },
     { "0 slots: classic spark arena", "0:0" },
     { "0 slots: frame layer", "3373:913452340" },
 }
