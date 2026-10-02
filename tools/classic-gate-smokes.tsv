@@ -310,3 +310,4 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 -	lua	tools/tests/rounded_group_block_border_smoke.lua	{root}	Rounded group block border smoke failed
 -	lua	tools/tests/rounded_clip_request_smoke.lua	{root}	Rounded clip request smoke failed
 -	lua	tools/tests/afk_timer_combat_return_smoke.lua	{root}	AFK timer combat return smoke failed
+-	lua	tools/tests/over_absorb_protected_glow_smoke.lua	{root}	Protected over-absorb glow smoke failed
