@@ -48,12 +48,19 @@ local KEY_TO_KIND = {
   gf_priority = "priority",
 }
 
+--- English keys: the Edit Mode HUD translates registry labels when it paints
+--- them; text this file paints itself goes through Translate at paint time.
 local LABELS = {
   party = "Group: Party",
   raid = "Group: Raid",
   mythicraid = "Group: Mythic Raid",
   priority = "Priority Frames",
 }
+
+local function Translate(text)
+  local translate = MSUF.Translate
+  return translate and translate(text) or text
+end
 
 local GROUP_KINDS = { "party", "raid", "mythicraid" }
 local MOVER_KINDS = { "party", "raid", "mythicraid", "priority" }
@@ -434,7 +441,7 @@ local function EnsureContainer(kind)
   fs:SetShadowOffset(1, -1)
   fs:SetTextColor(0.68, 0.83, 1.00, 0.88)
   fs:SetPoint("CENTER")
-  fs:SetText(LABELS[kind] or "Group Frame")
+  fs:SetText(Translate(LABELS[kind] or "Group frame"))
   f._msufGFEditLabel = fs
 
   _containers[kind] = f
@@ -1154,7 +1161,6 @@ local function RegisterAdditionalMovers()
   local api = MSUF.EditModeAPI or _G.MSUF_EditModeAPI
   local gf = GF()
   if not (api and gf) or not (api.RegisterElements or api.RegisterElement) then return end
-  local Translate = MSUF.Translate or function(text) return text end
   local blocks = gf.ADDITIONAL_BLOCKS or { "pets", "targets", "friendlyBoss", "healerMana" }
   local defaultX, defaultY = gf.ADDITIONAL_DEFAULT_X or {}, gf.ADDITIONAL_DEFAULT_Y or {}
   local elements = {}
@@ -1187,8 +1193,11 @@ local function RegisterAdditionalMovers()
             set = function(value) local state = Capture(); if not state then return false end; state[field] = value; return Restore(state) end }
         end
         elements[#elements + 1] = {
-          id = kind .. "_" .. prefix, label = LABELS[kind] .. ": " .. Translate(ADDITIONAL_BLOCK_NAMES[prefix] or prefix),
-          group = LABELS[kind], order = 80,
+          -- Public Edit Mode elements show their labels as given: translate the
+          -- pieces, then compose them with a translated format.
+          id = kind .. "_" .. prefix,
+          label = string.format(Translate("%s: %s"), Translate(LABELS[kind]), Translate(ADDITIONAL_BLOCK_NAMES[prefix] or prefix)),
+          group = Translate(LABELS[kind]), order = 80,
           getFrame = function() local live = GF(); return live and live.GetAdditionalEditPreviewFrame and live.GetAdditionalEditPreviewFrame(kind, prefix) end,
           isEnabled = function() local conf = GetConf(kind); return conf and conf.enabled == true and conf[prefix .. "Enabled"] == true end,
           getPosition = Capture, setPosition = Restore,

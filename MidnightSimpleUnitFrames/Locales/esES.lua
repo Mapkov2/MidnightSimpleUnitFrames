@@ -6476,6 +6476,13 @@ L["Priority Frames are full (%s)."] = "Los marcos prioritarios están llenos (%s
 L["Join a party or raid before selecting a Priority Frame."] = "Únete a un grupo o banda antes de elegir un marco prioritario."
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "Pasa el cursor sobre un marco de grupo, banda o prioritario de MSUF y pulsa la tecla de marcos prioritarios."
 L["The saved Priority Frames list is full."] = "La lista guardada de marcos prioritarios está llena."
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "Marcos de grupo: grupo"
+L["Group: Raid"] = "Marcos de grupo: banda"
+L["Group: Mythic Raid"] = "Marcos de grupo: banda mítica"
+L["Party Frames"] = "Marcos de grupo"
+L["Raid Frames"] = "Marcos de banda"
+L["Mythic Raid Frames"] = "Marcos de banda mítica"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end

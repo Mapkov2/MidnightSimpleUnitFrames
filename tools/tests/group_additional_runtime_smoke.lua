@@ -322,16 +322,20 @@ local body = assert(em2:match("\n(local ADDITIONAL_BLOCK_NAMES = .-\nend)\n\nloc
 local registered, batches = {}, 0
 local api = { RegisterElements = function(owner, list) batches = batches + 1; assert(owner == "msuf_group_extras"); for _, e in ipairs(list) do registered[#registered + 1] = e end return true end,
     RegisterElement = function() error("extra movers registered one at a time") end }
-local factory = assert(loadstring("return function(MSUF, GF, GetConf, ConfigLocked, LABELS, GROUP_KINDS, max, min) " .. body .. " return RegisterAdditionalMovers end"))()
-local register = factory({ EditModeAPI = api, Translate = function(text) return "T:" .. text end },
+local factory = assert(loadstring("return function(MSUF, GF, GetConf, ConfigLocked, LABELS, GROUP_KINDS, max, min, Translate) "
+    .. body .. " return RegisterAdditionalMovers end"))()
+local function Translate(text) return "T:" .. text end
+local register = factory({ EditModeAPI = api },
     function() return GF end, function() return conf end, function() return false end,
-    { party = "Group: Party", raid = "Group: Raid" }, { "party", "raid" }, math.max, math.min)
+    { party = "Group: Party", raid = "Group: Raid" }, { "party", "raid" }, math.max, math.min, Translate)
 register()
 assert(batches == 1, "extra movers were not registered in one batch")
 local ids = {}
 for _, e in ipairs(registered) do
     ids[#ids + 1] = e.id
     assert(e.label:find("T:", 1, true) and e.extraControls[1].label == "T:Width", "mover labels are not translated")
+    -- A translated format over translated pieces, never an English key concatenated.
+    assert(e.label:find("^T:T:Group: %a+: T:") and e.group:find("^T:Group: "), "mover label is not composed: " .. e.label)
 end
 table.sort(ids)
 assert(table.concat(ids, ",") == "party_healerMana,party_pets,party_targets,raid_healerMana,raid_pets",

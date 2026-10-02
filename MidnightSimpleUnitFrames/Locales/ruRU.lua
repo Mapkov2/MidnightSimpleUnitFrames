@@ -6425,6 +6425,13 @@ L["Priority Frames are full (%s)."] = "Приоритетные рамки за�
 L["Join a party or raid before selecting a Priority Frame."] = "Вступите в группу или рейд, прежде чем выбирать приоритетную рамку."
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "Наведите курсор на рамку группы, рейда или приоритетную рамку MSUF и нажмите клавишу приоритетных рамок."
 L["The saved Priority Frames list is full."] = "Сохранённый список приоритетных рамок заполнен."
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "Рамки групп: группа"
+L["Group: Raid"] = "Рамки групп: рейд"
+L["Group: Mythic Raid"] = "Рамки групп: эпохальный рейд"
+L["Party Frames"] = "Рамки группы"
+L["Raid Frames"] = "Рамки рейда"
+L["Mythic Raid Frames"] = "Рамки эпохального рейда"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

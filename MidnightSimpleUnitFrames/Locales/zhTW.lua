@@ -6414,6 +6414,13 @@ L["Priority Frames are full (%s)."] = "優先框架已滿（%s）。"
 L["Join a party or raid before selecting a Priority Frame."] = "請先加入隊伍或團隊，再選擇優先框架。"
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "將滑鼠游標移到 MSUF 隊伍、團隊或優先框架上，然後按優先框架快捷鍵。"
 L["The saved Priority Frames list is full."] = "已儲存的優先框架清單已滿。"
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "團體框架：隊伍"
+L["Group: Raid"] = "團體框架：團隊"
+L["Group: Mythic Raid"] = "團體框架：傳奇團隊"
+L["Party Frames"] = "隊伍框架"
+L["Raid Frames"] = "團隊框架"
+L["Mythic Raid Frames"] = "傳奇團隊框架"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

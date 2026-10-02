@@ -4510,6 +4510,13 @@ L["Move"] = "Move"
 L["Nudge"] = "Nudge"
 L["Set"] = "Set"
 L["Change"] = "Change"
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "Group: Party"
+L["Group: Raid"] = "Group: Raid"
+L["Group: Mythic Raid"] = "Group: Mythic Raid"
+L["Party Frames"] = "Party Frames"
+L["Raid Frames"] = "Raid Frames"
+L["Mythic Raid Frames"] = "Mythic Raid Frames"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

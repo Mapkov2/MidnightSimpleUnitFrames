@@ -6417,6 +6417,13 @@ L["Priority Frames are full (%s)."] = "우선순위 프레임이 가득 찼습�
 L["Join a party or raid before selecting a Priority Frame."] = "우선순위 프레임을 선택하려면 먼저 파티나 공격대에 참여하세요."
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "MSUF 파티, 공격대 또는 우선순위 프레임에 마우스를 올린 뒤 우선순위 프레임 단축키를 누르세요."
 L["The saved Priority Frames list is full."] = "저장된 우선순위 프레임 목록이 가득 찼습니다."
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "그룹: 파티"
+L["Group: Raid"] = "그룹: 공격대"
+L["Group: Mythic Raid"] = "그룹: 신화 공격대"
+L["Party Frames"] = "파티 프레임"
+L["Raid Frames"] = "공격대 프레임"
+L["Mythic Raid Frames"] = "신화 공격대 프레임"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

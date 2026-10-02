@@ -6613,6 +6613,13 @@ L["Priority Frames are full (%s)."] = "优先框体已满（%s）。"
 L["Join a party or raid before selecting a Priority Frame."] = "请先加入小队或团队，再选择优先框体。"
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "将鼠标悬停在 MSUF 小队、团队或优先框体上，然后按优先框体快捷键。"
 L["The saved Priority Frames list is full."] = "已保存的优先框体列表已满。"
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "团体框体：小队"
+L["Group: Raid"] = "团体框体：团队"
+L["Group: Mythic Raid"] = "团体框体：史诗团队"
+L["Party Frames"] = "小队框体"
+L["Raid Frames"] = "团队框体"
+L["Mythic Raid Frames"] = "史诗团队框体"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

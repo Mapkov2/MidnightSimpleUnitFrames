@@ -215,7 +215,8 @@ local function FillPriorityPinView(out, groupType, featureEnabled, baseFramesEna
     local active = selected and featureEnabled == true and groupType ~= nil and baseFramesEnabled == true
     row.index = i
     row.guid = guid
-    row.name = entry and entry.name or name or "Unknown"
+    -- nil when unknown: the Priority page paints its translated "Unknown player".
+    row.name = entry and entry.name or name
     row.present = entry ~= nil
     row.selected = selected
     row.active = active

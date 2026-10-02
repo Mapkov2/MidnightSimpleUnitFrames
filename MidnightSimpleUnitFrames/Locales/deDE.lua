@@ -6776,6 +6776,13 @@ L["Priority Frames are full (%s)."] = "Prioritätsframes sind voll (%s)."
 L["Join a party or raid before selecting a Priority Frame."] = "Tritt einer Party oder einem Raid bei, bevor du einen Prioritätsframe wählst."
 L["Hover an MSUF Party, Raid, or Priority frame, then press the Priority Frames key."] = "Zeige auf einen MSUF-Party-, Raid- oder Prioritätsframe und drücke dann die Prioritätsframes-Taste."
 L["The saved Priority Frames list is full."] = "Die gespeicherte Prioritätsframes-Liste ist voll."
+-- Group Edit Mode movers and popups.
+L["Group: Party"] = "Gruppe: Party"
+L["Group: Raid"] = "Gruppe: Raid"
+L["Group: Mythic Raid"] = "Gruppe: Mythic-Raid"
+L["Party Frames"] = "Partyframes"
+L["Raid Frames"] = "Raidframes"
+L["Mythic Raid Frames"] = "Mythic-Raid-Frames"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end
