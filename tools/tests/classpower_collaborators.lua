@@ -42,6 +42,20 @@ Collaborators.STANDINS = {
     end,
 }
 
+--- ClassPower/MSUF_CP_PlayerHP.lua reads the text change-key modes from
+--- MSUF.UFText.DISPATCH_KEY at load. The table is compiled in the unit-frame
+--- text formatter, which a harness without the unit-frame engine does not load:
+--- read its literal from that file, so the stand-in cannot drift from it.
+function Collaborators.DispatchKey(root)
+    local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua"
+    local file = assert(io.open(path, "rb"))
+    local source = file:read("*a")
+    file:close()
+    local literal = source:gsub("\r\n", "\n"):match("\nlocal DISPATCH_KEY = (%b{})")
+    assert(literal, path .. " no longer defines 'local DISPATCH_KEY = { ... }'")
+    return assert(loadstring("return " .. literal))()
+end
+
 --- Gives ns the real MSUF.Require / MSUF.Optional and defines every stand-in
 --- the harness did not define.
 function Collaborators.Install(root, ns)
@@ -52,6 +66,8 @@ function Collaborators.Install(root, ns)
     for name, standin in pairs(Collaborators.STANDINS) do
         if _G[name] == nil then _G[name] = standin end
     end
+    ns.UFText = ns.UFText or {}
+    if ns.UFText.DISPATCH_KEY == nil then ns.UFText.DISPATCH_KEY = Collaborators.DispatchKey(root) end
     return ns
 end
 
