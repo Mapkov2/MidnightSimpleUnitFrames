@@ -490,64 +490,70 @@ do
         _essRestricted = false
     end
 
+    --- A restricted (secret) Essence count: native whole-point pips, no
+    --- recharge timer. Partial recharge cannot be derived from a secret value.
+    local function PaintRestrictedEssence(cur, maxPower)
+        local visual = CP_GetVisual(E)
+        local smoothInterp = visual and visual.smoothInterp
+        local baseR = visual and visual.baseR or 1
+        local baseG = visual and visual.baseG or 1
+        local baseB = visual and visual.baseB or 1
+        local useSlotColors = visual and visual.useSlotColors == true
+        local bgR = visual and visual.bgR or 0
+        local bgG = visual and visual.bgG or 0
+        local bgB = visual and visual.bgB or 0
+        local bgA = visual and visual.bgAlpha or 0.3
+        local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
+        local visualVersion = visual and visual.version or 0
+
+        -- A restricted player-power value cannot be inspected in Lua, but
+        -- StatusBar:SetValue accepts it natively. Give every pip its own
+        -- [i-1, i] range so the client clamps the same secret Essence value
+        -- into the correct full/empty layout instead of showing every pip
+        -- as full. Partial recharge selection cannot be derived from a
+        -- secret value, so retire any formerly known timer before writing
+        -- the authoritative native whole-point state.
+        local enteredRestricted = not _essRestricted
+        if enteredRestricted then
+            StopEssenceOnUpdates()
+            _essRestricted = true
+        end
+        for i = 1, maxPower do
+            local bar = CP.bars[i]
+            if bar then
+                CP_StampMinMax(bar, i - 1, i)
+                CP_SetPowerValue(bar, cur, smoothInterp, true)
+                if enteredRestricted then
+                    bar._msufEssenceValue = nil
+                    bar._msufEssenceValueVersion = nil
+                end
+                CP_StampAlpha(bar, filledAlpha)
+                if enteredRestricted or bar._msufCPVisualVersion ~= visualVersion
+                    or bar._msufCPFullColor ~= nil then
+                    local slotR = useSlotColors and visual.slotR and visual.slotR[i]
+                    CP_StampStatusBarColor(bar, slotR or baseR,
+                        slotR and visual.slotG[i] or baseG,
+                        slotR and visual.slotB[i] or baseB, 1)
+                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+                    bar._msufCPVisualVersion = visualVersion
+                    bar._msufCPFullColor = nil
+                end
+            end
+        end
+        local txt = CP.text
+        if txt and CP_PaintResourceText(txt, visual, _cpDB.textMode, cur, maxPower, nil, WritePassthroughCount) then
+            CP_StampTextColor(txt, 1, 1, 1, 1)
+        end
+        --- A secret power value only blocks the full/empty rules; the combat
+        --- rule still has to run, so pass nil instead of dropping the check.
+        CP_CheckAutoHide(nil, maxPower)
+    end
+
     local function UpdateEssence(powerType, maxPower)
         if maxPower <= 0 then return end
         local cur = UnitPower("player", powerType)
         if not NotSecret(cur) then
-            local visual = CP_GetVisual(E)
-            local smoothInterp = visual and visual.smoothInterp
-            local baseR = visual and visual.baseR or 1
-            local baseG = visual and visual.baseG or 1
-            local baseB = visual and visual.baseB or 1
-            local useSlotColors = visual and visual.useSlotColors == true
-            local bgR = visual and visual.bgR or 0
-            local bgG = visual and visual.bgG or 0
-            local bgB = visual and visual.bgB or 0
-            local bgA = visual and visual.bgAlpha or 0.3
-            local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
-            local visualVersion = visual and visual.version or 0
-
-            -- A restricted player-power value cannot be inspected in Lua, but
-            -- StatusBar:SetValue accepts it natively. Give every pip its own
-            -- [i-1, i] range so the client clamps the same secret Essence value
-            -- into the correct full/empty layout instead of showing every pip
-            -- as full. Partial recharge selection cannot be derived from a
-            -- secret value, so retire any formerly known timer before writing
-            -- the authoritative native whole-point state.
-            local enteredRestricted = not _essRestricted
-            if enteredRestricted then
-                StopEssenceOnUpdates()
-                _essRestricted = true
-            end
-            for i = 1, maxPower do
-                local bar = CP.bars[i]
-                if bar then
-                    CP_StampMinMax(bar, i - 1, i)
-                    CP_SetPowerValue(bar, cur, smoothInterp, true)
-                    if enteredRestricted then
-                        bar._msufEssenceValue = nil
-                        bar._msufEssenceValueVersion = nil
-                    end
-                    CP_StampAlpha(bar, filledAlpha)
-                    if enteredRestricted or bar._msufCPVisualVersion ~= visualVersion
-                        or bar._msufCPFullColor ~= nil then
-                        local slotR = useSlotColors and visual.slotR and visual.slotR[i]
-                        CP_StampStatusBarColor(bar, slotR or baseR,
-                            slotR and visual.slotG[i] or baseG,
-                            slotR and visual.slotB[i] or baseB, 1)
-                        CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
-                        bar._msufCPVisualVersion = visualVersion
-                        bar._msufCPFullColor = nil
-                    end
-                end
-            end
-            local txt = CP.text
-            if txt and CP_PaintResourceText(txt, visual, _cpDB.textMode, cur, maxPower, nil, WritePassthroughCount) then
-                CP_StampTextColor(txt, 1, 1, 1, 1)
-            end
-            --- A secret power value only blocks the full/empty rules; the combat
-            --- rule still has to run, so pass nil instead of dropping the check.
-            CP_CheckAutoHide(nil, maxPower)
+            PaintRestrictedEssence(cur, maxPower)
             return
         end
         _essRestricted = false
@@ -1080,6 +1086,38 @@ do
         CP.runeNativeAny = false
     end
 
+    --- Rune colours: the full colour, a per-slot colour, the Mists rune type
+    --- colour or the base colour, repainted when the visual, the full state or
+    --- a rune's type changed.
+    local function RecolorRunes(maxPower, visual, isFull, typeColors, recolorAll, runeMap, visualVersion, bgA)
+        local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
+        local useSlotColors = visual and visual.useSlotColors == true
+        for displayIdx = 1, maxPower do
+            local bar = CP.bars[displayIdx]
+            if not bar then break end
+            local typeColor = typeColors and typeColors[GetRuneType(runeMap[displayIdx])] or nil
+            if recolorAll or bar._msufCPRuneTypeColor ~= typeColor then
+                local slotR = useSlotColors and visual.slotR and visual.slotR[displayIdx]
+                local r, g, bl = baseR, baseG, baseB
+                if isFull then
+                    r, g, bl = visual.fullR, visual.fullG, visual.fullB
+                elseif slotR then
+                    r, g, bl = slotR, visual.slotG[displayIdx], visual.slotB[displayIdx]
+                elseif typeColor then
+                    r, g, bl = typeColor[1], typeColor[2], typeColor[3]
+                end
+                CP_StampStatusBarColor(bar, r, g, bl, 1)
+                CP_StampVertexColor(bar._bg, 0, 0, 0, bgA)
+                bar._msufCPVisualVersion = visualVersion
+                bar._msufCPFullColor = isFull
+                bar._msufCPRuneTypeColor = typeColor
+            end
+        end
+        CP._runeColorVersion = visualVersion
+        CP._runeFullColor = isFull
+        CP._runeTypeColored = typeColors ~= nil or nil
+    end
+
     local function Update(powerType, maxPower)
         if maxPower <= 0 then return end
 
@@ -1087,8 +1125,6 @@ do
         CP_ApplyRuneSortOrder(b.runeSortOrder)
 
         local visual = CP_GetVisual(E)
-        local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
-        local useSlotColors = visual and visual.useSlotColors == true
         local bgA = visual and visual.bgAlpha or 0.3
         local showRuneTime = not visual or visual.runeShowTime ~= false
         local filledAlpha = visual and visual.filledAlpha or GetFilledAlpha()
@@ -1212,30 +1248,7 @@ do
             and RUNE_TYPE_COLORS or nil
         local recolorAll = CP._runeColorVersion ~= visualVersion or CP._runeFullColor ~= isFull
         if recolorAll or typeColors or CP._runeTypeColored then
-            for displayIdx = 1, maxPower do
-                local bar = CP.bars[displayIdx]
-                if not bar then break end
-                local typeColor = typeColors and typeColors[GetRuneType(runeMap[displayIdx])] or nil
-                if recolorAll or bar._msufCPRuneTypeColor ~= typeColor then
-                    local slotR = useSlotColors and visual.slotR and visual.slotR[displayIdx]
-                    local r, g, bl = baseR, baseG, baseB
-                    if isFull then
-                        r, g, bl = visual.fullR, visual.fullG, visual.fullB
-                    elseif slotR then
-                        r, g, bl = slotR, visual.slotG[displayIdx], visual.slotB[displayIdx]
-                    elseif typeColor then
-                        r, g, bl = typeColor[1], typeColor[2], typeColor[3]
-                    end
-                    CP_StampStatusBarColor(bar, r, g, bl, 1)
-                    CP_StampVertexColor(bar._bg, 0, 0, 0, bgA)
-                    bar._msufCPVisualVersion = visualVersion
-                    bar._msufCPFullColor = isFull
-                    bar._msufCPRuneTypeColor = typeColor
-                end
-            end
-            CP._runeColorVersion = visualVersion
-            CP._runeFullColor = isFull
-            CP._runeTypeColored = typeColors ~= nil or nil
+            RecolorRunes(maxPower, visual, isFull, typeColors, recolorAll, runeMap, visualVersion, bgA)
         end
 
         local txt = CP.text
