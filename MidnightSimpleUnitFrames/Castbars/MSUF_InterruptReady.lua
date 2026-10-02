@@ -622,24 +622,13 @@ local function FeatureEnabled(general)
     return target or focus or boss or arena
 end
 
+--- The fill style follows the unit's own toggle: ShouldShow without the Focus
+--- Interrupt Tracker, which shows its readiness on the focus castbar.
 local function UnitSupportsFillStyle(general, unit)
-    if unit == "target" then
-        return general.kickReadyShowTarget == true
-    end
-
     if unit == "focus" then
         return general.kickReadyShowFocus == true
     end
-
-    if unit == "boss" or (type(unit) == "string" and unit:match("^boss%d+$")) then
-        return general.kickReadyShowBoss == true
-    end
-
-    if unit == "arena" or (type(unit) == "string" and unit:match("^arena%d+$")) then
-        return general.kickReadyShowArena == true
-    end
-
-    return false
+    return ShouldShow(general, unit)
 end
 
 local function IndicatorStyle(general)
