@@ -1039,8 +1039,13 @@ local function PreparePartyPortraitSwitch(ctx, sec)
     portraitEnable:SetChecked(Val(kind, "portraitMode", "OFF") ~= "OFF")
     return portraitEnable
 end
-function GroupPage.BuildPortrait(ctx, builder)
-    local kind = "party"
+-- Party portrait workspace. GroupPage.BuildPortrait runs a sequence of stages that share one state
+-- table (`s`): shell, binders, tabs, controls and gates. The stages create their widgets in the order
+-- the single builder did, so the layout is unchanged. The stages live on one table so the main chunk
+-- keeps its local budget.
+local PortraitBuild = {}
+function PortraitBuild.Shell(ctx, builder)
+    local s = { kind = "party", stateKey = "gf_party" }
     local cardH = { main = 224, geometry = 440, placement = 382, border = 440, style = 330 }
     local tabH = {
         general = cardH.main + 116,
@@ -1095,6 +1100,15 @@ function GroupPage.BuildPortrait(ctx, builder)
     local cardW = max(260, min(620, sectionW - 32))
     local tabW = max(260, min(780, sectionW - 40))
     local RefreshPortraitControls = M.RefreshProxy()
+    s.cardH, s.tabH, s.placementValues, s.renderValues = cardH, tabH, placementValues, renderValues
+    s.sizeModeValues, s.shapeValues, s.borderValues = sizeModeValues, shapeValues, borderValues
+    s.ClassStyleValues, s.NormalizeTab = ClassStyleValues, NormalizeTab
+    s.sec, s.sectionW, s.cardX, s.cardW, s.tabW = sec, sectionW, cardX, cardW, tabW
+    s.RefreshPortraitControls = RefreshPortraitControls
+    return s
+end
+function PortraitBuild.Binders(ctx, s)
+    local kind, stateKey = s.kind, s.stateKey
     local function AttachPortraitFocus(widget)
         W.AttachGroupEditFocus(widget, stateKey, "portrait")
         return widget
@@ -1200,6 +1214,14 @@ function GroupPage.BuildPortrait(ctx, builder)
         W.MoveWidget(control, parent, x, y, width, "LEFT")
         return AttachPortraitFocus(control)
     end
+    s.AttachPortraitFocus, s.PortraitMeta, s.SetValue = AttachPortraitFocus, PortraitMeta, SetValue
+    s.BindDropdown, s.BindNumber, s.BindToggle, s.BindColor = BindDropdown, BindNumber, BindToggle, BindColor
+end
+function PortraitBuild.Tabs(ctx, s)
+    local stateKey = s.stateKey
+    local tabH, NormalizeTab = s.tabH, s.NormalizeTab
+    local sec, sectionW, cardX, cardW, tabW, cardH = s.sec, s.sectionW, s.cardX, s.cardW, s.tabW, s.cardH
+    local RefreshPortraitControls, AttachPortraitFocus = s.RefreshPortraitControls, s.AttachPortraitFocus
     local function SetSectionHeight(height)
         height = max(120, floor((tonumber(height) or tabH.general) + 0.5))
         local entry = sec and sec._msuf2CollapsibleEntry
@@ -1267,6 +1289,16 @@ function GroupPage.BuildPortrait(ctx, builder)
     local portraitEnable = PreparePartyPortraitSwitch(ctx, sec)
     portraitEnable.refreshDetails = function() RefreshPortraitControls() end
     AttachPortraitFocus(portraitEnable)
+    s.mainCard, s.geometryCard, s.placementCard, s.borderCard, s.styleCard = mainCard, geometryCard, placementCard, borderCard, styleCard
+    s.portraitEnable = portraitEnable
+end
+function PortraitBuild.Controls(ctx, s)
+    local kind, cardW = s.kind, s.cardW
+    local mainCard, geometryCard, placementCard, borderCard, styleCard = s.mainCard, s.geometryCard, s.placementCard, s.borderCard, s.styleCard
+    local renderValues, sizeModeValues, shapeValues, borderValues = s.renderValues, s.sizeModeValues, s.shapeValues, s.borderValues
+    local placementValues, ClassStyleValues = s.placementValues, s.ClassStyleValues
+    local RefreshPortraitControls, AttachPortraitFocus, PortraitMeta, SetValue = s.RefreshPortraitControls, s.AttachPortraitFocus, s.PortraitMeta, s.SetValue
+    local BindDropdown, BindNumber, BindToggle, BindColor = s.BindDropdown, s.BindNumber, s.BindToggle, s.BindColor
     local side = W.Segment(mainCard, "Position", VT("LEFT", "Left", "RIGHT", "Right"), min(220, cardW - 32))
     W.MoveWidget(side, mainCard, 16, -62, min(220, cardW - 32))
     M.BindSegment(ctx, side,
@@ -1327,6 +1359,24 @@ function GroupPage.BuildPortrait(ctx, builder)
     local backgroundAlpha = BindNumber(styleCard, "Background opacity", 16, -210, cardW - 58, 0, 1, 0.05, "portraitBgColorA", 0.85, true)
     local castIcon = BindToggle(styleCard, "Show cast spell icon in portrait", 16, -274, cardW - 32, "portraitCastSpellIcon", false)
     castIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
+    s.controls = {
+        side = side, render = render, clickable = clickable, shape = shape, sizeMode = sizeMode,
+        size = size, width = width, height = height, zoom = zoom, panX = panX, panY = panY,
+        placement = placement, detachedPoint = detachedPoint, detachedTo = detachedTo, overlayAlign = overlayAlign,
+        level = level, alpha = alpha, border = border, edgeSoftness = edgeSoftness, borderArt = borderArt,
+        direction = direction, thickness = thickness, fill = fill, classStyle = classStyle,
+        background = background, backgroundColor = backgroundColor, backgroundAlpha = backgroundAlpha, castIcon = castIcon,
+    }
+end
+function PortraitBuild.Gates(ctx, s)
+    local kind, sec, portraitEnable, RefreshPortraitControls = s.kind, s.sec, s.portraitEnable, s.RefreshPortraitControls
+    local c = s.controls
+    local side, render, clickable, shape, sizeMode = c.side, c.render, c.clickable, c.shape, c.sizeMode
+    local size, width, height, zoom, panX, panY = c.size, c.width, c.height, c.zoom, c.panX, c.panY
+    local placement, detachedPoint, detachedTo, overlayAlign = c.placement, c.detachedPoint, c.detachedTo, c.overlayAlign
+    local level, alpha, border, edgeSoftness, borderArt = c.level, c.alpha, c.border, c.edgeSoftness, c.borderArt
+    local direction, thickness, fill, classStyle = c.direction, c.thickness, c.fill, c.classStyle
+    local background, backgroundColor, backgroundAlpha, castIcon = c.background, c.backgroundColor, c.backgroundAlpha, c.castIcon
     local activeControls = {
         render, clickable, shape, sizeMode, size, width, height, placement, level, alpha,
         border, edgeSoftness, background, castIcon,
@@ -1381,6 +1431,13 @@ function GroupPage.BuildPortrait(ctx, builder)
         track = function(c, refresh) return M.TrackCollapsibleRefresh(c, sec, refresh) end,
     }))
     if sec._msufPartyPortraitRefresh then sec._msufPartyPortraitRefresh() end
+end
+function GroupPage.BuildPortrait(ctx, builder)
+    local s = PortraitBuild.Shell(ctx, builder)
+    PortraitBuild.Binders(ctx, s)
+    PortraitBuild.Tabs(ctx, s)
+    PortraitBuild.Controls(ctx, s)
+    PortraitBuild.Gates(ctx, s)
 end
 
 --- Hide and collapse the Portrait shell outside Party without destroying the
