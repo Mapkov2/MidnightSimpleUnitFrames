@@ -200,14 +200,66 @@ local function GroupSlotsOwnsLane(groupSlots, lane)
     return owned and owned[lane.rootKey] == true or false
 end
 
+-- A frame is never freed, so retiring a lane container used to orphan it
+-- and its batch of AuraButtons for good: every step of a structural slider
+-- drag and every lane toggle built another one. A retired container is parked
+-- on its root by structural signature instead, and the next apply that asks
+-- for that signature takes it back through the ordinary reuse path. Parked
+-- containers are hidden and disabled, so they receive no UNIT_AURA. A forced
+-- recreate wants fresh AuraButtons and drops the key's parked ones.
+local LANE_PARK_LIMIT = 8
+
+local function ParkNativeLane(root, key, container)
+    local signature = container and container._msufA3StructuralSignature
+    if signature == nil then return end
+    local parked = root._msufA3ParkedLanes
+    if not parked then
+        parked = {}
+        root._msufA3ParkedLanes = parked
+    end
+    local pool = parked[key]
+    if not pool then
+        pool = { bySignature = {}, order = {} }
+        parked[key] = pool
+    end
+    local order = pool.order
+    if pool.bySignature[signature] == nil then
+        order[#order + 1] = signature
+        if #order > LANE_PARK_LIMIT then
+            pool.bySignature[table.remove(order, 1)] = nil
+        end
+    end
+    pool.bySignature[signature] = container
+end
+
+local function TakeParkedNativeLane(root, key, signature)
+    local pool = root._msufA3ParkedLanes and root._msufA3ParkedLanes[key]
+    local container = pool and pool.bySignature[signature]
+    if not container then return nil end
+    pool.bySignature[signature] = nil
+    local order = pool.order
+    for i = 1, #order do
+        if order[i] == signature then
+            table.remove(order, i)
+            break
+        end
+    end
+    return container
+end
+
+local function RetireNativeLane(root, key, container)
+    A3._HideLane(container)
+    ParkNativeLane(root, key, container)
+    root[key] = nil
+end
+
 A3._HideNormalLaneContainers = function(root, lanes, groupSlots)
     if not root then return end
     for i = 1, #NORMAL_LANE_ROOT_KEYS do
         local key = NORMAL_LANE_ROOT_KEYS[i]
         local lane = A3._NormalLaneForRootKey(lanes, key)
         if GroupSlotsOwnsLane(groupSlots, lane) or not (lane and lane.enabled == true) then
-            A3._HideLane(root[key])
-            root[key] = nil
+            RetireNativeLane(root, key, root[key])
         end
     end
 end
@@ -235,6 +287,19 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local layoutSignature = lane._msufA3LayoutSignature or LaneLayoutSignature(lane)
     local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
     local current = root[key]
+    if forceRecreate == true then
+        if root._msufA3ParkedLanes then root._msufA3ParkedLanes[key] = nil end
+    elseif not (current and current._msufA3StructuralSignature == structuralSignature) then
+        local parked = TakeParkedNativeLane(root, key, structuralSignature)
+        if parked then
+            RetireNativeLane(root, key, current)
+            root[key] = parked
+            -- The host carries the lane's geometry, which this signature
+            -- fixes; showing it lets the reuse path register the container.
+            if parked._msufA3LayoutHost then parked._msufA3LayoutHost:Show() end
+            current = parked
+        end
+    end
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         A3._RebindNativeContainerUnit(current, lane.unit)
         if current._msufA3StandaloneAuraSlot == true then
@@ -280,8 +345,12 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         current._msufA3LayoutSignature = layoutSignature
         return current
     end
-    A3._HideLane(current)
-    root[key] = nil
+    if forceRecreate == true then
+        A3._HideLane(current)
+        root[key] = nil
+    else
+        RetireNativeLane(root, key, current)
+    end
     current = A3._CreateNativeLane(root, lane, parentFrame)
     if current then
         current._msufA3TrackingSignature = trackingSignature
