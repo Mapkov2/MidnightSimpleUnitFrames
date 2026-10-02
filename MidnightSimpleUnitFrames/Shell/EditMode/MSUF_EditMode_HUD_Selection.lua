@@ -266,7 +266,7 @@ function HUD.ResetCurrentPosition()
     if cfg and cfg.externalPublicElement == true then
         local external = EM2.ExternalElements
         if external and type(external.Reset) == "function" and external.Reset(key) then
-            HUD.SetStatus(HelpText("Reset") .. " " .. HelpText(cfg.label or key), "ok")
+            HUD.SetStatus(string.format(HelpText("Reset %s"), HelpText(cfg.label or key)), "ok")
         else
             HUD.SetStatus(HelpText("Reset unavailable"), "warn")
         end
@@ -300,7 +300,7 @@ function HUD.ResetCurrentPosition()
         end
         if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
         if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(key, "layout", nil, { source = "hud-reset", duration = 0.32 }) end
-        HUD.SetStatus(HelpText("Reset") .. " " .. HelpText(LABEL_BY_KEY[key] or key), "ok")
+        HUD.SetStatus(string.format(HelpText("Reset %s"), HelpText(LABEL_BY_KEY[key] or key)), "ok")
         HUD.RefreshControls()
         return
     end
@@ -329,7 +329,7 @@ function HUD.ResetCurrentPosition()
     if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
     if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(key, "frame", nil, { source = "hud-reset", duration = 0.32 }) end
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh("EM2_HUD_RESET_POSITION") end
-    HUD.SetStatus(HelpText("Reset") .. " " .. HelpText(LABEL_BY_KEY[key] or key), "ok")
+    HUD.SetStatus(string.format(HelpText("Reset %s"), HelpText(LABEL_BY_KEY[key] or key)), "ok")
     HUD.RefreshControls()
 end
 

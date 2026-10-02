@@ -4391,6 +4391,7 @@ L["Profile string ready - press Ctrl+C"] = "Profilzeichenfolge bereit – Strg+C
 L["Provider & Surface"] = "Anbieter und Oberfläche"
 L["Reset failed: defaults unavailable"] = "Zurücksetzen fehlgeschlagen: Standardwerte nicht verfügbar"
 L["Reset unavailable"] = "Zurücksetzen nicht verfügbar"
+L["Reset %s"] = "%s zurückgesetzt"
 L["Resource Bar Colors"] = "Farben der Ressourcenleiste"
 L["Selected Status Text Settings"] = "Textoptionen für gewählten Status"
 L["Target Highlight Color"] = "Ziel-Hervorhebungsfarbe"

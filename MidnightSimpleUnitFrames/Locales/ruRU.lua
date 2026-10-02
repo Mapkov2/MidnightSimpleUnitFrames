@@ -4028,6 +4028,7 @@ L["Profile string ready - press Ctrl+C"] = "Строка профиля гото
 L["Provider & Surface"] = "Поставщик и поверхность"
 L["Reset failed: defaults unavailable"] = "Сброс не выполнен: значения по умолчанию недоступны"
 L["Reset unavailable"] = "Сброс недоступен"
+L["Reset %s"] = "Сброшено: %s"
 L["Resource Bar Colors"] = "Цвета полосы ресурса"
 L["Selected Status Text Settings"] = "Настройки текста выбранного состояния"
 L["Target Highlight Color"] = "Цвет выделения цели"
