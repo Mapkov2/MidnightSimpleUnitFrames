@@ -288,7 +288,7 @@
     "reason": "Unparented event/dispatch drivers (combat retry, layout update listener)"
   },
   {
-    "path": "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua",
+    "path": "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented event/dispatch driver"

@@ -662,7 +662,7 @@ assert(auraModel:find("buffSpacing = true", 1, true)
     and auraModel:find("debuffSpacing = true", 1, true),
     "Classic profile model drops per-lane aura spacing")
 
-local editCore = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua")
+local editCore = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua")
 assert(editCore:find("local function HardHideEditModePreviews", 1, true)
     and editCore:find("MSUF_HideAllCastbarPreviews", 1, true)
     and editCore:find("HardHideEditModePreviews()", 1, true),

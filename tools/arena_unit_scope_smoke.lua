@@ -181,7 +181,9 @@ for _, marker in ipairs({
         "Arena Edit Mode cast popup ownership is incomplete: " .. marker)
 end
 
+-- Core and Undo both normalize castbar units.
 local editModeCore = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Core.lua")
+    .. Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Undo.lua")
 for _, marker in ipairs({
     'if key == "player" or key == "target" or key == "focus" or key == "boss" or key == "arena" then return key end',
     'if key:match("^arena%d+$") then return "arena" end',

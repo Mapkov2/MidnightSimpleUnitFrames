@@ -1,5 +1,8 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
     <Script file="MSUF_EditMode_Core.lua"/>
+    <Script file="MSUF_EditMode_Registry.lua"/>
+    <Script file="MSUF_EditMode_State.lua"/>
+    <Script file="MSUF_EditMode_Undo.lua"/>
     <Script file="MSUF_EditMode_Layout_Grid.lua"/>
     <Script file="MSUF_EditMode_Layout_Snap.lua"/>
     <Script file="MSUF_EditMode_Layout_Nudge.lua"/>
@@ -14,6 +17,8 @@
     <Script file="MSUF_EditMode_Danders.lua"/>
     <Script file="MSUF_EditMode_Blizzard.lua"/>
     <Script file="MSUF_EditMode_Movers.lua"/>
+    <Script file="MSUF_EditMode_Elements.lua"/>
+    <Script file="MSUF_EditMode_Compat.lua"/>
     <Script file="MSUF_EditMode_Popups.lua"/>
     <Script file="MSUF_EditMode_PopupScale.lua"/>
     <Script file="MSUF_EditMode_CastPopup.lua"/>

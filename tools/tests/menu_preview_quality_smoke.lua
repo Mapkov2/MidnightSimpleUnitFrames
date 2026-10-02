@@ -153,7 +153,7 @@ end
 -- 2. Unit preview refresh hooks (Preview/MSUF_Menu2_UnitPreview_API.lua):
 --    a. hiding and showing the preview never stacks a second wrapper on a
 --       runtime global that another wrapper (Edit Mode's preview reforce,
---       MSUF_EditMode_Movers.lua) sits on top of;
+--       MSUF_EditMode_Compat.lua) sits on top of;
 --    b. a preview shown again right after it was hidden gets its hooks at
 --       once, not after the one-second rescan throttle.
 ---------------------------------------------------------------------------

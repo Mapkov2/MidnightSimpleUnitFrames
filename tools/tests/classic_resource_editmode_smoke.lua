@@ -83,7 +83,9 @@ local namespace = {
     ExportPublic = function(name, value) _G[name] = value end,
     UF = { GetFrame = function(key) if key == "player" then return player end end },
 }
-assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Movers.lua"))("MSUF", namespace)
+for _, file in ipairs({ "Movers", "Elements", "Compat" }) do
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_" .. file .. ".lua"))("MSUF", namespace)
+end
 local classCfg, powerCfg = assert(registry.classpower), assert(registry.power_player)
 assert(classCfg.getFrame() == combo and powerCfg.getFrame() == energy,
     "visible Class Resources and detached Player Power must have separate movers")
