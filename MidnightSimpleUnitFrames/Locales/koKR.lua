@@ -6480,6 +6480,7 @@ L["Import warning: %d more missing media item(s)."] = "가져오기 경고: 누�
 L["Imported %s settings into the active profile."] = "%s 설정을 활성 프로필로 가져왔습니다."
 L["Profile imported into the active profile."] = "프로필을 활성 프로필로 가져왔습니다."
 L["Import failed: %s."] = "가져오기 실패: %s."
+L["Import failed: could not decode compact profile string (%s)."] = "가져오기 실패: 압축 프로필 문자열을 해독할 수 없습니다 (%s)."
 L["Profile import failed: %s"] = "프로필 가져오기 실패: %s"
 L["Menu language changed with the profile. Reload the UI to apply it."] = "프로필과 함께 메뉴 언어가 바뀌었습니다. 적용하려면 UI를 다시 불러오세요."
 L["A unit frame was enabled. Reload the UI with /reload to apply it."] = "유닛 프레임이 활성화되었습니다. 적용하려면 /reload로 UI를 다시 불러오세요."

@@ -9,6 +9,11 @@
 -- once per ownership, never on Blizzard's own rebuilds (TotemFrameMixin:Update,
 -- which runs on every totem change), and hands the saved value back on release.
 --
+-- Each takeover captures its own layout snapshot (a second takeover restores
+-- the layout Blizzard had before it, not the one from the first takeover), and
+-- a release hands the flag back only while it still holds the value MSUF
+-- assigned: a change another owner made in between stays.
+--
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
@@ -61,5 +66,41 @@ for _, flavor in ipairs({ "Mainline", "TBC" }) do
         .. tostring(flag) .. ", " .. writes .. " writes)")
     for _ = 1, 3 do totem:Update() end
     Check(writes == 2, flavor .. ": a released TotemFrame still gets the managed-frame flag written")
+
+    -- A second takeover from a layout Blizzard changed after the first release.
+    local blizzardParent = world.widgets:CreateFrame("Frame", nil, world.widgets.UIParent)
+    totem:SetParent(blizzardParent)
+    totem:ClearAllPoints()
+    totem:SetPoint("TOPRIGHT", blizzardParent, "BOTTOMRIGHT", 7, 20)
+    totem:SetScale(0.8)
+    g.enablePlayerTotems = true
+    ns.MSUF_Gameplay_PlayerTotems_Apply(g)
+    Check(totem:GetParent() ~= blizzardParent, flavor .. ": the second takeover did not take TotemFrame")
+    g.enablePlayerTotems = false
+    ns.MSUF_Gameplay_PlayerTotems_Apply(g)
+    local point, relativeTo, relativePoint, x, y = totem:GetPoint(1)
+    Check(totem:GetParent() == blizzardParent and totem:GetNumPoints() == 1 and point == "TOPRIGHT"
+        and relativeTo == blizzardParent and relativePoint == "BOTTOMRIGHT" and x == 7 and y == 20
+        and math.abs(totem:GetScale() - 0.8) < 0.001,
+        flavor .. ": the second release restored the first takeover's layout, not Blizzard's current one")
+
+    -- Another owner changes the flag while MSUF owns the frame.
+    g.enablePlayerTotems = true
+    ns.MSUF_Gameplay_PlayerTotems_Apply(g)
+    Check(flag == true, flavor .. ": the third takeover did not set the managed-frame flag")
+    totem.ignoreFramePositionManager = false
+    g.enablePlayerTotems = false
+    ns.MSUF_Gameplay_PlayerTotems_Apply(g)
+    Check(flag == false, flavor .. ": the release overwrote another owner's managed-frame flag ("
+        .. tostring(flag) .. ")")
+    -- A flag another owner set before MSUF took over is not MSUF's to hand back.
+    totem.ignoreFramePositionManager = true
+    local before = writes
+    g.enablePlayerTotems = true
+    ns.MSUF_Gameplay_PlayerTotems_Apply(g)
+    g.enablePlayerTotems = false
+    ns.MSUF_Gameplay_PlayerTotems_Apply(g)
+    Check(flag == true and writes == before, flavor .. ": MSUF cleared a managed-frame flag it never assigned")
+    totem.ignoreFramePositionManager = nil
     print("totem_manager_flag_smoke: ok (" .. flavor .. ")")
 end

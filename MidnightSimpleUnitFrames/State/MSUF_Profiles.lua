@@ -2064,7 +2064,9 @@ local function MSUF_ProfileIO_PrepareImport(str, mode)
         local prefix = str:match("^%s*(MSUF%d+):")
         if prefix == "MSUF2" or prefix == "MSUF3" or prefix == "MSUF4" then
             why = "could not decode compact profile string (" .. prefix .. ")"
-            return nil, why, ProfileChatLine("error", "Import failed: %s.", Translate(why))
+            -- The chat line translates the whole sentence first and inserts the prefix after;
+            -- `why` stays the English reason the callers receive.
+            return nil, why, ProfileChatLine("error", "Import failed: could not decode compact profile string (%s).", prefix)
         end
         decoded, why = MSUF.ProfileIOParseTableLiteral(str)
         if type(decoded) ~= "table" then

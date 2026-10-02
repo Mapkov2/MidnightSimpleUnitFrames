@@ -181,7 +181,8 @@ do
         if not frame or originalLayout then return end
 
         -- Blizzard owns TotemFrame layout. Store the full original anchor/parent state before
-        -- MSUF takes temporary preview ownership so it can be restored losslessly.
+        -- MSUF takes temporary preview ownership so it can be restored losslessly. Each takeover
+        -- captures its own snapshot; a release drops it.
         local info = {
             parent = frame:GetParent(),
             scale = frame:GetScale(),
@@ -231,6 +232,7 @@ do
         local frame = _G.TotemFrame
         if not frame then
             managed = false
+            originalLayout = nil
             return true
         end
 
@@ -242,6 +244,7 @@ do
 
         local info = originalLayout
         managed = false
+        originalLayout = nil
 
         if not info then return true end
 
@@ -261,8 +264,9 @@ do
         if info.scale and frame.SetScale then frame:SetScale(info.scale) end
         if info.strata and frame.SetFrameStrata then frame:SetFrameStrata(info.strata) end
         if info.level and frame.SetFrameLevel then frame:SetFrameLevel(info.level) end
-        -- Hand the managed-frame flag back only if it still holds MSUF's value.
-        if frame.ignoreFramePositionManager ~= info.ignoreFramePositionManager then
+        -- Hand the managed-frame flag back only if MSUF assigned it and it still holds MSUF's
+        -- value; a change another owner made in between stays.
+        if info.flagAssigned and frame.ignoreFramePositionManager == true then
             frame.ignoreFramePositionManager = info.ignoreFramePositionManager
         end
         if frame.Layout then frame:Layout() end
@@ -317,6 +321,7 @@ do
         -- ownership, never on Blizzard's rebuilds, and restored on release.
         if frame.ignoreFramePositionManager ~= true then
             frame.ignoreFramePositionManager = true
+            originalLayout.flagAssigned = true
         end
         _RemoveFromTotemManagedContainers(frame)
 

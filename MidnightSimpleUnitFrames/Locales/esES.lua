@@ -6539,6 +6539,7 @@ L["Import warning: %d more missing media item(s)."] = "Aviso de importación: fa
 L["Imported %s settings into the active profile."] = "Se importaron los ajustes de %s al perfil activo."
 L["Profile imported into the active profile."] = "Perfil importado al perfil activo."
 L["Import failed: %s."] = "Error al importar: %s."
+L["Import failed: could not decode compact profile string (%s)."] = "Error al importar: no se pudo decodificar la cadena de perfil compacta (%s)."
 L["Profile import failed: %s"] = "Error al importar el perfil: %s"
 L["Menu language changed with the profile. Reload the UI to apply it."] = "El idioma del menú cambió con el perfil. Recarga la interfaz para aplicarlo."
 L["A unit frame was enabled. Reload the UI with /reload to apply it."] = "Se activó un marco de unidad. Recarga la interfaz con /reload para aplicarlo."

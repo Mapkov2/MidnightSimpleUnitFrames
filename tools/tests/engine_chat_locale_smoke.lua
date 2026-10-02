@@ -135,6 +135,17 @@ env.MSUF_SwitchProfile("Nirgendwo")
 local line = world.prints[before + 1]
 Check(line == "|cffff0000MSUF:|r " .. De("Unknown profile: %s"):format("Nirgendwo"),
     "deDE: an unknown profile prints " .. tostring(line))
+-- A compact string that fails to decode: the whole sentence is translated
+-- before the prefix goes in, so no English reason is left in the German line.
+before = #world.prints
+local imported, importWhy = env.MSUF_ImportFromString("MSUF4:@@@@")
+line = world.prints[before + 1]
+Check(imported == false and importWhy == "could not decode compact profile string (MSUF4)",
+    "deDE: the compact decode failure did not reach its branch: " .. tostring(importWhy))
+Check(line == "|cffff0000MSUF:|r "
+    .. De("Import failed: could not decode compact profile string (%s)."):format("MSUF4"),
+    "deDE: a failed compact import prints " .. tostring(line))
+Check(not line:find("could not decode", 1, true), "deDE: the compact import line keeps English words: " .. line)
 Check(env.BINDING_NAME_MSUF_TOGGLE_OPTIONS == De("Toggle MSUF Options")
     and env.BINDING_NAME_MSUF_TOGGLE_EDITMODE == De("Toggle MSUF Edit Mode"),
     "deDE: the options and Edit Mode binding labels stayed English")
