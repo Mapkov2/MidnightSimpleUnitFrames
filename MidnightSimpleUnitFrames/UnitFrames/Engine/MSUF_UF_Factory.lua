@@ -710,7 +710,7 @@ end
 
 local function RefreshBossPhysicalGeometry()
   local changed = false
-  local count = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+  local count = tonumber(_G.MAX_BOSS_FRAMES) or 5
   for index = 1, count do
     local unit = "boss" .. index
     local frame = (UF.frames and UF.frames[unit]) or _G["MSUF_" .. unit]
@@ -785,10 +785,6 @@ local function RegisterGlobals(unit, frame)
 end
 
 function UF.GetSecureUnitButtonTemplate()
-  return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
-end
-
-function UF.GetSecureHeaderUnitButtonTemplate()
   return "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
 end
 

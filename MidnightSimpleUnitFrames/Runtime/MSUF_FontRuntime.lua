@@ -258,7 +258,7 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
 
     if _G.MSUF_BossTestMode and _G.MSUF_UnitEditModeActive and not _G.MSUF_InCombat then
         local frames = (MSUF and MSUF.UF and MSUF.UF.frames) or {}
-        local max = _G.MSUF_MAX_BOSS_FRAMES or 5
+        local max = 5
         for i = 1, max do
             local bf = frames["boss" .. i]
             if bf and bf.isBoss and bf.ForceUpdate then

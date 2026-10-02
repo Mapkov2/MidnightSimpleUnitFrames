@@ -619,7 +619,6 @@ local function BroadcastGroupLifecycleExceptUnit(event, mode, exceptUnit)
 end
 
 local RegisterFrameEvent
-local RefreshHealthLifecycleSinkRoutes
 
 local function HeaderLayoutRebindActive(frame)
   local GF = MSUF and MSUF.GF
@@ -764,9 +763,6 @@ local function FrameOnHide(frame)
   frame._msufCoreOnShowFollowupEvent = nil
   frame._msufCoreOnShowFollowupGUID = nil
   frame._msufCoreOnShowFollowupTime = nil
-  if RefreshHealthLifecycleSinkRoutes and frame._msufHealthLifecycleSink then
-    RefreshHealthLifecycleSinkRoutes(frame)
-  end
   if SuspendHiddenFrameEvents(frame) then return end
   -- Blizzard's CompactUnitFrame explicitly unregisters this event while
   -- hidden because every registered unit makes the client perform additional
@@ -1201,68 +1197,6 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUni
     if visualsFn then visualsFn(self, ev, u, hp, hpMax, percentReady) end
     EndFrameEvent(self)
   end
-end
-
--- Castbars can borrow an already-registered target/focus health route instead
--- of registering a second UNIT_HEALTH/UNIT_CONNECTION listener. The wrapper is
--- shared; mutable owner/sink state remains frame-local and exists only while a
--- non-player cast is active.
-local function HealthLifecycleSinkRoute(self, ev, unit, ...)
-  local base = ev == "UNIT_CONNECTION"
-    and self._msufHealthLifecycleConnectionBase
-    or self._msufHealthLifecycleHealthBase
-  if base then base(self, ev, unit, ...) end
-  local sink = self._msufHealthLifecycleSink
-  if sink then sink(self._msufHealthLifecycleSinkOwner, self, ev, unit or self.MSUFUnitKey, ...) end
-end
-
-local function ClearHealthLifecycleSink(frame, notify)
-  if not frame then return false end
-  local sink = frame._msufHealthLifecycleSink
-  local owner = frame._msufHealthLifecycleSinkOwner
-  if not sink then return false end
-
-  if frame.UNIT_HEALTH == HealthLifecycleSinkRoute then
-    frame.UNIT_HEALTH = frame._msufHealthLifecycleHealthBase
-  end
-  if frame.UNIT_CONNECTION == HealthLifecycleSinkRoute then
-    frame.UNIT_CONNECTION = frame._msufHealthLifecycleConnectionBase
-  end
-  frame._msufHealthLifecycleSink = nil
-  frame._msufHealthLifecycleSinkOwner = nil
-  frame._msufHealthLifecycleSinkUnit = nil
-  frame._msufHealthLifecycleHealthBase = nil
-  frame._msufHealthLifecycleConnectionBase = nil
-
-  if notify == true then sink(owner, frame, "MSUF_UF_LIFECYCLE_DETACH", frame.MSUFUnitKey) end
-  return true
-end
-
-
-RefreshHealthLifecycleSinkRoutes = function(frame)
-  if not (frame and frame._msufHealthLifecycleSink) then return false end
-  local health = frame.UNIT_HEALTH
-  local connection = frame.UNIT_CONNECTION
-  if health == HealthLifecycleSinkRoute then health = frame._msufHealthLifecycleHealthBase end
-  if connection == HealthLifecycleSinkRoute then connection = frame._msufHealthLifecycleConnectionBase end
-
-  local valid = UF.attachedFrames[frame] == true
-    and frame._msufCoreSpecEnabled == true
-    and frame._msufCoreVisible == true
-    and frame._msufHealthLifecycleSinkUnit == frame.MSUFUnitKey
-    and frame._msufActiveElements and frame._msufActiveElements.Health == true
-    and type(health) == "function"
-    and type(connection) == "function"
-  if not valid then
-    ClearHealthLifecycleSink(frame, true)
-    return false
-  end
-
-  frame._msufHealthLifecycleHealthBase = health
-  frame._msufHealthLifecycleConnectionBase = connection
-  frame.UNIT_HEALTH = HealthLifecycleSinkRoute
-  frame.UNIT_CONNECTION = HealthLifecycleSinkRoute
-  return true
 end
 
 local function BuildPowerRoute(barFn, textFn, _unused, _unusedFollower, routeUnitless, target)
@@ -2418,7 +2352,6 @@ local function RebuildFrameEvents(frame)
   if not active then
     frame._msufElementEventRoutes = InternRuntimeRoutePlan(routes)
     frame._msufEventRouteNeedsIdentity = false
-    if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
     UF.RebuildRuntimeStatusState(frame)
     if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
     return true
@@ -2520,7 +2453,6 @@ local function RebuildFrameEvents(frame)
   -- A frame hidden while its routes are rebuilt (login, profile apply) stays
   -- inert until its next OnShow, exactly like one that hides later.
   if frame._msufCoreVisible == false then SuspendHiddenFrameEvents(frame) end
-  if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
   -- Compiled routes either capture only the one generic list they need or use
   -- a shared prototype. The event->builder map itself has no runtime reader.
   frame._msufEvents = nil
@@ -2691,7 +2623,6 @@ local function RetargetFrameUnitEvents(frame)
     end
     if hidden then SuspendHiddenFrameEvents(frame) end
   end
-  if RefreshHealthLifecycleSinkRoutes then RefreshHealthLifecycleSinkRoutes(frame) end
   UF.RebuildRuntimeStatusState(frame)
   if UF.SyncRuntimeDriver and UF._msufApplyingSpec ~= true then UF.SyncRuntimeDriver() end
   return true
@@ -2940,12 +2871,6 @@ function UF.DetachFrame(frame)
       FrameDisableElement(frame, name, true)
     end
   end
-  -- Element teardown makes this frame ineligible for immediate reattachment.
-  -- Notify an active castbar lifecycle owner before erasing the wrapped event
-  -- routes so it can promote itself to the minimal event fallback.
-  if frame._msufHealthLifecycleSink then
-    ClearHealthLifecycleSink(frame, true)
-  end
   ClearFrameEvents(frame)
   frame._msufIdentityFns = nil
   frame._msufIdentityCount = nil
@@ -2980,35 +2905,6 @@ end
 function UF.GetFrame(unit)
   if unit and issecretvalue(unit) == true then return nil end
   return UF.frames[unit]
-end
-
-function UF.SetHealthLifecycleSink(unit, sink, owner)
-  if type(sink) ~= "function" or owner == nil then return false end
-  local frame = UF.GetFrame(unit)
-  if not (frame
-    and UF.attachedFrames[frame] == true
-    and frame.MSUFUnitKey == unit
-    and frame._msufCoreSpecEnabled == true
-    and frame._msufCoreVisible == true
-    and frame._msufActiveElements and frame._msufActiveElements.Health == true
-    and type(frame.UNIT_HEALTH) == "function"
-    and type(frame.UNIT_CONNECTION) == "function") then
-    return false
-  end
-  if frame._msufHealthLifecycleSinkOwner ~= nil
-    and frame._msufHealthLifecycleSinkOwner ~= owner then
-    return false
-  end
-
-  frame._msufHealthLifecycleSink = sink
-  frame._msufHealthLifecycleSinkOwner = owner
-  frame._msufHealthLifecycleSinkUnit = unit
-  return RefreshHealthLifecycleSinkRoutes(frame) == true, frame
-end
-
-function UF.ClearHealthLifecycleSink(frame, owner)
-  if not frame or frame._msufHealthLifecycleSinkOwner ~= owner then return false end
-  return ClearHealthLifecycleSink(frame, false)
 end
 
 function UF.Apply(unit, applyMask)

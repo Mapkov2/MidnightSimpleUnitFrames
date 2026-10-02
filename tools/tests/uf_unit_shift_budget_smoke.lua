@@ -133,7 +133,7 @@ local ROUTE_FIELDS = {
     "_msufIdentityBarPath", "_msufRuntimeAllFns", "_msufRuntimeAllCount", "_msufRuntimeAllLabels",
     "_msufRuntimeAllPath", "_msufRuntimeOnShowNeedsFull", "_msufReshowPath", "_msufGroupIdentityFns",
     "_msufGroupIdentityCount", "_msufGroupIdentityLabels", "_msufGroupIdentityPath",
-    "_msufGroupLifecyclePlan", "_msufHealthLifecycleSink", "_msufGFRangeEventHandlerPVP",
+    "_msufGroupLifecyclePlan", "_msufGFRangeEventHandlerPVP",
 }
 
 local function Snapshot(frame)
