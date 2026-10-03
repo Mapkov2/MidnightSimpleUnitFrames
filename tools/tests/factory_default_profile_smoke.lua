@@ -118,6 +118,9 @@ assert(loadfile(repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"))("M
 local function AssertFactory(db, label)
     Check(type(db) == "table" and type(db.general) == "table", label .. ": no profile")
     Check(db.general._msufFactoryProfileApplied == true, label .. ": the factory profile was not applied")
+    Check(db.general.UIScale.Enabled == false and db.general.UIScale.Scale == 1
+        and db.general.globalUiScalePreset == "auto" and db.general.globalUiScaleValue == nil,
+        label .. ": global UI scaling must start disabled")
     Check(db.general.factoryMarker == "snapshot" and db.player.width == 321 and db.target.width == 322,
         label .. ": the snapshot values did not reach the profile")
     Check(type(db.focustarget) == "table" and db.focustarget.width == 123,
@@ -214,8 +217,13 @@ end
 second.gf_raid.maxColumns, second.gf_raid.width = 2, 123
 second.player.powerBarHeight, second.bars.classPowerHeight = 3, 4
 second.auras3.perUnit.target.layoutShared.maxDebuffs = 5
+second.general.UIScale.Enabled, second.general.UIScale.Scale = true, 0.75
+second.general.globalUiScalePreset, second.general.globalUiScaleValue = "custom", 0.75
 MSUF_EnsureDB(true)
 ns.GF.EnsureDB()
+Check(second.general.UIScale.Enabled == true and second.general.UIScale.Scale == 0.75
+    and second.general.globalUiScalePreset == "custom" and second.general.globalUiScaleValue == 0.75,
+    "normalization overwrote explicitly enabled global UI scaling")
 Check(second.gf_raid.maxColumns == 2 and second.gf_raid.width == 123
     and second.player.powerBarHeight == 3 and second.bars.classPowerHeight == 4
     and second.auras3.perUnit.target.layoutShared.maxDebuffs == 5,

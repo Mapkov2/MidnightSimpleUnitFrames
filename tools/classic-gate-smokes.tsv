@@ -74,6 +74,7 @@ clients+Forever	lua	tools/tests/menu_page_labels_locale_smoke.lua	{root} {flavor
 clients+Forever	lua	tools/tests/menu_pages_quality_smoke.lua	{root} {flavor}	Menu pages quality smoke failed: {flavor}
 clients+Forever	lua	tools/tests/menu_preview_quality_smoke.lua	{root} {flavor}	Menu preview quality smoke failed: {flavor}
 -	lua	tools/tests/forever_factory_profile_smoke.lua	{root}	Forever factory profile CBOR smoke failed
+-	python	tools/tests/factory_ui_scale_defaults_smoke.py	{root}	Factory UI scale defaults smoke failed
 clients	lua	tools/tests/factory_default_profile_smoke.lua	{root} {flavor}	Factory default profile smoke failed: {flavor}
 -	lua	tools/tests/preview_background_scene_smoke.lua	{root}	Preview background scene smoke failed
 clients+Forever	lua	tools/tests/client_boot_smoke.lua	{root/} {flavor}	Client boot smoke failed: {flavor}
