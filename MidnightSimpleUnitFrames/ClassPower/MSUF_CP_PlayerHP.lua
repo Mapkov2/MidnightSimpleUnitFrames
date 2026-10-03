@@ -30,6 +30,13 @@ if type(DISPATCH_KEY) ~= "table" then
     error("MSUF: missing required dependency 'UFText.DISPATCH_KEY' required by " .. FILE
         .. " - check that MSUF_UF_Text_Format.lua still names it and still loads first in MidnightSimpleUnitFrames.toc.", 2)
 end
+--- What each mode stamps, read on every health repaint, so the enum is turned into
+--- three sets once, here: the current health, the maximum, the percent (the percent
+--- modes stamp the rounded percent in place of the health). A mode in none of them,
+--- NONE and an unset mode included, stamps nothing.
+local STAMPS_HP = { [DISPATCH_KEY.CURRENT] = true, [DISPATCH_KEY.CURRENT_MAX] = true }
+local STAMPS_MAX = { [DISPATCH_KEY.MAX] = true, [DISPATCH_KEY.CURRENT_MAX] = true, [DISPATCH_KEY.PERCENT_MAX] = true }
+local STAMPS_PERCENT = { [DISPATCH_KEY.PERCENT] = true, [DISPATCH_KEY.PERCENT_MAX] = true }
 
 --- Global abbreviation style (see Runtime/MSUF_NumberFormat.lua). Registered at
 --- file scope, not inside the builder, so rebuilding the HP bar never stacks a
@@ -408,17 +415,13 @@ end
 local function RenderedTextMatches(rt, hp, maxHP)
     if not (rt and rt.healthSlotCount and rt.healthSlotCount > 0) then return false end
     local keyHP, keyMax = false, false
-    local mode = rt.healthDispatchKeyMode or DISPATCH_KEY.NONE
-    if mode == DISPATCH_KEY.CURRENT then
-        keyHP = hp
-    elseif mode == DISPATCH_KEY.MAX then
-        keyMax = maxHP
-    elseif mode == DISPATCH_KEY.CURRENT_MAX then
-        keyHP, keyMax = hp, maxHP
-    elseif mode == DISPATCH_KEY.PERCENT or mode == DISPATCH_KEY.PERCENT_MAX then
+    local mode = rt.healthDispatchKeyMode
+    if STAMPS_PERCENT[mode] then
         keyHP = Percent(hp, maxHP)
-        keyMax = mode == DISPATCH_KEY.PERCENT_MAX and maxHP or false
+    elseif STAMPS_HP[mode] then
+        keyHP = hp
     end
+    if STAMPS_MAX[mode] then keyMax = maxHP end
     local missing
     if rt.healthNeedsMissing == true then
         missing = (tonumber(maxHP) or 0) - (tonumber(hp) or 0)

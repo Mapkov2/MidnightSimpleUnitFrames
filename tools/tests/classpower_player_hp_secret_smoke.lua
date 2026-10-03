@@ -169,16 +169,22 @@ end
 --    Each mode stamps the values its writer compared; the text is copied only from a
 --    frame stamped for the same health inputs. The mode numbers are written out here on
 --    purpose: they are what the writers compile, so a renamed or renumbered enum shows.
+--    The whole update is also budgeted in VM instructions (this stub world, one health
+--    repaint) at what it cost when the modes were bare numbers. The percent modes, which
+--    the default text uses, may not cost more; the others read a set, which is 2 to 6
+--    instructions more than a literal compare chain whose first branches are one compare.
 do
+    local ALLOWANCE = 6
     local MODES = {
-        -- { label, mode, stamped health, stamped max } for 500 of 1000 health
-        { "unset", nil, false, false },
-        { "none", 0, false, false },
-        { "current", 1, 500, false },
-        { "max", 2, false, 1000 },
-        { "current and max", 3, 500, 1000 },
-        { "percent", 4, 50, false },
-        { "percent and max", 5, 50, 1000 },
+        -- { label, mode, stamped health, stamped max, budget with current stamps, budget with stale stamps,
+        --   allowance } for 500 of 1000 health
+        { "unset", nil, false, false, 619, 742, ALLOWANCE },
+        { "none", 0, false, false, 618, 741, ALLOWANCE },
+        { "current", 1, 500, false, 616, 739, ALLOWANCE },
+        { "max", 2, false, 1000, 617, 740, ALLOWANCE },
+        { "current and max", 3, 500, 1000, 620, 743, ALLOWANCE },
+        { "percent", 4, 50, false, 655, 778, 0 },
+        { "percent and max", 5, 50, 1000, 656, 779, 0 },
     }
     local DISPATCH_KEY = assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().DispatchKey(repo)
     for index, name in ipairs({ "NONE", "CURRENT", "MAX", "CURRENT_MAX", "PERCENT", "PERCENT_MAX" }) do
@@ -187,6 +193,7 @@ do
     for _, row in ipairs(MODES) do
         local label, mode, stampHP, stampMax = row[1], row[2], row[3], row[4]
         for _, stale in ipairs({ false, true }) do
+            local budget = (stale and row[6] or row[5]) + row[7]
             local api, playerFrame = Build({ playerHPBarUsePlayerText = true })
             for _, slot in ipairs({ { "hpTextLeft", "L" }, { "hpTextCenter", "C" }, { "hpTextRight", "R" } }) do
                 local fs = playerFrame:CreateFontString(nil, "OVERLAY")
@@ -204,7 +211,12 @@ do
             playerFrame._msufTextRuntime = rt
             S.hp, S.maxHP = 500, 1000
             api.PHP._hp = nil -- the bar repaints its text as if the health had just changed
+            local work = 0
+            debug.sethook(function() work = work + 1 end, "", 1)
             api.Update("UNIT_HEALTH")
+            debug.sethook()
+            Check(work <= budget, "mode " .. label .. (stale and " (stale stamps)" or " (current stamps)") .. ": the update costs "
+                .. work .. " VM instructions, budget " .. budget)
             local copied = api.PHP.right.text == "R" and api.PHP.left.text == "L" and api.PHP.center.text == "C"
             Check(copied == not stale, "mode " .. label .. (stale and " (stale stamps)" or " (current stamps)")
                 .. (stale and " copied text rendered for other health inputs" or " did not copy the rendered text")
