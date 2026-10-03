@@ -40,6 +40,7 @@ local metadataReads = {}
 local function Load(label, case)
     metadataReads = {}
     WOW_PROJECT_MAINLINE = 1
+    WOW_PROJECT_CAMELOT = case.camelotProject
     WOW_PROJECT_CLASSIC = 2
     WOW_PROJECT_BURNING_CRUSADE_CLASSIC = 5
     WOW_PROJECT_MISTS_CLASSIC = 19
@@ -603,6 +604,21 @@ do
         "s1: Party and Raid group kinds")
     assert(client.SupportsGroupKind("mythicraid") == false, "s1: Forever has no Mythic Raid group kind")
     assert(client.SupportsPetHappiness == true, "s1: Forever has hunter pet happiness")
+    -- 70170 publishes its own project constant; old builds still use Mainline.
+    local modern = Load("s1-camelot", Merge(forever, { project = 18, camelotProject = 18 }))
+    assert(modern.IsForever and modern.IsSupported and modern.ProjectIDRecognized,
+        "s1-camelot: the declared Forever project was not recognized")
+    AssertNoDiagnostic("s1-camelot", modern)
+    AssertArenaSlots("s1-camelot", modern, 0)
+    local missing = Load("s1-no-marker", Merge(forever, {
+        project = 18, camelotProject = 18, gameEvent = {} }))
+    assert(not missing.IsForever and not missing.IsSupported and missing.Flavor == "Unknown",
+        "s1-no-marker: a project constant replaced the Forever marker")
+    local unknown = Load("s1-unknown", Merge(forever, { project = 20, camelotProject = 18 }))
+    assert(unknown.IsForever and not unknown.ProjectIDRecognized,
+        "s1-unknown: an undeclared project lost its diagnostic")
+    Contains(unknown.Diagnostic, "unrecognized project ID", "s1-unknown")
+    client = Load("s1", forever)
     local text = table.concat(client.DescribeLines(), "\n")
     for _, fragment in ipairs({ "family Mainline, flavor Mainline, WoW Forever",
         "Forever marker GameEvent.RegisterCamelotEvents at load true, now true; CLASS_SORT_ORDER 9 classes",

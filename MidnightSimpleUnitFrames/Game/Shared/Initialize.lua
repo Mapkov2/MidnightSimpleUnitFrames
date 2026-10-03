@@ -17,6 +17,7 @@ _G.MSUF_NS = MSUF
 
 local projectID = _G.WOW_PROJECT_ID
 local mainlineID = _G.WOW_PROJECT_MAINLINE
+local camelotID = _G.WOW_PROJECT_CAMELOT
 local vanillaID = _G.WOW_PROJECT_CLASSIC
 local mistsID = _G.WOW_PROJECT_MISTS_CLASSIC
 local tbcID = _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC
@@ -123,7 +124,9 @@ Client.SupportsEllesmereEditMode = isRetail
 Client.SupportsBlizzardEditMode = type(_G.Enum) == "table" and type(_G.Enum.EditModeSystem) == "table"
 Client.IsSupported = isRetail or isVanilla or isMists or isTBC
 Client.TOCFlavor = tocFlavor
+-- Forever 1.60.1.70170 defines WOW_PROJECT_CAMELOT; the marker still owns placement.
 Client.ProjectIDRecognized = projectIsMainline
+    or (isForever and camelotID ~= nil and projectID == camelotID)
     or (not isForever and (projectIsVanilla or projectIsMists or projectIsTBC))
 -- Capability fact only. Never define a global issecretvalue fallback here:
 -- other addons probe that global to detect the secret-value API.
