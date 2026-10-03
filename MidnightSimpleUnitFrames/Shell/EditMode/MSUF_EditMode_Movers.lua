@@ -499,15 +499,9 @@ local function CreateMover(key, cfg)
     return mover
 end
 
-function Movers.Show()
-    if not moverParent then
-        moverParent = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_MoverParent", UIParent), true)
-        moverParent:SetAllPoints(UIParent)
-        moverParent:SetFrameStrata("FULLSCREEN")
-    end
-    moverParent:Show()
-    local reg = EM2.Registry and EM2.Registry.All()
-    if not reg then return end
+--- Creates any missing mover and puts every registered mover on its frame;
+--- one whose frame does not exist right now hides.
+local function SyncRegisteredMovers(reg)
     for k, c in pairs(reg) do
         local f = c.getFrame and c.getFrame()
         if not movers[k] and (c.popupType ~= "resource" or f) then CreateMover(k, c) end
@@ -523,6 +517,18 @@ function Movers.Show()
         end
     end
     Movers.RefreshGuidedPlacementCue()
+end
+
+function Movers.Show()
+    if not moverParent then
+        moverParent = PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_MoverParent", UIParent), true)
+        moverParent:SetAllPoints(UIParent)
+        moverParent:SetFrameStrata("FULLSCREEN")
+    end
+    moverParent:Show()
+    local reg = EM2.Registry and EM2.Registry.All()
+    if not reg then return end
+    SyncRegisteredMovers(reg)
 end
 
 function Movers.Hide()
@@ -556,23 +562,8 @@ function Movers.SyncAll()
     if EM2.Ticker and EM2.Ticker.IsDragging() then return end
     local reg = EM2.Registry and EM2.Registry.All()
     if not reg then return end
-    for k, c in pairs(reg) do
-        if c then
-            local f = c.getFrame and c.getFrame()
-            if not movers[k] and (c.popupType ~= "resource" or f) then CreateMover(k, c) end
-            local m = movers[k]
-            if m then
-                if f then
-                    SyncMoverToFrame(m, f, c)
-                    m:Show()
-                    m:UpdateLabelVisibility()
-                else
-                    m:Hide()
-                end
-            end
-        end
-    end
-    Movers.RefreshGuidedPlacementCue()
+    -- pairs never yields a nil value, so every entry is a registered mover.
+    SyncRegisteredMovers(reg)
 end
 
 --- Puts one existing mover back on its frame, for code that moved a single
