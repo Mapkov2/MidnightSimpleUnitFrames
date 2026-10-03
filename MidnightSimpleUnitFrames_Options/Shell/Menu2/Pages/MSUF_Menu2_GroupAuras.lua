@@ -144,8 +144,30 @@ local function SetAuraWorkspaceLane(scope, lane)
     M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
     M.gfAuraLaneSelection[scope] = (lane == "debuff" and "debuff") or (lane == "externals" and "externals") or "buff"
 end
+--- The workspace builds one scope, lane and tool at a time. Each combination
+--- is a declared view of the page (spec.variantKey), so a lane or tool click
+--- shows that view's cached entry or builds it once.
 local function RebuildGroupAuraPage(ctx)
     M.RebuildPageKeepingScroll((ctx and ctx.key) or M.activeKey or "gf_auras")
+end
+local GROUP_AURA_VIEWS = {}
+local GROUP_AURA_VIEW_STATE = { gfScope = true, gfAuraLaneSelection = true, gfAuraToolSelection = true }
+local function GroupAuraWorkspaceView()
+    local scope = tostring(CurrentScope())
+    local lane = CurrentAuraWorkspaceLane(scope)
+    local tool = CurrentAuraWorkspaceTool(scope, lane)
+    local id = scope .. ":" .. lane
+    local byLane = GROUP_AURA_VIEWS[id]
+    if not byLane then
+        byLane = {}
+        GROUP_AURA_VIEWS[id] = byLane
+    end
+    local view = byLane[tool]
+    if not view then
+        view = id .. ":" .. tool
+        byLane[tool] = view
+    end
+    return view
 end
 local function AuraWorkspaceLayout(lane, width)
     local sectionW = tonumber(width) or 720
@@ -541,4 +563,5 @@ local function BuildGFAuras(ctx)
     if GP.BuildSpellIndicatorsSection then GP.BuildSpellIndicatorsSection(ctx, b, RefreshPage) end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 33 })
+M.RegisterPage("gf_auras", { title = "MSUF Group Auras", build = BuildGFAuras, version = 33,
+    variantKey = GroupAuraWorkspaceView, viewStateKeys = GROUP_AURA_VIEW_STATE })

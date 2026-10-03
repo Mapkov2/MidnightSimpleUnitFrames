@@ -41,7 +41,8 @@ local GFAnchorValues, LanePlural, LaneTitle, MatchSuffix = M.AuraSettings.GFAnch
 local NATIVE_EXACT_AURA_FILTERS_ENABLED = M.AuraSettings.NATIVE_EXACT_AURA_FILTERS_ENABLED
 local NATIVE_EXACT_AURA_FILTERS_TEXT, NormalizeAuraSortMethodForLane = M.AuraSettings.NATIVE_EXACT_AURA_FILTERS_TEXT, M.AuraSettings.NormalizeAuraSortMethodForLane
 local NormalizeDebuffTypeBorderMode, QueueAurasPageRefresh = M.AuraSettings.NormalizeDebuffTypeBorderMode, M.AuraControls.QueueAurasPageRefresh
-local Rebuild, RegisterAuraControl, RegisterAuraTextAction = M.AuraControls.Rebuild, M.AuraControls.RegisterAuraControl, M.AuraControls.RegisterAuraTextAction
+-- Blacklist edits repaint the page in place: the refreshers repaint pooled rows.
+local Repaint, RegisterAuraControl, RegisterAuraTextAction = M.AuraControls.Repaint, M.AuraControls.RegisterAuraControl, M.AuraControls.RegisterAuraTextAction
 local Round, ScopeLabel, SetCurrentLane, Tr = M.AuraSettings.Round, M.AuraSettings.ScopeLabel, M.AuraSettings.SetCurrentLane, M.AuraSettings.Tr
 local GROUP_NATIVE_FILTER_LABELS = {
     ALL = "All",
@@ -730,7 +731,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
                 if directInput and directInput.SetText then directInput:SetText("") end
                 directInputValue = ""
                 QueueGroupScope(scope, "visual")
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -744,7 +745,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
             local changed = Model.RemoveGroupBlacklistSpell(scope, lane, value)
             if changed then
                 QueueGroupScope(scope, "visual")
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -782,7 +783,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
         if Model.AddGroupBlacklistSpell(scope, lane, spellID) then
             QueueGroupScope(scope, "visual")
-            Rebuild(ctx)
+            Repaint(ctx)
         end
     end)
     RegisterAuraControl(ctx, addSpell, "Add spell", "button", groupActionPath .. ".add-preset-spell", "action", {
@@ -793,7 +794,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     addSet:SetScript("OnClick", function()
         if Model.AddGroupBlacklistPresetGroup(scope, lane, CurrentPreset()) > 0 then
             QueueGroupScope(scope, "visual")
-            Rebuild(ctx)
+            Repaint(ctx)
         end
     end)
     RegisterAuraControl(ctx, addSet, "Add set", "button", groupActionPath .. ".add-preset-set", "action", {
@@ -825,7 +826,7 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
         row:SetScript("OnClick", function(self)
             if self._spellID and Model.RemoveGroupBlacklistSpell(scope, lane, self._spellID) then
                 QueueGroupScope(scope, "visual")
-                Rebuild(ctx)
+                Repaint(ctx)
             end
         end)
         rows[index] = row
@@ -989,7 +990,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
             local changed = Model.AddGroupBlacklistSpell(scope, lane, value)
             if changed then
                 QueueGroupScope(scope, blacklistApplyMode)
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             if input and input.SetText then input:SetText("") end
             inputValue = ""
@@ -1026,7 +1027,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         if count > 0 then
             M.auraBlacklistSpell = nil
             QueueGroupScope(scope, blacklistApplyMode)
-            Rebuild(ctx)
+            Repaint(ctx)
         end
         return count > 0
     end)
@@ -1048,7 +1049,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         if changed then
             M.auraBlacklistSpell = nil
             QueueGroupScope(scope, blacklistApplyMode)
-            Rebuild(ctx)
+            Repaint(ctx)
         end
         return changed and true or false
     end)
@@ -1078,7 +1079,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         remove = function(spellID)
             if not Model.RemoveGroupBlacklistSpell(scope, lane, spellID) then return end
             QueueGroupScope(scope, blacklistApplyMode)
-            Rebuild(ctx)
+            Repaint(ctx)
         end,
         removePath = function(value) return groupActionPath .. ".entry." .. AuraCatalogToken(value) .. ".remove" end,
     })

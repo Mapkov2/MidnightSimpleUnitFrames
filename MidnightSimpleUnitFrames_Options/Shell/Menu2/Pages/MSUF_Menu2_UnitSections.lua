@@ -1826,10 +1826,23 @@ local function BuildUnitPage(info)
         ctx:SetContentHeight(math.abs(builder.y) + 42)
     end
 end
+-- The aura workspace's container tab and tool are the unit page's declared
+-- views: a selector click shows that view's cached entry or builds it once.
+local UNIT_AURA_VIEW_STATE = { unitAuraTabSelection = true, unitAuraToolSelection = true }
+local function UnitAuraViewKey(unit)
+    if not UNIT_AURAS_MENU_UNITS[unit] then return nil end
+    return function()
+        local view = M.UnitAuraWorkspaceView
+        return view and view(unit) or nil
+    end
+end
 for key, info in pairs(UNIT_PAGES) do
+    local variantKey = UnitAuraViewKey(info.unit)
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
         version = 29,
+        variantKey = variantKey,
+        viewStateKeys = variantKey and UNIT_AURA_VIEW_STATE or nil,
     })
 end

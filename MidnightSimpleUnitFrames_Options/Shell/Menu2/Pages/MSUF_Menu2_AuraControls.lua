@@ -116,16 +116,35 @@ end
 
 local Card = W.ThemedControlCard
 
-local function Rebuild(ctx)
-    -- Nested aura workspaces and pinned previews settle their final height after
-    -- the page is selected; the shared helper reapplies the viewport for us.
-    local key = (ctx and ctx.key) or M.activeKey or "auras3"
-    if M.RebuildPageKeepingScroll and M.RebuildPageKeepingScroll(key) then return end
+local function RefreshFallback(ctx)
     if M.RequestRefresh then
         M.RequestRefresh(ctx, "auras-rebuild-fallback")
     elseif M.Refresh then
         M.Refresh(ctx)
     end
+end
+
+--- Shows the page again after a workspace selector (Container:, Edit:, lane)
+--- or a structural edit. The aura pages declare their selectors as views
+--- (spec.variantKey), so a selector click switches to that view's cached entry
+--- or builds it once; any other call rebuilds the page. Nested aura workspaces
+--- and pinned previews settle their final height after the page is selected;
+--- the shared helper reapplies the viewport for us.
+local function Rebuild(ctx)
+    local key = (ctx and ctx.key) or M.activeKey or "auras3"
+    if M.RebuildPageKeepingScroll and M.RebuildPageKeepingScroll(key) then return end
+    RefreshFallback(ctx)
+end
+
+--- A list edit (add, remove, reorder, keep) or a setting whose controls only
+--- refresh: the refreshers repaint pooled rows, so the page on screen repaints
+--- in place. A rebuild would leave a whole frame tree behind, and WoW never
+--- frees a frame.
+local REPAINT_IN_PLACE = { inPlace = true }
+local function Repaint(ctx)
+    local key = (ctx and ctx.key) or M.activeKey or "auras3"
+    if M.RepaintPageAfterDataChange and M.RepaintPageAfterDataChange(key, "auras-list", REPAINT_IN_PLACE) then return end
+    RefreshFallback(ctx)
 end
 
 local function RequestAuraRuntime(scope, reason)
@@ -480,6 +499,7 @@ M.AuraControls = {
     LANE_VALUES = LANE_VALUES,
     QueueAurasPageRefresh = QueueAurasPageRefresh,
     Rebuild = Rebuild,
+    Repaint = Repaint,
     RegisterAuraControl = RegisterAuraControl,
     RegisterAuraTextAction = RegisterAuraTextAction,
     RequestAuraRuntime = RequestAuraRuntime,

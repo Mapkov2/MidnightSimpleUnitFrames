@@ -313,6 +313,11 @@ local function CurrentAuraStyleContainer(scope)
     end
     return container
 end
+--- The lane the Global Aura Appearance page themes for a container: Dots on
+--- target and Debuffs are harmful, every other container helpful.
+local function AppearanceThemeLane(container)
+    return (container == "targetDots" or container == "debuff") and "debuff" or "buff"
+end
 local function BuildAuraStyleNav(ctx, b, scope)
     local h = 56
     local section = T.Panel(b.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
@@ -337,7 +342,11 @@ local function BuildAuraStyleNav(ctx, b, scope)
         getValue = function() return CurrentAuraStyleContainer(scope) end,
         setValue = function(container)
             M.SetMenuStateValue(scope == "appearance" and "auraAppearanceContainer" or "auraStyleContainer", container)
-            if container == "buff" or container == "debuff" then SetCurrentLane("auraStyleGFLane", container) end
+            if scope == "appearance" then
+                SetCurrentLane("auraStyleGFLane", AppearanceThemeLane(container))
+            elseif container == "buff" or container == "debuff" then
+                SetCurrentLane("auraStyleGFLane", container)
+            end
             local key = (ctx and ctx.key) or M.activeKey
             if key == "auras3_buffs" or key == "auras3_debuffs" then
                 SelectPage("auras3_styling", CurrentScope())
@@ -1351,9 +1360,7 @@ local function BuildAuraStylePage(ctx)
     Model.EnsureDB()
     b:GlobalStyleHeader("Global Aura Appearance", "Global Appearance theme selected only by Aura type. All layout, filters, timers, text and effects stay scope-aware in the corresponding UnitFrame or GroupFrame.", 84)
     local container = BuildAuraStyleNav(ctx, b, "appearance")
-    local themeLane = container == "targetDots" and "debuff" or "buff"
-    if container == "debuff" then themeLane = "debuff" end
-    SetCurrentLane("auraStyleGFLane", themeLane)
+    SetCurrentLane("auraStyleGFLane", AppearanceThemeLane(container))
     BuildUnitStyle(ctx, b, "appearance", {
         appearanceGlobalsOnly = true,
         previewContainer = container,
@@ -1417,6 +1424,41 @@ local function SetUnitAuraTool(unit, container, tool)
         M.unitAuraToolSelection[unit] = unitState
     end
     unitState[container] = tool
+end
+
+local UNIT_AURA_TABS = { buff = true, debuff = true, custom1 = true, custom2 = true, custom3 = true, custom4 = true }
+local function CurrentUnitAuraTab(unit)
+    local tabs = M.unitAuraTabSelection
+    local tab = tabs and tabs[unit] or "buff"
+    if not UNIT_AURA_TABS[tab] or (unit == "pet" and tab == "custom4") then tab = "buff" end
+    return tab
+end
+--- A normal lane tab also selects the lane the shared style and filter state
+--- follow. The workspace sets it when it builds the tab and when a selector
+--- shows that tab again, so a cached view leaves the same state as a build.
+local function SelectUnitWorkspaceLanes(tab)
+    if tab ~= "buff" and tab ~= "debuff" then return end
+    SetCurrentLane("auraStyleGFLane", tab)
+    SetCurrentLane("auraFilterLane", tab)
+end
+--- The unit page's aura workspace builds one container tab and one tool at a
+--- time. Each pair is a declared view of the unit page (spec.variantKey): a
+--- selector click shows that view's cached entry or builds it once.
+local UNIT_AURA_VIEWS = {}
+function M.UnitAuraWorkspaceView(unit)
+    local tab = CurrentUnitAuraTab(unit)
+    local tool = CurrentUnitAuraTool(unit, tab)
+    local byTab = UNIT_AURA_VIEWS[tab]
+    if not byTab then
+        byTab = {}
+        UNIT_AURA_VIEWS[tab] = byTab
+    end
+    local view = byTab[tool]
+    if not view then
+        view = tab .. ":" .. tool
+        byTab[tool] = view
+    end
+    return view
 end
 
 local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
@@ -2279,12 +2321,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     M.unitAuraTabSelection = M.unitAuraTabSelection or {}
     local workspaceTabs = unit == "player" and M._unitAuraWorkspaceTabsPlayer
         or (unit == "pet" and UNIT_AURA_WORKSPACE_TABS_PET or UNIT_AURA_WORKSPACE_TABS)
-    local function CurrentTab()
-        local tab = M.unitAuraTabSelection[unit] or "buff"
-        if tab ~= "buff" and tab ~= "debuff" and tab ~= "custom1" and tab ~= "custom2" and tab ~= "custom3" and tab ~= "custom4" then tab = "buff" end
-        if unit == "pet" and tab == "custom4" then tab = "buff" end
-        return tab
-    end
+    local function CurrentTab() return CurrentUnitAuraTab(unit) end
     local currentTab = CurrentTab()
     local normalLane = currentTab == "buff" or currentTab == "debuff"
     local currentTool = CurrentUnitAuraTool(unit, currentTab)
@@ -2331,6 +2368,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         getValue = CurrentTab,
         setValue = function(value)
             M.unitAuraTabSelection[unit] = value
+            SelectUnitWorkspaceLanes(CurrentTab())
             Rebuild(ctx)
         end,
     }), workspaceTabs, "unit-workspace.container-selector", customContainerContract)
@@ -2379,7 +2417,11 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         labelWidth = 72,
         centerY = toolCenterY,
         getValue = function() return CurrentUnitAuraTool(unit, currentTab) end,
-        setValue = function(value) SetUnitAuraTool(unit, currentTab, value); Rebuild(ctx) end,
+        setValue = function(value)
+            SetUnitAuraTool(unit, currentTab, value)
+            SelectUnitWorkspaceLanes(currentTab)
+            Rebuild(ctx)
+        end,
     }), tools, "unit-workspace.tool-selector")
     local openStyle = ActionButton(top, "Global Aura Appearance", 170, "normal")
     openStyle:SetPoint("TOPRIGHT", top, "TOPRIGHT", -16, footerY)
@@ -2404,8 +2446,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     end)
 
     if normalLane then
-        SetCurrentLane("auraStyleGFLane", currentTab)
-        SetCurrentLane("auraFilterLane", currentTab)
+        SelectUnitWorkspaceLanes(currentTab)
         if currentTool == "style" then
             BuildUnitStyle(ctx, auraBuilder, unit, { embeddedUnitPreview = true })
         elseif currentTool == "behavior" then
@@ -2452,7 +2493,11 @@ end
 M.RegisterPage("auras3_buffs", { title = "Global Aura Appearance: Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 25 })
 M.RegisterPage("auras3_debuffs", { title = "Global Aura Appearance: Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 25 })
 M.RegisterPage("auras3_custom", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 2 })
-M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 53 })
+-- Each container is a declared view: the Aura type selector shows its cached
+-- entry or builds it once (spec.variantKey).
+M.RegisterPage("auras3_styling", { title = "Aura Style", build = BuildAuraStylePage, version = 53,
+    variantKey = function() return CurrentAuraStyleContainer("appearance") end,
+    viewStateKeys = { auraStyleContainer = true, auraAppearanceContainer = true, auraStyleGFLane = true } })
 M.RegisterPage("auras3_filters", { title = "MSUF Auras", build = BuildMovedAuraPage, version = 31 })
 
 M.AurasPage = AurasPage
