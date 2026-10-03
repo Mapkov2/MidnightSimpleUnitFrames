@@ -33,16 +33,7 @@ local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 -- Load-time readers in files another package owns. Each row names the file,
 -- the owner and the fix; delete the row when the reader is gone.
 local KNOWN = {
-    -- Castbars, owned by fixb.
-    ["MidnightSimpleUnitFrames/Castbars/MSUF_FocusKick_StateDriver.lua"] =
-        "fixb: the focus kick state driver reads the castbar settings at load",
-    ["MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Bridge.lua"] =
-        "fixb: the castbar bridge reads the castbar settings at load",
-    ["MidnightSimpleUnitFrames/Castbars/MSUF_CastbarDriver.lua"] =
-        "fixb: the castbar driver reads the castbar settings at load",
     -- Found by the direct MSUF_DB read count (fix round); routed by the lead.
-    ["MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua"] =
-        "lead (R6 sweep routes it to fixe): CP.SyncControllerEvents(CPConfig.AnyFeatureEnabled()) at load",
     ["MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua"] =
         "lead (unrouted): MSUF_NormalizeStoredFontKeys() at load",
     ["MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Highlight.lua"] =
