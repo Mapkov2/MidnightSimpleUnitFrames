@@ -2671,6 +2671,24 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn:Refresh()
     return btn
 end
+--- The gate both preview live-state drivers run first: entering combat drops
+--- every listener but the re-arm signal, a hidden box drops all of them.
+--- Returns true when the event ends here.
+function H.LiveStateDriverGate(driver, event, box)
+    if event == "PLAYER_REGEN_DISABLED" then
+        driver:UnregisterAllEvents()
+        driver._msufLiveArmed = false
+        driver:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return true
+    end
+    if not (box.IsShown and box:IsShown()) then
+        driver:UnregisterAllEvents()
+        driver._msufLiveArmed = false
+        return true
+    end
+    return false
+end
+
 --- Moves a preview's "Layers" button into the compact header, beside the
 --- expand button, or back to the box's top-left corner.
 function H.LayoutCompactLayersButton(box, compact, Tr)

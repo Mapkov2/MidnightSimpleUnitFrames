@@ -2014,17 +2014,7 @@ function NativeBuild.Lifecycle(state)
         driver._msufLiveArmed = false
     end
     liveStateDriver:SetScript("OnEvent", function(driver, event)
-        if event == "PLAYER_REGEN_DISABLED" then
-            driver:UnregisterAllEvents()
-            driver._msufLiveArmed = false
-            driver:RegisterEvent("PLAYER_REGEN_ENABLED")
-            return
-        end
-        if not (box.IsShown and box:IsShown()) then
-            driver:UnregisterAllEvents()
-            driver._msufLiveArmed = false
-            return
-        end
+        if PreviewHelpers.LiveStateDriverGate(driver, event, box) then return end
         if event == "PLAYER_REGEN_ENABLED" then
             box:ArmLiveStateDriver()
             return
