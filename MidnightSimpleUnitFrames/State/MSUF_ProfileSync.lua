@@ -9,10 +9,39 @@ local modules = {}; for _,id in ipairs(Sync.Modules) do modules[id]=true end
 -- Root ownership is shared with the variants (State/MSUF_ProfileFields.lua).
 local roots = Fields.RootModules
 -- profile.bars holds the class resource settings next to the unit frame bar
--- settings; the class resource keys belong to the Class Resources module.
+-- settings. Every key the Class Resources page writes there (and the class
+-- resource colours of the Colors page) belongs to the Class Resources module;
+-- a key a Unit Frames page also writes stays with Unit Frames. The list is
+-- derived from the page sources by tools/tests/profile_sync_smoke.lua, which
+-- fails while it is stale; `lua tools/tests/profile_sync_smoke.lua <repoRoot>
+-- --write` rewrites it. Sync runs without the menu (logout, Edit Mode), so the
+-- core keeps the list.
+local RESOURCE_BAR_KEYS = {}
+for key in ([[
+altManaHeight altManaOffsetX altManaOffsetY altManaSmoothFill altManaWidth altManaWidthMode arcaneWindowColor
+arcaneWindowSoulColor arcaneWindowText arcaneWindowTextFrom arcaneWindowWarnColor arcaneWindowWarnLastGCD
+arcaneWindowWarnSeconds classPowerAnchorToCooldown classPowerBgAlpha classPowerBgTexture classPowerColorByType
+classPowerComboPointColorMode classPowerCooldownTopAnchor classPowerEmptyAlpha classPowerFillReverse
+classPowerFilledAlpha classPowerFontSize classPowerFrameLevelOffset classPowerFullColorEnabled classPowerGap
+classPowerHeight classPowerHideOOC classPowerHideWhenEmpty classPowerHideWhenFull classPowerOffsetX
+classPowerOffsetY classPowerOutline classPowerShape classPowerShapeAlign classPowerShowPrediction
+classPowerShowText classPowerSlotColorModes classPowerSmoothFill classPowerSyncPlayerPowerOOC
+classPowerTextLayer classPowerTextMode classPowerTextOffsetX classPowerTextOffsetY classPowerTexture
+classPowerTickWidth classPowerWidth classPowerWidthMode guardianIronfurShowHashLines ignorePainColor
+ignorePainTimeMarker manaCostColor manaGainPulse manaGainPulseColor manaRegenPause manaRegenPauseColor
+manaUpcomingCost playerHPBarAnchor playerHPBarBgAlpha playerHPBarBgTexture playerHPBarColorMode
+playerHPBarEnabled playerHPBarFrameLevelOffset playerHPBarGap playerHPBarHeight playerHPBarOffsetX
+playerHPBarOffsetY playerHPBarOrbSize playerHPBarOutline playerHPBarShape playerHPBarSmoothFill
+playerHPBarTextCenter playerHPBarTextCenterHidePercentSymbol playerHPBarTextEnabled playerHPBarTextLeft
+playerHPBarTextLeftHidePercentSymbol playerHPBarTextOffsetX playerHPBarTextOffsetY playerHPBarTextReverse
+playerHPBarTextRight playerHPBarTextRightHidePercentSymbol playerHPBarTextSeparator playerHPBarTextSize
+playerHPBarTexture playerHPBarUsePlayerText playerHPBarWidth playerHPBarWidthMode resourceExtraHeight
+resourceExtraOffsetX resourceExtraOffsetY resourceExtraWidth resourceMarks runeShowTime showAltMana
+showArcaneWindow showChargedComboPoints showClassPower showEbonMight showEleMaelstrom showGuardianIronfur
+showIgnorePain showShadowMana showSweepingStrikes
+]]):gmatch("%S+") do RESOURCE_BAR_KEYS[key] = true end
 local function BarsOwner(key)
-    if type(key)=="string" and (key:sub(1,10)=="classPower" or key:sub(1,12)=="arcaneWindow"
-        or key:sub(1,4)=="mana" or key=="resourceMarks") then return "resources" end
+    if RESOURCE_BAR_KEYS[key] == true then return "resources" end
     return roots.bars
 end
 function Sync.Owner(path)
