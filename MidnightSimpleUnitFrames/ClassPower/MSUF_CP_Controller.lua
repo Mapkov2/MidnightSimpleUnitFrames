@@ -1786,7 +1786,10 @@ end
 eventFrame:SetScript("OnEvent", ClassPowerOnEvent)
 
 --- Startup events exist only while at least one Class Resource feature is enabled.
-CP.SyncControllerEvents(CPConfig.AnyFeatureEnabled())
+--- The saved profile does not exist while this file loads, so they are bound
+--- here and the first FullRefresh (PLAYER_ENTERING_WORLD) drops them when every
+--- feature of the saved profile is off.
+CP.SyncControllerEvents(true)
 
 --- Public API (for Options, Edit Mode, and other modules)
 
