@@ -260,14 +260,13 @@ local function UpdateColorForInterruptible(frame)
                 blue = tonumber(general.playerCastbarOverrideB)
             else
                 local _, classToken = UnitClass("player")
-                if classToken then
-                    if type(_G.MSUF_GetClassBarColor) == "function" then
-                        red, green, blue = _G.MSUF_GetClassBarColor(classToken)
-                    end
-                    if not red and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken] then
-                        local color = _G.RAID_CLASS_COLORS[classToken]
-                        red, green, blue = color.r, color.g, color.b
-                    end
+                -- A secret class token is never a table key (the client
+                -- raises): the override then keeps the cast colours below.
+                if not issecretvalue(classToken) and classToken then
+                    -- Runtime/MSUF_FontRegistry.lua (loads before the castbars)
+                    -- owns it: MSUF's custom class colour (db.classColors, the
+                    -- one the unit frames use), else RAID_CLASS_COLORS.
+                    red, green, blue = _G.MSUF_GetClassBarColor(classToken)
                 end
             end
 

@@ -216,6 +216,46 @@ local function PlayerCastbarLife(world, frame)
         function() return "player", "Other-guid", 133, nil, nil end, false)
 end
 
+-- The player castbar's class colour override paints MSUF's custom class
+-- colour (db.classColors through MSUF_GetClassBarColor, as the unit frames'
+-- own class colours); a secret class token is never a table key.
+local function PlayerClassColourLife(world, frame)
+    local env = world.env
+    local db, g = env.MSUF_DB, env.MSUF_DB.general
+    local keep = { g.playerCastbarOverrideEnabled, g.playerCastbarOverrideMode, db.classColors }
+    g.playerCastbarOverrideEnabled, g.playerCastbarOverrideMode = true, "CLASS"
+    db.classColors = { [world.playerClass] = { r = 0.11, g = 0.22, b = 0.33 } }
+    local function Cast(castBarID)
+        world:StartCast("player", "Frostbolt", 1.5, castBarID)
+        world:Fire(frame, "UNIT_SPELLCAST_START", world:Payload("UNIT_SPELLCAST_START", "player", castBarID))
+        local bar = frame.statusBar
+        local r, gg, b = bar and bar._msufLastR, bar and bar._msufLastG, bar and bar._msufLastB
+        world.casting.player = nil
+        world:Fire(frame, "UNIT_SPELLCAST_STOP", world:Payload("UNIT_SPELLCAST_STOP", "player", castBarID))
+        world:Advance(0.5)
+        return r, gg, b
+    end
+    local r, gg, b = Cast(80)
+    if not (r == 0.11 and gg == 0.22 and b == 0.33) then
+        Fail(("player castbar class override painted %s, %s, %s, not the custom class colour")
+            :format(tostring(r), tostring(gg), tostring(b)))
+    end
+    -- A restricted class token: MSUF_GetClassBarColor indexes db.classColors
+    -- and RAID_CLASS_COLORS with it (the client raises on a secret key).
+    local getClassColor = env.MSUF_GetClassBarColor
+    local secretKey = false
+    env.MSUF_GetClassBarColor = function(token, ...)
+        if world.Secrets.IsSecret(token) then secretKey = true end
+        return getClassColor(token, ...)
+    end
+    world.secretPlayerClass = true
+    Cast(81)
+    world.secretPlayerClass = nil
+    env.MSUF_GetClassBarColor = getClassColor
+    if secretKey then Fail("player castbar class override looked up a secret class token") end
+    g.playerCastbarOverrideEnabled, g.playerCastbarOverrideMode, db.classColors = keep[1], keep[2], keep[3]
+end
+
 local function FindFrame(world, predicate)
     local frames = world.widgets.frames
     for index = 1, #frames do
@@ -386,6 +426,7 @@ local function RunMainline(style)
         PoolLife(world, "MSUF_ArenaCastbars", "arena1", "ARENA_OPPONENT_UPDATE", "arena1")
     end)
     Scenario(world, style .. " player", function() PlayerCastbarLife(world, env.MSUF_PlayerCastbar) end)
+    Scenario(world, style .. " player class colour", function() PlayerClassColourLife(world, env.MSUF_PlayerCastbar) end)
     Scenario(world, style .. " interrupt ready", function() InterruptReadyLife(world) end)
     Scenario(world, style .. " GCD attached", function()
         env.MSUF_DB.general.gcdBarDetached = false

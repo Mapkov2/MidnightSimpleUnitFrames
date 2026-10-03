@@ -474,7 +474,11 @@ local function InstallClient(world, env)
     env.issecretvalue = _G.issecretvalue
     env.issecure = function() return false end
     env.UnitClass = function(unit)
-        if unit == "player" then return world.playerClass, world.playerClass, 8 end
+        if unit == "player" then
+            -- world.secretPlayerClass: a restricted identity (both names secret).
+            if world.secretPlayerClass then return S("string"), S("string"), 8 end
+            return world.playerClass, world.playerClass, 8
+        end
         return "Warrior", "WARRIOR", 1
     end
     -- WoW Forever: the swing API (upstream/forever SwingTimerDocumentation.lua).
