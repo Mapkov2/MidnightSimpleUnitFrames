@@ -6746,6 +6746,14 @@ L["GHOST"] = "鬼魂"
 L["OFFLINE"] = "离线"
 L["Tracked buffs (%d of 40)"] = "已追踪增益（%d / 40）"
 L["Tracked debuffs (%d of 40)"] = "已追踪减益效果（%d / 40）"
+
+-- Menu prompts: the quick-setup results, the appearance reload and the reload label.
+L["Quick Setup applied!\n\nYour spec has no visible class\nresource bar right now.\n\nPlayer Power follows above\nEssential Cooldowns.\nIf you respec, Class Resources will\nappear automatically."] = "快速设置已应用！\n\n你当前的专精没有可见的\n职业资源条。\n\n玩家资源会跟随在\n核心冷却上方。\n切换专精后，职业资源会\n自动显示。"
+L["Quick Setup applied!\n\nClass Power is now positioned\nabove Essential Cooldowns.\n\nPlayer Power is detached and\nattached below it.\nUse Edit Mode for fine-tuning."] = "快速设置已应用！\n\n职业资源现已放置在\n核心冷却上方。\n\n玩家资源已分离，\n并附着在其下方。\n请使用编辑模式进行微调。"
+L["Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above Essential\nCooldowns when the bar appears.\nUntil then they use the Player\nframe or the saved position."] = "快速设置已应用！\n\n当该条出现时，职业资源和\n玩家资源将跟随在核心冷却上方。\n在此之前，它们使用玩家框架\n或已保存的位置。"
+L["Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."] = "快速设置已应用！\n\n职业资源已分离，\n并放置在屏幕中央。\n\n未检测到核心冷却。\n玩家资源已分离，\n并附着在其下方。\n\n请使用编辑模式进行微调。"
+L["Reload the UI to apply the menu appearance preset?"] = "重载界面以应用菜单外观预设？"
+L["these changes"] = "这些更改"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

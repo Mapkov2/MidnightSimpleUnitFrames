@@ -6609,6 +6609,14 @@ L["GHOST"] = "FANTASMA"
 L["OFFLINE"] = "DESCONECTADO"
 L["Tracked buffs (%d of 40)"] = "Mejoras monitorizadas (%d de 40)"
 L["Tracked debuffs (%d of 40)"] = "Desventajas monitorizadas (%d de 40)"
+
+-- Menu prompts: the quick-setup results, the appearance reload and the reload label.
+L["Quick Setup applied!\n\nYour spec has no visible class\nresource bar right now.\n\nPlayer Power follows above\nEssential Cooldowns.\nIf you respec, Class Resources will\nappear automatically."] = "¡Configuración rápida aplicada!\n\nTu especialización no tiene ahora\nninguna barra de recurso de clase visible.\n\nEl recurso del jugador sigue sobre tus\nreutilizaciones esenciales.\nSi cambias de especialización, los recursos\nde clase aparecerán automáticamente."
+L["Quick Setup applied!\n\nClass Power is now positioned\nabove Essential Cooldowns.\n\nPlayer Power is detached and\nattached below it.\nUse Edit Mode for fine-tuning."] = "¡Configuración rápida aplicada!\n\nLos recursos de clase están ahora\nsobre tus reutilizaciones esenciales.\n\nEl recurso del jugador está desacoplado\ny anclado debajo.\nUsa el modo de edición para ajustarlo."
+L["Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above Essential\nCooldowns when the bar appears.\nUntil then they use the Player\nframe or the saved position."] = "¡Configuración rápida aplicada!\n\nLos recursos de clase y el recurso del jugador\nseguirán sobre tus reutilizaciones esenciales\ncuando aparezca la barra.\nHasta entonces usan el marco del jugador\no la posición guardada."
+L["Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."] = "¡Configuración rápida aplicada!\n\nLos recursos de clase están desacoplados\ny situados en el centro de la pantalla.\n\nNo se detectaron reutilizaciones esenciales.\nEl recurso del jugador está desacoplado\ny anclado debajo.\n\nUsa el modo de edición para ajustarlo."
+L["Reload the UI to apply the menu appearance preset?"] = "¿Recargar la interfaz para aplicar el estilo predefinido del menú?"
+L["these changes"] = "estos cambios"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end

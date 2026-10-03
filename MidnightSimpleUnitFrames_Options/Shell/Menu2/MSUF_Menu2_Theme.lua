@@ -120,21 +120,12 @@ function M.ResolveLocaleSelection(selection)
     return "enUS"
 end
 function M.ShowLocaleReloadRequired()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show and M.InstallStaticPopup) then
-        if _G.print then
-            _G.print(M.Tr("|cffffd700MSUF:|r Menu language saved. Reload the UI to apply it."))
-        end
-        return false
-    end
-    M.InstallStaticPopup("MSUF2_LOCALE_RELOAD_REQUIRED", {
+    M.ShowPrompt("MSUF2_LOCALE_RELOAD_REQUIRED", {
         text = M.Tr("Menu language was changed. MSUF loads only one language per session, so a UI reload is required to apply it.\n\nReload now?"),
-        button1 = _G.RELOADUI or _G.RELOAD or M.Tr("Reload"),
-        button2 = _G.CANCEL or M.Tr("Not now"),
-        OnAccept = function()
-            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
-        end,
+        accept = RELOADUI or RELOAD or M.Tr("Reload"),
+        cancel = CANCEL or M.Tr("Not now"),
+        onAccept = function() ReloadUI() end,
     })
-    _G.StaticPopup_Show("MSUF2_LOCALE_RELOAD_REQUIRED")
     return true
 end
 function M.ApplyLocaleSelection(selection)
@@ -147,8 +138,8 @@ function M.ApplyLocaleSelection(selection)
     if selection ~= nil then
         if reloadRequired then
             M.ShowLocaleReloadRequired()
-        elseif type(_G.StaticPopup_Hide) == "function" then
-            _G.StaticPopup_Hide("MSUF2_LOCALE_RELOAD_REQUIRED")
+        else
+            M.HidePrompt("MSUF2_LOCALE_RELOAD_REQUIRED")
         end
     end
     return active or MSUF.LOCALE, selected, reloadRequired

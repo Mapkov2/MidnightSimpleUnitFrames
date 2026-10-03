@@ -716,18 +716,9 @@ function M.ShowPageResetConfirm(pageKey)
     if not M.PageHasReset(pageKey) then return false end
     local message = M.BuildPageResetWarning(pageKey)
     if not message then return false end
-    if not _G.StaticPopupDialogs then return M.ResetPageToDefaults(pageKey) end
-    M.InstallStaticPopup("MSUF2_PAGE_RESET_CONFIRM", {
-        text = "%s",
-        button1 = _G.YES or "Yes",
-        button2 = _G.NO or "No",
-        OnAccept = function(_, data)
-            if data and data.pageKey then M.ResetPageToDefaults(data.pageKey) end
-        end,
+    M.ShowPrompt("MSUF2_PAGE_RESET_CONFIRM", {
+        text = message,
+        onAccept = function() M.ResetPageToDefaults(pageKey) end,
     })
-    if _G.StaticPopup_Show then
-        _G.StaticPopup_Show("MSUF2_PAGE_RESET_CONFIRM", message, nil, { pageKey = pageKey })
-        return true
-    end
-    return M.ResetPageToDefaults(pageKey)
+    return true
 end

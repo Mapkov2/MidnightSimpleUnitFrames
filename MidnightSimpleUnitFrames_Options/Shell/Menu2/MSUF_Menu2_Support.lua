@@ -389,6 +389,146 @@ local function RaisePopupOverMenuWindow(dialog)
     dialog:SetFrameStrata(strata)
     if dialog.Raise then dialog:Raise() end
 end
+-- Menu prompts. Nothing here writes Blizzard's StaticPopupDialogs. A question
+-- with two buttons that Escape may cancel uses Blizzard's generic dialogs
+-- (Blizzard_StaticPopup_Game GameDialogDefs.lua GENERIC_CONFIRMATION and
+-- GENERIC_INPUT_BOX, the same on live, forever, classic, classic_era and
+-- classic_anniversary): they read the text, the button labels and the
+-- callbacks from a data table. Escape and the second button both run the
+-- cancel callback there, so a prompt with one button, or one Escape must not
+-- answer, is a menu-owned frame instead. One data table and one frame per key
+-- keep one question per key: showing a key again replaces its question, and
+-- the replaced one runs no callback. The caller translates and formats the
+-- text when it shows the prompt.
+--
+-- spec: text, accept / cancel (button labels; the generic dialog defaults to
+-- YES / NO), onAccept(text), onCancel(), showAlert, single (one button),
+-- hideOnEscape (false: Escape does not answer), input = { maxLetters = n }.
+local promptData, promptFrames = {}, {}
+local function PromptHandler(owner, field)
+    return function(text)
+        local handler = owner.spec[field]
+        if handler then return handler(text) end
+    end
+end
+local function GenericPromptData(key)
+    local data = promptData[key]
+    if data then return data end
+    data = { text = "%s", referenceKey = key, spec = {} }
+    data.callback = PromptHandler(data, "onAccept")
+    data.cancelCallback = PromptHandler(data, "onCancel")
+    promptData[key] = data
+    return data
+end
+local function ShowGenericPrompt(key, spec)
+    local data = GenericPromptData(key)
+    if data.which then StaticPopup_Hide(data.which, data) end
+    data.which = spec.input and "GENERIC_INPUT_BOX" or "GENERIC_CONFIRMATION"
+    data.spec, data.text_arg1 = spec, spec.text
+    data.acceptText, data.cancelText, data.showAlert = spec.accept, spec.cancel, spec.showAlert
+    data.maxLetters = spec.input and spec.input.maxLetters
+    if spec.input then StaticPopup_ShowCustomGenericInputBox(data) else StaticPopup_ShowCustomGenericConfirmation(data) end
+    local dialog = StaticPopup_FindVisible(data.which, data)
+    RaisePopupOverMenuWindow(dialog)
+    return dialog
+end
+local function PromptButtonClick(button)
+    local frame = button:GetParent()
+    frame:Hide()
+    local handler = frame._msufPromptSpec[button._msufPromptField]
+    if handler then handler() end
+end
+local function PromptKeyDown(frame, key)
+    if InCombatLockdown() then return end
+    local escape = key == "ESCAPE"
+    frame:SetPropagateKeyboardInput(not escape)
+    if escape then PromptButtonClick(frame._msufPromptButtons[2]) end
+end
+local function BuildPromptFrame()
+    local frame = M.CreateMenuPopupPanel(UIParent)
+    frame:SetClampedToScreen(true)
+    local alert = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
+    alert:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
+    alert:SetSize(36, 36)
+    alert:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -14)
+    local text = PixelLayoutRegion(frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
+    text:SetJustifyH("CENTER")
+    if M.Theme and M.Theme.StyleFontString then M.Theme.StyleFontString(text, M.Theme.colors and M.Theme.colors.text or { 1, 1, 1, 1 }, 0) end
+    local buttons = {}
+    for index, field in ipairs({ "onAccept", "onCancel" }) do
+        local button = PixelLayoutRegion(CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"))
+        button:SetSize(128, 22)
+        button._msufPromptField = field
+        button:RegisterForClicks("LeftButtonUp")
+        button:SetScript("OnClick", PromptButtonClick)
+        MSUF_SkinButton(button)
+        buttons[index] = button
+    end
+    frame:SetScript("OnKeyDown", PromptKeyDown)
+    frame._msufPromptAlert, frame._msufPromptText, frame._msufPromptButtons = alert, text, buttons
+    frame:Hide()
+    return frame
+end
+local function LayoutPromptFrame(frame, spec)
+    local text, accept, cancel = frame._msufPromptText, frame._msufPromptButtons[1], frame._msufPromptButtons[2]
+    -- An explicit text width, so the string height is known before the frame
+    -- has a resolved rect.
+    local width, inset = spec.showAlert and 360 or 320, spec.showAlert and 58 or 18
+    frame:SetWidth(width)
+    frame._msufPromptAlert:SetShown(spec.showAlert == true)
+    text:ClearAllPoints()
+    text:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -18)
+    text:SetWidth(width - inset - 18)
+    text:SetText(spec.text)
+    accept:SetText(spec.accept)
+    cancel:SetText(spec.cancel or "")
+    cancel:SetShown(not spec.single)
+    accept:ClearAllPoints()
+    cancel:ClearAllPoints()
+    if spec.single then
+        accept:SetPoint("BOTTOM", frame, "BOTTOM", 0, 16)
+    else
+        accept:SetPoint("BOTTOMRIGHT", frame, "BOTTOM", -6, 16)
+        cancel:SetPoint("BOTTOMLEFT", frame, "BOTTOM", 6, 16)
+    end
+    frame:SetHeight(math.max(spec.showAlert and 64 or 0, text:GetStringHeight() or 0) + 18 + 16 + 22 + 16)
+end
+local function ShowFramePrompt(key, spec)
+    local frame = promptFrames[key] or BuildPromptFrame()
+    promptFrames[key] = frame
+    frame._msufPromptSpec = spec
+    LayoutPromptFrame(frame, spec)
+    M.ApplyPopupFramePriority(frame)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOP", UIParent, "TOP", 0, -135)
+    local escape = spec.hideOnEscape ~= false and not InCombatLockdown()
+    frame:EnableKeyboard(escape)
+    if escape then frame:SetPropagateKeyboardInput(true) end
+    frame:Show()
+    frame:Raise()
+    return frame
+end
+--- Shows the prompt for `key` (see the spec above) and returns its frame.
+function M.ShowPrompt(key, spec)
+    if spec.single or spec.hideOnEscape == false then return ShowFramePrompt(key, spec) end
+    return ShowGenericPrompt(key, spec)
+end
+function M.HidePrompt(key)
+    local data, frame = promptData[key], promptFrames[key]
+    if data and data.which then StaticPopup_Hide(data.which, data) end
+    if frame then frame:Hide() end
+end
+function M.IsPromptShown(key)
+    local data, frame = promptData[key], promptFrames[key]
+    if frame and frame:IsShown() then return true end
+    return data ~= nil and data.which ~= nil and StaticPopup_FindVisible(data.which, data) ~= nil
+end
+--- Host API kept for callers outside this addon that register a named dialog
+--- and call StaticPopup_Show themselves: the MSUF Suite's page-reset, copy-bars
+--- and run-history prompts, and the core's client-version warning. Without it
+--- the Suite would either raise in StaticPopup_Show or run those actions
+--- without asking. Nothing in the Options addon calls it (menu_prompt_ownership
+--- smoke); the menu's own prompts use M.ShowPrompt.
 function M.InstallStaticPopup(key, spec, defaults)
     if not (_G.StaticPopupDialogs and key and type(spec) == "table") then return nil end
     local existing = _G.StaticPopupDialogs[key]
@@ -1333,42 +1473,37 @@ ExportPublic("MSUF_GetNextTip", GetNextTip)
 local pendingReloadRecommendedLabel
 local function ShowReloadRecommendedPopup(label)
     if BlockConfigCombatLocked(false) then return end
-    if not _G.StaticPopupDialogs then return end
     pendingReloadRecommendedLabel = tostring(label or "")
     if pendingReloadRecommendedLabel == "" then pendingReloadRecommendedLabel = "these changes" end
     pendingReloadRecommendedLabel = Tr(pendingReloadRecommendedLabel)
-    M.InstallStaticPopup("MSUF_RELOAD_RECOMMENDED", {
-        text = Tr("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
-        button1 = _G.RELOAD or Tr("Reload"),
-        button2 = _G.CANCEL or Tr("Not now"),
-        OnAccept = function()
+    M.ShowPrompt("MSUF_RELOAD_RECOMMENDED", {
+        text = string.format(Tr("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
+            pendingReloadRecommendedLabel),
+        accept = RELOAD or Tr("Reload"),
+        cancel = CANCEL or Tr("Not now"),
+        onAccept = function()
             pendingReloadRecommendedLabel = nil
-            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+            ReloadUI()
         end,
-        OnCancel = function() pendingReloadRecommendedLabel = nil end,
+        onCancel = function() pendingReloadRecommendedLabel = nil end,
     })
-    _G.StaticPopup_Show("MSUF_RELOAD_RECOMMENDED", pendingReloadRecommendedLabel)
 end
 ExportPublic("MSUF_ShowReloadRecommendedPopup", ShowReloadRecommendedPopup)
+-- Escape does not answer it: a menu-owned prompt (M.ShowPrompt).
 local function ShowGroupFrameReloadRequiredPopup()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-        if _G.print then _G.print(Tr("|cffffd700MSUF:|r Group frames were enabled or disabled. Reload the UI with /reload.")) end
-        return
-    end
-    M.InstallStaticPopup("MSUF2_GROUPFRAMES_RELOAD_REQUIRED", {
+    return M.ShowPrompt("MSUF2_GROUPFRAMES_RELOAD_REQUIRED", {
         text = Tr("Group frames were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"),
-        button1 = _G.RELOAD or Tr("Reload"),
-        button2 = _G.CANCEL or Tr("Not now"),
+        accept = RELOAD or Tr("Reload"),
+        cancel = CANCEL or Tr("Not now"),
         hideOnEscape = false,
-        OnAccept = function()
-            if _G.InCombatLockdown and _G.InCombatLockdown() then
-                if _G.print then _G.print(Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
+        onAccept = function()
+            if InCombatLockdown() then
+                print(Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload."))
                 return
             end
-            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+            ReloadUI()
         end,
     })
-    _G.StaticPopup_Show("MSUF2_GROUPFRAMES_RELOAD_REQUIRED")
 end
 ExportPublic("MSUF_ShowGroupFrameReloadRequiredPopup", ShowGroupFrameReloadRequiredPopup)
 -- One popup for every link: frames are never freed, and a new named frame,
@@ -1473,23 +1608,23 @@ local function ShowCopyLink(title, url)
     if frame._msufOkButton and frame._msufOkButton.Raise then frame._msufOkButton:Raise() end
 end
 ExportPublic("MSUF_ShowCopyLink", ShowCopyLink)
-do
-    -- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
-    -- the core resolves it once from the TOC this client loaded, so the Options
-    -- package never reports its own "## Version" here.
+-- The alpha-build notice. Alpha builds used to register it as the named dialog
+-- MSUF_ALPHA_DISCORD, which nothing ever showed (no StaticPopup_Show of it in
+-- Classic, Retail or the Suite, nor in their history). It is a prompt now and
+-- stays unwired, as before; showing it on alpha builds is the owner's call.
+-- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
+-- the core resolves it once from the TOC this client loaded, so the Options
+-- package never reports its own "## Version" here.
+function M.ShowAlphaDiscordPrompt()
     local getVersion = MSUF.GetAddonVersion
     local version = type(getVersion) == "function" and getVersion() or nil
-    local isAlpha = type(version) == "string" and version:lower():find("alpha", 1, true) ~= nil
-    if isAlpha then
-        M.InstallStaticPopup("MSUF_ALPHA_DISCORD", {
-            text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"),
-            button1 = Tr("Copy Discord Link"),
-            button2 = _G.CLOSE or Tr("Close"),
-            OnAccept = function()
-                _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz")
-            end,
-        })
-    end
+    if not (type(version) == "string" and version:lower():find("alpha", 1, true)) then return nil end
+    return M.ShowPrompt("MSUF_ALPHA_DISCORD", {
+        text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"),
+        accept = Tr("Copy Discord Link"),
+        cancel = CLOSE or Tr("Close"),
+        onAccept = function() ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end,
+    })
 end
 
 local function PlayerDisplayName()

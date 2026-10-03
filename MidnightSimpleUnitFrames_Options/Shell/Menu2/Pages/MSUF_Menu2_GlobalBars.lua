@@ -454,36 +454,22 @@ local function ApplyRoundedRuntime()
     return RequestApply("RequestRoundedBars", "MSUF2_ROUNDED", CurrentBarsScope())
 end
 
+-- One Reload button, and Escape does not answer: menu-owned prompts
+-- (M.ShowPrompt), which also take the menu's popup priority.
 local function ShowDispelBorderReloadRequiredPopup()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-        if _G.print then
-            _G.print("|cffffd700MSUF:|r " .. M.Tr("Dispel border") .. ": " .. M.Tr("Requires a UI reload."))
-        end
-        return
-    end
-    M.InstallStaticPopup("MSUF2_DISPEL_BORDER_RELOAD_REQUIRED", {
+    M.ShowPrompt("MSUF2_DISPEL_BORDER_RELOAD_REQUIRED", {
         text = M.Tr("Dispel border") .. "\n\n" .. M.Tr("Requires a UI reload."),
-        button1 = _G.RELOAD or M.Tr("Reload"),
-        hideOnEscape = false,
-        OnAccept = ReloadAfterCombatCheck,
+        accept = RELOAD or M.Tr("Reload"), single = true, hideOnEscape = false,
+        onAccept = ReloadAfterCombatCheck,
     })
-    _G.StaticPopup_Show("MSUF2_DISPEL_BORDER_RELOAD_REQUIRED")
 end
 
 local function ShowRoundedReloadRequiredPopup()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-        if _G.print then _G.print(M.Tr("|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload.")) end
-        return
-    end
-    M.InstallStaticPopup("MSUF2_ROUNDED_RELOAD_REQUIRED", {
+    M.ShowPrompt("MSUF2_ROUNDED_RELOAD_REQUIRED", {
         text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
-        button1 = _G.RELOAD or M.Tr("Reload"), hideOnEscape = false,
-        OnAccept = ReloadAfterCombatCheck,
+        accept = RELOAD or M.Tr("Reload"), single = true, hideOnEscape = false,
+        onAccept = ReloadAfterCombatCheck,
     })
-    local dialog = _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
-    if dialog and type(M.ApplyPopupFramePriority) == "function" then
-        M.ApplyPopupFramePriority(dialog)
-    end
 end
 local function SetRoundedBool(key, value, requireReload)
     value = value and true or false

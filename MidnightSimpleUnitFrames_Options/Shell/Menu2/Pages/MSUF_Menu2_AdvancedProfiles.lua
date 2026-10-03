@@ -242,59 +242,37 @@ local function WrapMultilineProfileInput(editBox, card, x, y, width, height)
     end)
     return editBox
 end
-local function InstallProfilePopup(key, spec)
-    return M.InstallStaticPopup and M.InstallStaticPopup(key, spec)
-end
-
--- Static popups are the safety boundary for destructive profile operations.
--- Keep the actual profile mutations inside the OnAccept handlers so callers cannot bypass
--- confirmation by invoking helper functions directly.
-local function EnsureProfilePopups()
-    if not _G.StaticPopupDialogs then return end
-    InstallProfilePopup("MSUF2_IMPORT_RELOAD_PROMPT", {
-        text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
-        button1 = _G.RELOAD or M.Tr("Reload"),
-        button2 = _G.CANCEL or M.Tr("Not now"),
-        OnAccept = function()
-            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
-        end,
-    })
-    InstallProfilePopup("MSUF2_PROFILE_SWITCH_RELOAD", {
-        text = M.Tr("Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"),
-        button1 = YES or M.Tr("Yes"),
-        button2 = NO or M.Tr("No"),
-        OnAccept = function()
-            if _G.InCombatLockdown and _G.InCombatLockdown() then
-                PrintProfileMessage("|cffffd700", "Can't reload the UI in combat. Leave combat, then type /reload.")
-                return
-            end
-            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
-        end,
-    })
-    InstallProfilePopup("MSUF2_CONFIRM_RESET_PROFILE", {
-        text = M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."),
-        button1 = YES or M.Tr("Yes"),
-        button2 = NO or M.Tr("No"),
-        OnAccept = function(_, data)
+-- Prompts are the safety boundary for destructive profile operations. Keep the
+-- actual profile mutations inside their accept handlers so callers cannot
+-- bypass confirmation by invoking helper functions directly. M.ShowPrompt
+-- shows Blizzard's generic confirmation; nothing is written to
+-- StaticPopupDialogs.
+local ProfilePrompts = {}
+function ProfilePrompts.ConfirmReset(name, after)
+    M.ShowPrompt("MSUF2_CONFIRM_RESET_PROFILE", {
+        text = string.format(M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."), name),
+        accept = YES or M.Tr("Yes"),
+        cancel = NO or M.Tr("No"),
+        onAccept = function()
             if BlockCombatAction() then return end
-            if not (data and data.name) then return end
-            _G.MSUF_ResetProfile(data.name)
+            _G.MSUF_ResetProfile(name)
             ClearProfileHistory()
             if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_PROFILE_RESET", { preview = true, applyAll = false, notify = false }) end
-            if type(data.after) == "function" then data.after() end
+            after()
             _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
         end,
     })
-    InstallProfilePopup("MSUF2_CONFIRM_DELETE_PROFILE", {
-        text = M.Tr("Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other profiles are not affected, but this profile cannot be restored unless you exported or copied it first."),
-        button1 = DELETE or M.Tr("Delete"),
-        button2 = CANCEL or M.Tr("Cancel"),
-        OnAccept = function(_, data)
+end
+function ProfilePrompts.ConfirmDelete(name, after)
+    M.ShowPrompt("MSUF2_CONFIRM_DELETE_PROFILE", {
+        text = string.format(M.Tr("Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other profiles are not affected, but this profile cannot be restored unless you exported or copied it first."), name),
+        accept = DELETE or M.Tr("Delete"),
+        cancel = CANCEL or M.Tr("Cancel"),
+        onAccept = function()
             if BlockCombatAction() then return end
-            if not (data and data.name) then return end
-            _G.MSUF_DeleteProfile(data.name)
+            _G.MSUF_DeleteProfile(name)
             ClearProfileHistory()
-            if type(data.after) == "function" then data.after() end
+            after()
         end,
     })
 end
@@ -303,11 +281,12 @@ local function ShowImportReloadPrompt()
         PrintProfileMessage("|cffffd700", "Profile imported. Reload after combat with /reload.")
         return
     end
-    if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_IMPORT_RELOAD_PROMPT then
-        _G.StaticPopup_Show("MSUF2_IMPORT_RELOAD_PROMPT")
-        return
-    end
-    _G.MSUF_ShowReloadRecommendedPopup("Profile import")
+    M.ShowPrompt("MSUF2_IMPORT_RELOAD_PROMPT", {
+        text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
+        accept = RELOAD or M.Tr("Reload"),
+        cancel = CANCEL or M.Tr("Not now"),
+        onAccept = function() ReloadUI() end,
+    })
 end
 -- A profile switch swaps the whole DB under a live UI. Frames re-apply, but anything baked
 -- at load time (group headers, module gating) only settles after a reload, so offer one.
@@ -317,11 +296,18 @@ local function ShowProfileSwitchReloadPrompt(profileName)
         PrintProfileMessage("|cffffd700", "Switched to profile '%s'. Reload after combat with /reload.", name)
         return
     end
-    if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_PROFILE_SWITCH_RELOAD then
-        _G.StaticPopup_Show("MSUF2_PROFILE_SWITCH_RELOAD", name)
-        return
-    end
-    PrintProfileMessage("|cffffd700", "Switched to profile '%s'. Reload the UI with /reload.", name)
+    M.ShowPrompt("MSUF2_PROFILE_SWITCH_RELOAD", {
+        text = string.format(M.Tr("Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"), name),
+        accept = YES or M.Tr("Yes"),
+        cancel = NO or M.Tr("No"),
+        onAccept = function()
+            if _G.InCombatLockdown and _G.InCombatLockdown() then
+                PrintProfileMessage("|cffffd700", "Can't reload the UI in combat. Leave combat, then type /reload.")
+                return
+            end
+            ReloadUI()
+        end,
+    })
 end
 local function ReloadAfterNewProfileImport(profileName)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
@@ -344,7 +330,6 @@ end
 local ProfilesPage = {}
 function ProfilesPage.Prepare(ctx)
     local b = W.PageBuilder(ctx)
-    EnsureProfilePopups()
     local contentW = b.width or ctx.width or 920
     local buttonW, buttonH, buttonGap = 190, 24, 14
     local PROFILE_TOOLTIP = { hook = true, titleAsLine = true, bodyColor = { 0.85, 0.85, 0.85 } }
@@ -702,12 +687,7 @@ end
             M.ShowPageResetConfirm("profiles")
             return
         end
-        local name = ActiveProfileName()
-        if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
-            _G.StaticPopup_Show("MSUF2_CONFIRM_RESET_PROFILE", name, nil, { name = name, after = function() RefreshAfterProfileChange(ctx) end })
-        else
-            error("MSUF profile reset confirmation is unavailable")
-        end
+        ProfilePrompts.ConfirmReset(ActiveProfileName(), function() RefreshAfterProfileChange(ctx) end)
     end, nil, "profile.reset_current", true, nil, nil, {
         kind = "button", historyMode = "none", confirmRequired = true,
         set = function()
@@ -738,13 +718,7 @@ end
         if BlockCombatAction() then return end
         local name = ActiveProfileName()
         if name == "Default" then return end
-        if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE then
-            _G.StaticPopup_Show("MSUF2_CONFIRM_DELETE_PROFILE", name, nil, { name = name, after = function() RefreshAfterProfileChange(ctx) end })
-        else
-            _G.MSUF_DeleteProfile(name)
-            ClearProfileHistory()
-            RefreshAfterProfileChange(ctx)
-        end
+        ProfilePrompts.ConfirmDelete(name, function() RefreshAfterProfileChange(ctx) end)
     end, true, "profile.delete_current", true, nil, nil, {
         kind = "button", historyMode = "none", confirmRequired = true,
         set = function()

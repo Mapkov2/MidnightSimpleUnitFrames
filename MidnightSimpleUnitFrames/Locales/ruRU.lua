@@ -6558,6 +6558,14 @@ L["GHOST"] = "ПРИЗРАК"
 L["OFFLINE"] = "НЕ В СЕТИ"
 L["Tracked buffs (%d of 40)"] = "Отслеживаемые баффы (%d из 40)"
 L["Tracked debuffs (%d of 40)"] = "Отслеживаемые дебаффы (%d из 40)"
+
+-- Menu prompts: the quick-setup results, the appearance reload and the reload label.
+L["Quick Setup applied!\n\nYour spec has no visible class\nresource bar right now.\n\nPlayer Power follows above\nEssential Cooldowns.\nIf you respec, Class Resources will\nappear automatically."] = "Быстрая настройка применена!\n\nУ вашей специализации сейчас нет\nвидимой полосы ресурса класса.\n\nРесурс игрока следует над вашими\nважными способностями.\nПри смене специализации ресурсы класса\nпоявятся автоматически."
+L["Quick Setup applied!\n\nClass Power is now positioned\nabove Essential Cooldowns.\n\nPlayer Power is detached and\nattached below it.\nUse Edit Mode for fine-tuning."] = "Быстрая настройка применена!\n\nРесурсы класса теперь расположены\nнад вашими важными способностями.\n\nРесурс игрока откреплён\nи закреплён под ними.\nТочную настройку выполните в режиме редактирования."
+L["Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above Essential\nCooldowns when the bar appears.\nUntil then they use the Player\nframe or the saved position."] = "Быстрая настройка применена!\n\nРесурсы класса и ресурс игрока\nпоследуют над вашими важными\nспособностями, когда появится полоса.\nДо тех пор они используют рамку игрока\nили сохранённую позицию."
+L["Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."] = "Быстрая настройка применена!\n\nРесурсы класса откреплены\nи размещены в центре экрана.\n\nВажные способности не обнаружены.\nРесурс игрока откреплён\nи закреплён под ними.\n\nТочную настройку выполните в режиме редактирования."
+L["Reload the UI to apply the menu appearance preset?"] = "Перезагрузить интерфейс, чтобы применить пресет оформления меню?"
+L["these changes"] = "эти изменения"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

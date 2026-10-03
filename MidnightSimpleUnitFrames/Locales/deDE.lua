@@ -6909,6 +6909,14 @@ L["GHOST"] = "GEIST"
 L["OFFLINE"] = "OFFLINE"
 L["Tracked buffs (%d of 40)"] = "Verfolgte Buffs (%d von 40)"
 L["Tracked debuffs (%d of 40)"] = "Verfolgte Schwächungen (%d von 40)"
+
+-- Menu prompts: the quick-setup results, the appearance reload and the reload label.
+L["Quick Setup applied!\n\nYour spec has no visible class\nresource bar right now.\n\nPlayer Power follows above\nEssential Cooldowns.\nIf you respec, Class Resources will\nappear automatically."] = "Schnellsetup angewendet!\n\nDeine Spezialisierung hat gerade keine\nsichtbare Klassenressourcenleiste.\n\nDie Spielerressource folgt über deinen\nwichtigen Abklingzeiten.\nNach einem Spezialisierungswechsel erscheinen\ndie Klassenressourcen automatisch."
+L["Quick Setup applied!\n\nClass Power is now positioned\nabove Essential Cooldowns.\n\nPlayer Power is detached and\nattached below it.\nUse Edit Mode for fine-tuning."] = "Schnellsetup angewendet!\n\nDie Klassenressourcen sitzen jetzt\nüber deinen wichtigen Abklingzeiten.\n\nDie Spielerressource ist abgetrennt\nund darunter angehängt.\nFeinabstimmung im Bearbeitungsmodus."
+L["Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above Essential\nCooldowns when the bar appears.\nUntil then they use the Player\nframe or the saved position."] = "Schnellsetup angewendet!\n\nKlassenressourcen und Spielerressource\nfolgen über deinen wichtigen Abklingzeiten,\nsobald die Leiste erscheint.\nBis dahin nutzen sie den Spielerrahmen\noder die gespeicherte Position."
+L["Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."] = "Schnellsetup angewendet!\n\nDie Klassenressourcen sind abgetrennt\nund in der Bildschirmmitte platziert.\n\nKeine wichtigen Abklingzeiten erkannt.\nDie Spielerressource ist abgetrennt\nund darunter angehängt.\n\nFeinabstimmung im Bearbeitungsmodus."
+L["Reload the UI to apply the menu appearance preset?"] = "UI neu laden, um die Menü-Darstellungsvorlage anzuwenden?"
+L["these changes"] = "diese Änderungen"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end
