@@ -11,7 +11,11 @@
 --   2. importing data older than the lift (stamp 4 or no stamp) still lifts it;
 --   3. a current stamp skips nothing but the lift: legacy triggers and hidden
 --      priority switches in the payload are still normalized;
---   4. stored profiles: an old stamp lifts once, a newer build's stamp never.
+--   4. stored profiles: an old stamp lifts once, a newer build's stamp never;
+--   5. the Wago compatibility payload of a full export (what a tool keeps when
+--      it drops the msuf6 envelope) carries both dispel stamps, the priority
+--      one and _msufNativeDispelTriggerMigration, so its import keeps TOP and
+--      the By me dispel border trigger.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -111,6 +115,29 @@ local function Run(flavor)
     migrate(stored)
     g, p, gf = Modes(stored)
     Check(g == "TOP" and p == "TOP" and gf == "TOP", flavor .. ": a profile from a newer build lost its TOP")
+
+    -- 5. The Wago compatibility payload.
+    SetTop(MSUF_DB)
+    MSUF_DB.general.dispelBorderTrigger = "BY_ME"
+    local full = h.Export("all")
+    Check(type(full) == "table" and type(full.msuf6) == "table" and type(full.payload) == "table",
+        flavor .. ": a full export has no Wago compatibility payload")
+    local nativeStamp = tonumber(MSUF_DB._msufNativeDispelTriggerMigration)
+    Check(nativeStamp ~= nil and nativeStamp >= 1, flavor .. ": the active profile carries no native dispel trigger stamp")
+    Check(tonumber(full.payload._msufDispelPriorityMigration) == CURRENT
+        and tonumber(full.payload._msufNativeDispelTriggerMigration) == nativeStamp,
+        flavor .. ": the Wago compatibility payload drops the dispel migration stamps")
+    full.msuf6 = nil
+    local quiet = print
+    print = function() end
+    local ok, why = MSUF_ImportFromString(Harness.Literal(full))
+    print = quiet
+    Check(ok == true, flavor .. ": the compatibility payload import failed: " .. tostring(why))
+    MSUF_EnsureDB(true)
+    g, p = Modes(MSUF_DB)
+    Check(g == "TOP" and p == "TOP", flavor .. ": the compatibility payload import turned TOP into " .. g .. "/" .. p)
+    Check(MSUF_DB.general.dispelBorderTrigger == "BY_ME", flavor .. ": the compatibility payload import turned By me into "
+        .. tostring(MSUF_DB.general.dispelBorderTrigger))
     print("profile_migration_version_smoke: ok (" .. flavor .. ")")
 end
 

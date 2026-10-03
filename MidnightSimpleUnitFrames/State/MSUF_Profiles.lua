@@ -1305,6 +1305,10 @@ end
 local MSUF_PROFILEIO_WAGO_SCHEMA = 1
 local MSUF_PROFILEIO_WAGO_FULL_KEY = "msuf6"
 local MSUF_PROFILEIO_WAGO_PAYLOAD_KEYS = {
+    -- The dispel data-format stamps: without them an import of the portable
+    -- payload runs both dispel migrations again (TOP -> ALL, By me -> Dispel type).
+    _msufDispelPriorityMigration = true,
+    _msufNativeDispelTriggerMigration = true,
     arena = true,
     profileVariants = true,
     auras2 = true,
