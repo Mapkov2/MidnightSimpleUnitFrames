@@ -189,9 +189,11 @@ _G.C_CurveUtil = { CreateCurve = function()
 end }
 
 local registered
-local namespace = { UF = { Layers = {}, RegisterElement = function(name, element)
+local namespace = { ExportPublic = function() end, UF = { Layers = {}, RegisterElement = function(name, element)
     if name == "Prediction" then registered = element end
 end } }
+-- The saved overlay anchor modes (UF.Shared.ABSORB_ANCHOR) come from the file that owns them.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 assert(registered, "the prediction element did not register")
