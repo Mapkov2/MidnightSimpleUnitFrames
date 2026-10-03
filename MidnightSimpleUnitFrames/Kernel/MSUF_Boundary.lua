@@ -46,16 +46,21 @@ MSUF.TryDecodeFactoryPayload = TryDecodeFactoryPayload
 -- Lua error from inside the codec.
 MSUF.TryDeserializeNativeCBOR = TryDeserializeFactoryPayload
 
--- Another addon's step that the host runs inside its own state: Menu2 runs
--- the prepare, reset and finish steps of a host API v1 page-reset provider
--- around its undo history. A step that raises is reported like any other
--- Lua error and the host gets nil back, so its own state (the history depth)
--- always closes again. Every other runtime error keeps the normal path.
-local function RunPageResetProviderStep(step, pageKey, label)
-    local ok, result = pcall(step, pageKey)
-    if ok then return result end
-    ReportError("page-reset provider " .. tostring(label) .. " " .. tostring(pageKey), result)
-    return nil
+-- A host API v1 step that the host runs inside its own state, so a raise must
+-- not leave that state half done: Menu2 runs a page-reset provider's prepare,
+-- reset and finish (another addon's code) around its undo history, and
+-- ApplyUIScaleProfile runs its writes and MSUF's scale appliers before it can
+-- put the settings back. A step that raises is reported like any other Lua
+-- error (a string first argument names its subject) and the caller gets false;
+-- otherwise true and the step's result. Every other runtime error keeps the
+-- normal path.
+local function RunHostAPIStep(label, step, ...)
+    local ok, result = pcall(step, ...)
+    if ok then return true, result end
+    local subject = ...
+    if type(subject) == "string" then label = tostring(label) .. " " .. subject end
+    ReportError(label, result)
+    return false
 end
 
-MSUF.RunPageResetProviderStep = RunPageResetProviderStep
+MSUF.RunHostAPIStep = RunHostAPIStep

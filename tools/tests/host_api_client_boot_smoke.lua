@@ -104,8 +104,9 @@ Check(type(M) == "table" and M.HOST_API_VERSION == 1 and type(M.RegisterPageRese
 Check(type(M.PageResetProviders) == "table" and next(M.PageResetProviders) == nil, "the page-reset registry is not empty")
 
 -- 2. The real owners, recorded and called through.
-local log, recording = {}, false
+local log, recording, raiseOwner = {}, false, nil
 local OWNERS = { "MSUF_ApplyMsufScale", "MSUF_ResetGlobalUiScale", "MSUF_SetGlobalUiScale",
+    "MSUF_ApplyCurrentProfileGlobalUiScale",
     "MSUF_EnsureCooldownWidthObservers", "MSUF_ApplyPowerBarEmbedLayout_ForUnitKey",
     "MSUF_ClassPower_Apply", "MSUF_UFCore_NotifyConfigChanged" }
 for _, name in ipairs(OWNERS) do
@@ -113,6 +114,10 @@ for _, name in ipairs(OWNERS) do
     Check(type(real) == "function", name .. " is not exported on this client")
     rawset(env, name, function(...)
         if recording then log[#log + 1] = name .. Show({ ... }) end
+        if raiseOwner == name then
+            real(...)
+            error("injected " .. name .. " failure")
+        end
         return real(...)
     end)
 end
@@ -185,6 +190,35 @@ local ok, reason = api.ApplyUIScaleProfile({})
 Check(ok == false and reason == "combat", "ApplyUIScaleProfile did not refuse in combat")
 LeaveCombat()
 recording = false
+
+-- A real scale applier that raises after its own writes: false, "failed", and
+-- every MSUF scale setting exactly as before, with MSUF's scale applied again.
+do
+    local errors = {}
+    rawset(env, "geterrorhandler", function() return function(message) errors[#errors + 1] = tostring(message) end end)
+    Check(api.ApplyUIScaleProfile({ msufScale = 1.2, global = { preset = "custom", scale = 0.8 } }) == true,
+        "the scale apply before the rollback case failed")
+    -- A fresh profile has no disableScaling; the scale owner writes false.
+    db.general.msufUiScale, db.general.uiScale, db.general.disableScaling = 0.9, 0.8, nil
+    local FIELDS = { "msufUiScale", "uiScale", "UIScale", "globalUiScalePreset", "globalUiScaleValue", "disableScaling" }
+    local function Fields()
+        local out = {}
+        for _, key in ipairs(FIELDS) do out[key] = Copy(db.general[key]) end
+        return out
+    end
+    local before, uiTable = Fields(), db.general.UIScale
+    for _, owner in ipairs({ "MSUF_ApplyMsufScale", "MSUF_ResetGlobalUiScale", "MSUF_SetGlobalUiScale" }) do
+        raiseOwner = owner
+        local ok, reason = api.ApplyUIScaleProfile({ msufScale = 1, global = { preset = "custom", scale = 0.75 } })
+        raiseOwner = nil
+        Check(ok == false and reason == "failed", owner .. " raising must answer false, \"failed\"")
+        Check(Equal(before, Fields()) and db.general.UIScale == uiTable,
+            owner .. " raising left MSUF scale settings changed: " .. Show(before) .. " -> " .. Show(Fields()))
+        Check(#errors >= 1 and errors[#errors]:find("MSUF ApplyUIScaleProfile", 1, true) ~= nil
+            and table.concat(errors, " "):find("injected " .. owner .. " failure", 1, true) ~= nil,
+            owner .. " raising was not reported")
+    end
+end
 
 -- 3. A provider on the real Menu2.
 local own = { M.PageHasReset, M.BuildPageResetWarning, M.ResetPageToDefaults, M.ShowPageResetConfirm }
@@ -280,4 +314,5 @@ Check(edge.reset == false and edge.confirm == false and edge.resetRan == nil,
     "the provider page reset or asked during the PLAYER_REGEN_DISABLED dispatch")
 
 print(("host_api_client_boot_smoke: %s PASS (real owners resolved and called; legacy-oracle parity incl. forced stack; "
+    .. "scale rollback on a raising applier; "
     .. "Menu2 provider steps, contained errors and the REGEN edge on the real graph)"):format(flavor))

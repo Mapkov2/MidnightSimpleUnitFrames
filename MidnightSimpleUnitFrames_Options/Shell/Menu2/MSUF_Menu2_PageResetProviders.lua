@@ -29,8 +29,8 @@
 local _, MSUF = ...
 local M = MSUF.MSUF2
 local byPage = M.PageResetProviders
--- Kernel/MSUF_Boundary.lua: a raising provider step is reported and returns nil.
-local RunStep = MSUF.RunPageResetProviderStep
+-- Kernel/MSUF_Boundary.lua: a raising step is reported and returns false.
+local RunStep = MSUF.RunHostAPIStep
 -- Runtime/MSUF_HostAPI.lua: the host API's combat question.
 local PlayerInCombat = MSUF.HostAPIPlayerInCombat
 local records, order = {}, {}
@@ -145,7 +145,8 @@ end
 function M.ResetProviderPage(key, provider)
     if RefusedInCombat() or provider.canReset(key) ~= true then return false end
     if provider.prepare then
-        if RunStep(provider.prepare, key, "prepare") ~= true then return false end
+        local _, prepared = RunStep("page-reset provider prepare", provider.prepare, key)
+        if prepared ~= true then return false end
         -- An open menu session keeps the snapshot it took before prepare loaded
         -- anything, and that snapshot is the reset's "before". Refresh it, so
         -- Undo restores what prepare loaded. The session's start snapshot (Reset
@@ -153,11 +154,11 @@ function M.ResetProviderPage(key, provider)
         M.SyncExternalHistoryState()
     end
     local ok = M.RunWithHistory(HistoryLabel(provider, key), "page:reset:" .. key, function()
-        local result = RunStep(provider.reset, key, "reset")
-        if result == false then return false end
+        local ran, result = RunStep("page-reset provider reset", provider.reset, key)
+        if ran and result == false then return false end
         return result == true or nil
     end) == true
-    if ok and provider.finish then RunStep(provider.finish, key, "finish") end
+    if ok and provider.finish then RunStep("page-reset provider finish", provider.finish, key) end
     return ok
 end
 
