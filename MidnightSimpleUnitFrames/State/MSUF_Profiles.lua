@@ -239,6 +239,21 @@ function MSUF_InitProfiles()
             active = "Default"
         end
     end
+    --- Older builds stored the pickers' unassigned row as the name "None".
+    --- While no profile has that name such a value means unassigned: it is
+    --- cleared, so a profile named "None" made later is not picked up by it.
+    if type(profiles.None) ~= "table" then
+        for _, entry in pairs(chars) do
+            local map = type(entry) == "table" and entry.specProfileMap
+            if type(map) == "table" then
+                for slot, mapped in pairs(map) do
+                    if mapped == "None" then map[slot] = nil end
+                end
+            end
+        end
+        local meta = MSUF_ProfileIO_EnsureGlobalMeta()
+        if meta.defaultProfileForNewChars == "None" then meta.defaultProfileForNewChars = nil end
+    end
     if not active then
         --- A character that has never chosen a profile follows the account-wide
         --- preference when it still names a live profile. Everything else keeps

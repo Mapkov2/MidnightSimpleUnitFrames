@@ -7,7 +7,10 @@
 -- value, so a real profile named "None" can be picked in both and the
 -- unassigned row still clears. Behind the page, MSUF_SetSpecProfile clears for
 -- "None" only while no real profile owns the name, the contract
--- MSUF_SetDefaultProfileForNewCharacters already has.
+-- MSUF_SetDefaultProfileForNewCharacters already has. Older builds stored the
+-- unassigned row as the name "None"; while no profile has that name,
+-- initialization clears those values, so a "None" profile made later is not
+-- picked up by them.
 -- Builds the real page in a booted client (tools/tests/client_world.lua).
 -- Plain Lua 5.1, repo root and flavor as arguments.
 
@@ -52,7 +55,19 @@ for name, fn in pairs({ SetChecked = Store("checked"), GetChecked = Get("checked
     if methods[name] == nil then methods[name] = fn end
 end
 e.print = function() end
+-- Saved data of older builds, which stored the unassigned row as the name
+-- "None": with no profile of that name, initialization clears it for every
+-- character and the new-character choice.
+local charKey = e.MSUF_GetCharKey()
+e.MSUF_GlobalDB = { profiles = {}, global = { defaultProfileForNewChars = "None" }, char = {
+    [charKey] = { activeProfile = "Default", specProfileMap = { [SLOTS[1]] = "None" } },
+    ["Alt-Realm"] = { activeProfile = "Default", specProfileMap = { [7] = "None", [8] = "Default" } },
+} }
 e.MSUF_InitProfiles()
+Check(e.MSUF_GetSpecProfile(SLOTS[1]) == nil and e.MSUF_GlobalDB.char["Alt-Realm"].specProfileMap[7] == nil
+    and e.MSUF_GlobalDB.char["Alt-Realm"].specProfileMap[8] == "Default"
+    and e.MSUF_GetDefaultProfileForNewCharacters() == nil,
+    "a stored \"None\" from an older build was not cleared at initialization")
 Check(e.MSUF_CopyProfile("Default", "None") == true and e.MSUF_CopyProfile("Default", "Raid") == true,
     "harness: the profiles None and Raid were not created")
 
@@ -145,5 +160,13 @@ e.MSUF_SetSpecProfile(SLOTS[1], "Raid")
 Check(e.MSUF_DeleteProfile("None") == true, "harness: the None profile was not deleted")
 e.MSUF_SetSpecProfile(SLOTS[1], "None")
 Check(e.MSUF_GetSpecProfile(SLOTS[1]) == nil, "\"None\" without a real None profile no longer clears a slot")
+
+-- Once a real "None" profile exists, a stored "None" is that profile.
+Check(e.MSUF_CopyProfile("Default", "None") == true, "harness: the None profile was not created again")
+e.MSUF_SetSpecProfile(SLOTS[1], "None")
+Check(e.MSUF_SetDefaultProfileForNewCharacters("None") == true, "harness: new characters did not take None")
+e.MSUF_InitProfiles()
+Check(e.MSUF_GetSpecProfile(SLOTS[1]) == "None" and e.MSUF_GetDefaultProfileForNewCharacters() == "None",
+    "initialization cleared an assignment of the real None profile")
 
 print("profile_none_name_smoke: ok (" .. flavor .. ")")
