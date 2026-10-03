@@ -88,17 +88,24 @@ local function Measure(event)
     -- Warm route caches and coalescers, then drain what they queued.
     for _ = 1, 3 do Dispatch(event) end
     h:RunTimers()
-    local ticks = 0
     collectgarbage("collect")
     collectgarbage("stop")
-    local kb = collectgarbage("count")
-    debug.sethook(function() ticks = ticks + 1 end, "", 1000)
-    for _ = 1, 100 do Dispatch(event) end
-    debug.sethook()
-    kb = collectgarbage("count") - kb
+    -- A full collect can shrink Lua 5.1's string table. Keep the smaller
+    -- allocation of two identical batches without collecting between them;
+    -- drain coalescers after each batch so both start with the same queues.
+    local maxTicks, minKB = 0, math.huge
+    for _ = 1, 2 do
+        local ticks = 0
+        local kb = collectgarbage("count")
+        debug.sethook(function() ticks = ticks + 1 end, "", 1000)
+        for _ = 1, 100 do Dispatch(event) end
+        debug.sethook()
+        kb = collectgarbage("count") - kb
+        maxTicks, minKB = math.max(maxTicks, ticks), math.min(minKB, kb)
+        h:RunTimers()
+    end
     collectgarbage("restart")
-    h:RunTimers()
-    results[#results + 1] = { event = event, k = ticks, kb = kb }
+    results[#results + 1] = { event = event, k = maxTicks, kb = minKB }
 end
 for _, event in ipairs(EVENTS) do Measure(event) end
 
