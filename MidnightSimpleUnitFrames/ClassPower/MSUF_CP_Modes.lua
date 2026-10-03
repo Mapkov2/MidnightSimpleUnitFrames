@@ -1114,6 +1114,7 @@ do
         CP._runeColorVersion = visualVersion
         CP._runeFullColor = isFull
         CP._runeTypeColored = typeColors ~= nil or nil
+        CP.runeTypesDirty = nil
     end
 
     local function Update(powerType, maxPower)
@@ -1245,7 +1246,17 @@ do
             and not (type(overrides) == "table" and type(overrides.RUNES) == "table")
             and RUNE_TYPE_COLORS or nil
         local recolorAll = CP._runeColorVersion ~= visualVersion or CP._runeFullColor ~= isFull
-        if recolorAll or typeColors or CP._runeTypeColored then
+        --- A rune changes its type only with RUNE_TYPE_UPDATE (the controller sets
+        --- CP.runeTypesDirty), so a RUNE_POWER_UPDATE reads no rune type.
+        local recolor = recolorAll
+        if not recolor then
+            if typeColors then
+                recolor = CP.runeTypesDirty == true or not CP._runeTypeColored
+            else
+                recolor = CP._runeTypeColored == true
+            end
+        end
+        if recolor then
             RecolorRunes(maxPower, visual, isFull, typeColors, recolorAll, runeMap, visualVersion, bgA)
         end
 

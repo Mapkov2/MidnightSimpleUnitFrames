@@ -1682,6 +1682,8 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     if event == "RUNE_POWER_UPDATE" or event == "RUNE_TYPE_UPDATE" then
         --- arg1 = runeID (1-6), arg2 = energize boolean (RUNE_POWER_UPDATE only)
+        --- Only RUNE_TYPE_UPDATE (Mists) makes the rune mode re-read rune types.
+        if event == "RUNE_TYPE_UPDATE" then CP.runeTypesDirty = true end
         OnRuneUpdate(arg1, arg2)
         return
     end
