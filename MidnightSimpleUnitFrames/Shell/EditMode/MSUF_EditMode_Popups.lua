@@ -155,7 +155,7 @@ function Popups.IsAnyOpen()
         or false
 end
 
---- MSUF_EM2_Popup_Unit.lua - v5
+--- Unit frame popup (EM2.UnitPopup).
 local floor = math.floor
 local max, min = math.max, math.min
 local function DB() return _G.MSUF_DB end
@@ -286,7 +286,7 @@ local function Apply()
             if pf.dpbAnchorBtn then conf.detachedPowerBarAnchorToClassPower = pf.dpbAnchorBtn._checked and true or false end
         end
     end
-    --- Direct SetSize: MarkDirty/UpdateSimpleUnitFrame only handles health/power/text,
+    --- Direct SetSize: UF.MarkDirty only refreshes health/power/text,
     --- not frame dimensions. Apply width/height immediately.
     if frame and conf.width and conf.height then
         frame:SetSize(conf.width, conf.height)

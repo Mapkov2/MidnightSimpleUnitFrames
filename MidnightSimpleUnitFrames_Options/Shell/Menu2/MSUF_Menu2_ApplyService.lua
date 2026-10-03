@@ -534,8 +534,8 @@ end
 local function ApplyPriorityRecord(gf, reason)
     if type(gf) ~= "table" then return false end
     if type(gf.RequestPriorityApply) == "function" then
-        -- RequestPriorityApply is a method-shaped public contract so Menu2,
-        -- EditMode, and the SettingGraph all share one combat-safe cold path.
+        -- RequestPriorityApply is a method-shaped public contract so Menu2 and
+        -- Edit Mode share one combat-safe cold path.
         gf.RequestPriorityApply(gf, reason or "MSUF2_PRIORITY")
         return true
     end

@@ -116,8 +116,8 @@ ExportPublic("MSUF_SetMSUFEditModeDirect", MSUF_SetMSUFEditModeDirect)
 
 --- --- Preview System ---
 --- One global flag: MSUF_PreviewTestMode. Mirrors MSUF_BossTestMode exactly.
---- The core's visibility driver (line 2000) checks this flag to force-show.
---- The core's UpdateSimpleUnitFrame (line 4017) already applies EditPrev data.
+--- The unit-frame engine (load conditions, visibility drivers, portrait)
+--- reads this flag to force-show the frames and paints their preview data.
 --- Zero hooks, zero timers, zero pipeline fighting.
 ExportPublic("MSUF_UnitPreviewActive", false)
 ExportPublic("MSUF_PreviewTestMode", false)
@@ -229,7 +229,7 @@ local function MSUF_SyncAllUnitPreviews()
     end
 
     --- 2) Non-player: refresh visibility drivers (reads MSUF_PreviewTestMode),
-    --- then update each frame (pipeline calls EditPrev for unitless frames)
+    --- then update each frame (the engine paints preview data for unitless frames)
     if _G.MSUF_RefreshAllUnitVisibilityDrivers then
         _G.MSUF_RefreshAllUnitVisibilityDrivers(want)
     end
