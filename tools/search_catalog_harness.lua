@@ -187,6 +187,9 @@ do
     -- model is loaded before Menu2 in the shipped addon, so reproduce that
     -- dependency here instead of silently auditing pages with the Aura section
     -- absent.
+    -- Its Group Aura filter code reads State's stored-token check from
+    -- MSUF.ProfileNormalize, which the shipped core loads long before it.
+    assert(loadfile(Join(ROOT, "tools/tests/profile_normalize_loader.lua")))().Install(ROOT, MSUF)
     local auraModelPath = Join(CORE, "Auras3/MSUF_Auras3_Menu_Model.lua")
     local auraChunk, auraErr = Auras3Loader.LoadFile(auraModelPath)
     assert(auraChunk, auraModelPath .. ": " .. tostring(auraErr))

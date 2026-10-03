@@ -5,7 +5,8 @@
 -- reads the stored-token check from MSUF.ProfileNormalize, which State loads long
 -- before it (State/MSUF_ProfileNormalize.lua owns the list of filter tokens a
 -- stored profile may keep). A harness that loads the model without the State
--- layer installs the three State files that normalizer needs, unchanged:
+-- layer installs the three State files that normalizer needs, unchanged; a file
+-- whose export the harness already loaded itself is not loaded a second time:
 --
 --   local Normalizer = assert(loadfile(root .. "/tools/tests/profile_normalize_loader.lua"))()
 --   Normalizer.Install(root, namespace)   -- before the first menu model file
@@ -18,10 +19,11 @@
 
 local Loader = {}
 
+-- { file, the namespace field it publishes }
 Loader.FILES = {
-    "State/MSUF_StateHelpers.lua",
-    "State/MSUF_ProfileCodec.lua",
-    "State/MSUF_ProfileNormalize.lua",
+    { "State/MSUF_StateHelpers.lua", "StateHelpers" },
+    { "State/MSUF_ProfileCodec.lua", "ProfileIOImportLimits" },
+    { "State/MSUF_ProfileNormalize.lua", "ProfileNormalize" },
 }
 
 function Loader.Install(root, ns)
@@ -29,8 +31,10 @@ function Loader.Install(root, ns)
     if type(ns.ProfileNormalize) == "table" then return ns end
     local lent = type(ns.ExportPublic) ~= "function"
     if lent then ns.ExportPublic = function(_, value) return value end end
-    for _, file in ipairs(Loader.FILES) do
-        assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. file))("MidnightSimpleUnitFrames", ns)
+    for _, entry in ipairs(Loader.FILES) do
+        if ns[entry[2]] == nil then
+            assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. entry[1]))("MidnightSimpleUnitFrames", ns)
+        end
     end
     if lent then ns.ExportPublic = nil end
     assert(type(ns.ProfileNormalize) == "table", "the profile normalizer did not publish MSUF.ProfileNormalize")
