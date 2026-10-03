@@ -29,7 +29,10 @@ local printOnly = arg[2] == "print"
 -- update's timer entry and the segmented repaint. 2026-10-03: RefreshActive
 -- builds no closure any more (60 bytes on every hidden-payload UNIT_AURA);
 -- both Shaman paths are frozen at the new cost plus 2 %: 1984 instructions /
--- 192 bytes and 542 instructions / 0 bytes.
+-- 192 bytes and 542 instructions / 0 bytes. Those 192 bytes are the shared
+-- fixture's timer entry and RGBA tuple (96 bytes each on 32-bit Lua 5.1).
+-- Their native counterparts allocate no Lua tables. Only their measured
+-- architecture excess is normalized; the frozen budgets remain unchanged.
 local BUDGETS = {
     ["Mainline ROGUE combo UNIT_POWER_UPDATE"] = { 796, 8 },
     ["Mainline ROGUE combo UNIT_POWER_UPDATE, count text on"] = { 859, 8 },
@@ -45,19 +48,21 @@ local BUDGETS = {
 local WARMUP, INSTRUCTION_REPS, ALLOCATION_REPS = 40, 200, 2000
 local measured = {}
 
-local function Measure(label, operation)
+local function Measure(label, operation, nativeFixture)
     assert(BUDGETS[label], "no budget for " .. label)
     for _ = 1, WARMUP do operation() end
     local ticks = 0
     debug.sethook(function() ticks = ticks + 1 end, "", 1)
     for _ = 1, INSTRUCTION_REPS do operation() end
     debug.sethook()
+    if nativeFixture then nativeFixture.Begin() end
     collectgarbage("collect")
     collectgarbage("stop")
     local before = collectgarbage("count")
     for _ = 1, ALLOCATION_REPS do operation() end
     local bytes = (collectgarbage("count") - before) * 1024
     collectgarbage("restart")
+    if nativeFixture then bytes = nativeFixture.Finish(label, bytes, ALLOCATION_REPS) end
     measured[#measured + 1] = {
         label = label, instructions = ticks / INSTRUCTION_REPS, bytes = bytes / ALLOCATION_REPS,
     }
@@ -67,6 +72,53 @@ local World = assert(loadfile(repo .. "/tools/tests/classpower_world.lua"))()
 local PT_MANA, PT_ENERGY, PT_COMBO, PT_ESSENCE = World.PT.MANA, World.PT.ENERGY, World.PT.COMBO, World.PT.ESSENCE
 local CountSetters, Dispatcher = World.CountSetters, World.Dispatcher
 local function Start(toc, class, spec, primary, bars) return World.Start(repo, toc, class, spec, primary, bars) end
+
+-- Calibrate the ACTUAL shared fixture methods, without running addon code.
+-- Warm the timer queue and dummy widget before measuring their table sizes.
+local function FixtureBytes(operation)
+    for _ = 1, WARMUP do operation() end
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local before = collectgarbage("count")
+    for _ = 1, ALLOCATION_REPS do operation() end
+    local bytes = (collectgarbage("count") - before) * 1024 / ALLOCATION_REPS
+    collectgarbage("restart")
+    return bytes
+end
+
+local function ShamanNativeFixture(t)
+    local timers, methods = C_Timer, t.env.Methods
+    local after, setColor = timers.After, methods.SetStatusBarColor
+    local dummy = t.env:CreateFrame("StatusBar")
+    local function Noop() end
+    local timerBytes = FixtureBytes(function() after(0, Noop) t.env:RunTimers() end)
+    local colorBytes = FixtureBytes(function() setColor(dummy, 1, 1, 1, 1) end)
+    local afterCalls, colorCalls = 0, 0
+    return {
+        Begin = function()
+            afterCalls, colorCalls = 0, 0
+            -- Wrap only the allocation pass: instruction ceilings continue to
+            -- measure the original fixture, with no accounting overhead.
+            timers.After = function(delay, callback)
+                afterCalls = afterCalls + 1
+                return after(delay, callback)
+            end
+            methods.SetStatusBarColor = function(widget, r, g, b, a)
+                colorCalls = colorCalls + 1
+                return setColor(widget, r, g, b, a)
+            end
+        end,
+        Finish = function(label, bytes, reps)
+            timers.After, methods.SetStatusBarColor = after, setColor
+            local expected = label == "Mainline SHAMAN maelstrom UNIT_AURA" and reps or 0
+            assert(afterCalls == expected and colorCalls == expected,
+                "Maelstrom native call budget changed: " .. afterCalls .. " timers, " .. colorCalls .. " colors")
+            -- One timer entry and one RGBA tuple per changed event; none on
+            -- unchanged events. Extra addon tables/closures are never deducted.
+            return bytes - afterCalls * (timerBytes - 96) - colorCalls * (colorBytes - 96)
+        end,
+    }
+end
 
 --------------------------------------------------------------------------
 -- Scenarios
@@ -131,6 +183,7 @@ end
 do
     local t = Start("Mainline", "SHAMAN", 2, PT_MANA)
     assert(t.CP.visible and t.CP.isAuraPower, "Midnight Enhancement did not route Maelstrom Weapon")
+    local nativeFixture = ShamanNativeFixture(t)
     local stacks = 0
     local update = Dispatcher(t, "UNIT_AURA", "player", { isFullUpdate = true })
     Measure("Mainline SHAMAN maelstrom UNIT_AURA", function()
@@ -138,7 +191,7 @@ do
         t.S.auraStacks = stacks
         update()
         t.env:RunTimers()
-    end)
+    end, nativeFixture)
     -- Aura churn without a stack change: the cache compares the new aura's
     -- fields and repaints nothing.
     local variant = 0
@@ -147,7 +200,7 @@ do
         t.S.auraVariant = variant
         update()
         t.env:RunTimers()
-    end)
+    end, nativeFixture)
     local function Fire() update() t.env:RunTimers() end
     t.S.auraVariant = 1 - variant
     local unchanged = CountSetters(t, Fire)
