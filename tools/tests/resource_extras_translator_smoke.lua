@@ -23,7 +23,10 @@
 --      variant is saved, imported or applied (State/MSUF_ProfileFields.lua runs
 --      the translator the normalizer registers): the effective bars carry the
 --      current keys and the implicit Arcane look, the class power switch reads
---      them, and restoring the base leaves nothing behind.
+--      them, and restoring the base leaves nothing behind. A removed former key
+--      becomes a removal of its current key (a legacy import whose variant
+--      removes the former mana rule the base has on keeps the helper off); the
+--      variant's own value and the carried Arcane look win over such a removal.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -168,6 +171,15 @@ local function PathProof(flavor)
     Source("all")
     Check(env.MSUF_ImportExternal("MSUF3:captured", "External") == true, label .. ": the external import failed")
     CheckCarried(env.MSUF_GlobalDB.profiles.External.bars, label .. " external import")
+    -- 5. the same full import with a variant that removes the former mana rule the base has on.
+    Source("all")
+    Payload(source).profileVariants = { version = 1, entries = { { name = "NoPause", conditions = {},
+        patch = { { path = { "bars", "manaFiveSecondRule" }, remove = true } } } } }
+    Check(env.MSUF_ImportFromString("MSUF3:captured") == true, label .. ": the full import with a variant failed")
+    Check(env.MSUF_DB.bars.manaRegenPause == nil and env.MSUF_DB.bars.manaFiveSecondRule == nil,
+        label .. ": the imported variant that removes the former mana rule left the mana helper on")
+    ns.ProfileVariants.Restore()
+    Check(env.MSUF_DB.bars.manaRegenPause == true, label .. ": restoring the imported variant lost the base mana rule")
 end
 
 for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
@@ -277,9 +289,56 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     Check(offDB.bars.showArcaneWindow == false and offDB.bars.arcaneWindowText == "gcds" and offDB.bars.arcaneWindowTextFrom == nil
         and offDB.bars.arcaneWindowWarnLastGCD == nil, flavor .. ": a variant that turned the helper off gained the former look")
     Variants.Restore()
-    local removeDB = { bars = {}, profileVariants = Schema({ { path = { "bars", "showArcaneSoul" }, remove = true } }) }
-    Check(Variants.Resolve(removeDB, { location = "solo", dark = false }) == false and next(removeDB.bars) == nil,
-        flavor .. ": removing a former key changed the bars")
+    -- a removed former key resets its current key; restoring brings the base value back.
+    local removeDB = { bars = { showArcaneWindow = true },
+        profileVariants = Schema({ { path = { "bars", "showArcaneSoul" }, remove = true } }) }
+    Check(Variants.Resolve(removeDB, { location = "solo", dark = false }) == true and removeDB.bars.showArcaneWindow == nil
+        and PatchByPath(removeDB.profileVariants)["bars.showArcaneWindow"].remove == true,
+        flavor .. ": removing a former key did not reset its current key")
+    Variants.Restore()
+    Check(removeDB.bars.showArcaneWindow == true, flavor .. ": restoring the removal lost the base helper")
+
+    -- the review repro: a legacy profile import whose base has the former mana rule on and whose
+    -- variant removes it. The import validates the variants, then normalizes the base.
+    local legacy = { general = {}, bars = { manaFiveSecondRule = true },
+        profileVariants = Schema({ { path = { "bars", "manaFiveSecondRule" }, remove = true } }) }
+    legacy.profileVariants = assert(Variants.ValidateForProfile(legacy, legacy.profileVariants))
+    N.TranslateProfileToCurrent(legacy, { source = "import" })
+    Check(legacy.bars.manaRegenPause == true and legacy.bars.manaFiveSecondRule == nil,
+        flavor .. ": the legacy base mana rule was not carried")
+    local removal = PatchByPath(legacy.profileVariants)
+    Check(removal["bars.manaRegenPause"] ~= nil and removal["bars.manaRegenPause"].remove == true
+        and removal["bars.manaFiveSecondRule"] == nil, flavor .. ": the variant lost its removal of the former mana rule")
+    Check(Variants.Resolve(legacy, { location = "solo", dark = false }) == true and legacy.bars.manaRegenPause == nil
+        and wanted(legacy.bars) == false, flavor .. ": the variant that removes the former mana rule turned the helper on")
+    Variants.Restore()
+    Check(legacy.bars.manaRegenPause == true and wanted(legacy.bars) == true,
+        flavor .. ": restoring the legacy variant lost the base mana rule")
+
+    -- precedence: the variant's own value for the current key and the carried Arcane look win over a
+    -- removed former key; a former and a current removal of one setting are one removal; an off helper
+    -- gains no look, so its removed text mode resets.
+    local precedenceDB = { bars = { manaRegenPause = false, manaGainPulseColor = { 1, 1, 1 }, arcaneWindowText = "gcds",
+        arcaneWindowTextFrom = 3 }, profileVariants = Schema({
+        { path = { "bars", "manaFiveSecondRule" }, remove = true }, { path = { "bars", "manaRegenPause" }, value = true },
+        { path = { "bars", "showArcaneSoul" }, value = true }, { path = { "bars", "arcaneSoulDisplay" }, remove = true },
+        { path = { "bars", "arcaneSoulCountdownWindow" }, remove = true },
+        { path = { "bars", "manaTickColor" }, remove = true }, { path = { "bars", "manaGainPulseColor" }, remove = true },
+    }) }
+    Check(Variants.Resolve(precedenceDB, { location = "solo", dark = false }) == true,
+        flavor .. ": the precedence variant did not apply")
+    local p = precedenceDB.bars
+    Check(p.manaRegenPause == true and p.showArcaneWindow == true and p.arcaneWindowText == "both"
+        and p.arcaneWindowTextFrom == 6 and p.arcaneWindowWarnLastGCD == true and p.manaGainPulseColor == nil,
+        flavor .. ": a removed former key overrode the variant's own value or the carried Arcane look")
+    Variants.Restore()
+    local offTextDB = { bars = { arcaneWindowText = "gcds" }, profileVariants = Schema({
+        { path = { "bars", "showArcaneSoul" }, value = false }, { path = { "bars", "arcaneSoulDisplay" }, remove = true } }) }
+    Check(Variants.Resolve(offTextDB, { location = "solo", dark = false }) == true and offTextDB.bars.showArcaneWindow == false
+        and offTextDB.bars.arcaneWindowText == nil and offTextDB.bars.arcaneWindowTextFrom == nil,
+        flavor .. ": an off helper's removed text mode did not reset, or it gained the former look")
+    Variants.Restore()
+    Check(offTextDB.bars.arcaneWindowText == "gcds", flavor .. ": restoring lost the base text mode")
     local currentDB = { bars = {}, profileVariants = Schema({ { path = { "bars", "showArcaneWindow" }, value = true } }) }
     Check(Variants.Resolve(currentDB, { location = "solo", dark = false }) == true and currentDB.bars.showArcaneWindow == true
         and currentDB.bars.arcaneWindowText == nil, flavor .. ": a current-key variant was changed")
