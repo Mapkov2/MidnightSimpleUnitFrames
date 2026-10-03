@@ -424,3 +424,157 @@ function UI.FadeIn(frame, duration, fromAlpha, toAlpha)
     if frame._msufUIFadeInAnim.SetSmoothing then frame._msufUIFadeInAnim:SetSmoothing("OUT") end
     frame._msufUIFadeIn:Play()
 end
+
+--- Prompts for the core and the menu (the Options addon's M.ShowPrompt calls
+--- these with the menu's look). Nothing here writes Blizzard's
+--- StaticPopupDialogs. A question with two buttons that Escape may cancel uses
+--- Blizzard's generic dialogs (Blizzard_StaticPopup GENERIC_CONFIRMATION and
+--- GENERIC_INPUT_BOX, the same on live, forever, classic, classic_era and
+--- classic_anniversary): they read the text, the button labels and the
+--- callbacks from a data table. Escape and the second button both run the
+--- cancel callback there, and so does a dialog that finds no free frame or is
+--- replaced. A prompt with one button, one Escape must not answer, or one whose
+--- answer is stored (owned = true) is therefore an MSUF-owned frame, where only
+--- a click or Escape answers. One data table and one frame per key keep one
+--- question per key: showing a key again replaces its question, and the
+--- replaced one runs no callback. The caller translates and formats the text
+--- when it shows the prompt; nothing times out.
+---
+--- spec: text, accept / cancel (button labels; the generic dialog defaults to
+--- YES / NO), onAccept(text), onCancel(), showAlert, single (one button),
+--- hideOnEscape (false: Escape does not answer), owned (always the owned
+--- frame), input = { maxLetters = n }.
+--- style (optional): panel(parent) builds the owned frame, text(fontString)
+--- styles its message, priority(frame) sets its strata and level on every
+--- show, raise(dialog) lifts a generic dialog.
+local promptData, promptFrames = {}, {}
+local function PromptHandler(owner, field)
+    return function(text)
+        local handler = owner.spec[field]
+        if handler then return handler(text) end
+    end
+end
+local function GenericPromptData(key)
+    local data = promptData[key]
+    if data then return data end
+    data = { text = "%s", referenceKey = key, spec = {} }
+    data.callback = PromptHandler(data, "onAccept")
+    data.cancelCallback = PromptHandler(data, "onCancel")
+    promptData[key] = data
+    return data
+end
+local function ShowGenericPrompt(key, spec, style)
+    local data = GenericPromptData(key)
+    if data.which then StaticPopup_Hide(data.which, data) end
+    data.which = spec.input and "GENERIC_INPUT_BOX" or "GENERIC_CONFIRMATION"
+    data.spec, data.text_arg1 = spec, spec.text
+    data.acceptText, data.cancelText, data.showAlert = spec.accept, spec.cancel, spec.showAlert
+    data.maxLetters = spec.input and spec.input.maxLetters
+    if spec.input then StaticPopup_ShowCustomGenericInputBox(data) else StaticPopup_ShowCustomGenericConfirmation(data) end
+    local dialog = StaticPopup_FindVisible(data.which, data)
+    if style and style.raise then style.raise(dialog) end
+    return dialog
+end
+local function PromptButtonClick(button)
+    local frame = button:GetParent()
+    frame:Hide()
+    local handler = frame._msufPromptSpec[button._msufPromptField]
+    if handler then handler() end
+end
+local function PromptKeyDown(frame, key)
+    if InCombatLockdown() then return end
+    local escape = key == "ESCAPE"
+    frame:SetPropagateKeyboardInput(not escape)
+    if escape then PromptButtonClick(frame._msufPromptButtons[2]) end
+end
+local function DefaultPromptPanel(parent)
+    local frame = PixelLayoutRegion(CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil))
+    UI.ApplyMaterial(frame, "popup")
+    frame:EnableMouse(true)
+    return frame
+end
+-- Blizzard's own dialogs sit on DIALOG.
+local function DefaultPromptPriority(frame)
+    frame:SetFrameStrata("DIALOG")
+end
+local function BuildPromptFrame(style)
+    local frame = (style and style.panel or DefaultPromptPanel)(UIParent)
+    frame:SetClampedToScreen(true)
+    local alert = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK"))
+    alert:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew")
+    alert:SetSize(36, 36)
+    alert:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -14)
+    local text = PixelLayoutRegion(frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
+    text:SetJustifyH("CENTER")
+    if style and style.text then style.text(text) end
+    local buttons = {}
+    for index, field in ipairs({ "onAccept", "onCancel" }) do
+        local button = PixelLayoutRegion(CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"))
+        button:SetSize(128, 22)
+        button._msufPromptField = field
+        button:RegisterForClicks("LeftButtonUp")
+        button:SetScript("OnClick", PromptButtonClick)
+        MSUF_SkinButton(button)
+        buttons[index] = button
+    end
+    frame:SetScript("OnKeyDown", PromptKeyDown)
+    frame._msufPromptAlert, frame._msufPromptText, frame._msufPromptButtons = alert, text, buttons
+    frame._msufPromptPriority = style and style.priority or DefaultPromptPriority
+    frame:Hide()
+    return frame
+end
+local function LayoutPromptFrame(frame, spec)
+    local text, accept, cancel = frame._msufPromptText, frame._msufPromptButtons[1], frame._msufPromptButtons[2]
+    -- An explicit text width, so the string height is known before the frame
+    -- has a resolved rect.
+    local width, inset = spec.showAlert and 360 or 320, spec.showAlert and 58 or 18
+    frame:SetWidth(width)
+    frame._msufPromptAlert:SetShown(spec.showAlert == true)
+    text:ClearAllPoints()
+    text:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -18)
+    text:SetWidth(width - inset - 18)
+    text:SetText(spec.text)
+    accept:SetText(spec.accept)
+    cancel:SetText(spec.cancel or "")
+    cancel:SetShown(not spec.single)
+    accept:ClearAllPoints()
+    cancel:ClearAllPoints()
+    if spec.single then
+        accept:SetPoint("BOTTOM", frame, "BOTTOM", 0, 16)
+    else
+        accept:SetPoint("BOTTOMRIGHT", frame, "BOTTOM", -6, 16)
+        cancel:SetPoint("BOTTOMLEFT", frame, "BOTTOM", 6, 16)
+    end
+    frame:SetHeight(max(spec.showAlert and 64 or 0, text:GetStringHeight() or 0) + 18 + 16 + 22 + 16)
+end
+local function ShowFramePrompt(key, spec, style)
+    local frame = promptFrames[key] or BuildPromptFrame(style)
+    promptFrames[key] = frame
+    frame._msufPromptSpec = spec
+    LayoutPromptFrame(frame, spec)
+    frame._msufPromptPriority(frame)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOP", UIParent, "TOP", 0, -135)
+    local escape = spec.hideOnEscape ~= false and not InCombatLockdown()
+    frame:EnableKeyboard(escape)
+    if escape then frame:SetPropagateKeyboardInput(true) end
+    frame:Show()
+    frame:Raise()
+    return frame
+end
+--- Shows the prompt for `key` (see the spec above) and returns its frame.
+function UI.ShowPrompt(key, spec, style)
+    if spec.single or spec.hideOnEscape == false or spec.owned then return ShowFramePrompt(key, spec, style) end
+    return ShowGenericPrompt(key, spec, style)
+end
+--- Hides the prompt for `key` without answering it.
+function UI.HidePrompt(key)
+    local data, frame = promptData[key], promptFrames[key]
+    if data and data.which then StaticPopup_Hide(data.which, data) end
+    if frame then frame:Hide() end
+end
+function UI.IsPromptShown(key)
+    local data, frame = promptData[key], promptFrames[key]
+    if frame and frame:IsShown() then return true end
+    return data ~= nil and data.which ~= nil and StaticPopup_FindVisible(data.which, data) ~= nil
+end
