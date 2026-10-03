@@ -164,11 +164,13 @@ assert(contains(player, "ScheduleDelayed(frame._msufPlayerInterruptHideCB, durat
 assert(not contains(player, "HideIfNoLongerCasting({"), "player interrupt callback must not allocate an owner table")
 assert(contains(player, "local INTERRUPT_IDENTITY_GRACE = 0.25"),
     "player interrupt feedback must retain a bounded STOP-before-INTERRUPTED identity window")
-assert(contains(player, "frame._msufPlayerInterruptCastGUID = interruptCastGUID")
-    and contains(player, "MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)))")
-    and contains(player, "and castGUID == pendingGUID")
-    and contains(player, "GetTime() <= frame._msufPlayerInterruptCastDeadline"),
-    "player interrupt feedback must match the stopped cast GUID before accepting the late terminal event")
+assert(contains(player, "frame._msufPlayerInterruptCastGUID = plainGUID")
+    and contains(player, "frame._msufPlayerInterruptCastBarID = castBarID")
+    and contains(player, "MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)), (select(5, ...)))")
+    and contains(player, "return castBarID == pendingBarID")
+    and contains(player, "return castGUID == pendingGUID")
+    and contains(player, "if deadline == nil or GetTime() > deadline then return false end"),
+    "player interrupt feedback must match the stopped cast (castBarID, else castGUID) before accepting the late terminal event")
 local playerEventStart = assert(player:find("local function PlayerCastbarOnEventImpl", 1, true))
 local playerInterruptStart = assert(player:find('if event == "UNIT_SPELLCAST_INTERRUPTED" then', playerEventStart, true))
 local playerInterruptEnd = assert(player:find("if not frame.isEmpower then", playerInterruptStart, true))

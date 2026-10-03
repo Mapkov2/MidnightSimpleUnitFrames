@@ -422,7 +422,11 @@ local function FinishWake()
     frame:SetScript("OnCooldownDone", function()
         if not finishWakeArmed then return end
         finishWakeArmed = false
-        OnFinishTimer()
+        -- The secret cap is still armed (armedKey): FinishGCDBar cancels it.
+        -- OnFinishTimer would forget the key first and leave the cap to end
+        -- the next GCD.
+        local active = activeFrame
+        if active then FinishGCDBar(active) else CancelFinishTimers() end
     end)
     frame:Show()
     finishWake = frame

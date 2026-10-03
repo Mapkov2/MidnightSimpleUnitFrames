@@ -147,24 +147,121 @@ end
 
 local function Escape(name) return (name:gsub("%W", "%%%0")) end
 
--- True when the text before a use short-circuits it: `flag or` with a true
--- plain local flag, `flag and` with a false one, and the negated forms
--- `not flag and` (true flag) and `not flag or` (false flag).
+-- The expression before a use, as tokens: names and keywords, numbers,
+-- strings, operators (==, ~=, <=, >=, .., ... and single characters). A
+-- comment ends the line.
+local function Tokens(text)
+    local tokens, position = {}, 1
+    while position <= #text do
+        local char = text:sub(position, position)
+        if char:find("%s") then
+            position = position + 1
+        elseif text:find("^%-%-", position) then
+            break
+        elseif char == "\"" or char == "'" then
+            local finish = position + 1
+            while finish <= #text and text:sub(finish, finish) ~= char do
+                if text:sub(finish, finish) == "\\" then finish = finish + 1 end
+                finish = finish + 1
+            end
+            tokens[#tokens + 1] = { kind = "string", value = text:sub(position + 1, finish - 1) }
+            position = finish + 1
+        elseif char:find("[%a_]") then
+            local word = text:match("^[%a_][%w_]*", position)
+            tokens[#tokens + 1] = { kind = "name", text = word }
+            position = position + #word
+        elseif char:find("%d") then
+            local number = text:match("^%d+%.?%d*", position)
+            tokens[#tokens + 1] = { kind = "number", value = tonumber(number) }
+            position = position + #number
+        else
+            local operator = text:match("^[=~<>]=", position) or text:match("^%.%.%.?", position) or char
+            tokens[#tokens + 1] = { kind = "op", text = operator }
+            position = position + #operator
+        end
+    end
+    return tokens
+end
+
+local KEYWORD = { ["and"] = true, ["or"] = true, ["not"] = true, ["true"] = true, ["false"] = true, ["nil"] = true,
+    ["if"] = true, ["then"] = true, ["else"] = true, ["elseif"] = true, ["local"] = true, ["return"] = true,
+    ["while"] = true, ["do"] = true, ["until"] = true, ["function"] = true, ["end"] = true, ["for"] = true,
+    ["in"] = true, ["repeat"] = true }
+-- Tokens after which an operand starts a new (sub)expression.
+local OPERAND_START = { ["("] = true, ["{"] = true, ["["] = true, ["="] = true, [","] = true, ["and"] = true,
+    ["or"] = true, ["return"] = true, ["if"] = true, ["elseif"] = true, ["while"] = true, ["until"] = true,
+    ["then"] = true, ["do"] = true, ["else"] = true }
+local LITERAL = { ["true"] = true, ["false"] = false }
+
+local function TokenText(token) return token and (token.text or token.kind) end
+
+-- A plain operand at tokens[index]: a non-secret local, or such a local
+-- compared (==, ~=) with a literal. Returns its value and the next index.
+local function PlainOperand(tokens, index, locals)
+    local token = tokens[index]
+    if not (token and token.kind == "name" and not KEYWORD[token.text]) then return end
+    local value = locals[token.text]
+    if value == nil or IsSecret(value) then return end
+    local operator, literal = tokens[index + 1], tokens[index + 2]
+    if operator and operator.kind == "op" and (operator.text == "==" or operator.text == "~=") then
+        if not literal then return end
+        local plain
+        if literal.kind == "number" or literal.kind == "string" then
+            plain = literal.value
+        elseif literal.kind == "name" and (LITERAL[literal.text] ~= nil or literal.text == "nil") then
+            plain = LITERAL[literal.text]
+        else
+            return
+        end
+        local equal = rawequal(value, plain)
+        if operator.text == "==" then return equal, index + 3 end
+        return not equal, index + 3
+    end
+    return value, index + 1
+end
+
+-- True when the expression before a use short-circuits it, by Lua's
+-- precedence: a plain operand (see PlainOperand), optionally negated with
+-- `not`, that is true before `or` (and not the right side of an `and`), or
+-- false before `and` with no `or` of the same depth after it, and the use
+-- inside that operator's right side (no bracket closes in between). `i == 1 or x ~= nil` with i == 2 does not
+-- short-circuit; a bare `i or` with a number would have.
 local function ShortCircuited(prefix, locals)
-    local tokens = {}
-    for token in prefix:gmatch("[%a_][%w_]*") do tokens[#tokens + 1] = token end
-    for index = 1, #tokens - 1 do
-        local flag, operator = tokens[index], tokens[index + 1]
-        if (operator == "or" or operator == "and") and flag ~= "not" and flag ~= "and" and flag ~= "or"
-            and locals[flag] ~= nil and not IsSecret(locals[flag]) then
-            local value = locals[flag]
-            if tokens[index - 1] == "not" then value = not value end
-            if operator == "or" and value then return true end
-            if operator == "and" and not value then return true end
+    local tokens = Tokens(prefix)
+    local depths, depth = {}, 0
+    for index = 1, #tokens do
+        local text = TokenText(tokens[index])
+        if text == ")" or text == "}" or text == "]" then depth = depth - 1 end
+        depths[index] = depth
+        if text == "(" or text == "{" or text == "[" then depth = depth + 1 end
+    end
+    for index = 1, #tokens do
+        local before = tokens[index - 1]
+        if index == 1 or OPERAND_START[TokenText(before)] then
+            local negated, start = false, index
+            if TokenText(tokens[index]) == "not" then negated, start = true, index + 1 end
+            local value, nextIndex = PlainOperand(tokens, start, locals)
+            local operator = nextIndex and tokens[nextIndex]
+            local word = operator and operator.kind == "name" and operator.text
+            -- After `and` the operand ends a conjunction: `a and b or use`
+            -- is `(a and b) or use`, which b alone does not decide.
+            if word == "or" and TokenText(before) == "and" then word = nil end
+            if word == "and" or word == "or" then
+                if negated then value = not value end
+                local level, inside = depths[nextIndex], true
+                for after = nextIndex + 1, #tokens do
+                    local text = TokenText(tokens[after])
+                    if depths[after] < level then inside = false break end
+                    if word == "and" and text == "or" and depths[after] == level then inside = false break end
+                end
+                if inside and word == "or" and value then return true end
+                if inside and word == "and" and not value then return true end
+            end
         end
     end
     return false
 end
+SecretWorld.ShortCircuited = ShortCircuited
 
 local USE_PATTERNS = { "%%f[%%w_.]%s%%s*[=~]=", "[=~]=%%s*%s%%f[^%%w_]", "%%f[%%w_]not%%s+%s%%f[^%%w_]",
     "%%f[%%w_]not%%s*%%(%%s*%s%%s*%%)" }
@@ -198,6 +295,9 @@ local function Misuses(line, name, locals, value)
     end
     return false
 end
+SecretWorld.Misuses = Misuses
+--- The secret helper of the last world built (the watcher's IsSecret).
+function SecretWorld.CurrentSecrets() return Secrets end
 
 --- Records every executed line of the given files that compares or
 --- truth-tests a secret local or a secret field of a local table. Returns
@@ -374,7 +474,11 @@ local function InstallClient(world, env)
     env.issecretvalue = _G.issecretvalue
     env.issecure = function() return false end
     env.UnitClass = function(unit)
-        if unit == "player" then return world.playerClass, world.playerClass, 8 end
+        if unit == "player" then
+            -- world.secretPlayerClass: a restricted identity (both names secret).
+            if world.secretPlayerClass then return S("string"), S("string"), 8 end
+            return world.playerClass, world.playerClass, 8
+        end
         return "Warrior", "WARRIOR", 1
     end
     -- WoW Forever: the swing API (upstream/forever SwingTimerDocumentation.lua).

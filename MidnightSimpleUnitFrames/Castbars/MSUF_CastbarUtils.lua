@@ -432,8 +432,9 @@ local function GetNonInterruptibleCastColor()
 end
 ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
 
--- The custom colours come from this file's getters: Castbars load after
--- Runtime/MSUF_Colors.lua, so these are what the public aliases hold.
+-- The custom colours come from this file's getters, the only owner of the
+-- public aliases (Runtime/MSUF_Colors.lua keeps its palette-fallback getters
+-- for the menu's MSUF._colorsAPI only).
 local function ResolveCastbarColors()
     EnsureDBLazy()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
@@ -611,7 +612,7 @@ local function ResolveInterruptUnavailableCastColor()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
     local red, green, blue
 
-    -- This file's getter (it replaces Runtime/MSUF_Colors.lua's export).
+    -- This file's getter (the public alias's only owner).
     red, green, blue = GetInterruptUnavailableCastColor()
 
     if not (red and green and blue) then

@@ -185,16 +185,75 @@ local function PlayerCastbarLife(world, frame)
     Fire("UNIT_SPELLCAST_FAILED", nil, 74)
     world:Advance(0.5)
 
-    -- A readable cast whose STOP arrives before a restricted INTERRUPTED: the
-    -- kept identity is plain, the late payload's castGUID is secret.
-    world.secretCasts = false
-    world:StartCast("player", "Polymorph", 1.5, 75)
-    Fire("UNIT_SPELLCAST_START", nil, 75)
-    world.secretCasts = true
-    world.casting.player = nil
-    Fire("UNIT_SPELLCAST_STOP", nil, 75)
-    Fire("UNIT_SPELLCAST_INTERRUPTED", true, 75)
-    world:Advance(0.5)
+    -- STOP before INTERRUPTED keeps the cast's identity for the late payload.
+    -- A restricted payload's castGUID is secret: its NeverSecret castBarID
+    -- decides (before 2026-10-03 the feedback was dropped). Another cast's
+    -- castBarID is rejected; without castBarIDs a plain castGUID decides.
+    local function LateInterrupt(label, secretStart, castBarID, payload, shown)
+        world.secretCasts = secretStart
+        world:StartCast("player", "Polymorph", 1.5, castBarID)
+        Fire("UNIT_SPELLCAST_START", nil, castBarID)
+        world.secretCasts = true
+        world.casting.player = nil
+        Fire("UNIT_SPELLCAST_STOP", nil, castBarID)
+        if frame.interruptFeedbackEndTime ~= nil then Fail("player castbar: " .. label .. ": feedback before the interrupt") end
+        world:Fire(frame, "UNIT_SPELLCAST_INTERRUPTED", payload())
+        if (frame.interruptFeedbackEndTime ~= nil) ~= shown then
+            Fail("player castbar: " .. label .. (shown and ": no interrupt feedback" or ": another cast's interrupt shown"))
+        end
+        world:Advance(0.8)
+    end
+    local S = world.Secrets.New
+    LateInterrupt("readable cast, restricted late INTERRUPTED", false, 75,
+        function() return "player", S("string"), S(), S("string"), 75 end, true)
+    LateInterrupt("restricted cast, restricted late INTERRUPTED", true, 76,
+        function() return "player", S("string"), S(), S("string"), 76 end, true)
+    LateInterrupt("late INTERRUPTED of another cast", true, 77,
+        function() return "player", S("string"), S(), S("string"), 99 end, false)
+    LateInterrupt("readable late INTERRUPTED without castBarID", false, nil,
+        function() return "player", "Polymorph-guid", 133, nil, nil end, true)
+    LateInterrupt("readable late INTERRUPTED of another castGUID", false, nil,
+        function() return "player", "Other-guid", 133, nil, nil end, false)
+end
+
+-- The player castbar's class colour override paints MSUF's custom class
+-- colour (db.classColors through MSUF_GetClassBarColor, as the unit frames'
+-- own class colours); a secret class token is never a table key.
+local function PlayerClassColourLife(world, frame)
+    local env = world.env
+    local db, g = env.MSUF_DB, env.MSUF_DB.general
+    local keep = { g.playerCastbarOverrideEnabled, g.playerCastbarOverrideMode, db.classColors }
+    g.playerCastbarOverrideEnabled, g.playerCastbarOverrideMode = true, "CLASS"
+    db.classColors = { [world.playerClass] = { r = 0.11, g = 0.22, b = 0.33 } }
+    local function Cast(castBarID)
+        world:StartCast("player", "Frostbolt", 1.5, castBarID)
+        world:Fire(frame, "UNIT_SPELLCAST_START", world:Payload("UNIT_SPELLCAST_START", "player", castBarID))
+        local bar = frame.statusBar
+        local r, gg, b = bar and bar._msufLastR, bar and bar._msufLastG, bar and bar._msufLastB
+        world.casting.player = nil
+        world:Fire(frame, "UNIT_SPELLCAST_STOP", world:Payload("UNIT_SPELLCAST_STOP", "player", castBarID))
+        world:Advance(0.5)
+        return r, gg, b
+    end
+    local r, gg, b = Cast(80)
+    if not (r == 0.11 and gg == 0.22 and b == 0.33) then
+        Fail(("player castbar class override painted %s, %s, %s, not the custom class colour")
+            :format(tostring(r), tostring(gg), tostring(b)))
+    end
+    -- A restricted class token: MSUF_GetClassBarColor indexes db.classColors
+    -- and RAID_CLASS_COLORS with it (the client raises on a secret key).
+    local getClassColor = env.MSUF_GetClassBarColor
+    local secretKey = false
+    env.MSUF_GetClassBarColor = function(token, ...)
+        if world.Secrets.IsSecret(token) then secretKey = true end
+        return getClassColor(token, ...)
+    end
+    world.secretPlayerClass = true
+    Cast(81)
+    world.secretPlayerClass = nil
+    env.MSUF_GetClassBarColor = getClassColor
+    if secretKey then Fail("player castbar class override looked up a secret class token") end
+    g.playerCastbarOverrideEnabled, g.playerCastbarOverrideMode, db.classColors = keep[1], keep[2], keep[3]
 end
 
 local function FindFrame(world, predicate)
@@ -224,6 +283,25 @@ local function GCDLife(world)
         world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", world:Payload("UNIT_SPELLCAST_SUCCEEDED", "player", nil))
         world:Advance(1.8)
     end
+    -- A secret GCD ends on its native completion (1.5 s), well before its
+    -- 2.5 s cap; a readable GCD 2.0 s after it with 0.55 s left must keep its
+    -- own deadline. Before 2026-10-03 the completion left the cap armed, and
+    -- at 2.5 s it ended the readable GCD early.
+    world.secretCooldowns = true
+    world.cooldowns[61304] = { startTime = world.clock, total = 1.5 }
+    world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", "player", world.Secrets.New("string"), 1449)
+    local bar = env.MSUF_DB.general.gcdBarDetached and world:Named("MSUF_DetachedGCDBar") or env.MSUF_PlayerCastbar
+    world:Advance(2.0)
+    if bar and bar._msufGCDActive == true then Fail("secret GCD did not end on its native completion") end
+    world.secretCooldowns = false
+    world.cooldowns[61304] = { startTime = world.clock - 0.95, total = 1.5 }
+    world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", "player", world.Secrets.New("string"), 1449)
+    world:Advance(0.52)
+    if not (bar and bar._msufGCDActive == true) then
+        Fail("the secret GCD's cap ended the readable GCD after it early")
+    end
+    world:Advance(0.3)
+    if bar and bar._msufGCDActive == true then Fail("readable GCD after a secret one did not end") end
     world.secretCooldowns = true
 end
 
@@ -348,6 +426,7 @@ local function RunMainline(style)
         PoolLife(world, "MSUF_ArenaCastbars", "arena1", "ARENA_OPPONENT_UPDATE", "arena1")
     end)
     Scenario(world, style .. " player", function() PlayerCastbarLife(world, env.MSUF_PlayerCastbar) end)
+    Scenario(world, style .. " player class colour", function() PlayerClassColourLife(world, env.MSUF_PlayerCastbar) end)
     Scenario(world, style .. " interrupt ready", function() InterruptReadyLife(world) end)
     Scenario(world, style .. " GCD attached", function()
         env.MSUF_DB.general.gcdBarDetached = false
@@ -425,10 +504,49 @@ local function RunForever()
     end
 end
 
+-- The watcher's own rule (SecretWorld.Misuses): a guard counts only when the
+-- expression really short-circuits the use. Before 2026-10-03 it read the
+-- names alone, so `i == 1 or (frame.speed ~= nil ...)` passed as `i or ...`
+-- and the Forever swing timer's secret attack-speed compare went unseen.
+local function WatcherSelfTest(secrets)
+    local secret = secrets.New("number")
+    local secretFlag = secrets.New("boolean")
+    local function Case(line, name, locals, value, expected)
+        local got = SecretWorld.Misuses(line, name, locals, value) == true
+        if got ~= expected then
+            Fail(("watcher self-test: %q with %s reads as %s"):format(line, name, got and "a misuse" or "guarded"))
+        end
+    end
+    local function L(extra)
+        local locals = { speed = secret, frame = { speed = secret } }
+        for key, value in pairs(extra or {}) do locals[key] = value end
+        return locals
+    end
+    Case("local equipped = i == 1 or (frame.speed ~= nil and Equipped(frame.speed))", "frame.speed", L({ i = 2 }), secret, true)
+    Case("local equipped = i == 1 or (frame.speed ~= nil and Equipped(frame.speed))", "frame.speed", L({ i = 1 }), secret, false)
+    Case("local equipped = i ~= 1 and frame.speed ~= nil", "frame.speed", L({ i = 1 }), secret, false)
+    Case("if hand == \"main\" or speed == nil then", "speed", L({ hand = "off" }), secret, true)
+    Case("if hand == \"main\" or speed == nil then", "speed", L({ hand = "main" }), secret, false)
+    Case("local x = flag or speed ~= nil", "speed", L({ flag = true }), secret, false)
+    Case("local x = flag or speed ~= nil", "speed", L({ flag = false }), secret, true)
+    Case("local x = not flag and speed ~= nil", "speed", L({ flag = true }), secret, false)
+    Case("local x = not flag and speed ~= nil", "speed", L({ flag = false }), secret, true)
+    Case("local x = flag and speed ~= nil", "speed", L({ flag = false }), secret, false)
+    Case("local x = flag and other or speed ~= nil", "speed", L({ flag = false, other = 1 }), secret, true)
+    Case("local x = (flag or other) and speed ~= nil", "speed", L({ flag = true, other = 1 }), secret, true)
+    Case("local x = count + flag or speed ~= nil", "speed", L({ flag = true, count = 1 }), secret, true)
+    Case("local x = issecretvalue(speed) or speed > 0", "speed", L(), secret, false)
+    Case("if ready then", "ready", L({ ready = secretFlag }), secretFlag, true)
+    Case("if known and ready then", "ready", L({ known = false, ready = secretFlag }), secretFlag, false)
+    Case("if known == 2 and ready then", "ready", L({ known = 1, ready = secretFlag }), secretFlag, false)
+    Case("if known == 2 and ready then", "ready", L({ known = 2, ready = secretFlag }), secretFlag, true)
+end
+
 for _, style in ipairs(os.getenv("MSUF_SMOKE_STYLES") and { os.getenv("MSUF_SMOKE_STYLES") } or { "box", "border", "fill" }) do
     if style == "forever" then RunForever() else RunMainline(style) end
 end
 if not os.getenv("MSUF_SMOKE_STYLES") then RunForever() end
+WatcherSelfTest(assert(SecretWorld.CurrentSecrets(), "no secret world ran"))
 
 if #failures > 0 then
     error(("castbar_secret_paths_smoke: %d failure(s):\n  %s"):format(#failures, table.concat(failures, "\n  ")), 0)
