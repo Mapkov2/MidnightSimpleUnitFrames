@@ -648,6 +648,11 @@ function State.EnsureCombatListener()
     combatFrame = CreateFrame("Frame")
     combatFrame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" and active then
+            -- The configuration lock with the event marks the combat edge
+            -- (Kernel Util.InCombat): the lockdown starts after this dispatch,
+            -- and the exit below commits history through that lock, which
+            -- must already refuse.
+            IsConfigCombatLocked(event)
             if provider == "ellesmere" then
                 State.SuspendExternalPreview()
             else

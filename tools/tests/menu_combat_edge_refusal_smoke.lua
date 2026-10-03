@@ -19,7 +19,10 @@
 --   3. the same holds when only the minimized bar is on screen (the fallback
 --      combat listener quiesces the runtime itself);
 --   4. the refusal source answers true for the event and for the rest of its
---      frame, and false again once the lockdown ended.
+--      frame, and false again once the lockdown ended;
+--   5. MSUF Edit Mode, closed by its own combat listener (sent the event
+--      alone), defers its open move the same way: no snapshot, no entry on
+--      that frame, the entry after combat.
 -- Boots the real core and Options graph of one client (client_world.lua).
 -- Plain Lua 5.1, repo root and client flavor.
 
@@ -227,6 +230,47 @@ world.widgets:SetCombat(true)
 Check(M.IsConfigCombatLocked() == true, "the refusal ignores the lockdown")
 world.widgets:SetCombat(false)
 Check(M.IsConfigCombatLocked("PLAYER_REGEN_ENABLED") == false, "the refusal holds after PLAYER_REGEN_ENABLED")
+
+---------------------------------------------------------------------------
+-- 5. MSUF Edit Mode's own combat exit
+---------------------------------------------------------------------------
+do
+    world.widgets:AdvanceTime(1)
+    M.HideSlashMenuAndMinibar(win)
+    world.widgets:RunTimers()
+    -- The unit-frame engine is not what this section models
+    -- (editmode_shell_locale_smoke does the same).
+    n.UF.Apply = function() return true end
+    e.MSUF_ForceReanchorAllUnitFrames_Once = function() end
+    local EM2 = Check(e.MSUF_EM2, "MSUF Edit Mode did not load")
+    Check(EM2.State.Enter("player") == true, "Edit Mode did not open")
+    world.widgets:RunTimers()
+    Check(EM2.Undo.BeginChange("unit", "player", "Move") == true, "the Edit Mode move did not open its transaction")
+    e.MSUF_DB.player.offsetX = (tonumber(e.MSUF_DB.player.offsetX) or 0) + 5
+    local listener
+    for _, frame in ipairs(world.widgets.frames) do
+        local handler = frame.events and frame.events.PLAYER_REGEN_DISABLED and frame:GetScript("OnEvent")
+        if handler and debug.getinfo(handler, "S").source:find("MSUF_EditMode_State.lua", 1, true) then
+            listener = { frame = frame, handler = handler }
+        end
+    end
+    if Check(listener, "Edit Mode registered no combat listener") then
+        local undoBefore = UndoCount()
+        snapshots = 0
+        listener.handler(listener.frame, "PLAYER_REGEN_DISABLED")
+        Check(EM2.State.IsActive and EM2.State.IsActive() ~= true, "combat left Edit Mode open")
+        Check(snapshots == 0, "the Edit Mode exit took " .. snapshots .. " profile snapshot(s) on the combat-start frame")
+        Check(UndoCount() == undoBefore, "the Edit Mode exit pushed an entry on the combat-start frame")
+        world.widgets:SetCombat(true)
+        world.widgets:AdvanceTime(1)
+        world.widgets:SetCombat(false)
+        Fire("PLAYER_REGEN_ENABLED")
+        listener.handler(listener.frame, "PLAYER_REGEN_ENABLED")
+        world.widgets:RunTimers()
+        OpenMenu("after the Edit Mode combat exit")
+        Check(UndoCount() == undoBefore + 1, "the deferred Edit Mode move did not land after combat")
+    end
+end
 
 print(string.format("menu_combat_edge_refusal_smoke: ok (%s: the combat-start frame defers the apply and the history commit)",
     flavor))

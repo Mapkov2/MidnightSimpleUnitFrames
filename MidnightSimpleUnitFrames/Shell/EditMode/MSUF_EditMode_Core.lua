@@ -234,8 +234,10 @@ end
 
 -- The combat lock and its message belong to the core (Kernel/MSUF_Util.lua,
 -- loaded before Edit Mode on every client).
-function Util.IsConfigCombatLocked()
-    return MSUF.Require("MSUF_IsConfigCombatLocked", CALLER)() and true or false
+--- A handler running for a combat event passes it (PLAYER_REGEN_DISABLED
+--- arrives before the lockdown starts).
+function Util.IsConfigCombatLocked(event)
+    return MSUF.Require("MSUF_IsConfigCombatLocked", CALLER)(event) and true or false
 end
 
 function Util.ShowConfigCombatLockMessage()
