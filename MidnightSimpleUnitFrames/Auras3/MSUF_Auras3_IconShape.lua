@@ -6,6 +6,10 @@ A3.IconShape = Shape
 Shape.MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames")
 Shape.RECTANGLE = "RECTANGLE"
 Shape.FOLLOW_PORTRAIT = "FOLLOW_PORTRAIT"
+-- Some spell icons include a bevel in the artwork; keep it inside the crop.
+function Shape.IconZoomInset(zoom)
+    return math.max(0.07, (1 - 100 / zoom) * 0.5)
+end
 Shape.MEDIA = {
     CIRCLE = {
         mask = Shape.MEDIA_ROOT .. "\\Media\\Masks\\circle_mask.tga",

@@ -310,7 +310,7 @@ local function SyncMissingFrame(parentFrame, slot, button, ownerContainer)
         -- Match the live AuraButton crop exactly. PrepareAuraButton derives
         -- the icon TexCoord from the same zoom, so a fixed crop here would
         -- reframe the art the moment the aura came up.
-        local inset = (1 - (100 / ClampNumber(slot.iconZoom, 100, 100, 200))) * 0.5
+        local inset = A3.IconShape.IconZoomInset(ClampNumber(slot.iconZoom, 100, 100, 200))
         tex:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
         if slot.enchantSlot then
             -- No AuraButton can ever cover an enchant placeholder, so the icon

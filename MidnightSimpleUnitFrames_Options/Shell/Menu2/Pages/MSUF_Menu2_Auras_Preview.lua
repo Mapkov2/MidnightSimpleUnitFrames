@@ -81,8 +81,7 @@ local function ApplyAuraPreviewIconZoom(texture, zoom)
     if not (texture and texture.SetTexCoord) then return end
     zoom = tonumber(zoom) or 100
     if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
-    local visible = 100 / zoom
-    local inset = (1 - visible) * 0.5
+    local inset = A3.IconShape.IconZoomInset(zoom)
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
 local function ApplyAuraPreviewFont(fs, size)

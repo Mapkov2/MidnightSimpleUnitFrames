@@ -469,7 +469,7 @@ local function ApplyFrameAuraPreview(frame, kind, visual, lane, descriptor, slot
   local textures = descriptor.textures
   texture:SetTexture(textures[((sampleIndex - 1) % #textures) + 1] or PREVIEW_QUESTION)
   local zoom = max(100, min(200, tonumber(lane.iconZoom) or 100))
-  local inset = (1 - (100 / zoom)) * 0.5
+  local inset = MSUF.MSUF_Auras3.IconShape.IconZoomInset(zoom)
   texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
   texture:SetVertexColor(1, 1, 1, 1)
 
@@ -824,7 +824,7 @@ local function ApplySpellIndicatorPreview(frame, kind, visual, slot)
   else
     texture:SetTexture(slot.icon or PREVIEW_QUESTION)
     local zoom = max(100, min(200, tonumber(slot.iconZoom) or 100))
-    local inset = (1 - (100 / zoom)) * 0.5
+    local inset = MSUF.MSUF_Auras3.IconShape.IconZoomInset(zoom)
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
     texture:SetVertexColor(1, 1, 1, 1)
     texture:SetShown(not barOnly)

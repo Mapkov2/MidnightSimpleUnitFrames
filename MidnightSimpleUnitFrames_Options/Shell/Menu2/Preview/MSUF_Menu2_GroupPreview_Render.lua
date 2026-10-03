@@ -1006,7 +1006,7 @@ local function ApplyPreviewIconZoom(texture, zoom, baseInset)
     if zoom < 100 then zoom = 100 elseif zoom > 200 then zoom = 200 end
     baseInset = tonumber(baseInset) or 0
     local visible = (1 - (baseInset * 2)) * (100 / zoom)
-    local inset = (1 - visible) * 0.5
+    local inset = math.max(MSUF.MSUF_Auras3.IconShape.IconZoomInset(zoom), (1 - visible) * 0.5)
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
 

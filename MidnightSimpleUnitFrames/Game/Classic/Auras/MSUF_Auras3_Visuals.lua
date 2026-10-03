@@ -390,7 +390,7 @@ function V.ApplyButtonLayout(lane, button)
     local cfg = lane and lane.config
     if not (cfg and button) then return end
     local zoom = Clamp(cfg.iconZoom, 100, 100, 200)
-    local inset = (1 - (100 / zoom)) * 0.5
+    local inset = Shape.IconZoomInset(zoom)
     if button.Icon and button.Icon.SetTexCoord then button.Icon:SetTexCoord(inset, 1 - inset, inset, 1 - inset) end
     local shape = cfg.iconShape or Shape.RECTANGLE
     A3.ApplyAuraIconShape(button, shape, button.Cooldown, button.Icon)

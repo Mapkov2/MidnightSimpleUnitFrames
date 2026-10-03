@@ -296,6 +296,8 @@ local Client = {
     IsVanilla = flavor == "Vanilla", IsTBC = flavor == "TBC", IsMists = flavor == "Mists",
 }
 local MSUF = { MSUF2 = M, MSUF_Auras3 = A3, Client = Client, AddonName = "MidnightSimpleUnitFrames" }
+-- Load the shared crop owner, as the shipped Core graph does before Options.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", MSUF)
 local pages = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/"
 for _, file in ipairs({ "MSUF_Menu2_AuraSettings.lua", "MSUF_Menu2_AuraControls.lua", "MSUF_Menu2_Auras.lua",
     "MSUF_Menu2_Auras_Group.lua", "MSUF_Menu2_Auras_Preview.lua" }) do

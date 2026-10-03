@@ -253,8 +253,7 @@ end
 local function ApplyIconZoom(texture, zoom)
     if not (texture and texture.SetTexCoord) then return end
     zoom = Clamp(zoom, 100, 100, 200)
-    local visible = 100 / zoom
-    local inset = (1 - visible) * 0.5
+    local inset = A3.IconShape.IconZoomInset(zoom)
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
 

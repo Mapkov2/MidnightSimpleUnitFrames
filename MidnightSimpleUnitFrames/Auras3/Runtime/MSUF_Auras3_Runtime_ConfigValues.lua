@@ -342,8 +342,7 @@ local function ApplyAuraIconZoom(texture, lane)
     local zoom = ClampNumber(lane and lane.iconZoom, 100, 100, 200)
     if texture._msufA3IconZoomKey == zoom then return end
     texture._msufA3IconZoomKey = zoom
-    local visible = 100 / zoom
-    local inset = (1 - visible) * 0.5
+    local inset = Shape.IconZoomInset(zoom)
     texture:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
 end
 
