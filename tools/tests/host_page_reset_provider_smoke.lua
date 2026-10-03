@@ -13,7 +13,8 @@
 --   * the provider's reset runs in one host history entry, and the host adds
 --     no refresh, feedback or second entry of its own (the provider does those);
 --   * prepare runs before the undo snapshot (a dormant state it loads is what
---     Undo restores), finish after the committed entry, historyLabel names it;
+--     Undo restores, also inside an open menu session), finish after the
+--     committed entry, historyLabel names it;
 --   * a raising step is reported through Kernel/MSUF_Boundary.lua and never
 --     leaves the history capturing; PLAYER_REGEN_DISABLED refuses before the
 --     lockdown starts; a malformed provider leaves the others' pages alone;
@@ -144,6 +145,7 @@ local function Boot()
     M.Tr = function(text) return text end
     M.Format = function(text, ...) return string.format(text, ...) end
     M.IsConfigCombatLocked = function() return world.combat end
+    M.MenuTimer = globals.C_Timer -- Classic's coalesced menu refresh reads it at load
     -- Classic reads the host's combat message at load; Retail defines its own.
     M.ShowConfigCombatLockMessage = function() Log("combatlock") end
     M.pages = { suite_alpha = { title = "Alpha" }, suite_beta = { title = "Beta" }, opt_bars = { title = "Bars" } }
@@ -531,6 +533,43 @@ do
 end
 
 do
+    -- The same inside an open menu session (the menu starts one when shown): the
+    -- session snapshot from before prepare is the reset's "before" unless the
+    -- host refreshes it. Shaped like the Suite's state: one history provider
+    -- whose Skinning part is missing while that engine is dormant.
+    local w = Boot()
+    local WM = w.M
+    local suiteRoot, skin, loaded = { setting = 1 }, { profile = 7 }, false
+    WM.RegisterHistoryProvider("MSUF_Suite", function()
+        return { root = { setting = suiteRoot.setting }, skin = loaded and { profile = skin.profile } or nil }
+    end, function(state)
+        suiteRoot.setting = state.root.setting
+        if state.skin then skin.profile = state.skin.profile end
+    end)
+    Check(WM.StartHistorySession("menu") == true, "the menu session did not start")
+    WM.RunWithHistory("Earlier change", "test:earlier", function()
+        w.globals.MSUF_DB.general.marker = 5
+        suiteRoot.setting = 2
+        return true
+    end)
+    local before = Entries(w)
+    StepProvider(w, "suite_skin", {
+        prepare = function() loaded = true return true end,
+        reset = function() skin.profile = 0 return true end,
+    })
+    Check(WM.ResetPageToDefaults("suite_skin") == true and Entries(w) == before + 1 and WM.IsHistoryCapturing() == false,
+        "the session reset must add exactly one entry")
+    Check(WM.Undo() and skin.profile == 7 and w.globals.MSUF_DB.general.marker == 5 and suiteRoot.setting == 2,
+        "Undo in an open session did not restore what prepare loaded: 7 -> 0 -> " .. tostring(skin.profile))
+    Check(WM.Redo() and skin.profile == 0, "Redo did not reapply the session reset")
+    -- Discarding the session still discards it: the earlier change goes, and
+    -- the undo stack is back to where the session started.
+    Check(WM.CancelHistorySurface("menu", true) == true and w.globals.MSUF_DB.general.marker == 1
+        and suiteRoot.setting == 1 and Entries(w) == 0, "discarding the session no longer discards it")
+    WM.EndHistorySession("menu")
+end
+
+do
     -- The undo label: the provider's own, else the host's translated "Reset %s"
     -- with the translated page title.
     local w = Boot()
@@ -695,7 +734,7 @@ do
     collectgarbage("restart")
     Check(allocated == 0, ("the provider lookup allocated %.3f KB in 10000 calls"):format(allocated))
     print(("host_page_reset_provider_smoke: PASS (4 functions, unowned keys unchanged, combat, history, "
-        .. "generic dialog, re-registration, old Suite wrap, prepare/finish/label, contained steps, REGEN edge, "
+        .. "generic dialog, re-registration, old Suite wrap, prepare/finish/label, open-session undo, contained steps, REGEN edge, "
         .. "malformed providers; lookup %d VM instructions per 300 calls at 1 and 2051 pages, 0 KB)")
         :format(small))
 end

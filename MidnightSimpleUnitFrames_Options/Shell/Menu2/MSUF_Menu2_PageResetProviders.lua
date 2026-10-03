@@ -144,7 +144,14 @@ end
 -- changed, so Undo can restore it.
 function M.ResetProviderPage(key, provider)
     if RefusedInCombat() or provider.canReset(key) ~= true then return false end
-    if provider.prepare and RunStep(provider.prepare, key, "prepare") ~= true then return false end
+    if provider.prepare then
+        if RunStep(provider.prepare, key, "prepare") ~= true then return false end
+        -- An open menu session keeps the snapshot it took before prepare loaded
+        -- anything, and that snapshot is the reset's "before". Refresh it, so
+        -- Undo restores what prepare loaded. The session's start snapshot (Reset
+        -- session, discard) stays as it was, and no entry is added.
+        M.SyncExternalHistoryState()
+    end
     local ok = M.RunWithHistory(HistoryLabel(provider, key), "page:reset:" .. key, function()
         local result = RunStep(provider.reset, key, "reset")
         if result == false then return false end
