@@ -12,6 +12,8 @@
 --      slot colours cover the new pips exactly as a full refresh paints them.
 --   3. A full refresh inside an MSUF Edit Mode session hides Alt Mana (it is no
 --      Edit Mode mover); leaving Edit Mode shows it again.
+--   4. Tip of the Spear expires after its duration; every Kill Command
+--      schedules the same expiry callback instead of a new closure.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -190,7 +192,46 @@ do
     _G.MSUF_UnitEditModeActive = nil
 end
 
+-- 4. Tip of the Spear expires after its duration. Every Kill Command schedules
+--    the same expiry callback (no closure per UNIT_SPELLCAST_SUCCEEDED); the
+--    timer of an earlier cast leaves the stacks of a later one alone.
+do
+    local t = World.Start(repo, "Mainline", "HUNTER", 3, 2)
+    local CP = t.CP
+    Check(CP.visible and CP.powerType == "TIP_OF_THE_SPEAR", "Survival did not route Tip of the Spear")
+    local scheduled = {}
+    local after = C_Timer.After
+    C_Timer.After = function(delay, callback)
+        scheduled[#scheduled + 1] = { due = GetTime() + delay, callback = callback }
+    end
+    local KILL_COMMAND = 259489
+    local function Cast(now)
+        t.env:SetTime(now)
+        t.onEvent(t.eventFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "cast", KILL_COMMAND)
+    end
+    local function RunDue(now)
+        t.env:SetTime(now)
+        for _, entry in ipairs(scheduled) do
+            if not entry.ran and entry.due <= now then
+                entry.ran = true
+                entry.callback()
+            end
+        end
+    end
+    Cast(1000)
+    Cast(1004)
+    Check(CP.spStacks > 0, "Kill Command gave no Tip of the Spear stacks")
+    Check(#scheduled == 2 and rawequal(scheduled[1].callback, scheduled[2].callback),
+        "each Kill Command scheduled a new expiry closure")
+    local stacks = CP.spStacks
+    RunDue(1010.1)
+    Check(CP.spStacks == stacks, "the first cast's timer expired the stacks the second cast refreshed")
+    RunDue(1014.1)
+    Check(CP.spStacks == 0 and CP.spExpires == nil, "Tip of the Spear did not expire after its duration")
+    C_Timer.After = after
+end
+
 if #failures > 0 then
     error("classpower_lifecycle_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_lifecycle_smoke: ok (Player HP disable, grown maximum slot colours, Alt Mana after Edit Mode)")
+print("classpower_lifecycle_smoke: ok (Player HP disable, grown maximum slot colours, Alt Mana after Edit Mode, Tip of the Spear expiry)")
