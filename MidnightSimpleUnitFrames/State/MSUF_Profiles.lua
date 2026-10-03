@@ -240,19 +240,24 @@ function MSUF_InitProfiles()
         end
     end
     --- Older builds stored the pickers' unassigned row as the name "None".
-    --- While no profile has that name such a value means unassigned: it is
-    --- cleared, so a profile named "None" made later is not picked up by it.
-    if type(profiles.None) ~= "table" then
-        for _, entry in pairs(chars) do
-            local map = type(entry) == "table" and entry.specProfileMap
+    --- MSUF_SetSpecProfile never stored "None" there, so each character's
+    --- spec map clears it once (specProfileMapVersion 1); an assignment to a
+    --- real "None" profile made after that stays. The new-character choice
+    --- could name a real "None" profile: it is cleared only without one.
+    for _, entry in pairs(chars) do
+        if type(entry) == "table" and entry.specProfileMapVersion ~= 1 then
+            local map = entry.specProfileMap
             if type(map) == "table" then
                 for slot, mapped in pairs(map) do
                     if mapped == "None" then map[slot] = nil end
                 end
             end
+            entry.specProfileMapVersion = 1
         end
-        local meta = MSUF_ProfileIO_EnsureGlobalMeta()
-        if meta.defaultProfileForNewChars == "None" then meta.defaultProfileForNewChars = nil end
+    end
+    local meta = MSUF_ProfileIO_EnsureGlobalMeta()
+    if meta.defaultProfileForNewChars == "None" and type(profiles.None) ~= "table" then
+        meta.defaultProfileForNewChars = nil
     end
     if not active then
         --- A character that has never chosen a profile follows the account-wide

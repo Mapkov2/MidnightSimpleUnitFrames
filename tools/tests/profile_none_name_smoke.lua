@@ -161,10 +161,21 @@ Check(e.MSUF_DeleteProfile("None") == true, "harness: the None profile was not d
 e.MSUF_SetSpecProfile(SLOTS[1], "None")
 Check(e.MSUF_GetSpecProfile(SLOTS[1]) == nil, "\"None\" without a real None profile no longer clears a slot")
 
--- Once a real "None" profile exists, a stored "None" is that profile.
+-- A character that has not run this build yet clears its older "None" once,
+-- also while a real "None" profile exists (MSUF_SetSpecProfile never stored
+-- "None"); the new-character choice of that real profile stays.
 Check(e.MSUF_CopyProfile("Default", "None") == true, "harness: the None profile was not created again")
-e.MSUF_SetSpecProfile(SLOTS[1], "None")
 Check(e.MSUF_SetDefaultProfileForNewCharacters("None") == true, "harness: new characters did not take None")
+local own = e.MSUF_GlobalDB.char[charKey]
+own.specProfileMapVersion, own.specProfileMap[SLOTS[1]] = nil, "None"
+e.MSUF_GlobalDB.char["Old-Realm"] = { activeProfile = "Default", specProfileMap = { [3] = "None" } }
+e.MSUF_InitProfiles()
+Check(e.MSUF_GetSpecProfile(SLOTS[1]) == nil and e.MSUF_GlobalDB.char["Old-Realm"].specProfileMap[3] == nil,
+    "an older \"None\" survived because a real None profile exists")
+Check(e.MSUF_GetDefaultProfileForNewCharacters() == "None", "initialization cleared new characters' real None profile")
+
+-- After that, an assignment of the real "None" profile is that profile.
+e.MSUF_SetSpecProfile(SLOTS[1], "None")
 e.MSUF_InitProfiles()
 Check(e.MSUF_GetSpecProfile(SLOTS[1]) == "None" and e.MSUF_GetDefaultProfileForNewCharacters() == "None",
     "initialization cleared an assignment of the real None profile")
