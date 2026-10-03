@@ -185,16 +185,35 @@ local function PlayerCastbarLife(world, frame)
     Fire("UNIT_SPELLCAST_FAILED", nil, 74)
     world:Advance(0.5)
 
-    -- A readable cast whose STOP arrives before a restricted INTERRUPTED: the
-    -- kept identity is plain, the late payload's castGUID is secret.
-    world.secretCasts = false
-    world:StartCast("player", "Polymorph", 1.5, 75)
-    Fire("UNIT_SPELLCAST_START", nil, 75)
-    world.secretCasts = true
-    world.casting.player = nil
-    Fire("UNIT_SPELLCAST_STOP", nil, 75)
-    Fire("UNIT_SPELLCAST_INTERRUPTED", true, 75)
-    world:Advance(0.5)
+    -- STOP before INTERRUPTED keeps the cast's identity for the late payload.
+    -- A restricted payload's castGUID is secret: its NeverSecret castBarID
+    -- decides (before 2026-10-03 the feedback was dropped). Another cast's
+    -- castBarID is rejected; without castBarIDs a plain castGUID decides.
+    local function LateInterrupt(label, secretStart, castBarID, payload, shown)
+        world.secretCasts = secretStart
+        world:StartCast("player", "Polymorph", 1.5, castBarID)
+        Fire("UNIT_SPELLCAST_START", nil, castBarID)
+        world.secretCasts = true
+        world.casting.player = nil
+        Fire("UNIT_SPELLCAST_STOP", nil, castBarID)
+        if frame.interruptFeedbackEndTime ~= nil then Fail("player castbar: " .. label .. ": feedback before the interrupt") end
+        world:Fire(frame, "UNIT_SPELLCAST_INTERRUPTED", payload())
+        if (frame.interruptFeedbackEndTime ~= nil) ~= shown then
+            Fail("player castbar: " .. label .. (shown and ": no interrupt feedback" or ": another cast's interrupt shown"))
+        end
+        world:Advance(0.8)
+    end
+    local S = world.Secrets.New
+    LateInterrupt("readable cast, restricted late INTERRUPTED", false, 75,
+        function() return "player", S("string"), S(), S("string"), 75 end, true)
+    LateInterrupt("restricted cast, restricted late INTERRUPTED", true, 76,
+        function() return "player", S("string"), S(), S("string"), 76 end, true)
+    LateInterrupt("late INTERRUPTED of another cast", true, 77,
+        function() return "player", S("string"), S(), S("string"), 99 end, false)
+    LateInterrupt("readable late INTERRUPTED without castBarID", false, nil,
+        function() return "player", "Polymorph-guid", 133, nil, nil end, true)
+    LateInterrupt("readable late INTERRUPTED of another castGUID", false, nil,
+        function() return "player", "Other-guid", 133, nil, nil end, false)
 end
 
 local function FindFrame(world, predicate)

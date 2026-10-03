@@ -402,6 +402,7 @@ local function ClearPendingPlayerInterrupt(frame)
     if not frame then return end
     frame._msufPlayerInterruptCastUnit = nil
     frame._msufPlayerInterruptCastGUID = nil
+    frame._msufPlayerInterruptCastBarID = nil
     frame._msufPlayerInterruptCastDeadline = nil
 end
 
@@ -688,15 +689,23 @@ local CHANNEL_START_EVENTS = {
 local function StopPlayerCastbar(frame)
     -- Some player terminal sequences deliver STOP before INTERRUPTED. Preserve
     -- the real displayed cast's identity for that short event burst before the
-    -- normal stop cleanup clears it. Instant/GCD casts never populate this.
-    -- castGUID is SecretWhenUnitSpellCastRestricted: a secret identity is never
-    -- kept, because no later payload could be matched against it.
+    -- normal stop cleanup clears it. Instant/GCD casts and channels never
+    -- store a castGUID, so they never populate this. castGUID is
+    -- SecretWhenUnitSpellCastRestricted: only a plain one is kept; the
+    -- NeverSecret castBarID is kept beside it and matched first.
     local interruptUnit = frame._msufActiveCastUnit
     local interruptCastGUID = frame._msufActiveCastGUID
-    if interruptUnit ~= nil and not issecretvalue(interruptCastGUID) and interruptCastGUID ~= nil then
-        frame._msufPlayerInterruptCastUnit = interruptUnit
-        frame._msufPlayerInterruptCastGUID = interruptCastGUID
-        frame._msufPlayerInterruptCastDeadline = GetTime() + INTERRUPT_IDENTITY_GRACE
+    local guidSecret = issecretvalue(interruptCastGUID)
+    if interruptUnit ~= nil and (guidSecret or interruptCastGUID ~= nil) then
+        local castBarID = frame._msufActiveCastBarID
+        if issecretvalue(castBarID) or type(castBarID) ~= "number" then castBarID = nil end
+        local plainGUID = (not guidSecret) and interruptCastGUID or nil
+        if castBarID ~= nil or plainGUID ~= nil then
+            frame._msufPlayerInterruptCastUnit = interruptUnit
+            frame._msufPlayerInterruptCastGUID = plainGUID
+            frame._msufPlayerInterruptCastBarID = castBarID
+            frame._msufPlayerInterruptCastDeadline = GetTime() + INTERRUPT_IDENTITY_GRACE
+        end
     end
     MarkPlayerStateInactive(frame)
 
@@ -978,14 +987,21 @@ local function HandleActiveEmpowerEvent(frame, event, ...)
 end
 
 --- The identity StopPlayerCastbar kept for an INTERRUPTED that follows its
---- STOP (always plain, see there). Only a plain payload castGUID can match it.
-local function MatchesPendingInterrupt(frame, eventUnit, castGUID)
+--- STOP (always plain, see there), inside its grace window and for its unit.
+--- The NeverSecret castBarID decides when both sides have one; otherwise a
+--- plain payload castGUID has to equal the kept one (a restricted payload's
+--- castGUID is secret).
+local function MatchesPendingInterrupt(frame, eventUnit, castGUID, castBarID)
+    local deadline = frame._msufPlayerInterruptCastDeadline
+    if deadline == nil or GetTime() > deadline then return false end
+    if eventUnit ~= frame._msufPlayerInterruptCastUnit then return false end
+    local pendingBarID = frame._msufPlayerInterruptCastBarID
+    if pendingBarID ~= nil and type(castBarID) == "number" and not issecretvalue(castBarID) then
+        return castBarID == pendingBarID
+    end
     local pendingGUID = frame._msufPlayerInterruptCastGUID
-    if pendingGUID == nil or issecretvalue(castGUID) then return false end
-    return eventUnit == frame._msufPlayerInterruptCastUnit
-        and castGUID == pendingGUID
-        and frame._msufPlayerInterruptCastDeadline ~= nil
-        and GetTime() <= frame._msufPlayerInterruptCastDeadline
+    if pendingGUID == nil or castGUID == nil or issecretvalue(castGUID) then return false end
+    return castGUID == pendingGUID
 end
 
 local function PlayerCastbarOnEventImpl(frame, event, ...)
@@ -1006,7 +1022,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
             or event == "UNIT_SPELLCAST_CHANNEL_STOP")
         and not HasActivePlayerCast(frame)
         and not (event == "UNIT_SPELLCAST_INTERRUPTED"
-            and MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)))) then
+            and MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)), (select(5, ...)))) then
         return
     end
     if event == "UNIT_SPELLCAST_START"
