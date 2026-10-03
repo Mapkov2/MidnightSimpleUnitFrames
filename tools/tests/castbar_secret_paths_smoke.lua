@@ -224,6 +224,25 @@ local function GCDLife(world)
         world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", world:Payload("UNIT_SPELLCAST_SUCCEEDED", "player", nil))
         world:Advance(1.8)
     end
+    -- A secret GCD ends on its native completion (1.5 s), well before its
+    -- 2.5 s cap; a readable GCD 2.0 s after it with 0.55 s left must keep its
+    -- own deadline. Before 2026-10-03 the completion left the cap armed, and
+    -- at 2.5 s it ended the readable GCD early.
+    world.secretCooldowns = true
+    world.cooldowns[61304] = { startTime = world.clock, total = 1.5 }
+    world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", "player", world.Secrets.New("string"), 1449)
+    local bar = env.MSUF_DB.general.gcdBarDetached and world:Named("MSUF_DetachedGCDBar") or env.MSUF_PlayerCastbar
+    world:Advance(2.0)
+    if bar and bar._msufGCDActive == true then Fail("secret GCD did not end on its native completion") end
+    world.secretCooldowns = false
+    world.cooldowns[61304] = { startTime = world.clock - 0.95, total = 1.5 }
+    world:Fire(driver, "UNIT_SPELLCAST_SUCCEEDED", "player", world.Secrets.New("string"), 1449)
+    world:Advance(0.52)
+    if not (bar and bar._msufGCDActive == true) then
+        Fail("the secret GCD's cap ended the readable GCD after it early")
+    end
+    world:Advance(0.3)
+    if bar and bar._msufGCDActive == true then Fail("readable GCD after a secret one did not end") end
     world.secretCooldowns = true
 end
 
