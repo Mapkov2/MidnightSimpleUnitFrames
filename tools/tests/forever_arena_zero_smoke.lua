@@ -162,8 +162,11 @@ local function NewSandbox(forever)
     if forever then env.GameEvent = { RegisterCamelotEvents = function() end } end
 
     local absent = { GameEvent = true, MAX_ARENA_ENEMIES = true, C_GameRules = true, C_EventUtils = true }
+    -- Addon-owned globals (MSUF_*, and the __MSUF_* load guards such as
+    -- ClassPower's __MSUF_ClassPower_Loaded) are unset until the addon sets
+    -- them; a stub there would make a load guard skip its whole file.
     setmetatable(env, { __index = function(_, key)
-        if absent[key] or (type(key) == "string" and (key:find("^MSUF") or key == "LibStub")) then return nil end
+        if absent[key] or (type(key) == "string" and (key:find("^_*MSUF") or key == "LibStub")) then return nil end
         return Stub
     end })
     return env
