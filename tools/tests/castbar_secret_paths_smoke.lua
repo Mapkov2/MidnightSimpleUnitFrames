@@ -425,10 +425,49 @@ local function RunForever()
     end
 end
 
+-- The watcher's own rule (SecretWorld.Misuses): a guard counts only when the
+-- expression really short-circuits the use. Before 2026-10-03 it read the
+-- names alone, so `i == 1 or (frame.speed ~= nil ...)` passed as `i or ...`
+-- and the Forever swing timer's secret attack-speed compare went unseen.
+local function WatcherSelfTest(secrets)
+    local secret = secrets.New("number")
+    local secretFlag = secrets.New("boolean")
+    local function Case(line, name, locals, value, expected)
+        local got = SecretWorld.Misuses(line, name, locals, value) == true
+        if got ~= expected then
+            Fail(("watcher self-test: %q with %s reads as %s"):format(line, name, got and "a misuse" or "guarded"))
+        end
+    end
+    local function L(extra)
+        local locals = { speed = secret, frame = { speed = secret } }
+        for key, value in pairs(extra or {}) do locals[key] = value end
+        return locals
+    end
+    Case("local equipped = i == 1 or (frame.speed ~= nil and Equipped(frame.speed))", "frame.speed", L({ i = 2 }), secret, true)
+    Case("local equipped = i == 1 or (frame.speed ~= nil and Equipped(frame.speed))", "frame.speed", L({ i = 1 }), secret, false)
+    Case("local equipped = i ~= 1 and frame.speed ~= nil", "frame.speed", L({ i = 1 }), secret, false)
+    Case("if hand == \"main\" or speed == nil then", "speed", L({ hand = "off" }), secret, true)
+    Case("if hand == \"main\" or speed == nil then", "speed", L({ hand = "main" }), secret, false)
+    Case("local x = flag or speed ~= nil", "speed", L({ flag = true }), secret, false)
+    Case("local x = flag or speed ~= nil", "speed", L({ flag = false }), secret, true)
+    Case("local x = not flag and speed ~= nil", "speed", L({ flag = true }), secret, false)
+    Case("local x = not flag and speed ~= nil", "speed", L({ flag = false }), secret, true)
+    Case("local x = flag and speed ~= nil", "speed", L({ flag = false }), secret, false)
+    Case("local x = flag and other or speed ~= nil", "speed", L({ flag = false, other = 1 }), secret, true)
+    Case("local x = (flag or other) and speed ~= nil", "speed", L({ flag = true, other = 1 }), secret, true)
+    Case("local x = count + flag or speed ~= nil", "speed", L({ flag = true, count = 1 }), secret, true)
+    Case("local x = issecretvalue(speed) or speed > 0", "speed", L(), secret, false)
+    Case("if ready then", "ready", L({ ready = secretFlag }), secretFlag, true)
+    Case("if known and ready then", "ready", L({ known = false, ready = secretFlag }), secretFlag, false)
+    Case("if known == 2 and ready then", "ready", L({ known = 1, ready = secretFlag }), secretFlag, false)
+    Case("if known == 2 and ready then", "ready", L({ known = 2, ready = secretFlag }), secretFlag, true)
+end
+
 for _, style in ipairs(os.getenv("MSUF_SMOKE_STYLES") and { os.getenv("MSUF_SMOKE_STYLES") } or { "box", "border", "fill" }) do
     if style == "forever" then RunForever() else RunMainline(style) end
 end
 if not os.getenv("MSUF_SMOKE_STYLES") then RunForever() end
+WatcherSelfTest(assert(SecretWorld.CurrentSecrets(), "no secret world ran"))
 
 if #failures > 0 then
     error(("castbar_secret_paths_smoke: %d failure(s):\n  %s"):format(#failures, table.concat(failures, "\n  ")), 0)

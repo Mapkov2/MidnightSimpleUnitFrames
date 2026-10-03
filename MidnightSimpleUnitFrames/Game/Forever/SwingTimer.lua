@@ -275,7 +275,8 @@ local function RefreshVisibility()
         local frame = frames[HANDS[i]]
         local cfg = frame.config
         if i == 1 then frame.speed = main elseif i == 2 then frame.speed = off else frame.speed = ranged end
-        local equipped = i == 1 or (frame.speed ~= nil and Equipped(frame.speed))
+        -- Equipped asks issecretvalue first; Equipped(nil) is false.
+        local equipped = i == 1 or Equipped(frame.speed)
         frame.handlesSwings = cfg.enabled and equipped == true
         if frame.handlesSwings and not preview then listen = true end
         local shown = active and cfg.enabled and (preview or (equipped
