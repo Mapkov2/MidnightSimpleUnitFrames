@@ -10,6 +10,8 @@
 --   2. A maximum that grows while the structure stays (UNIT_MAXPOWER, or a
 --      talent that adds combo points) recompiles the visual: ramp and custom
 --      slot colours cover the new pips exactly as a full refresh paints them.
+--   3. A full refresh inside an MSUF Edit Mode session hides Alt Mana (it is no
+--      Edit Mode mover); leaving Edit Mode shows it again.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -148,7 +150,47 @@ for _, mode in ipairs({ "ramp", "custom" }) do
     end
 end
 
+-- 3. Alt Mana is a live surface, not an Edit Mode mover: a full refresh inside an
+--    MSUF Edit Mode session hides it, and leaving Edit Mode shows it again.
+do
+    local listeners = {}
+    local t = World.Start(repo, "Mainline", "PRIEST", 3, 13, { showAltMana = true }, {
+        beforeLoad = function()
+            _G.MSUF_RegisterAnyEditModeListener = function(fn) listeners[#listeners + 1] = fn end
+        end,
+    })
+    t.env:RunTimers()
+    local AM = World.Upvalue(t.CP.DisableNow, "AM")
+    local function Shown() return AM.visible == true and AM.container ~= nil and AM.container.shown == true end
+    local function Notify(active)
+        _G.MSUF_UnitEditModeActive = active
+        for _, fn in ipairs(listeners) do fn(active) end
+        t.env:RunTimers()
+    end
+    Check(#listeners > 0, "ClassPower registers no Edit Mode listener")
+    Check(Shown(), "Shadow Alt Mana did not show")
+    Notify(true)
+    -- A Class Resource option changed from the menu while Edit Mode is open.
+    _G.MSUF_ClassPower_Apply({ full = true })
+    t.env:RunTimers()
+    Check(not Shown(), "a full refresh in Edit Mode kept Alt Mana (it is no Edit Mode mover)")
+    Notify(false)
+    Check(Shown(), "leaving Edit Mode did not bring Alt Mana back")
+    -- Leaving again without a refresh in between changes nothing.
+    Notify(true)
+    Notify(false)
+    Check(Shown(), "an Edit Mode session without a refresh hid Alt Mana")
+    -- Turned off in Edit Mode, it stays off.
+    Notify(true)
+    MSUF_DB.bars.showAltMana = false
+    _G.MSUF_ClassPower_Apply({ full = true })
+    t.env:RunTimers()
+    Notify(false)
+    Check(not Shown(), "leaving Edit Mode showed an Alt Mana bar that was turned off")
+    _G.MSUF_UnitEditModeActive = nil
+end
+
 if #failures > 0 then
     error("classpower_lifecycle_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_lifecycle_smoke: ok (Player HP disable, grown maximum slot colours)")
+print("classpower_lifecycle_smoke: ok (Player HP disable, grown maximum slot colours, Alt Mana after Edit Mode)")

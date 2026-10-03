@@ -2020,6 +2020,12 @@ ExportPublic("MSUF_ClassPower_Apply", CP.ApplyPublic)
 
 do
     MSUF.Require("MSUF_RegisterAnyEditModeListener", "ClassPower/MSUF_CP_Controller.lua")(function(active)
+        --- A full refresh during an Edit Mode session hides Alt Mana
+        --- (Refresh.ApplyAltMana); leaving Edit Mode shows it again.
+        if active ~= true and not AM.visible and _cpDB.bars and _cpDB.bars.showAltMana == true then
+            local playerFrame = GetPlayerFrame()
+            if playerFrame then Refresh.ApplyAltMana(playerFrame, true, false) end
+        end
         if not (CP.visible and CP.container) then return end
         if active == true then
             CP.container:SetAlpha(1)
