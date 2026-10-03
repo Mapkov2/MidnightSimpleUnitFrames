@@ -384,3 +384,4 @@ clients+Forever	lua	tools/tests/castbar_preview_time_offset_smoke.lua	{root} {fl
 -	lua	tools/tests/menu_required_owners_smoke.lua	{root}	A menu or Edit Mode owner is guarded or falls back instead of being required
 clients+Forever	lua	tools/tests/group_preview_repaint_budget_smoke.lua	{root} {flavor}	Group preview repaint allocates or calls more than its budget: {flavor}
 clients+Forever	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} {flavor}	Menu previews paint an English status word on a German client: {flavor}
+classics	lua	tools/tests/classic_aura_arena_custom_containers_smoke.lua	{root} {flavor}	Classic Custom Aura containers do not reach the arena frames: {flavor}
