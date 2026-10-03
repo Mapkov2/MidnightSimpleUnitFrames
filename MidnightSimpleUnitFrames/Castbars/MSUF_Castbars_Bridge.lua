@@ -100,10 +100,54 @@ local function ForEachBlizzardPlayerCastbar(callback)
     end
 end
 
+--- Blizzard's player castbar is a managed frame on every client (mirror:
+--- BottomManagedFrameTemplate on Mainline and Forever, UIParentBottomManaged-
+--- FrameTemplate on the Classic clients): its OnHide runs the bottom managed
+--- container layout, which also places ExtraAbilityContainer. Hide() from
+--- addon code runs that layout tainted, so a shown managed bar is concealed
+--- instead: alpha 0 and no mouse. Its cast events are gone, so it shows no cast;
+--- Blizzard hides it itself (Edit Mode exit) and MSUF's release restores it.
+--- Hiding stays for a bar outside the container (Forever's GamepadPlayer-
+--- CastingBarFrame: its OnHide lays nothing out), and a hidden bar is left alone.
+--- Previews (MSUF_HideBlizzardPlayerCastbar) conceal through the same helper.
+local function ConcealNativeFrame(frame)
+    if not (frame.IsShown and frame:IsShown()) then return end
+    if frame.isManagedFrame ~= true then
+        frame:Hide()
+        return
+    end
+    local record = nativeRecords[frame]
+    if not record then
+        record = {}
+        nativeRecords[frame] = record
+    end
+    local alpha = frame:GetAlpha()
+    if alpha > 0 then
+        record.alpha = alpha
+        frame:SetAlpha(0)
+    end
+    if frame:IsMouseEnabled() then
+        record.mouse = true
+        frame:EnableMouse(false)
+    end
+end
+NativeOwner.Conceal = ConcealNativeFrame
+
+local function RevealNativeFrame(frame, record)
+    if record.alpha ~= nil then
+        frame:SetAlpha(record.alpha)
+        record.alpha = nil
+    end
+    if record.mouse then
+        frame:EnableMouse(true)
+        record.mouse = nil
+    end
+end
+
 local function HideSuppressedNativeFrame(frame)
     local record = nativeRecords[frame]
-    if record and record.suppressed and frame.Hide then
-        frame:Hide()
+    if record and record.suppressed then
+        ConcealNativeFrame(frame)
     end
 end
 
@@ -124,7 +168,7 @@ local function SetNativeFrameSuppressed(frame, suppressed)
 
     if suppressed then
         if record and record.suppressed then
-            if frame.Hide then frame:Hide() end
+            ConcealNativeFrame(frame)
             return true
         end
 
@@ -140,10 +184,12 @@ local function SetNativeFrameSuppressed(frame, suppressed)
             frame:UnregisterAllEvents()
             record.detached = true
         end
-        if frame.Hide then frame:Hide() end
+        ConcealNativeFrame(frame)
         return true
     end
 
+    -- A bar the previews concealed has a record without the suppression.
+    if record then RevealNativeFrame(frame, record) end
     if not (record and record.suppressed) then
         return false
     end
@@ -167,7 +213,7 @@ function NativeOwner:Apply()
     if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
         nativeOwnershipPending = true
         ForEachBlizzardPlayerCastbar(function(frame)
-            if suppress and frame.Hide then frame:Hide() end
+            if suppress then ConcealNativeFrame(frame) end
         end)
         if eventFrame then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return false

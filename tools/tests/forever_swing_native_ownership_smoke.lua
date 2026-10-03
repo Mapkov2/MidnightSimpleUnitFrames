@@ -11,13 +11,18 @@
 --
 -- Pinned:
 --   * MSUF never writes a field onto a Blizzard bar (side table instead);
---   * outside Edit Mode MSUF never shows, hides or re-registers a Blizzard
---     bar itself (each would run the BottomManagedFrame container layout,
---     which also lays out ExtraAbilityContainer, from addon code); setting
---     the CVar is enough, on enable, apply, a user re-enabling the CVar,
---     Blizzard_SwingTimer loading late, and disable;
---   * the bars end hidden while MSUF owns them, Edit Mode included, and
---     Blizzard restores them when MSUF releases a CVar that was on.
+--   * MSUF never shows, hides or re-registers a Blizzard bar itself, Edit
+--     Mode included (each would run the BottomManagedFrame container layout,
+--     which also lays out ExtraAbilityContainer, from addon code: the bars
+--     inherit BottomManagedFrameTemplate); setting the CVar is enough, on
+--     enable, apply, a user re-enabling the CVar, Blizzard_SwingTimer loading
+--     late, and disable. Before the fix MSUF hid a bar Blizzard's Edit Mode
+--     showed (red without the fix);
+--   * the bars end hidden while MSUF owns them; in Edit Mode, where only
+--     Blizzard can hide them, they are invisible (alpha 0) and Blizzard hides
+--     them itself on exit;
+--   * Blizzard restores them when MSUF releases a CVar that was on, with the
+--     alpha Blizzard had set (the Edit Mode opacity).
 --
 -- Plain Lua 5.1, repo root as arg 1.
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
@@ -97,6 +102,9 @@ end
 
 local NATIVE_METHODS = {}
 function NATIVE_METHODS.IsShown(bar) return nativeState[bar].shown == true end
+function NATIVE_METHODS.GetAlpha(bar) return nativeState[bar].alpha end
+-- A frame's alpha runs no script and no container layout.
+function NATIVE_METHODS.SetAlpha(bar, alpha) nativeState[bar].alpha = alpha end
 function NATIVE_METHODS.HookScript(bar, script, handler)
     Check(script == "OnShow", "unexpected native hook " .. tostring(script))
     local state = nativeState[bar]
@@ -124,7 +132,8 @@ for _, hand in ipairs({ "MainHand", "OffHand", "Ranged" }) do
             error("MSUF wrote the field " .. tostring(key) .. " onto Blizzard's SwingTimer" .. hand .. "Frame", 2)
         end,
     })
-    nativeState[bar] = { shown = false, onShowHooks = {}, fields = { isInEditMode = false } }
+    -- 0.8: the bar's Edit Mode opacity (EditModeSwingTimerSystemMixin SetAlpha).
+    nativeState[bar] = { shown = false, alpha = 0.8, onShowHooks = {}, fields = { isInEditMode = false } }
     _G["SwingTimer" .. hand .. "Frame"] = bar
     nativeBars[#nativeBars + 1] = bar
     BlizzardUpdateShownState(bar)
@@ -191,7 +200,14 @@ local swing = assert(ns.SwingTimer, "SwingTimer module missing")
 
 local function AssertNoAddonLayout(step)
     for _, call in ipairs(addonCalls) do
-        Check(call.editMode, step .. ": MSUF called " .. call.method .. " on a Blizzard swing bar outside Edit Mode")
+        Check(false, step .. ": MSUF called " .. call.method .. " on a Blizzard swing bar"
+            .. (call.editMode and " in Edit Mode" or ""))
+    end
+end
+local function AssertNativeInvisible(step)
+    for index, bar in ipairs(nativeBars) do
+        Check(not bar:IsShown() or nativeState[bar].alpha == 0,
+            step .. ": Blizzard swing bar " .. index .. " is visible while MSUF owns it")
     end
 end
 local function AssertNativeHidden(step)
@@ -223,19 +239,27 @@ DriverEvent("ADDON_LOADED", "Blizzard_SwingTimer")
 AssertNativeHidden("late Blizzard_SwingTimer")
 AssertNoAddonLayout("late Blizzard_SwingTimer")
 
--- Blizzard's Edit Mode shows its bars although the CVar is off; MSUF keeps
--- them hidden there (the one case the CVar cannot cover).
+-- Blizzard's Edit Mode shows its bars although the CVar is off; MSUF makes
+-- them invisible there (the one case the CVar cannot cover), never hidden.
 SetEditMode(true)
-AssertNativeHidden("Edit Mode")
+AssertNativeInvisible("Edit Mode")
+AssertNoAddonLayout("Edit Mode")
+-- A settings apply while Edit Mode shows them keeps them invisible.
+Check(swing.Set("main", "height", 20), "Edit Mode settings apply failed")
+AssertNativeInvisible("Edit Mode apply")
+AssertNoAddonLayout("Edit Mode apply")
 SetEditMode(false)
 AssertNativeHidden("after Edit Mode")
-addonCalls = {}
+AssertNoAddonLayout("after Edit Mode")
 
--- Release with the CVar originally on: Blizzard restores its bars itself.
+-- Release with the CVar originally on: Blizzard restores its bars itself,
+-- at the alpha Blizzard had set.
 Check(swing.SetEnabled(false), "disable failed")
 Check(cvarOn, "MSUF did not restore the native CVar")
 for index, bar in ipairs(nativeBars) do
     Check(bar:IsShown(), "release: Blizzard swing bar " .. index .. " stayed hidden")
+    Check(nativeState[bar].alpha == 0.8, "release: Blizzard swing bar " .. index .. " kept alpha "
+        .. tostring(nativeState[bar].alpha))
 end
 AssertNoAddonLayout("release")
 

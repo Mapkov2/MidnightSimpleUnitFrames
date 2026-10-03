@@ -247,12 +247,29 @@ end
 -- (Blizzard_SwingTimer.lua OnShowSwingTimerCVarChanged), so turning the CVar
 -- off hides them and restoring it shows them again. Showing or hiding a bar
 -- from addon code would run the bottom managed-frame container layout (which
--- also places ExtraAbilityContainer) tainted. Only Blizzard's Edit Mode shows a
--- bar while the CVar is off (ShouldBeShown: isInEditMode); that one case is
--- hidden here. Hooked bars are kept in a side table, never on Blizzard's frame.
+-- also places ExtraAbilityContainer) tainted: the bars inherit
+-- BottomManagedFrameTemplate, and their OnHide (EditModeSystemMixin
+-- OnSystemHide) removes them from it. Only Blizzard's Edit Mode shows a bar
+-- while the CVar is off (ShouldBeShown: isInEditMode); that one case is made
+-- invisible here, never hidden: alpha 0 (the bar takes no mouse of its own),
+-- the alpha Blizzard had set (Edit Mode opacity) kept for the release. Blizzard
+-- hides the bar itself when Edit Mode ends. Hooked bars and their alpha live in
+-- side tables, never on Blizzard's frame.
 local nativeHooked = setmetatable({}, { __mode = "k" })
-local function HideNative(frame)
-    if active and frame.isInEditMode and frame:IsShown() then frame:Hide() end
+local nativeAlpha = setmetatable({}, { __mode = "k" })
+local function MuteNative(frame)
+    if not (active and frame.isInEditMode and frame:IsShown()) then return end
+    local alpha = frame:GetAlpha()
+    if alpha > 0 then
+        nativeAlpha[frame] = alpha
+        frame:SetAlpha(0)
+    end
+end
+local function RestoreNative()
+    for frame, alpha in pairs(nativeAlpha) do
+        nativeAlpha[frame] = nil
+        frame:SetAlpha(alpha)
+    end
 end
 local function SuppressNative()
     if _G.GetCVarBool("showSwingTimer") then _G.SetCVar("showSwingTimer", "0") end
@@ -261,9 +278,9 @@ local function SuppressNative()
         if frame then
             if not nativeHooked[frame] then
                 nativeHooked[frame] = true
-                frame:HookScript("OnShow", HideNative)
+                frame:HookScript("OnShow", MuteNative)
             end
-            HideNative(frame)
+            MuteNative(frame)
         end
     end
 end
@@ -614,7 +631,9 @@ local function Disable()
     end
     if frames.main and frames.main.Cue then frames.main.Cue:Hide() end
     cueSpell, cueTitled = nil, false
-    -- Blizzard's CVar callback shows its bars and re-registers PLAYER_SWING.
+    -- Blizzard's CVar callback shows its bars and re-registers PLAYER_SWING;
+    -- a bar muted in Edit Mode gets its alpha back first.
+    RestoreNative()
     _G.SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
 end
 function Swing.SetEnabled(value)

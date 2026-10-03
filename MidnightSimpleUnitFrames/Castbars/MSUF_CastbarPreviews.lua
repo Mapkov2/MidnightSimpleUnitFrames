@@ -510,7 +510,10 @@ local function HideBlizzardPlayerCastbar()
             if frame.UnregisterAllEvents then
                 frame:UnregisterAllEvents()
             end
-            if frame.Hide then frame:Hide() end
+            -- Castbars/MSUF_Castbars_Bridge.lua (loads first): a shown managed
+            -- bar is concealed, never hidden from here (its OnHide runs the
+            -- bottom managed-frame layout tainted).
+            MSUF.Castbars.NativeOwner.Conceal(frame)
         end
     end
 end
