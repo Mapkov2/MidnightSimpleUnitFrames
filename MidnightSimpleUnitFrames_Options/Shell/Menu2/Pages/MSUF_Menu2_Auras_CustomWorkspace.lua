@@ -564,34 +564,16 @@ local function BuildCustomWhitelistTool(C)
                 if refreshList then refreshList() end
             end)
         end
-        local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, section))
-        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -214)
-        listScroll:SetSize(inner - 20, 190)
-        local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
-        listChild:SetSize(inner - 44, 190)
-        listScroll:SetScrollChild(listChild)
-        M._StyleNestedAuraScrollFrame(listScroll, section, 44)
+        local listScroll, listChild = M.AuraControls.SpellListScroll(section, -214, inner, 190)
         local rows = {}
         local function EnsureRow(i)
             local row = rows[i]
             if row then return row end
-            row = PixelLayoutRegion(CreateFrame("Frame", nil, listChild))
-            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
-            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
-            row:SetHeight(40)
-            if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+            row = M.AuraControls.SpellListRow(listChild, i)
             row.rank = T.Font(row, "GameFontDisableSmall", "", T.colors.accent)
             row.rank:SetPoint("LEFT", row, "LEFT", 7, 0)
             row.rank:SetWidth(24)
-            row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
-            row.icon:SetPoint("LEFT", row.rank, "RIGHT", 3, 0)
-            row.icon:SetSize(28, 28)
-            row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-            row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
-            row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
-            row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
-            row.remove = ActionButton(row, "Remove", 80)
-            row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+            M.AuraControls.SpellListRowLabels(row, row.rank, "RIGHT", 3)
             -- Two static buttons instead of one relabelled one: the styled
             -- action button has no guaranteed text setter, and a fixed label
             -- always states what the click will do.
