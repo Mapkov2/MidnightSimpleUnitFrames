@@ -345,12 +345,24 @@ for _ = 1, 100 do manaRow.scripts.OnEvent(manaRow, "UNIT_POWER_UPDATE", "party2"
 debug.sethook()
 manaKB = collectgarbage("count") - manaKB
 collectgarbage("restart")
-assert(counters.UnitPower == 100 and counters.UnitPowerMax == 100 and counters.SetMinMaxValues == 100
-    and counters.SetValue == 100 and counters.SetText == 100 and not counters.UnitName,
+-- Three natives per mana tick: UnitPower, SetValue, SetText. The maximum is
+-- UNIT_MAXPOWER's (registered by BindManaRow) and the bind's; before the fix
+-- every tick also called UnitPowerMax and SetMinMaxValues (5 natives).
+assert(counters.UnitPower == 100 and counters.SetValue == 100 and counters.SetText == 100 and not counters.UnitName,
     "mana tick native-call budget changed")
-print(string.format("group additional mana: %.2f instructions / %.3f KB / 5 native calls per event",
+assert(not counters.UnitPowerMax and not counters.SetMinMaxValues, "a mana tick re-read the maximum: UnitPowerMax "
+    .. tostring(counters.UnitPowerMax) .. ", SetMinMaxValues " .. tostring(counters.SetMinMaxValues) .. " per 100 ticks")
+print(string.format("group additional mana: %.2f instructions / %.3f KB / 3 native calls per event",
     manaInstructions / 100, manaKB / 100))
 assert(manaInstructions <= 16000 and manaKB <= 1, "mana tick VM/allocation budget exceeded")
+-- The maximum follows UNIT_MAXPOWER (mana only) and the value with it.
+assert(manaRow.events.UNIT_MAXPOWER and manaRow.units.UNIT_MAXPOWER == "party2", "mana row lost UNIT_MAXPOWER")
+Reset()
+manaRow.scripts.OnEvent(manaRow, "UNIT_MAXPOWER", "party2", "RAGE")
+assert(not counters.UnitPowerMax and not counters.UnitPower, "a non-mana maximum touched the mana row")
+manaRow.scripts.OnEvent(manaRow, "UNIT_MAXPOWER", "party2", "MANA")
+assert(counters.UnitPowerMax == 1 and counters.SetMinMaxValues == 1 and manaRow.bar.maxValue == 1000
+    and counters.UnitPower == 1 and counters.SetValue == 1, "UNIT_MAXPOWER did not set the maximum and the value")
 combat = false
 
 combat = true

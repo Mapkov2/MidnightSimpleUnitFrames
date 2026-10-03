@@ -601,11 +601,12 @@ local function ApplyBosses(kind, conf, enabled)
     end
     holder:Show()
 end
+-- The value path: mana changes many times a second on a healer, the maximum
+-- only with UNIT_MAXPOWER and a new unit (PaintManaIdentity sets it there).
 local function UpdateManaValue(row)
     local unit = row.unit
     if not unit then return end
     local mana = UnitPower(unit, 0)
-    row.bar:SetMinMaxValues(0, UnitPowerMax(unit, 0))
     row.bar:SetValue(mana)
     row.value:SetText(mana)
 end
@@ -615,6 +616,7 @@ local function UpdateMana(row, event, _, powerType)
         return
     end
     if powerType and powerType ~= "MANA" then return end
+    if event == "UNIT_MAXPOWER" and row.unit then row.bar:SetMinMaxValues(0, UnitPowerMax(row.unit, 0)) end
     UpdateManaValue(row)
 end
 local function ManaRow(holder, index)
@@ -640,6 +642,7 @@ for i = 1, 40 do RAID_UNITS[i] = "raid" .. i end
 -- A row listens to its own unit; rebinding happens only when the unit changes.
 local function PaintManaIdentity(row)
     row.name:SetText(UnitName(row.unit))
+    row.bar:SetMinMaxValues(0, UnitPowerMax(row.unit, 0))
     UpdateManaValue(row)
 end
 local function BindManaRow(row, unit)
