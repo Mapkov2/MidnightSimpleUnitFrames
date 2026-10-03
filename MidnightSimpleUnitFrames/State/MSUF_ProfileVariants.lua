@@ -43,6 +43,7 @@ function Variants.Validate(schema)
             or #entry.name > 64 or entry.name:find("[%c]") or names[entry.name] then return nil, "invalid variant name" end
         names[entry.name] = true
         local patch, err = Fields.ValidatePatch(entry.patch or {})
+        if patch then patch, err = Fields.TranslatePatch(patch) end
         if not patch then return nil, err end
         for _, field in ipairs(patch) do
             if not AddPath(allPaths,field.path) then return nil,"overlapping variant table paths" end

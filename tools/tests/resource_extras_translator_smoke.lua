@@ -18,6 +18,12 @@
 --      reaches the translator: first login on a flat saved DB, a login over
 --      stored profiles (active and inactive), a profile switch, and the
 --      imports (active profile, new profile, external, unit frame kind).
+--   5. A stored profile variant is a patch of single fields, applied after the
+--      profile was normalized, so its former-name fields are translated when the
+--      variant is saved, imported or applied (State/MSUF_ProfileFields.lua runs
+--      the translator the normalizer registers): the effective bars carry the
+--      current keys and the implicit Arcane look, the class power switch reads
+--      them, and restoring the base leaves nothing behind.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -204,5 +210,80 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local current = { showArcaneWindow = true, arcaneWindowText = "gcds" }
     Check(N.CarryFormerResourceExtras(current) == false and current.arcaneWindowText == "gcds"
         and current.arcaneWindowWarnLastGCD == nil, flavor .. ": a current profile was changed")
+
+    -- 5. a stored variant that still names the former keys.
+    local Variants = assert(world.core.ProfileVariants, flavor .. ": no MSUF.ProfileVariants")
+    local wanted = assert(world.core.CPBuilders and world.core.CPBuilders.ResourceExtrasWanted,
+        flavor .. ": no helper switch check")
+    local function FormerFields()
+        return {
+            { path = { "bars", "showArcaneSoul" }, value = true },
+            { path = { "bars", "arcaneSoulBeforeColor" }, value = { .1, .1, .1 } },
+            { path = { "bars", "manaFiveSecondRule" }, value = true },
+            { path = { "general", "fontSize" }, value = 13 },
+        }
+    end
+    local function Schema(fields) return { version = 1, entries = { { name = "Arcane", conditions = {}, patch = fields } } } end
+    local function PatchByPath(schema)
+        local byPath = {}
+        for _, field in ipairs(schema.entries[1].patch) do byPath[table.concat(field.path, ".")] = field end
+        return byPath
+    end
+
+    -- saved or imported: validation translates, and keeps what is not a former key.
+    local clean = assert(Variants.ValidateForProfile({ general = { fontSize = 12 }, bars = {} }, Schema(FormerFields())))
+    local fields = PatchByPath(clean)
+    for _, key in ipairs(FORMER_KEYS) do Check(fields["bars." .. key] == nil, flavor .. ": the validated variant kept " .. key) end
+    Check(fields["bars.showArcaneWindow"].value == true and fields["bars.arcaneWindowText"].value == "both"
+        and fields["bars.arcaneWindowTextFrom"].value == 6 and fields["bars.arcaneWindowWarnLastGCD"].value == true
+        and fields["bars.arcaneWindowColor"].value[1] == .1 and fields["bars.manaRegenPause"].value == true
+        and fields["general.fontSize"].value == 13, flavor .. ": the validated variant is not the carried one")
+
+    -- activation, the effective value, restoring the base.
+    local db = { general = { fontSize = 12 }, bars = { arcaneWindowText = "seconds" }, profileVariants = Schema(FormerFields()) }
+    local base = Copy(db)
+    base.profileVariants = nil
+    Check(Variants.Resolve(db, { location = "solo", dark = false }) == true, flavor .. ": the variant did not apply")
+    for _, key in ipairs(FORMER_KEYS) do Check(db.bars[key] == nil, flavor .. ": the applied variant wrote " .. key) end
+    Check(db.bars.showArcaneWindow == true and db.bars.arcaneWindowText == "both" and db.bars.arcaneWindowTextFrom == 6
+        and db.bars.arcaneWindowWarnLastGCD == true and db.bars.arcaneWindowColor[1] == .1
+        and db.bars.manaRegenPause == true and db.general.fontSize == 13,
+        flavor .. ": the effective bars do not carry the former keys")
+    Check(wanted(db.bars) == true, flavor .. ": the class power switch ignores the former-key variant")
+    Check(PatchByPath(db.profileVariants)["bars.showArcaneSoul"] == nil,
+        flavor .. ": the stored variant still names the former key after activation")
+    Variants.Restore()
+    local restored = Copy(db)
+    restored.profileVariants = nil
+    Check(restored.general.fontSize == 12, flavor .. ": restoring the base left the variant's font size")
+    for key in pairs(base.bars) do Check(restored.bars[key] == base.bars[key], flavor .. ": the base " .. key .. " changed") end
+    for key in pairs(restored.bars) do Check(base.bars[key] ~= nil, flavor .. ": restoring left " .. key .. " in the base") end
+    Check(wanted(db.bars) == false, flavor .. ": the base wants a helper after the variant is restored")
+
+    -- the rules hold in a patch: the variant's own choices win, an off helper gains no look, a removal carries nothing.
+    local chosenDB = { bars = {}, profileVariants = Schema({
+        { path = { "bars", "showArcaneSoul" }, value = true }, { path = { "bars", "arcaneSoulDisplay" }, value = "SECONDS" },
+        { path = { "bars", "arcaneSoulCountdownWindow" }, value = 0 }, { path = { "bars", "arcaneWindowWarnLastGCD" }, value = false },
+    }) }
+    Check(Variants.Resolve(chosenDB, { location = "solo", dark = false }) == true, flavor .. ": the chosen variant did not apply")
+    Check(chosenDB.bars.arcaneWindowText == "seconds" and chosenDB.bars.arcaneWindowTextFrom == 0
+        and chosenDB.bars.arcaneWindowWarnLastGCD == false and chosenDB.bars.showArcaneWindow == true,
+        flavor .. ": the variant's own former choices were replaced")
+    Variants.Restore()
+    Check(next(chosenDB.bars) == nil, flavor .. ": the chosen variant left values in the base")
+    local offDB = { bars = {}, profileVariants = Schema({
+        { path = { "bars", "showArcaneSoul" }, value = false }, { path = { "bars", "arcaneSoulDisplay" }, value = "GCD" } }) }
+    Check(Variants.Resolve(offDB, { location = "solo", dark = false }) == true, flavor .. ": the off variant did not apply")
+    Check(offDB.bars.showArcaneWindow == false and offDB.bars.arcaneWindowText == "gcds" and offDB.bars.arcaneWindowTextFrom == nil
+        and offDB.bars.arcaneWindowWarnLastGCD == nil, flavor .. ": a variant that turned the helper off gained the former look")
+    Variants.Restore()
+    local removeDB = { bars = {}, profileVariants = Schema({ { path = { "bars", "showArcaneSoul" }, remove = true } }) }
+    Check(Variants.Resolve(removeDB, { location = "solo", dark = false }) == false and next(removeDB.bars) == nil,
+        flavor .. ": removing a former key changed the bars")
+    local currentDB = { bars = {}, profileVariants = Schema({ { path = { "bars", "showArcaneWindow" }, value = true } }) }
+    Check(Variants.Resolve(currentDB, { location = "solo", dark = false }) == true and currentDB.bars.showArcaneWindow == true
+        and currentDB.bars.arcaneWindowText == nil, flavor .. ": a current-key variant was changed")
+    Variants.Restore()
+
     print("resource_extras_translator_smoke: ok (" .. flavor .. ")")
 end

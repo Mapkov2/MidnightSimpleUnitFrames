@@ -476,6 +476,50 @@ local function MSUF_ProfileIO_CarryFormerResourceExtras(bars)
     return true
 end
 
+--- The same rules for a variant patch (State/MSUF_ProfileVariants.lua), which names
+--- settings field by field and is applied to the effective profile after normalization:
+--- the fields saved under a former name are carried over as one set, including the
+--- implicit Arcane look, and the former fields leave the patch. A former key the patch
+--- removes has nothing to carry. Registered with State/MSUF_ProfileFields.lua, which
+--- loads first in every TOC; a harness that loads this file alone has no variants.
+local function MSUF_ProfileIO_IsFormerResourceExtrasField(field, currentKeys)
+    local path = field.path
+    if #path ~= 2 or path[1] ~= "bars" then return false end
+    local key = path[2]
+    return MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS[key] ~= nil or key == "arcaneSoulDisplay"
+        or (currentKeys == true and (key == "arcaneWindowText" or key == "arcaneWindowWarnLastGCD"))
+end
+local function MSUF_ProfileIO_CarryFormerResourceExtrasPatch(patch)
+    local found = false
+    for i = 1, #patch do
+        if MSUF_ProfileIO_IsFormerResourceExtrasField(patch[i]) then found = true break end
+    end
+    if not found then return patch end
+    --- The carry rules read two current keys (the text mode it may replace and the
+    --- last-global-cooldown warning it only defaults), so the patch's own values
+    --- for them take part.
+    local carried = {}
+    for i = 1, #patch do
+        local field = patch[i]
+        if not field.remove and MSUF_ProfileIO_IsFormerResourceExtrasField(field, true) then
+            carried[field.path[2]] = field.value
+        end
+    end
+    MSUF_ProfileIO_CarryFormerResourceExtras(carried)
+    local out = {}
+    for i = 1, #patch do
+        local field = patch[i]
+        local key = field.path[2]
+        if not (MSUF_ProfileIO_IsFormerResourceExtrasField(field) or (#field.path == 2 and field.path[1] == "bars"
+            and carried[key] ~= nil)) then
+            out[#out + 1] = field
+        end
+    end
+    for key, value in pairs(carried) do out[#out + 1] = { path = { "bars", key }, value = value, remove = false } end
+    return out
+end
+if MSUF.ProfileFields then MSUF.ProfileFields.RegisterPatchTranslator(MSUF_ProfileIO_CarryFormerResourceExtrasPatch) end
+
 local function MSUF_ProfileIO_ProfileNeedsNormalization(profile)
     if type(profile) ~= "table" then return false end
     if MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false) then return true end
@@ -1271,6 +1315,7 @@ MSUF.ProfileNormalize = {
     NormalizeImportedFontSizes = MSUF_ProfileIO_NormalizeImportedFontSizes,
     NormalizeGFAuraFilterToken = MSUF_ProfileIO_NormalizeGFAuraFilterToken,
     CarryFormerResourceExtras = MSUF_ProfileIO_CarryFormerResourceExtras,
+    CarryFormerResourceExtrasPatch = MSUF_ProfileIO_CarryFormerResourceExtrasPatch,
     TranslateProfileToCurrent = MSUF_ProfileIO_TranslateProfileToCurrent,
     TranslateProfilesToCurrent = MSUF_ProfileIO_TranslateProfilesToCurrent,
 }

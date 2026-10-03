@@ -301,6 +301,22 @@ function Fields.ValidatePatch(patch)
     return clean
 end
 
+-- State normalizers that rewrite settings saved under former names register a
+-- translator (patch -> patch). A variant patch names settings field by field and
+-- is applied after profile normalization, so it is translated whenever it is
+-- validated: when a variant is saved, imported or applied. A translator returns
+-- the patch it was given when it has nothing to change; otherwise a new field list.
+local patchTranslators = {}
+function Fields.RegisterPatchTranslator(translate)
+    patchTranslators[#patchTranslators + 1] = translate
+end
+function Fields.TranslatePatch(patch)
+    local translated = patch
+    for i = 1, #patchTranslators do translated = patchTranslators[i](translated) end
+    if translated == patch then return patch end
+    return Fields.ValidatePatch(translated)
+end
+
 -- Diff only known settings roots. Metadata, migrations and session caches never
 -- become variant fields. Numeric table keys retain their type in saved patches.
 function Fields.Diff(before, after)
