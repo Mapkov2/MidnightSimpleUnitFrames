@@ -369,6 +369,13 @@ local function InstallClientFacts(target)
     _G.C_DurationUtil = _G.C_DurationUtil or {}
     _G.C_DurationUtil.CreateDuration = _G.C_DurationUtil.CreateDuration or function() return {} end
     if CoreLoadGraph(suffix)[MANA_EXTRAS_PATH] then
+        -- The class power file requires its Kernel providers at load (MSUF.Require):
+        -- the real Require, and a stand-in for the pixel-layout helper, which only
+        -- paints and is never called while the file defines its builders.
+        if type(namespace.Require) ~= "function" then
+            assert(loadfile("MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
+        end
+        _G.MSUF_PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region) return region end
         assert(loadfile(MANA_EXTRAS_PATH))("MidnightSimpleUnitFrames", namespace)
     end
     if isForever then
