@@ -114,6 +114,13 @@ _G.MSUF_CreateProfile = function(name)
     profileCalls[#profileCalls + 1] = "create:" .. tostring(name)
     return true
 end
+--- A copy of a saved profile under a new name (the menu's "Copy current profile").
+_G.MSUF_CopyProfile = function(source, name)
+    if not ProfileIndex(source) or ProfileIndex(name) then return false end
+    profiles[#profiles + 1] = name
+    profileCalls[#profileCalls + 1] = "copy:" .. tostring(source) .. ">" .. tostring(name)
+    return true
+end
 _G.MSUF_SwitchProfile = function(name)
     if not ProfileIndex(name) then return false end
     _G.MSUF_ActiveProfile = name
@@ -470,9 +477,14 @@ assert(OutputContains("Default"), "/msuf profile must list the saved profiles")
 assert(OutputContains("Raiding"), "/msuf profile must list every saved profile")
 
 ResetCalls()
+local savedFrom = _G.MSUF_ActiveProfile
 _G.SlashCmdList["MSUF2OPTIONS"]("profile My Raid Setup")
-assert(ProfileCallsContain("create:My Raid Setup"),
-    "/msuf profile <name> must save a profile under the exact name typed")
+--- The help says it saves the current settings: a copy of the active profile,
+--- never a factory profile.
+assert(ProfileCallsContain("copy:" .. savedFrom .. ">My Raid Setup"),
+    "/msuf profile <name> must save the current settings under the exact name typed")
+assert(not ProfileCallsContain("create:My Raid Setup"),
+    "/msuf profile <name> built a factory profile instead of saving the current settings")
 assert(ProfileCallsContain("switch:My Raid Setup"),
     "/msuf profile <name> must activate the profile it just saved")
 
@@ -527,15 +539,19 @@ assert(ProfileCallsContain("reset:Default"), "/msuf default confirm must reset t
 --- ---------------------------------------------------------------------------
 combat = true
 local COMBAT_BLOCKED = {
-    { "profile CombatProfile", "create:CombatProfile" },
+    { "profile CombatProfile", ">CombatProfile" },
     { "load Raiding", "switch:Raiding" },
     { "delete RaidingAlt", "delete:RaidingAlt" },
     { "default confirm", "reset:Default" },
 }
+local function ProfileCallsMention(needle)
+    for i = 1, #profileCalls do if profileCalls[i]:find(needle, 1, true) then return true end end
+    return false
+end
 for i = 1, #COMBAT_BLOCKED do
     ResetCalls()
     _G.SlashCmdList["MSUF2OPTIONS"](COMBAT_BLOCKED[i][1])
-    assert(not ProfileCallsContain(COMBAT_BLOCKED[i][2]),
+    assert(not ProfileCallsMention(COMBAT_BLOCKED[i][2]),
         "/msuf " .. COMBAT_BLOCKED[i][1] .. " must be refused in combat")
 end
 
