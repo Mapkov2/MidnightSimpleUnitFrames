@@ -96,6 +96,8 @@ function MenuWorld.Open(root, flavor, options)
     options = options or {}
     local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
     local world = World.New(root, flavor, { locale = options.locale or "enUS" })
+    -- Runs before anything loads, e.g. to take a client capability away.
+    if type(options.beforeCore) == "function" then options.beforeCore(world) end
     local Methods = world.widgets.Methods
     local function Store(field) return function(self, value) self[field] = value end end
     local function Fetch(field) return function(self) return self[field] end end

@@ -11,9 +11,17 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua", {
     "MSUF_DetailsEditMode_SetEnabled",
     "MSUF_DominosEditMode_SetEnabled",
     "MSUF_DandersEditMode_SetEnabled",
-    "MSUF_BlizzardEditMode_SetEnabled",
     "MSUF_SetMinimapIconEnabled",
 })
+-- The Blizzard Edit Mode adapter exists only where the client has the Edit
+-- Mode system (MSUF.Client.SupportsBlizzardEditMode, Game/Shared/Initialize.lua);
+-- elsewhere Shell/EditMode/MSUF_EditMode_Blizzard.lua exports nothing, so the
+-- adapter is required only with the capability on and its switch stays
+-- disabled without it, as the profile and reset paths gate it.
+local SUPPORTS_BLIZZARD_EDIT_MODE = MSUF.Client ~= nil and MSUF.Client.SupportsBlizzardEditMode == true
+if SUPPORTS_BLIZZARD_EDIT_MODE then
+    MSUF.Require("MSUF_BlizzardEditMode_SetEnabled", "Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua")
+end
 
 -- Menu2 global Misc page.
 -- Binds tooltip provider/anchor/modifier behavior and small global UI options. Tooltip
@@ -528,8 +536,9 @@ function MiscSection.ExternalEditMode(s)
     local blizzardEM = BindMiscToggle(external, "Show Blizzard frames in MSUF Edit Mode",
         "blizzardEditModeIntegration", true, "MSUF2_BLIZZARD_EDIT_MODE", 14, -186, 430, PREVIEW_FALSE,
         function(value)
-            _G.MSUF_BlizzardEditMode_SetEnabled(value)
+            if SUPPORTS_BLIZZARD_EDIT_MODE then _G.MSUF_BlizzardEditMode_SetEnabled(value) end
         end)
+    if not SUPPORTS_BLIZZARD_EDIT_MODE then W.SetControlEnabled(blizzardEM, false) end
     M.AddTooltip(blizzardEM, "Blizzard Edit Mode integration",
         "On (default): MSUF Edit Mode can move the Blizzard Minimap, Chat, Micro Menu and Tooltip through the game's own Edit Mode layout. If a Blizzard preset is active, selecting an element creates and activates a saved 'MSUF' layout automatically.",
         { hook = true })
