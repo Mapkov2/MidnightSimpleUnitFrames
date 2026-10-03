@@ -34,6 +34,15 @@ function Fixture.Install(root, ns, menu)
         if addedExport then ns.ExportPublic = nil end
         if not hadMSUF then rawset(_G, "MSUF", nil) end
     end
+    -- A menu file may require the core's MSUF_PixelLayoutRegion; a fixture
+    -- without the core gets the stand-in the other menu files fall back to
+    -- (fixtures lay out no pixels).
+    if type(rawget(_G, "MSUF_PixelLayoutRegion")) ~= "function" then
+        rawset(_G, "MSUF_PixelLayoutRegion", function(region, policy, ...)
+            if type(policy) == "string" then return region[policy](region, ...) end
+            return region
+        end)
+    end
     if type(menu) == "table" and type(menu.RequireGlobals) ~= "function" then
         local support = Read(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua")
         local body = assert(support:match("\n(function M%.RequireGlobals%(context, names%)\n.-\nend)\n"),

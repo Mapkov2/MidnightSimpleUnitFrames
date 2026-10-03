@@ -1196,10 +1196,7 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
         local db = DB()
         local key = StatusTextUnit()
         local conf = db[key]
-        if type(conf) ~= "table" then
-            conf = {}
-            db[key] = conf
-        end
+        if type(conf) ~= "table" then conf = {}; db[key] = conf end
         return conf
     end
     local function ApplyStatusTextColors()
@@ -1392,10 +1389,8 @@ end
 local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     if part ~= "appearance" then
     local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 332, false)
-    LabelAt(background, "Fill and color mode affect only the health background; foreground health coloring stays independent.", 12, -8, 660,
-        "GameFontHighlightSmall", T.colors.muted)
-    LabelAt(background, "Texture comes from Bars; preview uses Player background opacity multiplied by tint opacity.", 12, -24, 660,
-        "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(background, "Fill and color mode affect only the health background; foreground health coloring stays independent.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(background, "Texture comes from Bars; preview uses Player background opacity multiplied by tint opacity.", 12, -24, 660, "GameFontHighlightSmall", T.colors.muted)
     local refreshBackgroundPreview
     local function SetBackgroundFill(value)
         M.ColorsBackgroundMode.SetFill(value)
@@ -1543,8 +1538,7 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
             ApplyUnitframeColorWithReload()
         end,
         Meta("appearance.dark_mode_tone"))
-    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45,
-        ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
+    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
     local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -142, 230, G, "enableHealthGradient", true, function()
         ApplyUnitframeColorWithReload()
         if refreshBarModeControls then refreshBarModeControls() end

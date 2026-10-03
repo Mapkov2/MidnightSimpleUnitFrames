@@ -23,9 +23,12 @@ local function FallbackHandleText(handle)
     return handle and (handle._previewText or handle._key) or "Handle"
 end
 local HANDLE_FALLBACKS = {
-    TR = Fallbacks.Identity, Round = Fallbacks.Round, ResolveAnchor = Fallbacks.Center, PointOffset = Fallbacks.ZeroPair, HandleOffset = Fallbacks.ZeroPair, OffsetToConfig = Fallbacks.Round,
-    CurrentStatusSpec = Fallbacks.Nil, CurrentSpellConfig = Fallbacks.Nil, CurrentSpellPlaced = Fallbacks.Nil, HandleText = FallbackHandleText, HandleOffsets = Fallbacks.Nil,
-    UpdateHint = Fallbacks.Noop, RefreshHandleSelection = Fallbacks.Noop, StatusLabel = Fallbacks.Status, StartPan = Fallbacks.False, StopPan = Fallbacks.Noop, ZoomWheel = Fallbacks.Noop,
+    TR = Fallbacks.Identity, Round = Fallbacks.Round, ResolveAnchor = Fallbacks.Center, PointOffset = Fallbacks.ZeroPair,
+    HandleOffset = Fallbacks.ZeroPair, OffsetToConfig = Fallbacks.Round,
+    CurrentStatusSpec = Fallbacks.Nil, CurrentSpellConfig = Fallbacks.Nil, CurrentSpellPlaced = Fallbacks.Nil,
+    HandleText = FallbackHandleText, HandleOffsets = Fallbacks.Nil,
+    UpdateHint = Fallbacks.Noop, RefreshHandleSelection = Fallbacks.Noop, StatusLabel = Fallbacks.Status,
+    StartPan = Fallbacks.False, StopPan = Fallbacks.Noop, ZoomWheel = Fallbacks.Noop,
 }
 local SPELL_DROP_ANCHOR_FRAC = {
     TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 },
@@ -460,10 +463,7 @@ function Stage.BindPositionWriters(st)
             if not conf then return end
             conf.dispelSymbolX = OffsetToConfig(offX or 0, scale)
             conf.dispelSymbolY = OffsetToConfig(offY or 0, scale)
-            if not previewOnly then
-                RefreshGroupPreviewAfterMove(handle)
-                CheckpointHandleHistory(handle, action)
-            end
+            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
             return true
         end
         if handle._cfgPortrait then
@@ -475,10 +475,7 @@ function Stage.BindPositionWriters(st)
             if not conf then return end
             conf.portraitOffsetX = OffsetToConfig(offX or 0, scale)
             conf.portraitOffsetY = OffsetToConfig(offY or 0, scale)
-            if not previewOnly then
-                RefreshGroupPreviewAfterMove(handle)
-                CheckpointHandleHistory(handle, action)
-            end
+            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
             return true
         end
         if handle._cfgPower then
@@ -490,10 +487,7 @@ function Stage.BindPositionWriters(st)
             if not conf then return end
             conf.detachedPowerBarOffsetX = OffsetToConfig(offX or 0, scale)
             conf.detachedPowerBarOffsetY = OffsetToConfig(offY or 0, scale)
-            if not previewOnly then
-                RefreshGroupPreviewAfterMove(handle)
-                CheckpointHandleHistory(handle, action)
-            end
+            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
             return true
         end
         local m = box._mock

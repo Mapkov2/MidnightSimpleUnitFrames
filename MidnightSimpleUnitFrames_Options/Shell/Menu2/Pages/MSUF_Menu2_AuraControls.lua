@@ -1,7 +1,7 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 -- Shared Aura controls and apply scheduling; no dependency on a page builder.
 local _, MSUF = ...
 MSUF = MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_AuraControls.lua")
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local W, T = M.Widgets, M.Theme
@@ -339,34 +339,50 @@ local function FilterSpellEntries(entries, searchValue)
     end
     return query, visible
 end
+--- A scrolling spell list in an aura section: the scroll frame at (24, y),
+--- height px tall, and its child, styled like the other nested lists.
+local function SpellListScroll(section, y, inner, height)
+    local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, section))
+    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, y)
+    listScroll:SetSize(inner - 20, height)
+    local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
+    listChild:SetSize(inner - 44, height)
+    listScroll:SetScrollChild(listChild)
+    M._StyleNestedAuraScrollFrame(listScroll, section, 44)
+    return listScroll, listChild
+end
+--- Row i of a 44 px spell list: a 40 px card across the list child.
+local function SpellListRow(listChild, i)
+    local row = PixelLayoutRegion(CreateFrame("Frame", nil, listChild))
+    row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
+    row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
+    row:SetHeight(40)
+    if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+    return row
+end
+--- A spell list row's icon (left edge at iconAnchor's iconRelPoint, x px
+--- in), the name and Spell ID lines beside it and its Remove button.
+local function SpellListRowLabels(row, iconAnchor, iconRelPoint, x)
+    row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
+    row.icon:SetPoint("LEFT", iconAnchor, iconRelPoint, x, 0)
+    row.icon:SetSize(28, 28)
+    row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+    row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
+    row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+    row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
+    row.remove = ActionButton(row, "Remove", 80)
+    row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+end
 local function BlockedSpellList(ctx, section, inner, offsetY, emptyText, opts)
     local Tr, MatchSuffix = M.AuraSettings.Tr, M.AuraSettings.MatchSuffix
     local empty = W.Text(section, emptyText, 24, -284 + offsetY, inner, T.colors.muted)
-    local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, section))
-    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + offsetY)
-    listScroll:SetSize(inner - 20, 150)
-    local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
-    listChild:SetSize(inner - 44, 150)
-    listScroll:SetScrollChild(listChild)
-    M._StyleNestedAuraScrollFrame(listScroll, section, 44)
+    local listScroll, listChild = SpellListScroll(section, -260 + offsetY, inner, 150)
     local rows = {}
     local function EnsureRow(i)
         local row = rows[i]
         if row then return row end
-        row = PixelLayoutRegion(CreateFrame("Frame", nil, listChild))
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
-        row:SetHeight(40)
-        if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
-        row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
-        row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
-        row.icon:SetSize(28, 28)
-        row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-        row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
-        row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
-        row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
-        row.remove = ActionButton(row, "Remove", 80)
-        row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+        row = SpellListRow(listChild, i)
+        SpellListRowLabels(row, row, "LEFT", 7)
         row.remove:SetScript("OnClick", function()
             if row._spellID then opts.remove(row._spellID) end
         end)
@@ -453,6 +469,9 @@ M.AuraControls = {
     BlockedSpellList = BlockedSpellList,
     BuildLaneTabs = BuildLaneTabs,
     Card = Card,
+    SpellListRow = SpellListRow,
+    SpellListRowLabels = SpellListRowLabels,
+    SpellListScroll = SpellListScroll,
     FilterSpellEntries = FilterSpellEntries,
     FirstUnblockedSpell = FirstUnblockedSpell,
     PaintPresetSummary = PaintPresetSummary,

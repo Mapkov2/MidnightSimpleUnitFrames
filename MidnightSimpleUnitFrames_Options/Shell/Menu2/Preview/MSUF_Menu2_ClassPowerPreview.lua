@@ -997,8 +997,7 @@ local function RenderClassPower(preview, bars, player, spec)
                 segW = max(1, boundary - prevBoundary)
             end
             local rune = runeOrder and runeOrder[i]
-            local frac = rune and ((rune.elapsed or 0) / (rune.total or 1)) or (CPPreview.FillForSegment and CPPreview.FillForSegment(spec, i, animatedValue)
-                or (i <= floor(tonumber(animatedValue or spec.value) or 0) and 1 or 0))
+            local frac = rune and ((rune.elapsed or 0) / (rune.total or 1)) or (CPPreview.FillForSegment and CPPreview.FillForSegment(spec, i, animatedValue) or (i <= floor(tonumber(animatedValue or spec.value) or 0) and 1 or 0))
             if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
             local sx = startX + xPos
             if bars.classPowerFillReverse == true then sx = w - sx - segW end
@@ -2400,16 +2399,11 @@ function Preview.Create(ctx, builder)
     box.noResource:Hide()
     CreatePlayerReference(box)
     box.handleClass = MakeHandle(box, "classPower", "bars", "classPowerOffsetX", "classPowerOffsetY", 0, 0, "Class resource bar", { 0.30, 0.78, 0.55 }, "class", "class", 0)
-    box.handleClassText = MakeHandle(box, "classPowerText", "bars", "classPowerTextOffsetX", "classPowerTextOffsetY", 0, 0, "Class resource text",
-        { 0.30, 0.78, 0.55 }, "classText", "classText", 2)
-    box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Player power bar",
-        { 0.95, 0.72, 0.18 }, "power", "power", 0)
-    box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Player power text", { 0.95, 0.72, 0.18 },
-        "powerText", "powerText", 2)
-    box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar",
-        { 0.25, 0.90, 0.42 }, "hp", "hp", 0)
-    box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text",
-        { 0.25, 0.90, 0.42 }, "hpText", "hpText", 2)
+    box.handleClassText = MakeHandle(box, "classPowerText", "bars", "classPowerTextOffsetX", "classPowerTextOffsetY", 0, 0, "Class resource text", { 0.30, 0.78, 0.55 }, "classText", "classText", 2)
+    box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Player power bar", { 0.95, 0.72, 0.18 }, "power", "power", 0)
+    box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Player power text", { 0.95, 0.72, 0.18 }, "powerText", "powerText", 2)
+    box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp", 0)
+    box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText", 2)
     function box:Refresh()
         -- Like the unit preview, never render in combat: the refresh waits for
         -- PLAYER_REGEN_ENABLED (the menu closes at combat start; this covers a

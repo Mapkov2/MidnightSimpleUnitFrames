@@ -2547,18 +2547,7 @@ local VALUE_TEXT_HANDLE_FIELDS = {
     power = { "powerLeft", "powerCenter", "powerRight" },
 }
 local function HandleRegionList(box, field, a, b, c)
-    local lists = box._msufTextHandleRegionLists
-    if not lists then
-        lists = {}
-        box._msufTextHandleRegionLists = lists
-    end
-    local list = lists[field]
-    if not list then
-        list = {}
-        lists[field] = list
-    end
-    list[1], list[2], list[3] = a, b, c
-    return list
+    return PreviewHelpers.CachedRegionList(box, "_msufTextHandleRegionLists", field, a, b, c)
 end
 local function TextHandleOptions(box, scale)
     local opts = box._msufTextHandleOptions
@@ -2694,10 +2683,7 @@ function Stage.RenderClassPower(st)
                 S((tonumber(bars.classPowerOffsetY) or 0) - 2))
         end
         local cp = box._msufClassPowerPreviewScratch
-        if not cp then
-            cp = {}
-            box._msufClassPowerPreviewScratch = cp
-        end
+        if not cp then cp = {}; box._msufClassPowerPreviewScratch = cp end
         cp.preview = classPowerPreviewSpec
         cp.token = cp.preview and cp.preview.token
         cp.isRune = cp.preview and cp.preview.mode == "rune"
@@ -2839,8 +2825,7 @@ function Stage.RenderClassPower(st)
             cp.tr, cp.tg, cp.tb = RenderState.CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
             mock.classPower.text:SetTextColor(cp.tr, cp.tg, cp.tb, cp.runeTextAlpha)
             mock.classPower.text:ClearAllPoints()
-            mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", S(tonumber(bars.classPowerTextOffsetX) or 0),
-                S(tonumber(bars.classPowerTextOffsetY) or 0))
+            mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", S(tonumber(bars.classPowerTextOffsetX) or 0), S(tonumber(bars.classPowerTextOffsetY) or 0))
             mock.classPower.text:Show()
             Stage.PlaceClassPowerTextHandle(st)
         else
@@ -3408,8 +3393,7 @@ function Stage.RenderPortrait(st)
         mock.portrait:SetSize(S(box._runtimePortraitW), S(box._runtimePortraitH))
         mock.portrait:SetAlpha(box._runtimePortraitAlpha or 1)
         mock.portrait:ClearAllPoints()
-        if mock.portrait.border and mock.portrait.border.SetFrameLevel
-            and mock.portrait.GetFrameLevel then mock.portrait.border:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1) end
+        if mock.portrait.border and mock.portrait.border.SetFrameLevel and mock.portrait.GetFrameLevel then mock.portrait.border:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1) end
         local ox = S(tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.x) or tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0)
         local oy = S(tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.y) or tonumber(PortraitStyleGet(key, "portraitOffsetY", 0)) or 0)
         if box._runtimePortraitPlacement == "DETACHED" then
@@ -3438,8 +3422,7 @@ function Stage.RenderPortrait(st)
             or PortraitStyleGet(key, "portraitShape", "SQUARE")
         box._msufPreviewPortraitImageSpec = nil
         if renderMode == "CLASS" then
-            local visual = RenderState.ClassPortraitVisual(data.class, (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.classStyle)
-                or PortraitStyleGet(key, "portraitClassStyle", "BLIZZARD"))
+            local visual = RenderState.ClassPortraitVisual(data.class, (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.classStyle) or PortraitStyleGet(key, "portraitClassStyle", "BLIZZARD"))
             if visual and visual.atlas and mock.portrait.tex.SetAtlas then
                 mock.portrait.tex:SetAtlas(visual.atlas)
                 -- Only a flipped class atlas needs its coordinates.
@@ -3492,8 +3475,7 @@ function Stage.RenderPortrait(st)
             mock.portrait.initial:Hide()
         end
         local portraitBg = runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.bg
-        if (portraitBg and portraitBg.enabled == true) or (not (runtimeSpec and runtimeSpec.portrait)
-            and PortraitStyleGet(key, "portraitBgEnabled", false) == true) then
+        if (portraitBg and portraitBg.enabled == true) or (not (runtimeSpec and runtimeSpec.portrait) and PortraitStyleGet(key, "portraitBgEnabled", false) == true) then
             if mock.portrait.bg then
                 mock.portrait.bg:SetVertexColor(
                     (portraitBg and portraitBg.r) or g.portraitBgColorR or 0.05,
@@ -3573,8 +3555,7 @@ function Stage.RenderPortrait(st)
             RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, cr, cg, cb, 1)
         elseif bStyle == "REACTION" then
             local hostile = (key == "target" or key == "boss" or key == "arena" or key == "focus" or key == "focustarget" or key == "pettarget")
-            RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, hostile and 1 or 0.1,
-                hostile and 0.2 or 0.85, 0.1, 1)
+            RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, hostile and 1 or 0.1, hostile and 0.2 or 0.85, 0.1, 1)
         else
             RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, 1, 1, 1, 1)
         end

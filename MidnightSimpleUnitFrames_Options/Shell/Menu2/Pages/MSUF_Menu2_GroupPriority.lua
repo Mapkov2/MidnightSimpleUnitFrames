@@ -448,10 +448,7 @@ local function BuildPriorityPage(ctx)
     nextPage:SetPoint("TOPRIGHT", pinsCard, "TOPRIGHT", -16, -36)
     pageText:SetPoint("RIGHT", nextPage, "LEFT", -8, 0)
     prevPage:SetPoint("RIGHT", pageText, "LEFT", -8, 0)
-    if T.CenterButtonLabel then
-        T.CenterButtonLabel(prevPage)
-        T.CenterButtonLabel(nextPage)
-    end
+    if T.CenterButtonLabel then T.CenterButtonLabel(prevPage); T.CenterButtonLabel(nextPage) end
     RegisterAction(prevPage, ctx, "pins.page.previous", "Previous pinned players")
     RegisterAction(nextPage, ctx, "pins.page.next", "Next pinned players")
     local emptyPins = W.Text(pinsCard,
@@ -482,11 +479,7 @@ local function BuildPriorityPage(ctx)
         remove:SetPoint("RIGHT", row, "RIGHT", -4, 0)
         down:SetPoint("RIGHT", remove, "LEFT", -4, 0)
         up:SetPoint("RIGHT", down, "LEFT", -4, 0)
-        if T.CenterButtonLabel then
-            T.CenterButtonLabel(up)
-            T.CenterButtonLabel(down)
-            T.CenterButtonLabel(remove)
-        end
+        if T.CenterButtonLabel then T.CenterButtonLabel(up); T.CenterButtonLabel(down); T.CenterButtonLabel(remove) end
         RegisterAction(up, ctx, "pins.row." .. i .. ".up", "Move pinned player up")
         RegisterAction(down, ctx, "pins.row." .. i .. ".down", "Move pinned player down")
         RegisterAction(remove, ctx, "pins.row." .. i .. ".remove", "Remove pinned player")
@@ -512,10 +505,7 @@ local function BuildPriorityPage(ctx)
         local entries = pinViewScratch
         local count = #entries
         local pages = max(1, math.ceil(count / PIN_ROWS_PER_PAGE))
-        if pinPage > pages then
-            pinPage = pages
-            M.gfPriorityPinPage = pinPage
-        end
+        if pinPage > pages then pinPage = pages; M.gfPriorityPinPage = pinPage end
         local first = (pinPage - 1) * PIN_ROWS_PER_PAGE + 1
         T.SetTranslatedText(pinsStatus, count == 1 and Tr("1 saved player") or (tostring(count) .. " " .. Tr("saved players")))
         pageText:SetText(tostring(pinPage) .. " / " .. tostring(pages))

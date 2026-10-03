@@ -2926,8 +2926,7 @@ function T.StyleScrollFrame(scroll, anchor)
     local thumbHover = T.colors.coreRaised
     local thumb = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY")))
     thumb:SetSize(5, 42)
-    ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 },
-        { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
+    ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 }, { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
     bar._msuf2Thumb = thumb
     local function Paint(hover)
         local shown = bar.IsShown and bar:IsShown()
@@ -2939,13 +2938,11 @@ function T.StyleScrollFrame(scroll, anchor)
                 { T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], a },
                 true)
         end
-        if trackEdge then trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3],
-            (hover and 0.62 or 0.38) * alpha) end
+        if trackEdge then trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], (hover and 0.62 or 0.38) * alpha) end
         if thumb and thumb.SetColorTexture then
             local c = hover and thumbHover or thumbBase
             local a = (hover and 0.90 or 0.68) * alpha
-            ApplyTextureGradient(thumb, "VERTICAL", { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a },
-                { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
+            ApplyTextureGradient(thumb, "VERTICAL", { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
         end
     end
     local rawSetVerticalScroll = scroll.SetVerticalScroll

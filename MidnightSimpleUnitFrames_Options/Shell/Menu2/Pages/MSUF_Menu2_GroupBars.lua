@@ -286,8 +286,7 @@ local function BuildGFResourceBarSection(ctx, b)
     local powerMainCard = W.ControlCard(power, "Visibility & Size", nil, powerLeftX, powerCardY, powerLeftW, powerCardH)
     local powerBorderCard = W.ControlCard(power, "Border & fill", "Outline and fill behavior.", powerRightX, powerCardY, powerRightW, powerCardH)
     local powerRoleCard = W.ControlCard(power, "Roles", nil, powerLeftX, roleCardY, powerLeftW, roleCardH)
-    local detachedCard = W.ControlCard(power, "Detached placement", "Used only when the power bar is detached from the frame.", powerLeftX, detachedCardY,
-        powerInnerW, detachedCardH)
+    local detachedCard = W.ControlCard(power, "Detached placement", "Used only when the power bar is detached from the frame.", powerLeftX, detachedCardY, powerInnerW, detachedCardH)
     local detachedGap = 16
     local detachedColW = floor((powerInnerW - 32 - detachedGap) / 2)
     local detachedRightX = 16 + detachedColW + detachedGap
@@ -851,8 +850,7 @@ local function BuildGFValueTextTab(ctx, s, kind, tab, cfg)
     end
     local formattingY = hasAbsorb and -310 or -248
     W.Text(content, "Formatting", 16, formattingY, textCardW - 32, T.colors.text)
-    controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16,
-        formattingY - 28, textHalfDropW)
+    controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, formattingY - 28, textHalfDropW)
     if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, formattingY - 50, textHalfDropW), cfg.reverseKey, false, "visual") end
     if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, formattingY - 78, textHalfDropW), cfg.decimalsKey, false, "visual") end
     if cfg.shortNumbersKey then

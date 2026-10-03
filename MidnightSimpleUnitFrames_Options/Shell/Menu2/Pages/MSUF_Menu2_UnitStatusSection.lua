@@ -188,8 +188,7 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         end
         M.RegisterSearchWidget(control, meta)
     end
-    local function BindStatusPlacementSlider(parent, label, minValue, maxValue, xPos, yPos, width, specKey, defaultKey, fallback, reason,
-        searchLabel, keywords, normalize)
+    local function BindStatusPlacementSlider(parent, label, minValue, maxValue, xPos, yPos, width, specKey, defaultKey, fallback, reason, searchLabel, keywords, normalize)
         local control = W.Slider(parent, label, minValue, maxValue, 1, 300)
         Shared.PlaceSlider(parent, control, xPos, yPos, width)
         M.BindNumberWidget(ctx, control,
@@ -248,8 +247,7 @@ function StatusSection.PrepareBinders(state, ctx, unit)
         return type(defaultValue) == "function" and defaultValue(spec) or defaultValue
     end
     local RefreshStatusSectionState = M.RefreshProxy()
-    local function BindStatusSpecDropdown(parent, label, values, width, xPos, yPos, moveWidth, specField, defaultValue, reason, searchLabel, keywords,
-        searchValues, afterSet)
+    local function BindStatusSpecDropdown(parent, label, values, width, xPos, yPos, moveWidth, specField, defaultValue, reason, searchLabel, keywords, searchValues, afterSet)
         local control = W.Dropdown(parent, label, values, width)
         Shared.PlaceDropdown(parent, control, xPos, yPos, moveWidth)
         M.BindDropdownWidget(ctx, control,
@@ -285,8 +283,7 @@ function StatusSection.BuildIndicatorSelector(state, ctx, unit)
     local RegisterStatusSearch, RefreshStatusMenu, ReadStatusEnabled = state.RegisterStatusSearch, state.RefreshStatusMenu, state.ReadStatusEnabled
     local selectedStatusContract, RefreshStatusSectionState = state.selectedStatusContract, state.RefreshStatusSectionState
     local selector = W.Dropdown(selectedCard, "Indicator", function() return StatusValues(unit) end, 260)
-    if selector._msuf2Title and selector._msuf2Title.SetTextColor then selector._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2],
-        T.colors.accent[3], T.colors.accent[4] or 1) end
+    if selector._msuf2Title and selector._msuf2Title.SetTextColor then selector._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1) end
     Shared.PlaceDropdown(selectedCard, selector, 16, -54, selectedControlW)
     M.BindDropdownWidget(ctx, selector,
         function()

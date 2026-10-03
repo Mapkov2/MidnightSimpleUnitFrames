@@ -200,16 +200,39 @@ local function MSUF_EM2_SchedulePreviewReforce()
     C_Timer.After(0.1, RunQueuedPreviewReforce)
 end
 
+--- Combat lockdown stops every unit preview: the test flags go off and the
+--- castbar previews hide.
+local function StopPreviewTestModes()
+    ExportPublic("MSUF_PreviewTestMode", false)
+    ExportPublic("MSUF_BossTestMode", false)
+    ExportPublic("MSUF_ArenaTestMode", false)
+    MSUF.Require("MSUF_HideAllCastbarPreviews", CALLER)()
+end
+--- Castbar previews follow the unit edit: the boss castbars in one batch,
+--- then every castbar test function.
+local function SyncCastbarPreviewTests()
+    local beginBossBatch = _G.MSUF_BeginBossCastbarPreviewBatch
+    local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
+    local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
+    if batchingBossPreview then beginBossBatch() end
+    SyncCastbarEditModeWithUnitEdit()
+    --- Animated castbar motion is owned by the on-demand preview animation driver.
+    for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
+        local f = _G[fn]
+        if type(f) == "function" then
+            f(false, true)
+        end
+    end
+    if batchingBossPreview then endBossBatch() end
+end
+
 local function MSUF_SyncAllUnitPreviews()
     local active = _G.MSUF_UnitPreviewActive and true or false
     local editOn = EM2.State and EM2.State.IsActive()
     local want = active and editOn
 
     if IsConfigCombatLocked() then
-        ExportPublic("MSUF_PreviewTestMode", false)
-        ExportPublic("MSUF_BossTestMode", false)
-        ExportPublic("MSUF_ArenaTestMode", false)
-        MSUF.Require("MSUF_HideAllCastbarPreviews", CALLER)()
+        StopPreviewTestModes()
         return
     end
 
@@ -236,19 +259,7 @@ local function MSUF_SyncAllUnitPreviews()
 
     ForPreviewFrames(ReforcePreviewFrame, want)
     --- 3) Castbars
-    local beginBossBatch = _G.MSUF_BeginBossCastbarPreviewBatch
-    local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
-    local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
-    if batchingBossPreview then beginBossBatch() end
-    SyncCastbarEditModeWithUnitEdit()
-    --- Animated castbar motion is owned by the on-demand preview animation driver.
-    for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
-        local f = _G[fn]
-        if type(f) == "function" then
-            f(false, true)
-        end
-    end
-    if batchingBossPreview then endBossBatch() end
+    SyncCastbarPreviewTests()
 
     --- 4) Aura refresh
     local a3 = MSUF and MSUF.MSUF_Auras3
@@ -369,10 +380,7 @@ do
         local want = active and editOn
 
         if IsConfigCombatLocked() then
-            ExportPublic("MSUF_PreviewTestMode", false)
-            ExportPublic("MSUF_BossTestMode", false)
-            ExportPublic("MSUF_ArenaTestMode", false)
-            MSUF.Require("MSUF_HideAllCastbarPreviews", CALLER)()
+            StopPreviewTestModes()
             UninstallPipelineWrappers()
             return
         end
@@ -424,21 +432,7 @@ do
             ForPreviewFrames(ReforcePreviewFrame, want)
         end)
 
-        Phase(0.06, function()
-            local beginBossBatch = _G.MSUF_BeginBossCastbarPreviewBatch
-            local endBossBatch = _G.MSUF_EndBossCastbarPreviewBatch
-            local batchingBossPreview = type(beginBossBatch) == "function" and type(endBossBatch) == "function"
-            if batchingBossPreview then beginBossBatch() end
-            SyncCastbarEditModeWithUnitEdit()
-            --- Animated castbar motion is owned by the on-demand preview animation driver.
-            for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
-                local f = _G[fn]
-                if type(f) == "function" then
-                    f(false, true)
-                end
-            end
-            if batchingBossPreview then endBossBatch() end
-        end)
+        Phase(0.06, SyncCastbarPreviewTests)
 
         Phase(0.08, function()
             local a3 = MSUF and MSUF.MSUF_Auras3

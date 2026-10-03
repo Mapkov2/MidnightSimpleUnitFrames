@@ -827,8 +827,7 @@ local function BuildDrag(mover, key, cfg, start)
         }
     end
 
-    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority")
-        or (bar and bar._msufIsGroupFrame == true) or false
+    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority") or (bar and bar._msufIsGroupFrame == true) or false
     local groupKind = (key == "gf_party" and "party")
         or (key == "gf_raid" and "raid")
         or (key == "gf_mythicraid" and "mythicraid")

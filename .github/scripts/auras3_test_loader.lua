@@ -144,6 +144,23 @@ local function PrepareDirectContracts(source, namespace)
     _G.wipe = _G.wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
     _G.canaccesstable = _G.canaccesstable or function() return true end
     local function Uses(text) return source:find(text, 1, true) ~= nil end
+    -- A menu file that requires the core's PixelLayoutRegion gets the stand-in
+    -- the other menu files fall back to (the harness lays out no pixels).
+    -- Both aura backends lay their dispel overlay strip out through the shared
+    -- border runtime (Runtime/MSUF_BorderStyles.lua, loaded early by every TOC).
+    if Uses("MSUF.BorderStyles.LayoutEdgeStrip") or Uses("MSUF.BorderStyles and MSUF.BorderStyles.LayoutEdgeStrip") then
+        local styles = namespace.BorderStyles
+        if not (type(styles) == "table" and type(styles.LayoutEdgeStrip) == "function") then
+            local owner = "MidnightSimpleUnitFrames/Runtime/MSUF_BorderStyles.lua"
+            assert(compileSource(Read(owner), "@" .. owner))("MidnightSimpleUnitFrames", namespace)
+        end
+    end
+    if Uses('MSUF.Require("MSUF_PixelLayoutRegion"') and type(_G.MSUF_PixelLayoutRegion) ~= "function" then
+        _G.MSUF_PixelLayoutRegion = function(region, policy, ...)
+            if type(policy) == "string" then return region[policy](region, ...) end
+            return region
+        end
+    end
     local function Bind(owner, name, preamble, ...)
         local text = Read(SourcePath(owner))
         local body = Slice.Function(text, "local function " .. name, owner)

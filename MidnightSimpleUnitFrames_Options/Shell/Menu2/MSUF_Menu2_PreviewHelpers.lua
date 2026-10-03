@@ -1829,8 +1829,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         if box._detachedCastPreview and box.mock.cast and box.mock.cast:IsShown() then
             box.mock.cast:ClearAllPoints()
-            box.mock.cast:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._detachedCastBaseOffsetX) or 0) + panX,
-                (tonumber(box._detachedCastBaseOffsetY) or 0) + panY)
+            box.mock.cast:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._detachedCastBaseOffsetX) or 0) + panX, (tonumber(box._detachedCastBaseOffsetY) or 0) + panY)
         end
         local point, relative, relativePoint, actualX, actualY = box.mock:GetPoint(1)
         return point == "CENTER" and relative == box.canvas and relativePoint == "CENTER"
@@ -1994,8 +1993,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
         local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
         local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
-        local bgIdle, bgHover, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1],
-            raised[2], raised[3], 0.98 }
+        local bgIdle, bgHover, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2], raised[3], 0.98 }
         local brIdle, brHover, brDown = { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
         local bgScratch = { 0, 0, 0, 1 }
         local function ApplyButtonVisual(self, hover, down)
@@ -2012,8 +2010,7 @@ function H.InstallZoomPan(ZoomPan, opts)
                     end
                 end
                 if self._msuf2PreviewZoomEdge then
-                    self._msuf2PreviewZoomEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1),
-                        min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
+                    self._msuf2PreviewZoomEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1), min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
                 end
                 if self[fontField] and self[fontField].SetTextColor then
                     self[fontField]:SetTextColor(hover and 0.88 or 0.78, hover and 0.94 or 0.84, 1.00, alpha)
@@ -2687,6 +2684,24 @@ function H.LiveStateDriverGate(driver, event, box)
         return true
     end
     return false
+end
+
+--- A region list kept on owner (owner[cacheField][field]) and refilled with
+--- a, b, c, d: the text focus rings and the text handles refit around it on
+--- every repaint and animation tick without allocating a table.
+function H.CachedRegionList(owner, cacheField, field, a, b, c, d)
+    local lists = owner[cacheField]
+    if not lists then
+        lists = {}
+        owner[cacheField] = lists
+    end
+    local list = lists[field]
+    if not list then
+        list = {}
+        lists[field] = list
+    end
+    list[1], list[2], list[3], list[4] = a, b, c, d
+    return list
 end
 
 --- Moves a preview's "Layers" button into the compact header, beside the
@@ -3506,23 +3521,8 @@ function H.PaintPreviewDurationBar(bar, icon, cfg, width, height, auraState)
     local r, g, b = MSUF.MSUF_Auras3.GetDurationBarColor()
     bar:SetVertexColor(r, g, b, 0.92)
     frac = max(0.02, min(1, tonumber(frac) or 0.62))
-    bar:ClearAllPoints()
-    bar:SetHeight(barHeight)
-    if auraState then
-        bar:SetWidth(max(1, floor(max(1, width - inset * 2) * frac + 0.5)))
-        if cfg.durationBarPosition == "TOP" then
-            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        else
-            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        end
-    elseif cfg.durationBarPosition == "TOP" then
-        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-    else
-        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-    end
-    bar:Show()
+    MSUF.MSUF_Auras3.LayoutPreviewDurationBar(bar, icon, cfg.durationBarPosition, barHeight, inset, width,
+        auraState and frac or nil)
 end
 
 --- The rectangular power bar border of a unit or group preview: a mouse-free
@@ -3530,7 +3530,6 @@ end
 function H.EnsurePowerBorderHost(mock, field)
     local host = mock[field]
     if host then return host end
-    if type(_G.CreateFrame) ~= "function" then return nil end
     host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
     if host.EnableMouse then host:EnableMouse(false) end
     host.edges = {}
@@ -3570,39 +3569,6 @@ function H.LayoutPowerBorderEdges(host, edge, roundedPower)
         right:Show()
     end
     host:Show()
-end
-
---- The dispel overlay of a unit or group preview: the region covers the
---- target (FULL) or a thickness-wide strip along one edge (TOP, BOTTOM, LEFT,
---- RIGHT), filled with the preview dispel type's colour, or with the spec's
---- dispel colour where the aura backend paints none.
-function H.PaintDispelOverlayRegion(region, target, style, thickness, a3, dispel)
-    region:ClearAllPoints()
-    if style == "TOP" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetHeight(thickness)
-    elseif style == "BOTTOM" then
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetHeight(thickness)
-    elseif style == "LEFT" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetWidth(thickness)
-    elseif style == "RIGHT" then
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetWidth(thickness)
-    else
-        region:SetAllPoints(target)
-    end
-    if a3 and type(a3.SetDispelColorTexture) == "function" then
-        a3.SetDispelColorTexture(region, a3.GetDispelColorPreviewType(), true, 1)
-    else
-        region:SetColorTexture(tonumber(dispel and dispel.r) or 0.25,
-            tonumber(dispel and dispel.g) or 0.75, tonumber(dispel and dispel.b) or 1, 1)
-    end
 end
 
 --- The header shade and separator line a pinned (docked) unit or group

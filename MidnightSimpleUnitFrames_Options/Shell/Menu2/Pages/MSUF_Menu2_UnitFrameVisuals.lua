@@ -339,19 +339,15 @@ local function BuildPortrait(ctx, builder, unit)
             RefreshPortraitControls()
         end,
         PortraitControlMeta("portrait.position", tostring(unit) .. ".portraitMode"))
-    local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER",
-        nil, RefreshPortraitControls)
+    local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER", nil, RefreshPortraitControls)
     local clickable = BindPortraitToggle(mainCard, "Clickable portrait", 16, -174, leftW - 32, "portraitClickable", false, "MSUF2_PORTRAIT_CLICKABLE")
     clickable._msuf2SearchText = "Clickable portrait unit frame target right click menu click casting mouseover"
     BindExactPortraitTabTarget(clickable, "general", tostring(unit) .. ".portraitClickable")
-    local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE",
-        nil, RefreshPortraitControls)
-    local eliteDragon = BindPortraitToggle(borderCard, "Elite and rare dragon", 16, -112, leftW - 32, "portraitBlizzardElite", false,
-        "MSUF2_PORTRAIT_BLIZZARD_ELITE", RefreshPortraitControls)
+    local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE", nil, RefreshPortraitControls)
+    local eliteDragon = BindPortraitToggle(borderCard, "Elite and rare dragon", 16, -112, leftW - 32, "portraitBlizzardElite", false, "MSUF2_PORTRAIT_BLIZZARD_ELITE", RefreshPortraitControls)
     eliteDragon._msuf2SearchText = "Blizzard portrait ring elite rare rareelite boss gold silver dragon classification"
     BindExactPortraitTabTarget(eliteDragon, "border", tostring(unit) .. ".portraitBlizzardElite")
-    local blizzardCorner = BindPortraitToggle(borderCard, "Bottom-right gold connector", 16, -148, leftW - 32, "portraitBlizzardCorner", false,
-        "MSUF2_PORTRAIT_BLIZZARD_CORNER", RefreshPortraitControls)
+    local blizzardCorner = BindPortraitToggle(borderCard, "Bottom-right gold connector", 16, -148, leftW - 32, "portraitBlizzardCorner", false, "MSUF2_PORTRAIT_BLIZZARD_CORNER", RefreshPortraitControls)
     blizzardCorner._msuf2SearchText = "Blizzard portrait frame gold corner triangle connector embellishment Forever"
     BindExactPortraitTabTarget(blizzardCorner, "border", tostring(unit) .. ".portraitBlizzardCorner")
     local dragonPreview = W.Dropdown(borderCard, "Runtime Preview", PORTRAIT_PLACEMENT.classificationPreview, 220)
@@ -401,43 +397,31 @@ local function BuildPortrait(ctx, builder, unit)
     local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -278, rightW - 58, 100, 300, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
     local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -332, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
     local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -386, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
-    local placement = BindPortraitDropdown(placementCard, "Placement", PORTRAIT_PLACEMENT.modes, 16, -58, min(220, leftW - 32), "portraitPlacement", "ATTACHED",
-        "MSUF2_PORTRAIT_PLACEMENT", nil, RefreshPortraitControls)
+    local placement = BindPortraitDropdown(placementCard, "Placement", PORTRAIT_PLACEMENT.modes, 16, -58, min(220, leftW - 32), "portraitPlacement", "ATTACHED", "MSUF2_PORTRAIT_PLACEMENT", nil, RefreshPortraitControls)
     placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
-    local detachedPoint = BindPortraitDropdown(placementCard, "Portrait anchor point", PORTRAIT_PLACEMENT.points, 16, -112, min(220, leftW - 32),
-        "portraitDetachedPoint", "RIGHT", "MSUF2_PORTRAIT_DETACHED_POINT")
-    local detachedTo = BindPortraitDropdown(placementCard, "Attach to frame point", PORTRAIT_PLACEMENT.points, 16, -166, min(220, leftW - 32),
-        "portraitDetachedTo", "LEFT", "MSUF2_PORTRAIT_DETACHED_TO")
-    local overlayAlign = BindPortraitDropdown(placementCard, "Overlay alignment", PORTRAIT_PLACEMENT.overlay, 16, -220, min(220, leftW - 32),
-        "portraitOverlayAlign", "LEFT", "MSUF2_PORTRAIT_OVERLAY_ALIGN")
+    local detachedPoint = BindPortraitDropdown(placementCard, "Portrait anchor point", PORTRAIT_PLACEMENT.points, 16, -112, min(220, leftW - 32), "portraitDetachedPoint", "RIGHT", "MSUF2_PORTRAIT_DETACHED_POINT")
+    local detachedTo = BindPortraitDropdown(placementCard, "Attach to frame point", PORTRAIT_PLACEMENT.points, 16, -166, min(220, leftW - 32), "portraitDetachedTo", "LEFT", "MSUF2_PORTRAIT_DETACHED_TO")
+    local overlayAlign = BindPortraitDropdown(placementCard, "Overlay alignment", PORTRAIT_PLACEMENT.overlay, 16, -220, min(220, leftW - 32), "portraitOverlayAlign", "LEFT", "MSUF2_PORTRAIT_OVERLAY_ALIGN")
     local levelOffset = BindPortraitSlider(placementCard, "Layer offset", 16, -274, leftW - 58, 0, 30, 1, "portraitLevelOffset", 7, "MSUF2_PORTRAIT_LEVEL")
     levelOffset._msuf2SearchText = "Portrait layer offset frame level behind in front of bars"
     local portraitAlpha = BindPortraitSlider(placementCard, "Portrait opacity", 16, -328, leftW - 58, 0, 100, 1, "portraitAlpha", 100, "MSUF2_PORTRAIT_ALPHA")
-    local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle",
-        "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
+    local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle", "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
-    local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -256, min(220, leftW - 32), "portraitBorderStyle", "NONE",
-        "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
-    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -310, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0,
-        "MSUF2_PORTRAIT_EDGE_SOFTNESS")
+    local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -256, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
+    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -310, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0, "MSUF2_PORTRAIT_EDGE_SOFTNESS")
     BindExactPortraitTabTarget(edgeSoftness, "border", tostring(unit) .. ".portraitEdgeSoftness")
     edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
-    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -364, min(220, leftW - 32), "portraitBorderArt", "FLAT",
-        "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
+    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -364, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
     borderArt._msuf2SearchText = "Portrait border art flat relief beveled ring blizzard style"
-    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -418, min(220, leftW - 32),
-        "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
+    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -418, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
     borderDirection._msuf2SearchText = "Portrait border direction rotate light up right down left"
-    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -472, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2,
-        "MSUF2_PORTRAIT_BORDER_SIZE")
-    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -540, leftW - 32, "portraitFillBorder", false,
-        "MSUF2_PORTRAIT_FILL_BORDER")
+    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -472, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
+    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -540, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
     -- The Castbar section's Icon tab hosts a second toggle for this same key on
     -- every unit that has a castbar. Re-run the page refreshers so the twin
     -- surface picks up the new state instead of showing a stale checkbox.
-    local castSpellIcon = BindPortraitToggle(styleCard, "Show cast spell icon in portrait", 16, -166, rightW - 32, "portraitCastSpellIcon", false,
-        "MSUF2_PORTRAIT_CAST_ICON",
+    local castSpellIcon = BindPortraitToggle(styleCard, "Show cast spell icon in portrait", 16, -166, rightW - 32, "portraitCastSpellIcon", false, "MSUF2_PORTRAIT_CAST_ICON",
         CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local flip = BindPortraitToggle(styleCard, "Flip portrait left to right", 16, -220, rightW - 32, "portraitFlip", false, "MSUF2_PORTRAIT_FLIP")
@@ -459,24 +443,20 @@ local function BuildPortrait(ctx, builder, unit)
         BindPortraitSlider(dragonCard, "Dragon size", 16, -112, leftW - 58, 25, 300, 1, "portraitDragonScale", 100, "MSUF2_DRAGON_SCALE"),
         BindPortraitSlider(dragonCard, "Dragon horizontal shift", 16, -166, leftW - 58, -200, 200, 1, "portraitDragonX", 0, "MSUF2_DRAGON_X"),
         BindPortraitSlider(dragonCard, "Dragon vertical shift", 16, -220, leftW - 58, -200, 200, 1, "portraitDragonY", 0, "MSUF2_DRAGON_Y"),
-        BindPortraitDropdown(dragonCard, "Dragon draw order", PORTRAIT_PLACEMENT.dragonLayer, 16, -274, min(220, leftW - 32), "portraitDragonLayer",
-            "OVERLAY", "MSUF2_DRAGON_LAYER"),
+        BindPortraitDropdown(dragonCard, "Dragon draw order", PORTRAIT_PLACEMENT.dragonLayer, 16, -274, min(220, leftW - 32), "portraitDragonLayer", "OVERLAY", "MSUF2_DRAGON_LAYER"),
         BindPortraitSlider(dragonCard, "Dragon level above portrait", 16, -328, leftW - 58, 0, 30, 1, "portraitDragonLevel", 1, "MSUF2_DRAGON_LEVEL"),
         BindPortraitToggle(dragonCard, "Flip dragon left to right", 16, -382, leftW - 32, "portraitDragonFlip", false, "MSUF2_DRAGON_FLIP"),
         BindPortraitToggle(dragonCard, "Color dragon by unit class", 16, -428, leftW - 32, "portraitDragonClassColor", false, "MSUF2_DRAGON_COLOR"),
         BindPortraitToggle(dragonCard, "Keep enemy dragons in instances", 16, -474, leftW - 32, "portraitDragonInInstances", true, "MSUF2_DRAGON_INSTANCES"),
     }
-    local dragonKeys = { "portraitDragonScale", "portraitDragonX", "portraitDragonY", "portraitDragonLayer", "portraitDragonLevel", "portraitDragonFlip",
-        "portraitDragonClassColor", "portraitDragonInInstances" }
+    local dragonKeys = { "portraitDragonScale", "portraitDragonX", "portraitDragonY", "portraitDragonLayer", "portraitDragonLevel", "portraitDragonFlip", "portraitDragonClassColor", "portraitDragonInInstances" }
     for i, control in ipairs(dragonControls) do
         BindExactPortraitTabTarget(control, "dragon", tostring(unit) .. "." .. dragonKeys[i])
     end
     BindExactPortraitTabTarget(flip, "advanced", tostring(unit) .. ".portraitFlip")
     BindExactPortraitTabTarget(shadow, "advanced", tostring(unit) .. ".portraitInnerShadow")
     if M.AddTooltip then
-        M.AddTooltip(render, "Render",
-            "3D shows the unit's live model in a rectangle. While the game keeps a unit's identity private, the regular 2D portrait stands in.",
-            { hook = true })
+        M.AddTooltip(render, "Render", "3D shows the unit's live model in a rectangle. While the game keeps a unit's identity private, the regular 2D portrait stands in.", { hook = true })
         M.AddTooltip(shadow, "Inset shadow strength", "Darkens the inner edges of square portraits, 3D models included.", { hook = true })
         M.AddTooltip(dragonControls[4], "Dragon draw order", "Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring.", { hook = true })
     end
@@ -530,8 +510,7 @@ local function BuildPortrait(ctx, builder, unit)
         { controls = zoom, on = function(conf) return PortraitActive() and conf.portraitRender ~= "CLASS" end },
         { controls = shape, on = function(conf) return PortraitActive() and conf.portraitRender ~= "3D" end },
         { controls = flip, on = function(conf) return PortraitActive() and conf.portraitRender ~= "3D" end },
-        { controls = shadow, on = function(conf) return PortraitActive() and ((conf.portraitShape or "SQUARE") == "SQUARE"
-            or conf.portraitRender == "3D") end },
+        { controls = shadow, on = function(conf) return PortraitActive() and ((conf.portraitShape or "SQUARE") == "SQUARE" or conf.portraitRender == "3D") end },
         { controls = dragonControls, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true end },
         { controls = { eliteDragon, blizzardCorner }, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) end },
         { controls = { dragonPreview, dragonPreviewExtra }, on = function(conf)
@@ -625,15 +604,8 @@ local function BuildPower(ctx, builder, unit)
     local detachedHeight
     local orbSize
     local detachedTextToggle
-    local function AddPowerControl(control)
-        M.AppendValues(powerControls, control)
-        W.AttachUnitEditFocus(control, unit, "powerbar")
-        return control
-    end
-    local function AddDetachedControl(control)
-        M.AppendValues(detachedControls, control)
-        return AddPowerControl(control)
-    end
+    local function AddPowerControl(control) M.AppendValues(powerControls, control); W.AttachUnitEditFocus(control, unit, "powerbar"); return control end
+    local function AddDetachedControl(control) M.AppendValues(detachedControls, control); return AddPowerControl(control) end
     local function ResolveDefault(value)
         if type(value) == "function" then return value() end
         return value
@@ -729,8 +701,7 @@ local function BuildPower(ctx, builder, unit)
     local function BuildPowerControls(parent, addFn, specs)
         return M.BuildControlSpecs(specs, {
             toggle = function(s, i) return BindPowerToggle(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11]), s[12] or s[6] or i end,
-            slider = function(s, i) return BindPowerSlider(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12],
-                s.opts), s[13] or s[9] or i end,
+            slider = function(s, i) return BindPowerSlider(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s.opts), s[13] or s[9] or i end,
         })
     end
     local function SetPowerFillMode(key, peerKey, value, reason, historyLabel)
@@ -784,8 +755,7 @@ local function BuildPower(ctx, builder, unit)
     end
     local mainCard = PowerCard("Visibility & Size", nil, leftX, -38, cardW, mainCardHeight)
     local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, mainCardHeight)
-    local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY,
-        fullW, detachedCardHeight)
+    local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
     -- Power bar art is configured once on the Bars page. The per-unit keys stay
     -- scope-aware in the UF compiler (conf -> bars -> unit bar texture); they
     -- simply have no control on this page anymore.
@@ -925,12 +895,9 @@ local function BuildPower(ctx, builder, unit)
         detachedSync = playerDetached.sync
     end
     local detachedFields = BuildPowerControls(detachedCard, AddDetachedControl, {
-        { "slider", "Detached width", 16, sliderTop, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end,
-            "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached height", detachedRightX, sliderTop, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil,
-            "height", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached layer", 16, sliderTop - 66, detachedSliderW, 0, 30, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER",
-            opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached width", 16, sliderTop, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached height", detachedRightX, sliderTop, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil, "height", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached layer", 16, sliderTop - 66, detachedSliderW, 0, 30, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },
     })
     detachedWidth, detachedHeight = detachedFields.width, detachedFields.height
     if detachedWidth and M.AddTooltip then
@@ -956,11 +923,8 @@ local function BuildPower(ctx, builder, unit)
                 RefreshClassPowerDetachedState()
             end,
             SettingMeta(ctx, "power.detached_shape", unit, "detachedPowerBarShape"))
-        if M.AddTooltip then M.AddTooltip(detachedShape, "Independent Powerbar Shape",
-            "Changes only Player power. Class Resources keep their own shape setting. Round and Crystal fill horizontally; Orb fills bottom-to-top.",
-            { hook = true, owner = "ANCHOR_RIGHT" }) end
-        orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 132, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54,
-            "MSUF2_POWER_DETACHED_ORB_SIZE", nil, DETACHED_POWER_OPTS)
+        if M.AddTooltip then M.AddTooltip(detachedShape, "Independent Powerbar Shape", "Changes only Player power. Class Resources keep their own shape setting. Round and Crystal fill horizontally; Orb fills bottom-to-top.", { hook = true, owner = "ANCHOR_RIGHT" }) end
+        orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 132, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE", nil, DETACHED_POWER_OPTS)
     end
     local function PowerOn() return ReadBool(unit, "showPowerBar", true) end
     local function DetachedOn() return PowerOn() and ReadBool(unit, "powerBarDetached", false) end
@@ -1002,8 +966,7 @@ local function BuildPower(ctx, builder, unit)
                 powerNotice:Show()
             elseif not PowerOn() then
                 if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
-                powerNotice:SetMessage(M.Format("%s power bar is hidden. Turn it on to configure size, embed, or detached settings.",
-                    UnitTopLabel(unit)), "warning")
+                powerNotice:SetMessage(M.Format("%s power bar is hidden. Turn it on to configure size, embed, or detached settings.", UnitTopLabel(unit)), "warning")
                 powerNotice:Show()
             else
                 if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
