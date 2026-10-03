@@ -28,8 +28,10 @@ local Enum = _G.Enum
 local CurveAPI = _G.C_CurveUtil
 local LuaCurveType = Enum and Enum.LuaCurveType
 local ReadUnitExistsCached = UF.ReadUnitExistsCached
--- The saved overlay anchor modes (MSUF_UF_Shared.lua).
+-- The saved overlay anchor modes (MSUF_UF_Shared.lua). The layout, clip and update
+-- paths compare the follow modes per event, so those two are plain upvalues.
 local ABSORB_ANCHOR = UF.Shared.ABSORB_ANCHOR
+local FOLLOW_HP, FOLLOW_HP_OVERFLOW = ABSORB_ANCHOR.FOLLOW_HP, ABSORB_ANCHOR.FOLLOW_HP_OVERFLOW
 local UnitMissing
 do
   local issv = _G.issecretvalue
@@ -235,7 +237,7 @@ local function FollowModeReverse(hpReverse)
 end
 
 local function ReverseForMode(mode, hpReverse)
-  if mode == ABSORB_ANCHOR.FOLLOW_HP or mode == ABSORB_ANCHOR.FOLLOW_HP_OVERFLOW then
+  if mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW then
     return FollowModeReverse(hpReverse)
   end
   return AnchorModeReverse(mode, hpReverse)
@@ -1170,8 +1172,8 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
   if not (bar and hpBar) then
     return
   end
-  local followSource = (mode == 3 or mode == 4) and followBar or nil
-  local follow = (mode == 3 or mode == 4) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
+  local followSource = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and followBar or nil
+  local follow = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
   local vertical = frame._msufPredictionVertical == true
   -- Extent along the fill axis only: width horizontally, height vertically. The
   -- cross axis is pinned by the corner anchors, so it is never measured. Served
@@ -1179,7 +1181,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
   local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
   local anchorTarget = follow or hpBar
   local parent = hpBar
-  if mode == 4 then
+  if mode == FOLLOW_HP_OVERFLOW then
     parent = EnsureOverflowClip(frame, hpBar, vertical,
       frame._msufPredictionHpReverse == true, width) or frame._msufHealthVisualRoot or frame
   end
@@ -1205,7 +1207,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
 
   local parentChanged = SetParentCached(bar, parent)
   SyncBarLayer(frame, hpBar, bar, levelOffset, parentChanged)
-  if hpBar.SetClipsChildren and mode == 3 and hpBar._msufPredictionClipsChildren ~= true then
+  if hpBar.SetClipsChildren and mode == FOLLOW_HP and hpBar._msufPredictionClipsChildren ~= true then
     hpBar:SetClipsChildren(true)
     hpBar._msufPredictionClipsChildren = true
   end
@@ -1301,14 +1303,14 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
   if not (bar and hpBar) then
     return false
   end
-  local followSource = (mode == 3 or mode == 4) and followBar or nil
-  local follow = (mode == 3 or mode == 4) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
+  local followSource = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and followBar or nil
+  local follow = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
   local vertical = frame._msufPredictionVertical == true
   -- Cached along-axis extent (see LayoutBar): this guard is the per-event hot
   -- path, so it must not measure the bar natively.
   local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
   local anchorTarget = follow or hpBar
-  local parent = (mode == 4) and OverflowParent(frame) or hpBar
+  local parent = (mode == FOLLOW_HP_OVERFLOW) and OverflowParent(frame) or hpBar
   height = height or 0
   offsetY = offsetY or 0
   return bar._msufPredictionMode == mode
@@ -1338,10 +1340,10 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
   if not (bar and hpBar) then
     return
   end
-  mode = mode or 3
+  mode = mode or FOLLOW_HP
   height = height or 0
   offsetY = offsetY or 0
-  if mode ~= 3 then
+  if mode ~= FOLLOW_HP then
     bar._msufHealAbsorbMode = nil
     return LayoutBar(frame, bar, levelOffset, mode, ReverseForMode(mode, hpReverse), nil, height, offsetY)
   end
@@ -1447,15 +1449,15 @@ local function MixedFollowNeedsClamp(cfg, healMode, absorbMode)
   return cfg ~= nil
     and cfg.heal == true
     and cfg.absorb == true
-    and absorbMode == 3
-    and healMode ~= 3
-    and healMode ~= 4
+    and absorbMode == FOLLOW_HP
+    and healMode ~= FOLLOW_HP
+    and healMode ~= FOLLOW_HP_OVERFLOW
 end
 
 local function NeedsHealthEvent(cfg)
   if not (cfg and cfg.absorb == true) then return false end
-  local healMode = NormalizeAnchorMode(cfg.healAnchorMode, 3)
-  local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+  local healMode = NormalizeAnchorMode(cfg.healAnchorMode, FOLLOW_HP)
+  local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, ABSORB_ANCHOR.RIGHT)
   return cfg.overAbsorbOverlay == true
     or cfg.fullHealthAbsorbStripe == true
     or MixedFollowNeedsClamp(cfg, healMode, absorbMode)
@@ -1674,10 +1676,10 @@ local function CompilePredictionRuntime(frame, cfg, spec)
   end
   cfg = cfg or {}
   local hpReverse = spec and spec.health and spec.health.reverse == true
-  local healMode = NormalizeAnchorMode(cfg.healAnchorMode, 3)
-  local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
-  local healAbsorbMode = NormalizeAnchorMode(cfg.healAbsorbAnchorMode, 3)
-  local followAbsorb = cfg.absorb == true and (absorbMode == 3 or absorbMode == 4)
+  local healMode = NormalizeAnchorMode(cfg.healAnchorMode, FOLLOW_HP)
+  local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, ABSORB_ANCHOR.RIGHT)
+  local healAbsorbMode = NormalizeAnchorMode(cfg.healAbsorbAnchorMode, FOLLOW_HP)
+  local followAbsorb = cfg.absorb == true and (absorbMode == FOLLOW_HP or absorbMode == FOLLOW_HP_OVERFLOW)
   local mixedFollowClamp = MixedFollowNeedsClamp(cfg, healMode, absorbMode)
   frame._msufPredictionRuntimeCfg = cfg
   frame._msufPredictionFrameWidth = tonumber(spec and spec.width) or nil
@@ -1848,8 +1850,8 @@ function Prediction.Apply(frame, spec)
     -- work rather than on the first protected combat health event.
     EnsureFullHealthCurve()
   end
-  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, 3)
-  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, FOLLOW_HP)
+  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, ABSORB_ANCHOR.RIGHT)
 
   ApplyPredictionBar(frame, cfg, spec, frame.incomingHealBar, cfg.heal,
     1, healMode, frame._msufPredictionHealReverse,
@@ -1928,7 +1930,7 @@ local function UpdateMixedFollowHealthValue(frame, unit, cfg, seedHP, seedMaxHP)
 
   local follow = cfg.heal == true and frame.incomingHealBar
     and frame.incomingHealBar._msufShown == true and frame.incomingHealBar or nil
-  LayoutBarIfNeeded(frame, bar, 2, 3, frame._msufPredictionAbsorbReverse, follow,
+  LayoutBarIfNeeded(frame, bar, 2, FOLLOW_HP, frame._msufPredictionAbsorbReverse, follow,
     frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
   local maxHP = seedMaxHP
   if bar._msufMaxReady ~= true and issecretvalue(maxHP) ~= true and maxHP == nil then
@@ -2450,7 +2452,7 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
 
   if showAbsorb and frame.absorbBar then
     local absorbMode = frame._msufPredictionAbsorbMode
-    if absorbMode == 3 or absorbMode == 4 then
+    if absorbMode == FOLLOW_HP or absorbMode == FOLLOW_HP_OVERFLOW then
       local follow = frame._msufPredictionHealActive == true
         and frame.incomingHealBar and frame.incomingHealBar._msufShown == true
         and frame.incomingHealBar or nil
@@ -2507,8 +2509,8 @@ local function ApplyPreviewValues(frame, cfg, unit, showHeal, showAbsorb, showHe
   incomingValue = incomingValue or TEST_INCOMING
   absorbValue = absorbValue or TEST_ABSORB
   healAbsorbValue = healAbsorbValue or TEST_HEAL_ABSORB
-  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, 3)
-  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, FOLLOW_HP)
+  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, ABSORB_ANCHOR.RIGHT)
   if showHeal and frame.incomingHealBar then
     LayoutBar(frame, frame.incomingHealBar, 1, healMode, frame._msufPredictionHealReverse, nil,
       frame._msufPredictionHealHeight, frame._msufPredictionHealOffsetY)
@@ -2517,7 +2519,7 @@ local function ApplyPreviewValues(frame, cfg, unit, showHeal, showAbsorb, showHe
     HideBar(frame.incomingHealBar)
   end
   if showAbsorb and frame.absorbBar then
-    if absorbMode == 3 or absorbMode == 4 then
+    if absorbMode == FOLLOW_HP or absorbMode == FOLLOW_HP_OVERFLOW then
       local follow = VisibleFollowBar(cfg, frame.incomingHealBar)
       LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow,
         frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
