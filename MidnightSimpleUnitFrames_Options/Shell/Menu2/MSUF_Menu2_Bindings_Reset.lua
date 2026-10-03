@@ -108,10 +108,14 @@ local BARS_SCOPE_KEYS = KSW [[
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength powerGradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill powerChunkedFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
+    frameBarShape aggroMode tempMaxHealthEnabled tempMaxHealthTexture tempMaxHealthOpacity tempMaxHealthBackgroundOpacity
+    tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
 ]]
 local BARS_TABLE_KEYS = KSW [[
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover roundedCornerStrength powerBarTexture
+    powerBarBgTexture slantedBarsEnabled slantedBarDirection slantedUnitFrames slantedGroupFrames slantedPowerBars slantedMouseover
+    slantedCastbars slantedClassResources
 ]]
 local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth shortenNameClipSide shortenNameMaxChars shortenNameShowDots nameColorMode nameColorR nameColorG nameColorB characterNameParts"
 local FONT_SCOPE_KEYS = KSW [[

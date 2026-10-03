@@ -276,16 +276,29 @@ end
 ---------------------------------------------------------------------------
 -- Each path is written by a control on that page and read by the runtime, and
 -- the page's reset summary names it (Fonts: name shortening; Castbar:
--- interrupt indicator; Bars: shared bar textures, gradients, rounded corners
--- and per-unit/group bar overrides; Class Resources: behavior), yet the reset
--- left it at the user's value.
+-- interrupt indicator; Bars: everything its own sections show, with the
+-- per-unit/group bar overrides they write; Class Resources: behavior), yet the
+-- reset left it at the user's value.
 local PAGE_OWNED = {
     { "opt_fonts", Words [[general.shortenNameMaxChars general.shortenNameClipSide general.shortenNameShowDots]] },
     { "opt_castbar", Words [[general.kickReadyTimeMarker general.kickReadyTimeSegment]] },
-    { "opt_bars", Words [[bars.powerBarTexture bars.roundedCornerStrength general.powerGradientStrength
-        player.powerGradientStrength gf_party.powerGradientStrength]] },
+    { "opt_bars", Words [[bars.powerBarTexture bars.powerBarBgTexture bars.roundedCornerStrength
+        general.powerGradientStrength player.powerGradientStrength gf_party.powerGradientStrength
+        bars.slantedBarsEnabled bars.slantedBarDirection bars.slantedUnitFrames bars.slantedGroupFrames
+        bars.slantedPowerBars bars.slantedMouseover bars.slantedCastbars bars.slantedClassResources
+        general.aggroMode target.aggroMode gf_raid.aggroMode
+        general.tempMaxHealthEnabled general.tempMaxHealthTexture general.tempMaxHealthOpacity
+        general.tempMaxHealthBackgroundOpacity general.tempMaxHealthColorR general.tempMaxHealthColorG
+        general.tempMaxHealthColorB player.tempMaxHealthEnabled gf_party.tempMaxHealthOpacity]] },
     { "classpower", Words [[bars.showGuardianIronfur bars.showSweepingStrikes bars.manaUpcomingCost]] },
 }
+-- "Enable slanted bars" on the Bars page writes the frame shape of every unit
+-- and group scope; the Bars reset owns those per-scope bar shapes too.
+for _, scope in ipairs({ "player", "target", "targettarget", "focus", "focustarget", "pet", "pettarget", "boss",
+    "arena", "gf_party", "gf_raid", "gf_mythicraid" }) do
+    local paths = PAGE_OWNED[3][2]
+    paths[#paths + 1] = scope .. ".frameBarShape"
+end
 local covered = 0
 for _, row in ipairs(PAGE_OWNED) do
     local pageKey, paths = row[1], row[2]
