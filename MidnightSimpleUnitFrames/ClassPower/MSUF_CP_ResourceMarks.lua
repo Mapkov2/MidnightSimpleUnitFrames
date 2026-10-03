@@ -20,47 +20,102 @@ local SIGNED
 local pending
 local function Number(v) return E.NotSecret(v) and type(v) == "number" and v == v end
 
+-- The colour of the last threshold rule a plain fraction passes, or nil for
+-- the base colour. Compile builds the step curve from the same rules, so both
+-- agree for every fraction in [0, 1].
+local function RuleColor(view, fraction)
+    local color
+    for _, rule in ipairs(view.rules) do
+        if rule.threshold and ((rule.direction == "BELOW" and fraction < rule.fraction)
+            or (rule.direction ~= "BELOW" and fraction >= rule.fraction)) then
+            color = rule.color
+        end
+    end
+    return color
+end
 -- A plain percentage through the curve, or through the rules on a client
 -- without curves.
 local function EvaluatePlain(view, percent)
     if view.curve then return view.curve:EvaluateUnpacked(percent) end
-    local r, g, b = view.r, view.g, view.b
-    for _, rule in ipairs(view.rules) do
-        if rule.threshold and ((rule.direction == "BELOW" and percent < rule.fraction)
-            or (rule.direction ~= "BELOW" and percent >= rule.fraction)) then
-            r, g, b = rule.color[1], rule.color[2], rule.color[3]
-        end
-    end
-    return r, g, b
+    local color = RuleColor(view, percent)
+    if color then return color[1], color[2], color[3] end
+    return view.r, view.g, view.b
 end
-local function Paint(view)
-    if not view.enabled or not view.hasThreshold or view.suspended or view.writing then return end
-    local r, g, b
+-- What a view's power reads: a plain fraction, or nil and whether the client
+-- restricts it (then only its native curve evaluation may see the value).
+local function Read(view)
+    local unit, power = view.unit, view.power
     if view.classResource and E.ClassPowerReader then
         -- Client-owned resources (combo points on the target, vehicles)
         -- are never restricted where a provider exists; skip otherwise.
-        local value, maximum = E.ClassPowerReader(view.unit, view.power), UnitPowerMax(view.unit, view.power)
-        if not (Number(value) and Number(maximum) and maximum > 0) then return end
-        r, g, b = EvaluatePlain(view, value / maximum)
-    elseif view.curve and UnitPowerPercent then
+        local value, maximum = E.ClassPowerReader(unit, power), UnitPowerMax(unit, power)
+        if Number(value) and Number(maximum) and maximum > 0 then return value / maximum end
+        return nil, false
+    end
+    if view.curve and UnitPowerPercent then
         -- A plain percent evaluates without an allocation; only a restricted
         -- (secret) percent needs the client to evaluate the curve natively.
-        local percent = UnitPowerPercent(view.unit, view.power, false)
-        if Number(percent) then
-            r, g, b = view.curve:EvaluateUnpacked(percent)
-        else
-            local color = UnitPowerPercent(view.unit, view.power, false, view.curve)
-            if not (color and color.GetRGB) then return end
-            r, g, b = color:GetRGB()
-        end
-    else
-        local value, maximum = UnitPower(view.unit, view.power), UnitPowerMax(view.unit, view.power)
-        if not (Number(value) and Number(maximum) and maximum > 0) then return end
-        r, g, b = EvaluatePlain(view, value / maximum)
+        local percent = UnitPowerPercent(unit, power, false)
+        if Number(percent) then return percent end
+        return nil, true
     end
+    local value, maximum = UnitPower(unit, power), UnitPowerMax(unit, power)
+    if Number(value) and Number(maximum) and maximum > 0 then return value / maximum end
+    return nil, false
+end
+local function Write(view, r, g, b)
     view.writing = true
     view.bar:SetStatusBarColor(r, g, b, view.a)
     view.writing = false
+end
+-- A restricted percentage: the client evaluates the curve, and its colour
+-- goes to the bar unread.
+local function PaintNative(view)
+    local color = UnitPowerPercent(view.unit, view.power, false, view.curve)
+    if not (color and color.GetRGB) then return end
+    view.pr = nil
+    Write(view, color:GetRGB())
+end
+-- A class resource pip: the rule colour, or the pip's own base colour. The
+-- plain colour is stamped, so a tick that keeps it writes nothing; an owner
+-- write clears the stamp (View).
+local function PaintPip(view, color)
+    local r, g, b
+    if color then r, g, b = color[1], color[2], color[3] else r, g, b = view.r, view.g, view.b end
+    if view.pr == r and view.pg == g and view.pb == b then return end
+    Write(view, r, g, b)
+    view.pr, view.pg, view.pb = r, g, b
+end
+local function Paint(view)
+    if not view.enabled or not view.hasThreshold or view.suspended or view.writing then return end
+    local fraction, restricted = Read(view)
+    if fraction then
+        if view.classResource then return PaintPip(view, RuleColor(view, fraction)) end
+        Write(view, EvaluatePlain(view, fraction))
+    elseif restricted then
+        PaintNative(view)
+    end
+end
+-- Every pip of a class resource shares its unit, power and rules (Refresh adds
+-- each CLASS rule to every pip), so one read and one rule pass per event serve
+-- them all. Pips past the current maximum are hidden; they are painted when
+-- they show, by the owner's write (View) or the next event.
+local batchUnit, batchPower, batchFraction, batchRestricted, batchColor
+local function PaintBatched(view)
+    if not view.classResource then return Paint(view) end
+    local shown = E.CP.currentMax
+    if view.index and type(shown) == "number" and view.index > shown then return end
+    if not view.enabled or not view.hasThreshold or view.suspended or view.writing then return end
+    if batchUnit ~= view.unit or batchPower ~= view.power then
+        batchUnit, batchPower = view.unit, view.power
+        batchFraction, batchRestricted = Read(view)
+        batchColor = batchFraction and RuleColor(view, batchFraction) or nil
+    end
+    if batchFraction then
+        PaintPip(view, batchColor)
+    elseif batchRestricted then
+        PaintNative(view)
+    end
 end
 local function UpdateCurve(view)
     if not view.curve then return end
@@ -114,7 +169,10 @@ local function View(bar)
     if not Number(view.a) then view.a = 1 end
     -- The bar's owner keeps painting its base colour; follow it.
     hooksecurefunc(bar, "SetStatusBarColor", function(_, r, g, b, a)
-        if view.writing or not Number(r) or not Number(g) or not Number(b) then return end
+        if view.writing then return end
+        -- The owner painted over the threshold colour.
+        view.pr = nil
+        if not Number(r) or not Number(g) or not Number(b) then return end
         if not Number(a) then a = 1 end
         if view.r ~= r or view.g ~= g or view.b ~= b or view.a ~= a then
             view.r, view.g, view.b, view.a = r, g, b, a
@@ -125,11 +183,8 @@ local function View(bar)
     return view
 end
 local function RestoreColor(view)
-    if view.r then
-        view.writing = true
-        view.bar:SetStatusBarColor(view.r, view.g, view.b, view.a)
-        view.writing = false
-    end
+    view.pr = nil
+    if view.r then Write(view, view.r, view.g, view.b) end
 end
 local function HideMarks(overlay, from)
     for index = from or 1, #overlay.marks do overlay.marks[index]:Hide() end
@@ -140,6 +195,7 @@ local function Disable()
     for _, view in pairs(views) do
         local wasEnabled = view.enabled
         view.enabled, view.hasThreshold, view.suspended = false, false, nil
+        view.pr = nil
         if wasEnabled then RestoreColor(view) end
     end
     for _, overlay in pairs(overlays) do
@@ -259,6 +315,7 @@ local function Refresh()
                         view.power = power
                         view.token = token
                         view.classResource = rule.target == "CLASS"
+                        view.index = bars and i or nil
                         view.target, view.overlay = rule.target, overlay
                         view.unit = unit
                         view.powerEvent = powerEvent
@@ -329,8 +386,9 @@ local function OnEvent(_, event, unit, token)
             Refresh()
             return
         end
+        batchUnit, batchPower = nil, nil
         if event == "PLAYER_TARGET_CHANGED" or event == "COMBO_TARGET_CHANGED" then
-            for i = 1, #active do if active[i].classResource then Paint(active[i]) end end
+            for i = 1, #active do if active[i].classResource then PaintBatched(active[i]) end end
             return
         end
         if not E.NotSecret(token) then return end
@@ -343,7 +401,7 @@ local function OnEvent(_, event, unit, token)
                     Refresh()
                     return
                 end
-                Paint(view)
+                PaintBatched(view)
             end
         end
 end

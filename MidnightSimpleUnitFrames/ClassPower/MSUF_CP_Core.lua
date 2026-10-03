@@ -1124,7 +1124,7 @@ do
     --- (target-owned combo points); nil on Midnight.
     local CP, AM, CPK, PT, POWER_TYPE_TOKENS, PLAYER_CLASS
     local UnitPower, NotSecret, tonumber, C_Timer
-    local GetPlayerFrame, CP_EnsureBars, CP_Layout, RefreshChargedPoints
+    local GetPlayerFrame, CP_EnsureBars, CP_Layout, RefreshChargedPoints, CP_CompileVisual
     local RunActiveUpdate, RunAuraSegmentedUpdate, ResolveMaxPower, AM_UpdateValue
     local CP_ComputeStructuralSignature, CP_RefreshEventBindings
     local ThrottledFullRefresh, FullRefresh, CP_SyncRuntimeOnUpdates, CP_ShouldUseLiteBindings
@@ -1158,6 +1158,9 @@ do
             else
                 CP.currentMax = maxP
             end
+            --- The compiled visual knows the slots of the old maximum only: per-slot
+            --- colours (ramp, custom) would leave the new pips white.
+            CP_CompileVisual(CP.powerType, CP.renderMode, maxP)
         end
 
         if PLAYER_CLASS == "ROGUE"
@@ -1339,6 +1342,7 @@ do
         POWER_TYPE_TOKENS, PLAYER_CLASS = env.POWER_TYPE_TOKENS, env.PLAYER_CLASS
         UnitPower, NotSecret, tonumber, C_Timer = env.UnitPower, env.NotSecret, env.tonumber, env.C_Timer
         GetPlayerFrame, CP_EnsureBars, CP_Layout = env.GetPlayerFrame, env.CP_EnsureBars, env.CP_Layout
+        CP_CompileVisual = env.CP_CompileVisual
         RefreshChargedPoints, RunActiveUpdate = env.RefreshChargedPoints, env.RunActiveUpdate
         RunAuraSegmentedUpdate, ResolveMaxPower = env.RunAuraSegmentedUpdate, env.ResolveMaxPower
         AM_UpdateValue, CP_ComputeStructuralSignature = env.AM_UpdateValue, env.CP_ComputeStructuralSignature
@@ -1361,7 +1365,6 @@ do
     --- Bound once by SPECIALS at controller load.
     local CP, _cpDB, CPConst, TIP, PLAYER_CLASS, GetSpec, GetTime, math_min
     local C_SpellBook, C_Timer, RunActiveUpdate, RunAuraSegmentedUpdate
-    local tipExpiryGeneration
 
     --- Warlock shard prediction is speculative UI only; it is cleared on cast
     --- end and never writes profile/runtime structure.
@@ -1384,7 +1387,6 @@ do
     end
 
     local function ResetTipState(render)
-        tipExpiryGeneration = tipExpiryGeneration + 1
         CP.spStacks = 0
         CP.spExpires = nil
         if render and CP.visible and CP.powerType == "TIP_OF_THE_SPEAR" then
@@ -1392,16 +1394,18 @@ do
         end
     end
 
+    --- One callback serves every scheduled expiry, so a cast allocates no
+    --- closure. A timer from an earlier cast finds the later expiry still ahead,
+    --- or the stacks already reset (spExpires nil), and does nothing.
+    local function OnTipExpiry()
+        if CP.spExpires and GetTime() >= CP.spExpires then
+            ResetTipState(true)
+        end
+    end
+
     local function ScheduleTipExpiry()
-        tipExpiryGeneration = tipExpiryGeneration + 1
-        local generation = tipExpiryGeneration
         if not (C_Timer and type(C_Timer.After) == "function") then return end
-        C_Timer.After(TIP.DURATION + 0.05, function()
-            if generation ~= tipExpiryGeneration then return end
-            if CP.spExpires and GetTime() >= CP.spExpires then
-                ResetTipState(true)
-            end
-        end)
+        C_Timer.After(TIP.DURATION + 0.05, OnTipExpiry)
     end
 
     local function NormalizeExpiredTipState()
@@ -1443,7 +1447,6 @@ do
             if spellID == TIP.TAKEDOWN_HIT and known(TIP.TWIN_FANG) then return end
             CP.spStacks = CP.spStacks - 1
             if CP.spStacks == 0 then
-                tipExpiryGeneration = tipExpiryGeneration + 1
                 CP.spExpires = nil
             end
             RunAuraSegmentedUpdate()
@@ -1466,7 +1469,6 @@ do
         PLAYER_CLASS, GetSpec, GetTime = env.PLAYER_CLASS, env.GetSpec, env.GetTime
         math_min, C_SpellBook, C_Timer = env.math_min, env.C_SpellBook, env.C_Timer
         RunActiveUpdate, RunAuraSegmentedUpdate = env.RunActiveUpdate, env.RunAuraSegmentedUpdate
-        tipExpiryGeneration = 0
         return API
     end
 end

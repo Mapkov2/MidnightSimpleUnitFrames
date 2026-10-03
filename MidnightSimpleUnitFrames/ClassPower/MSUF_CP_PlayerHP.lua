@@ -432,8 +432,19 @@ local function RenderedTextMatches(rt, hp, maxHP)
         and rt._lastHealthTextMissing == missing
 end
 
-local function ApplyCopiedTextColor(dst, r, g, b, a)
-    if not (dst and r and dst.SetTextColor) then return end
+--- A slot coloured from secret health ("HP text color by health": Text_Common
+--- SetHealthTextSlotColorSecret) keeps no plain colour stamp, and its
+--- FontString:GetTextColor reads back secret (SecretReturnsForAspect VertexColor).
+--- ReadTextSlot flags such a colour; it goes to SetTextColor unread and clears the
+--- copy's stamp, so a later plain colour is painted again.
+local function ApplyCopiedTextColor(dst, r, g, b, a, secretColor)
+    if not (dst and dst.SetTextColor) then return end
+    if secretColor then
+        dst:SetTextColor(r, g, b, a)
+        dst._phpTextR, dst._phpTextG, dst._phpTextB, dst._phpTextA = nil, nil, nil, nil
+        return
+    end
+    if r == nil then return end
     a = a or 1
     if dst._phpTextR == r and dst._phpTextG == g and dst._phpTextB == b and dst._phpTextA == a then return end
     dst:SetTextColor(r, g, b, a)
@@ -455,6 +466,7 @@ local function ReadTextSlot(src)
         r, g, b, a = src._msufTextR, src._msufTextG, src._msufTextB, src._msufTextA
         if r == nil and src.GetTextColor then
             r, g, b, a = src:GetTextColor()
+            if issecretvalue(r) then return text, r, g, b, a, true end
         end
     end
     return text, r, g, b, a
@@ -462,22 +474,22 @@ end
 
 local function CopyTextSlot(src, dst)
     if not dst then return false end
-    local text, r, g, b, a = ReadTextSlot(src)
-    ApplyCopiedTextColor(dst, r, g, b, a)
+    local text, r, g, b, a, secretColor = ReadTextSlot(src)
+    ApplyCopiedTextColor(dst, r, g, b, a, secretColor)
     SetText(dst, text)
     return true
 end
 
 local function CopyCompactText(playerFrame)
     if not (PHP.center and playerFrame) then return false end
-    local text, r, g, b, a = ReadTextSlot(playerFrame.hpTextCenter)
+    local text, r, g, b, a, secretColor = ReadTextSlot(playerFrame.hpTextCenter)
     if issecretvalue(text) ~= true and text == "" then
-        text, r, g, b, a = ReadTextSlot(playerFrame.hpTextRight)
+        text, r, g, b, a, secretColor = ReadTextSlot(playerFrame.hpTextRight)
     end
     if issecretvalue(text) ~= true and text == "" then
-        text, r, g, b, a = ReadTextSlot(playerFrame.hpTextLeft)
+        text, r, g, b, a, secretColor = ReadTextSlot(playerFrame.hpTextLeft)
     end
-    ApplyCopiedTextColor(PHP.center, r, g, b, a)
+    ApplyCopiedTextColor(PHP.center, r, g, b, a, secretColor)
     SetText(PHP.left, "")
     SetText(PHP.right, "")
     SetText(PHP.center, text)
@@ -796,15 +808,23 @@ local function ApplyTextLayout(b)
     PHP.right:SetShown(enabled and not compact)
 end
 
+--- Hides the whole bar: the frame and the outline host, a sibling parented to
+--- the player frame. The edge stamp is cleared so the next layout that shows the
+--- bar shows its outline again.
+local function Hide()
+    if PHP.frame then PHP.frame:Hide() end
+    HideBarEdges()
+    HideShapeEdge()
+    PHP._edgeStamp = nil
+    PHP.visible = false
+end
+
 --- Layout/config path. This can run on profile changes and ClassPower
 --- refreshes, so every expensive frame operation is guarded by stamps.
 local function ApplyLayout(playerFrame)
     local b = _cpDB.bars or {}
     if not Enabled() then
-        if PHP.frame then PHP.frame:Hide() end
-        HideBarEdges()
-        HideShapeEdge()
-        PHP.visible = false
+        Hide()
         return false
     end
     if not Ensure(playerFrame) then return false end
@@ -956,6 +976,15 @@ local function ApplyColor(hp, maxHP, event)
         return
     elseif colorMode == "GRADIENT" then
         local r, g, b = GradientColor(hp, maxHP, common)
+        --- The shared helper evaluates UnitHealthPercent with a colour curve, which is
+        --- SecretReturns while health is secret: such a colour goes to the C sink unread
+        --- and leaves no change stamp behind.
+        if issecretvalue(r) == true or issecretvalue(g) == true or issecretvalue(b) == true then
+            bar:SetStatusBarColor(r, g, b, 1)
+            bar._phpR, bar._phpG, bar._phpB = nil, nil, nil
+            bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+            return
+        end
         ApplyCachedColor(bar, r, g, b)
         return
     end
@@ -1141,5 +1170,6 @@ builders.PLAYER_HP = function(E)
         Refresh = Refresh,
         Update = Update,
         ApplyFont = ApplyFont,
+        Hide = Hide,
     }
 end

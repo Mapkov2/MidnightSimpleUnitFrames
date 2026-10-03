@@ -26,7 +26,10 @@ local printOnly = arg[2] == "print"
 -- instructions, bytes per operation (8 bytes: below any per-operation table).
 -- A Maelstrom Weapon stack change allocated 252 bytes before the split too:
 -- the per-call refresh closure (CPAuras.RefreshActive), the deferred
--- update's timer entry and the segmented repaint.
+-- update's timer entry and the segmented repaint. 2026-10-03: RefreshActive
+-- builds no closure any more (60 bytes on every hidden-payload UNIT_AURA);
+-- both Shaman paths are frozen at the new cost plus 2 %: 1984 instructions /
+-- 192 bytes and 542 instructions / 0 bytes.
 local BUDGETS = {
     ["Mainline ROGUE combo UNIT_POWER_UPDATE"] = { 796, 8 },
     ["Mainline ROGUE combo UNIT_POWER_UPDATE, count text on"] = { 859, 8 },
@@ -34,8 +37,8 @@ local BUDGETS = {
     ["Mists ROGUE target combo UNIT_POWER_FREQUENT"] = { 815, 8 },
     ["Mainline DEATHKNIGHT RUNE_POWER_UPDATE"] = { 1026, 8 },
     ["Mainline EVOKER essence UNIT_POWER_FREQUENT"] = { 756, 8 },
-    ["Mainline SHAMAN maelstrom UNIT_AURA"] = { 2044, 258 },
-    ["Mainline SHAMAN unchanged UNIT_AURA"] = { 572, 62 },
+    ["Mainline SHAMAN maelstrom UNIT_AURA"] = { 2024, 196 },
+    ["Mainline SHAMAN unchanged UNIT_AURA"] = { 553, 8 },
     ["Mainline MONK stagger tick"] = { 230, 8 },
 }
 

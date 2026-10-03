@@ -894,6 +894,7 @@ do
         CP_PlayerHPRefresh = playerHP.Refresh or CP_PlayerHPRefresh
         CP_PlayerHPUpdate = playerHP.Update or CP_PlayerHPUpdate
         CP_PlayerHPApplyFont = playerHP.ApplyFont or CP_PlayerHPApplyFont
+        CP.PlayerHPHide = playerHP.Hide
     end
 end
 
@@ -1424,6 +1425,7 @@ do
             GetPlayerFrame = GetPlayerFrame,
             CP_EnsureBars = CP_EnsureBars,
             CP_Layout = CP_Layout,
+            CP_CompileVisual = CP_CompileVisual,
             RefreshChargedPoints = RefreshChargedPoints,
             RunActiveUpdate = function(powerType, maxP) return CP_RunActiveUpdate(powerType, maxP) end,
             RunAuraSegmentedUpdate = function()
@@ -1680,6 +1682,8 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
 
     if event == "RUNE_POWER_UPDATE" or event == "RUNE_TYPE_UPDATE" then
         --- arg1 = runeID (1-6), arg2 = energize boolean (RUNE_POWER_UPDATE only)
+        --- Only RUNE_TYPE_UPDATE (Mists) makes the rune mode re-read rune types.
+        if event == "RUNE_TYPE_UPDATE" then CP.runeTypesDirty = true end
         OnRuneUpdate(arg1, arg2)
         return
     end
@@ -1784,7 +1788,10 @@ end
 eventFrame:SetScript("OnEvent", ClassPowerOnEvent)
 
 --- Startup events exist only while at least one Class Resource feature is enabled.
-CP.SyncControllerEvents(CPConfig.AnyFeatureEnabled())
+--- The saved profile does not exist while this file loads, so they are bound
+--- here and the first FullRefresh (PLAYER_ENTERING_WORLD) drops them when every
+--- feature of the saved profile is off.
+CP.SyncControllerEvents(true)
 
 --- Public API (for Options, Edit Mode, and other modules)
 
@@ -2018,6 +2025,12 @@ ExportPublic("MSUF_ClassPower_Apply", CP.ApplyPublic)
 
 do
     MSUF.Require("MSUF_RegisterAnyEditModeListener", "ClassPower/MSUF_CP_Controller.lua")(function(active)
+        --- A full refresh during an Edit Mode session hides Alt Mana
+        --- (Refresh.ApplyAltMana); leaving Edit Mode shows it again.
+        if active ~= true and not AM.visible and _cpDB.bars and _cpDB.bars.showAltMana == true then
+            local playerFrame = GetPlayerFrame()
+            if playerFrame then Refresh.ApplyAltMana(playerFrame, true, false) end
+        end
         if not (CP.visible and CP.container) then return end
         if active == true then
             CP.container:SetAlpha(1)
@@ -2088,7 +2101,8 @@ function CP.DisableNow()
     if CP.resourceExtras then CP.resourceExtras.Disable() end
     if CP.container then CP.container:Hide() end
     if AM.container then AM.container:Hide() end
-    if PHP.container then PHP.container:Hide() end
+    --- The second Player HP bar lives in PHP.frame plus a sibling outline host.
+    if CP.PlayerHPHide then CP.PlayerHPHide() elseif PHP.frame then PHP.frame:Hide() end
     CP.visible, AM.visible, PHP.visible = false, false, false
     if augWasActive or displayPowerWasOverridden then RefreshPlayerPowerBar() end
 end

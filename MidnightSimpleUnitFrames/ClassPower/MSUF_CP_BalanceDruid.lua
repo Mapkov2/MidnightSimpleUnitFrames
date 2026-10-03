@@ -617,7 +617,10 @@ end
         return BalanceOnEvent(self, event, arg1, arg2, arg3)
     end)
 
-_refreshActiveState()
+--- The saved profile does not exist while this file loads: bind the structural
+--- events only. PLAYER_ENTERING_WORLD and the controller's FullRefresh
+--- (MSUF_BAL_RefreshRuntime) run the first evaluation against the saved profile.
+_setStructuralEventsBound(true)
 
 ExportPublic("MSUF_BAL_RefreshRuntime", _refreshActiveState)
 
