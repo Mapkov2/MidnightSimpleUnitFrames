@@ -141,13 +141,13 @@ local function BuildGroupAuraOwner(cfg, assistMode, includeFixed, rootKey, spell
         tostring(sensorRoot and sensorRoot._msufA3StructuralSignature or "-"),
         tostring(spellRoot and spellRoot._msufA3StructuralSignature or "-"),
         flowLane and ("flow:" .. tostring(flowLane.rootKey) .. ":"
-            .. tostring(flowLane._msufA3StructuralSignature)) or "-",
+            .. tostring(flowLane._msufA3StructuralSignature) .. "\030" .. tostring(flowLane.alpha)) or "-",
     }
     if slotLanes then
         for i = 1, #slotLanes do
             local lane = slotLanes[i]
             signatureParts[#signatureParts + 1] = "slot:" .. tostring(lane.rootKey) .. ":"
-                .. tostring(lane._msufA3StructuralSignature)
+                .. tostring(lane._msufA3StructuralSignature) .. "\030" .. tostring(lane.alpha)
         end
     end
     return {
@@ -233,7 +233,7 @@ local function AttachUnitLanes(cfg, sensorRoot)
             end
             owned = owned or {}
             owned[lane.rootKey] = true
-            parts[#parts + 1] = lane.rootKey .. ":" .. lane._msufA3StructuralSignature
+            parts[#parts + 1] = lane.rootKey .. ":" .. lane._msufA3StructuralSignature .. "\030" .. tostring(lane.alpha)
         end
     end
     if not owned then return sensorRoot end

@@ -371,13 +371,39 @@ local function UpdateSlots(container, slotRoot)
     return true
 end
 
+--- A retired root parks its container on the aura root (NativeApply's
+--- RetireNativeLane), so a later apply of the same slots takes it back instead
+--- of building another one; `discard` drops it (a forced recreate).
+local function RetireSlotRoot(root, key, container, parentFrame, discard)
+    Runtime.ReleaseContainerEffects(container, parentFrame)
+    D().RetireContainer(root, key, container, parentFrame, discard)
+end
+
+--- A parked container comes back with the effect surfaces its buttons built in
+--- initializeFrame, but retiring it dropped them from the frame's effect list
+--- (ReleaseContainerEffects). List them again, as initializeFrame did, so
+--- RefreshFrameEffects and the rounded edges reach them. Addon tables only.
+function Runtime.RelistContainerEffects(container, parentFrame)
+    local slots = container and container._msufA3SpellIndicatorButtonSlots
+    parentFrame = parentFrame or (container and container._msufA3ParentFrame)
+    if not (slots and parentFrame) then return end
+    for i = 1, #slots do
+        local button = container[i]
+        if button and button._msufA3FrameEffectApplied then
+            local listed = parentFrame._msufA3SpellIndicatorEffectButtons or {}
+            parentFrame._msufA3SpellIndicatorEffectButtons = listed
+            listed[button] = true
+        end
+    end
+end
+
 function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
     if not (root and Runtime.IsRoot(slotRoot)) then return nil end
     local deps = D()
     local key = slotRoot.rootKey or "SpellIndicators"
     local structuralSignature = slotRoot._msufA3StructuralSignature
     local layoutSignature = slotRoot._msufA3LayoutSignature
-    local current = root[key]
+    local current = deps.ReviveContainer(root, key, root[key], structuralSignature, RetireSlotRoot, parentFrame, forceRecreate)
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         deps.RebindUnit(current, slotRoot.unit)
         current._msufA3NativeLaneConfig = slotRoot
@@ -389,9 +415,7 @@ function Runtime.Apply(root, slotRoot, parentFrame, forceRecreate)
         current._msufA3LayoutSignature = layoutSignature
         return current
     end
-    Runtime.ReleaseContainerEffects(current, parentFrame)
-    deps.HideContainer(current)
-    root[key] = nil
+    RetireSlotRoot(root, key, current, parentFrame, forceRecreate == true)
     current = CreateSlots(root, slotRoot, parentFrame)
     if current then
         current._msufA3StructuralSignature = structuralSignature

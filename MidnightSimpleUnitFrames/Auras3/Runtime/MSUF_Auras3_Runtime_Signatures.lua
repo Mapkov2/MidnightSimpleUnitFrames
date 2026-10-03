@@ -7,7 +7,8 @@ MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
 MSUF.Auras3RuntimeFactories.Signatures = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local tostring = tostring
 
-local LaneLayoutSignature, LaneStructuralSignature, LaneTrackingSignature, SensorLayoutSignature, SensorStructuralSignature
+local LaneButtonSignature, LaneLayoutSignature, LaneStructuralSignature, LaneTrackingSignature
+local SensorLayoutSignature, SensorStructuralSignature
 
 LaneTrackingSignature = function(lane)
     -- initialAnchor, layer, and strata are tracking-level on purpose: the
@@ -40,16 +41,30 @@ LaneStructuralSignature = function(lane)
     -- The public 12.1 group-filter setter reparses native assignments in place.
     -- Button visuals and item-enchantment slots still belong to container
     -- creation and remain structural.
+    -- Where a lane sits and how opaque it is are not: Blizzard's flow layout
+    -- anchors every AuraGroup button to its container, MSUF anchors that to an
+    -- addon-owned host and fades the container, so the reuse path moves and
+    -- fades the lane (SyncContainerGeometry) without touching a button. A
+    -- standalone AuraSlot anchors its button in initializeFrame, so its offsets
+    -- stay; an owner that sets each button's alpha adds it (OwnerConfig).
+    local standalone = UsesStandaloneAuraSlot(lane)
     return tostring(lane.kind) .. "\030" .. tostring(lane.identityCandidateMode)
-        .. "\030" .. tostring(LaneLayoutSignature(lane))
+        .. "\030" .. LaneButtonSignature(lane)
+        .. "\030" .. (standalone and (tostring(lane.anchor) .. "\030" .. tostring(lane.x)
+            .. "\030" .. tostring(lane.y)) or "host")
         .. "\030" .. tostring(lane.weaponEnchants)
         .. "\030" .. tostring(lane.customPriority)
         .. "\030" .. tostring(lane.customPrioritySignature)
         .. "\030" .. tostring(lane.customPriority and lane.candidateFilterSignature or nil)
-        .. "\030" .. tostring(UsesStandaloneAuraSlot(lane))
+        .. "\030" .. tostring(standalone)
 end
 
 LaneLayoutSignature = function(lane)
+    return LaneButtonSignature(lane) .. "\030" .. tostring(lane.anchor) .. "\030" .. tostring(lane.x)
+        .. "\030" .. tostring(lane.y) .. "\030" .. tostring(lane.alpha)
+end
+
+LaneButtonSignature = function(lane)
     return tostring(lane.size) .. "\030" .. tostring(lane.iconZoom) .. "\030" .. tostring(lane.spacing)
         .. "\030" .. tostring(lane.iconShape) .. "\030" .. tostring(lane.requestedIconShape)
         .. "\030" .. tostring(lane.buttonWidth) .. "\030" .. tostring(lane.buttonHeight)
@@ -57,8 +72,7 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.perRow)
         .. "\030" .. tostring(lane.cols) .. "\030" .. tostring(lane.rows)
         .. "\030" .. tostring(lane.width) .. "\030" .. tostring(lane.height)
-        .. "\030" .. tostring(lane.anchor) .. "\030" .. tostring(lane.x)
-        .. "\030" .. tostring(lane.y) .. "\030" .. tostring(lane.layer)
+        .. "\030" .. tostring(lane.layer)
         .. "\030" .. tostring(lane.strata)
         .. "\030" .. tostring(lane.xSign) .. "\030" .. tostring(lane.ySign)
         .. "\030" .. tostring(lane.verticalGrowth) .. "\030" .. tostring(lane.initialAnchor)
@@ -93,7 +107,6 @@ LaneLayoutSignature = function(lane)
         .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[2])
         .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[3])
         .. "\030" .. tostring(lane.pandemicFrameEffect and lane.pandemicFrameEffect.color and lane.pandemicFrameEffect.color[4])
-        .. "\030" .. tostring(lane.alpha)
         .. "\030" .. tostring(lane.padding)
         .. "\030" .. tostring(lane.portraitPositionWhenDisabled)
         .. "\030" .. tostring(lane.portraitLevelOffset)
