@@ -88,15 +88,18 @@ local BARS_SCOPE_KEYS = KSW [[
     healPredEnabled healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
     aggroOutlineMode dispelOutlineMode dispelBorderTrigger dispelBorderShowOn
-    purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
+    purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength powerGradientStrength
+    aggroMode tempMaxHealthEnabled tempMaxHealthTexture tempMaxHealthOpacity tempMaxHealthBackgroundOpacity
+    tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill powerChunkedFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
 ]]
 local BARS_TABLE_KEYS = KSW [[
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
-    roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover
+    roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover roundedCornerStrength powerBarTexture
+    powerBarBgTexture
 ]]
-local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth nameColorMode nameColorR nameColorG nameColorB"
+local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth shortenNameClipSide shortenNameMaxChars shortenNameShowDots nameColorMode nameColorR nameColorG nameColorB"
 local FONT_SCOPE_KEYS = KSW [[
     fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth
     fontOutline useGlobalFontColor fontR fontG fontB nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide
@@ -117,6 +120,7 @@ local CASTBAR_GENERAL_KEYS = KSW [[
     empowerColorStages enableFocusKickIcon focusKickShowCastbar focusKickIconWidth focusKickIconHeight focusKickTextSize
     focusKickIconOffsetX focusKickIconOffsetY kickReadyShowTarget kickReadyShowFocus kickReadyShowBoss
     kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY
+    showGCDBar showGCDBarTime showGCDBarSpell
 ]]
 local MODULES_GENERAL_KEYS = KS("styleEnabled")
 local COLOR_GENERAL_KEYS = KSW "playerCastbarOverrideEnabled playerCastbarOverrideMode npcClassColorBar npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT"
@@ -196,8 +200,10 @@ local function IsColorKey(key)
     if lower == "useclasscolors" or lower == "enablehealthgradient" or lower == "gradientstrength" then return true end
     if lower == "fontcolor" or lower == "highlightcolor" or lower == "usecustomfontcolor" then return true end
     if lower == "nameclasscolor" or lower == "npcnamered" then return true end
-    local last = lower:sub(-1)
-    if last == "r" or last == "g" or last == "b" or last == "a" then
+    -- A channel is a capital R/G/B/A closing a colour stem (classBarBgR,
+    -- castbarBorderA); a lowercase last letter ends a word (fontSlug, useBarBorder).
+    local last = key:sub(-1)
+    if last == "R" or last == "G" or last == "B" or last == "A" then
         if lower:find("color", 1, true)
             or lower:find("font", 1, true)
             or lower:find("bg", 1, true)
@@ -235,6 +241,8 @@ local function IsClassPowerBarsKey(key)
         or key == "showEbonMight"
         or key == "showShadowMana"
         or key == "showAltMana"
+        or key == "showGuardianIronfur"
+        or key == "showSweepingStrikes"
         or key == "classPowerComboPointColorMode"
 end
 local function FactoryDefaults()
