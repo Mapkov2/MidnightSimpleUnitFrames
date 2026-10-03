@@ -1082,10 +1082,13 @@ local function InstallSupportLinkStrip(f)
     local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
     local links = {
         { texture = "Discord.png", title = "Discord", tooltip = "Copy Discord Link", url = "https://discord.gg/2Gf9b2Wprz" },
-        { texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
-        { texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.", url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
+        { texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.",
+            url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
+        { texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.",
+            url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
         { texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.", url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
-        { texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
+        { texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.",
+            url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
     }
     local size, gap, idleAlpha = 14, 7, 0.45
     local strip = PixelLayoutRegion(CreateFrame("Frame", nil, f))

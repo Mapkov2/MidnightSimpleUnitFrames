@@ -291,7 +291,8 @@ local function OpenGeneralCastbars()
 end
 
 local function WirePopupFocus(btn)
-    return Util.WirePopupFocus and Util.WirePopupFocus(btn, function() return pf and pf.unit and (pf.unit == "boss" and "boss" or pf.unit) end, "castbar", "cast-popup") or btn
+    return Util.WirePopupFocus and Util.WirePopupFocus(btn, function() return pf and pf.unit and (pf.unit == "boss" and "boss" or pf.unit) end,
+        "castbar", "cast-popup") or btn
 end
 
 function Sync()

@@ -201,7 +201,8 @@ local function AddTooltip(widget, title, body, opts)
                 _G.GameTooltip:SetText(Tr(resolvedTitle), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1, titleColor[4])
             end
         end
-        if resolvedBody and resolvedBody ~= "" then _G.GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86, bodyColor[3] or 1.00, true) end
+        if resolvedBody and resolvedBody ~= "" then _G.GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86,
+            bodyColor[3] or 1.00, true) end
         if reason then _G.GameTooltip:AddLine(reason, 1, 0.82, 0.35, true) end
         _G.GameTooltip:Show()
     end
@@ -953,7 +954,8 @@ function M.SeedGameplayMeleeSpellScope(scope)
         g.nameplateMeleeSpellIDByClass = type(g.nameplateMeleeSpellIDByClass) == "table" and g.nameplateMeleeSpellIDByClass or {}
         if UnitClass then
             local _, class = UnitClass("player")
-            if class and (tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0) <= 0 then g.nameplateMeleeSpellIDByClass[class] = M.GetGameplayMeleeSpellID(g) end
+            if class and (tonumber(g.nameplateMeleeSpellIDByClass[class])
+                or 0) <= 0 then g.nameplateMeleeSpellIDByClass[class] = M.GetGameplayMeleeSpellID(g) end
         end
     end
 end

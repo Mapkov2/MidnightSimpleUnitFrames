@@ -101,7 +101,8 @@ local function ClampCenterAxis(center, halfSize, screenSize)
     return max(minCenter, min(maxCenter, center))
 end
 
-local VALID_UNIT_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
+local VALID_UNIT_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true,
+    BOTTOMLEFT = true, BOTTOMRIGHT = true }
 
 local function UnitFramePoint(conf)
     local point = conf and conf.point or "CENTER"
@@ -382,7 +383,8 @@ local function ApplySubframeDragPosition(d, centerX, centerY, uiScale)
     return true
 end
 
-local GROUP_VALID_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
+local GROUP_VALID_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true,
+    BOTTOMLEFT = true, BOTTOMRIGHT = true }
 
 local function ResolveGroupAnchor(conf, owner)
     local gf = MSUF and MSUF.GF
@@ -825,7 +827,8 @@ local function BuildDrag(mover, key, cfg, start)
         }
     end
 
-    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority") or (bar and bar._msufIsGroupFrame == true) or false
+    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority")
+        or (bar and bar._msufIsGroupFrame == true) or false
     local groupKind = (key == "gf_party" and "party")
         or (key == "gf_raid" and "raid")
         or (key == "gf_mythicraid" and "mythicraid")

@@ -69,7 +69,8 @@ local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
     if prefix ~= "healerMana" then Slider("Frames per row", "Columns", 1, 8, 1, 1, 32, -308) end
     Slider("Text size", "TextSize", 7, 32, 1, 11, controlWidth + 64, -308)
     if prefix == "pets" then Slider("Pet limit", "MaxCount", 1, 40, 1, 40, 32, -398) end
-    W.Text(section, "X and Y count from the middle of the screen. Secure frames take new settings once combat ends.", 32, prefix == "pets" and -482 or -392, width - 64, T.colors.muted)
+    W.Text(section, "X and Y count from the middle of the screen. Secure frames take new settings once combat ends.", 32, prefix == "pets" and -482 or -392,
+        width - 64, T.colors.muted)
     if prefix == "healerMana" or prefix == "friendlyBoss" then
         W.Text(section, "Healers are found by their assigned group role, not by class. Classic and Forever groups often leave roles unassigned: set them with Set Role in a member's right-click menu where the game offers it.", 32, -432, width - 64, T.colors.muted)
     end
@@ -161,7 +162,8 @@ local function BuildBuffCoverage(ctx, b)
     ScopeSlider(ctx, section, "Layer", 0, 30, 1, width, "buffCoverageLayer", 6, "visual", 32, -496, width, "LEFT")
     W.Text(section, "Each icon marks a buff that a class in your group can cast but this member lacks. Thorns is checked on members with the Tank role (on everyone with Thorns only on tanks off), Arcane Intellect and Divine Spirit on mana users. Combat, encounters and PvP matches hide aura data, so the icons keep their last known state until it ends.", 32, -566, width * 2 + 32, T.colors.muted)
 end
-local TIER_GROWTH = { {value="INHERIT",text="Same as the base layout"}, {value="DOWN",text="Down"}, {value="UP",text="Up"}, {value="LEFT",text="Left"}, {value="RIGHT",text="Right"} }
+local TIER_GROWTH = { {value="INHERIT",text="Same as the base layout"}, {value="DOWN",text="Down"}, {value="UP",text="Up"}, {value="LEFT",text="Left"},
+    {value="RIGHT",text="Right"} }
 local function BuildSizingTier(ctx, parent, prefix, fullWidth, metadata)
     local width = (fullWidth - 96) / 2
     local controls = {}
@@ -176,7 +178,8 @@ local function BuildSizingTier(ctx, parent, prefix, fullWidth, metadata)
     Slider("Frame width for this raid size (0 = base)", "Width", 0, 500, 32, -202)
     Slider("Frame height for this raid size (0 = base)", "Height", 0, 200, width + 64, -202)
     local growthMeta = metadata(prefix .. "Growth", prefix)
-    controls[#controls + 1] = ScopeDropdown(ctx, parent, "Growth direction", TIER_GROWTH, width, prefix .. "Growth", "INHERIT", "rebuild", 32, -282, width, "LEFT", growthMeta)
+    controls[#controls + 1] = ScopeDropdown(ctx, parent, "Growth direction", TIER_GROWTH, width, prefix .. "Growth", "INHERIT", "rebuild", 32, -282,
+        width, "LEFT", growthMeta)
     growthMeta.label, growthMeta.kind, growthMeta.values = "Growth direction", "dropdown", TIER_GROWTH
     M.RegisterSearchWidget(controls[#controls], growthMeta)
     local positionMeta = metadata(prefix .. "Position", prefix)
@@ -185,7 +188,8 @@ local function BuildSizingTier(ctx, parent, prefix, fullWidth, metadata)
     M.RegisterSearchWidget(controls[#controls], positionMeta)
     Slider("Horizontal position", "X", -2000, 2000, 32, -406)
     Slider("Vertical position", "Y", -2000, 2000, width + 64, -406)
-    W.Text(parent, "Turn on raid size overrides under General to edit these. The position uses the group's anchor point.", 32, -470, fullWidth - 64, T.colors.muted)
+    W.Text(parent, "Turn on raid size overrides under General to edit these. The position uses the group's anchor point.", 32, -470,
+        fullWidth - 64, T.colors.muted)
     return controls
 end
 

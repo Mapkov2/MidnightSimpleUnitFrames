@@ -37,7 +37,8 @@ local OpenSearchTarget = C.OpenSearchTarget
 local OpenSearchResults = C.OpenSearchResults
 local ContentHeight = C.ContentHeight
 
-if not (W and T and TrimText and SearchCombatLocked and NormalizeSearchText and SearchPages and ShortLabel and OpenSearchTarget and OpenSearchResults and ContentHeight) then return end
+if not (W and T and TrimText and SearchCombatLocked and NormalizeSearchText and SearchPages and ShortLabel and OpenSearchTarget and OpenSearchResults
+    and ContentHeight) then return end
 
 local HEADER_HEIGHT = 78
 local EXAMPLES_HEIGHT = 206

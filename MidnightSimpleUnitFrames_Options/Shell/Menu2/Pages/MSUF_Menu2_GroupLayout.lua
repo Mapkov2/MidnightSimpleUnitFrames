@@ -140,7 +140,8 @@ local function RefreshFrameBasicsProviderHeader(section)
         { text = FrameProviderLabel(CurrentScope()), kind = usesMSUF and "accent" or (provider == "NONE" and "muted" or "info") },
     }
     if usesMSUF then
-        badges[#badges + 1] = { text = Bool(CurrentScope(), "showPlayer", true) and "Player shown" or "Player hidden", kind = Bool(CurrentScope(), "showPlayer", true) and "info" or "muted" }
+        badges[#badges + 1] = { text = Bool(CurrentScope(), "showPlayer", true) and "Player shown" or "Player hidden",
+            kind = Bool(CurrentScope(), "showPlayer", true) and "info" or "muted" }
         local offlineFaded = not offlineHidden and Bool(CurrentScope(), "offlineFadeEnabled", false)
         local offlineText
         if offlineHidden then
@@ -229,7 +230,8 @@ local function BuildGFGeneralSection(ctx, b)
         { "Reverse fill direction", generalRightX, -184, generalRightToggleW, "bars", "reverseFill", false, "visual" },
         { "Hide during client scene", generalRightX, -214, generalRightToggleW, "layout", "hideInClientScene", true, "visual" },
         { "Click casting / Clique", generalRightX, -244, generalRightToggleW, "layout", "clickCastEnabled", true, "rebuild" },
-    }, { ["*"] = function(s) return BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, s[1], s[2], s[3], s[4]), s[5]), s[6], s[7], s[8]) end }, nil, msufControls)
+    }, { ["*"] = function(s) return BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, s[1], s[2], s[3], s[4]), s[5]), s[6], s[7],
+        s[8]) end }, nil, msufControls)
     --- Blizzard's Raid Manager tab is one shared frame, so this control is deliberately
     --- not scope-bound: it reads and writes Party, Raid and Mythic Raid together. It also
     --- stays live on the Blizzard providers, where MSUF's ownership pass never hides the
@@ -266,11 +268,13 @@ local function BuildGFGeneralSection(ctx, b)
         ControlMeta(ctx, "basics.frame_bar_shape"))
     msufControls[#msufControls + 1] = barShape
     if M.AddTooltip then
-        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.", M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.",
+            M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
     end
     W.DividerAt(general, -326, generalLeftX, 32)
     W.LabelAt(general, "Offline Members", generalLeftX, -344, generalLeftW, "GameFontNormalSmall", T.colors.accent)
-    local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -370, generalLeftW), "layout"), "hideOfflineEnabled", false, "visual")
+    local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -370, generalLeftW), "layout"),
+        "hideOfflineEnabled", false, "visual")
     local hideOfflineCombat = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide offline in combat", generalRightX, -370, generalRightToggleW), "layout"), "hideOfflineInCombat", false, "visual")
     local hideOffline = AttachGroupFocus(ScopeSlider(ctx, general, "Hide offline after", 0, 120, 1, offlineSliderW, "hideOfflineDelay", 0, "visual", generalLeftX, -404, offlineSliderW, "LEFT"), "layout")
     local hideOfflineControls = { hideOfflineCombat, hideOffline }
@@ -437,7 +441,8 @@ local function BuildGFGeometrySection(ctx, b)
     BuildGrowthDirectionTiles(ctx, growth, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
     AttachGroupFocus(ScopeSlider(ctx, grid, "Units per column", 1, 40, 1, col - 64, "unitsPerColumn", 5, "rebuild", 16, -40, col - 64, "LEFT"), "layout")
     AttachGroupFocus(ScopeSlider(ctx, grid, "Max columns", 1, 8, 1, col - 64, "maxColumns", 8, "rebuild", 16, -100, col - 64, "LEFT"), "layout")
-    local preserve = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(grid, "Preserve raid groups", 16, -152, col - 32), "layout"), "preserveRaidGroups", false, "rebuild")
+    local preserve = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(grid, "Preserve raid groups", 16, -152, col - 32), "layout"),
+        "preserveRaidGroups", false, "rebuild")
     local visibilityRows = {
         {"Collapse empty preserved raid groups", "collapseEmptyGroups"},
         {"Center party frames while solo", "centerSolo"},
@@ -462,7 +467,8 @@ local function BuildGFGeometrySection(ctx, b)
         SetOptionEnabled(organization.smallRaidAsParty, scope == "party")
         SetSectionBadgesAndStatus(section, {
             { text = OptionText(GROWTH_VALUES, Val(CurrentScope(), "growth", "DOWN"), "Down"), kind = "accent" },
-            { text = "Grid " .. BadgeNumber(Num(CurrentScope(), "unitsPerColumn", 5)) .. "/" .. BadgeNumber(Num(CurrentScope(), "maxColumns", 8)), kind = "info" },
+            { text = "Grid " .. BadgeNumber(Num(CurrentScope(), "unitsPerColumn", 5)) .. "/"
+                .. BadgeNumber(Num(CurrentScope(), "maxColumns", 8)), kind = "info" },
         })
     end)
 end
@@ -716,7 +722,8 @@ local function BuildGFScalingSection(ctx, b)
     local rules = W.ControlCard(general, "Raid size overrides", nil, 20, -270, inner, 158)
     local useTiers = BindScopeToggle(ctx, W.ToggleAt(rules, "Use raid size overrides", 16, -38, inner - 32), "layoutTiersEnabled", false, "rebuild")
     local exclude = BindScopeToggle(ctx, W.ToggleAt(rules, "Exclude hidden groups from group size", 16, -76, inner - 32), "excludeHiddenGroups", false, "rebuild")
-    W.Text(rules, "Group size selects both the scaling percentage and raid overrides. Raid overrides are unavailable for Party frames.", 16, -112, inner - 32, T.colors.muted)
+    W.Text(rules, "Group size selects both the scaling percentage and raid overrides. Raid overrides are unavailable for Party frames.", 16, -112,
+        inner - 32, T.colors.muted)
     local appearance = W.ControlCard(general, "Resize appearance", nil, 20, -446, inner, 154)
     for i, entry in ipairs({
         {"Scale indicators with frame dimensions", "autoScaleIndicatorsOnResize"},
@@ -779,7 +786,8 @@ local function BuildGFScalingSection(ctx, b)
     }
     for _, entry in ipairs(entries) do
         local tab = frames[entry.prefix]
-        local percentage = ScopeSlider(ctx, tab, "Group size scale (%)", 50, 100, 5, inner - 64, entry.key, entry.default, "rebuild", 36, -44, inner - 64, "LEFT")
+        local percentage = ScopeSlider(ctx, tab, "Group size scale (%)", 50, 100, 5, inner - 64, entry.key, entry.default, "rebuild", 36,
+            -44, inner - 64, "LEFT")
         BindAutoScalePreview(percentage, entry.count)
         autoControls[#autoControls + 1] = percentage
         W.Text(tab, "The percentage applies in By group size mode. Exact raid dimensions below replace scaled width or height; 0 keeps the scaled base. Spacing and resource bar height still use the scaling percentage.", 20, -104, inner, T.colors.muted)
@@ -800,7 +808,8 @@ local function BuildGFScalingSection(ctx, b)
         end
         RefreshTabs()
         SetSectionBadgesAndStatus(scale, {
-            { text = OptionText(VT("off", "Off", "manual", "Manual", "auto", "By group size"), scalingMode, "Off"), kind = scalingMode == "off" and "muted" or "info" },
+            { text = OptionText(VT("off", "Off", "manual", "Manual", "auto", "By group size"), scalingMode, "Off"), kind = scalingMode == "off"
+                and "muted" or "info" },
             OnOffBadge(raid and Bool(CurrentScope(), "layoutTiersEnabled", false), "Raid overrides", "Base dimensions"),
         })
     end)
@@ -828,7 +837,8 @@ local function BuildGFAnchorSection(ctx, b)
             QueueGF(CurrentScope(), "rebuild")
         end,
         ControlMeta(ctx, "field.anchorToFrame"))
-    local anchorPoint = ScopeDropdown(ctx, anchor, "Anchor Point", GF_ANCHOR_POINTS, anchorControlW, "anchorPoint", "CENTER", "rebuild", anchorRightX, -38, anchorControlW)
+    local anchorPoint = ScopeDropdown(ctx, anchor, "Anchor Point", GF_ANCHOR_POINTS, anchorControlW, "anchorPoint", "CENTER", "rebuild",
+        anchorRightX, -38, anchorControlW)
     local function IsStandardAnchorTarget(value)
         return value == nil or value == "" or value == "FREE" or value == "player" or value == "target"
             or value == "targettarget" or value == "focustarget" or value == "focus"
@@ -918,8 +928,10 @@ local GROUP_LAYOUT_SECTION_SPECS = {
         prepareShell = function(...) return GP.PreparePortraitShell(...) end,
     },
     { sectionId = "text", title = "Text", height = 690, build = BuildGFTextSection },
-    { sectionId = "power", title = "Resource Bar", autoHeight = true, build = BuildGFResourceBarSection, prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PreparePowerSwitch(ctx, sec) end },
-    { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection, prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PrepareRangeSwitch(ctx, sec) end },
+    { sectionId = "power", title = "Resource Bar", autoHeight = true, build = BuildGFResourceBarSection,
+        prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PreparePowerSwitch(ctx, sec) end },
+    { sectionId = "range", title = "Range Fade", height = 220, build = BuildGFRangeFadeSection,
+        prepareShell = function(ctx, sec) M.GroupFrameLayoutSections.PrepareRangeSwitch(ctx, sec) end },
     { sectionId = "transparency", title = "Transparency", autoHeight = true, build = BuildGFTransparencySection },
     { sectionId = "layout_advanced", title = "Group Layout", height = GEOMETRY_SECTION_HEIGHT, build = BuildGFGeometrySection },
     { sectionId = "sorting", title = "Sorting", autoHeight = true, build = BuildGFSortingSection },

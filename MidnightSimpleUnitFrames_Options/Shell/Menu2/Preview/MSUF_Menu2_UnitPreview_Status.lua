@@ -304,7 +304,8 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             if tex.SetTexCoord then tex:SetTexCoord(0.5, 1, 0, 0.5) end
         end
     elseif spec.id == "statusResting" then
-        local symbol = (runtimeCfg and runtimeCfg.symbol) or conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol or g.restingStateIndicatorSymbol
+        local symbol = (runtimeCfg and runtimeCfg.symbol) or conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol
+            or g.restingStateIndicatorSymbol
         local path = StatusSymbolTexture(symbol)
         if tex and symbol == RESTING_ANIMATED_SYMBOL and ApplyRestingFlipbook and ApplyRestingFlipbook(tex, true) then
             -- Blizzard's native 42-frame rested loop applied above.

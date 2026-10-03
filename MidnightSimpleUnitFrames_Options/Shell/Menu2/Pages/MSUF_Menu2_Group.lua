@@ -678,11 +678,13 @@ local function AttachGroupSectionUX(ctx)
         return M.Tr(text:sub(1, 1):upper() .. text:sub(2):lower())
     end
     local sections = {
-        general = { fields = "showPlayer showSolo clickCastEnabled reverseFill smoothFill chunkedFill frameBarShape", summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
+        general = { fields = "showPlayer showSolo clickCastEnabled reverseFill smoothFill chunkedFill frameBarShape",
+            summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
         portrait = { prefixes = "portrait", noCopy = true },
         text = { },
         power = { fields = "powerBarEnabled powerHeight powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth", prefixes = "detachedPower" },
-        range = { fields = "rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineFadeEnabled offlineAlpha", summary = function(c) return c.rangeFadeEnabled and (Number((c.rangeFadeAlpha or 0.4) * 100) .. "%") or "" end },
+        range = { fields = "rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineFadeEnabled offlineAlpha", summary = function(c) return c.rangeFadeEnabled
+            and (Number((c.rangeFadeAlpha or 0.4) * 100) .. "%") or "" end },
         transparency = { fields = "hpBarAlpha hpBgAlpha oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha alphaExcludeTextPortrait alphaExcludePredictionBars", summary = function(c) return Number((c.hpBarAlpha or 1) * 100) .. "%" end },
         dispel = { prefixes = "dispelOverlay" },
         dispelSymbol = { prefixes = "dispelSymbol" },
@@ -1339,22 +1341,29 @@ function PortraitBuild.Controls(ctx, s)
     local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -278, cardW - 58, 100, 300, 1, "portraitZoom", 100)
     local panX = BindNumber(geometryCard, "Zoom center X", 16, -332, cardW - 58, -100, 100, 1, "portraitPanX", 0)
     local panY = BindNumber(geometryCard, "Zoom center Y", 16, -386, cardW - 58, -100, 100, 1, "portraitPanY", 0)
-    local placement = BindDropdown(placementCard, "Placement", placementValues.modes, 16, -58, min(220, cardW - 32), "portraitPlacement", "ATTACHED", nil, RefreshPortraitControls)
+    local placement = BindDropdown(placementCard, "Placement", placementValues.modes, 16, -58, min(220, cardW - 32), "portraitPlacement", "ATTACHED", nil,
+        RefreshPortraitControls)
     placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
-    local detachedPoint = BindDropdown(placementCard, "Portrait anchor point", placementValues.points, 16, -112, min(220, cardW - 32), "portraitDetachedPoint", "RIGHT")
-    local detachedTo = BindDropdown(placementCard, "Attach to frame point", placementValues.points, 16, -166, min(220, cardW - 32), "portraitDetachedTo", "LEFT")
-    local overlayAlign = BindDropdown(placementCard, "Overlay alignment", placementValues.overlay, 16, -220, min(220, cardW - 32), "portraitOverlayAlign", "LEFT")
+    local detachedPoint = BindDropdown(placementCard, "Portrait anchor point", placementValues.points, 16, -112, min(220, cardW - 32),
+        "portraitDetachedPoint", "RIGHT")
+    local detachedTo = BindDropdown(placementCard, "Attach to frame point", placementValues.points, 16, -166, min(220, cardW - 32),
+        "portraitDetachedTo", "LEFT")
+    local overlayAlign = BindDropdown(placementCard, "Overlay alignment", placementValues.overlay, 16, -220, min(220, cardW - 32),
+        "portraitOverlayAlign", "LEFT")
     local level = BindNumber(placementCard, "Layer offset", 16, -274, cardW - 58, 0, 30, 1, "portraitLevelOffset", 7)
     level._msuf2SearchText = "Portrait layer offset frame level behind in front of bars"
     local alpha = BindNumber(placementCard, "Portrait opacity", 16, -328, cardW - 58, 0, 100, 1, "portraitAlpha", 100)
     local border = BindDropdown(borderCard, "Border", borderValues, 16, -112, min(220, cardW - 32), "portraitBorderStyle", "NONE", nil, RefreshPortraitControls)
     local edgeSoftness = BindNumber(borderCard, "Portrait edge softness", 16, -166, cardW - 58, 0, 30, 2, "portraitEdgeSoftness", 0)
     edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
-    local borderArt = BindDropdown(borderCard, "Border art", placementValues.borderArt, 16, -220, min(220, cardW - 32), "portraitBorderArt", "FLAT", nil, RefreshPortraitControls)
-    local direction = BindDropdown(borderCard, "Border direction", placementValues.borderDirection, 16, -274, min(220, cardW - 32), "portraitBorderDirection", "UP")
+    local borderArt = BindDropdown(borderCard, "Border art", placementValues.borderArt, 16, -220, min(220, cardW - 32), "portraitBorderArt", "FLAT", nil,
+        RefreshPortraitControls)
+    local direction = BindDropdown(borderCard, "Border direction", placementValues.borderDirection, 16, -274, min(220, cardW - 32),
+        "portraitBorderDirection", "UP")
     local thickness = BindNumber(borderCard, "Border thickness", 16, -328, cardW - 58, 1, 12, 1, "portraitBorderThickness", 2)
     local fill = BindToggle(borderCard, "Fill border into frame gap", 16, -396, cardW - 32, "portraitFillBorder", false)
-    local classStyle = BindDropdown(styleCard, "Class portrait style", ClassStyleValues, 16, -58, min(220, cardW - 32), "portraitClassStyle", "BLIZZARD", M.NormalizePortraitClassStyle)
+    local classStyle = BindDropdown(styleCard, "Class portrait style", ClassStyleValues, 16, -58, min(220, cardW - 32), "portraitClassStyle", "BLIZZARD",
+        M.NormalizePortraitClassStyle)
     local background = BindToggle(styleCard, "Portrait background", 16, -112, cardW - 32, "portraitBgEnabled", false, RefreshPortraitControls)
     local backgroundColor = BindColor(styleCard, "Portrait Background Color", 16, -158, min(260, cardW - 32), "portraitBgColor", { 0.05, 0.05, 0.05 })
     local backgroundAlpha = BindNumber(styleCard, "Background opacity", 16, -210, cardW - 58, 0, 1, 0.05, "portraitBgColorA", 0.85, true)
@@ -1608,7 +1617,8 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         btn:SetScript("OnLeave", function(self)
             SetTileVisual(self, Val(CurrentScope(), "growth", "DOWN") == info.value, false)
         end)
-        M.AddTooltip(btn, function() return M.Format("Growth: %s", M.Tr(info.text or "")) end, "Click to set group frame growth direction.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
+        M.AddTooltip(btn, function() return M.Format("Growth: %s", M.Tr(info.text or "")) end, "Click to set group frame growth direction.",
+            { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
         btn:SetScript("OnClick", function()
             Set(CurrentScope(), "growth", info.value, "geometry")
             RefreshGrowthTiles()

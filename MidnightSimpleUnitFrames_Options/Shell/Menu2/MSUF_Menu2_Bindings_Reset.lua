@@ -25,7 +25,10 @@ local DeepCopy = M.DeepCopy
 local QueueMenuRefresh = M.QueueMenuRefresh
 local COLOR_CLASSPOWER_RUNTIME, ApplyScopedFeatureRuntime, FlushApplyServiceNow =
     M.COLOR_CLASSPOWER_RUNTIME, M.ApplyScopedFeatureRuntime, M.FlushApplyServiceNow
-local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf_target = { unit = "target", label = "Target" }, uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" }, uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_arena = { unit = "arena", label = "Arena Frames" }, uf_pet = { unit = "pet", label = "Pet" }, uf_pettarget = { unit = "pettarget", label = "Pet Target" } }
+local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf_target = { unit = "target", label = "Target" },
+    uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" },
+    uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_arena = { unit = "arena", label = "Arena Frames" },
+    uf_pet = { unit = "pet", label = "Pet" }, uf_pettarget = { unit = "pettarget", label = "Pet Target" } }
 local CASTBAR_SUFFIX_KEYS = WL "TimeFormat FrameLevelOffset IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderThickness IconBorderStyle IconFrameLevelOffset SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY SpellNameColorR SpellNameColorG SpellNameColorB TimeColorR TimeColorG TimeColorB"
 local CASTBAR_TARGET_NAME_SUFFIX_KEYS = WL "TargetNamePosition TargetNameFontSize TargetNameAlign TargetNameOffsetX TargetNameOffsetY TargetNameColorR TargetNameColorG TargetNameColorB"
 local function BuildUnitCastbarResetKeys(spec)
@@ -38,10 +41,14 @@ local function BuildUnitCastbarResetKeys(spec)
     return keys
 end
 local UNIT_CASTBAR_GENERAL_KEYS = {
-    player = BuildUnitCastbarResetKeys({ base = "castbarPlayer", backend = "castbarPlayer", enable = "enablePlayerCastbar", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName" }),
-    target = BuildUnitCastbarResetKeys({ base = "castbarTarget", backend = "castbarTarget", enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName", targetName = "castbarTargetShowTargetName" }),
-    focus = BuildUnitCastbarResetKeys({ base = "castbarFocus", backend = "castbarFocus", enable = "enableFocusCastbar", time = "showFocusCastTime", icon = "castbarFocusShowIcon", name = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName" }),
-    boss = BuildUnitCastbarResetKeys({ base = "bossCast", backend = "bossCastbar", enable = "enableBossCastbar", time = "showBossCastTime", icon = "showBossCastIcon", name = "showBossCastName", targetName = "showBossCastTargetName" }),
+    player = BuildUnitCastbarResetKeys({ base = "castbarPlayer", backend = "castbarPlayer", enable = "enablePlayerCastbar", time = "showPlayerCastTime",
+        icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName" }),
+    target = BuildUnitCastbarResetKeys({ base = "castbarTarget", backend = "castbarTarget", enable = "enableTargetCastbar", time = "showTargetCastTime",
+        icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName", targetName = "castbarTargetShowTargetName" }),
+    focus = BuildUnitCastbarResetKeys({ base = "castbarFocus", backend = "castbarFocus", enable = "enableFocusCastbar", time = "showFocusCastTime",
+        icon = "castbarFocusShowIcon", name = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName" }),
+    boss = BuildUnitCastbarResetKeys({ base = "bossCast", backend = "bossCastbar", enable = "enableBossCastbar", time = "showBossCastTime",
+        icon = "showBossCastIcon", name = "showBossCastName", targetName = "showBossCastTargetName" }),
 }
 local function ResetInfo(label, kind, summary)
     return { label = label, kind = kind, summary = summary }
@@ -55,13 +62,18 @@ local PAGE_RESET_INFO = {
     gf_priority = GROUP_RESET_INFO,
     opt_bars = ResetInfo("Bars", "bars", "shared bar textures, gradients, rounded frame corners, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides"),
     opt_fonts = ResetInfo("Fonts", "fonts", "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides"),
-    auras3_buffs = { label = "Buff Appearance", kind = "auraAppearance", appearanceKind = "buff", summary = "global Buff icon shape, border and shadow appearance" },
-    auras3_debuffs = { label = "Debuff Appearance", kind = "auraAppearance", appearanceKind = "debuff", summary = "global Debuff icon shape, border and shadow appearance" },
+    auras3_buffs = { label = "Buff Appearance", kind = "auraAppearance", appearanceKind = "buff",
+        summary = "global Buff icon shape, border and shadow appearance" },
+    auras3_debuffs = { label = "Debuff Appearance", kind = "auraAppearance", appearanceKind = "debuff",
+        summary = "global Debuff icon shape, border and shadow appearance" },
     auras3_styling = ResetInfo("Aura Appearance", "auraAppearance", "the currently selected global Aura product appearance only"),
     opt_castbar = ResetInfo("Castbar", "castbar", "global castbar behavior, textures, boss castbar and interrupt indicator settings"),
-    opt_colors = ResetInfo("Colors", "colors", "frame colors, group-frame colors, class/NPC colors, power colors, castbar colors, aura colors and gameplay color settings"),
-    opt_misc = ResetInfo("Miscellaneous", "misc", "language/menu behavior, update pacing, tooltips, Blizzard-frame handling, minimap icon, sounds and range-fade settings"),
-    classpower = ResetInfo("Class Resources", "classpower", "class-resource layout, behavior, style, auto-hide, detached power bar and alternative mana settings"),
+    opt_colors = ResetInfo("Colors", "colors",
+        "frame colors, group-frame colors, class/NPC colors, power colors, castbar colors, aura colors and gameplay color settings"),
+    opt_misc = ResetInfo("Miscellaneous", "misc",
+        "language/menu behavior, update pacing, tooltips, Blizzard-frame handling, minimap icon, sounds and range-fade settings"),
+    classpower = ResetInfo("Class Resources", "classpower",
+        "class-resource layout, behavior, style, auto-hide, detached power bar and alternative mana settings"),
     gameplay = ResetInfo("Gameplay", "gameplay", "gameplay enhancement settings such as combat text, crosshair and click-cast behavior"),
     modules = ResetInfo("Modules", "modules", "optional style/module settings such as MSUF Style and dropdown style"),
     profiles = ResetInfo("Profiles", "profile", "the entire active profile"),

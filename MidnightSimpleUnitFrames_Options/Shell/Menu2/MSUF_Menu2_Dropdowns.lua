@@ -96,7 +96,8 @@ local function PaintDropdownScrollbar(hover)
         local c = hover and thumbHover or thumbBase
         local a = (hover and 0.90 or 0.68) * alpha
         if T.ApplyTextureGradient then
-            T.ApplyTextureGradient(thumb, "VERTICAL", { min(c[1] * 1.22, 1), min(c[2] * 1.18, 1), min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
+            T.ApplyTextureGradient(thumb, "VERTICAL", { min(c[1] * 1.22, 1), min(c[2] * 1.18, 1), min(c[3] * 1.12, 1), a },
+                { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
         elseif thumb.SetColorTexture then
             thumb:SetColorTexture(c[1], c[2], c[3], a)
         end

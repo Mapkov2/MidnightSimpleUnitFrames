@@ -380,7 +380,9 @@ local function CreatePreviewAnimationButton(box, registerControl)
     }
     (registerControl or RegisterGroupPreviewControl)(btn, "combat_animation", "Group Preview Animation", "button", "ephemeral")
     if M.AddTooltip then
-        M.AddTooltip(btn, "Animate Preview", "Animates health, power, prediction bars, text values, aura timers, and combat-state indicators in this preview only. Pauses during combat.", { hook = true })
+        M.AddTooltip(btn, "Animate Preview",
+            "Animates health, power, prediction bars, text values, aura timers, and combat-state indicators in this preview only. Pauses during combat.",
+            { hook = true })
     end
     box._previewAnimationButton = btn
     box.RefreshAnimationButton = RefreshPreviewAnimationButton
@@ -1391,7 +1393,8 @@ function NativeBuild.Frame(parent, ctx)
     if parent and parent.GetFrameLevel and box.SetFrameLevel then box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2) end
     local title = T.Font(box, "GameFontNormal", "", chrome.title or T.colors.title or T.colors.text)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -8)
-    T.SetTranslatedText(title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", H.PreviewScopeLabel(H.CurrentScope())))
+    T.SetTranslatedText(title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview",
+        H.PreviewScopeLabel(H.CurrentScope())))
     box._title = title
     local hint = T.Font(box, "GameFontDisableSmall", "", T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
@@ -2089,7 +2092,8 @@ function M.FocusGFPreviewTextSlot(kind, slot, active)
     local focused = false
     for i = 1, #previews do
         local box = previews[i]
-        if box and not box._msufGFNativePreviewDisposed and box.FocusTextSlot and box.IsShown and box:IsShown() and (not box.IsVisible or box:IsVisible()) then focused = box:FocusTextSlot(kind, slot, active) or focused end
+        if box and not box._msufGFNativePreviewDisposed and box.FocusTextSlot and box.IsShown and box:IsShown()
+            and (not box.IsVisible or box:IsVisible()) then focused = box:FocusTextSlot(kind, slot, active) or focused end
     end
     return focused
 end

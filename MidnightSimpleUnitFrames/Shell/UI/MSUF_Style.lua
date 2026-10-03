@@ -94,7 +94,8 @@ function Style.ApplyBackdrop(frame, alphaOverride, thinBorder)
     if frame.SetBackdrop then
         PixelLayoutRegion(frame, "SetBackdrop", { bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
         frame:SetBackdropColor(THEME.bgR, THEME.bgG, THEME.bgB, alphaOverride or THEME.bgA)
-        frame:SetBackdropBorderColor(thinBorder and THEME.edgeThinR or THEME.edgeR, thinBorder and THEME.edgeThinG or THEME.edgeG, thinBorder and THEME.edgeThinB or THEME.edgeB, thinBorder and THEME.edgeThinA or THEME.edgeA)
+        frame:SetBackdropBorderColor(thinBorder and THEME.edgeThinR or THEME.edgeR, thinBorder and THEME.edgeThinG or THEME.edgeG, thinBorder
+            and THEME.edgeThinB or THEME.edgeB, thinBorder and THEME.edgeThinA or THEME.edgeA)
     end
     return frame
 end
@@ -125,7 +126,8 @@ function Style.SkinNavButton(btn, opts)
 end
 function Style.SkinDashboardButton(btn)
     Style.SkinNavButton(btn)
-    if btn and not btn._msufSetSelected then btn._msufSetSelected = function(self, selected) if self._msufSetActive then self:_msufSetActive(selected) end end end
+    if btn and not btn._msufSetSelected then btn._msufSetSelected = function(self,
+        selected) if self._msufSetActive then self:_msufSetActive(selected) end end end
     return btn
 end
 

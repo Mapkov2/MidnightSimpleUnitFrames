@@ -537,7 +537,8 @@ local function ApplyScopedFeatureRuntime(kind, reason, scope)
     if kind == "external" then return true end
     if kind == "castbar" then
         if ApplyService.RequestCastbars then return ApplyService.RequestCastbars(reason, "history") ~= false end
-        if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { history = false, preview = true, applyAll = false, castbar = true, castbarTextures = true }) ~= false end
+        if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { history = false, preview = true, applyAll = false, castbar = true,
+            castbarTextures = true }) ~= false end
         local did = true, _G.MSUF_UpdateCastbarVisuals()
         _G.MSUF_UpdateBossCastbarPreview()
 did = true

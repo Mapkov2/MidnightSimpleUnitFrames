@@ -449,8 +449,10 @@ function SB.Create(box, deps)
     if M.AddTooltip then
         M.AddTooltip(openBtn, "Open settings", "Jumps to the options section that owns the selected preview element.", { hook = true })
         M.AddTooltip(resetBtn, "Reset offset", "Puts the selected element back to its default X/Y offset.", { hook = true })
-        M.AddTooltip(editX, "Exact X offset", "Edits the selected child element's local X offset. Positive values move right. Arrow keys and dragging update the same offset.", { hook = true })
-        M.AddTooltip(editY, "Exact Y offset", "Edits the selected child element's local Y offset. Positive values move up. Arrow keys and dragging update the same offset.", { hook = true })
+        M.AddTooltip(editX, "Exact X offset",
+            "Edits the selected child element's local X offset. Positive values move right. Arrow keys and dragging update the same offset.", { hook = true })
+        M.AddTooltip(editY, "Exact Y offset",
+            "Edits the selected child element's local Y offset. Positive values move up. Arrow keys and dragging update the same offset.", { hook = true })
     end
 
     function bar:MSUF2SetEnabled(enabled)
@@ -636,7 +638,9 @@ function SB.CreatePicker(box, parent)
         if popup and popup.Hide then popup:Hide() end
     end)
     if M.AddTooltip then
-        M.AddTooltip(picker, "Preview element", "Lists every element the preview placed, including those hidden behind another handle. Tab and Shift+Tab step through the same list.", { hook = true })
+        M.AddTooltip(picker, "Preview element",
+            "Lists every element the preview placed, including those hidden behind another handle. Tab and Shift+Tab step through the same list.",
+            { hook = true })
     end
     picker:MSUF2Refresh()
     box._msuf2ElementPicker = picker

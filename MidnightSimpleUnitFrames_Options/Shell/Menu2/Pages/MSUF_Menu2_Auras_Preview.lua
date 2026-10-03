@@ -298,11 +298,16 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             cfg.cooldownSwipeReverse = Model.ReadBool(readScope, "cooldownSwipeReverse", false)
             cfg.showDurationBar = Model.ReadBool(readScope, "showDurationBar", false)
         end
-        cfg.stackSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)
-        cfg.stackAnchor = lane and type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(readScope, lane) or Model.ReadStackAnchor(readScope)
-        cfg.stackX = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetX", -1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetX", -1, -2000, 2000)
-        cfg.stackY = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetY", 1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetY", 1, -2000, 2000)
-        cfg.cooldownSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "cooldownTextSize", 14, 6, 40)
+        cfg.stackSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40)
+            or Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)
+        cfg.stackAnchor = lane and type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(readScope, lane)
+            or Model.ReadStackAnchor(readScope)
+        cfg.stackX = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetX", -1, -2000, 2000)
+            or Model.ReadNumber(readScope, "stackTextOffsetX", -1, -2000, 2000)
+        cfg.stackY = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetY", 1, -2000, 2000)
+            or Model.ReadNumber(readScope, "stackTextOffsetY", 1, -2000, 2000)
+        cfg.cooldownSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40)
+            or Model.ReadNumber(readScope, "cooldownTextSize", 14, 6, 40)
         if lane and type(Model.ReadLaneCooldownAnchor) == "function" then
             cfg.cooldownAnchor = Model.ReadLaneCooldownAnchor(readScope, lane)
         elseif type(Model.ReadCooldownAnchor) == "function" then
@@ -310,10 +315,14 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         elseif runtimePreview and runtimePreview.cooldownAnchor then
             cfg.cooldownAnchor = runtimePreview.cooldownAnchor
         end
-        cfg.cooldownX = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetX", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetX", 0, -2000, 2000)
-        cfg.cooldownY = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetY", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetY", 0, -2000, 2000)
-        cfg.cooldownDecimalSeconds = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownDecimalSeconds", 3, 0, 30) or Model.ReadNumber(readScope, "cooldownDecimalSeconds", 3, 0, 30)
-        cfg.durationBarHeight = lane and Model.ReadLaneStyleNumber(readScope, lane, "durationBarHeight", 2, 1, 16) or Model.ReadNumber(readScope, "durationBarHeight", 2, 1, 16)
+        cfg.cooldownX = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetX", 0, -2000, 2000)
+            or Model.ReadNumber(readScope, "cooldownTextOffsetX", 0, -2000, 2000)
+        cfg.cooldownY = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetY", 0, -2000, 2000)
+            or Model.ReadNumber(readScope, "cooldownTextOffsetY", 0, -2000, 2000)
+        cfg.cooldownDecimalSeconds = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownDecimalSeconds", 3, 0, 30)
+            or Model.ReadNumber(readScope, "cooldownDecimalSeconds", 3, 0, 30)
+        cfg.durationBarHeight = lane and Model.ReadLaneStyleNumber(readScope, lane, "durationBarHeight", 2, 1, 16)
+            or Model.ReadNumber(readScope, "durationBarHeight", 2, 1, 16)
         if lane and type(Model.ReadLaneDurationBarDisplay) == "function" then
             cfg.durationBarDisplay = Model.ReadLaneDurationBarDisplay(readScope, lane)
         else

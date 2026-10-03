@@ -1012,11 +1012,13 @@ function ProfilesPage.ImportExport(state)
             end,
         },
     }), "Import to current profile", "button")
-    AddProfileTooltip(import, "Import to current profile", "Applies the import string to the active profile. Export or copy your profile first if you want an easy backup.")
+    AddProfileTooltip(import, "Import to current profile",
+        "Applies the import string to the active profile. Export or copy your profile first if you want an easy backup.")
     importCreateNew = W.SwitchAt(actionsCard, "Import and create new profile", 20, -176,
         max(220, actionsCardW - 40))
     RegisterControl(importCreateNew, ProfilesMeta("import.create_new_mode", "ephemeral"), "Import and create new profile", "toggle")
-    AddProfileTooltip(importCreateNew, "Import and create new profile", "Creates a separate profile before importing so you can test the import without changing your current profile.")
+    AddProfileTooltip(importCreateNew, "Import and create new profile",
+        "Creates a separate profile before importing so you can test the import without changing your current profile.")
     local importNameW = min(380, max(180, actionsCardW - 40))
     importProfileName = W.TextInput(actionsCard, "New profile name", importNameW)
     RegisterControl(importProfileName, ProfilesMeta("import.new_profile_name", "ephemeral"), "New profile name", "textinput")
@@ -1159,7 +1161,8 @@ function ProfilesPage.ImportActions(state)
         end
         M.SetMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
         self:SetChecked(M.profileImportCreateNew == true)
-        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2) end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on"
+            or "New-profile import off", "info", 1.2) end
         if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
     end)
     --- Blizzard Edit Mode data is opt-in per session for BOTH directions

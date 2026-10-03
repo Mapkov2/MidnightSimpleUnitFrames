@@ -1125,7 +1125,8 @@ function Picker.DefineReadout(panel)
         end
         local r, g, b = self.owner:GetRGB()
         local originalValue = self.originals and self.originals[self.owner]
-        self.original:SetColorTexture(originalValue and originalValue[1] or r, originalValue and originalValue[2] or g, originalValue and originalValue[3] or b, 1)
+        self.original:SetColorTexture(originalValue and originalValue[1] or r, originalValue and originalValue[2] or g, originalValue
+            and originalValue[3] or b, 1)
         T.SetTranslatedText(self.selector.label, Tr(self.owner._msuf2ColorLabel or self.owner._msuf2SearchText or "Color"))
         self._readoutHex, self._readoutR, self._readoutG, self._readoutB = nil, nil, nil, nil
         self:RefreshColorReadout(true)

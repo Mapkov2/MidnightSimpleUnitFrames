@@ -284,7 +284,8 @@ local function PreviewSetRowOffset(self, x)
         if direction == "LEFT" then direction = "RTL" end
         if direction == "RIGHT" then direction = "LTR" end
         local reverse = direction ~= "LTR"
-        if unit == "target" and ((g and g.castbarOpositeDirectionTarget == true) or ReadGBool("castbarOpositeDirectionTarget", false)) then reverse = not reverse end
+        if unit == "target" and ((g and g.castbarOpositeDirectionTarget == true) or ReadGBool("castbarOpositeDirectionTarget",
+            false)) then reverse = not reverse end
         -- Channels keep the cast's anchor; unified direction instead makes
         -- them fill like a cast (see the visual progress computation).
         return reverse

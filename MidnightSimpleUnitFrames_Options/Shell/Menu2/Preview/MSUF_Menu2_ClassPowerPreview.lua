@@ -64,7 +64,8 @@ local CP_OUTLINE_OPTS = {
     texture = WHITE8,
     color = function() return PREVIEW_BORDER_COLOR[1], PREVIEW_BORDER_COLOR[2], PREVIEW_BORDER_COLOR[3], PREVIEW_BORDER_COLOR[4] end,
 }
-local HP_TEXT_REVERSE = { CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT", CURMAXPERCENT = "PERCENTCURMAX", PERCENTCURMAX = "CURMAXPERCENT", PERCENTMAXCUR = "CURMAXPERCENT" }
+local HP_TEXT_REVERSE = { CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", MAXPERCENT = "PERCENTMAX",
+    PERCENTMAX = "MAXPERCENT", CURMAXPERCENT = "PERCENTCURMAX", PERCENTCURMAX = "CURMAXPERCENT", PERCENTMAXCUR = "CURMAXPERCENT" }
 local DELIMITERS = { [""] = " ", ["-"] = " - ", ["/"] = " / ", ["\\"] = " \\ ", ["|"] = " | ", ["<"] = " < ", [">"] = " > ", ["~"] = " ~ ", [":"] = " : " }
 local function TR(text)
     return (M.Tr and M.Tr(text)) or text
@@ -229,7 +230,8 @@ local function ResolveTexture(key, fallback)
     end
     return WHITE8
 end
-local PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER", mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
+local PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER",
+    mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
 local function PreviewClassToken(spec)
     if spec and spec.classToken then return tostring(spec.classToken):upper() end
     if spec and spec.class then return tostring(spec.class):upper() end
@@ -682,7 +684,8 @@ local function PlaceTextHandle(handle, parent, regions)
         local region = regions[i]
         if region and region.IsShown and region:IsShown() then
             handle:ClearAllPoints()
-            handle:SetSize(max(24, (region.GetStringWidth and region:GetStringWidth() or 20) + 10), max(18, (region.GetStringHeight and region:GetStringHeight() or 12) + 6))
+            handle:SetSize(max(24, (region.GetStringWidth and region:GetStringWidth() or 20) + 10),
+                max(18, (region.GetStringHeight and region:GetStringHeight() or 12) + 6))
             handle:SetPoint("CENTER", region, "CENTER", 0, 0)
             handle._msufPlaced = true
             handle:Show()
@@ -994,7 +997,8 @@ local function RenderClassPower(preview, bars, player, spec)
                 segW = max(1, boundary - prevBoundary)
             end
             local rune = runeOrder and runeOrder[i]
-            local frac = rune and ((rune.elapsed or 0) / (rune.total or 1)) or (CPPreview.FillForSegment and CPPreview.FillForSegment(spec, i, animatedValue) or (i <= floor(tonumber(animatedValue or spec.value) or 0) and 1 or 0))
+            local frac = rune and ((rune.elapsed or 0) / (rune.total or 1)) or (CPPreview.FillForSegment and CPPreview.FillForSegment(spec, i, animatedValue)
+                or (i <= floor(tonumber(animatedValue or spec.value) or 0) and 1 or 0))
             if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
             local sx = startX + xPos
             if bars.classPowerFillReverse == true then sx = w - sx - segW end
@@ -1490,7 +1494,8 @@ local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spe
         local leftMode, centerMode, rightMode, delimiter, hideLeft, hideCenter, hideRight = HPTextConfig(bars, player)
         local maxValue = 1000000
         local current = floor((maxValue * fraction) + 0.5)
-        ApplyMeterText(frame, Clamp(bars.playerHPBarUsePlayerText ~= false and player.hpFontSize or bars.playerHPBarTextSize, 14, 6, 48), tonumber(bars.playerHPBarTextOffsetX) or 0, tonumber(bars.playerHPBarTextOffsetY) or 0,
+        ApplyMeterText(frame, Clamp(bars.playerHPBarUsePlayerText ~= false and player.hpFontSize or bars.playerHPBarTextSize, 14, 6, 48),
+            tonumber(bars.playerHPBarTextOffsetX) or 0, tonumber(bars.playerHPBarTextOffsetY) or 0,
             ModeText(leftMode, current, maxValue, delimiter, hideLeft),
             ModeText(centerMode, current, maxValue, delimiter, hideCenter),
             ModeText(rightMode, current, maxValue, delimiter, hideRight))
@@ -1599,7 +1604,8 @@ local function UpdateDetachedPowerAnimation(preview, frame, bars, player)
         local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
         local current = floor((fraction * 100) + 0.5)
         if frame.left then frame.left:SetText(ModeText(leftMode, current, 100, delimiter, HidePercentValue(player, "powerTextLeftHidePercentSymbol"))) end
-        if frame.center then frame.center:SetText(ModeText(centerMode, current, 100, delimiter, HidePercentValue(player, "powerTextCenterHidePercentSymbol"))) end
+        if frame.center then frame.center:SetText(ModeText(centerMode, current, 100, delimiter,
+            HidePercentValue(player, "powerTextCenterHidePercentSymbol"))) end
         if frame.right then frame.right:SetText(ModeText(rightMode, current, 100, delimiter, HidePercentValue(player, "powerTextRightHidePercentSymbol"))) end
     end
     return true
@@ -1844,8 +1850,10 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
     if mana then
         local regenTimers = MSUF.CPBuilders and MSUF.CPBuilders.ManaRegenTimersSupported
         regenTimers = regenTimers and regenTimers() or false
-        if regenTimers and bars.manaRegenPause == true then SampleStrip(preview, samples, bars, powerFrame, "FIVE",3,"BOTTOMLEFT",1,"manaRegenPauseColor",SAMPLE.FIVE,.6) end
-        if regenTimers and bars.manaGainPulse == true then SampleStrip(preview, samples, bars, powerFrame, "TICK",2,"TOPLEFT",-1,"manaGainPulseColor",SAMPLE.TICK,.5) end
+        if regenTimers and bars.manaRegenPause == true then SampleStrip(preview, samples, bars, powerFrame, "FIVE",3,"BOTTOMLEFT",1,
+            "manaRegenPauseColor",SAMPLE.FIVE,.6) end
+        if regenTimers and bars.manaGainPulse == true then SampleStrip(preview, samples, bars, powerFrame, "TICK",2,"TOPLEFT",-1,
+            "manaGainPulseColor",SAMPLE.TICK,.5) end
         if bars.manaUpcomingCost == true then
             local frame=SampleStrip(preview, samples, bars, powerFrame, "COST",powerFrame:GetHeight(),"TOPLEFT",0,"manaCostColor",SAMPLE.COST,.18)
             frame:ClearAllPoints()
@@ -2392,11 +2400,16 @@ function Preview.Create(ctx, builder)
     box.noResource:Hide()
     CreatePlayerReference(box)
     box.handleClass = MakeHandle(box, "classPower", "bars", "classPowerOffsetX", "classPowerOffsetY", 0, 0, "Class resource bar", { 0.30, 0.78, 0.55 }, "class", "class", 0)
-    box.handleClassText = MakeHandle(box, "classPowerText", "bars", "classPowerTextOffsetX", "classPowerTextOffsetY", 0, 0, "Class resource text", { 0.30, 0.78, 0.55 }, "classText", "classText", 2)
-    box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Player power bar", { 0.95, 0.72, 0.18 }, "power", "power", 0)
-    box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Player power text", { 0.95, 0.72, 0.18 }, "powerText", "powerText", 2)
-    box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp", 0)
-    box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText", 2)
+    box.handleClassText = MakeHandle(box, "classPowerText", "bars", "classPowerTextOffsetX", "classPowerTextOffsetY", 0, 0, "Class resource text",
+        { 0.30, 0.78, 0.55 }, "classText", "classText", 2)
+    box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Player power bar",
+        { 0.95, 0.72, 0.18 }, "power", "power", 0)
+    box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Player power text", { 0.95, 0.72, 0.18 },
+        "powerText", "powerText", 2)
+    box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar",
+        { 0.25, 0.90, 0.42 }, "hp", "hp", 0)
+    box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text",
+        { 0.25, 0.90, 0.42 }, "hpText", "hpText", 2)
     function box:Refresh()
         -- Like the unit preview, never render in combat: the refresh waits for
         -- PLAYER_REGEN_ENABLED (the menu closes at combat start; this covers a

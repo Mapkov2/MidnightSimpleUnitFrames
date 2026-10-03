@@ -32,10 +32,14 @@ local GROUP_SPECS = {
         defaultY = 6,
         defaultSize = 26,
     },
-    custom1 = { label = "Custom 1", customIndex = 1, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
-    custom2 = { label = "Custom 2", customIndex = 2, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
-    custom3 = { label = "Custom 3", customIndex = 3, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
-    custom4 = { label = "Dots on target", customIndex = 4, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
+    custom1 = { label = "Custom 1", customIndex = 1, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0,
+        defaultSize = 24, defaultSpacing = 2 },
+    custom2 = { label = "Custom 2", customIndex = 2, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0,
+        defaultSize = 24, defaultSpacing = 2 },
+    custom3 = { label = "Custom 3", customIndex = 3, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0,
+        defaultSize = 24, defaultSpacing = 2 },
+    custom4 = { label = "Dots on target", customIndex = 4, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0,
+        defaultSize = 24, defaultSpacing = 2 },
 }
 
 local pf
@@ -622,8 +626,10 @@ local function Build()
         liveStatus = true,
         hoverSource = "aura-popup",
     })
-    pf.buffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Buffs", 20, -58, 250, 32, function() SetActiveGroup("buff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
-    pf.debuffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Debuffs", 290, -58, 250, 32, function() SetActiveGroup("debuff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
+    pf.buffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Buffs", 20, -58, 250, 32, function() SetActiveGroup("buff") end,
+        ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
+    pf.debuffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Debuffs", 290, -58, 250, 32, function() SetActiveGroup("debuff") end,
+        ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
     Quick.ValueCard(pf, pf, 20, -102, 250, "Position", {
         { label = "X", key = "xBox", onChanged = Apply },
         { label = "Y", key = "yBox", onChanged = Apply },

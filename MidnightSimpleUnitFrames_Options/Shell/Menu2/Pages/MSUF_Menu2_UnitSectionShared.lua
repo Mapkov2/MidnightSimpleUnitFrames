@@ -389,7 +389,8 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     text:SetJustifyH("LEFT")
     local button
     if buttonLabel and buttonLabel ~= "" then
-        button = (W.StyleTopActionButton and W.StyleTopActionButton(T.Button(notice, buttonLabel, buttonWidth or 92, 20))) or T.Button(notice, buttonLabel, buttonWidth or 92, 20)
+        button = (W.StyleTopActionButton and W.StyleTopActionButton(T.Button(notice, buttonLabel, buttonWidth or 92, 20)))
+            or T.Button(notice, buttonLabel, buttonWidth or 92, 20)
         button:SetPoint("RIGHT", notice, "RIGHT", -2, 0)
         button[gateKey] = true
         text:SetPoint("RIGHT", notice, "RIGHT", -(buttonWidth or 92) - 20, 0)
@@ -406,7 +407,8 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
             bg:SetColorTexture(coreShadow[1], coreShadow[2], coreShadow[3], 0.30)
             top:SetColorTexture(coreBlue[1], coreBlue[2], coreBlue[3], 0.42)
             bottom:SetColorTexture(coreSurface[1], coreSurface[2], coreSurface[3], 0.48)
-            if text.SetTextColor and T.colors and T.colors.dim then text:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1) end
+            if text.SetTextColor and T.colors and T.colors.dim then text:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3],
+                T.colors.dim[4] or 1) end
         end
     end
     function notice:SetMessage(message, tone)
@@ -495,7 +497,8 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
         if not popup then return end
         local source = SourceKey()
         local selected = opts.selectedTarget and opts.selectedTarget(source)
-        if popup._title then T.SetTranslatedText(popup._title, M.Format(opts.titleFormat or "Copy from %s", opts.sourceLabel and opts.sourceLabel(source) or tostring(source or ""))) end
+        if popup._title then T.SetTranslatedText(popup._title, M.Format(opts.titleFormat or "Copy from %s", opts.sourceLabel and opts.sourceLabel(source)
+            or tostring(source or ""))) end
         local x = opts.targetX or 16
         for i = 1, #targets do
             local item = targets[i]
@@ -824,7 +827,8 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
         if not overlay then return end
         overlay._isCandidateAllowed = opts.isCandidateAllowed
         overlay._onPick = function(frameName)
-            WithHistory(opts.pickTitle or opts.commitTitle or "Pick Anchor", opts.pickKey or opts.commitKey, function() if opts.setValue then opts.setValue(frameName or "", "pick") end; box:SetText(frameName or "") end)
+            WithHistory(opts.pickTitle or opts.commitTitle or "Pick Anchor", opts.pickKey or opts.commitKey,
+                function() if opts.setValue then opts.setValue(frameName or "", "pick") end; box:SetText(frameName or "") end)
         end
         overlay:Show()
     end)

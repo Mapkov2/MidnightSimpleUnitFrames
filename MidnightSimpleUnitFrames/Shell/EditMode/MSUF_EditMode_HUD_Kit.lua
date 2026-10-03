@@ -23,7 +23,8 @@ local function Space(role, fallback)
     return ui and ui.Space and ui.Space(role, fallback) or fallback
 end
 
-local DockUI = { PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end }
+local DockUI = { PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region,
+    ...) end return region end }
 EM2.HUDDock = DockUI
 
 local function HelpText(key)

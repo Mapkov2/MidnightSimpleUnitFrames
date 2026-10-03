@@ -1662,7 +1662,8 @@ local function GroupHealthBackgroundColor(RenderState, MSUF, ClassColor, mode, h
 end
 --- Value texts from the slot set the full refresh resolved (kept per box).
 local function GroupHealthSlotText(gf, htx, mode, hidePercentSymbol, absorbIcon, fakeHP)
-    if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, htx.fakeMax, htx.delimiter, false, nil, hidePercentSymbol, htx.short, htx.fakeAbsorb, absorbIcon == true) end
+    if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, htx.fakeMax, htx.delimiter, false, nil, hidePercentSymbol, htx.short,
+        htx.fakeAbsorb, absorbIcon == true) end
     return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
 end
 local function GroupHealthTextColor(htx, fakeHP)
@@ -1813,7 +1814,8 @@ function Stage.PrepareAuraLanes(st)
     local LayoutHandle, RuntimeAuraAnchor = helpers.LayoutHandle, helpers.RuntimeAuraAnchor
     local LayoutAuraPreviewBorder, PreviewAuraState = helpers.LayoutAuraPreviewBorder, helpers.PreviewAuraState
     local RuntimeAuraGridShape = helpers.RuntimeAuraGridShape
-    local auraDynamicScale = (runtimeAuras and runtimeAuras.dynamicScaleValue) or (gf and gf.GetPreviewDynamicScale and gf.GetPreviewDynamicScale(conf, kind)) or 1
+    local auraDynamicScale = (runtimeAuras and runtimeAuras.dynamicScaleValue) or (gf and gf.GetPreviewDynamicScale
+        and gf.GetPreviewDynamicScale(conf, kind)) or 1
     local NormalizeDispelBorderMode = _G.MSUF_NormalizeLegacyDispelBorderMode
     local LayoutAuraPreviewSwipe, LayoutAuraDurationBar = GroupAuraPreviewSwipe, GroupAuraDurationBar
     st.AddIconPool, st.AuraGrowth, st.ConfigToOffset, st.GF_AURA_MOCK_ICON_IDS, st.GF_PREVIEW_ANCHOR_FRAC, st.Int, st.LayoutAuraDurationBar, st.LayoutAuraPreviewBorder = AddIconPool, AuraGrowth, ConfigToOffset, GF_AURA_MOCK_ICON_IDS, GF_PREVIEW_ANCHOR_FRAC, Int, LayoutAuraDurationBar, LayoutAuraPreviewBorder
@@ -1871,7 +1873,8 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
         local cooldownY = ConfigToOffset(cfg.cooldownY or 0, textScale)
         local stackX = ConfigToOffset(cfg.stackX or 0, textScale)
         local stackY = ConfigToOffset(cfg.stackY or 0, textScale)
-        local dispelMode = groupKey == "debuff" and NormalizeDispelBorderMode(cfg.dispelBorderMode, cfg.showDispelBorder == true or cfg.showDispelSymbol == true) or "OFF"
+        local dispelMode = groupKey == "debuff" and NormalizeDispelBorderMode(cfg.dispelBorderMode, cfg.showDispelBorder == true
+            or cfg.showDispelSymbol == true) or "OFF"
         local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
         local gv = AuraGrowth(growth)
         local centered = runtimeLane ~= true and gv.centered == true
@@ -2804,7 +2807,8 @@ function Stage.LayoutMockFrame(st, env)
         local ClampZoom, H, M, ResolveDefaultZoomLock, Round, ScaleValue, UpdateZoomControls, WHITE8X8 = env.ClampZoom, env.H, env.M, env.ResolveDefaultZoomLock, env.Round, env.ScaleValue, env.UpdateZoomControls, env.WHITE8X8
         local T = env.T
         local max, min, width = env.max, env.min, env.width
-        T.SetTranslatedText(self._title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
+        T.SetTranslatedText(self._title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview"))
+            or "Group Frame Preview", label))
         local stageW = self._stage:GetWidth() or (width - 98)
         local stageH = self._stage:GetHeight() or 218
         if stageW <= 1 then stageW = math.max(260, width - 98) end
@@ -2980,8 +2984,10 @@ function Stage.RenderHealthBars(st, env)
         mock._msufGFPreviewPowerBorderG = runtimePower and runtimePower.borderG or bg
         mock._msufGFPreviewPowerBorderB = runtimePower and runtimePower.borderB or bb
         mock._msufGFPreviewPowerBorderA = runtimePower and runtimePower.borderA or mock._msufGFPreviewBorderA
-        local barTex = runtimeHealth.texture or (runtimeSpec and runtimeSpec.texture) or (gf and gf.ResolveBarTexture and gf.ResolveBarTexture(kind)) or ResolvePreviewStatusbarTexture(conf, "barTexture")
-        local bgTex = runtimeHealth.backgroundTexture or (runtimeSpec and runtimeSpec.backgroundTexture) or (gf and gf.ResolveBarBgTexture and gf.ResolveBarBgTexture(kind)) or WHITE8X8
+        local barTex = runtimeHealth.texture or (runtimeSpec and runtimeSpec.texture) or (gf and gf.ResolveBarTexture and gf.ResolveBarTexture(kind))
+            or ResolvePreviewStatusbarTexture(conf, "barTexture")
+        local bgTex = runtimeHealth.backgroundTexture or (runtimeSpec and runtimeSpec.backgroundTexture)
+            or (gf and gf.ResolveBarBgTexture and gf.ResolveBarBgTexture(kind)) or WHITE8X8
         mock._health:SetStatusBarTexture(barTex)
         if st.reason ~= "GROUP_PREVIEW_ANIMATE" then
             Render.ApplyNameBar(mock, conf, (runtimeSpec and runtimeSpec.group) or Render.NO_GROUP_VISUAL,
@@ -3086,7 +3092,8 @@ function Stage.RenderHealthBars(st, env)
             st.healPredFollows = true
         else
             mock._healPred:SetAllPoints(mock._health)
-            if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill((healPredMode == 1) and false or ((healPredMode == 5) and not hpReverse or true)) end
+            if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill((healPredMode == 1) and false
+                or ((healPredMode == 5) and not hpReverse or true)) end
             mock._healPred:SetValue(healPct)
         end
         mock._healPred:SetShown(healPredShown)
@@ -3098,7 +3105,8 @@ function Stage.RenderHealthBars(st, env)
             runtimePrediction.absorbB or (gen and gen.absorbBarColorB) or 1,
             (runtimePrediction.absorbA or (gen and gen.absorbBarOpacity) or (gen and gen.absorbBarColorA) or 0.75) * predictionFillAlpha
         )
-        local absorbMode = tonumber(runtimePrediction.absorbAnchorMode) or tonumber((conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
+        local absorbMode = tonumber(runtimePrediction.absorbAnchorMode) or tonumber((conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode)
+            or (gen and gen.absorbAnchorMode)) or 2
         if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
         local absorbShown
         if runtimeSpec then
@@ -3114,7 +3122,8 @@ function Stage.RenderHealthBars(st, env)
             end
         end
         local absorbAnchorTex = hpTex or mock._health
-        if healPredShown and (healPredMode == 3 or healPredMode == 4) and mock._healPred.GetStatusBarTexture then absorbAnchorTex = mock._healPred:GetStatusBarTexture() or absorbAnchorTex end
+        if healPredShown and (healPredMode == 3 or healPredMode == 4)
+            and mock._healPred.GetStatusBarTexture then absorbAnchorTex = mock._healPred:GetStatusBarTexture() or absorbAnchorTex end
         local absorbFollows = (absorbMode == 3 or absorbMode == 4) and absorbAnchorTex
         if absorbFollows then
             if hpReverse then
@@ -3301,23 +3310,28 @@ function Stage.RenderChrome(st, env)
         PaintGroupPreviewDispelSymbol(scene)
         local textBaseLevel = 0
         if mock._nameTextLayer then
-            if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
+            if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock
+                and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
             mock._nameTextLayer:ClearAllPoints()
             mock._nameTextLayer:SetAllPoints(mock)
-            SetPreviewFrameLevel(mock._nameTextLayer, Layers.ElementLevel and PreviewElementLevel(mock, Layers, runtimeText.nameLayer or conf.nameTextLayer, 5, 8)
+            SetPreviewFrameLevel(mock._nameTextLayer, Layers.ElementLevel and PreviewElementLevel(mock, Layers, runtimeText.nameLayer
+                or conf.nameTextLayer, 5, 8)
                 or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + ClampLayer(runtimeText.nameLayer or conf.nameTextLayer, 5) + 8))
         end
         if mock._healthTextLayer then
-            if mock._healthTextLayer.GetParent and mock._healthTextLayer:GetParent() ~= mock and mock._healthTextLayer.SetParent then mock._healthTextLayer:SetParent(mock) end
+            if mock._healthTextLayer.GetParent and mock._healthTextLayer:GetParent() ~= mock
+                and mock._healthTextLayer.SetParent then mock._healthTextLayer:SetParent(mock) end
             mock._healthTextLayer:ClearAllPoints()
             mock._healthTextLayer:SetAllPoints(mock)
-            SetPreviewFrameLevel(mock._healthTextLayer, Layers.ElementLevel and PreviewElementLevel(mock, Layers, runtimeText.healthLayer or conf.textLayer, 5, 8)
+            SetPreviewFrameLevel(mock._healthTextLayer, Layers.ElementLevel and PreviewElementLevel(mock, Layers, runtimeText.healthLayer
+                or conf.textLayer, 5, 8)
                 or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + ClampLayer(runtimeText.healthLayer or conf.textLayer, 5) + 8))
         end
         if mock._powerTextLayer then
             mock._powerTextLayer:ClearAllPoints()
             mock._powerTextLayer:SetAllPoints(mock)
-            SetPreviewFrameLevel(mock._powerTextLayer, Layers.ElementLevel and PreviewElementLevel(mock, Layers, runtimeText.powerLayer or conf.powerTextLayer, 2, 8)
+            SetPreviewFrameLevel(mock._powerTextLayer, Layers.ElementLevel and PreviewElementLevel(mock, Layers, runtimeText.powerLayer
+                or conf.powerTextLayer, 2, 8)
                 or (((mock.GetFrameLevel and mock:GetFrameLevel()) or 1) + ClampLayer(runtimeText.powerLayer or conf.powerTextLayer, 2) + 8))
         end
         st.textBaseLevel = textBaseLevel
@@ -3369,7 +3383,8 @@ function Stage.RenderNameText(st, env)
         local runtimeSpec, runtimeText, scene, self = st.runtimeSpec, st.runtimeText, st.scene, st.self
         local ConfigToOffset, ScaleValue, T, max = env.ConfigToOffset, env.ScaleValue, env.T, env.max
         local showText = LayerOn("text")
-        local fontPath = (runtimeSpec and runtimeSpec.font) or (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
+        local fontPath = (runtimeSpec and runtimeSpec.font) or (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind))
+            or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
         local fontFlags = (runtimeSpec and runtimeSpec.fontFlags) or (gf and gf.ResolveFontFlags and gf.ResolveFontFlags(kind)) or "OUTLINE"
         local fontShadow = true
         local fontShadowAlpha = tonumber(runtimeSpec and runtimeSpec.fontShadowAlpha) or 1
@@ -3451,9 +3466,11 @@ function Stage.RenderHealthText(st, env)
         -- mirroring the live engine's apply-time swap.
         local hpRev = (runtimeSpec and runtimeText.healthReverse == true)
             or ((not runtimeSpec) and conf.hpTextReverse == true)
-        local hpLeftSize = max(7, ScaleValue(runtimeText[hpRev and "healthRightFontSize" or "healthLeftFontSize"] or conf[hpRev and "hpTextRightFontSize" or "hpTextLeftFontSize"] or hpSize, previewScale, 6))
+        local hpLeftSize = max(7, ScaleValue(runtimeText[hpRev and "healthRightFontSize" or "healthLeftFontSize"]
+            or conf[hpRev and "hpTextRightFontSize" or "hpTextLeftFontSize"] or hpSize, previewScale, 6))
         local hpCenterSize = max(7, ScaleValue(runtimeText.healthCenterFontSize or conf.hpTextCenterFontSize or hpSize, previewScale, 6))
-        local hpRightSize = max(7, ScaleValue(runtimeText[hpRev and "healthLeftFontSize" or "healthRightFontSize"] or conf[hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize"] or hpSize, previewScale, 6))
+        local hpRightSize = max(7, ScaleValue(runtimeText[hpRev and "healthLeftFontSize" or "healthRightFontSize"]
+            or conf[hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize"] or hpSize, previewScale, 6))
         local hpTextOn = showText and ((runtimeSpec and runtimeSpec.showHealthText == true) or (not runtimeSpec and conf.showHPText ~= false))
         local hpLeftMode, hpCenterMode, hpRightMode
         if runtimeSpec then
@@ -3461,7 +3478,8 @@ function Stage.RenderHealthText(st, env)
         elseif gf and gf.ResolveHealthTextSlots then
             hpLeftMode, hpCenterMode, hpRightMode = gf.ResolveHealthTextSlots(conf)
         else
-            hpLeftMode, hpCenterMode, hpRightMode = runtimeText.healthLeft or conf.textLeft or "NONE", runtimeText.healthCenter or conf.textCenter or "NONE", runtimeText.healthRight or conf.textRight or "NONE"
+            hpLeftMode, hpCenterMode, hpRightMode = runtimeText.healthLeft or conf.textLeft or "NONE", runtimeText.healthCenter or conf.textCenter
+                or "NONE", runtimeText.healthRight or conf.textRight or "NONE"
         end
         local function GlobalHidePercentSymbol()
             local db = M.EnsureDB and M.EnsureDB()
@@ -3527,16 +3545,20 @@ function Stage.RenderHealthText(st, env)
             runtimeText.healthReverse == true and "healthLeftAbsorbIcon" or "healthRightAbsorbIcon",
             conf.hpTextReverse == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon")
         PaintPreviewText(mock._hpLeftFS, hpLeftSize, hpLeftMode, "LEFT", "LEFT",
-            pad4 + ConfigToOffset(runtimeText[hpRev and "healthRightX" or "healthLeftX"] or ((conf.hpOffsetX or 0) + (conf[hpRev and "hpTextRightOffsetX" or "hpTextLeftOffsetX"] or 0)), previewScale),
-            ConfigToOffset(runtimeText[hpRev and "healthRightY" or "healthLeftY"] or ((conf.hpOffsetY or 0) + (conf[hpRev and "hpTextRightOffsetY" or "hpTextLeftOffsetY"] or 0) + baselineOffset), previewScale),
+            pad4 + ConfigToOffset(runtimeText[hpRev and "healthRightX" or "healthLeftX"] or ((conf.hpOffsetX
+                or 0) + (conf[hpRev and "hpTextRightOffsetX" or "hpTextLeftOffsetX"] or 0)), previewScale),
+            ConfigToOffset(runtimeText[hpRev and "healthRightY" or "healthLeftY"] or ((conf.hpOffsetY
+                or 0) + (conf[hpRev and "hpTextRightOffsetY" or "hpTextLeftOffsetY"] or 0) + baselineOffset), previewScale),
             "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpLeftMode, hpLeftHidePercent, htx.leftIcon, fakeHP))
         PaintPreviewText(mock._hpCenterFS, hpCenterSize, hpCenterMode, "CENTER", "CENTER",
             ConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0) + baselineOffset), previewScale),
             "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpCenterMode, hpCenterHidePercent, htx.centerIcon, fakeHP))
         PaintPreviewText(mock._hpRightFS, hpRightSize, hpRightMode, "RIGHT", "RIGHT",
-            -pad4 + ConfigToOffset(runtimeText[hpRev and "healthLeftX" or "healthRightX"] or ((conf.hpOffsetX or 0) + (conf[hpRev and "hpTextLeftOffsetX" or "hpTextRightOffsetX"] or 0)), previewScale),
-            ConfigToOffset(runtimeText[hpRev and "healthLeftY" or "healthRightY"] or ((conf.hpOffsetY or 0) + (conf[hpRev and "hpTextLeftOffsetY" or "hpTextRightOffsetY"] or 0) + baselineOffset), previewScale),
+            -pad4 + ConfigToOffset(runtimeText[hpRev and "healthLeftX" or "healthRightX"] or ((conf.hpOffsetX
+                or 0) + (conf[hpRev and "hpTextLeftOffsetX" or "hpTextRightOffsetX"] or 0)), previewScale),
+            ConfigToOffset(runtimeText[hpRev and "healthLeftY" or "healthRightY"] or ((conf.hpOffsetY
+                or 0) + (conf[hpRev and "hpTextLeftOffsetY" or "hpTextRightOffsetY"] or 0) + baselineOffset), previewScale),
             "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpRightMode, hpRightHidePercent, htx.rightIcon, fakeHP))
         st.SlotHidePercentSymbol, st.pad4 = SlotHidePercentSymbol, pad4
 end

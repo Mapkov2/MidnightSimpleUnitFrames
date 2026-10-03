@@ -897,7 +897,8 @@ function H.StylePreviewPillButton(btn, T, opts)
     local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
     local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
     local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
-    local bgIdle, bgHover, bgActive, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2], raised[3], 0.98 }, { raised[1], raised[2], raised[3], 1.00 }
+    local bgIdle, bgHover, bgActive, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2],
+        raised[3], 0.98 }, { raised[1], raised[2], raised[3], 1.00 }
     local brIdle, brHover, brActive = { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
     local bgScratch = { 0, 0, 0, 1 }
     function btn:MSUF2RefreshPreviewPill(active, hover, down)
@@ -916,14 +917,16 @@ function H.StylePreviewPillButton(btn, T, opts)
                 self._msuf2PreviewPillFill:SetVertexColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
             end
             if self._msuf2PreviewPillEdge then
-                self._msuf2PreviewPillEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1), min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
+                self._msuf2PreviewPillEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1),
+                    min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
             end
         elseif self.SetBackdropColor then
             self:SetBackdropColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
             self:SetBackdropBorderColor(br[1], br[2], br[3], (br[4] or 1) * alpha)
         end
         if self[fontField] and self[fontField].SetTextColor then
-            self[fontField]:SetTextColor(active and 0.06 or (hover and 0.88 or 0.78), active and 0.95 or (hover and 0.94 or 0.84), active and 1.00 or 0.96, alpha)
+            self[fontField]:SetTextColor(active and 0.06 or (hover and 0.88 or 0.78), active and 0.95 or (hover and 0.94 or 0.84), active
+                and 1.00 or 0.96, alpha)
         end
     end
     btn:SetScript("OnEnter", function(self)
@@ -970,13 +973,15 @@ function H.ShowPreviewHandleContext(handle, opts)
         popup:SetSize(176, 76)
         popup:SetFrameStrata("FULLSCREEN_DIALOG")
         popup:EnableMouse(true)
-        local title = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+        local title = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 })
+            or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -8)
         title:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
         title:SetJustifyH("LEFT")
         popup._title = title
         local function MakeButton(label, y)
-            local btn = W and W.TopButton and W.TopButton(popup, label, 152, 24) or (T and T.Button and T.Button(popup, label, 152, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
+            local btn = W and W.TopButton and W.TopButton(popup, label, 152, 24) or (T and T.Button and T.Button(popup, label, 152, 24))
+                or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
             btn:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, y)
             if not btn.GetText then btn:SetText(tr(label)) end
             return btn
@@ -1027,7 +1032,8 @@ function H.ShowPreviewHandleContext(handle, opts)
     end
     popup._handle = handle
     popup._openSettings = openSettings
-    if popup._title and popup._title.SetText then SetShownText(popup._title, tr(opts.title or (handle._label or handle._previewText or handle._key or "Preview Element"))) end
+    if popup._title and popup._title.SetText then SetShownText(popup._title, tr(opts.title
+        or (handle._label or handle._previewText or handle._key or "Preview Element"))) end
     popup._open:SetScript("OnClick", function(self)
         local p = self:GetParent()
         local h = p and p._handle
@@ -1497,7 +1503,8 @@ function H.ShowPreviewControlsHelp(anchor, opts)
             if fs.SetMaxLines then fs:SetMaxLines(1) end
             popup._lines[i] = fs
         end
-        local close = W and W.TopButton and W.TopButton(popup, "Got it", 84, 24) or (T and T.Button and T.Button(popup, "Got it", 84, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
+        local close = W and W.TopButton and W.TopButton(popup, "Got it", 84, 24) or (T and T.Button and T.Button(popup, "Got it", 84, 24))
+            or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
         close:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -12, 12)
         if not close.GetText then close:SetText(tr("Got it")) end
         close:SetScript("OnClick", function(self)
@@ -1572,7 +1579,8 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
             hint:SetBackdropBorderColor(0.10, 0.32, 0.54, 0.92)
         end
         hint:EnableMouse(true)
-        local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", (T.colors and T.colors.text) or { 0.86, 0.90, 0.98, 1 }) or PixelLayoutRegion(hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+        local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", (T.colors and T.colors.text) or { 0.86, 0.90, 0.98, 1 })
+            or PixelLayoutRegion(hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         text:SetPoint("TOPLEFT", hint, "TOPLEFT", 12, -8)
         text:SetPoint("RIGHT", hint, "RIGHT", -60, 0)
         text:SetJustifyH("LEFT")
@@ -1821,7 +1829,8 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         if box._detachedCastPreview and box.mock.cast and box.mock.cast:IsShown() then
             box.mock.cast:ClearAllPoints()
-            box.mock.cast:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._detachedCastBaseOffsetX) or 0) + panX, (tonumber(box._detachedCastBaseOffsetY) or 0) + panY)
+            box.mock.cast:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._detachedCastBaseOffsetX) or 0) + panX,
+                (tonumber(box._detachedCastBaseOffsetY) or 0) + panY)
         end
         local point, relative, relativePoint, actualX, actualY = box.mock:GetPoint(1)
         return point == "CENTER" and relative == box.canvas and relativePoint == "CENTER"
@@ -1985,7 +1994,8 @@ function H.InstallZoomPan(ZoomPan, opts)
         local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
         local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
         local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
-        local bgIdle, bgHover, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2], raised[3], 0.98 }
+        local bgIdle, bgHover, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1],
+            raised[2], raised[3], 0.98 }
         local brIdle, brHover, brDown = { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
         local bgScratch = { 0, 0, 0, 1 }
         local function ApplyButtonVisual(self, hover, down)
@@ -2002,7 +2012,8 @@ function H.InstallZoomPan(ZoomPan, opts)
                     end
                 end
                 if self._msuf2PreviewZoomEdge then
-                    self._msuf2PreviewZoomEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1), min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
+                    self._msuf2PreviewZoomEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1),
+                        min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
                 end
                 if self[fontField] and self[fontField].SetTextColor then
                     self[fontField]:SetTextColor(hover and 0.88 or 0.78, hover and 0.94 or 0.84, 1.00, alpha)
@@ -2637,7 +2648,8 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
             self.bg:SetColorTexture(hover[1], hover[2], hover[3], available and 0.42 or 0.18)
             self.bar:SetColorTexture(c[1], c[2], c[3], available and 0.90 or 0.36)
         else
-            self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.026, (available and on) and c[2] * 0.18 or 0.070, (available and on) and c[3] * 0.18 or 0.110, (available and on) and 0.74 or 0.58)
+            self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.026, (available and on) and c[2] * 0.18 or 0.070, (available and on) and c[3] * 0.18
+                or 0.110, (available and on) and 0.74 or 0.58)
             self.bar:SetColorTexture(c[1], c[2], c[3], available and 1.0 or 0.48)
         end
         self.fs:SetTextColor(0.90, 0.92, 1, 1)

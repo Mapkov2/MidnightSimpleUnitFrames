@@ -431,7 +431,8 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
         end
         local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -194,
             function()
-                if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
+                if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0))
+                    or 0) > 0) and true or false end
                 return SharedNameShorteningEnabled()
             end,
             function(v)
@@ -821,7 +822,8 @@ local function BuildFonts(ctx)
             nil,
             path)
     end
-    local function BuildNameShorteningControls(parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide, getChars, setChars, getNoEllipsis, setNoEllipsis, formatChars)
+    local function BuildNameShorteningControls(parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide, getChars, setChars,
+        getNoEllipsis, setNoEllipsis, formatChars)
         local controls = {}
         controls.shorten = W.Toggle(parent, label)
         M.BindBoolWidget(ctx, controls.shorten, getEnabled, setEnabled, Meta("name_shortening.enabled"))
@@ -843,8 +845,10 @@ local function BuildFonts(ctx)
         if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
         if controls.scopeNotice.SetHeight then controls.scopeNotice:SetHeight(44) end
         if M.AddControlTooltip then
-            M.AddControlTooltip(controls.side, "Truncation style", "Chooses which side of a long name is cut. Keep end drops the front, which helps when many names start the same way.", { hook = true })
-            M.AddControlTooltip(controls.chars, "Max name length", "About how many letters of a name stay visible before it is cut. Names with wide letters may show a little less.", { hook = true })
+            M.AddControlTooltip(controls.side, "Truncation style",
+                "Chooses which side of a long name is cut. Keep end drops the front, which helps when many names start the same way.", { hook = true })
+            M.AddControlTooltip(controls.chars, "Max name length",
+                "About how many letters of a name stay visible before it is cut. Names with wide letters may show a little less.", { hook = true })
             M.AddControlTooltip(controls.noEllipsis, "No Ellipsis (truncate without ..)", "Shortened names end at the cut without the .. marker. Only names that are actually too long are affected.", { hook = true, labelHit = true })
         end
         return controls
@@ -865,12 +869,18 @@ local function BuildFonts(ctx)
     local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor, powerColor }
     if M.AddControlTooltip then
         local tip = { hook = true }
-        M.AddControlTooltip(outline, "Outline", "Draws a dark edge around each letter for readability. Thick Outline helps on bright or busy bars; Slug rendering allows only None or Outline.", tip)
-        M.AddControlTooltip(shadow, "Text shadow", "Adds a black drop shadow below and to the right of the text so it stands out from the bar. Unavailable while Slug rendering is active.", tip)
-        M.AddControlTooltip(baseline, "Baseline", "Shifts name, health and power text up (+) or down (-) by up to 4 px on top of their own offsets. Handy when a font sits too high or low.", tip)
-        M.AddControlTooltip(nameColor, "Player Name Color", "Class Color tints player character names only; NPC names follow NPC / Boss Name Color. Custom Color gives every name one color.", tip)
+        M.AddControlTooltip(outline, "Outline",
+            "Draws a dark edge around each letter for readability. Thick Outline helps on bright or busy bars; Slug rendering allows only None or Outline.",
+            tip)
+        M.AddControlTooltip(shadow, "Text shadow",
+            "Adds a black drop shadow below and to the right of the text so it stands out from the bar. Unavailable while Slug rendering is active.", tip)
+        M.AddControlTooltip(baseline, "Baseline",
+            "Shifts name, health and power text up (+) or down (-) by up to 4 px on top of their own offsets. Handy when a font sits too high or low.", tip)
+        M.AddControlTooltip(nameColor, "Player Name Color",
+            "Class Color tints player character names only; NPC names follow NPC / Boss Name Color. Custom Color gives every name one color.", tip)
         M.AddControlTooltip(npcColor, "NPC / Boss Name Color", "Colors names of non-player units. NPC / Reaction uses hostile, neutral and friendly colors; Class Color uses the NPC's class and falls back to reaction.", tip)
-        M.AddControlTooltip(healthColor, "HP Text Color", "Health Gradient colors the health text by current health, using the health bar's gradient colors. Class Color uses the unit's class color.", tip)
+        M.AddControlTooltip(healthColor, "HP Text Color",
+            "Health Gradient colors the health text by current health, using the health bar's gradient colors. Class Color uses the unit's class color.", tip)
     end
     -- Hover reasons: a scope without its own settings locks this page; the
     -- shadow sliders also wait for Text shadow (Slug is explained on hover).

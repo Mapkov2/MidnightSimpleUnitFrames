@@ -478,7 +478,8 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     local knobSize = 16
     local knobPad = 2
     local switchTrackTexture = (T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
-    local switchKnobTexture = (T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
+    local switchKnobTexture = (T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse)
+        or "Interface\\Buttons\\WHITE8X8"
     local btn = PixelLayoutRegion(CreateFrame("CheckButton", nil, section))
     btn._msuf2ControlKind = "toggle"
     btn:SetPoint("TOPLEFT", x or 16, y or -40)

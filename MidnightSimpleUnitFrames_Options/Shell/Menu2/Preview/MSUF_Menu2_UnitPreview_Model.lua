@@ -45,21 +45,34 @@ local UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", 
 local UNIT_SET = {}
 for i = 1, #UNIT_KEYS do UNIT_SET[UNIT_KEYS[i]] = true end
 local CONTROL_CHILD_KEYS, CONTROL_NAME_SUFFIXES = M.WordList "minusButton plusButton Button _msufPeelButton", M.WordList "Button Text Low High"
-local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", boss = "Boss Frames", arena = "Arena Frames", pet = "Pet", pettarget = "Pet Target" }
+local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus",
+    boss = "Boss Frames", arena = "Arena Frames", pet = "Pet", pettarget = "Pet Target" }
 local UNIT_DATA = {
     -- Stylized fallback data. The preview prefers a live snapshot of the real
     -- unit (see LiveUnitData below) so it mirrors the frame's current state;
     -- this table backfills any unit or field that is unavailable (unit does
     -- not exist, loading screens, secret-restricted values).
-    player = { name = "MIDNIGHT", class = "ROGUE", className = "Rogue", race = "Night Elf", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Stealth" },
-    target = { name = "Astral Warden", class = "MAGE", className = "Mage", race = "Construct", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true, classification = "elite", reactionKind = "neutral", npcKind = "npcRegular", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
-    targettarget = { name = "Moonlit Tank", class = "WARRIOR", className = "Warrior", race = "Human", hp = 0.88, power = 0.36, powerToken = "RAGE", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Warrior_DefensiveStance" },
-    pettarget = { name = "Hunted Foe", class = "WARRIOR", className = "Warrior", race = "Orc", hp = 0.57, power = 0.24, powerToken = "RAGE", level = "81", elite = false, reactionKind = "enemy", npcKind = "npcMelee", portraitTexture = "Interface\\ICONS\\Ability_Warrior_Charge" },
-    focustarget = { name = "Marked Add", class = "WARRIOR", className = "Warrior", race = "Orc", hp = 0.57, power = 0.24, powerToken = "RAGE", level = "81", elite = false, reactionKind = "enemy", npcKind = "npcMelee", portraitTexture = "Interface\\ICONS\\Ability_Warrior_Charge" },
-    focus = { name = "Voidcaller", class = "WARLOCK", className = "Warlock", race = "Orc", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81", elite = true, classification = "rareelite", reactionKind = "enemy", npcKind = "npcCaster", portraitTexture = "Interface\\ICONS\\Spell_Shadow_Metamorphosis" },
-    boss = { name = "Boss Preview", class = "DEATHKNIGHT", className = "Death Knight", race = "Undead", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, classification = "worldboss", reactionKind = "enemy", npcKind = "npcBoss", portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
-    pet = { name = "Companion", class = "HUNTER", className = "Hunter", race = "Beast", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
-    arena = { name = "Arena Opponent", class = "MAGE", className = "Mage", race = "Human", hp = 0.65, power = 0.80, powerToken = "MANA", level = "80", elite = false, isPlayer = true, reactionKind = "enemy", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
+    player = { name = "MIDNIGHT", class = "ROGUE", className = "Rogue", race = "Night Elf", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80",
+        elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Stealth" },
+    target = { name = "Astral Warden", class = "MAGE", className = "Mage", race = "Construct", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82",
+        elite = true, classification = "elite", reactionKind = "neutral", npcKind = "npcRegular",
+        portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
+    targettarget = { name = "Moonlit Tank", class = "WARRIOR", className = "Warrior", race = "Human", hp = 0.88, power = 0.36, powerToken = "RAGE",
+        level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Warrior_DefensiveStance" },
+    pettarget = { name = "Hunted Foe", class = "WARRIOR", className = "Warrior", race = "Orc", hp = 0.57, power = 0.24, powerToken = "RAGE", level = "81",
+        elite = false, reactionKind = "enemy", npcKind = "npcMelee", portraitTexture = "Interface\\ICONS\\Ability_Warrior_Charge" },
+    focustarget = { name = "Marked Add", class = "WARRIOR", className = "Warrior", race = "Orc", hp = 0.57, power = 0.24, powerToken = "RAGE", level = "81",
+        elite = false, reactionKind = "enemy", npcKind = "npcMelee", portraitTexture = "Interface\\ICONS\\Ability_Warrior_Charge" },
+    focus = { name = "Voidcaller", class = "WARLOCK", className = "Warlock", race = "Orc", hp = 0.63, power = 0.81, powerToken = "MANA", level = "81",
+        elite = true, classification = "rareelite", reactionKind = "enemy", npcKind = "npcCaster",
+        portraitTexture = "Interface\\ICONS\\Spell_Shadow_Metamorphosis" },
+    boss = { name = "Boss Preview", class = "DEATHKNIGHT", className = "Death Knight", race = "Undead", hp = 0.55, power = 0.35, powerToken = "MANA",
+        level = "??", elite = true, classification = "worldboss", reactionKind = "enemy", npcKind = "npcBoss",
+        portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
+    pet = { name = "Companion", class = "HUNTER", className = "Hunter", race = "Beast", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80",
+        elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
+    arena = { name = "Arena Opponent", class = "MAGE", className = "Mage", race = "Human", hp = 0.65, power = 0.80, powerToken = "MANA", level = "80",
+        elite = false, isPlayer = true, reactionKind = "enemy", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
 }
 local POWER_BAR_MASTER_KEYS = {
     player = "showPlayerPowerBar",
@@ -159,7 +172,8 @@ local function CanonKey(key)
     return "player"
 end
 local IsSecretValue = _G.issecretvalue
-local LIVE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", arena = "arena1", pet = "pet", pettarget = "pettarget" }
+local LIVE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1",
+    arena = "arena1", pet = "pet", pettarget = "pettarget" }
 local liveUnitDataCache = {}
 local function LiveNumber(value)
     if value == nil or IsSecretValue(value) == true then return nil end

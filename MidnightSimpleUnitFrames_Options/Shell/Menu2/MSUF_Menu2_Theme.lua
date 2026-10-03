@@ -863,7 +863,8 @@ function T.PlayMotion(frame, motion, opts)
     if scaleFrom == nil then scaleFrom = profile.scaleFrom end
     local scaleTo = opts.scaleTo
     if scaleTo == nil then scaleTo = profile.scaleTo end
-    if scaleFrom ~= nil and scaleTo ~= nil then return T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleTo, opts.onFinished, smoothing, opts.scaleOrigin or profile.scaleOrigin) end
+    if scaleFrom ~= nil and scaleTo ~= nil then return T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleTo, opts.onFinished, smoothing,
+        opts.scaleOrigin or profile.scaleOrigin) end
     return T.PlayAlpha(frame, fromAlpha, toAlpha, duration, opts.onFinished, smoothing)
 end
 local function IsDescendantOf(frame, ancestor)
@@ -1015,7 +1016,8 @@ local function PaintGlassLayer(frame, key, subLevel, color, texture, inset, blen
     if color then
         PlaceGlassFill(tex, frame, inset)
         tex:SetTexture(texture or WHITE8)
-        if texCoord and tex.SetTexCoord then tex:SetTexCoord(texCoord[1], texCoord[2], texCoord[3], texCoord[4], texCoord[5], texCoord[6], texCoord[7], texCoord[8]) end
+        if texCoord and tex.SetTexCoord then tex:SetTexCoord(texCoord[1], texCoord[2], texCoord[3], texCoord[4], texCoord[5], texCoord[6],
+            texCoord[7], texCoord[8]) end
         if tex.SetVertexColor then tex:SetVertexColor(color[1], color[2], color[3], color[4] or 1) end
         if tex.SetBlendMode then tex:SetBlendMode(blend or "BLEND") end
         if tex.Show then tex:Show() end
@@ -1708,7 +1710,8 @@ local function IsTextureRegion(region)
     if region.IsObjectType then return region:IsObjectType("Texture") and true or false end
     return region.GetObjectType and region:GetObjectType() == "Texture"
 end
-local SLIDER_STYLED_TEXTURE_KEYS = { "_msufTrack", "_msufTrackTop", "_msufTrackBottom", "_msufFill", "_msufFillGlow", "_msuf2Thumb", "_msufPeelTrack", "_msufPeelTrackFill" }
+local SLIDER_STYLED_TEXTURE_KEYS = { "_msufTrack", "_msufTrackTop", "_msufTrackBottom", "_msufFill", "_msufFillGlow", "_msuf2Thumb",
+    "_msufPeelTrack", "_msufPeelTrackFill" }
 local SLIDER_NATIVE_SUFFIXES = WL "Left Middle Right Text Low High"
 local function HideNativeSliderParts(slider)
     if not slider then return end
@@ -1789,7 +1792,8 @@ function T.StyleSlider(slider)
     slider.__msufPeelSliderSkinned = true
     slider._msuf2SliderStyled = true
     if slider.SetOrientation then slider:SetOrientation("HORIZONTAL") end
-    if slider.SetThumbTexture and slider.GetThumbTexture and not slider:GetThumbTexture() then PixelLayoutRegion(slider, "SetThumbTexture", T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8") end
+    if slider.SetThumbTexture and slider.GetThumbTexture and not slider:GetThumbTexture() then PixelLayoutRegion(slider, "SetThumbTexture", T.media.sliderThumb
+        or "Interface\\Buttons\\WHITE8X8") end
     HideNativeSliderParts(slider)
     if not slider._msufTrack and slider.CreateTexture then
         local track = SliderTexture(slider, "_msufTrack", "BACKGROUND", 1, 8)
@@ -1969,7 +1973,8 @@ function T.Panel(parent, name, bg, border)
     if T.ApplyGradient then T.ApplyGradient(f, DynamicGradientFromColor(bg or T.colors.panel), { key = "_msuf2MaterialGradient" }) end
     return f
 end
-local EDIT_BOX_EDGE_SPECS = { { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 }, { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 }, { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 } }
+local EDIT_BOX_EDGE_SPECS = { { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 },
+    { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 }, { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 } }
 local EDIT_BOX_NATIVE_SUFFIXES = WL "Left Right Middle Mid"
 local function HideNativeEditBoxArt(editBox)
     local name = editBox.GetName and editBox:GetName()
@@ -2059,11 +2064,14 @@ function T.SkinEditBox(editBox)
     T.StyleFontString(fs, T.colors.text, 1)
     editBox:HookScript("OnEditFocusGained", function(self)
         PaintEditBox(self, true)
-        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill and not (MenuSkin and MenuSkin.Owns(self)) then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95) end
+        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill and not (MenuSkin
+            and MenuSkin.Owns(self)) then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95) end
     end)
     editBox:HookScript("OnEditFocusLost", function(self)
         PaintEditBox(self, false)
-        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill and not (MenuSkin and MenuSkin.Owns(self)) then self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1) end
+        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill and not (MenuSkin
+            and MenuSkin.Owns(self)) then self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3],
+            T.colors.borderSoft[4] or 1) end
     end)
     editBox:HookScript("OnEnable", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
     editBox:HookScript("OnDisable", function(self) PaintEditBox(self, false) end)
@@ -2749,7 +2757,8 @@ end
 function T.SkinDangerButton(btn) return T.ApplyButtonRole(btn, "danger") end
 function T.SkinPrimaryButton(btn) return T.ApplyButtonRole(btn, "primary") end
 function T.SkinSuccessButton(btn) return T.ApplyButtonRole(btn, "success") end
-local BUTTON_ROLE_VARIANTS = { primary = "primary", destructive = "danger", danger = "danger", delete = "danger", reset = "danger", success = "success", confirm = "success" }
+local BUTTON_ROLE_VARIANTS = { primary = "primary", destructive = "danger", danger = "danger", delete = "danger", reset = "danger",
+    success = "success", confirm = "success" }
 function T.ApplyButtonRole(btn, role)
     if not btn then return btn end
     role = tostring(role or "normal")
@@ -2917,7 +2926,8 @@ function T.StyleScrollFrame(scroll, anchor)
     local thumbHover = T.colors.coreRaised
     local thumb = PixelBarTexture(PixelLayoutRegion(bar:CreateTexture(nil, "OVERLAY")))
     thumb:SetSize(5, 42)
-    ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 }, { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
+    ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 },
+        { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
     bar._msuf2Thumb = thumb
     local function Paint(hover)
         local shown = bar.IsShown and bar:IsShown()
@@ -2929,11 +2939,13 @@ function T.StyleScrollFrame(scroll, anchor)
                 { T.colors.coreShadow[1], T.colors.coreShadow[2], T.colors.coreShadow[3], a },
                 true)
         end
-        if trackEdge then trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], (hover and 0.62 or 0.38) * alpha) end
+        if trackEdge then trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3],
+            (hover and 0.62 or 0.38) * alpha) end
         if thumb and thumb.SetColorTexture then
             local c = hover and thumbHover or thumbBase
             local a = (hover and 0.90 or 0.68) * alpha
-            ApplyTextureGradient(thumb, "VERTICAL", { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
+            ApplyTextureGradient(thumb, "VERTICAL", { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a },
+                { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
         end
     end
     local rawSetVerticalScroll = scroll.SetVerticalScroll

@@ -179,7 +179,8 @@ local function BuildMisc(ctx)
             SetG("menuLocale", value, "MSUF2_LOCALE", { preview = false, applyAll = false, noRuntime = true })
         end,
         "language.selection")
-    local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
+    local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96,
+        languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
     -- Number abbreviation belongs here, not on the Fonts page: it is a locale
     -- formatting rule and it is global. The Fonts page is scope-aware, so a
@@ -219,7 +220,9 @@ local function BuildMisc(ctx)
         MSUF.GF.RefreshVisuals()
         RefreshAbbrevSample()
     end, Meta("setting.numberAbbrevStyle"))
-    local abbrevHelp = W.Text(language, "Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales.", 30, -186, languageW - 70, T.colors.muted)
+    local abbrevHelp = W.Text(language,
+        "Compact keeps 12.3K / 1.23M on every client language. Game default follows the client, which adds spaces or different letters on some locales.", 30,
+        -186, languageW - 70, T.colors.muted)
     if abbrevHelp.SetWordWrap then abbrevHelp:SetWordWrap(true) end
     abbrevSample = W.Text(language, "", 30, -232, languageW - 70, T.colors.text)
     RefreshAbbrevSample()
@@ -235,8 +238,11 @@ local function BuildMisc(ctx)
     local hasAppearancePresets = type(T.GetMenuAppearancePreset) == "function"
     local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", hasAppearancePresets and 508 or 380, true)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
-    BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil, nil, nil, MENU_WRITE_OPTS)
-    local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, menuBehaviorW - 70, T.colors.muted)
+    BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil,
+        nil, nil, MENU_WRITE_OPTS)
+    local menuSnapHelp = W.Text(menuBehavior,
+        "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72,
+        menuBehaviorW - 70, T.colors.muted)
     if menuSnapHelp.SetWordWrap then menuSnapHelp:SetWordWrap(true) end
     BindMiscToggle(menuBehavior, "Hide Advanced menu section", "hideAdvancedMenu", true, "MSUF2_ADVANCED_MENU_VISIBILITY", 14, -118, 280, MENU_WRITE_OPTS,
         function() M.RefreshAdvancedNavVisibility() end)
@@ -372,7 +378,8 @@ local function BuildMisc(ctx)
     M.TrackRefresh(ctx, RefreshAccentSwatchEnabled)
     local accentHelp = W.Text(menuBehavior, hasAppearancePresets
         and "Background opacity changes the MSUF Forever background only; text stays fully opaque."
-        or "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, hasAppearancePresets and -450 or -330, menuBehaviorW - 70, T.colors.muted)
+        or "Midnight keeps the stock blue accent. Class color follows this character; the accent applies after a UI reload.", 30, hasAppearancePresets and -450
+            or -330, menuBehaviorW - 70, T.colors.muted)
     if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
     if hasAppearancePresets then
         M.InstallStaticPopup("MSUF2_APPEARANCE_RELOAD_REQUIRED", {
@@ -585,7 +592,8 @@ local function BuildMisc(ctx)
         function() return ReadTooltipProvider() end,
         function(v) WriteTooltipSettings(v, ReadTooltipAnchor()) end,
         "tooltips.provider")
-    BindMiscDropdown(tooltips, "Tooltip anchor", VT("EXTERNAL", "Addon / Blizzard controlled", "FIXED", "MSUF fixed position", "CURSOR", "MSUF cursor"), tooltipRightW, tooltipRightX, -44,
+    BindMiscDropdown(tooltips, "Tooltip anchor", VT("EXTERNAL", "Addon / Blizzard controlled", "FIXED", "MSUF fixed position", "CURSOR", "MSUF cursor"),
+        tooltipRightW, tooltipRightX, -44,
         function() return ReadTooltipAnchor() end,
         function(v) WriteTooltipSettings(ReadTooltipProvider(), v) end,
         "tooltips.anchor")

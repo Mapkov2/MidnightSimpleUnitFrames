@@ -760,7 +760,8 @@ end
             { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
             { "Important", "onlyImportant" }, { "Crowd control", "crowdControl" },
         } or {
-            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only",
+                "includeNameplateOnly" },
             { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
             { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
             { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
@@ -1121,7 +1122,9 @@ local function BuildCustomAppearanceTool(C)
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(durationBar, {{
                     text = reminder and Tr("Unavailable")
-                        or (enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off"),
+                        or (enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / "
+                            .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / "
+                            .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off"),
                     kind = enabled and "accent" or "muted", showWhenClosed = true,
                 }})
             end
@@ -1186,14 +1189,18 @@ local function BuildCustomAppearanceTool(C)
 
                 local stackEnabled = placed.showStacks ~= false
                 W.SetCollapsibleBadges(stack, {{
-                    text = stackEnabled and (tostring(Round(tonumber(placed.stackSize) or 14)) .. "px / " .. AnchorLabel(placed.stackAnchor or "BOTTOMRIGHT")) or "Off",
+                    text = stackEnabled and (tostring(Round(tonumber(placed.stackSize) or 14)) .. "px / "
+                        .. AnchorLabel(placed.stackAnchor or "BOTTOMRIGHT")) or "Off",
                     kind = stackEnabled and "accent" or "muted", showWhenClosed = true,
                 }})
 
                 local cooldownEnabled = placed.showCooldown ~= false
                 local decimal = Round(tonumber(placed.cooldownDecimalSeconds) or 3)
                 W.SetCollapsibleBadges(cooldown, {
-                    { text = cooldownEnabled and (tostring(Round(tonumber(placed.cooldownSize) or 14)) .. "px / " .. AnchorLabel(placed.cooldownAnchor or "CENTER") .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
+                    { text = cooldownEnabled and (tostring(Round(tonumber(placed.cooldownSize) or 14)) .. "px / "
+                        .. AnchorLabel(placed.cooldownAnchor or "CENTER") .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES,
+                        placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted",
+                        showWhenClosed = true },
                     { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
                 })
 
@@ -1227,7 +1234,8 @@ local function BuildCustomEffectTool(C)
         end
         BindSlider(ctx, section, "Opacity", 24, -96, 5, 100, 5, col3,
             function() return floor(((item.frame.color[4] or 0.8) * 100) + 0.5) end,
-            function(value) item.frame.color[4] = (tonumber(value) or 80) / 100; item.frame.tintAlpha = item.frame.color[4]; Apply("AURAS3_CUSTOM_EFFECT_ALPHA") end,
+            function(value) item.frame.color[4] = (tonumber(value)
+                or 80) / 100; item.frame.tintAlpha = item.frame.color[4]; Apply("AURAS3_CUSTOM_EFFECT_ALPHA") end,
             AuraControlMeta(ctx, "custom-container.effect.opacity"))
         BindSlider(ctx, section, "Layer (0-30)", 24 + col3 + gap, -96, 0, 30, 1, col3,
             function() return tonumber(item.frame.layer) or 0 end,

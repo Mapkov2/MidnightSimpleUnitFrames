@@ -409,7 +409,8 @@ function Stage.BindTextDrag(st)
         end
         if handle._dragPoint then
             handle:ClearAllPoints()
-            handle:SetPoint(handle._dragPoint, handle._dragRelTo or box._mock, handle._dragRelPoint or handle._dragPoint, (handle._dragStartX or 0) + dx, (handle._dragStartY or 0) + dy)
+            handle:SetPoint(handle._dragPoint, handle._dragRelTo or box._mock, handle._dragRelPoint or handle._dragPoint, (handle._dragStartX or 0) + dx,
+                (handle._dragStartY or 0) + dy)
             moved = true
         end
         return moved
@@ -1204,7 +1205,8 @@ function Stage.CreateLayerHandles(st)
         local handle = spellIndicatorHandles[key]
         if not handle then
             local c = item.color or { 0.69, 0.50, 0.88 }
-            handle = CreatePreviewHandle(key, "si", { c[1] or 0.69, c[2] or 0.50, c[3] or 0.88 }, tostring(item.display or item.auraName or "SPELL"):upper(), 44, 44, false)
+            handle = CreatePreviewHandle(key, "si", { c[1] or 0.69, c[2] or 0.50, c[3] or 0.88 },
+                tostring(item.display or item.auraName or "SPELL"):upper(), 44, 44, false)
             handle._cfgSpell = true
             handle._sectionKey = "si"
             AddIconPool(handle, 1)

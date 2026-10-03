@@ -537,7 +537,8 @@ false=import current profile|import to current|current profile import
 ]]
 
 local DASHBOARD_ROUTE_TERMS = {
-    { DASHBOARD_ROUTE_RECOVERY, "discord|factory reset|fullreset|print help|display recovery|recovery tools|recover menu|reset all|help reset|copy discord|support discord" },
+    { DASHBOARD_ROUTE_RECOVERY,
+        "discord|factory reset|fullreset|print help|display recovery|recovery tools|recover menu|reset all|help reset|copy discord|support discord" },
     { DASHBOARD_ROUTE_SCALING, "scaling|ui scale|menu scale|msuf frame scale|msuf menu scale|make menu bigger|make menu smaller|options too big|options too small|resize window|groesser|kleiner|skalierung" },
 }
 

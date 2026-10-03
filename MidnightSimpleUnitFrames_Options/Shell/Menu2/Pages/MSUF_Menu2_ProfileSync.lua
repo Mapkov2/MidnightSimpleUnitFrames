@@ -102,7 +102,8 @@ function M.ProfileSyncPageBuild(state)
     local names=_G.MSUF_GetAllProfiles()
     local rows=math.ceil(#names/2)
     local width=math.max(180,math.floor((state.contentW-50)/2))
-    local section=state.b:CollapsibleSection("profiles_sync","Profile synchronization",group and (950+rows*32+math.max(0,math.ceil(#Sync.Modules/2)-4)*32) or 250,true)
+    local section=state.b:CollapsibleSection("profiles_sync","Profile synchronization",group
+        and (950+rows*32+math.max(0,math.ceil(#Sync.Modules/2)-4)*32) or 250,true)
     W.Text(section,"Share selected modules between profiles. Changes sync when switching profiles or logging out. Local variant settings and excluded fields stay independent.",
         20,-40,state.contentW-40,T.colors.muted)
     VariantPage.Drop(state,section,"Sync group","sync.group.select",GroupValues,function() return selected or "" end,
@@ -148,7 +149,8 @@ function M.ProfileSyncPageBuild(state)
     end,width)
     y=y-44
     VariantPage.Button(state,section,"Synchronize changes now","sync.flush",20,y,function() return VariantPage.Result(ctx,Sync.Flush()) end,width)
-    VariantPage.Button(state,section,"Copy shared modules now","sync.initialize",30+width,y,function() return VariantPage.Result(ctx,Sync.Flush(true)) end,width)
+    VariantPage.Button(state,section,"Copy shared modules now","sync.initialize",30+width,y,
+        function() return VariantPage.Result(ctx,Sync.Flush(true)) end,width)
     y=y-42
     W.Text(section,"Copy shared modules now uses the active profile as the starting point for its groups. Existing local exclusions and variant values are preserved. Save the group first.",
         20,y,state.contentW-40,T.colors.muted)

@@ -94,8 +94,10 @@ local FALLBACK_UNIT_STATUS_SPECS = {
     { text = "Raid Marker", show = "showRaidMarker", defaultShow = true, layer = "raidMarkerLayer", defaultLayer = 7 },
     { text = "Level", show = "showLevelIndicator", defaultShow = true, layer = "levelIndicatorLayer", defaultLayer = 7 },
     { text = "Boss Number", show = "showBossNumberIndicator", defaultShow = false, layer = "bossNumberIndicatorLayer", defaultLayer = 7, units = "boss" },
-    { text = "Raid Group", show = "showRaidGroupInName", defaultShow = false, layer = "raidGroupNameLayer", legacyLayer = "nameTextLayer", defaultLayer = 5, units = "player target targettarget focustarget focus pettarget" },
-    { text = "Elite / Rare", show = "showEliteIcon", defaultShow = true, layer = "eliteIconLayer", defaultLayer = 7, units = "target focus targettarget focustarget pettarget boss" },
+    { text = "Raid Group", show = "showRaidGroupInName", defaultShow = false, layer = "raidGroupNameLayer", legacyLayer = "nameTextLayer", defaultLayer = 5,
+        units = "player target targettarget focustarget focus pettarget" },
+    { text = "Elite / Rare", show = "showEliteIcon", defaultShow = true, layer = "eliteIconLayer", defaultLayer = 7,
+        units = "target focus targettarget focustarget pettarget boss" },
     { text = "Dead / Offline Text", show = "statusDeadTextEnabled", defaultShow = true, layer = "statusTextLayer", defaultLayer = 7 },
     { text = "Ghost Text", show = "statusGhostTextEnabled", defaultShow = true, layer = "statusGhostTextLayer", defaultLayer = 7 },
     { text = "AFK Text", show = "statusAFKTextEnabled", defaultShow = false, layer = "statusAFKTextLayer", defaultLayer = 7 },
@@ -103,8 +105,10 @@ local FALLBACK_UNIT_STATUS_SPECS = {
     { text = "DND Text", show = "statusDNDTextEnabled", defaultShow = false, layer = "statusDNDTextLayer", defaultLayer = 7 },
     { text = "Combat", show = "showCombatStateIndicator", defaultShow = true, layer = "combatStateIndicatorLayer", defaultLayer = 7, units = "player target" },
     { text = "Rested", show = "showRestingIndicator", defaultShow = false, layer = "restedStateIndicatorLayer", defaultLayer = 7, units = "player" },
-    { text = "Incoming Rez", show = "showIncomingResIndicator", defaultShow = true, layer = "incomingResIndicatorLayer", defaultLayer = 7, units = "player target" },
-    { text = "PvP Flag", show = "showPvpIndicator", defaultShow = true, layer = "pvpIndicatorLayer", defaultLayer = 7, units = "player target focus targettarget focustarget pettarget" },
+    { text = "Incoming Rez", show = "showIncomingResIndicator", defaultShow = true, layer = "incomingResIndicatorLayer", defaultLayer = 7,
+        units = "player target" },
+    { text = "PvP Flag", show = "showPvpIndicator", defaultShow = true, layer = "pvpIndicatorLayer", defaultLayer = 7,
+        units = "player target focus targettarget focustarget pettarget" },
     { text = "Stance", show = "showStanceIndicator", defaultShow = false, layer = "stanceIndicatorLayer", defaultLayer = 7, units = "player" },
 }
 local FALLBACK_GROUP_STATUS_SPECS = {
@@ -411,7 +415,8 @@ Overview.RegisterProvider("unit-auras", function(sink)
     local rootEnabled = auras.enabled ~= false
     local lanes = {
         { key = "buff", label = "Buffs", layer = "buffLayer", strata = "buffStrata", defaultLayer = 5, show = "showBuffs", max = "maxBuffs", defaultMax = 8 },
-        { key = "debuff", label = "Debuffs", layer = "debuffLayer", strata = "debuffStrata", defaultLayer = 6, show = "showDebuffs", max = "maxDebuffs", defaultMax = 12 },
+        { key = "debuff", label = "Debuffs", layer = "debuffLayer", strata = "debuffStrata", defaultLayer = 6, show = "showDebuffs",
+            max = "maxDebuffs", defaultMax = 12 },
     }
     for i = 1, #UNIT_AURA_SCOPES do
         local scope = UNIT_AURA_SCOPES[i]
@@ -672,7 +677,8 @@ Overview.RegisterProvider("group-frames", function(sink)
                         value = frame and frame.layer, default = 0,
                         enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.layer",
-                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "frame", "layer" } },
+                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey,
+                            auraKey, "frame", "layer" } },
                     })
                     sink:Strata({
                         id = "group." .. scope.key .. ".spellIndicators." .. token .. ".frame.strata",
@@ -680,7 +686,8 @@ Overview.RegisterProvider("group-frames", function(sink)
                         value = frame and frame.strata, default = "AUTO",
                         enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.strata",
-                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "frame", "strata" } },
+                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey,
+                            auraKey, "frame", "strata" } },
                     })
                 end
             end
@@ -1104,7 +1111,8 @@ local function CurrentLayerContext()
             scopes = {}
             scopes[SCOPE_LABEL[scope] or scope] = true
         end
-        return { key = key, label = (scope == "shared" and "Shared" or (SCOPE_LABEL[scope] or scope)) .. " Auras", scopes = scopes, areas = { ["Unit Auras"] = true, ["Group Auras"] = true }, order = AREA_ORDER.auras }
+        return { key = key, label = (scope == "shared" and "Shared" or (SCOPE_LABEL[scope] or scope)) .. " Auras", scopes = scopes,
+            areas = { ["Unit Auras"] = true, ["Group Auras"] = true }, order = AREA_ORDER.auras }
     end
     if key == "classpower" then
         return { key = key, label = "Class Resources", scopes = { Player = true }, order = AREA_ORDER.class }
@@ -1150,7 +1158,8 @@ end
 
 local function SearchMatches(row, query)
     if query == "" then return true end
-    local haystack = table.concat({ row.area or "", row.scope or "", row.label or "", row.settingKey or "", row.id or "", tostring(row.layer or row.strata or "") }, " "):lower()
+    local haystack = table.concat({ row.area or "", row.scope or "", row.label or "", row.settingKey or "", row.id or "",
+        tostring(row.layer or row.strata or "") }, " "):lower()
     for token in query:gmatch("%S+") do
         if not haystack:find(token, 1, true) then return false end
     end
@@ -1549,7 +1558,8 @@ local function CreatePopup()
     hintBG:SetPoint("BOTTOMRIGHT", popup, "TOPRIGHT", -10, -86)
     hintBG:SetColorTexture(0.025, 0.22, 0.16, 0.46)
     popup._hintBG = hintBG
-    popup._hint = Font(popup, "GameFontHighlightSmall", Tr("EDITABLE: click a green Layer number, type 0-30, press Enter."), Color("success", { 0.30, 1.00, 0.62, 1 }), "control")
+    popup._hint = Font(popup, "GameFontHighlightSmall", Tr("EDITABLE: click a green Layer number, type 0-30, press Enter."),
+        Color("success", { 0.30, 1.00, 0.62, 1 }), "control")
     popup._hint:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -58)
     popup._hint:SetPoint("RIGHT", popup, "RIGHT", -14, 0)
     popup._hint:SetJustifyH("LEFT")

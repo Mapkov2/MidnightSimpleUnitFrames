@@ -149,7 +149,8 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         M.BindDropdownWidget(ctx,widget,function() local rule=Rule();return rule and rule[key] or default end,
             function(value) Write(key,value) end,Meta("marks."..key))
     end
-    Drop("target","Resource bar",{{value="PLAYER",text="Player power"},{value="CLASS",text="Class resource"},{value="ALTMANA",text="Alternative mana"}},"PLAYER")
+    Drop("target","Resource bar",{{value="PLAYER",text="Player power"},{value="CLASS",text="Class resource"},
+        {value="ALTMANA",text="Alternative mana"}},"PLAYER")
     Drop("resource","Power type",PowerTypeValues(),"ALL")
     Drop("mode","Value mode",{{value="PERCENT",text="Percent"},{value="ABSOLUTE",text="Absolute value"}},"PERCENT")
     for _,spec in ipairs({{"value","Resource value",0,10000000,1,50},{"width","Mark width",1,20,1,2}}) do

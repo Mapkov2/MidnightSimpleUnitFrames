@@ -327,7 +327,8 @@ function Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
     elseif section == "portrait" then state, tab = "unitPortraitTabSelection", "placement"
     elseif section == "castbar" then
         state = "unitCastbarTabSelection"
-        tab = key == "castbarIcon" and "icon" or (key == "castbarTime" and "time" or ((key == "castbarText" or key == "castbarTarget") and "spell" or "general"))
+        tab = key == "castbarIcon" and "icon" or (key == "castbarTime" and "time" or ((key == "castbarText" or key == "castbarTarget")
+            and "spell" or "general"))
     end
     if state then
         menu[state] = menu[state] or {}
@@ -423,7 +424,8 @@ OpenPreviewHandleSettings = function(handle, source)
                 if menu.SetMenuStateValue then menu.SetMenuStateValue("classPowerStyleTab", "text") else menu.classPowerStyleTab = "text" end
             elseif handle._key == "detachedPower" then
                 sectionId = "classpower_detached_power"
-                if menu.SetMenuStateValue then menu.SetMenuStateValue("classPowerDetachedPowerTab", "layout") else menu.classPowerDetachedPowerTab = "layout" end
+                if menu.SetMenuStateValue then menu.SetMenuStateValue("classPowerDetachedPowerTab",
+                    "layout") else menu.classPowerDetachedPowerTab = "layout" end
             end
             ExportPublic("MSUF_EM2_MenuFocusRequest", {
                 pageKey = "classpower",

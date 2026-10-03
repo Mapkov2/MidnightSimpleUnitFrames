@@ -792,7 +792,8 @@ local ApplyPreviewBackdrop = PreviewCore.ApplyBackdrop
 local STATUS_PREVIEW = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.StatusPreview) or {}
 local PREVIEW_LAYERS = (MSUF.UFPreviewSpecs and MSUF.UFPreviewSpecs.PreviewLayers) or {}
 local ZOOM_MIN = tonumber(PreviewZoomPan.MIN) or 0.35
-if PreviewZoomPan.Configure then PreviewZoomPan.Configure({ Preview = Preview, T = M2.Theme, TR = TR, TEX_W8 = TEX_W8, UpdateHandleHint = UpdateHandleHint }) end
+if PreviewZoomPan.Configure then PreviewZoomPan.Configure({ Preview = Preview, T = M2.Theme, TR = TR, TEX_W8 = TEX_W8,
+    UpdateHandleHint = UpdateHandleHint }) end
 local function ZoomOrOne(v) return tonumber(v) or 1 end
 local ClampPreviewZoom = PreviewZoomPan.Clamp or ZoomOrOne
 local UpdatePreviewZoomControls = PreviewZoomPan.UpdateControls or Fallbacks.Noop
@@ -980,7 +981,9 @@ function BoxBuild.LayerRail(box, s)
                 GameTooltip:SetText(label, 1, 1, 1)
                 if self.tooltip then GameTooltip:AddLine(tr(self.tooltip), 0.82, 0.82, 0.82, true) end
                 GameTooltip:AddLine(TR(on and "Click to hide this preview layer." or "Click to show this preview layer."), 0.55, 0.68, 0.86, true)
-                if self.key == "guides" then GameTooltip:AddLine(tr(on and "Turn off to inspect the frame without mover outlines. The selected element can still be nudged with arrow keys." or "Guides are hidden. Turn this back on to see drag handles and selected borders."), 0.55, 0.68, 0.86, true) end
+                if self.key == "guides" then GameTooltip:AddLine(tr(on
+                    and "Turn off to inspect the frame without mover outlines. The selected element can still be nudged with arrow keys."
+                    or "Guides are hidden. Turn this back on to see drag handles and selected borders."), 0.55, 0.68, 0.86, true) end
                 GameTooltip:Show()
             end
         end,
@@ -1244,7 +1247,8 @@ function BoxBuild.MockCast(box, s)
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(TR("Castbar"), 1, 1, 1)
-            GameTooltip:AddLine(TR("Preview follows the current castbar visibility, whole-bar layer, icon, text, and global color settings."), 0.82, 0.82, 0.82, true)
+            GameTooltip:AddLine(TR("Preview follows the current castbar visibility, whole-bar layer, icon, text, and global color settings."),
+                0.82, 0.82, 0.82, true)
             GameTooltip:AddLine(TR("Ctrl + left-drag pans the preview canvas."), 0.55, 0.68, 0.86, true)
             GameTooltip:Show()
         end
@@ -1315,29 +1319,54 @@ function BoxBuild.Handles(box, s)
         h._lastDragY = nextY
         WriteHandleOffsets(h, nextX, nextY, "UNIT_PREVIEW_DRAG")
     end
-    box.handleName = MakeHandle(box, "name", { x = "nameOffsetX", y = "nameOffsetY", defaultX = 4, defaultY = -4, text = true, resolveOffsetDelta = ViewHandles.NameHandleOffsetDelta, section = "text" }, "Name text", { 0.30, 0.66, 1.0 })
-    box.handleRaidGroupName = MakeHandle(box, "raidgroupname", { x = "raidGroupNameOffsetX", y = "raidGroupNameOffsetY", defaultX = 3, defaultY = 0, statusRefresh = "MSUF_RefreshRaidGroupNameFrames", section = "status" }, "Raid group", { 0.45, 0.70, 1.0 })
-    box.handleHP = MakeHandle(box, "hp", { x = "hpOffsetX", y = "hpOffsetY", defaultX = -4, defaultY = -4, text = true, section = "text" }, "HP text", { 0.25, 0.90, 0.42 })
-    box.handleHPLeft = MakeHandle(box, "hpLeft", { x = "hpTextLeftOffsetX", y = "hpTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "HP left text", { 0.25, 0.90, 0.42 })
-    box.handleHPCenter = MakeHandle(box, "hpCenter", { x = "hpTextCenterOffsetX", y = "hpTextCenterOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "HP center text", { 0.25, 0.90, 0.42 })
-    box.handleHPRight = MakeHandle(box, "hpRight", { x = "hpTextRightOffsetX", y = "hpTextRightOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "HP right text", { 0.25, 0.90, 0.42 })
-    box.handlePower = MakeHandle(box, "power", { x = "powerOffsetX", y = "powerOffsetY", defaultX = -4, defaultY = 4, text = true, section = "text" }, "Power text", { 0.95, 0.72, 0.18 })
-    box.handlePowerLeft = MakeHandle(box, "powerLeft", { x = "powerTextLeftOffsetX", y = "powerTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power left text", { 0.95, 0.72, 0.18 })
-    box.handlePowerCenter = MakeHandle(box, "powerCenter", { x = "powerTextCenterOffsetX", y = "powerTextCenterOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power center text", { 0.95, 0.72, 0.18 })
-    box.handlePowerRight = MakeHandle(box, "powerRight", { x = "powerTextRightOffsetX", y = "powerTextRightOffsetY", defaultX = 0, defaultY = 0, text = true, section = "text" }, "Power right text", { 0.95, 0.72, 0.18 })
-    box.handlePortrait = MakeHandle(box, "portrait", { x = "portraitOffsetX", y = "portraitOffsetY", defaultX = 0, defaultY = 0, portrait = true, section = "portrait" }, "Portrait", { 0.90, 0.42, 1.0 })
-    box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4, detachedPower = true, section = "power", playerSection = "classPower" }, "Detached power bar", { 0.95, 0.72, 0.18 })
+    box.handleName = MakeHandle(box, "name", { x = "nameOffsetX", y = "nameOffsetY", defaultX = 4, defaultY = -4, text = true,
+        resolveOffsetDelta = ViewHandles.NameHandleOffsetDelta, section = "text" }, "Name text", { 0.30, 0.66, 1.0 })
+    box.handleRaidGroupName = MakeHandle(box, "raidgroupname", { x = "raidGroupNameOffsetX", y = "raidGroupNameOffsetY", defaultX = 3, defaultY = 0,
+        statusRefresh = "MSUF_RefreshRaidGroupNameFrames", section = "status" }, "Raid group", { 0.45, 0.70, 1.0 })
+    box.handleHP = MakeHandle(box, "hp", { x = "hpOffsetX", y = "hpOffsetY", defaultX = -4, defaultY = -4, text = true, section = "text" },
+        "HP text", { 0.25, 0.90, 0.42 })
+    box.handleHPLeft = MakeHandle(box, "hpLeft", { x = "hpTextLeftOffsetX", y = "hpTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true,
+        section = "text" }, "HP left text", { 0.25, 0.90, 0.42 })
+    box.handleHPCenter = MakeHandle(box, "hpCenter", { x = "hpTextCenterOffsetX", y = "hpTextCenterOffsetY", defaultX = 0, defaultY = 0, text = true,
+        section = "text" }, "HP center text", { 0.25, 0.90, 0.42 })
+    box.handleHPRight = MakeHandle(box, "hpRight", { x = "hpTextRightOffsetX", y = "hpTextRightOffsetY", defaultX = 0, defaultY = 0, text = true,
+        section = "text" }, "HP right text", { 0.25, 0.90, 0.42 })
+    box.handlePower = MakeHandle(box, "power", { x = "powerOffsetX", y = "powerOffsetY", defaultX = -4, defaultY = 4, text = true, section = "text" },
+        "Power text", { 0.95, 0.72, 0.18 })
+    box.handlePowerLeft = MakeHandle(box, "powerLeft", { x = "powerTextLeftOffsetX", y = "powerTextLeftOffsetY", defaultX = 0, defaultY = 0, text = true,
+        section = "text" }, "Power left text", { 0.95, 0.72, 0.18 })
+    box.handlePowerCenter = MakeHandle(box, "powerCenter", { x = "powerTextCenterOffsetX", y = "powerTextCenterOffsetY", defaultX = 0, defaultY = 0,
+        text = true, section = "text" }, "Power center text", { 0.95, 0.72, 0.18 })
+    box.handlePowerRight = MakeHandle(box, "powerRight", { x = "powerTextRightOffsetX", y = "powerTextRightOffsetY", defaultX = 0, defaultY = 0, text = true,
+        section = "text" }, "Power right text", { 0.95, 0.72, 0.18 })
+    box.handlePortrait = MakeHandle(box, "portrait", { x = "portraitOffsetX", y = "portraitOffsetY", defaultX = 0, defaultY = 0, portrait = true,
+        section = "portrait" }, "Portrait", { 0.90, 0.42, 1.0 })
+    box.handleDetachedPower = MakeHandle(box, "detachedPower", { x = "detachedPowerBarOffsetX", y = "detachedPowerBarOffsetY", defaultX = 0, defaultY = -4,
+        detachedPower = true, section = "power", playerSection = "classPower" }, "Detached power bar", { 0.95, 0.72, 0.18 })
     box.texLayerHandles = {
-        MakeHandle(box, "texLayer", { x = "texLayerOffsetX", y = "texLayerOffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 1", { 0.80, 0.55, 0.25 }),
-        MakeHandle(box, "texLayer2", { x = "texLayer2OffsetX", y = "texLayer2OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 2", { 0.80, 0.55, 0.25 }),
-        MakeHandle(box, "texLayer3", { x = "texLayer3OffsetX", y = "texLayer3OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" }, "Texture layer 3", { 0.80, 0.55, 0.25 }),
+        MakeHandle(box, "texLayer", { x = "texLayerOffsetX", y = "texLayerOffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" },
+            "Texture layer 1", { 0.80, 0.55, 0.25 }),
+        MakeHandle(box, "texLayer2", { x = "texLayer2OffsetX", y = "texLayer2OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" },
+            "Texture layer 2", { 0.80, 0.55, 0.25 }),
+        MakeHandle(box, "texLayer3", { x = "texLayer3OffsetX", y = "texLayer3OffsetY", defaultX = 0, defaultY = 0, texLayer = true, section = "texture_layer" },
+            "Texture layer 3", { 0.80, 0.55, 0.25 }),
     }
-    box.handleClassPower = MakeHandle(box, "classPower", { barsX = "classPowerOffsetX", barsY = "classPowerOffsetY", defaultX = 0, defaultY = 0, classPower = true, readOffsets = ViewHandles.ReadBarsHandleOffsets, writeOffsets = ViewHandles.WriteBarsHandleOffsets, section = "classPower" }, "Class power", { 0.30, 0.78, 0.55 })
-    box.handleClassPowerText = MakeHandle(box, "classPowerText", { barsX = "classPowerTextOffsetX", barsY = "classPowerTextOffsetY", defaultX = 0, defaultY = 0, classPower = true, readOffsets = ViewHandles.ReadBarsHandleOffsets, writeOffsets = ViewHandles.WriteBarsHandleOffsets, section = "classPower" }, "Class power text", { 0.30, 0.78, 0.55 })
+    box.handleClassPower = MakeHandle(box, "classPower", { barsX = "classPowerOffsetX", barsY = "classPowerOffsetY", defaultX = 0, defaultY = 0,
+        classPower = true, readOffsets = ViewHandles.ReadBarsHandleOffsets, writeOffsets = ViewHandles.WriteBarsHandleOffsets, section = "classPower" },
+        "Class power", { 0.30, 0.78, 0.55 })
+    box.handleClassPowerText = MakeHandle(box, "classPowerText", { barsX = "classPowerTextOffsetX", barsY = "classPowerTextOffsetY", defaultX = 0, defaultY = 0,
+        classPower = true, readOffsets = ViewHandles.ReadBarsHandleOffsets, writeOffsets = ViewHandles.WriteBarsHandleOffsets, section = "classPower" },
+        "Class power text", { 0.30, 0.78, 0.55 })
     box.handleCastbar = MakeHandle(box, "castbar", { castbar = true, global = true, section = "castbar" }, "Castbar", { 0.20, 0.90, 0.85 })
-    box.handleCastbarIcon = MakeHandle(box, "castbarIcon", { suffixX = "IconOffsetX", suffixY = "IconOffsetY", bossX = "bossCastIconOffsetX", bossY = "bossCastIconOffsetY", defaultX = 0, defaultY = 0, iconFallback = true, readOffsets = ViewHandles.ReadCastbarSubOffsets, writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar icon", { 0.20, 0.90, 0.85 })
-    box.handleCastbarText = MakeHandle(box, "castbarText", { suffixX = "TextOffsetX", suffixY = "TextOffsetY", bossX = "bossCastTextOffsetX", bossY = "bossCastTextOffsetY", defaultX = 0, defaultY = 0, readOffsets = ViewHandles.ReadCastbarSubOffsets, writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar text", { 0.20, 0.90, 0.85 })
-    box.handleCastbarTarget = MakeHandle(box, "castbarTarget", { suffixX = "TargetNameOffsetX", suffixY = "TargetNameOffsetY", bossX = "bossCastTargetNameOffsetX", bossY = "bossCastTargetNameOffsetY", defaultX = 0, defaultY = 1, readOffsets = ViewHandles.ReadCastbarSubOffsets, writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Cast target text", { 0.95, 0.78, 0.22 })
+    box.handleCastbarIcon = MakeHandle(box, "castbarIcon", { suffixX = "IconOffsetX", suffixY = "IconOffsetY", bossX = "bossCastIconOffsetX",
+        bossY = "bossCastIconOffsetY", defaultX = 0, defaultY = 0, iconFallback = true, readOffsets = ViewHandles.ReadCastbarSubOffsets,
+        writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar icon", { 0.20, 0.90, 0.85 })
+    box.handleCastbarText = MakeHandle(box, "castbarText", { suffixX = "TextOffsetX", suffixY = "TextOffsetY", bossX = "bossCastTextOffsetX",
+        bossY = "bossCastTextOffsetY", defaultX = 0, defaultY = 0, readOffsets = ViewHandles.ReadCastbarSubOffsets,
+        writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar text", { 0.20, 0.90, 0.85 })
+    box.handleCastbarTarget = MakeHandle(box, "castbarTarget", { suffixX = "TargetNameOffsetX", suffixY = "TargetNameOffsetY",
+        bossX = "bossCastTargetNameOffsetX", bossY = "bossCastTargetNameOffsetY", defaultX = 0, defaultY = 1, readOffsets = ViewHandles.ReadCastbarSubOffsets,
+        writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Cast target text", { 0.95, 0.78, 0.22 })
     box.handleCastbarTime = MakeHandle(box, "castbarTime", { suffixX = "TimeOffsetX", suffixY = "TimeOffsetY", bossX = "bossCastTimeOffsetX", bossY = "bossCastTimeOffsetY", bossBaseX = -2, defaultX = -2, defaultY = 0, defaultXFromG = "castbarPlayerTimeOffsetX", defaultYFromG = "castbarPlayerTimeOffsetY", readOffsets = ViewHandles.ReadCastbarSubOffsets, writeOffsets = ViewHandles.WriteCastbarSubOffsets, section = "castbar", interactionPriority = 1 }, "Castbar time", { 0.20, 0.90, 0.85 })
     if type(PreviewAuras.CreateHandles) == "function" then PreviewAuras.CreateHandles(box, MakeHandle) end
     box.statusHandles = { raidgroupname = box.handleRaidGroupName }
@@ -1349,7 +1378,8 @@ function BoxBuild.Handles(box, s)
     end
     for i = 1, #STATUS_PREVIEW do
         local spec = STATUS_PREVIEW[i]
-        box.statusHandles[spec.id] = MakeHandle(box, spec.id, { x = spec.x, y = spec.y, defaultX = spec.defaultX or 0, defaultY = spec.defaultY or 0, statusRefresh = spec.refresh, section = "status" }, spec.label, spec.color)
+        box.statusHandles[spec.id] = MakeHandle(box, spec.id, { x = spec.x, y = spec.y, defaultX = spec.defaultX or 0, defaultY = spec.defaultY or 0,
+            statusRefresh = spec.refresh, section = "status" }, spec.label, spec.color)
     end
 end
 function BoxBuild.Scripts(box)

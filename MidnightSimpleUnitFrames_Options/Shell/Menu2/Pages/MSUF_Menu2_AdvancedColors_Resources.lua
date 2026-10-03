@@ -33,7 +33,8 @@ local function ApplyClassPowerColors()
     if painter and type(painter.RefreshResourcesStrip) == "function" then painter.RefreshResourcesStrip() end
     local apply = CurrentApplyService()
     if apply and type(apply.RequestClassPower) == "function" then
-        return apply.RequestClassPower("MSUF2_CLASSPOWER_COLORS", { colors = true, playerHP = true }, { preview = true, applyAll = false, colors = true, colorScope = "player" })
+        return apply.RequestClassPower("MSUF2_CLASSPOWER_COLORS", { colors = true, playerHP = true },
+            { preview = true, applyAll = false, colors = true, colorScope = "player" })
     end
     RequestGeneral("MSUF2_CLASSPOWER_COLORS", { preview = true, applyAll = false, colors = true, colorScope = "player" })
     _G.MSUF_ClassPower_InvalidateColors()

@@ -183,7 +183,8 @@ local function SyncBossPagePreviewForKey(key, force)
     lastBossPreviewFn = fn
     if type(fn) == "function" then
         fn(bossActive)
-        if bossActive and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function" and not BossPagePreviewInCombat() then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_BOSS_PAGE_CORE") end
+        if bossActive and type(_G.MSUF_ApplyBossUnitframePreviewState) == "function"
+            and not BossPagePreviewInCombat() then _G.MSUF_ApplyBossUnitframePreviewState(true, "MSUF2_BOSS_PAGE_CORE") end
     else
         ApplyBossPagePreviewFallback(bossActive, "MSUF2_BOSS_PAGE_FALLBACK")
     end

@@ -204,7 +204,8 @@ end
 local function PreviewUnit(box)
     if not box then return nil end
     local key = box.key
-    if not key and box._msufPanel and (box._msufPanel._msufGetCurrentKey or box._msufPanel._msufLastApplyKey ~= nil) then key = CurrentPanelKey(box._msufPanel) end
+    if not key and box._msufPanel
+        and (box._msufPanel._msufGetCurrentKey or box._msufPanel._msufLastApplyKey ~= nil) then key = CurrentPanelKey(box._msufPanel) end
     key = Auras.PreviewUnitKey(key)
     if key then box.key = key end
     return key
@@ -1737,7 +1738,8 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     if visual.SetAlpha then visual:SetAlpha(ClampNumber(bounds.alpha, 1, 0, 1)) end
     if visual.SetFrameLevel then visual:SetFrameLevel(Layers.ElementLevel and Layers.ElementLevel(layer, 5, 0) or ((baseLevel or 0) + layer)) end
     visual:Show()
-    if handle.SetFrameLevel then handle:SetFrameLevel(Layers.ElementLevel and (Layers.ElementLevel(30, 30, 31) + 32) or ((baseLevel or 0) + max(50, layer + 45))) end
+    if handle.SetFrameLevel then handle:SetFrameLevel(Layers.ElementLevel and (Layers.ElementLevel(30, 30, 31) + 32)
+        or ((baseLevel or 0) + max(50, layer + 45))) end
     if handle._selBorder and handle._selBorder.SetFrameLevel then handle._selBorder:SetFrameLevel((handle:GetFrameLevel() or 0) + 5) end
     PlaceMinimumHitHandle(handle, box.mock, handleLeft, handleBottom, handleW, handleH, 4, 18)
     for i = 1, bounds.shown do
@@ -1749,7 +1751,8 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         local col, row = IconGridCoord(i, bounds.perRow, verticalGrowth)
         icon:SetSize(size, size)
         icon:ClearAllPoints()
-        icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX + padX, row * step * bounds.growthY + padY)
+        icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX + padX,
+            row * step * bounds.growthY + padY)
         local previewTexture = bounds.previewTextures and bounds.previewTextures[i]
         icon.tex:SetTexture(previewTexture or textures[((i - 1) % #textures) + 1])
         ApplyIconZoom(icon.tex, bounds.iconZoom)

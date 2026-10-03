@@ -291,7 +291,8 @@ function W.SetPreviewFocus(key, component, slot, active)
         local fn = _G.MSUF_UFPreview_FocusTextSlot
         if type(fn) == "function" then didFocus = fn(key, component, slot, active == true) or didFocus end
     end
-    if textComponent and GROUP_FOCUS_KIND[key] and type(M.FocusGFPreviewTextSlot) == "function" then didFocus = M.FocusGFPreviewTextSlot(component, slot, active == true) or didFocus end
+    if textComponent and GROUP_FOCUS_KIND[key] and type(M.FocusGFPreviewTextSlot) == "function" then didFocus = M.FocusGFPreviewTextSlot(component, slot,
+        active == true) or didFocus end
     return didFocus
 end
 function W.AttachEditFocus(widget, key, component, slot, opts)

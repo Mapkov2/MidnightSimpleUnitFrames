@@ -62,7 +62,8 @@ local function BuildBehaviorSection(PageState, secBuilder)
     end
     local behaviorControls = BuildCastControlSpecs(behavior, {
         { "toggle", "Shake on interrupt", leftX, -42, 260, "castbarInterruptShake", false, "MSUF2_CASTBAR_SHAKE", ApplyAndRefresh },
-        { "slider", "Shake strength", leftX, -72, 320, 0, 30, 1, "castbarShakeStrength", 8, "MSUF2_CASTBAR_SHAKE_STRENGTH", function(reason, value, applyQueued) ApplyCastbarsIfNeeded(reason, nil, applyQueued); ShakeCastPreview(value) end },
+        { "slider", "Shake strength", leftX, -72, 320, 0, 30, 1, "castbarShakeStrength", 8, "MSUF2_CASTBAR_SHAKE_STRENGTH",
+            function(reason, value, applyQueued) ApplyCastbarsIfNeeded(reason, nil, applyQueued); ShakeCastPreview(value) end },
         { "slider", "Interrupt display duration (sec)", leftX, -126, 320, 0, 5, 0.1, "castbarInterruptFeedbackDuration", 0.5, "MSUF2_CASTBAR_INTERRUPT_DURATION", nil, {
             precise = true,
             setValue = function(value)
@@ -71,9 +72,12 @@ local function BuildBehaviorSection(PageState, secBuilder)
                 M.PlayCastbarPreviewInterrupt()
             end,
         } },
-        { "toggle", "Always use fill direction for all casts", rightX, -42, 360, "castbarUnifiedDirection", false, "MSUF2_CASTBAR_UNIFIED_DIRECTION", ApplyAndRefresh },
-        { "dropdown", "Castbar fill direction", rightX, -72, 300, VT("RTL", "Right to left (default)", "LTR", "Left to right"), "castbarFillDirection", "RTL", "MSUF2_CASTBAR_FILL_DIRECTION", ApplyAndRefresh },
-        { "toggle", "Use opposite fill direction for target", rightX, -126, 360, "castbarOpositeDirectionTarget", false, "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh },
+        { "toggle", "Always use fill direction for all casts", rightX, -42, 360, "castbarUnifiedDirection", false,
+            "MSUF2_CASTBAR_UNIFIED_DIRECTION", ApplyAndRefresh },
+        { "dropdown", "Castbar fill direction", rightX, -72, 300, VT("RTL", "Right to left (default)", "LTR", "Left to right"), "castbarFillDirection", "RTL",
+            "MSUF2_CASTBAR_FILL_DIRECTION", ApplyAndRefresh },
+        { "toggle", "Use opposite fill direction for target", rightX, -126, 360, "castbarOpositeDirectionTarget", false,
+            "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh },
         { "toggle", "Spell-specific channel tick markers", rightX, -150, 360, "castbarShowChannelTicks", false, "MSUF2_CASTBAR_TICKS", ApplyTicksAndSync },
         { "toggle", "Highlight last channel tick", rightX, -178, 360, "castbarAccentLastTick", false, "MSUF2_CASTBAR_LAST_TICK", ApplyAndRefresh },
     }, "behavior")
@@ -146,12 +150,14 @@ local function BuildGCDSection(PageState, secBuilder)
         { "toggle", "GCD bar: show spell name + icon", gcdLeftX, -104, 300, "showGCDBarSpell", true, "MSUF2_CASTBAR_GCD_SPELL" },
         { "toggle", "Place GCD bar separately", gcdLeftX, -134, 340, "gcdBarDetached", false, "MSUF2_CASTBAR_GCD_DETACHED", ApplyDetached },
         { "toggle", "Keep separate GCD background visible", gcdLeftX, -160, 360, "gcdBarIdle", false, "MSUF2_CASTBAR_GCD_IDLE", _G.MSUF_GCDBar_RefreshLayout },
-        { "toggle", "Separate GCD bar only in combat", gcdLeftX, -186, 360, "gcdBarCombatOnly", false, "MSUF2_CASTBAR_GCD_COMBAT", _G.MSUF_GCDBar_RefreshLayout },
+        { "toggle", "Separate GCD bar only in combat", gcdLeftX, -186, 360, "gcdBarCombatOnly", false, "MSUF2_CASTBAR_GCD_COMBAT",
+            _G.MSUF_GCDBar_RefreshLayout },
         { "slider", "Separate GCD bar width", gcdLeftX, -218, 320, 40, 600, 1, "gcdBarWidth", 180, "MSUF2_CASTBAR_GCD_WIDTH", _G.MSUF_GCDBar_RefreshLayout },
         { "slider", "Separate GCD bar height", gcdLeftX, -272, 320, 4, 50, 1, "gcdBarHeight", 12, "MSUF2_CASTBAR_GCD_HEIGHT", _G.MSUF_GCDBar_RefreshLayout },
         { "slider", "Separate GCD horizontal position", 392, -46, 320, -2000, 2000, 1, "gcdBarX", 0, "MSUF2_CASTBAR_GCD_X", _G.MSUF_GCDBar_RefreshLayout },
         { "slider", "Separate GCD vertical position", 392, -104, 320, -1500, 1500, 1, "gcdBarY", -180, "MSUF2_CASTBAR_GCD_Y", _G.MSUF_GCDBar_RefreshLayout },
-        { "slider", "Separate GCD opacity (percent)", 392, -162, 320, 0, 100, 5, "gcdBarOpacity", 100, "MSUF2_CASTBAR_GCD_ALPHA", _G.MSUF_GCDBar_RefreshLayout },
+        { "slider", "Separate GCD opacity (percent)", 392, -162, 320, 0, 100, 5, "gcdBarOpacity", 100, "MSUF2_CASTBAR_GCD_ALPHA",
+            _G.MSUF_GCDBar_RefreshLayout },
     }, "gcd")
     if M.AddTooltip then
         M.AddTooltip(gcdControls.showGCDBar,
@@ -199,8 +205,10 @@ local function BuildTexturesSection(PageState, secBuilder)
         RequestCastPreviewRefresh()
     end
     local textureControls = BuildCastControlSpecs(textures, {
-        { "dropdown", "Castbar texture", texLeftX, -42, 300, function() return TextureValues(nil) end, "castbarTexture", "Blizzard", "MSUF2_CASTBAR_TEXTURE", ApplyTexturesAndPreview },
-        { "dropdown", "Castbar background texture", texLeftX, -96, 300, function() return TextureValues(nil) end, "castbarBackgroundTexture", "Blizzard", "MSUF2_CASTBAR_BG_TEXTURE", ApplyTexturesAndPreview, {
+        { "dropdown", "Castbar texture", texLeftX, -42, 300, function() return TextureValues(nil) end, "castbarTexture", "Blizzard", "MSUF2_CASTBAR_TEXTURE",
+            ApplyTexturesAndPreview },
+        { "dropdown", "Castbar background texture", texLeftX, -96, 300, function() return TextureValues(nil) end, "castbarBackgroundTexture", "Blizzard",
+            "MSUF2_CASTBAR_BG_TEXTURE", ApplyTexturesAndPreview, {
             getValue = function()
                 local v = ReadG("castbarBackgroundTexture", nil)
                 return (type(v) == "string" and v ~= "") and v or ReadG("castbarTexture", "Blizzard")
@@ -210,7 +218,8 @@ local function BuildTexturesSection(PageState, secBuilder)
         { "toggle", "Show latency indicator", texRightX, -120, 360, "castbarShowLatency", true, "MSUF2_CASTBAR_LATENCY", ApplyTexturesAndPreview },
         { "toggle", "Show spark (leading edge highlight)", texRightX, -144, 360, "castbarShowSpark", false, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview },
         { "toggle", "Spark extends beyond bar", texRightX, -168, 360, "castbarSparkOverflow", true, "MSUF2_CASTBAR_SPARK_OVERFLOW", ApplyTexturesAndPreview },
-        { "toggle", "Show network latency in milliseconds", texRightX, -196, 360, "castbarShowLatencyText", false, "MSUF2_CASTBAR_LATENCY_TEXT", ApplyTexturesAndPreview },
+        { "toggle", "Show network latency in milliseconds", texRightX, -196, 360, "castbarShowLatencyText", false, "MSUF2_CASTBAR_LATENCY_TEXT",
+            ApplyTexturesAndPreview },
     }, "textures")
     if M.AddTooltip and textureControls then
         local tip = { hook = true, titleAsLine = true, labelHit = true, owner = "ANCHOR_RIGHT" }
@@ -234,9 +243,12 @@ local function BuildEmpoweredSection(PageState, secBuilder)
         ShowEmpoweredPreview()
     end
     local empoweredControls = BuildCastControlSpecs(empowered, {
-        { "toggle", "Add color to stages (Empowered casts)", empoweredLeftX, -42, 300, "empowerColorStages", true, "MSUF2_CASTBAR_EMPOWER_COLOR", ApplyEmpoweredPreview },
-        { "toggle", "Add stage blink (Empowered casts)", empoweredLeftX, -68, 300, "empowerStageBlink", true, "MSUF2_CASTBAR_EMPOWER_BLINK", function(reason, value, applyQueued) ApplyEmpoweredPreview(reason, value, applyQueued); if syncEmpowered then syncEmpowered() end end },
-        { "slider", "Stage blink time (sec)", empoweredRightX, -42, 320, 0.05, 1.00, 0.01, "empowerStageBlinkTime", 0.25, "MSUF2_CASTBAR_EMPOWER_TIME", ApplyEmpoweredPreview, { precise = true } },
+        { "toggle", "Add color to stages (Empowered casts)", empoweredLeftX, -42, 300, "empowerColorStages", true, "MSUF2_CASTBAR_EMPOWER_COLOR",
+            ApplyEmpoweredPreview },
+        { "toggle", "Add stage blink (Empowered casts)", empoweredLeftX, -68, 300, "empowerStageBlink", true, "MSUF2_CASTBAR_EMPOWER_BLINK",
+            function(reason, value, applyQueued) ApplyEmpoweredPreview(reason, value, applyQueued); if syncEmpowered then syncEmpowered() end end },
+        { "slider", "Stage blink time (sec)", empoweredRightX, -42, 320, 0.05, 1.00, 0.01, "empowerStageBlinkTime", 0.25, "MSUF2_CASTBAR_EMPOWER_TIME",
+            ApplyEmpoweredPreview, { precise = true } },
     }, "empowered")
     local blinkControls = { empoweredControls.empowerStageBlinkTime }
     if W.SetControlsDisabledReason and W.TurnOnReason then
@@ -312,7 +324,8 @@ local function BuildFocusKickSection(PageState, secBuilder)
             },
         })
     end
-    local focusHint = W.Text(focusKick, "Track interrupts on your focus with a detached kick icon, optionally alongside the Focus castbar.", 14, -38, (focusKick._msuf2Width or ctx.width or 720) - 28, T.colors.muted)
+    local focusHint = W.Text(focusKick, "Track interrupts on your focus with a detached kick icon, optionally alongside the Focus castbar.", 14, -38,
+        (focusKick._msuf2Width or ctx.width or 720) - 28, T.colors.muted)
     if focusHint and focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
     focusKick._msuf2CursorY = -68
     local focusLeftX, focusRightX = 14, 392
@@ -336,7 +349,8 @@ local function BuildFocusKickSection(PageState, secBuilder)
         end)
     end
     local focusControls = BuildCastControlSpecs(focusKick, {
-        { "toggle", "Focus interrupt tracker", focusLeftX, -74, 260, "enableFocusKickIcon", false, "MSUF2_FOCUS_KICK_ENABLE", nil, { name = "enable", switch = true,
+        { "toggle", "Focus interrupt tracker", focusLeftX, -74, 260, "enableFocusKickIcon", false, "MSUF2_FOCUS_KICK_ENABLE", nil,
+            { name = "enable", switch = true,
             afterSet = function(_, enabled)
                 _G.MSUF_FocusKickDriver_ForceUpdate()
                 _G.MSUF_KickReady_RefreshAll()
@@ -350,7 +364,8 @@ local function BuildFocusKickSection(PageState, secBuilder)
                 return type(fn) == "function" and fn() or false
             end,
             setValue = function(v) _G.MSUF_FocusKick_SetPreviewEnabled(v and true or false) end, classification = "ephemeral" } },
-        { "toggle", "Show castbar with Focus Kick icon", focusLeftX, -126, 340, "focusKickShowCastbar", false, "MSUF2_FOCUS_KICK_CASTBAR", nil, { name = "show_castbar",
+        { "toggle", "Show castbar with Focus Kick icon", focusLeftX, -126, 340, "focusKickShowCastbar", false, "MSUF2_FOCUS_KICK_CASTBAR", nil,
+            { name = "show_castbar",
             setValue = function(v)
                 if M.SetGeneralValue("focusKickShowCastbar", v and true or false, "MSUF2_FOCUS_KICK_CASTBAR",
                     { applyAll = false, preview = false, notify = false }) then
@@ -358,7 +373,8 @@ local function BuildFocusKickSection(PageState, secBuilder)
                 end
             end } },
         { "slider", "Width", focusRightX, -74, 320, 16, 128, 1, "focusKickIconWidth", 40, "MSUF2_FOCUS_KICK_WIDTH", ApplyFocusKickOptions, { name = "width" } },
-        { "slider", "Height", focusRightX, -128, 320, 16, 128, 1, "focusKickIconHeight", 40, "MSUF2_FOCUS_KICK_HEIGHT", ApplyFocusKickOptions, { name = "height" } },
+        { "slider", "Height", focusRightX, -128, 320, 16, 128, 1, "focusKickIconHeight", 40, "MSUF2_FOCUS_KICK_HEIGHT",
+            ApplyFocusKickOptions, { name = "height" } },
         { "slider", "Text size", focusRightX, -182, 320, 8, 24, 1, nil, nil, nil, nil, { name = "text",
             settingKey = "general.focusKickTextSize",
             getValue = function()
@@ -371,7 +387,8 @@ local function BuildFocusKickSection(PageState, secBuilder)
                 RequestFocusKickTextFont()
                 ApplyFocusKickOptions()
             end } },
-        { "slider", "X offset", focusLeftX, -176, 320, -500, 500, 1, "focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_X", ApplyFocusKickOptions, { name = "x", setDefault = 0 } },
+        { "slider", "X offset", focusLeftX, -176, 320, -500, 500, 1, "focusKickIconOffsetX", 300, "MSUF2_FOCUS_KICK_X", ApplyFocusKickOptions,
+            { name = "x", setDefault = 0 } },
         { "slider", "Y offset", focusLeftX, -230, 320, -500, 500, 1, "focusKickIconOffsetY", 0, "MSUF2_FOCUS_KICK_Y", ApplyFocusKickOptions, { name = "y" } },
     }, "focus_kick")
     local resetFocus = W.Button(focusKick, "Reset Position", 150)
@@ -383,7 +400,8 @@ local function BuildFocusKickSection(PageState, secBuilder)
         if M.RequestRefresh then M.RequestRefresh(ctx, "castbars-focus-kick-reset") elseif M.Refresh then M.Refresh(ctx) end
     end)
     RegisterControl(resetFocus, Meta("focus_kick.reset_position", "action"), "Reset Position", "button")
-    local focusKickControls = { focusControls.preview, focusControls.show_castbar, focusControls.width, focusControls.height, focusControls.text, focusControls.x, focusControls.y, resetFocus }
+    local focusKickControls = { focusControls.preview, focusControls.show_castbar, focusControls.width, focusControls.height, focusControls.text,
+        focusControls.x, focusControls.y, resetFocus }
     if W.SetControlsDisabledReason and W.TurnOnReason then
         W.SetControlsDisabledReason(focusKickControls,
             W.TurnOnReason("Focus interrupt tracker", function() return ReadGBool("enableFocusKickIcon", false) end))
@@ -427,19 +445,25 @@ local function BuildInterruptReadySection(PageState, secBuilder)
         { "arena", "Show on Arena castbars", "kickReadyShowArena" },
     }) do
         if unitToggle[1] == "target" or not M.SupportsFrameScope or M.SupportsFrameScope(unitToggle[1]) then
-            kickSpecs[#kickSpecs + 1] = { "toggle", unitToggle[2], kickLeftX, -56 - #kickSpecs * 26, 300, unitToggle[3], false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady }
+            kickSpecs[#kickSpecs + 1] = { "toggle", unitToggle[2], kickLeftX, -56 - #kickSpecs * 26, 300, unitToggle[3], false,
+                "MSUF2_KICK_READY_ENABLE", ApplyKickReady }
         end
     end
-    kickSpecs[#kickSpecs + 1] = { "dropdown", "Indicator style", kickRightX, -56, 300, VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border", "MSUF2_KICK_READY_STYLE", ApplyKickReady }
+    kickSpecs[#kickSpecs + 1] = { "dropdown", "Indicator style", kickRightX, -56, 300,
+        VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border",
+        "MSUF2_KICK_READY_STYLE", ApplyKickReady }
     kickSpecs[#kickSpecs + 1] = { "slider", "Indicator size", kickRightX, -110, 320, 8, 32, 1, "kickReadySize", 16, "MSUF2_KICK_READY_SIZE", ApplyAndRefresh }
-    kickSpecs[#kickSpecs + 1] = { "toggle", "Auto-size to castbar height", kickRightX, -164, 360, "kickReadyAutoSize", true, "MSUF2_KICK_READY_AUTO", ApplyKickReady }
+    kickSpecs[#kickSpecs + 1] = { "toggle", "Auto-size to castbar height", kickRightX, -164, 360, "kickReadyAutoSize", true,
+        "MSUF2_KICK_READY_AUTO", ApplyKickReady }
     local kickControls = BuildCastControlSpecs(kick, kickSpecs, "interrupt_ready")
     local colorHint = W.Text(kick, "Colors: Colors menu > Castbar Colors", kickRightX, -196, 370, T.colors.muted)
     W.LabelAt(kick, "Placement", kickLeftX, -172, 160, "GameFontNormalSmall", T.colors.accent)
     M.Assign(kickControls, BuildCastControlSpecs(kick, {
         { "toggle", "Show interrupt availability markers", kickRightX, -216, 370, "kickReadyTimeMarker", false, "MSUF2_KICK_TIME_MARKER", ApplyKickReady },
-        { "toggle", "Shade cast time after interrupts recover", kickRightX, -244, 370, "kickReadyTimeSegment", false, "MSUF2_KICK_TIME_SEGMENT", ApplyKickReady },
-        { "dropdown", "Anchor", kickLeftX, -190, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
+        { "toggle", "Shade cast time after interrupts recover", kickRightX, -244, 370, "kickReadyTimeSegment", false,
+            "MSUF2_KICK_TIME_SEGMENT", ApplyKickReady },
+        { "dropdown", "Anchor", kickLeftX, -190, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT",
+            "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
         { "slider", "X offset", kickLeftX, -244, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
         { "slider", "Y offset", kickLeftX, -298, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
     }, "interrupt_ready.placement"))
@@ -558,7 +582,8 @@ local function CreateCastbarPageState(ctx, b)
                 if not (opts.classification == "ephemeral") then selectedValue2 = { settingKey = opts.settingKey or (key and ("general." .. key)) } end
                 opts.meta = opts.meta or Meta(semanticPrefix .. "." .. tostring(key or opts.name), opts.classification,
                     selectedValue2)
-                return BindCastSlider(parent, label, x, y, width, spec[6], spec[7], spec[8], key, spec[10], spec[11], opts.afterSet or spec[12], opts), opts.name or key or i
+                return BindCastSlider(parent, label, x, y, width, spec[6], spec[7], spec[8], key, spec[10], spec[11], opts.afterSet or spec[12],
+                    opts), opts.name or key or i
             end,
             dropdown = function(spec, i)
                 local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[7]
@@ -601,25 +626,33 @@ local function BuildCastbars(ctx)
     b:GlobalStyleHeader("Castbar", "Castbar behavior, textures and interrupt indicators.", 72)
     local PageState = CreateCastbarPageState(ctx, b)
     local LazyCastbarSection = PageState.LazyCastbarSection
-    LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 224, defaultOpen = true, build = function(_, secBuilder) return BuildBehaviorSection(PageState, secBuilder) end })
-    LazyCastbarSection({ sectionId = "castbar_filters", title = "Filtering & Feedback", height = 110, build = function(_, secBuilder) return BuildFilterSection(PageState, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_behavior", title = "Shake & Fill Direction", height = 224, defaultOpen = true,
+        build = function(_, secBuilder) return BuildBehaviorSection(PageState, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_filters", title = "Filtering & Feedback", height = 110,
+        build = function(_, secBuilder) return BuildFilterSection(PageState, secBuilder) end })
     if GCDBarSupported() then
-        LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 346, build = function(_, secBuilder) return BuildGCDSection(PageState, secBuilder) end })
+        LazyCastbarSection({ sectionId = "castbar_gcd", title = "GCD Bar", height = 346,
+            build = function(_, secBuilder) return BuildGCDSection(PageState, secBuilder) end })
     end
-    LazyCastbarSection({ sectionId = "castbar_textures", title = "Textures & Outline", height = 246, build = function(_, secBuilder) return BuildTexturesSection(PageState, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_textures", title = "Textures & Outline", height = 246,
+        build = function(_, secBuilder) return BuildTexturesSection(PageState, secBuilder) end })
     -- Empowered casts are an Evoker mechanic: Midnight only. WoW Forever and the
     -- Classic clients have no Evoker (MSUF.Client.HasEmpoweredCasts). A harness
     -- that fakes only IsClassic still hides the section.
     local client = MSUF.Client
     if not client or (client.HasEmpoweredCasts ~= false and client.IsClassic ~= true) then
-        LazyCastbarSection({ sectionId = "castbar_empowered", title = "Empowered Casts", height = 130, build = function(_, secBuilder) return BuildEmpoweredSection(PageState, secBuilder) end })
+        LazyCastbarSection({ sectionId = "castbar_empowered", title = "Empowered Casts", height = 130,
+            build = function(_, secBuilder) return BuildEmpoweredSection(PageState, secBuilder) end })
     end
-    LazyCastbarSection({ sectionId = "castbar_name_shortening", title = "Name Shortening", height = 154, build = function(_, secBuilder) return BuildNameShorteningSection(PageState, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_name_shortening", title = "Name Shortening", height = 154,
+        build = function(_, secBuilder) return BuildNameShorteningSection(PageState, secBuilder) end })
     -- Focus Kick tracks the focus unit, which Classic Era does not have.
     if not M.SupportsFrameScope or M.SupportsFrameScope("focus") then
-        LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 352, build = function(_, secBuilder) return BuildFocusKickSection(PageState, secBuilder) end })
+        LazyCastbarSection({ sectionId = "castbar_focus_kick", title = "Focus Kick", height = 352,
+            build = function(_, secBuilder) return BuildFocusKickSection(PageState, secBuilder) end })
     end
-    LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 382, build = function(_, secBuilder) return BuildInterruptReadySection(PageState, secBuilder) end })
+    LazyCastbarSection({ sectionId = "castbar_interrupt_ready", title = "Interrupt Ready Indicator", height = 382,
+        build = function(_, secBuilder) return BuildInterruptReadySection(PageState, secBuilder) end })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 6 })
