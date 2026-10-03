@@ -574,4 +574,55 @@ do
     end
 end
 
+---------------------------------------------------------------------------
+-- 8. One owner per public cast-colour getter. Runtime/MSUF_Colors.lua and
+--    Castbars/MSUF_CastbarUtils.lua both exported the interruptible,
+--    non-interruptible and interrupt-unavailable getters; Utils loads later
+--    and always replaced Colors' (palette-fallback) copies, which reached no
+--    caller. Utils is the only publisher; Colors keeps its getters for the
+--    menu's MSUF._colorsAPI rows.
+---------------------------------------------------------------------------
+do
+    local OWNERS = {
+        MSUF_GetInterruptibleCastColor = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua",
+        MSUF_GetNonInterruptibleCastColor = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua",
+        MSUF_GetInterruptUnavailableCastColor = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua",
+        MSUF_GetInterruptFeedbackCastColor = "MidnightSimpleUnitFrames/Runtime/MSUF_Colors.lua",
+    }
+    local writers = {}
+    for name in pairs(OWNERS) do writers[name] = {} end
+    local pipe = assert(io.popen('git -C "' .. root .. '" ls-files -- MidnightSimpleUnitFrames MidnightSimpleUnitFrames_Options', "r"))
+    local scanned = 0
+    for path in pipe:lines() do
+        if path:match("%.lua$") then
+            local handle = io.open(root .. "/" .. path, "rb")
+            if handle then
+                local source = handle:read("*a")
+                handle:close()
+                scanned = scanned + 1
+                for name in pairs(OWNERS) do
+                    local quoted = '"' .. name .. '"'
+                    if source:find("ExportPublic%(%s*" .. quoted:gsub("%W", "%%%0"))
+                        or source:find("%f[%w_]_?G%." .. name .. "%s*=[^=]") then
+                        writers[name][#writers[name] + 1] = path
+                    end
+                end
+            end
+        end
+    end
+    pipe:close()
+    Check(scanned >= 400, "only " .. scanned .. " Lua files scanned; git ls-files failed")
+    for name, owner in pairs(OWNERS) do
+        local list = writers[name]
+        Check(#list == 1 and list[1] == owner,
+            name .. " is published by " .. (#list > 0 and table.concat(list, ", ") or "no file") .. ", not only " .. owner)
+    end
+    local colors = ReadSource("Runtime/MSUF_Colors.lua")
+    for _, getter in ipairs({ "GetInterruptibleCastColor", "GetNonInterruptibleCastColor",
+        "GetInterruptFeedbackCastColor", "GetInterruptUnavailableCastColor" }) do
+        Check(colors:find("%s+" .. getter .. "%s*=%s*" .. getter .. ","),
+            "MSUF._colorsAPI lost " .. getter .. " (the menu's cast colour rows)")
+    end
+end
+
 print("castbar correctness smoke: ok")

@@ -444,17 +444,20 @@ local function ResetCastbarBackgroundColor()
 end
 
 --- - Cast Colors (interruptible / non-interruptible / feedback) -
+--- The menu's colour rows read these through MSUF._colorsAPI (with the palette
+--- fallbacks). The public MSUF_GetInterruptibleCastColor,
+--- MSUF_GetNonInterruptibleCastColor and MSUF_GetInterruptUnavailableCastColor
+--- belong to Castbars/MSUF_CastbarUtils.lua: it loads after this file in every
+--- TOC and always replaced these exports (custom RGB only; each castbar caller
+--- owns its palette fallback), so this file no longer publishes them.
 local function GetInterruptibleCastColor() return _getRGBPalette("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", "castbarInterruptibleColor", "turquoise", 0, 0.9, 0.8) end
-ExportPublic("MSUF_GetInterruptibleCastColor", GetInterruptibleCastColor)
 local function SetInterruptibleCastColor(r, g, b) _setRGB("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", r, g, b, 0, 0.9, 0.8, PushCastbarVisualUpdates) end
 local function GetNonInterruptibleCastColor() return _getRGBTonumber("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", "castbarNonInterruptibleColor", "red", 0.4, 0.01, 0.01) end
-ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
 local function SetNonInterruptibleCastColor(r, g, b) _setRGB("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", r, g, b, 0.4, 0.01, 0.01, PushCastbarVisualUpdates) end
 local function GetInterruptFeedbackCastColor() return _getRGBTonumber("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", "castbarInterruptFeedbackColor", "yellow", 1.0, 0.82, 0.0) end
 ExportPublic("MSUF_GetInterruptFeedbackCastColor", GetInterruptFeedbackCastColor)
 local function SetInterruptFeedbackCastColor(r, g, b) _setRGB("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", r, g, b, 1.0, 0.82, 0.0, PushCastbarVisualUpdates) end
 local function GetInterruptUnavailableCastColor() return _getRGBTonumber("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", "castbarInterruptUnavailableColor", nil, 1.0, 0.494117647, 0.137254902) end
-ExportPublic("MSUF_GetInterruptUnavailableCastColor", GetInterruptUnavailableCastColor)
 local function SetInterruptUnavailableCastColor(r, g, b) _setRGB("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", r, g, b, 1.0, 0.494117647, 0.137254902, PushCastbarVisualUpdates) end
 
 --- - Player Castbar Override -
