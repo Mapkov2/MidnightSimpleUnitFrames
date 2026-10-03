@@ -21,6 +21,9 @@
 --      their switch at load, and the Grid2, Details!, Dominos, DandersFrames
 --      and Blizzard Edit Mode adapters activated at load, also for a player
 --      who had turned the integration off (their read saw no profile).
+--      The R5 fix round removed the last ones: the stored font key
+--      normalization, the mouseover highlight cache, the cooldown width
+--      observers, the NSRT nickname adapter and the arena trinket sync.
 --   2. Target sounds a player turned on are active after login. At load the
 --      driver read the throwaway profile (off) and nothing applied the saved
 --      value until the menu toggle or a profile switch.
@@ -33,17 +36,6 @@ local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 -- Load-time readers in files another package owns. Each row names the file,
 -- the owner and the fix; delete the row when the reader is gone.
 local KNOWN = {
-    -- Found by the direct MSUF_DB read count (fix round); routed by the lead.
-    ["MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua"] =
-        "lead (unrouted): MSUF_NormalizeStoredFontKeys() at load",
-    ["MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Highlight.lua"] =
-        "lead (unrouted): Highlight.Refresh() at load",
-    ["MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua"] =
-        "lead (unrouted): EnsureCooldownWidthObservers() at load",
-    ["MidnightSimpleUnitFrames/Integrations/MSUF_Integration_NSRTNicknames.lua"] =
-        "lead (unrouted): TryEnableNSRT() at load reads the nickname switch",
-    ["MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"] =
-        "lead (unrouted): SyncTrinketIcons(false) at load reads the arena switch",
 }
 
 local function Check(condition, message)

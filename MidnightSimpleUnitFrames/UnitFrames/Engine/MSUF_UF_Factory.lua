@@ -2192,7 +2192,9 @@ do
       ScheduleLateAnchorReanchor()
     end
   end)
-  EnsureCooldownWidthObservers()
+  -- The observers read the profile, so they are first armed by PLAYER_LOGIN
+  -- above (the SavedVariables arrive after every file ran), not while this
+  -- file loads.
 end
 
 do

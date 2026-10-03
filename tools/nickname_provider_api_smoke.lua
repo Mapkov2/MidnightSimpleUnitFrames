@@ -246,8 +246,16 @@ _G.NSAPI = {
 
 chunk = assert(loadfile(ResolvePath("Integrations/MSUF_Integration_NSRTNicknames.lua")))
 chunk("MidnightSimpleUnitFrames", MSUF)
+-- The nickname switch lives in the profile, so the adapter waits for MSUF's
+-- ADDON_LOADED or PLAYER_LOGIN (the SavedVariables arrive after every file ran).
+Check(not API.IsProviderRegistered("NorthernSkyRaidTools"),
+    "the bundled NSRT adapter read the profile while its file loaded")
+local nsrtFrame = eventFrame
+nsrtFrame.callback(nsrtFrame, "PLAYER_LOGIN")
 Check(API.IsProviderRegistered("NorthernSkyRaidTools"),
     "bundled NSRT adapter did not register as a nickname provider")
+Check(not nsrtFrame.events.PLAYER_LOGIN and not nsrtFrame.events.ADDON_LOADED,
+    "the NSRT adapter kept its discovery events after it registered")
 Check(activeResolver("player") == "NSRTFirst", "NSRT nickname was not resolved")
 Check(type(nsrtCallbacks.NSRT_NICKNAME_UPDATED) == "function",
     "NSRT nickname callback was not registered")
