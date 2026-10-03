@@ -539,10 +539,9 @@ local function ApplyScopedFeatureRuntime(kind, reason, scope)
         if ApplyService.RequestCastbars then return ApplyService.RequestCastbars(reason, "history") ~= false end
         if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { history = false, preview = true, applyAll = false, castbar = true,
             castbarTextures = true }) ~= false end
-        local did = true, _G.MSUF_UpdateCastbarVisuals()
+        _G.MSUF_UpdateCastbarVisuals()
         _G.MSUF_UpdateBossCastbarPreview()
-did = true
-        return did
+        return true
     end
     if kind == "classpower" then
         -- A ClassPower-owned setting can also decide whether the module has any
