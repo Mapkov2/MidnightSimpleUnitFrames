@@ -6668,6 +6668,12 @@ L["Nudge %s"] = "Ajustement fin : %s"
 L["Set %s"] = "Définir %s"
 L["Toggle %s"] = "Basculer %s"
 L["Change %s"] = "Modifier %s"
+L["Above CDM"] = "Au-dessus du CDM"
+L["Centered on CDM"] = "Au centre du CDM"
+L["Below CDM"] = "Sous le CDM"
+L["Selected position: %s."] = "Position choisie : %s."
+L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "Choisissez où ancrer les cadres d’unité au CDM : au-dessus, au centre ou en dessous. Garder indépendant les laisse sans ancrage."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

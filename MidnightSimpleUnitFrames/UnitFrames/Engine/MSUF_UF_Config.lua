@@ -65,6 +65,7 @@ local ECV_ANCHORS = {
   focustarget = { "TOP", "RIGHT", 0, 40 },
 }
 
+
 local DEFAULTS = {
   player = { width = 275, height = 40, x = -256, y = -180, showName = false, showPower = true },
   target = { width = 275, height = 40, x = 320, y = -180, showName = true, showPower = true },
@@ -76,6 +77,39 @@ local DEFAULTS = {
   boss = { width = 180, height = 30, x = 500, y = 180, showName = true, showPower = false },
   arena = { width = 180, height = 30, x = 360, y = -40, showName = true, showPower = true },
 }
+
+-- Explicit popup choices translate the whole global layout around its main
+-- row. Legacy CDM/per-unit coordinates keep their original edge rules.
+local ECV_POSITION_RULES = {}
+for key in pairs(DEFAULTS) do ECV_POSITION_RULES[key] = { "CENTER", "CENTER", 0, 0 } end
+local function CooldownRowEdge(general, selected)
+  if selected == "CENTER" then return 0 end
+  local db = Config.GetDB()
+  local player, target = db.player or {}, db.target or {}
+  local playerHalf = Number(player.height or player.frameHeight, 40) / 2
+  local targetHalf = Number(target.height or target.frameHeight, 40) / 2
+  local playerY = Number(general.cooldownAnchorLayoutPlayerY, 0)
+  local targetY = Number(general.cooldownAnchorLayoutTargetY, 0)
+  if selected == "TOP" then return 8 - min(playerY - playerHalf, targetY - targetHalf) end
+  return -8 - max(playerY + playerHalf, targetY + targetHalf)
+end
+function Config.CooldownAnchorRule(key, conf, general)
+  local selected = general and general.cooldownAnchorPosition
+  local named = conf and conf.anchorFrameName
+  local target = conf and conf.anchorToUnitframe
+  local followsGlobal = not named or named == ""
+  followsGlobal = followsGlobal and (not target or target == "" or target == "GLOBAL" or target == "global" or target == "FREE")
+  if followsGlobal and general and general.anchorToCooldown == true
+      and (selected == "TOP" or selected == "CENTER" or selected == "BOTTOM") then
+    local rule = ECV_POSITION_RULES[key]
+    if rule then
+      rule[2] = selected
+      rule[4] = -Number(general.cooldownAnchorLayoutY, -180) + CooldownRowEdge(general, selected)
+      return rule
+    end
+  end
+  return ECV_ANCHORS[key]
+end
 
 local POWER_KEYS = {
   player = "showPlayerPowerBar",
@@ -1231,7 +1265,7 @@ local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossInd
   -- retain their exact screen geometry without adding runtime event work.
   local essentialCooldownAnchor = cooldownViewerAnchor
     and out.anchorFrameName == "EssentialCooldownViewer"
-  local ecvRule = essentialCooldownAnchor and ECV_ANCHORS[key] or nil
+  local ecvRule = essentialCooldownAnchor and Config.CooldownAnchorRule(key, conf, general) or nil
   if ecvRule then
     out.point = ecvRule[1]
     out.relativePoint = ecvRule[2]

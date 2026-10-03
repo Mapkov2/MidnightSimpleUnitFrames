@@ -6584,6 +6584,12 @@ L["Nudge %s"] = "%s 미세 이동"
 L["Set %s"] = "%s 지정"
 L["Toggle %s"] = "%s 전환"
 L["Change %s"] = "%s 변경"
+L["Above CDM"] = "CDM 위"
+L["Centered on CDM"] = "CDM 중앙"
+L["Below CDM"] = "CDM 아래"
+L["Selected position: %s."] = "선택한 위치: %s."
+L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "유닛 프레임을 CDM의 위, 중앙 또는 아래에 고정할 위치를 선택하세요. 독립적으로 유지하면 고정되지 않습니다."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

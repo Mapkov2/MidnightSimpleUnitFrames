@@ -51,7 +51,6 @@ local CreateFrame = CreateFrame
 local C_AddOns = C_AddOns
 local C_Timer = C_Timer
 local EventRegistry = EventRegistry
-local InCombatLockdown = InCombatLockdown
 local UIParent = UIParent
 local type = type
 local issecretvalue = _G.issecretvalue
@@ -59,6 +58,10 @@ local issecretvalue = _G.issecretvalue
 --- ClassPower/MSUF_CP_Controller.lua). A provider that is already present
 --- (the Suite loading first) is acquired while this file loads, before they
 --- exist; their own first apply then covers that acquisition.
+local function GetSuite()
+    return _G.MSUFSuite
+end
+
 local function RunOptional(name, ...)
     local fn = MSUF.Optional(name)
     if fn then return fn(...) end
@@ -286,12 +289,31 @@ function MSUF.GetCooldownAnchorConsentDecision(providerId)
     return CooldownConsentDecision(providerId)
 end
 
-function MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision)
+-- Keep screen offsets intact so switching the global layout back to
+-- independent restores its saved placement. The selected CDM origin is stored
+-- once per profile and shared by the compiler and Edit Mode.
+local function RememberCooldownLayoutOrigin(db)
+    local general = db.general
+    if general.cooldownAnchorLayoutY ~= nil then return end
+    local player, target = db.player or {}, db.target or {}
+    local playerY = tonumber(player.offsetY or player.y) or -180
+    local targetY = tonumber(target.offsetY or target.y) or playerY
+    general.cooldownAnchorLayoutY = (playerY + targetY) * 0.5
+    general.cooldownAnchorLayoutPlayerY = playerY - general.cooldownAnchorLayoutY
+    general.cooldownAnchorLayoutTargetY = targetY - general.cooldownAnchorLayoutY
+end
+
+function MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision, position)
     local db = _G.MSUF_DB
     if type(db) ~= "table" then return false end
     if type(db.general) ~= "table" then db.general = {} end
     enabled = enabled == true
     local changed = db.general.anchorToCooldown ~= enabled
+    if enabled and (position == "TOP" or position == "CENTER" or position == "BOTTOM") then
+        changed = changed or db.general.cooldownAnchorPosition ~= position
+        db.general.cooldownAnchorPosition = position
+        RememberCooldownLayoutOrigin(db)
+    end
     db.general.anchorToCooldown = enabled
 
     local providerId = MSUF.GetAutomaticCooldownAnchorProvider()
@@ -306,7 +328,7 @@ end
 local function FirstConsentText(providerLabel)
     return format(Tr("MSUF detected %s."), providerLabel)
         .. "\n\n"
-        .. Tr("Would you like MSUF to anchor the global Unit Frame layout to Essential Cooldown Manager?")
+        .. Tr("Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached.")
         .. "\n\n"
         .. Tr("Nothing will move unless you confirm again in the next step. If you choose Keep independent, you can enable CDM anchoring at any time in MSUF Edit Mode or under Unit > Anchoring in the MSUF menu.")
 end
@@ -351,12 +373,13 @@ end
 
 local function ResolveCooldownConsent(data, enabled)
     if type(data) ~= "table" or data.providerId ~= automaticCooldownProviderId then return end
+    if InCombat() then return end
     RememberCooldownConsent(data.providerId, enabled)
     -- Written before the layout switch, so its reanchor recompiles the unit
     -- configuration with the class power width source already in place.
     local classPowerAdopted = enabled == true and data.providerId == SUITE_COOLDOWN_ADDON
         and AdoptSuiteClassPowerAnchor()
-    MSUF.SetCooldownAnchorEnabled(enabled, false)
+    MSUF.SetCooldownAnchorEnabled(enabled, false, data.position)
     if classPowerAdopted then RefreshAdoptedSuiteClassPower() end
 end
 
@@ -364,11 +387,18 @@ end
 -- their buttons or Escape answer them. (Blizzard's generic dialog also cancels
 -- when it finds no free dialog frame or another dialog replaces it, which would
 -- store a refusal nobody gave.)
+local function CanAnswerCooldownConsent()
+    return not InCombat()
+end
+
 local function ShowFinalCooldownConsent(data)
     if data.providerId ~= automaticCooldownProviderId then return end
     UI.ShowPrompt(COOLDOWN_CONFIRM_POPUP, {
-        text = FinalConsentText(data.providerLabel), accept = Tr("Confirm anchoring"), cancel = CANCEL or Tr("Cancel"),
-        owned = true,
+        text = FinalConsentText(data.providerLabel) .. "\n\n"
+            .. format(Tr("Selected position: %s."), Tr(data.position == "TOP" and "Above CDM"
+                or data.position == "BOTTOM" and "Below CDM" or "Centered on CDM")),
+        accept = Tr("Confirm anchoring"), cancel = CANCEL or Tr("Cancel"),
+        owned = true, canAnswer = CanAnswerCooldownConsent,
         onAccept = function() ResolveCooldownConsent(data, true) end,
         onCancel = function() ResolveCooldownConsent(data, false) end,
     })
@@ -377,7 +407,10 @@ end
 local function ShowFirstCooldownConsent(data)
     UI.ShowPrompt(COOLDOWN_CONSENT_POPUP, {
         text = FirstConsentText(data.providerLabel), accept = Tr("Continue"), cancel = Tr("Keep independent"),
-        owned = true,
+        owned = true, canAnswer = CanAnswerCooldownConsent, selectedChoice = data.position,
+        choices = { { label = Tr("Above CDM"), value = "TOP" },
+            { label = Tr("Centered on CDM"), value = "CENTER" }, { label = Tr("Below CDM"), value = "BOTTOM" } },
+        onChoice = function(position) data.position = position end,
         onAccept = function() ShowFinalCooldownConsent(data) end,
         onCancel = function() ResolveCooldownConsent(data, false) end,
     })
@@ -388,6 +421,10 @@ local function MaybeShowCooldownConsent()
     -- Consent offers the Cooldown Manager layout; a client that cannot host
     -- the anchor has nothing to ask about.
     if not cooldownAnchorSupported then return false end
+    local suite = GetSuite()
+    local installer = suite and suite.Installer
+    if installer and ((installer.IsFirstRunPending and installer.IsFirstRunPending())
+        or (installer.IsOpen and installer.IsOpen())) then return false end
     if not providerId or cooldownConsentPromptProviderId == providerId then return false end
     local db = _G.MSUF_DB
     local general = type(db) == "table" and db.general or nil
@@ -403,7 +440,9 @@ local function MaybeShowCooldownConsent()
         watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
         return false
     end
-    ShowFirstCooldownConsent({ providerId = providerId, providerLabel = providerLabel })
+    local position = general.cooldownAnchorPosition
+    if position ~= "TOP" and position ~= "BOTTOM" then position = "CENTER" end
+    ShowFirstCooldownConsent({ providerId = providerId, providerLabel = providerLabel, position = position })
     cooldownConsentPromptProviderId = providerId
     return true
 end
@@ -424,12 +463,12 @@ _G.MSUF_GetCooldownAnchorConsentDecision = function(providerId)
     return MSUF.GetCooldownAnchorConsentDecision(providerId)
 end
 
-_G.MSUF_SetCooldownAnchorEnabled = function(enabled, rememberDecision)
-    return MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision)
+_G.MSUF_SetCooldownAnchorEnabled = function(enabled, rememberDecision, position)
+    return MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision, position)
 end
 
 InCombat = function()
-    return InCombatLockdown and InCombatLockdown() or false
+    return MSUF.Util.InCombat()
 end
 
 local function IsSecretValue(value)
@@ -660,7 +699,7 @@ end
 --- inert there even if a table of that name exists.
 local function GetSuiteCooldownAnchorCandidate()
     if not cooldownAnchorClientSupported then return nil end
-    local suite = _G.MSUFSuite
+    local suite = GetSuite()
     local manager = type(suite) == "table" and suite.CooldownManager or nil
     local getAnchorFrame = type(manager) == "table" and manager.GetAnchorFrame or nil
     if type(getAnchorFrame) ~= "function" then return nil end
@@ -1182,7 +1221,7 @@ end
 
 local function RegisterSuiteCooldownAnchor()
     if not cooldownAnchorClientSupported then return false end
-    local suite = _G.MSUFSuite
+    local suite = GetSuite()
     local manager = type(suite) == "table" and suite.CooldownManager or nil
     if not (type(manager) == "table" and type(manager.GetAnchorFrame) == "function")
         and not IsAddOnFullyLoaded(SUITE_COOLDOWN_ADDON) then
@@ -1265,6 +1304,10 @@ watcher:SetScript("OnEvent", function(self, event, addon)
     RegisterThirdPartyAnchors()
     if event == "PLAYER_LOGIN" then ScheduleMissingCooldownAnchorWarning() end
 end)
+
+if cooldownAnchorClientSupported and EventRegistry then
+    EventRegistry:RegisterCallback("MSUFSuite.Installer.Finished", MaybeShowCooldownConsent, "MidnightSimpleUnitFrames")
+end
 
 RefreshAutomaticCooldownProvider(false)
 RegisterThirdPartyAnchors()

@@ -6780,6 +6780,12 @@ L["Nudge %s"] = "微调%s"
 L["Set %s"] = "设定%s"
 L["Toggle %s"] = "切换%s"
 L["Change %s"] = "更改%s"
+L["Above CDM"] = "CDM 上方"
+L["Centered on CDM"] = "CDM 中央"
+L["Below CDM"] = "CDM 下方"
+L["Selected position: %s."] = "所选位置：%s。"
+L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "选择单位框体在 CDM 上方、中央或下方的锚定位置。保持独立会让框体不进行锚定。"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

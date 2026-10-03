@@ -143,6 +143,10 @@ local function LoadProvider(options)
     _G.MSUF_ClassPower_Apply = function(opts) h.cpApply[#h.cpApply + 1] = opts end
 
     local ns = {
+        Util = {
+            InCombat = function() return h.combatEdge == true or env:IsInCombat() end,
+            IsPlayerInCombat = function() return h.combatEdge == true or env:IsInCombat() end,
+        },
         Client = MODELS[options.model or "Midnight"],
         UF = {
             spawned = true,
@@ -409,6 +413,68 @@ local function ConsentWorld(db, loaded, suite)
     Fire(h, "PLAYER_LOGIN")
     return h
 end
+
+for _, position in ipairs({ "TOP", "CENTER", "BOTTOM" }) do
+    for _, provider in ipairs({ SUITE_ID, "CooldownManagerCentered", "SkironCooldownManager" }) do
+        Case("consent: selectable " .. position .. " on " .. provider, function()
+            local h = ConsentWorld(nil, { provider }, provider == SUITE_ID)
+            local first = assert(PopupNamed(h, CONSENT_POPUP))
+            local choices = assert(first.frame._msufPromptChoices, "the popup has no anchor-position choices")
+            local picked
+            for _, button in ipairs(choices) do
+                if button._msufChoiceValue == position then picked = button end
+            end
+            assert(picked, "the popup does not offer " .. position)
+            picked:GetScript("OnClick")(picked)
+            assert(_G.MSUF_DB.general.anchorToCooldown == false
+                and _G.MSUF_DB.general.cooldownAnchorPosition == nil and h.forceReanchor == 0,
+                "selecting a position moved frames before confirmation")
+            AnswerConsent(h, true, true)
+            assert(_G.MSUF_DB.general.cooldownAnchorPosition == position
+                and _G.MSUF_DB.general.anchorToCooldown == true and h.forceReanchor == 1,
+                "confirmation did not apply the selected anchor position")
+        end)
+    end
+end
+
+for _, edge in ipairs({ "lockdown", "regen-disabled" }) do
+    Case("consent: confirmation stays pending during " .. edge, function()
+        local h = ConsentWorld()
+        local first = assert(PopupNamed(h, CONSENT_POPUP))
+        Answer(first, "accept")
+        local final = assert(PopupNamed(h, CONFIRM_POPUP))
+        if edge == "lockdown" then h.env:SetCombat(true) else h.combatEdge = true end
+        local button = final.frame._msufPromptButtons[1]
+        button:GetScript("OnClick")(button)
+        assert(final.frame:IsShown(), "combat discarded the unanswered confirmation")
+        assert(_G.MSUF_DB.general.anchorToCooldown == false and h.forceReanchor == 0
+            and h.ns.GetCooldownAnchorConsentDecision(SUITE_ID) == nil,
+            "combat wrote or applied the CDM preference")
+        h.env:SetCombat(false)
+        h.combatEdge = false
+        Fire(h, "PLAYER_REGEN_ENABLED")
+        Answer(final, "accept")
+        assert(_G.MSUF_DB.general.anchorToCooldown == true and h.forceReanchor == 1,
+            "the preserved confirmation did not work after combat")
+    end)
+end
+
+Case("consent: Suite setup finishes before choosing the CDM layout", function()
+    local h = LoadProvider({ model = "Midnight", suite = true, loaded = { SUITE_ID } })
+    local pending, open = true, true
+    h.suite.Installer = { IsFirstRunPending = function() return pending end,
+        IsOpen = function() return open end }
+    Fire(h, "PLAYER_LOGIN")
+    assert(PopupNamed(h, CONSENT_POPUP) == nil, "CDM consent ran before the factory import")
+    pending = false
+    h.registry:TriggerEvent("MSUFSuite.Installer.Finished")
+    assert(PopupNamed(h, CONSENT_POPUP) == nil, "consent appeared behind the setup window")
+    open = false
+    h.registry:TriggerEvent("MSUFSuite.Installer.Finished")
+    assert(PopupNamed(h, CONSENT_POPUP), "finishing setup lost the deferred CDM choice")
+    AnswerConsent(h, true, true)
+    assert(_G.MSUF_DB.general.cooldownAnchorPosition == "CENTER")
+end)
 
 Case("consent: accepting the Suite anchors class power at cooldown width", function()
     local h = ConsentWorld()
@@ -781,6 +847,104 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             assert(env.MSUF_GetActiveCooldownAnchorProvider() == SUITE_ID, flavor .. ": Suite is not the active provider")
             assert(env.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer") == frame,
                 flavor .. ": the effective cooldown frame is not the Suite's")
+            -- The chosen position reaches the real compiler and the real
+            -- Edit Mode drag builder on both supported clients.
+            local config = ns.UF.Config
+            local db = config.GetDB()
+            env.MSUF_DB = db
+            db.general.anchorToCooldown = true
+            db.player.anchorFrameName, db.target.anchorFrameName = nil, nil
+            db.player.anchorToUnitframe, db.target.anchorToUnitframe = "GLOBAL", "GLOBAL"
+            env.GetCursorPosition = function() return 800, 600 end
+            local mover = env.CreateFrame("Frame", nil, env.UIParent)
+            mover:SetSize(275, 40)
+            mover.left, mover.bottom = 100, 200
+            local bar = env.CreateFrame("Frame", nil, env.UIParent)
+            bar:SetSize(275, 40)
+            local cfg = { getFrame = function() return bar end, getConf = function() return db.player end }
+            for _, choice in ipairs({
+                { "TOP", "CENTER", "TOP", "CENTER", "TOP" },
+                { "CENTER", "CENTER", "CENTER", "CENTER", "CENTER" },
+                { "BOTTOM", "CENTER", "BOTTOM", "CENTER", "BOTTOM" },
+            }) do
+                db.general.cooldownAnchorPosition = choice[1]
+                db.general.cooldownAnchorLayoutY = db.player.offsetY
+                db.general.cooldownAnchorLayoutHeight = db.player.height
+                local player, target = config.RefreshUnit("player"), config.RefreshUnit("target")
+                assert(player.point == choice[2] and player.relativePoint == choice[3]
+                    and target.point == choice[4] and target.relativePoint == choice[5],
+                    flavor .. ": compiled position disagrees with " .. choice[1])
+                local rowY = choice[1] == "TOP" and (player.height / 2 + 8)
+                    or choice[1] == "BOTTOM" and -(player.height / 2 + 8) or 0
+                assert(player.y == rowY, flavor .. ": the main row is not at the chosen CDM edge")
+                for _, unit in ipairs({ "focus", "targettarget", "focustarget", "pet", "pettarget", "boss1", "arena1" }) do
+                    local secondary = config.RefreshUnit(unit)
+                    assert(secondary or not ns.Client.SupportsUnit(unit:match("^arena") and "arena" or unit),
+                        flavor .. ": a supported unit did not compile")
+                    if secondary then
+                    assert(secondary.relativePoint == choice[1], flavor .. ": " .. unit .. " kept the old CDM origin")
+                    local saved = db[secondary.key]
+                    local y = saved and (saved.offsetY or saved.y)
+                    if y then
+                        assert(secondary.y - y == player.y - db.player.offsetY,
+                            flavor .. ": " .. unit .. " did not move with the whole layout")
+                    end
+                    end
+                end
+                local drag = assert(env.MSUF_EM2.Ticker.BeginExternalDrag(mover, "player", cfg))
+                assert(drag.usesECV and drag.ecvRule[1] == player.point
+                    and drag.ecvRule[2] == player.relativePoint
+                    and drag.ecvRule[4] == player.y - db.player.offsetY,
+                    flavor .. ": Edit Mode drag disagrees with the selected CDM anchor")
+                env.MSUF_EM2.Ticker.EndExternalDrag(drag, false)
+            end
+            for _, family in ipairs({ "boss", "arena" }) do
+                if ns.Client.SupportsUnit(family) then
+                    db.general.cooldownAnchorPosition = "CENTER"
+                    db[family].anchorFrameName, db[family].anchorToUnitframe = nil, "GLOBAL"
+                    local oldFrames, oldGeometry = ns.UF.frames, env.MSUF_ApplyBossPhysicalBarGeometry
+                    ns.UF.frames = {}
+                    -- Fixture frames have no health textures; only their geometry painter is cosmetic here.
+                    env.MSUF_ApplyBossPhysicalBarGeometry = function() end
+                    local stack, before = {}, {}
+                    local count = family == "boss" and 5 or 3
+                    for i = 1, count do
+                        local spec = config.RefreshUnit(family .. i)
+                        local f = env.CreateFrame("Frame", nil, env.UIParent)
+                        f:SetSize(spec.width, spec.height)
+                        f.left, f.bottom = 100, 300 - i * 40
+                        f:SetPoint(spec.point, frame, spec.relativePoint, spec.x, spec.y)
+                        stack[i], before[i], ns.UF.frames[family .. i] = f, { f:GetPoint(1) }, f
+                    end
+                    local stackCfg = { getFrame = function() return stack[1] end,
+                        getConf = function() return db[family] end }
+                    local drag = assert(env.MSUF_EM2.Ticker.BeginExternalDrag(mover, family, stackCfg))
+                    assert(drag.usesECV and (drag.isBossLayout or drag.isArenaLayout))
+                    mover.left, mover.bottom = mover.left + 20, mover.bottom + 10
+                    assert(env.MSUF_EM2.Ticker.ApplyExternalDrag(drag), "stack drag did not apply")
+                    for i = 1, count do
+                        local moved = { stack[i]:GetPoint(1) }
+                        assert(moved[4] == before[i][4] + 20 and moved[5] == before[i][5] + 10,
+                            flavor .. ": CDM drag broke the " .. family .. " stack")
+                    end
+                    env.MSUF_EM2.Ticker.EndExternalDrag(drag, false)
+                    ns.UF.frames, env.MSUF_ApplyBossPhysicalBarGeometry = oldFrames, oldGeometry
+                end
+            end
+            local savedHeight = db.player.height
+            db.player.height = 100
+            db.general.cooldownAnchorPosition = "TOP"
+            local taller = config.RefreshUnit("player")
+            assert(taller.y - taller.height / 2 == 8, flavor .. ": resized frame overlaps the CDM top")
+            db.player.height = savedHeight
+            -- Per-unit anchors retain their own legacy rule; independence
+            -- switches the global layout back to screen positioning.
+            db.player.anchorToUnitframe = "EssentialCooldownViewer"
+            local explicit = config.RefreshUnit("player")
+            assert(explicit.point == "RIGHT" and explicit.relativePoint == "LEFT")
+            db.player.anchorToUnitframe = "GLOBAL"
+            db.general.anchorToCooldown = false
+            assert(config.RefreshUnit("player").anchorFrameName ~= "EssentialCooldownViewer")
             -- The Suite hides its bar: the resolver falls back to ArcUI at once.
             frame:Hide()
             frame.scripts.OnHide(frame)

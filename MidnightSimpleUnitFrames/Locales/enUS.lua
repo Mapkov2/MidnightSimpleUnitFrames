@@ -4582,6 +4582,12 @@ L["Set %s"] = "Set %s"
 L["Toggle %s"] = "Toggle %s"
 L["Change %s"] = "Change %s"
 L["%s: %s"] = "%s: %s"
+L["Above CDM"] = "Above CDM"
+L["Centered on CDM"] = "Centered on CDM"
+L["Below CDM"] = "Below CDM"
+L["Selected position: %s."] = "Selected position: %s."
+L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

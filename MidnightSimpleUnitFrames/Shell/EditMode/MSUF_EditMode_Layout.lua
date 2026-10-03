@@ -46,13 +46,12 @@ EM2.Ticker = Ticker
 
 local format = string.format
 
-local ECV_ANCHORS = {
-    player       = { "RIGHT", "LEFT",  -20,   0 },
-    target       = { "LEFT",  "RIGHT",  20,   0 },
-    focus        = { "TOP",   "LEFT",    0,   0 },
-    targettarget = { "TOP",   "RIGHT",   0, -40 },
-    focustarget  = { "TOP",   "RIGHT",   0,  40 },
-}
+-- The runtime compiler owns the CDM edge rules; drag offsets use the same
+-- selected position so moving a frame never jumps between coordinate spaces.
+local function CooldownAnchorRule(key, conf)
+    local config = MSUF.UF.Config
+    return config.CooldownAnchorRule(key, conf, config.GetDB().general)
+end
 
 local function PointXY(fr, p)
     if not fr or not p then return nil, nil end
@@ -321,29 +320,27 @@ local function ApplyUnitDragPosition(d, centerX, centerY, uiScale)
     if previousX == nil then previousX = d.unitStartX or 0 end
     if previousY == nil then previousY = d.unitStartY or 0 end
 
-    local positioned
+    local point, anchor, relativePoint = d.point, d.anchor, d.relativePoint
+    local baseX, extraY = 0, 0
     if d.usesECV and d.ecvFrame and d.ecvRule then
-        local point, relativePoint = d.ecvRule[1], d.ecvRule[2]
-        local baseX, extraY = d.ecvRule[3] or 0, d.ecvRule[4] or 0
-        positioned = TryApplyFramePoint(d.bar, point, d.ecvFrame, relativePoint,
-            baseX + nextX, nextY + extraY)
-    elseif d.isBossLayout then
-        positioned = SetBossPreviewPosition(d.point, d.anchor, d.relativePoint,
-            nextX, nextY, d.conf, previousX, previousY)
+        point, anchor, relativePoint = d.ecvRule[1], d.ecvFrame, d.ecvRule[2]
+        baseX, extraY = d.ecvRule[3] or 0, d.ecvRule[4] or 0
+    end
+    local placedX, placedY = baseX + nextX, extraY + nextY
+    local rollbackX, rollbackY = baseX + previousX, extraY + previousY
+    local positioned
+    if d.isBossLayout then
+        positioned = SetBossPreviewPosition(point, anchor, relativePoint,
+            placedX, placedY, d.conf, rollbackX, rollbackY)
     elseif d.isArenaLayout then
-        positioned = SetArenaPreviewPosition(d.point, d.anchor, d.relativePoint,
-            nextX, nextY, d.conf, previousX, previousY)
+        positioned = SetArenaPreviewPosition(point, anchor, relativePoint,
+            placedX, placedY, d.conf, rollbackX, rollbackY)
     else
-        positioned = TryApplyFramePoint(d.bar, d.point, d.anchor, d.relativePoint, nextX, nextY)
+        positioned = TryApplyFramePoint(d.bar, point, anchor, relativePoint, placedX, placedY)
     end
     if not positioned then
-        if d.usesECV and d.ecvFrame and d.ecvRule then
-            local point, relativePoint = d.ecvRule[1], d.ecvRule[2]
-            local baseX, extraY = d.ecvRule[3] or 0, d.ecvRule[4] or 0
-            TryApplyFramePoint(d.bar, point, d.ecvFrame, relativePoint,
-                baseX + previousX, previousY + extraY)
-        elseif not (d.isBossLayout or d.isArenaLayout) then
-            TryApplyFramePoint(d.bar, d.point, d.anchor, d.relativePoint, previousX, previousY)
+        if not (d.isBossLayout or d.isArenaLayout) then
+            TryApplyFramePoint(d.bar, point, anchor, relativePoint, rollbackX, rollbackY)
         end
         return false
     end
@@ -854,7 +851,7 @@ local function BuildDrag(mover, key, cfg, start)
         end
     end
 
-    local ecvRule = ECV_ANCHORS[key]
+    local ecvRule = not (isCastbar or isGroupFrame or isSubframe) and CooldownAnchorRule(key, conf) or nil
     local usesECV = false
     local ecvFrame
     if (not isCastbar) and ecvRule and conf then

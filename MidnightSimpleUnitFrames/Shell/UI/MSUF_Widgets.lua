@@ -443,7 +443,7 @@ end
 --- spec: text, accept / cancel (button labels; the generic dialog defaults to
 --- YES / NO), onAccept(text), onCancel(), showAlert, single (one button),
 --- hideOnEscape (false: Escape does not answer), owned (always the owned
---- frame), input = { maxLetters = n }.
+--- frame), input = { maxLetters = n }, canAnswer() (optional answer gate).
 --- style (optional): panel(parent) builds the owned frame, text(fontString)
 --- styles its message, priority(frame) sets its strata and level on every
 --- show, raise(dialog) lifts a generic dialog.
@@ -477,8 +477,10 @@ local function ShowGenericPrompt(key, spec, style)
 end
 local function PromptButtonClick(button)
     local frame = button:GetParent()
+    local spec = frame._msufPromptSpec
+    if spec.canAnswer and not spec.canAnswer() then return end
     frame:Hide()
-    local handler = frame._msufPromptSpec[button._msufPromptField]
+    local handler = spec[button._msufPromptField]
     if handler then handler() end
 end
 local function PromptKeyDown(frame, key)
@@ -523,11 +525,50 @@ local function BuildPromptFrame(style)
     frame:Hide()
     return frame
 end
+local function PaintPromptChoices(frame)
+    local spec = frame._msufPromptSpec
+    for index, button in ipairs(frame._msufPromptChoices or {}) do
+        local choice = spec.choices and spec.choices[index]
+        button:SetShown(choice ~= nil)
+        if choice then
+            button:SetText(choice.label)
+            button:SetAlpha(spec.selectedChoice == choice.value and 1 or 0.55)
+        end
+    end
+end
+local function PromptChoiceClick(button)
+    local frame = button:GetParent()
+    local spec = frame._msufPromptSpec
+    spec.selectedChoice = button._msufChoiceValue
+    if spec.onChoice then spec.onChoice(spec.selectedChoice) end
+    PaintPromptChoices(frame)
+end
+local function LayoutPromptChoices(frame, spec)
+    if spec.choices then
+        frame._msufPromptChoices = frame._msufPromptChoices or {}
+        local width = (frame:GetWidth() - 36 - (#spec.choices - 1) * 8) / #spec.choices
+        for index, choice in ipairs(spec.choices) do
+            local button = frame._msufPromptChoices[index]
+            if not button then
+                button = PixelLayoutRegion(CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"))
+                button:SetScript("OnClick", PromptChoiceClick)
+                MSUF_SkinButton(button)
+                frame._msufPromptChoices[index] = button
+            end
+            button._msufChoiceValue = choice.value
+            button:SetSize(width, 22)
+            button:ClearAllPoints()
+            button:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18 + (index - 1) * (width + 8), 54)
+        end
+    end
+    PaintPromptChoices(frame)
+    return spec.choices and 38 or 0
+end
 local function LayoutPromptFrame(frame, spec)
     local text, accept, cancel = frame._msufPromptText, frame._msufPromptButtons[1], frame._msufPromptButtons[2]
     -- An explicit text width, so the string height is known before the frame
     -- has a resolved rect.
-    local width, inset = spec.showAlert and 360 or 320, spec.showAlert and 58 or 18
+    local width, inset = spec.choices and 440 or spec.showAlert and 360 or 320, spec.showAlert and 58 or 18
     frame:SetWidth(width)
     frame._msufPromptAlert:SetShown(spec.showAlert == true)
     text:ClearAllPoints()
@@ -545,7 +586,8 @@ local function LayoutPromptFrame(frame, spec)
         accept:SetPoint("BOTTOMRIGHT", frame, "BOTTOM", -6, 16)
         cancel:SetPoint("BOTTOMLEFT", frame, "BOTTOM", 6, 16)
     end
-    frame:SetHeight(max(spec.showAlert and 64 or 0, text:GetStringHeight() or 0) + 18 + 16 + 22 + 16)
+    local choicesHeight = LayoutPromptChoices(frame, spec)
+    frame:SetHeight(max(spec.showAlert and 64 or 0, text:GetStringHeight() or 0) + 18 + 16 + 22 + 16 + choicesHeight)
 end
 local function ShowFramePrompt(key, spec, style)
     local frame = promptFrames[key] or BuildPromptFrame(style)

@@ -6592,6 +6592,12 @@ L["Nudge %s"] = "Сдвиг: %s"
 L["Set %s"] = "Установка: %s"
 L["Toggle %s"] = "Переключение: %s"
 L["Change %s"] = "Изменение: %s"
+L["Above CDM"] = "Над CDM"
+L["Centered on CDM"] = "По центру CDM"
+L["Below CDM"] = "Под CDM"
+L["Selected position: %s."] = "Выбранное положение: %s."
+L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "Выберите положение привязки рамок юнитов к CDM: сверху, по центру или снизу. Сохранить независимость оставляет рамки без привязки."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end
