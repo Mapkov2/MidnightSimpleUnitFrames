@@ -6744,6 +6744,8 @@ L["Rare Elite"] = "稀有精英"
 L["PvP"] = "PvP"
 L["GHOST"] = "鬼魂"
 L["OFFLINE"] = "离线"
+L["Tracked buffs (%d of 40)"] = "已追踪增益（%d / 40）"
+L["Tracked debuffs (%d of 40)"] = "已追踪减益效果（%d / 40）"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

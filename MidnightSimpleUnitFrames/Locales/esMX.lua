@@ -6607,6 +6607,8 @@ L["Rare Elite"] = "Élite raro"
 L["PvP"] = "JcJ"
 L["GHOST"] = "FANTASMA"
 L["OFFLINE"] = "DESCONECTADO"
+L["Tracked buffs (%d of 40)"] = "Mejoras monitoreadas (%d de 40)"
+L["Tracked debuffs (%d of 40)"] = "Desventajas monitoreadas (%d de 40)"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

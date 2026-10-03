@@ -46,6 +46,9 @@ local FORBIDDEN = {
     { PAGES .. "MSUF_Menu2_Auras_CustomWorkspace.lua", 'containerLabel %.%. " Cooldown', "custom cooldown text shortcut titles" },
     { PAGES .. "MSUF_Menu2_Auras_CustomWorkspace.lua", '"Display: " %.%.', "custom DoT display line" },
     { PAGES .. "MSUF_Menu2_Auras_CustomWorkspace.lua", 'Tr%(containerLabel%)%)', "custom Layout title translated twice" },
+    { PAGES .. "MSUF_Menu2_Auras_CustomWorkspace.lua", '"Tracked "%)? ?%.%.', "custom Whitelist status line (Tracked .. plural)" },
+    { PAGES .. "MSUF_Menu2_Auras_CustomWorkspace.lua", 'auraPlural', "custom Whitelist status line plural noun" },
+    { PAGES .. "MSUF_Menu2_Auras_CustomWorkspace.lua", '" of 40%)"', "custom Whitelist status count fragment" },
     { PAGES .. "MSUF_Menu2_AdvancedProfiles.lua", '"Module import failed: " %.%.', "module import failure" },
     { PAGES .. "MSUF_Menu2_AdvancedProfiles.lua", '"Suite import failed: " %.%.', "Suite import failure" },
     { PAGES .. "MSUF_Menu2_AdvancedProfiles.lua", '"Export failed: " %.%.', "export failure" },
@@ -87,19 +90,23 @@ local KEYS = {
     "Boss %s", "Arena %s", "%s %s",
     "Death Knight", "Demon Hunter", "Druid", "Evoker", "Hunter", "Mage", "Monk",
     "Paladin", "Priest", "Rogue", "Shaman", "Warlock", "Warrior",
+    "Tracked buffs (%d of 40)", "Tracked debuffs (%d of 40)",
 }
 -- Keys this change added: a translated pack must give each its own text.
 -- (Existing keys such as "Paladin" or "Raid" are the same word in some languages.)
 local ADDED = {}
 for i = 1, 23 do ADDED[KEYS[i]] = true end
 ADDED["%s Layout"] = nil
+ADDED["Tracked buffs (%d of 40)"] = true
+ADDED["Tracked debuffs (%d of 40)"] = true
 -- Every key each changed site uses must be among KEYS.
 local SITE_KEYS = {
     { PAGES .. "MSUF_Menu2_Auras.lua", { "Buff Filters", "Debuff Filters", "Buff Blacklist", "Debuff Blacklist" } },
     { PAGES .. "MSUF_Menu2_Auras_Group.lua", { "Buff Filters", "Debuff Filters", "Buff Blacklist", "Debuff Blacklist" } },
     { PAGES .. "MSUF_Menu2_Auras_CustomWorkspace.lua", { "%s Whitelist", "%s Filters", "%s Setup", "%s Layout", "Custom %d",
         "Display: portrait position", "Display: normal DoT lane",
-        "%s Cooldown Text Settings", "%s Cooldown Colors" } },
+        "%s Cooldown Text Settings", "%s Cooldown Colors",
+        "Tracked buffs (%d of 40)", "Tracked debuffs (%d of 40)" } },
     { PAGES .. "MSUF_Menu2_AdvancedProfiles.lua", { "Export failed: %s", "Module import failed: %s", "Suite import failed: %s" } },
     { EDIT .. "MSUF_EditMode_Blizzard.lua", { "MSUF Edit Mode: Blizzard layout is not editable (%s)" } },
     { EDIT .. "MSUF_EditMode_HUD.lua", { "Anchor set: %s", "BG %d%%", "Grid %dpx" } },

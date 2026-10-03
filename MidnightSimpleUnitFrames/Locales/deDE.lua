@@ -6907,6 +6907,8 @@ L["Rare Elite"] = "Seltene Elite"
 L["PvP"] = "PvP"
 L["GHOST"] = "GEIST"
 L["OFFLINE"] = "OFFLINE"
+L["Tracked buffs (%d of 40)"] = "Verfolgte Buffs (%d von 40)"
+L["Tracked debuffs (%d of 40)"] = "Verfolgte Schwächungen (%d von 40)"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

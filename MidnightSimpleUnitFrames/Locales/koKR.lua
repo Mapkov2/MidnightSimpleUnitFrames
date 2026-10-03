@@ -6548,6 +6548,8 @@ L["Rare Elite"] = "희귀 정예"
 L["PvP"] = "PvP"
 L["GHOST"] = "유령"
 L["OFFLINE"] = "오프라인"
+L["Tracked buffs (%d of 40)"] = "추적 중인 버프 (%d / 40)"
+L["Tracked debuffs (%d of 40)"] = "추적 중인 디버프 (%d / 40)"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end
