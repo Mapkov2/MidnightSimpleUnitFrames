@@ -677,8 +677,7 @@ Overview.RegisterProvider("group-frames", function(sink)
                         value = frame and frame.layer, default = 0,
                         enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.layer",
-                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey,
-                            auraKey, "frame", "layer" } },
+                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "frame", "layer" } },
                     })
                     sink:Strata({
                         id = "group." .. scope.key .. ".spellIndicators." .. token .. ".frame.strata",
@@ -686,8 +685,7 @@ Overview.RegisterProvider("group-frames", function(sink)
                         value = frame and frame.strata, default = "AUTO",
                         enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.strata",
-                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey,
-                            auraKey, "frame", "strata" } },
+                        edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "frame", "strata" } },
                     })
                 end
             end

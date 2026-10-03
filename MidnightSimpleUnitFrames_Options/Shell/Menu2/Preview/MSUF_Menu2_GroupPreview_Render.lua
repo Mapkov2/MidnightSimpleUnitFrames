@@ -1873,8 +1873,7 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
         local cooldownY = ConfigToOffset(cfg.cooldownY or 0, textScale)
         local stackX = ConfigToOffset(cfg.stackX or 0, textScale)
         local stackY = ConfigToOffset(cfg.stackY or 0, textScale)
-        local dispelMode = groupKey == "debuff" and NormalizeDispelBorderMode(cfg.dispelBorderMode, cfg.showDispelBorder == true
-            or cfg.showDispelSymbol == true) or "OFF"
+        local dispelMode = groupKey == "debuff" and NormalizeDispelBorderMode(cfg.dispelBorderMode, cfg.showDispelBorder == true or cfg.showDispelSymbol == true) or "OFF"
         local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
         local gv = AuraGrowth(growth)
         local centered = runtimeLane ~= true and gv.centered == true
@@ -2049,10 +2048,7 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
             end
         end
         local anim = handle._msufGFAuraAnim
-        if not anim then
-            anim = {}
-            handle._msufGFAuraAnim = anim
-        end
+        if not anim then anim = {}; handle._msufGFAuraAnim = anim end
         anim.groupKey, anim.maxIcons, anim.cfg, anim.size = groupKey, maxIcons, cfg, size
         anim.swipe, anim.swipeReverse = showSwipe and not barOnly, cooldownSwipeReverse
         anim.showStacks, anim.showCooldown = showStacks, showCooldown
@@ -2807,8 +2803,7 @@ function Stage.LayoutMockFrame(st, env)
         local ClampZoom, H, M, ResolveDefaultZoomLock, Round, ScaleValue, UpdateZoomControls, WHITE8X8 = env.ClampZoom, env.H, env.M, env.ResolveDefaultZoomLock, env.Round, env.ScaleValue, env.UpdateZoomControls, env.WHITE8X8
         local T = env.T
         local max, min, width = env.max, env.min, env.width
-        T.SetTranslatedText(self._title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview"))
-            or "Group Frame Preview", label))
+        T.SetTranslatedText(self._title, string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
         local stageW = self._stage:GetWidth() or (width - 98)
         local stageH = self._stage:GetHeight() or 218
         if stageW <= 1 then stageW = math.max(260, width - 98) end
@@ -2826,10 +2821,7 @@ function Stage.LayoutMockFrame(st, env)
         local additional = self._additionalPreviewLayout
         if st.reason ~= "GROUP_PREVIEW_ANIMATE" then
             local layoutScratch = self._additionalPreviewLayoutScratch
-            if not layoutScratch then
-                layoutScratch = {}
-                self._additionalPreviewLayoutScratch = layoutScratch
-            end
+            if not layoutScratch then layoutScratch = {}; self._additionalPreviewLayoutScratch = layoutScratch end
             additional = Render.AdditionalPreviewLayout(gf, kind, conf, liveW, liveH, layoutScratch)
             self._additionalPreviewLayout = additional
             local topology = additional and ((additional.pets and 1 or 0) + (additional.targets and 2 or 0)
@@ -2940,8 +2932,7 @@ function Stage.LayoutMockFrame(st, env)
                     local holder = gf.RenderAdditionalPreview(root, kind, prefix, kind == "party" and 5 or 10, MENU_EXTRA_OPTIONS)
                     if holder then
                         holder:SetScale(previewScale)
-                        holder:ClearAllPoints()
-                        holder:SetPoint("CENTER", root, "CENTER", 0, 0)
+                        holder:ClearAllPoints(); holder:SetPoint("CENTER", root, "CENTER", 0, 0)
                         root:Show()
                     else root:Hide() end
                 elseif root then
@@ -2984,10 +2975,8 @@ function Stage.RenderHealthBars(st, env)
         mock._msufGFPreviewPowerBorderG = runtimePower and runtimePower.borderG or bg
         mock._msufGFPreviewPowerBorderB = runtimePower and runtimePower.borderB or bb
         mock._msufGFPreviewPowerBorderA = runtimePower and runtimePower.borderA or mock._msufGFPreviewBorderA
-        local barTex = runtimeHealth.texture or (runtimeSpec and runtimeSpec.texture) or (gf and gf.ResolveBarTexture and gf.ResolveBarTexture(kind))
-            or ResolvePreviewStatusbarTexture(conf, "barTexture")
-        local bgTex = runtimeHealth.backgroundTexture or (runtimeSpec and runtimeSpec.backgroundTexture)
-            or (gf and gf.ResolveBarBgTexture and gf.ResolveBarBgTexture(kind)) or WHITE8X8
+        local barTex = runtimeHealth.texture or (runtimeSpec and runtimeSpec.texture) or (gf and gf.ResolveBarTexture and gf.ResolveBarTexture(kind)) or ResolvePreviewStatusbarTexture(conf, "barTexture")
+        local bgTex = runtimeHealth.backgroundTexture or (runtimeSpec and runtimeSpec.backgroundTexture) or (gf and gf.ResolveBarBgTexture and gf.ResolveBarBgTexture(kind)) or WHITE8X8
         mock._health:SetStatusBarTexture(barTex)
         if st.reason ~= "GROUP_PREVIEW_ANIMATE" then
             Render.ApplyNameBar(mock, conf, (runtimeSpec and runtimeSpec.group) or Render.NO_GROUP_VISUAL,
@@ -3092,8 +3081,7 @@ function Stage.RenderHealthBars(st, env)
             st.healPredFollows = true
         else
             mock._healPred:SetAllPoints(mock._health)
-            if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill((healPredMode == 1) and false
-                or ((healPredMode == 5) and not hpReverse or true)) end
+            if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill((healPredMode == 1) and false or ((healPredMode == 5) and not hpReverse or true)) end
             mock._healPred:SetValue(healPct)
         end
         mock._healPred:SetShown(healPredShown)
@@ -3105,8 +3093,7 @@ function Stage.RenderHealthBars(st, env)
             runtimePrediction.absorbB or (gen and gen.absorbBarColorB) or 1,
             (runtimePrediction.absorbA or (gen and gen.absorbBarOpacity) or (gen and gen.absorbBarColorA) or 0.75) * predictionFillAlpha
         )
-        local absorbMode = tonumber(runtimePrediction.absorbAnchorMode) or tonumber((conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode)
-            or (gen and gen.absorbAnchorMode)) or 2
+        local absorbMode = tonumber(runtimePrediction.absorbAnchorMode) or tonumber((conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
         if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
         local absorbShown
         if runtimeSpec then
@@ -3122,8 +3109,7 @@ function Stage.RenderHealthBars(st, env)
             end
         end
         local absorbAnchorTex = hpTex or mock._health
-        if healPredShown and (healPredMode == 3 or healPredMode == 4)
-            and mock._healPred.GetStatusBarTexture then absorbAnchorTex = mock._healPred:GetStatusBarTexture() or absorbAnchorTex end
+        if healPredShown and (healPredMode == 3 or healPredMode == 4) and mock._healPred.GetStatusBarTexture then absorbAnchorTex = mock._healPred:GetStatusBarTexture() or absorbAnchorTex end
         local absorbFollows = (absorbMode == 3 or absorbMode == 4) and absorbAnchorTex
         if absorbFollows then
             if hpReverse then

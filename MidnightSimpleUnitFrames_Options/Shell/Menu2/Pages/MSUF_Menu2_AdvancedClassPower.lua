@@ -1187,9 +1187,7 @@ function Page:BuildDetachedPower()
     local values = VT("layout", "Layout", "textures", "Textures", "text", "Text")
     RegisterSegment(W.SegmentTabs(self.ctx, section, { stateKey = "classPowerDetachedPowerTab", label = "Power area", values = values,
         width = min(520, max(320, width - 64)), frames = frames, defaultTab = "layout", x = 32, y = -44 }), "detached_power.workspace_tab", values)
-    W.ControlCard(layout, "Detached Player Power",
-        "When anchored here, Player power settings are managed by Class Resources. In Automatic mode, Augmentation Evoker shows Ebon Might on this bar.", 14,
-        -38, cardW, twoColumns and 536 or 814)
+    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources. In Automatic mode, Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 536 or 814)
     self.dpbUse = W.SwitchAt(layout, "Detached player power", 32, -104, controlW)
     M.BindBoolWidget(self.ctx, self.dpbUse, function() return Player().powerBarDetached == true end,
         function(value)
@@ -1204,8 +1202,7 @@ function Page:BuildDetachedPower()
                 player.detachedPowerBarHeight = tonumber(player.detachedPowerBarHeight) or 6
                 player.detachedPowerBarFrameLevelOffset = tonumber(player.detachedPowerBarFrameLevelOffset) or 6
             end
-            ApplyDetachedPowerSource()
-            self.refresh()
+            ApplyDetachedPowerSource(); self.refresh()
         end, Meta("detached_power.enabled"))
     local smooth = SwitchAt(self.ctx, layout, "Smooth fill", twoColumns and rightX or 32, twoColumns and -104 or -138, controlW,
         Player, "powerSmoothFill", false, ApplyDetachedPlayerPowerSmoothing, Meta("detached_power.layout.smooth_fill"))
@@ -1231,14 +1228,12 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbSource, "Displayed resource",
         M.PlayerPowerSourceTooltip)
     local mode = self:Controls(layout, Bars, ApplyDetachedPowerWidthMode, "detached_power.layout", {
-        { "mode", "nilDefaultDropdown", "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs",
-            "Tracked Buffs"), 260, "detachedPowerBarWidthMode", "manual", self:WithRefresh(ApplyDetachedPowerWidthMode), group = "detached" },
+        { "mode", "nilDefaultDropdown", "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs"), 260, "detachedPowerBarWidthMode", "manual", self:WithRefresh(ApplyDetachedPowerWidthMode), group = "detached" },
     })
     self.dpb = self:Controls(layout, Player, ApplyDetachedPowerBar, "detached_power.layout", {
         { "anchor", "toggle", "Anchor to Class Resource", "detachedPowerBarAnchorToClassPower", false, group = "detachedPlayer" },
         { "sync", "toggle", "Sync width to Class Resource", "detachedPowerBarSyncClassPower", true, ApplyDetachedPowerSource, group = "detachedPlayer" },
-        { "width", "detachedPowerWidth", "Power width", 20, 800, 1, 300, "detachedPowerBarWidth", 0, self:WithRefresh(ApplyDetachedPowerSource),
-            group = "detachedPlayer" },
+        { "width", "detachedPowerWidth", "Power width", 20, 800, 1, 300, "detachedPowerBarWidth", 0, self:WithRefresh(ApplyDetachedPowerSource), group = "detachedPlayer" },
         { "orbSize", "slider", "Orb size", 20, 160, 1, 300, "detachedPowerOrbSize", 54, group = "detachedPlayer" },
         { "x", "slider", "Power X", -1000, 1000, 1, 300, "detachedPowerBarOffsetX", 0, group = "detachedPlayer" },
         { "y", "slider", "Power Y", -1000, 1000, 1, 300, "detachedPowerBarOffsetY", -4, group = "detachedPlayer" },
@@ -1246,11 +1241,9 @@ function Page:BuildDetachedPower()
         { "layer", "slider", "Player Power layer", 0, 30, 1, 300, "detachedPowerBarFrameLevelOffset", 6, group = "detachedPlayer" },
     })
     AddTooltip(self.dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. Anchor connects it to the Class Resources stack; Sync only follows the stack width. In Automatic mode, Augmentation Evoker uses this bar for Ebon Might; an explicit Mana selection keeps it as Mana.")
-    AddTooltip(self.dpb.anchor, "Anchor To Class Resource",
-        "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
+    AddTooltip(self.dpb.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
     AddTooltip(self.dpb.width, "Power Width", "Manual width for the detached Player power bar. Available while Width mode is Manual; dragging it releases Sync width to Class Resource, because that sync would otherwise win. Unset, the bar inherits the Player frame width.")
-    AddTooltip(self.dpb.sync, "Sync Width",
-        "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
+    AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
     AddTooltip(self.dpb.layer, "Player Power Layer", "Orders only the normal Player Power bar. It does not control Class Resource pips or their text.")
     local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 620 or 850)
     if W.AttachContextColorShortcut then
@@ -1318,13 +1311,10 @@ function Page:BuildDetachedPower()
         offsets[index] = slider
     end
     AddTooltip(self.dpbText.preset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.")
-    AddTooltip(self.dpbText.onBar, "Power Text On Bar",
-        "Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout.")
+    AddTooltip(self.dpbText.onBar, "Power Text On Bar", "Places Player power text on the detached power bar. When off, the same Player power text remains positioned by the normal text layout.")
     AddTooltip(self.dpbText.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
-    AddTooltip(self.dpbText.layer, "Player Power Text Layer",
-        "Orders only the normal Player Power text. The visible Essence count and Ebon Might time belong to Class Resource text.")
-    AddTooltip(fontOutline, "Player Text Outline",
-        "Sets the Player font scope used by detached Power text. Player Name and HP text share this outline setting.")
+    AddTooltip(self.dpbText.layer, "Player Power Text Layer", "Orders only the normal Player Power text. The visible Essence count and Ebon Might time belong to Class Resource text.")
+    AddTooltip(fontOutline, "Player Text Outline", "Sets the Player font scope used by detached Power text. Player Name and HP text share this outline setting.")
     -- Power art is owned by the Bars page and the Player unit page (detached or
     -- not); this tab keeps only the shape edge that Class Resources still owns.
     local powerTexturesCard = W.ControlCard(textures, "Shape Outline", "Power textures live on the Bars page.", 14, -38, cardW, 160)
@@ -1349,18 +1339,15 @@ function Page:BuildDetachedPower()
         { "outline", "playerPowerOutline", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline, group = "detached" },
     })
     self.dpbTextures = texture
-    AddTooltip(texture.outline, "Power Bar Outline",
-        "Edge strength of every detached Player power shape, including Bar, Round, Crystal and Orb. 0 disables only that edge.")
-    PlaceColumn(layout, 32, twoColumns and -220 or -254, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.width,
-        self.dpb.orbSize, self.dpb.height)
+    AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of every detached Player power shape, including Bar, Round, Crystal and Orb. 0 disables only that edge.")
+    PlaceColumn(layout, 32, twoColumns and -220 or -254, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.width, self.dpb.orbSize, self.dpb.height)
     PlaceColumn(layout, rightX, twoColumns and -220 or -640, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.outline)
     PlaceColumn(text, 32, -104, 54, controlW, "LEFT", self.dpbText.onBar, self.dpbText.preset, self.dpbText.right)
     for i, control in ipairs({ self.dpbHide[1], self.dpbText.left, self.dpbHide[2], self.dpbText.center, self.dpbHide[3], self.dpbText.sep }) do
         MoveWidget(control, text, 32, ({ -264, -298, -350, -384, -436, -470 })[i], controlW, "LEFT")
     end
-    PlaceColumn(text, rightX, twoColumns and -154 or -446, 54, controlW, "LEFT", self.dpbText.size, fontOutline, self.dpbText.x, self.dpbText.y,
-        self.dpbText.layer, slot, offsets[1], offsets[2])
+    PlaceColumn(text, rightX, twoColumns and -154 or -446, 54, controlW, "LEFT", self.dpbText.size, fontOutline, self.dpbText.x, self.dpbText.y, self.dpbText.layer, slot, offsets[1], offsets[2])
     self:Add("detachedPlayer", smooth)
     self:Add("detachedText", fontOutline, unpack(self.dpbHide))
     self:Add("detachedSlot", slot, offsets[1], offsets[2])

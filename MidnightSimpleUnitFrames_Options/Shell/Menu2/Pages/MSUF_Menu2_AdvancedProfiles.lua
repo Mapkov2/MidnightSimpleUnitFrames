@@ -659,10 +659,7 @@ function ProfilesPage.ManagementControls(state)
     local PrepareProfileName = function(value)
 local name = Trim(value)
         local prepared = { name = name, existed = name ~= "" and ProfileExists(name) or false }
-        if name ~= "" then
-            M.profileCreateCopyName = name
-            nameInput:SetText(name)
-        end
+        if name ~= "" then M.profileCreateCopyName = name; nameInput:SetText(name) end
         return prepared
 end
 
@@ -1062,15 +1059,9 @@ function ProfilesPage.ImportActions(state)
             return false
         elseif suiteKind == "module" then
             local suite = SuiteProfiles()
-            if not suite then
-                PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this module.")
-                return false
-            end
+            if not suite then PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this module."); return false end
             local ok, reason = suite.ImportModule(text)
-            if not ok then
-                PrintProfileMessage("|cffff0000", "Module import failed: %s", tostring(reason))
-                return false
-            end
+            if not ok then PrintProfileMessage("|cffff0000", "Module import failed: %s", tostring(reason)); return false end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
             return true
@@ -1099,17 +1090,11 @@ function ProfilesPage.ImportActions(state)
         local suiteKind = SuiteImportKind(text)
         if suiteKind then
             local suite = SuiteProfiles()
-            if not suite then
-                PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this profile.")
-                return false
-            end
+            if not suite then PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this profile."); return false end
             local ok, reason
             if suiteKind == "full" then ok, reason = suite.Import(name, text)
             else ok, reason = suite.ImportModuleIntoNew(name, text) end
-            if not ok then
-                PrintProfileMessage("|cffff0000", "Suite import failed: %s", tostring(reason))
-                return false
-            end
+            if not ok then PrintProfileMessage("|cffff0000", "Suite import failed: %s", tostring(reason)); return false end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
             M.profileImportNewName = ""
@@ -1161,8 +1146,7 @@ function ProfilesPage.ImportActions(state)
         end
         M.SetMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
         self:SetChecked(M.profileImportCreateNew == true)
-        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on"
-            or "New-profile import off", "info", 1.2) end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2) end
         if M.RequestRefresh then M.RequestRefresh(ctx, "profiles-import-mode") elseif M.Refresh then M.Refresh(ctx) end
     end)
     --- Blizzard Edit Mode data is opt-in per session for BOTH directions

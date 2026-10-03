@@ -303,37 +303,29 @@ local function CreateMover(key, cfg)
     mover:SetSize(100, 30)
     mover:SetFrameStrata("FULLSCREEN")
     mover:SetFrameLevel(cfg.popupType == "castbar" and 340 or cfg.popupType == "resource" and 330 or 300)
-    mover:SetMovable(true)
-    mover:RegisterForDrag("LeftButton")
+    mover:SetMovable(true); mover:RegisterForDrag("LeftButton")
     if mover.RegisterForClicks then mover:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
-    mover:EnableMouse(true)
-    mover:SetClampedToScreen(true)
+    mover:EnableMouse(true); mover:SetClampedToScreen(true)
     mover._barKey = key
 
     local bg = PixelLayoutRegion(mover:CreateTexture(nil, "BACKGROUND"))
-    bg:SetAllPoints()
-    bg:SetColorTexture(th.bgR, th.bgG, th.bgB, 0.55)
+    bg:SetAllPoints(); bg:SetColorTexture(th.bgR, th.bgG, th.bgB, 0.55)
     mover._bg = bg
 
     local brd = PixelLayoutRegion(CreateFrame("Frame", nil, mover, "BackdropTemplate"))
-    brd:SetAllPoints()
-    brd:SetFrameLevel(max(0, mover:GetFrameLevel() - 1))
+    brd:SetAllPoints(); brd:SetFrameLevel(max(0, mover:GetFrameLevel() - 1))
     PixelLayoutRegion(brd, "SetBackdrop", { edgeFile = W8, edgeSize = 1 })
     brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.60)
     mover._brd = brd
 
     local label = PixelLayoutRegion(mover:CreateFontString(nil, "OVERLAY"))
-    label:SetFont(FONT, FontSize("caption"), "OUTLINE")
-    label:SetPoint("CENTER")
-    label:SetTextColor(th.textR, th.textG, th.textB, 0.85)
-    label:SetText(MoverLabelText(key, cfg))
+    label:SetFont(FONT, FontSize("caption"), "OUTLINE"); label:SetPoint("CENTER")
+    label:SetTextColor(th.textR, th.textG, th.textB, 0.85); label:SetText(MoverLabelText(key, cfg))
     mover._label = label
 
     local coordFS = PixelLayoutRegion(mover:CreateFontString(nil, "OVERLAY"))
-    coordFS:SetFont(FONT, FontSize("micro"), "OUTLINE")
-    coordFS:SetPoint("TOP", mover, "BOTTOM", 0, -2)
-    coordFS:SetTextColor(th.titleR, th.titleG, th.titleB, 0.90)
-    coordFS:Hide()
+    coordFS:SetFont(FONT, FontSize("micro"), "OUTLINE"); coordFS:SetPoint("TOP", mover, "BOTTOM", 0, -2)
+    coordFS:SetTextColor(th.titleR, th.titleG, th.titleB, 0.90); coordFS:Hide()
     mover._coordFS = coordFS
 
     mover:SetScript("OnEnter", function(self)

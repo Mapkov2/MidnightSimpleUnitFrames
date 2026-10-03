@@ -768,30 +768,19 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
             and "Turns every HP text slot on this frame on or off. The health bar is not affected, and your slot setup is kept."
             or "Turns every power text slot on this frame on or off. The power bar is not affected, and your slot setup is kept.", tip)
         for _, button in ipairs(controls.slot and controls.slot.buttons or {}) do
-            M.AddTooltip(button, "Text slots",
-                "Each text has three slots: left, center and right. The slot picked here is the one the value, Hide % sign and slot size settings edit.", tip)
+            M.AddTooltip(button, "Text slots", "Each text has three slots: left, center and right. The slot picked here is the one the value, Hide % sign and slot size settings edit.", tip)
         end
         for _, button in ipairs(controls.absorb and controls.absorb.buttons or {}) do
-            M.AddTooltip(button, "Absorb",
-                "Adds the unit's absorb shield amount after this slot's HP value, with or without a shield icon. Shown only while a shield is active.", tip)
+            M.AddTooltip(button, "Absorb", "Adds the unit's absorb shield amount after this slot's HP value, with or without a shield icon. Shown only while a shield is active.", tip)
         end
-        M.AddTooltip(controls.mode, cfg.valueLabel or "Value",
-            "What the selected slot shows. None leaves the slot empty; choices with several values are joined by the Delimiter.", tip)
-        M.AddTooltip(controls.hidePercent, "Hide % sign",
-            "Shows the percent as a bare number (63 instead of 63%) in the selected slot only. Available when that slot's value includes a percent.", toggleTip)
-        M.AddTooltip(controls.separator, "Delimiter",
-            "Symbol placed between values that share one slot, like Current and Percent. Used by all slots of this text.", tip)
-        M.AddTooltip(controls.reverse, "Reverse order",
-            "Mirrors the HP text: left and right slots swap sides and multi-value choices flip, so Current / Percent becomes Percent / Current.", toggleTip)
-        M.AddTooltip(controls.decimals, "Decimal percent", "Shows HP percent with one decimal (63.4% instead of 63%) in every HP slot that shows a percent.",
-            toggleTip)
-        M.AddTooltip(controls.fullValueShort, "Short numbers",
-            "Abbreviates large HP numbers, absorb included, instead of printing the full value. Available while a slot shows a number.", toggleTip)
-        M.AddTooltip(controls.moveTogether, "Move text as one group",
-            "On: dragging this text in Preview moves all its slots together. Off: each visible slot gets its own handle so you can place it separately.",
-            toggleTip)
-        M.AddTooltip(controls.slotSize, "Selected slot size",
-            "Font size of the slot picked in Text slots only. Slots you never resize keep the normal text size.", tip)
+        M.AddTooltip(controls.mode, cfg.valueLabel or "Value", "What the selected slot shows. None leaves the slot empty; choices with several values are joined by the Delimiter.", tip)
+        M.AddTooltip(controls.hidePercent, "Hide % sign", "Shows the percent as a bare number (63 instead of 63%) in the selected slot only. Available when that slot's value includes a percent.", toggleTip)
+        M.AddTooltip(controls.separator, "Delimiter", "Symbol placed between values that share one slot, like Current and Percent. Used by all slots of this text.", tip)
+        M.AddTooltip(controls.reverse, "Reverse order", "Mirrors the HP text: left and right slots swap sides and multi-value choices flip, so Current / Percent becomes Percent / Current.", toggleTip)
+        M.AddTooltip(controls.decimals, "Decimal percent", "Shows HP percent with one decimal (63.4% instead of 63%) in every HP slot that shows a percent.", toggleTip)
+        M.AddTooltip(controls.fullValueShort, "Short numbers", "Abbreviates large HP numbers, absorb included, instead of printing the full value. Available while a slot shows a number.", toggleTip)
+        M.AddTooltip(controls.moveTogether, "Move text as one group", "On: dragging this text in Preview moves all its slots together. Off: each visible slot gets its own handle so you can place it separately.", toggleTip)
+        M.AddTooltip(controls.slotSize, "Selected slot size", "Font size of the slot picked in Text slots only. Slots you never resize keep the normal text size.", tip)
     end
     return controls
 end

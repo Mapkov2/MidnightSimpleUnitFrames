@@ -1664,10 +1664,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         end
         local function FlushRuntime()
             if not pendingApply then return end
-            if CombatLocked() then
-                releaseScheduled = nil
-                return false
-            end
+            if CombatLocked() then releaseScheduled = nil; return false end
             local scope = pendingScope or CurrentScope()
             pendingApply, pendingScope, releaseScheduled = nil, nil, nil
             QueueSpellIndicators(scope, "auras")
@@ -1749,8 +1746,7 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
 
     if M.AddTooltip then
         M.AddTooltip(tooltip, "Spell Icon tooltip", "Controls native Aura tooltips for Spell Icons only.", { hook = true })
-        M.AddTooltip(decimals, "Cooldown text format", "Below this value, remaining whole seconds may show one decimal place. Set 0 for whole seconds only.",
-            { hook = true })
+        M.AddTooltip(decimals, "Cooldown text format", "Below this value, remaining whole seconds may show one decimal place. Set 0 for whole seconds only.", { hook = true })
     end
 
     RefreshStyleState = RefreshStyleState(function()
@@ -2428,8 +2424,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     W.MoveWidget(ciAlpha, corners, leftX, -170, leftW, "LEFT")
     local ciLayer = ScopeSlider(ctx, corners, "Layer (0-30)", 0, 30, 1, leftW, "ciLayer", 7, "visual", leftX, -224, leftW, "LEFT")
     W.LabelAt(corners, "Slot Assignments", leftX, -282, leftW, "GameFontNormalSmall", T.colors.accent)
-    W.Text(corners, "Assign what each corner dot should show. Choosing Custom Spell enables that slot's editor on the right.", leftX,
-        -304, leftW, T.colors.muted)
+    W.Text(corners, "Assign what each corner dot should show. Choosing Custom Spell enables that slot's editor on the right.", leftX, -304, leftW, T.colors.muted)
     local slotControls = {}
     local slotPositions = {
         TL = { x = leftX, y = -358 },
@@ -2459,8 +2454,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
         slotControls[#slotControls + 1] = slotDrop
     end
     W.LabelAt(corners, "Custom Spell Editor", rightX, -42, rightW, "GameFontNormalSmall", T.colors.accent)
-    W.Text(corners, "Pick a slot, set it to Custom Spell, then enter spell IDs. This edits one slot at a time and keeps the five slot assignments visible.",
-        rightX, -64, rightW, T.colors.muted)
+    W.Text(corners, "Pick a slot, set it to Custom Spell, then enter spell IDs. This edits one slot at a time and keeps the five slot assignments visible.", rightX, -64, rightW, T.colors.muted)
     local slotDrop = W.Dropdown(corners, "Editor Slot", CI_SLOT_VALUES, rightW)
     M.BindDropdownWidget(ctx, slotDrop,
         function() return CurrentCISlot() end,
@@ -2549,11 +2543,9 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
             historySource = "menu:group-corner-indicator-color",
         })
     end
-    local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX,
-        -506, rightW, T.colors.dim)
+    local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX, -506, rightW, T.colors.dim)
     if customHelp.SetWordWrap then customHelp:SetWordWrap(true) end
-    local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha, ciLayer }, { slotDrop, categoryDrop }, { customSpells, customMode,
-        customFilter, customColor }
+    local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha, ciLayer }, { slotDrop, categoryDrop }, { customSpells, customMode, customFilter, customColor }
     local function RefreshCornerIndicatorState()
         local slot = CurrentCISlot()
         local category = Val(CurrentScope(), "ciSlot" .. slot, CI_SLOT_DEFAULTS[slot] or "none")

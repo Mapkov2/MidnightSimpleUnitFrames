@@ -722,8 +722,7 @@ local function BuildGFScalingSection(ctx, b)
     local rules = W.ControlCard(general, "Raid size overrides", nil, 20, -270, inner, 158)
     local useTiers = BindScopeToggle(ctx, W.ToggleAt(rules, "Use raid size overrides", 16, -38, inner - 32), "layoutTiersEnabled", false, "rebuild")
     local exclude = BindScopeToggle(ctx, W.ToggleAt(rules, "Exclude hidden groups from group size", 16, -76, inner - 32), "excludeHiddenGroups", false, "rebuild")
-    W.Text(rules, "Group size selects both the scaling percentage and raid overrides. Raid overrides are unavailable for Party frames.", 16, -112,
-        inner - 32, T.colors.muted)
+    W.Text(rules, "Group size selects both the scaling percentage and raid overrides. Raid overrides are unavailable for Party frames.", 16, -112, inner - 32, T.colors.muted)
     local appearance = W.ControlCard(general, "Resize appearance", nil, 20, -446, inner, 154)
     for i, entry in ipairs({
         {"Scale indicators with frame dimensions", "autoScaleIndicatorsOnResize"},
@@ -786,8 +785,7 @@ local function BuildGFScalingSection(ctx, b)
     }
     for _, entry in ipairs(entries) do
         local tab = frames[entry.prefix]
-        local percentage = ScopeSlider(ctx, tab, "Group size scale (%)", 50, 100, 5, inner - 64, entry.key, entry.default, "rebuild", 36,
-            -44, inner - 64, "LEFT")
+        local percentage = ScopeSlider(ctx, tab, "Group size scale (%)", 50, 100, 5, inner - 64, entry.key, entry.default, "rebuild", 36, -44, inner - 64, "LEFT")
         BindAutoScalePreview(percentage, entry.count)
         autoControls[#autoControls + 1] = percentage
         W.Text(tab, "The percentage applies in By group size mode. Exact raid dimensions below replace scaled width or height; 0 keeps the scaled base. Spacing and resource bar height still use the scaling percentage.", 20, -104, inner, T.colors.muted)
@@ -808,8 +806,7 @@ local function BuildGFScalingSection(ctx, b)
         end
         RefreshTabs()
         SetSectionBadgesAndStatus(scale, {
-            { text = OptionText(VT("off", "Off", "manual", "Manual", "auto", "By group size"), scalingMode, "Off"), kind = scalingMode == "off"
-                and "muted" or "info" },
+            { text = OptionText(VT("off", "Off", "manual", "Manual", "auto", "By group size"), scalingMode, "Off"), kind = scalingMode == "off" and "muted" or "info" },
             OnOffBadge(raid and Bool(CurrentScope(), "layoutTiersEnabled", false), "Raid overrides", "Base dimensions"),
         })
     end)

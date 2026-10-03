@@ -960,9 +960,7 @@ local function BuildBasics(ctx, builder, unit, label)
         end,
         SettingMeta(ctx, "basics.health_color_mode", unit, "healthColorMode"))
     if M.AddTooltip then
-        M.AddTooltip(colorMode, "Health Color Scheme",
-            "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.",
-            { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(colorMode, "Health Color Scheme", "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
     -- Shares the Health Color Scheme row so the section stays within its
     -- declared height instead of overlapping the next accordion header. Snap to
@@ -991,9 +989,7 @@ local function BuildBasics(ctx, builder, unit, label)
         end,
         SettingMeta(ctx, "basics.fill_direction", unit, "verticalFillBars"))
     if M.AddTooltip then
-        M.AddTooltip(fillDir, "Fill Direction",
-            "Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill.",
-            { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(fillDir, "Fill Direction", "Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local barShape = W.Dropdown(sec, "Frame bar shape", FRAME_BAR_SHAPE_OPTIONS, math.min(270, math.max(220, colW * 2)))
     UnitSectionShared.PlaceDropdown(sec, barShape, x1, -164, math.min(270, math.max(220, colW * 2)))
@@ -1010,8 +1006,7 @@ local function BuildBasics(ctx, builder, unit, label)
         end,
         SettingMeta(ctx, "basics.frame_bar_shape", unit, "frameBarShape"))
     if M.AddTooltip then
-        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.",
-            M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.", M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local petPlayerClassColor
     if unit == "pet" then
@@ -1058,8 +1053,7 @@ local function BuildBasics(ctx, builder, unit, label)
         unit ~= "focustarget" and "setting" or "action", enableShortcutMeta)
     notice:SetMessage(M.Format("%s frame is disabled and will not appear.", unitLabel), "warning")
     enableNow:SetScript("OnClick", function()
-        if unit == "focustarget" and not ReadBool("focus", "enabled", true) then SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED",
-            { preview = true }) end
+        if unit == "focustarget" and not ReadBool("focus", "enabled", true) then SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true }) end
         SetBool(unit, "enabled", true, "MSUF2_FRAME_ENABLED", { preview = true })
         M.RequestOrRefresh(ctx, "frame-basics-enable-now")
     end)
@@ -1096,11 +1090,8 @@ local function BuildLayout(ctx, builder, unit)
     local anchorRightX = anchorLeftX + anchorColumnW + anchorGap
     local anchorControlW = min(300, max(180, anchorColumnW - 16))
     local customAnchorW = min(260, max(180, anchorColumnW - 128))
-    local anchorChoices = VT("GLOBAL", "Global anchor", "EssentialCooldownViewer", "Essential cooldown viewer", "UtilityCooldownViewer",
-        "Utility cooldown viewer", "BuffIconCooldownViewer", "Tracked buffs viewer", "player", "Player frame", "target", "Target frame", "targettarget",
-        "Target of Target frame", "focustarget", "Focus Target frame", "focus", "Focus frame", "pet", "Pet frame")
-    local anchorPoints = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT",
-        "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
+    local anchorChoices = VT("GLOBAL", "Global anchor", "EssentialCooldownViewer", "Essential cooldown viewer", "UtilityCooldownViewer", "Utility cooldown viewer", "BuffIconCooldownViewer", "Tracked buffs viewer", "player", "Player frame", "target", "Target frame", "targettarget", "Target of Target frame", "focustarget", "Focus Target frame", "focus", "Focus frame", "pet", "Pet frame")
+    local anchorPoints = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
     local standardAnchorValues = M.KeySetFromWords "GLOBAL global FREE EssentialCooldownViewer UtilityCooldownViewer BuffIconCooldownViewer player target targettarget focustarget focus pet"
     local function CustomAnchorName(conf)
         local custom = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""

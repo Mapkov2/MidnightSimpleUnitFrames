@@ -460,10 +460,7 @@ function Stage.BindPositionWriters(st)
             if not conf then return end
             conf.dispelSymbolX = OffsetToConfig(offX or 0, scale)
             conf.dispelSymbolY = OffsetToConfig(offY or 0, scale)
-            if not previewOnly then
-                RefreshGroupPreviewAfterMove(handle)
-                CheckpointHandleHistory(handle, action)
-            end
+            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
             return true
         end
         if handle._cfgPortrait then
@@ -475,10 +472,7 @@ function Stage.BindPositionWriters(st)
             if not conf then return end
             conf.portraitOffsetX = OffsetToConfig(offX or 0, scale)
             conf.portraitOffsetY = OffsetToConfig(offY or 0, scale)
-            if not previewOnly then
-                RefreshGroupPreviewAfterMove(handle)
-                CheckpointHandleHistory(handle, action)
-            end
+            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
             return true
         end
         if handle._cfgPower then
@@ -490,10 +484,7 @@ function Stage.BindPositionWriters(st)
             if not conf then return end
             conf.detachedPowerBarOffsetX = OffsetToConfig(offX or 0, scale)
             conf.detachedPowerBarOffsetY = OffsetToConfig(offY or 0, scale)
-            if not previewOnly then
-                RefreshGroupPreviewAfterMove(handle)
-                CheckpointHandleHistory(handle, action)
-            end
+            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
             return true
         end
         local m = box._mock

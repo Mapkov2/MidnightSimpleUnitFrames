@@ -979,8 +979,7 @@ local function BuildTextureSection(ctx, b)
         end, topY - 162, "textures.power_background")
     if M.AddTooltip then
         M.AddTooltip(powerTexture, "Power Bar Texture", "Art for every unit's power bar. Leave on Use bar texture to keep the shared bar art. Each unit page can override this, and the Class Resources detached power texture still wins for a detached Player bar.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(powerBgTexture, "Power Background Texture", "Background art behind every unit's power bar. Overridable per unit on the unit page.",
-            { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(powerBgTexture, "Power Background Texture", "Background art behind every unit's power bar. Overridable per unit on the unit page.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local gradLabel = T.Font(textures, "GameFontHighlightSmall", "Gradient", T.colors.muted)
     gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
@@ -1054,9 +1053,7 @@ local function BuildTextureSection(ctx, b)
             end)
             RegisterControl(btn, Meta("gradient." .. kind .. ".direction." .. tostring(value), "action"), text, "button")
             if M.AddTooltip then
-                M.AddTooltip(btn, nil,
-                    "Adds or removes a fade direction; the shade darkens toward this arrow. Directions can be combined, and one always stays on.",
-                    { hook = true })
+                M.AddTooltip(btn, nil, "Adds or removes a fade direction; the shade darkens toward this arrow. Directions can be combined, and one always stays on.", { hook = true })
             end
             directionButtons[kind][value] = btn
         end
@@ -1075,13 +1072,10 @@ local function BuildTextureSection(ctx, b)
     local gradientControls = { hpGradient, powerGradient }
     if M.AddTooltip then
         local tip = { hook = true, labelHit = true }
-        M.AddTooltip(hpGradient, "Health gradient",
-            "Adds a shade over the filled part of health bars that darkens toward the arrows you pick. The strength slider sets how dark it gets.", tip)
+        M.AddTooltip(hpGradient, "Health gradient", "Adds a shade over the filled part of health bars that darkens toward the arrows you pick. The strength slider sets how dark it gets.", tip)
         M.AddTooltip(powerGradient, "Power gradient", "Adds the same fading shade to power bars, with its own direction arrows and strength.", tip)
-        M.AddTooltip(hpStrength, "Health strength", "How dark the health bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color.",
-            tip)
-        M.AddTooltip(powerStrength, "Power strength", "How dark the power bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color.",
-            tip)
+        M.AddTooltip(hpStrength, "Health strength", "How dark the health bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color.", tip)
+        M.AddTooltip(powerStrength, "Power strength", "How dark the power bar shade gets at its strongest edge. 0 shows no shade, 1 uses the full shade color.", tip)
     end
     -- Hover reasons: a unit or group scope without its own settings locks this
     -- card, and each strength slider and arrow pad waits for its gradient.
@@ -1489,18 +1483,12 @@ local function BuildAbsorbSection(ctx, b)
     if M.AddTooltip then
         local tip = { hook = true, labelHit = true }
         local testTip = "Shows sample bars on the frames of the selected scope, even while this bar is turned off, so you can check its look. Cannot be turned on in combat."
-        M.AddTooltip(positiveEnabled, "Show positive absorbs", "Draws absorb shields on the unit, such as Power Word: Shield, as an overlay on the health bar.",
-            tip)
-        M.AddTooltip(overAbsorb, "Over-absorb overlay",
-            "Adds a shield glow at the end of the health bar when absorbs plus incoming heals cover all of the missing health.", tip)
-        M.AddTooltip(fullStripe, "Full-health absorb stripe",
-            "Shows a shield glow at the end of the health bar while the unit is at full health and still has an absorb shield.", tip)
-        M.AddTooltip(negativeEnabled, "Show negative heal absorbs",
-            "Shows heal absorbs, effects that soak up incoming healing before health can rise, as a bar over current health.", tip)
-        M.AddTooltip(healEnabled, "Show heal prediction",
-            "Shows incoming heals as a bar on the health bar before they land. Only your own heals count unless Include healing from others is on.", tip)
-        M.AddTooltip(healAllHealers, "Include healing from others",
-            "Counts incoming heals from every healer, not only your own. Useful on group frames when several healers are active.", tip)
+        M.AddTooltip(positiveEnabled, "Show positive absorbs", "Draws absorb shields on the unit, such as Power Word: Shield, as an overlay on the health bar.", tip)
+        M.AddTooltip(overAbsorb, "Over-absorb overlay", "Adds a shield glow at the end of the health bar when absorbs plus incoming heals cover all of the missing health.", tip)
+        M.AddTooltip(fullStripe, "Full-health absorb stripe", "Shows a shield glow at the end of the health bar while the unit is at full health and still has an absorb shield.", tip)
+        M.AddTooltip(negativeEnabled, "Show negative heal absorbs", "Shows heal absorbs, effects that soak up incoming healing before health can rise, as a bar over current health.", tip)
+        M.AddTooltip(healEnabled, "Show heal prediction", "Shows incoming heals as a bar on the health bar before they land. Only your own heals count unless Include healing from others is on.", tip)
+        M.AddTooltip(healAllHealers, "Include healing from others", "Counts incoming heals from every healer, not only your own. Useful on group frames when several healers are active.", tip)
         M.AddTooltip(positiveTest, "Test prediction bars", testTip, tip)
         M.AddTooltip(negativeTest, "Test prediction bars", testTip, tip)
         M.AddTooltip(healTest, "Test prediction bars", testTip, tip)
@@ -2238,25 +2226,18 @@ local function BuildHighlightSection(ctx, b)
         end)
         return control
     end
-    local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode",
-        function() return ScopeBorderModeOn("aggroOutlineMode", 1) end, nil, "highlight.preview.aggro")
-    local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode",
-        function() return ScopeBorderModeOn("dispelOutlineMode", 1) end, nil, "highlight.preview.dispel")
-    local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode",
-        function() return ScopeBorderModeOn("purgeOutlineMode", 0) end, nil, "highlight.preview.purge")
-    local bossTargetTest = bossSupported and BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode",
-        "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true, "highlight.preview.boss_target")
+    local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", function() return ScopeBorderModeOn("aggroOutlineMode", 1) end, nil, "highlight.preview.aggro")
+    local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end, nil, "highlight.preview.dispel")
+    local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", function() return ScopeBorderModeOn("purgeOutlineMode", 0) end, nil, "highlight.preview.purge")
+    local bossTargetTest = bossSupported and BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true, "highlight.preview.boss_target")
     local scopedBorderControls = { highlight, aggro, dispelBorder, purge }
     local dispelBorderControls = { dispelTrigger, dispelShowOn, dispelTest }
     if M.AddTooltip then
         local tip = { hook = true }
         M.AddTooltip(aggro, "Aggro border", "Shows the aggro color on the border when the unit has threat: your frame while you hold aggro, enemies attacking you, and group members with high threat.", tip)
-        M.AddTooltip(dispelBorder, "Dispel border",
-            "Colors the border by debuff type while the unit has a debuff that Dispel border detects. Changing it asks for a UI reload.", tip)
-        M.AddTooltip(purge, "Purge border", "Colors the border while the unit has a buff you can purge or spellsteal. Only Target and Focus frames support it.",
-            tip)
-        M.AddTooltip(bossTarget, "Boss target border",
-            "Highlights the Boss frame of the boss you are targeting. It is shared by all boss frames, so it changes only on the Shared scope.", tip)
+        M.AddTooltip(dispelBorder, "Dispel border", "Colors the border by debuff type while the unit has a debuff that Dispel border detects. Changing it asks for a UI reload.", tip)
+        M.AddTooltip(purge, "Purge border", "Colors the border while the unit has a buff you can purge or spellsteal. Only Target and Focus frames support it.", tip)
+        M.AddTooltip(bossTarget, "Boss target border", "Highlights the Boss frame of the boss you are targeting. It is shared by all boss frames, so it changes only on the Shared scope.", tip)
     end
     if W.SetControlsDisabledReason and W.TurnOnReason then
         W.SetControlsDisabledReason(dispelBorderControls, W.TurnOnReason("Dispel border", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end))
@@ -2320,8 +2301,7 @@ local function BuildHighlightSection(ctx, b)
         end,
         Meta("highlight.priority.enabled"))
     if M.AddTooltip then
-        M.AddTooltip(prio, "Custom highlight priority",
-            "When several highlight borders show at once, the highest one in the list wins. Turn this on to reorder the list by dragging.", { hook = true })
+        M.AddTooltip(prio, "Custom highlight priority", "When several highlight borders show at once, the highest one in the list wins. Turn this on to reorder the list by dragging.", { hook = true })
     end
     local rowMax = 4
     local prioContainer, prioRows, prioCount

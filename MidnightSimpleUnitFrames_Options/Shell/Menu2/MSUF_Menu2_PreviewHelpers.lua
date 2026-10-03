@@ -1829,8 +1829,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         if box._detachedCastPreview and box.mock.cast and box.mock.cast:IsShown() then
             box.mock.cast:ClearAllPoints()
-            box.mock.cast:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._detachedCastBaseOffsetX) or 0) + panX,
-                (tonumber(box._detachedCastBaseOffsetY) or 0) + panY)
+            box.mock.cast:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._detachedCastBaseOffsetX) or 0) + panX, (tonumber(box._detachedCastBaseOffsetY) or 0) + panY)
         end
         local point, relative, relativePoint, actualX, actualY = box.mock:GetPoint(1)
         return point == "CENTER" and relative == box.canvas and relativePoint == "CENTER"
@@ -1994,8 +1993,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
         local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
         local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
-        local bgIdle, bgHover, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1],
-            raised[2], raised[3], 0.98 }
+        local bgIdle, bgHover, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2], raised[3], 0.98 }
         local brIdle, brHover, brDown = { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
         local bgScratch = { 0, 0, 0, 1 }
         local function ApplyButtonVisual(self, hover, down)
@@ -2012,8 +2010,7 @@ function H.InstallZoomPan(ZoomPan, opts)
                     end
                 end
                 if self._msuf2PreviewZoomEdge then
-                    self._msuf2PreviewZoomEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1),
-                        min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
+                    self._msuf2PreviewZoomEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1), min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
                 end
                 if self[fontField] and self[fontField].SetTextColor then
                     self[fontField]:SetTextColor(hover and 0.88 or 0.78, hover and 0.94 or 0.84, 1.00, alpha)

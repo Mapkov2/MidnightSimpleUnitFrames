@@ -238,10 +238,7 @@ local function BuildCustomDotsTool(C)
         local values = type(Model.TargetDotValues) == "function" and Model.TargetDotValues() or {}
         local selected
         for i = 1, #values do
-            if values[i].value then
-                selected = values[i].value
-                break
-            end
+            if values[i].value then selected = values[i].value; break end
         end
         local dropdown = BindDropdown(ctx, section, "DoT", 24, -34, values, max(140, inner - 132),
             function() return selected end,
@@ -251,10 +248,7 @@ local function BuildCustomDotsTool(C)
         add:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -56)
         add:SetScript("OnClick", function()
             local changed = selected and Model.AddCustomContainerSpell(unit, index, selected)
-            if changed then
-                Apply("AURAS3_TARGET_DOT_ADD", true)
-                Rebuild(ctx)
-            end
+            if changed then Apply("AURAS3_TARGET_DOT_ADD", true); Rebuild(ctx) end
             return changed and true or false
         end)
         RegisterAuraTextAction(ctx, add, {
@@ -1122,9 +1116,7 @@ local function BuildCustomAppearanceTool(C)
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(durationBar, {{
                     text = reminder and Tr("Unavailable")
-                        or (enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / "
-                            .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / "
-                            .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off"),
+                        or (enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off"),
                     kind = enabled and "accent" or "muted", showWhenClosed = true,
                 }})
             end
@@ -1189,18 +1181,14 @@ local function BuildCustomAppearanceTool(C)
 
                 local stackEnabled = placed.showStacks ~= false
                 W.SetCollapsibleBadges(stack, {{
-                    text = stackEnabled and (tostring(Round(tonumber(placed.stackSize) or 14)) .. "px / "
-                        .. AnchorLabel(placed.stackAnchor or "BOTTOMRIGHT")) or "Off",
+                    text = stackEnabled and (tostring(Round(tonumber(placed.stackSize) or 14)) .. "px / " .. AnchorLabel(placed.stackAnchor or "BOTTOMRIGHT")) or "Off",
                     kind = stackEnabled and "accent" or "muted", showWhenClosed = true,
                 }})
 
                 local cooldownEnabled = placed.showCooldown ~= false
                 local decimal = Round(tonumber(placed.cooldownDecimalSeconds) or 3)
                 W.SetCollapsibleBadges(cooldown, {
-                    { text = cooldownEnabled and (tostring(Round(tonumber(placed.cooldownSize) or 14)) .. "px / "
-                        .. AnchorLabel(placed.cooldownAnchor or "CENTER") .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES,
-                        placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted",
-                        showWhenClosed = true },
+                    { text = cooldownEnabled and (tostring(Round(tonumber(placed.cooldownSize) or 14)) .. "px / " .. AnchorLabel(placed.cooldownAnchor or "CENTER") .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
                     { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
                 })
 
