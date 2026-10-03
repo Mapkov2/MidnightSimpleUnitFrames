@@ -1018,20 +1018,29 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
   SeedCachedHealthMax(frame, unit, hpMax, event)
 
   if rt.healthPlain == true then
-    if (needHPValue and hp == nil) or (needMaxValue and hpMax == nil) then
+    -- issecretvalue before every nil test. The dispatch values were asked
+    -- above (hpSecret, hpMaxSecret), so the UNIT_HEALTH path asks nothing
+    -- more; a value read here to fill a missing one is asked when it arrives.
+    local hpMissing = needHPValue and not hpSecret and hp == nil
+    local maxMissing = needMaxValue and not hpMaxSecret and hpMax == nil
+    if hpMissing or maxMissing then
       local cachedHP, cachedMax = ReadHealthValuesCached(frame, unit)
-      if needHPValue and hp == nil then
+      if hpMissing then
         hp = cachedHP
+        hpMissing = issecretvalue(hp) ~= true and hp == nil
       end
-      if needMaxValue and hpMax == nil then
+      if maxMissing then
         hpMax = cachedMax
+        maxMissing = issecretvalue(hpMax) ~= true and hpMax == nil
       end
     end
-    if needHPValue and hp == nil then
+    if hpMissing then
       hp = UnitHealth(unit)
+      hpMissing = issecretvalue(hp) ~= true and hp == nil
     end
-    if needMaxValue and hpMax == nil then
+    if maxMissing then
       hpMax = ReadHealthMaxCached(frame, unit, event)
+      maxMissing = issecretvalue(hpMax) ~= true and hpMax == nil
     end
 
     if rt.healthNeedsMissing == true then
@@ -1050,10 +1059,10 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
       rt.healthMissing = nil
     end
 
-    if needHPValue and hp == nil then
+    if hpMissing then
       hp = 0
     end
-    if needMaxValue and hpMax == nil then
+    if maxMissing then
       hpMax = 1
     end
 
