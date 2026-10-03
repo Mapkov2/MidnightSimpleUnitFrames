@@ -10,6 +10,10 @@
 -- resulting MSUF_DB, applier call, argument and the database at each applier
 -- call must match.
 --
+-- A raising scale applier (any of the three, four settings shapes) answers
+-- false, "failed" with every MSUF scale setting byte-identical to before and
+-- MSUF's scale applied again from them.
+--
 -- Also pinned: the refusals (combat, also during the PLAYER_REGEN_DISABLED
 -- dispatch before the lockdown starts; unavailable; invalid) write nothing;
 -- SetResourceStack(mode, force) returns changed, applied, and a forced apply
@@ -23,6 +27,7 @@
 local root = ((arg and arg[1]) or "."):gsub("\\", "/"):gsub("/$", "")
 local HOST_API = root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua"
 local REQUIRE = root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"
+local BOUNDARY = root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua"
 
 -- The Retail runner runs every smoke under .github/scripts/auras3_test_driver.lua,
 -- whose loadfile injects shared contracts into the namespace it is given. This
@@ -64,7 +69,8 @@ local function Show(value)
     return "{" .. table.concat(parts, ",") .. "}"
 end
 
-local SCALE_APPLIERS = { "MSUF_ApplyMsufScale", "MSUF_ResetGlobalUiScale", "MSUF_SetGlobalUiScale" }
+local SCALE_APPLIERS = { "MSUF_ApplyMsufScale", "MSUF_ResetGlobalUiScale", "MSUF_SetGlobalUiScale",
+    "MSUF_ApplyCurrentProfileGlobalUiScale" }
 local RESOURCE_APPLIERS = { "MSUF_EnsureCooldownWidthObservers", "MSUF_ApplyPowerBarEmbedLayout_ForUnitKey",
     "MSUF_ClassPower_Apply", "MSUF_UFCore_NotifyConfigChanged" }
 local CAPABILITIES = {}
@@ -79,13 +85,16 @@ local function NewHost(db, options)
     -- combat: the lockdown. regenEdge: PLAYER_REGEN_DISABLED is being
     -- dispatched; the client already flags the player in combat, the
     -- lockdown starts after that dispatch.
-    local host = { log = {}, reads = {}, combat = false, regenEdge = false, record = true, requires = 0 }
+    -- raise: appliers that raise (after an owner-like partial write).
+    local host = { log = {}, reads = {}, combat = false, regenEdge = false, record = true, requires = 0,
+        raise = {}, errors = {} }
     local globals = {}
     for _, name in ipairs({ "type", "tonumber", "tostring", "pairs", "ipairs", "next", "error", "select",
-        "string", "table", "math", "assert", "rawget", "rawset", "setmetatable", "unpack" }) do
+        "string", "table", "math", "assert", "rawget", "rawset", "setmetatable", "unpack", "pcall" }) do
         globals[name] = _G[name]
     end
     globals.MSUF_DB = db
+    globals.geterrorhandler = function() return function(message) host.errors[#host.errors + 1] = tostring(message) end end
     globals.InCombatLockdown = function() return host.combat end
     globals.UnitAffectingCombat = function(unit) return unit == "player" and (host.combat or host.regenEdge) end
     globals.MSUF_GetPixelPerfectScale = function() return PIXEL_PERFECT end
@@ -96,6 +105,18 @@ local function NewHost(db, options)
             local state = section == "general" and current.general or { bars = current.bars, player = current.player }
             host.log[#host.log + 1] = name .. Show({ ... }) .. " @ " .. Show(state)
             if name == "MSUF_ClassPower_Apply" then host.classPowerOptions = (...) end
+            -- MSUF's profile re-apply reads the settings through
+            -- EnsureGlobalUiScaleTable, which writes disableScaling.
+            if name == "MSUF_ApplyCurrentProfileGlobalUiScale" then current.general.disableScaling = false end
+            if host.raise[name] then
+                -- The scale owner writes these too (EnsureGlobalUiScaleTable,
+                -- SetGlobalUiScaleState) before anything can raise.
+                local general = current.general
+                general.UIScale = type(general.UIScale) == "table" and general.UIScale or {}
+                general.UIScale.Enabled, general.UIScale._migratedFromGlobalPreset_v1 = false, true
+                general.disableScaling, general.globalUiScalePreset, general.globalUiScaleValue = false, "auto", nil
+                error("injected " .. name .. " failure")
+            end
         end
     end
     for _, name in ipairs(options.missing or {}) do globals[name] = nil end
@@ -124,6 +145,8 @@ local function BootV1(host)
     end
     local require = assert(LoadChunk(REQUIRE))
     setfenv(require, host.env)("MidnightSimpleUnitFrames", ns)
+    local boundary = assert(LoadChunk(BOUNDARY))
+    setfenv(boundary, host.env)("MidnightSimpleUnitFrames", ns)
     local realRequire = ns.Require
     ns.Require = function(...)
         host.requires = host.requires + 1
@@ -343,6 +366,64 @@ do
 end
 
 ------------------------------------------------------------------------------
+-- 2b. A raising scale applier: the error is reported, every MSUF scale setting
+-- is exactly as before (UIScale keeps its identity), MSUF's scale is applied
+-- again from the saved settings, and the answer is false, "failed".
+local ROLLBACK_GENERALS = {
+    function() return { msufUiScale = 0.9, uiScale = 0.8, keep = "general" } end,
+    function() return { msufUiScale = 1.3, globalUiScalePreset = "custom", globalUiScaleValue = 0.9, disableScaling = true,
+        UIScale = { Enabled = false, Scale = 0.9, extra = 3 } } end,
+    function() return { UIScale = "legacy", uiScale = 1.1, globalUiScalePreset = "pixel" } end,
+    function() return {} end,
+}
+local rollbacks = 0
+for _, raising in ipairs({ "MSUF_ApplyMsufScale", "MSUF_ResetGlobalUiScale", "MSUF_SetGlobalUiScale" }) do
+    for index, general in ipairs(ROLLBACK_GENERALS) do
+        local host = NewHost({ general = general(), bars = { keep = 1 } })
+        local api = BootV1(host)
+        local before = Copy(DB(host))
+        local table0 = DB(host).general.UIScale
+        host.raise[raising] = true
+        local ok, reason = api.ApplyUIScaleProfile(SpecFor(true, 0.75, "custom"))
+        local label = raising .. " / general " .. index
+        Check(ok == false and reason == "failed", "a raising applier must answer false, \"failed\": " .. label)
+        Check(Equal(before, DB(host)), "a raising applier left MSUF scale settings changed: " .. label
+            .. "\n  before " .. Show(before) .. "\n  after  " .. Show(DB(host)))
+        Check(DB(host).general.UIScale == table0, "UIScale lost its identity: " .. label)
+        Check(#host.errors >= 1 and host.errors[1]:find("MSUF ApplyUIScaleProfile: ", 1, true)
+            and host.errors[1]:find("injected " .. raising .. " failure", 1, true), "the applier error was not reported: " .. label)
+        local saved = tonumber(before.general.msufUiScale) or tonumber(before.general.uiScale) or 1
+        local restored = table.concat(host.log, "\n"):find("MSUF_ApplyMsufScale{1=" .. tostring(saved) .. "}", 1, true)
+        Check(restored and host.log[#host.log]:find("^MSUF_ApplyCurrentProfileGlobalUiScale{}") ~= nil,
+            "MSUF's scale was not applied again from the saved settings: " .. label .. "\n" .. table.concat(host.log, "\n"))
+        if raising ~= "MSUF_ApplyMsufScale" then
+            -- The global scale is re-applied from the settings already put back.
+            Check(host.log[#host.log] == "MSUF_ApplyCurrentProfileGlobalUiScale{} @ " .. Show(before.general),
+                "the profile re-apply ran on unrestored settings: " .. label .. "\n" .. host.log[#host.log])
+        end
+        -- A normal apply afterwards is the legacy apply again.
+        host.raise[raising] = nil
+        host.log = {}
+        Check(api.ApplyUIScaleProfile(SpecFor(true, 0.75, "custom")) == true and DB(host).general.msufUiScale == 1
+            and DB(host).general.globalUiScaleValue == 0.75, "the apply after a rollback did not write: " .. label)
+        rollbacks = rollbacks + 1
+        compared = compared + 1
+    end
+end
+do
+    -- The restore raising too still leaves every setting as it was.
+    local host = NewHost({ general = { msufUiScale = 0.9, uiScale = 0.8, UIScale = { Enabled = true, Scale = 0.7 } } })
+    local api = BootV1(host)
+    local before = Copy(DB(host))
+    host.raise.MSUF_ApplyMsufScale, host.raise.MSUF_ApplyCurrentProfileGlobalUiScale = true, true
+    local ok, reason = api.ApplyUIScaleProfile(SpecFor(true, 0.75, "custom"))
+    Check(ok == false and reason == "failed" and Equal(before, DB(host)) and #host.errors == 3
+        and host.errors[2]:find("MSUF ApplyUIScaleProfile restore: ", 1, true)
+        and host.errors[3]:find("injected MSUF_ApplyCurrentProfileGlobalUiScale failure", 1, true),
+        "a raising restore must still leave every setting as it was and report every error")
+end
+
+------------------------------------------------------------------------------
 -- 3. SetResourceStack equals the legacy Profiles write wherever it changes something.
 local function CompleteStack()
     return {
@@ -518,5 +599,7 @@ do
     Check(host.globals.MSUF_HostAPI == api, "MSUF_HostAPI must stay the table created at file load")
 end
 
-print(("host_api_smoke: PASS (%d legacy-oracle comparisons; refusals; 7 owner lookups in 3030 calls; 0 KB per call)")
-    :format(compared))
+local owners = 0
+for _ in pairs(CAPABILITIES) do owners = owners + 1 end
+print(("host_api_smoke: PASS (%d legacy-oracle comparisons; refusals; rollback of a raising applier; "
+    .. "%d owner lookups in 3030 calls; 0 KB per call)"):format(compared, owners))
