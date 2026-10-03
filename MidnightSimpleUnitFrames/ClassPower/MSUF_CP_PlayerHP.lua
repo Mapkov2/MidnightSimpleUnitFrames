@@ -808,15 +808,23 @@ local function ApplyTextLayout(b)
     PHP.right:SetShown(enabled and not compact)
 end
 
+--- Hides the whole bar: the frame and the outline host, a sibling parented to
+--- the player frame. The edge stamp is cleared so the next layout that shows the
+--- bar shows its outline again.
+local function Hide()
+    if PHP.frame then PHP.frame:Hide() end
+    HideBarEdges()
+    HideShapeEdge()
+    PHP._edgeStamp = nil
+    PHP.visible = false
+end
+
 --- Layout/config path. This can run on profile changes and ClassPower
 --- refreshes, so every expensive frame operation is guarded by stamps.
 local function ApplyLayout(playerFrame)
     local b = _cpDB.bars or {}
     if not Enabled() then
-        if PHP.frame then PHP.frame:Hide() end
-        HideBarEdges()
-        HideShapeEdge()
-        PHP.visible = false
+        Hide()
         return false
     end
     if not Ensure(playerFrame) then return false end
@@ -1162,5 +1170,6 @@ builders.PLAYER_HP = function(E)
         Refresh = Refresh,
         Update = Update,
         ApplyFont = ApplyFont,
+        Hide = Hide,
     }
 end

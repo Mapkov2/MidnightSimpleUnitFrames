@@ -894,6 +894,7 @@ do
         CP_PlayerHPRefresh = playerHP.Refresh or CP_PlayerHPRefresh
         CP_PlayerHPUpdate = playerHP.Update or CP_PlayerHPUpdate
         CP_PlayerHPApplyFont = playerHP.ApplyFont or CP_PlayerHPApplyFont
+        CP.PlayerHPHide = playerHP.Hide
     end
 end
 
@@ -2088,7 +2089,8 @@ function CP.DisableNow()
     if CP.resourceExtras then CP.resourceExtras.Disable() end
     if CP.container then CP.container:Hide() end
     if AM.container then AM.container:Hide() end
-    if PHP.container then PHP.container:Hide() end
+    --- The second Player HP bar lives in PHP.frame plus a sibling outline host.
+    if CP.PlayerHPHide then CP.PlayerHPHide() elseif PHP.frame then PHP.frame:Hide() end
     CP.visible, AM.visible, PHP.visible = false, false, false
     if augWasActive or displayPowerWasOverridden then RefreshPlayerPowerBar() end
 end
