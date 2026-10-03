@@ -513,7 +513,10 @@ end
 
 local function EffectiveContainers(auras, unit)
     local root = type(auras) == "table" and auras.customContainers or nil
-    local record = type(root) == "table" and type(root.perUnit) == "table" and root.perUnit[Scope(unit)] or nil
+    -- The menu keeps one Arena record for every arena slot (Menu_Common
+    -- NormalizeUnit), as Mainline's UnitCustomContainerScope reads it.
+    local scope = type(unit) == "string" and unit:match("^arena%d+$") and "arena" or Scope(unit)
+    local record = type(root) == "table" and type(root.perUnit) == "table" and root.perUnit[scope] or nil
     return type(record) == "table" and type(record.items) == "table" and record.items or nil
 end
 

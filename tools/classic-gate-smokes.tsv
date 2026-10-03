@@ -392,3 +392,5 @@ clients+Forever	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} {fla
 -	lua	tools/tests/focus_kick_preview_combat_keyboard_smoke.lua	{root}	The focus interrupt tracker preview calls a restricted keyboard API in combat or swallows keybinds
 -	lua	tools/tests/castbar_target_name_font_pass_smoke.lua	{root}	A castbar font pass mid-cast leaves the cast target name in the font colour
 -	lua	tools/tests/castbar_preview_native_conceal_smoke.lua	{root}	The castbar previews hide a shown managed Blizzard player castbar (tainted container layout)
+classics	lua	tools/tests/classic_aura_arena_custom_containers_smoke.lua	{root} {flavor}	Classic Custom Aura containers do not reach the arena frames: {flavor}
+-	lua+driver	tools/tests/aura_native_container_growth_smoke.lua	{root/}	Native AuraContainers grow with menu edits instead of being parked and reused

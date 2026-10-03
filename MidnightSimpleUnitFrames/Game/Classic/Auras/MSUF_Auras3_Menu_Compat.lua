@@ -47,7 +47,9 @@ local function EachRuntimeUnit(scope, callback)
         for i = 1, #BOSS_UNITS do callback(BOSS_UNITS[i]) end
     elseif scope == "arena" or ARENA_LOOKUP[scope] then
         for i = 1, #ARENA_UNITS do callback(ARENA_UNITS[i]) end
-    elseif scope == "target" or scope == "focus" then
+    elseif scope == "pet" or scope == "target" or scope == "focus" then
+        -- The same own-unit scopes as Menu_Common's NormalizeUnit: a Pet write
+        -- prepares the Pet override, never Player's.
         callback(scope)
     else
         callback("player")

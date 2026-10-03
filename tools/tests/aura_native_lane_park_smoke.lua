@@ -7,8 +7,11 @@
 -- so a slider drag or a lane toggle grew the frame count for the session
 -- (re-review 2026-10-02). The real NativeApply factory runs here against
 -- counted container stubs: an apply that returns to a parked signature must
--- take that container back, the park stays bounded, and a forced recreate
--- (fresh AuraButtons) never revives a parked one.
+-- take that container back, a drag over more values than it once kept (eight)
+-- rebuilds none it already built, and a forced recreate (fresh AuraButtons)
+-- never revives a parked one and drops the key's park, which may hold
+-- containers from before the PLAYER_ENTERING_WORLD that asked for it.
+-- Nothing is evicted: no container can be freed or restyled for another signature.
 -- Argument: the repository root.
 local root = assert(arg[1], "repository root argument missing")
 root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
@@ -98,21 +101,25 @@ A3._HideNormalLaneContainers(laneRoot, { buff = Lane(20, false) }, nil)
 assert(laneRoot.Buffs == nil and not first.shown, "a disabled lane kept its container")
 assert(Apply(20) == first and #created == 2, "re-enabling a lane built another container")
 
--- A long slider drag stays bounded: only the last eight signatures are parked.
+-- A long slider drag builds one container per value it visits, and dragging
+-- back over them builds none: every retired container stays parked.
 for size = 30, 60 do Apply(size) end
+local before = #created
+for size = 60, 30, -1 do Apply(size) end
+assert(#created == before, "dragging back over 31 parked values built " .. (#created - before) .. " containers")
 local parked = laneRoot._msufA3ParkedLanes and laneRoot._msufA3ParkedLanes.Buffs
 local count = 0
-for _ in pairs(parked and parked.bySignature or {}) do count = count + 1 end
-assert(count <= 8 and #parked.order == count, "the lane park grew to " .. count .. " containers")
-local before = #created
-Apply(59)
-assert(#created == before, "a recently parked signature was not revived")
+for _ in pairs(parked or {}) do count = count + 1 end
+assert(count == #created - 1, "the lane park holds " .. count .. " of the " .. (#created - 1) .. " retired containers")
 
--- A forced recreate wants fresh AuraButtons: it builds one and drops the park.
-local forced = Apply(59, true)
-assert(#created == before + 1 and forced ~= created[before], "a forced recreate reused a container")
+-- A forced recreate wants fresh AuraButtons: it builds one, never revives or
+-- keeps the container it replaces, and drops the key's park.
+local stale = laneRoot.Buffs
+local forced = Apply(30, true)
+assert(#created == before + 1 and forced ~= stale and forced == created[#created], "a forced recreate reused a container")
 assert(next(laneRoot._msufA3ParkedLanes.Buffs or {}) == nil, "a forced recreate kept the parked containers")
-Apply(58)
+Apply(31)
 assert(#created == before + 2, "a forced recreate left an older container parked")
+assert(Apply(30) == forced and #created == before + 2, "the forced recreate's container was not parked for its signature")
 
 print("aura native lane park smoke: OK (" .. #created .. " containers built)")

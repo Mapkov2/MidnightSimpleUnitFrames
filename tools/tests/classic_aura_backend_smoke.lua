@@ -600,6 +600,24 @@ do
             "Classic Arena Hide Permanent did not preserve/fan out owner " .. i)
     end
 
+    -- Pet is its own scope (Menu_Common NormalizeUnit): its first Hide Permanent
+    -- edit copies the Shared blacklist into the Pet override and leaves Player
+    -- on Shared. It used to prepare a Player override instead (re-review R6).
+    auras.perUnit.pet = nil
+    assert(Model.WriteBlacklistHidePermanent("pet", "buff", true) == true,
+        "Classic Pet Hide Permanent write did not report its change")
+    assert(auras.perUnit.player == nil,
+        "Classic Pet Hide Permanent write prepared a Player blacklist override")
+    local pet = auras.perUnit.pet
+    assert(pet and pet.overrideBlacklist == true
+        and pet.blacklist ~= sharedBlacklist
+        and pet.blacklist.spells[710001] == true
+        and pet.blacklist.debuffs.maxDuration == 37
+        and pet.blacklist.buffs.hidePermanent == true,
+        "Classic Pet Hide Permanent did not copy the Shared blacklist into the Pet override")
+    assert(Model.ReadBlacklistHidePermanent("pet", "buff") == true,
+        "Classic Pet menu did not read back its Hide Permanent")
+
     local function Read(path)
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
