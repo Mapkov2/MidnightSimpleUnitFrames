@@ -13,7 +13,14 @@
 --   2. the owner of the keys the name rule got wrong;
 --   3. the real export/import pipeline: a Unit Frames import keeps the
 --      receiver's profile-local keys and a Colors import keeps non-colour keys,
---      while the keys each kind owns still travel.
+--      while the keys each kind owns still travel;
+--   4. the keys each page writes resolve to that page's owner. The lists come
+--      from the page sources: the Menu2 search index (generated from the
+--      pages: page, section and setting key of every control), the Colors page
+--      files and the colour API behind them, the MSUF Edit Mode and the menu
+--      window chrome. The name rule had put the unified bar colour, the NPC
+--      type switches, the GCD bar, kick-ready and cast time keys and the menu
+--      and Edit Mode preferences in unitframes.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -26,6 +33,7 @@ end
 -- 1 + 2: registry completeness and corrected owners --------------------------
 local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 local CLEAR_BY_NAME = { unitframes = true, castbars = true }
+local SEEDED, Registry = {}, nil
 for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     local world = World.New(root, flavor)
     world:Boot()
@@ -34,6 +42,8 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         .. tostring(failure and failure.message))
     world.env.MSUF_EnsureDB()
     local F = assert(world.core.ProfileFields, flavor .. ": no MSUF.ProfileFields")
+    Registry = F
+    for key in pairs(world.env.MSUF_DB.general) do SEEDED[key] = true end
     local undeclared = {}
     for key in pairs(world.env.MSUF_DB.general) do
         if key:sub(1, 1) ~= "_" and not F.IsDeclaredGeneralKey(key)
@@ -52,17 +62,31 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         globalUiScalePreset = "profile", globalUiScaleValue = "profile", disableScaling = "profile",
         blizzardEditModeIntegration = "profile", blizzardEditModeSnapshot = "profile",
         nsrtNicknameIntegration = "profile", dominosEditModeIntegration = "profile",
+        -- menu and MSUF Edit Mode preferences
+        flashFullW = "profile", flashFullXpx = "profile", msuf2WindowW = "profile", dropdownStyleMode = "profile",
+        tipCycleIndex = "profile", unitPreviewGuidesEnabled = "profile", classPowerPreviewGuidesEnabled = "profile",
+        previewDragHintAnimationEnabled = "profile", showNavigationIcons = "profile", reduceMotion = "profile",
+        hpPowerTextSelectedKey = "profile", editModeBgAlpha = "profile", editModeSnapToGrid = "profile",
+        editModeGridStep = "profile", editModePopupScale = "profile", linkEditModes = "profile",
         -- read like colours, are unit frame settings
         useBarBorder = "unitframes", fontSlug = "unitframes", fontTextAlpha = "unitframes",
-        portraitFillBorder = "unitframes", dispelBorderTrigger = "unitframes", editModeBgAlpha = "unitframes",
+        portraitFillBorder = "unitframes", dispelBorderTrigger = "unitframes",
         hpBgAlpha = "unitframes", powerBarBgAlpha = "unitframes",
         -- colours stay colours
         classBarBgR = "colors", healthGradientHighG = "colors", fontColor = "colors", barMode = "colors",
         castbarInterruptColor = "castbarColors", empowerColorStages = "castbarColors",
         aurasStackCountColor = "auraColors",
+        -- Colors page settings the name rule put elsewhere
+        unifiedBarR = "colors", darkBarB = "colors", darkBarGray = "colors", barBgFillMode = "colors",
+        npcTypeBoss = "colors", npcTypeToT = "colors", tapDeniedGray = "colors",
+        aurasCooldownTextSafeSeconds = "colors", playerCastbarOverrideMode = "castbarColors",
+        playerCastbarOverrideR = "castbarColors", castbarInterruptibleR = "castbarColors",
+        castbarTargetNameB = "castbarColors",
         -- castbar family
         arenaCastTimeFormat = "castbars", castbarPlayerBarWidth = "castbars", showBossCastIcon = "castbars",
-        enablePlayerCastbar = "castbars", empowerStageBlink = "castbars",
+        enablePlayerCastbar = "castbars", empowerStageBlink = "castbars", gcdBarWidth = "castbars",
+        showGCDBar = "castbars", kickReadySize = "castbars", enableFocusKickIcon = "castbars",
+        focusKickTextSize = "castbars", showPlayerCastTime = "castbars", showFocusCastTime = "castbars",
         -- plain unit frame keys
         fontKey = "unitframes", portraitShape = "unitframes", unitDispelSymbolMode = "unitframes",
         -- undeclared keys a menu may write: the fallback rule
@@ -146,8 +170,169 @@ local function RunImports(flavor)
     exported = ExportedGeneral("castbar")
     Check(exported.castbarTexture ~= nil and exported.castbarInterruptColor == nil and exported.fontKey == nil,
         flavor .. ": the Castbars export does not carry exactly the castbar keys")
+
+    -- The unified colour, the NPC type switches, the GCD bar, kick-ready and
+    -- cast time keys and the menu and Edit Mode preferences travel with their
+    -- own kind only.
+    g = MSUF_DB.general
+    g.unifiedBarR, g.npcTypeBoss, g.tapDeniedGray = 0.6, false, false
+    g.gcdBarWidth, g.kickReadySize, g.showPlayerCastTime = 333, 21, false
+    g.flashFullW, g.editModeGridStep, g.tipCycleIndex = 1400, 24, 9
+    exported = ExportedGeneral("colors")
+    Check(exported.unifiedBarR == 0.6 and exported.npcTypeBoss == false and exported.tapDeniedGray == false,
+        flavor .. ": the Colors export lost the unified colour, an NPC type switch or the tapped grey")
+    exported = ExportedGeneral("castbar")
+    Check(exported.gcdBarWidth == 333 and exported.kickReadySize == 21 and exported.showPlayerCastTime == false,
+        flavor .. ": the Castbars export carries no GCD bar, kick-ready or cast time keys")
+    local friend = ExportedGeneral("unitframe")
+    Check(friend.unifiedBarR == nil and friend.npcTypeBoss == nil and friend.gcdBarWidth == nil
+        and friend.flashFullW == nil and friend.editModeGridStep == nil and friend.tipCycleIndex == nil,
+        flavor .. ": the Unit Frames export carries colours, castbar keys or menu and Edit Mode preferences")
+    friend.unifiedBarR, friend.npcTypeBoss, friend.flashFullW, friend.editModeGridStep = 0.2, true, 700, 64
+    friend.gcdBarWidth = 99
+    g.unifiedBarR, g.npcTypeBoss, g.flashFullW, g.editModeGridStep, g.gcdBarWidth = 0.4, false, 1200, 16, 250
+    Import("unitframe", { general = friend })
+    g = MSUF_DB.general
+    Check(g.unifiedBarR == 0.4 and g.npcTypeBoss == false and g.gcdBarWidth == 250,
+        flavor .. ": a Unit Frames import overwrote a colour or a castbar key")
+    Check(g.flashFullW == 1200 and g.editModeGridStep == 16,
+        flavor .. ": a Unit Frames import overwrote a menu or Edit Mode preference")
 end
 
 RunImports("Mainline")
 RunImports("Vanilla")
+
+-- 4: the keys each page writes resolve to that page's owner -------------------
+local F = Registry
+local COLOR_FAMILY = { colors = true, castbarColors = true, auraColors = true }
+local CASTBAR_FAMILY = { castbars = true, castbarColors = true }
+local PROFILE = { profile = true }
+local OPTIONS = "MidnightSimpleUnitFrames_Options/Shell/Menu2/"
+local mismatches, seen, counts = {}, {}, {}
+
+local function ReadSource(rel)
+    local handle = assert(io.open(root .. "/" .. rel, "rb"), "missing page source " .. rel)
+    local text = handle:read("*a")
+    handle:close()
+    return (text:gsub("\r\n", "\n"))
+end
+-- exceptions name keys a page legitimately writes for another owner.
+local function Expect(key, family, where, exceptions)
+    if type(key) ~= "string" or key:sub(1, 1) == "_" then return end
+    counts[where] = (counts[where] or 0) + 1
+    local owner, wanted = F.GeneralOwner(key), exceptions and exceptions[key]
+    local ok
+    if wanted then ok = owner == wanted else ok = family[owner] == true end
+    local line = where .. ": general." .. key .. " -> " .. tostring(owner)
+    if not ok and not seen[line] then
+        seen[line] = true
+        mismatches[#mismatches + 1] = line
+    end
+end
+-- The stored keys a control's setting key names: the key itself, or the
+-- channels (R, G, B, A) its colour is stored in, also under the key without
+-- its "Color" suffix.
+local function StoredKeys(key)
+    local out = {}
+    for _, prefix in ipairs({ key, key:match("^(.-)Color$") }) do
+        for _, channel in ipairs({ "R", "G", "B", "A" }) do
+            if SEEDED[prefix .. channel] then out[#out + 1] = prefix .. channel end
+        end
+    end
+    if SEEDED[key] or #out == 0 then out[#out + 1] = key end
+    return out
+end
+-- Direct writes to profile.general in a source file.
+local function GeneralWrites(text)
+    local keys = {}
+    for _, pattern in ipairs({ "G%(%)%.([%a_][%w_]*)%s*=[^=]", "%f[%w_]g%.([%a_][%w_]*)%s*=[^=]",
+        "%f[%w_]gen%.([%a_][%w_]*)%s*=[^=]", "%f[%w_]general%.([%a_][%w_]*)%s*=[^=]" }) do
+        for key in text:gmatch(pattern) do keys[key] = true end
+    end
+    return keys
+end
+
+-- a. Every control of the search index (both index files) with a general
+-- setting key: the Castbars page and the castbar section of each unit page,
+-- the Colors page, and the menu sections of the Misc page and the menu chrome.
+-- The Misc page's minimap and welcome message rows are not menu preferences
+-- (their owner is still open), so their sections are not checked.
+local MENU_SECTIONS = { misc_menu_behavior = true, misc_external_edit_mode = true,
+    misc_nickname_integration = true, misc_mapkoskin = true }
+local function IndexFamily(page, section)
+    if page == "opt_castbar" or section == "castbar" then return CASTBAR_FAMILY, "Castbars controls" end
+    if page == "opt_colors" then return COLOR_FAMILY, "Colors controls" end
+    if page == "menu_chrome" or (page == "opt_misc" and MENU_SECTIONS[section]) then
+        return PROFILE, "menu preference controls"
+    end
+end
+for _, rel in ipairs({ OPTIONS .. "Search/MSUF_Menu2_Search_StaticIndex_Data.lua",
+    OPTIONS .. "Search/MSUF_Menu2_Search_StaticIndex_Data_Classic.lua" }) do
+    local blob = assert(ReadSource(rel):match("%[==%[\n?(.-)%]==%]"), rel .. ": no index blob")
+    for line in blob:gmatch("[^\n]+") do
+        local cols = {}
+        for col in (line .. "\t"):gmatch("([^\t]*)\t") do cols[#cols + 1] = col end
+        local key = cols[4] and cols[4]:match("^general%.([%a_][%w_]*)")
+        local family, where = IndexFamily(cols[1], cols[9])
+        if key and family then
+            for _, stored in ipairs(StoredKeys(key)) do Expect(stored, family, where) end
+        end
+    end
+end
+
+-- b. The Colors page files: their direct writes and every colour prefix they
+-- hand the colour pickers (stored as prefix..R/G/B), and the colour API the
+-- page drives (Runtime/MSUF_Colors.lua). The bar text editors remember their
+-- selected key in general; that is a menu preference.
+local COLOR_PAGE_EXCEPTIONS = { hpPowerTextSelectedKey = "profile" }
+local colorSources = {}
+for _, name in ipairs({ "", "_Context", "_Group", "_Meta", "_Resources" }) do
+    colorSources[#colorSources + 1] = ReadSource(OPTIONS .. "Pages/MSUF_Menu2_AdvancedColors" .. name .. ".lua")
+end
+for _, text in ipairs(colorSources) do
+    for key in pairs(GeneralWrites(text)) do Expect(key, COLOR_FAMILY, "Colors page writes", COLOR_PAGE_EXCEPTIONS) end
+    for _, call in ipairs({ "GeneralColorAt", "ContextGeneral", "SetAllPortraitRGB", "ClearRGBs?", "ClearRGBAs" }) do
+        for args in text:gmatch(call .. "(%b())") do
+            for prefix in args:gmatch('"(%l[%w_]*)"') do
+                for _, channel in ipairs({ "R", "G", "B" }) do Expect(prefix .. channel, COLOR_FAMILY, "Colors pickers") end
+            end
+        end
+    end
+end
+local colorApi = ReadSource("MidnightSimpleUnitFrames/Runtime/MSUF_Colors.lua")
+for args in colorApi:gmatch("_setRGBA?(%b())") do
+    -- Whole keys only; key .. "R" is a dynamic per-unit castbar text colour.
+    for key in args:gmatch('"(%l[%w_]+)"') do Expect(key, COLOR_FAMILY, "Colors API") end
+end
+for key in pairs(GeneralWrites(colorApi)) do Expect(key, COLOR_FAMILY, "Colors API") end
+
+-- c. The MSUF Edit Mode (every file its manifest loads): grid, snapping and
+-- popup preferences. The HUD also edits two unit frame anchors and the player
+-- castbar preview switch.
+local EDIT_MODE_EXCEPTIONS = { anchorName = "unitframes", anchorToCooldown = "unitframes",
+    castbarPlayerPreviewEnabled = "castbars" }
+local editModeDir = "MidnightSimpleUnitFrames/Shell/EditMode/"
+for file in ReadSource(editModeDir .. "MSUF_EditMode.xml"):gmatch('<Script%s+file="([^"]+)"') do
+    for key in pairs(GeneralWrites(ReadSource(editModeDir .. file:gsub("\\", "/")))) do
+        Expect(key, PROFILE, "Edit Mode writes", EDIT_MODE_EXCEPTIONS)
+    end
+end
+
+-- d. The menu window chrome: geometry, theme and preview guides.
+for _, rel in ipairs({ "MSUF_Menu2_Window.lua", "MSUF_Menu2_Theme.lua", "MSUF_Menu2_Theme_Forever.lua",
+    "Preview/MSUF_Menu2_UnitPreview_View_Chrome.lua" }) do
+    for key in pairs(GeneralWrites(ReadSource(OPTIONS .. rel))) do Expect(key, PROFILE, "menu chrome writes") end
+end
+
+table.sort(mismatches)
+Check(#mismatches == 0, "keys a page writes resolve outside that page's owner (declare them in "
+    .. "State/MSUF_ProfileFields.lua):\n  " .. table.concat(mismatches, "\n  "))
+-- The derivation must keep finding the pages' keys.
+local minimum = { ["Castbars controls"] = 100, ["Colors controls"] = 60, ["menu preference controls"] = 15,
+    ["Colors page writes"] = 40, ["Colors pickers"] = 30, ["Colors API"] = 40, ["Edit Mode writes"] = 8,
+    ["menu chrome writes"] = 3 }
+for where, least in pairs(minimum) do
+    Check((counts[where] or 0) >= least, "page key derivation found only " .. tostring(counts[where] or 0)
+        .. " " .. where .. " (expected at least " .. least .. "); did a page source or the index format move?")
+end
 print("general_key_ownership_smoke: ok")
