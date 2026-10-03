@@ -683,19 +683,22 @@ local function QuickOffered(mark)
     if mark then db.general[QUICK_SETUP_FLAG] = true end
     return db.general and db.general[QUICK_SETUP_FLAG] == true
 end
-local function QuickEnsurePopups()
-    if not _G.StaticPopupDialogs then return end
-    M.InstallStaticPopup("MSUF2_CLASSPOWER_QUICK_RESULT", {
-        text = "%s", button1 = OKAY, button2 = QuickTr("Undo"), hideOnEscape = false,
-        OnAccept = function() quickSetupUndoSnapshot = nil end,
-        OnCancel = function()
+-- The result offers Undo; Escape must not answer it, so it is a menu-owned
+-- prompt (M.ShowPrompt). The offer is Blizzard's generic confirmation.
+local function ShowQuickSetupResult(popupText)
+    M.ShowPrompt("MSUF2_CLASSPOWER_QUICK_RESULT", {
+        text = QuickTr(popupText), accept = OKAY, cancel = QuickTr("Undo"), hideOnEscape = false,
+        onAccept = function() quickSetupUndoSnapshot = nil end,
+        onCancel = function()
             if not quickSetupUndoSnapshot then return end
             QuickRestore(quickSetupUndoSnapshot)
             quickSetupUndoSnapshot = nil
             QuickRefreshAll("ClassPowerQuickSetupUndo")
         end,
     })
-    M.InstallStaticPopup("MSUF2_CLASSPOWER_QUICK_OFFER", {
+end
+local function ShowQuickSetupOffer()
+    M.ShowPrompt("MSUF2_CLASSPOWER_QUICK_OFFER", {
         text = QuickTr("Welcome to Class Resources!\n\n"
             .. "Would you like to automatically set up a\n"
             .. "detached Class Bar positioned above your\n"
@@ -705,18 +708,17 @@ local function QuickEnsurePopups()
             .. "Player Power in one click.\n\n"
             .. "You can always run this later via the\n"
             .. "|cff00ff00Quick Setup: Class Bar|r button below."),
-        button1 = QuickTr("Setup Now"), button2 = QuickTr("Not Now"), hideOnEscape = true, showAlert = true,
-        OnAccept = function()
+        accept = QuickTr("Setup Now"), cancel = QuickTr("Not Now"), showAlert = true,
+        onAccept = function()
             QuickOffered(true)
             C_Timer.After(0.05, function()
                 if _G.MSUF2_ClassPowerQuickSetup then _G.MSUF2_ClassPowerQuickSetup() end
             end)
         end,
-        OnCancel = function() QuickOffered(true) end,
+        onCancel = function() QuickOffered(true) end,
     })
 end
 local function ExecuteQuickSetup()
-    QuickEnsurePopups()
     QuickOffered(true)
     local ecv = QuickGetVisibleCDM()
     local retail = not (MSUF.Client and MSUF.Client.IsClassic)
@@ -737,7 +739,7 @@ local function ExecuteQuickSetup()
         popupText = "Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."
     end
     QuickRefreshAll("ClassPowerQuickSetup")
-    if StaticPopup_Show then StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_RESULT", QuickTr(popupText)) end
+    ShowQuickSetupResult(popupText)
 end
 _G.MSUF2_ClassPowerQuickSetup = ExecuteQuickSetup
 ExportPublic("MSUF_QuickSetup_ResetFirstRun", function()
@@ -749,9 +751,8 @@ end)
 local function MaybeOfferQuickSetup()
     if quickSetupFirstRunChecked or QuickOffered() then return end
     quickSetupFirstRunChecked = true
-    QuickEnsurePopups()
     C_Timer.After(0.15, function()
-        if not QuickOffered() and StaticPopup_Show then StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_OFFER") end
+        if not QuickOffered() then ShowQuickSetupOffer() end
     end)
 end
 local function BuildInlineClassPowerPreview(ctx, b)

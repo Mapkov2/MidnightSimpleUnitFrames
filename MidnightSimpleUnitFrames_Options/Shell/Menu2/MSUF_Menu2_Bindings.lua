@@ -186,12 +186,14 @@ function M.SyncDirectPowerTextOffsets(conf, changedKey, changedValue)
     return SyncDirectTextGroupOffsets(conf, "power", changedKey, changedValue)
 end
 local IsConfigCombatLocked = M.IsConfigCombatLocked
-function M.IsConfigCombatLocked()
-    return IsConfigCombatLocked()
+function M.IsConfigCombatLocked(event)
+    return IsConfigCombatLocked(event)
 end
 local ShowConfigCombatLockMessage = M.ShowConfigCombatLockMessage
-function M.BlockCombatAction()
-    if not IsConfigCombatLocked() then return false end
+--- A combat event handler passes its event (Kernel InCombat(event)): the
+--- refusal then holds on the PLAYER_REGEN_DISABLED frame as well.
+function M.BlockCombatAction(event)
+    if not IsConfigCombatLocked(event) then return false end
     ShowConfigCombatLockMessage()
     return true
 end

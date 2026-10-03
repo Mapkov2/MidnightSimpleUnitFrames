@@ -192,6 +192,7 @@ clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/editmode_public_api_session_smoke.lua	{root}	Edit Mode public API session smoke failed
 -	lua	tools/tests/editmode_shell_labels_smoke.lua	{root}	Edit Mode shell labels smoke failed
 -	lua	tools/tests/editmode_shell_locale_smoke.lua	{root}	Edit Mode shell locale smoke failed
+-	lua	tools/tests/menu_history_locale_smoke.lua	{root}	The menu history shows English or a split character on a German client
 -	lua	tools/tests/editmode_popup_focus_combat_smoke.lua	{root}	Edit Mode popup focus and combat smoke failed
 -	lua	tools/tests/editmode_hud_toolbar_smoke.lua	{root}	Edit Mode toolbar wiring smoke failed
 -	lua	tools/tests/editmode_group_geometry_util_smoke.lua	{root}	Edit Mode group geometry refresh lost its single Util owner
@@ -208,6 +209,7 @@ clients+Forever	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.l
 -	lua	tools/tests/classic_history_ui_scale_smoke.lua	{root/}	Classic History UI scale smoke failed
 clients+Forever	lua	tools/tests/menu_page_reset_history_smoke.lua	{root} {flavor}	Page resets and undo history: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}	Menu combat quiescence: {flavor}
+clients+Forever	lua	tools/tests/menu_combat_edge_refusal_smoke.lua	{root} {flavor}	The menu flushed an apply or committed history on the combat-start frame: {flavor}
 clients+Forever	lua	tools/tests/menu_refresh_queue_smoke.lua	{root} {flavor}	Menu refresh requests re-queue after a cancelled task: {flavor}
 clients+Forever	lua	tools/tests/menu_core_text_smoke.lua	{root} {flavor}	Menu core text, slider names and feedback settle: {flavor}
 clients+Forever	lua	tools/tests/menu_pages_translate_once_smoke.lua	{root} {flavor}	Menu pages and previews translate their text once: {flavor}
@@ -219,6 +221,8 @@ clients+Forever	lua	tools/tests/menu_preview_focus_clear_smoke.lua	{root} {flavo
 -	lua	tools/tests/menu_search_page_side_effects_smoke.lua	{root} Mainline	Search keeps the page on screen and filters deleted variants: Mainline
 -	lua	tools/tests/menu_search_page_side_effects_smoke.lua	{root} Vanilla	Search keeps the page on screen and filters deleted variants: Vanilla
 -	lua	tools/tests/menu_popup_contracts_smoke.lua	{root}	Menu popup OnAccept and Edit Mode strata contracts failed
+-	lua	tools/tests/menu_prompt_ownership_smoke.lua	{root}	An Options file writes StaticPopupDialogs, or a menu prompt lost its buttons, text or Escape rule
+-	lua	tools/tests/menu_discarded_values_smoke.lua	{root}	An Options local declares more values than names, or the history castbar fallback lost an owner
 -	lua	tools/tests/menu_control_catalog_contracts_smoke.lua	{root}	Menu control catalog contracts failed
 -	lua	tools/tests/menu_color_picker_fallback_smoke.lua	{root}	Menu color picker fallback owner contract failed
 -	lua	tools/tests/classic_unit_menu_runtime_parity_smoke.lua	{root/}	Classic unit menu runtime parity smoke failed

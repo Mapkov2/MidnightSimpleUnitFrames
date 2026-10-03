@@ -315,12 +315,6 @@ function MiscSection.MenuAccent(s)
     local ctx, BindMiscToggle, BindMiscDropdown = s.ctx, s.BindMiscToggle, s.BindMiscDropdown
     local hasAppearancePresets, menuBehavior, menuBehaviorW = s.hasAppearancePresets, s.menuBehavior, s.menuBehaviorW
     local menuFontRightX, menuFontW = s.menuFontRightX, s.menuFontW
-    M.InstallStaticPopup("MSUF2_ACCENT_RELOAD_REQUIRED", {
-        text = M.Tr("The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"),
-        button1 = RELOADUI or M.Tr("Reload"),
-        button2 = CANCEL or M.Tr("Not now"),
-        OnAccept = function() ReloadUI() end,
-    })
     local accentSwatch
     local function IsAccentMode(mode)
         if mode == "class" or mode == "custom" then return true end
@@ -338,11 +332,16 @@ function MiscSection.MenuAccent(s)
         if applied and sig and sig ~= applied then
             -- Re-showing an already-visible popup replays its open sound; guard
             -- so live color-picker painting cannot spam it.
-            if not (type(StaticPopup_Visible) == "function" and StaticPopup_Visible("MSUF2_ACCENT_RELOAD_REQUIRED")) then
-                StaticPopup_Show("MSUF2_ACCENT_RELOAD_REQUIRED")
+            if not M.IsPromptShown("MSUF2_ACCENT_RELOAD_REQUIRED") then
+                M.ShowPrompt("MSUF2_ACCENT_RELOAD_REQUIRED", {
+                    text = M.Tr("The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"),
+                    accept = RELOADUI or M.Tr("Reload"),
+                    cancel = CANCEL or M.Tr("Not now"),
+                    onAccept = function() ReloadUI() end,
+                })
             end
-        elseif type(StaticPopup_Hide) == "function" then
-            StaticPopup_Hide("MSUF2_ACCENT_RELOAD_REQUIRED")
+        else
+            M.HidePrompt("MSUF2_ACCENT_RELOAD_REQUIRED")
         end
     end
     local accentCheckTimer
@@ -408,12 +407,6 @@ function MiscSection.MenuAccent(s)
             or -330, menuBehaviorW - 70, T.colors.muted)
     if accentHelp.SetWordWrap then accentHelp:SetWordWrap(true) end
     if hasAppearancePresets then
-        M.InstallStaticPopup("MSUF2_APPEARANCE_RELOAD_REQUIRED", {
-            text = M.Tr("Reload the UI to apply the menu appearance preset?"),
-            button1 = RELOADUI or M.Tr("Reload"),
-            button2 = CANCEL or M.Tr("Not now"),
-            OnAccept = function() ReloadUI() end,
-        })
         BindMiscDropdown(menuBehavior, "Menu appearance preset",
             VT("classicGlass", "MSUF Forever", "midnight", "Midnight Blue",
                 "midnightDark", "Midnight Dark",
@@ -441,7 +434,12 @@ function MiscSection.MenuAccent(s)
                     return
                 end
                 RefreshAccentSwatchEnabled()
-                StaticPopup_Show("MSUF2_APPEARANCE_RELOAD_REQUIRED")
+                M.ShowPrompt("MSUF2_APPEARANCE_RELOAD_REQUIRED", {
+                    text = M.Tr("Reload the UI to apply the menu appearance preset?"),
+                    accept = RELOADUI or M.Tr("Reload"),
+                    cancel = CANCEL or M.Tr("Not now"),
+                    onAccept = function() ReloadUI() end,
+                })
             end,
             "setting.menuAppearancePreset")
         local opacity = W.Slider(menuBehavior, "Background opacity", 80, 100, 1, 250)

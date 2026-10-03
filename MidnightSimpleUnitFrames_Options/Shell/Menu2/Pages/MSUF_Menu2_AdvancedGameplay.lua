@@ -71,7 +71,7 @@ local function BuildGameplay(ctx)
         Gameplay().nameplateMeleeSpellID = floor((tonumber(value) or 0) + 0.5)
     end
     local timerControls, stateControls, totemControls = {}, {}, {}
-    local crossControls, meleeControls = {}, {}, {}
+    local crossControls, meleeControls = {}, {}
     local selectedSpellText
     local noSpellWarn
     local CONTROL_KEY_INDEX = { toggle = 5, switch = 6, slider = 9, dropdown = 7 }

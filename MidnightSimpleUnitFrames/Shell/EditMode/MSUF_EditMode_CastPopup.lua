@@ -306,7 +306,7 @@ function Sync()
         x, y = FramePositionValues(CastbarFrame(unit))
     end
 
-    if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(unit)) .. " " .. Quick.Tr("Castbar")) end
+    if pf._titleFS then pf._titleFS:SetText(string.format(Quick.Tr("%s Castbar"), Quick.Tr(UnitLabel(unit)))) end
     Quick.SetBoxText(pf.xBox, x ~= nil and x or Quick.San(xKey and g[xKey], dx))
     Quick.SetBoxText(pf.yBox, y ~= nil and y or Quick.San(yKey and g[yKey], dy))
     Quick.SetBoxText(pf.wBox, w)

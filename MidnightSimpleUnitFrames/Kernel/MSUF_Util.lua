@@ -1116,9 +1116,14 @@ ExportPublic("MSUF_IsInAnyEditMode", IsInAnyEditMode)
 do
     local _lastConfigCombatMessage = 0
 
-    local function IsConfigCombatLocked()
-        if InCombatLockdown and InCombatLockdown() then return true end
-        return false
+    --- The one combat refusal for configuration: the menu, its lifecycle, apply
+    --- deferral and history commits. It reads InCombat(event), so it refuses on
+    --- the PLAYER_REGEN_DISABLED frame too, while InCombatLockdown() still
+    --- answers false. A handler running for a combat event passes that event;
+    --- the edge then holds for the rest of the frame (InCombat). Guards in front
+    --- of protected writes keep asking InCombatLockdown() themselves.
+    local function IsConfigCombatLocked(event)
+        return InCombat(event) == true
     end
     ExportPublic("MSUF_IsConfigCombatLocked", IsConfigCombatLocked)
 
@@ -1143,8 +1148,8 @@ do
     end
     ExportPublic("MSUF_ShowConfigCombatLockMessage", ShowConfigCombatLockMessage)
 
-    local function BlockConfigCombatLocked()
-        local locked = IsConfigCombatLocked and IsConfigCombatLocked()
+    local function BlockConfigCombatLocked(event)
+        local locked = IsConfigCombatLocked(event)
         if locked then
             if ShowConfigCombatLockMessage then ShowConfigCombatLockMessage() end
             return true

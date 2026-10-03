@@ -131,43 +131,25 @@ local function BindingActionLabel(action)
     return _G["BINDING_NAME_" .. action] or action
 end
 
-local function EnsureBindingConflictPopup()
-    if not _G.StaticPopupDialogs or _G.StaticPopupDialogs.MSUF2_PRIORITY_BINDING_CONFLICT then return end
-    _G.StaticPopupDialogs.MSUF2_PRIORITY_BINDING_CONFLICT = {
-        text = Tr("%s is currently bound to %s. Replace that binding?"),
-        button1 = _G.ACCEPT or Tr("Replace"),
-        button2 = _G.CANCEL or Tr("Cancel"),
-        OnAccept = function(_, data)
-            if not data then return end
-            if type(data.commit) == "function" then
-                data.commit(data.key, true)
-                return
-            end
-            local ok = _G.MSUF_SetManagedBinding(PRIORITY_BINDING, data.key, true)
-            if ok and type(data.refresh) == "function" then data.refresh("priority-binding-replaced") end
-        end,
-        timeout = 0,
-        whileDead = 1,
-        hideOnEscape = 1,
-        preferredIndex = 3,
-    }
+-- Blizzard's generic confirmation (M.ShowPrompt); nothing is written to
+-- StaticPopupDialogs.
+local function ShowBindingConflictPrompt(fullKey, action, commit)
+    M.ShowPrompt("MSUF2_PRIORITY_BINDING_CONFLICT", {
+        text = string.format(Tr("%s is currently bound to %s. Replace that binding?"),
+            FormatBindingKey(fullKey), BindingActionLabel(action)),
+        accept = ACCEPT or Tr("Replace"),
+        cancel = CANCEL or Tr("Cancel"),
+        onAccept = function() commit(fullKey, true) end,
+    })
 end
 
-local function EnsureClearPinsPopup()
-    if not _G.StaticPopupDialogs or _G.StaticPopupDialogs.MSUF2_PRIORITY_CLEAR_PINS then return end
-    _G.StaticPopupDialogs.MSUF2_PRIORITY_CLEAR_PINS = {
+local function ShowClearPinsPrompt(clear)
+    M.ShowPrompt("MSUF2_PRIORITY_CLEAR_PINS", {
         text = Tr("Clear every manually pinned Priority Frame for this character?"),
-        button1 = _G.ACCEPT or Tr("Clear all"),
-        button2 = _G.CANCEL or Tr("Cancel"),
-        OnAccept = function(_, data)
-            if not data or type(data.clear) ~= "function" then return end
-            data.clear()
-        end,
-        timeout = 0,
-        whileDead = 1,
-        hideOnEscape = 1,
-        preferredIndex = 3,
-    }
+        accept = ACCEPT or Tr("Clear all"),
+        cancel = CANCEL or Tr("Cancel"),
+        onAccept = clear,
+    })
 end
 
 local MODIFIER_KEYS = {
@@ -269,16 +251,7 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
         local ok, code, action = ApplyKey(fullKey, false)
         if ok then return end
         StopListening()
-        if code == "CONFLICT" then
-            EnsureBindingConflictPopup()
-            if _G.StaticPopup_Show then
-                _G.StaticPopup_Show("MSUF2_PRIORITY_BINDING_CONFLICT", FormatBindingKey(fullKey), BindingActionLabel(action), {
-                    key = fullKey,
-                    commit = ApplyKey,
-                    refresh = Changed,
-                })
-            end
-        end
+        if code == "CONFLICT" then ShowBindingConflictPrompt(fullKey, action, ApplyKey) end
     end
 
     button:SetScript("OnClick", function(_, mouseButton)
@@ -594,12 +567,7 @@ local function BuildPriorityPage(ctx)
                 if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback("All Priority pins cleared", "ok", 1.3) end
             end
         end
-        EnsureClearPinsPopup()
-        if _G.StaticPopup_Show then
-            _G.StaticPopup_Show("MSUF2_PRIORITY_CLEAR_PINS", nil, nil, { clear = Clear })
-        else
-            Clear()
-        end
+        ShowClearPinsPrompt(Clear)
     end)
     TrackSectionRefresh(ctx, who, RefreshPins)
 

@@ -760,24 +760,12 @@ local function CopyAuras3UnitStyle(src, dst)
     ApplyAuras3Unit(dst)
     return true
 end
-local function EnsureCopyDialog()
-    M.InstallStaticPopup("MSUF2_COPY_TO_ALL_CONFIRM", {
-        text = M.Tr("Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target."),
-        button1 = YES or "Yes",
-        button2 = NO or "No",
-        OnAccept = function(_, data)
-            if type(data) == "function" then data() end
-        end,
-    })
-end
 local function ConfirmCopyToAll(callback)
     if type(callback) ~= "function" then return end
-    EnsureCopyDialog()
-    if StaticPopup_Show then
-        StaticPopup_Show("MSUF2_COPY_TO_ALL_CONFIRM", nil, nil, callback)
-    else
-        callback()
-    end
+    M.ShowPrompt("MSUF2_COPY_TO_ALL_CONFIRM", {
+        text = M.Tr("Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target."),
+        onAccept = callback,
+    })
 end
 local AURA_COPY_SCOPE_KEYS = { auras = true, aurastyle = true }
 local function SelectedCopyScopeState(scopes)

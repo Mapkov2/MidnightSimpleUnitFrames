@@ -705,7 +705,10 @@ function M.ResetPageToDefaults(pageKey)
     local info = ResolvePageResetInfo(pageKey)
     if not info then return false end
     if info.kind == "profile" then return ResetPageImpl(pageKey) end
-    return M.RunWithHistory("Reset " .. tostring(info.label or pageKey), "page:reset:" .. tostring(pageKey), function()
+    -- The undo entry's name, like the provider path: "Reset %s" over the
+    -- translated page title.
+    local label = string.format(M.Tr("Reset %s"), M.Tr(tostring(info.label or pageKey)))
+    return M.RunWithHistory(label, "page:reset:" .. tostring(pageKey), function()
         return ResetPageImpl(pageKey)
     end)
 end
@@ -716,18 +719,9 @@ function M.ShowPageResetConfirm(pageKey)
     if not M.PageHasReset(pageKey) then return false end
     local message = M.BuildPageResetWarning(pageKey)
     if not message then return false end
-    if not _G.StaticPopupDialogs then return M.ResetPageToDefaults(pageKey) end
-    M.InstallStaticPopup("MSUF2_PAGE_RESET_CONFIRM", {
-        text = "%s",
-        button1 = _G.YES or "Yes",
-        button2 = _G.NO or "No",
-        OnAccept = function(_, data)
-            if data and data.pageKey then M.ResetPageToDefaults(data.pageKey) end
-        end,
+    M.ShowPrompt("MSUF2_PAGE_RESET_CONFIRM", {
+        text = message,
+        onAccept = function() M.ResetPageToDefaults(pageKey) end,
     })
-    if _G.StaticPopup_Show then
-        _G.StaticPopup_Show("MSUF2_PAGE_RESET_CONFIRM", message, nil, { pageKey = pageKey })
-        return true
-    end
-    return M.ResetPageToDefaults(pageKey)
+    return true
 end

@@ -6,6 +6,12 @@
 -- label, the Edit Mode history labels and the Classic route to Blizzard's Edit
 -- Mode are format strings over translated pieces, never English concatenation.
 -- W-C6: so is the HUD Reset status ("Reset %s"), checked in German at run time.
+-- Re-review R7 (Edit Mode): the toolbar's Motion and Settings buttons, the
+-- preview animation status, the Exit, Undo and Redo tips, the copied-size
+-- status and the one Edit Mode combat message (Kernel/MSUF_Util.lua) exist in
+-- every pack; the unit, castbar and aura popup titles and the history labels
+-- are whole-sentence keys ("%s Frame", "Move %s"), so each language orders
+-- the words itself. The German Move history label is checked at run time.
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 
 local failures = {}
@@ -27,9 +33,17 @@ local KEYS = {
     "Open %s settings",
     "Choose %s in the game menu", "%s settings", "%s Anchor", "%s %s: %s", "%s %s", "Reset %s",
     "Unit frame", "General layout", "Group frame", "Move", "Nudge", "Set", "Change",
+    "Motion", "Settings", "Preview animation on", "Preview animation off",
+    "Keep the current positions and exit Edit Mode.",
+    "Undo the last MSUF change from Edit Mode or the in-game menu.",
+    "Redo the last MSUF change from Edit Mode or the in-game menu.",
+    "Copied frame size",
+    "|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.",
+    "%s Frame", "%s Castbar", "%s Auras", "%s: %s",
+    "Change %s", "Move %s", "Nudge %s", "Set %s", "Toggle %s",
 }
 -- Pure format strings: every pack keeps the same placeholders.
-local IDENTITY = { ["%s %s: %s"] = true, ["%s %s"] = true }
+local IDENTITY = { ["%s %s: %s"] = true, ["%s %s"] = true, ["%s: %s"] = true }
 local ENGLISH = { enUS = true, enGB = true }
 local PACKS = { "deDE", "enGB", "enUS", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
 
@@ -76,6 +90,30 @@ Check(hud:find('string.format(HelpText("%s Anchor"), providerLabel)', 1, true)
     and not hud:find('" Anchor")', 1, true), "the HUD cooldown button concatenates its provider anchor label")
 Check(hud:find('string.format(HelpText("Reset %s"), ', 1, true)
     and not hud:find('HelpText("Reset") .. ', 1, true), "the HUD Reset status concatenates its label")
+-- The literals the toolbar and the popups show, so a renamed one cannot slip
+-- out of the packs.
+for _, literal in ipairs({ '"Motion"', '"Settings"', '"Preview animation on"', '"Preview animation off"',
+    '"Keep the current positions and exit Edit Mode."', '"Undo the last MSUF change from Edit Mode or the in-game menu."',
+    '"Redo the last MSUF change from Edit Mode or the in-game menu."' }) do
+    Check(hud:find(literal, 1, true), "the HUD no longer shows " .. literal .. "; update this smoke")
+end
+local unitPopup = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Popups.lua")
+Check(unitPopup:find('SetHUDStatus("Copied frame size"', 1, true), "the unit popup no longer reports the copied size; update this smoke")
+Check(unitPopup:find('string.format(Tr("%s Frame"), ', 1, true) and not unitPopup:find('.. " " .. Tr("Frame")', 1, true),
+    "the unit popup title concatenates its words")
+local castPopup = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_CastPopup.lua")
+Check(castPopup:find('string.format(Quick.Tr("%s Castbar"), ', 1, true) and not castPopup:find('.. " " .. Quick.Tr("Castbar")', 1, true),
+    "the castbar popup title concatenates its words")
+Check(aura:find('string.format(Quick.Tr("%s Auras"), ', 1, true) and not aura:find('Quick.Tr("%s %s")', 1, true),
+    "the aura popup title is not a whole-sentence key")
+local undo = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Undo.lua")
+for _, key in ipairs({ "Change %s", "Move %s", "Nudge %s", "Reset %s", "Set %s", "Toggle %s" }) do
+    Check(undo:find('"' .. key .. '"', 1, true), "the Edit Mode history labels lost the sentence key " .. key)
+end
+Check(not undo:find('tr("%s %s: %s")', 1, true), "the Edit Mode history label still glues action, frame and key")
+local util = Read("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua")
+Check(util:find('"|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."', 1, true),
+    "the Edit Mode combat message changed; update this smoke")
 local blizzard = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Blizzard.lua")
 Check(blizzard:find('translate("Choose %s in the game menu")', 1, true) ~= nil,
     "the Classic route to Blizzard's Edit Mode does not translate its hint")
@@ -110,6 +148,16 @@ do
         local expected = string.format(Translated("Reset %s"), Translated("Player"))
         Check(Translated("Reset %s") ~= "Reset %s" and status == expected,
             "deDE: HUD Reset said " .. tostring(status) .. ", not " .. expected)
+        -- The Move history label: German puts the verb last.
+        local undo = EM2.Undo
+        if Check(undo.BeginChange("unit", "player", "Move") == true, "deDE: the move transaction did not open") then
+            env.MSUF_DB.player.offsetX = (tonumber(env.MSUF_DB.player.offsetX) or 0) + 3
+            undo.CommitChange()
+            local label = env.MSUF2.GetHistoryState().undoLabel
+            local want = string.format(Translated("%s: %s"), string.format(Translated("Move %s"), Translated("Unit frame")), "player")
+            Check(Translated("Move %s") ~= "Move %s" and label == want,
+                "deDE: the move history label is " .. tostring(label) .. ", not " .. want)
+        end
         EM2.State.Exit("test")
     end
 end

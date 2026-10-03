@@ -338,7 +338,8 @@ local function RunTranslatedHistoryLabel(flavor)
     env.MSUF_DB.player.offsetX = (tonumber(env.MSUF_DB.player.offsetX) or 0) + 9
     EM2.Undo.CommitChange()
     local label = history.GetHistoryState().undoLabel
-    Check(label == "Verschieben Unitframe: player", context .. ": the undo label is not translated ("
+    -- The whole-sentence "Move %s" lets German put the verb last.
+    Check(label == "Unitframe verschieben: player", context .. ": the undo label is not translated ("
         .. tostring(label) .. ")")
     EM2.State.Exit("test")
     world.widgets:RunTimers()

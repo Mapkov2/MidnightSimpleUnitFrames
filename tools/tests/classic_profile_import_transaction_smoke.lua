@@ -329,6 +329,8 @@ local M = {
     RequestRefresh = Noop,
     ClearHistory = Noop,
     BlockCombatAction = function() return false end,
+    -- The menu's prompts (MSUF_Menu2_Support.lua M.ShowPrompt) only ask.
+    ShowPrompt = Noop,
     RequestGeneralApply = Noop,
     TrackRefresh = Noop,
     RegisterPage = Noop,

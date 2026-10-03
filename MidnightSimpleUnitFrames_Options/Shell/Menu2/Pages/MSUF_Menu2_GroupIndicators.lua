@@ -1100,27 +1100,21 @@ local function AddCustomBuffResolved(refreshPage, kind, specKey, spellIDs)
     RefreshSpellPage(refreshPage)
     return true
 end
+-- Escape does not answer it: a menu-owned prompt (M.ShowPrompt). Only the
+-- second button picks the entered ID; a replaced question adds nothing.
 local function ShowCustomBuffAuraIDSuggestion(refreshPage, kind, specKey, spellIDs, suggestedID, spellName)
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then return false end
-    M.InstallStaticPopup("MSUF2_GF_SPELL_CUSTOM_BUFF_AURA_ID", {
-        text = "%s", button1 = Tr("Use both IDs"), button2 = Tr("Entered ID only"), hideOnEscape = false,
-        OnAccept = function(_, data)
-            if type(data) ~= "table" then return end
+    M.ShowPrompt("MSUF2_GF_SPELL_CUSTOM_BUFF_AURA_ID", {
+        text = M.Format("%s is active on you with Aura ID %d. Your entered ID is %d. Track both IDs?",
+            tostring(spellName or Tr("This buff")), tonumber(suggestedID) or 0, tonumber(spellIDs and spellIDs[1]) or 0),
+        accept = Tr("Use both IDs"), cancel = Tr("Entered ID only"), hideOnEscape = false,
+        onAccept = function()
             local combined, seen = {}, {}
-            for i = 1, #(data.spellIDs or {}) do AddCustomBuffSpellID(combined, seen, data.spellIDs[i]) end
-            AddCustomBuffSpellID(combined, seen, data.suggestedID)
-            AddCustomBuffResolved(data.refreshPage, data.kind, data.specKey, combined)
+            for i = 1, #(spellIDs or {}) do AddCustomBuffSpellID(combined, seen, spellIDs[i]) end
+            AddCustomBuffSpellID(combined, seen, suggestedID)
+            AddCustomBuffResolved(refreshPage, kind, specKey, combined)
         end,
-        OnCancel = function(_, data, reason)
-            if reason == "clicked" and type(data) == "table" then
-                AddCustomBuffResolved(data.refreshPage, data.kind, data.specKey, data.spellIDs)
-            end
-        end,
+        onCancel = function() AddCustomBuffResolved(refreshPage, kind, specKey, spellIDs) end,
     })
-    local message = M.Format("%s is active on you with Aura ID %d. Your entered ID is %d. Track both IDs?",
-        tostring(spellName or Tr("This buff")), tonumber(suggestedID) or 0, tonumber(spellIDs and spellIDs[1]) or 0)
-    _G.StaticPopup_Show("MSUF2_GF_SPELL_CUSTOM_BUFF_AURA_ID", message, nil,
-        { refreshPage = refreshPage, kind = kind, specKey = specKey, spellIDs = spellIDs, suggestedID = suggestedID })
     return true
 end
 local function AddCustomBuff(refreshPage, kind, specKey, rawValue)
@@ -1148,30 +1142,14 @@ local function RemoveCustomBuff(refreshPage, kind, specKey, auraName)
     RefreshSpellPage(refreshPage)
     return true
 end
+-- Blizzard's generic text-input dialog (M.ShowPrompt): it opens empty with
+-- the focus in its edit box, Enter accepts, and Add waits for some text.
 local function ShowCustomBuffPopup(refreshPage, kind, specKey)
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then return false end
-    M.InstallStaticPopup("MSUF2_GF_SPELL_CUSTOM_BUFF_ID", {
-        text = Tr("Enter buff Spell ID, link, or name"), button1 = Tr("Add"), button2 = _G.CANCEL or Tr("Cancel"), hasEditBox = true, maxLetters = 255,
-        OnShow = function(self)
-            local edit = self.editBox or self.EditBox
-            if edit then
-                edit:SetText("")
-                edit:SetFocus()
-                if edit.HighlightText then
-                    edit:HighlightText()
-                end
-            end
-        end,
-        OnAccept = function(self, data)
-            local edit = self.editBox or self.EditBox
-            if type(data) == "table" then AddCustomBuff(data.refreshPage, data.kind, data.specKey, edit and edit:GetText() or "") end
-        end,
-        EditBoxOnEnterPressed = function(self)
-            local parent = self:GetParent()
-            if parent and parent.button1 then parent.button1:Click() end
-        end,
+    M.ShowPrompt("MSUF2_GF_SPELL_CUSTOM_BUFF_ID", {
+        text = Tr("Enter buff Spell ID, link, or name"), accept = Tr("Add"), cancel = CANCEL or Tr("Cancel"),
+        input = { maxLetters = 255 },
+        onAccept = function(text) AddCustomBuff(refreshPage, kind, specKey, text or "") end,
     })
-    _G.StaticPopup_Show("MSUF2_GF_SPELL_CUSTOM_BUFF_ID", nil, nil, { refreshPage = refreshPage, kind = kind, specKey = specKey })
     return true
 end
 

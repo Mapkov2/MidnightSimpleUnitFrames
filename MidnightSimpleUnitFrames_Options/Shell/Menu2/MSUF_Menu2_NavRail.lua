@@ -45,11 +45,9 @@ local function NavIconsEnabled()
     return type(g) ~= "table" or g.showNavigationIcons ~= false
 end
 local TrimText = M.TrimText
+-- History labels are translated: counted in UTF-8 characters.
 local function ShortLabel(text, limit)
-    text = TrimText(text)
-    limit = tonumber(limit) or 22
-    if #text <= limit then return text end
-    return text:sub(1, max(1, limit - 3)) .. "..."
+    return M.ShortenUtf8(TrimText(text), tonumber(limit) or 22)
 end
 local function NavItemWidth(indent)
     return NAV_W - NAV_ITEM_X - NAV_ITEM_RIGHT_PAD - (tonumber(indent) or 0)
@@ -363,11 +361,11 @@ local function CreateHistoryControls(parent)
     end
     AttachHistoryTooltip(undo, function()
         local s = M.GetHistoryState and M.GetHistoryState() or {}
-        return s.undoLabel and ("Undo: " .. ShortLabel(s.undoLabel, 28)) or "Undo"
+        return s.undoLabel and M.Format("Undo: %s", ShortLabel(s.undoLabel, 28)) or "Undo"
     end, function() return HistoryTooltipText("undo") end)
     AttachHistoryTooltip(redo, function()
         local s = M.GetHistoryState and M.GetHistoryState() or {}
-        return s.redoLabel and ("Redo: " .. ShortLabel(s.redoLabel, 28)) or "Redo"
+        return s.redoLabel and M.Format("Redo: %s", ShortLabel(s.redoLabel, 28)) or "Redo"
     end, function() return HistoryTooltipText("redo") end)
     local function HistorySummaryText(label, count)
         if not label then return "" end

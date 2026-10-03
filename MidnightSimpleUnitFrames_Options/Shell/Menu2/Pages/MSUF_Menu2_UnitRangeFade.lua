@@ -25,14 +25,12 @@ local function MaybeShowBossUpdateRateWarning(rate)
     if rate <= 0 then return false end
     local session = tonumber(M._msuf2MenuSessionSerial) or 0
     if M._msuf2BossUpdateRateWarningSession == session then return false end
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show and type(M.InstallStaticPopup) == "function") then return false end
-    M.InstallStaticPopup(BOSS_UPDATE_RATE_WARNING, {
-        text = "Performance warning\n\nCustom Boss update rates replace the adaptive default with continuous range checks for every visible Boss Frame. Higher values can increase CPU use during encounters.\n\nStandard keeps the performance-friendly adaptive rate.",
-        button1 = _G.OKAY or "Okay",
-        showAlert = true,
-    })
     M._msuf2BossUpdateRateWarningSession = session
-    _G.StaticPopup_Show(BOSS_UPDATE_RATE_WARNING)
+    -- One Okay button: a menu-owned prompt (M.ShowPrompt); Escape closes it.
+    M.ShowPrompt(BOSS_UPDATE_RATE_WARNING, {
+        text = M.Tr("Performance warning\n\nCustom Boss update rates replace the adaptive default with continuous range checks for every visible Boss Frame. Higher values can increase CPU use during encounters.\n\nStandard keeps the performance-friendly adaptive rate."),
+        accept = OKAY or M.Tr("Okay"), single = true, showAlert = true,
+    })
     return true
 end
 local function BuildRangeFade(ctx, builder, unit)

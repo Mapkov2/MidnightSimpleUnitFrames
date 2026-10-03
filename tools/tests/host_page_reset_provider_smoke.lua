@@ -160,10 +160,23 @@ local function Boot()
     -- History bookkeeping that the window owns.
     M.MarkMenuDataDirty = function() end
     M.RepaintPageAfterDataChange = function() return true end
+    -- The host's legacy named-dialog export (kept for old Suite builds) and
+    -- its own prompts (Support.lua M.ShowPrompt, which writes nothing).
     M.InstallStaticPopup = function(key, spec)
         Log("InstallStaticPopup " .. key)
         if not globals.StaticPopupDialogs[key] then globals.StaticPopupDialogs[key] = spec end
         return globals.StaticPopupDialogs[key]
+    end
+    -- Support.lua's label shortener (UTF-8 aware there; the labels here are ASCII).
+    M.ShortenUtf8 = function(text, limit)
+        text = tostring(text or "")
+        if #text <= limit then return text end
+        return text:sub(1, math.max(1, limit - 3)) .. "..."
+    end
+    M.ShowPrompt = function(key, spec)
+        Log("ShowPrompt " .. key .. " " .. tostring(spec.text))
+        world.prompt = { key = key, spec = spec }
+        return {}
     end
     for _, file in ipairs(CHAIN) do
         local chunk = assert(LoadChunk(MENU2 .. file))
@@ -234,7 +247,7 @@ local function HostScript(w)
 end
 local emptyRun = HostScript(Boot())
 Check(emptyRun:find("uf_player has=true", 1, true) and emptyRun:find("unknown has=false", 1, true)
-    and emptyRun:find("StaticPopup_Show MSUF2_PAGE_RESET_CONFIRM", 1, true),
+    and emptyRun:find("ShowPrompt MSUF2_PAGE_RESET_CONFIRM", 1, true),
     "the host's own page resets did not run in the harness:\n" .. emptyRun)
 local populated = Boot()
 populated.M.RegisterPageResetProvider("msuf-suite", Provider(populated, { suite_alpha = true, suite_beta = true }))
@@ -310,7 +323,8 @@ Check(nested == false and suite.resets == resets, "a nested provider reset ran i
 Clear(world)
 local writes = #world.popupWrites
 Check(M.ShowPageResetConfirm("suite_alpha") == true, "the provider page did not ask")
-Check(#world.popupWrites == writes and not Has(world, "InstallStaticPopup") and not Has(world, "StaticPopup_Show"),
+Check(#world.popupWrites == writes and not Has(world, "InstallStaticPopup") and not Has(world, "StaticPopup_Show")
+    and not Has(world, "ShowPrompt"),
     "the provider confirmation wrote StaticPopupDialogs or used the host's named dialog: " .. Logged(world))
 Check(world.generic.text == "Suite warning suite_alpha" and world.generic.data.text == "%s",
     "the confirmation must show the provider's warning as a format argument")
