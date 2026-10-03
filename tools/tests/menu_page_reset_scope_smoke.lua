@@ -12,6 +12,9 @@
 --    control writes is dirtied; after the reset, the touched set must equal the
 --    pre-fix set minus exactly the NON_COLOUR inventory below, so no colour key
 --    or colour channel leaves the Colors reset and only those keys do.
+-- 2. Arena castbar (C7-1): Reset Arena Frames and Reset Castbar left the arena
+--    castbar switches and styling (enableArenaCastbar, showArenaCast*,
+--    arenaCast*) at the user's values while resetting every boss twin.
 --
 -- Plain Lua 5.1, repo root as arg 1 and the client flavor as arg 2.
 
@@ -189,6 +192,77 @@ for i = 1, #CASTBAR_FREED do
     Check(db.general[key] == factory.general[key], "Reset Castbar left general." .. key .. " at the user value")
 end
 
-print(string.format("menu_page_reset_scope_smoke: %s ok (Reset Colors: %d keys inventoried, %d colour keys reset,"
-    .. " %d non-colour keys kept; Reset Castbar restores %d freed castbar keys)",
-    flavor, total, colourReset, #NON_COLOUR_LIST, #CASTBAR_FREED))
+local summary = { string.format("Reset Colors: %d keys inventoried, %d colour keys reset, %d non-colour keys kept;"
+    .. " Reset Castbar restores %d freed castbar keys", total, colourReset, #NON_COLOUR_LIST, #CASTBAR_FREED) }
+
+---------------------------------------------------------------------------
+-- 2. Arena castbar keys reset like their boss twins (C7-1)
+---------------------------------------------------------------------------
+-- Boss and arena castbars share one key family (bossCast*/arenaCast*,
+-- show{Boss,Arena}Cast*, enable{Boss,Arena}Castbar). A reset must treat an
+-- arena castbar key exactly like its boss twin: the Arena Frames reset
+-- promises "this unit's castbar toggles" like the Boss one, and the Castbar
+-- reset covers both families. Pairs: every boss castbar default key plus every
+-- boss castbar key the Boss page writes (some exist only once written).
+local BOSS_PAGE_CASTBAR_WRITES = Words [[
+    bossCastFrameLevelOffset bossCastIconBorderStyle bossCastIconBorderThickness bossCastIconFrameLevelOffset
+    bossCastIconPosition bossCastIconSize bossCastIconSpacing bossCastIconZoom bossCastSpellNameFontSize
+    bossCastSpellNameMaxWidth bossCastSpellNamePosition bossCastSpellNameTruncate bossCastTargetNameAlign
+    bossCastTargetNameFontSize bossCastTargetNamePosition bossCastTimeFontSize bossCastTimeFormat bossCastTimePosition
+    bossCastbarBackend bossCastbarBackendBeforeHide bossCastbarHeight bossCastbarMatchWidth bossCastbarWidth
+    enableBossCastbar showBossCastIcon showBossCastName showBossCastTargetName showBossCastTime
+]]
+local bossKeys = {}
+for key in pairs(factory.general) do
+    if key:find("[Bb]ossCast") and not key:find("^_") then bossKeys[key] = true end
+end
+for i = 1, #BOSS_PAGE_CASTBAR_WRITES do bossKeys[BOSS_PAGE_CASTBAR_WRITES[i]] = true end
+local castbarPairs = {}
+for key in pairs(bossKeys) do
+    castbarPairs[#castbarPairs + 1] = { key, (key:gsub("boss", "arena"):gsub("Boss", "Arena")) }
+end
+table.sort(castbarPairs, function(a, b) return a[1] < b[1] end)
+local function ResetPairs(pageKey)
+    local live = Restore()
+    for i = 1, #castbarPairs do
+        live.general[castbarPairs[i][1]], live.general[castbarPairs[i][2]] = SENTINEL, SENTINEL
+    end
+    return Reset(pageKey)
+end
+local function CheckTwins(label, bossDB, arenaDB)
+    local resetCount = 0
+    for i = 1, #castbarPairs do
+        local boss, arena = castbarPairs[i][1], castbarPairs[i][2]
+        local bossReset = bossDB.general[boss] ~= SENTINEL
+        local arenaValue = arenaDB.general[arena]
+        Check((arenaValue ~= SENTINEL) == bossReset, label .. (bossReset and " skips general." or " resets general.")
+            .. arena .. " but treats general." .. boss .. " the other way")
+        if bossReset then
+            -- The unit reset writes `DeepCopy(v) or nil`, so a factory false
+            -- comes back as nil for boss and arena alike; the runtime reads
+            -- these switches as `== true`.
+            local expected = factory.general[arena]
+            Check(arenaValue == expected or (expected == false and arenaValue == nil),
+                label .. " did not restore general." .. arena)
+            resetCount = resetCount + 1
+        end
+    end
+    return resetCount
+end
+local castbarTwins = CheckTwins("Reset Castbar", ResetPairs("opt_castbar"), ResetPairs("opt_castbar"))
+summary[#summary + 1] = string.format("Reset Castbar resets %d of %d arena castbar keys like their boss twins",
+    castbarTwins, #castbarPairs)
+-- TBC builds Arena Frames without a Boss Frames page; the Boss reset still
+-- runs there as the reference (its key table does not depend on the page).
+if M.pages and M.pages.uf_arena then
+    local bossDB = ResetPairs("uf_boss")
+    local bossState = { general = {} }
+    for i = 1, #castbarPairs do bossState.general[castbarPairs[i][1]] = bossDB.general[castbarPairs[i][1]] end
+    local unitTwins = CheckTwins("Reset Arena Frames", bossState, ResetPairs("uf_arena"))
+    Check(unitTwins >= 20, "Reset Boss Frames resets only " .. unitTwins .. " boss castbar keys")
+    summary[#summary + 1] = string.format("Reset Arena Frames resets %d arena castbar keys like Reset Boss Frames", unitTwins)
+else
+    summary[#summary + 1] = "no Arena Frames page on this client"
+end
+
+print("menu_page_reset_scope_smoke: " .. flavor .. " ok (" .. table.concat(summary, "; ") .. ")")

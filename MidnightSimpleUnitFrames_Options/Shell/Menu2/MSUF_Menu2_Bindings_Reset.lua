@@ -49,6 +49,8 @@ local UNIT_CASTBAR_GENERAL_KEYS = {
         icon = "castbarFocusShowIcon", name = "castbarFocusShowSpellName", targetName = "castbarFocusShowTargetName" }),
     boss = BuildUnitCastbarResetKeys({ base = "bossCast", backend = "bossCastbar", enable = "enableBossCastbar", time = "showBossCastTime",
         icon = "showBossCastIcon", name = "showBossCastName", targetName = "showBossCastTargetName" }),
+    arena = BuildUnitCastbarResetKeys({ base = "arenaCast", backend = "arenaCastbar", enable = "enableArenaCastbar", time = "showArenaCastTime",
+        icon = "showArenaCastIcon", name = "showArenaCastName", targetName = "showArenaCastTargetName" }),
 }
 local function ResetInfo(label, kind, summary)
     return { label = label, kind = kind, summary = summary }
@@ -236,6 +238,7 @@ local function IsCastbarKey(key)
     local lower = string.lower(key)
     if lower:find("castbar", 1, true) then return true end
     if lower:find("bosscast", 1, true) then return true end
+    if lower:find("arenacast", 1, true) then return true end
     if lower:find("empower", 1, true) then return true end
     if lower == "enableplayercastbar" or lower == "enabletargetcastbar" or lower == "enablefocuscastbar" then return true end
     if lower:find("spellnamefontsize", 1, true) or lower:find("timefontsize", 1, true) then return true end
