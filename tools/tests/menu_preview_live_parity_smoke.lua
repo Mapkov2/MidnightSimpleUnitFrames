@@ -15,6 +15,9 @@
 --      (zoom, aspect ratio, pan, flip), never a drifted copy.
 --   4. Castbar samples: the latency text in the player time font, channel
 --      ticks placed like the live markers (count, centring, fill direction).
+--   5. Castbar fill colour: with a palette choice and no custom RGB the unit
+--      preview paints what the live castbars resolve (MSUF_ResolveCastbarColors),
+--      never a colour of its own.
 --
 -- Plain Lua 5.1 with the repo root and a client matrix Suffix (or Forever).
 
@@ -229,6 +232,58 @@ do
         Check(not samples.ticks[6], "more than five default channel ticks")
     end
     castbar.channelTickUseCustom = savedCustom
+    for _, field in ipairs(FIELDS) do g[field] = saved[field] end
+    MSUF.UF.Config.Refresh()
+    box:Hide()
+end
+
+-- 5. Castbar fill colour ---------------------------------------------------
+-- The live target/focus/boss castbars tint through MSUF_ResolveCastbarColors
+-- (Castbars/MSUF_CastbarDriver.lua): the custom RGB, else the palette choice.
+-- The unit preview painted a fixed teal whenever no custom RGB was set, so a
+-- palette choice showed in the menu's colour rows and on the live bar but not
+-- in the preview.
+do
+    local Preview = MSUF.UFPreview
+    local resolve = env.MSUF_ResolveCastbarColors
+    Check(type(resolve) == "function", "harness: the core publishes no MSUF_ResolveCastbarColors")
+    local parent = env.CreateFrame("Frame", nil, env.UIParent); parent:SetSize(900, 400)
+    local panel = env.CreateFrame("Frame", nil, env.UIParent)
+    panel._msufGetCurrentKey = function() return "player" end
+    local box = Preview._BuildPreview(parent, panel, 900, 400)
+    box:Show(); box.canvas:SetSize(400, 200)
+    local g = env.MSUF_DB.general
+    local FIELDS = { "enablePlayerCastbar", "castbarInterruptibleColor", "castbarInterruptibleR",
+        "castbarInterruptibleG", "castbarInterruptibleB" }
+    local saved = {}
+    for _, field in ipairs(FIELDS) do saved[field] = g[field] end
+    g.enablePlayerCastbar = true
+    local OLD_FIXED = { 0.0, 0.9, 0.8 }
+    local function PreviewFill(label)
+        MSUF.UF.Config.Refresh()
+        Preview.Refresh(box, "MENU_PREVIEW_LIVE_PARITY")
+        local color = box.mock.cast.fill.vertexColor
+        Check(type(color) == "table", "harness: the castbar preview painted no fill colour (" .. label .. ")")
+        return color
+    end
+    for _, key in ipairs({ "red", "yellow", "turquoise" }) do
+        g.castbarInterruptibleColor = key
+        g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB = nil, nil, nil
+        local r, gr, b = resolve()
+        local color = PreviewFill(key)
+        Check(color[1] == r and color[2] == gr and color[3] == b,
+            string.format("palette choice %s without a custom RGB: the preview fill is %s/%s/%s, the live castbar resolves %s/%s/%s",
+                key, tostring(color[1]), tostring(color[2]), tostring(color[3]), tostring(r), tostring(gr), tostring(b)))
+        if key ~= "turquoise" then
+            Check(not (r == OLD_FIXED[1] and gr == OLD_FIXED[2] and b == OLD_FIXED[3]),
+                "harness: the " .. key .. " palette resolves to the old fixed teal, so the check proves nothing")
+        end
+    end
+    g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB = 0.25, 0.5, 0.75
+    local color = PreviewFill("custom")
+    local r, gr, b = resolve()
+    Check(r == 0.25 and gr == 0.5 and b == 0.75, "harness: the live castbar ignores the custom RGB")
+    Check(color[1] == r and color[2] == gr and color[3] == b, "the preview fill ignores the custom RGB the live castbar uses")
     for _, field in ipairs(FIELDS) do g[field] = saved[field] end
     MSUF.UF.Config.Refresh()
     box:Hide()

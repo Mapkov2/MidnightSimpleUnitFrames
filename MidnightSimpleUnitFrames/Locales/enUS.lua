@@ -4545,6 +4545,8 @@ L["Utility"] = "Utility"
 L["Other"] = "Other"
 L["Boss %s"] = "Boss %s"
 L["Arena %s"] = "Arena %s"
+L["Tracked buffs (%d of 40)"] = "Tracked buffs (%d of 40)"
+L["Tracked debuffs (%d of 40)"] = "Tracked debuffs (%d of 40)"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

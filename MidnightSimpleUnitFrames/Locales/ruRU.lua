@@ -6556,6 +6556,8 @@ L["Rare Elite"] = "Редкий элитный"
 L["PvP"] = "PvP"
 L["GHOST"] = "ПРИЗРАК"
 L["OFFLINE"] = "НЕ В СЕТИ"
+L["Tracked buffs (%d of 40)"] = "Отслеживаемые баффы (%d из 40)"
+L["Tracked debuffs (%d of 40)"] = "Отслеживаемые дебаффы (%d из 40)"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

@@ -509,7 +509,6 @@ local function BuildCustomWhitelistTool(C)
         local inner = w - 48
         local auraType = item.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
         local auraNoun = auraType == "DEBUFF" and "debuff" or "buff"
-        local auraPlural = auraNoun .. "s"
         -- Whole sentences per lane: inserting the noun with %s breaks declension in
         -- German and Russian. `auraNoun` itself stays raw - it feeds Search action ids.
         local isDebuff = auraType == "DEBUFF"
@@ -628,7 +627,9 @@ local function BuildCustomWhitelistTool(C)
             local entries = Model.CustomContainerSpellEntries(unit, index)
             local query, visible = FilterSpellEntries(entries, searchValue)
             local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
-            T.SetTranslatedText(status, tostring("Tracked ") .. auraPlural .. " (" .. tostring(#entries) .. " of 40)"
+            -- Whole sentence per lane: the noun cannot be joined to a fragment, so each
+            -- language orders and inflects the label itself.
+            T.SetTranslatedText(status, M.Format(isDebuff and "Tracked debuffs (%d of 40)" or "Tracked buffs (%d of 40)", #entries)
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
                     or customPriority and Tr(" - dynamic priority active")
                     or Tr(" - drag to set Custom Priority"))

@@ -3641,9 +3641,14 @@ function Stage.RenderCastbar(st)
         else
             mock.cast:SetPoint("BOTTOMLEFT", mock, "TOPLEFT", S(castOffsetX), S(castOffsetY))
         end
-        local cr, cg, cb = 0.0, 0.9, 0.8
-        if type(_G.MSUF_GetInterruptibleCastColor) == "function" then cr, cg, cb = _G.MSUF_GetInterruptibleCastColor() end
-        mock.cast.fill:SetVertexColor(cr or 0.0, cg or 0.9, cb or 0.8, 1)
+        -- The live castbars tint through MSUF_ResolveCastbarColors: the custom RGB,
+        -- else the palette choice. The preview asks the same function, so the two
+        -- cannot drift and no colour is kept here.
+        local resolveCastbarColors = _G.MSUF_ResolveCastbarColors
+        if type(resolveCastbarColors) == "function" then
+            local cr, cg, cb = resolveCastbarColors()
+            mock.cast.fill:SetVertexColor(cr, cg, cb, 1)
+        end
         ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, RenderState.CastbarShowIcon,
             RenderState.CastbarShowText, RenderState.ReadCastbarNum, RenderState.FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle, animState)
         ApplyCastbarPreviewRounded(mock.cast, g, castEdge, castBgR, castBgG, castBgB, castBgA)
