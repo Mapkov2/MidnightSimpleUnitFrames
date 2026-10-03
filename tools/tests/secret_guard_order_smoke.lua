@@ -16,7 +16,11 @@
 --      ignores a secret GUID when it marks and when it consumes;
 --   4. UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua
 --      TruncateLegacyGroupName: a secret name is returned untouched, and the
---      common path (no legacy truncation) still asks no native predicate.
+--      common path (no legacy truncation) still asks no native predicate;
+--      UpdateHealthRuntime (plain health text): secret health values from the
+--      dispatch, from the health bar cache or from UnitHealth reach the secret
+--      text path uncompared, and the dispatch path (UNIT_HEALTH with both
+--      values) asks issecretvalue exactly as often as before (3 times).
 -- The functions are compiled from the shipped files at their own lines, so the
 -- line hook reads the real source.
 --
@@ -108,6 +112,19 @@ local TruncateLegacyGroupName = Slice(RUNTIME, "local function TruncateLegacyGro
     issecretvalue = CountingPredicate,
 })
 
+local healthSink, cachedHP, cachedMax, unitHealthValue
+local healthEnv = {
+    issecretvalue = CountingPredicate,
+    nativeSecrets = true,
+    SeedCachedHealthMax = function() end,
+    ReadHealthValuesCached = function() return cachedHP, cachedMax end,
+    UnitHealth = function() return unitHealthValue end,
+    ReadHealthMaxCached = function() return cachedMax end,
+    UpdateTextSlotsSecret = function(_, _, hp, hpMax) healthSink = { hp = hp, hpMax = hpMax } end,
+    UpdateTextSlotsPlain = function() healthSink = "plain" end,
+}
+local UpdateHealthRuntime = Slice(RUNTIME, "local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)", healthEnv)
+
 local stop = Secrets.Watch({ root .. "/" .. TEXTURE, root .. "/" .. LAYOUT, root .. "/" .. CORE, root .. "/" .. RUNTIME },
     { strict = true })
 
@@ -147,6 +164,27 @@ local plainName = "Plain"
 Check(TruncateLegacyGroupName(plainName, {}) == plainName and predicateCalls == 0,
     "the name path without legacy truncation asked " .. predicateCalls .. " native predicate(s)")
 
+local function HealthRuntime(event, hp, hpMax)
+    healthSink = nil
+    local rt = { healthSlotCount = 1, healthPlain = true, healthNeedsCurrent = true, healthNeedsMax = true }
+    UpdateHealthRuntime({ MSUFUnitKey = "target", _msufTextRuntime = rt }, event, "target", hp, hpMax)
+    return healthSink
+end
+local dispatchHP, dispatchMax = Secrets.New("number"), Secrets.New("number")
+predicateCalls = 0
+local sink = HealthRuntime("UNIT_HEALTH", dispatchHP, dispatchMax)
+Check(type(sink) == "table" and sink.hp == dispatchHP and sink.hpMax == dispatchMax,
+    "secret dispatch health did not reach the secret text path")
+Check(predicateCalls == 3, "the UNIT_HEALTH dispatch path asked issecretvalue " .. predicateCalls
+    .. " times (budget: 3)")
+cachedHP, cachedMax = Secrets.New("number"), Secrets.New("number")
+sink = HealthRuntime("UNIT_MAXHEALTH", nil, nil)
+Check(type(sink) == "table" and sink.hp == cachedHP and sink.hpMax == cachedMax,
+    "secret cached health did not reach the secret text path")
+cachedHP, cachedMax, unitHealthValue = nil, Secrets.New("number"), Secrets.New("number")
+sink = HealthRuntime("UNIT_MAXHEALTH", nil, nil)
+Check(type(sink) == "table" and sink.hp == unitHealthValue, "a secret UnitHealth did not reach the secret text path")
+
 local violations = stop()
 Check(#violations == 0, "secret values compared before issecretvalue:\n    " .. table.concat(violations, "\n    "))
 
@@ -154,4 +192,4 @@ if #failures > 0 then
     error("secret_guard_order_smoke failed:\n  " .. table.concat(failures, "\n  "))
 end
 print("secret_guard_order_smoke: ok (texture layer alpha and health colour, name clip, identity follow-up,"
-    .. " legacy name truncation)")
+    .. " legacy name truncation, plain health text)")
