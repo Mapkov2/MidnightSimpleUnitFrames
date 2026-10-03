@@ -610,7 +610,13 @@ local function ResolveGroupFilter(conf)
 end
 
 local function GroupFilterAllows(conf, groupIndex, classFile, role, ignoreGroupLimit)
-  local groupLimit = ignoreGroupLimit ~= true and PreservedRaidGroupLimit(conf) or nil
+  local groupLimit
+  if ignoreGroupLimit ~= true then
+    groupLimit = PreservedRaidGroupLimit(conf)
+  elseif conf and conf.hideMythicGroupsFiveToEight == true and GF.IsMythicRaidContext and GF.IsMythicRaidContext() then
+    -- The raid-wide role fill ignores only the block cap; the Mythic bench stays out.
+    groupLimit = 4
+  end
   groupIndex = tonumber(groupIndex)
   if groupLimit and groupIndex and groupIndex > groupLimit then
     return false

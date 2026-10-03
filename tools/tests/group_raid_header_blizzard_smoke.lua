@@ -12,6 +12,10 @@
 --    maxColumns must therefore carry the configured cap, not the live count:
 --    with a count-sized cap the eleventh member of a ten-member raid got no
 --    frame (INDEX), or pushed an existing member out (GROUP, ROLE, NAME).
+-- 2. Mythic "Hide groups 5-8" with preserved groups and the raid-wide role
+--    fill: the role fill ignores the block cap but must keep subgroups 5-8
+--    (the bench) out of the name lists; they used to take the slots of active
+--    raiders in subgroups 1-4.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -249,11 +253,84 @@ local function CombatJoin(label, sghSource, mode)
     end
 end
 
+------------------------------------------------------------------ 2. mythic bench
+local function MythicConf(maxColumns)
+    return {
+        enabled = true, width = 80, height = 32, spacing = 1, growth = "DOWN", groupGrowth = "RIGHT",
+        unitsPerColumn = 5, maxColumns = maxColumns, preserveRaidGroups = true,
+        sortMode = "ROLE", sortRolesAcrossRaid = true, roleOrder = "TANK,HEALER,DAMAGER",
+        hideMythicGroupsFiveToEight = true, showPlayer = true,
+    }
+end
+
+-- 20 active raiders in subgroups 1-4, five bench members in subgroup 5.
+local function MythicRoster(roster)
+    Add(roster, "TankA", 1, "TANK"); Add(roster, "TankB", 1, "TANK"); Add(roster, "HealA", 1, "HEALER")
+    Add(roster, "Dps01", 1); Add(roster, "Dps02", 1)
+    Add(roster, "HealB", 2, "HEALER"); for i = 3, 6 do Add(roster, ("Dps%02d"):format(i), 2) end
+    Add(roster, "HealC", 3, "HEALER"); for i = 7, 10 do Add(roster, ("Dps%02d"):format(i), 3) end
+    Add(roster, "HealD", 4, "HEALER"); for i = 11, 14 do Add(roster, ("Dps%02d"):format(i), 4) end
+    Add(roster, "BenchTank", 5, "TANK"); Add(roster, "BenchHeal", 5, "HEALER")
+    Add(roster, "BenchDps1", 5); Add(roster, "BenchDps2", 5); Add(roster, "BenchDps3", 5)
+end
+
+-- Names listed by, and (with the real header) shown in, the allowed blocks.
+local function RoleFill(world)
+    world.GF.SetupHeader("raid", "mythicraid")
+    local listed, shown = {}, {}
+    for groupIndex = 1, 8 do
+        local header = world.GF.raidGroupHeaders[groupIndex]
+        if header and header._msufPreservedGroupAllowed == true then
+            Check(header:GetAttribute("sortMethod") == "NAMELIST", "block " .. groupIndex .. " is not a role-fill name list")
+            for name in tostring(header:GetAttribute("nameList") or ""):gmatch("[^,]+") do listed[name] = true end
+            if world.env.SecureGroupHeader_Update then
+                world:Update(header)
+                world:Shown(header, shown)
+            end
+        end
+    end
+    return listed, shown
+end
+
+local function BenchAndMissing(world, names)
+    local bench, missing = {}, {}
+    for _, member in ipairs(world.roster) do
+        if member.group > 4 and names[member.name] then bench[#bench + 1] = member.name end
+        if member.group <= 4 and not names[member.name] then missing[#missing + 1] = member.name end
+    end
+    return table.concat(bench, " "), table.concat(missing, " ")
+end
+
+local function MythicBench(label, sghSource)
+    local world = NewWorld(sghSource, MythicConf(8), "mythicraid", true)
+    MythicRoster(world.roster)
+    local listed, shown = RoleFill(world)
+    local bench, missing = BenchAndMissing(world, listed)
+    Check(bench == "", label .. ": Hide groups 5-8 listed bench members " .. bench)
+    Check(missing == "", label .. ": active raiders missing from the role fill: " .. missing)
+    if sghSource then
+        bench, missing = BenchAndMissing(world, shown)
+        Check(bench == "" and missing == "", label .. ": real header shows bench [" .. bench
+            .. "], hides active [" .. missing .. "]")
+    end
+
+    -- The role fill still ignores the block cap: outside Mythic, four blocks
+    -- take raiders of every subgroup in role order (the tanks of subgroup 5 first).
+    world = NewWorld(sghSource, MythicConf(4), "raid", false)
+    MythicRoster(world.roster)
+    listed = RoleFill(world)
+    Check(listed.BenchTank and listed.BenchHeal, label .. ": the raid-wide role fill lost subgroup 5 outside Mythic")
+    local count = 0
+    for _ in pairs(listed) do count = count + 1 end
+    Check(count == 20, label .. ": four blocks of five listed " .. count .. " names")
+end
+
 ------------------------------------------------------------------ run
 local runs = MirrorPresent() and ReadBranches() or { { label = "attributes only (no Blizzard UI mirror)" } }
 for _, run in ipairs(runs) do
     for _, mode in ipairs({ "INDEX", "GROUP", "ROLE", "NAME" }) do
         CombatJoin(run.label .. " " .. mode, run.source, mode)
     end
+    MythicBench(run.label .. " mythic", run.source)
 end
 print(("group_raid_header_blizzard_smoke: ok (%s)"):format(#runs > 1 and (#runs .. " Blizzard branches") or runs[1].label))
