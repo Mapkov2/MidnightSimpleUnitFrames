@@ -213,6 +213,8 @@ end
 ---   variantKey(key) names the page's current view state (a short string). Each
 ---                   view keeps its own cached entry, so switching back to a view
 ---                   built before shows that entry again (see RebuildPageKeepingScroll);
+---   viewStateKeys   set of the menu state names variantKey reads. A search route
+---                   that changes only these switches the view instead of rebuilding;
 ---   rebuildsItself  true when the page's frame structure follows its saved data
 ---                   from the first build on (see M.PageRebuildsItself).
 function M.RegisterPage(key, spec)
@@ -263,6 +265,10 @@ local function BuildPageEntry(key, hidden)
         then
             cached = variant
             cached.layoutVersion = layoutVersion
+            -- The view was last painted while another one was on screen, and
+            -- the selector that left it already repainted itself with the new
+            -- value: its refreshers run again whenever it comes back.
+            cached._msuf2RefreshRevision = nil
             M.cache[key] = cached
             M.RestorePageEntryRegistrations(cached)
         else
@@ -559,15 +565,19 @@ end
 --- and page resets. Its refreshers re-read every bound control and the visible
 --- settle relayouts its sections, so no frame is created. A page that rebuilds
 --- itself (or a caller passing options.rebuild) is built again instead, the way
---- every restore used to work. Returns false when the menu is hidden or shows
---- another page; the caller then queues its ordinary refresh.
+--- every restore used to work. options.inPlace keeps even such a page: the
+--- caller changed rows its refreshers repaint from a pool (a list edit). Returns
+--- false when the menu is hidden or shows another page; the caller then queues
+--- its ordinary refresh.
 function M.RepaintPageAfterDataChange(key, reason, options)
     key = ALIASES[key or ""] or key
     if not (key and key == M.activeKey and MenuShown()) then return false end
     M.MarkMenuDataDirty(reason or "data-change")
     if key ~= "search" then MarkSearchIndexDirty() end
     local cached = M.cache[key]
-    local rebuild = (options and options.rebuild == true) or not cached or M.PageRebuildsItself(key)
+    local inPlace = options and options.inPlace == true
+    local rebuild = (options and options.rebuild == true) or not cached
+        or (not inPlace and M.PageRebuildsItself(key))
     if rebuild then
         InvalidatePageEntries(key)
         M.activeKey = nil

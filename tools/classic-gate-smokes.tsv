@@ -215,6 +215,7 @@ clients+Forever	lua	tools/tests/menu_core_text_smoke.lua	{root} {flavor}	Menu co
 clients+Forever	lua	tools/tests/menu_pages_translate_once_smoke.lua	{root} {flavor}	Menu pages and previews translate their text once: {flavor}
 clients+Forever	lua	tools/tests/menu_button_history_smoke.lua	{root} {flavor}	Menu button history checkpoint is opt-in and keeps undo: {flavor}
 clients+Forever	lua	tools/tests/menu_page_rebuild_leak_smoke.lua	{root} {flavor}	Undo, reset and view switches repaint pages without new frames: {flavor}
+clients+Forever	lua	tools/tests/menu_aura_workspace_views_smoke.lua	{root} {flavor}	Aura workspace views and list edits create no frames: {flavor}
 clients+Forever	lua	tools/tests/search_results_repaint_smoke.lua	{root} {flavor}	Search results repaint in place without new frames: {flavor}
 clients+Forever	lua	tools/tests/menu_default_drift_smoke.lua	{root} {flavor}	Menu fallbacks drifted from the seeded defaults: {flavor}
 clients+Forever	lua	tools/tests/menu_preview_focus_clear_smoke.lua	{root} {flavor}	Leaving a text control clears the unit preview text focus: {flavor}

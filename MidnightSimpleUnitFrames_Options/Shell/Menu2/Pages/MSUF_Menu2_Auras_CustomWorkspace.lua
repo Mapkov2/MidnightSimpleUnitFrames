@@ -35,6 +35,9 @@ local DURATION_BAR_DIRECTION_VALUES, DURATION_BAR_DISPLAY_VALUES = M.AuraSetting
 local DURATION_BAR_POSITION_VALUES, MatchSuffix = M.AuraSettings.DURATION_BAR_POSITION_VALUES, M.AuraSettings.MatchSuffix
 local NATIVE_EXACT_AURA_FILTERS_TEXT, NormalizeAuraSortMethodForLane = M.AuraSettings.NATIVE_EXACT_AURA_FILTERS_TEXT, M.AuraSettings.NormalizeAuraSortMethodForLane
 local QueueAurasPageRefresh, Rebuild, RegisterAuraControl = M.AuraControls.QueueAurasPageRefresh, M.AuraControls.Rebuild, M.AuraControls.RegisterAuraControl
+-- A list edit repaints the page in place; Rebuild is kept for the edits that
+-- change which controls the tools build (aura type, a container reset).
+local Repaint = M.AuraControls.Repaint
 local RegisterAuraTextAction, Round, Tr = M.AuraControls.RegisterAuraTextAction, M.AuraSettings.Round, M.AuraSettings.Tr
 local function CustomStyleSectionId(index, suffix)
     return "aura_style_custom_" .. tostring(index or 1) .. "_" .. tostring(suffix or "section")
@@ -156,7 +159,7 @@ local function BuildCustomDefensivesTool(C)
                 if customInput and customInput.SetText then customInput:SetText("") end
                 customInputValue = ""
                 Apply("AURAS3_PLAYER_DEFENSIVE_CUSTOM_ADD", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -193,7 +196,7 @@ local function BuildCustomDefensivesTool(C)
             row:SetScript("OnClick", function(self)
                 if self._spellID and Model.RemoveCustomContainerSpell(unit, index, self._spellID) then
                     Apply("AURAS3_PLAYER_DEFENSIVE_CUSTOM_REMOVE", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             rows[i] = row
@@ -248,7 +251,7 @@ local function BuildCustomDotsTool(C)
         add:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -56)
         add:SetScript("OnClick", function()
             local changed = selected and Model.AddCustomContainerSpell(unit, index, selected)
-            if changed then Apply("AURAS3_TARGET_DOT_ADD", true); Rebuild(ctx) end
+            if changed then Apply("AURAS3_TARGET_DOT_ADD", true); Repaint(ctx) end
             return changed and true or false
         end)
         RegisterAuraTextAction(ctx, add, {
@@ -273,7 +276,7 @@ local function BuildCustomDotsTool(C)
                 if customInput and customInput.SetText then customInput:SetText("") end
                 customInputValue = ""
                 Apply("AURAS3_TARGET_DOT_CUSTOM_ADD", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -335,19 +338,19 @@ local function BuildCustomDotsTool(C)
             row.up:SetScript("OnClick", function()
                 if row._spellID and Model.MoveCustomContainerSpell(unit, index, row._spellID, -1) then
                     Apply("AURAS3_TARGET_DOT_PRIORITY", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             row.down:SetScript("OnClick", function()
                 if row._spellID and Model.MoveCustomContainerSpell(unit, index, row._spellID, 1) then
                     Apply("AURAS3_TARGET_DOT_PRIORITY", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             row.remove:SetScript("OnClick", function()
                 if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_TARGET_DOT_REMOVE", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             AddTooltip(row.up, "Move up", "Raises this DoT in the fixed priority order.")
@@ -358,7 +361,7 @@ local function BuildCustomDotsTool(C)
                 if Model.MoveCustomContainerSpellToIndex(unit, index, spellID, target) then
                     Model.EnableCustomContainerSpellPriority(unit, index)
                     Apply("AURAS3_TARGET_DOT_PRIORITY", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             rows[i] = row
@@ -421,7 +424,7 @@ local function BuildCustomWhitelistEnchants(C)
             function(value)
                 item.reminderEnchantMainHand = value == true
                 Apply("AURAS3_CUSTOM_REMINDER_ENCHANT", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end,
             AuraControlMeta(ctx, "custom-container.reminder.enchant-main-hand"))
         AddTooltip(enchantMain, "Track the Main Hand enchant",
@@ -431,7 +434,7 @@ local function BuildCustomWhitelistEnchants(C)
             function(value)
                 item.reminderEnchantOffHand = value == true
                 Apply("AURAS3_CUSTOM_REMINDER_ENCHANT", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end,
             AuraControlMeta(ctx, "custom-container.reminder.enchant-off-hand"))
         AddTooltip(enchantOff, "Track the Off Hand enchant",
@@ -451,7 +454,7 @@ local function BuildCustomWhitelistEnchants(C)
                 if enchantInput and enchantInput.SetText then enchantInput:SetText("") end
                 enchantInputValue = ""
                 Apply("AURAS3_CUSTOM_REMINDER_ENCHANT_ITEM", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -535,7 +538,7 @@ local function BuildCustomWhitelistTool(C)
                 if input and input.SetText then input:SetText("") end
                 inputValue = ""
                 Apply("AURAS3_CUSTOM_WHITELIST_ADD", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -585,13 +588,13 @@ local function BuildCustomWhitelistTool(C)
             row.keepOn:SetScript("OnClick", function()
                 if row._spellID and Model.ToggleCustomContainerKeepSpell(unit, index, row._spellID, true) then
                     Apply("AURAS3_CUSTOM_REMINDER_KEEP", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             row.keepOff:SetScript("OnClick", function()
                 if row._spellID and Model.ToggleCustomContainerKeepSpell(unit, index, row._spellID, false) then
                     Apply("AURAS3_CUSTOM_REMINDER_KEEP", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             AddTooltip(row.keepOn, "Always show",
@@ -608,7 +611,7 @@ local function BuildCustomWhitelistTool(C)
             row.remove:SetScript("OnClick", function()
                 if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_CUSTOM_WHITELIST_REMOVE", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             AddTooltip(row.remove, "Remove from whitelist", removeBody)
@@ -617,7 +620,7 @@ local function BuildCustomWhitelistTool(C)
                 if Model.MoveCustomContainerSpellToIndex(unit, index, spellID, target) then
                     Model.EnableCustomContainerSpellPriority(unit, index)
                     Apply("AURAS3_CUSTOM_PRIORITY", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             rows[i] = row
@@ -1377,17 +1380,23 @@ local function BuildCustomDefensivesSetup(C)
         RegisterAuraControl(ctx, reset, "Reset", "button", customActionPath .. ".setup.reset", "action", {
             actionKey = "reset_aura_custom_container", actionFixedArgs = { scope = unit, index = index },
         })
-        local predefined = type(Model.PlayerDefensivePreviewEntries) == "function"
-            and #Model.PlayerDefensivePreviewEntries() or 0
-        local predefinedTotal = type(Model.PlayerDefensiveClassEntries) == "function"
-            and #Model.PlayerDefensiveClassEntries(true) or predefined
-        local custom = #Model.CustomContainerSpellEntries(unit, index)
+        -- The counts change in the Defensives tool. Its view stays cached while
+        -- this one is shown, so the line repaints instead of keeping build data.
+        local function SourceText()
+            local predefined = type(Model.PlayerDefensivePreviewEntries) == "function"
+                and #Model.PlayerDefensivePreviewEntries() or 0
+            local predefinedTotal = type(Model.PlayerDefensiveClassEntries) == "function"
+                and #Model.PlayerDefensiveClassEntries(true) or predefined
+            local custom = #Model.CustomContainerSpellEntries(unit, index)
+            return M.Format("Source: player buffs · %d / %d predefined enabled · %d custom · passive talent procs included",
+                predefined, predefinedTotal, custom)
+        end
         -- The 12.1 native aura buttons render their icon unmaskable; shaping
         -- was attempted exhaustively and reverted (2026-07-31). Keep users
         -- informed instead of letting them hunt for a shape option.
         W.Text(section, "Aura Style > Defensive Buffs can follow the frame portrait shape.", 24, -312, inner, T.colors.muted)
-        W.Text(section, M.Format("Source: player buffs · %d / %d predefined enabled · %d custom · passive talent procs included",
-        predefined, predefinedTotal, custom), 24, -344, inner, T.colors.muted)
+        local source = W.Text(section, SourceText(), 24, -344, inner, T.colors.muted)
+        M.TrackRefresh(ctx, function() source:SetText(SourceText()) end)
         return true
     end
 end
@@ -1455,9 +1464,21 @@ local function BuildCustomDotsSetup(C)
         RegisterAuraControl(ctx, reset, "Reset", "button", customActionPath .. ".setup.reset", "action", {
             actionKey = "reset_aura_custom_container", actionFixedArgs = { scope = unit, index = index },
         })
-        local count = #Model.CustomContainerSpellEntries(unit, index)
-        W.Text(section, M.Format("Source: this UnitFrame · Ownership: only mine · Harmful DoTs only · %d selected", count), 24, -324, inner, T.colors.muted)
-        W.Text(section, item.portraitIcon == true and "Display: portrait position" or "Display: normal DoT lane", 24, -356, inner, T.colors.muted)
+        -- The DoT list changes in the Dots tool, whose view stays cached while
+        -- this one is shown: both lines repaint from the saved data.
+        local function SourceText()
+            return M.Format("Source: this UnitFrame · Ownership: only mine · Harmful DoTs only · %d selected",
+                #Model.CustomContainerSpellEntries(unit, index))
+        end
+        local function DisplayText()
+            return item.portraitIcon == true and "Display: portrait position" or "Display: normal DoT lane"
+        end
+        local source = W.Text(section, SourceText(), 24, -324, inner, T.colors.muted)
+        local display = W.Text(section, DisplayText(), 24, -356, inner, T.colors.muted)
+        M.TrackRefresh(ctx, function()
+            source:SetText(SourceText())
+            display:SetText(DisplayText())
+        end)
         return true
     end
 end
@@ -1527,17 +1548,22 @@ local function BuildCustomContainerSetup(C)
         function(value)
             item.placed.reminderEnabled = value == "reminder"
             Apply("AURAS3_CUSTOM_REMINDER", true)
-            Rebuild(ctx)
+            Repaint(ctx)
         end,
         AuraControlMeta(ctx, "custom-container.reminder.enabled"))
     local modeNote = W.Text(section, "", 24, modeY - 44, inner, T.colors.muted)
-    local count = #Model.CustomContainerSpellEntries(unit, index)
-    W.Text(section, count == 1 and "1 whitelisted spell · style remains live in Menu Preview and Edit Mode."
-        or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count), 24, modeY - 66, inner, T.colors.muted)
+    -- The Whitelist tool changes the count while this view stays cached.
+    local function CountText()
+        local count = #Model.CustomContainerSpellEntries(unit, index)
+        return count == 1 and "1 whitelisted spell · style remains live in Menu Preview and Edit Mode."
+            or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count)
+    end
+    local countNote = W.Text(section, CountText(), 24, modeY - 66, inner, T.colors.muted)
     M.TrackRefresh(ctx, function()
         modeNote:SetText(item.placed.reminderEnabled == true
             and "Every whitelisted entry keeps its own place. A dimmed icon means that entry is missing."
             or "Only auras that are currently active are shown, packed together.")
+        countNote:SetText(CountText())
     end)
 
     -- Buff Reminder. Exact Spell ID whitelists are the only aura source that

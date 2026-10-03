@@ -935,26 +935,41 @@ local function SearchRouteForTarget(pageKey, query, fallback)
     return selectedValue1
 end
 
-local function ApplyRouteValues(target, values, setter)
+local function ApplyRouteValues(target, values, setter, changedKeys)
     if type(target) ~= "table" or type(values) ~= "table" then return false end
     local changed = false
     for key, value in pairs(values) do
         if target[key] ~= value then
             if setter then setter(key, value) else target[key] = value end
             changed = true
+            if changedKeys then changedKeys[#changedKeys + 1] = key end
         end
     end
     return changed
 end
 
+--- True when the page declares views (spec.variantKey) that read this menu
+--- state (spec.viewStateKeys): SelectPage then shows that view's cached entry
+--- or builds it once, so the route needs no rebuild. WoW never frees a frame,
+--- and a rebuild per search hop leaves a whole page tree behind.
+local function RouteStateIsView(pageKey, name)
+    local spec = M.pages and M.pages[pageKey]
+    local owned = spec and spec.variantKey and spec.viewStateKeys
+    return owned ~= nil and owned[name] == true
+end
+
 local function ApplySearchRoute(pageKey, route)
     if SearchCombatLocked() or (not (M.frame and M.frame.IsShown and M.frame:IsShown())) then return false end
     if type(route) ~= "table" then return false end
-    local changed = false
+    local changed, rebuild = false, false
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     local state = route.state
     if type(state) == "table" then
-        changed = ApplyRouteValues(M, state, M.SetMenuStateValue) or changed
+        local changedKeys = {}
+        changed = ApplyRouteValues(M, state, M.SetMenuStateValue, changedKeys) or changed
+        for i = 1, #changedKeys do
+            if not RouteStateIsView(pageKey, changedKeys[i]) then rebuild = true end
+        end
     end
     local accordion = route.accordion
     if type(accordion) == "table" then
@@ -977,7 +992,7 @@ local function ApplySearchRoute(pageKey, route)
         local normalizedAccordion = {}
         for key, value in pairs(accordion) do normalizedAccordion[key] = value and true or false end
         if ApplyRouteValues(target, normalizedAccordion) then
-            changed = true
+            changed, rebuild = true, true
         end
     end
     local tables = route.tables
@@ -989,7 +1004,10 @@ local function ApplySearchRoute(pageKey, route)
                     target = {}
                     M[tableName] = target
                 end
-                if ApplyRouteValues(target, values) then changed = true end
+                if ApplyRouteValues(target, values) then
+                    changed = true
+                    if not RouteStateIsView(pageKey, tableName) then rebuild = true end
+                end
             end
         end
     end
@@ -1014,6 +1032,7 @@ local function ApplySearchRoute(pageKey, route)
                             if nested[key2] ~= value then
                                 nested[key2] = value
                                 changed = true
+                                if not RouteStateIsView(pageKey, tableName) then rebuild = true end
                             end
                         end
                     end
@@ -1044,11 +1063,11 @@ local function ApplySearchRoute(pageKey, route)
             local value = general[key]
             if value ~= nil and db[key] ~= value then
                 db[key] = value
-                changed = true
+                changed, rebuild = true, true
             end
         end
     end
-    if changed and pageKey and type(M.InvalidatePage) == "function" then
+    if rebuild and pageKey and type(M.InvalidatePage) == "function" then
         M.InvalidatePage(pageKey)
     end
     return changed
