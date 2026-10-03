@@ -649,7 +649,7 @@ local function MarkOnShowIdentityFollowup(frame)
   local event = OnShowIdentityFollowupEvent(unit)
   if not (event and UnitGUID) then return end
   local guid = UnitGUID(unit)
-  if guid == nil or issecretvalue(guid) == true then return end
+  if issecretvalue(guid) == true or guid == nil then return end
   -- RegisterUnitWatch exposes target/focus/pet/boss frames before their matching
   -- lifecycle event reaches Lua. OnShow has already performed the complete
   -- identity reseed, so remember that exact same-frame GUID and let the event
@@ -671,7 +671,7 @@ local function ConsumeOnShowIdentityFollowup(frame, event, unit)
   if event ~= expected or GetTime() ~= expectedTime or not UnitGUID then return false end
   unit = unit or frame.MSUFUnitKey
   local guid = UnitGUID(unit)
-  return guid ~= nil and issecretvalue(guid) ~= true and guid == expectedGUID
+  return issecretvalue(guid) ~= true and guid ~= nil and guid == expectedGUID
 end
 
 local function FrameOnShow(frame)

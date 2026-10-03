@@ -865,7 +865,9 @@ end
 local function TruncateLegacyGroupName(name, rt)
   local maxChars = rt and rt.nameLegacyTruncation == true and tonumber(rt.nameLegacyShortenMax) or 0
   maxChars = floor((maxChars or 0) + 0.5)
-  if name == nil or maxChars <= 0 or issecretvalue(name) == true then return name end
+  -- maxChars is plain configuration, so the common path (no legacy
+  -- truncation) still returns before the native predicate.
+  if maxChars <= 0 or issecretvalue(name) == true or name == nil then return name end
 
   local count, pos, byteLength = 0, 1, #name
   while pos <= byteLength do

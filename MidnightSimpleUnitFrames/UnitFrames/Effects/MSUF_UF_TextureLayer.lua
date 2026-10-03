@@ -859,8 +859,9 @@ local function PlainHealthPercent(hp, maxHP)
 end
 
 local function SetHolderAlpha(holder, alpha)
-  if not holder or alpha == nil then return end
+  if not holder then return end
   local secret = issecretvalue(alpha) == true
+  if not secret and alpha == nil then return end
   local cachedAlpha = holder._msufTexLayerOwnAlpha
   -- A secret curve result is valid input for Region:SetAlpha, but it must
   -- never be cached: reading/comparing that value later from tainted Lua is
@@ -980,7 +981,9 @@ local function ResolveHealthRGB(holder, frame, conf, keys, unit, hp, maxHP, r, g
   local aboveMode = conf[keys.HealthAboveMode]
   if aboveMode ~= "CLASS" and aboveMode ~= "CUSTOM" then
     if issecretvalue(r) == true or r ~= nil then return r, g, b end
-    if hp ~= nil and maxHP ~= nil and HealthGradientColorFromValues then
+    -- The gradient helper (BarsCommon GradientFromValues) answers nil for a
+    -- secret or missing value, so the health values reach it uncompared.
+    if HealthGradientColorFromValues then
       r, g, b = HealthGradientColorFromValues(health, hp, maxHP)
       if issecretvalue(r) == true or r ~= nil then return r, g, b end
     end

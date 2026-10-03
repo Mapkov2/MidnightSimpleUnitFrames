@@ -396,3 +396,4 @@ clients+Forever	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} {fla
 -	lua	tools/tests/castbar_preview_native_conceal_smoke.lua	{root}	The castbar previews hide a shown managed Blizzard player castbar (tainted container layout)
 classics	lua	tools/tests/classic_aura_arena_custom_containers_smoke.lua	{root} {flavor}	Classic Custom Aura containers do not reach the arena frames: {flavor}
 -	lua+driver	tools/tests/aura_native_container_growth_smoke.lua	{root/}	Native AuraContainers grow with menu edits instead of being parked and reused
+-	lua	tools/tests/secret_guard_order_smoke.lua	{root}	A secret-capable value is compared before issecretvalue (texture layer, name clip, identity follow-up, legacy name truncation)
