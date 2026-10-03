@@ -324,6 +324,12 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
+    "path": "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_ExternalProvider.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented event driver: an Edit Mode adapter's first switch evaluation at PLAYER_LOGIN"
+  },
+  {
     "path": "MidnightSimpleUnitFrames/Shell/MSUF_GameMenu.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,

@@ -290,12 +290,10 @@ local function MSUF_SetMinimapIconPosition(value)
 end
 ExportPublic("MSUF_SetMinimapIconPosition", MSUF_SetMinimapIconPosition)
 
---- Init on login (DB is expected to exist by then)
+--- Init on login. The saved setting is read there, never while this file
+--- loads: the client loads the SavedVariables after every file ran.
 local initFrame = CreateFrame("Frame")
-local initialGeneral = EnsureGeneralDB()
-if not initialGeneral or initialGeneral.showMinimapIcon then
-    initFrame:RegisterEvent("PLAYER_LOGIN")
-end
+initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function(self)
     self:UnregisterEvent("PLAYER_LOGIN")
     self:SetScript("OnEvent", nil)

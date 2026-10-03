@@ -395,7 +395,8 @@ local function Deactivate()
     return true
 end
 
-local SetEnabled = _G.MSUF_EM2.ExternalProviders.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
+local External = _G.MSUF_EM2.ExternalProviders
+local SetEnabled = External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_DandersEditMode_IsAvailable", function() return Danders() ~= nil end)
 Export("MSUF_DandersEditMode_SetEnabled", SetEnabled)
@@ -416,4 +417,4 @@ if eventFrame then
     end)
 end
 
-if Enabled() then Activate() end
+External.ActivateAtLogin(Enabled, Activate)

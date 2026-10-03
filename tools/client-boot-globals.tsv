@@ -21,7 +21,6 @@ C_ClassColor	*	namespace	Blizzard C_* namespace the harness does not model
 C_CooldownViewer	Mainline,Forever	namespace	Blizzard C_* namespace the harness does not model
 C_CurveUtil	*	namespace	Blizzard C_* namespace the harness does not model
 C_DurationUtil	*	namespace	Blizzard C_* namespace the harness does not model
-C_EditMode	*	namespace	Blizzard C_* namespace the harness does not model
 C_EncodingUtil	*	namespace	Blizzard C_* namespace the harness does not model
 C_Housing	*	namespace	Blizzard C_* namespace the harness does not model
 C_IncomingSummon	*	namespace	Blizzard C_* namespace the harness does not model
@@ -45,10 +44,7 @@ CoolinatorPrimaryGroupAnchor	*	thirdparty	third-party addon global MSUF probes t
 CreateUnitHealPredictionCalculator	*	api	Blizzard client API the harness does not model
 CurveConstants	*	table	Blizzard CurveConstants table
 DAMAGE_TEXT_FONT	*	constant	Blizzard UI constant the harness does not model
-DandersFrames	*	thirdparty	third-party addon global MSUF probes to detect that addon
-Details	*	thirdparty	third-party addon global MSUF probes to detect that addon
 DisableAddOn	Vanilla,Mists,TBC	api	Blizzard Classic addon-toggle global
-Dominos	*	thirdparty	third-party addon global MSUF probes to detect that addon
 EllesmereUI	*	thirdparty	third-party addon global MSUF probes to detect that addon
 EnableAddOn	Vanilla,Mists,TBC	api	Blizzard Classic addon-toggle global
 Enum	*	table	Blizzard Enum table; MSUF probes Enum.EditModeSystem to place Blizzard Edit Mode
@@ -83,7 +79,6 @@ GetUnitChargedPowerPoints	*	unit	Blizzard unit-state API; the harness answers it
 GetUnitEmpowerStageCount	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 GetUnitSpeed	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 GetUnitTotalModifiedMaxHealthPercent	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
-Grid2Layout	*	thirdparty	third-party addon global MSUF probes to detect that addon
 HasPetUI	Vanilla,TBC,Forever	api	Blizzard pet API behind the pet happiness indicator
 INTERRUPTED	*	constant	Blizzard UI constant the harness does not model
 INVSLOT_MAINHAND	Mainline,Forever	constant	Blizzard UI constant the harness does not model

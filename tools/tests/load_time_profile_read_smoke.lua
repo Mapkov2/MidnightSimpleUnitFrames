@@ -6,14 +6,21 @@
 -- profile (the full defaults pass) that the SavedVariables then replace, and the
 -- reader acts on factory defaults.
 --
---   1. Booting each client's real core graph, no file calls MSUF_EnsureDB
---      while it loads, except the readers listed in KNOWN with the package
---      that owns their fix. A new load-time reader fails.
+--   1. Booting each client's real core graph, no file reads the profile while
+--      it loads, except the readers listed in KNOWN with the package that owns
+--      their fix. Counted: MSUF_EnsureDB calls, MSUF_GetGeneralDB calls, and
+--      every read or write of the MSUF_DB global (directly, through _G or
+--      through a helper the file called). A new load-time reader fails, and so
+--      does a KNOWN row no client hits any more.
 --      Before wave 4: Runtime/MSUF_UnitTooltips.lua recomputed its hover
 --      fast path at load, and Features/Gameplay/MSUF_Feature_TargetSound.lua
 --      applied the target sounds at load.
 --      The castbar readers (Anchors, InterruptReady, Boss and Arena pools)
---      left with W4-C3 143756be; KNOWN is empty since.
+--      left with W4-C3 143756be.
+--      Before the fix round: the game menu button and the minimap icon read
+--      their switch at load, and the Grid2, Details!, Dominos, DandersFrames
+--      and Blizzard Edit Mode adapters activated at load, also for a player
+--      who had turned the integration off (their read saw no profile).
 --   2. Target sounds a player turned on are active after login. At load the
 --      driver read the throwaway profile (off) and nothing applied the saved
 --      value until the menu toggle or a profile switch.
@@ -25,7 +32,28 @@ local World = assert(loadfile(root .. "/tools/tests/client_world.lua"))()
 
 -- Load-time readers in files another package owns. Each row names the file,
 -- the owner and the fix; delete the row when the reader is gone.
-local KNOWN = {}
+local KNOWN = {
+    -- Castbars, owned by fixb.
+    ["MidnightSimpleUnitFrames/Castbars/MSUF_FocusKick_StateDriver.lua"] =
+        "fixb: the focus kick state driver reads the castbar settings at load",
+    ["MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Bridge.lua"] =
+        "fixb: the castbar bridge reads the castbar settings at load",
+    ["MidnightSimpleUnitFrames/Castbars/MSUF_CastbarDriver.lua"] =
+        "fixb: the castbar driver reads the castbar settings at load",
+    -- Found by the direct MSUF_DB read count (fix round); routed by the lead.
+    ["MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua"] =
+        "lead (R6 sweep routes it to fixe): CP.SyncControllerEvents(CPConfig.AnyFeatureEnabled()) at load",
+    ["MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua"] =
+        "lead (unrouted): MSUF_NormalizeStoredFontKeys() at load",
+    ["MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Highlight.lua"] =
+        "lead (unrouted): Highlight.Refresh() at load",
+    ["MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua"] =
+        "lead (unrouted): EnsureCooldownWidthObservers() at load",
+    ["MidnightSimpleUnitFrames/Integrations/MSUF_Integration_NSRTNicknames.lua"] =
+        "lead (unrouted): TryEnableNSRT() at load reads the nickname switch",
+    ["MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"] =
+        "lead (unrouted): SyncTrinketIcons(false) at load reads the arena switch",
+}
 
 local function Check(condition, message)
     if not condition then error(message, 2) end
@@ -39,25 +67,55 @@ end
 
 local function Boot(flavor)
     local world = World.New(root, flavor)
-    local calls = {}
+    local hits, createdBy = {}, nil
+    local function Record(file, kind)
+        -- Only the core addon: the client loads the Options addon on demand,
+        -- after the SavedVariables.
+        file = Relative(file)
+        if file:find("^MidnightSimpleUnitFrames_") then return end
+        local entry = hits[file] or {}
+        hits[file] = entry
+        entry[kind] = (entry[kind] or 0) + 1
+    end
+    local function Note(kind)
+        if world.loading then Record(world.loading, kind) end
+    end
+    -- MSUF_DB is addon-owned, so the sandbox answers nil for it while no file
+    -- has created it: every read of it reaches __index, every write __newindex.
+    local meta = getmetatable(world.env)
+    local index = meta.__index
+    meta.__index = function(env, key)
+        if key == "MSUF_DB" then Note("MSUF_DB read") end
+        return index(env, key)
+    end
+    meta.__newindex = function(env, key, value)
+        if key == "MSUF_DB" then Note("MSUF_DB write") end
+        rawset(env, key, value)
+    end
     local load = world.LoadFile
     function world:LoadFile(path, addon, namespace)
         local ok, message = load(self, path, addon, namespace)
         if path:match("/State/MSUF_Defaults%.lua$") then
             local ensure = assert(rawget(self.env, "MSUF_EnsureDB"), flavor .. ": Defaults exported no MSUF_EnsureDB")
             local function Counted(...)
-                -- Only the core addon: the client loads the Options addon on
-                -- demand, after the SavedVariables.
-                local loading = self.loading
-                if loading and not Relative(loading):find("^MidnightSimpleUnitFrames_") then
-                    local file = Relative(loading)
-                    calls[file] = (calls[file] or 0) + 1
-                end
+                Note("MSUF_EnsureDB call")
                 return ensure(...)
             end
             rawset(self.env, "MSUF_EnsureDB", Counted)
             namespace.MSUF_EnsureDB = Counted
             namespace.EnsureDB = Counted
+        elseif path:match("/Kernel/MSUF_Util%.lua$") then
+            local general = assert(rawget(self.env, "MSUF_GetGeneralDB"), flavor .. ": Util exported no MSUF_GetGeneralDB")
+            rawset(self.env, "MSUF_GetGeneralDB", function(...)
+                Note("MSUF_GetGeneralDB call")
+                return general(...)
+            end)
+        end
+        -- A file that created MSUF_DB past __newindex (rawset) would hide every
+        -- later read: the first file after which it exists counts as a writer.
+        if not createdBy and rawget(self.env, "MSUF_DB") ~= nil then
+            createdBy = path
+            Record(path, "MSUF_DB created")
         end
         return ok, message
     end
@@ -65,7 +123,7 @@ local function Boot(flavor)
     local failure = world:FirstFailure()
     Check(failure == nil, flavor .. ": load failed in " .. tostring(failure and failure.file) .. ": "
         .. tostring(failure and failure.message))
-    return world, calls
+    return world, hits
 end
 
 local function TargetSoundRegistered(world)
@@ -89,13 +147,17 @@ local function FireBusKey(world, event, key)
     return false
 end
 
-local readers = 0
+local readers, knownHit = 0, {}
 for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     -- 1. no load-time profile read outside the known rows.
-    local world, calls = Boot(flavor)
-    for file, count in pairs(calls) do
-        Check(KNOWN[file] ~= nil, flavor .. ": " .. file .. " calls MSUF_EnsureDB " .. count
-            .. " time(s) while it loads, before the SavedVariables exist")
+    local world, hits = Boot(flavor)
+    for file, entry in pairs(hits) do
+        local kinds = {}
+        for kind, count in pairs(entry) do kinds[#kinds + 1] = kind .. " x" .. count end
+        table.sort(kinds)
+        Check(KNOWN[file] ~= nil, flavor .. ": " .. file .. " reads the profile while it loads, before the"
+            .. " SavedVariables exist (" .. table.concat(kinds, ", ") .. ")")
+        knownHit[file] = true
         readers = readers + 1
     end
 
@@ -111,5 +173,8 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         flavor .. ": the target sounds are not applied at PLAYER_LOGIN")
     Check(TargetSoundRegistered(world), flavor .. ": target sounds a player turned on are off after login")
     print("load_time_profile_read_smoke: ok (" .. flavor .. ")")
+end
+for file, row in pairs(KNOWN) do
+    Check(knownHit[file], file .. " no longer reads the profile while it loads: delete its KNOWN row (" .. row .. ")")
 end
 print("load_time_profile_read_smoke: ok (" .. readers .. " known load-time reader hit(s) owned elsewhere)")
