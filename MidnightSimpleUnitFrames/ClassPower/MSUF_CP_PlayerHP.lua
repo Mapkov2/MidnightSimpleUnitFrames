@@ -956,6 +956,15 @@ local function ApplyColor(hp, maxHP, event)
         return
     elseif colorMode == "GRADIENT" then
         local r, g, b = GradientColor(hp, maxHP, common)
+        --- The shared helper evaluates UnitHealthPercent with a colour curve, which is
+        --- SecretReturns while health is secret: such a colour goes to the C sink unread
+        --- and leaves no change stamp behind.
+        if issecretvalue(r) == true or issecretvalue(g) == true or issecretvalue(b) == true then
+            bar:SetStatusBarColor(r, g, b, 1)
+            bar._phpR, bar._phpG, bar._phpB = nil, nil, nil
+            bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+            return
+        end
         ApplyCachedColor(bar, r, g, b)
         return
     end

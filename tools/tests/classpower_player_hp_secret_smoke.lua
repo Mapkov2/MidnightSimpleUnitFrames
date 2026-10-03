@@ -225,7 +225,55 @@ do
     end
 end
 
+--- Records the colour writes of a widget method ("SetStatusBarColor", "SetTextColor").
+local function RecordColor(widget, method)
+    local inner = widget[method]
+    widget.writes = {}
+    widget[method] = function(self, r, g, b, a)
+        self.writes[#self.writes + 1] = { r, g, b, a }
+        return inner(self, r, g, b, a)
+    end
+end
+
+-- 6. HP colour "HP Gradient": the shared helper (MSUF_UF_Elements_BarsCommon.lua
+--    GradientColor) evaluates UnitHealthPercent(unit, true, curve) per channel, which
+--    is SecretReturns while health is secret. The components go to SetStatusBarColor
+--    unread, no secret survives as a change stamp (the second update compared the
+--    first one's), and a plain colour afterwards is stamped again.
+do
+    local api = Build({ playerHPBarColorMode = "GRADIENT", playerHPBarUsePlayerText = false,
+        playerHPBarTextRight = "NONE" })
+    local bar = api.PHP.bar
+    RecordColor(bar, "SetStatusBarColor")
+    _G.MSUF_NS = _G.MSUF_NS or {}
+    _G.MSUF_NS.UFBarTextCommon = { GradientColor = function() return S.gradR, S.gradG, S.gradB, true end }
+    for pass = 1, 2 do
+        SecretHealth()
+        S.gradR, S.gradG, S.gradB = Secrets.New("number"), Secrets.New("number"), 0
+        bar.writes = {}
+        local ok, err, violations = Watched(function() api.Update("UNIT_HEALTH") end)
+        Check(ok, "gradient pass " .. pass .. ": a secret gradient colour raised: " .. tostring(err))
+        Check(#violations == 0, "gradient pass " .. pass .. ": a secret gradient colour was compared:\n    "
+            .. table.concat(violations, "\n    "))
+        local write = bar.writes[#bar.writes]
+        Check(write and rawequal(write[1], S.gradR) and rawequal(write[2], S.gradG),
+            "gradient pass " .. pass .. ": the secret gradient colour did not reach SetStatusBarColor")
+        Check(bar._phpR == nil and bar._msufStatusR == nil,
+            "gradient pass " .. pass .. ": a secret gradient colour was kept as a change stamp")
+    end
+    S.hp, S.maxHP = 400, 1000
+    S.gradR, S.gradG, S.gradB = 1, 0.8, 0
+    bar.writes = {}
+    api.Update("UNIT_HEALTH")
+    S.hp = 410
+    api.Update("UNIT_HEALTH")
+    Check(#bar.writes == 1 and bar.writes[1][2] == 0.8,
+        "a plain gradient colour after secret health is not painted once and stamped: " .. #bar.writes .. " writes")
+    _G.MSUF_NS.UFBarTextCommon = nil
+end
+
 if #failures > 0 then
     error("classpower_player_hp_secret_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_player_hp_secret_smoke: ok (secret copy, own percent, hidden symbol, compact, change-key modes)")
+print("classpower_player_hp_secret_smoke: ok (secret copy, own percent, hidden symbol, compact, change-key modes,"
+    .. " secret gradient)")
