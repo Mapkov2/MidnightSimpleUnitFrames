@@ -2686,6 +2686,24 @@ function H.LiveStateDriverGate(driver, event, box)
     return false
 end
 
+--- A region list kept on owner (owner[cacheField][field]) and refilled with
+--- a, b, c, d: the text focus rings and the text handles refit around it on
+--- every repaint and animation tick without allocating a table.
+function H.CachedRegionList(owner, cacheField, field, a, b, c, d)
+    local lists = owner[cacheField]
+    if not lists then
+        lists = {}
+        owner[cacheField] = lists
+    end
+    local list = lists[field]
+    if not list then
+        list = {}
+        lists[field] = list
+    end
+    list[1], list[2], list[3], list[4] = a, b, c, d
+    return list
+end
+
 --- Moves a preview's "Layers" button into the compact header, beside the
 --- expand button, or back to the box's top-left corner.
 function H.LayoutCompactLayersButton(box, compact, Tr)
@@ -3503,23 +3521,8 @@ function H.PaintPreviewDurationBar(bar, icon, cfg, width, height, auraState)
     local r, g, b = MSUF.MSUF_Auras3.GetDurationBarColor()
     bar:SetVertexColor(r, g, b, 0.92)
     frac = max(0.02, min(1, tonumber(frac) or 0.62))
-    bar:ClearAllPoints()
-    bar:SetHeight(barHeight)
-    if auraState then
-        bar:SetWidth(max(1, floor(max(1, width - inset * 2) * frac + 0.5)))
-        if cfg.durationBarPosition == "TOP" then
-            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        else
-            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        end
-    elseif cfg.durationBarPosition == "TOP" then
-        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-    else
-        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-    end
-    bar:Show()
+    MSUF.MSUF_Auras3.LayoutPreviewDurationBar(bar, icon, cfg.durationBarPosition, barHeight, inset, width,
+        auraState and frac or nil)
 end
 
 --- The rectangular power bar border of a unit or group preview: a mouse-free
@@ -3527,7 +3530,6 @@ end
 function H.EnsurePowerBorderHost(mock, field)
     local host = mock[field]
     if host then return host end
-    if type(_G.CreateFrame) ~= "function" then return nil end
     host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
     if host.EnableMouse then host:EnableMouse(false) end
     host.edges = {}
@@ -3567,39 +3569,6 @@ function H.LayoutPowerBorderEdges(host, edge, roundedPower)
         right:Show()
     end
     host:Show()
-end
-
---- The dispel overlay of a unit or group preview: the region covers the
---- target (FULL) or a thickness-wide strip along one edge (TOP, BOTTOM, LEFT,
---- RIGHT), filled with the preview dispel type's colour, or with the spec's
---- dispel colour where the aura backend paints none.
-function H.PaintDispelOverlayRegion(region, target, style, thickness, a3, dispel)
-    region:ClearAllPoints()
-    if style == "TOP" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetHeight(thickness)
-    elseif style == "BOTTOM" then
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetHeight(thickness)
-    elseif style == "LEFT" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetWidth(thickness)
-    elseif style == "RIGHT" then
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetWidth(thickness)
-    else
-        region:SetAllPoints(target)
-    end
-    if a3 and type(a3.SetDispelColorTexture) == "function" then
-        a3.SetDispelColorTexture(region, a3.GetDispelColorPreviewType(), true, 1)
-    else
-        region:SetColorTexture(tonumber(dispel and dispel.r) or 0.25,
-            tonumber(dispel and dispel.g) or 0.75, tonumber(dispel and dispel.b) or 1, 1)
-    end
 end
 
 --- The header shade and separator line a pinned (docked) unit or group

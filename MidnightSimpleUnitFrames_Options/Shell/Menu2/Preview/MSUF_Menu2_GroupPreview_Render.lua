@@ -608,8 +608,8 @@ local function PaintGroupPreviewDispelOverlay(scene)
     local style = tostring(overlay.dispelOverlayStyle or "FULL"):upper()
     local thickness = scene.S.ScaleValue(tonumber(scene.runtimeBorder.highlightThickness) or 3,
         scene.previewScale, 1)
-    M.PreviewHelpers.PaintDispelOverlayRegion(region, target, style, thickness,
-        scene.MSUF and scene.MSUF.MSUF_Auras3, scene.runtimeSpec and scene.runtimeSpec.dispel)
+    scene.MSUF.MSUF_Auras3.PaintDispelOverlayPreview(region, target, style, thickness,
+        scene.runtimeSpec and scene.runtimeSpec.dispel)
     local alpha = math.max(0, math.min(1, tonumber(overlay.dispelOverlayAlpha) or 0.35))
     local layerAlpha = scene.soloLayer and scene.soloLayer ~= "dispelOverlay" and 0.15 or 1
     region:SetAlpha(alpha * layerAlpha)
@@ -2739,8 +2739,7 @@ local function BuildSpellEffectPreview(env, glow)
             root._msufSpellPreviewLayer = RenderState.ClampLayer(effect.layer, 0)
             root._msufSpellPreviewKind = tostring(effect.type or "none"):lower()
             local color = effect.color or {}
-            local r, g, b = color[1] or 1, color[2] or 1, color[3] or 1
-            local a = color[4] or 1
+            local r, g, b, a = color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1
             local kind = tostring(effect.type or "none"):lower()
             if kind == "healthtint" then
                 local tint = root._msufSpellPreviewTint

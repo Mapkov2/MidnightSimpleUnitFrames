@@ -508,13 +508,15 @@ local function SetTileVisual(btn, active, hover)
 end
 W.SetTileVisual = SetTileVisual
 
+-- The client's standard font (FrameXML sets it before any addon loads).
+local TILE_BADGE_FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 -- Growth and layout tiles (unit Boss layout, group Growth) mark the first
 -- frame of their mini preview with a "1" badge and the growth direction with
 -- an arrow. Both are built on first use and reused on every repaint.
 function W.EnsureTileFirstBadge(btn)
     if not btn._firstText then
         btn._firstText = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-        if btn._firstText.SetFont then btn._firstText:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
+        if btn._firstText.SetFont then btn._firstText:SetFont(TILE_BADGE_FONT, T.FontSize("micro"), "OUTLINE") end
         btn._firstText:SetText("1")
         btn._firstText:SetTextColor(0, 0, 0, 1)
     end
@@ -523,7 +525,7 @@ end
 function W.PaintTileDirectionArrow(btn, info, labelH)
     if not btn._arrow then
         btn._arrow = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-        if btn._arrow.SetFont then btn._arrow:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
+        if btn._arrow.SetFont then btn._arrow:SetFont(TILE_BADGE_FONT, T.FontSize("caption"), "OUTLINE") end
         btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
     end
     btn._arrow:SetText(info.arrow)

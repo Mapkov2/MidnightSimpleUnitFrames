@@ -9,6 +9,30 @@ if type(A3) ~= "table" then
     MSUF.MSUF_Auras3 = A3
 end
 A3.EditModeModules = A3.EditModeModules or {}
+--- Places a preview aura's duration bar inside icon: height px tall on the
+--- configured edge (TOP, else bottom), inset px in. With a fill share it
+--- covers that share of the inner width from the left edge, otherwise all of
+--- it. The Edit Mode and the menu previews share it.
+function A3.LayoutPreviewDurationBar(bar, icon, position, height, inset, width, frac)
+    bar:ClearAllPoints()
+    bar:SetHeight(height)
+    if frac then
+        bar:SetWidth(math.max(1, math.floor(math.max(1, width - inset * 2) * frac + 0.5)))
+        if position == "TOP" then
+            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        else
+            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        end
+    elseif position == "TOP" then
+        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+    else
+        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+    end
+    bar:Show()
+end
+
 A3.EditModeModules.Preview = function(config, layout, drag, IsBossScope, ForEachBossUnit, EditPreviewActive, UnitPreviewActive, SyncPreviewGroupStrata)
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor, math_min, math_max = math.floor, math.min, math.max
@@ -333,23 +357,7 @@ local function ApplyPreviewDurationBarProgress(icon, cfg, auraState)
     local r, g, b = AuraDurationBarColor()
     bar:SetVertexColor(r, g, b, 0.92)
     frac = math_max(0.02, math_min(1, tonumber(frac) or 1))
-    bar:ClearAllPoints()
-    bar:SetHeight(height)
-    if auraState then
-        bar:SetWidth(math_max(1, math_floor(math_max(1, size - inset * 2) * frac + 0.5)))
-        if cfg.durationBarPosition == "TOP" then
-            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        else
-            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        end
-    elseif cfg.durationBarPosition == "TOP" then
-        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-    else
-        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-    end
-    bar:Show()
+    A3.LayoutPreviewDurationBar(bar, icon, cfg.durationBarPosition, height, inset, size, auraState and frac or nil)
 end
 
 local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elapsed)

@@ -91,18 +91,7 @@ local NormalizePreviewTextFocusSlot = PreviewHelpers.NormalizeTextFocusSlot
 -- Focus region lists live on the mock and the placement options on the box,
 -- so refitting the ring after an animation tick allocates nothing.
 local function FocusRegionList(mock, field, a, b, c, d)
-    local lists = mock._msufFocusRegionLists
-    if not lists then
-        lists = {}
-        mock._msufFocusRegionLists = lists
-    end
-    local list = lists[field]
-    if not list then
-        list = {}
-        lists[field] = list
-    end
-    list[1], list[2], list[3], list[4] = a, b, c, d
-    return list
+    return PreviewHelpers.CachedRegionList(mock, "_msufFocusRegionLists", field, a, b, c, d)
 end
 local function PreviewTextFocusRegions(mock, kind, slot)
     if not mock then return nil end

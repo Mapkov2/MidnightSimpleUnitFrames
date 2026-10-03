@@ -1105,6 +1105,15 @@ function V.HideDispelOverlay(frame, preview)
     return changed
 end
 
+--- A menu preview's dispel overlay: this backend's strip layout in the
+--- spec's dispel colour (the scan backend has no preview dispel type).
+function A3.PaintDispelOverlayPreview(region, target, style, thickness, dispel)
+    region:ClearAllPoints()
+    MSUF.BorderStyles.LayoutEdgeStrip(region, target, style, thickness)
+    region:SetColorTexture(tonumber(dispel and dispel.r) or 0.25,
+        tonumber(dispel and dispel.g) or 0.75, tonumber(dispel and dispel.b) or 1, 1)
+end
+
 --- Scan-backend equivalent of Retail's native AddDispelTypeTexture overlay.
 --- It is reached only when the compiled frame visual enables the feature; the
 --- disabled path owns no frame, event or API work.
@@ -1133,25 +1142,7 @@ function V.UpdateDispelOverlay(frame, visual, active, r, g, b, a, preview)
     if frame[signatureKey] == signature and host:IsShown() then return false end
     local region = host.region
     region:ClearAllPoints()
-    if style == "TOP" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetHeight(3)
-    elseif style == "BOTTOM" then
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetHeight(3)
-    elseif style == "LEFT" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetWidth(3)
-    elseif style == "RIGHT" then
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetWidth(3)
-    else
-        region:SetAllPoints(target)
-    end
+    MSUF.BorderStyles.LayoutEdgeStrip(region, target, style, 3)
     region:SetColorTexture(r, g, b, 1)
     region:SetAlpha(alpha)
     if host.SetFrameLevel and frame.GetFrameLevel then host:SetFrameLevel((frame:GetFrameLevel() or 0) + 8) end

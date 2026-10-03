@@ -1055,8 +1055,8 @@ function Auras.LayoutDispelLayers(box, mock, runtimeSpec, S, baseLevel, overlayA
         local target = overlay.onHealth ~= false and mock.hp or (mock.healthBar or mock)
         local style = tostring(overlay.style or "FULL"):upper()
         local thickness = max(1, S(runtimeSpec and runtimeSpec.border and runtimeSpec.border.highlightThickness or 3))
-        MSUF.MSUF2.PreviewHelpers.PaintDispelOverlayRegion(region, target, style, thickness,
-            MSUF and MSUF.MSUF_Auras3, runtimeSpec and runtimeSpec.dispel or nil)
+        MSUF.MSUF_Auras3.PaintDispelOverlayPreview(region, target, style, thickness,
+            runtimeSpec and runtimeSpec.dispel or nil)
         region:SetAlpha(ClampNumber(overlay.alpha, 0.35, 0, 1))
         region:Show()
         overlayHost:Show()

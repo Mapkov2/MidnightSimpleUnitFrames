@@ -23,9 +23,12 @@ local function FallbackHandleText(handle)
     return handle and (handle._previewText or handle._key) or "Handle"
 end
 local HANDLE_FALLBACKS = {
-    TR = Fallbacks.Identity, Round = Fallbacks.Round, ResolveAnchor = Fallbacks.Center, PointOffset = Fallbacks.ZeroPair, HandleOffset = Fallbacks.ZeroPair, OffsetToConfig = Fallbacks.Round,
-    CurrentStatusSpec = Fallbacks.Nil, CurrentSpellConfig = Fallbacks.Nil, CurrentSpellPlaced = Fallbacks.Nil, HandleText = FallbackHandleText, HandleOffsets = Fallbacks.Nil,
-    UpdateHint = Fallbacks.Noop, RefreshHandleSelection = Fallbacks.Noop, StatusLabel = Fallbacks.Status, StartPan = Fallbacks.False, StopPan = Fallbacks.Noop, ZoomWheel = Fallbacks.Noop,
+    TR = Fallbacks.Identity, Round = Fallbacks.Round, ResolveAnchor = Fallbacks.Center, PointOffset = Fallbacks.ZeroPair,
+    HandleOffset = Fallbacks.ZeroPair, OffsetToConfig = Fallbacks.Round,
+    CurrentStatusSpec = Fallbacks.Nil, CurrentSpellConfig = Fallbacks.Nil, CurrentSpellPlaced = Fallbacks.Nil,
+    HandleText = FallbackHandleText, HandleOffsets = Fallbacks.Nil,
+    UpdateHint = Fallbacks.Noop, RefreshHandleSelection = Fallbacks.Noop, StatusLabel = Fallbacks.Status,
+    StartPan = Fallbacks.False, StopPan = Fallbacks.Noop, ZoomWheel = Fallbacks.Noop,
 }
 local SPELL_DROP_ANCHOR_FRAC = {
     TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 },
