@@ -13,6 +13,31 @@ local function ClearExports()
     end
 end
 
+-- The adapter reads its switch at PLAYER_LOGIN, never while it loads (the
+-- client loads the SavedVariables after every file ran): each load here is
+-- followed by that login, delivered to the frames the module created while it
+-- loaded. beforeLogin stands for the SavedVariables step.
+local function LoadModule(namespace, beforeLogin)
+    local create, created = CreateFrame, {}
+    CreateFrame = function(...)
+        local frame = create and create(...)
+        if not frame then
+            frame = { events = {} }
+            function frame:RegisterEvent(event) self.events[event] = true end
+            function frame:UnregisterEvent(event) self.events[event] = nil end
+            function frame:SetScript(_, fn) self.onEvent = fn end
+        end
+        created[#created + 1] = frame
+        return frame
+    end
+    assert(loadfile(modulePath))("MidnightSimpleUnitFrames", namespace)
+    CreateFrame = create
+    if beforeLogin then beforeLogin() end
+    for _, frame in ipairs(created) do
+        if frame.events and frame.events.PLAYER_LOGIN and frame.onEvent then frame.onEvent(frame, "PLAYER_LOGIN") end
+    end
+end
+
 -- Older or partial Classic clients must load the shared manifest without
 -- constructing a Blizzard adapter when the native Edit Mode enum is absent.
 ClearExports()
@@ -23,7 +48,7 @@ MSUF_EditModeAPI = {
         error("Blizzard element registered without Enum.EditModeSystem")
     end,
 }
-assert(loadfile(modulePath))("MidnightSimpleUnitFrames", {})
+LoadModule({})
 assert(MSUF_BlizzardEditMode_IsAvailable == nil,
     "unsupported Classic client exported a partial Blizzard adapter")
 
@@ -40,7 +65,7 @@ MSUF_EditModeAPI = {
 }
 MSUF_DB = { general = { blizzardEditModeIntegration = true } }
 ClearExports()
-assert(loadfile(modulePath))("MidnightSimpleUnitFrames", {})
+LoadModule({})
 assert(type(MSUF_BlizzardEditMode_IsAvailable) == "function"
     and MSUF_BlizzardEditMode_IsAvailable() == false,
     "partial Classic client reported Blizzard Edit Mode as available")
@@ -201,7 +226,7 @@ end
 local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 RequireFixture.Install(root, namespace)
 ClearExports()
-assert(loadfile(modulePath))("MidnightSimpleUnitFrames", namespace)
+LoadModule(namespace)
 
 assert(type(MSUF_BlizzardEditMode_IsAvailable) == "function"
     and MSUF_BlizzardEditMode_IsAvailable() == true,
@@ -361,6 +386,7 @@ local function LoadAdapter(opts)
     }
     EditModePresetLayoutManager = opts.presetManager
     MSUF_DB = { general = { blizzardEditModeIntegration = true, blizzardEditModeSnapshot = opts.snapshot } }
+    if opts.atLogin then MSUF_DB = nil end
     local clientNamespace = { Client = opts.client }
     function clientNamespace.ExportPublic(name, value)
         _G[name] = value
@@ -368,7 +394,8 @@ local function LoadAdapter(opts)
     end
     RequireFixture.Install(root, clientNamespace)
     ClearExports()
-    assert(loadfile(modulePath))("MidnightSimpleUnitFrames", clientNamespace)
+    -- opts.atLogin(ctx): the saved profile arrives (SavedVariables step).
+    LoadModule(clientNamespace, opts.atLogin and function() opts.atLogin(ctx) end)
     return ctx
 end
 
@@ -640,6 +667,28 @@ do
     assert(Count() == 0, "the second off left Blizzard elements registered")
     MSUF_BlizzardEditMode_SetEnabled(true)
     assert(Count() == loaded, "Blizzard elements did not register again after the second on")
+end
+
+-- The client loads the SavedVariables after every file ran, so the adapter
+-- reads its switch at PLAYER_LOGIN: while it loads there is no profile, and an
+-- integration the player turned off stayed on (it read "no profile" as on).
+do
+    local function Count(ctx)
+        local n = 0
+        for _ in pairs(ctx.registered) do n = n + 1 end
+        return n
+    end
+    local saved = { general = { blizzardEditModeIntegration = false, blizzardEditModeSnapshot = {} } }
+    local function Login(ctx)
+        assert(Count(ctx) == 0, "the Blizzard adapter registered elements while it loaded, before the saved profile")
+        MSUF_DB = saved
+    end
+    local micro = { Orientation = 0, Order = 1, Size = 2, EyeSize = 3 }
+    local ctx = LoadAdapter({ microSetting = micro, atLogin = Login })
+    assert(Count(ctx) == 0, "the Blizzard adapter activated at login with the integration turned off")
+    saved.general.blizzardEditModeIntegration = true
+    ctx = LoadAdapter({ microSetting = micro, atLogin = Login })
+    assert(Count(ctx) == 6, "the Blizzard adapter did not activate at login with the integration on: " .. Count(ctx))
 end
 
 

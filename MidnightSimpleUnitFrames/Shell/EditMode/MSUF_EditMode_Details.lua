@@ -229,7 +229,8 @@ local function Deactivate()
     return true
 end
 
-local SetEnabled = _G.MSUF_EM2.ExternalProviders.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
+local External = _G.MSUF_EM2.ExternalProviders
+local SetEnabled = External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_DetailsEditMode_IsAvailable", function() return Details() ~= nil end)
 Export("MSUF_DetailsEditMode_SetEnabled", SetEnabled)
@@ -242,4 +243,4 @@ if eventFrame then
     end)
 end
 
-if Enabled() then Activate() end
+External.ActivateAtLogin(Enabled, Activate)

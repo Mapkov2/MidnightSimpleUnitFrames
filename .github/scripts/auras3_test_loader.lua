@@ -175,7 +175,7 @@ local function PrepareDirectContracts(source, namespace)
         _G.MSUF_EM2 = _G.MSUF_EM2 or {}
         _G.MSUF_EM2.ExternalProviders = _G.MSUF_EM2.ExternalProviders or {}
         local target = _G.MSUF_EM2.ExternalProviders
-        for _, name in ipairs({"CreateEnabledSetter", "CreateElementRegistrar"}) do
+        for _, name in ipairs({"CreateEnabledSetter", "CreateElementRegistrar", "ActivateAtLogin"}) do
             if not target[name] then BindPublic("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_ExternalProvider.lua", "External", name, target) end
         end
     end

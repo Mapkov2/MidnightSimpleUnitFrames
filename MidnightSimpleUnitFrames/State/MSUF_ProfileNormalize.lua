@@ -480,8 +480,11 @@ end
 --- settings field by field and is applied to the effective profile after normalization:
 --- the fields saved under a former name are carried over as one set, including the
 --- implicit Arcane look, and the former fields leave the patch. A former key the patch
---- removes has nothing to carry. Registered with State/MSUF_ProfileFields.lua, which
---- loads first in every TOC; a harness that loads this file alone has no variants.
+--- removes becomes a removal of its current key (arcaneSoulDisplay: the text mode), so
+--- the variant still resets that setting; a value for the current key wins over it,
+--- whether the variant sets it itself or the carried Arcane look does. Registered with
+--- State/MSUF_ProfileFields.lua, which loads first in every TOC; a harness that loads
+--- this file alone has no variants.
 local function MSUF_ProfileIO_IsFormerResourceExtrasField(field, currentKeys)
     local path = field.path
     if #path ~= 2 or path[1] ~= "bars" then return false end
@@ -498,11 +501,13 @@ local function MSUF_ProfileIO_CarryFormerResourceExtrasPatch(patch)
     --- The carry rules read two current keys (the text mode it may replace and the
     --- last-global-cooldown warning it only defaults), so the patch's own values
     --- for them take part.
-    local carried = {}
+    local carried, removed = {}, {}
     for i = 1, #patch do
         local field = patch[i]
         if not field.remove and MSUF_ProfileIO_IsFormerResourceExtrasField(field, true) then
             carried[field.path[2]] = field.value
+        elseif field.remove and MSUF_ProfileIO_IsFormerResourceExtrasField(field) then
+            removed[MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS[field.path[2]] or "arcaneWindowText"] = true
         end
     end
     MSUF_ProfileIO_CarryFormerResourceExtras(carried)
@@ -513,9 +518,14 @@ local function MSUF_ProfileIO_CarryFormerResourceExtrasPatch(patch)
         if not (MSUF_ProfileIO_IsFormerResourceExtrasField(field) or (#field.path == 2 and field.path[1] == "bars"
             and carried[key] ~= nil)) then
             out[#out + 1] = field
+            if #field.path == 2 and field.path[1] == "bars" then removed[key] = nil end
         end
     end
-    for key, value in pairs(carried) do out[#out + 1] = { path = { "bars", key }, value = value, remove = false } end
+    for key, value in pairs(carried) do
+        out[#out + 1] = { path = { "bars", key }, value = value, remove = false }
+        removed[key] = nil
+    end
+    for key in pairs(removed) do out[#out + 1] = { path = { "bars", key }, remove = true } end
     return out
 end
 if MSUF.ProfileFields then MSUF.ProfileFields.RegisterPatchTranslator(MSUF_ProfileIO_CarryFormerResourceExtrasPatch) end

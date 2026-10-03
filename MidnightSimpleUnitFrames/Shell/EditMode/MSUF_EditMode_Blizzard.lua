@@ -1189,7 +1189,8 @@ local function Deactivate()
     return true
 end
 
-local SetEnabled = _G.MSUF_EM2.ExternalProviders.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
+local External = _G.MSUF_EM2.ExternalProviders
+local SetEnabled = External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_BlizzardEditMode_IsAvailable", function() return Blizzard() ~= nil end)
 Export("MSUF_BlizzardEditMode_SetEnabled", SetEnabled)
@@ -1213,4 +1214,4 @@ Export("MSUF_BlizzardEditMode_Debug", function()
     return table.concat(parts, " ")
 end)
 
-if Enabled() then Activate() end
+External.ActivateAtLogin(Enabled, Activate)

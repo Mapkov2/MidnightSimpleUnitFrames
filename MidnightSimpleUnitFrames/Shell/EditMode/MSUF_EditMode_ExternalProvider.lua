@@ -670,6 +670,21 @@ function External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
     end
 end
 
+--- An adapter's first switch evaluation waits for PLAYER_LOGIN. The client
+--- loads the SavedVariables after every file ran, so a read while the adapter
+--- loads saw no profile and turned on an integration the player had turned
+--- off. Profile changes arrive through the adapter's SetEnabled
+--- (State/MSUF_ProfileRuntime.lua).
+function External.ActivateAtLogin(Enabled, Activate)
+    local frame = CreateFrame("Frame")
+    frame:RegisterEvent("PLAYER_LOGIN")
+    frame:SetScript("OnEvent", function(self)
+        self:UnregisterEvent("PLAYER_LOGIN")
+        self:SetScript("OnEvent", nil)
+        if Enabled() then Activate() end
+    end)
+end
+
 function External.CreateElementRegistrar(API, OWNER, registered)
     return function(element)
         if registered[element.id] then return true end
