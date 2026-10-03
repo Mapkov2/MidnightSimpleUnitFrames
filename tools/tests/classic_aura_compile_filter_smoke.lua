@@ -8,9 +8,10 @@
 --
 -- This smoke loads the real Classic Features, Compile and UnitFrames files and
 -- answers C_UnitAuras with a stub whose filter tokens behave like the client's
--- (PLAYER = cast by the player, pet or vehicle; HARMFUL|RAID = a debuff that
--- has a dispel type; RAID_PLAYER_DISPELLABLE = a dispel type this player's
--- class removes). It asserts only observable results: compiled filter
+-- (PLAYER = cast by the player, pet or vehicle; HARMFUL|RAID and
+-- RAID_PLAYER_DISPELLABLE = a dispel type this player's class removes, as
+-- Blizzard's AuraUtil.lua uses HARMFUL|RAID for its dispellable debuffs on
+-- every Classic client). It asserts only observable results: compiled filter
 -- strings, the filters handed to the API, and which aura instance IDs end up
 -- visible or light the dispel border.
 --
@@ -67,12 +68,8 @@ function World.Matches(record, filter)
         elseif token == "PLAYER" then
             if record.fromPlayer ~= true then return false end
         elseif token == "RAID" then
-            if World.era then
-                -- Classic Era: HARMFUL|RAID returns the debuffs this player can cure.
-                if not (record.harmful and record.dispel and World.removable[record.dispel]) then
-                    return false
-                end
-            elseif not (record.harmful and record.dispel) then
+            -- Every Classic client: HARMFUL|RAID returns the debuffs this player can cure.
+            if not (record.harmful and record.dispel and World.removable[record.dispel]) then
                 return false
             end
         elseif token == "RAID_PLAYER_DISPELLABLE" then
@@ -341,7 +338,8 @@ do
     local direct = Compile.DirectVisualFilterForTrigger
     Check(direct("PLAYER_CAST") == "HARMFUL|PLAYER", "PLAYER_CAST no longer queries the player's own debuffs")
     Check(direct("BY_ME") == "HARMFUL|RAID_PLAYER_DISPELLABLE", "BY_ME no longer queries debuffs this player can dispel")
-    Check(direct("DISPEL_TYPE") == "HARMFUL|RAID", "DISPEL_TYPE no longer queries typed debuffs")
+    Check(direct("DISPEL_TYPE") == "HARMFUL",
+        "DISPEL_TYPE does not read every debuff (HARMFUL|RAID keeps only what the player can cure)")
     Check(direct("ANY_DEBUFF") == nil and direct("BORDER") == nil and direct(nil) == nil,
         "a trigger without a native filter was given a direct-visual query")
 
@@ -553,10 +551,16 @@ do
     frame = DirectFrame({ dispel = true, dispelTrigger = "PLAYER_CAST" })
     ExpectBorder(frame, false, nil, "direct PLAYER_CAST without an own debuff")
 
-    World.Set("target", ordered)
-    frame = DirectFrame({ dispel = true, dispelTrigger = "DISPEL_TYPE" })
-    ExpectBorder(frame, true, magicForeign.id, "direct DISPEL_TYPE")
-    ExpectOnlyIndexFilter("HARMFUL|RAID", "direct DISPEL_TYPE")
+    -- Any dispel type lights for the first typed debuff whoever can cure it,
+    -- past the untyped debuff at index 1.
+    for _, class in ipairs(CLASSES) do
+        World.removable = class.removable
+        World.Set("target", ordered)
+        frame = DirectFrame({ dispel = true, dispelTrigger = "DISPEL_TYPE" })
+        ExpectBorder(frame, true, magicForeign.id, "direct DISPEL_TYPE for " .. class.name)
+        ExpectOnlyIndexFilter("HARMFUL", "direct DISPEL_TYPE for " .. class.name)
+    end
+    World.removable = CLASSES[1].removable
 
     World.Set("target", { helpfulOwn, untypedForeign, debuffOwn })
     frame = DirectFrame({ dispel = true, dispelTrigger = "DISPEL_TYPE" })

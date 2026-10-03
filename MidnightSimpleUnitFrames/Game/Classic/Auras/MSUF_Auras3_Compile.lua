@@ -432,7 +432,9 @@ local function DirectVisualFilterForTrigger(trigger)
     elseif trigger == "BY_ME" then
         return DISPELLABLE_DEBUFF_FILTER
     elseif trigger == "DISPEL_TYPE" then
-        return "HARMFUL|RAID"
+        -- Not HARMFUL|RAID: that keeps only what the player can dispel. The
+        -- reader walks these debuffs to the first one with a dispel type.
+        return "HARMFUL"
     end
 end
 

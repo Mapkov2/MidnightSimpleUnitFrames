@@ -89,12 +89,16 @@ local function ResolveDirectDispelTriggerVisual(unit, visual, trigger)
         return false
     end
     local data = GetAuraDataByIndex(unit, 1, filter)
+    -- Any dispel type: the first debuff with a readable dispel type, whoever
+    -- can dispel it. The walk ends after the unit's last debuff, and after
+    -- 40 indexes at most.
+    local index = 1
+    while trigger == "DISPEL_TYPE" and data and (PlainString(data.dispelName) or "") == "" do
+        index = index + 1
+        data = index <= 40 and GetAuraDataByIndex(unit, index, filter) or nil
+    end
     if not (data and data.auraInstanceID) then
         return false
-    end
-    if trigger == "DISPEL_TYPE" then
-        local dispelName = PlainString(data.dispelName)
-        if dispelName == nil or dispelName == "" then return false end
     end
     local token = data.auraInstanceID
     if IsSecret(token) then token = nil end

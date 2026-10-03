@@ -130,9 +130,10 @@ local function Matches(aura, filter)
         return false
     end
     if filter:find("|PLAYER", 1, true) and aura.mine ~= true then return false end
-    -- HARMFUL|RAID (Classic Era's dispellable filter and the Any dispel type
-    -- trigger) and HARMFUL|RAID_PLAYER_DISPELLABLE both keep typed debuffs only.
-    if filter:find("|RAID", 1, true) and aura.dispelName == nil then return false end
+    -- HARMFUL|RAID and HARMFUL|RAID_PLAYER_DISPELLABLE keep the debuffs the
+    -- player can dispel, as on the client (Blizzard's AuraUtil.lua). This
+    -- player dispels nothing: every border here is Any dispel type.
+    if filter:find("|RAID", 1, true) then return false end
     return true
 end
 _G.UnitExists = function() return true end
