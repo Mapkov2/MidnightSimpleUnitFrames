@@ -139,6 +139,7 @@ local CASTBAR_GENERAL_KEYS = KSW [[
     empowerColorStages enableFocusKickIcon focusKickShowCastbar focusKickIconWidth focusKickIconHeight focusKickTextSize
     focusKickIconOffsetX focusKickIconOffsetY kickReadyShowTarget kickReadyShowFocus kickReadyShowBoss kickReadyShowArena
     kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY kickReadyTimeMarker kickReadyTimeSegment
+    showGCDBar showGCDBarTime showGCDBarSpell gcdBarDetached gcdBarIdle gcdBarCombatOnly gcdBarWidth gcdBarHeight gcdBarX gcdBarY gcdBarOpacity
 ]]
 local MODULES_GENERAL_KEYS = KS("styleEnabled")
 local COLOR_GENERAL_KEYS = KSW "playerCastbarOverrideEnabled playerCastbarOverrideMode npcClassColorBar npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT"

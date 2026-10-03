@@ -276,12 +276,16 @@ end
 ---------------------------------------------------------------------------
 -- Each path is written by a control on that page and read by the runtime, and
 -- the page's reset summary names it (Fonts: name shortening; Castbar:
--- interrupt indicator; Bars: everything its own sections show, with the
+-- interrupt indicator and the GCD bar section, offered wherever the client can
+-- drive the bar; Bars: everything its own sections show, with the
 -- per-unit/group bar overrides they write; Class Resources: behavior), yet the
 -- reset left it at the user's value.
 local PAGE_OWNED = {
     { "opt_fonts", Words [[general.shortenNameMaxChars general.shortenNameClipSide general.shortenNameShowDots]] },
-    { "opt_castbar", Words [[general.kickReadyTimeMarker general.kickReadyTimeSegment]] },
+    { "opt_castbar", Words [[general.kickReadyTimeMarker general.kickReadyTimeSegment
+        general.showGCDBar general.showGCDBarTime general.showGCDBarSpell general.gcdBarDetached general.gcdBarIdle
+        general.gcdBarCombatOnly general.gcdBarWidth general.gcdBarHeight general.gcdBarX general.gcdBarY
+        general.gcdBarOpacity]] },
     { "opt_bars", Words [[bars.powerBarTexture bars.powerBarBgTexture bars.roundedCornerStrength
         general.powerGradientStrength player.powerGradientStrength gf_party.powerGradientStrength
         bars.slantedBarsEnabled bars.slantedBarDirection bars.slantedUnitFrames bars.slantedGroupFrames
