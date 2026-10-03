@@ -234,8 +234,11 @@ end
 ExportPublic("MSUF_SuppressBlizzardPlayerCastbars", SuppressBlizzardPlayerCastbars)
 ExportPublic("MSUF_ApplyBlizzardCastbarOwnership", SuppressBlizzardPlayerCastbars)
 
+local SyncBlizzardCastbarEvents
 eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(_, event, addonName)
+    -- The first event with the saved profile: keep the events it asks for.
+    if event == "PLAYER_LOGIN" then SyncBlizzardCastbarEvents() end
     if event == "ADDON_LOADED"
         and addonName ~= "Blizzard_CastingBarFrame"
         and addonName ~= "Blizzard_CastingBar"
@@ -247,18 +250,24 @@ eventFrame:SetScript("OnEvent", function(_, event, addonName)
     SuppressBlizzardPlayerCastbars()
 end)
 
-local function SyncBlizzardCastbarEvents()
+local function RegisterOwnershipEvents()
+    eventFrame:RegisterEvent("PLAYER_LOGIN")
+    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    eventFrame:RegisterEvent("ADDON_LOADED")
+end
+
+SyncBlizzardCastbarEvents = function()
     local wanted = not ShouldUseBlizzard("player")
     eventFrame:UnregisterAllEvents()
-    if wanted then
-        eventFrame:RegisterEvent("PLAYER_LOGIN")
-        eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        eventFrame:RegisterEvent("ADDON_LOADED")
-    end
+    if wanted then RegisterOwnershipEvents() end
     if nativeOwnershipPending then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
     return wanted
 end
-SyncBlizzardCastbarEvents()
+-- Not SyncBlizzardCastbarEvents at file load: the client loads the
+-- SavedVariables after every file ran, so the backend read there answered the
+-- default (MSUF owns the player castbar). Until login the events are the ones
+-- that default asked for; PLAYER_LOGIN resyncs them from the saved profile.
+RegisterOwnershipEvents()
 
 local AreAnyCastbarsEnabled = _G.MSUF_AreAnyCastbarsEnabled
 if type(AreAnyCastbarsEnabled) ~= "function" then
