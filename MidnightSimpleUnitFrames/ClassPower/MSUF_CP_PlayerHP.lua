@@ -432,8 +432,19 @@ local function RenderedTextMatches(rt, hp, maxHP)
         and rt._lastHealthTextMissing == missing
 end
 
-local function ApplyCopiedTextColor(dst, r, g, b, a)
-    if not (dst and r and dst.SetTextColor) then return end
+--- A slot coloured from secret health ("HP text color by health": Text_Common
+--- SetHealthTextSlotColorSecret) keeps no plain colour stamp, and its
+--- FontString:GetTextColor reads back secret (SecretReturnsForAspect VertexColor).
+--- ReadTextSlot flags such a colour; it goes to SetTextColor unread and clears the
+--- copy's stamp, so a later plain colour is painted again.
+local function ApplyCopiedTextColor(dst, r, g, b, a, secretColor)
+    if not (dst and dst.SetTextColor) then return end
+    if secretColor then
+        dst:SetTextColor(r, g, b, a)
+        dst._phpTextR, dst._phpTextG, dst._phpTextB, dst._phpTextA = nil, nil, nil, nil
+        return
+    end
+    if r == nil then return end
     a = a or 1
     if dst._phpTextR == r and dst._phpTextG == g and dst._phpTextB == b and dst._phpTextA == a then return end
     dst:SetTextColor(r, g, b, a)
@@ -455,6 +466,7 @@ local function ReadTextSlot(src)
         r, g, b, a = src._msufTextR, src._msufTextG, src._msufTextB, src._msufTextA
         if r == nil and src.GetTextColor then
             r, g, b, a = src:GetTextColor()
+            if issecretvalue(r) then return text, r, g, b, a, true end
         end
     end
     return text, r, g, b, a
@@ -462,22 +474,22 @@ end
 
 local function CopyTextSlot(src, dst)
     if not dst then return false end
-    local text, r, g, b, a = ReadTextSlot(src)
-    ApplyCopiedTextColor(dst, r, g, b, a)
+    local text, r, g, b, a, secretColor = ReadTextSlot(src)
+    ApplyCopiedTextColor(dst, r, g, b, a, secretColor)
     SetText(dst, text)
     return true
 end
 
 local function CopyCompactText(playerFrame)
     if not (PHP.center and playerFrame) then return false end
-    local text, r, g, b, a = ReadTextSlot(playerFrame.hpTextCenter)
+    local text, r, g, b, a, secretColor = ReadTextSlot(playerFrame.hpTextCenter)
     if issecretvalue(text) ~= true and text == "" then
-        text, r, g, b, a = ReadTextSlot(playerFrame.hpTextRight)
+        text, r, g, b, a, secretColor = ReadTextSlot(playerFrame.hpTextRight)
     end
     if issecretvalue(text) ~= true and text == "" then
-        text, r, g, b, a = ReadTextSlot(playerFrame.hpTextLeft)
+        text, r, g, b, a, secretColor = ReadTextSlot(playerFrame.hpTextLeft)
     end
-    ApplyCopiedTextColor(PHP.center, r, g, b, a)
+    ApplyCopiedTextColor(PHP.center, r, g, b, a, secretColor)
     SetText(PHP.left, "")
     SetText(PHP.right, "")
     SetText(PHP.center, text)

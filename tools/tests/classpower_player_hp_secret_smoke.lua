@@ -173,8 +173,14 @@ end
 --    repaint) at what it cost when the modes were bare numbers. The percent modes, which
 --    the default text uses, may not cost more; the others read a set, which is 2 to 6
 --    instructions more than a literal compare chain whose first branches are one compare.
+--    2026-10-03: a copied slot without a plain colour stamp reads FontString:GetTextColor,
+--    which is secret for a slot painted from secret health (section 7). The issecretvalue
+--    check on that read costs 13 instructions per mirrored slot in this stub world (a C
+--    call in the client), +39 on the rows that copy (current stamps): 621 -> 660 unset,
+--    655 -> 694 percent. Stale stamps copy nothing and stay as they were.
 do
     local ALLOWANCE = 6
+    local COPY_COLOUR_CHECK = 39
     local MODES = {
         -- { label, mode, stamped health, stamped max, budget with current stamps, budget with stale stamps,
         --   allowance } for 500 of 1000 health
@@ -193,7 +199,7 @@ do
     for _, row in ipairs(MODES) do
         local label, mode, stampHP, stampMax = row[1], row[2], row[3], row[4]
         for _, stale in ipairs({ false, true }) do
-            local budget = (stale and row[6] or row[5]) + row[7]
+            local budget = (stale and row[6] or row[5] + COPY_COLOUR_CHECK) + row[7]
             local api, playerFrame = Build({ playerHPBarUsePlayerText = true })
             for _, slot in ipairs({ { "hpTextLeft", "L" }, { "hpTextCenter", "C" }, { "hpTextRight", "R" } }) do
                 local fs = playerFrame:CreateFontString(nil, "OVERLAY")
@@ -272,8 +278,56 @@ do
     _G.MSUF_NS.UFBarTextCommon = nil
 end
 
+-- 7. Mirrored text with "HP text color by health": the player frame paints its slots
+--    with a secret colour (MSUF_UF_Text_Common.lua SetHealthTextSlotColorSecret clears
+--    _msufTextR), so FontString:GetTextColor reads back secret (SecretReturnsForAspect
+--    VertexColor). The copy hands it to SetTextColor unread and keeps no secret stamp;
+--    a plain colour afterwards is painted once and stamped again.
+for _, shape in ipairs({ "BAR", "ORB" }) do
+    local api, playerFrame = Build({ playerHPBarUsePlayerText = true, playerHPBarShape = shape })
+    local PHP = api.PHP
+    playerFrame._msufTextRuntime = { healthSlotCount = 1 }
+    for _, key in ipairs({ "hpTextLeft", "hpTextCenter", "hpTextRight" }) do
+        local fs = playerFrame:CreateFontString(nil, "OVERLAY")
+        fs.shown = true
+        fs._aText = "50%"
+        fs.GetTextColor = function() return S.textR, S.textG, S.textB, S.textA end
+        playerFrame[key] = fs
+    end
+    local slots = shape == "ORB" and { PHP.center } or { PHP.left, PHP.center, PHP.right }
+    for _, fs in ipairs(slots) do RecordColor(fs, "SetTextColor") end
+    for pass = 1, 2 do
+        SecretHealth()
+        S.textR, S.textG, S.textB, S.textA = Secrets.New("number"), Secrets.New("number"),
+            Secrets.New("number"), Secrets.New("number")
+        for _, fs in ipairs(slots) do fs.writes = {} end
+        local ok, err, violations = Watched(function() api.Update("UNIT_HEALTH") end)
+        local label = shape .. " text colour pass " .. pass
+        Check(ok, label .. ": a secret player text colour raised: " .. tostring(err))
+        Check(#violations == 0, label .. ": a secret player text colour was compared:\n    "
+            .. table.concat(violations, "\n    "))
+        for _, fs in ipairs(slots) do
+            local write = fs.writes[#fs.writes]
+            Check(write and rawequal(write[1], S.textR) and rawequal(write[4], S.textA),
+                label .. ": the secret player text colour did not reach SetTextColor")
+            Check(fs._phpTextR == nil and fs._phpTextA == nil, label .. ": a secret text colour was kept as a stamp")
+        end
+    end
+    S.textR, S.textG, S.textB, S.textA = 1, 0.5, 0, 1
+    for _, fs in ipairs(slots) do fs.writes = {} end
+    SecretHealth()
+    api.Update("UNIT_HEALTH")
+    SecretHealth()
+    api.Update("UNIT_HEALTH")
+    for _, fs in ipairs(slots) do
+        Check(#fs.writes == 1 and fs.writes[1][2] == 0.5, shape
+            .. ": a plain player text colour after a secret one is not painted once and stamped: "
+            .. #fs.writes .. " writes")
+    end
+end
+
 if #failures > 0 then
     error("classpower_player_hp_secret_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
 print("classpower_player_hp_secret_smoke: ok (secret copy, own percent, hidden symbol, compact, change-key modes,"
-    .. " secret gradient)")
+    .. " secret gradient, secret text colour)")
