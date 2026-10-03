@@ -170,34 +170,25 @@ function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
     return nil
 end
 
+--- Called on every UNIT_AURA whose payload is hidden: no closure per call.
 function CPAuras.RefreshActive(powerType, renderMode)
-    local changed = false
-    local handled = true
-    local function Refresh(spellID, stateKind)
-        if CPAuras.RefreshSpell(spellID, stateKind) then changed = true end
-    end
-
     if powerType == "MAELSTROM_WEAPON" then
-        Refresh(CPK.SPELL.MAELSTROM_WEAPON, "stacks")
+        return CPAuras.RefreshSpell(CPK.SPELL.MAELSTROM_WEAPON, "stacks")
     elseif powerType == "ICICLES" then
-        Refresh(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
+        return CPAuras.RefreshSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
     elseif powerType == "SOUL_FRAGMENTS" then
-        Refresh(CPK.SPELL.VOID_METAMORPHOSIS, "stacks")
-        Refresh(CPK.SPELL.SILENCE_THE_WHISPERS, "stacks")
-        Refresh(CPK.SPELL.DARK_HEART, "stacks")
+        --- All three refresh, whatever the first ones report.
+        local void = CPAuras.RefreshSpell(CPK.SPELL.VOID_METAMORPHOSIS, "stacks")
+        local silence = CPAuras.RefreshSpell(CPK.SPELL.SILENCE_THE_WHISPERS, "stacks")
+        local heart = CPAuras.RefreshSpell(CPK.SPELL.DARK_HEART, "stacks")
+        return void or silence or heart
     elseif powerType == "SOUL_FRAGMENTS_VENG" then
         --- Vengeance reads the native spell cast count; UNIT_AURA is only a
         --- value-change signal and does not require any aura-cache queries.
-        changed = true
-    else
-        handled = false
-    end
-
-    if not handled then
-        CPAuras.Rebuild()
         return true
     end
-    return changed
+    CPAuras.Rebuild()
+    return true
 end
 
 function CPAuras.IsExpired(aura)
