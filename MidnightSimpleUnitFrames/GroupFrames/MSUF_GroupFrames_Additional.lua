@@ -578,15 +578,47 @@ local function ApplyPets(kind, conf, enabled)
         ConfigurePetHeader(header, kind, conf, width, height, units, math.ceil(cap / units), 1)
     end
 end
+-- A boss token can pass to another friendly NPC while its button stays shown:
+-- no OnShow and no name event repaint it then. Blizzard's boss frames run a
+-- full Update for both cases (TargetFrame.lua OnEvent: INSTANCE_ENCOUNTER_
+-- ENGAGE_UNIT for every boss frame, UNIT_TARGETABLE_CHANGED for its own unit),
+-- so the holder listens while the block is on and repaints the identity of
+-- each shown button. Unit tokens are compared only when readable.
+local BOSS_IDENTITY_EVENTS = { "INSTANCE_ENCOUNTER_ENGAGE_UNIT", "UNIT_TARGETABLE_CHANGED" }
+local function RepaintBosses(_, event, unit)
+    local targetable = event == "UNIT_TARGETABLE_CHANGED"
+    if targetable and issecretvalue(unit) then return end
+    for i = 1, #bossButtons do
+        local button = bossButtons[i]
+        if button.unit and button:IsShown() and (not targetable or button.unit == unit) then PaintIdentity(button, event) end
+    end
+end
+local function ListenBossIdentity(holder, on)
+    if (holder._msufIdentityEvents == true) == on then return end
+    holder._msufIdentityEvents = on
+    if not on then
+        holder:UnregisterAllEvents()
+        return
+    end
+    holder:SetScript("OnEvent", RepaintBosses)
+    -- No client facts (a harness) is a client with the events, as BOSS_UNITS.
+    local supports = Client and Client.SupportsEvent
+    for i = 1, #BOSS_IDENTITY_EVENTS do
+        local event = BOSS_IDENTITY_EVENTS[i]
+        if not supports or supports(event) then holder:RegisterEvent(event) end
+    end
+end
 local function ApplyBosses(kind, conf, enabled)
     local holder = Holder("FriendlyBosses")
     holder._msufAdditionalKind, holder._msufAdditionalPrefix = kind, "friendlyBoss"
     local healer = GF.GetUnitGroupRole("player") == "HEALER"
     if not BOSS_UNITS or not enabled or conf.friendlyBossEnabled ~= true or (conf.friendlyBossHealerOnly ~= false and not healer) then
         SuspendButtons(bossButtons)
+        ListenBossIdentity(holder, false)
         holder:Hide()
         return
     end
+    ListenBossIdentity(holder, true)
     local count = min(5, _G.MAX_BOSS_FRAMES or 5)
     local width, height, columns, totalW, totalH = Geometry(conf, "friendlyBoss", count)
     Place(holder, conf, "friendlyBoss", totalW, totalH)
