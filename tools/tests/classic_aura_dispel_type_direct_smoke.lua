@@ -15,8 +15,12 @@
 --   * a group frame whose debuff lane scans natively with PLAYER (Only mine)
 --     reads it from the unit the same way
 --   * the direct path stays direct and cheap: no lane scan with the icons off,
---     an add or remove reads the debuffs up to the first typed one (40 at
---     most), and an update-only payload reads nothing
+--     an add or remove reads the debuffs up to the first typed one (past 40
+--     untyped ones too; a reader that never answers nil stops at the 1000
+--     sanity bound), and an update-only payload reads nothing, also with the
+--     icons on, a duration sort and fresh aura tables that reorder the lane
+--   * on a group frame whose stripe follows an Only mine lane, an update-only
+--     payload still moves the stripe without re-reading the unit
 -- Arguments: repository root, flavor (Vanilla, TBC or Mists).
 local root = assert(arg[1], "repository root argument missing")
 root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
@@ -84,6 +88,7 @@ local PLAYER_CAN_DISPEL = {} -- a Warrior removes no dispel type
 local world = {}
 local api = { index = 0, slots = 0 }
 local unknownFilters = {}
+local endless -- an aura the index reader answers past the last one (a reader that never answers nil)
 local function UnitList(unit) world[unit] = world[unit] or {}; return world[unit] end
 local function Matches(aura, filter)
     local helpful, harmful = false, false
@@ -134,14 +139,15 @@ _G.C_UnitAuras = {
         for _, aura in ipairs(UnitList(unit)) do
             if Matches(aura, filter) then n = n + 1; if n == index then return aura end end
         end
-        return nil
+        return endless
     end,
 }
 _G.AuraUtil = {}
 
-local function DB(targetIcons)
+local function DB(targetIcons, debuffSort)
     _G.MSUF_DB = { general = {}, auras3 = { enabled = true, showTarget = targetIcons == true, shared = {}, perUnit = {
-        target = { layout = {}, layoutShared = { showBuffs = false, showDebuffs = true }, filters = { debuffs = {} } },
+        target = { layout = {}, layoutShared = { showBuffs = false, showDebuffs = true, debuffSortMethod = debuffSort },
+            filters = { debuffs = {} } },
     } } }
 end
 DB(false)
@@ -241,15 +247,26 @@ end)
 ExpectBorder(target, nil, "icons off, untyped debuffs only")
 assert(index == 3 and slots == 0, ("no typed debuff: %d index reads and %d slot lists, expected 3 and 0 (%s)")
     :format(index, slots, flavor))
--- The walk is bounded: 40 index reads at most, however many debuffs answer.
+-- No client caps a unit's debuffs at 40: a typed debuff at index 41 still lights it.
 local many = {}
-for i = 1, 50 do many[i] = Debuff(nil) end
+for i = 1, 40 do many[i] = Debuff(nil) end
+local deepMagic = Debuff("Magic")
+many[41] = deepMagic
 world.target = many
 index, slots = Calls(function()
-    registered.Update(target, "UNIT_AURA", "target", { addedAuras = { many[50] } })
+    registered.Update(target, "UNIT_AURA", "target", { addedAuras = { deepMagic } })
 end)
-ExpectBorder(target, nil, "icons off, 50 untyped debuffs")
-assert(index == 40 and slots == 0, ("50 untyped debuffs: %d index reads and %d slot lists, expected 40 and 0 (%s)")
+ExpectBorder(target, deepMagic, "icons off, Magic debuff behind 40 untyped ones")
+assert(index == 41 and slots == 0, ("Magic at index 41: %d index reads and %d slot lists, expected 41 and 0 (%s)")
+    :format(index, slots, flavor))
+-- A reader that never answers nil stops at the sanity bound.
+world.target, endless = {}, Debuff(nil)
+index, slots = Calls(function()
+    registered.Update(target, "UNIT_AURA", "target", { removedAuraInstanceIDs = { deepMagic.auraInstanceID } })
+end)
+endless = nil
+ExpectBorder(target, nil, "icons off, a reader that never answers nil")
+assert(index == 1000 and slots == 0, ("endless reader: %d index reads and %d slot lists, expected 1000 and 0 (%s)")
     :format(index, slots, flavor))
 
 -- 2. Overlay on the same trigger, without the border -------------------------------------
@@ -261,14 +278,40 @@ assert(A3.ResolveUnitFrameConfig("target", overlaySpec).visualDirect == true,
 Expect(overlay, "_msufA3DispelOverlayActive", "_msufA3DispelOverlayToken", magic, "icons off, overlay")
 
 -- 3. Debuff icons on, still no filter work ----------------------------------------------
-DB(true)
+-- A duration sort re-renders the lane on an update-only payload whose fresh aura
+-- table carries a new duration; the border, read from the unit, is not re-read.
+DB(true, "DURATION")
 A3.BumpRuntimeConfig()
+local u2, u3 = Debuff(nil), Debuff(nil)
+u2.duration, u3.duration = 60, 90
+world.target = { untyped, u2, u3, magic }
 local iconSpec = { border = { dispel = true, dispelTrigger = "DISPEL_TYPE" } }
 local icons = NewFrame("target", iconSpec)
 local iconCfg = A3.ResolveUnitFrameConfig("target", iconSpec)
-assert(iconCfg.visualDirect == true and iconCfg.lanes.debuff and iconCfg.lanes.debuff.renderEnabled == true,
-    "precondition: the debuff icons are not on beside a direct border (" .. flavor .. ")")
-ExpectBorder(icons, magic, "icons on, Magic debuff behind an untyped one")
+assert(iconCfg.visualDirect == true and iconCfg.lanes.debuff and iconCfg.lanes.debuff.renderEnabled == true
+    and iconCfg.lanes.debuff.reorderOnUpdate == true,
+    "precondition: the duration-sorted debuff icons are not on beside a direct border (" .. flavor .. ")")
+ExpectBorder(icons, magic, "icons on, Magic debuff behind untyped ones")
+local iconLane = icons._msufA3State.lanes.debuff
+local moves, lastSlot = 0, iconLane.visibleByID[untyped.auraInstanceID]
+index, slots = Calls(function()
+    for i = 1, 100 do
+        local fresh = {}
+        for key, value in pairs(world.target[1]) do fresh[key] = value end
+        fresh.duration = i % 2 == 0 and 5 or 500
+        fresh.expirationTime = 50 + fresh.duration
+        world.target[1] = fresh
+        registered.Update(icons, "UNIT_AURA", "target", { updatedAuraInstanceIDs = { fresh.auraInstanceID } })
+        local slot = iconLane.visibleByID[fresh.auraInstanceID]
+        if slot ~= lastSlot then moves = moves + 1 end
+        lastSlot = slot
+    end
+end)
+assert(moves >= 50, ("precondition: the duration sort moved the refreshed icon %d times in 100 updates (%s)")
+    :format(moves, flavor))
+ExpectBorder(icons, magic, "icons on, after 100 duration refreshes")
+assert(index == 0 and slots == 0, ("100 duration refreshes with icons on: %d index reads and %d slot lists, expected 0 (%s)")
+    :format(index, slots, flavor))
 
 -- 4. Group frame, Only mine debuff lane (native PLAYER scan) ------------------------------
 world.party1 = { Debuff(nil), Debuff("Curse") }
@@ -280,6 +323,35 @@ local groupCfg = assert(group._msufA3GroupConfig, "group aura config missing (" 
 assert(groupCfg.visualDirect == true and groupCfg.lanes.debuff.nativePlayerFilter == true,
     "precondition: an Only mine group debuff lane is not a native PLAYER scan (" .. flavor .. ")")
 ExpectBorder(group, world.party1[2], "group Only mine lane, Curse debuff from another caster")
+
+-- 5. The stripe still follows the lane on an update-only payload ----------------------------
+-- Hide permanent keeps the player's own permanent debuff off the Only mine lane;
+-- refreshed as a timed debuff (a fresh aura table), it enters the lane and the
+-- stripe shows, while the border keeps the Curse it read from the unit.
+local ownPermanent, curse = Debuff(nil, true), Debuff("Curse")
+ownPermanent.duration, ownPermanent.expirationTime = 0, 0
+world.party2 = { ownPermanent, curse }
+local stripeSpec = { scope = "group", border = { dispel = true, dispelTrigger = "DISPEL_TYPE" },
+    group = { debuffStripeEnabled = true }, auras = {
+        enabled = true, showDebuffs = true, maxDebuffs = 4, debuffFilter = "HARMFUL|PLAYER", debuffHidePermanent = true,
+    } }
+local striped = NewFrame("party2", stripeSpec, true)
+local stripedCfg = assert(striped._msufA3GroupConfig, "striped group aura config missing (" .. flavor .. ")")
+assert(stripedCfg.visualDirect == true and stripedCfg.visual.stripeEnabled == true,
+    "precondition: the striped Only mine group lane is not a direct visual (" .. flavor .. ")")
+ExpectBorder(striped, curse, "striped group lane, Curse debuff from another caster")
+assert(striped._msufA3DebuffStripeActive ~= true, "the stripe shows a hidden permanent debuff (" .. flavor .. ")")
+local timed = {}
+for key, value in pairs(ownPermanent) do timed[key] = value end
+timed.duration, timed.expirationTime = 20, 70
+world.party2 = { timed, curse }
+index, slots = Calls(function()
+    registered.Update(striped, "UNIT_AURA", "party2", { updatedAuraInstanceIDs = { timed.auraInstanceID } })
+end)
+assert(striped._msufA3DebuffStripeActive == true,
+    "the stripe did not follow the lane when the own debuff became timed (" .. flavor .. ")")
+ExpectBorder(striped, curse, "striped group lane after the own debuff became timed")
+assert(index == 0, ("stripe update re-read the unit: %d index reads (%s)"):format(index, flavor))
 
 assert(#unknownFilters == 0, "the backend queried an unsupported filter: " .. tostring(unknownFilters[1]))
 print("classic aura dispel type direct smoke passed: " .. flavor)

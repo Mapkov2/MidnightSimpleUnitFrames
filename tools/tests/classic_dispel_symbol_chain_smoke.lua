@@ -89,8 +89,18 @@ Check(runtime:find("local debuff = (sourceEnabled and source.showDebuffs == true
 --- direct branch used to skip it: turning the symbol off flips
 --- directVisualEligible on, so that branch takes over and the last rendered
 --- symbol stayed frozen on the frame forever.
-local body = runtime:match("\nlocal function UpdateFrameAuraVisualState%(frame, state, cfg, unit%)\n(.-)\nend\n")
+local body = runtime:match("\nlocal function UpdateFrameAuraVisualState%(frame, state, cfg, unit, stripeOnly%)\n(.-)\nend\n")
 Check(body, "UpdateFrameAuraVisualState is no longer recognisable")
+--- The stripe-only exit leaves the symbol host as it is. That is safe only
+--- because UnitFrames.lua asks for it on an update-only payload under the same
+--- config: a config change (a symbol turned off included) is a full update
+--- there, which re-runs the whole direct branch.
+Check(runtime:find("if full or membershipBumped then\n            visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit) == true\n"
+    .. "        elseif changedCount > 0 and cfg.visual and cfg.visual.stripeEnabled == true then\n"
+    .. "            visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit, true) == true\n", 1, true),
+  "the stripe-only direct visual update is reachable outside an update-only payload")
+Check(runtime:find("forceFull = forceFull == true or state.config ~= cfg", 1, true),
+  "a config change no longer forces the full update that refreshes the symbol host")
 local directBranch = body:match("(if cfg and cfg%.visualDirect == true then.-\n    end)")
 Check(directBranch, "the direct-visual branch is no longer recognisable")
 --- The direct branch hands the host to the unit-walk symbol helper (symbols

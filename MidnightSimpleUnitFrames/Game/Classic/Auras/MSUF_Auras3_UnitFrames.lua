@@ -227,9 +227,11 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
     local visualChanged = false
     if cfg.visualDirect == true then
         -- Same rule as the lane-less exit above; a lane that changed may move
-        -- the debuff stripe, which follows the lane.
-        if full or membershipBumped or changedCount > 0 then
+        -- the debuff stripe, which follows the lane, and nothing else.
+        if full or membershipBumped then
             visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
+        elseif changedCount > 0 and cfg.visual and cfg.visual.stripeEnabled == true then
+            visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit, true) == true
         end
     elseif auraVisualDirty == true then
         if cfg.visual ~= nil or FrameHasAuraVisualState(frame) then

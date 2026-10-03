@@ -63,13 +63,6 @@ local h = Harness.New(root, flavor, { beforeBoot = function(harness)
         pairScans = pairScans + 1
         return realPairs(t)
     end
-    -- The world's catch-all stub answers C_UnitAuras.GetAuraSlots with no slot
-    -- but GetAuraDataByIndex with an aura at every index, which no client does.
-    -- Answer the index read as a client answers it for a unit without auras,
-    -- so a debuff walk (the Classic Any dispel type border) is measured at its
-    -- in-game cost, not at its 40-index bound.
-    local stub = harness.env.C_UnitAuras
-    harness.env.C_UnitAuras = setmetatable({ GetAuraDataByIndex = function() return nil end }, { __index = stub })
 end })
 local GF, env = h.GF, h.env
 -- Native counting runs the same scenarios separately, keeping hook allocations

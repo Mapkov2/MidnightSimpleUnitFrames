@@ -90,12 +90,14 @@ local function ResolveDirectDispelTriggerVisual(unit, visual, trigger)
     end
     local data = GetAuraDataByIndex(unit, 1, filter)
     -- Any dispel type: the first debuff with a readable dispel type, whoever
-    -- can dispel it. The walk ends after the unit's last debuff, and after
-    -- 40 indexes at most.
+    -- can dispel it. The walk ends at the unit's last debuff, where the client
+    -- answers nil, as Blizzard's AuraUtil.FindAura walks; no client documents
+    -- an aura count limit. The 1000 bound is a sanity stop only, for a reader
+    -- that never answers nil; no unit carries that many debuffs.
     local index = 1
     while trigger == "DISPEL_TYPE" and data and (PlainString(data.dispelName) or "") == "" do
         index = index + 1
-        data = index <= 40 and GetAuraDataByIndex(unit, index, filter) or nil
+        data = index <= 1000 and GetAuraDataByIndex(unit, index, filter) or nil
     end
     if not (data and data.auraInstanceID) then
         return false
@@ -361,7 +363,7 @@ local function DispelBorderShowOnAllows(visual, unit)
     return not canAssist
 end
 
-local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
+local function UpdateFrameAuraVisualState(frame, state, cfg, unit, stripeOnly)
     local visual = cfg and cfg.visual
     if not (visual and visual.enabled == true) then
         return ClearFrameAuraVisualState(frame)
@@ -370,6 +372,17 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
     -- The stripe alone shows the debuffs the lane's filter matches.
     local stripeActive = visual.stripeEnabled == true and HasActiveDebuff(debuffLane)
     if cfg and cfg.visualDirect == true then
+        -- stripeOnly: an update-only payload changes no debuff's dispel type,
+        -- caster or membership, so what was read from the unit stands and
+        -- only the stripe, which follows the lane, may move.
+        if stripeOnly == true then
+            return SetFrameAuraVisualState(frame, frame._msufA3DispelActive == true,
+                frame._msufA3DispelR, frame._msufA3DispelG, frame._msufA3DispelB, frame._msufA3DispelA,
+                frame._msufA3DispelColorSecret == true, frame._msufA3DispelToken,
+                frame._msufA3DispelOverlayActive == true, frame._msufA3DispelOverlayR, frame._msufA3DispelOverlayG,
+                frame._msufA3DispelOverlayB, frame._msufA3DispelOverlayA,
+                frame._msufA3DispelOverlayColorSecret == true, frame._msufA3DispelOverlayToken, stripeActive, visual)
+        end
         --- Symbols are on here only for a lane with a native PLAYER scan; the
         --- helper also hides a host left over from the previous config, so a
         --- symbol turned off never stays frozen on the frame.

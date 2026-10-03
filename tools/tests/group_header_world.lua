@@ -360,6 +360,13 @@ function Harness.New(root, flavor, options)
         return createFrame(frameType, name, parent, template)
     end
 
+    -- Units carry no auras here. The catch-all stub would answer
+    -- C_UnitAuras.GetAuraDataByIndex with an aura at every index while its
+    -- GetAuraSlots reports none; answer the index read as a client does for a
+    -- unit without auras, so a debuff walk (the Classic Any dispel type
+    -- border) ends where it ends in game.
+    env.C_UnitAuras = setmetatable({ GetAuraDataByIndex = function() return nil end }, { __index = env.C_UnitAuras })
+
     if options.beforeBoot then options.beforeBoot(h) end
     world:Boot()
     local failure = world:FirstFailure()
