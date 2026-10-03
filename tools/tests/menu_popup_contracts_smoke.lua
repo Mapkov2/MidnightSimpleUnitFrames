@@ -3,14 +3,15 @@
 -- Contracts of the "Fix now" jump and of the prompts the menu raises (review
 -- 2026-09-30, F5, F8 and F21; Blizzard_StaticPopup/StaticPopup.lua on live,
 -- forever, classic_era, classic_anniversary and classic):
---   * the dialog stays open when OnAccept returns true ("hide = not
---     OnAccept(...)"): "Fix now" on the missing cooldown-anchor warning opens
---     the setting and the dialog must close, so OnAccept returns nothing;
+--   * "Fix now" on the missing cooldown-anchor warning (the core prompt
+--     layer, Blizzard's generic confirmation) opens the setting and closes the
+--     dialog, and the warning writes nothing to StaticPopupDialogs;
 --   * the jump applies its route and builds the target page once, whether the
 --     menu window is open on another page or hidden;
 --   * StaticPopup_Show always puts the dialog on DIALOG strata, the menu's
 --     normal strata. In MSUF Edit Mode the menu sits on FULLSCREEN_DIALOG, so
---     every prompt the menu installs lifts itself to the window's strata.
+--     every prompt the menu shows (M.ShowPrompt: Blizzard's generic dialog or
+--     a menu-owned frame) lifts itself to the window's strata.
 --
 -- Boots the real Mainline core and Options graph and opens the real menu.
 -- Plain Lua 5.1, repo root as arg 1.
@@ -59,7 +60,8 @@ world.env.CreateFrame = function(kind, ...)
     return frame
 end
 world.env.MAX_BOSS_FRAMES = 5 -- Harness gap only: every client defines it.
-world.env.StaticPopupDialogs = {} -- Blizzard's table; the harness stubs unknown globals.
+-- Blizzard's StaticPopup system, generic dialogs included (static_popup_stub.lua).
+local popups = assert(loadfile(root .. "/tools/tests/static_popup_stub.lua"))().Install(world.env)
 world:Boot()
 local failure = world:FirstFailure()
 Check(not failure, "boot failed: " .. tostring(failure and failure.file) .. " " .. tostring(failure and failure.message))
@@ -67,19 +69,9 @@ local e, n = world.env, world.core
 local M = Check(n.MSUF2, "Menu2 did not load")
 M.ApplyService.Flush = function() return true end
 
--- Blizzard's show path, reduced to the two steps that matter here: the dialog
--- goes to DIALOG strata (StaticPopup_SetUpPosition), then its OnShow runs.
-local dialogs = Check(e.StaticPopupDialogs, "StaticPopupDialogs missing")
-local shown = {}
-e.StaticPopup_Show = function(which, text, _, data)
-    local info = Check(dialogs[which], "unknown popup " .. tostring(which))
-    local dialog = e.CreateFrame("Frame", nil, e.UIParent)
-    dialog:SetFrameStrata("DIALOG")
-    dialog.which, dialog.data, dialog.text = which, data, text
-    dialog:Show()
-    if info.OnShow then info.OnShow(dialog, data) end
-    shown[#shown + 1] = dialog
-    return dialog
+local function Generic(key)
+    local list = popups.ForKey(key)
+    return #list == 1 and list[1] or nil
 end
 
 ---------------------------------------------------------------------------
@@ -99,7 +91,11 @@ Check(watcher, "the third-party anchor login watcher is missing")
 world.widgets:ClearTimers()
 watcher.scripts.OnEvent(watcher, "PLAYER_LOGIN")
 world.widgets:RunTimers(10)
-local warning = Check(dialogs.MSUF_COOLDOWN_ANCHOR_MISSING, "the missing cooldown-anchor warning was not shown")
+local warning = Check(Generic("MSUF_COOLDOWN_ANCHOR_MISSING"), "the missing cooldown-anchor warning was not shown")
+Check(warning.which == "GENERIC_CONFIRMATION", "the missing cooldown-anchor warning is not Blizzard's generic confirmation")
+Check(warning.text and warning.text:find("No cooldown anchor found.", 1, true), "the warning lost its text")
+Check(warning.button1:GetText():find("Fix now", 1, true) and warning.button2:GetText() == e.CANCEL,
+    "the warning lost Fix now / Cancel")
 local openExact = Check(e.MSUF_OpenExactSettingControl, "the exact setting jump is not published")
 local opened = 0
 e.MSUF_OpenExactSettingControl = function(settingKey, _, pageKey)
@@ -107,9 +103,9 @@ e.MSUF_OpenExactSettingControl = function(settingKey, _, pageKey)
     opened = opened + 1
     return true
 end
-local keepOpen = warning.OnAccept(shown[#shown], shown[#shown] and shown[#shown].data)
+popups.Click(warning, 1)
 Check(opened == 1, "Fix now did not open the cooldown-anchor setting")
-Check(not keepOpen, "Fix now returned " .. tostring(keepOpen) .. ", which keeps the Blizzard dialog open")
+Check(Generic("MSUF_COOLDOWN_ANCHOR_MISSING") == nil, "Fix now left the warning open")
 e.MSUF_OpenExactSettingControl = openExact
 
 ---------------------------------------------------------------------------
@@ -143,27 +139,31 @@ playerPage.build = build
 local editMode = false
 M.IsMSUFEditModeActive = function() return editMode end
 Check(M.frame:IsShown(), "the menu window is not shown")
-local ownShows = 0
-M.InstallStaticPopup("MSUF2_SMOKE_STRATA", { text = "%s", button1 = "OK", OnShow = function() ownShows = ownShows + 1 end })
-local function ShowSmoke() return e.StaticPopup_Show("MSUF2_SMOKE_STRATA", "smoke") end
+local function ShowSmoke() return M.ShowPrompt("MSUF2_SMOKE_STRATA", { text = "smoke" }) end
 M.ApplyMenuFramePriority(M.frame)
 Check(M.frame:GetFrameStrata() == "DIALOG", "the menu window is not on DIALOG outside Edit Mode")
-Check(ShowSmoke():GetFrameStrata() == "DIALOG" and ownShows == 1,
-    "a prompt outside Edit Mode left DIALOG or lost its own OnShow")
+Check(ShowSmoke():GetFrameStrata() == "DIALOG", "a prompt outside Edit Mode left DIALOG")
 editMode = true
 M.ApplyMenuFramePriority(M.frame)
 local windowStrata = M.frame:GetFrameStrata()
 Check(windowStrata == M.MENU_EDIT_FRAME_STRATA and windowStrata ~= "DIALOG", "Edit Mode did not raise the menu window")
-Check(ShowSmoke():GetFrameStrata() == windowStrata and ownShows == 2, "a prompt in Edit Mode opened behind the menu window")
--- The real prompts: page reset and the reload prompt.
+Check(ShowSmoke():GetFrameStrata() == windowStrata, "a prompt in Edit Mode opened behind the menu window")
+-- The real prompts: page reset and the reload prompt (Blizzard's generic
+-- dialog), and the group-frame reload prompt (menu-owned).
 Check(M.ShowPageResetConfirm("opt_bars"), "the page reset prompt did not show")
-Check(shown[#shown].which == "MSUF2_PAGE_RESET_CONFIRM" and shown[#shown]:GetFrameStrata() == windowStrata,
-    "the page reset prompt opened behind the menu window in Edit Mode")
+local reset = Check(Generic("MSUF2_PAGE_RESET_CONFIRM"), "the page reset prompt is not one generic dialog")
+Check(reset:GetFrameStrata() == windowStrata, "the page reset prompt opened behind the menu window in Edit Mode")
 e.MSUF_ShowReloadRecommendedPopup("Smoke")
-Check(shown[#shown].which == "MSUF_RELOAD_RECOMMENDED" and shown[#shown]:GetFrameStrata() == windowStrata,
-    "the reload prompt opened behind the menu window in Edit Mode")
+local reload = Check(Generic("MSUF_RELOAD_RECOMMENDED"), "the reload prompt is not one generic dialog")
+Check(reload:GetFrameStrata() == windowStrata, "the reload prompt opened behind the menu window in Edit Mode")
+local owned = e.MSUF_ShowGroupFrameReloadRequiredPopup()
+Check(owned and owned:IsShown() and owned:GetFrameStrata() == windowStrata
+    and (owned:GetFrameLevel() or 0) > (M.frame:GetFrameLevel() or 0),
+    "the group-frame reload prompt opened behind the menu window in Edit Mode")
+owned:Hide()
 M.frame:Hide()
 Check(ShowSmoke():GetFrameStrata() == "DIALOG", "a prompt was lifted although the menu window is hidden")
+Check(#popups.writes == 0, "a prompt wrote StaticPopupDialogs: " .. table.concat(popups.writes, ","))
 
 ---------------------------------------------------------------------------
 -- 4. One copy-link popup serves every link (F11)

@@ -2,6 +2,10 @@
 --- Registry, State and Undo, the next files in MSUF_EditMode.xml, build on Util.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Core.lua"
 local ExportPublic = MSUF.ExportPublic
 local function PublishCompat(name, value)
     return ExportPublic(name, value)
@@ -125,6 +129,28 @@ end
 
 local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
 
+--- Re-applies one group kind's geometry after an Edit Mode change: through the
+--- menu's apply service while the Options addon is loaded, else on GF directly
+--- (its public aliases and full refreshes are the fallbacks). The layout drag
+--- commit and the HUD Settings/Reset actions share it; reason names the caller.
+function Util.RefreshGroupGeometryScoped(kind, reason)
+    if not kind then return false end
+    if RequestGroupGeometryApply(kind, reason) then
+        return true
+    end
+    local gf = MSUF and MSUF.GF
+    local mask = (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
+    if gf and type(gf.RefreshGeometry) == "function" then
+        gf.RefreshGeometry(kind)
+        return true
+    end
+    if gf and type(gf.RefreshVisuals) == "function" then
+        gf.RefreshVisuals(kind, mask)
+        return true
+    end
+    return false
+end
+
 local function ApplyGroupSettingsForKeySafe(kind)
     if RequestGroupGeometryApply(kind, "EM2_CORE_GROUP_GEOMETRY") then
         return true
@@ -142,8 +168,14 @@ local function ApplyGroupSettingsForKeySafe(kind)
         gf.DeferGroupRuntime("layout", kind, dirty)
         did = true
     else
-        if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry(kind); did = true end
-        if type(gf.RefreshVisuals) == "function" and dirty then gf.RefreshVisuals(kind, dirty); did = true end
+        if type(gf.RefreshGeometry) == "function" then
+            gf.RefreshGeometry(kind)
+            did = true
+        end
+        if type(gf.RefreshVisuals) == "function" and dirty then
+            gf.RefreshVisuals(kind, dirty)
+            did = true
+        end
     end
     return did
 end
@@ -151,18 +183,8 @@ end
 local function ApplyCastbarSettingsForKeySafe(unit)
     unit = EditCastbarUnitForKey(unit)
     if not unit then return false end
-    local did = false
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
-        did = true
-    elseif type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        did = true
-    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals(unit)
-        did = true
-    end
-    return did
+    MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(unit)
+    return true
 end
 
 --- Edit Mode writes offsets/sizes straight into MSUF_DB and never routes through
@@ -195,10 +217,6 @@ function Util.ApplySettingsForKeySafe(key)
         RefreshUnitConfigSpec(UF, key)
         return UF.Apply(key) == true
     end
-    if type(_G.MSUF_ApplyUnitFrameKey_Immediate) == "function" and key then
-        _G.MSUF_ApplyUnitFrameKey_Immediate(key)
-        return true
-    end
     return false
 end
 
@@ -214,31 +232,20 @@ function Util.ThemeColor(key, fallback)
     return fallback
 end
 
-function Util.IsConfigCombatLocked()
-    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
-        return _G.MSUF_IsConfigCombatLocked() and true or false
-    end
-    if InCombatLockdown and InCombatLockdown() then return true end
-    return false
+-- The combat lock and its message belong to the core (Kernel/MSUF_Util.lua,
+-- loaded before Edit Mode on every client).
+--- A handler running for a combat event passes it (PLAYER_REGEN_DISABLED
+--- arrives before the lockdown starts).
+function Util.IsConfigCombatLocked(event)
+    return MSUF.Require("MSUF_IsConfigCombatLocked", CALLER)(event) and true or false
 end
 
 function Util.ShowConfigCombatLockMessage()
-    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-        _G.MSUF_ShowConfigCombatLockMessage()
-    elseif print then
-        print("|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
-    end
+    MSUF.Require("MSUF_ShowConfigCombatLockMessage", CALLER)()
 end
 
 function Util.BlockConfigCombatLocked()
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-        return _G.MSUF_BlockConfigCombatLocked() and true or false
-    end
-    if Util.IsConfigCombatLocked() then
-        Util.ShowConfigCombatLockMessage()
-        return true
-    end
-    return false
+    return MSUF.Require("MSUF_BlockConfigCombatLocked", CALLER)() and true or false
 end
 
 function Util.RefreshUFPreview(reason)

@@ -2,6 +2,13 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua", {
+    "MSUF_GetClassBarColor",
+    "MSUF_GetNPCReactionColor",
+    "MSUF_NormalizeStoredFontKeys",
+})
 local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Menu2 global Fonts page.
@@ -170,7 +177,7 @@ local function PlayerClassColorPreview()
         classToken = token
     end
     classToken = classToken or "WARRIOR"
-    if type(_G.MSUF_GetClassBarColor) == "function" then
+    do
         local r, g, b = _G.MSUF_GetClassBarColor(classToken)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
@@ -192,7 +199,7 @@ local function NPCReactionColorPreview()
             end
         end
     end
-    if type(_G.MSUF_GetNPCReactionColor) == "function" then
+    do
         local r, g, b = _G.MSUF_GetNPCReactionColor(kind)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
@@ -409,6 +416,165 @@ local function SetFontRenderingMode(value)
     end
     ApplyFonts("MSUF2_FONT_RENDERING")
 end
+--- Name Shortening: the group-frame scope edits its own name fields (or
+--- follows Shared), every other scope edits the unit name keys of its
+--- font scope. Split from BuildFonts, which hands in its row builder.
+local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason, ActiveFontOverrideLabels)
+    local nameScope = CurrentFontScope()
+    if IsGFScope(nameScope) then
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
+            288 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
+        names._msuf2CursorY = -40
+        local shorten, side, chars, noEllipsis
+        local function RefreshGFNameShorteningUI()
+            if M.RequestRefresh then M.RequestRefresh(ctx, "fonts-gf-name-shortening") elseif M.Refresh then M.Refresh(ctx) end
+        end
+        local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -194,
+            function()
+                if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
+                return SharedNameShorteningEnabled()
+            end,
+            function(v)
+                if not GFNameUsesLocalScope() then return end
+                GFNameScopeSet("nameShortenEnabled", v and true or false)
+                if v and (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then GFNameScopeSet("nameMaxChars", SharedNameShorteningMax()) end
+                ApplyFonts("MSUF2_GF_NAME_SHORTEN")
+                RefreshGFNameShorteningUI()
+            end,
+            function()
+                if GFNameUsesLocalScope() then return GFNameScopeGet("nameClipSide", "RIGHT") end
+                return SharedNameShorteningSide()
+            end,
+            function(v)
+                if not GFNameUsesLocalScope() then return end
+                GFNameScopeSet("nameClipSide", v or "RIGHT")
+                ApplyFonts("MSUF2_GF_NAME_SHORTEN_SIDE")
+                RefreshGFNameShorteningUI()
+            end,
+            function()
+                if GFNameUsesLocalScope() then return tonumber(GFNameScopeGet("nameMaxChars", 6)) or 6 end
+                return SharedNameShorteningMax()
+            end,
+            function(v)
+                if not GFNameUsesLocalScope() then return end
+                v = floor((tonumber(v) or 6) + 0.5)
+                GFNameScopeSet("nameMaxChars", v)
+                ApplyFonts("MSUF2_GF_NAME_MAX")
+                RefreshGFNameShorteningUI()
+            end,
+            function()
+                if GFNameUsesLocalScope() then return GFNameScopeGet("nameNoEllipsis", false) and true or false end
+                return SharedNameShorteningNoEllipsis()
+            end,
+            function(v)
+                if not GFNameUsesLocalScope() then return end
+                GFNameScopeSet("nameNoEllipsis", v and true or false)
+                ApplyFonts("MSUF2_GF_NAME_ELLIPSIS")
+                RefreshGFNameShorteningUI()
+            end,
+            function(v) return tostring(floor((tonumber(v) or 6) + 0.5)) end)
+        shorten, side, chars, noEllipsis = controls.shorten, controls.side, controls.chars, controls.noEllipsis
+        local scopeNotice, gfNameShorteningControls = controls.scopeNotice, { side, chars, noEllipsis }
+        if fontScopeReason and W.SetControlsDisabledReason then
+            local shortenReason = W.TurnOnReason("Shorten group names", function()
+                if GFNameUsesLocalScope() then
+                    return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
+                end
+                return SharedNameShorteningEnabled()
+            end)
+            W.SetControlDisabledReason(shorten, fontScopeReason)
+            W.SetControlsDisabledReason(gfNameShorteningControls, function(control)
+                return fontScopeReason(control) or shortenReason(control)
+            end)
+        end
+        local function RefreshGFNameShorteningControls()
+            local canEdit = CurrentFontScopeCanEdit()
+            local enabled
+            if GFNameUsesLocalScope() then
+                enabled = GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
+            else
+                enabled = SharedNameShorteningEnabled()
+            end
+            SetControlEnabled(shorten, canEdit)
+            SetControlsEnabled(gfNameShorteningControls, canEdit and enabled)
+            if GFNameUsesLocalScope() then
+                scopeNotice:SetText("This group scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
+            else
+                scopeNotice:SetText("This group scope follows Shared name shortening. Turn on custom settings above only when group names need different truncation.")
+            end
+        end
+        M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
+    else
+        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
+            294 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
+        local shorten, side, chars, noEllipsis, scopeNotice, nameShorteningControls
+        local function CanEditNameShortening()
+            return CurrentFontScopeCanEdit() and not IsGFScope(CurrentFontScope())
+        end
+        local function NameShorteningEnabled()
+            return FontScopeGet("shortenNames", false, "shortenNames") and true or false
+        end
+        local function RefreshNameShorteningControls()
+            local canEdit = CanEditNameShortening()
+            local enabled = NameShorteningEnabled()
+            SetControlEnabled(shorten, canEdit)
+            SetControlsEnabled(nameShorteningControls, canEdit and enabled)
+            SetControlEnabled(noEllipsis, canEdit)
+            if scopeNotice then
+                local current = CurrentFontScope()
+                if current == "shared" then
+                    local active = ActiveFontOverrideLabels()
+                    if #active > 0 then
+                        T.SetTranslatedText(scopeNotice, "|cffffd200" .. M.Tr("Font overrides active:") .. "|r "
+                            .. table.concat(active, ", ")
+                            .. M.Tr(". Shared name-shortening changes do not affect those scopes."))
+                    else
+                        scopeNotice:SetText("Shared name shortening affects all unit names and group frames unless a scope has custom font settings.")
+                    end
+                elseif ScopeHasOverride(current, "fontOverride") then
+                    scopeNotice:SetText("This scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
+                else
+                    scopeNotice:SetText("This scope follows Shared name shortening. Turn on custom settings above only when this scope needs different names.")
+                end
+            end
+        end
+        local function ApplyNameShorteningChange(reason, onlyWhenEnabled)
+            RefreshNameShorteningControls()
+            if (not onlyWhenEnabled) or NameShorteningEnabled() then ApplyNameShortening(reason) end
+        end
+        local controls = BuildNameShorteningControls(names,
+            nameScope == "shared" and "Shorten names" or "Shorten unit names",
+            4, -194, NameShorteningEnabled,
+            function(v)
+                FontScopeSet("shortenNames", v and true or false, "MSUF2_SHORTEN_NAMES", "shortenNames")
+                ApplyNameShorteningChange("MSUF2_SHORTEN_NAMES", false)
+            end,
+            function() return FontScopeGet("shortenNameClipSide", "LEFT") end,
+            function(v)
+                FontScopeSet("shortenNameClipSide", v or "LEFT", "MSUF2_SHORTEN_SIDE")
+                ApplyNameShorteningChange("MSUF2_SHORTEN_SIDE", true)
+            end,
+            function() return tonumber(FontScopeGet("shortenNameMaxChars", 6)) or 6 end,
+            function(v)
+                FontScopeSet("shortenNameMaxChars", floor((tonumber(v) or 6) + 0.5), "MSUF2_SHORTEN_MAX")
+                ApplyNameShorteningChange("MSUF2_SHORTEN_MAX", true)
+            end,
+            function() return not FontScopeGet("shortenNameShowDots", true) end,
+            function(v)
+                FontScopeSet("shortenNameShowDots", not (v and true or false), "MSUF2_SHORTEN_DOTS")
+                ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
+            end)
+        shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis, controls.scopeNotice; nameShorteningControls = { side, chars }
+        if fontScopeReason and W.SetControlsDisabledReason then
+            local shortenReason = W.TurnOnReason(nameScope == "shared" and "Shorten names" or "Shorten unit names", NameShorteningEnabled)
+            W.SetControlsDisabledReason({ shorten, noEllipsis }, fontScopeReason)
+            W.SetControlsDisabledReason(nameShorteningControls, function(control)
+                return fontScopeReason(control) or shortenReason(control)
+            end)
+        end
+        M.TrackRefresh(ctx, RefreshNameShorteningControls)
+    end
+end
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Fonts", "Shared font, text style, name and power colors.", 72)
@@ -530,7 +696,7 @@ local function BuildFonts(ctx)
         function() return FontKeyGet() end,
         function(v)
             FontKeySet(v)
-            if type(_G.MSUF_NormalizeStoredFontKeys) == "function" then _G.MSUF_NormalizeStoredFontKeys() end
+            _G.MSUF_NormalizeStoredFontKeys()
             ApplyFonts("MSUF2_FONT_KEY")
             RefreshFontPreview()
         end,
@@ -729,160 +895,7 @@ local function BuildFonts(ctx)
         SetControlEnabled(npcColor, canEdit and not gfScope)
     end)
     M.TrackRefresh(ctx, RefreshScopedFontControls)
-    local nameScope = CurrentFontScope()
-    if IsGFScope(nameScope) then
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
-            288 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
-        names._msuf2CursorY = -40
-        local shorten, side, chars, noEllipsis
-        local function RefreshGFNameShorteningUI()
-            if M.RequestRefresh then M.RequestRefresh(ctx, "fonts-gf-name-shortening") elseif M.Refresh then M.Refresh(ctx) end
-        end
-        local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -194,
-            function()
-                if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
-                return SharedNameShorteningEnabled()
-            end,
-            function(v)
-                if not GFNameUsesLocalScope() then return end
-                GFNameScopeSet("nameShortenEnabled", v and true or false)
-                if v and (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then GFNameScopeSet("nameMaxChars", SharedNameShorteningMax()) end
-                ApplyFonts("MSUF2_GF_NAME_SHORTEN")
-                RefreshGFNameShorteningUI()
-            end,
-            function()
-                if GFNameUsesLocalScope() then return GFNameScopeGet("nameClipSide", "RIGHT") end
-                return SharedNameShorteningSide()
-            end,
-            function(v)
-                if not GFNameUsesLocalScope() then return end
-                GFNameScopeSet("nameClipSide", v or "RIGHT")
-                ApplyFonts("MSUF2_GF_NAME_SHORTEN_SIDE")
-                RefreshGFNameShorteningUI()
-            end,
-            function()
-                if GFNameUsesLocalScope() then return tonumber(GFNameScopeGet("nameMaxChars", 6)) or 6 end
-                return SharedNameShorteningMax()
-            end,
-            function(v)
-                if not GFNameUsesLocalScope() then return end
-                v = floor((tonumber(v) or 6) + 0.5)
-                GFNameScopeSet("nameMaxChars", v)
-                ApplyFonts("MSUF2_GF_NAME_MAX")
-                RefreshGFNameShorteningUI()
-            end,
-            function()
-                if GFNameUsesLocalScope() then return GFNameScopeGet("nameNoEllipsis", false) and true or false end
-                return SharedNameShorteningNoEllipsis()
-            end,
-            function(v)
-                if not GFNameUsesLocalScope() then return end
-                GFNameScopeSet("nameNoEllipsis", v and true or false)
-                ApplyFonts("MSUF2_GF_NAME_ELLIPSIS")
-                RefreshGFNameShorteningUI()
-            end,
-            function(v) return tostring(floor((tonumber(v) or 6) + 0.5)) end)
-        shorten, side, chars, noEllipsis = controls.shorten, controls.side, controls.chars, controls.noEllipsis
-        local scopeNotice, gfNameShorteningControls = controls.scopeNotice, { side, chars, noEllipsis }
-        if fontScopeReason and W.SetControlsDisabledReason then
-            local shortenReason = W.TurnOnReason("Shorten group names", function()
-                if GFNameUsesLocalScope() then
-                    return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
-                end
-                return SharedNameShorteningEnabled()
-            end)
-            W.SetControlDisabledReason(shorten, fontScopeReason)
-            W.SetControlsDisabledReason(gfNameShorteningControls, function(control)
-                return fontScopeReason(control) or shortenReason(control)
-            end)
-        end
-        local function RefreshGFNameShorteningControls()
-            local canEdit = CurrentFontScopeCanEdit()
-            local enabled
-            if GFNameUsesLocalScope() then
-                enabled = GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) == true
-            else
-                enabled = SharedNameShorteningEnabled()
-            end
-            SetControlEnabled(shorten, canEdit)
-            SetControlsEnabled(gfNameShorteningControls, canEdit and enabled)
-            if GFNameUsesLocalScope() then
-                scopeNotice:SetText("This group scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
-            else
-                scopeNotice:SetText("This group scope follows Shared name shortening. Turn on custom settings above only when group names need different truncation.")
-            end
-        end
-        M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
-    else
-        local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening",
-            294 + (CharacterNameParts and CharacterNameParts.rowHeight or 0), true)
-        local shorten, side, chars, noEllipsis, scopeNotice, nameShorteningControls
-        local function CanEditNameShortening()
-            return CurrentFontScopeCanEdit() and not IsGFScope(CurrentFontScope())
-        end
-        local function NameShorteningEnabled()
-            return FontScopeGet("shortenNames", false, "shortenNames") and true or false
-        end
-        local function RefreshNameShorteningControls()
-            local canEdit = CanEditNameShortening()
-            local enabled = NameShorteningEnabled()
-            SetControlEnabled(shorten, canEdit)
-            SetControlsEnabled(nameShorteningControls, canEdit and enabled)
-            SetControlEnabled(noEllipsis, canEdit)
-            if scopeNotice then
-                local current = CurrentFontScope()
-                if current == "shared" then
-                    local active = ActiveFontOverrideLabels()
-                    if #active > 0 then
-                        T.SetTranslatedText(scopeNotice, "|cffffd200" .. M.Tr("Font overrides active:") .. "|r "
-                            .. table.concat(active, ", ")
-                            .. M.Tr(". Shared name-shortening changes do not affect those scopes."))
-                    else
-                        scopeNotice:SetText("Shared name shortening affects all unit names and group frames unless a scope has custom font settings.")
-                    end
-                elseif ScopeHasOverride(current, "fontOverride") then
-                    scopeNotice:SetText("This scope uses custom font settings. Shared name-shortening changes will not affect it until the override is reset.")
-                else
-                    scopeNotice:SetText("This scope follows Shared name shortening. Turn on custom settings above only when this scope needs different names.")
-                end
-            end
-        end
-        local function ApplyNameShorteningChange(reason, onlyWhenEnabled)
-            RefreshNameShorteningControls()
-            if (not onlyWhenEnabled) or NameShorteningEnabled() then ApplyNameShortening(reason) end
-        end
-        local controls = BuildNameShorteningControls(names,
-            nameScope == "shared" and "Shorten names" or "Shorten unit names",
-            4, -194, NameShorteningEnabled,
-            function(v)
-                FontScopeSet("shortenNames", v and true or false, "MSUF2_SHORTEN_NAMES", "shortenNames")
-                ApplyNameShorteningChange("MSUF2_SHORTEN_NAMES", false)
-            end,
-            function() return FontScopeGet("shortenNameClipSide", "LEFT") end,
-            function(v)
-                FontScopeSet("shortenNameClipSide", v or "LEFT", "MSUF2_SHORTEN_SIDE")
-                ApplyNameShorteningChange("MSUF2_SHORTEN_SIDE", true)
-            end,
-            function() return tonumber(FontScopeGet("shortenNameMaxChars", 6)) or 6 end,
-            function(v)
-                FontScopeSet("shortenNameMaxChars", floor((tonumber(v) or 6) + 0.5), "MSUF2_SHORTEN_MAX")
-                ApplyNameShorteningChange("MSUF2_SHORTEN_MAX", true)
-            end,
-            function() return not FontScopeGet("shortenNameShowDots", true) end,
-            function(v)
-                FontScopeSet("shortenNameShowDots", not (v and true or false), "MSUF2_SHORTEN_DOTS")
-                ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
-            end)
-        shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis, controls.scopeNotice; nameShorteningControls = { side, chars }
-        if fontScopeReason and W.SetControlsDisabledReason then
-            local shortenReason = W.TurnOnReason(nameScope == "shared" and "Shorten names" or "Shorten unit names", NameShorteningEnabled)
-            W.SetControlsDisabledReason({ shorten, noEllipsis }, fontScopeReason)
-            W.SetControlsDisabledReason(nameShorteningControls, function(control)
-                return fontScopeReason(control) or shortenReason(control)
-            end)
-        end
-        M.TrackRefresh(ctx, RefreshNameShorteningControls)
-    end
+    BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fontScopeReason, ActiveFontOverrideLabels)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_fonts", { title = "MSUF Fonts", build = BuildFonts, version = 6 })

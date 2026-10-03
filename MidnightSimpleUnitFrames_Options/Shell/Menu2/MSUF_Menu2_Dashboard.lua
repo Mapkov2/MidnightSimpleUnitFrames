@@ -97,26 +97,23 @@ end
 local function ShowFactoryResetConfirm(kind)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     if kind == "suite" and not LoadedSuiteFactoryReset() then return false end
-    if type(_G.ReloadUI) ~= "function" or type(M.InstallStaticPopup) ~= "function"
-        or type(_G.StaticPopup_Show) ~= "function" then return false end
     local suiteReset = kind == "suite"
     local key = suiteReset and "MSUF2_SUITE_FACTORY_RESET_CONFIRM" or "MSUF2_FACTORY_RESET_CONFIRM"
-    M.InstallStaticPopup(key, {
+    M.ShowPrompt(key, {
         text = M.Tr(suiteReset
             and "Factory reset MSUF Suite?\n\nAll Suite profiles and skin settings on this account will be deleted. MSUF settings stay intact. The UI will reload."
             or "Factory reset MSUF?\n\nAll MSUF profiles and settings on this account will be deleted. Suite profiles are kept, but the active Suite profile may follow MSUF back to Default. The UI will reload."),
-        button1 = _G.YES or M.Tr("Yes"),
-        button2 = _G.NO or M.Tr("No"),
-        OnAccept = function()
+        accept = YES or M.Tr("Yes"),
+        cancel = NO or M.Tr("No"),
+        onAccept = function()
             if M.BlockCombatAction and M.BlockCombatAction() then return end
             if suiteReset then
                 RunSuiteFactoryReset()
             elseif M.StageFactoryReset() then
-                _G.ReloadUI()
+                ReloadUI()
             end
         end,
     })
-    _G.StaticPopup_Show(key)
     return true
 end
 
@@ -388,17 +385,10 @@ end
 -- card should not drop the user back into the walkthrough. Only the restart
 -- path asks; resuming an active tour and the very first run stay one click.
 local function ConfirmGuidedSetupRestart()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show and type(M.InstallStaticPopup) == "function") then
-        return StartGuidedSetupFromDashboard(true)
-    end
-    M.InstallStaticPopup("MSUF2_GUIDED_SETUP_RESTART_CONFIRM", {
-        text = "%s",
-        button1 = _G.YES or "Yes",
-        button2 = _G.NO or "No",
-        OnAccept = function() StartGuidedSetupFromDashboard(true) end,
+    M.ShowPrompt("MSUF2_GUIDED_SETUP_RESTART_CONFIRM", {
+        text = M.Tr("Run the guided setup again? The walkthrough starts over at the first step."),
+        onAccept = function() StartGuidedSetupFromDashboard(true) end,
     })
-    _G.StaticPopup_Show("MSUF2_GUIDED_SETUP_RESTART_CONFIRM",
-        M.Tr("Run the guided setup again? The walkthrough starts over at the first step."))
     return true
 end
 -- The home page is assembled by Dashboard.Build from one stage per card. Stages
@@ -525,7 +515,12 @@ function Dashboard.PrepareActionHelpers(state)
     end
     local function RefreshDashboardEditModeButtonSafe() M.RefreshDashboardEditModeButton() end
     local function RefreshMenuFramePrioritySafe() M.RefreshMenuFramePriority() end
-    local function RefreshDashboardFrameStatus() local f = M.frame; if f and f.RefreshStatus then f:RefreshStatus() end end
+    local function RefreshDashboardFrameStatus()
+        local f = M.frame
+        if f and f.RefreshStatus then
+            f:RefreshStatus()
+        end
+    end
     local function ToggleEditMode()
         local active = IsDashboardEditModeActive()
         if (not active) and IsDashboardEditModeCombatLocked() then
@@ -1151,10 +1146,14 @@ function Dashboard.BuildSupportCard(state)
     support:SetHeight(supportH)
     local supportLinks = {
         { key = "discord", texture = "Discord.png", title = "Discord", tooltip = "Copy Discord Link", url = "https://discord.gg/2Gf9b2Wprz" },
-        { key = "patreon", texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
-        { key = "paypal", texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.", url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
-        { key = "kofi", texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.", url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
-        { key = "github", texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
+        { key = "patreon", texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.",
+            url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
+        { key = "paypal", texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.",
+            url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
+        { key = "kofi", texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.",
+            url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
+        { key = "github", texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.",
+            url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
     }
     local iconRow = PixelLayoutRegion(CreateFrame("Frame", nil, support))
     iconRow:SetSize(168, 24)

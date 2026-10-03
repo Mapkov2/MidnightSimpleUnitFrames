@@ -44,6 +44,9 @@ local function PreviewZoom(path, functionName)
     local source = file:read("*a"):gsub("\r\n", "\n")
     file:close()
     local code = assert(source:match("local function " .. functionName .. "%(.-\nend"), path)
+    if functionName == "ApplySpellIndicatorPreview" then
+        code = assert(source:match("local function ShowSpellPreviewTimer%(.-\nend"), path) .. "\n" .. code
+    end
     local chunk = assert(loadstring(code .. "\nreturn " .. functionName))
     setfenv(chunk, setmetatable({A3=A3, MSUF=namespace, Clamp=Clamp, ClampNumber=Clamp,
         max=math.max, min=math.min, floor=math.floor, VALID_POINTS={TOPLEFT=true},

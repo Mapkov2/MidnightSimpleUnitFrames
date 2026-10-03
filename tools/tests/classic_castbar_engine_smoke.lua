@@ -202,6 +202,7 @@ do
     }
     local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
     manifest.LoadSelected(root, "Vanilla", driverNamespace, {
+        "Kernel/MSUF_Require.lua",
         "Castbars/MSUF_CastbarUtils.lua",
         "Castbars/MSUF_CastbarRuntime.lua",
         "Castbars/MSUF_CastbarEngine.lua",
@@ -218,6 +219,8 @@ do
     -- the driver measures that shift and repaints the "+x.x" suffix, and a new
     -- castID starts without one.
     do
+        -- Castbars/MSUF_CastbarFrames.lua is not loaded; the regions come below.
+        _G.MSUF_BuildCastbarFrameElements = function() end
         local driven = assert(_G.MSUF_CreateCastBar("MSUF_EngineSmokeTargetCastBar", "target"),
             "driver castbar missing")
         driven.statusBar = NewWidget()
@@ -315,9 +318,12 @@ local unitGuard = assert(runtimeSource:find("if not ActiveUnitMatches(frame, eve
     "player castbar interrupted branch has no unit guard")
 assert(not runtimeSource:sub(interrupted, unitGuard):find("HasActivePlayerCast", 1, true),
     "late player interrupt feedback still requires an API-active cast after STOP")
-assert(runtimeSource:find("frame._msufPlayerInterruptCastGUID = interruptCastGUID", 1, true)
-    and runtimeSource:find("select(2, ...) == frame._msufPlayerInterruptCastGUID", 1, true)
-    and runtimeSource:find("GetTime() <= frame._msufPlayerInterruptCastDeadline", 1, true),
+assert(runtimeSource:find("frame._msufPlayerInterruptCastGUID = plainGUID", 1, true)
+    and runtimeSource:find("frame._msufPlayerInterruptCastBarID = castBarID", 1, true)
+    and runtimeSource:find("MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)), (select(5, ...)))", 1, true)
+    and runtimeSource:find("return castBarID == pendingBarID", 1, true)
+    and runtimeSource:find("return castGUID == pendingGUID", 1, true)
+    and runtimeSource:find("if deadline == nil or GetTime() > deadline then return false end", 1, true),
     "player castbar does not retain and verify the stopped cast identity")
 
 local previewFile = assert(io.open(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua", "rb"))

@@ -228,6 +228,10 @@ local function LoadUnitPage(client)
     local ns = { Client = client, UF = { GetFrame = function() return nil end },
         ExportPublic = function() end, Translate = function(text) return text end,
         MSUF2 = { Widgets = {} } }
+    -- The page requires its core collaborators at load (M.RequireGlobals).
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.Install(root, ns)
+    RequireFixture.StubRequirements(root, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua" })
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua"))(
         "MidnightSimpleUnitFrames_Options", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua"))(

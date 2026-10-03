@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua
 --- EditMode v2 integration for group frames.
 ---
@@ -8,6 +7,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 local ExportPublic = MSUF.ExportPublic
 
@@ -23,8 +23,6 @@ local CreateFrame = CreateFrame
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetTime = GetTime
-local IsInGroup = IsInGroup
-local IsInRaid = IsInRaid
 local UIParent = UIParent
 local floor, max, min = math.floor, math.max, math.min
 local type, tonumber, tostring = type, tonumber, tostring
@@ -48,12 +46,19 @@ local KEY_TO_KIND = {
   gf_priority = "priority",
 }
 
+--- English keys: the Edit Mode HUD translates registry labels when it paints
+--- them; text this file paints itself goes through Translate at paint time.
 local LABELS = {
   party = "Group: Party",
   raid = "Group: Raid",
   mythicraid = "Group: Mythic Raid",
   priority = "Priority Frames",
 }
+
+local function Translate(text)
+  local translate = MSUF.Translate
+  return translate and translate(text) or text
+end
 
 local GROUP_KINDS = { "party", "raid", "mythicraid" }
 local MOVER_KINDS = { "party", "raid", "mythicraid", "priority" }
@@ -96,13 +101,8 @@ end
 
 local function GetConf(kind)
   local gf = GF()
-  if kind == "priority" and gf and type(gf.GetPriorityConf) == "function" then
-    return gf.GetPriorityConf()
-  end
-  if gf and type(gf.GetConf) == "function" then return gf.GetConf(kind) end
-  local db = _G.MSUF_DB
-  local key = KIND_TO_KEY[kind]
-  return db and key and db[key] or nil
+  if kind == "priority" then return gf.GetPriorityConf() end
+  return gf.GetConf(kind)
 end
 
 local function KindEnabled(kind)
@@ -121,37 +121,13 @@ local function ConfigLocked()
   return Dep("MSUF_IsConfigCombatLocked")() and true or false
 end
 
-local function GroupGeometryMask(gf)
-  return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
-end
-
 local function RefreshGroupGeometry(gf, kind)
   if not gf or ConfigLocked() then return false end
-  if type(gf.InvalidateCompiledSpecs) == "function" then gf.InvalidateCompiledSpecs(kind) end
-  if type(gf.RefreshGeometry) == "function" then
-    return gf.RefreshGeometry(kind)
-  end
-  if type(gf.RefreshVisuals) == "function" then
-    return gf.RefreshVisuals(kind, GroupGeometryMask(gf))
-  end
-  if type(gf.RefreshAll) == "function" then
-    return gf.RefreshAll()
-  end
-  return false
+  gf.InvalidateCompiledSpecs(kind)
+  return gf.RefreshGeometry(kind)
 end
 
-local function RefreshGroupBounds(gf, kind)
-  if not gf or ConfigLocked() then return false end
-  if type(gf.InvalidateCompiledSpecs) == "function" then gf.InvalidateCompiledSpecs(kind) end
-  if type(gf.RefreshGeometry) == "function" then
-    return gf.RefreshGeometry(kind)
-  elseif kind and type(gf.RefreshVisuals) == "function" then
-    return gf.RefreshVisuals(kind, GroupGeometryMask(gf))
-  elseif type(gf.MarkAllDirty) == "function" then
-    return gf.MarkAllDirty(GroupGeometryMask(gf))
-  end
-  return RefreshGroupGeometry(gf, kind)
-end
+local RefreshGroupBounds = RefreshGroupGeometry
 
 local function BlockConfigLocked()
   return Dep("MSUF_BlockConfigCombatLocked")() and true or false
@@ -164,17 +140,7 @@ local function GetDefaultCenter(kind)
 end
 
 local function GetLiveGroupKind()
-  local gf = GF()
-  if gf and type(gf.GetLiveGroupKind) == "function" then
-    return NormalizeKind(gf.GetLiveGroupKind())
-  end
-  if IsInRaid and IsInRaid() then
-    return (gf and type(gf.GetLiveRaidKind) == "function" and NormalizeKind(gf.GetLiveRaidKind())) or "raid"
-  end
-  if IsInGroup and IsInGroup() then
-    return "party"
-  end
-  return nil
+  return NormalizeKind(GF().GetLiveGroupKind())
 end
 
 local function RuntimeHeaderKey(kind)
@@ -229,7 +195,7 @@ local function EnsureRuntimeAnchor(kind)
 
   local gf = GF()
   local headerKey = RuntimeHeaderKey(kind)
-  if gf and headerKey and type(gf.SetupHeader) == "function" and not ConfigLocked() then
+  if gf and headerKey and not ConfigLocked() then
     gf.SetupHeader(headerKey, kind)
     return RuntimeAnchor(kind)
   end
@@ -290,15 +256,7 @@ end
 local function PriorityMetrics(conf, count)
   local gf = GF()
   local baseKind = GetLiveGroupKind() or "party"
-  local w, h = 80, 32
-  if gf and type(gf.GetPriorityFrameMetrics) == "function" then
-    w, h = gf.GetPriorityFrameMetrics(baseKind)
-  elseif gf and type(gf.GetScaledFrameMetrics) == "function" then
-    w, h = gf.GetScaledFrameMetrics(baseKind)
-  else
-    local base = gf and type(gf.GetConf) == "function" and gf.GetConf(baseKind) or nil
-    w, h = tonumber(base and base.width) or w, tonumber(base and base.height) or h
-  end
+  local w, h = gf.GetPriorityFrameMetrics(baseKind)
   w, h = max(tonumber(w) or 80, 1), max(tonumber(h) or 32, 1)
   count = min(5, max(1, floor((tonumber(count) or 5) + 0.5)))
   local spacing = min(40, max(0, floor((tonumber(conf and conf.spacing) or 2) + 0.5)))
@@ -336,45 +294,20 @@ local function ShouldShowPreviewKind(kind)
   return selected == nil or selected == kind
 end
 
-local function HasNativePreviewAPI(gf)
-  return gf
-    and type(gf.SetPreviewAnchor) == "function"
-    and type(gf.ShowPreview) == "function"
-    and type(gf.HidePreview) == "function"
-end
-
 local function ResolveAnchorFrame(conf, owner)
-  local gf = GF()
-  if gf and type(gf.ResolveAnchorFrame) == "function" then
-    local frame, missing = gf.ResolveAnchorFrame(conf, owner)
-    if missing then Dep("MSUF_ScheduleLateAnchorReanchor")() end
-    return frame
-  end
-  return UIParent
+  local frame, missing = GF().ResolveAnchorFrame(conf, owner)
+  if missing then Dep("MSUF_ScheduleLateAnchorReanchor")() end
+  return frame
 end
-
-local VALID_POINTS = {
-  CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true,
-  TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true,
-}
 
 local function AnchorPoint(conf)
-  local gf = GF()
-  if gf and type(gf.GetAnchorPoint) == "function" then return gf.GetAnchorPoint(conf) end
-  local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
-  if not VALID_POINTS[point] then point = "CENTER" end
-  return point
+  return GF().GetAnchorPoint(conf)
 end
 
 --- Both sides of a group anchor come from the single visible Anchor Point; see
 --- GF.ResolveAnchorPoint (MSUF_GroupFrames_DB.lua) for the legacy pair it retires.
 local function ResolveAnchorPoint(kind, conf, parent)
-  local gf = GF()
-  if gf and type(gf.ResolveAnchorPoint) == "function" then
-    return gf.ResolveAnchorPoint(kind, conf, parent)
-  end
-  local point = AnchorPoint(conf)
-  return point, point
+  return GF().ResolveAnchorPoint(kind, conf, parent)
 end
 
 local ClampAnchorOffsetOnScreen = _G.MSUF_UF_ClampAnchorOffsetOnScreen
@@ -393,7 +326,7 @@ local function IsPreviewActive(kind)
     return true
   end
   local gf = GF()
-  if HasNativePreviewAPI(gf) and not ConfigLocked() then
+  if gf and not ConfigLocked() then
     return gf._previewActive and gf._previewActive[kind] == true
   end
   return true
@@ -434,21 +367,14 @@ local function EnsureContainer(kind)
   fs:SetShadowOffset(1, -1)
   fs:SetTextColor(0.68, 0.83, 1.00, 0.88)
   fs:SetPoint("CENTER")
-  fs:SetText(LABELS[kind] or "Group Frame")
+  fs:SetText(Translate(LABELS[kind] or "Group frame"))
   f._msufGFEditLabel = fs
 
   _containers[kind] = f
   return f
 end
 
-local function GetPositionCount(kind)
-  if kind == "priority" then return GetRequestedPreviewCount(kind) end
-  local gf = GF()
-  if gf and type(gf.GetPositionCount) == "function" then
-    return gf.GetPositionCount(kind)
-  end
-  return GetRequestedPreviewCount(kind)
-end
+local GetPositionCount = GetRequestedPreviewCount
 
 local FrameRectToUI = _G.MSUF_UF_FrameRectToUI
 
@@ -495,13 +421,7 @@ end
 
 local function RequestPriorityApply(gf, reason)
   if not gf then return false end
-  if type(gf.RequestPriorityApply) == "function" then
-    return gf:RequestPriorityApply(reason or "edit-mode")
-  end
-  if type(gf.RefreshPriorityFrames) == "function" then
-    return gf.RefreshPriorityFrames(reason or "edit-mode")
-  end
-  return RefreshGroupGeometry(gf, "priority")
+  return gf:RequestPriorityApply(reason or "edit-mode")
 end
 
 local function PreviewBounds(kind)
@@ -557,9 +477,8 @@ end
 
 local function HidePreviewVisualsForCombat()
   local gf = GF()
-  local hidePreview = gf and type(gf.HidePreview) == "function"
   for _, kind in ipairs(GROUP_KINDS) do
-    if hidePreview then
+    if gf then
       gf.HidePreview(kind)
     end
     if _containers[kind] then _containers[kind]:Hide() end
@@ -574,7 +493,7 @@ end
 --- the same resolver, GF.ResolveGroupPositionKeys).
 local function PositionKeys(kind, conf)
   local gf = GF()
-  if kind ~= "priority" and gf and type(gf.ResolveGroupPositionKeys) == "function" then
+  if kind ~= "priority" and gf then
     local xKey, yKey = gf.ResolveGroupPositionKeys(kind, conf, GetPositionCount(kind))
     if xKey then return xKey, yKey end
   end
@@ -583,7 +502,7 @@ end
 
 local function SizeKeys(kind, conf)
   local gf = GF()
-  if kind ~= "priority" and gf and type(gf.ResolveGroupSizeKeys) == "function" then
+  if kind ~= "priority" and gf then
     return gf.ResolveGroupSizeKeys(kind, conf, GetPositionCount(kind))
   end
   return "width", "height"
@@ -626,7 +545,7 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
   if cx == nil then cx = defX end
   if cy == nil then cy = defY end
   local gf = GF()
-  if gf and type(gf.ConfigureAnchorPointScreenClamp) == "function" then
+  if gf then
     gf.ConfigureAnchorPointScreenClamp(anchor, point, totalW, totalH)
   else
     cx, cy = ClampAnchorOffsetOnScreen(point, relativePoint, parent, floor(cx + 0.5), floor(cy + 0.5), totalW, totalH)
@@ -662,10 +581,10 @@ local function SyncContainer(kind)
   if kind == "priority" then
     totalW, totalH = PriorityMetrics(conf, positionCount)
   else
-    if gf and type(gf.EnsureStableGridPosition) == "function" then
+    if gf then
       gf.EnsureStableGridPosition(kind, positionCount, conf)
     end
-    if gf and type(gf.GetGridMetrics) == "function" then
+    if gf then
       local _, _, w, h = gf.GetGridMetrics(kind, positionCount)
       totalW = tonumber(w) or totalW
       totalH = tonumber(h) or totalH
@@ -687,7 +606,7 @@ local function SyncContainer(kind)
   container:SetSize(max(totalW, 1), max(totalH, 1))
   container._msufGFGridWidth = max(totalW, 1)
   container._msufGFGridHeight = max(totalH, 1)
-  if kind ~= "priority" and gf and type(gf.ConfigureAnchorPointScreenClamp) == "function" then
+  if kind ~= "priority" and gf then
     gf.ConfigureAnchorPointScreenClamp(container, "CENTER", totalW, totalH)
   end
   container:ClearAllPoints()
@@ -712,7 +631,7 @@ local function SyncContainer(kind)
       container:SetPoint(point, parent, relativePoint, floor(cx + 0.5), floor(cy + 0.5))
     end
   end
-  local nativeActive = kind ~= "priority" and HasNativePreviewAPI(gf)
+  local nativeActive = kind ~= "priority" and gf
     and not ConfigLocked()
     and gf._previewActive
     and gf._previewActive[kind] == true
@@ -949,7 +868,7 @@ local function ShowPreviewOnly()
     return
   end
 
-  local nativeAllowed = HasNativePreviewAPI(gf) and not ConfigLocked()
+  local nativeAllowed = gf and not ConfigLocked()
   local needsLiveVisibility = false
   if nativeAllowed then
     for _, kind in ipairs(GROUP_KINDS) do
@@ -1002,7 +921,7 @@ local function HidePreviewOnly()
     return
   end
 
-  if HasNativePreviewAPI(gf) then
+  if gf then
     for _, kind in ipairs(GROUP_KINDS) do
       gf.SetPreviewAnchor(kind, nil)
       gf.HidePreview(kind)
@@ -1024,7 +943,7 @@ local function RefreshEditModePreviewAfterRuntimeChange()
     return
   end
   local gf = GF()
-  if _previewShownByEM2 and HasNativePreviewAPI(gf) then
+  if _previewShownByEM2 and gf then
     ShowPreviewOnly()
   else
     SyncAllContainers()
@@ -1042,7 +961,7 @@ local function NudgePreviewKind(kind, dx, dy)
   local conf = GetConf(kind)
   if not conf then return false end
   local gf = GF()
-  if kind ~= "priority" and gf and type(gf.EnsureStableGridPosition) == "function" then
+  if kind ~= "priority" and gf then
     gf.EnsureStableGridPosition(kind, GetPositionCount(kind), conf)
   end
   Dep("MSUF_EM_UndoBeforeChange")("gf", kind, true)
@@ -1060,10 +979,8 @@ local function NudgePreviewKind(kind, dx, dy)
   SyncContainer(kind)
   if kind == "priority" then
     RequestPriorityApply(gf, "edit-mode-nudge")
-  elseif gf and HasNativePreviewAPI(gf) and gf.RefreshPreviewLayout then
-    gf.RefreshPreviewLayout(kind)
   elseif gf then
-    RefreshGroupGeometry(gf, kind)
+    gf.RefreshPreviewLayout(kind)
   end
   if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
   RefreshGFPositionUI(kind)
@@ -1125,7 +1042,7 @@ local function ExitEditMode()
 
   local gf = GF()
   if gf then gf._groupEditActive = nil end
-  if HasNativePreviewAPI(gf) then
+  if gf then
     for _, kind in ipairs(GROUP_KINDS) do
       gf.SetPreviewAnchor(kind, nil)
       gf.HidePreview(kind)
@@ -1154,7 +1071,6 @@ local function RegisterAdditionalMovers()
   local api = MSUF.EditModeAPI or _G.MSUF_EditModeAPI
   local gf = GF()
   if not (api and gf) or not (api.RegisterElements or api.RegisterElement) then return end
-  local Translate = MSUF.Translate or function(text) return text end
   local blocks = gf.ADDITIONAL_BLOCKS or { "pets", "targets", "friendlyBoss", "healerMana" }
   local defaultX, defaultY = gf.ADDITIONAL_DEFAULT_X or {}, gf.ADDITIONAL_DEFAULT_Y or {}
   local elements = {}
@@ -1183,14 +1099,31 @@ local function RegisterAdditionalMovers()
         end
         local function Dimension(field, label, low, high)
           return { id = field, kind = "number", label = label, min = low, max = high, step = 1,
-            get = function() local state = Capture(); return state and state[field] end,
-            set = function(value) local state = Capture(); if not state then return false end; state[field] = value; return Restore(state) end }
+            get = function()
+              local state = Capture()
+              return state and state[field]
+            end,
+            set = function(value)
+              local state = Capture()
+              if not state then return false end
+              state[field] = value
+              return Restore(state)
+            end }
         end
         elements[#elements + 1] = {
-          id = kind .. "_" .. prefix, label = LABELS[kind] .. ": " .. Translate(ADDITIONAL_BLOCK_NAMES[prefix] or prefix),
-          group = LABELS[kind], order = 80,
-          getFrame = function() local live = GF(); return live and live.GetAdditionalEditPreviewFrame and live.GetAdditionalEditPreviewFrame(kind, prefix) end,
-          isEnabled = function() local conf = GetConf(kind); return conf and conf.enabled == true and conf[prefix .. "Enabled"] == true end,
+          -- Public Edit Mode elements show their labels as given: translate the
+          -- pieces, then compose them with a translated format.
+          id = kind .. "_" .. prefix,
+          label = string.format(Translate("%s: %s"), Translate(LABELS[kind]), Translate(ADDITIONAL_BLOCK_NAMES[prefix] or prefix)),
+          group = Translate(LABELS[kind]), order = 80,
+          getFrame = function()
+            local live = GF()
+            return live and live.GetAdditionalEditPreviewFrame and live.GetAdditionalEditPreviewFrame(kind, prefix)
+          end,
+          isEnabled = function()
+            local conf = GetConf(kind)
+            return conf and conf.enabled == true and conf[prefix .. "Enabled"] == true
+          end,
           getPosition = Capture, setPosition = Restore,
           extraControls = { Dimension("width", Translate("Width"), 20, 500), Dimension("height", Translate("Height"), 10, 200) },
         }
@@ -1353,7 +1286,6 @@ end
 local function InstallRuntimeObserver()
   local gf = GF()
   if not gf or gf._msufEM2BridgeHooked then return end
-  if type(gf.RegisterRuntimeObserver) ~= "function" then return end
   gf._msufEM2BridgeHooked = true
   gf.RegisterRuntimeObserver("em2", OnGroupRuntimeMutation)
 end
@@ -1412,16 +1344,18 @@ local GROUP_PAGE_BUTTONS = {
   { "Status", "gf_indicators", "status" },
 }
 
-local function QuickPopup()
+local GroupPopup = {}
+
+function GroupPopup.QuickPopup()
   return EM2.QuickPopup or (_G.MSUF_EM2_Menu2Style and _G.MSUF_EM2_Menu2Style.QuickPopup) or {}
 end
 
-local function Tr(text)
-  local fn = QuickPopup().Tr
+function GroupPopup.Tr(text)
+  local fn = GroupPopup.QuickPopup().Tr
   return fn and fn(text) or text
 end
 
-local function RefreshAfterPopupApply(mode)
+function GroupPopup.RefreshAfterPopupApply(mode)
   local gf = GF()
   if not gf then return end
 
@@ -1442,7 +1376,7 @@ local function RefreshAfterPopupApply(mode)
   RefreshGroupBounds(gf, mode)
 
   if _em2Active then
-    if _previewShownByEM2 and HasNativePreviewAPI(gf) then
+    if _previewShownByEM2 and gf then
       ShowPreviewOnly()
     else
       SyncContainer(mode)
@@ -1457,15 +1391,15 @@ local function RefreshAfterPopupApply(mode)
   end)
 end
 
-local function SetHUDStatus(text, kind)
-  Dep("MSUF_EM2_SetHUDStatus")(Tr(text), kind)
+function GroupPopup.SetHUDStatus(text, kind)
+  Dep("MSUF_EM2_SetHUDStatus")(GroupPopup.Tr(text), kind)
 end
 
-local function GroupComponentForPage(pageKey)
+function GroupPopup.GroupComponentForPage(pageKey)
   return GROUP_PAGE_COMPONENT[pageKey] or "layout"
 end
 
-local function GroupSectionForPage(pageKey, component)
+function GroupPopup.GroupSectionForPage(pageKey, component)
   if pageKey == "gf_bars" then
     if component == "stripe" or component == "dstripe" then return "dstripe" end
     return "dispel"
@@ -1500,9 +1434,9 @@ local function GF_EM2_ResetPosition(kind)
     conf.point = "CENTER"
     conf.relativePoint = "CENTER"
   end
-  RefreshAfterPopupApply(kind)
+  GroupPopup.RefreshAfterPopupApply(kind)
   RefreshGFPositionUI(kind)
-  SetHUDStatus("Reset group position", "ok")
+  GroupPopup.SetHUDStatus("Reset group position", "ok")
   local key = KIND_TO_KEY[kind]
   if key and EM2.Focus and EM2.Focus.Pulse then
     EM2.Focus.Pulse(key, kind == "priority" and "placement" or "layout", nil, { source = "group-reset", duration = 0.32 })
@@ -1511,13 +1445,259 @@ local function GF_EM2_ResetPosition(kind)
 end
 ExportPublic("MSUF_GF_EM2_ResetPosition", GF_EM2_ResetPosition)
 
+--- Group quick popup. One popup per scope; it carries its scope in
+--- popup._msufGFMode, and GroupPopup holds what the popup does, grouped by
+--- concern: writing position and size, repainting the boxes, the ratio lock,
+--- the size copy, the position reset and the Menu2 page jump.
+
+function GroupPopup.ClampWidth(key, value)
+  return floor(max(key == "width" and 40 or 20, min(key == "width" and 400 or 500, value)) + 0.5)
+end
+
+function GroupPopup.ClampHeight(key, value)
+  return floor(max(key == "height" and 16 or 10, min(200, value)) + 0.5)
+end
+
+function GroupPopup.NotifyMoved(mode)
+  local key = KIND_TO_KEY[mode]
+  if key and EM2.Focus and EM2.Focus.NotifyPositionChanged then
+    EM2.Focus.NotifyPositionChanged(key, true)
+  end
+end
+
+--- Writes the boxes back: position through the frame's display translation,
+--- size into the shown tier's keys (a tier's own override keeps its 20-500 by
+--- 10-200 range).
+function GroupPopup.Apply(popup)
+  if BlockConfigLocked() then return end
+  local mode = popup._msufGFMode
+  local conf = GetConf(mode)
+  if not conf then return end
+  Dep("MSUF_EM_UndoBeforeChange")("gf", mode)
+
+  -- Convert before reading the current offsets: they feed TranslateFramePosition
+  -- below, so reading them in legacy semantics and stamping V2 afterwards would
+  -- persist the legacy numbers under the converted label.
+  if mode ~= "priority" then
+    local applyGF = GF()
+    if applyGF and type(applyGF.EnsureStableGridPosition) == "function" then
+      applyGF.EnsureStableGridPosition(mode, GetPositionCount(mode), conf)
+    end
+  end
+  local xKey, yKey = PositionKeys(mode, conf)
+  local widthKey, heightKey = SizeKeys(mode, conf)
+  local currentX = San(conf[xKey], 0)
+  local currentY = San(conf[yKey], 0)
+  local displayX = popup.xBox and tonumber(popup.xBox:GetText())
+  local displayY = popup.yBox and tonumber(popup.yBox:GetText())
+  conf.positionMode = STABLE_GRID_POSITION_MODE
+
+  local w = popup.wBox and tonumber(popup.wBox:GetText())
+  if w then conf[widthKey] = GroupPopup.ClampWidth(widthKey, w) end
+  local h = popup.hBox and tonumber(popup.hBox:GetText())
+  if h then conf[heightKey] = GroupPopup.ClampHeight(heightKey, h) end
+
+  local frame = SyncContainer(mode)
+  conf[xKey], conf[yKey] = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
+
+  GroupPopup.RefreshAfterPopupApply(mode)
+  GroupPopup.NotifyMoved(mode)
+end
+
+--- Repaints the boxes from the shown frame and the shown tier's keys.
+function GroupPopup.Sync(popup)
+  local mode = popup._msufGFMode
+  local conf = GetConf(mode)
+  if not conf then return end
+  local function S(box, value)
+    if box and box.SetText then box:SetText(tostring(value or 0)) end
+  end
+
+  local x, y = FramePositionValues(SyncContainer(mode))
+  local isRaid = mode == "raid" or mode == "mythicraid"
+  local xKey, yKey = PositionKeys(mode, conf)
+  local widthKey, heightKey = SizeKeys(mode, conf)
+  S(popup.xBox, x ~= nil and x or San(conf[xKey], 0))
+  S(popup.yBox, y ~= nil and y or San(conf[yKey], 0))
+  S(popup.wBox, conf[widthKey] or (isRaid and 80 or 120))
+  S(popup.hBox, conf[heightKey] or (isRaid and 32 or 40))
+end
+
+--- Applies, selects the matching component and opens its Menu2 page and section.
+function GroupPopup.OpenMenu2Page(popup, pageKey)
+  local mode = popup._msufGFMode
+  GroupPopup.Apply(popup)
+  local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+  local key = KIND_TO_KEY[mode]
+  pageKey = pageKey or "gf_layout"
+  local component = GroupPopup.GroupComponentForPage(pageKey)
+  local sectionId = GroupPopup.GroupSectionForPage(pageKey, component)
+  if EM2.Focus and EM2.Focus.SetSelection then
+    EM2.Focus.SetSelection(key, component, nil, { source = "group-popup", menu = false })
+  end
+  ExportPublic("MSUF_EM2_MenuFocusRequest", {
+    key = key,
+    component = component,
+    pageKey = pageKey,
+    sectionId = sectionId,
+    source = "group-popup",
+    explicit = true,
+    changedAt = GetTime and GetTime() or 0,
+  })
+  if M then
+    M.gfScope = mode
+    -- The Options addon may not be loaded yet; keep the scope on its facade
+    -- and let OpenPage below load the menu even without the persistence method.
+    if type(M.PersistMenuStateValue) == "function" then
+      M.PersistMenuStateValue("gfScope", mode)
+    end
+  end
+  GF_EM2_SetActivePreviewKind(mode)
+  GroupPopup.QuickPopup().OpenPage(pageKey, popup)
+end
+
+--- Copies the source group's size only. Position stays untouched so a size
+--- copy cannot unexpectedly move another group block. The size shown on each
+--- side is the one that counts: a size tier's own override when it has one.
+function GroupPopup.CopySizeTo(popup, targetMode)
+  local mode = popup._msufGFMode
+  targetMode = NormalizeKind(targetMode)
+  if not targetMode or targetMode == mode then return end
+  GroupPopup.Apply(popup)
+  local src = GetConf(mode)
+  local dst = GetConf(targetMode)
+  if not src or not dst then return end
+  Dep("MSUF_EM_UndoBeforeChange")("gf", targetMode)
+  local srcW, srcH = SizeKeys(mode, src)
+  local dstW, dstH = SizeKeys(targetMode, dst)
+  if src[srcW] ~= nil then
+    dst[dstW] = GroupPopup.ClampWidth(dstW, tonumber(src[srcW]) or 120)
+  end
+  if src[srcH] ~= nil then
+    dst[dstH] = GroupPopup.ClampHeight(dstH, tonumber(src[srcH]) or 40)
+  end
+  GroupPopup.RefreshAfterPopupApply(targetMode)
+  local targetKey = KIND_TO_KEY[targetMode]
+  if targetKey and EM2.Focus and EM2.Focus.Pulse then
+    EM2.Focus.Pulse(targetKey, "layout", nil, { source = "group-copy", duration = 0.32 })
+  end
+  GroupPopup.SetHUDStatus("Copied group size", "ok")
+  if popup and popup:IsShown() then GroupPopup.Sync(popup) end
+end
+
+--- The footer reset: the shown position keys back to the block's center.
+function GroupPopup.ResetPosition(popup)
+  if BlockConfigLocked() then return end
+  local mode = popup._msufGFMode
+  local conf = GetConf(mode)
+  if not conf then return end
+  Dep("MSUF_EM_UndoBeforeChange")("gf", mode)
+  local xKey, yKey = PositionKeys(mode, conf)
+  conf[xKey], conf[yKey] = 0, 0
+  conf.positionMode = STABLE_GRID_POSITION_MODE
+  GroupPopup.RefreshAfterPopupApply(mode)
+  GroupPopup.NotifyMoved(mode)
+  if popup and popup:IsShown() then GroupPopup.Sync(popup) end
+end
+
+--- Size edits: with the ratio locked, the other box follows before the apply.
+function GroupPopup.ApplySize(popup, changed)
+  if popup._lockRatio then
+    local ratio = tonumber(popup._sizeRatio)
+    local w = popup.wBox and tonumber(popup.wBox:GetText())
+    local h = popup.hBox and tonumber(popup.hBox:GetText())
+    local Q = GroupPopup.QuickPopup()
+    if ratio and ratio > 0 then
+      if changed == "width" and w then
+        Q.SetBoxText(popup.hBox, floor(max(16, min(200, w / ratio)) + 0.5))
+      elseif changed == "height" and h then
+        Q.SetBoxText(popup.wBox, floor(max(40, min(400, h * ratio)) + 0.5))
+      end
+    end
+  end
+  GroupPopup.Apply(popup)
+end
+
+function GroupPopup.ToggleSizeRatio(popup, checked)
+  popup._lockRatio = checked and true or false
+  if popup._lockRatio then
+    local w = popup.wBox and tonumber(popup.wBox:GetText())
+    local h = popup.hBox and tonumber(popup.hBox:GetText())
+    if w and h and h > 0 then popup._sizeRatio = w / h end
+  end
+end
+
+--- Hovering a page button lights the component it opens.
+function GroupPopup.WireFocus(btn, mode, component)
+  if not (btn and btn.HookScript) then return btn end
+  btn:HookScript("OnEnter", function()
+    local key = KIND_TO_KEY[mode]
+    if key and EM2.Focus and EM2.Focus.SetHover then
+      EM2.Focus.SetHover(key, component, nil, { source = "group-popup" })
+    end
+  end)
+  btn:HookScript("OnLeave", function()
+    if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("group-popup") end
+  end)
+  return btn
+end
+
+--- The popup body: position and size cards, the page buttons, the detail and
+--- copy buttons and the shared footer.
+function GroupPopup.BuildControls(popup)
+  local mode = popup._msufGFMode
+  local function Apply() GroupPopup.Apply(popup) end
+  local Q = GroupPopup.QuickPopup()
+  Q.ValueCard(popup, popup, 20, -58, 208, "Position", {
+    { label = "X", key = "xBox", onChanged = Apply },
+    { label = "Y", key = "yBox", onChanged = Apply },
+  }, { height = 132, boxWidth = 64, hoverWash = true })
+  local sizeCard = Q.ValueCard(popup, popup, 240, -58, 300, "Size", {
+    { label = "Width", key = "wBox", onChanged = function() GroupPopup.ApplySize(popup, "width") end },
+    { label = "Height", key = "hBox", onChanged = function() GroupPopup.ApplySize(popup, "height") end },
+  }, { height = 132, boxWidth = 64, controlsRightInset = 88, hoverWash = true })
+  popup.ratioBtn = Q.ToggleAt(sizeCard, "Lock ratio", 208, -80, 80, 32,
+    function(checked) GroupPopup.ToggleSizeRatio(popup, checked) end, { hoverWash = true })
+
+  for i = 1, #GROUP_PAGE_BUTTONS do
+    local def = GROUP_PAGE_BUTTONS[i]
+    local pageKey, component = def[2], def[3]
+    local x = 20 + (i - 1) * 130
+    local width = (i == #GROUP_PAGE_BUTTONS) and 130 or 122
+    GroupPopup.WireFocus(Q.ButtonAt(popup, def[1], x, -204, width, 34, function() GroupPopup.OpenMenu2Page(popup, pageKey) end, {
+      hoverWash = true,
+      active = i == 1,
+    }), mode, component)
+  end
+
+  Q.ButtonAt(popup, "Open detailed settings", 20, -250, 334, 36, function() GroupPopup.OpenMenu2Page(popup, "gf_layout") end, {
+    variant = "primary",
+    hoverWash = true,
+  })
+  Q.MenuButtonAt(popup, "Copy size to...", 366, -250, 174, 36, function()
+    local entries = {}
+    for _, target in ipairs(GROUP_COPY_TARGETS) do
+      if target[1] ~= mode then entries[#entries + 1] = { key = target[1], label = target[2] } end
+    end
+    return entries
+  end, function(entry)
+    if entry.key ~= mode then GroupPopup.CopySizeTo(popup, entry.key) end
+  end, { palette = Q.RefreshPalette() })
+
+  local Quick = EM2.QuickPopup or (_G.MSUF_EM2_Menu2Style and _G.MSUF_EM2_Menu2Style.QuickPopup)
+  if Quick and Quick.AddFooterControls then
+    Quick.AddFooterControls(popup, { anchor = "BOTTOM", bottomGap = 12,
+      onResetPosition = function() GroupPopup.ResetPosition(popup) end })
+  end
+end
+
 local function BuildGFPopup(mode)
   local gf = GF()
   if not gf then return nil end
 
   local isRaid = (mode == "raid" or mode == "mythicraid")
   local title = (mode == "mythicraid") and "Mythic Raid Frames" or (isRaid and "Raid Frames" or "Party Frames")
-  local popup = QuickPopup().CreateShell("MSUF_EM2_GFPopup_" .. mode, {
+  local popup = GroupPopup.QuickPopup().CreateShell("MSUF_EM2_GFPopup_" .. mode, {
     width = 560,
     height = 350,
     x = 250,
@@ -1529,228 +1709,10 @@ local function BuildGFPopup(mode)
   })
   if not popup then return nil end
 
-  local function Conf()
-    return GetConf(mode)
-  end
-
-  local function Apply()
-    if BlockConfigLocked() then return end
-    local conf = Conf()
-    if not conf then return end
-    Dep("MSUF_EM_UndoBeforeChange")("gf", mode)
-
-    -- Convert before reading the current offsets: they feed TranslateFramePosition
-    -- below, so reading them in legacy semantics and stamping V2 afterwards would
-    -- persist the legacy numbers under the converted label.
-    if mode ~= "priority" then
-      local applyGF = GF()
-      if applyGF and type(applyGF.EnsureStableGridPosition) == "function" then
-        applyGF.EnsureStableGridPosition(mode, GetPositionCount(mode), conf)
-      end
-    end
-    local xKey, yKey = PositionKeys(mode, conf)
-    local widthKey, heightKey = SizeKeys(mode, conf)
-    local currentX = San(conf[xKey], 0)
-    local currentY = San(conf[yKey], 0)
-    local displayX = popup.xBox and tonumber(popup.xBox:GetText())
-    local displayY = popup.yBox and tonumber(popup.yBox:GetText())
-    conf.positionMode = STABLE_GRID_POSITION_MODE
-
-    -- A size tier's own override keeps its wider range (20-500 by 10-200).
-    local w = popup.wBox and tonumber(popup.wBox:GetText())
-    if w then conf[widthKey] = floor(max(widthKey == "width" and 40 or 20, min(widthKey == "width" and 400 or 500, w)) + 0.5) end
-    local h = popup.hBox and tonumber(popup.hBox:GetText())
-    if h then conf[heightKey] = floor(max(heightKey == "height" and 16 or 10, min(200, h)) + 0.5) end
-
-    local frame = SyncContainer(mode)
-    if type(TranslateFramePosition) == "function" then
-      conf[xKey], conf[yKey] = TranslateFramePosition(frame, currentX, currentY, displayX, displayY)
-    else
-      conf[xKey], conf[yKey] = San(displayX, currentX), San(displayY, currentY)
-    end
-
-    RefreshAfterPopupApply(mode)
-    local key = KIND_TO_KEY[mode]
-    if key and EM2.Focus and EM2.Focus.NotifyPositionChanged then
-      EM2.Focus.NotifyPositionChanged(key, true)
-    end
-  end
-
-  local function Sync()
-    local conf = Conf()
-    if not conf then return end
-    local function S(box, value)
-      if box and box.SetText then box:SetText(tostring(value or 0)) end
-    end
-
-    local x, y
-    if type(FramePositionValues) == "function" then
-      x, y = FramePositionValues(SyncContainer(mode))
-    end
-    local xKey, yKey = PositionKeys(mode, conf)
-    local widthKey, heightKey = SizeKeys(mode, conf)
-    S(popup.xBox, x ~= nil and x or San(conf[xKey], 0))
-    S(popup.yBox, y ~= nil and y or San(conf[yKey], 0))
-    S(popup.wBox, conf[widthKey] or (isRaid and 80 or 120))
-    S(popup.hBox, conf[heightKey] or (isRaid and 32 or 40))
-  end
-
-  popup.Sync = Sync
-  popup.Apply = Apply
-
-  local function OpenMenu2Page(pageKey)
-    Apply()
-    local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
-    local key = KIND_TO_KEY[mode]
-    pageKey = pageKey or "gf_layout"
-    local component = GroupComponentForPage(pageKey)
-    local sectionId = GroupSectionForPage(pageKey, component)
-    if EM2.Focus and EM2.Focus.SetSelection then
-      EM2.Focus.SetSelection(key, component, nil, { source = "group-popup", menu = false })
-    end
-    ExportPublic("MSUF_EM2_MenuFocusRequest", {
-      key = key,
-      component = component,
-      pageKey = pageKey,
-      sectionId = sectionId,
-      source = "group-popup",
-      explicit = true,
-      changedAt = GetTime and GetTime() or 0,
-    })
-    if M then
-      M.gfScope = mode
-      if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("gfScope", mode) end
-    end
-    GF_EM2_SetActivePreviewKind(mode)
-    QuickPopup().OpenPage(pageKey, popup)
-  end
-
-  --- Copies the source group's size only. Position stays untouched so a size
-  --- copy cannot unexpectedly move another group block. The size shown on each
-  --- side is the one that counts: a size tier's own override when it has one.
-  local function CopySizeTo(targetMode)
-    targetMode = NormalizeKind(targetMode)
-    if not targetMode or targetMode == mode then return end
-    Apply()
-    local src = Conf()
-    local dst = GetConf(targetMode)
-    if not src or not dst then return end
-    Dep("MSUF_EM_UndoBeforeChange")("gf", targetMode)
-    local srcW, srcH = SizeKeys(mode, src)
-    local dstW, dstH = SizeKeys(targetMode, dst)
-    if src[srcW] ~= nil then
-      dst[dstW] = floor(max(dstW == "width" and 40 or 20, min(dstW == "width" and 400 or 500, tonumber(src[srcW]) or 120)) + 0.5)
-    end
-    if src[srcH] ~= nil then
-      dst[dstH] = floor(max(dstH == "height" and 16 or 10, min(200, tonumber(src[srcH]) or 40)) + 0.5)
-    end
-    RefreshAfterPopupApply(targetMode)
-    local targetKey = KIND_TO_KEY[targetMode]
-    if targetKey and EM2.Focus and EM2.Focus.Pulse then
-      EM2.Focus.Pulse(targetKey, "layout", nil, { source = "group-copy", duration = 0.32 })
-    end
-    SetHUDStatus("Copied group size", "ok")
-    if popup and popup:IsShown() then Sync() end
-  end
-
-  local function ResetPosition()
-    if BlockConfigLocked() then return end
-    local conf = Conf()
-    if not conf then return end
-    Dep("MSUF_EM_UndoBeforeChange")("gf", mode)
-    local xKey, yKey = PositionKeys(mode, conf)
-    conf[xKey], conf[yKey] = 0, 0
-    conf.positionMode = STABLE_GRID_POSITION_MODE
-    RefreshAfterPopupApply(mode)
-    local key = KIND_TO_KEY[mode]
-    if key and EM2.Focus and EM2.Focus.NotifyPositionChanged then
-      EM2.Focus.NotifyPositionChanged(key, true)
-    end
-    if popup and popup:IsShown() then Sync() end
-  end
-
-  local function CaptureSizeRatio()
-    local w = popup.wBox and tonumber(popup.wBox:GetText())
-    local h = popup.hBox and tonumber(popup.hBox:GetText())
-    if w and h and h > 0 then popup._sizeRatio = w / h end
-  end
-
-  local function ApplySize(changed)
-    if popup._lockRatio then
-      local ratio = tonumber(popup._sizeRatio)
-      local w = popup.wBox and tonumber(popup.wBox:GetText())
-      local h = popup.hBox and tonumber(popup.hBox:GetText())
-      local Q = QuickPopup()
-      if ratio and ratio > 0 then
-        if changed == "width" and w then
-          Q.SetBoxText(popup.hBox, floor(max(16, min(200, w / ratio)) + 0.5))
-        elseif changed == "height" and h then
-          Q.SetBoxText(popup.wBox, floor(max(40, min(400, h * ratio)) + 0.5))
-        end
-      end
-    end
-    Apply()
-  end
-
-  local function ToggleSizeRatio(checked)
-    popup._lockRatio = checked and true or false
-    if popup._lockRatio then CaptureSizeRatio() end
-  end
-
-  local function WireGroupFocus(btn, component)
-    if not (btn and btn.HookScript) then return btn end
-    btn:HookScript("OnEnter", function()
-      local key = KIND_TO_KEY[mode]
-      if key and EM2.Focus and EM2.Focus.SetHover then
-        EM2.Focus.SetHover(key, component, nil, { source = "group-popup" })
-      end
-    end)
-    btn:HookScript("OnLeave", function()
-      if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("group-popup") end
-    end)
-    return btn
-  end
-
-  local Q = QuickPopup()
-  Q.ValueCard(popup, popup, 20, -58, 208, "Position", {
-    { label = "X", key = "xBox", onChanged = Apply },
-    { label = "Y", key = "yBox", onChanged = Apply },
-  }, { height = 132, boxWidth = 64, hoverWash = true })
-  local sizeCard = Q.ValueCard(popup, popup, 240, -58, 300, "Size", {
-    { label = "Width", key = "wBox", onChanged = function() ApplySize("width") end },
-    { label = "Height", key = "hBox", onChanged = function() ApplySize("height") end },
-  }, { height = 132, boxWidth = 64, controlsRightInset = 88, hoverWash = true })
-  popup.ratioBtn = Q.ToggleAt(sizeCard, "Lock ratio", 208, -80, 80, 32, ToggleSizeRatio, { hoverWash = true })
-
-  for i = 1, #GROUP_PAGE_BUTTONS do
-    local def = GROUP_PAGE_BUTTONS[i]
-    local pageKey, component = def[2], def[3]
-    local x = 20 + (i - 1) * 130
-    local width = (i == #GROUP_PAGE_BUTTONS) and 130 or 122
-    WireGroupFocus(Q.ButtonAt(popup, def[1], x, -204, width, 34, function() OpenMenu2Page(pageKey) end, {
-      hoverWash = true,
-      active = i == 1,
-    }), component)
-  end
-
-  Q.ButtonAt(popup, "Open detailed settings", 20, -250, 334, 36, function() OpenMenu2Page("gf_layout") end, {
-    variant = "primary",
-    hoverWash = true,
-  })
-  Q.MenuButtonAt(popup, "Copy size to...", 366, -250, 174, 36, function()
-    local entries = {}
-    for _, target in ipairs(GROUP_COPY_TARGETS) do
-      if target[1] ~= mode then entries[#entries + 1] = { key = target[1], label = target[2] } end
-    end
-    return entries
-  end, function(entry)
-    if entry.key ~= mode then CopySizeTo(entry.key) end
-  end, { palette = Q.RefreshPalette() })
-
-  local Quick = EM2.QuickPopup or (_G.MSUF_EM2_Menu2Style and _G.MSUF_EM2_Menu2Style.QuickPopup)
-  if Quick and Quick.AddFooterControls then
-    Quick.AddFooterControls(popup, { anchor = "BOTTOM", bottomGap = 12, onResetPosition = ResetPosition })
-  end
+  popup._msufGFMode = mode
+  popup.Sync = function() GroupPopup.Sync(popup) end
+  popup.Apply = function() GroupPopup.Apply(popup) end
+  GroupPopup.BuildControls(popup)
 
   if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(popup) end
   popup:Hide()

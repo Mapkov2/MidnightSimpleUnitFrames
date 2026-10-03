@@ -268,6 +268,10 @@ local M = {
 -- The Options addon namespace reads through to the core namespace
 -- (MSUF_OptionsLOD_Bootstrap.lua), which is where MSUF.Client lives.
 local optionsNamespace = setmetatable({ MSUF2 = M }, { __index = namespace })
+-- The page requires its core collaborators at load (M.RequireGlobals).
+local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.Install(repo, optionsNamespace, M)
+RequireFixture.StubRequirements(repo, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua" })
 local pagePath = repo .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua"
 local pageFile = assert(io.open(pagePath, "rb"))
 local pageSource = pageFile:read("*a")

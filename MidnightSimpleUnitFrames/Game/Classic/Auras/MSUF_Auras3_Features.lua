@@ -240,8 +240,15 @@ function Features.MatchFilterRequirements(plan, unit, data, matchFilter, mine)
     if req.player == true and mine ~= true then return false end
     if req.notPlayer == true and mine == true then return false end
     if req.important == true and not Features.IsImportantAura(data) then return false end
-    if req.stealable == true and data.isStealable ~= true then return false end
-    if req.boss == true and data.isBossAura ~= true then return false end
+    -- A secret flag cannot prove the requirement.
+    if req.stealable == true then
+        local stealable = data.isStealable
+        if IsSecret(stealable) or stealable ~= true then return false end
+    end
+    if req.boss == true then
+        local boss = data.isBossAura
+        if IsSecret(boss) or boss ~= true then return false end
+    end
     if req.dispellableAny == true then
         local dispelName = not IsSecret(data.dispelName) and data.dispelName or nil
         if type(dispelName) ~= "string" or dispelName == "" then return false end
@@ -275,12 +282,14 @@ end
 local function PlayerClass()
     if type(UnitClass) ~= "function" then return nil end
     local _, class = UnitClass("player")
+    -- UnitClass is SecretWhenUnitIdentityRestricted on 12.x engines.
+    if IsSecret(class) then return nil end
     return class
 end
 
 local function PlayerDefensiveHash(entry)
     local class = PlayerClass()
-    local spells = class and A3.PlayerDefensiveData and A3.PlayerDefensiveData[class]
+    local spells = class and A3.PlayerDefensiveData[class]
     local base = {}
     for i = 1, type(spells) == "table" and #spells or 0 do
         local spellID = tonumber(spells[i] and spells[i][1])
@@ -368,7 +377,8 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     -- The Buff/Debuff lane parser (MSUF_Auras3_Compile.lua, loaded before any
     -- lane compiles) with the same Player & Priority First fallback, so one
     -- sort name orders a container and a lane alike.
-    local sortOrder = A3._ClassicCompile.SortMode(placed.sortMethod, 1)
+    local Compile = A3._ClassicCompile
+    local sortOrder = Compile.SortMode(placed.sortMethod, Compile.SORT_MODE.PLAYER_FIRST)
     if forcePlayer == true and (not activeFilters or activeFilters.onlyMine ~= true) then
         local source = activeFilters or {}
         activeFilters = {}
@@ -446,7 +456,7 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         onlyMine = onlyMine,
         hasInclusive = hasInclusive,
         needsPlayerFlag = filterPlan.needsPlayerFlag == true
-            or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5,
+            or Compile.SORT_READS_OWNERSHIP[sortOrder] == true,
         needsCombatRefresh = filterPlan.needsCombatRefresh == true,
         -- Classic has no Pandemic state, so onlyInPandemicWindow is deliberately
         -- never read: a true saved by Retail (the menu hides that switch here)
@@ -503,7 +513,10 @@ end
 
 local function EffectiveContainers(auras, unit)
     local root = type(auras) == "table" and auras.customContainers or nil
-    local record = type(root) == "table" and type(root.perUnit) == "table" and root.perUnit[Scope(unit)] or nil
+    -- The menu keeps one Arena record for every arena slot (Menu_Common
+    -- NormalizeUnit), as Mainline's UnitCustomContainerScope reads it.
+    local scope = type(unit) == "string" and unit:match("^arena%d+$") and "arena" or Scope(unit)
+    local record = type(root) == "table" and type(root.perUnit) == "table" and root.perUnit[scope] or nil
     return type(record) == "table" and type(record.items) == "table" and record.items or nil
 end
 
@@ -520,11 +533,12 @@ function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
     local source = EffectiveContainers(auras, unit)
     local lanes, order = {}, {}
     if type(source) == "table" then
-        for index = 1, 4 do
+        for index = 1, A3.CUSTOM_CONTAINER_COUNT do
             local entry = source[index]
             if type(entry) == "table" and entry.enabled == true then
-                local playerDefensive = unit == "player" and (index == 4 or entry.playerDefensives == true)
-                local targetDot = not playerDefensive and index == 4 and unit ~= "player"
+                local preset = index == A3.PRESET_CUSTOM_CONTAINER_INDEX
+                local playerDefensive = unit == "player" and (preset or entry.playerDefensives == true)
+                local targetDot = not playerDefensive and preset and unit ~= "player"
                 local spellIDs = playerDefensive and PlayerDefensiveHash(entry)
                     or (targetDot and TargetDotHash(entry) or SpellIDHash(entry.spellIDs or entry.includeSpellIDs))
                 if spellIDs then
@@ -610,7 +624,8 @@ function Features.CompileGroupIndicatorLanes(frame, unit)
 end
 
 local function PublicNumber(value)
-    if value == nil or IsSecret(value) then return nil end
+    if IsSecret(value) then return nil end
+    if value == nil then return nil end
     return tonumber(value)
 end
 

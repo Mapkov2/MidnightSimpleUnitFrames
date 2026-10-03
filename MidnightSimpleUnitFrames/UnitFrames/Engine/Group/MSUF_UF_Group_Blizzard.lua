@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua
 --- Ownership adapter for Blizzard party/raid frames.
 ---
@@ -8,6 +7,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 local ExportPublic = MSUF.ExportPublic
 
 local GF = MSUF.GF or {}
@@ -267,9 +267,10 @@ end
 --- while MSUF owns the frames" behavior.
 local function HideRaidFrames()
   -- All generated CompactRaidGroup/CompactRaidFrame unit buttons are children
-  -- of CompactRaidFrameContainer. Hide only the owners and leave Blizzard's
+  -- of CompactRaidFrameContainer. Hide only the owner and leave Blizzard's
   -- unit-button scripts, events, colors and secret values completely untouched.
-  HideFrame(_G.CompactRaidFrameReservationManager)
+  -- (Blizzard_CompactRaidFrameReservationManager.lua is a file of reservation
+  -- helpers, CompactRaidFrameReservation_NewManager; it creates no frame.)
   HideFrame(_G.CompactRaidFrameContainer)
 end
 
@@ -293,6 +294,7 @@ local raidManagerMode = "AUTO"
 local raidManagerHooked = false
 local raidManagerMouseDefault
 local raidManagerPendingMouse
+local raidManagerGamepadLit = false
 
 --- "DEFAULT" is the pre-release spelling of AUTO and is mapped rather than dropped, so a
 --- profile written by an in-between build keeps working instead of silently resetting.
@@ -348,10 +350,103 @@ local function RaidManagerOnLeave(self)
   self:SetAlpha(0)
 end
 
+--- The tab's toggle buttons are child Buttons with their own mouse state, so the
+--- manager's EnableMouse(false) leaves them clickable: at alpha 0 an invisible
+--- button at the screen edge would open an invisible panel. Mainline 12.1 and WoW
+--- Forever split the toggle into toggleButtonForward (shown while collapsed) and
+--- toggleButtonBack (while expanded); the Classic branches keep one legacy
+--- toggleButton (Blizzard_CompactRaidFrameManager.xml, upstream/live, upstream/forever,
+--- and the Classic family files on classic_era/classic). Mainline never touches the
+--- legacy key.
+local SPLIT_TOGGLES = {
+  { key = "toggleButtonForward", global = "CompactRaidFrameManagerToggleButtonForward" },
+  { key = "toggleButtonBack", global = "CompactRaidFrameManagerToggleButtonBack" },
+}
+local RAID_MANAGER_TOGGLES = IS_CLASSIC_FAMILY and {
+  { key = "toggleButton", global = "CompactRaidFrameManagerToggleButton" },
+  SPLIT_TOGGLES[1], SPLIT_TOGGLES[2],
+} or SPLIT_TOGGLES
+--- Side table: each button's own mouse default, read once before the first write.
+local raidManagerToggleMouseDefault = {}
+--- The mode ApplyRaidManagerMode last resolved AUTO into.
+local raidManagerEffectiveMode = "SHOW"
+
+local function RaidManagerToggle(manager, index)
+  local toggle = RAID_MANAGER_TOGGLES[index]
+  local button = manager[toggle.key] or _G[toggle.global]
+  if button and not IsForbidden(button) then return button end
+  return nil
+end
+
+local function MouseScriptable(frame)
+  return type(frame.EnableMouse) == "function" and type(frame.IsMouseEnabled) == "function"
+end
+
+local function MouseEnabled(frame)
+  return frame:IsMouseEnabled() and true or false
+end
+
+--- HIDDEN drops mouse input from the manager and every toggle, so the invisible
+--- tab stops eating clicks at the left screen edge. An expanded invisible panel
+--- keeps its toggles so the user can still collapse it; the toggle hook hands them
+--- back to click-through afterwards. EnableMouse is protected once the frame is,
+--- so a combat request parks the wanted state for regen -- the alpha write already
+--- did the visible half.
+local function ApplyRaidManagerMouse(manager, enabled)
+  if not (manager and MouseScriptable(manager)) then
+    return
+  end
+  if raidManagerMouseDefault == nil then
+    raidManagerMouseDefault = MouseEnabled(manager)
+  end
+  local wanted = enabled and raidManagerMouseDefault or false
+  local keepToggles = enabled or manager.collapsed == false
+  local changed = MouseEnabled(manager) ~= wanted
+  local protected = manager.IsProtected and manager:IsProtected()
+  for i = 1, #RAID_MANAGER_TOGGLES do
+    local button = RaidManagerToggle(manager, i)
+    if button and MouseScriptable(button) then
+      local default = raidManagerToggleMouseDefault[button]
+      if default == nil then
+        default = MouseEnabled(button)
+        raidManagerToggleMouseDefault[button] = default
+      end
+      changed = changed or MouseEnabled(button) ~= (default and keepToggles)
+      protected = protected or (button.IsProtected and button:IsProtected())
+    end
+  end
+  if not changed then
+    raidManagerPendingMouse = nil
+    return
+  end
+  if InCombat() and protected then
+    raidManagerPendingMouse = enabled and true or false
+    EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
+    return
+  end
+  raidManagerPendingMouse = nil
+  if MouseEnabled(manager) ~= wanted then
+    manager:EnableMouse(wanted)
+  end
+  for i = 1, #RAID_MANAGER_TOGGLES do
+    local button = RaidManagerToggle(manager, i)
+    local default = button and raidManagerToggleMouseDefault[button]
+    if default ~= nil and MouseEnabled(button) ~= (default and keepToggles) then
+      button:EnableMouse(default and keepToggles)
+    end
+  end
+end
+
+--- A collapse click fades a MOUSEOVER panel and hands a HIDDEN panel's toggles
+--- back to click-through.
 local function RaidManagerOnToggleClick()
   local manager = _G.CompactRaidFrameManager
-  if raidManagerMode == "MOUSEOVER" and manager and manager.collapsed and manager.SetAlpha then
+  if not manager then return end
+  if raidManagerMode == "MOUSEOVER" and manager.collapsed and manager.SetAlpha then
     manager:SetAlpha(0)
+  end
+  if raidManagerEffectiveMode == "HIDDEN" then
+    ApplyRaidManagerMouse(manager, false)
   end
 end
 
@@ -360,107 +455,10 @@ local function EnsureRaidManagerHooks(manager)
   raidManagerHooked = true
   manager:HookScript("OnEnter", RaidManagerOnEnter)
   manager:HookScript("OnLeave", RaidManagerOnLeave)
-  --- 12.1 split the single toggleButton into a forward/back pair.
-  local buttons = {
-    manager.toggleButtonBack or _G.CompactRaidFrameManagerToggleButtonBack,
-    manager.toggleButtonForward or _G.CompactRaidFrameManagerToggleButtonForward,
-  }
-  for i = 1, #buttons do
-    local button = buttons[i]
-    if button and type(button.HookScript) == "function" and not IsForbidden(button) then
+  for i = 1, #RAID_MANAGER_TOGGLES do
+    local button = RaidManagerToggle(manager, i)
+    if button and type(button.HookScript) == "function" then
       button:HookScript("OnClick", RaidManagerOnToggleClick)
-    end
-  end
-end
-
---- HIDDEN also drops mouse input, so the invisible tab stops eating clicks at the left
---- screen edge. EnableMouse is protected once the frame is, so a combat request parks the
---- wanted state for regen -- the alpha write above already did the visible half.
-local function ApplyRaidManagerMouse(manager, enabled)
-  if not (manager and type(manager.EnableMouse) == "function" and type(manager.IsMouseEnabled) == "function") then
-    return
-  end
-  if raidManagerMouseDefault == nil then
-    raidManagerMouseDefault = manager:IsMouseEnabled() and true or false
-  end
-  local wanted = enabled and raidManagerMouseDefault or false
-  if (manager:IsMouseEnabled() and true or false) == wanted then
-    raidManagerPendingMouse = nil
-    return
-  end
-  if InCombat() and manager.IsProtected and manager:IsProtected() then
-    raidManagerPendingMouse = enabled and true or false
-    EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
-    return
-  end
-  raidManagerPendingMouse = nil
-  manager:EnableMouse(wanted)
-end
-
---- Classic: the supported Classic branches keep Blizzard's single legacy toggle button
---- (Blizzard_CompactRaidFrames/Classic), a child with its own mouse state. HIDDEN drops
---- its mouse as well; an expanded panel keeps it clickable so it can still be collapsed,
---- and the toggle hook hands it back to click-through afterwards. raidManagerEffectiveMode
---- is the mode ApplyRaidManagerMode last resolved AUTO into.
-local raidManagerEffectiveMode = "SHOW"
-if IS_CLASSIC_FAMILY then
-  local raidManagerButtonMouseDefault
-
-  ApplyRaidManagerMouse = function(manager, enabled)
-    if not (manager and type(manager.EnableMouse) == "function" and type(manager.IsMouseEnabled) == "function") then
-      return
-    end
-    local button = manager.toggleButton or _G.CompactRaidFrameManagerToggleButton
-    if not (button and not IsForbidden(button)
-      and type(button.EnableMouse) == "function" and type(button.IsMouseEnabled) == "function") then
-      button = nil
-    end
-    if raidManagerMouseDefault == nil then
-      raidManagerMouseDefault = manager:IsMouseEnabled() and true or false
-    end
-    if button and raidManagerButtonMouseDefault == nil then
-      raidManagerButtonMouseDefault = button:IsMouseEnabled() and true or false
-    end
-    local wanted = enabled and raidManagerMouseDefault or false
-    local buttonWanted = button ~= nil and raidManagerButtonMouseDefault == true
-      and (enabled or manager.collapsed == false)
-    local managerChanged = (manager:IsMouseEnabled() and true or false) ~= wanted
-    local buttonChanged = button ~= nil and (button:IsMouseEnabled() and true or false) ~= buttonWanted
-    if not managerChanged and not buttonChanged then
-      raidManagerPendingMouse = nil
-      return
-    end
-    if InCombat() and ((manager.IsProtected and manager:IsProtected())
-      or (button and button.IsProtected and button:IsProtected())) then
-      raidManagerPendingMouse = enabled and true or false
-      EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
-      return
-    end
-    raidManagerPendingMouse = nil
-    if managerChanged then
-      manager:EnableMouse(wanted)
-    end
-    if buttonChanged then
-      button:EnableMouse(buttonWanted)
-    end
-  end
-
-  --- Collapsing an invisible panel hands the toggle button back to click-through.
-  local function LegacyToggleClick()
-    RaidManagerOnToggleClick()
-    local manager = _G.CompactRaidFrameManager
-    if raidManagerEffectiveMode == "HIDDEN" and manager then
-      ApplyRaidManagerMouse(manager, false)
-    end
-  end
-
-  local HookManagerAndSplitToggles = EnsureRaidManagerHooks
-  EnsureRaidManagerHooks = function(manager)
-    if raidManagerHooked or type(manager.HookScript) ~= "function" then return end
-    HookManagerAndSplitToggles(manager)
-    local button = manager.toggleButton or _G.CompactRaidFrameManagerToggleButton
-    if button and type(button.HookScript) == "function" and not IsForbidden(button) then
-      button:HookScript("OnClick", LegacyToggleClick)
     end
   end
 end
@@ -481,14 +479,14 @@ end
 local function RaidManagerDisplayOnShow()
   local manager = _G.CompactRaidFrameManager
   if not manager or raidManagerEffectiveMode == "SHOW" or not RaidManagerGamepadUIActive() then return end
-  manager._msufGamepadLit = true
+  raidManagerGamepadLit = true
   manager:SetAlpha(1)
 end
 
 local function RaidManagerDisplayOnHide()
   local manager = _G.CompactRaidFrameManager
-  if not (manager and manager._msufGamepadLit) then return end
-  manager._msufGamepadLit = nil
+  if not (manager and raidManagerGamepadLit) then return end
+  raidManagerGamepadLit = false
   if raidManagerEffectiveMode == "SHOW" then return end
   if raidManagerEffectiveMode == "MOUSEOVER" and MouseIsOverRaidManager(manager) then return end
   manager:SetAlpha(0)
@@ -540,14 +538,18 @@ local function ApplyRaidManagerMode()
       and "HIDDEN" or "SHOW"
   end
   raidManagerEffectiveMode = mode
+  -- The toggle hook hands a collapsed HIDDEN panel's toggles back to click-through.
+  if mode == "HIDDEN" then EnsureRaidManagerHooks(manager) end
   if IS_CLASSIC_FAMILY then
-    if mode == "HIDDEN" then EnsureRaidManagerHooks(manager) end
     KeepRaidContainerOpaque(mode ~= "SHOW")
   elseif mode ~= "SHOW" then
     EnsureRaidManagerGamepadHooks(manager)
   end
   -- An open gamepad panel stays lit until it closes (RaidManagerDisplayOnHide).
-  local gamepadLit = manager._msufGamepadLit == true and mode ~= "SHOW"
+  if raidManagerGamepadHooked and mode ~= "SHOW" and manager.collapsed == false and RaidManagerGamepadUIActive() then
+    raidManagerGamepadLit = true
+  end
+  local gamepadLit = raidManagerGamepadLit and mode ~= "SHOW"
 
   if mode == "HIDDEN" then
     manager:SetAlpha(gamepadLit and 1 or 0)
@@ -557,7 +559,7 @@ local function ApplyRaidManagerMode()
   ApplyRaidManagerMouse(manager, true)
   if mode == "MOUSEOVER" then
     EnsureRaidManagerHooks(manager)
-    manager:SetAlpha((gamepadLit or MouseIsOverRaidManager(manager)) and 1 or 0)
+    manager:SetAlpha((gamepadLit or manager.collapsed == false or MouseIsOverRaidManager(manager)) and 1 or 0)
     return
   end
   manager:SetAlpha(1)
@@ -568,10 +570,6 @@ end
 function GF.ApplyBlizzardRaidManagerMode()
   ApplyRaidManagerMode()
   return raidManagerMode
-end
-
-function GF.GetBlizzardRaidManagerMode()
-  return ResolveRaidManagerMode()
 end
 
 local BASE_EVENTS = {
@@ -668,14 +666,6 @@ BlizzardRosterEventWanted = function()
   local raid = GF.GetConf and GF.GetConf(LiveRaidKind()) or {}
   return NormalizeBlizzardFallbackMode(party.blizzardFallbackMode) == "NONE"
     or NormalizeBlizzardFallbackMode(raid.blizzardFallbackMode) == "NONE"
-end
-
-function GF.HideBlizzardPartyFrames()
-  HidePartyFrames()
-end
-
-function GF.HideBlizzardRaidFrames()
-  HideRaidFrames()
 end
 
 function GF.RestoreBlizzardGroupFrames()

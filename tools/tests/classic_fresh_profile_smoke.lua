@@ -13,9 +13,9 @@
 --    have added its two bookkeeping keys) is completed exactly as a new profile's is; an
 --    owner with any customized key or value, and every complete owner, stays byte-for-byte
 --    as it is, and a profile with nothing to repair is not even stamped.
--- 3. bars.showArcaneSoul is a former name: only the class power extras read it, to carry a
---    saved value to bars.showArcaneWindow (MSUF_CP_ResourceExtras.lua). A fresh profile no
---    longer carries it; the defaults pass leaves a saved one as it is.
+-- 3. bars.showArcaneSoul is a former name. A fresh profile no longer carries it; the profile
+--    translator (State/MSUF_ProfileNormalize.lua) carries a saved value to
+--    bars.showArcaneWindow on the first login, once, together with the aura repair.
 local repo = assert(arg[1], "repository root is required"):gsub("\\", "/"):gsub("/$", "")
 local flavor = assert(arg[2], "client flavor required (Vanilla|TBC|Mists)")
 
@@ -64,7 +64,7 @@ local arenaSlots = Check(tonumber(_G.MSUF_MAX_ARENA_FRAMES), "the client model p
 function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return value end
 _G.MSUF_NS, _G.MSUF = ns, ns
 manifest.LoadSelected(repo, flavor, ns, {
-    "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
+    "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "Locales/MSUF_Localization.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua", "State/MSUF_Defaults.lua",
 })
@@ -367,6 +367,11 @@ ExpectRepaired("Beta3", "beta3")
 ExpectRepaired("Alpha", "alpha")
 ExpectRepaired("MenuRead", "beta3", true)
 ExpectRepaired("Mixed", "beta3", false, mixedCustomized)
+-- The former Arcane switch (off) moves to its current key on the first login.
+for _, name in ipairs({ "Beta3", "Custom" }) do
+    expected[name].bars.showArcaneSoul = nil
+    expected[name].bars.showArcaneWindow = false
+end
 
 -- A login must leave every profile exactly as expected. The heavy pass also re-runs
 -- migrations that have nothing to do with auras, so after it only the aura tree is held.
@@ -419,8 +424,8 @@ for _, name in ipairs({ "Beta3", "Custom" }) do
     profiles[name]._msufDefaultsRevision = nil
     MSUF_EnsureDB(true)
     Check(Snapshot(profiles[name].auras3) == Snapshot(expected[name].auras3)
-        and profiles[name].bars.showArcaneSoul == false,
-        name .. ": the defaults pass with every migration moved an aura owner or showArcaneSoul")
+        and profiles[name].bars.showArcaneSoul == nil and profiles[name].bars.showArcaneWindow == false,
+        name .. ": the defaults pass with every migration moved an aura owner or brought back showArcaneSoul")
 end
 -- The stamp is what ends it: a repaired profile is never repaired a second time.
 profiles.Beta3.auras3.perUnit.player = SavedOwner("beta3", "player")
@@ -431,4 +436,4 @@ Check(Snapshot(profiles.Beta3.auras3) == stamped, "a stamped profile was repaire
 print = realPrint
 print("PASS fresh Classic profile (" .. flavor .. "): " .. #UNITS .. " complete aura lane owners on first login, reset and new profile; "
     .. "saved sparse owners repaired once and per owner (6.5-beta3, 6.5-alpha18 New Profile, menu read), "
-    .. #CUSTOMIZE .. " kinds of customized owner and complete profiles byte-identical; showArcaneSoul is no longer seeded")
+    .. #CUSTOMIZE .. " kinds of customized owner and complete profiles byte-identical; showArcaneSoul is no longer seeded and a saved one moves once")

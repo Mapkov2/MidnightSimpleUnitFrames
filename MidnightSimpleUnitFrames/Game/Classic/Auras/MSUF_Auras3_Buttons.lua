@@ -296,9 +296,6 @@ local function CreateAuraButton(lane, index)
 
     lane[index] = button
     lane.createdButtons = index
-    if type(lane.PostCreateButton) == "function" then
-        lane:PostCreateButton(button)
-    end
     return button
 end
 
@@ -335,7 +332,9 @@ end
 --- with every other listener.
 local function AuraDispelColor(cfg, unit, data)
     local raw = data and data.dispelName
-    local name = PlainString(raw)
+    -- A secret dispel type has no readable colour.
+    if IsSecret(raw) then return false end
+    local name = type(raw) == "string" and raw or nil
     if raw == nil or name == "" then
         name = "None"
     elseif not name then

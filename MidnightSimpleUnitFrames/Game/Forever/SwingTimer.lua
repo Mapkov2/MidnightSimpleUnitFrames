@@ -46,6 +46,12 @@ local CUE_LABEL_LIMIT = 40
 local cueNames, cueIcons, cueLabelKeys, cueSpell, cueTitled = {}, {}, {}, nil, false
 local cueEventsBound, reachEventsBound, equippedOff, equippedRanged = false, false, nil, nil
 local Public = _G.issecretvalue and function(value) return not _G.issecretvalue(value) end or function() return true end
+-- UnitAttackSpeed is SecretWhenUnitStatsRestricted. A hand without a weapon
+-- answers nil; a secret speed is a returned speed, so its weapon is equipped.
+local function Equipped(speed)
+    if not Public(speed) then return true end
+    return (speed or 0) > 0
+end
 
 -- Settings saved under the former names of the swing extras move over once
 -- (the former key is removed); the queued-attack text was always on with them.
@@ -236,31 +242,58 @@ local function CreateBar(hand)
     return frame
 end
 
-local function HideNative(frame)
-    if active and frame:IsShown() then frame:Hide() end
+-- Blizzard owns its bars' visibility through the showSwingTimer CVar: its own
+-- CVarCallbackRegistry handler runs UpdateFrameState on every bar
+-- (Blizzard_SwingTimer.lua OnShowSwingTimerCVarChanged), so turning the CVar
+-- off hides them and restoring it shows them again. Showing or hiding a bar
+-- from addon code would run the bottom managed-frame container layout (which
+-- also places ExtraAbilityContainer) tainted: the bars inherit
+-- BottomManagedFrameTemplate, and their OnHide (EditModeSystemMixin
+-- OnSystemHide) removes them from it. Only Blizzard's Edit Mode shows a bar
+-- while the CVar is off (ShouldBeShown: isInEditMode); that one case is made
+-- invisible here, never hidden: alpha 0 (the bar takes no mouse of its own),
+-- the alpha Blizzard had set (Edit Mode opacity) kept for the release. Blizzard
+-- hides the bar itself when Edit Mode ends. Hooked bars and their alpha live in
+-- side tables, never on Blizzard's frame.
+local nativeHooked = setmetatable({}, { __mode = "k" })
+local nativeAlpha = setmetatable({}, { __mode = "k" })
+local function MuteNative(frame)
+    if not (active and frame.isInEditMode and frame:IsShown()) then return end
+    local alpha = frame:GetAlpha()
+    if alpha > 0 then
+        nativeAlpha[frame] = alpha
+        frame:SetAlpha(0)
+    end
+end
+local function RestoreNative()
+    for frame, alpha in pairs(nativeAlpha) do
+        nativeAlpha[frame] = nil
+        frame:SetAlpha(alpha)
+    end
 end
 local function SuppressNative()
     if _G.GetCVarBool("showSwingTimer") then _G.SetCVar("showSwingTimer", "0") end
     for i = 1, #HANDS do
         local frame = _G["SwingTimer" .. NAMES[HANDS[i]] .. "Frame"]
         if frame then
-            if not frame._msufSwingHideHook then
-                frame._msufSwingHideHook = true
-                frame:HookScript("OnShow", HideNative)
+            if not nativeHooked[frame] then
+                nativeHooked[frame] = true
+                frame:HookScript("OnShow", MuteNative)
             end
-            HideNative(frame)
+            MuteNative(frame)
         end
     end
 end
 local function RefreshVisibility()
     local main, off, ranged = _G.UnitAttackSpeed("player")
-    equippedOff, equippedRanged = (off or 0) > 0, (ranged or 0) > 0
+    equippedOff, equippedRanged = Equipped(off), Equipped(ranged)
     local listen = false
     for i = 1, #HANDS do
         local frame = frames[HANDS[i]]
         local cfg = frame.config
         if i == 1 then frame.speed = main elseif i == 2 then frame.speed = off else frame.speed = ranged end
-        local equipped = i == 1 or (frame.speed and frame.speed > 0)
+        -- Equipped asks issecretvalue first; Equipped(nil) is false.
+        local equipped = i == 1 or Equipped(frame.speed)
         frame.handlesSwings = cfg.enabled and equipped == true
         if frame.handlesSwings and not preview then listen = true end
         local shown = active and cfg.enabled and (preview or (equipped
@@ -528,7 +561,7 @@ local function OnEvent(_, event, a, b, c)
         -- Haste procs change the speeds many times a minute; only equipping or
         -- removing an off-hand or ranged weapon changes which bars run.
         local _, off, ranged = _G.UnitAttackSpeed("player")
-        if ((off or 0) > 0) ~= equippedOff or ((ranged or 0) > 0) ~= equippedRanged then
+        if Equipped(off) ~= equippedOff or Equipped(ranged) ~= equippedRanged then
             RefreshVisibility()
             SyncRanges()
         end
@@ -538,9 +571,13 @@ local function OnEvent(_, event, a, b, c)
         SyncRanges()
         if event == "PLAYER_REGEN_DISABLED" then UpdateCue() end
         if event == "WEAPON_SLOT_CHANGED" then
+            -- A secret speed cannot rebind the duration (SetTimeFromEnd takes
+            -- plain numbers only); the running swing keeps its timer.
             for i = 1, #HANDS do
                 local frame = frames[HANDS[i]]
-                if frame.endsAt and frame.endsAt > _G.GetTime() then Start(frame, frame.speed) end
+                if frame.endsAt and frame.endsAt > _G.GetTime() and Public(frame.speed) then
+                    Start(frame, frame.speed)
+                end
             end
         end
     end
@@ -594,11 +631,10 @@ local function Disable()
     end
     if frames.main and frames.main.Cue then frames.main.Cue:Hide() end
     cueSpell, cueTitled = nil, false
+    -- Blizzard's CVar callback shows its bars and re-registers PLAYER_SWING;
+    -- a bar muted in Edit Mode gets its alpha back first.
+    RestoreNative()
     _G.SetCVar("showSwingTimer", nativeEnabled and "1" or "0")
-    for i = 1, #HANDS do
-        local frame = _G["SwingTimer" .. NAMES[HANDS[i]] .. "Frame"]
-        if frame then frame:UpdateShownStateAndRegistration() end
-    end
 end
 function Swing.SetEnabled(value)
     local cfg = DB()

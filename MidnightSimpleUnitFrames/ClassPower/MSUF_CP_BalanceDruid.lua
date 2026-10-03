@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- MSUF_CP_BalanceDruid.lua
 --- Balance Druid Astral Power prediction and eclipse coloring runtime.
 --- Kept out of the controller because it owns its own events and class gate.
@@ -11,15 +10,12 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 do
     local _, MSUF = ...
     MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+    local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_BalanceDruid.lua")
     local ExportPublic = MSUF.ExportPublic
 
     local CoreUnitFrame = MSUF.UF.GetFrame
 
-    local balanceBuilders = _G.MSUF_CP_FEATURE_BUILDERS
-    if type(balanceBuilders) ~= "table" then
-        balanceBuilders = {}
-        ExportPublic("MSUF_CP_FEATURE_BUILDERS", balanceBuilders)
-    end
+    local balanceBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_FEATURE_BUILDERS")
 
     --- Class gate: Balance-specific runtime setup only applies to Druids.
     --- Everything inside this do-block is cold-dead code for other classes
@@ -89,9 +85,15 @@ local function GetColorOverrides()
 end
 
 local function _checkActive()
-    if not _featureOn then _active = false; return end
+    if not _featureOn then
+        _active = false
+        return
+    end
     local spec = GetSpec and GetSpec()
-    if spec ~= 1 then _active = false; return end
+    if spec ~= 1 then
+        _active = false
+        return
+    end
     local pType = UnitPowerType("player")
     _active = (NotSecret(pType) and pType == LUNAR_POWER) and true or false
 end
@@ -102,16 +104,8 @@ local function _getPowerBar()
 end
 
 local function _resolveEclColor(token)
-    local ov = GetColorOverrides()
-    if type(ov) == "table" then
-        local c = token and ov[token]
-        if type(c) == "table" then
-            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                return r, g, b
-            end
-        end
-    end
+    local r, g, b = CPConst.OverrideRGB(GetColorOverrides(), token)
+    if r then return r, g, b end
     if token == "ECLIPSE_SOLAR" then return CPK.BAL.CLR_SOLAR[1], CPK.BAL.CLR_SOLAR[2], CPK.BAL.CLR_SOLAR[3] end
     if token == "ECLIPSE_LUNAR" then return CPK.BAL.CLR_LUNAR[1], CPK.BAL.CLR_LUNAR[2], CPK.BAL.CLR_LUNAR[3] end
     if token == "ECLIPSE_CA" then return CPK.BAL.CLR_CA[1], CPK.BAL.CLR_CA[2], CPK.BAL.CLR_CA[3] end
@@ -131,15 +125,28 @@ local _balAuras = {
     watched = {},
     bySpell = {},
     spellByInstance = {},
+    --- Eclipse spells the last rebuild found missing. Valid only for the
+    --- eclipse refresh that follows that rebuild (_absentFresh): a later aura
+    --- event or the refresh itself ends it.
+    absent = {},
 }
+local _absentFresh = false
 
 local function _AuraID(value)
-    if value == nil or not NotSecret(value) then return nil end
+    if not NotSecret(value) or value == nil then return nil end
     return tonumber(value)
 end
 
+--- A restricted spell ID is never boolean-tested (see CPAuras.AuraSpellID).
 local function _AuraSpellID(aura)
-    return aura and _AuraID(aura.spellId or aura.spellID or aura.id) or nil
+    if not aura then return nil end
+    local id = aura.spellId
+    if not NotSecret(id) then return nil end
+    if id ~= nil then return tonumber(id) end
+    id = aura.spellID
+    if not NotSecret(id) then return nil end
+    if id == nil then id = aura.id end
+    return _AuraID(id)
 end
 
 local function _AuraInstanceID(aura)
@@ -165,6 +172,7 @@ local function _StoreTrackedAura(aura)
     local auraInstanceID = _AuraInstanceID(aura)
     if auraInstanceID then _balAuras.spellByInstance[auraInstanceID] = spellID end
     _balAuras.bySpell[spellID] = aura
+    _balAuras.absent[spellID] = nil
     return true
 end
 
@@ -172,21 +180,29 @@ local function _FetchTrackedAura(spellID)
     spellID = _AuraID(spellID)
     if not spellID then return nil end
 
+    --- The controller's getter reads an eclipse live: one
+    --- GetPlayerAuraBySpellID, or GetUnitAuraBySpellID where the first is
+    --- missing (MSUF_CP_Controller_Auras.lua CPAuras.Fetch). When it answers
+    --- nothing usable, only the query it did not make is left to ask.
     local shared = _G.MSUF_CP_GetTrackedPlayerAura
+    local askedPlayer = false
     if type(shared) == "function" then
         local aura = shared(spellID)
         if CanAccessTableValue(aura) then
             _StoreTrackedAura(aura)
             return aura
         end
+        askedPlayer = true
     end
 
     if not C_UnitAuras then return nil end
     local aura
-    if type(C_UnitAuras.GetPlayerAuraBySpellID) == "function" then
+    local hasPlayerGetter = type(C_UnitAuras.GetPlayerAuraBySpellID) == "function"
+    if hasPlayerGetter and not askedPlayer then
         aura = C_UnitAuras.GetPlayerAuraBySpellID(spellID)
     end
-    if (not CanAccessTableValue(aura)) and type(C_UnitAuras.GetUnitAuraBySpellID) == "function" then
+    if (not CanAccessTableValue(aura)) and type(C_UnitAuras.GetUnitAuraBySpellID) == "function"
+        and (hasPlayerGetter or not askedPlayer) then
         aura = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
     end
     if CanAccessTableValue(aura) then
@@ -209,6 +225,7 @@ local function _GetTrackedAura(spellID)
             aura = nil
         end
     end
+    if not aura and _absentFresh and _balAuras.absent[spellID] then return nil end
     return aura or _FetchTrackedAura(spellID)
 end
 
@@ -222,6 +239,7 @@ end
 local function _RebuildTrackedAuras()
     for k in pairs(_balAuras.bySpell) do _balAuras.bySpell[k] = nil end
     for k in pairs(_balAuras.spellByInstance) do _balAuras.spellByInstance[k] = nil end
+    for k in pairs(_balAuras.absent) do _balAuras.absent[k] = nil end
     for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
         _balAuras.watched[auraID] = true
     end
@@ -231,11 +249,17 @@ local function _RebuildTrackedAuras()
     )
     if canFetchBySpell then
         for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
-            _FetchTrackedAura(auraID)
+            if not _FetchTrackedAura(auraID) then _balAuras.absent[auraID] = true end
         end
     else
         _ScanUnitAuras()
+        for auraID in pairs(CPConst.ECLIPSE_AURAS or {}) do
+            if not _balAuras.bySpell[auraID] then _balAuras.absent[auraID] = true end
+        end
     end
+    --- The eclipse refresh right after this rebuild need not ask again for an
+    --- eclipse it just found missing.
+    _absentFresh = true
 end
 
 local function _CanProcessIncrementalAuraUpdate(unitAuraUpdateInfo)
@@ -253,6 +277,7 @@ local function _CanProcessIncrementalAuraUpdate(unitAuraUpdateInfo)
 end
 
 local function _ProcessAuraUpdate(unitAuraUpdateInfo)
+    _absentFresh = false
     if not _CanProcessIncrementalAuraUpdate(unitAuraUpdateInfo) then
         _RebuildTrackedAuras()
         return
@@ -314,6 +339,7 @@ local function _refreshEclipses()
     else
         _eclColor = nil
     end
+    _absentFresh = false
 end
 
 local function _computeAP(spellID)
@@ -337,16 +363,8 @@ local function _computeAP(spellID)
 end
 
 local function _resolvePredColor()
-    local ov = GetColorOverrides()
-    if type(ov) == "table" then
-        local c = ov["AP_PREDICTION"]
-        if type(c) == "table" then
-            local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-            if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                return r, g, b
-            end
-        end
-    end
+    local pr, pg, pb = CPConst.OverrideRGB(GetColorOverrides(), "AP_PREDICTION")
+    if pr then return pr, pg, pb end
     if _G.MSUF_GetPowerBarColor then
         local r, g, b = _G.MSUF_GetPowerBarColor(LUNAR_POWER, "LUNAR_POWER")
         if type(r) == "number" then return r, g, b end
@@ -354,10 +372,30 @@ local function _resolvePredColor()
     return 0.30, 0.52, 0.90
 end
 
+--- The Player Power bar belongs to the Power element, which dedupes its colour
+--- writes on the bar's _msufR/_msufG/_msufB/_msufA stamp. The eclipse colour
+--- is painted over the bar and leaves that stamp alone, so when the eclipse
+--- ends the bar takes the Power element's own colour back from it; otherwise
+--- the element's next write matched the stamp and was skipped.
+local _eclPaintedBar = nil
+
+local function _restorePowerColor()
+    local bar = _eclPaintedBar
+    if not bar then return end
+    _eclPaintedBar = nil
+    local r, g, b = bar._msufR, bar._msufG, bar._msufB
+    if r ~= nil then bar:SetStatusBarColor(r, g, b, bar._msufA or 1) end
+end
+
 local function _applyEclipseColor()
     local bar = _getPowerBar()
-    if not bar or not _eclColor then return end
+    if not bar then return end
+    if not _eclColor then
+        _restorePowerColor()
+        return
+    end
     bar:SetStatusBarColor(_eclColor[1], _eclColor[2], _eclColor[3], 1)
+    _eclPaintedBar = bar
 end
 
 local function _updateOverlay()
@@ -385,7 +423,10 @@ local function _updateOverlay()
         return
     end
     local rawMx = UnitPowerMax("player", LUNAR_POWER)
-    if not NotSecret(rawMx) then _predTex:Hide(); return end
+    if not NotSecret(rawMx) then
+        _predTex:Hide()
+        return
+    end
     local mx = tonumber(rawMx) or 100
     if mx <= 0 then mx = 100 end
     local predFrac = _predAmt / mx
@@ -397,11 +438,20 @@ local function _updateOverlay()
         if remainingFrac < 0 then remainingFrac = 0 end
         if predFrac > remainingFrac then predFrac = remainingFrac end
     end
-    if predFrac <= 0 then _predTex:Hide(); return end
+    if predFrac <= 0 then
+        _predTex:Hide()
+        return
+    end
     local barW, barH = bar:GetWidth(), bar:GetHeight()
-    if barW <= 0 or barH <= 0 then _predTex:Hide(); return end
+    if barW <= 0 or barH <= 0 then
+        _predTex:Hide()
+        return
+    end
     local predW = barW * predFrac
-    if predW < 1 then _predTex:Hide(); return end
+    if predW < 1 then
+        _predTex:Hide()
+        return
+    end
     if _eclColor then
         _predTex:SetVertexColor(_eclColor[1], _eclColor[2], _eclColor[3], CPK.BAL.PRED_ALPHA)
     else
@@ -416,6 +466,7 @@ end
 
 local function _cleanup()
     _castSpell, _predAmt, _eclColor = nil, 0, nil
+    _restorePowerColor()
     if _predTex then _predTex:Hide() end
 end
 
@@ -544,7 +595,9 @@ end
         _updateOverlay()
         return
     end
-    if (event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_FAILED" or event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_SUCCEEDED") and arg1 == "player" then
+    if (event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_FAILED"
+        or event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_SUCCEEDED")
+        and arg1 == "player" then
         _clearPrediction()
         _updateOverlay()
         return
@@ -564,7 +617,10 @@ end
         return BalanceOnEvent(self, event, arg1, arg2, arg3)
     end)
 
-_refreshActiveState()
+--- The saved profile does not exist while this file loads: bind the structural
+--- events only. PLAYER_ENTERING_WORLD and the controller's FullRefresh
+--- (MSUF_BAL_RefreshRuntime) run the first evaluation against the saved profile.
+_setStructuralEventsBound(true)
 
 ExportPublic("MSUF_BAL_RefreshRuntime", _refreshActiveState)
 

@@ -100,10 +100,54 @@ local function ForEachBlizzardPlayerCastbar(callback)
     end
 end
 
+--- Blizzard's player castbar is a managed frame on every client (mirror:
+--- BottomManagedFrameTemplate on Mainline and Forever, UIParentBottomManaged-
+--- FrameTemplate on the Classic clients): its OnHide runs the bottom managed
+--- container layout, which also places ExtraAbilityContainer. Hide() from
+--- addon code runs that layout tainted, so a shown managed bar is concealed
+--- instead: alpha 0 and no mouse. Its cast events are gone, so it shows no cast;
+--- Blizzard hides it itself (Edit Mode exit) and MSUF's release restores it.
+--- Hiding stays for a bar outside the container (Forever's GamepadPlayer-
+--- CastingBarFrame: its OnHide lays nothing out), and a hidden bar is left alone.
+--- Previews (MSUF_HideBlizzardPlayerCastbar) conceal through the same helper.
+local function ConcealNativeFrame(frame)
+    if not (frame.IsShown and frame:IsShown()) then return end
+    if frame.isManagedFrame ~= true then
+        frame:Hide()
+        return
+    end
+    local record = nativeRecords[frame]
+    if not record then
+        record = {}
+        nativeRecords[frame] = record
+    end
+    local alpha = frame:GetAlpha()
+    if alpha > 0 then
+        record.alpha = alpha
+        frame:SetAlpha(0)
+    end
+    if frame:IsMouseEnabled() then
+        record.mouse = true
+        frame:EnableMouse(false)
+    end
+end
+NativeOwner.Conceal = ConcealNativeFrame
+
+local function RevealNativeFrame(frame, record)
+    if record.alpha ~= nil then
+        frame:SetAlpha(record.alpha)
+        record.alpha = nil
+    end
+    if record.mouse then
+        frame:EnableMouse(true)
+        record.mouse = nil
+    end
+end
+
 local function HideSuppressedNativeFrame(frame)
     local record = nativeRecords[frame]
-    if record and record.suppressed and frame.Hide then
-        frame:Hide()
+    if record and record.suppressed then
+        ConcealNativeFrame(frame)
     end
 end
 
@@ -124,7 +168,7 @@ local function SetNativeFrameSuppressed(frame, suppressed)
 
     if suppressed then
         if record and record.suppressed then
-            if frame.Hide then frame:Hide() end
+            ConcealNativeFrame(frame)
             return true
         end
 
@@ -140,10 +184,12 @@ local function SetNativeFrameSuppressed(frame, suppressed)
             frame:UnregisterAllEvents()
             record.detached = true
         end
-        if frame.Hide then frame:Hide() end
+        ConcealNativeFrame(frame)
         return true
     end
 
+    -- A bar the previews concealed has a record without the suppression.
+    if record then RevealNativeFrame(frame, record) end
     if not (record and record.suppressed) then
         return false
     end
@@ -167,7 +213,7 @@ function NativeOwner:Apply()
     if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then
         nativeOwnershipPending = true
         ForEachBlizzardPlayerCastbar(function(frame)
-            if suppress and frame.Hide then frame:Hide() end
+            if suppress then ConcealNativeFrame(frame) end
         end)
         if eventFrame then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return false
@@ -188,8 +234,11 @@ end
 ExportPublic("MSUF_SuppressBlizzardPlayerCastbars", SuppressBlizzardPlayerCastbars)
 ExportPublic("MSUF_ApplyBlizzardCastbarOwnership", SuppressBlizzardPlayerCastbars)
 
+local SyncBlizzardCastbarEvents
 eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", function(_, event, addonName)
+    -- The first event with the saved profile: keep the events it asks for.
+    if event == "PLAYER_LOGIN" then SyncBlizzardCastbarEvents() end
     if event == "ADDON_LOADED"
         and addonName ~= "Blizzard_CastingBarFrame"
         and addonName ~= "Blizzard_CastingBar"
@@ -201,18 +250,24 @@ eventFrame:SetScript("OnEvent", function(_, event, addonName)
     SuppressBlizzardPlayerCastbars()
 end)
 
-local function SyncBlizzardCastbarEvents()
+local function RegisterOwnershipEvents()
+    eventFrame:RegisterEvent("PLAYER_LOGIN")
+    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    eventFrame:RegisterEvent("ADDON_LOADED")
+end
+
+SyncBlizzardCastbarEvents = function()
     local wanted = not ShouldUseBlizzard("player")
     eventFrame:UnregisterAllEvents()
-    if wanted then
-        eventFrame:RegisterEvent("PLAYER_LOGIN")
-        eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-        eventFrame:RegisterEvent("ADDON_LOADED")
-    end
+    if wanted then RegisterOwnershipEvents() end
     if nativeOwnershipPending then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
     return wanted
 end
-SyncBlizzardCastbarEvents()
+-- Not SyncBlizzardCastbarEvents at file load: the client loads the
+-- SavedVariables after every file ran, so the backend read there answered the
+-- default (MSUF owns the player castbar). Until login the events are the ones
+-- that default asked for; PLAYER_LOGIN resyncs them from the saved profile.
+RegisterOwnershipEvents()
 
 local AreAnyCastbarsEnabled = _G.MSUF_AreAnyCastbarsEnabled
 if type(AreAnyCastbarsEnabled) ~= "function" then
@@ -279,15 +334,12 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
 
         SyncBlizzardCastbarEvents()
         SuppressBlizzardPlayerCastbars()
-        if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then
-            _G.MSUF_FocusKickDriver_ForceUpdate()
-        end
-        if type(_G.MSUF_CastbarDriver_SyncLifecycle) == "function" then
-            _G.MSUF_CastbarDriver_SyncLifecycle(true)
-        end
-        if type(_G.MSUF_KickReady_RefreshAll) == "function" then
-            _G.MSUF_KickReady_RefreshAll()
-        end
+        -- The castbar files below load after this one, before any settings
+        -- change: the focus kick state driver, the castbar driver and the
+        -- interrupt-ready indicator.
+        _G.MSUF_FocusKickDriver_ForceUpdate()
+        _G.MSUF_CastbarDriver_SyncLifecycle(true)
+        _G.MSUF_KickReady_RefreshAll()
 
         local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
         if type(applyPlayerState) == "function" then
@@ -307,12 +359,9 @@ if type(CastbarsOnSettingsChanged) ~= "function" then
             poolOrder[poolIndex].ApplyEnabled()
         end
 
-        if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then
-            _G.MSUF_UpdateCastbarWidthSourceSync(GeneralDB())
-        end
-        if type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
-            _G.MSUF_ApplyPlayerChannelTickMarkers()
-        end
+        -- Castbars/MSUF_CastbarAnchors.lua and _ChannelTicks.lua (after this file).
+        _G.MSUF_UpdateCastbarWidthSourceSync(GeneralDB())
+        _G.MSUF_ApplyPlayerChannelTickMarkers()
 
         if not AreAnyCastbarsEnabled() then
             CastbarsForceHideAll()
@@ -355,10 +404,7 @@ if type(registerModule) == "function" then
         end,
         RefreshSettings = function(_, reason)
             CastbarsOnSettingsChanged(reason or "module_refresh")
-
-            if type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
-                _G.MSUF_ApplyPlayerChannelTickMarkers()
-            end
+            _G.MSUF_ApplyPlayerChannelTickMarkers()
         end,
     })
 end

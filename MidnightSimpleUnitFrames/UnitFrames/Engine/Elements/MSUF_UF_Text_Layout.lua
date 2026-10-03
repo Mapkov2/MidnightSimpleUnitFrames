@@ -302,16 +302,25 @@ local function LayoutDots(dots, fs, side)
   dots._msufShown = true
 end
 
+-- The separator follows the rendered end of a left-justified name. A
+-- self-sized name ends at its own right edge; a bar-anchored name spans the bar,
+-- so the invisible auto-width twin (_msufNameAnchorText, EnsureNameAnchorProxy)
+-- marks its glyph end. Anchoring to that edge lets the UI engine carry a
+-- restricted name's geometry: GetStringWidth() is SecretWhenAnchoringSecret,
+-- and SetPoint and the anchor cache below must never see that secret width.
 local function AnchorInlineToName(frame)
   local name = frame and frame.nameText
   local sep = frame and frame.totInlineSep
-  if not (frame and frame._msufInlineAnchorDynamic == true and name and sep and name.GetStringWidth) then
+  if not (frame and frame._msufInlineAnchorDynamic == true and name and sep) then
     return
   end
-  local width = name:GetStringWidth()
-  sep:ClearAllPoints()
-  sep:SetPoint("LEFT", name, "LEFT", width, 0)
-  sep._msufPoint, sep._msufRelPoint, sep._msufRelativeTo, sep._msufX, sep._msufY = "LEFT", "LEFT", name, width, 0
+  local target = frame._msufNameAnchorTextActive == true and frame._msufNameAnchorText or name
+  if sep._msufPoint ~= "LEFT" or sep._msufRelPoint ~= "RIGHT" or sep._msufRelativeTo ~= target
+    or sep._msufX ~= 0 or sep._msufY ~= 0 then
+    sep:ClearAllPoints()
+    sep:SetPoint("LEFT", target, "RIGHT", 0, 0)
+    sep._msufPoint, sep._msufRelPoint, sep._msufRelativeTo, sep._msufX, sep._msufY = "LEFT", "RIGHT", target, 0, 0
+  end
 end
 
 local function AnchorInlineToNameClip(frame)
@@ -644,7 +653,7 @@ function Text.RefreshNameCenterClipFit(frame)
   end
   local overflow = false
   local raw = fs.GetText and fs:GetText()
-  if not (raw == nil or issecretvalue(raw) == true) and raw ~= "" and fs.GetStringWidth then
+  if issecretvalue(raw) ~= true and raw ~= nil and raw ~= "" and fs.GetStringWidth then
     local window = tonumber(frame._msufNameInlineClipWidth) or 0
     local width = fs:GetStringWidth()
     if window > 0 and type(width) == "number" and width > window + 0.5 then
@@ -814,7 +823,15 @@ local function EnsureNameAnchorProxy(frame, spec)
     end
   end
 
-  local active = frame._msufNameRelativeStatus == true
+  -- The inline target-of-target name hangs off the glyph end of a
+  -- left-justified, unshortened bar-anchored name (AnchorInlineToName; the
+  -- justify rule is LayoutBarAnchoredName's).
+  local inline = text.inlineToT
+  local nameAnchor = text.nameAnchor
+  local inlineGlyphEdge = spec and spec.key == "target" and type(inline) == "table" and inline.enabled == true
+    and text.nameShorten ~= true and nameAnchor ~= "TOP" and nameAnchor ~= "CENTER"
+    and nameAnchor ~= "TOPRIGHT" and nameAnchor ~= "RIGHT"
+  local active = (frame._msufNameRelativeStatus == true or inlineGlyphEdge)
     and spec and spec.showName ~= false
     and text.directLayout ~= true
     and ((text.anchorToBars == true and not clipped) or clipTarget ~= nil)

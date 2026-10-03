@@ -5,6 +5,13 @@ addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.
     or "MidnightSimpleUnitFrames"
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalBars.lua", {
+    "MSUF_RefreshTempMaxHealth",
+    "MSUF_UFPreview_RequestRefresh",
+    "MSUF_ApplyRoundedUnitframes",
+})
 
 -- Menu2 global Bars page.
 -- Binds shared/scoped texture, gradient, outline, absorb, and highlight controls. Page code
@@ -447,36 +454,22 @@ local function ApplyRoundedRuntime()
     return RequestApply("RequestRoundedBars", "MSUF2_ROUNDED", CurrentBarsScope())
 end
 
+-- One Reload button, and Escape does not answer: menu-owned prompts
+-- (M.ShowPrompt), which also take the menu's popup priority.
 local function ShowDispelBorderReloadRequiredPopup()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-        if _G.print then
-            _G.print("|cffffd700MSUF:|r " .. M.Tr("Dispel border") .. ": " .. M.Tr("Requires a UI reload."))
-        end
-        return
-    end
-    M.InstallStaticPopup("MSUF2_DISPEL_BORDER_RELOAD_REQUIRED", {
+    M.ShowPrompt("MSUF2_DISPEL_BORDER_RELOAD_REQUIRED", {
         text = M.Tr("Dispel border") .. "\n\n" .. M.Tr("Requires a UI reload."),
-        button1 = _G.RELOAD or M.Tr("Reload"),
-        hideOnEscape = false,
-        OnAccept = ReloadAfterCombatCheck,
+        accept = RELOAD or M.Tr("Reload"), single = true, hideOnEscape = false,
+        onAccept = ReloadAfterCombatCheck,
     })
-    _G.StaticPopup_Show("MSUF2_DISPEL_BORDER_RELOAD_REQUIRED")
 end
 
 local function ShowRoundedReloadRequiredPopup()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-        if _G.print then _G.print(M.Tr("|cffffd700MSUF:|r Rounded frame texture changed. Reload the UI with /reload.")) end
-        return
-    end
-    M.InstallStaticPopup("MSUF2_ROUNDED_RELOAD_REQUIRED", {
+    M.ShowPrompt("MSUF2_ROUNDED_RELOAD_REQUIRED", {
         text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
-        button1 = _G.RELOAD or M.Tr("Reload"), hideOnEscape = false,
-        OnAccept = ReloadAfterCombatCheck,
+        accept = RELOAD or M.Tr("Reload"), single = true, hideOnEscape = false,
+        onAccept = ReloadAfterCombatCheck,
     })
-    local dialog = _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
-    if dialog and type(M.ApplyPopupFramePriority) == "function" then
-        M.ApplyPopupFramePriority(dialog)
-    end
 end
 local function SetRoundedBool(key, value, requireReload)
     value = value and true or false
@@ -1129,14 +1122,8 @@ local function BuildTempMaxHealthSection(ctx, b)
 
     local function Refresh(reason)
         local scope = CurrentBarsScope()
-        if type(_G.MSUF_RefreshTempMaxHealth) == "function" then
-            _G.MSUF_RefreshTempMaxHealth(scope, reason or "MSUF2_TEMP_MAX_HEALTH")
-        else
-            ApplyBars(reason or "MSUF2_TEMP_MAX_HEALTH")
-        end
-        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-            _G.MSUF_UFPreview_RequestRefresh(reason or "MSUF2_TEMP_MAX_HEALTH")
-        end
+        _G.MSUF_RefreshTempMaxHealth(scope, reason or "MSUF2_TEMP_MAX_HEALTH")
+        _G.MSUF_UFPreview_RequestRefresh(reason or "MSUF2_TEMP_MAX_HEALTH")
         if type(M.RefreshGFNativePreviews) == "function" then
             M.RefreshGFNativePreviews(reason or "MSUF2_TEMP_MAX_HEALTH")
         end
@@ -1607,8 +1594,10 @@ local function BuildOutlineSection(ctx, b)
         end,
         Meta("outline.color"))
     if M.AddTooltip then
-        M.AddTooltip(outlineSlider, "Bar outline thickness", "Width in pixels of the normal frame outline; 0 hides it. Aggro, dispel and other highlight borders use their own thickness.", { hook = true })
-        M.AddTooltip(outlineLayer, "Frame outline layer (0-30)", "Draw order on the shared 0-30 layer scale. Raise it to draw the outline above text, icons or auras on a lower layer.", { hook = true })
+        M.AddTooltip(outlineSlider, "Bar outline thickness",
+            "Width in pixels of the normal frame outline; 0 hides it. Aggro, dispel and other highlight borders use their own thickness.", { hook = true })
+        M.AddTooltip(outlineLayer, "Frame outline layer (0-30)",
+            "Draw order on the shared 0-30 layer scale. Raise it to draw the outline above text, icons or auras on a lower layer.", { hook = true })
     end
     local turnOn, turnOff = W.TurnOnReason, W.TurnOffReason
     local scopeReason = turnOn and turnOn("Use custom settings for this scope", ScopedControls)
@@ -1650,11 +1639,19 @@ local function BuildRoundedSection(ctx, b)
     local roundedControls = M.BuildControlSpecs({
         { "master", "Rounded frame texture", roundLeftX, -52, "roundedFramesEnabled", false, true, "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded frames ausschalten|alle abgerundeten frames", "Master switch for the rounded frame texture style.", true },
         { "units", "Unit frames", roundLeftX, -90, "roundedUnitFrames", true, nil, "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes abgerundet|player target focus boss rounded", "Enable or disable rounded textures on unit frames." },
-        { "groups", "Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil, "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet", "Enable or disable rounded textures on group frames." },
+        { "groups", "Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil,
+            "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet",
+            "Enable or disable rounded textures on group frames." },
         { "classResources", "Class resources", roundLeftX, -166, "roundedClassResources", false, nil, "rounded class resources|rounded combo points|rounded soul shards|class resource bar corners|klassenressourcen abgerundet|combo punkte abrunden|seelensplitter abrunden", "Round rectangular class resource bars. Circle, Diamond, and Hex shapes are unchanged." },
-        { "power", "Power bars", roundRightX, -52, "roundedPowerBars", true, nil, "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden", "Enable or disable rounded textures on power bars." },
-        { "mouseover", "Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil, "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet", "Enable or disable rounded mouseover highlight edges." },
-        { "castbars", "Castbars", roundRightX, -128, "roundedCastbars", false, nil, "rounded castbars|castbar corners|cast bars rounded|castbars abgerundet|zauberbalken abgerundet", "Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed." },
+        { "power", "Power bars", roundRightX, -52, "roundedPowerBars", true, nil,
+            "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden",
+            "Enable or disable rounded textures on power bars." },
+        { "mouseover", "Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil,
+            "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet",
+            "Enable or disable rounded mouseover highlight edges." },
+        { "castbars", "Castbars", roundRightX, -128, "roundedCastbars", false, nil,
+            "rounded castbars|castbar corners|cast bars rounded|castbars abgerundet|zauberbalken abgerundet",
+            "Round MSUF castbar surfaces and outlines. Blizzard castbars, spell icons, and the GCD bar are not changed." },
     }, { ["*"] = function(s) return BindRoundedToggle(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10]), s[1] end })
     local roundedPreview
     local roundingSlider = W.Slider(rounded, "Corner rounding", 1, 5, 1, 300)
@@ -1726,7 +1723,8 @@ local function BuildRoundedSection(ctx, b)
     RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
         "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
         "Shows a small preview of the rounded frame texture style.", "preview")
-    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.classResources, roundedControls.power, roundedControls.mouseover, roundedControls.castbars, roundingSlider }
+    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.classResources, roundedControls.power,
+        roundedControls.mouseover, roundedControls.castbars, roundingSlider }
     SyncRoundedControls(M.BindGateGroup(ctx, nil, {
         { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end,
             reason = W.TurnOnReason and W.TurnOnReason("Rounded frame texture") },
@@ -1846,7 +1844,7 @@ local function BuildSlantedSection(ctx, b)
         return ApplySlantedToScope(SLANTED_PRESET_GROUPS) or units
     end
     local function RefreshSlanted(reason)
-        if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then _G.MSUF_ApplyRoundedUnitframes() end
+        _G.MSUF_ApplyRoundedUnitframes()
         SyncSlantedControls()
         if M.RequestRefresh then M.RequestRefresh(ctx, reason) end
     end
@@ -1920,12 +1918,15 @@ local function BuildSlantedSection(ctx, b)
         function(value)
             local allowed = false
             for i = 1, #SLANTED_DIRECTION_VALUES do
-                if SLANTED_DIRECTION_VALUES[i].value == value then allowed = true; break end
+                if SLANTED_DIRECTION_VALUES[i].value == value then
+                    allowed = true
+                    break
+                end
             end
             if not allowed or Bars().slantedBarDirection == value then return end
             Bars().slantedBarDirection = value
             if preview and preview.RefreshSlantedPreview then preview:RefreshSlantedPreview() end
-            if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then _G.MSUF_ApplyRoundedUnitframes() end
+            _G.MSUF_ApplyRoundedUnitframes()
             if M.RequestRefresh then M.RequestRefresh(ctx, "slanted-bar-direction") end
         end,
         Meta("slanted.direction"))
@@ -2376,7 +2377,9 @@ local function BuildPowerSection(ctx, b)
         local tip = { hook = true, labelHit = true, labelHitWhenDisabled = true }
         M.AddTooltip(smoothPower, "Smooth power bar", "Power bars glide to new values instead of jumping; turns off Chunked power loss. Set per unit: pick a unit scope with a power bar, such as Player or Target.", tip)
         M.AddTooltip(chunkedPower, "Chunked power loss", "Spent power drops at once while the spent part briefly stays highlighted, then fades; turns off Smooth power bar. Set per unit, like Smooth power bar.", tip)
-        M.AddTooltip(realtimePower, "Realtime power text", "Updates the Player power text on every power tick instead of the regular update rate. Only the Player frame uses it; set it on the Shared scope.", tip)
+        M.AddTooltip(realtimePower, "Realtime power text",
+            "Updates the Player power text on every power tick instead of the regular update rate. Only the Player frame uses it; set it on the Shared scope.",
+            tip)
     end
     M.BindGateGroup(ctx, nil, {
         { controls = { smoothPower, chunkedPower }, on = function() return CurrentPowerBarScopeUnit() ~= nil end },

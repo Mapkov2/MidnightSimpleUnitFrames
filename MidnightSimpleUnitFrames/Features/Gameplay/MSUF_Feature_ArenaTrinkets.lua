@@ -396,6 +396,13 @@ local function HandleMistsCombatLog()
 end
 
 local function HandleEvent(event, arg1, arg2, arg3)
+    if event == "PLAYER_LOGIN" then
+        -- The first sync reads the arena switches, so it waits for the
+        -- SavedVariables; it attaches the Retail texture relays before the
+        -- first arena response. World/opponent events retry later.
+        SyncTrinketIcons(false)
+        return
+    end
     if event == "ARENA_CROWD_CONTROL_SPELL_UPDATE" then
         HandleClassicSpellUpdate(arg1, arg2, arg3)
         SyncTrinketIcons(false)
@@ -460,6 +467,7 @@ local function WireEvents()
         { "ARENA_CROWD_CONTROL_SPELL_UPDATE", "MSUF_ARENA_TRINKET_SPELL" },
         { "ARENA_COOLDOWNS_UPDATE", "MSUF_ARENA_TRINKET_COOLDOWN" },
         { "PLAYER_ENTERING_WORLD", "MSUF_ARENA_TRINKET_WORLD" },
+        { "PLAYER_LOGIN", "MSUF_ARENA_TRINKET_LOGIN" },
     }
     if IS_RETAIL then
         events[#events + 1] = { "PVP_MATCH_STATE_CHANGED", "MSUF_ARENA_TRINKET_MATCH" }
@@ -488,9 +496,6 @@ end
 -- subscribed and no relay is attached there.
 if not (type(Client.SupportsUnit) == "function" and Client.SupportsUnit("arena1") == false) then
     WireEvents()
-    -- Attach Retail texture relays before the first arena response whenever the
-    -- native CompactArenaFrame already exists. World/opponent events retry later.
-    SyncTrinketIcons(false)
 end
 
 ExportPublic("MSUF_ArenaMatch_SyncTrinketIcons", function()

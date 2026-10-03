@@ -1038,6 +1038,10 @@ local function LoadUnitPage(pageFile, client)
         Translate = function(text) return text end,
         MSUF2 = { Widgets = {} },
     }
+    -- The page requires its core collaborators at load (M.RequireGlobals).
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.Install(root, namespace)
+    RequireFixture.StubRequirements(root, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/" .. pageFile })
     assert(loadfile(options .. "Shell/Menu2/MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", namespace)
     assert(loadfile(options .. "Shell/Menu2/Pages/" .. pageFile))("MidnightSimpleUnitFrames_Options", namespace)
     local page = assert(namespace.MSUF2.UnitPage, pageFile .. " did not publish M.UnitPage")
@@ -1158,7 +1162,7 @@ do
         local render = Read(MENU .. "Preview/MSUF_Menu2_UnitPreview_Render.lua")
         Check(render:find('statusPetHappiness = "petHappiness", statusThreat = "threat",', 1, true),
             "UnitPreview_Render: the preview must read the compiled threat entry")
-        Check(render:find('                textW = R.PreviewStatus.ThreatPlate and R.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW\n',
+        Check(render:find('                textW = RenderState.PreviewStatus.ThreatPlate and RenderState.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW\n',
             1, true),
             "UnitPreview_Render: the Threat % preview no longer lays out on its plate")
         local section = Read(MENU .. "Pages/MSUF_Menu2_UnitStatusSection.lua")

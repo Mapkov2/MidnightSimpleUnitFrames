@@ -145,9 +145,13 @@ end
 local function CreateCenterLine(vertical, thickness, subLevel)
     local tex = PixelLayoutRegion(gridFrame:CreateTexture(nil, "BACKGROUND", nil, subLevel))
     if vertical then
-        tex:SetWidth(thickness); tex:SetPoint("TOP", UIParent, "TOP", 0, 0); tex:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
+        tex:SetWidth(thickness)
+        tex:SetPoint("TOP", UIParent, "TOP", 0, 0)
+        tex:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
     else
-        tex:SetHeight(thickness); tex:SetPoint("LEFT", UIParent, "LEFT", 0, 0); tex:SetPoint("RIGHT", UIParent, "RIGHT", 0, 0)
+        tex:SetHeight(thickness)
+        tex:SetPoint("LEFT", UIParent, "LEFT", 0, 0)
+        tex:SetPoint("RIGHT", UIParent, "RIGHT", 0, 0)
     end
     return tex
 end
@@ -155,9 +159,11 @@ end
 local function CreateCenterPip(vertical, thickness, length, subLevel)
     local tex = PixelLayoutRegion(gridFrame:CreateTexture(nil, "BACKGROUND", nil, subLevel))
     if vertical then
-        tex:SetWidth(thickness); tex:SetHeight(length)
+        tex:SetWidth(thickness)
+        tex:SetHeight(length)
     else
-        tex:SetHeight(thickness); tex:SetWidth(length)
+        tex:SetHeight(thickness)
+        tex:SetWidth(length)
     end
     tex:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     return tex

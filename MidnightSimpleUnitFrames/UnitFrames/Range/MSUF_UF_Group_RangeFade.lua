@@ -23,7 +23,9 @@ local UnitGUID = UnitGUID
 local UnitInRange = UnitInRange
 local UnitIsVisible = UnitIsVisible
 local UnitPhaseReason = UnitPhaseReason
-local InCombatLockdown = InCombatLockdown
+-- One combat-state source (Kernel/MSUF_Util.lua). Pass the event when the
+-- caller runs for PLAYER_REGEN_DISABLED/ENABLED: the lockdown lags both edges.
+local InCombat = MSUF.Util.InCombat
 local IsInInstance = IsInInstance
 local NewTimer = C_Timer.NewTimer
 local GetTime = GetTime
@@ -543,7 +545,7 @@ end
 
 FlushRangeSettle = function()
   rangeSettleTimer = nil
-  if InCombatLockdown and InCombatLockdown() then
+  if InCombat() then
     rangeSettleQueued = nil
     rangeSettleCursor = nil
     rangeSettleAfterCombat = true
@@ -595,7 +597,7 @@ local function CancelRangeSettle()
 end
 
 local function QueueRangeSettle(delay)
-  if InCombatLockdown and InCombatLockdown() then
+  if InCombat() then
     rangeSettleAfterCombat = true
     return
   end
@@ -1279,7 +1281,9 @@ local function BaseAlpha(frame, event)
       return offlineAlpha, true
     end
     local hideReady = OfflineHideReady(frame)
-    if not (InCombatLockdown and InCombatLockdown()) or frame._msufGFHideOfflineInCombat == true then
+    -- PLAYER_REGEN_DISABLED re-applies every registered frame before the
+    -- lockdown starts, so the event says whether combat began.
+    if not InCombat(event) or frame._msufGFHideOfflineInCombat == true then
       if hideReady then
         return 0, true
       end

@@ -241,6 +241,8 @@ manifest.LoadSelected(repo, manifestFlavor, namespace, {
     "Kernel/MSUF_Boundary.lua",
     "State/MSUF_StateHelpers.lua",
     "State/MSUF_ProfileCodec.lua",
+    -- The general key owner registry every partial export and import asks.
+    "State/MSUF_ProfileFields.lua",
 })
 
 -- Stub: State/MSUF_Defaults.lua owns MSUF_EnsureDB and the factory profile.
@@ -263,6 +265,9 @@ local function Applies(reason) return applies[reason] or 0 end
 -- Stub: group-frame config cache owner (UnitFrames engine) is not loaded.
 MSUF_GF_InvalidateConfCache = function() end
 
+-- The translation core loads ahead of State/ in every core TOC; the profile chat lines use it.
+local localizationPath = repo .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"
+assert(loadstring(MSUF_Auras3TestLoader.ReadSource(localizationPath), "@" .. localizationPath))("MidnightSimpleUnitFrames", namespace)
 local normalizePath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua"
 assert(loadstring(MSUF_Auras3TestLoader.ReadSource(normalizePath), "@" .. normalizePath))("MidnightSimpleUnitFrames", namespace)
 local profilesPath = repo .. "/MidnightSimpleUnitFrames/State/MSUF_Profiles.lua"
@@ -324,6 +329,8 @@ local M = {
     RequestRefresh = Noop,
     ClearHistory = Noop,
     BlockCombatAction = function() return false end,
+    -- The menu's prompts (MSUF_Menu2_Support.lua M.ShowPrompt) only ask.
+    ShowPrompt = Noop,
     RequestGeneralApply = Noop,
     TrackRefresh = Noop,
     RegisterPage = Noop,
@@ -336,7 +343,13 @@ local pageSource = MSUF_Auras3TestLoader.ReadSource(pagePath)
 Check(pageSource:find("function ProfilesPage.ImportActions(state)", 1, true) ~= nil,
     "profiles page no longer defines ProfilesPage.ImportActions(state)")
 local pageChunk = assert(loadstring(pageSource .. "\nreturn ProfilesPage", "@" .. pagePath))
-local ProfilesPage = pageChunk("MidnightSimpleUnitFrames_Options", { MSUF2 = M, Client = namespace.Client })
+-- The page requires its core collaborators at load (M.RequireGlobals).
+local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
+local pageNamespace = RequireFixture.Install(repo, { MSUF2 = M, Client = namespace.Client }, M)
+-- The menu's reload prompt (MSUF_Menu2_Support.lua) only asks; it never reloads.
+MSUF_ShowReloadRecommendedPopup = function() end
+RequireFixture.StubRequirements(repo, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua" })
+local ProfilesPage = pageChunk("MidnightSimpleUnitFrames_Options", pageNamespace)
 
 local blobText, nameText = "", "Fresh"
 local importClick, committed

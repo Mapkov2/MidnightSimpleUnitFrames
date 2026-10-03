@@ -6,7 +6,8 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- owns the draggable icon frame, copied time text, border coloring, and short
 --- interrupt feedback animation.
 
-local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic)
+local MSUF = select(2, ...) or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic
 
 local ParentFrame = UIParent
 local After = C_Timer and C_Timer.After
@@ -95,7 +96,6 @@ local function DetachTimeDriver()
 
         if source.MSUF_castActive == true
             and runtime and runtime.PrepareWork
-            and type(_G.MSUF_RegisterCastbar) == "function"
         then
             runtime:PrepareWork(source)
             _G.MSUF_RegisterCastbar(source)
@@ -115,10 +115,8 @@ local function AttachTimeDriver(state)
     end
 
     iconFrame.timeText:SetAlpha(1)
-    local format = "CURRENT"
-    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
-        format = _G.MSUF_GetCastbarTimeFormat("focus", general) or format
-    end
+    -- Kernel/MSUF_Util.lua owns the castbar time format.
+    local format = _G.MSUF_GetCastbarTimeFormat("focus", general) or "CURRENT"
 
     local runtime = _G.MSUF_CastbarRuntime
     local source = FocusSourceCastbar()
@@ -159,7 +157,7 @@ local function AttachTimeDriver(state)
     source._msufForceLuaTimeTextFollower = true
     iconFrame._msufTimeFollowerSource = source
     if runtime and runtime.PrepareWork then runtime:PrepareWork(source) end
-    if type(_G.MSUF_RegisterCastbar) == "function" then _G.MSUF_RegisterCastbar(source) end
+    _G.MSUF_RegisterCastbar(source)
 
     local text = source.timeText:GetText()
     if _G.issecretvalue and _G.issecretvalue(text) == true then
@@ -169,12 +167,25 @@ local function AttachTimeDriver(state)
     end
 end
 
+--- One time-text font apply (file scope: a cast state must not build a closure).
+local function ApplyTimeTextFontTo(fs, applyResolved, fontPath, fontSize, fontFlags, fontKey)
+    if not fs then return end
+    if type(applyResolved) == "function" then
+        applyResolved(fs, fontPath, fontSize, fontFlags, fontKey)
+        return
+    end
+    local ready = _G.MSUF_SetFontChecked(fs, fontPath, fontSize, fontFlags)
+    local matches = _G.MSUF_FontApplicationMatches
+    if ready and type(matches) == "function" then ready = matches(fs, fontPath, fontSize) == true end
+    if not ready then
+        _G.MSUF_MarkFontApplyFailed()
+    end
+end
+
 local function ApplyTimeTextFont()
     local general = EnsureOptions()
-    local fontPath = (type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath())
-        or STANDARD_TEXT_FONT
-        or "Fonts\\FRIZQT__.TTF"
-    local fontFlags = (type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags()) or "OUTLINE"
+    local fontPath = _G.MSUF_GetFontPath() or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local fontFlags = _G.MSUF_GetFontFlags() or "OUTLINE"
     local fontSize = ResolveTextSize(general)
     local resolveSafe = _G.MSUF_ResolveSafeFontPath
     if type(resolveSafe) == "function" then
@@ -184,28 +195,14 @@ local function ApplyTimeTextFont()
 
     local g = _G.MSUF_DB and _G.MSUF_DB.general
     local applyResolved = _G.MSUF_ApplyResolvedFont
-    local function ApplyOne(fs)
-        if not fs then return end
-        if type(applyResolved) == "function" then
-            applyResolved(fs, fontPath, fontSize, fontFlags, g and g.fontKey)
-            return
-        end
-        local ready = _G.MSUF_SetFontChecked(fs, fontPath, fontSize, fontFlags)
-        local matches = _G.MSUF_FontApplicationMatches
-        if ready and type(matches) == "function" then ready = matches(fs, fontPath, fontSize) == true end
-        if not ready and type(_G.MSUF_MarkFontApplyFailed) == "function" then
-            _G.MSUF_MarkFontApplyFailed()
-        end
-    end
-    ApplyOne(iconFrame and iconFrame.timeText)
-    ApplyOne(previewFrame and previewFrame.timeText)
+    local fontKey = g and g.fontKey
+    ApplyTimeTextFontTo(iconFrame and iconFrame.timeText, applyResolved, fontPath, fontSize, fontFlags, fontKey)
+    ApplyTimeTextFontTo(previewFrame and previewFrame.timeText, applyResolved, fontPath, fontSize, fontFlags, fontKey)
 
-    if type(_G.MSUF_GetConfiguredFontColor) == "function" then
-        local red, green, blue = _G.MSUF_GetConfiguredFontColor()
-        if red and green and blue then
-            if iconFrame and iconFrame.timeText then iconFrame.timeText:SetTextColor(red, green, blue, 1) end
-            if previewFrame and previewFrame.timeText then previewFrame.timeText:SetTextColor(red, green, blue, 1) end
-        end
+    local red, green, blue = _G.MSUF_GetConfiguredFontColor()
+    if red and green and blue then
+        if iconFrame and iconFrame.timeText then iconFrame.timeText:SetTextColor(red, green, blue, 1) end
+        if previewFrame and previewFrame.timeText then previewFrame.timeText:SetTextColor(red, green, blue, 1) end
     end
 end
 
@@ -220,7 +217,7 @@ end
 
 local function ApplyInterruptibilityColor(isNotInterruptible, apiNotInterruptibleRaw)
     if not iconFrame then return end
-    if type(_G.MSUF_KickReady_Init) == "function" then _G.MSUF_KickReady_Init() end
+    _G.MSUF_KickReady_Init()
 
     if iconFrame.icon and iconFrame.icon.SetDesaturated then
         iconFrame.icon:SetDesaturated(isNotInterruptible == true)
@@ -231,23 +228,7 @@ local function ApplyInterruptibilityColor(isNotInterruptible, apiNotInterruptibl
         return
     end
 
-    local red, green, blue, alpha
-    local hasColor = false
-    if type(_G.MSUF_KickReady_IsReady) == "function"
-        and type(_G.MSUF_KickReady_EvaluateRGBA) == "function"
-    then
-        red, green, blue, alpha = _G.MSUF_KickReady_EvaluateRGBA(
-            _G.MSUF_KickReady_IsReady(),
-            apiNotInterruptibleRaw
-        )
-        hasColor = true
-    end
-
-    if hasColor then
-        SetBorderColor(red, green, blue, alpha)
-    else
-        SetBorderColor(1, 0.2, 0.2, 1)
-    end
+    SetBorderColor(_G.MSUF_KickReady_EvaluateRGBA(_G.MSUF_KickReady_IsReady(), apiNotInterruptibleRaw))
 end
 
 local function LayoutBorderEdges()
@@ -289,6 +270,26 @@ local function ApplyIconLayout()
 
     LayoutBorderEdges()
     ApplyTimeTextFont()
+    -- The settings this geometry came from; a drag or the interrupt shake
+    -- clears them while they move the icon themselves.
+    iconFrame._msufFocusKickLayoutW = general.focusKickIconWidth
+    iconFrame._msufFocusKickLayoutH = general.focusKickIconHeight
+    iconFrame._msufFocusKickLayoutX = general.focusKickIconOffsetX
+    iconFrame._msufFocusKickLayoutY = general.focusKickIconOffsetY
+    iconFrame._msufFocusKickLayoutValid = true
+end
+
+local function InvalidateIconLayout()
+    if iconFrame then iconFrame._msufFocusKickLayoutValid = nil end
+end
+
+--- True while the icon still sits where the current settings put it.
+local function IconLayoutCurrent(general)
+    return iconFrame._msufFocusKickLayoutValid == true
+        and iconFrame._msufFocusKickLayoutW == general.focusKickIconWidth
+        and iconFrame._msufFocusKickLayoutH == general.focusKickIconHeight
+        and iconFrame._msufFocusKickLayoutX == general.focusKickIconOffsetX
+        and iconFrame._msufFocusKickLayoutY == general.focusKickIconOffsetY
 end
 
 local function EnsureIconFrame()
@@ -326,6 +327,7 @@ local function EnsureIconFrame()
     iconFrame:SetMovable(true)
     iconFrame:RegisterForDrag("LeftButton")
     iconFrame:SetScript("OnDragStart", function(frame)
+        InvalidateIconLayout()
         frame:StartMoving()
     end)
     iconFrame:SetScript("OnDragStop", function(frame)
@@ -375,6 +377,7 @@ local function PlayInterruptFeedback()
 
         shakeStep = shakeStep + 1
         local direction = (shakeStep % 2 == 0) and -1 or 1
+        InvalidateIconLayout()
         iconFrame:ClearAllPoints()
         iconFrame:SetPoint(
             "CENTER",
@@ -394,6 +397,12 @@ local function PlayInterruptFeedback()
     shake()
 end
 
+local function Translate(text)
+    local translate = MSUF.Translate
+    if type(translate) == "function" then return translate(text) end
+    return text
+end
+
 local function PrintMoveError(message)
     if UIErrorsFrame and UIErrorsFrame.AddMessage then
         UIErrorsFrame:AddMessage(message, 1, 0.2, 0.2, 1)
@@ -411,9 +420,15 @@ local function SetPreviewSelected(selected)
     end
 end
 
+-- Kernel/MSUF_Util.lua loads before this file in every TOC. Resolved at use
+-- time (the preview keyboard paths only), so castbar harnesses without it load.
+local function InCombat(event)
+    return MSUF.Util.InCombat(event)
+end
+
 local function NudgePreview(deltaX, deltaY)
     if not (previewEnabled and previewSelected) then return false end
-    if InCombatLockdown and InCombatLockdown() then return false end
+    if InCombat() then return false end
 
     local general = EnsureOptions()
     local step = (IsControlKeyDown and IsControlKeyDown()) and 10
@@ -427,6 +442,28 @@ local function NudgePreview(deltaX, deltaY)
     return true
 end
 
+--- The preview takes the keyboard (arrow-key nudges) only out of combat.
+--- SetPropagateKeyboardInput is restricted in combat, and OnKeyDown calls it
+--- for every key, so a preview left on into combat raised a blocked action per
+--- key press, and a nudge just before the pull left keybinds swallowed. The
+--- keyboard is released at PLAYER_REGEN_DISABLED, while the lockdown has not
+--- started yet (propagation back on first), and taken again at
+--- PLAYER_REGEN_ENABLED. EnableKeyboard is protected only on protected frames.
+local function SetPreviewKeyboard(frame, enabled)
+    if InCombatLockdown and InCombatLockdown() then return false end
+    if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
+    frame:EnableKeyboard(enabled)
+    return true
+end
+
+local function OnPreviewCombatEvent(frame, event)
+    if InCombat(event) then
+        SetPreviewKeyboard(frame, false)
+    else
+        SetPreviewKeyboard(frame, true)
+    end
+end
+
 local function EnsurePreviewFrame()
     if previewFrame then return previewFrame end
 
@@ -435,8 +472,11 @@ local function EnsurePreviewFrame()
     previewFrame:SetFrameLevel(70)
     previewFrame:SetMovable(true)
     previewFrame:EnableMouse(true)
-    previewFrame:EnableKeyboard(true)
-    if previewFrame.SetPropagateKeyboardInput then previewFrame:SetPropagateKeyboardInput(true) end
+    -- Built in combat: the keyboard waits for PLAYER_REGEN_ENABLED.
+    SetPreviewKeyboard(previewFrame, true)
+    previewFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    previewFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    previewFrame:SetScript("OnEvent", OnPreviewCombatEvent)
 
     previewFrame:RegisterForDrag("LeftButton")
     previewFrame.icon = PixelLayoutRegion(previewFrame:CreateTexture(nil, "ARTWORK"))
@@ -469,6 +509,9 @@ local function EnsurePreviewFrame()
         if button == "LeftButton" then SetPreviewSelected(true) end
     end)
     previewFrame:SetScript("OnKeyDown", function(frame, key)
+        -- A key reaching the preview in combat (built at the combat edge) only
+        -- propagates: no restricted call and no nudge.
+        if InCombat() then return end
         local deltaX, deltaY = 0, 0
         if key == "LEFT" then
             deltaX = -1
@@ -493,12 +536,14 @@ local function EnsurePreviewFrame()
     end)
     previewFrame:SetScript("OnHide", function(frame)
         SetPreviewSelected(false)
-        if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
+        if frame.SetPropagateKeyboardInput and not (InCombatLockdown and InCombatLockdown()) then
+            frame:SetPropagateKeyboardInput(true)
+        end
     end)
     previewFrame:SetScript("OnDragStart", function(frame)
         if not previewEnabled then return end
         if InCombatLockdown and InCombatLockdown() then
-            PrintMoveError("In combat - cannot move Focus Interrupt Tracker preview.")
+            PrintMoveError(Translate("In combat - cannot move Focus Interrupt Tracker preview."))
             return
         end
         SetPreviewSelected(true)
@@ -571,7 +616,7 @@ local function SetPreviewEnabled(enabled)
         end
         SetPreviewSelected(false)
         previewFrame:Hide()
-        PrintMoveError("Enable Focus Interrupt Tracker first to use the on-screen preview.")
+        PrintMoveError(Translate("Enable Focus Interrupt Tracker first to use the on-screen preview."))
         return
     end
 
@@ -592,17 +637,13 @@ end
 
 local function InitFocusKickIcon()
     EnsureInitialized(IsFocusKickEnabled())
-    if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then
-        _G.MSUF_FocusKickDriver_ForceUpdate()
-    end
+    _G.MSUF_FocusKickDriver_ForceUpdate()
 end
 
 local function UpdateFocusKickIconOptions()
     EnsureInitialized(IsFocusKickEnabled())
     if iconFrame then ApplyIconLayout() end
-    if type(_G.MSUF_FocusKickDriver_ForceUpdate) == "function" then
-        _G.MSUF_FocusKickDriver_ForceUpdate()
-    end
+    _G.MSUF_FocusKickDriver_ForceUpdate()
     if refreshPreviewLayout then refreshPreviewLayout() end
 end
 
@@ -611,7 +652,7 @@ local function IsPreviewEnabled()
 end
 
 local function ApplyCastState(state)
-    EnsureOptions()
+    local general = EnsureOptions()
 
     if not IsFocusKickEnabled() then
         if iconFrame then
@@ -635,18 +676,22 @@ local function ApplyCastState(state)
     end
 
     if iconFrame.icon and state.icon then
-        if type(_G.MSUF_SetIconTexture) == "function" then
-            _G.MSUF_SetIconTexture(iconFrame.icon, state.icon, "")
-        else
-            iconFrame.icon:SetTexture(state.icon)
-        end
+        _G.MSUF_SetIconTexture(iconFrame.icon, state.icon, "")
     end
 
     iconFrame.MSUF_sourceCastBar = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
         or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
     ApplyInterruptibilityColor(state.isNotInterruptible == true, state.apiNotInterruptibleRaw)
     iconFrame:Show()
-    ApplyIconLayout()
+    -- The option, font, drag and shake paths own the geometry; a cast state
+    -- only re-lays the icon out when it no longer matches the settings (a
+    -- profile switch, a drag or a shake in flight). The time-text font is
+    -- reapplied on every cast state as before.
+    if IconLayoutCurrent(general) then
+        ApplyTimeTextFont()
+    else
+        ApplyIconLayout()
+    end
     AttachTimeDriver(state)
 end
 

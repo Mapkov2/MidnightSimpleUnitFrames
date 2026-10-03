@@ -96,12 +96,23 @@ end
 -- No dead code
 ---------------------------------------------------------------------------
 local RETIRED_GLOBALS = { "MSUF_ProfileIO_SuppressRuntimeSideEffects", "MSUF_GFOptionsPanel" }
+-- Wave 3: GF exports no addon, XML, string dispatch, test or Suite sibling called
+-- (grep-proven); their behaviour stays reachable through the live entry points.
+local RETIRED_GF_EXPORTS = { "AnyGroupRuntimeEnabled", "BuildFrameCache", "DropCompiledSpecs",
+    "GetBlizzardAuraTypeFlags", "GetBlizzardRaidManagerMode", "GetPriorityGroupType", "GetPriorityPinCount",
+    "HasActiveTextSlot", "HasActivePowerTextSlot", "HasFontOverride", "HideBlizzardPartyFrames",
+    "HideBlizzardRaidFrames", "HideOrphanedPreviews", "InvalidateGroupSizeCache", "RefreshAggro",
+    "RefreshClickCastFrames", "TogglePriorityMouseover", "ValidateUnitFrameMap", "_AbbrevNumber" }
 local deadAliases = {}
 for _, relative in ipairs(GROUP_FILES) do
     local lines = codeByFile[relative]
     local text = table.concat(lines, "\n")
     for _, name in ipairs(RETIRED_GLOBALS) do
         Check(not text:find(name, 1, true), relative .. " still reads the retired global " .. name)
+    end
+    for _, name in ipairs(RETIRED_GF_EXPORTS) do
+        Check(not text:find("GF%.%f[%w_]" .. name:gsub("_", "%%_") .. "%f[^%w_]"),
+            relative .. " brings back the dead export GF." .. name)
     end
     for index, code in ipairs(lines) do
         local alias, global = code:match("^local%s+([%w_]+)%s*=%s*_G%.([%w_]+)%s*$")
@@ -192,6 +203,43 @@ do
         Check(german[index] == translated:format(subject),
             "deDE " .. case[1] .. " feedback is not the translated text: " .. tostring(german[index]))
     end
+end
+
+---------------------------------------------------------------------------
+-- The popup can open Options before its persistence method has loaded.
+---------------------------------------------------------------------------
+do
+    local source = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua")
+    local body = assert(source:match("\nfunction GroupPopup%.OpenMenu2Page%(popup, pageKey%)\n(.-)\nend\n"),
+        "group popup menu entry moved")
+    local menu, opened, persisted = {}, 0, 0
+    local popup = { _msufGFMode = "raid" }
+    local scope
+    local context = {
+        _G = { MSUF2 = menu }, EM2 = {}, KIND_TO_KEY = { raid = "gf_raid" },
+        ExportPublic = function() end,
+        GF_EM2_SetActivePreviewKind = function(mode) scope = mode end,
+        GroupPopup = {
+            Apply = function() end,
+            GroupComponentForPage = function() return "layout" end,
+            GroupSectionForPage = function() return "layout" end,
+            QuickPopup = function() return { OpenPage = function(page, owner)
+                Check(page == "gf_layout" and owner == popup, "popup opened the wrong page")
+                Check(menu.gfScope == "raid" and scope == "raid", "popup lost its selected scope")
+                opened = opened + 1
+            end } end,
+        },
+    }
+    setmetatable(context, { __index = _G })
+    local open = setfenv(assert(loadstring("return function(popup, pageKey)\n" .. body .. "\nend")), context)()
+    open(popup)
+    Check(opened == 1, "popup did not open Options without the persistence method")
+    menu.PersistMenuStateValue = function(key, value)
+        Check(key == "gfScope" and value == "raid", "popup persisted the wrong scope")
+        persisted = persisted + 1
+    end
+    open(popup)
+    Check(opened == 2 and persisted == 1, "popup did not resolve the newly loaded persistence method")
 end
 
 ---------------------------------------------------------------------------

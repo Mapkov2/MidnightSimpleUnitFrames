@@ -214,26 +214,8 @@ end
 --- reproduces it from `anchor`. Host and parent share a scale (host is parented
 --- to the frame), so raw edge coordinates are directly comparable.
 function DS.AnchorOffset(host, parent, anchor)
-    local hl, hr, ht, hb = host:GetLeft(), host:GetRight(), host:GetTop(), host:GetBottom()
-    local pl, pr, pt, pb = parent:GetLeft(), parent:GetRight(), parent:GetTop(), parent:GetBottom()
-    if not (hl and hr and ht and hb and pl and pr and pt and pb) then return nil, nil end
-    anchor = tostring(anchor or "TOPRIGHT")
-    local x
-    if anchor:find("LEFT", 1, true) then
-        x = hl - pl
-    elseif anchor:find("RIGHT", 1, true) then
-        x = hr - pr
-    else
-        x = ((hl + hr) * 0.5) - ((pl + pr) * 0.5)
-    end
-    local y
-    if anchor:find("TOP", 1, true) then
-        y = ht - pt
-    elseif anchor:find("BOTTOM", 1, true) then
-        y = hb - pb
-    else
-        y = ((ht + hb) * 0.5) - ((pt + pb) * 0.5)
-    end
+    local x, y = A3.HostAnchorOffset(host, parent, anchor)
+    if x == nil then return nil, nil end
     return Round(x), Round(y)
 end
 

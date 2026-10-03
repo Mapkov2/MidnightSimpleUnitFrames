@@ -29,6 +29,12 @@ local Clamp01 = UF.Clamp01
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 Shared.WHITE = WHITE
 
+--- Overlay anchor modes of the absorb, heal-absorb and heal prediction bars
+--- (general.absorbAnchorMode, healAbsorbAnchorMode, healPredAnchorMode; the
+--- values are saved, so they never change). The menu's labels: anchor to the
+--- left or right side, follow the HP bar (with overflow), reverse from max.
+Shared.ABSORB_ANCHOR = { LEFT = 1, RIGHT = 2, FOLLOW_HP = 3, FOLLOW_HP_OVERFLOW = 4, REVERSE_FROM_MAX = 5 }
+
 --- Fallback class colour used when neither the profile palette nor
 --- RAID_CLASS_COLORS resolves a class token. Cold compile sites call this.
 --- Per-event colour paths (BarsCommon, Text_Common, GetClassBarColorFast)

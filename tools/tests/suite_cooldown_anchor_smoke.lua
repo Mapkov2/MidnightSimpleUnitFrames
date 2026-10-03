@@ -12,7 +12,10 @@
 --   2. The two-step consent: accepting the Suite provider also anchors class
 --      power to the cooldown bar at cooldown width, only while those class
 --      power keys are still at their defaults; declining, another provider and
---      the plain setter never touch class power.
+--      the plain setter never touch class power. Both steps are prompts of the
+--      real core prompt layer (Shell/UI/MSUF_Widgets.lua), MSUF-owned frames:
+--      their buttons and Escape answer them, a prompt hidden for a provider
+--      change stores nothing, and nothing writes StaticPopupDialogs.
 --   3. The real ClassPower layout (ClassPower/MSUF_CP_Core.lua): on the Suite's
 --      anchor the bar sits on top of the Essential row (BOTTOM -> TOP, same
 --      width, hard lock and screen cache on BOTTOM); every other provider keeps
@@ -25,6 +28,7 @@
 local root = assert(arg and arg[1], "repo root required"):gsub("\\", "/"):gsub("/$", "")
 
 local Stubs = assert(loadfile(root .. "/.github/scripts/msuf_test_stubs.lua"))()
+local PopupStub = assert(loadfile(root .. "/tools/tests/static_popup_stub.lua"))()
 
 local ANCHORS = root .. "/MidnightSimpleUnitFrames/Integrations/MSUF_Integration_ThirdPartyAnchors.lua"
 local SUITE_ID = "MSUF_Suite_CooldownManager"
@@ -124,12 +128,12 @@ local function LoadProvider(options)
     }
     _G.MSUFSuite = options.suite and h.suite or nil
 
-    _G.StaticPopupDialogs = {}
-    _G.StaticPopup_Show = function(name, text, _, data)
-        h.popups[#h.popups + 1] = { name = name, text = text, data = data }
-        return {}
+    -- Blizzard's StaticPopup system (static_popup_stub.lua records every
+    -- StaticPopupDialogs write).
+    h.staticPopups = PopupStub.Install(_G)
+    for _, name in ipairs({ "EnableKeyboard", "SetPropagateKeyboardInput" }) do
+        env.Methods[name] = env.Methods[name] or function(self, on) self["fixture" .. name] = on end
     end
-    _G.StaticPopup_Hide = function(name) h.hidden[#h.hidden + 1] = name end
     _G.MSUF_DB = options.db or { general = { anchorToCooldown = false },
         bars = { classPowerWidthMode = "player", classPowerOffsetX = 0, classPowerOffsetY = 0 } }
     _G.MSUF_GlobalDB = options.globalDB or {}
@@ -153,10 +157,24 @@ local function LoadProvider(options)
         },
     }
     h.ns = ns
-    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua) and the
+    -- real core prompt layer (Shell/UI/MSUF_Widgets.lua), as in every core TOC.
+    -- The button skin (Shell/UI/MSUF_Style.lua) is cosmetic here.
+    _G.MSUF_UI, _G.MSUF_SkinButton = nil, function() end
     ns.ExportPublic = function(name, value) _G[name] = value return value end
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/UI/MSUF_Widgets.lua"))("MidnightSimpleUnitFrames", ns)
     ns.ExportPublic = nil
+    local show, hide = ns.UI.ShowPrompt, ns.UI.HidePrompt
+    ns.UI.ShowPrompt = function(key, spec, style)
+        local frame = show(key, spec, style)
+        h.popups[#h.popups + 1] = { name = key, text = spec.text, spec = spec, frame = frame }
+        return frame
+    end
+    ns.UI.HidePrompt = function(key)
+        h.hidden[#h.hidden + 1] = key
+        return hide(key)
+    end
     assert(loadfile(ANCHORS))("MidnightSimpleUnitFrames", ns)
     for i = 1, #env.frames do
         local frame = env.frames[i]
@@ -180,22 +198,43 @@ local function PopupNamed(h, name)
     end
 end
 
--- Accept (or decline) the two-step consent exactly like the dialog buttons do.
-local function AnswerConsent(h, acceptFirst, acceptSecond)
+-- Whether a consent prompt names the provider.
+local function Names(popup, label)
+    return popup ~= nil and popup.text:find(label, 1, true) ~= nil
+end
+
+-- Click button 1 (accept) or 2 (cancel) of an owned prompt, or press Escape.
+local function Answer(popup, how)
+    local frame = assert(popup.frame, "the prompt " .. popup.name .. " is not an MSUF-owned frame")
+    assert(frame:IsShown(), "the prompt " .. popup.name .. " is not shown")
+    if how == "escape" then
+        assert(frame.fixtureEnableKeyboard == true, "the prompt " .. popup.name .. " does not take Escape")
+        frame:GetScript("OnKeyDown")(frame, "ESCAPE")
+    else
+        local button = frame._msufPromptButtons[how == "accept" and 1 or 2]
+        button:GetScript("OnClick")(button)
+    end
+    assert(not frame:IsShown(), "answering " .. popup.name .. " left it open")
+end
+
+-- Accept (or decline) the two-step consent exactly like the prompt buttons do.
+local function AnswerConsent(h, acceptFirst, acceptSecond, decline)
     local first = assert(PopupNamed(h, CONSENT_POPUP), "the first consent step was not shown")
-    local dialogs = _G.StaticPopupDialogs
+    local buttons = first.frame._msufPromptButtons
+    assert(buttons[1]:GetText() == "Continue" and buttons[2]:GetText() == "Keep independent",
+        "the first consent step lost Continue / Keep independent")
     if not acceptFirst then
-        dialogs[CONSENT_POPUP].OnCancel(nil, first.data, "clicked")
+        Answer(first, decline or "cancel")
         return first
     end
-    dialogs[CONSENT_POPUP].OnAccept(nil, first.data)
+    Answer(first, "accept")
     local second = assert(PopupNamed(h, CONFIRM_POPUP), "the second consent step was not shown")
-    assert(second.data == first.data, "the second step lost the provider data")
-    if acceptSecond then
-        dialogs[CONFIRM_POPUP].OnAccept(nil, second.data)
-    else
-        dialogs[CONFIRM_POPUP].OnCancel(nil, second.data, "clicked")
-    end
+    assert(second.text:find(first.text:match("MSUF detected (.-)%.\n"), 1, true),
+        "the second step names another provider")
+    buttons = second.frame._msufPromptButtons
+    assert(buttons[1]:GetText() == "Confirm anchoring" and buttons[2]:GetText() == _G.CANCEL,
+        "the second consent step lost Confirm anchoring / Cancel")
+    Answer(second, acceptSecond and "accept" or (decline or "cancel"))
     return first
 end
 
@@ -338,8 +377,7 @@ for _, modelName in ipairs(MAINLINE_MODELS) do
         Fire(h, "ADDON_LOADED", SUITE_ID)
         assert(h.registry:Count(SUITE_EVENT) == 1, "ADDON_LOADED did not register the callback")
         assert(h.ns.GetAutomaticCooldownAnchorProvider() == SUITE_ID, "the Suite was not detected")
-        assert(PopupNamed(h, CONSENT_POPUP) and PopupNamed(h, CONSENT_POPUP).data.providerId == SUITE_ID,
-            "the consent prompt did not name the Suite")
+        assert(Names(PopupNamed(h, CONSENT_POPUP), "MSUF Suite"), "the consent prompt did not name the Suite")
         h.env:RunTimers()
         assert(h.ns.GetSuiteCooldownAnchor() == h.frame, "the Suite anchor was not acquired after ADDON_LOADED")
     end)
@@ -375,7 +413,8 @@ end
 Case("consent: accepting the Suite anchors class power at cooldown width", function()
     local h = ConsentWorld()
     local first = AnswerConsent(h, true, true)
-    assert(first.data.providerId == SUITE_ID)
+    assert(Names(first, "MSUF Suite"), "the consent prompt did not name the Suite")
+    assert(#h.staticPopups.writes == 0, "the consent wrote StaticPopupDialogs: " .. table.concat(h.staticPopups.writes, ","))
     local bars = _G.MSUF_DB.bars
     assert(_G.MSUF_DB.general.anchorToCooldown == true, "the unit frame layout was not anchored")
     assert(h.ns.GetCooldownAnchorConsentDecision(SUITE_ID) == "accepted")
@@ -419,20 +458,41 @@ for _, custom in ipairs(CUSTOM) do
 end
 
 Case("consent: declining either step never touches class power", function()
-    for _, second in ipairs({ false, true }) do
-        local h = ConsentWorld()
-        if second then AnswerConsent(h, true, false) else AnswerConsent(h, false) end
-        local bars = _G.MSUF_DB.bars
-        assert(_G.MSUF_DB.general.anchorToCooldown == false and h.ns.GetCooldownAnchorConsentDecision(SUITE_ID) == "declined")
-        assert(bars.classPowerAnchorToCooldown == nil and bars.classPowerWidthMode == "player" and #h.cpApply == 0,
-            "declining changed class power")
+    for _, decline in ipairs({ "cancel", "escape" }) do
+        for _, second in ipairs({ false, true }) do
+            local h = ConsentWorld()
+            if second then AnswerConsent(h, true, false, decline) else AnswerConsent(h, false, nil, decline) end
+            local bars = _G.MSUF_DB.bars
+            assert(_G.MSUF_DB.general.anchorToCooldown == false and h.ns.GetCooldownAnchorConsentDecision(SUITE_ID) == "declined",
+                decline .. " on step " .. (second and 2 or 1) .. " did not store the refusal")
+            assert(bars.classPowerAnchorToCooldown == nil and bars.classPowerWidthMode == "player" and #h.cpApply == 0,
+                "declining changed class power")
+        end
     end
+end)
+
+Case("consent: a prompt hidden for a provider change stores nothing", function()
+    local h = ConsentWorld()
+    local first = assert(PopupNamed(h, CONSENT_POPUP), "the first consent step was not shown")
+    h.loaded[SUITE_ID] = nil
+    h.loaded.Coolinator = true
+    local hidden = #h.hidden
+    Fire(h, "ADDON_LOADED", "Coolinator")
+    local hid = false
+    for i = hidden + 1, #h.hidden do hid = hid or h.hidden[i] == CONSENT_POPUP end
+    assert(hid, "a provider change did not hide the Suite's consent prompt")
+    assert(h.ns.GetCooldownAnchorConsentDecision(SUITE_ID) == nil and _G.MSUF_DB.general.anchorToCooldown == false,
+        "hiding the consent prompt stored a decision")
+    -- The same prompt now asks about the new provider.
+    local again = PopupNamed(h, CONSENT_POPUP)
+    assert(again ~= first and again.frame == first.frame and again.frame:IsShown() and Names(again, "Coolinator"),
+        "the consent prompt did not ask about the new provider")
 end)
 
 Case("consent: another provider and the plain setter never touch class power", function()
     local h = ConsentWorld(nil, { "Coolinator" }, false)
     local first = AnswerConsent(h, true, true)
-    assert(first.data.providerId == "Coolinator" and _G.MSUF_DB.general.anchorToCooldown == true)
+    assert(Names(first, "Coolinator") and _G.MSUF_DB.general.anchorToCooldown == true)
     assert(_G.MSUF_DB.bars.classPowerAnchorToCooldown == nil and _G.MSUF_DB.bars.classPowerWidthMode == "player",
         "accepting Coolinator changed class power")
     local s = LoadProvider({ model = "Midnight", suite = true, loaded = { SUITE_ID } })
@@ -570,6 +630,7 @@ local function StartClassPower(provider, bars)
     function MSUF_RegisterModule(name, callbacks)
         if name == "ClassPower" then module = callbacks end
     end
+    assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().Install(root, ns)
     for i = 1, #CP_LOAD_ORDER do
         assert(loadfile(root .. "/MidnightSimpleUnitFrames/" .. CP_LOAD_ORDER[i]))("MidnightSimpleUnitFrames", ns)
     end

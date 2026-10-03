@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- GroupFrames/MSUF_GroupFrames_DB_Textures.lua
 --- Group-frame textures: highlight and outline values, bar and border
 --- textures, and the status icon packs (built-in, add-on, SharedMedia).
@@ -7,6 +6,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- shares the one MSUF.GF table; see that file for the module's API surface.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 MSUF.GF = MSUF.GF or {}
 local GF = MSUF.GF
@@ -677,7 +677,8 @@ local function ExternalIconPath(pack, file, useMidnight)
 end
 
 local function StatusIconAssetCacheKey(iconType, variant, includeDefault, includeStyleSets)
-    return tostring(iconType or "") .. "\031" .. tostring(variant or "") .. "\031" .. (includeDefault and "1" or "0") .. "\031" .. (includeStyleSets and "1" or "0")
+    return tostring(iconType or "") .. "\031" .. tostring(variant or "") .. "\031" .. (includeDefault and "1" or "0") .. "\031"
+        .. (includeStyleSets and "1" or "0")
 end
 
 local function AddStatusIconAssetItem(out, used, value, text)

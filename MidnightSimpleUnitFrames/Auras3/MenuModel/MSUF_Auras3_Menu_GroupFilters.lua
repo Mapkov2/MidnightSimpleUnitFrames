@@ -28,6 +28,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     local SpellIDFromInput = Common.SpellIDFromInput
     local SpellInfo = Common.SpellInfo
     local SpellLabel = Common.SpellLabel
+    local UnresolvedSpellText = Common.UnresolvedSpellText
     local BlacklistPresetKeysForKind = Presets.BlacklistPresetKeysForKind
     local BuildBlacklistPresetValues = Presets.BuildBlacklistPresetValues
     local FALLBACK_PUBLIC_AURA_META = Presets.FALLBACK_PUBLIC_AURA_META
@@ -164,7 +165,12 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
             value = "MSUF_GROUP_HIGHLIGHTS_V1",
             text = "MSUF Highlights",
             tooltipTitle = "MSUF Highlights",
-            tooltip = "Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. The exact list overrides duration filters so temporary states Blizzard reports without a duration, such as Shroud membership, remain visible.",
+            -- One text, split only to keep the line short.
+            tooltip = "Shows MSUF's curated high-value buffs from every Party or Raid member: major defensive, "
+                .. "healing, offensive, and support cooldowns, plus tactical states such as Shroud membership and "
+                .. "frequent high-value cooldowns such as Shadow Dance. Uses Blizzard's native aura filtering. "
+                .. "The exact list overrides duration filters so temporary states Blizzard reports without a "
+                .. "duration, such as Shroud membership, remain visible.",
         },
         { value = "Player", text = "Cast by Me" },
         { value = "BigDefensive", text = "Big Defensive" },
@@ -198,38 +204,12 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         if type(getter) ~= "function" then return nil end
         return getter()
     end
-    local GF_CURRENT_BUFF_FILTER_TOKENS = {
-        ALL = "ALL",
-        MSUFGROUPHIGHLIGHTSV1 = "MSUF_GROUP_HIGHLIGHTS_V1",
-        PLAYER = "Player",
-        BIGDEFENSIVE = "BigDefensive",
-        BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
-        EXTERNALDEFENSIVE = "ExternalDefensive",
-        EXTERNALDEFENSIVEPLAYER = "ExternalDefensivePlayer",
-        RAIDINCOMBAT = "RaidInCombat",
-        RAID = "Raid",
-        RAIDPLAYER = "RaidPlayer",
-    }
-    local GF_CURRENT_DEBUFF_FILTER_TOKENS = {
-        ALL = "ALL",
-        PLAYER = "Player",
-        RAID = "Raid",
-        RAIDINCOMBAT = "RaidInCombat",
-        RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
-        DISPELLABLE = "DISPELLABLE",
-        CROWDCONTROL = "CROWD_CONTROL",
-        NONPLAYER = "NonPlayer",
-    }
     --- Stored Group Aura filters must never retain a token that the current UI no
-    --- longer exposes. Reset retired/unknown filters to the lane's visible default
-    --- instead of silently continuing an uneditable Blizzard filter expression.
-    local function NormalizeGFStoredFilterToken(lane, token)
-        local current = lane == "debuff" and GF_CURRENT_DEBUFF_FILTER_TOKENS
-            or lane == "buff" and GF_CURRENT_BUFF_FILTER_TOKENS
-            or nil
-        if not current then return token end
-        return current[GFNativeFilterKey(token)] or "ALL"
-    end
+    --- longer exposes. Profile normalization (State/MSUF_ProfileNormalize.lua, which
+    --- loads first) owns the list of tokens a stored profile may keep and resets
+    --- retired/unknown ones to the lane's visible default instead of silently
+    --- continuing an uneditable Blizzard filter expression.
+    local NormalizeGFStoredFilterToken = MSUF.ProfileNormalize.NormalizeGFAuraFilterToken
     GF_AURA_FILTER.NormalizeFilterToken = NormalizeGFStoredFilterToken
     local GF_NATIVE_BUFF_FILTERS = {
         ALL = false,
@@ -254,9 +234,8 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         NONPLAYER = false,
     }
     local function ResolveGFNativeFilter(lane, token, baseFilter, filterMap)
-        local key = GFNativeFilterKey(token)
-        local current = lane == "debuff" and GF_CURRENT_DEBUFF_FILTER_TOKENS or GF_CURRENT_BUFF_FILTER_TOKENS
-        if not current[key] then key = "ALL" end
+        -- A token the lane no longer offers resolves like the lane's default, "ALL".
+        local key = GFNativeFilterKey(NormalizeGFStoredFilterToken(lane, token))
         local filter = filterMap[key]
         if filter == false then return baseFilter end
         if type(filter) == "string" and filter ~= "" then return baseFilter .. "|" .. filter end
@@ -399,24 +378,6 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         return count
     end
 
-    function Model.GroupBlacklistSummary(scope, groupKey)
-        scope = NormalizeGroupScope(scope)
-        groupKey = NormalizeKind(groupKey)
-        local a = GroupScopeKinds(scope)
-        local spells = EnsureGroupBlacklistSpells(a, groupKey, false)
-        if type(spells) ~= "table" then return "No blacklisted spells." end
-        local out = {}
-        for key, enabled in pairs(spells) do
-            if enabled == true then
-                local spellID = SpellIDFromInput(key)
-                out[#out + 1] = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)")
-            end
-        end
-        table_sort(out)
-        if #out == 0 then return "No blacklisted spells." end
-        return table.concat(out, "\n")
-    end
-
     function Model.ReadGroupBlacklistHidePermanent(scope, groupKey)
         local kind = GroupScopeKinds(scope)
         local group = GroupAuraGroup(kind, groupKey)
@@ -484,7 +445,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
                 end
                 out[#out + 1] = {
                     value = spellID and tostring(spellID) or tostring(key),
-                    text = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)"),
+                    text = spellID and SpellLabel(spellID) or UnresolvedSpellText(key),
                     icon = icon,
                 }
             end
@@ -647,22 +608,6 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         if b then write(b) end
         if changed then InvalidateGroupBlacklist(scope, groupKey) end
         return changed
-    end
-
-    function Model.GroupBlacklistCategorySummary(scope, groupKey)
-        scope = NormalizeGroupScope(scope)
-        groupKey = NormalizeKind(groupKey)
-        local a = GroupScopeKinds(scope)
-        local group = GroupAuraGroup(a, groupKey)
-        local cats = type(group.blacklistCats) == "table" and group.blacklistCats or nil
-        if type(cats) ~= "table" then return "No blacklisted aura categories." end
-        local out = {}
-        for key, enabled in pairs(cats) do
-            if enabled == true then out[#out + 1] = Model.GroupBlacklistCategoryLabel(key) end
-        end
-        table_sort(out)
-        if #out == 0 then return "No blacklisted aura categories." end
-        return table.concat(out, "\n")
     end
 
 end

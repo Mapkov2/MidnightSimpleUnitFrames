@@ -29,6 +29,7 @@ function methods:SetSize(w,h) self.width, self.height = w,h end
 function methods:SetScale(v) self.scale = v end
 function methods:GetScale() return self.scale or 1 end
 function methods:SetAlpha(v) self.alpha = v end
+function methods:GetAlpha() return self.alpha or 1 end
 function methods:GetCenter() return self.centerX or 500, self.centerY or 400 end
 function methods:SetPoint(...) self.point = {...} end
 function methods:SetBackdrop(value) self.backdrop = value end
@@ -162,8 +163,16 @@ assert(main:IsShown() and off:IsShown() and not ranged:IsShown(), "both hands by
 assert(off.Lane == nil, "the off-hand lane is built only when it is chosen")
 for _,frame in ipairs(nativeFrames) do
     assert(not frame:IsShown() and not frame.receivingSwings, "all Blizzard bars suppressed")
+    -- SwingTimerMixin:SetIsInEditMode sets the field, then shows the bar.
+    -- MSUF never hides a Blizzard bar (its OnHide lays out the bottom managed
+    -- container tainted); it makes the bar invisible instead.
+    frame.isInEditMode = true
     frame:Show()
-    assert(not frame:IsShown(), "Edit Mode cannot reshow a native bar")
+    assert(frame:IsShown() and frame.alpha == 0, "Edit Mode cannot make a native bar visible")
+    -- Edit Mode exit: Blizzard hides the bar itself (the CVar is off).
+    frame.isInEditMode = nil
+    frame:UpdateShownStateAndRegistration()
+    assert(not frame:IsShown(), "harness: Edit Mode exit hides the native bar")
 end
 event("PLAYER_SWING",2,0)
 event("PLAYER_SWING",3,1)
@@ -285,7 +294,9 @@ _G.MSUF_DB={swingTimers={enabled=false}}
 swing.RefreshSettings()
 assert(native and next(driver.events)==nil, "profile disabling releases events and restores native preference")
 assert(not main:IsShown() and not main.binding.enabled)
-for _,frame in ipairs(nativeFrames) do assert(frame:IsShown()) end
+for _,frame in ipairs(nativeFrames) do
+    assert(frame:IsShown() and frame:GetAlpha() == 1, "release restores the native bars and their alpha")
+end
 -- An originally hidden native UI must remain hidden on release.
 _G.SetCVar("showSwingTimer","0")
 assert(swing.SetEnabled(true))

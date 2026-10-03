@@ -21,6 +21,18 @@ local _G = _G
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+
+--- Every provider this file calls is addon code: State defaults, Kernel Util,
+--- the unit-frame factory and the Edit Mode castbar popup load before it;
+--- Castbars/MSUF_CastbarStyle.lua and _Visuals.lua (and the Classic visual
+--- compat, which replaces the outline inset and spark exports) are resolved
+--- when they are used. A missing one fails loudly instead of silently
+--- skipping a layout step.
+local FILE = "Castbars/MSUF_CastbarAnchors.lua"
+local Require = MSUF.Require
+local function Later(name)
+    return Require(name, FILE)
+end
 local floor = math.floor
 local ceil = math.ceil
 local type = type
@@ -93,18 +105,12 @@ local function Round(value)
 end
 
 local function GeneralDB()
-    if type(_G.MSUF_EnsureDB) == "function" then _G.MSUF_EnsureDB() end
+    Later("MSUF_EnsureDB")()
     return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 end
 
 local function CastbarFrameInset(frame, g)
-    if type(_G.MSUF_GetCastbarOutlineInset) == "function" then
-        local inset = _G.MSUF_GetCastbarOutlineInset(frame, g)
-        return tonumber(inset) or 0
-    end
-    local thickness = tonumber(g and g.castbarOutlineThickness)
-    if thickness == nil then thickness = 1 end
-    return thickness > 0 and 1 or 0
+    return tonumber(Later("MSUF_GetCastbarOutlineInset")(frame, g)) or 0
 end
 
 local function GetUnitFrames()
@@ -273,13 +279,11 @@ local function UnitframeNormalBorderInsetForTarget(frame, sourceFrame, targetFra
     local inset = UnitframeNormalBorderInset(frame, sourceFrame)
     if inset <= 0 then return 0 end
 
-    if frame and frame._msufBossPhysicalGeometryApplied == true
-        and type(_G.MSUF_GetPhysicalPixelSize) == "function"
-    then
+    if frame and frame._msufBossPhysicalGeometryApplied == true then
         -- Mirror the boss border's own conversion: the setting is a unitframe-unit
         -- value, so it becomes a physical-pixel count through the unitframe's
         -- scale, not one pixel per configured unit.
-        local framePixel = _G.MSUF_GetPhysicalPixelSize(frame, 1)
+        local framePixel = Later("MSUF_GetPhysicalPixelSize")(frame, 1)
         local pixels = inset
         if type(framePixel) == "number" and framePixel > 0 then
             pixels = inset / framePixel
@@ -467,6 +471,21 @@ end
 -- Width-source signatures (skip redundant re-anchors)
 ------------------------------------------------------------------------
 
+--- The pool module of a castbar kind (boss, arena), nil for single bars. The
+--- pools load after this file; every caller runs later.
+local function CastbarPool(unit)
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    return pools and pools.kinds and pools.kinds[unit] or nil
+end
+
+--- Unit-frame width sources of one castbar kind: a pool reads the unit frame
+--- of every slot (boss1..N), a single bar its own unit frame.
+local function WidthSourceSlots(unit)
+    local pool = CastbarPool(unit)
+    if pool then return pool.maxFrames, pool.unitPrefix end
+    return 1, nil
+end
+
 local function InvalidateWidthSourceSignature(unit)
     if unit then
         widthSourceSignatures[NormalizeUnit(unit)] = nil
@@ -541,16 +560,11 @@ local function WidthSourceNeedsReanchor(g, unit)
     local offset = 1
 
     if matchSrc == "unitframe" then
-        local count = (unit == "boss" and 5) or (unit == "arena" and (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)) or 1
+        local count, slotPrefix = WidthSourceSlots(unit)
         if state.count ~= count then changed = true end
         state.count = count
         for i = 1, count do
-            local sourceUnit = unit
-            if unit == "boss" then
-                sourceUnit = "boss" .. i
-            elseif unit == "arena" then
-                sourceUnit = "arena" .. i
-            end
+            local sourceUnit = slotPrefix and (slotPrefix .. i) or unit
             local frame = GetUnitframe(sourceUnit)
             local source = GetUnitframeWidthSourceFromFrame(frame)
             local sliceChanged
@@ -695,14 +709,9 @@ local function EnsureWidthSourceHooks(g, unit)
 
     if matchSrc == "unitframe" then
         local found = false
-        local count = (unit == "boss" and 5) or (unit == "arena" and (tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)) or 1
+        local count, slotPrefix = WidthSourceSlots(unit)
         for i = 1, count do
-            local sourceUnit = unit
-            if unit == "boss" then
-                sourceUnit = "boss" .. i
-            elseif unit == "arena" then
-                sourceUnit = "arena" .. i
-            end
+            local sourceUnit = slotPrefix and (slotPrefix .. i) or unit
             local frame = GetUnitframe(sourceUnit)
             found = HookWidthSourceFrame(frame, unit, generation) or found
             found = HookWidthSourceFrame(GetUnitframeWidthSourceFromFrame(frame), unit, generation) or found
@@ -796,9 +805,7 @@ function MSUF_UpdateCastbarWidthSourceSync(g, unit, keepSignature)
     -- installing duplicate hooks. Its generation fastpath makes unchanged
     -- castbar applies O(1), while profile/import changes still activate the
     -- newly selected viewer immediately.
-    if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then
-        _G.MSUF_EnsureCooldownWidthObservers()
-    end
+    Later("MSUF_EnsureCooldownWidthObservers")()
     if SyncWidthSourceLifecycle and not SyncWidthSourceLifecycle(g) then
         InvalidateWidthSourceSignature(unit)
         return
@@ -848,6 +855,13 @@ end
 do
     widthSourceBoot = CreateFrame("Frame")
     widthSourceBoot:SetScript("OnEvent", function(_, event, addon)
+        -- The first event with the saved profile: start the lifecycle the
+        -- profile asks for (its PLAYER_ENTERING_WORLD pass then syncs).
+        if event == "PLAYER_LOGIN" then
+            widthSourceBoot:UnregisterEvent("PLAYER_LOGIN")
+            SyncWidthSourceLifecycle(GeneralDB())
+            return
+        end
         if event == "ADDON_LOADED" and addon ~= "Blizzard_CooldownViewer" and addon ~= "Blizzard_EditMode" then
             return
         end
@@ -890,138 +904,10 @@ do
         end
         return wanted
     end
-    SyncWidthSourceLifecycle(GeneralDB())
-end
-
-------------------------------------------------------------------------
--- Player castbar icon + statusbar layout
-------------------------------------------------------------------------
-
--- Lays out the cast icon and inner statusBar for player-style castbars.
-function MSUF_ApplyPlayerCastbarIconLayout(bar, g, topInset, bottomInset)
-    if not (bar and g and bar.statusBar) then return end
-    local statusBar = bar.statusBar
-    topInset = tonumber(topInset) or 0
-    bottomInset = tonumber(bottomInset) or 0
-    local height = (bar.GetHeight and bar:GetHeight()) or 18
-
-    -- Global + per-player icon visibility (forced on while in Edit Mode so it
-    -- can still be positioned).
-    local showIcon = g.castbarShowIcon ~= false
-    if g.castbarPlayerShowIcon ~= nil then
-        showIcon = g.castbarPlayerShowIcon ~= false
-    end
-    local isPlayerBar = bar == _G.MSUF_PlayerCastbar
-        or bar == _G.MSUF_PlayerCastbarPreview
-        or bar == _G.PlayerCastingBarFrame
-        or bar == _G.CastingBarFrame
-    if isPlayerBar
-        and (_G.MSUF_UnitEditModeActive == true
-            or (EditModeManagerFrame and EditModeManagerFrame.IsShown and EditModeManagerFrame:IsShown())) then
-        showIcon = true
-    end
-
-    local iconOffsetX = tonumber(g.castbarPlayerIconOffsetX)
-    if iconOffsetX == nil then iconOffsetX = tonumber(g.castbarIconOffsetX) or 0 end
-    local iconOffsetY = tonumber(g.castbarPlayerIconOffsetY)
-    if iconOffsetY == nil then iconOffsetY = tonumber(g.castbarIconOffsetY) or 0 end
-
-    local iconSize = tonumber(g.castbarPlayerIconSize) or tonumber(g.castbarIconSize) or height
-    if iconSize < 6 then iconSize = 6 elseif iconSize > 128 then iconSize = 128 end
-    local iconZoom = tonumber(g.castbarPlayerIconZoom) or tonumber(g.castbarIconZoom) or 100
-    if iconZoom < 100 then iconZoom = 100 elseif iconZoom > 200 then iconZoom = 200 end
-
-    local icon = bar.Icon or bar.icon or (bar.IconFrame and bar.IconFrame.Icon)
-    local iconDetached = (iconOffsetX ~= 0) -- detach only on X
-
-    if icon then
-        if showIcon then
-            icon:Show()
-            local host = bar._msufPCIconHost
-            if not host then
-                host = PixelLayoutRegion(CreateFrame("Frame", nil, bar))
-                host:EnableMouse(false)
-                bar._msufPCIconHost = host
-            end
-            host:SetSize(iconSize, iconSize)
-            host:ClearAllPoints()
-            host:SetPoint("LEFT", bar, "LEFT", iconOffsetX, iconOffsetY)
-            if statusBar.GetFrameLevel and host.SetFrameLevel then
-                local resolveIconLevel = _G.MSUF_ResolveCastbarIconFrameLevel
-                local unitFromFrame = _G.MSUF_GetCastbarUnitFromFrame
-                local manualIconLevel = type(resolveIconLevel) == "function"
-                    and resolveIconLevel(type(unitFromFrame) == "function" and unitFromFrame(bar) or "player", g)
-                    or nil
-                host:SetFrameLevel(manualIconLevel or ((statusBar:GetFrameLevel() or 0) + 3))
-            end
-            host:Show()
-
-            local key = "H:" .. (iconDetached and "D" or "A") .. ":" .. iconSize .. ":" .. iconZoom .. ":" .. iconOffsetX .. ":" .. iconOffsetY
-            if icon._msufPCIconKey ~= key or (icon.GetParent and icon:GetParent() ~= host) then
-                icon:SetParent(host)
-                icon:ClearAllPoints()
-                icon:SetAllPoints(host)
-                if icon.SetDrawLayer then
-                    icon:SetDrawLayer("OVERLAY", 7) -- above bar texture, below texts
-                end
-                if icon.SetTexCoord then
-                    local visible = 100 / iconZoom
-                    local inset = (1 - visible) * 0.5
-                    icon:SetTexCoord(inset, 1 - inset, inset, 1 - inset)
-                end
-                icon._msufPCIconKey = key
-            end
-        else
-            icon:Hide()
-            if bar._msufPCIconHost then bar._msufPCIconHost:Hide() end
-        end
-    elseif bar._msufPCIconHost then
-        bar._msufPCIconHost:Hide()
-    end
-
-    -- StatusBar anchoring (only re-anchor when the layout state changes).
-    local frameInset = CastbarFrameInset(bar, g)
-    if frameInset <= 0 then
-        topInset = 0
-        bottomInset = 0
-    end
-    local layoutKey = "I" .. frameInset .. ":" .. ((showIcon and icon and not iconDetached) and ("G:" .. iconSize) or "F")
-    if statusBar._msufPCLayoutKey ~= layoutKey then
-        statusBar:ClearAllPoints()
-        if showIcon and icon and not iconDetached then
-            statusBar:SetPoint("TOPLEFT", bar, "TOPLEFT", iconSize + 1, topInset)
-            statusBar:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -frameInset, bottomInset)
-        else
-            statusBar:SetPoint("TOPLEFT", bar, "TOPLEFT", frameInset, topInset)
-            statusBar:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -frameInset, bottomInset)
-        end
-        statusBar._msufPCLayoutKey = layoutKey
-    end
-
-    -- Explicit StatusBar sizing: point-anchoring alone can leave the bar in a
-    -- "border-only" state until the next frame. Force size so the fill spans the
-    -- full new width immediately (fixes black bar on CDM sync).
-    local barWidth = (bar.GetWidth and bar:GetWidth()) or 250
-    if barWidth <= 0 then barWidth = 250 end
-    local sbWidth = (showIcon and icon and not iconDetached) and (barWidth - iconSize - 1 - frameInset) or (barWidth - (frameInset * 2))
-    if sbWidth < 1 then sbWidth = 1 end
-    local sbHeight = height - (frameInset * 2)
-    if sbHeight < 1 then sbHeight = 1 end
-
-    if statusBar._msufPCSbW ~= sbWidth then
-        statusBar:SetWidth(sbWidth)
-        statusBar._msufPCSbW = sbWidth
-    end
-    if statusBar._msufPCSbH ~= sbHeight then
-        statusBar:SetHeight(sbHeight)
-        statusBar._msufPCSbH = sbHeight
-    end
-
-    local bg = bar.backgroundBar
-    if bg and bg.SetAllPoints then
-        bg:ClearAllPoints()
-        bg:SetAllPoints(statusBar)
-    end
+    -- Not at file load: the client loads the SavedVariables after every file
+    -- ran, so a read here builds a throwaway profile (no width source) and
+    -- the castbar login passes only sync a unit whose unit frame exists.
+    widthSourceBoot:RegisterEvent("PLAYER_LOGIN")
 end
 
 ------------------------------------------------------------------------
@@ -1054,6 +940,71 @@ local function ApplyPlayerCastbarSizeAndLayout(bar, g, w, h, preserveWidth)
 
 end
 
+-- Set the outer frame size. Returns true when a frame was present.
+local function SetOuterSize(frame, w, h)
+    if not frame then return false end
+    SetWidth(frame, w)
+    if h and h > 0 then SetHeight(frame, h) end
+    return true
+end
+
+--- The player castbar and its preview take the full size and layout.
+local function ApplyPlayerCastbarEffectiveSize(g)
+    local frame = _G.MSUF_PlayerCastbar
+    local preview = _G.MSUF_PlayerCastbarPreview
+    local target = frame or preview
+    if not target then return false end
+
+    local w, h, preserveWidth = MSUF_GetCastbarDesiredSize("player", g, target, 250, 18)
+    if frame then ApplyPlayerCastbarSizeAndLayout(frame, g, w, h, preserveWidth) end
+    if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
+    return true
+end
+
+--- Target and focus: the live bar gets its outer size (the status bar keeps
+--- the icon's square), the preview the full layout.
+local function ApplyTargetFocusCastbarEffectiveSize(unit, g)
+    local frame = (unit == "target"
+        and (_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)))
+        or (_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar))
+    local preview = (unit == "target" and _G.MSUF_TargetCastbarPreview) or _G.MSUF_FocusCastbarPreview
+    local target = frame or preview
+    if not target then return false end
+
+    local fallbackW = (target.GetWidth and target:GetWidth()) or 240
+    local fallbackH = (target.GetHeight and target:GetHeight()) or 18
+    local w, h, preserveWidth = MSUF_GetCastbarDesiredSize(unit, g, target, fallbackW, fallbackH)
+
+    if frame and SetOuterSize(frame, w, h) and frame.statusBar then
+        local barH = (frame.GetHeight and frame:GetHeight()) or h or 18
+        SetWidth(frame.statusBar, math.max(1, (w or 240) - barH - 1))
+    end
+    if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
+    return true
+end
+
+--- Boss and arena: every built bar of the pool, then its Edit Mode preview.
+local function ApplyPoolCastbarEffectiveSize(pool, g)
+    local applied = false
+    for index = 1, pool.maxFrames do
+        local frame = pool.Bar(index)
+        if frame then
+            local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240
+            local fallbackH = (frame.GetHeight and frame:GetHeight()) or 12
+            local w, h = MSUF_GetCastbarDesiredSize(pool.unitPrefix .. index, g, frame, fallbackW, fallbackH)
+            if SetOuterSize(frame, w, h) then
+                applied = true
+                if frame.ApplyLayout then frame:ApplyLayout() end
+            end
+        end
+    end
+    if _G.MSUF_UnitEditModeActive == true and pool.preview then
+        pool.preview:Update()
+        applied = true
+    end
+    return applied
+end
+
 -- Apply the effective runtime size to a unit's castbar(s). Returns true if a
 -- bar was sized. (Assigned to the forward-declared local above.)
 ApplyCastbarEffectiveSizeUnit = function(unit, g)
@@ -1065,92 +1016,16 @@ ApplyCastbarEffectiveSizeUnit = function(unit, g)
     unit = NormalizeUnit(unit)
     if not ShouldUseMSUFCastbar(unit, g) then return false end
 
-    -- Set the outer frame size. Returns true when a frame was present.
-    local function SetOuterSize(frame, w, h)
-        if not frame then return false end
-        SetWidth(frame, w)
-        if h and h > 0 then SetHeight(frame, h) end
-        return true
-    end
-
     if unit == "player" then
-        local frame = _G.MSUF_PlayerCastbar
-        local preview = _G.MSUF_PlayerCastbarPreview
-        local target = frame or preview
-        if not target then return false end
-
-        local w, h, preserveWidth = MSUF_GetCastbarDesiredSize("player", g, target, 250, 18)
-        if frame then ApplyPlayerCastbarSizeAndLayout(frame, g, w, h, preserveWidth) end
-        if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth) end
-        return true
+        return ApplyPlayerCastbarEffectiveSize(g)
     end
-
     if unit == "target" or unit == "focus" then
-        local frame = (unit == "target"
-            and (_G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or ((_G.TargetCastBar and _G.TargetCastBar._msufCastbarDriver == true) and _G.TargetCastBar)))
-            or (_G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar))
-        local preview = (unit == "target" and _G.MSUF_TargetCastbarPreview) or _G.MSUF_FocusCastbarPreview
-        local target = frame or preview
-        if not target then return false end
-
-        local fallbackW = (target.GetWidth and target:GetWidth()) or 240
-        local fallbackH = (target.GetHeight and target:GetHeight()) or 18
-        local w, h, preserveWidth = MSUF_GetCastbarDesiredSize(unit, g, target, fallbackW, fallbackH)
-
-        if frame and SetOuterSize(frame, w, h) and frame.statusBar then
-            local barH = (frame.GetHeight and frame:GetHeight()) or h or 18
-            SetWidth(frame.statusBar, math.max(1, (w or 240) - barH - 1))
-        end
-        if preview and type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-            _G.MSUF_ApplyPlayerCastbarSizeAndLayout(preview, g, w, h, preserveWidth)
-        end
-        return true
+        return ApplyTargetFocusCastbarEffectiveSize(unit, g)
     end
-
-    if unit == "boss" then
-        local applied = false
-        local maxBoss = tonumber(_G.MAX_BOSS_FRAMES) or 5
-        if maxBoss < 1 or maxBoss > 12 then maxBoss = 5 end
-        for i = 1, maxBoss do
-            local frame = (_G.MSUF_BossCastbars and _G.MSUF_BossCastbars[i]) or _G["MSUF_BossCastbar" .. i]
-            if frame then
-                local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240
-                local fallbackH = (frame.GetHeight and frame:GetHeight()) or 12
-                local w, h = MSUF_GetCastbarDesiredSize("boss" .. i, g, frame, fallbackW, fallbackH)
-                if SetOuterSize(frame, w, h) then
-                    applied = true
-                    if frame.ApplyLayout then frame:ApplyLayout() end
-                end
-            end
-        end
-        if _G.MSUF_UnitEditModeActive == true and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-            _G.MSUF_UpdateBossCastbarPreview()
-            applied = true
-        end
-        return applied
+    local pool = CastbarPool(unit)
+    if pool then
+        return ApplyPoolCastbarEffectiveSize(pool, g)
     end
-
-    if unit == "arena" then
-        local applied = false
-        for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-            local frame = (_G.MSUF_ArenaCastbars and _G.MSUF_ArenaCastbars[i]) or _G["MSUF_ArenaCastbar" .. i]
-            if frame then
-                local fallbackW = (frame.GetWidth and frame:GetWidth()) or 240
-                local fallbackH = (frame.GetHeight and frame:GetHeight()) or 12
-                local w, h = MSUF_GetCastbarDesiredSize("arena" .. i, g, frame, fallbackW, fallbackH)
-                if SetOuterSize(frame, w, h) then
-                    applied = true
-                    if frame.ApplyLayout then frame:ApplyLayout() end
-                end
-            end
-        end
-        if _G.MSUF_UnitEditModeActive == true and type(_G.MSUF_UpdateArenaCastbarPreview) == "function" then
-            _G.MSUF_UpdateArenaCastbarPreview()
-            applied = true
-        end
-        return applied
-    end
-
     return false
 end
 
@@ -1231,9 +1106,7 @@ local function ReanchorTargetOrFocusCastbarBase(unit)
     if not preserveWidth and type(snap) == "function" then width = snap(frame, width) end
     SetWidth(frame, width)
     SetHeight(frame, desiredHeight)
-    if preview and type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout) == "function" then
-        _G.MSUF_ApplyPlayerCastbarSizeAndLayout(preview, g, width, desiredHeight, preserveWidth)
-    end
+    if preview then ApplyPlayerCastbarSizeAndLayout(preview, g, width, desiredHeight, preserveWidth) end
 
     local positionPreview = unit == "target" and _G.MSUF_PositionTargetCastbarPreview or _G.MSUF_PositionFocusCastbarPreview
     if preview and positionPreview then positionPreview() end
@@ -1242,14 +1115,10 @@ end
 
 local function RefreshCastbarVisualFollowers(frame, unit, general)
     if not frame then return end
-    local refreshFrame = _G.MSUF_RefreshCastbarFrame
-    if type(refreshFrame) == "function" then
-        refreshFrame(frame)
-    elseif type(_G.MSUF_ApplyCastbarDetailLayout) == "function" then
-        _G.MSUF_ApplyCastbarDetailLayout(frame, unit)
-    end
-    local applySpark = _G.MSUF_ApplyCastbarSparkVisual
-    if type(applySpark) == "function" then applySpark(frame, general) end
+    -- Castbars/MSUF_CastbarVisuals.lua owns the refresh (the Classic compat
+    -- wraps it); its detail-layout fallback never ran after the file loaded.
+    Later("MSUF_RefreshCastbarFrame")(frame)
+    Later("MSUF_ApplyCastbarSparkVisual")(frame, general)
 end
 
 local function ReanchorTargetCastBarBase()
@@ -1339,12 +1208,7 @@ local function ReanchorPoolCastBar(kind)
     if not InCombat() and pool and pool.preview then
         pool.preview:Update()
     end
-    if kind == "boss" and type(MSUF_SyncBossCastbarSliders) == "function" then
-        MSUF_SyncBossCastbarSliders()
-    end
-    if type(MSUF_SyncCastbarPositionPopup) == "function" then
-        MSUF_SyncCastbarPositionPopup(kind)
-    end
+    Later("MSUF_SyncCastbarPositionPopup")(kind)
 end
 
 function MSUF_ReanchorBossCastBar()
@@ -1375,11 +1239,7 @@ ExportPublic("MSUF_GetCastbarDesiredSize", MSUF_GetCastbarDesiredSize)
 ExportPublic("MSUF_UpdateCastbarWidthSourceSync", MSUF_UpdateCastbarWidthSourceSync)
 ExportPublic("MSUF_ApplyCastbarEffectiveSizeUnit", ApplyCastbarEffectiveSizeUnit)
 ExportPublic("MSUF_RefreshCastbarCooldownWidthSource", RefreshCastbarCooldownWidthSource)
-ExportPublic("MSUF_GetPlayerCastbarDesiredSize", function(g, bar, fallbackW, fallbackH)
-    return MSUF_GetCastbarDesiredSize("player", g, bar, fallbackW, fallbackH)
-end)
 ExportPublic("MSUF_ApplyPlayerCastbarSizeAndLayout", ApplyPlayerCastbarSizeAndLayout)
-ExportPublic("MSUF_ApplyPlayerCastbarIconLayout", MSUF_ApplyPlayerCastbarIconLayout)
 ExportPublic("MSUF_ReanchorPlayerCastBar", MSUF_ReanchorPlayerCastBar)
 ExportPublic("MSUF_ReanchorPlayerCastBarBase", ReanchorPlayerCastBarBase)
 ExportPublic("MSUF_ReanchorBossCastBar", MSUF_ReanchorBossCastBar)

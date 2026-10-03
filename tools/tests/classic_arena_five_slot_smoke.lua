@@ -275,6 +275,11 @@ end
 local function CompileWith(slots)
     _G.MSUF_MAX_ARENA_FRAMES = slots
     local namespace, A3 = NewAuraNamespace()
+    -- The Auras3 core loads first in game; its lane-key schema carries the
+    -- managed units, arena slots included.
+    namespace.MSUF_CreateCanonicalPlayerDefensiveAuraContainer = function() return {} end
+    namespace.Client.MaxArenaOpponents = slots
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"))("MidnightSimpleUnitFrames", namespace)
     -- MSUF_Auras3_UnitFrames.lua provides the NormalizeClassic* value helpers in
     -- game; lane compilation only needs them to pass values through here.
     setmetatable(A3, { __index = function(_, key)
@@ -282,7 +287,7 @@ local function CompileWith(slots)
             return function(value) return value end
         end
     end })
-    -- The Auras3 core is not loaded here; its EnsureDB returns the profile's tree.
+    -- The core's profile adapter is replaced: EnsureDB returns the profile's tree.
     A3.EnsureDB = function() local auras = _G.MSUF_DB.auras3; return auras, auras.shared end
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
     for _, file in ipairs({ "MSUF_Auras3_DataShared.lua", "MSUF_Auras3_Visuals.lua", "MSUF_Auras3_Features.lua" }) do

@@ -478,7 +478,8 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     local knobSize = 16
     local knobPad = 2
     local switchTrackTexture = (T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
-    local switchKnobTexture = (T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
+    local switchKnobTexture = (T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse)
+        or "Interface\\Buttons\\WHITE8X8"
     local btn = PixelLayoutRegion(CreateFrame("CheckButton", nil, section))
     btn._msuf2ControlKind = "toggle"
     btn:SetPoint("TOPLEFT", x or 16, y or -40)
@@ -698,7 +699,10 @@ function W.ScopeOverrideBar(ctx, section, opts)
     end
     function bar:SetValue(value)
         local current = self:GetValue()
-        if current == value then self:Refresh(); return false end
+        if current == value then
+            self:Refresh()
+            return false
+        end
         if type(opts.setValue) == "function" then opts.setValue(value) end
         if type(opts.onChange) == "function" then opts.onChange(value) end
         self:Refresh()
@@ -1124,7 +1128,10 @@ function W.SegmentTabs(ctx, parent, opts)
     end
     local defaultTab = opts.defaultTab or opts.default or "main"
     local segment
-    local function CurrentTab() local tab = opts.get and opts.get() or (opts.stateKey and M[opts.stateKey]) or defaultTab; return allowed[tab] and tab or defaultTab end
+    local function CurrentTab()
+        local tab = opts.get and opts.get() or (opts.stateKey and M[opts.stateKey]) or defaultTab
+        return allowed[tab] and tab or defaultTab
+    end
     local function RefreshTabs()
         local tab = CurrentTab()
         for key, frame in pairs(frames) do

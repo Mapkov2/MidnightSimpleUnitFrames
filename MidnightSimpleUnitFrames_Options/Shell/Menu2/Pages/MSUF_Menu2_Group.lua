@@ -3,6 +3,12 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Group.lua", {
+    "MSUF_ShowGroupFrameReloadRequiredPopup",
+    "MSUF_GF_EM2_SetActivePreviewKind",
+})
 local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Menu2 Group page foundation.
@@ -128,35 +134,10 @@ local function CurrentApplyService()
     if type(apply) == "table" then return apply end
     return nil
 end
-local MaskHas = _G.MSUF_UF_MaskHas
-local function AddDirty(mask, flag)
-    if not flag then return mask or 0 end
-    mask = tonumber(mask) or 0
-    if MaskHas(mask, flag) then return mask end
-    return mask + flag
-end
+-- The apply service owns the group dirty-mask merge; this page's pending
+-- queue merges without the DIRTY_CONFIG bit.
 local function MergeDirtyMask(gf, current, incoming)
-    if not current then return incoming end
-    if not incoming then return current end
-    if current == true or incoming == true then return true end
-    if gf then
-        if current == gf.DIRTY_ALL or incoming == gf.DIRTY_ALL then return gf.DIRTY_ALL end
-        if current == gf.DIRTY_CONFIG or incoming == gf.DIRTY_CONFIG then return gf.DIRTY_CONFIG end
-    end
-    if type(current) ~= "number" or type(incoming) ~= "number" then return incoming end
-    local out = current
-    if gf then
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_VISUAL) and gf.DIRTY_VISUAL or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_FONT) and gf.DIRTY_FONT or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_COLOR) and gf.DIRTY_COLOR or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_BORDER) and gf.DIRTY_BORDER or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_GEOMETRY) and gf.DIRTY_GEOMETRY or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_LAYOUT) and gf.DIRTY_LAYOUT or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AURAS) and gf.DIRTY_AURAS or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_UNIT_BINDING) and gf.DIRTY_UNIT_BINDING or nil)
-        out = AddDirty(out, MaskHas(incoming, gf.DIRTY_AGGRO) and gf.DIRTY_AGGRO or nil)
-    end
-    return out
+    return M.ApplyService.MergeGroupDirty(gf, current, incoming, true)
 end
 local function ModeDirtyMask(gf, mode)
     if not gf then return nil end
@@ -166,7 +147,7 @@ local function ModeDirtyMask(gf, mode)
     if mode == "border" or mode == "borders" then return gf.DIRTY_BORDER end
     if mode == "aggro" then return gf.DIRTY_AGGRO or gf.DIRTY_COLOR end
     if mode == "auras" then return gf.DIRTY_AURAS end
-    if mode == "geometry" then return AddDirty(gf.DIRTY_GEOMETRY, gf.DIRTY_LAYOUT) end
+    if mode == "geometry" then return M.ApplyService.AddDirty(gf.DIRTY_GEOMETRY, gf.DIRTY_LAYOUT) end
     if mode == "config" then return gf.DIRTY_CONFIG end
     return nil
 end
@@ -184,12 +165,8 @@ local function RefreshGFPreview(kind, opts)
     local gf = GF()
     if opts and opts.auraOnly == true and gf and type(gf.RefreshPreviewAuras) == "function" then
         gf.RefreshPreviewAuras(kind)
-    elseif opts and opts.auraOnly == true and type(_G.MSUF_GF_RefreshPreviewAuras) == "function" then
-        _G.MSUF_GF_RefreshPreviewAuras(kind)
     elseif opts and opts.spellOnly == true and gf and type(gf.RefreshPreviewSpellIndicators) == "function" then
         gf.RefreshPreviewSpellIndicators(kind)
-    elseif opts and opts.spellOnly == true and type(_G.MSUF_GF_RefreshPreviewSpellIndicators) == "function" then
-        _G.MSUF_GF_RefreshPreviewSpellIndicators(kind)
     elseif gf and type(gf.RefreshPreviewLayout) == "function" then
         gf.RefreshPreviewLayout(kind)
     end
@@ -339,9 +316,7 @@ local function Set(kind, key, value, mode)
             conf.hlOverride = true
         end
         QueueGF(kind, mode or "visual")
-        if key == "enabled" and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
-            _G.MSUF_ShowGroupFrameReloadRequiredPopup()
-        end
+        if key == "enabled" then _G.MSUF_ShowGroupFrameReloadRequiredPopup() end
         return true
     end
     return M.RunWithHistory(M.Format("Group %s", tostring(key)), "group:" .. tostring(kind) .. ":" .. tostring(key), Write)
@@ -455,9 +430,7 @@ local function SetFrameProvider(kind, provider)
         conf.enabled = nextEnabled
         if not nextEnabled then conf.blizzardFallbackMode = provider end
         QueueGF(kind, "rebuild")
-        if (enabledChanged or fallbackChanged) and type(_G.MSUF_ShowGroupFrameReloadRequiredPopup) == "function" then
-            _G.MSUF_ShowGroupFrameReloadRequiredPopup()
-        end
+        if enabledChanged or fallbackChanged then _G.MSUF_ShowGroupFrameReloadRequiredPopup() end
         return true
     end
     return M.RunWithHistory("Group frame provider", "group:" .. tostring(kind) .. ":frameProvider", Write)
@@ -503,7 +476,6 @@ local GF_COPY_CATEGORIES = {
 local function DeepCopy(value)
     local gf = GF()
     if gf and type(gf._DeepCopyTable) == "function" then return gf._DeepCopyTable(value) end
-    if type(_G.MSUF_DeepCopy) == "function" then return _G.MSUF_DeepCopy(value) end
     return M.DeepCopy(value)
 end
 local function NewGFCopyScopes()
@@ -522,8 +494,8 @@ local function GroupCopyDirtyMask(scopes)
         return gf.DIRTY_CONFIG or gf.DIRTY_ALL or gf.DIRTY_VISUAL
     end
     local dirty
-    if scopes.font then dirty = AddDirty(dirty, gf.DIRTY_FONT) end
-    if scopes.auras or scopes.aurastyle then dirty = AddDirty(dirty, gf.DIRTY_AURAS) end
+    if scopes.font then dirty = M.ApplyService.AddDirty(dirty, gf.DIRTY_FONT) end
+    if scopes.auras or scopes.aurastyle then dirty = M.ApplyService.AddDirty(dirty, gf.DIRTY_AURAS) end
     return dirty or gf.DIRTY_VISUAL
 end
 local GROUP_AURA_STYLE_ROOT_KEYS = { "dynamicScale", "showTooltip", "iconZoom" }
@@ -706,11 +678,13 @@ local function AttachGroupSectionUX(ctx)
         return M.Tr(text:sub(1, 1):upper() .. text:sub(2):lower())
     end
     local sections = {
-        general = { fields = "showPlayer showSolo clickCastEnabled reverseFill smoothFill chunkedFill frameBarShape", summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
+        general = { fields = "showPlayer showSolo clickCastEnabled reverseFill smoothFill chunkedFill frameBarShape",
+            summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
         portrait = { prefixes = "portrait", noCopy = true },
         text = { },
         power = { fields = "powerBarEnabled powerHeight powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth", prefixes = "detachedPower" },
-        range = { fields = "rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineFadeEnabled offlineAlpha", summary = function(c) return c.rangeFadeEnabled and (Number((c.rangeFadeAlpha or 0.4) * 100) .. "%") or "" end },
+        range = { fields = "rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineFadeEnabled offlineAlpha", summary = function(c) return c.rangeFadeEnabled
+            and (Number((c.rangeFadeAlpha or 0.4) * 100) .. "%") or "" end },
         transparency = { fields = "hpBarAlpha hpBgAlpha oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha alphaExcludeTextPortrait alphaExcludePredictionBars", summary = function(c) return Number((c.hpBarAlpha or 1) * 100) .. "%" end },
         dispel = { prefixes = "dispelOverlay" },
         dispelSymbol = { prefixes = "dispelSymbol" },
@@ -832,7 +806,7 @@ local function ScopeSection(ctx, builder, opts)
         if previousScope ~= M.gfScope and W.CloseTextQuickSettings then W.CloseTextQuickSettings() end
         if previousScope ~= M.gfScope and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format("%s scope", ScopeShortLabel(M.gfScope)), "info", 1.1) end
         local gf = GF()
-        if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
+        _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope)
         RequestGFPagePreview()
         if gf and type(gf.PreviewScopeChanged) == "function" then
             gf.PreviewScopeChanged()
@@ -963,6 +937,35 @@ local function BindScopeToggle(ctx, widget, key, default, mode, semanticPath)
         end,
         ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key)))
     return widget
+end
+--- Binds one of two mutually exclusive fill toggles (smooth vs chunked):
+--- turning key on turns peerKey off, in one history step named historyField.
+local function BindExclusiveScopeToggle(ctx, control, key, peerKey, historyLabel, historyField, refresh)
+    M.BindBoolWidget(ctx, control,
+        function() return Bool(CurrentScope(), key, false) end,
+        function(value)
+            value = value == true
+            local scope = CurrentScope()
+            local function Write()
+                local conf = Conf(scope)
+                local changed = conf[key] ~= value
+                conf[key] = value
+                if value and conf[peerKey] ~= false then
+                    conf[peerKey] = false
+                    changed = true
+                end
+                if not changed then return false end
+                QueueGF(scope, "visual")
+                refresh()
+                return true
+            end
+            if type(M.RunWithHistory) == "function" then
+                return M.RunWithHistory(historyLabel, "group:" .. tostring(scope) .. ":" .. historyField, Write)
+            end
+            return Write()
+        end,
+        GroupControlMeta(ctx, "field." .. tostring(key)))
+    return control
 end
 local function BindScopeSlider(ctx, widget, key, default, mode, semanticPath)
     local metadata = ResolveGroupControlMeta(ctx, semanticPath, "field." .. tostring(key))
@@ -1338,22 +1341,29 @@ function PortraitBuild.Controls(ctx, s)
     local zoom = BindNumber(geometryCard, "Portrait zoom", 16, -278, cardW - 58, 100, 300, 1, "portraitZoom", 100)
     local panX = BindNumber(geometryCard, "Zoom center X", 16, -332, cardW - 58, -100, 100, 1, "portraitPanX", 0)
     local panY = BindNumber(geometryCard, "Zoom center Y", 16, -386, cardW - 58, -100, 100, 1, "portraitPanY", 0)
-    local placement = BindDropdown(placementCard, "Placement", placementValues.modes, 16, -58, min(220, cardW - 32), "portraitPlacement", "ATTACHED", nil, RefreshPortraitControls)
+    local placement = BindDropdown(placementCard, "Placement", placementValues.modes, 16, -58, min(220, cardW - 32), "portraitPlacement", "ATTACHED", nil,
+        RefreshPortraitControls)
     placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
-    local detachedPoint = BindDropdown(placementCard, "Portrait anchor point", placementValues.points, 16, -112, min(220, cardW - 32), "portraitDetachedPoint", "RIGHT")
-    local detachedTo = BindDropdown(placementCard, "Attach to frame point", placementValues.points, 16, -166, min(220, cardW - 32), "portraitDetachedTo", "LEFT")
-    local overlayAlign = BindDropdown(placementCard, "Overlay alignment", placementValues.overlay, 16, -220, min(220, cardW - 32), "portraitOverlayAlign", "LEFT")
+    local detachedPoint = BindDropdown(placementCard, "Portrait anchor point", placementValues.points, 16, -112, min(220, cardW - 32),
+        "portraitDetachedPoint", "RIGHT")
+    local detachedTo = BindDropdown(placementCard, "Attach to frame point", placementValues.points, 16, -166, min(220, cardW - 32),
+        "portraitDetachedTo", "LEFT")
+    local overlayAlign = BindDropdown(placementCard, "Overlay alignment", placementValues.overlay, 16, -220, min(220, cardW - 32),
+        "portraitOverlayAlign", "LEFT")
     local level = BindNumber(placementCard, "Layer offset", 16, -274, cardW - 58, 0, 30, 1, "portraitLevelOffset", 7)
     level._msuf2SearchText = "Portrait layer offset frame level behind in front of bars"
     local alpha = BindNumber(placementCard, "Portrait opacity", 16, -328, cardW - 58, 0, 100, 1, "portraitAlpha", 100)
     local border = BindDropdown(borderCard, "Border", borderValues, 16, -112, min(220, cardW - 32), "portraitBorderStyle", "NONE", nil, RefreshPortraitControls)
     local edgeSoftness = BindNumber(borderCard, "Portrait edge softness", 16, -166, cardW - 58, 0, 30, 2, "portraitEdgeSoftness", 0)
     edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
-    local borderArt = BindDropdown(borderCard, "Border art", placementValues.borderArt, 16, -220, min(220, cardW - 32), "portraitBorderArt", "FLAT", nil, RefreshPortraitControls)
-    local direction = BindDropdown(borderCard, "Border direction", placementValues.borderDirection, 16, -274, min(220, cardW - 32), "portraitBorderDirection", "UP")
+    local borderArt = BindDropdown(borderCard, "Border art", placementValues.borderArt, 16, -220, min(220, cardW - 32), "portraitBorderArt", "FLAT", nil,
+        RefreshPortraitControls)
+    local direction = BindDropdown(borderCard, "Border direction", placementValues.borderDirection, 16, -274, min(220, cardW - 32),
+        "portraitBorderDirection", "UP")
     local thickness = BindNumber(borderCard, "Border thickness", 16, -328, cardW - 58, 1, 12, 1, "portraitBorderThickness", 2)
     local fill = BindToggle(borderCard, "Fill border into frame gap", 16, -396, cardW - 32, "portraitFillBorder", false)
-    local classStyle = BindDropdown(styleCard, "Class portrait style", ClassStyleValues, 16, -58, min(220, cardW - 32), "portraitClassStyle", "BLIZZARD", M.NormalizePortraitClassStyle)
+    local classStyle = BindDropdown(styleCard, "Class portrait style", ClassStyleValues, 16, -58, min(220, cardW - 32), "portraitClassStyle", "BLIZZARD",
+        M.NormalizePortraitClassStyle)
     local background = BindToggle(styleCard, "Portrait background", 16, -112, cardW - 32, "portraitBgEnabled", false, RefreshPortraitControls)
     local backgroundColor = BindColor(styleCard, "Portrait Background Color", 16, -158, min(260, cardW - 32), "portraitBgColor", { 0.05, 0.05, 0.05 })
     local backgroundAlpha = BindNumber(styleCard, "Background opacity", 16, -210, cardW - 58, 0, 1, 0.05, "portraitBgColorA", 0.85, true)
@@ -1561,12 +1571,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         for i = #positions + 1, #btn._cells do
             btn._cells[i]:Hide()
         end
-        if not btn._firstText then
-            btn._firstText = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._firstText.SetFont then btn._firstText:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
-            btn._firstText:SetText("1")
-            btn._firstText:SetTextColor(0, 0, 0, 1)
-        end
+        W.EnsureTileFirstBadge(btn)
         local first = positions[1]
         if first then
             btn._firstText:ClearAllPoints()
@@ -1575,23 +1580,7 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
                 originY - (first.row * (cellH + cellGap)) - (cellH * 0.5))
             btn._firstText:Show()
         end
-        if not btn._arrow then
-            btn._arrow = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._arrow.SetFont then btn._arrow:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
-            btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
-        end
-        btn._arrow:SetText(info.arrow)
-        btn._arrow:ClearAllPoints()
-        if info.dy == -1 then
-            btn._arrow:SetPoint("BOTTOM", btn, "BOTTOM", 0, labelH + 1)
-        elseif info.dy == 1 then
-            btn._arrow:SetPoint("TOP", btn, "TOP", 0, -4)
-        elseif info.dx == 1 then
-            btn._arrow:SetPoint("RIGHT", btn, "RIGHT", -4, labelH * 0.5)
-        else
-            btn._arrow:SetPoint("LEFT", btn, "LEFT", 4, labelH * 0.5)
-        end
-        btn._arrow:Show()
+        W.PaintTileDirectionArrow(btn, info, labelH)
     end
     local function RefreshGrowthTiles()
         local current = Val(CurrentScope(), "growth", "DOWN")
@@ -1628,7 +1617,8 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         btn:SetScript("OnLeave", function(self)
             SetTileVisual(self, Val(CurrentScope(), "growth", "DOWN") == info.value, false)
         end)
-        M.AddTooltip(btn, function() return M.Format("Growth: %s", M.Tr(info.text or "")) end, "Click to set group frame growth direction.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
+        M.AddTooltip(btn, function() return M.Format("Growth: %s", M.Tr(info.text or "")) end, "Click to set group frame growth direction.",
+            { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
         btn:SetScript("OnClick", function()
             Set(CurrentScope(), "growth", info.value, "geometry")
             RefreshGrowthTiles()
@@ -1850,6 +1840,7 @@ M.Assign(GroupPage, {
     RefreshContext = RefreshContext,
     ScopeSection = ScopeSection,
     BindScopeToggle = BindScopeToggle,
+    BindExclusiveScopeToggle = BindExclusiveScopeToggle,
     BindScopeSlider = BindScopeSlider,
     BindScopeDropdown = BindScopeDropdown,
     ScopeDropdown = ScopeDropdown,

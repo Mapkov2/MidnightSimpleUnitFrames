@@ -7,6 +7,13 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GroupPriority.lua", {
+    "MSUF_SetManagedBinding",
+    "MSUF_ClearManagedBinding",
+    "MSUF_EM2_SetFocusSelection",
+})
 
 local W = M.Widgets
 local T = M.Theme
@@ -124,41 +131,25 @@ local function BindingActionLabel(action)
     return _G["BINDING_NAME_" .. action] or action
 end
 
-local function EnsureBindingConflictPopup()
-    if not _G.StaticPopupDialogs or _G.StaticPopupDialogs.MSUF2_PRIORITY_BINDING_CONFLICT then return end
-    _G.StaticPopupDialogs.MSUF2_PRIORITY_BINDING_CONFLICT = {
-        text = Tr("%s is currently bound to %s. Replace that binding?"),
-        button1 = _G.ACCEPT or Tr("Replace"),
-        button2 = _G.CANCEL or Tr("Cancel"),
-        OnAccept = function(_, data)
-            if not data then return end
-            if type(data.commit) == "function" then data.commit(data.key, true); return end
-            if type(_G.MSUF_SetManagedBinding) ~= "function" then return end
-            local ok = _G.MSUF_SetManagedBinding(PRIORITY_BINDING, data.key, true)
-            if ok and type(data.refresh) == "function" then data.refresh("priority-binding-replaced") end
-        end,
-        timeout = 0,
-        whileDead = 1,
-        hideOnEscape = 1,
-        preferredIndex = 3,
-    }
+-- Blizzard's generic confirmation (M.ShowPrompt); nothing is written to
+-- StaticPopupDialogs.
+local function ShowBindingConflictPrompt(fullKey, action, commit)
+    M.ShowPrompt("MSUF2_PRIORITY_BINDING_CONFLICT", {
+        text = string.format(Tr("%s is currently bound to %s. Replace that binding?"),
+            FormatBindingKey(fullKey), BindingActionLabel(action)),
+        accept = ACCEPT or Tr("Replace"),
+        cancel = CANCEL or Tr("Cancel"),
+        onAccept = function() commit(fullKey, true) end,
+    })
 end
 
-local function EnsureClearPinsPopup()
-    if not _G.StaticPopupDialogs or _G.StaticPopupDialogs.MSUF2_PRIORITY_CLEAR_PINS then return end
-    _G.StaticPopupDialogs.MSUF2_PRIORITY_CLEAR_PINS = {
+local function ShowClearPinsPrompt(clear)
+    M.ShowPrompt("MSUF2_PRIORITY_CLEAR_PINS", {
         text = Tr("Clear every manually pinned Priority Frame for this character?"),
-        button1 = _G.ACCEPT or Tr("Clear all"),
-        button2 = _G.CANCEL or Tr("Cancel"),
-        OnAccept = function(_, data)
-            if not data or type(data.clear) ~= "function" then return end
-            data.clear()
-        end,
-        timeout = 0,
-        whileDead = 1,
-        hideOnEscape = 1,
-        preferredIndex = 3,
-    }
+        accept = ACCEPT or Tr("Clear all"),
+        cancel = CANCEL or Tr("Cancel"),
+        onAccept = clear,
+    })
 end
 
 local MODIFIER_KEYS = {
@@ -219,15 +210,20 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
         end
     end
     local function ClearBinding()
-        if not CurrentKey() then StopListening(); return true end
-        if type(_G.MSUF_ClearManagedBinding) ~= "function" then return false end
+        if not CurrentKey() then
+            StopListening()
+            return true
+        end
         local ok, code = _G.MSUF_ClearManagedBinding(PRIORITY_BINDING)
         if ok then Changed("priority-binding-cleared") end
         if not ok then BindingFailed(code) end
         return ok
     end
     local function ApplyKey(key, replaceConflict)
-        if CurrentKey() == key then StopListening(); return true end
+        if CurrentKey() == key then
+            StopListening()
+            return true
+        end
         local set = _G.MSUF_SetManagedBinding
         if type(set) ~= "function" then return false, "UNAVAILABLE" end
         local ok, code, action = set(PRIORITY_BINDING, key, replaceConflict == true)
@@ -239,8 +235,14 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
         if not listening or type(key) ~= "string" then return end
         key = key:upper()
         if MODIFIER_KEYS[key] or key == "UNKNOWN" then return end
-        if key == "ESCAPE" then StopListening(); return end
-        if key == "BACKSPACE" or key == "DELETE" then ClearBinding(); return end
+        if key == "ESCAPE" then
+            StopListening()
+            return
+        end
+        if key == "BACKSPACE" or key == "DELETE" then
+            ClearBinding()
+            return
+        end
         local prefix = ""
         if _G.IsShiftKeyDown and _G.IsShiftKeyDown() then prefix = prefix .. "SHIFT-" end
         if _G.IsControlKeyDown and _G.IsControlKeyDown() then prefix = prefix .. "CTRL-" end
@@ -249,16 +251,7 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
         local ok, code, action = ApplyKey(fullKey, false)
         if ok then return end
         StopListening()
-        if code == "CONFLICT" then
-            EnsureBindingConflictPopup()
-            if _G.StaticPopup_Show then
-                _G.StaticPopup_Show("MSUF2_PRIORITY_BINDING_CONFLICT", FormatBindingKey(fullKey), BindingActionLabel(action), {
-                    key = fullKey,
-                    commit = ApplyKey,
-                    refresh = Changed,
-                })
-            end
-        end
+        if code == "CONFLICT" then ShowBindingConflictPrompt(fullKey, action, ApplyKey) end
     end
 
     button:SetScript("OnClick", function(_, mouseButton)
@@ -300,7 +293,7 @@ end
 local function OpenPriorityEditMode()
     if type(M.SetMSUFEditModeActive) ~= "function" then return false end
     local ok = M.SetMSUFEditModeActive(true, "gf_priority", { source = "priority-page" })
-    if ok and type(_G.MSUF_EM2_SetFocusSelection) == "function" then
+    if ok then
         _G.MSUF_EM2_SetFocusSelection("gf_priority", "placement", nil, {
             source = "priority-page",
             menu = false,
@@ -574,12 +567,7 @@ local function BuildPriorityPage(ctx)
                 if type(M.ShowStatusFeedback) == "function" then M.ShowStatusFeedback("All Priority pins cleared", "ok", 1.3) end
             end
         end
-        EnsureClearPinsPopup()
-        if _G.StaticPopup_Show then
-            _G.StaticPopup_Show("MSUF2_PRIORITY_CLEAR_PINS", nil, nil, { clear = Clear })
-        else
-            Clear()
-        end
+        ShowClearPinsPrompt(Clear)
     end)
     TrackSectionRefresh(ctx, who, RefreshPins)
 

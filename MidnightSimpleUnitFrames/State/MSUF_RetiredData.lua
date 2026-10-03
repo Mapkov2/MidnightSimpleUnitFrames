@@ -1,4 +1,5 @@
--- Saved data that a retired feature left behind, removed once per account.
+-- Saved data that retired features left behind: the in-game Assistant's
+-- (removed once per account) and the built-in profilers' (see below).
 --
 -- The in-game Assistant (the MidnightSimpleUnitFrames_Assistant addon, retired
 -- in 6.5) kept its conversation history and context in every profile it
@@ -25,10 +26,16 @@ local function ClearPrefixedKeys(store)
     end
 end
 
+--- The account SavedVariable, read when a cleanup runs (it exists only once
+--- the client has loaded the SavedVariables).
+local function AccountDB()
+    return rawget(_G, "MSUF_GlobalDB")
+end
+
 --- Returns true when this call removed the data, false when there was no
 --- account table yet or the stamp says it already ran.
 local function ClearRetiredAssistantData()
-    local globalDB = rawget(_G, "MSUF_GlobalDB")
+    local globalDB = AccountDB()
     if type(globalDB) ~= "table" then return false end
     local global = globalDB.global
     if type(global) == "table" and global[STAMP] == true then return false end
@@ -53,11 +60,26 @@ local function ClearRetiredAssistantData()
 end
 MSUF.ClearRetiredAssistantData = ClearRetiredAssistantData
 
+-- The built-in profilers were removed in favour of disposable external traces.
+-- Their last report and armed trace state stayed in the account table. This
+-- ran at the load of Kernel/MSUF_Util.lua, before the client had loaded the
+-- SavedVariables, so it never saw them; it runs on every ADDON_LOADED instead,
+-- because an older build on the same account can write them again.
+local function ClearRetiredProfilerData()
+    local globalDB = AccountDB()
+    if type(globalDB) ~= "table" then return false end
+    globalDB.clickCoreProfilerLast = nil
+    globalDB.cpTraceArm = nil
+    return true
+end
+MSUF.ClearRetiredProfilerData = ClearRetiredProfilerData
+
 local bus = MSUF.EventBus
 if type(bus) == "table" and type(bus.Register) == "function" then
     bus:Register("ADDON_LOADED", BUS_KEY, function(_, loadedName)
         if loadedName ~= addonName then return end
         bus:Unregister("ADDON_LOADED", BUS_KEY)
+        ClearRetiredProfilerData()
         ClearRetiredAssistantData()
     end)
 end

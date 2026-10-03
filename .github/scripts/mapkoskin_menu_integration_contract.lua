@@ -6,6 +6,7 @@ end
 local M = {}
 function M.Lines(text) return text:gmatch("[^\r\n]+") end
 function M.WordList(text) local out = {}; for word in text:gmatch("%S+") do out[#out + 1] = word end; return out end
+function M.Assign(target, values) for key, value in pairs(values) do target[key] = value end; return target end
 function M.AssignNamedValues(target, names, ...)
     local i = 0
     for name in names:gmatch("%S+") do i = i + 1; target[name] = select(i, ...) end

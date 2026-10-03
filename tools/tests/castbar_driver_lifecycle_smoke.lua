@@ -16,6 +16,8 @@
 --   C2.2  a new UNIT_SPELLCAST_START ends the interrupt feedback hold at once.
 --   C2.3  every path that shows a cast publishes it to engine subscribers
 --         (start retry, stop re-check, target/focus swap).
+--   C2.3b a boss or arena pool lifecycle pass that shows a cast publishes it
+--         through the driver too.
 --   C2.6  boss and arena pools own their cast lifecycle (no failsafe poll);
 --         other units' empowered casts fill like casts; an interrupt for
 --         another castBarID is ignored; a kicked channel shows its feedback.
@@ -148,6 +150,36 @@ do
 end
 
 --------------------------------------------------------------------------
+-- C2.3b: pool lifecycle passes publish what they show
+--------------------------------------------------------------------------
+
+do
+    local world = NewWorld("timer", { pools = true })
+    _G.MSUF_ApplyBossCastbarsEnabled()
+    _G.MSUF_ApplyArenaCastbarsEnabled()
+    local engine = assert(_G.MSUF_GetCastbarEngine(), "castbar engine missing")
+    local pools = world.ns.Castbars.Pools
+    for _, unit in ipairs({ "boss1", "arena1" }) do
+        local published = {}
+        engine:Subscribe(unit, function(state)
+            published[#published + 1] = (state and state.active == true) and state.spellName or false
+        end)
+        local pool = pools.kinds[unit:match("^(%a+)")]
+        local bar = world:PoolCastbar(pool.Bar(1))
+        -- The unit is already casting when the encounter or opponent pass runs.
+        world:StartCast(unit, "Shadow Bolt", 2.5, 91)
+        assert(pool.RefreshFromUnit(bar, false) == true and bar.MSUF_castActive == true,
+            unit .. ": the lifecycle pass did not show the running cast")
+        assert(published[#published] == "Shadow Bolt",
+            unit .. ": the lifecycle pass showed a cast without publishing it")
+        assert(bar._msufActiveSeq == 91, unit .. ": the lifecycle pass kept no cast identity")
+        world.casting[unit] = nil
+        world:Fire(bar, "UNIT_SPELLCAST_STOP")
+        world:Advance(0.5)
+    end
+end
+
+--------------------------------------------------------------------------
 -- C2.6: boss and arena pools own their cast lifecycle (no manager poll)
 --------------------------------------------------------------------------
 
@@ -266,4 +298,4 @@ do
     assert(not bar.MSUF_castActive and #bar.completedAt >= 1, "the ended channel did not complete")
 end
 
-print("castbar_driver_lifecycle_smoke: ok (stop re-check keys on timer and signal backends, interrupt hold yields, every shown cast is published, pools own the lifecycle, enemy empowers fill, interrupts match the cast bar, kicked channels)")
+print("castbar_driver_lifecycle_smoke: ok (stop re-check keys on timer and signal backends, interrupt hold yields, every shown cast is published, pool passes publish, pools own the lifecycle, enemy empowers fill, interrupts match the cast bar, kicked channels)")

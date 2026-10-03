@@ -208,7 +208,10 @@ end
 
 local function RestoreAfterScale()
     scaleQueued = false
-    if not scalePending or not active or not Enabled() then scalePending = false; return end
+    if not scalePending or not active or not Enabled() then
+        scalePending = false
+        return
+    end
     if InCombat() then
         if eventFrame then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return
@@ -265,7 +268,8 @@ local function Deactivate()
     return true
 end
 
-local SetEnabled = _G.MSUF_EM2.ExternalProviders.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
+local External = _G.MSUF_EM2.ExternalProviders
+local SetEnabled = External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
 
 Export("MSUF_Grid2EditMode_IsAvailable", function() return Layout() ~= nil end)
 Export("MSUF_Grid2EditMode_SetEnabled", SetEnabled)
@@ -279,4 +283,4 @@ if eventFrame then
     end)
 end
 
-if Enabled() then Activate() end
+External.ActivateAtLogin(Enabled, Activate)

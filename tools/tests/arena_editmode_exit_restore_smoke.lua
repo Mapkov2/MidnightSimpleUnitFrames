@@ -385,6 +385,17 @@ local function NewWorld(flavor, roster)
         return nil
     end
     _G.MSUF_ShowConfigCombatLockMessage = function() end
+    -- Kernel/MSUF_OptionsLoader.lua: Edit Mode opens only once the menu addon
+    -- could load; this harness needs no menu.
+    _G.MSUF_EnsureOptionsLoaded = function() return true end
+    -- The core's combat lock (Kernel/MSUF_Util.lua): locked while in combat
+    -- lockdown, and the blocking variant shows the message.
+    _G.MSUF_IsConfigCombatLocked = function() return (InCombatLockdown and InCombatLockdown()) and true or false end
+    _G.MSUF_BlockConfigCombatLocked = function()
+        if not _G.MSUF_IsConfigCombatLocked() then return false end
+        _G.MSUF_ShowConfigCombatLockMessage()
+        return true
+    end
 
     -- Harness-only arena opponent data; the values only have to be internally
     -- consistent for the prep display path.
@@ -445,6 +456,23 @@ local function NewWorld(flavor, roster)
         preview.castTargetText = Widget(nil, false, preview)
         return preview
     end
+    -- The castbar providers the pool preview calls (Castbars/MSUF_CastbarAnchors.lua,
+    -- _Castbars_Core.lua, _CastbarVisuals.lua, _CastbarUtils.lua and the driver,
+    -- all loaded before it in every TOC): the pool's own size settings, no
+    -- width source, no visual work.
+    _G.MSUF_GetCastbarDesiredSize = function(unit, general, _, fallbackW, fallbackH)
+        local kind = tostring(unit):match("^(%a+)")
+        return tonumber(general[kind .. "CastbarWidth"]) or fallbackW, tonumber(general[kind .. "CastbarHeight"]) or fallbackH
+    end
+    _G.MSUF_ApplyPlayerCastbarSizeAndLayout = function(frame, _, width, height) frame:SetSize(width, height) end
+    _G.MSUF_GetCastbarUnitframeWidthSource = function() return nil end
+    _G.MSUF_GetCastbarAutoAnchorOffsetX = function() return 0 end
+    _G.MSUF_GetCastbarUnitframeBottomInset = function() return 0 end
+    _G.MSUF_ApplyCastbarFrameLayer = function() end
+    _G.MSUF_RefreshCastbarFrame = function() end
+    _G.MSUF_ApplyCastbarSparkVisual = function() end
+    _G.MSUF_ApplyCastTargetTextColor = function() end
+    _G.MSUF_HardSyncCastbarPreview = function() end
     -- The boss castbar preview follows a boss preview refresh; no boss castbars here.
     _G.MSUF_UpdateBossCastbarPreview = function() end
     _G.MSUF_UpdatePlayerCastbarPreview = function()

@@ -23,6 +23,7 @@ local ResolveFrameStrata = dependencies.Platform.ResolveFrameStrata
 local Round = dependencies.Platform.Round
 local SyncFrameStrata = dependencies.Platform.SyncFrameStrata
 local ValidateNativeAuraButtonContract = dependencies.NativeContract.ValidateNativeAuraButtonContract
+local LayoutEdgeStrip = MSUF.BorderStyles.LayoutEdgeStrip
 
 local function DispelSensorTarget(parentFrame, sensor)
     if sensor and sensor.visual == "overlay" and parentFrame then
@@ -122,26 +123,16 @@ local function LayoutDispelSensorOverlay(region, button, sensor, visualTarget)
     region:ClearAllPoints()
     local target = visualTarget
     if not target then return false end
-    if style == "TOP" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetHeight(thickness)
-    elseif style == "BOTTOM" then
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetHeight(thickness)
-    elseif style == "LEFT" then
-        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
-        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
-        region:SetWidth(thickness)
-    elseif style == "RIGHT" then
-        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
-        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
-        region:SetWidth(thickness)
-    else
-        region:SetAllPoints(target)
-    end
+    LayoutEdgeStrip(region, target, style, thickness)
     return true
+end
+
+--- A menu preview's dispel overlay: the frame's strip layout in the preview
+--- dispel type's colour (the Classic scan backend publishes its own).
+function A3.PaintDispelOverlayPreview(region, target, style, thickness)
+    region:ClearAllPoints()
+    LayoutEdgeStrip(region, target, style, thickness)
+    A3.SetDispelColorTexture(region, A3.GetDispelColorPreviewType(), true, 1)
 end
 
 -- MSUF supplies its own sensor art (WHITE8X8 fill / msuf edge texture) and only

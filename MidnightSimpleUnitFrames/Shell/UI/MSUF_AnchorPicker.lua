@@ -94,7 +94,10 @@ local function SafeGetRect(frame)
     local l, b, w, h = FrameGetRect(frame)
 
     if isSecretValue and (isSecretValue(l) or isSecretValue(b) or isSecretValue(w) or isSecretValue(h)) then return nil end
-    l = tonumber(l); b = tonumber(b); w = tonumber(w); h = tonumber(h)
+    l = tonumber(l)
+    b = tonumber(b)
+    w = tonumber(w)
+    h = tonumber(h)
     if not (l and b and w and h) then return nil end
     if w <= 0 or h <= 0 then return nil end
     return l, b, w, h

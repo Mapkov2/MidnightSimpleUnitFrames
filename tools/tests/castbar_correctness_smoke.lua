@@ -1,0 +1,628 @@
+-- castbar_correctness_smoke.lua <repoRoot>
+--
+-- Behavioural pins for castbar correctness fixes (quality program wave 3).
+-- Each section loads the real castbar file(s) it covers into a strict fake
+-- client: widget methods the client does not have raise, so a stub cannot be
+-- more lenient than the game. Every section fails on the pre-fix code.
+--
+-- Plain Lua 5.1, repo root as arg 1.
+local root = arg and arg[1] or "."
+
+local function Check(condition, message)
+    if not condition then error(message or "check failed", 2) end
+end
+
+local function Equal(actual, expected, message)
+    if actual ~= expected then
+        error((message or "values differ") .. ": expected " .. tostring(expected)
+            .. ", got " .. tostring(actual), 2)
+    end
+end
+
+local function WipeAddonGlobals()
+    local names = {}
+    for key in pairs(_G) do
+        if type(key) == "string" and key:find("MSUF", 1, true) then names[#names + 1] = key end
+    end
+    for index = 1, #names do _G[names[index]] = nil end
+end
+
+local function NewNamespace()
+    local namespace = { Castbars = {} }
+    function namespace.ExportPublic(name, value)
+        _G[name] = value
+        return value
+    end
+    return namespace
+end
+
+local function LoadAddonFile(relativePath, namespace)
+    local chunk, loadError = loadfile(root .. "/MidnightSimpleUnitFrames/" .. relativePath)
+    Check(chunk ~= nil, loadError)
+    chunk("MidnightSimpleUnitFrames", namespace)
+    return namespace
+end
+
+-- Strict widgets: only the methods a region of that kind has in the client.
+-- An unknown method raises instead of answering nil.
+local STRICT_MT = {
+    __index = function(self, key)
+        local methods = rawget(self, "_methods")
+        local method = methods and methods[key]
+        if method then return method end
+        if type(key) == "string" and key:match("^%u") then
+            error("fake client: " .. tostring(rawget(self, "_kind")) .. " has no method " .. key, 2)
+        end
+        return nil
+    end,
+}
+
+local REGION = {}
+function REGION.ClearAllPoints(self) self.points = {} end
+function REGION.SetPoint(self, point, relativeTo, relativePoint, x, y)
+    self.points = self.points or {}
+    self.points[#self.points + 1] = { point, relativeTo, relativePoint, x, y }
+end
+function REGION.SetAllPoints(self, target) self.allPoints = target end
+function REGION.Show(self) self.shown = true end
+function REGION.Hide(self) self.shown = false end
+function REGION.SetShown(self, shown) self.shown = shown and true or false end
+function REGION.IsShown(self) return self.shown == true end
+function REGION.SetAlpha(self, alpha) self.alpha = alpha end
+function REGION.GetAlpha(self) return self.alpha or 1 end
+function REGION.GetWidth(self) return self.width or 0 end
+function REGION.GetHeight(self) return self.height or 0 end
+function REGION.SetWidth(self, width) self.width = width end
+function REGION.SetHeight(self, height) self.height = height end
+function REGION.SetSize(self, width, height) self.width, self.height = width, height end
+function REGION.GetRect(self) return 0, 0, self.width or 0, self.height or 0 end
+function REGION.GetParent(self) return self.parent end
+function REGION.SetParent(self, parent) self.parent = parent end
+function REGION.GetName(self) return self.name end
+function REGION.GetEffectiveScale() return 1 end
+
+local FRAME = setmetatable({}, { __index = REGION })
+function FRAME.EnableMouse() end
+function FRAME.SetFrameLevel(self, level) self.level = level end
+function FRAME.GetFrameLevel(self) return self.level or 1 end
+function FRAME.SetBackdrop(self, backdrop) self.backdrop = backdrop end
+function FRAME.SetBackdropColor() end
+function FRAME.SetBackdropBorderColor() end
+
+local STATUSBAR = setmetatable({}, { __index = FRAME })
+function STATUSBAR.SetStatusBarTexture(self, texture) self.texture = texture end
+function STATUSBAR.SetStatusBarColor(self, r, g, b, a) self.color = { r, g, b, a } end
+
+local TEXTURE = setmetatable({}, { __index = REGION })
+function TEXTURE.SetTexCoord(self, ...) self.texCoord = { ... } end
+function TEXTURE.SetDrawLayer(self, layer, sub) self.layer, self.subLayer = layer, sub end
+function TEXTURE.SetTexture(self, texture) self.textureFile = texture end
+function TEXTURE.SetVertexColor() end
+
+local FONTSTRING = setmetatable({}, { __index = REGION })
+function FONTSTRING.SetText(self, text) self.text = text end
+function FONTSTRING.GetText(self) return self.text end
+function FONTSTRING.SetFont(self, path, size, flags) self.font = { path, size, flags } return true end
+function FONTSTRING.GetFont(self) local f = self.font or {} return f[1], f[2], f[3] end
+function FONTSTRING.SetTextColor(self, r, g, b, a) self.textColor = { r, g, b, a } end
+function FONTSTRING.SetShadowColor() end
+function FONTSTRING.SetShadowOffset() end
+function FONTSTRING.SetMaxLines() end
+function FONTSTRING.SetWordWrap() end
+function FONTSTRING.SetNonSpaceWrap() end
+function FONTSTRING.SetJustifyH(self, justify) self.justify = justify end
+function FONTSTRING.GetStringWidth(self) return self.stringWidth or 30 end
+
+local function NewWidget(kind, methods, fields)
+    local widget = fields or {}
+    widget._kind = kind
+    widget._methods = methods
+    widget.shown = widget.shown ~= false
+    return setmetatable(widget, STRICT_MT)
+end
+
+local function InstallCreateFrame()
+    _G.CreateFrame = function(_, name, parent)
+        return NewWidget("Frame", FRAME, { name = name, parent = parent })
+    end
+end
+
+-- A live pool castbar frame as MSUF_CastbarFrames builds it.
+local function NewCastbarFrame(name, unit)
+    local frame = NewWidget("Frame", FRAME, { name = name, unit = unit, width = 200, height = 18 })
+    frame.statusBar = NewWidget("StatusBar", STATUSBAR, { parent = frame, width = 200, height = 18 })
+    frame.icon = NewWidget("Texture", TEXTURE, { parent = frame })
+    frame.castText = NewWidget("FontString", FONTSTRING, { parent = frame.statusBar })
+    frame.timeText = NewWidget("FontString", FONTSTRING, { parent = frame.statusBar })
+    return frame
+end
+
+local function LastPoint(region)
+    local points = region.points or {}
+    return points[#points]
+end
+
+---------------------------------------------------------------------------
+-- 1. Arena castbar "Show icon", "Show spell name" and "Show cast time" follow
+--    the keys the Unit page and Defaults_Bars.lua write
+--    (showArenaCastIcon/showArenaCastName/showArenaCastTime), the same way the
+--    boss castbar follows showBossCast*. Before the fix the live arena bar read
+--    arenaCastShowIcon/arenaCastShowSpellName (never written) and had no
+--    arena time branch, so all three toggles did nothing.
+---------------------------------------------------------------------------
+do
+    WipeAddonGlobals()
+    InstallCreateFrame()
+    _G.issecretvalue = function() return false end
+    _G.MSUF_CastbarFrameInset = function() return 0 end
+    _G.MSUF_ResolveFontShadowMetrics = function() return 1, 1, -1 end
+    _G.MSUF_SetFontChecked = function(fs, path, size, flags) return fs:SetFont(path, size, flags) end
+    _G.MSUF_GetFontPath = function() return "Fonts\\FRIZQT__.TTF" end
+    _G.MSUF_GetFontFlags = function() return "OUTLINE" end
+    _G.MSUF_DB = { general = {} }
+    -- The providers MSUF_CastbarVisuals.lua requires at load (State, Kernel,
+    -- Runtime colours, the castbar Core, Style and Utils), reduced to no-ops
+    -- and plain values: these checks are about which elements show.
+    _G.MSUF_EnsureDB = function() end
+    _G.MSUF_SetTextIfChanged = function(fs, text) fs:SetText(text) end
+    _G.MSUF_MarkFontApplyFailed = function() end
+    _G.MSUF_GetCastbarTextColor = function() return 1, 1, 1 end
+    _G.MSUF_GetCastbarBackgroundColor = function() return 0.2, 0.2, 0.2, 1 end
+    _G.MSUF_RefreshCastbarStyleCache = function() end
+    _G.MSUF_ApplyCastbarOutline = function() end
+    _G.MSUF_GetCastbarSpellNameShorteningConfig = function() return false end
+    _G.MSUF_RefreshCastbarSpellNameText = function() end
+    _G.MSUF_RefreshCastTargetText = function() end
+    local namespace = NewNamespace()
+    LoadAddonFile("Kernel/MSUF_Require.lua", namespace)
+    local MSUF = LoadAddonFile("Castbars/MSUF_CastbarVisuals.lua", namespace)
+    local apply = MSUF.Castbars.Visuals.ApplyDetailLayout
+    Check(type(apply) == "function", "Visuals.ApplyDetailLayout missing")
+    Check(_G.MSUF_ApplyCastbarDetailLayout == apply, "MSUF_ApplyCastbarDetailLayout alias missing")
+
+    local function General(overrides)
+        local g = {
+            castbarShowIcon = true,
+            castbarShowSpellName = true,
+            showBossCastIcon = true, showBossCastName = true, showBossCastTime = true,
+            showArenaCastIcon = true, showArenaCastName = true, showArenaCastTime = true,
+            bossCastTimeOffsetX = 0, arenaCastTimeOffsetX = 0,
+            fontSize = 12,
+        }
+        for key, value in pairs(overrides or {}) do g[key] = value end
+        return g
+    end
+
+    for _, case in ipairs({ { unit = "boss", name = "MSUF_BossCastbar1", flag = "_msufIsBossCastbar", key = "Boss" },
+                            { unit = "arena", name = "MSUF_ArenaCastbar1", flag = "_msufIsArenaCastbar", key = "Arena" } }) do
+        local label = case.unit .. ": "
+        -- Every toggle on: icon shown, both texts visible.
+        local frame = NewCastbarFrame(case.name, case.unit .. "1")
+        frame[case.flag] = true
+        apply(frame, case.unit, General())
+        Equal(frame.icon.shown, true, label .. "icon hidden with Show icon on")
+        Equal(frame.castText.alpha, 1, label .. "spell name hidden with Show spell name on")
+        Equal(frame.timeText.alpha, 1, label .. "time hidden with Show cast time on")
+
+        -- Each flat key alone turns its element off. The legacy per-prefix
+        -- names are set to the opposite value to prove they are not read.
+        local off = {}
+        off["show" .. case.key .. "CastIcon"] = false
+        off["show" .. case.key .. "CastName"] = false
+        off["show" .. case.key .. "CastTime"] = false
+        off[case.unit .. "CastShowIcon"] = true
+        off[case.unit .. "CastShowSpellName"] = true
+        frame = NewCastbarFrame(case.name, case.unit .. "1")
+        frame[case.flag] = true
+        apply(frame, case.unit, General(off))
+        Equal(frame.icon.shown, false, label .. "Show icon off left the icon visible")
+        Equal(frame.castText.alpha, 0, label .. "Show spell name off left the name visible")
+        Equal(frame.castText.text, "", label .. "Show spell name off kept text")
+        Equal(frame.timeText.alpha, 0, label .. "Show cast time off left the time visible")
+        Equal(frame.timeText.text, "", label .. "Show cast time off kept text")
+
+        -- The unit-generic fallbacks apply only when the flat key is unset.
+        frame = NewCastbarFrame(case.name, case.unit .. "1")
+        frame[case.flag] = true
+        local unset = General({ castbarShowIcon = false, castbarShowSpellName = false })
+        unset["show" .. case.key .. "CastIcon"] = nil
+        unset["show" .. case.key .. "CastName"] = nil
+        apply(frame, case.unit, unset)
+        Equal(frame.icon.shown, false, label .. "unset Show icon ignored castbarShowIcon")
+        Equal(frame.castText.alpha, 0, label .. "unset Show spell name ignored castbarShowSpellName")
+    end
+
+    -- Boss and arena time offsets sit on the same -2 base the Unit preview
+    -- and its drag handle use (MSUF_Menu2_UnitPreview_Render.lua: timeX =
+    -- -2 + <kind>CastTimeOffsetX), and never fall back to the player offset.
+    for _, case in ipairs({ { unit = "boss", name = "MSUF_BossCastbar1" },
+                            { unit = "arena", name = "MSUF_ArenaCastbar1" } }) do
+        local offsets = General({ castbarPlayerTimeOffsetX = 9, castbarPlayerTimeOffsetY = 7 })
+        offsets[case.unit .. "CastTimeOffsetX"] = 5
+        offsets[case.unit .. "CastTimeOffsetY"] = 3
+        local frame = NewCastbarFrame(case.name, case.unit .. "1")
+        apply(frame, case.unit, offsets)
+        local point = LastPoint(frame.timeText)
+        Check(point ~= nil, case.unit .. ": time text not anchored")
+        Equal(point[4], 3, case.unit .. ": time X offset not on the -2 base")
+        Equal(point[5], 3, case.unit .. ": time Y offset")
+        offsets[case.unit .. "CastTimeOffsetX"] = nil
+        offsets[case.unit .. "CastTimeOffsetY"] = nil
+        frame = NewCastbarFrame(case.name, case.unit .. "1")
+        apply(frame, case.unit, offsets)
+        point = LastPoint(frame.timeText)
+        Equal(point[4], -2, case.unit .. ": unset time X fell back to the player offset")
+        Equal(point[5], 0, case.unit .. ": unset time Y fell back to the player offset")
+    end
+
+    -- Unit castbars keep their per-prefix keys.
+    local target = NewCastbarFrame("MSUF_TargetCastBar", "target")
+    apply(target, "target", General({ castbarTargetShowIcon = false, castbarTargetShowSpellName = false,
+        showTargetCastTime = false }))
+    Equal(target.icon.shown, false, "target: castbarTargetShowIcon ignored")
+    Equal(target.castText.alpha, 0, "target: castbarTargetShowSpellName ignored")
+    Equal(target.timeText.alpha, 0, "target: showTargetCastTime ignored")
+end
+
+---------------------------------------------------------------------------
+-- 2. UNIT_SPELLCAST_INTERRUPTED shows feedback only on a bar that shows a
+--    cast (MSUF_castActive), as CHANNEL_STOP does and as Blizzard's
+--    CastingBarMixin:HandleInterruptOrSpellFailed requires (IsShown() and
+--    self.casting). A profession cast hidden by castbarHideTradeSkills never
+--    showed the bar, so its interrupt must not flash "Interrupted" either.
+---------------------------------------------------------------------------
+local World = assert(loadfile(root .. "/tools/tests/castbar_world.lua"))()
+
+do
+    for _, backend in ipairs({ "timer", "signal" }) do
+        local world = World.New(root, backend)
+        _G.MSUF_DB.general.castbarHideTradeSkills = true
+        local bar = world:Driver("target")
+        local label = backend .. ": "
+
+        -- A hidden profession cast never shows the bar ...
+        world:StartCast("target", "Smelt Copper", 3, 71, true)
+        world:Fire(bar, "UNIT_SPELLCAST_START")
+        world:Advance(0.05)
+        Check(bar.MSUF_castActive ~= true, label .. "a hidden profession cast showed the bar")
+        -- ... and its interrupt shows no feedback.
+        world.casting.target = nil
+        world:Fire(bar, "UNIT_SPELLCAST_INTERRUPTED", "Smelt Copper-guid", 133, nil, 71)
+        Check(bar.interrupted ~= true, label .. "an interrupt of a hidden cast showed interrupt feedback")
+        Check(bar.castText.text == nil or bar.castText.text == "",
+            label .. "an interrupt of a hidden cast wrote " .. tostring(bar.castText.text))
+        world:Advance(1.0)
+
+        -- An idle bar ignores a stray interrupt as well.
+        world:Fire(bar, "UNIT_SPELLCAST_INTERRUPTED", "Other-guid", 133, nil, 72)
+        Check(bar.interrupted ~= true, label .. "an idle bar showed interrupt feedback")
+
+        -- A shown cast still gets its feedback.
+        world:StartCast("target", "Fireball", 3, 73)
+        world:Fire(bar, "UNIT_SPELLCAST_START")
+        Check(bar.MSUF_castActive == true, label .. "the cast was not shown")
+        world.casting.target = nil
+        world:Fire(bar, "UNIT_SPELLCAST_INTERRUPTED", "Fireball-guid", 133, nil, 73)
+        Check(bar.interrupted == true and bar.shown == true, label .. "a shown cast's interrupt was ignored")
+        world:Advance(1.0)
+    end
+end
+
+---------------------------------------------------------------------------
+-- 3. The interrupt label is Blizzard's localized INTERRUPTED GlobalString
+--    (CastingBarMixin:GetInterruptText returns INTERRUPTED on every branch of
+--    the UI source mirror). Before the fix four sites wrote the English
+--    literal "Interrupted": the driver's label resolver fallback and
+--    frame:SetInterrupted, the runtime's interrupt visuals and the player's
+--    empowered-cast interrupt.
+---------------------------------------------------------------------------
+do
+    local LOCALIZED = "Unterbrochen"
+    local world = World.New(root, "timer")
+    _G.INTERRUPTED = LOCALIZED
+
+    -- Label resolver fallback (no interrupter, toggle off).
+    Equal(_G.MSUF_Castbar_ResolveInterruptLabel(nil, "target"), LOCALIZED,
+        "interrupt label resolver fallback")
+    Equal(_G.MSUF_Castbar_ResolveInterruptLabel("Player-1-0001", "target"), LOCALIZED,
+        "interrupt label without showInterruptSource")
+
+    -- Target/focus driver: frame:SetInterrupted.
+    local bar = world:Driver("target")
+    world:StartCast("target", "Fireball", 3, 81)
+    world:Fire(bar, "UNIT_SPELLCAST_START")
+    world.casting.target = nil
+    world:Fire(bar, "UNIT_SPELLCAST_INTERRUPTED", "Fireball-guid", 133, nil, 81)
+    Check(bar.interrupted == true, "driver interrupt not shown")
+    Equal(bar.castText.text, LOCALIZED, "driver interrupt label")
+    world:Advance(1.0)
+
+    -- Runtime interrupt visuals without a label.
+    local runtime = assert(_G.MSUF_CastbarRuntime, "castbar runtime missing")
+    local frame = world.NewWidget("Frame")
+    frame.statusBar = world.NewWidget("StatusBar")
+    frame.castText = world.NewWidget("FontString")
+    frame.timeText = world.NewWidget("FontString")
+    runtime:ApplyInterruptValues(frame, 1, false, nil, nil, nil, nil, true)
+    Equal(frame.castText.text, LOCALIZED, "runtime interrupt default label")
+
+    -- Player castbar: an interrupted empowered cast.
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_PlayerCastbarRuntime.lua"))(
+        "MidnightSimpleUnitFrames", world.ns)
+    _G.MSUF_IsCastbarEnabledForUnit = function() return true end
+    local player = world.NewWidget("StatusBar", "MSUF_PlayerSmokeCastBar")
+    player.unit = "player"
+    player.statusBar = world.NewWidget("StatusBar")
+    player.castText = world.NewWidget("FontString")
+    player.timeText = world.NewWidget("FontString")
+    player.isEmpower = true
+    _G.MSUF_PlayerCastbar_OnEvent(player, "UNIT_SPELLCAST_INTERRUPTED", "player", "Fire Breath-guid", 357208, nil, 91)
+    Equal(player.castText.text, LOCALIZED, "player empowered-cast interrupt label")
+    _G.INTERRUPTED = nil
+end
+
+---------------------------------------------------------------------------
+-- 4. A secret spell name (restricted units: UnitCastingInfo is
+--    SecretWhenUnitSpellCastRestricted) cannot be measured or cached, but it
+--    must also forget the previous plain name. Before the fix the shortener
+--    returned the secret early and left _msufRawCastText on the last plain
+--    name, so a cold re-layout mid-cast (Visuals ApplySpellTextLayout ->
+--    MSUF_RefreshCastbarSpellNameText) repainted that old name over the
+--    current secret one.
+---------------------------------------------------------------------------
+do
+    WipeAddonGlobals()
+    local SECRET = setmetatable({}, { __tostring = function() return "<secret spell name>" end })
+    _G.issecretvalue = function(value) return rawequal(value, SECRET) end
+    _G.C_Timer = { After = function() end }
+    _G.MSUF_DB = { general = {} }
+    local utilsNamespace = NewNamespace()
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", utilsNamespace)
+    local applyTexts = assert(_G.MSUF_CB_ApplyTexts, "MSUF_CB_ApplyTexts missing")
+    local refresh = assert(_G.MSUF_RefreshCastbarSpellNameText, "MSUF_RefreshCastbarSpellNameText missing")
+
+    -- The saved shortening modes are named (OFF/ON); legacy booleans and
+    -- larger mode numbers keep their meaning, and the boss override wins.
+    local modes = assert(utilsNamespace.Castbars and utilsNamespace.Castbars.SpellNameShortening,
+        "the spell name shortening modes are not named")
+    Check(modes.OFF == 0 and modes.ON == 1, "the shortening mode values changed")
+    local config = assert(_G.MSUF_GetCastbarSpellNameShorteningConfig, "shortening config missing")
+    local cases = { { 0, false }, { 1, true }, { true, true }, { false, false }, { 3, true }, { 7, true } }
+    for _, case in ipairs(cases) do
+        _G.MSUF_DB.general.castbarSpellNameShortening = case[1]
+        Check((config({ unit = "target" }) == true) == case[2], "shortening " .. tostring(case[1]) .. " decided wrongly")
+    end
+    _G.MSUF_DB.general.castbarSpellNameShortening = modes.ON
+    _G.MSUF_DB.general.bossCastSpellNameShortening = false
+    Check(config({ unit = "boss1" }) == false, "the boss shortening override was ignored")
+    _G.MSUF_DB.general.bossCastSpellNameShortening = nil
+
+    for _, mode in ipairs({ 0, 1 }) do
+        _G.MSUF_DB.general.castbarSpellNameShortening = mode
+        local label = "shortening " .. mode .. ": "
+        local frame = { unit = "arena1", castText = NewWidget("FontString", FONTSTRING, {}) }
+        applyTexts(frame, nil, "Fireball")
+        Equal(frame.castText.text, "Fireball", label .. "plain name")
+        applyTexts(frame, nil, SECRET)
+        Check(rawequal(frame.castText.text, SECRET), label .. "secret name not written")
+        refresh(frame)
+        Check(rawequal(frame.castText.text, SECRET),
+            label .. "cold re-layout repainted " .. tostring(frame.castText.text) .. " over the secret name")
+        -- The next plain cast is measured and cached again.
+        applyTexts(frame, nil, "Frostbolt")
+        refresh(frame)
+        Equal(frame.castText.text, "Frostbolt", label .. "plain name after a secret one")
+    end
+end
+
+---------------------------------------------------------------------------
+-- 5. Possibly secret values are tested with issecretvalue before any nil
+--    comparison (AGENTS_QUALITY.md section 1.5: never compare a secret). Lua 5.1
+--    never calls a metamethod for a comparison with nil, so no stub can make
+--    such a comparison raise; the order is pinned in the source instead, and
+--    the secret cases are checked for behaviour.
+---------------------------------------------------------------------------
+local function ReadSource(relativePath)
+    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/" .. relativePath, "rb"))
+    local source = handle:read("*a"):gsub("\r\n", "\n")
+    handle:close()
+    return source
+end
+
+local function FunctionBody(source, header, label)
+    local start = source:find(header, 1, true)
+    Check(start ~= nil, label .. ": function header not found")
+    local finish = source:find("\nend\n", start, true) or source:find("\n    end\n", start, true)
+    return source:sub(start, finish or #source)
+end
+
+local function AssertSecretTestFirst(body, value, label)
+    local secretAt = body:find("issecret[%w_]*%(" .. value .. "%)") or body:find("[Ii]sSecret[%w_]*%(" .. value .. "%)")
+    Check(secretAt ~= nil, label .. ": " .. value .. " is never tested with issecretvalue")
+    local compareAt = body:find(value .. " [=~]= nil")
+    Check(compareAt == nil or secretAt < compareAt,
+        label .. ": " .. value .. " is compared with nil before issecretvalue")
+end
+
+do
+    local castbars = ReadSource("Castbars/MSUF_Castbars.lua")
+    AssertSecretTestFirst(FunctionBody(castbars, "local function CheckChannelHardStop(", "CheckChannelHardStop"),
+        "channelName", "CheckChannelHardStop")
+    local driver = ReadSource("Castbars/MSUF_CastbarDriver.lua")
+    AssertSecretTestFirst(FunctionBody(driver, "function _G.MSUF_Castbar_ResolveInterruptLabel(", "ResolveInterruptLabel"),
+        "interruptedBy", "MSUF_Castbar_ResolveInterruptLabel")
+    local utils = ReadSource("Castbars/MSUF_CastbarUtils.lua")
+    AssertSecretTestFirst(FunctionBody(utils, "local function ShortenCastbarSpellName(", "ShortenCastbarSpellName"),
+        "text", "ShortenCastbarSpellName")
+
+    -- Behaviour: a secret interrupter falls back to the plain label, and a
+    -- channel whose name is secret is still running for the hard-stop check.
+    local world = World.New(root, "timer")
+    local SECRET_GUID = setmetatable({}, { __tostring = function() return "<secret guid>" end })
+    _G.issecretvalue = function(value) return rawequal(value, SECRET_GUID) end
+    _G.INTERRUPTED = "Interrupted"
+    _G.MSUF_DB.target.showInterruptSource = true
+    _G.UnitNameFromGUID = function() error("a secret interrupter GUID reached UnitNameFromGUID") end
+    Equal(_G.MSUF_Castbar_ResolveInterruptLabel(SECRET_GUID, "target"), "Interrupted",
+        "a secret interrupter did not fall back to the plain label")
+    _G.INTERRUPTED = nil
+    _G.UnitNameFromGUID = nil
+    Check(world.loaded["MSUF_Castbars.lua"], "castbar manager not loaded")
+end
+
+---------------------------------------------------------------------------
+-- 6. The Focus Interrupt Tracker preview messages are translated (keys in
+--    every Locales pack). Before the fix both UIErrorsFrame messages were
+--    English literals.
+---------------------------------------------------------------------------
+do
+    WipeAddonGlobals()
+    local LOCALE = {
+        ["In combat - cannot move Focus Interrupt Tracker preview."] = "Im Kampf - Vorschau gesperrt.",
+        ["Enable Focus Interrupt Tracker first to use the on-screen preview."] = "Erst den Tracker aktivieren.",
+    }
+    local messages = {}
+    _G.UIErrorsFrame = { AddMessage = function(_, message) messages[#messages + 1] = message end }
+    local function PermissiveWidget(name)
+        local widget = { scripts = {}, shown = false, name = name }
+        setmetatable(widget, { __index = function(_, key)
+            if type(key) == "string" and key:match("^%u") then return function() end end
+            return nil
+        end })
+        function widget:SetScript(script, handler) self.scripts[script] = handler end
+        function widget:Show() self.shown = true end
+        function widget:Hide() self.shown = false end
+        function widget:IsShown() return self.shown end
+        function widget:CreateTexture() return PermissiveWidget() end
+        function widget:CreateFontString() return PermissiveWidget() end
+        function widget:CreateAnimationGroup() return PermissiveWidget() end
+        function widget:CreateAnimation() return PermissiveWidget() end
+        if name then _G[name] = widget end
+        return widget
+    end
+    _G.UIParent = PermissiveWidget("UIParent")
+    _G.CreateFrame = function(_, name) return PermissiveWidget(name) end
+    _G.C_Timer = { After = function() end }
+    local combat = false
+    _G.InCombatLockdown = function() return combat end
+    _G.MSUF_DB = { general = { enableFocusKickIcon = false }, focus = {} }
+    _G.MSUF_SetFontChecked = function() return true end
+    -- The font providers the preview's time text calls (Castbars_Core and
+    -- Runtime/MSUF_FontRegistry.lua, both loaded before the icon) and the
+    -- focus kick state driver.
+    _G.MSUF_GetFontPath = function() return "Fonts\\FRIZQT__.TTF" end
+    _G.MSUF_GetFontFlags = function() return "OUTLINE" end
+    _G.MSUF_GetConfiguredFontColor = function() return 1, 1, 1 end
+    _G.MSUF_FocusKickDriver_ForceUpdate = function() end
+    local ns = NewNamespace()
+    ns.Translate = function(text) return LOCALE[text] or text end
+    LoadAddonFile("Castbars/MSUF_FocusKickIcon.lua", ns)
+
+    -- Turning the preview on while the tracker is off.
+    _G.MSUF_FocusKick_SetPreviewEnabled(true)
+    Equal(messages[#messages], "Erst den Tracker aktivieren.", "focus-kick disabled preview message")
+
+    -- Dragging the preview in combat.
+    _G.MSUF_DB.general.enableFocusKickIcon = true
+    _G.MSUF_FocusKick_SetPreviewEnabled(true)
+    local preview = assert(_G.MSUF_FocusKickPreviewFrame, "focus-kick preview frame missing")
+    combat = true
+    preview.scripts.OnDragStart(preview)
+    Equal(messages[#messages], "Im Kampf - Vorschau gesperrt.", "focus-kick combat drag message")
+    _G.UIErrorsFrame = nil
+end
+
+---------------------------------------------------------------------------
+-- 7. One interrupt-ready unit rule. The castbar's unavailable tint
+--    (MSUF_CastbarUtils.lua) and the indicator's fill style
+--    (MSUF_InterruptReady.lua) gate on the same unit classification and
+--    setting: the tint is the fill rule plus backend ownership, for every unit
+--    token (the tint once matched any "boss..." or "arena..." prefix).
+---------------------------------------------------------------------------
+do
+    WipeAddonGlobals()
+    local namespace = NewNamespace()
+    namespace.Client = { IsRetail = true }
+    namespace.Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end }
+    _G.issecretvalue = function() return false end
+    _G.C_Timer = { After = function() end }
+    _G.C_Spell = {}
+    _G.GetTime = function() return 1 end
+    _G.UnitClass = function() return "Mage", "MAGE" end
+    _G.CreateFrame = function() return setmetatable({}, { __index = function() return function() end end }) end
+    _G.UIParent = _G.CreateFrame()
+    LoadAddonFile("Castbars/MSUF_CastbarUtils.lua", namespace)
+    LoadAddonFile("Castbars/MSUF_InterruptReady.lua", namespace)
+    local tint = assert(_G.MSUF_Castbar_ShouldUseInterruptUnavailableColor, "unavailable tint gate missing")
+    local units = assert(namespace.Castbars.KickReadyUnits, "the interrupt-ready unit rule is not shared")
+    local tokens = { "player", "target", "focus", "boss", "arena", "pet", "bosstarget", "boss1target",
+        "arenapet1", "bossX" }
+    for index = 1, 5 do tokens[#tokens + 1] = "boss" .. index; tokens[#tokens + 1] = "arena" .. index end
+    for mask = 0, 31 do
+        local general = { kickReadyStyle = "fill",
+            kickReadyShowTarget = mask % 2 == 1, kickReadyShowFocus = math.floor(mask / 2) % 2 == 1,
+            kickReadyShowBoss = math.floor(mask / 4) % 2 == 1, kickReadyShowArena = math.floor(mask / 8) % 2 == 1 }
+        local owned = math.floor(mask / 16) % 2 == 1
+        _G.MSUF_DB = { general = general }
+        _G.MSUF_ShouldUseMSUFCastbar = function() return owned end
+        for _, unit in ipairs(tokens) do
+            local key = units.Key(unit)
+            local fill = key ~= nil and general[units.ShowKey[key]] == true
+            Check(tint({ unit = unit }) == (fill and owned),
+                "unavailable tint and interrupt-ready fill disagree on " .. unit .. " (settings " .. mask .. ")")
+        end
+    end
+end
+
+---------------------------------------------------------------------------
+-- 8. One owner per public cast-colour getter. Runtime/MSUF_Colors.lua and
+--    Castbars/MSUF_CastbarUtils.lua both exported the interruptible,
+--    non-interruptible and interrupt-unavailable getters; Utils loads later
+--    and always replaced Colors' (palette-fallback) copies, which reached no
+--    caller. Utils is the only publisher; Colors keeps its getters for the
+--    menu's MSUF._colorsAPI rows.
+---------------------------------------------------------------------------
+do
+    local OWNERS = {
+        MSUF_GetInterruptibleCastColor = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua",
+        MSUF_GetNonInterruptibleCastColor = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua",
+        MSUF_GetInterruptUnavailableCastColor = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua",
+        MSUF_GetInterruptFeedbackCastColor = "MidnightSimpleUnitFrames/Runtime/MSUF_Colors.lua",
+    }
+    local writers = {}
+    for name in pairs(OWNERS) do writers[name] = {} end
+    local pipe = assert(io.popen('git -C "' .. root .. '" ls-files -- MidnightSimpleUnitFrames MidnightSimpleUnitFrames_Options', "r"))
+    local scanned = 0
+    for path in pipe:lines() do
+        if path:match("%.lua$") then
+            local handle = io.open(root .. "/" .. path, "rb")
+            if handle then
+                local source = handle:read("*a")
+                handle:close()
+                scanned = scanned + 1
+                for name in pairs(OWNERS) do
+                    local quoted = '"' .. name .. '"'
+                    if source:find("ExportPublic%(%s*" .. quoted:gsub("%W", "%%%0"))
+                        or source:find("%f[%w_]_?G%." .. name .. "%s*=[^=]") then
+                        writers[name][#writers[name] + 1] = path
+                    end
+                end
+            end
+        end
+    end
+    pipe:close()
+    Check(scanned >= 400, "only " .. scanned .. " Lua files scanned; git ls-files failed")
+    for name, owner in pairs(OWNERS) do
+        local list = writers[name]
+        Check(#list == 1 and list[1] == owner,
+            name .. " is published by " .. (#list > 0 and table.concat(list, ", ") or "no file") .. ", not only " .. owner)
+    end
+    local colors = ReadSource("Runtime/MSUF_Colors.lua")
+    for _, getter in ipairs({ "GetInterruptibleCastColor", "GetNonInterruptibleCastColor",
+        "GetInterruptFeedbackCastColor", "GetInterruptUnavailableCastColor" }) do
+        Check(colors:find("%s+" .. getter .. "%s*=%s*" .. getter .. ","),
+            "MSUF._colorsAPI lost " .. getter .. " (the menu's cast colour rows)")
+    end
+end
+
+print("castbar correctness smoke: ok")

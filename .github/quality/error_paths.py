@@ -20,6 +20,9 @@ REJECTION_BOUNDARIES = {
         "local decoded, blob = pcall(encoding.DecodeBase64, cleaned)",
         "inflated, payload = pcall(encoding.DecompressString, blob, method)",
         "inflated, payload = pcall(encoding.DecompressString, blob)",
+        # Host API v1 steps (another addon's page-reset steps, MSUF's scale
+        # appliers) run inside host state that a raise must not leave half done.
+        "local ok, result = pcall(step, ...)",
     },
 }
 NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")

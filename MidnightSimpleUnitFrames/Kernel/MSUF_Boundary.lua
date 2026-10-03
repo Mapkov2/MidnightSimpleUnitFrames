@@ -45,3 +45,22 @@ MSUF.TryDecodeFactoryPayload = TryDecodeFactoryPayload
 -- payload must come back as a failed decode (an import message), never as a
 -- Lua error from inside the codec.
 MSUF.TryDeserializeNativeCBOR = TryDeserializeFactoryPayload
+
+-- A host API v1 step that the host runs inside its own state, so a raise must
+-- not leave that state half done: Menu2 runs a page-reset provider's prepare,
+-- reset and finish (another addon's code) around its undo history, and
+-- ApplyUIScaleProfile runs its writes and MSUF's scale appliers before it can
+-- put the settings back. A step that raises is reported like any other Lua
+-- error (a string first argument names its subject) and the caller gets false;
+-- otherwise true and the step's result. Every other runtime error keeps the
+-- normal path.
+local function RunHostAPIStep(label, step, ...)
+    local ok, result = pcall(step, ...)
+    if ok then return true, result end
+    local subject = ...
+    if type(subject) == "string" then label = tostring(label) .. " " .. subject end
+    ReportError(label, result)
+    return false
+end
+
+MSUF.RunHostAPIStep = RunHostAPIStep

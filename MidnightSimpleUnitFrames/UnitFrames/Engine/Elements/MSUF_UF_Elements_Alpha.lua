@@ -5,19 +5,21 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
 
-local V = MSUF.UFVisuals or {}
-local UF = V.UF or MSUF.UF
+local Visuals = MSUF.UFVisuals or {}
+local UF = Visuals.UF or MSUF.UF
 
 -- Unitframe alpha element.
 -- Combines configured opacity, range fade, combat/target modifiers, and linked castbar alpha.
 -- Keep this as a visual-only layer; load conditions decide whether frames exist/show.
-local tonumber = V.tonumber or tonumber
-local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
-local Clamp01 = V.Clamp01
-local SetFrameAlpha = V.SetFrameAlpha
-local SetAlphaCached = V.SetAlphaCached
+local tonumber = Visuals.tonumber or tonumber
+local EMPTY_EVENTS = Visuals.EMPTY_EVENTS or {}
+local Clamp01 = Visuals.Clamp01
+local SetFrameAlpha = Visuals.SetFrameAlpha
+local SetAlphaCached = Visuals.SetAlphaCached
 local CreateFrame = _G.CreateFrame
-local InCombatLockdown = _G.InCombatLockdown
+-- The one combat-state source (Kernel/MSUF_Util.lua). Asking it with the
+-- regen event also marks the combat edge for the group pokes below.
+local InCombat = MSUF.Util.InCombat
 local issecretvalue = _G.issecretvalue
 local EvaluateColorValueFromBoolean = _G.C_CurveUtil and _G.C_CurveUtil.EvaluateColorValueFromBoolean
 
@@ -111,7 +113,10 @@ local function OocSyncDriver()
   if want and not oocDriver then
     oocDriver = CreateFrame("Frame")
     oocDriver:SetScript("OnEvent", function(_, event)
-      OocCombatFlip(event == "PLAYER_REGEN_DISABLED")
+      -- InCombat(event) also marks PLAYER_REGEN_DISABLED for the pokes:
+      -- a group member's offline fade asks InCombat("MSUF_OOC") before the
+      -- lockdown starts.
+      OocCombatFlip(InCombat(event) == true)
     end)
   end
   if not oocDriver or (oocDriver._msufActive == true) == want then
@@ -121,7 +126,7 @@ local function OocSyncDriver()
   if want then
     -- Event-tracked from here on; seed from the lockdown state because a
     -- /reload or profile swap can happen mid-combat.
-    oocInCombat = InCombatLockdown and InCombatLockdown() == true or false
+    oocInCombat = InCombat() == true
     oocDriver:RegisterEvent("PLAYER_REGEN_DISABLED")
     oocDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
   else

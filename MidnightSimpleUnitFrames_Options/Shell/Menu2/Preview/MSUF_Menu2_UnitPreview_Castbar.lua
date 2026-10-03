@@ -185,6 +185,23 @@ function Castbar.ReadNumber(g, key, suffix, bossKey, fallback)
     end
     return (v ~= nil) and v or fallback
 end
+-- Time text offsets follow the live castbar (MSUF_CastbarVisuals.lua
+-- ApplyTimeTextLayout): boss and arena store X relative to a -2 base and never
+-- fall back to the player offset; the other units fall back to the player
+-- offset, then to -2 and 0. Both menu castbar previews read them here.
+function Castbar.TimeOffsets(g, key)
+    key = CanonKey(key)
+    g = g or {}
+    if key == "boss" or key == "arena" then
+        return -2 + (tonumber(g[key .. "CastTimeOffsetX"]) or 0), tonumber(g[key .. "CastTimeOffsetY"]) or 0
+    end
+    local prefix = Castbar.Prefix(key)
+    local x = prefix and g[prefix .. "TimeOffsetX"]
+    local y = prefix and g[prefix .. "TimeOffsetY"]
+    if x == nil then x = g.castbarPlayerTimeOffsetX end
+    if y == nil then y = g.castbarPlayerTimeOffsetY end
+    return tonumber(x) or -2, tonumber(y) or 0
+end
 function Castbar.ReadString(g, key, suffix, bossKey, fallback)
     local dbKey = TextKey(key, suffix, bossKey)
     local value = dbKey and g and g[dbKey] or nil

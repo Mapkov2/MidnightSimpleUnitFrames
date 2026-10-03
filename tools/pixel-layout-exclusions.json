@@ -42,6 +42,12 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
+    "path": "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarGCD.lua",
+    "call": "CreateFrame ( \"Cooldown\" , nil , UIParent )",
+    "count": 1,
+    "reason": "Hidden 1x1 Cooldown (alpha 0, no swipe, edge, bling or numbers): the native OnCooldownDone timer that ends a secret GCD"
+  },
+  {
     "path": "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPreviews.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
@@ -318,6 +324,12 @@
     "reason": "Unparented event/dispatch driver"
   },
   {
+    "path": "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_ExternalProvider.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented event driver: an Edit Mode adapter's first switch evaluation at PLAYER_LOGIN"
+  },
+  {
     "path": "MidnightSimpleUnitFrames/Shell/MSUF_GameMenu.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
@@ -544,5 +556,11 @@
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented profile variant lifecycle event dispatcher; no visual regions"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/State/MSUF_FirstLoad.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented ADDON_LOADED driver that settles the SavedVariables"
   }
 ]

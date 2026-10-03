@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua
 --- Secure party/raid header creation and anchoring.
 ---
@@ -8,6 +7,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "GroupFrames")
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -503,7 +503,8 @@ function GF.GetPreservedRaidGroupCount(conf, keepEmpty)
     end
   end
   if occupied then
-    local count = 0; for _ in pairs(occupied) do count = count + 1 end
+    local count = 0
+    for _ in pairs(occupied) do count = count + 1 end
     return math.max(1, count)
   end
   return ResolvePreservedRaidGroupCount(conf, maxRosterGroup)
@@ -593,7 +594,7 @@ local function ResolveGroupFilter(conf)
   elseif type(value) == "table" then
     local out = {}
     for i = 1, 8 do
-      if (not groupLimit or i <= groupLimit) and (value[i] == true or value[tostring(i)] == true) then
+      if (not groupLimit or i <= groupLimit) and GF.GroupFilterAllowsSubgroup(value, i) then
         out[#out + 1] = tostring(i)
       end
     end
@@ -618,11 +619,7 @@ local function GroupFilterAllows(conf, groupIndex, classFile, role, ignoreGroupL
   end
   local filter = conf and conf.groupFilter
   if type(filter) == "table" then
-    local value = filter[groupIndex]
-    if value == nil then
-      value = filter[tostring(groupIndex)]
-    end
-    return value ~= false
+    return GF.GroupFilterAllowsSubgroup(filter, groupIndex)
   elseif type(filter) == "string" and filter ~= "" then
     local wanted = tostring(groupIndex)
     classFile = type(classFile) == "string" and classFile:upper() or nil
@@ -643,26 +640,18 @@ RaidGroupAllowed = function(conf, groupIndex)
   if not conf then return true end
   if conf.hideMythicGroupsFiveToEight == true and GF.IsMythicRaidContext and GF.IsMythicRaidContext() and groupIndex > 4 then return false end
   local filter = conf.groupFilter
-  if type(filter) == "table" then
-    local value = filter[groupIndex]
-    return value ~= false and (value ~= nil or filter[tostring(groupIndex)] ~= false)
-  elseif type(filter) == "string" then
-    local hasGroups = false
-    for token in filter:gmatch("[^,]+") do
-      local group = tonumber(token)
-      if group and group >= 1 and group <= 8 then
-        hasGroups = true
-        if group == groupIndex then return true end
-      end
-    end
-    return not hasGroups
-  end
-  return true
+  if filter == nil then return true end
+  return GF.GroupFilterAllowsSubgroup(filter, groupIndex)
 end
 
+--- UnitName is SecretWhenUnitNameIdentityRestricted and UnitGroupRolesAssigned
+--- SecretWhenUnitIdentityRestricted (UnitDocumentation.lua): test either result
+--- with issecretvalue before any truth test, comparison or concatenation. A
+--- secret name reads as no name, so the unit never enters a name list.
 local function UnitFullName(unit)
   if not (unit and UnitName) then return nil end
   local name, realm = UnitName(unit)
+  if issecretvalue(name) == true or issecretvalue(realm) == true then return nil end
   if not name or name == "" then
     return nil
   end
@@ -673,7 +662,9 @@ local function UnitFullName(unit)
 end
 
 local function UnitRole(unit)
-  local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
+  local role
+  if UnitGroupRolesAssigned and unit then role = UnitGroupRolesAssigned(unit) end
+  if issecretvalue(role) == true then return "DAMAGER" end
   if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
     return role
   end
@@ -785,9 +776,29 @@ local function ClassPriority(conf)
   local result, count = {}, 0
   for token in (type(conf.classOrder) == "string" and conf.classOrder or ""):gmatch("[^,%s]+") do
     token = token:upper()
-    if not result[token] then count = count + 1; result[token] = count end
+    if not result[token] then
+      count = count + 1
+      result[token] = count
+    end
   end
   return result
+end
+
+--- SecureGroupHeader's nameList attribute for sorted entries: each name once,
+--- in entry order; nil when no entry has a name.
+local function NameListFromEntries(entries)
+  local names, seen = {}, {}
+  for i = 1, #entries do
+    local name = entries[i].name
+    if name and not seen[name] then
+      seen[name] = true
+      names[#names + 1] = name
+    end
+  end
+  if #names == 0 then
+    return nil
+  end
+  return table_concat(names, ",")
 end
 
 local function BuildPlayerFirstRoleNameList(key, kind, conf, mode)
@@ -845,19 +856,7 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf, mode)
     if mode == "NAME" and a.name ~= b.name then return a.name < b.name end
     return (a.index or 0) < (b.index or 0)
   end)
-
-  local names, seen = {}, {}
-  for i = 1, #entries do
-    local name = entries[i].name
-    if name and not seen[name] then
-      seen[name] = true
-      names[#names + 1] = name
-    end
-  end
-  if #names == 0 then
-    return nil
-  end
-  return table_concat(names, ",")
+  return NameListFromEntries(entries)
 end
 
 local function EntryRolePriority(entry, priority)
@@ -948,18 +947,7 @@ end
 local function BuildRaidFreezeNameList(kind, conf, mode, descending)
   local entries = BuildRaidFreezeEntries(kind, conf, mode, descending, false)
   if not entries then return nil end
-  local names, seen = {}, {}
-  for i = 1, #entries do
-    local name = entries[i].name
-    if name and not seen[name] then
-      seen[name] = true
-      names[#names + 1] = name
-    end
-  end
-  if #names == 0 then
-    return nil
-  end
-  return table_concat(names, ",")
+  return NameListFromEntries(entries)
 end
 
 local function ResolveSortMode(key, conf)
@@ -1016,7 +1004,10 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
           local block = floor((position - 1) / 5) + 1
           if block <= blockLimit and block <= groupCount then
             local names = nameLists[block]
-            if not names then names = {}; nameLists[block] = names end
+            if not names then
+              names = {}
+              nameLists[block] = names
+            end
             names[#names + 1] = name
           end
         end
@@ -1030,11 +1021,17 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
         local groupIndex, name = entry.group, entry.name
         if type(groupIndex) == "number" and groupIndex >= 1 and groupIndex <= groupCount and name then
           local seen = seenByGroup[groupIndex]
-          if not seen then seen = {}; seenByGroup[groupIndex] = seen end
+          if not seen then
+            seen = {}
+            seenByGroup[groupIndex] = seen
+          end
           if not seen[name] then
             seen[name] = true
             local names = nameLists[groupIndex]
-            if not names then names = {}; nameLists[groupIndex] = names end
+            if not names then
+              names = {}
+              nameLists[groupIndex] = names
+            end
             names[#names + 1] = name
           end
         end
@@ -1062,7 +1059,10 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
     local playerBlock
     if not all and mode == "GROUP_ROLE" and conf.playerFirstInRole == true then
       for i = 1, #entries do
-        if entries[i].player == true then playerBlock = entries[i].group; break end
+        if entries[i].player == true then
+          playerBlock = entries[i].group
+          break
+        end
       end
     end
     for groupIndex = 1, groupCount do
@@ -1211,7 +1211,10 @@ local function ApplySortAttributes(header, state)
   return changed
 end
 
-local SECURE_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate, PingableUnitFrameTemplate"
+--- SecureUnitButtonTemplate + PingableUnitFrameTemplate with registerForClicks="AnyUp"
+--- (GroupFrames/MSUF_GroupFrames_Additional.xml). The header births children in
+--- combat too and RegisterForClicks is protected, so the template carries it.
+local SECURE_UNIT_BUTTON_TEMPLATE = "MSUF_GroupHeaderUnitButtonTemplate"
 -- Mainline 12.1 births native AuraContainers inside the restricted header.
 -- Classic has no such template; its addon-owned UNIT_AURA backend attaches
 -- after the secure child exists, so keep this header attribute cleared.
@@ -1221,19 +1224,13 @@ local SECURE_INIT_VERSION = 9
 --- Insecure header method the secure snippet calls for every child it births.
 local CHILD_INIT_METHOD = "MSUFGFInitChild"
 
-local function ButtonTemplate()
-  if UF and type(UF.GetSecureHeaderUnitButtonTemplate) == "function" then
-    return UF.GetSecureHeaderUnitButtonTemplate()
-  end
-  return SECURE_UNIT_BUTTON_TEMPLATE
-end
-
 --- SecureGroupHeader runs this snippet once per child it creates, in combat as
 --- well (SecureGroupHeaders.lua configureChildren -> SetupUnitButtonConfiguration),
 --- before it writes the child's unit. The last line is the oUF pattern: the
 --- restricted handle's CallMethod reaches the header's insecure method (RestrictedFrames.lua
 --- HANDLE:CallMethod, forceinsecure), which adopts the child; GetParent returns
---- the protected header in combat too. Present on every client branch.
+--- the protected header in combat too. Present on every client branch. A restricted
+--- handle has no SetRoundLayoutToNearestPixel; Adapter's scan sets it on each child.
 local _initCfgNonce = 0
 local function BuildInitialConfigFunction(w, h)
   _initCfgNonce = _initCfgNonce + 1
@@ -1241,7 +1238,6 @@ local function BuildInitialConfigFunction(w, h)
 self:ClearAllPoints()
 self:SetWidth(%.3f)
 self:SetHeight(%.3f)
-if self.SetRoundLayoutToNearestPixel then self:SetRoundLayoutToNearestPixel(true) end
 self:SetAttribute('type1', nil)
 self:SetAttribute('*type1', 'target')
 self:SetAttribute('type2', nil)
@@ -1563,7 +1559,7 @@ local function ApplyRuntimeFootprintScreenClamp(key, kind, conf, anchor, totalW,
 end
 
 local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount, preservedGroupIndex, preservedSortSnapshot)
-  local buttonTemplate = ButtonTemplate()
+  local buttonTemplate = SECURE_UNIT_BUTTON_TEMPLATE
   local growth = GF.ResolveLayoutGrowth and GF.ResolveLayoutGrowth(kind, conf) or conf.growth
   local point, xOffset, yOffset, columnAnchor = GrowthAttributes(growth, spacing, conf.groupGrowth)
   local upc = ClampInt(conf.unitsPerColumn, 5, 1, preservedGroupIndex and 5 or 40)
@@ -1811,7 +1807,7 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
   local shouldHide = header.IsShown and header:IsShown()
     and (kindChanged or sizeChanged or secureInitChanged or topologyChanged
       or AttrChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE)
-      or AttrChanged(header, "template", ButtonTemplate())
+      or AttrChanged(header, "template", SECURE_UNIT_BUTTON_TEMPLATE)
       or AttrChanged(header, "nameList", nameList))
 
   if shouldHide then header:Hide() end
@@ -1819,7 +1815,7 @@ local function ConfigurePriorityHeader(header, kind, conf, nameList, w, h, spaci
 
   local changed = kindChanged
   changed = SetAttrIfChanged(header, "auraContainerTemplate", SECURE_AURA_CONTAINER_TEMPLATE) or changed
-  changed = SetAttrIfChanged(header, "template", ButtonTemplate()) or changed
+  changed = SetAttrIfChanged(header, "template", SECURE_UNIT_BUTTON_TEMPLATE) or changed
   changed = SetAttrIfChanged(header, "templateType", "Button") or changed
   changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
   changed = SetAttrIfChanged(header, "initial-height", initialHeight) or changed

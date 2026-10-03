@@ -99,7 +99,10 @@ local function ContextDBRowsState(rowKeys, keys, apply)
             for i = 1, #(state or {}) do
                 local rowState = state[i]
                 local row = db[rowState[1]]
-                if type(row) ~= "table" then row = {}; db[rowState[1]] = row end
+                if type(row) ~= "table" then
+                    row = {}
+                    db[rowState[1]] = row
+                end
                 for j = 1, #(rowState[3] or {}) do
                     local item = rowState[3][j]
                     row[item[1]] = item[2] and ContextCopy(item[3]) or nil
@@ -510,7 +513,8 @@ local function RegisterBarContextFactories()
             "healAbsorbBarColor", 0.7, 0, 0, 0.45, "healAbsorbBarOpacity", 1, "MSUF2_HEAL_ABSORB_OPACITY")
     end)
     FixedContextFactory("bar.power_background", function()
-        return ContextStoredApi("bar.power_background", "Power background", "GetPowerBarBackgroundColor", "SetPowerBarBackgroundColor", "powerBarBgColor", 0, 0, 0, 1, ApplyColors, true)
+        return ContextStoredApi("bar.power_background", "Power background", "GetPowerBarBackgroundColor", "SetPowerBarBackgroundColor", "powerBarBgColor", 0, 0,
+            0, 1, ApplyColors, true)
     end)
     FixedContextFactory("bar.aggro_border", function()
         local target = ContextApi("bar.aggro_border", "Aggro border", "GetAggroBorderColor", "SetAggroBorderColor", 1, 0.5, 0)
@@ -544,12 +548,17 @@ local function RegisterBarContextFactories()
     end)
     FixedContextFactory("bar.outline", function() return ContextGeneral("bar.outline", "Bar outline", "barOutlineColor", 0, 0, 0, ApplyGlobalOutlineColor) end)
     FixedContextFactory("bar.background_tint", function()
-        return ContextStoredApi("bar.background_tint", "Bar background tint", "GetClassBarBgColor", "SetClassBarBgColor", "classBarBg", 0, 0, 0, 1, ApplyUnitframeColorWithReload, true)
+        return ContextStoredApi("bar.background_tint", "Bar background tint", "GetClassBarBgColor", "SetClassBarBgColor", "classBarBg", 0, 0, 0, 1,
+            ApplyUnitframeColorWithReload, true)
     end)
-    FixedContextFactory("health.unified", function() return ContextGeneral("health.unified", "Unified health bar", "unifiedBar", 0.10, 0.60, 0.90, ApplyUnitframeColorWithReload) end)
-    FixedContextFactory("health.gradient.low", function() return ContextGeneral("health.gradient.low", "Health gradient - low", "healthGradientLow", 1, 0, 0, ApplyUnitframeColorWithReload) end)
-    FixedContextFactory("health.gradient.mid", function() return ContextGeneral("health.gradient.mid", "Health gradient - middle", "healthGradientMid", 1, 1, 0, ApplyUnitframeColorWithReload) end)
-    FixedContextFactory("health.gradient.high", function() return ContextGeneral("health.gradient.high", "Health gradient - high", "healthGradientHigh", 0, 1, 0, ApplyUnitframeColorWithReload) end)
+    FixedContextFactory("health.unified", function() return ContextGeneral("health.unified", "Unified health bar", "unifiedBar", 0.10, 0.60, 0.90,
+        ApplyUnitframeColorWithReload) end)
+    FixedContextFactory("health.gradient.low", function() return ContextGeneral("health.gradient.low", "Health gradient - low", "healthGradientLow", 1, 0, 0,
+        ApplyUnitframeColorWithReload) end)
+    FixedContextFactory("health.gradient.mid", function() return ContextGeneral("health.gradient.mid", "Health gradient - middle", "healthGradientMid", 1, 1, 0,
+        ApplyUnitframeColorWithReload) end)
+    FixedContextFactory("health.gradient.high", function() return ContextGeneral("health.gradient.high", "Health gradient - high", "healthGradientHigh", 0, 1,
+        0, ApplyUnitframeColorWithReload) end)
     ContextFactory("health.background.current", function(context)
         local mode = M.ColorsBackgroundMode.GetColor()
         if mode == "health_gradient" then
@@ -750,9 +759,12 @@ local function RegisterCastContextFactories()
         end)
     end
     CastApiFactory("cast.interruptible", "Interruptible cast", "GetInterruptibleCastColor", "SetInterruptibleCastColor", "castbarInterruptible", 0, 0.9, 0.8)
-    CastApiFactory("cast.non_interruptible", "Non-interruptible cast", "GetNonInterruptibleCastColor", "SetNonInterruptibleCastColor", "castbarNonInterruptible", 0.4, 0.01, 0.01)
-    CastApiFactory("cast.interrupt_feedback", "Interrupt feedback", "GetInterruptFeedbackCastColor", "SetInterruptFeedbackCastColor", "castbarInterruptFeedback", 1, 0.82, 0)
-    CastApiFactory("cast.interrupt_unavailable", "Interrupt unavailable", "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor", "castbarInterruptUnavailable", 1, 0.494117647, 0.137254902)
+    CastApiFactory("cast.non_interruptible", "Non-interruptible cast", "GetNonInterruptibleCastColor", "SetNonInterruptibleCastColor",
+        "castbarNonInterruptible", 0.4, 0.01, 0.01)
+    CastApiFactory("cast.interrupt_feedback", "Interrupt feedback", "GetInterruptFeedbackCastColor", "SetInterruptFeedbackCastColor",
+        "castbarInterruptFeedback", 1, 0.82, 0)
+    CastApiFactory("cast.interrupt_unavailable", "Interrupt unavailable", "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor",
+        "castbarInterruptUnavailable", 1, 0.494117647, 0.137254902)
     local function CastStoredFactory(id, label, getName, setName, defaults, keys)
         FixedContextFactory(id, function()
             local target = ContextApi(id, label, getName, setName, defaults[1], defaults[2], defaults[3], ApplyCastbarColors)
@@ -762,23 +774,34 @@ local function RegisterCastContextFactories()
         end)
     end
     CastStoredFactory("cast.text", "Cast text", "GetCastbarTextColor", "SetCastbarTextColor", { 1, 1, 1 }, { "castbarFontR", "castbarFontG", "castbarFontB" })
-    CastStoredFactory("cast.target_text", "Cast target text", "GetCastbarTargetNameColor", "SetCastbarTargetNameColor", { 1, 1, 1 }, { "castbarTargetNameR", "castbarTargetNameG", "castbarTargetNameB" })
-    CastStoredFactory("cast.player_override", "Player cast override", "GetPlayerCastbarOverrideColor", "SetPlayerCastbarOverrideColor", { 0, 0.6, 1 }, { "playerCastbarOverrideR", "playerCastbarOverrideG", "playerCastbarOverrideB" })
+    CastStoredFactory("cast.target_text", "Cast target text", "GetCastbarTargetNameColor", "SetCastbarTargetNameColor", { 1, 1, 1 },
+        { "castbarTargetNameR", "castbarTargetNameG", "castbarTargetNameB" })
+    CastStoredFactory("cast.player_override", "Player cast override", "GetPlayerCastbarOverrideColor", "SetPlayerCastbarOverrideColor", { 0, 0.6, 1 },
+        { "playerCastbarOverrideR", "playerCastbarOverrideG", "playerCastbarOverrideB" })
     FixedContextFactory("cast.border", function()
-        local target = ContextApiOrGeneral("cast.border", "Castbar border", "GetCastbarBorderColor", "SetCastbarBorderColor", "castbarBorder", 0, 0, 0, ApplyCastbarColors, 1)
+        local target = ContextApiOrGeneral("cast.border", "Castbar border", "GetCastbarBorderColor", "SetCastbarBorderColor", "castbarBorder", 0, 0,
+            0, ApplyCastbarColors, 1)
         local state = ContextStoredState(G, { "castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA" }, ApplyCastbarColors)
-        target.hasOpacity, target.getOpacity = true, function() local _, _, _, a = ApiRGB("GetCastbarBorderColor", 0, 0, 0); return tonumber(a) or 1 end
+        target.hasOpacity, target.getOpacity = true, function()
+            local _, _, _, a = ApiRGB("GetCastbarBorderColor", 0, 0, 0)
+            return tonumber(a) or 1
+        end
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)
     FixedContextFactory("cast.background", function()
-        local target = ContextApiOrGeneral("cast.background", "Castbar background", "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", "castbarBg", 0.10, 0.10, 0.10, ApplyCastbarColors, 0.85)
+        local target = ContextApiOrGeneral("cast.background", "Castbar background", "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", "castbarBg", 0.10,
+            0.10, 0.10, ApplyCastbarColors, 0.85)
         local state = ContextStoredState(G, { "castbarBgR", "castbarBgG", "castbarBgB", "castbarBgA" }, ApplyCastbarColors)
-        target.hasOpacity, target.getOpacity = true, function() local _, _, _, a = ApiRGB("GetCastbarBackgroundColor", 0.10, 0.10, 0.10); return tonumber(a) or 0.85 end
+        target.hasOpacity, target.getOpacity = true, function()
+            local _, _, _, a = ApiRGB("GetCastbarBackgroundColor", 0.10, 0.10, 0.10)
+            return tonumber(a) or 0.85
+        end
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)
-    FixedContextFactory("cast.kick_ready", function() return ContextTable("cast.kick_ready", "Kick ready", G, "kickReadyColor", 0, 1, 0, ApplyCastbarColors) end)
+    FixedContextFactory("cast.kick_ready", function() return ContextTable("cast.kick_ready", "Kick ready", G, "kickReadyColor", 0, 1, 0,
+        ApplyCastbarColors) end)
     FixedContextFactory("cast.kick_not_ready", function() return ContextTable("cast.kick_not_ready", "Kick not ready", G, "kickNotReadyColor", 1, 0, 0, ApplyCastbarColors) end)
     -- Per-castbar detail text colors. A detail with no complete stored triple is
     -- still following the shared castbar color, so the factory hands back that
@@ -924,8 +947,10 @@ local function RegisterGroupContextFactories()
         return target
     end)
     FixedContextFactory("group.background", function() return ContextGroup("group.background", "Group bar background", "bg", 0.10, 0.10, 0.10) end)
-    FixedContextFactory("group.dead", function() return ContextGroup("group.dead", "Dead / offline background", "deadBg", 0.60, 0.05, 0.05, "deadBgA", 0.90) end)
-    FixedContextFactory("group.debuff_stripe", function() return ContextGroup("group.debuff_stripe", "Debuff stripe", "debuffStripeColor", 0.80, 0.20, 0.20, "debuffStripeAlpha", 0.60) end)
+    FixedContextFactory("group.dead", function() return ContextGroup("group.dead", "Dead / offline background", "deadBg", 0.60, 0.05,
+        0.05, "deadBgA", 0.90) end)
+    FixedContextFactory("group.debuff_stripe", function() return ContextGroup("group.debuff_stripe", "Debuff stripe", "debuffStripeColor", 0.80, 0.20, 0.20,
+        "debuffStripeAlpha", 0.60) end)
     FixedContextFactory("group.target", function() return ContextGroup("group.target", "Target highlight", "target", 1, 1, 1) end)
     FixedContextFactory("group.focus", function() return ContextGroup("group.focus", "Focus highlight", "hlFocusColor", 0.50, 0.50, 1) end)
     FixedContextFactory("group.border", function() return ContextGroup("group.border", "Group border", "groupBorder", 0.38, 0.68, 1, "groupBorderA", 0.95) end)
@@ -936,7 +961,8 @@ local function RegisterGroupContextFactories()
     end)
 end
 local function RegisterGameplayContextFactories()
-    FixedContextFactory("gameplay.timer", function() return ContextTable("gameplay.timer", "Combat timer", Gameplay, "combatTimerColor", 1, 1, 1, ApplyGameplayColors) end)
+    FixedContextFactory("gameplay.timer", function() return ContextTable("gameplay.timer", "Combat timer", Gameplay, "combatTimerColor", 1, 1, 1,
+        ApplyGameplayColors) end)
     FixedContextFactory("gameplay.enter", function()
         local target = ContextTarget("gameplay.enter", "Combat enter",
             function() return TableRGB(Gameplay(), "combatStateEnterColor", 1, 1, 1) end,
@@ -955,8 +981,10 @@ local function RegisterGameplayContextFactories()
             isEnabled = function() return Gameplay().combatStateColorSync ~= true end,
         })
     end)
-    FixedContextFactory("gameplay.crosshair_in", function() return ContextTable("gameplay.crosshair_in", "Crosshair in range", Gameplay, "crosshairInRangeColor", 0, 1, 0, ApplyGameplayColors) end)
-    FixedContextFactory("gameplay.crosshair_out", function() return ContextTable("gameplay.crosshair_out", "Crosshair out of range", Gameplay, "crosshairOutRangeColor", 1, 0, 0, ApplyGameplayColors) end)
+    FixedContextFactory("gameplay.crosshair_in", function() return ContextTable("gameplay.crosshair_in", "Crosshair in range", Gameplay,
+        "crosshairInRangeColor", 0, 1, 0, ApplyGameplayColors) end)
+    FixedContextFactory("gameplay.crosshair_out", function() return ContextTable("gameplay.crosshair_out", "Crosshair out of range", Gameplay,
+        "crosshairOutRangeColor", 1, 0, 0, ApplyGameplayColors) end)
 end
 local function RegisterPowerContextFactories()
     local function PowerTokenTarget(id, token, label)
@@ -978,26 +1006,13 @@ local function RegisterPowerContextFactories()
     end)
     -- A single unit has one resource, so "power.current" resolves it from context.
     -- A party or raid roster mixes every resource type at once, so group cards name
-    -- each color instead. Labels are spelled out rather than read from the page's
-    -- COLOR_POWER_TOKENS list: this registry is an IIFE that holds 28 of Lua 5.1's
-    -- 60 upvalues, and a file-level local for the list would add another. They must
-    -- stay in sync with that list, and each entry edits the same shared override table.
-    local POWER_TOKEN_CONTEXT_IDS = {
-        { "power.token.mana", "MANA", "Mana" },
-        { "power.token.rage", "RAGE", "Rage" },
-        { "power.token.energy", "ENERGY", "Energy" },
-        { "power.token.focus", "FOCUS", "Focus" },
-        { "power.token.runic_power", "RUNIC_POWER", "Runic Power" },
-        { "power.token.insanity", "INSANITY", "Insanity" },
-        { "power.token.fury", "FURY", "Fury" },
-        { "power.token.pain", "PAIN", "Pain" },
-        { "power.token.essence", "ESSENCE", "Essence" },
-        { "power.token.lunar_power", "LUNAR_POWER", "Astral Power" },
-        { "power.token.maelstrom", "MAELSTROM", "Maelstrom" },
-    }
-    for i = 1, #POWER_TOKEN_CONTEXT_IDS do
-        local entry = POWER_TOKEN_CONTEXT_IDS[i]
-        local id, token, label = entry[1], entry[2], entry[3]
+    -- each color instead: one "power.token.<token>" id per power the Colors page
+    -- lists (COLOR_POWER_TOKENS, MSUF_Menu2_AdvancedColors), with its label. Each
+    -- entry edits the same shared override table.
+    local powerTokens = CP.COLOR_POWER_TOKENS or {}
+    for i = 1, #powerTokens do
+        local token, label = powerTokens[i].value, powerTokens[i].text
+        local id = "power.token." .. token:lower()
         ContextFactory(id, function() return PowerTokenTarget(id, token, label) end)
     end
     ContextFactory("class_power.current", function(context)
@@ -1010,7 +1025,9 @@ local function RegisterPowerContextFactories()
             return { generalState.captureState(), barsState.captureState() }
         end
         local function RestoreClassPowerState(state)
-            generalState.restoreState(state and state[1]); barsState.restoreState(state and state[2]); ApplyColors()
+            generalState.restoreState(state and state[1])
+            barsState.restoreState(state and state[2])
+            ApplyColors()
         end
         local function ClassPowerTarget(id, label, getRGB, setRGB)
             return ContextTarget(id, label, getRGB, setRGB, {
@@ -1075,7 +1092,9 @@ local function RegisterGradientContextFactories()
                         tonumber(GradientScopeGet(prefix .. "B", 0)) or 0
             end,
             function(r, g, b)
-                    GradientScopeSet(prefix .. "R", r); GradientScopeSet(prefix .. "G", g); GradientScopeSet(prefix .. "B", b)
+                    GradientScopeSet(prefix .. "R", r)
+                    GradientScopeSet(prefix .. "G", g)
+                    GradientScopeSet(prefix .. "B", b)
                     ApplyScopedBarGradientColors(reason)
             end)
             local state = ContextDBRowsState(rows, {
@@ -1103,7 +1122,10 @@ local function AppendContextTargets(out, seen, value, reference)
     if type(value.getRGB) == "function" and type(value.setRGB) == "function" then
         if type(reference) == "table" and type(reference.label) == "string" then value.label = reference.label end
         local identity = value._msuf2ContextColorId or value
-        if not seen[identity] then seen[identity] = true; out[#out + 1] = value end
+        if not seen[identity] then
+            seen[identity] = true
+            out[#out + 1] = value
+        end
         return
     end
     for i = 1, #value do AppendContextTargets(out, seen, value[i], reference) end

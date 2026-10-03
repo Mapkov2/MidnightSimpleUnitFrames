@@ -616,27 +616,7 @@ function StatusSection.PrepareIconResolvers(state, unit)
         return out
     end
     local function IconAssetValuesForCurrentStatus()
-        local spec = CurrentStatusSpec(unit)
-        local entries = StatusPreviewEntries(spec)
-        local valuesFn = _G.MSUF_GetStatusIconAssetValues
-        if type(valuesFn) ~= "function" or type(entries) ~= "table" then
-            return { { value = "", text = "Use default icon" } }
-        end
-        local out, used = {}, {}
-        for i = 1, #entries do
-            local entry = entries[i]
-                local values = valuesFn(entry[1], entry[2], i == 1, true)
-            for j = 1, #(values or {}) do
-                local item = values[j]
-                local value = item and item.value
-                if type(value) == "string" and not used[value] then
-                    used[value] = true
-                    out[#out + 1] = item
-                end
-            end
-        end
-        if #out == 0 then out[1] = { value = "", text = "Use default icon" } end
-        return out
+        return UP.StatusIconAssetValues(StatusPreviewEntries(CurrentStatusSpec(unit)))
     end
     local function ResolvePreviewStatusIcon(spec, entry)
         if not entry then return nil end
@@ -673,7 +653,8 @@ function StatusSection.PrepareIconResolvers(state, unit)
         if entry[1] == "combat" then return "Interface\\CharacterFrame\\UI-StateIcon", 0.5, 1, 0, 0.5, "UI-HUD-UnitFrame-Player-CombatIcon" end
         if entry[1] == "resting" then return "Interface\\CharacterFrame\\UI-StateIcon", 0, 0.5, 0, 0.5 end
         if entry[1] == "incomingRes" then return "Interface\\RaidFrame\\Raid-Icon-Rez", 0, 1, 0, 1 end
-        if entry[1] == "pvp" then return entry[2] == "Horde" and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
+        if entry[1] == "pvp" then return entry[2] == "Horde" and "Interface\\TargetingFrame\\UI-PVP-Horde"
+            or "Interface\\TargetingFrame\\UI-PVP-Alliance", 0, 1, 0, 1 end
         if entry[1] == "petHappiness" then
             -- The runtime element owns the per-client art (texture cells or atlases).
             local petHappinessIcon = _G.MSUF_GetPetHappinessIcon
@@ -823,7 +804,8 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
     end
     local petXPWidth
     if IS_CLASSIC_FAMILY and unit == "pet" then
-        petXPWidth = BindStatusPlacementSlider(placementCard, "Bar width", 8, 400, placeRightX, -116, placeRightW, "width", "defaultWidth", 80, "MSUF2_PET_XP_WIDTH", "Pet XP bar width", { "pet xp width", "pet experience width", "pet bar width" })
+        petXPWidth = BindStatusPlacementSlider(placementCard, "Bar width", 8, 400, placeRightX, -116, placeRightW, "width", "defaultWidth", 80,
+            "MSUF2_PET_XP_WIDTH", "Pet XP bar width", { "pet xp width", "pet experience width", "pet bar width" })
         AttachStatusExactTarget(petXPWidth, "width")
     end
     local anchor = BindStatusSpecDropdown(placementCard, "Anchor", CurrentStatusAnchorValues, 220, placeLeftX, -116, placeLeftW,
@@ -833,7 +815,8 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
         "right to target name", "left to target name", "right to boss name", "left to boss name",
         "top left", "top right", "bottom left", "bottom right",
     }, CurrentStatusAnchorValues)
-    local layer = BindStatusPlacementSlider(placementCard, "Layer", 0, 30, placeLeftX, -178, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
+    local layer = BindStatusPlacementSlider(placementCard, "Layer", 0, 30, placeLeftX, -178, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER",
+        "Status indicator layer", {
         "level layer", "indicator layer", "layer", "above text", "behind text",
     }, ClampSelectedStatusLayer)
     -- The selected indicator's text color is edited through the ::: text shortcut on the
@@ -874,7 +857,8 @@ function StatusSection.BuildPlacementCard(state, ctx, unit)
             RefreshStatusRuntime(unit, spec)
             RefreshStatusMenu()
         end
-        M.RunWithHistory("Reset: " .. tostring(spec.text or spec.value or "Status icon"), "status:reset:" .. tostring(unit) .. ":" .. tostring(spec.value), ResetSelectedStatus)
+        M.RunWithHistory("Reset: " .. tostring(spec.text or spec.value or "Status icon"), "status:reset:" .. tostring(unit) .. ":"
+            .. tostring(spec.value), ResetSelectedStatus)
     end)
     RegisterStatusSearch(reset, "Reset selected status indicator", {
         "reset level", "reset level position", "reset level anchor", "reset indicator position",
@@ -891,24 +875,14 @@ function StatusSection.BuildPreviewCard(state, unit)
     local current = StatusPreviewButton(previewCard, "Preview current", 16, -54, min(142, previewControlW), "current", "Preview current status indicator", {
         "preview current", "current indicator", "preview level",
     }, "status.preview.basic.current")
-    local all = StatusPreviewButton(previewCard, "Show all", min(166, previewControlW - 112), -54, min(112, previewControlW), "all", "Show all status indicators", {
+    local all = StatusPreviewButton(previewCard, "Show all", min(166, previewControlW - 112), -54, min(112, previewControlW), "all",
+        "Show all status indicators", {
         "show all", "all indicators", "preview all", "all status icons",
     }, "status.preview.basic.all")
     local iconPreviewLabel = W.LabelAt(previewCard, "Icon preview", 16, -146, previewControlW, "GameFontNormalSmall", T.colors.accent)
-    local iconPreviewStrip = PixelLayoutRegion(CreateFrame("Frame", nil, previewCard))
-    iconPreviewStrip:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -158)
-    iconPreviewStrip:SetSize(previewControlW, 24)
-    local iconPreviewTextures = {}
-    for i = 1, 5 do
-        local holder = PixelLayoutRegion(CreateFrame("Frame", nil, iconPreviewStrip))
-        holder:SetSize(24, 24)
-        holder:SetPoint("LEFT", iconPreviewStrip, "LEFT", (i - 1) * 28, 0)
-        holder.bg = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND"))
-        holder.bg:SetAllPoints()
-        holder.bg:SetColorTexture(0.020, 0.026, 0.052, 0.70)
-        holder.tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
-        holder.tex:SetPoint("CENTER", holder, "CENTER", 0, 0)
-        holder.tex:SetSize(22, 22)
+    local iconPreviewStrip, iconPreviewTextures = UP.CreateStatusIconStrip(previewCard, -158, previewControlW)
+    for i = 1, #iconPreviewTextures do
+        local holder = iconPreviewTextures[i]
         if IS_CLASSIC_FAMILY then
             holder:EnableMouse(true)
             holder:SetScript("OnEnter", function(self)
@@ -919,7 +893,6 @@ function StatusSection.BuildPreviewCard(state, unit)
             end)
             holder:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         end
-        iconPreviewTextures[i] = holder
     end
     local function StopIconPreviewAnimations(resetAtlas)
         if not StopRestingFlipbook then return end
@@ -968,7 +941,8 @@ function StatusSection.BuildAdvancedTab(state)
     local StatusPreviewButton = state.StatusPreviewButton
     local advanced = {}
     advanced.card = W.ControlCard(advancedTab, "Advanced Placement", nil, placementCardX, -38, placementCardW, 232)
-    advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 0, 30, placeLeftX, -58, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER", "Advanced status indicator layer", {
+    advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 0, 30, placeLeftX, -58, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER",
+        "Advanced status indicator layer", {
         "advanced layer", "status icon advanced",
     }, ClampSelectedStatusLayer)
     advanced.reset = W.Button(advanced.card, "Reset selected", 150)
@@ -980,10 +954,12 @@ function StatusSection.BuildAdvancedTab(state)
     RegisterStatusSearch(advanced.reset, "Advanced reset selected status indicator", {
         "advanced reset", "reset status icon advanced",
     }, nil, nil, "status.advanced.reset", "action", selectedStatusContract)
-    advanced.test = BindStatusTestToggle(advanced.card, "Test mode", placeLeftX, -128, placeLeftW, "MSUF2_STATUS_ADV_TEST", "Advanced status indicator test mode", {
+    advanced.test = BindStatusTestToggle(advanced.card, "Test mode", placeLeftX, -128, placeLeftW, "MSUF2_STATUS_ADV_TEST",
+        "Advanced status indicator test mode", {
         "advanced test mode", "status icon advanced preview",
     })
-    advanced.current = StatusPreviewButton(advanced.card, "Preview current", placeLeftX, -178, min(142, placeLeftW), "current", "Advanced preview current status indicator", {
+    advanced.current = StatusPreviewButton(advanced.card, "Preview current", placeLeftX, -178, min(142, placeLeftW), "current",
+        "Advanced preview current status indicator", {
         "advanced preview current", "status icon advanced preview",
     }, "status.preview.advanced.current")
     advanced.all = StatusPreviewButton(advanced.card, "Show all", placeRightX, -178, min(112, placeRightW), "all", "Advanced show all status indicators", {

@@ -357,7 +357,10 @@ function Controller:MarkShellDirty()
         mover = mover or candidate
     end
     if not mover then self:HookMovers() end
-    if not mover then local _, first = next(self.externalMovers); mover = first end
+    if not mover then
+        local _, first = next(self.externalMovers)
+        mover = first
+    end
     if not mover then return false end
     local binding = self.externalBindings[self.spec.GetMoverKey(mover)]
     local proxy = binding and self.resolvedFrames[binding.externalKey]
@@ -396,7 +399,6 @@ end
 
 function Controller:InstallDirtyHooks()
     if self.dirtyHooked or type(_G.hooksecurefunc) ~= "function" then return self.dirtyHooked end
-    if type(_G.MSUF_EM_UndoBeforeChange) ~= "function" then return false end
     _G.hooksecurefunc("MSUF_EM_UndoBeforeChange", function(category, key)
         self:OnMSUFEditChange(category, key)
     end)
@@ -430,9 +432,9 @@ function Controller:ScheduleMenuPreviewReconcile()
         if menu and type(menu.RequestGFPagePreviewForKey) == "function" then
             menu.RequestGFPagePreviewForKey(activeKey, true)
         end
-        if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-            _G.MSUF_UFPreview_RequestRefresh(self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE")
-        end
+        -- The unit preview belongs to the load-on-demand menu.
+        local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+        if refreshPreview then refreshPreview(self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE") end
         if menu and type(menu.RefreshGFNativePreviews) == "function" then
             menu.RefreshGFNativePreviews(self.spec.previewRefreshReason or "MSUF_EXTERNAL_EDIT_CLOSE")
         end
@@ -666,6 +668,21 @@ function External.CreateEnabledSetter(General, SETTING, Activate, Deactivate)
         if enabled then return Activate() end
         return Deactivate()
     end
+end
+
+--- An adapter's first switch evaluation waits for PLAYER_LOGIN. The client
+--- loads the SavedVariables after every file ran, so a read while the adapter
+--- loads saw no profile and turned on an integration the player had turned
+--- off. Profile changes arrive through the adapter's SetEnabled
+--- (State/MSUF_ProfileRuntime.lua).
+function External.ActivateAtLogin(Enabled, Activate)
+    local frame = CreateFrame("Frame")
+    frame:RegisterEvent("PLAYER_LOGIN")
+    frame:SetScript("OnEvent", function(self)
+        self:UnregisterEvent("PLAYER_LOGIN")
+        self:SetScript("OnEvent", nil)
+        if Enabled() then Activate() end
+    end)
 end
 
 function External.CreateElementRegistrar(API, OWNER, registered)

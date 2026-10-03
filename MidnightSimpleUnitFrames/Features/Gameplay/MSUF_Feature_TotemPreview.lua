@@ -2,7 +2,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
-local S = MSUF.MSUF_GameplayShared or MSUF.Gameplay or {}
+local GameplayShared = MSUF.MSUF_GameplayShared or MSUF.Gameplay or {}
 
 -- Blizzard totem/statue preview controller.
 -- Lets edit mode display and move Blizzard's totem-style frame without taking ownership of
@@ -31,14 +31,14 @@ local _EnsureGameplayDefaults = MSUF.MSUF_EnsureGameplayDefaults
 -- EnsureGameplayDefaults re-seeds ~33 keys on every call; the fast variant returns the cached
 -- table and only falls back to the full seed before the first one has run.
 local _GetGameplayDB = MSUF.MSUF_GetGameplayDBFast or _EnsureGameplayDefaults
-local _GetPlayerSpecID = S.GetPlayerSpecID
-local _Clamp = S.Clamp
-local _RoundInt = S.RoundInt
-local _SetupArrowNudge = S.SetupArrowNudge
-local _BeginHistory = S.BeginHistory
-local _CommitHistory = S.CommitHistory
-local _CheckpointHistory = S.CheckpointHistory
-local _SelectNudgeFrame = S.SelectNudgeFrame
+local _GetPlayerSpecID = GameplayShared.GetPlayerSpecID
+local _Clamp = GameplayShared.Clamp
+local _RoundInt = GameplayShared.RoundInt
+local _SetupArrowNudge = GameplayShared.SetupArrowNudge
+local _BeginHistory = GameplayShared.BeginHistory
+local _CommitHistory = GameplayShared.CommitHistory
+local _CheckpointHistory = GameplayShared.CheckpointHistory
+local _SelectNudgeFrame = GameplayShared.SelectNudgeFrame
 
 local function _SyncTotemOffsetSliders()
     -- Menu2 owns the offset sliders. RequestRefresh coalesces through a queued flag, so calling
@@ -181,7 +181,8 @@ do
         if not frame or originalLayout then return end
 
         -- Blizzard owns TotemFrame layout. Store the full original anchor/parent state before
-        -- MSUF takes temporary preview ownership so it can be restored losslessly.
+        -- MSUF takes temporary preview ownership so it can be restored losslessly. Each takeover
+        -- captures its own snapshot; a release drops it.
         local info = {
             parent = frame:GetParent(),
             scale = frame:GetScale(),
@@ -231,6 +232,7 @@ do
         local frame = _G.TotemFrame
         if not frame then
             managed = false
+            originalLayout = nil
             return true
         end
 
@@ -242,6 +244,7 @@ do
 
         local info = originalLayout
         managed = false
+        originalLayout = nil
 
         if not info then return true end
 
@@ -261,7 +264,11 @@ do
         if info.scale and frame.SetScale then frame:SetScale(info.scale) end
         if info.strata and frame.SetFrameStrata then frame:SetFrameStrata(info.strata) end
         if info.level and frame.SetFrameLevel then frame:SetFrameLevel(info.level) end
-        frame.ignoreFramePositionManager = info.ignoreFramePositionManager
+        -- Hand the managed-frame flag back only if MSUF assigned it and it still holds MSUF's
+        -- value; a change another owner made in between stays.
+        if info.flagAssigned and frame.ignoreFramePositionManager == true then
+            frame.ignoreFramePositionManager = info.ignoreFramePositionManager
+        end
         if frame.Layout then frame:Layout() end
         _ReturnToTotemManagedContainer(frame)
 
@@ -305,7 +312,17 @@ do
         -- the first apply. Both sides are self-guarding: AddManagedFrame bails on
         -- ignoreFramePositionManager, RemoveManagedFrame bails when the frame is not tracked, so
         -- repeat calls cost one table lookup and never trigger a container Layout.
-        frame.ignoreFramePositionManager = true
+        -- The flag is a field on Blizzard's frame that Blizzard reads
+        -- (ManagedFrameContainerMixin:AddManagedFrame, ManagedFrameSystem.lua:58; Classic
+        -- UIParent.lua:163), and it is the only way AddManagedFrame offers to keep the frame in
+        -- place: without it the first totem of a fight hands TotemFrame back to the hidden Blizzard
+        -- PlayerFrame for the whole fight, because nothing may move it in combat. Blizzard sets the
+        -- same field on PlayerCastingBarFrame (PlayerFrame.lua:36). It is written once per
+        -- ownership, never on Blizzard's rebuilds, and restored on release.
+        if frame.ignoreFramePositionManager ~= true then
+            frame.ignoreFramePositionManager = true
+            originalLayout.flagAssigned = true
+        end
         _RemoveFromTotemManagedContainers(frame)
 
         local wantParent = playerFrame or UIParent

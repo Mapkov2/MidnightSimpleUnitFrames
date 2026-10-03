@@ -2116,6 +2116,10 @@ local function MSUF_Defaults_NormalizeFontField(tbl)
 end
 
 local MSUF_DISPEL_PRIORITY_MIGRATION = 5
+--- The migration version that lifted the Beta 38 TOP dispel symbol default to
+--- ALL. Data written by that version or a later one keeps a TOP the user chose;
+--- the stamp travels with exported profiles as their data-format version.
+local MSUF_DISPEL_PRIORITY_TOP_LIFT = 5
 local MSUF_DISPEL_TYPE_PRIORITY_KEYS = {
     magic = true,
     curse = true,
@@ -2190,7 +2194,7 @@ local function MSUF_Defaults_CollapseDispelPriorityOrder(raw, includeTargetFocus
     return out
 end
 
-local function MSUF_Defaults_MigratePriorityScope(scope, includeTargetFocus)
+local function MSUF_Defaults_MigratePriorityScope(scope, includeTargetFocus, liftTop)
     if type(scope) ~= "table" then return end
     local raw = type(scope.hlPrioOrder) == "table" and scope.hlPrioOrder
         or (type(scope.highlightPrioOrder) == "table" and scope.highlightPrioOrder)
@@ -2219,10 +2223,13 @@ local function MSUF_Defaults_MigratePriorityScope(scope, includeTargetFocus)
     --- highest-priority debuff. Beta 39 makes "one per dispel type" the default,
     --- because two debuffs of different types have to read as two symbols. TOP was
     --- only ever the default in the one build that had it, so lift existing
-    --- profiles once rather than leaving them silently on the old behaviour. The
-    --- marker below keeps it one-time, so a deliberate TOP survives from here on.
-    for _, key in ipairs({ "unitDispelSymbolMode", "dispelSymbolMode" }) do
-        if tostring(scope[key] or ""):upper() == "TOP" then scope[key] = "ALL" end
+    --- profiles once rather than leaving them silently on the old behaviour. Only
+    --- data older than the lift gets it (liftTop), so a deliberate TOP survives
+    --- later migration versions, profile imports and forced re-runs.
+    if liftTop then
+        for _, key in ipairs({ "unitDispelSymbolMode", "dispelSymbolMode" }) do
+            if tostring(scope[key] or ""):upper() == "TOP" then scope[key] = "ALL" end
+        end
     end
 
     --- PTR 5 replaces the old catch-all debuff choice with the precise native
@@ -2243,15 +2250,20 @@ local function MSUF_Defaults_MigrateDispelPriorityProfile(db, force)
     --- never received the factory profile. The heavy pass runs this migration
     --- again right after seeding, which is when the stamp belongs.
     if MSUF_Defaults_IsFreshInstallProfileDB(db) then return false end
-    if force ~= true and tonumber(db._msufDispelPriorityMigration) == MSUF_DISPEL_PRIORITY_MIGRATION then
+    --- The stamp is the version the data was last migrated to, also when it
+    --- arrives inside an imported profile. A forced run (imports) still repeats
+    --- every idempotent normalization below.
+    local version = tonumber(db._msufDispelPriorityMigration) or 0
+    if force ~= true and version == MSUF_DISPEL_PRIORITY_MIGRATION then
         return false
     end
-    MSUF_Defaults_MigratePriorityScope(db.general, true)
+    local liftTop = version < MSUF_DISPEL_PRIORITY_TOP_LIFT
+    MSUF_Defaults_MigratePriorityScope(db.general, true, liftTop)
     for _, key in ipairs({ "player", "target", "targettarget", "tot", "focustarget", "focus", "pet", "pettarget", "boss", "arena" }) do
-        MSUF_Defaults_MigratePriorityScope(db[key], false)
+        MSUF_Defaults_MigratePriorityScope(db[key], false, liftTop)
     end
     for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
-        MSUF_Defaults_MigratePriorityScope(db[key], true)
+        MSUF_Defaults_MigratePriorityScope(db[key], true, liftTop)
     end
     db._msufDispelPriorityMigration = MSUF_DISPEL_PRIORITY_MIGRATION
     return true
@@ -3365,6 +3377,10 @@ local function MSUF_EnsureDB(force, allowPersistedFastPath)
     if type(profile) ~= "table" then
         profile = {}
         ExportPublic("MSUF_DB", profile)
+        -- A file that reads settings while the addon loads gets here before the
+        -- SavedVariables exist; State/MSUF_FirstLoad.lua must not count this
+        -- table as saved data on ADDON_LOADED.
+        MSUF.ProfilePolicy.NoteSessionProfileDB(profile)
     end
     if force ~= true and MSUF_DB_LastHeavyRun == profile then return profile end
     MSUF_Defaults_MigrateDispelPriorityProfiles()

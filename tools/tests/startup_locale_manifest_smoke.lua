@@ -22,7 +22,9 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         local selected = Manifest.Paths(root, suffix, locale, GAME_TYPES[client])
         local bytes, aliases, menuLocales, index = 0, {}, 0, {}
         for i, path in ipairs(selected) do
-            bytes = bytes + #Read(path)
+            -- Counted with LF line ends: the shipped package holds the LF blobs,
+            -- and a CRLF checkout (core.autocrlf) must not read as growth.
+            bytes = bytes + #(Read(path):gsub("\r\n", "\n"))
             index[path] = i
             if path:find("/AliasData/", 1, true) then aliases[#aliases + 1] = path end
             if path:match("/Locales/%a%a%u%u%.lua$") then menuLocales = menuLocales + 1 end
@@ -36,7 +38,13 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 2026-10-02: 16,050,000 -> 16,150,000 for the wave-2 quality splits
         -- (Edit Mode, engine and class power modules: file headers and imports)
         -- plus translated group and Edit Mode feedback; no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16150000 or 14000000),
+        -- 2026-10-02 (wave 4, W4-C2): 16,150,000 -> 16,200,000 and 14,000,000 ->
+        -- 14,050,000 for about 49 KB of translations: the engine and state chat
+        -- lines, key binding labels, unit tooltip and status words in the ten
+        -- translated packs (every pack is parsed at startup); no catalog was added.
+        -- 2026-10-03: bytes are counted with LF line ends (checkout-independent);
+        -- the LF tree measured Mainline 15,979,430 and Vanilla 13,830,064.
+        assert(bytes < (suffix == "Mainline" and 16200000 or 14050000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

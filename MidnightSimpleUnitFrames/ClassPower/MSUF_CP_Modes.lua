@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- ClassPower/MSUF_CP_Modes.lua - class power render modes
 
 --- MSUF_CP_Mode_Segmented.lua
@@ -7,10 +6,9 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "ClassPower/MSUF_CP_Modes.lua")
 
-local modeBuilders = _G.MSUF_CP_MODE_BUILDERS or {}
-ExportPublic("MSUF_CP_MODE_BUILDERS", modeBuilders)
+local modeBuilders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_MODE_BUILDERS")
 
 --- Classic flavors (Vanilla, TBC, Mists) load this file too; read once.
 local IS_CLASSIC = (MSUF.Client and MSUF.Client.IsClassic) == true
@@ -23,6 +21,7 @@ local math_abs = math.abs
 local math_floor = math.floor
 local string_format = string.format
 local _issecretvalue = _G.issecretvalue
+local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
 
 local function CP_GetVisual(E)
     local getVisual = E and E.GetVisual
@@ -191,6 +190,8 @@ local function CP_StampVertexColor(tex, r, g, b, a)
     end
 end
 
+--- Plain bounds only: type() answers "number" for a secret number too, so a
+--- possibly secret bound goes through CP_SetSecretMinMax instead.
 local function CP_StampMinMax(bar, minValue, maxValue)
     if not bar then return end
     if type(minValue) == "number" and type(maxValue) == "number" then
@@ -199,6 +200,15 @@ local function CP_StampMinMax(bar, minValue, maxValue)
     else
         bar._msufCPMin, bar._msufCPMax = nil, nil
     end
+    bar:SetMinMaxValues(minValue, maxValue)
+end
+
+--- A restricted range (a secret UnitHealthMax or UnitPowerMax) goes straight
+--- to the native bar and clears the cache: it must never be cached, or the
+--- next CP_StampMinMax would compare it.
+local function CP_SetSecretMinMax(bar, minValue, maxValue)
+    if not bar then return end
+    bar._msufCPMin, bar._msufCPMax = nil, nil
     bar:SetMinMaxValues(minValue, maxValue)
 end
 
@@ -358,29 +368,22 @@ local function CreateNativeTimerSupport(E)
     return support
 end
 
-modeBuilders.SEGMENTED = function(E)
+do
     local tonumber = tonumber
-    local _cpDB = E._cpDB or {}
-    local PLAYER_CLASS = E.PLAYER_CLASS
-    local PT = E.PT
-    local CPConst = E.CPConst
-    local CP = E.CP
-    local UnitPower = E.UnitPower
-    local UnitPartialPower = E.UnitPartialPower
-    local NotSecret = E.NotSecret
-    local CP_CheckAutoHide = E.CP_CheckAutoHide
-    local GetSpec = E.GetSpec
-    local GetTime = E.GetTime
-    local GetPowerRegenForPowerType = E.GetPowerRegenForPowerType
-    local nativeTimer = CreateNativeTimerSupport(E)
+    --- Bound once by SEGMENTED at controller load: the mode env (E) and the
+    --- values the painters read from it on every update.
+    local E, _cpDB, PLAYER_CLASS, PT, CPConst, CP
+    local UnitPower, UnitPartialPower, NotSecret, CP_CheckAutoHide
+    local GetSpec, GetTime, GetPowerRegenForPowerType
+    local nativeTimer
 
-    --- Essence smooth recharge (Evoker only)
-    local _essPrevCur    = nil
-    local _essRechargeAt = 0
-    local _essRate       = 0
-    local _essActiveBar  = nil
-    local _essNativeBar  = nil
-    local _essRestricted = false
+    --- Essence smooth recharge (Evoker only); fresh on every build.
+    local _essPrevCur
+    local _essRechargeAt
+    local _essRate
+    local _essActiveBar
+    local _essNativeBar
+    local _essRestricted
     local SetEssenceOnUpdate
 
     local function StopNativeEssence(bar)
@@ -482,64 +485,70 @@ modeBuilders.SEGMENTED = function(E)
         _essRestricted = false
     end
 
+    --- A restricted (secret) Essence count: native whole-point pips, no
+    --- recharge timer. Partial recharge cannot be derived from a secret value.
+    local function PaintRestrictedEssence(cur, maxPower)
+        local visual = CP_GetVisual(E)
+        local smoothInterp = visual and visual.smoothInterp
+        local baseR = visual and visual.baseR or 1
+        local baseG = visual and visual.baseG or 1
+        local baseB = visual and visual.baseB or 1
+        local useSlotColors = visual and visual.useSlotColors == true
+        local bgR = visual and visual.bgR or 0
+        local bgG = visual and visual.bgG or 0
+        local bgB = visual and visual.bgB or 0
+        local bgA = visual and visual.bgAlpha or 0.3
+        local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
+        local visualVersion = visual and visual.version or 0
+
+        -- A restricted player-power value cannot be inspected in Lua, but
+        -- StatusBar:SetValue accepts it natively. Give every pip its own
+        -- [i-1, i] range so the client clamps the same secret Essence value
+        -- into the correct full/empty layout instead of showing every pip
+        -- as full. Partial recharge selection cannot be derived from a
+        -- secret value, so retire any formerly known timer before writing
+        -- the authoritative native whole-point state.
+        local enteredRestricted = not _essRestricted
+        if enteredRestricted then
+            StopEssenceOnUpdates()
+            _essRestricted = true
+        end
+        for i = 1, maxPower do
+            local bar = CP.bars[i]
+            if bar then
+                CP_StampMinMax(bar, i - 1, i)
+                CP_SetPowerValue(bar, cur, smoothInterp, true)
+                if enteredRestricted then
+                    bar._msufEssenceValue = nil
+                    bar._msufEssenceValueVersion = nil
+                end
+                CP_StampAlpha(bar, filledAlpha)
+                if enteredRestricted or bar._msufCPVisualVersion ~= visualVersion
+                    or bar._msufCPFullColor ~= nil then
+                    local slotR = useSlotColors and visual.slotR and visual.slotR[i]
+                    CP_StampStatusBarColor(bar, slotR or baseR,
+                        slotR and visual.slotG[i] or baseG,
+                        slotR and visual.slotB[i] or baseB, 1)
+                    CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+                    bar._msufCPVisualVersion = visualVersion
+                    bar._msufCPFullColor = nil
+                end
+            end
+        end
+        local txt = CP.text
+        if txt and CP_PaintResourceText(txt, visual, _cpDB.textMode, cur, maxPower, nil, WritePassthroughCount) then
+            CP_StampTextColor(txt, 1, 1, 1, 1)
+        end
+        --- A secret power value only blocks the full/empty rules; the combat
+        --- rule still has to run, so pass nil instead of dropping the check.
+        CP_CheckAutoHide(nil, maxPower)
+    end
+
     local function UpdateEssence(powerType, maxPower)
         if maxPower <= 0 then return end
         local cur = UnitPower("player", powerType)
         if not NotSecret(cur) then
-            local visual = CP_GetVisual(E)
-            local smoothInterp = visual and visual.smoothInterp
-            local baseR = visual and visual.baseR or 1
-            local baseG = visual and visual.baseG or 1
-            local baseB = visual and visual.baseB or 1
-            local useSlotColors = visual and visual.useSlotColors == true
-            local bgR = visual and visual.bgR or 0
-            local bgG = visual and visual.bgG or 0
-            local bgB = visual and visual.bgB or 0
-            local bgA = visual and visual.bgAlpha or 0.3
-            local filledAlpha = visual and visual.filledAlpha or E.GetFilledAlpha()
-            local visualVersion = visual and visual.version or 0
-
-            -- A restricted player-power value cannot be inspected in Lua, but
-            -- StatusBar:SetValue accepts it natively. Give every pip its own
-            -- [i-1, i] range so the client clamps the same secret Essence value
-            -- into the correct full/empty layout instead of showing every pip
-            -- as full. Partial recharge selection cannot be derived from a
-            -- secret value, so retire any formerly known timer before writing
-            -- the authoritative native whole-point state.
-            local enteredRestricted = not _essRestricted
-            if enteredRestricted then
-                StopEssenceOnUpdates()
-                _essRestricted = true
-            end
-            for i = 1, maxPower do
-                local bar = CP.bars[i]
-                if bar then
-                    CP_StampMinMax(bar, i - 1, i)
-                    CP_SetPowerValue(bar, cur, smoothInterp, true)
-                    if enteredRestricted then
-                        bar._msufEssenceValue = nil
-                        bar._msufEssenceValueVersion = nil
-                    end
-                    CP_StampAlpha(bar, filledAlpha)
-                    if enteredRestricted or bar._msufCPVisualVersion ~= visualVersion
-                        or bar._msufCPFullColor ~= nil then
-                        local slotR = useSlotColors and visual.slotR and visual.slotR[i]
-                        CP_StampStatusBarColor(bar, slotR or baseR,
-                            slotR and visual.slotG[i] or baseG,
-                            slotR and visual.slotB[i] or baseB, 1)
-                        CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
-                        bar._msufCPVisualVersion = visualVersion
-                        bar._msufCPFullColor = nil
-                    end
-                end
-            end
-            local txt = CP.text
-            if txt and CP_PaintResourceText(txt, visual, _cpDB.textMode, cur, maxPower, nil, WritePassthroughCount) then
-                CP_StampTextColor(txt, 1, 1, 1, 1)
-            end
-            --- A secret power value only blocks the full/empty rules; the combat
-            --- rule still has to run, so pass nil instead of dropping the check.
-            CP_CheckAutoHide(nil, maxPower)
+            PaintRestrictedEssence(cur, maxPower)
             return
         end
         _essRestricted = false
@@ -731,9 +740,12 @@ modeBuilders.SEGMENTED = function(E)
                     if isFilled then
                         CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
                     else
-                        local dR = chargedR * 0.45; if dR < 0.05 then dR = 0.05 end
-                        local dG = chargedG * 0.45; if dG < 0.05 then dG = 0.05 end
-                        local dB = chargedB * 0.45; if dB < 0.05 then dB = 0.05 end
+                        local dR = chargedR * 0.45
+                        if dR < 0.05 then dR = 0.05 end
+                        local dG = chargedG * 0.45
+                        if dG < 0.05 then dG = 0.05 end
+                        local dB = chargedB * 0.45
+                        if dB < 0.05 then dB = 0.05 end
                         CP_StampVertexColor(bar._bg, dR, dG, dB, 1)
                     end
                 elseif useSlotColors then
@@ -771,7 +783,24 @@ modeBuilders.SEGMENTED = function(E)
         end
         CP_CheckAutoHide(cur, maxPower)
     end
-    return { Update = Update, StopEssenceOnUpdates = StopEssenceOnUpdates, RuntimeTick = RuntimeTick }
+    local API = {
+        Update = Update,
+        StopEssenceOnUpdates = StopEssenceOnUpdates,
+        RuntimeTick = RuntimeTick,
+    }
+
+    modeBuilders.SEGMENTED = function(boundE)
+        E = boundE
+        _cpDB = E._cpDB or {}
+        PLAYER_CLASS, PT, CPConst, CP = E.PLAYER_CLASS, E.PT, E.CPConst, E.CP
+        UnitPower, UnitPartialPower, NotSecret = E.UnitPower, E.UnitPartialPower, E.NotSecret
+        CP_CheckAutoHide, GetSpec, GetTime = E.CP_CheckAutoHide, E.GetSpec, E.GetTime
+        GetPowerRegenForPowerType = E.GetPowerRegenForPowerType
+        nativeTimer = CreateNativeTimerSupport(E)
+        _essPrevCur, _essRechargeAt, _essRate = nil, 0, 0
+        _essActiveBar, _essNativeBar, _essRestricted = nil, nil, false
+        return API
+    end
 end
 
 --- MSUF_CP_Mode_Fractional.lua
@@ -849,9 +878,16 @@ modeBuilders.FRACTIONAL = function(E)
             local bar = CP.bars[i]
             if bar then
                 CP_StampMinMax(bar, 0, 1)
-                if i <= fullBars then CP_SetPowerValue(bar, 1, smoothInterp); CP_StampAlpha(bar, filledAlpha)
-                elseif i == fullBars + 1 and partial > 0.001 then CP_SetPowerValue(bar, partial, smoothInterp); CP_StampAlpha(bar, filledAlpha)
-                else CP_SetPowerValue(bar, 0, smoothInterp); CP_StampAlpha(bar, emptyAlpha) end
+                if i <= fullBars then
+                    CP_SetPowerValue(bar, 1, smoothInterp)
+                    CP_StampAlpha(bar, filledAlpha)
+                elseif i == fullBars + 1 and partial > 0.001 then
+                    CP_SetPowerValue(bar, partial, smoothInterp)
+                    CP_StampAlpha(bar, filledAlpha)
+                else
+                    CP_SetPowerValue(bar, 0, smoothInterp)
+                    CP_StampAlpha(bar, emptyAlpha)
+                end
                 if bar._msufCPVisualVersion ~= visualVersion or bar._msufCPFullColor ~= isFull then
                     local slotR = useSlotColors and visual.slotR and visual.slotR[i]
                     CP_StampStatusBarColor(bar, isFull and visual.fullR or (slotR or baseR),
@@ -884,28 +920,18 @@ end
 --- MSUF_CP_Mode_Rune.lua
 --- DK rune mode. Native durations drive fill/text; RuntimeTick is degraded-only.
 
-modeBuilders.RUNE = function(E)
+do
     local math_floor = math.floor
     local string_format = string.format
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local GetTime = E.GetTime
-    local GetRuneCooldown = E.GetRuneCooldown
-    local UnitHasVehicleUI = E.UnitHasVehicleUI
-    local CP_CheckAutoHide = E.CP_CheckAutoHide
-    local CP_ApplyRuneSortOrder = E.CP_ApplyRuneSortOrder
-    local GetRuneMap = E.GetRuneMap
-    local GetFilledAlpha = E.GetFilledAlpha
-    local GetEmptyAlpha = E.GetEmptyAlpha
-    local EnsureRuneText = E.EnsureRuneText
-    local ApplyFont = E.ApplyFont
-    --- Mists only: { Get = GetRuneType, colors = { [runeType] = { r, g, b } } }.
-    local RuneTypes = E.RuneTypes
-    local GetRuneType = RuneTypes and RuneTypes.Get
-    local RUNE_TYPE_COLORS = RuneTypes and RuneTypes.colors
-    local nativeTimer = CreateNativeTimerSupport(E)
-    local _runeTimeTextCache = {}
-    local runeTextPresentationDirty = false
+    --- Bound once by RUNE at controller load. RuneTypes (Mists only):
+    --- { Get = GetRuneType, colors = { [runeType] = { r, g, b } } }.
+    local E, CP, _cpDB, GetTime, GetRuneCooldown, UnitHasVehicleUI, CP_CheckAutoHide
+    local CP_ApplyRuneSortOrder, GetRuneMap, GetFilledAlpha, GetEmptyAlpha
+    local EnsureRuneText, ApplyFont
+    local RuneTypes, GetRuneType, RUNE_TYPE_COLORS
+    local nativeTimer
+    local _runeTimeTextCache
+    local runeTextPresentationDirty
 
     local function GetRuneTimeText(q)
         local s = _runeTimeTextCache[q]
@@ -1055,6 +1081,42 @@ modeBuilders.RUNE = function(E)
         CP.runeNativeAny = false
     end
 
+    --- Rune colours: the full colour, a per-slot colour, the Mists rune type
+    --- colour or the base colour, repainted when the visual, the full state or
+    --- a rune's type changed. The background is the compiled one (the Colors
+    --- page RUNES background, black by default), the colour Layout paints too;
+    --- Layout reopens this pass (CP._runeColorVersion) whenever it repaints.
+    local function RecolorRunes(maxPower, visual, isFull, typeColors, recolorAll, runeMap, visualVersion, bgA)
+        local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
+        local bgR, bgG, bgB = visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0
+        local useSlotColors = visual and visual.useSlotColors == true
+        for displayIdx = 1, maxPower do
+            local bar = CP.bars[displayIdx]
+            if not bar then break end
+            local typeColor = typeColors and typeColors[GetRuneType(runeMap[displayIdx])] or nil
+            if recolorAll or bar._msufCPRuneTypeColor ~= typeColor then
+                local slotR = useSlotColors and visual.slotR and visual.slotR[displayIdx]
+                local r, g, bl = baseR, baseG, baseB
+                if isFull then
+                    r, g, bl = visual.fullR, visual.fullG, visual.fullB
+                elseif slotR then
+                    r, g, bl = slotR, visual.slotG[displayIdx], visual.slotB[displayIdx]
+                elseif typeColor then
+                    r, g, bl = typeColor[1], typeColor[2], typeColor[3]
+                end
+                CP_StampStatusBarColor(bar, r, g, bl, 1)
+                CP_StampVertexColor(bar._bg, bgR, bgG, bgB, bgA)
+                bar._msufCPVisualVersion = visualVersion
+                bar._msufCPFullColor = isFull
+                bar._msufCPRuneTypeColor = typeColor
+            end
+        end
+        CP._runeColorVersion = visualVersion
+        CP._runeFullColor = isFull
+        CP._runeTypeColored = typeColors ~= nil or nil
+        CP.runeTypesDirty = nil
+    end
+
     local function Update(powerType, maxPower)
         if maxPower <= 0 then return end
 
@@ -1062,8 +1124,6 @@ modeBuilders.RUNE = function(E)
         CP_ApplyRuneSortOrder(b.runeSortOrder)
 
         local visual = CP_GetVisual(E)
-        local baseR, baseG, baseB = visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
-        local useSlotColors = visual and visual.useSlotColors == true
         local bgA = visual and visual.bgAlpha or 0.3
         local showRuneTime = not visual or visual.runeShowTime ~= false
         local filledAlpha = visual and visual.filledAlpha or GetFilledAlpha()
@@ -1186,31 +1246,18 @@ modeBuilders.RUNE = function(E)
             and not (type(overrides) == "table" and type(overrides.RUNES) == "table")
             and RUNE_TYPE_COLORS or nil
         local recolorAll = CP._runeColorVersion ~= visualVersion or CP._runeFullColor ~= isFull
-        if recolorAll or typeColors or CP._runeTypeColored then
-            for displayIdx = 1, maxPower do
-                local bar = CP.bars[displayIdx]
-                if not bar then break end
-                local typeColor = typeColors and typeColors[GetRuneType(runeMap[displayIdx])] or nil
-                if recolorAll or bar._msufCPRuneTypeColor ~= typeColor then
-                    local slotR = useSlotColors and visual.slotR and visual.slotR[displayIdx]
-                    local r, g, bl = baseR, baseG, baseB
-                    if isFull then
-                        r, g, bl = visual.fullR, visual.fullG, visual.fullB
-                    elseif slotR then
-                        r, g, bl = slotR, visual.slotG[displayIdx], visual.slotB[displayIdx]
-                    elseif typeColor then
-                        r, g, bl = typeColor[1], typeColor[2], typeColor[3]
-                    end
-                    CP_StampStatusBarColor(bar, r, g, bl, 1)
-                    CP_StampVertexColor(bar._bg, 0, 0, 0, bgA)
-                    bar._msufCPVisualVersion = visualVersion
-                    bar._msufCPFullColor = isFull
-                    bar._msufCPRuneTypeColor = typeColor
-                end
+        --- A rune changes its type only with RUNE_TYPE_UPDATE (the controller sets
+        --- CP.runeTypesDirty), so a RUNE_POWER_UPDATE reads no rune type.
+        local recolor = recolorAll
+        if not recolor then
+            if typeColors then
+                recolor = CP.runeTypesDirty == true or not CP._runeTypeColored
+            else
+                recolor = CP._runeTypeColored == true
             end
-            CP._runeColorVersion = visualVersion
-            CP._runeFullColor = isFull
-            CP._runeTypeColored = typeColors ~= nil or nil
+        end
+        if recolor then
+            RecolorRunes(maxPower, visual, isFull, typeColors, recolorAll, runeMap, visualVersion, bgA)
         end
 
         local txt = CP.text
@@ -1219,11 +1266,27 @@ modeBuilders.RUNE = function(E)
         CP_CheckAutoHide(readyCount, maxPower)
     end
 
-    return {
+    local API = {
         Update = Update,
         StopOnUpdates = StopOnUpdates,
         RuntimeTick = RuntimeTick,
     }
+
+    modeBuilders.RUNE = function(boundE)
+        E = boundE
+        CP, _cpDB, GetTime = E.CP, E._cpDB, E.GetTime
+        GetRuneCooldown, UnitHasVehicleUI = E.GetRuneCooldown, E.UnitHasVehicleUI
+        CP_CheckAutoHide, CP_ApplyRuneSortOrder = E.CP_CheckAutoHide, E.CP_ApplyRuneSortOrder
+        GetRuneMap, GetFilledAlpha, GetEmptyAlpha = E.GetRuneMap, E.GetFilledAlpha, E.GetEmptyAlpha
+        EnsureRuneText, ApplyFont = E.EnsureRuneText, E.ApplyFont
+        RuneTypes = E.RuneTypes
+        GetRuneType = RuneTypes and RuneTypes.Get
+        RUNE_TYPE_COLORS = RuneTypes and RuneTypes.colors
+        nativeTimer = CreateNativeTimerSupport(E)
+        _runeTimeTextCache = {}
+        runeTextPresentationDirty = false
+        return API
+    end
 end
 
 --- MSUF_CP_Mode_Aura.lua
@@ -1231,24 +1294,16 @@ end
 --- Secret-safe: C_UnitAuras fields (applications) and C_Spell returns can be
 --- secret in Midnight/12.1. All Lua-side comparisons/arithmetic guarded with NotSecret.
 
-modeBuilders.AURA = function(E)
+do
     local type = type
     local tonumber = tonumber
-    local GetTime = E.GetTime
-    local CP = E.CP
-    local _cpDB = E._cpDB
-    local C_UnitAuras = E.C_UnitAuras
-    local GetTrackedPlayerAura = E.GetTrackedPlayerAura
-    local C_Spell = E.C_Spell
-    local CPK = E.CPK
-    local NotSecret = E.NotSecret
-    local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
-    local ResolveMWAbove5Color = E.ResolveMWAbove5Color
-    local CP_CheckAutoHide = E.CP_CheckAutoHide
     local math_floor = math.floor
-    --- Devourer reads the Collapsing Star cost on every Meta aura update.
-    local GetCollapsingStarCost = GetCollapsingStarCost
-    local MAX_FRAGMENT_NOTCHES = (E.CPConst and tonumber(E.CPConst.MAX_FRAGMENT_NOTCHES)) or 64
+    --- Bound once by AURA at controller load. Devourer reads the Collapsing
+    --- Star cost on every Meta aura update.
+    local E, GetTime, CP, _cpDB, C_UnitAuras, GetTrackedPlayerAura, C_Spell, CPK, NotSecret
+    local ResolveClassPowerBgColor, ResolveMWAbove5Color, CP_CheckAutoHide
+    local CollapsingStarCost
+    local MAX_FRAGMENT_NOTCHES
     --- Top of the Pip gap slider; the divider budget is shared across it.
     local MAX_PIP_GAP = 8
 
@@ -1267,16 +1322,11 @@ modeBuilders.AURA = function(E)
         else CP_SetPassthroughText(txt, value) end
     end
 
-    --- Resolved once, on the Classic clients only: no Classic game type loads a
-    --- Blizzard call site for either entry point, so the Classic build must not
-    --- assume them and keeps the client decision off the per-pip render path.
+    --- Resolved once by AURA, on the Classic clients only: no Classic game type
+    --- loads a Blizzard call site for either entry point, so the Classic build
+    --- must not assume them and keeps the client decision off the per-pip
+    --- render path.
     local ClassicSpellCastCount, ClassicSpellMaxApplications
-    if IS_CLASSIC then
-        local castCount = C_Spell and C_Spell.GetSpellCastCount
-        if type(castCount) == "function" then ClassicSpellCastCount = castCount end
-        local maxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
-        if type(maxApplications) == "function" then ClassicSpellMaxApplications = maxApplications end
-    end
 
     --- Devourer's fragment separators.
     --- Its Soul Fragment maximum is talent-dependent (30/35/50), far above
@@ -1289,7 +1339,7 @@ modeBuilders.AURA = function(E)
     --- count, so a stack change costs one comparison and touches no texture;
     --- only a Meta transition, a changed Collapsing Star cost or a relayout
     --- moves a notch.
-    local fragCount = -1
+    local fragCount
     local function ApplyFragmentNotches(count)
         local bar = CP.bars and CP.bars[1]
         if not (bar and type(bar.CreateTexture) == "function") then return end
@@ -1365,11 +1415,9 @@ modeBuilders.AURA = function(E)
         for i = shown + 1, #pool do pool[i]:Hide() end
     end
 
-    --- Layout owns the geometry, so it hands the new one straight back here
-    --- instead of leaving the notches stale until the next aura event. Passing
-    --- false is how every other resource and every shape mode drops them again
-    --- when it takes the single bar over.
-    CP.RefreshFragmentNotches = function(active)
+    --- Passing false is how every other resource and every shape mode drops the
+    --- notches again when it takes the single bar over.
+    local function RefreshFragmentNotches(active)
         ApplyFragmentNotches((active and fragCount > 1) and fragCount or 0)
     end
 
@@ -1389,15 +1437,8 @@ modeBuilders.AURA = function(E)
     end
 
     local function ResolveDHColor(isVoidMeta)
-        local ov = _cpDB.colorOverrides
-        if type(ov) == "table" then
-            local token = isVoidMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS"
-            local c = ov[token]
-            if type(c) == "table" then
-                local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
-            end
-        end
+        local r, g, b = OverrideRGB(_cpDB.colorOverrides, isVoidMeta and "SOUL_FRAGMENTS_META" or "SOUL_FRAGMENTS")
+        if r then return r, g, b end
         if isVoidMeta then return 0.60, 0.20, 0.93 end
         return 0.00, 0.80, 0.00
     end
@@ -1533,8 +1574,8 @@ modeBuilders.AURA = function(E)
         local progressMax
         if inMeta then
             --- Collapsing Star's cost can change while Meta is active.
-            if type(GetCollapsingStarCost) == "function" then
-                local rawCost = GetCollapsingStarCost()
+            if type(CollapsingStarCost) == "function" then
+                local rawCost = CollapsingStarCost()
                 if NotSecret(rawCost) and rawCost ~= nil then progressMax = tonumber(rawCost) end
             end
             local whispers = GetPlayerAura(CPK.SPELL.SILENCE_THE_WHISPERS)
@@ -1599,7 +1640,33 @@ modeBuilders.AURA = function(E)
         CP_CheckAutoHide(cur, 1)
     end
 
-    return { UpdateSegmented = UpdateSegmented, UpdateSingle = UpdateSingle }
+    local API = {
+        UpdateSegmented = UpdateSegmented,
+        UpdateSingle = UpdateSingle,
+    }
+
+    modeBuilders.AURA = function(boundE)
+        E = boundE
+        GetTime, CP, _cpDB = E.GetTime, E.CP, E._cpDB
+        C_UnitAuras, GetTrackedPlayerAura, C_Spell = E.C_UnitAuras, E.GetTrackedPlayerAura, E.C_Spell
+        CPK, NotSecret = E.CPK, E.NotSecret
+        ResolveClassPowerBgColor, ResolveMWAbove5Color = E.ResolveClassPowerBgColor, E.ResolveMWAbove5Color
+        CP_CheckAutoHide = E.CP_CheckAutoHide
+        CollapsingStarCost = GetCollapsingStarCost
+        MAX_FRAGMENT_NOTCHES = (E.CPConst and tonumber(E.CPConst.MAX_FRAGMENT_NOTCHES)) or 64
+        ClassicSpellCastCount, ClassicSpellMaxApplications = nil, nil
+        if IS_CLASSIC then
+            local castCount = C_Spell and C_Spell.GetSpellCastCount
+            if type(castCount) == "function" then ClassicSpellCastCount = castCount end
+            local maxApplications = C_Spell and C_Spell.GetSpellMaxCumulativeAuraApplications
+            if type(maxApplications) == "function" then ClassicSpellMaxApplications = maxApplications end
+        end
+        fragCount = -1
+        --- Layout owns the geometry, so it hands the new one straight back here
+        --- instead of leaving the notches stale until the next aura event.
+        CP.RefreshFragmentNotches = RefreshFragmentNotches
+        return API
+    end
 end
 
 --- 12.1 Ebon presentation host. Aura discovery and the countdown are owned by
@@ -1679,7 +1746,7 @@ modeBuilders.CONTINUOUS = function(E)
             if mx <= 0 then mx = 100 end
             CP_StampMinMax(bar, 0, mx)
         else
-            CP_StampMinMax(bar, 0, rawMx)
+            CP_SetSecretMinMax(bar, 0, rawMx)
             mx = nil
         end
         local visual = CP_GetVisual(E)
@@ -1762,7 +1829,8 @@ modeBuilders.CONTINUOUS = function(E)
             local visualVersion = visual and visual.version or 0
             if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
                 CP_StampStatusBarColor(bar, visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1, 1)
-                CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
+                CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0,
+                    visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
                 for i = 2, CP.maxBars do
                     local other = CP.bars[i]
                     if other then CP_StampShown(other, false) end
@@ -1778,8 +1846,15 @@ modeBuilders.CONTINUOUS = function(E)
             if txt then
                 local showText = visual and visual.showText == true
                 if showText and cur and mx then
-                    txt:SetFormattedText("%d / %d", cur, mx)
-                    txt._msufCPText = nil
+                    --- An explicit Class Resource text mode wins, as on every
+                    --- other bar; AUTO keeps the signed current / max.
+                    local textMode = _cpDB.textMode
+                    if textMode then
+                        CP_ApplyConfiguredText(textMode, txt, cur, mx)
+                    else
+                        txt:SetFormattedText("%d / %d", cur, mx)
+                        txt._msufCPText = nil
+                    end
                     CP_StampShown(txt, true)
                 else
                     CP_StampShown(txt, false)
@@ -1813,20 +1888,14 @@ modeBuilders.STAGGER = function(E)
     local STAGGER_CONST = E.STAGGER_CONST or {}
     local GetFilledAlpha = E.GetFilledAlpha
 
-    local staggerCachedTier = 0
+    --- The tier colour is resolved once per tier and compiled visual: every
+    --- FullRefresh, mode entry and colour edit compiles a new visual version,
+    --- so a colour edit or a return to Brewmaster repaints the current tier.
+    local staggerCachedTier, staggerCachedVersion = 0, nil
 
     local function ResolveStaggerColor(tier)
-        local ov = _cpDB.colorOverrides
-        if type(ov) == "table" then
-            local token = STAGGER_CONST.TOKENS and STAGGER_CONST.TOKENS[tier]
-            local c = token and ov[token]
-            if type(c) == "table" then
-                local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-                if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-                    return r, g, b
-                end
-            end
-        end
+        local r, g, b = OverrideRGB(_cpDB.colorOverrides, STAGGER_CONST.TOKENS and STAGGER_CONST.TOKENS[tier])
+        if r then return r, g, b end
         local def = STAGGER_CONST.COLOR_DEFAULTS and STAGGER_CONST.COLOR_DEFAULTS[tier]
         if def then
             return def[1], def[2], def[3]
@@ -1856,7 +1925,7 @@ modeBuilders.STAGGER = function(E)
             if mx <= 0 then mx = 1 end
             CP_StampMinMax(bar, 0, mx)
         else
-            CP_StampMinMax(bar, 0, rawMx)
+            CP_SetSecretMinMax(bar, 0, rawMx)
         end
 
         if curSafe then
@@ -1870,6 +1939,7 @@ modeBuilders.STAGGER = function(E)
         local visual = CP_GetVisual(E)
         CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
         CP_StampShown(bar, true)
+        local visualVersion = visual and visual.version or 0
 
         if curSafe and mxSafe then
             local perc = cur / mx
@@ -1878,14 +1948,13 @@ modeBuilders.STAGGER = function(E)
             elseif perc >= (STAGGER_CONST.YELLOW_TRANSITION or 0.3) then tier = 2
             else tier = 1 end
 
-            if tier ~= staggerCachedTier then
-                staggerCachedTier = tier
+            if tier ~= staggerCachedTier or visualVersion ~= staggerCachedVersion then
+                staggerCachedTier, staggerCachedVersion = tier, visualVersion
                 local r, g, b = ResolveStaggerColor(tier)
                 CP_StampStatusBarColor(bar, r, g, b, 1)
             end
         end
 
-        local visualVersion = visual and visual.version or 0
         if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
             CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0, visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
             for i = 2, CP.maxBars do

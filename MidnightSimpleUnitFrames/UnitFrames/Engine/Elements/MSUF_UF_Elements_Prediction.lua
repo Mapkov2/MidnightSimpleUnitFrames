@@ -28,6 +28,10 @@ local Enum = _G.Enum
 local CurveAPI = _G.C_CurveUtil
 local LuaCurveType = Enum and Enum.LuaCurveType
 local ReadUnitExistsCached = UF.ReadUnitExistsCached
+-- The saved overlay anchor modes (MSUF_UF_Shared.lua). The layout, clip and update
+-- paths compare the follow modes per event, so those two are plain upvalues.
+local ABSORB_ANCHOR = UF.Shared.ABSORB_ANCHOR
+local FOLLOW_HP, FOLLOW_HP_OVERFLOW = ABSORB_ANCHOR.FOLLOW_HP, ABSORB_ANCHOR.FOLLOW_HP_OVERFLOW
 local UnitMissing
 do
   local issv = _G.issecretvalue
@@ -212,17 +216,17 @@ local function SetColorCached(bar, r, g, b, a)
 end
 
 local function NormalizeAnchorMode(mode, fallback)
-  mode = tonumber(mode) or fallback or 2
-  if mode < 1 or mode > 5 then
-    return fallback or 2
+  mode = tonumber(mode) or fallback or ABSORB_ANCHOR.RIGHT
+  if mode < ABSORB_ANCHOR.LEFT or mode > ABSORB_ANCHOR.REVERSE_FROM_MAX then
+    return fallback or ABSORB_ANCHOR.RIGHT
   end
   return mode
 end
 
 local function AnchorModeReverse(mode, hpReverse)
-  if mode == 1 then
+  if mode == ABSORB_ANCHOR.LEFT then
     return false
-  elseif mode == 5 then
+  elseif mode == ABSORB_ANCHOR.REVERSE_FROM_MAX then
     return hpReverse ~= true
   end
   return true
@@ -233,7 +237,7 @@ local function FollowModeReverse(hpReverse)
 end
 
 local function ReverseForMode(mode, hpReverse)
-  if mode == 3 or mode == 4 then
+  if mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW then
     return FollowModeReverse(hpReverse)
   end
   return AnchorModeReverse(mode, hpReverse)
@@ -521,6 +525,9 @@ local function EnsureOverAbsorbGlow(frame)
   holder:Hide()
   local oldGlow = frame.overAbsorbGlow
   if oldGlow and oldGlow ~= glow and oldGlow.Hide then oldGlow:Hide() end
+  -- Only this function sets the holder's status texture, so the handle stays
+  -- valid for the holder's life; the health-tick sinks reuse it.
+  holder._msufOverAbsorbGlowTexture = glow
   frame.overAbsorbGlowBar = holder
   frame.overAbsorbGlow = glow
   return holder
@@ -633,6 +640,94 @@ local function ReadHealthForOverAbsorb(frame, unit, hp, maxHP)
   return hp, maxHP, hpSecret, maxSecret
 end
 
+-- Over-absorb glow with protected values (Midnight absorbs, and often health,
+-- are secret). The prediction calculator's MissingHealth clamp reports whether
+-- the absorb overflows the missing health, incoming heals counted: `clamped`,
+-- approximately the plain rule (hp + incoming + absorb >= max) as a possibly
+-- secret boolean. Incoming heals: the plain path adds the player's own
+-- (ReadIncomingHeals) unless "all healers" is on; the clamp subtracts the
+-- calculator's incoming heals, most likely the all-units amount (the healer
+-- passed to UnitGetDetailedHealPrediction only selects amountFromHealer;
+-- UnitDocumentation, UnitHealPredictionCalculatorAPIDocumentation); Blizzard's
+-- rule (CompactUnitFrame.lua:1257) adds all incoming heals less heal absorbs,
+-- so the plain path shares only its >= with it.
+-- The calculator documents `clamped` as "in excess of the clamp boundary"
+-- (UnitHealPredictionCalculatorAPIDocumentation). When the health and
+-- incoming-heal inputs agree with the plain path's, an absorb that exactly
+-- fills the missing health is the case where it differs from the plain rule's
+-- >=; no secret-safe API reports that edge. Its inputs need not agree: see
+-- the next paragraph on its health source. Without the full-health
+-- stripe a step curve keeps the plain rule that full health shows no partial
+-- glow; with the stripe, `clamped` is already the union of both, because at
+-- full health every positive absorb is clamped.
+--
+-- The step curve reads PREDICTED health, like the plain path, the stripe and
+-- the health bar (UnitHealthPercent usePredicted): the calculator's own health
+-- source is undocumented, so it supplies only the overflow flag. A health tick
+-- costs four native calls (2026-10-02 raid trace: six, about 30 % of core CPU):
+-- one calculator fill, its flag, the curve, and one SetAlphaFromBoolean that
+-- takes the curve result as its alphaIfTrue (SecretArguments
+-- AllowedWhenTainted, SimpleRegionAPIDocumentation), so the texture alpha is
+-- clamped AND partial in one sink and the holder stays at full alpha. The glow
+-- texture handle is the one EnsureOverAbsorbGlow created.
+-- Lua never compares, adds or branches on a protected value here.
+local overAbsorbPartialCurve
+local function UngateOverAbsorbGlow(holder)
+  if holder._msufOverAbsorbGlowGated == true then
+    local glow = holder._msufOverAbsorbGlowTexture
+    if glow then glow:SetAlpha(1) end
+    holder._msufOverAbsorbGlowGated = nil
+  end
+end
+
+local function ShowProtectedOverAbsorb(frame, holder, unit, stripeEnabled)
+  if issecretvalue(unit) == true or not UnitGetDetailedHealPrediction then return false end
+  local calc = frame._msufPredictionOverAbsorbCalc
+  if not calc then
+    calc = CreateUnitHealPredictionCalculator and CreateUnitHealPredictionCalculator()
+    if not (calc and calc.SetDamageAbsorbClampMode and calc.GetDamageAbsorbs) then return false end
+    calc:SetDamageAbsorbClampMode(UnitDamageAbsorbClampMode and UnitDamageAbsorbClampMode.MissingHealth or 0)
+    frame._msufPredictionOverAbsorbCalc = calc
+  end
+  local glow = holder._msufOverAbsorbGlowTexture
+  if not (glow and glow.SetAlphaFromBoolean) then return false end
+  local curve
+  if not stripeEnabled then
+    curve = overAbsorbPartialCurve
+    if not curve then
+      if not (CurveAPI and CurveAPI.CreateCurve and UnitHealthPercent) then return false end
+      curve = CurveAPI.CreateCurve()
+      if not curve then return false end
+      if curve.SetType then curve:SetType(LuaCurveType and LuaCurveType.Step or 1) end
+      -- Step: every partial health keeps 1, exact max health drops to 0.
+      curve:AddPoint(0, 1)
+      curve:AddPoint(1, 0)
+      overAbsorbPartialCurve = curve
+    end
+  end
+  if frame._msufPredictionAllHealers == true then
+    UnitGetDetailedHealPrediction(unit, nil, calc)
+  else
+    UnitGetDetailedHealPrediction(unit, PREDICTION_HEALER_UNIT, calc)
+  end
+  local _, clamped = calc:GetDamageAbsorbs()
+  if curve then
+    glow:SetAlphaFromBoolean(clamped, UnitHealthPercent(unit, true, curve), 0)
+  else
+    glow:SetAlphaFromBoolean(clamped, 1, 0)
+  end
+  holder._msufOverAbsorbGlowGated = true
+  -- The flag sink carries both gates; the holder itself stays opaque, which
+  -- also retires the stripe's full-health gate on it.
+  SetOverAbsorbAlpha(holder, 1, false)
+  frame._msufPredictionFullHealthAlphaReady = nil
+  if holder._msufOverAbsorbShown ~= true then
+    holder:SetShown(true)
+    holder._msufOverAbsorbShown = true
+  end
+  return true
+end
+
 local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refreshFullHealthAlpha,
   writeAbsorbValue, knownAbsorbSecret)
   if frame and refreshFullHealthAlpha == true then
@@ -679,17 +774,23 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       end
     end
   end
-  -- The partial-health over-absorb overlay has no secret-safe arithmetic path:
-  -- its existing result for any protected operand is always hidden. Reject
-  -- that exact state, and the overwhelmingly common plain zero-shield state,
-  -- before health/max lookups and layout checks.
+  -- Reject the overwhelmingly common plain zero-shield state before
+  -- health/max lookups and layout checks. A protected operand has no Lua
+  -- arithmetic path: the calculator flag renders it (ShowProtectedOverAbsorb).
   if not fullHealthStripeEnabled then
-    if issecretvalue(hp) == true
-      or issecretvalue(maxHP) == true
-      or absorbSecret
-      or type(absorb) ~= "number"
-      or absorb <= 0 then
+    if not absorbSecret and (type(absorb) ~= "number" or absorb <= 0) then
       HideOverAbsorbGlow(frame)
+      return
+    end
+    if absorbSecret or issecretvalue(hp) == true or issecretvalue(maxHP) == true then
+      if not (holder and hpBar
+          and holder._msufOverAbsorbReverse == reverse
+          and holder._msufOverAbsorbAnchor == hpBar) then
+        holder = PositionOverAbsorbGlow(frame, reverse)
+      end
+      if not (holder and ShowProtectedOverAbsorb(frame, holder, unit, false)) then
+        HideOverAbsorbGlow(frame)
+      end
       return
     end
   end
@@ -714,12 +815,14 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     -- UnitHealthMax recovery at all.
     if writeAbsorbValue == true
       and absorbSecret
+      and not overAbsorbEnabled
       and holder and hpBar
       and holder._msufOverAbsorbReverse == reverse
       and holder._msufOverAbsorbAnchor == hpBar
       and frame._msufPredictionFullHealthAlphaReady == true
       and frame._msufPredictionFullHealthAlphaDirty ~= true
       and frame._msufPredictionFullHealthAlphaUnit == unit then
+      UngateOverAbsorbGlow(holder)
       if holder._msufOverAbsorbShown ~= true then
         holder:SetShown(true)
         holder._msufOverAbsorbShown = true
@@ -733,6 +836,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
   -- and skip general health recovery/threshold work on every health event.
   if cfg and cfg.test ~= true
     and fullHealthStripeEnabled
+    and not overAbsorbEnabled
     and issecretvalue(unit) ~= true
     and (issecretvalue(hp) == true or issecretvalue(maxHP) == true)
     and holder and hpBar
@@ -758,6 +862,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
       frame._msufPredictionFullHealthAlphaDirty = nil
       frame._msufPredictionFullHealthAlphaUnit = unit
     end
+    UngateOverAbsorbGlow(holder)
     if holder._msufOverAbsorbShown ~= true then
       holder:SetShown(true)
       holder._msufOverAbsorbShown = true
@@ -786,6 +891,9 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
   -- values, UnitHealthPercent evaluates a step curve and SetAlpha accepts the
   -- resulting secret scalar. Rendering therefore performs the logical AND.
   if absorbSecret or hpSecret or maxSecret then
+    if overAbsorbEnabled and ShowProtectedOverAbsorb(frame, holder, unit, fullHealthStripeEnabled) then
+      return
+    end
     if fullHealthStripeEnabled then
       local alphaReady = frame._msufPredictionFullHealthAlphaReady == true
         and frame._msufPredictionFullHealthAlphaDirty ~= true
@@ -810,6 +918,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
         frame._msufPredictionFullHealthAlphaUnit = issecretvalue(unit) ~= true and unit or nil
       end
       if frame._msufPredictionFullHealthAlphaReady == true then
+        UngateOverAbsorbGlow(holder)
         if holder._msufOverAbsorbShown ~= true then
           holder:SetShown(true)
           holder._msufOverAbsorbShown = true
@@ -836,6 +945,7 @@ local function UpdateOverAbsorbGlow(frame, cfg, unit, hp, maxHP, absorb, refresh
     return
   end
   SetOverAbsorbAlpha(holder, 1, false)
+  UngateOverAbsorbGlow(holder)
   if holder._msufOverAbsorbShown ~= true then
     holder:SetShown(true)
     holder._msufOverAbsorbShown = true
@@ -1062,8 +1172,8 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
   if not (bar and hpBar) then
     return
   end
-  local followSource = (mode == 3 or mode == 4) and followBar or nil
-  local follow = (mode == 3 or mode == 4) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
+  local followSource = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and followBar or nil
+  local follow = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
   local vertical = frame._msufPredictionVertical == true
   -- Extent along the fill axis only: width horizontally, height vertically. The
   -- cross axis is pinned by the corner anchors, so it is never measured. Served
@@ -1071,7 +1181,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
   local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
   local anchorTarget = follow or hpBar
   local parent = hpBar
-  if mode == 4 then
+  if mode == FOLLOW_HP_OVERFLOW then
     parent = EnsureOverflowClip(frame, hpBar, vertical,
       frame._msufPredictionHpReverse == true, width) or frame._msufHealthVisualRoot or frame
   end
@@ -1097,7 +1207,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar, heig
 
   local parentChanged = SetParentCached(bar, parent)
   SyncBarLayer(frame, hpBar, bar, levelOffset, parentChanged)
-  if hpBar.SetClipsChildren and mode == 3 and hpBar._msufPredictionClipsChildren ~= true then
+  if hpBar.SetClipsChildren and mode == FOLLOW_HP and hpBar._msufPredictionClipsChildren ~= true then
     hpBar:SetClipsChildren(true)
     hpBar._msufPredictionClipsChildren = true
   end
@@ -1193,14 +1303,14 @@ local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, f
   if not (bar and hpBar) then
     return false
   end
-  local followSource = (mode == 3 or mode == 4) and followBar or nil
-  local follow = (mode == 3 or mode == 4) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
+  local followSource = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and followBar or nil
+  local follow = (mode == FOLLOW_HP or mode == FOLLOW_HP_OVERFLOW) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
   local vertical = frame._msufPredictionVertical == true
   -- Cached along-axis extent (see LayoutBar): this guard is the per-event hot
   -- path, so it must not measure the bar natively.
   local width = HpAlongSize(hpBar, vertical, tonumber(frame._msufPredictionFrameWidth))
   local anchorTarget = follow or hpBar
-  local parent = (mode == 4) and OverflowParent(frame) or hpBar
+  local parent = (mode == FOLLOW_HP_OVERFLOW) and OverflowParent(frame) or hpBar
   height = height or 0
   offsetY = offsetY or 0
   return bar._msufPredictionMode == mode
@@ -1230,10 +1340,10 @@ local function LayoutHealAbsorbBar(frame, bar, levelOffset, hpReverse, mode, hei
   if not (bar and hpBar) then
     return
   end
-  mode = mode or 3
+  mode = mode or FOLLOW_HP
   height = height or 0
   offsetY = offsetY or 0
-  if mode ~= 3 then
+  if mode ~= FOLLOW_HP then
     bar._msufHealAbsorbMode = nil
     return LayoutBar(frame, bar, levelOffset, mode, ReverseForMode(mode, hpReverse), nil, height, offsetY)
   end
@@ -1339,15 +1449,15 @@ local function MixedFollowNeedsClamp(cfg, healMode, absorbMode)
   return cfg ~= nil
     and cfg.heal == true
     and cfg.absorb == true
-    and absorbMode == 3
-    and healMode ~= 3
-    and healMode ~= 4
+    and absorbMode == FOLLOW_HP
+    and healMode ~= FOLLOW_HP
+    and healMode ~= FOLLOW_HP_OVERFLOW
 end
 
 local function NeedsHealthEvent(cfg)
   if not (cfg and cfg.absorb == true) then return false end
-  local healMode = NormalizeAnchorMode(cfg.healAnchorMode, 3)
-  local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+  local healMode = NormalizeAnchorMode(cfg.healAnchorMode, FOLLOW_HP)
+  local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, ABSORB_ANCHOR.RIGHT)
   return cfg.overAbsorbOverlay == true
     or cfg.fullHealthAbsorbStripe == true
     or MixedFollowNeedsClamp(cfg, healMode, absorbMode)
@@ -1487,7 +1597,6 @@ local function ClearPredictionCache(frame)
   frame._msufPredictionAbsorbSecret = nil
   frame._msufPredictionHealAbsorb = nil
   frame._msufPredictionHealthVisualActive = nil
-  frame._msufPredictionPartialGlowHealthActive = nil
   frame._msufPredictionHealthMax = nil
   frame._msufPredictionHealthMaxUnit = nil
   ClearBarValueCache(frame.incomingHealBar)
@@ -1567,10 +1676,10 @@ local function CompilePredictionRuntime(frame, cfg, spec)
   end
   cfg = cfg or {}
   local hpReverse = spec and spec.health and spec.health.reverse == true
-  local healMode = NormalizeAnchorMode(cfg.healAnchorMode, 3)
-  local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
-  local healAbsorbMode = NormalizeAnchorMode(cfg.healAbsorbAnchorMode, 3)
-  local followAbsorb = cfg.absorb == true and (absorbMode == 3 or absorbMode == 4)
+  local healMode = NormalizeAnchorMode(cfg.healAnchorMode, FOLLOW_HP)
+  local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, ABSORB_ANCHOR.RIGHT)
+  local healAbsorbMode = NormalizeAnchorMode(cfg.healAbsorbAnchorMode, FOLLOW_HP)
+  local followAbsorb = cfg.absorb == true and (absorbMode == FOLLOW_HP or absorbMode == FOLLOW_HP_OVERFLOW)
   local mixedFollowClamp = MixedFollowNeedsClamp(cfg, healMode, absorbMode)
   frame._msufPredictionRuntimeCfg = cfg
   frame._msufPredictionFrameWidth = tonumber(spec and spec.width) or nil
@@ -1741,8 +1850,8 @@ function Prediction.Apply(frame, spec)
     -- work rather than on the first protected combat health event.
     EnsureFullHealthCurve()
   end
-  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, 3)
-  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, FOLLOW_HP)
+  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, ABSORB_ANCHOR.RIGHT)
 
   ApplyPredictionBar(frame, cfg, spec, frame.incomingHealBar, cfg.heal,
     1, healMode, frame._msufPredictionHealReverse,
@@ -1821,7 +1930,7 @@ local function UpdateMixedFollowHealthValue(frame, unit, cfg, seedHP, seedMaxHP)
 
   local follow = cfg.heal == true and frame.incomingHealBar
     and frame.incomingHealBar._msufShown == true and frame.incomingHealBar or nil
-  LayoutBarIfNeeded(frame, bar, 2, 3, frame._msufPredictionAbsorbReverse, follow,
+  LayoutBarIfNeeded(frame, bar, 2, FOLLOW_HP, frame._msufPredictionAbsorbReverse, follow,
     frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
   local maxHP = seedMaxHP
   if bar._msufMaxReady ~= true and issecretvalue(maxHP) ~= true and maxHP == nil then
@@ -2091,6 +2200,12 @@ UpdateFullHealthStripeFast = function(frame, event, unit, seedHP, seedMaxHP)
     end
     SetOverAbsorbAlpha(holder, 1, false)
   else
+    -- With the partial overlay on, protected health renders through the
+    -- calculator flag in the general path.
+    if frame._msufPredictionOverAbsorbOverlay == true then
+      return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true,
+        nil, absorbSecret)
+    end
     -- A protected percentage cannot be passed into LuaCurve:Evaluate from
     -- addon code: that call is tainted even though the value itself came from
     -- UnitHealthPercent. Re-enter the native API with the curve so Blizzard
@@ -2117,6 +2232,7 @@ UpdateFullHealthStripeFast = function(frame, event, unit, seedHP, seedMaxHP)
   frame._msufPredictionFullHealthAlphaReady = true
   frame._msufPredictionFullHealthAlphaDirty = nil
   frame._msufPredictionFullHealthAlphaUnit = unit
+  UngateOverAbsorbGlow(holder)
   if holder._msufOverAbsorbShown ~= true then
     holder:SetShown(true)
     holder._msufOverAbsorbShown = true
@@ -2140,9 +2256,23 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
     return Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
   end
   local absorb = frame._msufPredictionAbsorb
-  -- This compiled non-stripe route can open only for the plain-positive absorb
-  -- verdict published by the data-event owner. Protected/non-positive payloads
-  -- never pass the health-visual gate, so do not reclassify them here.
+  -- This compiled non-stripe route opens for the plain-positive absorb verdict
+  -- published by the data-event owner, and for a protected absorb while the
+  -- partial overlay is on: that one renders through the calculator flag and
+  -- must never reach the plain dedupe compare below. With the glow anchored
+  -- for the live layout, a protected tick is exactly the calculator render;
+  -- anything else takes the authoritative UpdateOverAbsorbGlow.
+  if frame._msufPredictionAbsorbSecret == true then
+    local holder = frame.overAbsorbGlowBar
+    if holder and frame._msufPredictionOverAbsorbOverlay == true
+      and holder._msufOverAbsorbReverse == (frame._msufPredictionHpReverse == true)
+      and holder._msufOverAbsorbAnchor == (frame.hpBar or frame.Health) then
+      frame._msufPredictionFullHealthAlphaDirty = true
+      if not ShowProtectedOverAbsorb(frame, holder, unit, false) then HideOverAbsorbGlow(frame) end
+      return
+    end
+    return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true, nil, true)
+  end
   -- Steady-tick dedupe (pure overlay, plain absorb). The overshield verdict is
   -- a function of the integer health-percent bucket and the absorb amount; it
   -- cannot change while both are unchanged. Skip the redundant render on
@@ -2294,12 +2424,8 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
     frame._msufPredictionAbsorbSecret = absorbSecret and true or nil
     local absorbPositive = not absorbSecret and type(absorb) == "number" and absorb > 0
     frame._msufPredictionHealthVisualActive = (absorbPositive
-      or (absorbSecret and frame._msufPredictionFullHealthStripe == true)) and true or nil
-    if frame._msufPredictionFullHealthStripe ~= true and absorbPositive then
-      frame._msufPredictionPartialGlowHealthActive = true
-    else
-      frame._msufPredictionPartialGlowHealthActive = nil
-    end
+      or (absorbSecret and (frame._msufPredictionFullHealthStripe == true
+        or frame._msufPredictionOverAbsorbOverlay == true))) and true or nil
   end
   if refreshHealAbsorb then
     frame._msufPredictionHealAbsorb = ReadHealAbsorbs(unit)
@@ -2326,7 +2452,7 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
 
   if showAbsorb and frame.absorbBar then
     local absorbMode = frame._msufPredictionAbsorbMode
-    if absorbMode == 3 or absorbMode == 4 then
+    if absorbMode == FOLLOW_HP or absorbMode == FOLLOW_HP_OVERFLOW then
       local follow = frame._msufPredictionHealActive == true
         and frame.incomingHealBar and frame.incomingHealBar._msufShown == true
         and frame.incomingHealBar or nil
@@ -2383,8 +2509,8 @@ local function ApplyPreviewValues(frame, cfg, unit, showHeal, showAbsorb, showHe
   incomingValue = incomingValue or TEST_INCOMING
   absorbValue = absorbValue or TEST_ABSORB
   healAbsorbValue = healAbsorbValue or TEST_HEAL_ABSORB
-  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, 3)
-  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+  local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, FOLLOW_HP)
+  local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, ABSORB_ANCHOR.RIGHT)
   if showHeal and frame.incomingHealBar then
     LayoutBar(frame, frame.incomingHealBar, 1, healMode, frame._msufPredictionHealReverse, nil,
       frame._msufPredictionHealHeight, frame._msufPredictionHealOffsetY)
@@ -2393,7 +2519,7 @@ local function ApplyPreviewValues(frame, cfg, unit, showHeal, showAbsorb, showHe
     HideBar(frame.incomingHealBar)
   end
   if showAbsorb and frame.absorbBar then
-    if absorbMode == 3 or absorbMode == 4 then
+    if absorbMode == FOLLOW_HP or absorbMode == FOLLOW_HP_OVERFLOW then
       local follow = VisibleFollowBar(cfg, frame.incomingHealBar)
       LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow,
         frame._msufPredictionAbsorbHeight, frame._msufPredictionAbsorbOffsetY)
@@ -2595,8 +2721,8 @@ local function CreateAbsorbDataWriter(followAbsorb, withGlow, fullStripe)
     local absorbSecret = issecretvalue(absorb) == true
     frame._msufPredictionAbsorbSecret = absorbSecret and true or nil
     local absorbPositive = not absorbSecret and type(absorb) == "number" and absorb > 0
-    frame._msufPredictionHealthVisualActive = (absorbPositive or (absorbSecret and fullStripe)) and true or nil
-    frame._msufPredictionPartialGlowHealthActive = not fullStripe and absorbPositive and true or nil
+    frame._msufPredictionHealthVisualActive = (absorbPositive
+      or (absorbSecret and (fullStripe or frame._msufPredictionOverAbsorbOverlay == true))) and true or nil
     -- The guard already established CacheReady/Unit/Cfg. Only the glow's
     -- health-tick dedupe becomes stale when its absorb payload changes.
     frame._msufGlowTickBucket, frame._msufGlowTickUnit = nil, nil

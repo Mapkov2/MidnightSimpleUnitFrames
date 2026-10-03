@@ -308,7 +308,10 @@ Highlight.GroupLeave = GroupLeave
 Highlight.Show = UnitEnter
 Highlight.Hide = UnitLeave
 
-Highlight.Refresh()
+-- No Refresh while this file loads: the SavedVariables arrive after every file
+-- ran, and the cached defaults above are what a Refresh without a profile
+-- computes. Factory.SpawnAll refreshes from the saved profile before any frame
+-- gets its mouseover hooks, and ShowImpl refreshes once if it never saw one.
 
 ExportPublic("MSUF_RefreshMouseoverHighlight", Highlight.Refresh)
 

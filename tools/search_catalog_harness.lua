@@ -168,6 +168,10 @@ do
         local partOK, partResult = pcall(partChunk, "MidnightSimpleUnitFrames", MSUF)
         assert(partOK, partPath .. ": " .. tostring(partResult))
     end
+    -- The group migrations resolve MSUF_GF_AuraFilter (Auras3 GroupFilters, which the
+    -- client loads first) on use. The menu model fills this table in later; until then
+    -- the repair seeds empty blacklists, as it did while the table was absent.
+    _G.MSUF_GF_AuraFilter = _G.MSUF_GF_AuraFilter or {}
     local groupMigrationsPath = Join(CORE, "GroupFrames/MSUF_GroupFrames_DB_Migrations.lua")
     local groupMigrationsChunk, groupMigrationsErr = loadfile(groupMigrationsPath)
     assert(groupMigrationsChunk, groupMigrationsPath .. ": " .. tostring(groupMigrationsErr))
@@ -183,6 +187,9 @@ do
     -- model is loaded before Menu2 in the shipped addon, so reproduce that
     -- dependency here instead of silently auditing pages with the Aura section
     -- absent.
+    -- Its Group Aura filter code reads State's stored-token check from
+    -- MSUF.ProfileNormalize, which the shipped core loads long before it.
+    assert(loadfile(Join(ROOT, "tools/tests/profile_normalize_loader.lua")))().Install(ROOT, MSUF)
     local auraModelPath = Join(CORE, "Auras3/MSUF_Auras3_Menu_Model.lua")
     local auraChunk, auraErr = Auras3Loader.LoadFile(auraModelPath)
     assert(auraChunk, auraModelPath .. ": " .. tostring(auraErr))
@@ -199,6 +206,16 @@ do
     local boundaryOK, boundaryResult = pcall(boundaryChunk, "MidnightSimpleUnitFrames", MSUF)
     assert(boundaryOK, boundaryPath .. ": " .. tostring(boundaryResult))
     assert(type(MSUF.ReportError) == "function", "current validation reporter did not load")
+
+    -- Menu2 prompts (M.ShowPrompt) run on the core prompt layer, which the
+    -- main addon loads with its shared UI primitives long before Menu2, over
+    -- Blizzard's StaticPopup system (modelled by tools/tests/static_popup_stub.lua).
+    assert(loadfile(Join(ROOT, "tools/tests/static_popup_stub.lua")))().Install(_G)
+    local widgetsPath = Join(CORE, "Shell/UI/MSUF_Widgets.lua")
+    local widgetsChunk, widgetsErr = loadfile(widgetsPath)
+    assert(widgetsChunk, widgetsPath .. ": " .. tostring(widgetsErr))
+    widgetsChunk("MidnightSimpleUnitFrames", MSUF)
+    assert(MSUF.UI and type(MSUF.UI.ShowPrompt) == "function", "the core prompt layer did not load")
 end
 
 -- Load the real Menu2 product modules in their shipped XML order.  No catalog
@@ -214,6 +231,41 @@ local MENU_XML = rawget(_G, "__MSUF_MENU2_XML_MANIFEST") or {
     "Shell/Menu2/Preview/MSUF_Menu2_GroupPreview.xml",
     "Shell/Menu2/MSUF_Menu2_AfterGroupPreview.xml",
 }
+
+-- Menu pages list their core collaborators with M.RequireGlobals, which raises
+-- at load for a name the catalog world does not define. The catalog only reads
+-- labels and registrations, and before those pages required their collaborators
+-- they found them absent here, so each missing one answers nil: the generated
+-- rows stay those of the absent-collaborator world the index was built from.
+do
+    local menuPaths = {}
+    for _, relativeXml in ipairs(MENU_XML) do
+        local xmlPath = Join(OPTIONS, relativeXml)
+        local xmlDir = Dirname(xmlPath)
+        for relativeLua in Read(xmlPath):gmatch('<Script%s+file="([^"]+)"') do
+            local path = Join(xmlDir, relativeLua:gsub("\\", "/"))
+            menuPaths[#menuPaths + 1] = path:sub(#ROOT + 2)
+        end
+    end
+    for _, path in ipairs(menuPaths) do
+        for list in Read(Join(ROOT, path)):gmatch("M%.RequireGlobals%(%s*\"[^\"]+\"%s*,%s*(%b{})") do
+            for name in list:gmatch("\"(MSUF_[%w_]+)\"") do
+                local kind = type(rawget(_G, name))
+                if kind ~= "function" and kind ~= "table" then
+                    rawset(_G, name, function() return nil end)
+                end
+            end
+        end
+    end
+end
+
+-- A page may offer a prompt when it first builds (the Class Resources quick
+-- setup). Menu prompts use Blizzard's generic dialogs (M.ShowPrompt); the
+-- catalog world shows no dialog, so the missing ones answer nothing.
+for _, name in ipairs({ "StaticPopup_ShowCustomGenericConfirmation",
+    "StaticPopup_ShowCustomGenericInputBox", "StaticPopup_FindVisible", "StaticPopup_Hide" }) do
+    if type(rawget(_G, name)) ~= "function" then rawset(_G, name, function() return nil end) end
+end
 
 local loadedMenuFiles = 0
 for _, relativeXml in ipairs(MENU_XML) do

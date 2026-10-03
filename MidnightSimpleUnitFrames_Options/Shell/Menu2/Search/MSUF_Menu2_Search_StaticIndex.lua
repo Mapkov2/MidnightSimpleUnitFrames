@@ -192,7 +192,7 @@ local function CombatLocked()
 end
 
 --- Returns the decoded static records, building them on first use.
---- Menu language changes force a reload (see M.SetMenuLocale), so the decoded set
+--- Menu language changes force a reload (see M.ApplyLocaleSelection), so the decoded set
 --- cannot go stale within a session and is built exactly once.
 ---
 --- The first decode is the only non-trivial cost this module has, so it never runs

@@ -75,7 +75,8 @@ function TextSection.OpenSection(state, ctx, builder, unit)
         -- Edit Mode can request that Menu2 opens directly on the text section/component the
         -- user clicked. Consume that request visually without changing any text settings.
         local req = _G.MSUF_EM2_MenuFocusRequest
-        if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit and (req.component == "name" or req.component == "hp" or req.component == "power") then
+        if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit
+            and (req.component == "name" or req.component == "hp" or req.component == "power") then
             ExportPublic("MSUF_EM2_MenuFocusSection", sec)
             C_Timer.After(0, function()
                 if _G.MSUF_EM2_MenuFocusRequest ~= req or req.consumed == true then return end
@@ -118,7 +119,8 @@ function TextSection.PrepareSlotState(state, unit)
         pettarget = "Hunted Foe",
     }
     local function RaidGroupNameAllowed(unitKey)
-        return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focustarget" or unitKey == "pettarget" or unitKey == "focus"
+        return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focustarget"
+            or unitKey == "pettarget" or unitKey == "focus"
     end
     local function RaidGroupNamePreviewValue()
         local style = ReadText(unit, "raidGroupNameStyle", "PAREN")
@@ -329,20 +331,10 @@ function TextSection.PrepareCardHelpers(state, ctx, unit)
         else value = cur end
         return absorbBase and (value .. " + " .. absorbText) or value
     end
+    -- The reversed-order mapping is the engine's (the group text DB and the
+    -- unit bar element carry the same table); the preview reads it there.
     local function ReversePreviewHealthMode(mode)
-        local rev = {
-            CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT",
-            CURMAX = "MAXCUR", MAXCUR = "CURMAX",
-            CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
-            MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
-            PERCENTCURMAX = "CURMAXPERCENT",
-            CURPERCENTABSORB = "PERCENTCURABSORB", PERCENTCURABSORB = "CURPERCENTABSORB",
-            CURMAXABSORB = "MAXCURABSORB", MAXCURABSORB = "CURMAXABSORB",
-            CURMAXPERCENTABSORB = "PERCENTMAXCURABSORB", PERCENTMAXCURABSORB = "CURMAXPERCENTABSORB",
-            MAXPERCENTABSORB = "PERCENTMAXABSORB", PERCENTMAXABSORB = "MAXPERCENTABSORB",
-            PERCENTCURMAXABSORB = "CURMAXPERCENTABSORB",
-        }
-        return rev[mode] or mode
+        return MSUF.GF.ReverseHealthTextMode(mode)
     end
     state.tabFrames, state.TextCard, state.mouseoverFadeControls, state.MouseoverControl, state.PlaceDropdown, state.PlaceSlider =
         tabFrames, TextCard, mouseoverFadeControls, MouseoverControl, PlaceDropdown, PlaceSlider
@@ -365,7 +357,8 @@ function TextSection.BuildHeaderBadges(state, unit)
             CurrentTextTab(),
             ReadBool(unit, "showName", true),
             ReadBool(unit, "showHP", true),
-            ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget" and unit ~= "pettarget"))
+            ReadBool(unit, "showPowerText", ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget"
+                and unit ~= "pettarget"))
         )
     end
     local function PowerTextDefault()
@@ -809,9 +802,12 @@ function TextSection.BuildValueTextTabs(state, ctx, unit)
         valueLabel = "HP value",
         legacyKey = "hpTextMode",
         slots = {
-            left = { key = "textLeft", default = "NONE", reason = "MSUF2_HP_LEFT", hidePercentKey = "hpTextLeftHidePercentSymbol", hidePercentReason = "MSUF2_HP_LEFT_HIDE_PERCENT_SYMBOL", absorbIconKey = "hpTextLeftAbsorbIcon" },
-            center = { key = "textCenter", default = "NONE", reason = "MSUF2_HP_CENTER", hidePercentKey = "hpTextCenterHidePercentSymbol", hidePercentReason = "MSUF2_HP_CENTER_HIDE_PERCENT_SYMBOL", absorbIconKey = "hpTextCenterAbsorbIcon" },
-            right = { key = "textRight", default = "CURPERCENT", reason = "MSUF2_HP_RIGHT", hidePercentKey = "hpTextRightHidePercentSymbol", hidePercentReason = "MSUF2_HP_RIGHT_HIDE_PERCENT_SYMBOL", absorbIconKey = "hpTextRightAbsorbIcon" },
+            left = { key = "textLeft", default = "NONE", reason = "MSUF2_HP_LEFT", hidePercentKey = "hpTextLeftHidePercentSymbol",
+                hidePercentReason = "MSUF2_HP_LEFT_HIDE_PERCENT_SYMBOL", absorbIconKey = "hpTextLeftAbsorbIcon" },
+            center = { key = "textCenter", default = "NONE", reason = "MSUF2_HP_CENTER", hidePercentKey = "hpTextCenterHidePercentSymbol",
+                hidePercentReason = "MSUF2_HP_CENTER_HIDE_PERCENT_SYMBOL", absorbIconKey = "hpTextCenterAbsorbIcon" },
+            right = { key = "textRight", default = "CURPERCENT", reason = "MSUF2_HP_RIGHT", hidePercentKey = "hpTextRightHidePercentSymbol",
+                hidePercentReason = "MSUF2_HP_RIGHT_HIDE_PERCENT_SYMBOL", absorbIconKey = "hpTextRightAbsorbIcon" },
         },
         separatorKey = "hpTextSeparator",
         separatorGet = function() return ReadText(unit, "hpTextSeparator", "") end,
@@ -847,9 +843,12 @@ function TextSection.BuildValueTextTabs(state, ctx, unit)
         valueLabel = "Power value",
         legacyKey = "powerTextMode",
         slots = {
-            left = { key = "powerTextLeft", default = "NONE", reason = "MSUF2_POWER_TEXT_LEFT", hidePercentKey = "powerTextLeftHidePercentSymbol", hidePercentReason = "MSUF2_POWER_TEXT_LEFT_HIDE_PERCENT_SYMBOL" },
-            center = { key = "powerTextCenter", default = "NONE", reason = "MSUF2_POWER_TEXT_CENTER", hidePercentKey = "powerTextCenterHidePercentSymbol", hidePercentReason = "MSUF2_POWER_TEXT_CENTER_HIDE_PERCENT_SYMBOL" },
-            right = { key = "powerTextRight", default = "CURPERCENT", reason = "MSUF2_POWER_TEXT_RIGHT", hidePercentKey = "powerTextRightHidePercentSymbol", hidePercentReason = "MSUF2_POWER_TEXT_RIGHT_HIDE_PERCENT_SYMBOL" },
+            left = { key = "powerTextLeft", default = "NONE", reason = "MSUF2_POWER_TEXT_LEFT", hidePercentKey = "powerTextLeftHidePercentSymbol",
+                hidePercentReason = "MSUF2_POWER_TEXT_LEFT_HIDE_PERCENT_SYMBOL" },
+            center = { key = "powerTextCenter", default = "NONE", reason = "MSUF2_POWER_TEXT_CENTER", hidePercentKey = "powerTextCenterHidePercentSymbol",
+                hidePercentReason = "MSUF2_POWER_TEXT_CENTER_HIDE_PERCENT_SYMBOL" },
+            right = { key = "powerTextRight", default = "CURPERCENT", reason = "MSUF2_POWER_TEXT_RIGHT", hidePercentKey = "powerTextRightHidePercentSymbol",
+                hidePercentReason = "MSUF2_POWER_TEXT_RIGHT_HIDE_PERCENT_SYMBOL" },
         },
         separatorKey = "powerTextSeparator",
         separatorGet = function() return ReadText(unit, "powerTextSeparator", ReadText(unit, "hpTextSeparator", "")) end,
@@ -867,7 +866,8 @@ function TextSection.BuildValueTextTabs(state, ctx, unit)
         powerManagedNotice, powerManagedNoticeButton = notice, button
     end
     if powerManagedNoticeButton then
-        RegisterControl(powerManagedNoticeButton, ctx, "text.power.navigation.class_resources", "Class Resources", "button", "navigation", { navigationKey = "classpower" })
+        RegisterControl(powerManagedNoticeButton, ctx, "text.power.navigation.class_resources", "Class Resources", "button", "navigation",
+            { navigationKey = "classpower" })
         powerManagedNoticeButton:SetScript("OnClick", function()
             if type(M.SelectPage) == "function" then M.SelectPage("classpower") end
         end)
@@ -877,7 +877,8 @@ end
 function TextSection.BuildAdvancedTab(state, ctx, unit)
     local advancedTab, leftX, cardW, TextCard, PlaceSlider = state.advancedTab, state.leftX, state.cardW, state.TextCard, state.PlaceSlider
     local RefreshTextHeader, FixedSettingMeta = state.RefreshTextHeader, state.FixedSettingMeta
-    local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls text layers when text overlaps bars, portraits, or status icons.", leftX, -4, cardW, 260)
+    local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls text layers when text overlaps bars, portraits, or status icons.", leftX, -4, cardW,
+        260)
     local function BindAdvancedLayer(label, y, key, defaultValue, reason)
         local control = W.Slider(advancedLayers, label, 0, 30, 1, 260)
         PlaceSlider(advancedLayers, control, 16, y, cardW - 72)

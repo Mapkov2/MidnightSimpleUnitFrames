@@ -39,6 +39,17 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
     local world = World.New(root, flavor):Boot()
     local failure = world:FirstFailure()
     Check(failure == nil, flavor .. " did not boot: " .. tostring(failure and failure.file))
+    local GF = world.core.GF
+    local anchors = GF.PREDICTION_ANCHOR_MODES
+    Check(anchors and anchors.LEFT == 1 and anchors.RIGHT == 2 and anchors.FOLLOW_HEALTH == 3
+        and anchors.FOLLOW_HEALTH_OVERFLOW == 4 and anchors.REVERSE_FROM_MAX == 5,
+        flavor .. ": prediction modes changed their saved values")
+    Check(GF.ABSORB_DISPLAY_MODES.BAR == 2 and GF.ABSORB_DISPLAY_MODES.LEGACY_BAR_AND_TEXT == 3,
+        flavor .. ": legacy absorb modes changed their saved values")
+    local defaults = GF.PARTY_DEFAULTS
+    Check(defaults.healPredAnchorMode == 3 and defaults.healAbsorbAnchorMode == 3
+        and defaults.absorbTextMode == 2 and defaults.absorbAnchorMode == 5,
+        flavor .. ": prediction defaults changed")
     local position, firstGroup = {}, nil
     for index, path in ipairs(world.loaded) do
         local relative = path:gsub("^MidnightSimpleUnitFrames/", "")

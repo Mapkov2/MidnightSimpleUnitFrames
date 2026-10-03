@@ -6,7 +6,7 @@ addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local C_Timer = M.MenuTimer or _G.C_Timer
-local F = M.Fallbacks or {}
+local Fallbacks = M.Fallbacks or {}
 local H = M.PreviewHelpers or {}
 M.PreviewHelpers = H
 local CP = M.ClassPowerPreview or {}
@@ -897,7 +897,8 @@ function H.StylePreviewPillButton(btn, T, opts)
     local raised = tc and tc.coreRaised or { 0.026, 0.070, 0.110 }
     local rim = tc and tc.coreRim or { 0.043, 0.096, 0.150 }
     local blue = tc and tc.coreBlue or { 0.095, 0.360, 0.560 }
-    local bgIdle, bgHover, bgActive, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2], raised[3], 0.98 }, { raised[1], raised[2], raised[3], 1.00 }
+    local bgIdle, bgHover, bgActive, bgDown = { shadow[1], shadow[2], shadow[3], 0.92 }, { surface[1], surface[2], surface[3], 0.98 }, { raised[1], raised[2],
+        raised[3], 0.98 }, { raised[1], raised[2], raised[3], 1.00 }
     local brIdle, brHover, brActive = { rim[1], rim[2], rim[3], 0.72 }, { blue[1], blue[2], blue[3], 0.58 }, { blue[1], blue[2], blue[3], 0.70 }
     local bgScratch = { 0, 0, 0, 1 }
     function btn:MSUF2RefreshPreviewPill(active, hover, down)
@@ -916,14 +917,16 @@ function H.StylePreviewPillButton(btn, T, opts)
                 self._msuf2PreviewPillFill:SetVertexColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
             end
             if self._msuf2PreviewPillEdge then
-                self._msuf2PreviewPillEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1), min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
+                self._msuf2PreviewPillEdge:SetVertexColor(min(br[1] * (hover and 1.08 or 1), 1), min(br[2] * (hover and 1.08 or 1), 1),
+                    min(br[3] * (hover and 1.08 or 1), 1), (br[4] or 1) * alpha)
             end
         elseif self.SetBackdropColor then
             self:SetBackdropColor(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
             self:SetBackdropBorderColor(br[1], br[2], br[3], (br[4] or 1) * alpha)
         end
         if self[fontField] and self[fontField].SetTextColor then
-            self[fontField]:SetTextColor(active and 0.06 or (hover and 0.88 or 0.78), active and 0.95 or (hover and 0.94 or 0.84), active and 1.00 or 0.96, alpha)
+            self[fontField]:SetTextColor(active and 0.06 or (hover and 0.88 or 0.78), active and 0.95 or (hover and 0.94 or 0.84), active
+                and 1.00 or 0.96, alpha)
         end
     end
     btn:SetScript("OnEnter", function(self)
@@ -954,7 +957,7 @@ function H.ShowPreviewHandleContext(handle, opts)
     local M2 = opts.M or M
     local T = opts.T or (M2 and M2.Theme)
     local W = opts.W or (M2 and M2.Widgets)
-    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or Fallbacks.Identity
     local openSettings = opts.openSettings
     if type(openSettings) ~= "function" then return end
     local popup = H._previewHandleContextPopup
@@ -970,13 +973,15 @@ function H.ShowPreviewHandleContext(handle, opts)
         popup:SetSize(176, 76)
         popup:SetFrameStrata("FULLSCREEN_DIALOG")
         popup:EnableMouse(true)
-        local title = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 }) or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+        local title = T and T.Font and T.Font(popup, "GameFontDisableSmall", "", (T.colors and T.colors.muted) or { 0.72, 0.78, 0.90, 1 })
+            or PixelLayoutRegion(popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -8)
         title:SetPoint("RIGHT", popup, "RIGHT", -12, 0)
         title:SetJustifyH("LEFT")
         popup._title = title
         local function MakeButton(label, y)
-            local btn = W and W.TopButton and W.TopButton(popup, label, 152, 24) or (T and T.Button and T.Button(popup, label, 152, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
+            local btn = W and W.TopButton and W.TopButton(popup, label, 152, 24) or (T and T.Button and T.Button(popup, label, 152, 24))
+                or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
             btn:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, y)
             if not btn.GetText then btn:SetText(tr(label)) end
             return btn
@@ -1027,7 +1032,8 @@ function H.ShowPreviewHandleContext(handle, opts)
     end
     popup._handle = handle
     popup._openSettings = openSettings
-    if popup._title and popup._title.SetText then SetShownText(popup._title, tr(opts.title or (handle._label or handle._previewText or handle._key or "Preview Element"))) end
+    if popup._title and popup._title.SetText then SetShownText(popup._title, tr(opts.title
+        or (handle._label or handle._previewText or handle._key or "Preview Element"))) end
     popup._open:SetScript("OnClick", function(self)
         local p = self:GetParent()
         local h = p and p._handle
@@ -1074,7 +1080,7 @@ function H.EnsurePreviewHandleGear(handle, opts)
     opts = opts or {}
     if not handle then return nil end
     local T = opts.T or (M and M.Theme)
-    local tr = opts.Tr or opts.TR or (M and M.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M and M.Tr) or Fallbacks.Identity
     local gear = handle._msuf2SettingsGear
     if not gear then
         local template = T and T.Template and T.Template() or "BackdropTemplate"
@@ -1171,7 +1177,7 @@ end
 function H.EnsureZoomLockButton(box, zoomBar, opts)
     if not (box and zoomBar) then return nil end
     opts = opts or {}
-    local tr = opts.Tr or opts.TR or (M and M.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M and M.Tr) or Fallbacks.Identity
     local T = opts.T or (M and M.Theme)
     local btn = box.zoomLockButton
     if not btn then
@@ -1421,7 +1427,10 @@ function H.ShouldShowPreviewHandleTooltip(owner)
     return true
 end
 function H.ShowPreviewMoveCue(owner, handle)
-    if not PreviewDragCueEnabled() then H.HidePreviewMoveCue(); return false end
+    if not PreviewDragCueEnabled() then
+        H.HidePreviewMoveCue()
+        return false
+    end
     if not handle or handle._locked == true or handle._msufPlaced == false then return false end
     if handle.IsShown and not handle:IsShown() then return false end
     PreparePreviewMoveCueOwner(owner)
@@ -1438,7 +1447,7 @@ function H.ShowPreviewMoveCue(owner, handle)
     cue:Hide()
     cue:ClearAllPoints()
     cue:SetPoint("BOTTOM", handle, "TOP", 0, 12)
-    local tr = (M and M.Tr) or F.Identity
+    local tr = (M and M.Tr) or Fallbacks.Identity
     cue._label:SetText(tr("Drag to move"))
     cue._previewOwner = owner
     cue:Show()
@@ -1451,7 +1460,7 @@ function H.ShowPreviewMoveCue(owner, handle)
     return true
 end
 local function PreviewControlsLines(tr)
-    tr = tr or F.Identity
+    tr = tr or Fallbacks.Identity
     return {
         tr("Drag handles to move."),
         tr("Right-click: quick actions."),
@@ -1465,7 +1474,7 @@ function H.ShowPreviewControlsHelp(anchor, opts)
     local M2 = opts.M or M
     local T = opts.T or (M2 and M2.Theme)
     local W = opts.W or (M2 and M2.Widgets)
-    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or Fallbacks.Identity
     local popup = H._previewControlsHelpPopup
     if not popup then
         if M2 and type(M2.CreateMenuPopupPanel) == "function" then
@@ -1494,7 +1503,8 @@ function H.ShowPreviewControlsHelp(anchor, opts)
             if fs.SetMaxLines then fs:SetMaxLines(1) end
             popup._lines[i] = fs
         end
-        local close = W and W.TopButton and W.TopButton(popup, "Got it", 84, 24) or (T and T.Button and T.Button(popup, "Got it", 84, 24)) or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
+        local close = W and W.TopButton and W.TopButton(popup, "Got it", 84, 24) or (T and T.Button and T.Button(popup, "Got it", 84, 24))
+            or PixelLayoutRegion(CreateFrame("Button", nil, popup, "BackdropTemplate"))
         close:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -12, 12)
         if not close.GetText then close:SetText(tr("Got it")) end
         close:SetScript("OnClick", function(self)
@@ -1551,7 +1561,7 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
     if not box then return nil end
     local M2 = opts.M or M
     local T = opts.T or (M2 and M2.Theme)
-    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or F.Identity
+    local tr = opts.Tr or opts.TR or (M2 and M2.Tr) or Fallbacks.Identity
     local state = M2 and M2.GetPersistentMenuStateTable and M2.GetPersistentMenuStateTable("previewControlsHintState") or nil
     if state and state.seen == true then return nil end
     local parent = anchor or box.canvas or box._stage or box
@@ -1569,7 +1579,8 @@ function H.EnsurePreviewControlsHint(box, anchor, opts)
             hint:SetBackdropBorderColor(0.10, 0.32, 0.54, 0.92)
         end
         hint:EnableMouse(true)
-        local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", (T.colors and T.colors.text) or { 0.86, 0.90, 0.98, 1 }) or PixelLayoutRegion(hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+        local text = T and T.Font and T.Font(hint, "GameFontDisableSmall", "", (T.colors and T.colors.text) or { 0.86, 0.90, 0.98, 1 })
+            or PixelLayoutRegion(hint:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
         text:SetPoint("TOPLEFT", hint, "TOPLEFT", 12, -8)
         text:SetPoint("RIGHT", hint, "RIGHT", -60, 0)
         text:SetJustifyH("LEFT")
@@ -2058,14 +2069,14 @@ end
 function H.BuildZoomBar(box, surface, opts)
     if not (box and surface) then return nil end
     opts = opts or {}
-    local tr = opts.Tr or F.Identity
+    local tr = opts.Tr or Fallbacks.Identity
     local tex = opts.texture or "Interface\\Buttons\\WHITE8X8"
     local template = opts.template or "BackdropTemplate"
-    local stepZoom = opts.StepZoom or F.Noop
-    local setZoom = opts.SetZoom or F.Noop
+    local stepZoom = opts.StepZoom or Fallbacks.Noop
+    local setZoom = opts.SetZoom or Fallbacks.Noop
     local panEnabled = type(opts.StartPan) == "function"
-    local startPan = opts.StartPan or F.False
-    local stopPan = opts.StopPan or F.Noop
+    local startPan = opts.StartPan or Fallbacks.False
+    local stopPan = opts.StopPan or Fallbacks.Noop
     local buttonH = tonumber(opts.buttonHeight) or 20
     local createButton = opts.CreateZoomButton
     local prefix = opts.fieldPrefix or ""
@@ -2559,7 +2570,7 @@ end
 function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     if not (parent and def) then return nil end
     opts = opts or {}
-    local tr = opts.Tr or F.Identity
+    local tr = opts.Tr or Fallbacks.Identity
     local theme = opts.T or (M and M.Theme)
     local chip = opts.layout == "chip"
     local btn = PixelLayoutRegion(CreateFrame("Button", nil, parent))
@@ -2634,7 +2645,8 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
             self.bg:SetColorTexture(hover[1], hover[2], hover[3], available and 0.42 or 0.18)
             self.bar:SetColorTexture(c[1], c[2], c[3], available and 0.90 or 0.36)
         else
-            self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.026, (available and on) and c[2] * 0.18 or 0.070, (available and on) and c[3] * 0.18 or 0.110, (available and on) and 0.74 or 0.58)
+            self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.026, (available and on) and c[2] * 0.18 or 0.070, (available and on) and c[3] * 0.18
+                or 0.110, (available and on) and 0.74 or 0.58)
             self.bar:SetColorTexture(c[1], c[2], c[3], available and 1.0 or 0.48)
         end
         self.fs:SetTextColor(0.90, 0.92, 1, 1)
@@ -2656,6 +2668,174 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn:Refresh()
     return btn
 end
+--- The gate both preview live-state drivers run first: entering combat drops
+--- every listener but the re-arm signal, a hidden box drops all of them.
+--- Returns true when the event ends here.
+function H.LiveStateDriverGate(driver, event, box)
+    if event == "PLAYER_REGEN_DISABLED" then
+        driver:UnregisterAllEvents()
+        driver._msufLiveArmed = false
+        driver:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return true
+    end
+    if not (box.IsShown and box:IsShown()) then
+        driver:UnregisterAllEvents()
+        driver._msufLiveArmed = false
+        return true
+    end
+    return false
+end
+
+--- A region list kept on owner (owner[cacheField][field]) and refilled with
+--- a, b, c, d: the text focus rings and the text handles refit around it on
+--- every repaint and animation tick without allocating a table.
+function H.CachedRegionList(owner, cacheField, field, a, b, c, d)
+    local lists = owner[cacheField]
+    if not lists then
+        lists = {}
+        owner[cacheField] = lists
+    end
+    local list = lists[field]
+    if not list then
+        list = {}
+        lists[field] = list
+    end
+    list[1], list[2], list[3], list[4] = a, b, c, d
+    return list
+end
+
+--- Moves a preview's "Layers" button into the compact header, beside the
+--- expand button, or back to the box's top-left corner.
+function H.LayoutCompactLayersButton(box, compact, Tr)
+    if not box then return end
+    local header = box._msuf2CompactHeader
+    local expandBtn = box._msuf2CompactExpandButton
+    local layersBtn = box._msuf2LayersButton
+    if compact and header then
+        if layersBtn then
+            if layersBtn.SetText then layersBtn:SetText(Tr("Layers") .. " v", true) end
+            layersBtn:SetParent(header)
+            layersBtn:ClearAllPoints()
+            if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
+            else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
+            if layersBtn.SetFrameLevel and header.GetFrameLevel then
+                layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3)
+            end
+        end
+        return
+    end
+    if layersBtn then
+        if layersBtn.SetText then layersBtn:SetText("Layers") end
+        layersBtn:SetParent(box)
+        layersBtn:ClearAllPoints()
+        layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
+    end
+end
+
+--- Paints an "Animate" / "Stop" preview pill: label, text colour, pill state
+--- and, on a button without a pill fill, the backdrop (idleFill / idleBorder
+--- while stopped).
+function H.PaintAnimateButton(btn, active, Tr, idleFill, idleBorder)
+    if btn.fs then
+        -- The button plays an animation loop; it does not switch the preview
+        -- into a combat state. Label it after what it does.
+        btn.fs:SetText(active and Tr("Stop") or Tr("Animate"))
+        btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
+    end
+    if btn.MSUF2RefreshPreviewPill then btn:MSUF2RefreshPreviewPill(active) end
+    if btn.SetBackdropColor and not btn._msuf2PreviewPillFill then
+        if active then
+            btn:SetBackdropColor(0.020, 0.125, 0.155, 0.96)
+            btn:SetBackdropBorderColor(0.10, 0.82, 0.95, 1)
+        else
+            btn:SetBackdropColor(idleFill[1], idleFill[2], idleFill[3], idleFill[4])
+            btn:SetBackdropBorderColor(idleBorder[1], idleBorder[2], idleBorder[3], idleBorder[4])
+        end
+    end
+end
+
+--- The chip-style layer button options both preview rails share (theme text
+--- colours, quiet row fills, the selected-layer check). The caller's table
+--- carries availability, on state and the pointer handlers and is returned.
+local function LayerChipSelected(owner, key) return owner and owner._msuf2SelectedPreviewLayerKey == key end
+function H.LayerChipButtonOpts(Tr, colors, chrome, opts)
+    local active = colors.pillTextActive or colors.text or { 0.92, 0.96, 1.00, 1.00 }
+    local muted = colors.muted or { 0.62, 0.70, 0.82, 0.90 }
+    local disabled = colors.dim or { 0.36, 0.46, 0.60, 0.82 }
+    opts.Tr, opts.layout, opts.height, opts.rowHeight, opts.topOffset = Tr, "chip", 20, 20, 23
+    opts.showOffText, opts.quiet, opts.quietBase, opts.quietHover = false, true, chrome.rowBase, chrome.rowHover
+    opts.textOn = { active[1], active[2], active[3], 1.00 }
+    opts.textOff = { muted[1], muted[2], muted[3], 0.72 }
+    opts.textDisabled = { disabled[1], disabled[2], disabled[3], 0.64 }
+    opts.IsSelected = LayerChipSelected
+    return opts
+end
+
+--- Lays out a preview box's layer chips: as the compact popover while the
+--- rail hangs under the "Layers" button (it owns its width then), otherwise
+--- flowed across the rail beside the optional rail header.
+function H.LayoutLayerRail(box, rail, buttons, railWidth)
+    if not H.FlowLayerChips then return 30 end
+    local popover = box._msuf2LayerPopoverWidth
+    if popover and H.FlowLayerPopover then
+        local boxW = (box.GetWidth and box:GetWidth()) or 0
+        local boxH = (box.GetHeight and box:GetHeight()) or 0
+        return H.FlowLayerPopover(rail, buttons, {
+            width = popover,
+            maxWidth = boxW > 0 and (boxW - 24) or nil,
+            maxHeight = boxH > 0 and (boxH - 44) or nil,
+            rowHeight = 20,
+        })
+    end
+    railWidth = tonumber(railWidth) or (rail and rail.GetWidth and rail:GetWidth()) or 0
+    local headerWidth = 0
+    local header = box._msuf2LayerRailHeader
+    if header and header:IsShown() then
+        headerWidth = ((header.GetStringWidth and header:GetStringWidth()) or 44) + 18
+    end
+    return H.FlowLayerChips(rail, buttons, {
+        width = railWidth - headerWidth,
+        padX = 10 + headerWidth,
+        rowHeight = 20,
+    })
+end
+
+--- One layout path for a docked or floating preview box: the layer rail on
+--- the bottom edge, the selection bar above it, the surface takes the rest.
+--- raiseRail lifts the rail over the surface and shows its header first.
+function H.ApplyDockedPreviewLayout(box, rail, surface, bottomInset, raiseRail)
+    bottomInset = tonumber(bottomInset) or 12
+    local selection = box._msuf2SelectionBar
+    if not surface then return end
+    if rail then
+        rail:ClearAllPoints()
+        rail:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, bottomInset)
+        rail:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, bottomInset)
+        if raiseRail then
+            if rail.SetFrameLevel and surface.GetFrameLevel then
+                rail:SetFrameLevel((surface:GetFrameLevel() or 1) + 1)
+            end
+            if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Show() end
+        end
+        rail:Show()
+        if box.LayoutLayerRail then
+            box:LayoutLayerRail((box.GetWidth and box:GetWidth() or 0) - 24)
+        end
+    end
+    surface:ClearAllPoints()
+    surface:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+    if selection and rail then
+        selection:ClearAllPoints()
+        selection:SetPoint("BOTTOMLEFT", rail, "TOPLEFT", 0, 6)
+        selection:SetPoint("BOTTOMRIGHT", rail, "TOPRIGHT", 0, 6)
+        selection:Show()
+        surface:SetPoint("BOTTOMRIGHT", selection, "TOPRIGHT", 0, 6)
+    else
+        surface:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, bottomInset)
+    end
+    if box._msuf2ElementPicker then box._msuf2ElementPicker:Show() end
+end
+
 --- Flows measured layer chips into `rail`, wrapping when a row is full.
 --- Returns the height the rail needs, so callers can let the canvas absorb
 --- whatever the chips do not use instead of reserving a fixed strip.
@@ -2981,7 +3161,10 @@ function H.LayoutEdgeLines(frame, edge, opts)
     if not (frame and frame.CreateTexture) then return false end
     opts = opts or {}
     edge = H.ClampEdgeSize(edge, 1, opts.maxEdgeSize or 30)
-    if edge <= 0 then H.SetEdgeLinesShown(frame, false, opts); return false end
+    if edge <= 0 then
+        H.SetEdgeLinesShown(frame, false, opts)
+        return false
+    end
     local linesKey = opts.linesKey or "_lines"
     local keys = opts.keys or EDGE_LINE_KEYS
     frame[linesKey] = frame[linesKey] or {}
@@ -3302,6 +3485,130 @@ local function ReadPreviewBarsBool(key, default)
     return value and true or false
 end
 H.ReadPreviewBarsBool = ReadPreviewBarsBool
+
+--- Dummy cooldown swipe over a preview aura icon of width x height: the
+--- remaining share of the width (8-92 %) from the right edge, or from the
+--- left edge when reversed. The unit and group previews both paint it.
+function H.PaintPreviewAuraSwipe(swipe, icon, width, height, remainingFrac, reverse)
+    local max = math.max
+    remainingFrac = max(0.08, min(0.92, tonumber(remainingFrac) or 0.48))
+    swipe:ClearAllPoints()
+    swipe:SetWidth(max(1, floor(width * remainingFrac + 0.5)))
+    swipe:SetHeight(max(1, height))
+    if reverse == true then
+        swipe:SetPoint("TOPLEFT", icon, "TOPLEFT", 0, 0)
+        swipe:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", 0, 0)
+    else
+        swipe:SetPoint("TOPRIGHT", icon, "TOPRIGHT", 0, 0)
+        swipe:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 0, 0)
+    end
+end
+
+--- Dummy duration bar inside a preview aura icon of width x height: the
+--- configured height and edge, inset by 1/32 of the icon, and with an aura
+--- state the elapsed or remaining share of the width (else the full width).
+function H.PaintPreviewDurationBar(bar, icon, cfg, width, height, auraState)
+    local max = math.max
+    local scaleSize = max(1, min(width, height))
+    local barHeight = max(1, min(height, floor((tonumber(cfg.durationBarHeight) or 2) + 0.5)))
+    local inset = max(1, floor(scaleSize / 32 + 0.5))
+    local frac
+    if cfg.durationBarDirection == "ELAPSED" then
+        frac = auraState and auraState.elapsedFrac or 0.38
+    else
+        frac = auraState and auraState.remainingFrac or 0.62
+    end
+    local r, g, b = MSUF.MSUF_Auras3.GetDurationBarColor()
+    bar:SetVertexColor(r, g, b, 0.92)
+    frac = max(0.02, min(1, tonumber(frac) or 0.62))
+    MSUF.MSUF_Auras3.LayoutPreviewDurationBar(bar, icon, cfg.durationBarPosition, barHeight, inset, width,
+        auraState and frac or nil)
+end
+
+--- The rectangular power bar border of a unit or group preview: a mouse-free
+--- host frame on the mock with four edge textures, kept in mock[field].
+function H.EnsurePowerBorderHost(mock, field)
+    local host = mock[field]
+    if host then return host end
+    host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
+    if host.EnableMouse then host:EnableMouse(false) end
+    host.edges = {}
+    for i = 1, 4 do
+        local line = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6))
+        line:SetTexture("Interface\\Buttons\\WHITE8X8")
+        host.edges[i] = line
+    end
+    mock[field] = host
+    return host
+end
+
+--- Lays the border edges out edge pixels thick: the top edge only over a
+--- rounded power bar, all four otherwise; then shows the host.
+function H.LayoutPowerBorderEdges(host, edge, roundedPower)
+    local top, bottom, left, right = host.edges[1], host.edges[2], host.edges[3], host.edges[4]
+    top:ClearAllPoints()
+    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+    top:SetHeight(edge)
+    top:Show()
+    if not roundedPower then
+        bottom:ClearAllPoints()
+        bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+        bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+        bottom:SetHeight(edge)
+        left:ClearAllPoints()
+        left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+        left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+        left:SetWidth(edge)
+        right:ClearAllPoints()
+        right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+        right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
+        right:SetWidth(edge)
+        bottom:Show()
+        left:Show()
+        right:Show()
+    end
+    host:Show()
+end
+
+--- The header shade and separator line a pinned (docked) unit or group
+--- preview draws over its title row; built on first use.
+function H.EnsurePinnedHeader(box)
+    local shade = box._msuf2PinnedHeaderShade
+    if not shade and box.CreateTexture then
+        shade = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, -1))
+        shade:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
+        shade:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1)
+        shade:SetHeight(29)
+        shade:SetTexture("Interface\\Buttons\\WHITE8X8")
+        box._msuf2PinnedHeaderShade = shade
+    end
+    local line = box._msuf2PinnedHeaderLine
+    if not line and box.CreateTexture then
+        line = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, 0))
+        line:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -29)
+        line:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -29)
+        line:SetHeight(1)
+        line:SetTexture("Interface\\Buttons\\WHITE8X8")
+        box._msuf2PinnedHeaderLine = line
+    end
+    return shade, line
+end
+
+--- Shows the pinned header in the theme's shadow and soft border colours,
+--- or hides it when the preview is not pinned.
+function H.PaintPinnedHeader(shade, line, colors, pinned)
+    if shade then
+        local bg = colors.coreShadow or { 0.006, 0.016, 0.032, 1 }
+        shade:SetColorTexture(bg[1], bg[2], bg[3], pinned and 0.92 or 0)
+        shade:SetShown(pinned)
+    end
+    if line then
+        local border = colors.borderSoft or colors.border or { 0.070, 0.260, 0.390, 1 }
+        line:SetColorTexture(border[1], border[2], border[3], pinned and 0.52 or 0)
+        line:SetShown(pinned)
+    end
+end
 
 function H.CreateAnimationStarter(PreviewAnimationInCombat, StopPreviewAnimationDriver, PreviewAnimationOnUpdate)
     return function(box)

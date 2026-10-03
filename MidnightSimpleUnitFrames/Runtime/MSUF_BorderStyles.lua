@@ -256,6 +256,31 @@ local function SetPieceTexture(piece, texture, repeatEdge)
     end
 end
 
+--- Anchors region (its points already cleared) over target: all of it for
+--- FULL, or a thickness-wide strip along the TOP, BOTTOM, LEFT or RIGHT edge.
+--- The dispel overlays of both aura backends and the menu previews use it.
+function B.LayoutEdgeStrip(region, target, style, thickness)
+    if style == "TOP" then
+        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        region:SetHeight(thickness)
+    elseif style == "BOTTOM" then
+        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        region:SetHeight(thickness)
+    elseif style == "LEFT" then
+        region:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        region:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        region:SetWidth(thickness)
+    elseif style == "RIGHT" then
+        region:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        region:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        region:SetWidth(thickness)
+    else
+        region:SetAllPoints(target)
+    end
+end
+
 --- Create the eight textures for one owner. `layer`/`subLayer` place the whole
 --- border at the requested owner layer; `texture` is the resolved edgeFile.
 function B.Create(owner, layer, subLayer, texture)

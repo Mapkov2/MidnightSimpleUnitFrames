@@ -213,11 +213,19 @@ function Snap.Apply(cx, cy, hw, hh, dragKey)
     dyEdges[1], dyEdges[2], dyEdges[3] = dB, dCY, dT
     for _, de in ipairs(dxEdges) do
         local d = abs(de - screenCX)
-        if d < bestDistX then bestDistX = d; bestDX = screenCX - de; snapEdgeX = screenCX end
+        if d < bestDistX then
+            bestDistX = d
+            bestDX = screenCX - de
+            snapEdgeX = screenCX
+        end
     end
     for _, de in ipairs(dyEdges) do
         local d = abs(de - screenCY)
-        if d < bestDistY then bestDistY = d; bestDY = screenCY - de; snapEdgeY = screenCY end
+        if d < bestDistY then
+            bestDistY = d
+            bestDY = screenCY - de
+            snapEdgeY = screenCY
+        end
     end
 
     --- Check all other movers
@@ -234,7 +242,9 @@ function Snap.Apply(cx, cy, hw, hh, dragKey)
                     for _, te in ipairs(targetXEdges) do
                         local d = abs(de - te)
                         if d < bestDistX then
-                            bestDistX = d; bestDX = te - de; snapEdgeX = te
+                            bestDistX = d
+                            bestDX = te - de
+                            snapEdgeX = te
                         end
                     end
                 end
@@ -244,7 +254,9 @@ function Snap.Apply(cx, cy, hw, hh, dragKey)
                     for _, te in ipairs(targetYEdges) do
                         local d = abs(de - te)
                         if d < bestDistY then
-                            bestDistY = d; bestDY = te - de; snapEdgeY = te
+                            bestDistY = d
+                            bestDY = te - de
+                            snapEdgeY = te
                         end
                     end
                 end

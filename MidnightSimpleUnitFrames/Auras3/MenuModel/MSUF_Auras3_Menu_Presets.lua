@@ -18,6 +18,7 @@ function Factories.Presets(Model, Common)
     local AuraFilter = Common.AuraFilter
     local NormalizeKind = Common.NormalizeKind
     local NormalizeScope = Common.NormalizeScope
+    local SpellIDText = Common.SpellIDText
     local SpellInfo = Common.SpellInfo
 
     local FALLBACK_PUBLIC_AURA_SPELLS = {
@@ -249,7 +250,8 @@ function Factories.Presets(Model, Common)
             local bucket = buckets[category]
             if bucket and #bucket > 0 then
                 table_sort(bucket, function(a, b) return (a._order or 0) < (b._order or 0) end)
-                values[#values + 1] = { text = category, header = true, disabled = true, translate = false }
+                -- Category headers are English keys; the dropdown translates them.
+                values[#values + 1] = { text = category, header = true, disabled = true }
                 for j = 1, #bucket do
                     local item = bucket[j]
                     item._order = nil
@@ -299,7 +301,7 @@ function Factories.Presets(Model, Common)
             if id then
                 values[#values + 1] = {
                     value = tostring(id),
-                    text = (type(name) == "string" and name ~= "" and name or "Spell") .. " (#" .. tostring(id) .. ")",
+                    text = SpellIDText(name, id),
                     icon = icon,
                 }
             end

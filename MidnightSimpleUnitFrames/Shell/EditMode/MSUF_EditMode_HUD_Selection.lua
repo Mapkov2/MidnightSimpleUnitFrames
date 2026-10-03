@@ -2,6 +2,10 @@
 --- Labels and positions of the selected frame or component for the inspector
 --- row, the cooldown anchor queries, and the Settings and Reset actions.
 local _, MSUF = ...
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_HUD_Selection.lua"
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
 
@@ -43,51 +47,6 @@ local GROUP_KEY_TO_KIND = {
     gf_mythicraid = "mythicraid",
     gf_priority = "priority",
 }
-
-local function GroupGeometryMask(gf)
-    return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
-end
-
-local RequestGroupGeometryApply = _G.MSUF_RequestGroupGeometryApply
-
-local function RefreshGroupGeometryScoped(kind)
-    if not kind then return false end
-    if RequestGroupGeometryApply(kind, "EM2_HUD_GROUP_GEOMETRY") then
-        return true
-    end
-    local gf = MSUF and MSUF.GF
-    if gf and type(gf.RefreshGeometry) == "function" then
-        gf.RefreshGeometry(kind)
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshGeometry) == "function" then
-        _G.MSUF_GF_RefreshGeometry(kind)
-        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
-            _G.MSUF_GF_RefreshUnitBindings(kind)
-        end
-        if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-            _G.MSUF_GF_RefreshVisuals(kind, GroupGeometryMask(gf))
-        end
-        return true
-    end
-    if gf and type(gf.RefreshVisuals) == "function" then
-        gf.RefreshVisuals(kind, GroupGeometryMask(gf))
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-        _G.MSUF_GF_RefreshVisuals(kind)
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshAll) == "function" then
-        _G.MSUF_GF_RefreshAll()
-        return true
-    end
-    if type(_G.MSUF_GF_Refresh) == "function" then
-        _G.MSUF_GF_Refresh()
-        return true
-    end
-    return false
-end
 
 local LABEL_BY_KEY = {
     player = "Player",
@@ -228,14 +187,7 @@ local function DefaultHintText(hasSelection)
 end
 
 local function BlockHUDConfigLocked()
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-        return _G.MSUF_BlockConfigCombatLocked() and true or false
-    end
-    if InCombatLockdown and InCombatLockdown() then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
-        return true
-    end
-    return false
+    return MSUF.Require("MSUF_BlockConfigCombatLocked", CALLER)() and true or false
 end
 
 function HUD.OpenSelectedSettings()
@@ -261,7 +213,10 @@ function HUD.ResetCurrentPosition()
     if BlockHUDConfigLocked() then return end
 
     local key = CurrentSelectionKey()
-    if not key then HUD.SetStatus(HelpText("EM_SELECT_FIRST"), "warn"); return end
+    if not key then
+        HUD.SetStatus(HelpText("EM_SELECT_FIRST"), "warn")
+        return
+    end
     local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key) or nil
     if cfg and cfg.externalPublicElement == true then
         local external = EM2.ExternalElements
@@ -275,29 +230,7 @@ function HUD.ResetCurrentPosition()
     end
     local groupKind = GROUP_KEY_TO_KIND[key]
     if groupKind then
-        if type(_G.MSUF_GF_EM2_ResetPosition) == "function" then
-            _G.MSUF_GF_EM2_ResetPosition(groupKind)
-        else
-            local db = _G.MSUF_DB
-            local conf = db and db[key]
-            if conf then
-                if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-                    _G.MSUF_EM_UndoBeforeChange("gf", groupKind)
-                end
-                conf.offsetX = groupKind == "party" and -400 or groupKind == "priority" and -120 or -500
-                conf.offsetY = 0
-                if groupKind == "priority" then
-                    conf.anchorMode = "RAID_RIGHT"
-                    conf.attachGap = 8
-                    conf.attachOffset = 0
-                    conf.point = "CENTER"
-                    conf.relativePoint = "CENTER"
-                end
-                RefreshGroupGeometryScoped(groupKind)
-                if type(_G.MSUF_EM2_SyncGFPopups) == "function" then _G.MSUF_EM2_SyncGFPopups() end
-                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-            end
-        end
+        MSUF.Require("MSUF_GF_EM2_ResetPosition", CALLER)(groupKind)
         if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
         if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(key, "layout", nil, { source = "hud-reset", duration = 0.32 }) end
         HUD.SetStatus(string.format(HelpText("Reset %s"), HelpText(LABEL_BY_KEY[key] or key)), "ok")
@@ -305,30 +238,28 @@ function HUD.ResetCurrentPosition()
         return
     end
 
-    if not UNIT_KEYS[key] then HUD.SetStatus(HelpText("Reset unavailable"), "warn"); return end
+    if not UNIT_KEYS[key] then
+        HUD.SetStatus(HelpText("Reset unavailable"), "warn")
+        return
+    end
     local db = _G.MSUF_DB
     local conf = db and db[key]
     if not conf then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-        _G.MSUF_EM_UndoBeforeChange("unit", key)
-    end
-    local defaultX, defaultY = 0, 0
-    if type(_G.MSUF_GetDefaultUnitOffsets) == "function" then defaultX, defaultY = _G.MSUF_GetDefaultUnitOffsets(key) end
+    _G.MSUF_EM_UndoBeforeChange("unit", key)
+    local defaultX, defaultY = MSUF.Require("MSUF_GetDefaultUnitOffsets", CALLER)(key)
     conf.offsetX = defaultX
     conf.offsetY = defaultY
     if not ApplySettingsForKeySafe(key) then
         ApplyAllSettingsSafe()
     end
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
-        _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true)
-    elseif type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
-        _G.MSUF_ApplyPowerBarEmbedLayout_All()
-    end
+    MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", CALLER)(key, true)
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
     if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(key, "frame", nil, { source = "hud-reset", duration = 0.32 }) end
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh("EM2_HUD_RESET_POSITION") end
+    -- The unit preview belongs to the load-on-demand menu.
+    local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+    if refreshPreview then refreshPreview("EM2_HUD_RESET_POSITION") end
     HUD.SetStatus(string.format(HelpText("Reset %s"), HelpText(LABEL_BY_KEY[key] or key)), "ok")
     HUD.RefreshControls()
 end

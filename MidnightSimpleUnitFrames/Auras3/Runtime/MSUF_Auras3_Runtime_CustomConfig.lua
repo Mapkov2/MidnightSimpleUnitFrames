@@ -299,6 +299,13 @@ A3._PlayerDefensiveSpellIDHash = function()
     return cached
 end
 
+--- The name of an unnamed Custom Aura display, in the menu language.
+local function CustomAuraFallbackName(index)
+    local translate = MSUF.Translate
+    local format = type(translate) == "function" and translate("Custom Aura %d") or "Custom Aura %d"
+    return string.format(format, index)
+end
+
 local function CompileUnitCustomDisplays(auras, unit)
     local source = EffectiveUnitCustomDisplays(auras, unit)
     if type(source) ~= "table" then return nil end
@@ -311,7 +318,7 @@ local function CompileUnitCustomDisplays(auras, unit)
                 local helpful = tostring(entry.auraType or "BUFF"):upper() ~= "DEBUFF"
                 items[#items + 1] = {
                     key = "ufcustom:" .. tostring(entry.id or i),
-                    display = entry.name or ("Custom Aura " .. tostring(i)),
+                    display = entry.name or CustomAuraFallbackName(i),
                     enabled = true,
                     includeSpellIDs = includeSpellIDs,
                     nativeFilter = helpful and (entry.onlyOwn == true and "HELPFUL|PLAYER" or "HELPFUL")
@@ -457,7 +464,7 @@ end
 A3._ResolveSpecialCustomStyle = function(auras, unit, index, entry)
     local placed = type(entry) == "table" and type(entry.placed) == "table" and entry.placed or {}
     local frame = type(entry) == "table" and type(entry.frame) == "table" and entry.frame or nil
-    if index ~= 4 or type(entry) ~= "table" or entry._msufA3LocalStyleFromShared_v1 == true then
+    if index ~= A3.PRESET_CUSTOM_CONTAINER_INDEX or type(entry) ~= "table" or entry._msufA3LocalStyleFromShared_v1 == true then
         return placed, frame
     end
     local shared = type(auras) == "table" and type(auras.shared) == "table" and auras.shared or nil
@@ -751,17 +758,17 @@ end
 
 local function CompileUnitCustomLane(unit, entry, index, lanePadding, frameSpec, shared, auras)
     if type(entry) ~= "table" then return nil, nil end
-    local playerDefensives = unit == "player" and (index == 4 or entry.playerDefensives == true)
+    local playerDefensives = unit == "player" and (index == A3.PRESET_CUSTOM_CONTAINER_INDEX or entry.playerDefensives == true)
     -- `enabled` is the Core feature's master switch. Portrait mode is only a
     -- presentation choice and cannot keep a disabled feature alive.
     if entry.enabled ~= true then return nil, nil end
     local sourceSpellIDs = CustomSpellIDHash(entry.spellIDs or entry.includeSpellIDs)
     local includeSpellIDs = sourceSpellIDs
-    local targetDots = not playerDefensives and (index == 4 or entry.targetDots == true)
+    local targetDots = not playerDefensives and (index == A3.PRESET_CUSTOM_CONTAINER_INDEX or entry.targetDots == true)
     -- Target DoT portrait presentation belongs exclusively to the reserved
     -- index-4 lane. Custom 1-3 must remain normal custom containers even if a
     -- stale/imported record happens to carry the targetDots marker.
-    local portraitRequested = (playerDefensives or (targetDots and index == 4))
+    local portraitRequested = (playerDefensives or (targetDots and index == A3.PRESET_CUSTOM_CONTAINER_INDEX))
         and entry.portraitIcon == true
     if playerDefensives then
         includeSpellIDs = A3._PlayerDefensiveTrackedSpellIDHash(entry)
@@ -956,7 +963,7 @@ local function CompileUnitCustomContainers(auras, unit, frameSpec)
     -- Custom containers carry their own spacing in the per-container record;
     -- there is no Unit-wide or Shared lane-padding fallback.
     local lanes, effectItems, targetDotEffectItems = {}, {}, {}
-    for i = 1, 4 do
+    for i = 1, A3.CUSTOM_CONTAINER_COUNT do
         local lane, effect, portraitLane, reminderItems =
             CompileUnitCustomLane(unit, source[i], i, nil, frameSpec, auras.shared, auras)
         if lane then lanes["custom" .. tostring(i)] = lane end
@@ -968,7 +975,7 @@ local function CompileUnitCustomContainers(auras, unit, frameSpec)
             for j = 1, #reminderItems do effectItems[#effectItems + 1] = reminderItems[j] end
         end
         if effect then
-            local bucket = i == 4 and unit ~= "player" and targetDotEffectItems or effectItems
+            local bucket = i == A3.PRESET_CUSTOM_CONTAINER_INDEX and unit ~= "player" and targetDotEffectItems or effectItems
             bucket[#bucket + 1] = effect
         end
     end

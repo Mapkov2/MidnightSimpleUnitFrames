@@ -30,7 +30,9 @@ if type(GF.PARTY_DEFAULTS) ~= "table"
     error("MSUF_GroupFrames_DB_Migrations.lua loaded before MSUF_GroupFrames_DB.lua.", 2)
 end
 
+local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
 local PARTY_DEFAULTS = GF.PARTY_DEFAULTS
+local MIGRATIONS_FILE = "GroupFrames/MSUF_GroupFrames_DB_Migrations.lua"
 local RAID_DEFAULTS = GF.RAID_DEFAULTS
 local MYTHIC_RAID_DEFAULTS = GF.MYTHIC_RAID_DEFAULTS
 local PRIORITY_DEFAULTS = GF.PRIORITY_DEFAULTS
@@ -134,14 +136,16 @@ local function RemoveLayoutPresetState(conf)
 end
 
 local function NormalizeHealPredictionAnchorMode(value, fallback)
-    local mode = tonumber(value) or fallback or 3
-    if mode < 1 or mode > 5 then mode = fallback or 3 end
+    local mode = tonumber(value) or fallback or PREDICTION_ANCHOR.FOLLOW_HEALTH
+    if mode < PREDICTION_ANCHOR.LEFT or mode > PREDICTION_ANCHOR.REVERSE_FROM_MAX then
+        mode = fallback or PREDICTION_ANCHOR.FOLLOW_HEALTH
+    end
     return mode
 end
 
 local function ResolveSharedHealPredictionAnchorMode(db)
     local gen = db.general
-    return NormalizeHealPredictionAnchorMode(gen and gen.healPredAnchorMode, 3)
+    return NormalizeHealPredictionAnchorMode(gen and gen.healPredAnchorMode, PREDICTION_ANCHOR.FOLLOW_HEALTH)
 end
 
 local function MigrateHealPredictionOwnership(conf, scope, db)
@@ -152,12 +156,12 @@ local function MigrateHealPredictionOwnership(conf, scope, db)
     if conf.healPredEnabled == nil then
         conf.healPredEnabled = ResolveLegacyHealPredictionEnabled(db)
     end
-    conf.healPredAnchorMode = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, 3)
+    conf.healPredAnchorMode = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, PREDICTION_ANCHOR.FOLLOW_HEALTH)
     if conf._healPredBarsScopeMigrated ~= true then
         local sharedEnabled = ResolveLegacyHealPredictionEnabled(db)
         local localEnabled = conf.healPredEnabled == true
         local sharedAnchor = ResolveSharedHealPredictionAnchorMode(db)
-        local localAnchor = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, 3)
+        local localAnchor = NormalizeHealPredictionAnchorMode(conf.healPredAnchorMode, PREDICTION_ANCHOR.FOLLOW_HEALTH)
         if localEnabled ~= sharedEnabled or (localEnabled and localAnchor ~= sharedAnchor) then
             conf.hlOverride = true
         end
@@ -174,6 +178,24 @@ local function MigrateTextureOverrideOwnership(conf)
         conf.hlOverride = true
     end
     conf._barTextureOverrideMigrated = true
+end
+
+--- One-shot (stamped `_absorbMigrated`): early 6.0 profiles stored scope-level
+--- absorb toggles that shadowed the shared Bars values. The former pass stamped
+--- only its absorbEnabled branch and ran after the defaults step, so it cleared
+--- the healAbsorbEnabled the defaults had just refilled on every repair: a scope
+--- override of "Show negative heal absorbs" reverted at each login and profile
+--- switch. Runs before the defaults step, so a stored value is the user's and
+--- stays; a missing one is pinned to what the scope shows today (the shared
+--- value the cleared key fell back to), so the defaults fill never flips it.
+local function MigrateScopeAbsorbToggles(conf, _, db)
+    if type(conf) ~= "table" or conf._absorbMigrated == true then return end
+    if conf.absorbEnabled == true then conf.absorbEnabled = nil end
+    if conf.healAbsorbEnabled == nil then
+        local general = type(db) == "table" and db.general or nil
+        conf.healAbsorbEnabled = not (type(general) == "table" and general.healAbsorbEnabled == false)
+    end
+    conf._absorbMigrated = true
 end
 
 ---
@@ -251,16 +273,17 @@ local function NormalizeAuraRenderer(conf)
     end
 end
 
+--- The group aura filter helpers: MSUF_GF_AuraFilter, owned by
+--- Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua, which loads before the
+--- group files on every client. Resolved on first use by the repair below.
+local AuraFilterExport
+local function AuraFilter()
+    AuraFilterExport = AuraFilterExport or MSUF.Require("MSUF_GF_AuraFilter", MIGRATIONS_FILE)
+    return AuraFilterExport
+end
+
 --- Ensure spell filter fields exist on each aura sub-group.
 local function RepairAuraFilters(conf)
-    --- Migrate: remove legacy absorb/heal defaults that blocked global override
-    if conf.absorbEnabled == true and not conf._absorbMigrated then
-        conf.absorbEnabled = nil
-        conf._absorbMigrated = true
-    end
-    if conf.healAbsorbEnabled == true and not conf._absorbMigrated then
-        conf.healAbsorbEnabled = nil
-    end
     --- Remove absorb keys that shadow general when hlOverride is off
     if not conf.hlOverride then
         conf.absorbEnabled = nil
@@ -317,29 +340,15 @@ local function RepairAuraFilters(conf)
                 --- Retired/unknown native filters must not remain active
                 --- invisibly after their controls were removed from Menu2.
                 if gk == "buff" or gk == "debuff" then
-                    local AF = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+                    local AF = AuraFilter()
                     local normalize = AF and AF.NormalizeFilterToken
                     if type(normalize) == "function" then
                         g.filterToken = normalize(gk, g.filterToken)
                     end
                 end
-                if type(g.blacklistCats) ~= "table" then
-                    --- Apply sensible defaults from AuraFilter module
-                    local AF = GF.AuraFilter or _G.MSUF_GF_AuraFilter
-                    if AF then
-                        local defs = (gk == "buff") and AF.DEFAULT_BLACKLIST_BUFF
-                                  or (gk == "debuff") and AF.DEFAULT_BLACKLIST_DEBUFF
-                                  or nil
-                        if defs then
-                            g.blacklistCats = {}
-                            for k, v in pairs(defs) do g.blacklistCats[k] = v end
-                        else
-                            g.blacklistCats = {}
-                        end
-                    else
-                        g.blacklistCats = {}
-                    end
-                end
+                --- No default categories: MSUF_GF_AuraFilter.DEFAULT_BLACKLIST_BUFF/DEBUFF,
+                --- which this used to copy, are gone since 6.0 alpha 1 and read as nil.
+                if type(g.blacklistCats) ~= "table" then g.blacklistCats = {} end
                 if type(g.blacklist) ~= "table" then g.blacklist = {} end
                 if type(g.blacklist.spells) ~= "table" then g.blacklist.spells = {} end
                 if g.showDurationBar == nil then g.showDurationBar = false end
@@ -794,13 +803,31 @@ function GF.MigrateAuraConfig(conf, isRaid)
         conf.privateAuras = LegacyPrivateAuraDefaults()
         changed = true
     end
-    if type(conf.auras.buff) ~= "table" then conf.auras.buff = LegacyBuffDefaults(); changed = true end
-    if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = LegacyDebuffDefaults(); changed = true end
-    if type(conf.auras.externals) ~= "table" then conf.auras.externals = LegacyExternalDefaults(); changed = true end
-    if conf.auras.iconZoom == nil then conf.auras.iconZoom = 100; changed = true end
+    if type(conf.auras.buff) ~= "table" then
+        conf.auras.buff = LegacyBuffDefaults()
+        changed = true
+    end
+    if type(conf.auras.debuff) ~= "table" then
+        conf.auras.debuff = LegacyDebuffDefaults()
+        changed = true
+    end
+    if type(conf.auras.externals) ~= "table" then
+        conf.auras.externals = LegacyExternalDefaults()
+        changed = true
+    end
+    if conf.auras.iconZoom == nil then
+        conf.auras.iconZoom = 100
+        changed = true
+    end
     local legacyIconZoom = tonumber(conf.auras.iconZoom) or 100
-    if conf.auras.buff.iconZoom == nil then conf.auras.buff.iconZoom = legacyIconZoom; changed = true end
-    if conf.auras.debuff.iconZoom == nil then conf.auras.debuff.iconZoom = legacyIconZoom; changed = true end
+    if conf.auras.buff.iconZoom == nil then
+        conf.auras.buff.iconZoom = legacyIconZoom
+        changed = true
+    end
+    if conf.auras.debuff.iconZoom == nil then
+        conf.auras.debuff.iconZoom = legacyIconZoom
+        changed = true
+    end
     FillMissingAuraFields(conf.auras.buff, LEGACY_BUFF_DEFAULTS)
     FillMissingAuraFields(conf.auras.debuff, LEGACY_DEBUFF_DEFAULTS)
     FillMissingAuraFields(conf.auras.externals, LEGACY_EXTERNAL_DEFAULTS)
@@ -808,8 +835,14 @@ function GF.MigrateAuraConfig(conf, isRaid)
         conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9, iconZoom = 100, iconScale = 100 }
         changed = true
     end
-    if conf.spellIndicators.iconZoom == nil then conf.spellIndicators.iconZoom = 100; changed = true end
-    if conf.spellIndicators.iconScale == nil then conf.spellIndicators.iconScale = 100; changed = true end
+    if conf.spellIndicators.iconZoom == nil then
+        conf.spellIndicators.iconZoom = 100
+        changed = true
+    end
+    if conf.spellIndicators.iconScale == nil then
+        conf.spellIndicators.iconScale = 100
+        changed = true
+    end
     local _, spellStyleChanged = GF.EnsureSpellIndicatorStyle(conf)
     changed = spellStyleChanged or changed
     return changed
@@ -852,6 +885,8 @@ local DB_REPAIR_STEPS = {
     { name = "layoutPreset", run = RemoveLayoutPresetState },
     { name = "healPredOwnership", run = MigrateHealPredictionOwnership },
     { name = "textureOverrideOwnership", run = MigrateTextureOverrideOwnership },
+    --- Before "defaults": it must see the stored value, not the refilled default.
+    { name = "absorbToggleOwnership", run = MigrateScopeAbsorbToggles },
     { name = "splitDNDStatusText", run = MigrateSplitDNDStatusText },
     --- Party is the only scope that owns portrait config.
     { name = "portraitSizeMode", run = MigratePortraitSizeMode, scopes = PARTY_ONLY },

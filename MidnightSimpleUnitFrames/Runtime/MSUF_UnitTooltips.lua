@@ -11,6 +11,8 @@ local function PublishCompat(name, value)
 end
 
 local Tr = MSUF.Translate
+-- One combat-state source (Kernel/MSUF_Util.lua); see MSUF_RecomputeHoverInert.
+local InCombat = MSUF.Util.InCombat
 
 --- REQUIRED: State/MSUF_Defaults.lua is listed unconditionally in the TOC and
 --- exports MSUF_EnsureDB at its top level, far ahead of this file. The tooltip
@@ -112,7 +114,7 @@ local function MSUF_TooltipModeAllowed(mode, modifier)
         return false
     end
     if mode == TOOLTIP_MODE_OOC then
-        return not (_G.InCombatLockdown and _G.InCombatLockdown())
+        return not InCombat()
     end
     if mode == TOOLTIP_MODE_MODIFIER then
         modifier = MSUF_NormalizeTooltipModifierValue(modifier)
@@ -358,11 +360,11 @@ local function MSUF_UnitInfo_BuildNameLine(unit, fallbackName, isPlayer)
         if UnitIsAFK then
             local afk = UnitIsAFK(unit)
             if MSUF_UnitInfo_PlainBoolean(afk) == true then
-                nameLine = nameLine .. " <AFK>"
+                nameLine = string.format("%s <%s>", nameLine, Tr("AFK"))
             elseif UnitIsDND then
                 local dnd = UnitIsDND(unit)
                 if MSUF_UnitInfo_PlainBoolean(dnd) == true then
-                    nameLine = nameLine .. " <DND>"
+                    nameLine = string.format("%s <%s>", nameLine, Tr("DND"))
                 end
             end
         end
@@ -376,9 +378,9 @@ local function MSUF_UnitInfo_BuildLine4(faction, isPVP)
     local text = faction or ""
     if isPVP then
         if text ~= "" then
-            text = text .. "  PvP"
+            text = string.format("%s  %s", text, Tr("PvP"))
         else
-            text = "PvP"
+            text = Tr("PvP")
         end
     end
      return text
@@ -387,11 +389,11 @@ local function MSUF_UnitInfo_BuildLine2_Player(level, race, classLoc)
     local n = MSUF_UnitInfo_PlainNumber(level)
     if n and n > 0 then
         if race and classLoc then
-            return string.format("Level %d %s %s", n, race, classLoc)
+            return string.format(Tr("Level %d %s %s"), n, race, classLoc)
         elseif classLoc then
-            return string.format("Level %d %s", n, classLoc)
+            return string.format(Tr("Level %d %s"), n, classLoc)
         else
-            return string.format("Level %d", n)
+            return string.format(Tr("Level %d"), n)
         end
     end
     return classLoc or ""
@@ -399,13 +401,13 @@ end
 local function MSUF_UnitInfo_ClassificationText(classification)
     classification = MSUF_UnitInfo_PlainString(classification)
     if classification == "elite" then
-         return "Elite"
+         return Tr("Elite")
     elseif classification == "rare" then
-         return "Rare"
+         return Tr("Rare")
     elseif classification == "rareelite" then
-         return "Rare Elite"
+         return Tr("Rare Elite")
     elseif classification == "worldboss" then
-         return "Boss"
+         return Tr("Boss")
     end
      return nil
 end
@@ -414,12 +416,11 @@ local function MSUF_UnitInfo_BuildLine2_NPC(level, classification)
     if not (n and n > 0) then
          return ""
     end
-    local line2 = string.format("Level %d", n)
     local clsText = MSUF_UnitInfo_ClassificationText(classification)
     if clsText then
-        line2 = line2 .. string.format(" (%s)", clsText)
+        return string.format(Tr("Level %d (%s)"), n, clsText)
     end
-     return line2
+     return string.format(Tr("Level %d"), n)
 end
 local function MSUF_UnitInfo_SetText(fontString, value)
     if MSUF_UnitInfo_IsSecret(value) then
@@ -451,7 +452,7 @@ local function ShowUnitInfoTooltip(unit, fallbackName)
         local creatureType = MSUF_UnitInfo_PlainString(UnitCreatureType(unit))
         local line2 = ""
         if level and level > 0 then
-            line2 = string.format("Level %d", level)
+            line2 = string.format(Tr("Level %d"), level)
         end
         MSUF_UnitInfo_ShowFrame(f, name, line2, creatureType or "", "", MSUF_UnitInfo_GetLocationText())
         return
@@ -646,14 +647,15 @@ end
 -- Runs only on combat transitions, world entry, and setting changes -- never
 -- per hover. When a config becomes inert we also drop any unit tooltip we own
 -- (never another addon's, hence the owner check) so nothing lingers while the
--- OnLeave hooks are short-circuited.
-MSUF_RecomputeHoverInert = function()
+-- OnLeave hooks are short-circuited. The combat watcher passes its event:
+-- PLAYER_REGEN_DISABLED arrives before InCombatLockdown() turns true.
+MSUF_RecomputeHoverInert = function(event)
     local mode = MSUF_GetTooltipCache().mode
     local inert
     if mode == TOOLTIP_MODE_NEVER then
         inert = true
     elseif mode == TOOLTIP_MODE_OOC then
-        inert = (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+        inert = InCombat(event) and true or false
     else
         inert = false
     end
@@ -677,13 +679,16 @@ do
         watcher:RegisterEvent("PLAYER_ENTERING_WORLD")
         watcher:SetScript("OnEvent", function(_, event)
             if event ~= "MODIFIER_STATE_CHANGED" then
-                MSUF_RecomputeHoverInert()
+                MSUF_RecomputeHoverInert(event)
             else
                 MSUF_HandleTooltipModifier()
             end
         end)
     end
-    MSUF_RecomputeHoverInert()
+    -- No recompute at file load: the SavedVariables are not loaded yet, so it
+    -- built a throwaway profile through MSUF_EnsureDB on every login and read
+    -- that profile's mode. PLAYER_ENTERING_WORLD settles the flag with the
+    -- real one before the first hover can happen.
 end
 
 --- ==========================================================================

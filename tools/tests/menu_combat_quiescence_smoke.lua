@@ -109,7 +109,10 @@ local function EnterCombat(lockFirst)
     world.widgets:SetCombat(true)
     return listeners
 end
+-- PLAYER_REGEN_ENABLED arrives on a later frame than the combat edge, so the
+-- edge the menu marked at PLAYER_REGEN_DISABLED has expired (Util.InCombat).
 local function LeaveCombat()
+    world.widgets:AdvanceTime(1 / 60)
     world.widgets:SetCombat(false)
     Fire("PLAYER_REGEN_ENABLED")
     world.widgets:RunTimers()

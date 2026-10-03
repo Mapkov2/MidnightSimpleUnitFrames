@@ -91,12 +91,7 @@ local NormalizePreviewTextFocusSlot = PreviewHelpers.NormalizeTextFocusSlot
 -- Focus region lists live on the mock and the placement options on the box,
 -- so refitting the ring after an animation tick allocates nothing.
 local function FocusRegionList(mock, field, a, b, c, d)
-    local lists = mock._msufFocusRegionLists
-    if not lists then lists = {}; mock._msufFocusRegionLists = lists end
-    local list = lists[field]
-    if not list then list = {}; lists[field] = list end
-    list[1], list[2], list[3], list[4] = a, b, c, d
-    return list
+    return PreviewHelpers.CachedRegionList(mock, "_msufFocusRegionLists", field, a, b, c, d)
 end
 local function PreviewTextFocusRegions(mock, kind, slot)
     if not mock then return nil end
@@ -181,26 +176,11 @@ end
 local function PreviewAnimationActive(box)
     return box and box._animationEnabled == true
 end
+local ANIMATE_IDLE_FILL, ANIMATE_IDLE_BORDER = { 0.015, 0.018, 0.030, 0.86 }, { 0.10, 0.14, 0.22, 0.92 }
 local function RefreshPreviewAnimationButton(box)
     local btn = box and box.animateCombatButton
     if not btn then return end
-    local active = PreviewAnimationActive(box)
-    if btn.fs then
-        -- The button plays an animation loop; it does not switch the preview
-        -- into a combat state. Label it after what it does.
-        btn.fs:SetText(active and TR("Stop") or TR("Animate"))
-        btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
-    end
-    if btn.MSUF2RefreshPreviewPill then btn:MSUF2RefreshPreviewPill(active) end
-    if btn.SetBackdropColor and not btn._msuf2PreviewPillFill then
-        if active then
-            btn:SetBackdropColor(0.020, 0.125, 0.155, 0.96)
-            btn:SetBackdropBorderColor(0.10, 0.82, 0.95, 1)
-        else
-            btn:SetBackdropColor(0.015, 0.018, 0.030, 0.86)
-            btn:SetBackdropBorderColor(0.10, 0.14, 0.22, 0.92)
-        end
-    end
+    PreviewHelpers.PaintAnimateButton(btn, PreviewAnimationActive(box), TR, ANIMATE_IDLE_FILL, ANIMATE_IDLE_BORDER)
 end
 local function StopPreviewAnimationDriver(box)
     if not (box and box.SetScript) then return end
@@ -223,7 +203,8 @@ end
 --- listener for the whole fight (only the single re-arm signal stays), and
 --- the driver exists only while a preview box is in use.
 local LIVE_STATE_UNIT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_NAME_UPDATE", "UNIT_LEVEL", "UNIT_FACTION" }
-local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus", boss = "boss1", arena = "arena1", pet = "pet", pettarget = "pettarget" }
+local LIVE_STATE_UNIT_TOKENS = { player = "player", target = "target", targettarget = "targettarget", focustarget = "focustarget", focus = "focus",
+    boss = "boss1", arena = "arena1", pet = "pet", pettarget = "pettarget" }
 local SyncUnitPreviewLiveState
 local function UnitPreviewLiveStateEvent(driver, event)
     local box = driver._msufLiveStateBox
@@ -231,17 +212,7 @@ local function UnitPreviewLiveStateEvent(driver, event)
         driver:UnregisterAllEvents()
         return
     end
-    if event == "PLAYER_REGEN_DISABLED" then
-        driver:UnregisterAllEvents()
-        driver._msufLiveArmed = false
-        driver:RegisterEvent("PLAYER_REGEN_ENABLED")
-        return
-    end
-    if not (box.IsShown and box:IsShown()) then
-        driver:UnregisterAllEvents()
-        driver._msufLiveArmed = false
-        return
-    end
+    if PreviewHelpers.LiveStateDriverGate(driver, event, box) then return end
     if event == "PLAYER_REGEN_ENABLED" then
         SyncUnitPreviewLiveState(box, box.key, "PLAYER_REGEN_ENABLED")
         return
@@ -401,37 +372,11 @@ local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
     if not box then return end
     local T = MenuTheme()
     local colors = (T and T.colors) or {}
-    local shade = box._msuf2PinnedHeaderShade
-    if not shade and box.CreateTexture then
-        shade = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, -1))
-        shade:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
-        shade:SetPoint("TOPRIGHT", box, "TOPRIGHT", -1, -1)
-        shade:SetHeight(29)
-        shade:SetTexture(TEX_W8)
-        box._msuf2PinnedHeaderShade = shade
-    end
-    local line = box._msuf2PinnedHeaderLine
-    if not line and box.CreateTexture then
-        line = PixelLayoutRegion(box:CreateTexture(nil, "BORDER", nil, 0))
-        line:SetPoint("TOPLEFT", box, "TOPLEFT", 10, -29)
-        line:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -29)
-        line:SetHeight(1)
-        line:SetTexture(TEX_W8)
-        box._msuf2PinnedHeaderLine = line
-    end
+    local shade, line = M2.PreviewHelpers.EnsurePinnedHeader(box)
     if M2.PreviewSelectionBar then M2.PreviewSelectionBar.SetShown(box, true) end
     if box.ApplyDockedPreviewLayout then box:ApplyDockedPreviewLayout(12) end
     if box.footer then box.footer:SetShown(not pinned) end
-    if shade then
-        local bg = colors.coreShadow or { 0.006, 0.016, 0.032, 1 }
-        shade:SetColorTexture(bg[1], bg[2], bg[3], pinned and 0.92 or 0)
-        shade:SetShown(pinned)
-    end
-    if line then
-        local border = colors.borderSoft or colors.border or { 0.070, 0.260, 0.390, 1 }
-        line:SetColorTexture(border[1], border[2], border[3], pinned and 0.52 or 0)
-        line:SetShown(pinned)
-    end
+    M2.PreviewHelpers.PaintPinnedHeader(shade, line, colors, pinned)
     UpdateHandleHint(box, box._selectedHandle)
 end
 --- Compact inline presentation: the preview shrinks to a reference strip, the
@@ -461,29 +406,7 @@ local function EnsureUnitLayersButton(box)
 end
 local SetUnitCanvasToolsShown = M2.PreviewHelpers.SetCanvasToolsShown
 local function LayoutUnitHeaderControls(box, compact)
-    if not box then return end
-    local header = box._msuf2CompactHeader
-    local expandBtn = box._msuf2CompactExpandButton
-    local layersBtn = box._msuf2LayersButton
-    if compact and header then
-        if layersBtn then
-            if layersBtn.SetText then layersBtn:SetText(TR("Layers") .. " v", true) end
-            layersBtn:SetParent(header)
-            layersBtn:ClearAllPoints()
-            if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
-            else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
-            if layersBtn.SetFrameLevel and header.GetFrameLevel then
-                layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3)
-            end
-        end
-        return
-    end
-    if layersBtn then
-        if layersBtn.SetText then layersBtn:SetText("Layers") end
-        layersBtn:SetParent(box)
-        layersBtn:ClearAllPoints()
-        layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
-    end
+    PreviewHelpers.LayoutCompactLayersButton(box, compact, TR)
 end
 local function ApplyUnitCompactPresentation(box, compact, sideW)
     if not box then return end

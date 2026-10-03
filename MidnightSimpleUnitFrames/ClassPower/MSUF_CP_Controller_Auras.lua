@@ -1,10 +1,16 @@
 --- ClassPower/MSUF_CP_Controller_Auras.lua - controller player-aura cache
 --- The player auras the aura-driven class resources read: Maelstrom Weapon,
---- Icicles, the Devourer Soul Fragment auras and the Eclipse auras (Mists
---- Arcane Charges on the Classic clients). The cache keeps the watched spells
---- by spell and by aura instance and turns a UNIT_AURA payload into "did the
---- active resource change". Restricted IDs, payloads and fields are never
---- compared or iterated.
+--- Icicles and the Devourer Soul Fragment auras (Mists Arcane Charges on the
+--- Classic clients). The cache keeps the watched spells by spell and by aura
+--- instance and turns a UNIT_AURA payload into "did the active resource
+--- change". Restricted IDs, payloads and fields are never compared or
+--- iterated.
+---
+--- Only a resource the controller follows through UNIT_AURA is watched: the
+--- cache is exactly as fresh as those events. Any other spell (the Balance
+--- runtime's Eclipse auras, which it tracks with its own UNIT_AURA cache) is
+--- read live, so an aura that ends before its expiration time (death, a
+--- dispel) is never handed back from here.
 ---
 --- The controller binds it once at load (CONTROLLER_AURAS) and keeps the
 --- returned cache as CPAuras; the mode runners read it through
@@ -12,13 +18,8 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
 
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
+local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 local type, tonumber, pairs = type, tonumber, pairs
 
@@ -32,9 +33,11 @@ local CPAuras = {
     spellByInstance = {},
 }
 
+--- A restricted spell or aura instance ID is never compared, not even with
+--- nil: the secret check comes first.
 function CPAuras.NormalizeID(value)
-    if value == nil then return nil end
     if NotSecret(value) == false then return nil end
+    if value == nil then return nil end
     return tonumber(value)
 end
 
@@ -43,8 +46,19 @@ function CPAuras.AddSpell(spellID)
     if spellID then CPAuras.watched[spellID] = true end
 end
 
+--- The aura's spell ID. A restricted ID is never boolean-tested: the first
+--- field is read once, a secret one answers nil, and the other spellings are
+--- read only when it is a plain nil. UNIT_AURA payloads run through here, so
+--- the usual spelling returns after one secret check.
 function CPAuras.AuraSpellID(aura)
-    return aura and CPAuras.NormalizeID(aura.spellId or aura.spellID or aura.id) or nil
+    if not aura then return nil end
+    local id = aura.spellId
+    if NotSecret(id) == false then return nil end
+    if id ~= nil then return tonumber(id) end
+    id = aura.spellID
+    if NotSecret(id) == false then return nil end
+    if id == nil then id = aura.id end
+    return CPAuras.NormalizeID(id)
 end
 
 function CPAuras.AuraInstanceID(aura)
@@ -156,34 +170,25 @@ function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
     return nil
 end
 
+--- Called on every UNIT_AURA whose payload is hidden: no closure per call.
 function CPAuras.RefreshActive(powerType, renderMode)
-    local changed = false
-    local handled = true
-    local function Refresh(spellID, stateKind)
-        if CPAuras.RefreshSpell(spellID, stateKind) then changed = true end
-    end
-
     if powerType == "MAELSTROM_WEAPON" then
-        Refresh(CPK.SPELL.MAELSTROM_WEAPON, "stacks")
+        return CPAuras.RefreshSpell(CPK.SPELL.MAELSTROM_WEAPON, "stacks")
     elseif powerType == "ICICLES" then
-        Refresh(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
+        return CPAuras.RefreshSpell(CPConst.ICICLES and CPConst.ICICLES.AURA_ID, "stacks")
     elseif powerType == "SOUL_FRAGMENTS" then
-        Refresh(CPK.SPELL.VOID_METAMORPHOSIS, "stacks")
-        Refresh(CPK.SPELL.SILENCE_THE_WHISPERS, "stacks")
-        Refresh(CPK.SPELL.DARK_HEART, "stacks")
+        --- All three refresh, whatever the first ones report.
+        local void = CPAuras.RefreshSpell(CPK.SPELL.VOID_METAMORPHOSIS, "stacks")
+        local silence = CPAuras.RefreshSpell(CPK.SPELL.SILENCE_THE_WHISPERS, "stacks")
+        local heart = CPAuras.RefreshSpell(CPK.SPELL.DARK_HEART, "stacks")
+        return void or silence or heart
     elseif powerType == "SOUL_FRAGMENTS_VENG" then
         --- Vengeance reads the native spell cast count; UNIT_AURA is only a
         --- value-change signal and does not require any aura-cache queries.
-        changed = true
-    else
-        handled = false
-    end
-
-    if not handled then
-        CPAuras.Rebuild()
         return true
     end
-    return changed
+    CPAuras.Rebuild()
+    return true
 end
 
 function CPAuras.IsExpired(aura)
@@ -334,9 +339,6 @@ builders.CONTROLLER_AURAS = function(E)
     CPAuras.AddSpell(CPK.SPELL.VOID_METAMORPHOSIS)
     CPAuras.AddSpell(CPK.SPELL.SILENCE_THE_WHISPERS)
     CPAuras.AddSpell(CPK.SPELL.DARK_HEART)
-    for spellID in pairs(CPConst.ECLIPSE_AURAS or {}) do
-        CPAuras.AddSpell(spellID)
-    end
     --- Classic: Mists Arcane Charges is the only aura resource a Classic provider
     --- routes, so it is the whole watched set there, and its incremental and
     --- fallback aura updates are answered before the Retail resources are asked.

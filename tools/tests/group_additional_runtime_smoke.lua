@@ -25,10 +25,18 @@ local function Read(path)
     return text
 end
 
+local Secrets = dofile(root .. "/tools/tests/classpower_secrets.lua")
+Secrets.Install()
+local secretValues = false
+local secretHealth, secretMax = Secrets.New("number"), Secrets.New("number")
+local secretName, secretPower = Secrets.New("string"), Secrets.New("number")
+
 local combat, raid, group, size = false, false, true, 3
 local counters = {}
 local function Count(name) counters[name] = (counters[name] or 0) + 1 end
 local function Reset() counters = {} end
+local isSecret = issecretvalue
+issecretvalue = function(value) Count("issecretvalue"); return isSecret(value) end
 
 local methods = {}
 local frames = {}
@@ -64,8 +72,8 @@ function methods:Hide() if self.secure then assert(not combat, "secure Hide in c
 function methods:SetShown(v) if v then self:Show() else self:Hide() end end
 function methods:IsShown() return self.shown end
 function methods:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) end
-function methods:SetValue(v) self.value = v end
-function methods:SetMinMaxValues(_, v) self.maxValue = v end
+function methods:SetValue(v) Count("SetValue"); self.value = v end
+function methods:SetMinMaxValues(_, v) Count("SetMinMaxValues"); self.maxValue = v end
 -- As in the client, a FontString without a font refuses SetText ("Font not set").
 function methods:SetText(v)
     if self.kind == "FontString" then assert(self.font, "FontString:SetText(): Font not set") end
@@ -92,6 +100,12 @@ function methods:EnableMouse() end
 
 UIParent = Frame("Frame", "UIParent")
 local MSUF = { GF = {} }
+local startingCombat = false
+MSUF.Util = { InCombat = function(event)
+    if event == "PLAYER_REGEN_DISABLED" then startingCombat = true end
+    if event == "PLAYER_REGEN_ENABLED" then startingCombat = false end
+    return startingCombat or combat
+end }
 local GF = MSUF.GF
 local XML = Read("MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.xml")
 local ONLOAD = assert(XML:match('<OnLoad function="([%w_]+)"/>'))
@@ -122,12 +136,13 @@ local timers = {}
 C_Timer = { After = function(_, fn) timers[#timers + 1] = fn end }
 local function RunTimers() local due = timers; timers = {}; for _, fn in ipairs(due) do fn() end end
 local health = { party1target = 70, target = 50, pet = 30, partypet1 = 40 }
-function UnitHealth(unit) Count("UnitHealth"); return health[unit] or 100 end
-function UnitHealthMax(unit) Count("UnitHealthMax"); return 100 end
-function UnitName(unit) Count("UnitName"); return unit end
+function UnitHealth(unit) Count("UnitHealth"); if secretValues then return secretHealth end; return health[unit] or 100 end
+function UnitHealthMax(unit) Count("UnitHealthMax"); if secretValues then return secretMax end; return 100 end
+local names, powerValues = {}, {}
+function UnitName(unit) Count("UnitName"); if secretValues then return secretName end; return names[unit] or unit end
 function UnitClass() return "Hunter", "HUNTER" end
-function UnitPower(unit) return "MANA:" .. unit end
-function UnitPowerMax() return 1000 end
+function UnitPower(unit) Count("UnitPower"); if secretValues then return secretPower end; return powerValues[unit] or "MANA:" .. unit end
+function UnitPowerMax() Count("UnitPowerMax"); if secretValues then return secretMax end; return 1000 end
 local roles = { player = "HEALER", party1 = "DAMAGER", party2 = "HEALER" }
 function RegisterUnitWatch(b) assert(not combat, "unit watch in combat"); b.watched = true end
 function UnregisterUnitWatch(b) assert(not combat, "unit watch in combat"); b.watched = false end
@@ -152,11 +167,13 @@ function GF.GetUnitGroupRole(unit) return roles[unit] or "DAMAGER" end
 function GF.RegisterRuntimeObserver(_, cb) GF.observer = cb end
 MSUF.UFBarTextCommon = { ApplyHealthStatusColor = function(bar) Count("Paint"); bar:SetStatusBarColor(.1, .2, .3) end }
 
+dofile(root .. "/tools/tests/group_dependencies.lua")(MSUF)
 local function Load(client)
     MSUF.Client = client
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua"))("MSUF", MSUF)
 end
-Load({ SupportsUnit = function() return true end })
+local supportedEvents = { INSTANCE_ENCOUNTER_ENGAGE_UNIT = true, UNIT_TARGETABLE_CHANGED = true }
+Load({ SupportsUnit = function() return true end, SupportsEvent = function(event) return supportedEvents[event] == true end })
 
 ---------------------------------------------------------------------------
 -- Defaults: every block has its own start spot (P3-1)
@@ -232,6 +249,41 @@ Reset()
 pet.scripts.OnEvent(pet, "UNIT_CONNECTION", "partypet1")
 assert(counters.UnitName == 1 and counters.Paint == 1, "identity event skipped the repaint")
 
+-- The cached maximum is secret too. Identity seeds it before any health event;
+-- only UNIT_MAXHEALTH replaces it. A number-shaped secret catches nil checks.
+secretValues = true
+local stopSecrets = Secrets.Watch(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua")
+pet.scripts.OnEvent(pet, "UNIT_NAME_UPDATE", "partypet1")
+pet.scripts.OnEvent(pet, "UNIT_HEALTH", "partypet1")
+pet.scripts.OnEvent(pet, "UNIT_MAXHEALTH", "partypet1")
+assert(rawequal(pet.Health.value, secretHealth) and rawequal(pet.Health.maxValue, secretMax), "secret values missed bar sinks")
+assert(rawequal(pet.Name.text, secretName), "secret name missed text sink")
+local violations = stopSecrets()
+assert(#violations == 0, table.concat(violations, "\n"))
+secretValues = false
+pet.scripts.OnEvent(pet, "UNIT_NAME_UPDATE", "partypet1")
+
+-- Steady health work: freeze VM, allocation and native-call costs separately.
+local function MeasureHealth()
+    Reset()
+    local ticks = 0
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local kb = collectgarbage("count")
+    debug.sethook(function() ticks = ticks + 1 end, "", 1)
+    for _ = 1, 100 do pet.scripts.OnEvent(pet, "UNIT_HEALTH", "partypet1") end
+    debug.sethook()
+    kb = collectgarbage("count") - kb
+    collectgarbage("restart")
+    assert(counters.UnitHealth == 100 and counters.SetValue == 100, "health native read/write budget changed")
+    assert(not counters.UnitHealthMax and not counters.UnitName and not counters.Paint, "health event did identity work")
+    print(string.format("group additional health: %.2f instructions / %.3f KB / 3 native calls per event", ticks / 100, kb / 100))
+    assert(counters.issecretvalue == 100, "health secret-query budget changed")
+    -- Baseline: 8611 instructions including counter stubs; allow at most 2%.
+    assert(ticks <= 8783 and kb <= 1, "steady health VM/allocation budget exceeded")
+end
+MeasureHealth()
+
 ---------------------------------------------------------------------------
 -- Idempotent refresh, previews, coalescing (P2-5) and the pet anchor (P2-6)
 ---------------------------------------------------------------------------
@@ -268,6 +320,52 @@ local function ManaUnits()
     return table.concat(out, ",")
 end
 assert(ManaUnits() == "party2,player", "healer rows wrong: " .. ManaUnits())
+-- A roster swap can replace a person without replacing the row's unit token.
+local manaRow
+for _, f in ipairs(frames) do if f.parent == mana and f.unit == "party2" then manaRow = f end end
+assert(manaRow)
+names.party2, powerValues.party2 = "Replacement healer", 275
+combat = true
+Reset()
+for _, f in ipairs(frames) do
+    if f.events.GROUP_ROSTER_UPDATE and f.scripts.OnEvent then f.scripts.OnEvent(f, "GROUP_ROSTER_UPDATE") end
+end
+RunTimers()
+assert(manaRow.name.text == "Replacement healer" and manaRow.bar.value == 275,
+    "same-token roster replacement kept the old healer name or mana")
+assert(not counters.RegisterUnitEvent, "same-token roster replacement rebound events")
+assert(counters.UnitName == 2 and counters.UnitPower == 2 and counters.UnitPowerMax == 2,
+    "roster repaint must read each of two healers exactly once")
+Reset()
+local manaInstructions = 0
+collectgarbage("collect")
+collectgarbage("stop")
+local manaKB = collectgarbage("count")
+debug.sethook(function() manaInstructions = manaInstructions + 1 end, "", 1)
+for _ = 1, 100 do manaRow.scripts.OnEvent(manaRow, "UNIT_POWER_UPDATE", "party2", "MANA") end
+debug.sethook()
+manaKB = collectgarbage("count") - manaKB
+collectgarbage("restart")
+-- Three natives per mana tick: UnitPower, SetValue, SetText. The maximum is
+-- UNIT_MAXPOWER's (registered by BindManaRow) and the bind's; before the fix
+-- every tick also called UnitPowerMax and SetMinMaxValues (5 natives).
+assert(counters.UnitPower == 100 and counters.SetValue == 100 and counters.SetText == 100 and not counters.UnitName,
+    "mana tick native-call budget changed")
+assert(not counters.UnitPowerMax and not counters.SetMinMaxValues, "a mana tick re-read the maximum: UnitPowerMax "
+    .. tostring(counters.UnitPowerMax) .. ", SetMinMaxValues " .. tostring(counters.SetMinMaxValues) .. " per 100 ticks")
+print(string.format("group additional mana: %.2f instructions / %.3f KB / 3 native calls per event",
+    manaInstructions / 100, manaKB / 100))
+assert(manaInstructions <= 16000 and manaKB <= 1, "mana tick VM/allocation budget exceeded")
+-- The maximum follows UNIT_MAXPOWER (mana only) and the value with it.
+assert(manaRow.events.UNIT_MAXPOWER and manaRow.units.UNIT_MAXPOWER == "party2", "mana row lost UNIT_MAXPOWER")
+Reset()
+manaRow.scripts.OnEvent(manaRow, "UNIT_MAXPOWER", "party2", "RAGE")
+assert(not counters.UnitPowerMax and not counters.UnitPower, "a non-mana maximum touched the mana row")
+manaRow.scripts.OnEvent(manaRow, "UNIT_MAXPOWER", "party2", "MANA")
+assert(counters.UnitPowerMax == 1 and counters.SetMinMaxValues == 1 and manaRow.bar.maxValue == 1000
+    and counters.UnitPower == 1 and counters.SetValue == 1, "UNIT_MAXPOWER did not set the maximum and the value")
+combat = false
+
 combat = true
 roles.party2, roles.party1 = "DAMAGER", "HEALER"
 for _, f in ipairs(frames) do if f.events.GROUP_ROSTER_UPDATE and f.scripts.OnEvent then f.scripts.OnEvent(f, "GROUP_ROSTER_UPDATE") end end
@@ -277,6 +375,32 @@ combat = false
 for _, f in ipairs(frames) do if f.events.PLAYER_REGEN_ENABLED and f.scripts.OnEvent then f.scripts.OnEvent(f, "PLAYER_REGEN_ENABLED") end end
 
 ---------------------------------------------------------------------------
+-- The combat edge precedes InCombatLockdown. A synchronous settings refresh
+-- during that edge must defer protected changes until regen as well.
+local runtimeEvents
+for _, f in ipairs(frames) do if f.events.PLAYER_REGEN_DISABLED then runtimeEvents = f; break end end
+conf.targetsEnabled = true
+GF.RefreshAdditionalGroups()
+-- Start with an existing sample so the edge must hide it, not merely avoid birth.
+local previewParent = Frame("Frame", nil, UIParent)
+local sample = assert(GF.RenderAdditionalPreview(previewParent, "party", "targets", 5))
+assert(sample:IsShown(), "preview fixture did not render before combat")
+runtimeEvents.scripts.OnEvent(runtimeEvents, "PLAYER_REGEN_DISABLED")
+assert(not InCombatLockdown() and startingCombat, "fixture missed the combat-start edge")
+local frameCount = #frames
+assert(GF.RenderAdditionalPreview(previewParent, "party", "targets", 5) == nil,
+    "RenderAdditionalPreview accepted the combat-start edge")
+assert(not sample:IsShown(), "RenderAdditionalPreview left the sample visible at combat start")
+assert(GF.ShowAdditionalGroupPreview("party", 5) == false,
+    "ShowAdditionalGroupPreview accepted the combat-start edge")
+assert(#frames == frameCount, "a refused combat-start preview created frames")
+conf.targetsEnabled = false
+GF.RefreshAdditionalGroups()
+assert(MSUF_GroupAdditional_Targets.shown, "combat-start settings refresh hid a protected holder")
+runtimeEvents.scripts.OnEvent(runtimeEvents, "PLAYER_REGEN_ENABLED")
+assert(not MSUF_GroupAdditional_Targets.shown, "regen did not replay the protected holder change")
+conf.targetsEnabled = true
+
 -- Allied bosses: drivers released on disable; none without boss units (P2-15, P3-2)
 ---------------------------------------------------------------------------
 local bosses = {}
@@ -285,10 +409,41 @@ assert(#bosses == 5 and bosses[1].driver == "[@boss1,help,exists] show; hide", "
 Reset()
 GF.RefreshAdditionalGroups()
 assert(not counters.RegisterStateDriver, "boss drivers re-registered on an unchanged refresh")
+-- A boss token passed to another friendly NPC while its button stays shown
+-- (no OnShow, no name event): the encounter engage and targetable events
+-- repaint the identity, as Blizzard's boss frames do (TargetFrame.lua).
+local bossHolder = MSUF_GroupAdditional_FriendlyBosses
+assert(bossHolder.events.INSTANCE_ENCOUNTER_ENGAGE_UNIT and bossHolder.events.UNIT_TARGETABLE_CHANGED,
+    "allied bosses do not listen for a boss token changing hands")
+for _, button in ipairs(bosses) do button:Show() end
+names.boss1, names.boss2 = "Second ally", "Third ally"
+Reset()
+bossHolder.scripts.OnEvent(bossHolder, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+assert(bosses[1].Name.text == "Second ally" and bosses[2].Name.text == "Third ally" and counters.Paint == 5,
+    "a boss token changing hands left the old name and colour on a shown button")
+bosses[3]:Hide()
+names.boss2 = "Fourth ally"
+Reset()
+bossHolder.scripts.OnEvent(bossHolder, "UNIT_TARGETABLE_CHANGED", "boss2")
+assert(bosses[2].Name.text == "Fourth ally" and counters.UnitName == 1 and counters.Paint == 1,
+    "UNIT_TARGETABLE_CHANGED did not repaint exactly its own boss button")
+Reset()
+bossHolder.scripts.OnEvent(bossHolder, "UNIT_TARGETABLE_CHANGED", "boss3")
+bossHolder.scripts.OnEvent(bossHolder, "UNIT_TARGETABLE_CHANGED", "nameplate1")
+bossHolder.scripts.OnEvent(bossHolder, "UNIT_TARGETABLE_CHANGED", Secrets.New("string"))
+assert(not counters.UnitName and not counters.Paint, "a hidden, foreign or secret unit repainted a boss button")
+bosses[3]:Show()
 roles.player = "DAMAGER"
 GF.RefreshAdditionalGroups()
 assert(counters.UnregisterStateDriver == 5 and bosses[1].driver == nil and not bosses[1].shown, "boss drivers kept running after the block turned off")
+assert(next(bossHolder.events) == nil, "the allied boss holder kept listening after the block turned off")
+-- A client without an event (Client.SupportsEvent) registers only the others.
+supportedEvents.UNIT_TARGETABLE_CHANGED = nil
 roles.player = "HEALER"
+GF.RefreshAdditionalGroups()
+assert(bossHolder.events.INSTANCE_ENCOUNTER_ENGAGE_UNIT and not bossHolder.events.UNIT_TARGETABLE_CHANGED,
+    "the allied boss holder did not follow the client's events")
+supportedEvents.UNIT_TARGETABLE_CHANGED = true
 
 ---------------------------------------------------------------------------
 -- A nil scope enable is off, like the group runtime (P3-7)
@@ -308,7 +463,7 @@ for k, v in pairs({ GetConf = function() return conf end, EnsureDB = function() 
     ResolveBarTexture = function() return "bar" end, ResolveFontPath = function() return "font" end, ResolveFontFlags = function() return "" end,
     GetCompiledSpec = function() return spec end, ResolveNameColor = function() return 1, 1, 1 end,
     GetUnitGroupRole = function(unit) return roles[unit] or "DAMAGER" end, RegisterRuntimeObserver = function() end }) do GF[k] = v end
-Load({ SupportsUnit = function(unit) return unit ~= "boss1" end })
+Load({ SupportsUnit = function(unit) return unit ~= "boss1" end, SupportsEvent = function() return true end })
 Reset()
 GF.RefreshAdditionalGroups()
 assert(not counters.RegisterStateDriver and GF.GetAdditionalPreviewSpec("party", "friendlyBoss") == nil
@@ -322,16 +477,20 @@ local body = assert(em2:match("\n(local ADDITIONAL_BLOCK_NAMES = .-\nend)\n\nloc
 local registered, batches = {}, 0
 local api = { RegisterElements = function(owner, list) batches = batches + 1; assert(owner == "msuf_group_extras"); for _, e in ipairs(list) do registered[#registered + 1] = e end return true end,
     RegisterElement = function() error("extra movers registered one at a time") end }
-local factory = assert(loadstring("return function(MSUF, GF, GetConf, ConfigLocked, LABELS, GROUP_KINDS, max, min) " .. body .. " return RegisterAdditionalMovers end"))()
-local register = factory({ EditModeAPI = api, Translate = function(text) return "T:" .. text end },
+local factory = assert(loadstring("return function(MSUF, GF, GetConf, ConfigLocked, LABELS, GROUP_KINDS, max, min, Translate) "
+    .. body .. " return RegisterAdditionalMovers end"))()
+local function Translate(text) return "T:" .. text end
+local register = factory({ EditModeAPI = api },
     function() return GF end, function() return conf end, function() return false end,
-    { party = "Group: Party", raid = "Group: Raid" }, { "party", "raid" }, math.max, math.min)
+    { party = "Group: Party", raid = "Group: Raid" }, { "party", "raid" }, math.max, math.min, Translate)
 register()
 assert(batches == 1, "extra movers were not registered in one batch")
 local ids = {}
 for _, e in ipairs(registered) do
     ids[#ids + 1] = e.id
     assert(e.label:find("T:", 1, true) and e.extraControls[1].label == "T:Width", "mover labels are not translated")
+    -- A translated format over translated pieces, never an English key concatenated.
+    assert(e.label:find("^T:T:Group: %a+: T:") and e.group:find("^T:Group: "), "mover label is not composed: " .. e.label)
 end
 table.sort(ids)
 assert(table.concat(ids, ",") == "party_healerMana,party_pets,party_targets,raid_healerMana,raid_pets",

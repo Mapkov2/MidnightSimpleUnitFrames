@@ -16,16 +16,20 @@ local namespace = {
         return value
     end,
 }
--- The Auras3 core is not loaded here; its EnsureDB returns the profile's tree.
-namespace.MSUF_Auras3.EnsureDB = function()
+-- The shared core loads below for the helpers it shares with the backends, but
+-- this smoke reads the profile's tree as written: its normalizing EnsureDB and
+-- its generation counter are replaced right after it loads.
+local function StubEnsureDB()
     local auras = _G.MSUF_DB.auras3
     return auras, auras.shared
 end
-namespace.MSUF_Auras3.BumpRuntimeConfig = function()
+local function StubBumpRuntimeConfig()
     local A3 = namespace.MSUF_Auras3
     A3._runtimeConfigGen = (A3._runtimeConfigGen or 1) + 1
     return A3._runtimeConfigGen
 end
+namespace.MSUF_Auras3.EnsureDB = StubEnsureDB
+namespace.MSUF_Auras3.BumpRuntimeConfig = StubBumpRuntimeConfig
 
 -- No live group frames until the Group bridge section below: the group
 -- runtime (MSUF.GF, loaded after the aura backend in game) has nothing to redraw.
@@ -108,6 +112,11 @@ local classicPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_A
 local featuresPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua"
 local retailPath = root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
 local classicAuras = root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_"
+-- The shipped chain (Game/Classic/UnitFrames/MSUF_UFCore_Elements.xml): the
+-- shared core first, then the icon shapes and the Classic backend.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"))("MidnightSimpleUnitFrames", namespace)
+namespace.MSUF_Auras3.EnsureDB = StubEnsureDB
+namespace.MSUF_Auras3.BumpRuntimeConfig = StubBumpRuntimeConfig
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(classicAuras .. "DataShared.lua"))("MidnightSimpleUnitFrames", namespace)
 assert(loadfile(classicAuras .. "Visuals.lua"))("MidnightSimpleUnitFrames", namespace)
@@ -123,8 +132,13 @@ assert(loadfile(classicBackend .. "Preview.lua"))("MidnightSimpleUnitFrames", na
 assert(loadfile(retailPath))("MidnightSimpleUnitFrames", namespace)
 
 assert(registrations == 1, "Retail aura backend registered after Classic ownership")
-assert(namespace.MSUF_Auras3.classicAuraBackend == true, "Classic backend marker missing")
-assert(namespace.MSUF_Auras3.nativeAuraBackend == false, "native backend must be disabled on Classic")
+assert(namespace.MSUF_Auras3._ClassicBackend and namespace.MSUF_Auras3._ClassicBackend.Element,
+    "Classic backend element missing")
+-- Review 2026-10-02: nothing read the backend marker flags; they stay gone.
+for _, key in ipairs({ "classicAuraBackend", "nativeAuraBackend", "backendEnabled", "frontendOnly", "unitFrameAuras" }) do
+    assert(namespace.MSUF_Auras3[key] == nil, "the unread A3." .. key .. " marker is back")
+end
+assert(namespace.AuraBackendEnabled == nil, "the unread MSUF.AuraBackendEnabled marker is back")
 assert(registered and registered.events[1] == "UNIT_AURA", "Classic backend must own UNIT_AURA")
 
 -- The shared Edit Mode preview hides the rendered lane and forwards clicks
@@ -351,12 +365,43 @@ _G.MSUF_DB.gf_party = {
         externals = { enabled = true, max = 2, autoBlacklistBuffs = true },
     },
 }
+assert(loadfile(root .. "/tools/tests/profile_normalize_loader.lua"))().Install(root, namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MSUF", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Menu_Compat.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 namespace.GF = namespace.GF or {}
+-- The group compiler reads GF.PREDICTION_ANCHOR_MODES, GF.ABSORB_DISPLAY_MODES and
+-- GF.GetUnitGroupRole at load. Their owners, GroupFrames/MSUF_GroupFrames_DB.lua and
+-- MSUF_GroupFrames_DB_Geometry.lua, need the whole group DB behind them (defaults,
+-- EnsureDB, repairs) and this fixture keeps the profile's tree as written, so the real
+-- mode tables, role functions and captured API locals are compiled out of those files.
+do
+    local Slice = assert(loadfile(root .. "/.github/scripts/msuf_source_slice.lua"))()
+    local dbPath = root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB.lua"
+    local db = Slice.Read(dbPath)
+    local modeTables = {
+        "local GF = ...",
+        assert(db:match("GF%.PREDICTION_ANCHOR_MODES = %b{}"), "DB no longer names the prediction anchor modes"),
+        (assert(db:match("GF%.ABSORB_DISPLAY_MODES = %b{}"), "DB no longer names the absorb display modes")),
+    }
+    assert(loadstring(table.concat(modeTables, "\n"), "@" .. dbPath .. " (mode tables)"))(namespace.GF)
+    local geometryPath = root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Geometry.lua"
+    local geometry = Slice.Read(geometryPath)
+    local rolesApi = assert(geometry:match("local _GF_UnitGroupRolesAssigned = [^\n]+"),
+        "Geometry no longer captures UnitGroupRolesAssigned")
+    local secretApi = assert(geometry:match("local _GF_issecretvalue = [^\n]+"),
+        "Geometry no longer captures issecretvalue")
+    local roleChunk = table.concat({
+        "local GF = ...",
+        rolesApi,
+        secretApi,
+        Slice.Function(geometry, "function GF.NormalizeGroupRole", geometryPath),
+        Slice.Function(geometry, "function GF.GetUnitGroupRole", geometryPath),
+    }, "\n")
+    assert(loadstring(roleChunk, "@" .. geometryPath .. " (role functions)"))(namespace.GF)
+end
 namespace.GF.GetConf = function() return _G.MSUF_DB.gf_party end
 namespace.GF.GetScaledFrameMetrics = function() return 80, 32 end
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Metadata.lua"))("MidnightSimpleUnitFrames", namespace)
@@ -554,6 +599,24 @@ do
             and arena.blacklist.debuffs.hidePermanent == false,
             "Classic Arena Hide Permanent did not preserve/fan out owner " .. i)
     end
+
+    -- Pet is its own scope (Menu_Common NormalizeUnit): its first Hide Permanent
+    -- edit copies the Shared blacklist into the Pet override and leaves Player
+    -- on Shared. It used to prepare a Player override instead (re-review R6).
+    auras.perUnit.pet = nil
+    assert(Model.WriteBlacklistHidePermanent("pet", "buff", true) == true,
+        "Classic Pet Hide Permanent write did not report its change")
+    assert(auras.perUnit.player == nil,
+        "Classic Pet Hide Permanent write prepared a Player blacklist override")
+    local pet = auras.perUnit.pet
+    assert(pet and pet.overrideBlacklist == true
+        and pet.blacklist ~= sharedBlacklist
+        and pet.blacklist.spells[710001] == true
+        and pet.blacklist.debuffs.maxDuration == 37
+        and pet.blacklist.buffs.hidePermanent == true,
+        "Classic Pet Hide Permanent did not copy the Shared blacklist into the Pet override")
+    assert(Model.ReadBlacklistHidePermanent("pet", "buff") == true,
+        "Classic Pet menu did not read back its Hide Permanent")
 
     local function Read(path)
         local file = assert(io.open(path, "rb"))

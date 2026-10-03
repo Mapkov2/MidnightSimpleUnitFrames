@@ -13,7 +13,8 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
-if not Backend or Backend.Requests or not Backend.Element then return end
+assert(Backend and Backend.Element, "Classic aura requests require Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua")
+if Backend.Requests then return end
 local Compile = A3._ClassicCompile
 local Requests = {}
 
@@ -41,34 +42,9 @@ function A3._EnsureDeferredAuraRuntimeDriver()
     return frame
 end
 
-function A3._QueueDeferredAuraRuntime(scope, reason, visuals)
-    scope = tostring(scope or "shared"):lower()
-    A3._deferredAuraRuntime = true
-    A3._deferredAuraRuntimeReason = reason or A3._deferredAuraRuntimeReason or "AURAS3_CLASSIC_DEFERRED"
-    if visuals == true then A3._deferredAuraRuntimeVisuals = true end
-    if scope == "" or scope == "shared" or scope == "global" or scope == "all" or scope == "*" then
-        A3._deferredAuraRuntimeAll = true
-        A3._deferredAuraRuntimeScopes = nil
-    elseif A3._deferredAuraRuntimeAll ~= true then
-        A3._deferredAuraRuntimeScopes = A3._deferredAuraRuntimeScopes or {}
-        A3._deferredAuraRuntimeScopes[scope] = true
-    end
-    local frame = A3._EnsureDeferredAuraRuntimeDriver()
-    if frame then frame:RegisterEvent("PLAYER_REGEN_ENABLED") end
-    return false
-end
-
-function A3._AuraPreviewGroupKind(scope)
-    local key = tostring(scope or ""):lower()
-    if key == "party" or key == "gf_party" or key:match("^party%d+$") then return "party", true end
-    if key == "raid" or key == "gf_raid" or key:match("^raid%d+$") then return "raid", true end
-    if key == "mythicraid" or key == "gf_mythicraid" then return "mythicraid", true end
-    if key == "" or key == "shared" or key == "global" or key == "all" or key == "*"
-        or key == "group" or key == "groups" then
-        return nil, true
-    end
-    return nil, false
-end
+-- The queue (A3._QueueDeferredAuraRuntime), the scope test and the preview
+-- group kind are shared with Retail in Auras3/MSUF_Auras3_Core.lua.
+A3._deferredAuraDefaultReason = "AURAS3_CLASSIC_DEFERRED"
 
 function A3._NotifyAuraColdpathPreview(reason, scope)
     if CombatBlocked() then
@@ -93,16 +69,13 @@ local function ApplyRuntimeUnit(runtimeUnit)
     if CombatBlocked() then
         return A3._QueueDeferredAuraRuntime(runtimeUnit, "AURAS3_CLASSIC_RUNTIME_UNIT")
     end
-    local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
-        or (UF.frames and UF.frames[runtimeUnit])
-        or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[runtimeUnit])
-        or _G["MSUF_" .. runtimeUnit]
+    -- The frame that owns the unit's auras, else the unit frame itself. The
+    -- unit-frame factory registers every frame in UF.frames together with its
+    -- MSUF_<unit> global and _G.MSUF_UnitFrames, the same table
+    -- (RegisterGlobals in UnitFrames/Engine/MSUF_UF_Factory.lua).
+    local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit]) or UF.frames[runtimeUnit]
     if not frame then return false end
-    if UF.ApplyElementToFrame then
-        UF.ApplyElementToFrame(frame, "Auras", frame.MSUFSpec, nil)
-    else
-        A3.EnableFrame(frame)
-    end
+    UF.ApplyElementToFrame(frame, "Auras", frame.MSUFSpec, nil)
     return true
 end
 
@@ -115,11 +88,7 @@ function A3._ApplyGroupAuraFrame(frame, unit, kind)
     if kind then frame._msufGFKind = kind end
     local spec = frame.MSUFSpec
     if kind then spec = MSUF.GF.CompileSpec(kind, frame, unit) end
-    if UF.ApplyElementToFrame then
-        UF.ApplyElementToFrame(frame, "Auras", spec, nil)
-    else
-        A3.RenderFrame(frame)
-    end
+    UF.ApplyElementToFrame(frame, "Auras", spec, nil)
     return true
 end
 
@@ -237,24 +206,6 @@ function A3.RefreshAll()
     return RefreshAllNow()
 end
 
-A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
-    player = true, pet = true, target = true, focus = true, boss = true, arena = true,
-    party = true, raid = true, mythicraid = true,
-    gf_party = true, gf_raid = true, gf_mythicraid = true,
-    group = true, groups = true,
-    shared = true, global = true, all = true, ["*"] = true,
-}
-
-A3._LooksLikeApplyScope = function(value)
-    value = tostring(value or ""):lower()
-    if value == "" then return false end
-    if A3._requestApplyScopeKeys[value] then return true end
-    return value:match("^boss%d+$") ~= nil
-        or value:match("^arena%d+$") ~= nil
-        or value:match("^party%d+$") ~= nil
-        or value:match("^raid%d+$") ~= nil
-end
-
 --- The shared Auras3 core installs a no-runtime RequestScope stub before the
 --- client backend loads.  Classic must replace it just like Mainline does;
 --- otherwise Menu2 changes only invalidate configuration and never reach the
@@ -327,7 +278,6 @@ function A3.ApplyFontsFromGlobal(scope, reason)
     A3._NotifyAuraColdpathPreview(reason or "AURAS3_CLASSIC_FONT_VISUALS", "shared")
     return didWork
 end
-MSUF.ExportPublic("MSUF_Auras3_ApplyFontsFromGlobal", A3.ApplyFontsFromGlobal)
 
 --- Applies the queue collected while combat blocked aura runtime work. The
 --- queue is consumed only as work completes: a scope entry is removed after its
@@ -392,11 +342,5 @@ function A3.InvalidateUnitRuntimeConfig(unit)
     end
     return runtimeUnit
 end
-
-A3.RefreshRuntime = A3.RefreshAll
-
-MSUF.ExportPublic("MSUF_A3_RequestUnit", A3.RequestUnit)
-MSUF.ExportPublic("MSUF_Auras3_RefreshUnit", A3.RefreshUnit)
-MSUF.ExportPublic("MSUF_Auras3_RefreshAll", A3.RefreshAll)
 
 Backend.Requests = Requests

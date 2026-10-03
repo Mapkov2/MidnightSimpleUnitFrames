@@ -18,7 +18,17 @@ local registered
 local namespace = {
     Client = { IsClassic = true, DispellableDebuffFilter = "HARMFUL|RAID_PLAYER_DISPELLABLE" },
     MSUF_Auras3 = {},
-    UF = { RegisterElement = function(_, element) registered = element end, Config = { serial = 1 } },
+    UF = {
+        RegisterElement = function(_, element) registered = element end, Config = { serial = 1 },
+        -- UF.ApplyElementToFrame as the core runs it for the aura element: the
+        -- spec, then Enable, and Disable when Enable declines.
+        frames = {},
+        ApplyElementToFrame = function(frame, _, spec)
+            if spec then frame.MSUFSpec = spec end
+            if registered.Enable(frame) == false then registered.Disable(frame) end
+            return true
+        end,
+    },
     ExportPublic = function(name, value) _G[name] = value; return value end,
 }
 _G.MSUF_NS, _G.MSUF = namespace, namespace
@@ -442,6 +452,7 @@ do
         target = { layout = {}, layoutShared = { showBuffs = true, showDebuffs = true }, filters = {} },
     }))
     A3.BumpRuntimeConfig()
+    assert(loadfile(root .. "/tools/tests/profile_normalize_loader.lua"))().Install(root, namespace)
     assert(loadfile(ADDON .. "Auras3/MSUF_Auras3_Menu_Model.lua"))("MidnightSimpleUnitFrames", namespace)
     local Model = assert(A3.MenuModel and A3.MenuModel.Apply, "F12: the shared menu model did not load")
     world.pet, world.target = { Aura(true) }, { Aura(true) }
@@ -1175,6 +1186,35 @@ do
     end
     assert(not source:find("A3.CooldownText", 1, true),
         "F14: the Classic backend calls the A3.CooldownText hook again, which no Classic file defines")
+    -- Re-review 2026-10-02 (W3): no addon file, test or sibling repo calls these.
+    assert(not source:find("PostCreateButton", 1, true), "F14: the never-set lane.PostCreateButton hook is back")
+    -- The request helpers both backends copied live once, in the shared core.
+    local facadeHandle = assert(io.open(ADDON .. "Auras3/Runtime/MSUF_Auras3_Runtime_Facade.lua", "rb"))
+    local backends = source .. facadeHandle:read("*a")
+    facadeHandle:close()
+    for _, copy in ipairs({ "function A3._AuraPreviewGroupKind", "A3._LooksLikeApplyScope = function",
+        "A3._requestApplyScopeKeys = ", "function A3._QueueDeferredAuraRuntime", "function A3.RequestApply(" }) do
+        local hits = 0
+        for _ in backends:gmatch(copy:gsub("[%(%)%.%-%[%]%*%+%?%^%$]", "%%%0")) do hits = hits + 1 end
+        assert(hits == (copy == "function A3.RequestApply(" and 1 or 0),
+            "F14: a backend defines its own copy of the shared core's " .. copy)
+    end
+    assert(A3._LooksLikeApplyScope("arena2") == true and A3._AuraPreviewGroupKind("party3") == "party",
+        "F14: precondition: the shared request helpers are missing")
+    for _, name in ipairs({ "MSUF_A3_RequestUnit", "MSUF_Auras3_RefreshUnit", "MSUF_Auras3_RefreshAll",
+        "MSUF_Auras3_ApplyFontsFromGlobal" }) do
+        assert(_G[name] == nil, "F14: the uncalled global " .. name .. " is back")
+    end
+    assert(A3.BackendEnabled == nil and A3.NormalizeLegacyDispelBorderMode == nil and A3.DBRef == nil,
+        "F14: an unread A3 export (BackendEnabled, NormalizeLegacyDispelBorderMode, DBRef) is back")
+    local Model = assert(A3.MenuModel, "F14: precondition: the shared menu model is not loaded")
+    for _, name in ipairs({ "BlacklistSummary", "BlacklistPreparedCount", "UseSharedRules", "SetUseSharedRules",
+        "ScopeFiltersEnabled", "SetScopeFiltersEnabled", "UseSharedVisuals", "SetUseSharedVisuals",
+        "WriteGeneralBool", "WriteGeneralNumber", "WriteGeneralColor", "ReadSharedNumber", "WriteSharedNumber",
+        "ReadGrowth", "WriteGrowth", "ReadRowWrap", "WriteRowWrap", "RowWrapValues",
+        "GroupBlacklistSummary", "GroupBlacklistCategorySummary" }) do
+        assert(Model[name] == nil, "F14: the uncalled menu model export Model." .. name .. " is back")
+    end
     assert(type(_G.MSUF_SetDispelOverlayPreview) == "function" and type(_G.MSUF_SetDispelSymbolPreview) == "function",
         "F14: precondition: the live Classic dispel previews are gone")
     -- The dispel previews are an ordinary module loaded after the backend, not an
@@ -1447,6 +1487,13 @@ do
         V.UpdateDispelSymbols(frame, visual, { Magic = true, Curse = true }, preview)
         assert(host:GetFrameStrata() == "MEDIUM",
             "C3.5: an AUTO " .. label .. " symbol did not take its frame's strata")
+        -- W3.6 (re-review 2026-10-02): the signature keyed on "AUTO", so the same
+        -- symbols on a frame that changed strata kept the old one.
+        frame:SetFrameStrata("DIALOG")
+        V.UpdateDispelSymbols(frame, visual, { Magic = true, Curse = true }, preview)
+        assert(host:GetFrameStrata() == "DIALOG",
+            "W3.6: an AUTO " .. label .. " symbol kept " .. tostring(host:GetFrameStrata())
+            .. " after its frame moved to DIALOG")
     end
     Widget.SetFrameStrata, Widget.GetFrameStrata = savedSet, savedGet
     Widget.SetMovable, Widget.RegisterForDrag = savedMovable, savedDrag
@@ -1514,6 +1561,221 @@ do
         and pieces[1]._shown == false and rebuilt[1]._width == 6 and Left(rebuilt[1]) == -3,
         "F10: switching an inner border style to an outer one kept the inner draw layer")
     namespace.BorderStyles, _G.MSUF_BorderStyles = nil, nil
+end
+
+-- W3.1 (re-review 2026-10-02). Classic lanes accept all nine menu anchors ------------
+-- The lane Anchor and cooldown-text Anchor dropdowns offer nine points
+-- (AURA_ANCHORS, Menu_Schema). Classic kept only the four corners and CENTER,
+-- so TOP/LEFT/RIGHT/BOTTOM fell back to the lane default while the Edit Mode
+-- preview drew the choice.
+do
+    for _, anchor in ipairs({ "TOP", "LEFT", "RIGHT", "BOTTOM", "TOPLEFT", "CENTER", "BOTTOMRIGHT" }) do
+        LoadProfile(Profile({ target = {
+            layout = { buffAnchor = anchor, debuffAnchor = anchor },
+            layoutShared = { showBuffs = true, showDebuffs = true, maxBuffs = 4, maxDebuffs = 4,
+                buffCooldownTextAnchor = anchor },
+            filters = {},
+        } }))
+        A3.BumpRuntimeConfig()
+        world.target = { Aura(true), Aura(false) }
+        local target = NewFrame("target", {})
+        assert(Lane(target, "buff").config.anchor == anchor and Lane(target, "debuff").config.anchor == anchor,
+            "W3.1: a target lane dropped the menu anchor " .. anchor .. " for "
+            .. tostring(Lane(target, "buff").config.anchor))
+        assert(Lane(target, "buff").config.cooldownAnchor == anchor,
+            "W3.1: the cooldown text dropped the menu anchor " .. anchor)
+        local party = NewFrame("party3", { scope = "group", auras = {
+            enabled = true, showBuffs = true, maxBuffs = 4, buffAnchor = anchor, buffCooldownAnchor = anchor,
+        } }, GroupFields("party"))
+        assert(Lane(party, "buff").config.anchor == anchor and Lane(party, "buff").config.cooldownAnchor == anchor,
+            "W3.1: a group lane dropped the menu anchor " .. anchor)
+    end
+    -- A value no menu offers still falls back to the lane default.
+    LoadProfile(Profile({ target = {
+        layout = { buffAnchor = "MIDDLE" }, layoutShared = { showBuffs = true, maxBuffs = 4 }, filters = {},
+    } }))
+    A3.BumpRuntimeConfig()
+    local target = NewFrame("target", {})
+    assert(Lane(target, "buff").config.anchor == "BOTTOMRIGHT", "W3.1: an unknown anchor did not fall back")
+end
+
+-- W3.2 (re-review 2026-10-02). "Raid in combat" lanes follow the combat edge ---------
+-- RAID_IN_COMBAT membership flips with the player's combat state. The edge
+-- handler re-rendered each lane's cached active set without re-running the
+-- filters or bumping the unit's token serial, so the container kept showing
+-- the other side's auras until an unrelated full update.
+do
+    LoadProfile(Profile({ focus = { layout = {}, filters = {}, layoutShared = { showBuffs = false, showDebuffs = false } } }))
+    local hot = Aura(true, { spellId = 672001, tokens = { RAID_IN_COMBAT = false } })
+    local plain = Aura(true, { spellId = 672002, tokens = {} })
+    world.focus = { hot, plain }
+    _G.MSUF_DB.auras3.customContainers = { perUnit = { focus = { items = {
+        [1] = { enabled = true, auraType = "BUFF", spellIDs = "672001 672002",
+            filters = { enabled = true, raidInCombat = true }, placed = { size = 20, max = 8, perRow = 8 } },
+    } } } }
+    A3.BumpRuntimeConfig()
+    local focus = NewFrame("focus", {})
+    local events = registered.GetUnitlessEvents(focus)
+    local hearsEdge = false
+    for i = 1, #events do if events[i] == "PLAYER_REGEN_DISABLED" then hearsEdge = true end end
+    assert(hearsEdge, "W3.2: precondition: a Raid in combat container does not hear the combat edge")
+    assert(VisibleIDs(Lane(focus, "custom1")) == "",
+        "W3.2: precondition: the out-of-combat container shows " .. VisibleIDs(Lane(focus, "custom1")))
+    hot.tokens.RAID_IN_COMBAT = true
+    registered.Update(focus, "PLAYER_REGEN_DISABLED")
+    assert(VisibleIDs(Lane(focus, "custom1")) == IDs(hot),
+        "W3.2: entering combat kept the out-of-combat Raid in combat set: " .. VisibleIDs(Lane(focus, "custom1")))
+    hot.tokens.RAID_IN_COMBAT = false
+    registered.Update(focus, "PLAYER_REGEN_ENABLED")
+    assert(VisibleIDs(Lane(focus, "custom1")) == "",
+        "W3.2: leaving combat kept the in-combat Raid in combat set: " .. VisibleIDs(Lane(focus, "custom1")))
+    _G.MSUF_DB.auras3.customContainers = nil
+end
+
+-- W3.3 (re-review 2026-10-02). Lane Layer follows the menu's 0..30 slider ---------------
+-- The lane Layer control writes 0..30 (Model.ReadLaneLayer, the Layer
+-- overview); Classic clamped unit and group lanes to 1..15.
+do
+    for _, layer in ipairs({ 0, 25, 30 }) do
+        LoadProfile(Profile({ target = {
+            layout = { buffLayer = layer }, layoutShared = { showBuffs = true, maxBuffs = 4 }, filters = {},
+        } }))
+        A3.BumpRuntimeConfig()
+        world.target = { Aura(true) }
+        local target = NewFrame("target", {})
+        local lane = Lane(target, "buff")
+        assert(lane.config.layer == layer, "W3.3: a target lane clamped Layer " .. layer .. " to " .. tostring(lane.config.layer))
+        assert(lane.frame._frameLevel == lane.root:GetFrameLevel() + layer,
+            "W3.3: the target lane frame is not on Layer " .. layer)
+        local party = NewFrame("party3", { scope = "group", auras = {
+            enabled = true, showBuffs = true, maxBuffs = 4, buffLayer = layer,
+        } }, GroupFields("party"))
+        assert(Lane(party, "buff").config.layer == layer,
+            "W3.3: a group lane clamped Layer " .. layer .. " to " .. tostring(Lane(party, "buff").config.layer))
+    end
+end
+
+-- W3.4 (re-review 2026-10-02). A sorted lane keeps no arrival list ---------------------
+-- AddAuraToLane appended every new aura id to lane.ordered, which only the
+-- natural-order render reads and compacts. On a sorted lane (the default) the
+-- list grew with every delta-added aura until the next full scan.
+do
+    LoadProfile(Profile({ target = {
+        layout = {}, layoutShared = { showBuffs = true, maxBuffs = 4 }, filters = {},
+    } }))
+    A3.BumpRuntimeConfig()
+    world.target = { Aura(true) }
+    local target = NewFrame("target", {})
+    local lane = Lane(target, "buff")
+    assert(lane.config.naturalOrder ~= true, "W3.4: precondition: the default target buff lane is not sorted")
+    local list = UnitList("target")
+    for _ = 1, 200 do
+        local aura = Aura(true)
+        list[#list + 1] = aura
+        Update(target, { addedAuras = { aura } })
+        list[#list] = nil
+        Update(target, { removedAuraInstanceIDs = { aura.auraInstanceID } })
+    end
+    assert(Visible(target, "buff") == 1, "W3.4: precondition: the delta churn changed the visible buffs")
+    assert((lane.orderedCount or 0) <= 1 and #lane.ordered <= 1,
+        "W3.4: 200 delta-added auras grew a sorted lane's arrival list to " .. tostring(lane.orderedCount))
+    -- Arrival order still records and compacts its own list.
+    LoadProfile(Profile({ target = {
+        layout = {}, layoutShared = { showBuffs = true, maxBuffs = 4, buffSortMethod = "INSTANCE_ID" }, filters = {},
+    } }))
+    A3.BumpRuntimeConfig()
+    local first, second, third = Aura(true), Aura(true), Aura(true)
+    world.target = { first, second }
+    target = NewFrame("target", {})
+    lane = Lane(target, "buff")
+    assert(lane.config.naturalOrder == true, "W3.4: precondition: Arrival order is not a natural-order lane")
+    world.target[3] = third
+    Update(target, { addedAuras = { third } })
+    assert(VisibleIDs(lane) == IDs(first, second, third),
+        "W3.4: an arrival-order lane lost its order: " .. VisibleIDs(lane))
+end
+
+-- W3.5 (re-review 2026-10-02). Every Classic sort mode is a strict weak order ----------
+-- table.sort needs one. The default ("Player first") mode compared
+-- canApplyAura as true, false or unknown, and unknown (a synthetic weapon
+-- enchant, a secret flag) tied with both other classes, so two auras tied
+-- with a third while ranking against each other.
+do
+    local Compile = assert(A3._ClassicCompile, "W3.5: the Classic compile module is missing")
+    -- The named modes keep the values every lane compiles (lane.sortOrder).
+    local M = assert(Compile.SORT_MODE, "W3.5: the Classic sort modes are not named")
+    assert(M.ARRIVAL == 0 and M.PLAYER_FIRST == 1 and M.DURATION == 2 and M.EXPIRATION == 3
+        and M.EXPIRATION_ONLY == 4 and M.NAME == 5 and M.NAME_ONLY == 6, "W3.5: a Classic sort mode changed its value")
+    assert(Compile.SortMode("DEFAULT") == M.PLAYER_FIRST and Compile.SortMode("INSTANCE_ID") == M.ARRIVAL,
+        "W3.5: the sort-name parser changed")
+    local auras, mine = {}, {}
+    local canApply, durations, expirations, names = { true, false, nil }, { 30, 10 }, { 70, 0, 50 }, { "B", "A" }
+    for i = 1, 12 do
+        local aura = {
+            auraInstanceID = 9000 + i,
+            canApplyAura = canApply[(i % 3) + 1],
+            duration = durations[(i % 2) + 1],
+            expirationTime = expirations[(i % 3) + 1],
+            name = names[(i % 2) + 1],
+        }
+        if i % 4 == 0 then aura.canApplyAura = nil end
+        auras[i] = aura
+        mine[aura.auraInstanceID] = i % 5 == 0
+    end
+    Compile.SetSortOwnership(mine)
+    for mode = 0, 6 do
+        local less = Compile.SortComparator(mode)
+        local function Equivalent(a, b) return not less(a, b) and not less(b, a) end
+        for i = 1, #auras do
+            local a = auras[i]
+            assert(not less(a, a), "W3.5: sort mode " .. mode .. " ranks an aura before itself")
+            for j = 1, #auras do
+                local b = auras[j]
+                assert(not (less(a, b) and less(b, a)), "W3.5: sort mode " .. mode .. " is not asymmetric")
+                for k = 1, #auras do
+                    local c = auras[k]
+                    if less(a, b) and less(b, c) then
+                        assert(less(a, c), "W3.5: sort mode " .. mode .. " is not transitive")
+                    end
+                    if Equivalent(a, b) and Equivalent(b, c) then
+                        assert(Equivalent(a, c), "W3.5: sort mode " .. mode
+                            .. " ties are not transitive (auras " .. a.auraInstanceID .. ", "
+                            .. b.auraInstanceID .. ", " .. c.auraInstanceID .. ")")
+                    end
+                end
+            end
+        end
+    end
+    Compile.SetSortOwnership(nil)
+end
+
+-- W3.8 (re-review 2026-10-02). One host-rect offset helper for both dispel previews ----
+-- Classic's Visuals and Retail's EffectPreview each turned a dragged symbol
+-- host back into saved offsets with their own copy of the edge math.
+do
+    local function Rect(left, bottom, width, height)
+        return { GetLeft = function() return left end, GetRight = function() return left and left + width end,
+            GetBottom = function() return bottom end, GetTop = function() return bottom + height end }
+    end
+    local parent, host = Rect(100, 100, 200, 50), Rect(250.5, 130, 20, 12)
+    local x, y = A3.HostAnchorOffset(host, parent, "TOPRIGHT")
+    assert(x == -29.5 and y == -8, "W3.8: the shared host offset changed: " .. tostring(x) .. ", " .. tostring(y))
+    x, y = A3.HostAnchorOffset(host, parent, "CENTER")
+    assert(x == 60.5 and y == 11, "W3.8: the shared centre offset changed")
+    assert(A3.HostAnchorOffset(Rect(nil, 0, 1, 1), parent, "TOP") == nil, "W3.8: an unresolved rect gave an offset")
+    -- Classic rounds half away from zero, as before.
+    local V = assert(A3.ClassicVisuals, "W3.8: precondition: the Classic visuals are missing")
+    x, y = V.DispelPreviewAnchorOffset(host, parent, "topright")
+    assert(x == -30 and y == -8, "W3.8: the Classic preview offset changed: " .. tostring(x))
+    local handle = assert(io.open(ADDON .. "Auras3/Runtime/MSUF_Auras3_Runtime_EffectPreview.lua", "rb"))
+    local effectPreview = handle:read("*a")
+    handle:close()
+    handle = assert(io.open(overrides["Game/Classic/Auras/MSUF_Auras3_Visuals.lua"]
+        or (ADDON .. "Game/Classic/Auras/MSUF_Auras3_Visuals.lua"), "rb"))
+    local visuals = handle:read("*a")
+    handle:close()
+    assert(not (effectPreview .. visuals):find("host:GetLeft(), host:GetRight()", 1, true),
+        "W3.8: a dispel preview carries its own copy of the host-rect offset math again")
 end
 
 -- F6. Edit Mode and menu group test frames never run the live backend -------------------

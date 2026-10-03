@@ -14,7 +14,8 @@
 --      changelog page by its selected release: toggling between views that
 --      were built once creates nothing.
 -- Pass "report" to print the frame counts per trigger, including the search
--- results and the resize rebuild, which still build a new tree each time.
+-- results (built once, then repainted in place: search_results_repaint_smoke)
+-- and the resize rebuild, which still builds a new tree each time.
 --
 -- Boots the real core and Options graph of one client (menu_core_world.lua).
 -- Plain Lua 5.1, repo root and client flavor.

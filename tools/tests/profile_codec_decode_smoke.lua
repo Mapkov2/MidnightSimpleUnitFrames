@@ -95,6 +95,44 @@ for _, case in ipairs(cases) do
 end
 assert(nativeRaises > 0, "no case reached the raising native decoder")
 
+-- Wave 4: neither inflater takes an output limit, so the size of a deflate
+-- stream is checked before it is inflated. A stream above the cap is never
+-- handed to C_EncodingUtil.DecompressString or LibDeflate; a profile of
+-- factory size (about 37 KB of deflate) still inflates.
+local limits = assert(namespace.ProfileIOImportLimits, "import limits not published")
+local cap = assert(limits.compressedBytes, "no compressed-size cap before the inflate")
+assert(cap >= 64 * 1024 and cap * 1032 <= limits.decodedBytes * 8,
+    "the compressed cap no longer bounds a deflate bomb to a few hundred MiB")
+local inflates, deflateInflates = 0, 0
+local realDecompress = C_EncodingUtil.DecompressString
+C_EncodingUtil.DecompressString = function(compressed, method)
+    inflates = inflates + 1
+    return realDecompress(compressed, method)
+end
+_G.LibDeflate = {
+    DecompressDeflate = function(_, compressed)
+        deflateInflates = deflateInflates + 1
+        if type(compressed) == "string" and compressed:sub(1, 1) == "Z" then return compressed:sub(2) end
+    end,
+    DecodeForPrint = function(_, text) return DecodeBase64(text) end,
+}
+local bomb = "Z" .. string.rep("x", cap + 1)
+assert(MSUF_TryDecodeCompactString("MSUF4:" .. EncodeBase64(bomb)) == nil, "an oversized stream decoded")
+assert(MSUF_TryDecodeCompactString("MSUF2:" .. EncodeBase64(bomb)) == nil, "an oversized MSUF2 stream decoded")
+assert(inflates == 0 and deflateInflates == 0, string.format(
+    "a %d byte deflate stream above the %d byte cap was inflated (%d native, %d LibDeflate)",
+    #bomb, cap, inflates, deflateInflates))
+local filler = {}
+for i = 1, 1400 do filler["k" .. i] = string.rep("v", 20) end
+local factorySized = MSUF_EncodeCompactTable({ addon = "MSUF", marker = "factory", filler = filler })
+local factoryBytes = #DecodeBase64(factorySized:sub(7))
+assert(factoryBytes > 37000 and factoryBytes < cap, "the factory-size fixture is " .. factoryBytes .. " bytes")
+local factory = MSUF_TryDecodeCompactString(factorySized)
+assert(type(factory) == "table" and factory.marker == "factory" and inflates == 1,
+    "a factory-size profile no longer inflates")
+C_EncodingUtil.DecompressString = realDecompress
+_G.LibDeflate = nil
+
 -- Review F14: the table-literal parser stays linear in the input size. Every
 -- substring the parser cuts is counted; a copy of the remaining input per
 -- number made a 1 MB profile cost gigabytes of copying.

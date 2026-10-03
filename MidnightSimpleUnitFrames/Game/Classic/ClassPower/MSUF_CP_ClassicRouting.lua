@@ -4,7 +4,7 @@
 --- Vanilla, TBC and Mists run the Retail-named controller
 --- (ClassPower/MSUF_CP_Controller.lua). It reads one provider seam at load:
 --- GetClassPowerType, a Client table with NeedsTargetChanged, UnitPower,
---- UnitPowerDisplayMod, AcceptPowerToken and comboTargetEvent. WoW Forever's
+--- UnitPowerDisplayMod, UnitPowerMax, AcceptPowerToken and comboTargetEvent. WoW Forever's
 --- provider fills that seam itself. A Classic flavor provider (MSUF.CPClient,
 --- Game/<Flavor>/ClassPower.lua) keeps its Resolve(env) contract instead, which
 --- the Blizzard frame compat layer and the provider smokes read, so this file
@@ -28,9 +28,10 @@ local PLAYER_CLASS = select(2, UnitClass("player"))
 
 local Routing = {
     --- The provider owns combo point reads (target-owned, or the vehicle's on
-    --- Mists) and, on Mists, the Burning Ember display modifier.
+    --- Mists) and, on Mists, the Burning Ember display modifier and count.
     UnitPower = provider.UnitPower,
     UnitPowerDisplayMod = provider.UnitPowerDisplayMod,
+    UnitPowerMax = provider.UnitPowerMax,
     --- The controller reads the target-change rule through a Client table.
     Client = provider,
     --- COMBO_TARGET_CHANGED is bound wherever the client supports it: the

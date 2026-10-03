@@ -4,7 +4,7 @@
 --- Owns: search registry, background index construction, query matching,
 --- route resolution, and anchor scrolling. Result UI rendering lives in
 --- MSUF_Menu2_Search_Render.lua; public wrappers live in Search_API.lua.
-local addonName, MSUF = ...
+local MSUF = select(2, ...)
 MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
@@ -156,11 +156,18 @@ local function EnsureSearchLexicon()
         local folded = NormalizeSearchText(key)
         if folded ~= "" then
             local terms = aliases[folded]
-            if not terms then terms = {}; aliases[folded] = terms; seenByKey[folded] = {} end
+            if not terms then
+                terms = {}
+                aliases[folded] = terms
+                seenByKey[folded] = {}
+            end
             local seen, source = seenByKey[folded], sourceAliases[key]
             for _, term in ipairs(source) do
                 term = NormalizeSearchText(term)
-                if term ~= "" and not seen[term] then terms[#terms + 1] = term; seen[term] = true end
+                if term ~= "" and not seen[term] then
+                    terms[#terms + 1] = term
+                    seen[term] = true
+                end
             end
         end
     end
@@ -174,7 +181,10 @@ local function EnsureSearchLexicon()
             local words = {}
             for word in folded:gmatch("%S+") do words[#words + 1] = word end
             local bucket = multiWord[words[1]]
-            if not bucket then bucket = {}; multiWord[words[1]] = bucket end
+            if not bucket then
+                bucket = {}
+                multiWord[words[1]] = bucket
+            end
             bucket[#bucket + 1] = { key = folded, words = words }
         end
     end
@@ -228,7 +238,14 @@ local function AddPageLocalizedSearchKeywords(parts, pageKey)
     for i = 1, #list do AddSearchText(parts, list[i]) end
 end
 
-for _, row in ipairs({
+-- Loops at chunk level would hold their control variables as chunk locals
+-- (the chunk has a local budget), so each table fill runs in a function.
+local function AppendPageKeywordRows(rows)
+    for _, row in ipairs(rows) do
+        for i = 2, #row do AppendSearchKeywords(row[1], row[i]) end
+    end
+end
+AppendPageKeywordRows({
     { "gf_bars", SEARCH_DISPEL_OVERLAY_KEYWORDS, SEARCH_DEBUFF_STRIPE_KEYWORDS },
     { "gf_auras", SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_BLIZZARD_DISPEL_KEYWORDS },
     { "gf_indicators", SEARCH_DISPEL_DEBUFF_KEYWORDS, SEARCH_HIGHLIGHT_BORDER_KEYWORDS },
@@ -240,9 +257,7 @@ for _, row in ipairs({
     { "uf_arena", SEARCH_UNIT_AURA_DISPEL_KEYWORDS, SEARCH_DISPEL_DEBUFF_KEYWORDS },
     { "home", SEARCH_DASHBOARD_RECOVERY_KEYWORDS, SEARCH_DASHBOARD_SUPPORT_KEYWORDS, SEARCH_DASHBOARD_WAGO_KEYWORDS, SEARCH_DASHBOARD_SCALING_KEYWORDS },
     { "changelog", SEARCH_DASHBOARD_CHANGELOG_KEYWORDS },
-}) do
-    for i = 2, #row do AppendSearchKeywords(row[1], row[i]) end
-end
+})
 
 local DASHBOARD_ROUTE_RECOVERY = { state = { dashboardRecoveryOpen = true } }
 local DASHBOARD_ROUTE_SCALING = { state = { dashboardScalingOpen = true } }
@@ -297,7 +312,10 @@ local function CompactQueryKeys()
         else
             local lead = key:sub(1, leadLength)
             local bucket = byLead[lead]
-            if not bucket then bucket = {}; byLead[lead] = bucket end
+            if not bucket then
+                bucket = {}
+                byLead[lead] = bucket
+            end
             bucket[#bucket + 1] = key
         end
     end
@@ -310,7 +328,10 @@ local function CompactKeyAt(compact, word, index)
     if bucket then
         for k = 1, #bucket do
             local key = bucket[k]
-            if word:sub(index, index + #key - 1) == key then found = key; break end
+            if word:sub(index, index + #key - 1) == key then
+                found = key
+                break
+            end
         end
     end
     local short = compact.short
@@ -342,7 +363,10 @@ local function SearchRawWords(normalized, allowSoftStop)
             local candidate = bucket[b].words
             local matched = true
             for k = 2, #candidate do
-                if words[position + k - 1] ~= candidate[k] then matched = false; break end
+                if words[position + k - 1] ~= candidate[k] then
+                    matched = false
+                    break
+                end
             end
             if matched then
                 word = bucket[b].key
@@ -488,7 +512,10 @@ local function SearchAliasKeyForTypo(word)
         end
     end
     SEARCH_STATE.aliasTypoCount = (SEARCH_STATE.aliasTypoCount or 0) + 1
-    if SEARCH_STATE.aliasTypoCount > 128 then SEARCH_STATE.aliasTypoCache = {}; SEARCH_STATE.aliasTypoCount = 1 end
+    if SEARCH_STATE.aliasTypoCount > 128 then
+        SEARCH_STATE.aliasTypoCache = {}
+        SEARCH_STATE.aliasTypoCount = 1
+    end
     SEARCH_STATE.aliasTypoCache[word] = bestKey or false
     return bestKey
 end
@@ -507,7 +534,14 @@ local function AddSearchCanonicalPairs(result, firstWords, secondWords)
     end
 end
 
-for row in ([[
+local function AddSearchCanonicalRows(text)
+    for row in text:gmatch("[^;]+") do
+        row = row:match("^%s*(.-)%s*$")
+        local result, firstWords, secondWords = row:match("^([^|]*)|([^|]*)|(.+)$")
+        if result then AddSearchCanonicalPairs(result, firstWords, secondWords) end
+    end
+end
+AddSearchCanonicalRows([[
 demonhunter|demon|hunter;deathknight|death|knight;windshear|wind|shear;castbar|cast|bar;healthbar|health|bar;powerbar|power|bar;showbuffs|show|buffs;maxbuffs|max|buffs;customcaps|custom|caps
 smoothfill|smooth soft fluid|fill;smoothfill|weiche weichen sanfte fluessige|fuellung;smoothfill|relleno llenado|suave fluido;smoothfill|remplissage|doux fluide;smoothfill|riempimento|fluido morbido;smoothfill|preenchimento|suave fluido
 classpower|class|resource resources power;clickcast|click|cast casting;clickthrough|click|through;editmode|edit|mode;loadconditions|load|condition conditions;readycheck|ready|check;raidmarker|raid|marker;groupnumber|group|number
@@ -515,11 +549,7 @@ nameshortening|name|shortening;globalcooldown|global|cooldown;fokuskick|focus|ki
 onoff|turn|off;minimapicon|minimap|icon button;kofi|ko|fi;menuscale|menu|scale;uiscale|ui|scale;targetsound|target|sound sounds;unitauras|unit|aura auras;globalstyle|global|style;spellid|spell|id
 healthtext|health|text;powertext|power|text;nametext|name|text;classcolor|class|color;rangecheck|range|check checker checking;distancecheck|distance|check checker checking;outofrange|out|range;unitframe|unit|frame frames
 playerframe|player|frame;targetframe|target|frame;focusframe|focus|frame;petframe|pet|frame;bossframes|boss|frame frames;arenaframes|arena|frame frames;partyframes|party|frame frames;raidframes|raid|frame frames
-]]):gmatch("[^;]+") do
-    row = row:match("^%s*(.-)%s*$")
-    local result, firstWords, secondWords = row:match("^([^|]*)|([^|]*)|(.+)$")
-    if result then AddSearchCanonicalPairs(result, firstWords, secondWords) end
-end
+]])
 
 local function SearchCanonicalWords(raw)
     local words = {}
@@ -2071,8 +2101,8 @@ local function RefreshSearchResultsPage()
     local query = TrimText(M.searchQuery or "")
     if query == "" or SearchText.QueryLength(query) < MIN_SEARCH_QUERY_LEN then return end
     SetSearchResults(SearchPages(query), query)
-    if M.InvalidatePage then M.InvalidatePage("search") end
-    if M.SelectPage then M.SelectPage("search") end
+    -- The results page repaints in place (Search_Render); it is never rebuilt.
+    Search._Render.ShowSearchPage()
 end
 
 -- The background indexer used to build every unvisited page just to register its
@@ -2281,23 +2311,28 @@ function SearchPages(query)
     return CurateSearchResults(results, supportQuestion and not genericLocationQuestion)
 end
 
-SetSearchResults = function(results, query) M.searchResults = results or {}; M.searchResultsQuery = query or "" end
+SetSearchResults = function(results, query)
+    M.searchResults = results or {}
+    M.searchResultsQuery = query or ""
+end
 
 local function ShowSearchPageForQuery(query)
     query = TrimText(query)
     if query ~= "" and M.activeKey ~= "search" then
         M.searchReturnKey = M.activeKey or M.searchReturnKey or "home"
     end
-    M.InvalidatePage("search")
     if query ~= "" then
-        M.SelectPage("search")
+        Search._Render.ShowSearchPage()
     elseif M.activeKey == "search" then
         M.SelectPage(M.searchReturnKey or "home")
     end
 end
 
 local function RunSearchInputQuery(query, openPage)
-    if SearchCombatLocked() or SearchMenuClosed() then CancelSearchBackgroundIndex(); return end
+    if SearchCombatLocked() or SearchMenuClosed() then
+        CancelSearchBackgroundIndex()
+        return
+    end
     query = TrimText(query)
     M.searchQuery = query
     M.searchResultsPending = nil
@@ -2319,7 +2354,10 @@ local function RunSearchInputQuery(query, openPage)
 end
 
 local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
-    if SearchCombatLocked() or SearchMenuClosed() then CancelSearchBackgroundIndex(); return end
+    if SearchCombatLocked() or SearchMenuClosed() then
+        CancelSearchBackgroundIndex()
+        return
+    end
     query = TrimText(query)
     openPage = openPage == true
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1

@@ -6,36 +6,11 @@
 local _, MSUF = ...
 MSUF.CPBuilders = MSUF.CPBuilders or {}
 
--- Profiles saved before the resource extras got their current names keep the
--- player's choices under the former ones: each value moves over once and the
--- former key is removed. A player who had the Arcane helper on keeps its former
--- look (seconds with the global cooldown count, the text from 6 seconds left,
--- the warning in the last global cooldown) unless they had chosen otherwise.
-local FORMER_BARS = {
-    showArcaneSoul = "showArcaneWindow", arcaneSoulCountdownWindow = "arcaneWindowTextFrom",
-    arcaneSoulBeforeColor = "arcaneWindowColor", arcaneSoulActiveColor = "arcaneWindowSoulColor",
-    arcaneSoulLastColor = "arcaneWindowWarnColor", manaFiveSecondRule = "manaRegenPause",
-    manaRegenTicks = "manaGainPulse", manaFiveSecondColor = "manaRegenPauseColor", manaTickColor = "manaGainPulseColor",
-}
-local FORMER_TEXT = { SECONDS = "seconds", GCD = "gcds", BOTH = "both" }
-function MSUF.CPBuilders.CarryFormerExtras(b)
-    if type(b) ~= "table" then return end
-    if b.showArcaneSoul ~= nil or b.arcaneSoulDisplay ~= nil then
-        local used = b.showArcaneSoul == true
-        b.arcaneWindowText = FORMER_TEXT[b.arcaneSoulDisplay or (used and "BOTH") or ""] or b.arcaneWindowText
-        if used and b.arcaneSoulCountdownWindow == nil then b.arcaneSoulCountdownWindow = 6 end
-        if used and b.arcaneWindowWarnLastGCD == nil then b.arcaneWindowWarnLastGCD = true end
-        b.arcaneSoulDisplay = nil
-    end
-    for former, current in pairs(FORMER_BARS) do
-        if b[former] ~= nil then b[current], b[former] = b[former], nil end
-    end
-end
-
 -- The one list of switches that need a helper. The class power controller and
--- its config ask it too, so a profile's former names are carried over first.
+-- its config ask it too. Profiles saved under the former key names are moved to
+-- the current ones by the profile translator (MSUF.ProfileNormalize in
+-- State/MSUF_ProfileNormalize.lua) at login, switch and import.
 function MSUF.CPBuilders.ResourceExtrasWanted(b)
-    MSUF.CPBuilders.CarryFormerExtras(b)
     return type(b) == "table" and (b.showIgnorePain == true or b.showArcaneWindow == true
         or b.manaUpcomingCost == true or b.manaRegenPause == true or b.manaGainPulse == true
         or (type(b.resourceMarks) == "table" and #b.resourceMarks > 0)) or false
@@ -60,7 +35,10 @@ function MSUF.CPBuilders.ResourceExtras(E)
     end
     Refresh = function()
         disabled = false
-        if InCombat() then events:RegisterEvent("PLAYER_REGEN_ENABLED"); return end
+        if InCombat() then
+            events:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
         local b = E.db.bars or {}
         events:UnregisterAllEvents()
         RefreshHelper("ExtraAuras", b.showIgnorePain == true or b.showArcaneWindow == true)

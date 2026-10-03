@@ -291,9 +291,10 @@ Contract("Mists combat log without the EventBus", function()
     local frames = W.EventFrames()
     assert(#frames == 1, "expected one private event frame, found " .. #frames)
     local events = frames[1].events
-    assert(CountKeys(events) == 4 and events.ARENA_OPPONENT_UPDATE and events.ARENA_CROWD_CONTROL_SPELL_UPDATE
-        and events.ARENA_COOLDOWNS_UPDATE and events.PLAYER_ENTERING_WORLD,
-        "the private frame must start with the four arena events and no combat log")
+    -- PLAYER_LOGIN runs the first sync once the SavedVariables exist.
+    assert(CountKeys(events) == 5 and events.ARENA_OPPONENT_UPDATE and events.ARENA_CROWD_CONTROL_SPELL_UPDATE
+        and events.ARENA_COOLDOWNS_UPDATE and events.PLAYER_ENTERING_WORLD and events.PLAYER_LOGIN,
+        "the private frame must start with the four arena events, PLAYER_LOGIN and no combat log")
     assert(W.Burst(50) == 0, "the private frame handled combat-log events in the open world")
     W.Enter("arena")
     assert(events[LOG_EVENT] == true and W.Burst(50) == 50 and W.logInfoCalls == 50,
@@ -317,9 +318,9 @@ Contract("TBC and Midnight trinket events are unchanged", function()
         assert(W.registerCalls[LOG_EVENT] == nil and W.unregisterCalls[LOG_EVENT] == nil
             and insideArena == 0 and W.Burst(20) == 0,
             case.flavor .. " touched the Mists combat-log subscription")
-        assert(CountKeys(W.bus) == (case.extra and 5 or 4) and W.bus.ARENA_OPPONENT_UPDATE
+        assert(CountKeys(W.bus) == (case.extra and 6 or 5) and W.bus.ARENA_OPPONENT_UPDATE
             and W.bus.ARENA_CROWD_CONTROL_SPELL_UPDATE and W.bus.ARENA_COOLDOWNS_UPDATE and W.bus.PLAYER_ENTERING_WORLD
-            and (case.extra == nil or W.bus[case.extra] ~= nil),
+            and W.bus.PLAYER_LOGIN and (case.extra == nil or W.bus[case.extra] ~= nil),
             case.flavor .. " changed its arena trinket event set")
 
         -- A disabled display never asked for the match state on these clients.
@@ -412,6 +413,9 @@ local function LoadArenaCastbars(options)
     end
 
     local namespace = Namespace(options.client)
+    -- Castbars/MSUF_CastbarDriver.lua's pool entry, for the stub castbars above.
+    namespace.Castbars = namespace.Castbars or {}
+    namespace.Castbars.Driver = { ShowState = function(frame, state) frame:Cast(state) end }
     assert(loadfile(POOLS))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(CASTBARS))("MidnightSimpleUnitFrames", namespace)
     return W

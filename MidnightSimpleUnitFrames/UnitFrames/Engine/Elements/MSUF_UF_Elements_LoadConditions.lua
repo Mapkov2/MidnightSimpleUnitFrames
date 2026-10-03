@@ -776,9 +776,6 @@ local function ReapplyBossPreviewAlpha(reason)
   for i = 1, 5 do
     RefreshHealthAlpha(UF.frames and UF.frames["boss" .. i])
   end
-  if type(UF.RefreshElements) ~= "function" then
-    return false
-  end
   -- ApplyBossPreviewFrames deliberately seeds missing/range-hidden bars at 1
   -- so the synthetic data can be painted. Alpha is the final owner: restoring
   -- it here keeps both full and light preview applies at the configured value.
@@ -823,25 +820,11 @@ local function CanUseLightBossPreviewApply(active, reason)
   return BossPreviewFramesReady(active)
 end
 
+-- Auras3/MSUF_Auras3_Core.lua defines A3.RequestScope on every client (the
+-- Retail runtime facade and the Classic request queue replace it), so the
+-- preview refresh asks it directly.
 local function RefreshBossAuras()
-  local A3 = MSUF and MSUF.MSUF_Auras3
-  if A3 and type(A3.RequestScope) == "function" then
-    A3.RequestScope("boss", "MSUF_BOSS_PREVIEW")
-    return
-  end
-  if A3 and type(A3.RequestUnit) == "function" then
-    A3.RequestUnit("boss")
-    return
-  end
-  if A3 and type(A3.RefreshUnit) == "function" then
-    for i = 1, 5 do
-      A3.RefreshUnit("boss" .. i)
-    end
-    return
-  end
-  if A3 and type(A3.RefreshAll) == "function" then
-    A3.RefreshAll()
-  end
+  MSUF.MSUF_Auras3.RequestScope("boss", "MSUF_BOSS_PREVIEW")
 end
 
 function UF.ApplyBossPreviewState(active, reason)
@@ -864,11 +847,7 @@ function UF.ApplyBossPreviewState(active, reason)
   -- preview visibility handoff does not always produce.
   ApplyBossPreviewFrames(active)
   UF.RefreshVisibilityDrivers("boss")
-  if active and type(UF.RefreshElements) == "function" then
-    UF.RefreshElements("boss", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
-  elseif type(UF.RefreshElements) == "function" then
-    UF.RefreshElements("boss", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
-  end
+  UF.RefreshElements("boss", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
   UF.UpdateRuntime("boss", refreshReason)
 
   if active then
@@ -1124,9 +1103,6 @@ local function ReapplyArenaPreviewAlpha(reason)
   for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
     RefreshHealthAlpha(UF.frames and UF.frames["arena" .. i])
   end
-  if type(UF.RefreshElements) ~= "function" then
-    return false
-  end
   return UF.RefreshElements("arena", BOSS_PREVIEW_ALPHA_ELEMENTS,
     reason or "MSUF_ARENA_PREVIEW_ALPHA")
 end
@@ -1169,24 +1145,7 @@ local function CanUseLightArenaPreviewApply(active, reason)
 end
 
 local function RefreshArenaAuras()
-  local A3 = MSUF and MSUF.MSUF_Auras3
-  if A3 and type(A3.RequestScope) == "function" then
-    A3.RequestScope("arena", "MSUF_ARENA_PREVIEW")
-    return
-  end
-  if A3 and type(A3.RequestUnit) == "function" then
-    A3.RequestUnit("arena")
-    return
-  end
-  if A3 and type(A3.RefreshUnit) == "function" then
-    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-      A3.RefreshUnit("arena" .. i)
-    end
-    return
-  end
-  if A3 and type(A3.RefreshAll) == "function" then
-    A3.RefreshAll()
-  end
+  MSUF.MSUF_Auras3.RequestScope("arena", "MSUF_ARENA_PREVIEW")
 end
 
 function UF.ApplyArenaPreviewState(active, reason)
@@ -1205,9 +1164,7 @@ function UF.ApplyArenaPreviewState(active, reason)
 
   ApplyArenaPreviewFrames(active)
   UF.RefreshVisibilityDrivers("arena")
-  if type(UF.RefreshElements) == "function" then
-    UF.RefreshElements("arena", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
-  end
+  UF.RefreshElements("arena", BOSS_PREVIEW_REFRESH_ELEMENTS, refreshReason)
   UF.UpdateRuntime("arena", refreshReason)
 
   if active then

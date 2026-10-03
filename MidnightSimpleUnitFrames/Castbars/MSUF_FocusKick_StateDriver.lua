@@ -143,8 +143,8 @@ G.MSUF_FocusKickDriver_ForceUpdate = function()
     QueueRefresh(nil, false)
 end
 
-if FocusKickEnabled() then
-    SetSubscribed(true)
-    SetFocusCastbarSuppressed(not FocusKickShowsCastbar())
-    G.C_Timer.After(0.2, G.MSUF_FocusKickDriver_ForceUpdate)
-end
+-- No subscription at file load: the SavedVariables are not loaded yet, so the
+-- profile read here answered nil (the tracker off) and subscribed nothing. The
+-- unit frame spawn at PLAYER_LOGIN (Factory.SpawnAll) runs
+-- MSUF_FocusKickDriver_ForceUpdate with the saved profile, and every castbar
+-- settings change after it does too (MSUF_Castbars_OnSettingsChanged).

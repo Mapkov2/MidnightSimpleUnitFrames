@@ -200,14 +200,57 @@ local function GroupSlotsOwnsLane(groupSlots, lane)
     return owned and owned[lane.rootKey] == true or false
 end
 
+-- A frame is never freed, so retiring a container used to orphan it and its
+-- batch of AuraButtons for good: every structural slider step and every lane
+-- toggle built another one. Every retired owner (lane, dispel sensor, group
+-- owner, Spell Indicator root, and all of them on HideState) is parked on its
+-- root by structural signature instead, and the next apply that asks for that
+-- signature takes it back through its ordinary reuse path. Parked containers
+-- are hidden and disabled, so they receive no UNIT_AURA. Nothing is evicted:
+-- Blizzard removes no AuraGroup or AuraSlot and seals each button after
+-- initializeFrame, so a container only ever serves its own signature. A forced
+-- recreate (PLAYER_ENTERING_WORLD's fresh duration objects) discards the one it
+-- replaces and drops the key's park, which may hold containers from before it.
+local function ParkNativeLane(root, key, container)
+    local signature = container and container._msufA3StructuralSignature
+    if signature == nil then return end
+    local parked = root._msufA3ParkedLanes or {}
+    root._msufA3ParkedLanes = parked
+    parked[key] = parked[key] or {}
+    parked[key][signature] = container
+end
+
+-- `discard` drops the container instead of parking it (a forced recreate).
+local function RetireNativeLane(root, key, container, _, discard)
+    A3._HideLane(container)
+    if discard ~= true then ParkNativeLane(root, key, container) end
+    root[key] = nil
+end
+
+-- Swaps the container parked under `signature` in for `current`, which
+-- `retire` parks. Returns `current` when it already fits or none is parked.
+local function ReviveNativeLane(root, key, current, signature, retire, parentFrame, forceRecreate)
+    if forceRecreate == true and root._msufA3ParkedLanes then root._msufA3ParkedLanes[key] = nil end
+    if forceRecreate == true or (current and current._msufA3StructuralSignature == signature) then return current end
+    local pool = root._msufA3ParkedLanes and root._msufA3ParkedLanes[key]
+    local parked = pool and pool[signature]
+    if not parked then return current end
+    pool[signature] = nil
+    retire(root, key, current, parentFrame)
+    root[key] = parked
+    -- The host carries the lane's geometry; showing it lets the reuse path register the container.
+    if parked._msufA3LayoutHost then parked._msufA3LayoutHost:Show() end
+    if parked._msufA3SpellIndicatorRoot == true then SpellIndicatorsRuntime.RelistContainerEffects(parked, parentFrame) end
+    return parked
+end
+
 A3._HideNormalLaneContainers = function(root, lanes, groupSlots)
     if not root then return end
     for i = 1, #NORMAL_LANE_ROOT_KEYS do
         local key = NORMAL_LANE_ROOT_KEYS[i]
         local lane = A3._NormalLaneForRootKey(lanes, key)
         if GroupSlotsOwnsLane(groupSlots, lane) or not (lane and lane.enabled == true) then
-            A3._HideLane(root[key])
-            root[key] = nil
+            RetireNativeLane(root, key, root[key])
         end
     end
 end
@@ -234,7 +277,7 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
     local structuralSignature = lane._msufA3StructuralSignature or LaneStructuralSignature(lane)
     local layoutSignature = lane._msufA3LayoutSignature or LaneLayoutSignature(lane)
     local nativeFilter, _, candidateFilterSignature = EffectiveLaneFilters(lane)
-    local current = root[key]
+    local current = ReviveNativeLane(root, key, root[key], structuralSignature, RetireNativeLane, parentFrame, forceRecreate)
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         A3._RebindNativeContainerUnit(current, lane.unit)
         if current._msufA3StandaloneAuraSlot == true then
@@ -280,8 +323,7 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
         current._msufA3LayoutSignature = layoutSignature
         return current
     end
-    A3._HideLane(current)
-    root[key] = nil
+    RetireNativeLane(root, key, current, parentFrame, forceRecreate == true)
     current = A3._CreateNativeLane(root, lane, parentFrame)
     if current then
         current._msufA3TrackingSignature = trackingSignature
@@ -300,7 +342,7 @@ local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreat
     local key = sensorRoot.rootKey or "DispelSensor"
     local structuralSignature = sensorRoot._msufA3StructuralSignature
     local layoutSignature = sensorRoot._msufA3LayoutSignature
-    local current = root[key]
+    local current = ReviveNativeLane(root, key, root[key], structuralSignature, RetireNativeLane, parentFrame, forceRecreate)
     if forceRecreate ~= true and current and current._msufA3StructuralSignature == structuralSignature then
         A3._RebindNativeContainerUnit(current, sensorRoot.unit)
         UpdateDispelSensorRootSlots(current, sensorRoot)
@@ -311,8 +353,7 @@ local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreat
         current._msufA3LayoutSignature = layoutSignature
         return current
     end
-    A3._HideLane(current)
-    root[key] = nil
+    RetireNativeLane(root, key, current, parentFrame, forceRecreate == true)
     current = CreateNativeDispelSensorRoot(root, sensorRoot, parentFrame)
     if current then
         current._msufA3StructuralSignature = structuralSignature
@@ -322,24 +363,21 @@ local function ApplyDispelSensorRoot(root, sensorRoot, parentFrame, forceRecreat
     return current
 end
 
-local function HideGroupSlots(root, parentFrame, groupSlots, rootKeyOverride)
-    local rootKey = rootKeyOverride or (groupSlots and groupSlots.rootKey) or "GroupSlots"
-    local current = root[rootKey]
+local function RetireGroupSlots(root, rootKey, current, parentFrame, discard)
     if current and current._msufA3SpellIndicatorRoot == true then
         local currentConfig = current._msufA3NativeLaneConfig
         SpellIndicatorsRuntime.HideRootMissing(
             parentFrame, currentConfig and currentConfig.spellIndicatorRoot, current)
         SpellIndicatorsRuntime.ReleaseContainerEffects(current, parentFrame)
     end
-    A3._HideLane(current)
-    root[rootKey] = nil
+    RetireNativeLane(root, rootKey, current, parentFrame, discard)
 end
 
 local function ApplyGroupSlots(root, groupSlots, parentFrame, forceRecreate)
     if not (root and groupSlots) then return nil end
     local rootKey = groupSlots.rootKey or "GroupSlots"
     local structuralSignature = groupSlots._msufA3StructuralSignature
-    local current = root[rootKey]
+    local current = ReviveNativeLane(root, rootKey, root[rootKey], structuralSignature, RetireGroupSlots, parentFrame, forceRecreate)
     local parked = parentFrame and parentFrame._msufA3GroupOwners
         and parentFrame._msufA3GroupOwners[rootKey]
     if not current and parked and parked._msufA3StructuralSignature == structuralSignature then
@@ -378,7 +416,7 @@ local function ApplyGroupSlots(root, groupSlots, parentFrame, forceRecreate)
         current._msufA3StructuralSignature = structuralSignature
         return current
     end
-    HideGroupSlots(root, parentFrame, groupSlots)
+    RetireGroupSlots(root, rootKey, root[rootKey], parentFrame, forceRecreate == true)
     current = CreateNativeGroupSlots(root, groupSlots, parentFrame)
     if current then
         current._msufA3StructuralSignature = structuralSignature
@@ -480,9 +518,10 @@ local MANAGED_ROOT_KEYS = {
 local function HideState(frame)
     local root = frame and frame.Auras
     if not (root and root._msufA3NativeRoot) then return end
+    -- Park every owner: turning the unit's auras back on takes them back.
     for i = 1, #MANAGED_ROOT_KEYS do
         local key = MANAGED_ROOT_KEYS[i]
-        A3._HideLane(root[key])
+        RetireNativeLane(root, key, root[key])
     end
     SpellIndicatorsRuntime.HideAll(frame)
     root._msufA3Config = nil
@@ -499,7 +538,6 @@ local function HideState(frame)
     if unit and A3._unitFrameOwners and A3._unitFrameOwners[unit] == frame then
         A3._unitFrameOwners[unit] = nil
     end
-    for i = 1, #MANAGED_ROOT_KEYS do root[MANAGED_ROOT_KEYS[i]] = nil end
     frame._msufA3UnitAuraOwner = nil
 end
 
@@ -538,7 +576,7 @@ local function ApplyConfig(frame, cfg, reason)
             local apply = owner.sensorRoot == true and ApplyDispelSensorRoot or ApplyGroupSlots
             if not apply(root, owner, frame, forceRecreate) then ok = false end
         else
-            HideGroupSlots(root, frame, nil, key)
+            RetireGroupSlots(root, key, root[key], frame)
         end
     end
     for i = firstEffectRoot, #EFFECT_ROOT_FIELDS do
@@ -557,8 +595,7 @@ local function ApplyConfig(frame, cfg, reason)
             then
                 A3._QueueDeferredAuraRuntime(cfg.unit, "AURAS3_REMINDER_CLICK_CAST")
             end
-            A3._HideLane(root[key])
-            root[key] = nil
+            RetireNativeLane(root, key, root[key])
         end
     end
     if not anyEffectRoot and SpellIndicatorsRuntime.HideAll(frame) == true
@@ -671,6 +708,8 @@ return {
             RebindUnit = A3._RebindNativeContainerUnit,
             IsVisible = A3._NativeContainerVisible,
             HideContainer = A3._HideLane,
+            RetireContainer = RetireNativeLane,
+            ReviveContainer = ReviveNativeLane,
             RecreateGroupSlots = RecreateGroupSlots,
             SetAssistAlpha = SetAssistAlpha,
             ValidateAuraButton = ValidateNativeAuraButtonContract,

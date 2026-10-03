@@ -1,6 +1,7 @@
 -- Shared Aura controls and apply scheduling; no dependency on a page builder.
 local _, MSUF = ...
 MSUF = MSUF or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_AuraControls.lua")
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local W, T = M.Widgets, M.Theme
@@ -115,16 +116,35 @@ end
 
 local Card = W.ThemedControlCard
 
-local function Rebuild(ctx)
-    -- Nested aura workspaces and pinned previews settle their final height after
-    -- the page is selected; the shared helper reapplies the viewport for us.
-    local key = (ctx and ctx.key) or M.activeKey or "auras3"
-    if M.RebuildPageKeepingScroll and M.RebuildPageKeepingScroll(key) then return end
+local function RefreshFallback(ctx)
     if M.RequestRefresh then
         M.RequestRefresh(ctx, "auras-rebuild-fallback")
     elseif M.Refresh then
         M.Refresh(ctx)
     end
+end
+
+--- Shows the page again after a workspace selector (Container:, Edit:, lane)
+--- or a structural edit. The aura pages declare their selectors as views
+--- (spec.variantKey), so a selector click switches to that view's cached entry
+--- or builds it once; any other call rebuilds the page. Nested aura workspaces
+--- and pinned previews settle their final height after the page is selected;
+--- the shared helper reapplies the viewport for us.
+local function Rebuild(ctx)
+    local key = (ctx and ctx.key) or M.activeKey or "auras3"
+    if M.RebuildPageKeepingScroll and M.RebuildPageKeepingScroll(key) then return end
+    RefreshFallback(ctx)
+end
+
+--- A list edit (add, remove, reorder, keep) or a setting whose controls only
+--- refresh: the refreshers repaint pooled rows, so the page on screen repaints
+--- in place. A rebuild would leave a whole frame tree behind, and WoW never
+--- frees a frame.
+local REPAINT_IN_PLACE = { inPlace = true }
+local function Repaint(ctx)
+    local key = (ctx and ctx.key) or M.activeKey or "auras3"
+    if M.RepaintPageAfterDataChange and M.RepaintPageAfterDataChange(key, "auras-list", REPAINT_IN_PLACE) then return end
+    RefreshFallback(ctx)
 end
 
 local function RequestAuraRuntime(scope, reason)
@@ -321,6 +341,134 @@ local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setVa
     return getValue(), buttons, RefreshButtons
 end
 
+--- The blocked-spell list of a unit or group blacklist section: the empty
+--- state text, a scroll list of rows (icon, name, Spell ID, Remove) built on
+--- demand, and its repaint through the search query. opts.remove(spellID)
+--- removes one entry; opts.removePath(value) names its Remove button.
+--- The trimmed lower-case search query and the spell list entries whose
+--- name or spell ID contains it (every entry for an empty query).
+local function FilterSpellEntries(entries, searchValue)
+    local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    local visible = {}
+    for i = 1, #entries do
+        local entry = entries[i]
+        local haystack = (tostring(entry.text or "") .. " "
+            .. tostring(entry.spellID or entry.value or "")):lower()
+        if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
+    end
+    return query, visible
+end
+--- A scrolling spell list in an aura section: the scroll frame at (24, y),
+--- height px tall, and its child, styled like the other nested lists.
+local function SpellListScroll(section, y, inner, height)
+    local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, section))
+    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, y)
+    listScroll:SetSize(inner - 20, height)
+    local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
+    listChild:SetSize(inner - 44, height)
+    listScroll:SetScrollChild(listChild)
+    M._StyleNestedAuraScrollFrame(listScroll, section, 44)
+    return listScroll, listChild
+end
+--- Row i of a 44 px spell list: a 40 px card across the list child.
+local function SpellListRow(listChild, i)
+    local row = PixelLayoutRegion(CreateFrame("Frame", nil, listChild))
+    row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
+    row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
+    row:SetHeight(40)
+    if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+    return row
+end
+--- A spell list row's icon (left edge at iconAnchor's iconRelPoint, x px
+--- in), the name and Spell ID lines beside it and its Remove button.
+local function SpellListRowLabels(row, iconAnchor, iconRelPoint, x)
+    row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
+    row.icon:SetPoint("LEFT", iconAnchor, iconRelPoint, x, 0)
+    row.icon:SetSize(28, 28)
+    row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
+    row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
+    row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
+    row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
+    row.remove = ActionButton(row, "Remove", 80)
+    row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+end
+local function BlockedSpellList(ctx, section, inner, offsetY, emptyText, opts)
+    local Tr, MatchSuffix = M.AuraSettings.Tr, M.AuraSettings.MatchSuffix
+    local empty = W.Text(section, emptyText, 24, -284 + offsetY, inner, T.colors.muted)
+    local listScroll, listChild = SpellListScroll(section, -260 + offsetY, inner, 150)
+    local rows = {}
+    local function EnsureRow(i)
+        local row = rows[i]
+        if row then return row end
+        row = SpellListRow(listChild, i)
+        SpellListRowLabels(row, row, "LEFT", 7)
+        row.remove:SetScript("OnClick", function()
+            if row._spellID then opts.remove(row._spellID) end
+        end)
+        AddTooltip(row.remove, "Remove from blacklist", "Stops blocking this aura.")
+        rows[i] = row
+        return row
+    end
+    local list = {}
+    --- Repaints the rows for the entries matching searchValue and the
+    --- prepared header's count.
+    function list.Paint(entries, searchValue, prepared)
+        local query, visible = FilterSpellEntries(entries, searchValue)
+        T.SetTranslatedText(prepared, M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
+        T.SetTranslatedText(empty, #entries == 0 and Tr(emptyText) or M.Format("No results for \"%s\".", query))
+        empty:SetShown(#visible == 0)
+        listScroll:SetShown(#visible > 0)
+        listChild:SetHeight(max(150, #visible * 44))
+        for i = 1, max(#rows, #visible) do
+            local row, entry = rows[i], visible[i]
+            if entry then
+                row = EnsureRow(i)
+                row._spellID = entry.value
+                row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                local name = tostring(entry.text or entry.value or "Spell"):gsub("%s*%(#%d+%)$", "")
+                row.name:SetText(name)
+                row.id:SetText(entry.spellID and (tostring("Spell ID ") .. tostring(entry.spellID)) or tostring(entry.value or ""))
+                RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button", opts.removePath(entry.value), "action")
+                row:Show()
+            elseif row then
+                row._spellID = nil
+                row:Hide()
+            end
+        end
+    end
+    return list
+end
+
+--- A blacklist's blocked spells as a set keyed by tostring(spell id).
+local function BlockedSet(entries)
+    local blocked = {}
+    for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+    return blocked
+end
+--- The spell a blacklist's "Add spell" button adds: the selected preset
+--- spell while it is not blocked yet, otherwise the first one that is not.
+local function FirstUnblockedSpell(values, selected, blocked)
+    for i = 1, #values do
+        if values[i].value == selected and not blocked[tostring(selected)] then return selected end
+    end
+    for i = 1, #values do
+        if values[i].value ~= nil and not blocked[tostring(values[i].value)] then return values[i].value end
+    end
+    return nil
+end
+--- The preset summary line ("n spells in this set - ...") and the enabled
+--- state of the "Add set" and "Add spell" buttons for the blocked set.
+local function PaintPresetSummary(selectedSummary, addSet, addSpell, setSpells, blocked, CurrentSpell)
+    local missing = 0
+    for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
+    T.SetTranslatedText(selectedSummary, missing == 0
+        and M.Format("%d spells in this set - all already blocked", #setSpells)
+        or M.Format("%d spells in this set - %d can still be added", #setSpells, missing))
+    W.SetControlEnabled(addSet, missing > 0)
+    local selectedSpell = CurrentSpell()
+    W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
+end
+
 local function BuildLaneTabs(ctx, parent, stateKey, x, y, width)
     BuildActionTabs(ctx, parent, LANE_VALUES, x, y, width, function() return CurrentLane(stateKey, "debuff") end, function(value)
         SetCurrentLane(stateKey, value)
@@ -336,13 +484,22 @@ M.AuraControls = {
     AuraCatalogToken = AuraCatalogToken,
     AuraControlMeta = AuraControlMeta,
     AuraControlMetaAtVisiblePath = AuraControlMetaAtVisiblePath,
+    BlockedSet = BlockedSet,
+    BlockedSpellList = BlockedSpellList,
     BuildLaneTabs = BuildLaneTabs,
     Card = Card,
+    SpellListRow = SpellListRow,
+    SpellListRowLabels = SpellListRowLabels,
+    SpellListScroll = SpellListScroll,
+    FilterSpellEntries = FilterSpellEntries,
+    FirstUnblockedSpell = FirstUnblockedSpell,
+    PaintPresetSummary = PaintPresetSummary,
     ConfigureAuraSpellPriorityDrag = ConfigureAuraSpellPriorityDrag,
     ConfigureMaxDurationSlider = ConfigureMaxDurationSlider,
     LANE_VALUES = LANE_VALUES,
     QueueAurasPageRefresh = QueueAurasPageRefresh,
     Rebuild = Rebuild,
+    Repaint = Repaint,
     RegisterAuraControl = RegisterAuraControl,
     RegisterAuraTextAction = RegisterAuraTextAction,
     RequestAuraRuntime = RequestAuraRuntime,

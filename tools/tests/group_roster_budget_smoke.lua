@@ -18,6 +18,19 @@
 -- measured 64-bit limits for the same baseline/current and identical harness.
 -- Lua object sizes differ with pointer width, so a 32-bit KB limit cannot
 -- validate a 64-bit interpreter. An empty-table allocation identifies the layout.
+-- 2026-10-02 (wave 3, group): Mainline party_join 158k -> 164k (Vanilla's
+-- 164k already holds the new 160k). An
+-- out-of-combat birth is now built at its own unit write instead of by the
+-- next-frame settle (a combat start in between left it blank for the fight), so
+-- the joining frame's first build and its once-per-frame catch-up moved from the
+-- following settle into the join: Mainline join+settle 154k+41k -> 160k+36k
+-- (195k -> 196k), Vanilla 154k+42k -> 160k+37k. Every other case is unchanged.
+-- 2026-10-02 (wave 4, W4-C2): the route compiler remembers functions that are
+-- no element export, so each frame build stops re-walking every element field
+-- for its per-frame closures. Measured: Mainline party_join 161k -> 136k,
+-- party_apply 397k -> 288k, raid_build 1863k -> 1502k, raid_apply 1383k -> 1075k;
+-- Vanilla 160k -> 135k, 413k -> 307k, 1801k -> 1455k, 1424k -> 1134k. KB and the
+-- settle/shift cases unchanged. Those four limits move to the new measurement +2%.
 --
 -- Runs the real core load graph on the SecureGroupHeader emulator of
 -- tools/tests/group_header_world.lua. Plain Lua 5.1, repo root as arg 1.
@@ -29,15 +42,15 @@ local Harness = dofile(root .. "/tools/tests/group_header_world.lua")
 -- [flavor] = { [case] = { k instructions, KB } }
 local BUDGETS = {
     Mainline = {
-        party_join = { 158, 220 }, party_settle = { 42, 10 }, party_apply = { 401, 207 }, raid_build = { 1871, 3912 },
-        raid_settle = { 64, 8 }, raid_apply = { 1397, 582 }, raid_shift = { 84, 26 },
+        party_join = { 139, 220 }, party_settle = { 42, 10 }, party_apply = { 294, 207 }, raid_build = { 1533, 3912 },
+        raid_settle = { 64, 8 }, raid_apply = { 1097, 582 }, raid_shift = { 84, 26 },
     },
     Vanilla = {
-        party_join = { 164, 272 }, party_settle = { 43, 12 }, party_apply = { 464, 411 }, raid_build = { 1946, 4865 },
-        raid_settle = { 66, 18 }, raid_apply = { 1623, 1395 }, raid_shift = { 108, 75 },
+        party_join = { 138, 272 }, party_settle = { 43, 12 }, party_apply = { 314, 411 }, raid_build = { 1485, 4865 },
+        raid_settle = { 66, 18 }, raid_apply = { 1157, 1395 }, raid_shift = { 108, 75 },
     },
 }
-local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1"
+local MEASURE_ONLY = os.getenv("MSUF_BUDGET_MEASURE") == "1" or arg[3] == "native"
 
 local function Check(condition, message)
     if not condition then error(flavor .. ": " .. message, 2) end
@@ -52,6 +65,35 @@ local h = Harness.New(root, flavor, { beforeBoot = function(harness)
     end
 end })
 local GF, env = h.GF, h.env
+-- Native counting runs the same scenarios separately, keeping hook allocations
+-- and stack growth out of the original VM/KB measurement.
+if arg[3] == "native" then
+    local natives = {}
+    for _, name in ipairs({ "UnitHealth", "UnitHealthMax", "UnitHealthPercent", "UnitPower", "UnitPowerMax",
+        "UnitPowerPercent", "UnitName", "UnitGUID", "UnitGroupRolesAssigned", "GetRaidRosterInfo",
+        "UnitIsDeadOrGhost", "UnitIsConnected", "GetNumGroupMembers", "GetNumSubgroupMembers" }) do
+        if type(env[name]) == "function" then natives[env[name]] = true end
+    end
+    for _, name in ipairs({ "SetValue", "SetMinMaxValues", "SetText", "SetFormattedText", "SetTextColor",
+        "SetStatusBarColor", "SetStatusBarTexture", "SetVertexColor", "SetColorTexture", "SetTexture",
+        "SetPoint", "ClearAllPoints", "SetSize", "SetWidth", "SetHeight", "SetAttribute", "Show", "Hide",
+        "RegisterEvent", "RegisterUnitEvent", "UnregisterEvent", "UnregisterAllEvents" }) do
+        local fn = h.widgets.Methods[name]
+        if type(fn) == "function" then natives[fn] = true end
+    end
+    h.nativeCounts = {}
+    h.nativeTick = function()
+        if natives[debug.getinfo(2, "f").func] then h.nativeCalls = h.nativeCalls + 1 end
+    end
+    h.nativeLimits = flavor == "Mainline" and {
+        party_join = 399, party_settle = 71, party_apply = 278, raid_build = 6151,
+        raid_settle = 148, raid_apply = 1120, raid_shift = 107,
+    } or {
+        party_join = 439, party_settle = 81, party_apply = 350, raid_build = 6532,
+        raid_settle = 188, raid_apply = 1380, raid_shift = 161,
+    }
+end
+
 
 ---------------------------------------------------------------------------
 -- GF.EnsureDB stays a cold path
@@ -88,18 +130,43 @@ Check(pairScans == 0, "the repaired DB did not return to the scan-free path")
 -- Measurements
 ---------------------------------------------------------------------------
 local results = {}
-local function Measure(case, fn)
+local function MeasureOnce(fn)
     local ticks = 0
     local function Tick() ticks = ticks + 1 end
     collectgarbage("collect")
     collectgarbage("stop")
     local kb = collectgarbage("count")
-    debug.sethook(Tick, "", 1000)
+    if h.nativeTick then
+        h.nativeCalls = 0
+        debug.sethook(h.nativeTick, "c")
+    else
+        debug.sethook(Tick, "", 1000)
+    end
     fn()
     debug.sethook()
     kb = collectgarbage("count") - kb
     collectgarbage("restart")
+    return ticks, kb
+end
+
+-- repeatable: the case leaves the state it found (a settle), so it runs twice
+-- and keeps the smaller reading. The full collect before each run can shrink
+-- Lua 5.1's string table; regrowing it then lands in whichever run crosses the
+-- next power of two, which depends on how many strings the whole tree holds,
+-- not on the measured path. A resize happens at most once per pair, so the
+-- minimum is the path's own cost.
+local function Measure(case, fn, repeatable)
+    local ticks, kb = MeasureOnce(fn)
+    if repeatable then
+        local ticks2, kb2 = MeasureOnce(fn)
+        if ticks2 < ticks then ticks = ticks2 end
+        if kb2 < kb then kb = kb2 end
+    end
     results[#results + 1] = { case = case, k = ticks, kb = kb }
+    if h.nativeCounts then
+        h.nativeCounts[case] = h.nativeCalls
+        Check(h.nativeCalls <= h.nativeLimits[case], case .. ": native-call budget exceeded")
+    end
     local budget = (BUDGETS[flavor] or {})[case]
     if budget and not MEASURE_ONLY then
         Check(ticks <= budget[1], string.format("%s: %d k instructions, budget %d k", case, ticks, budget[1]))
@@ -127,7 +194,7 @@ Check(#h:Children(partyHeader) == 5 and GF.FrameForUnit("party4") ~= nil, "the j
 Measure("party_settle", function()
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
-end)
+end, true)
 Measure("party_apply", function()
     GF.RefreshVisuals(nil, GF.DIRTY_ALL)
 end)
@@ -141,10 +208,15 @@ end)
 local raidChildren = 0
 GF.ForEachHeader("raid", function(header) raidChildren = raidChildren + #h:Children(header) end)
 Check(raidChildren >= 20 and GF.FrameForUnit("raid20") ~= nil, "the raid did not build twenty styled frames")
+-- Warm the unchanged-roster path before measuring its steady-state cost.
+-- This keeps one-time VM growth out of the allocation budget; the repeat
+-- inside Measure keeps a string-table resize out of it.
+h:Event("GROUP_ROSTER_UPDATE")
+h:RunTimers()
 Measure("raid_settle", function()
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
-end)
+end, true)
 Measure("raid_apply", function()
     GF.RefreshVisuals(nil, GF.DIRTY_ALL)
 end)
@@ -189,7 +261,11 @@ for _, result in ipairs(results) do
         Check(result.kb <= memoryBudget, string.format("%s: %.1f KB allocated, budget %d KB",
             result.case, result.kb, memoryBudget))
     end
-    summary[#summary + 1] = string.format("%s %dk/%.1fKB", result.case, result.k, result.kb)
+    if h.nativeCounts then
+        summary[#summary + 1] = string.format("%s %d native calls", result.case, h.nativeCounts[result.case])
+    else
+        summary[#summary + 1] = string.format("%s %dk/%.1fKB", result.case, result.k, result.kb)
+    end
 end
 print(string.format("group_roster_budget_smoke: ok (%s, %s-bit%s: %s)", flavor,
     wideTables and "64" or "32", MEASURE_ONLY and ", measure only" or "",

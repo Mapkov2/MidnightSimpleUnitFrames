@@ -2,25 +2,37 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Group preview rounded-frame and outline helpers.
 ---
 --- This isolates the mask/outline subsystem from the native group preview
---- renderer, keeping the renderer focused on layout and composition.
-local _, MSUF = ...
+--- renderer, keeping the renderer focused on layout and composition. It loads
+--- before the native renderer, which reads its exports (Rounded.*) at load.
+local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local EnsureDB = M.EnsureDB
 local Rounded = M.GroupPreviewRounded or {}
 M.GroupPreviewRounded = Rounded
-function Rounded.Install(deps)
-    deps = deps or {}
-    local PreviewHelpers = deps.PreviewHelpers or {}
-    local Specs = deps.Specs or {}
-    local WHITE8X8 = deps.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
-    local GF_PREVIEW_ROUNDED_MASK = deps.ROUNDED_MASK
-    local GF_PREVIEW_ROUNDED_EDGE = deps.ROUNDED_EDGE
-    local GF_PREVIEW_ROUNDED_STRENGTH = 3
-    local ReadBarsBool = deps.ReadBarsBool
-    local Round = deps.Round
-    local HealPredAnchorMode = deps.HealPredAnchorMode
+local floor = math.floor
+local PreviewHelpers = M.PreviewHelpers or {}
+local Specs = M.GroupPreviewSpecs or {}
+local WHITE8X8 = Specs.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
+local maskRoot = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
+local GF_PREVIEW_ROUNDED_MASK = Specs.ROUNDED_MASK or (maskRoot .. "rounded_clean_mask_s3.png")
+local GF_PREVIEW_ROUNDED_EDGE = Specs.ROUNDED_EDGE or (maskRoot .. "rounded_clean_edge_s3.png")
+local GF_PREVIEW_ROUNDED_STRENGTH = 3
+local ReadBarsBool = PreviewHelpers.ReadPreviewBarsBool
+local function Round(value)
+    return floor((tonumber(value) or 0) + 0.5)
+end
+local function NormalizeAnchorMode(value, fallback)
+    local mode = tonumber(value) or fallback or 3
+    if mode < 1 or mode > 5 then mode = fallback or 3 end
+    return mode
+end
+local function HealPredAnchorMode(conf)
+    if conf and conf.hlOverride == true and conf.healPredAnchorMode ~= nil then return NormalizeAnchorMode(conf.healPredAnchorMode, 3) end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    return NormalizeAnchorMode(gen and gen.healPredAnchorMode, 3)
+end
 local function FrameStyle(conf)
     local explicit = conf and conf.frameBarShape
     if explicit == "SLANTED" and ReadBarsBool("slantedBarsEnabled", true)
@@ -175,18 +187,8 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
         if host then host:Hide() end
         return
     end
-    if not host then
-        if type(_G.CreateFrame) ~= "function" then return end
-        host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-        if host.EnableMouse then host:EnableMouse(false) end
-        host.edges = {}
-        for i = 1, 4 do
-            local line = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6))
-            line:SetTexture(WHITE8X8)
-            host.edges[i] = line
-        end
-        mock._msufGFPreviewPowerBorder = host
-    end
+    host = host or PreviewHelpers.EnsurePowerBorderHost(mock, "_msufGFPreviewPowerBorder")
+    if not host then return end
     -- Elements_Power parents this rectangular border surface to the power bar
     -- and keeps it two details above that bar. The preview host is mock-owned,
     -- so explicitly follow the bar when a detached Layer moves it far above
@@ -198,7 +200,6 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
         host:Hide()
         return
     end
-    local top, bottom, left, right = host.edges[1], host.edges[2], host.edges[3], host.edges[4]
     for i = 1, 4 do host.edges[i]:Hide() end
     host:ClearAllPoints()
     host:SetAllPoints(mock._power)
@@ -208,29 +209,7 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
     local a = mock._msufGFPreviewPowerBorderA
     if r == nil then r, g, b, a = BaseEdgeColor(mock) end
     for i = 1, 4 do host.edges[i]:SetVertexColor(r or 0, g or 0, b or 0, a == nil and 1 or a) end
-    top:ClearAllPoints()
-    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-    top:SetHeight(edge)
-    top:Show()
-    if not roundedPower then
-        bottom:ClearAllPoints()
-        bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-        bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-        bottom:SetHeight(edge)
-        left:ClearAllPoints()
-        left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-        left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-        left:SetWidth(edge)
-        right:ClearAllPoints()
-        right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-        right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-        right:SetWidth(edge)
-        bottom:Show()
-        left:Show()
-        right:Show()
-    end
-    host:Show()
+    PreviewHelpers.LayoutPowerBorderEdges(host, edge, roundedPower)
 end
 local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDetached, powerEdgeSize)
     if not mock then return false end
@@ -334,5 +313,6 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     if mock.SetBackdropBorderColor then mock:SetBackdropBorderColor(0, 0, 0, 0) end
     return true
 end
-    return { SetOutlineShown = SetOutlineShown, LayoutOutline = LayoutOutline, BaseEdgeColor = BaseEdgeColor, ApplyRounded = ApplyRounded }
-end
+Rounded.SetOutlineShown, Rounded.LayoutOutline = SetOutlineShown, LayoutOutline
+Rounded.BaseEdgeColor, Rounded.ApplyRounded = BaseEdgeColor, ApplyRounded
+Rounded.Round, Rounded.HealPredAnchorMode = Round, HealPredAnchorMode

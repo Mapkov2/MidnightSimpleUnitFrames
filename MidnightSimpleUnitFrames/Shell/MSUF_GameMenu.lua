@@ -430,11 +430,13 @@ HookGameMenu = function()
 end
 
 initFrame = CreateFrame("Frame")
-runtimeEnabled = IsGameMenuButtonEnabled()
-if runtimeEnabled then
-    initFrame:RegisterEvent("PLAYER_LOGIN")
-    initFrame:RegisterEvent("ADDON_LOADED")
-end
+--- No profile read while this file loads: the client loads the SavedVariables
+--- after every file ran, so that read always answered "on". The hook waits for
+--- GameMenuFrame, every show reads the saved setting (PositionGameMenuButton),
+--- and the menu toggle sets the runtime state (MSUF_SetGameMenuButtonEnabled).
+runtimeEnabled = true
+initFrame:RegisterEvent("PLAYER_LOGIN")
+initFrame:RegisterEvent("ADDON_LOADED")
 initFrame:SetScript("OnEvent", function(self)
     if HookGameMenu() then
         self:UnregisterEvent("PLAYER_LOGIN")

@@ -242,30 +242,13 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         return g[key] == true
     end
 
-    function Model.WriteGeneralBool(key, value)
-        local g = EnsureGeneralDB()
-        g[key] = value and true or false
-    end
-
     function Model.ReadGeneralNumber(key, defaultValue, minValue, maxValue)
         local g = EnsureGeneralDB()
         return ClampNumber(g[key], defaultValue, minValue, maxValue)
     end
 
-    function Model.WriteGeneralNumber(key, value, minValue, maxValue)
-        local g = EnsureGeneralDB()
-        value = ClampNumber(value, 0, minValue, maxValue)
-        if math_floor(value) == value then value = Round(value) end
-        g[key] = value
-    end
-
     function Model.ReadGeneralColor(key, defaultR, defaultG, defaultB)
         return ReadRGB(EnsureGeneralDB(), key, defaultR, defaultG, defaultB)
-    end
-
-    function Model.WriteGeneralColor(key, r, g, b)
-        local general = EnsureGeneralDB()
-        general[key] = { Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1) }
     end
 
     -- One cold-path source of truth for the aura duration bar and every preview.
@@ -349,30 +332,6 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
         if flag then auras[flag] = enabled and true or false end
     end
 
-    function Model.UseSharedVisuals(unit)
-        return false
-    end
-
-    local function EnsureUnitStyleOverrides(auras, runtimeUnit)
-        local pu = PerUnit(auras, runtimeUnit, true)
-        if not pu then return end
-        pu.layout = type(pu.layout) == "table" and pu.layout or {}
-        pu.layoutShared = type(pu.layoutShared) == "table" and pu.layoutShared or {}
-        if pu.overrideStyle ~= true then
-            ClearKeys(pu.layout, STYLE_LAYOUT_KEYS)
-            ClearKeys(pu.layoutShared, STYLE_SHARED_LAYOUT_KEYS)
-        end
-        pu.overrideStyle = true
-    end
-
-    function Model.SetUseSharedVisuals(unit, useShared)
-        local auras = Model.EnsureDB()
-        if type(auras) ~= "table" then return end
-        EachRuntimeUnit(unit, function(runtimeUnit)
-            EnsureUnitStyleOverrides(auras, runtimeUnit)
-        end)
-    end
-
     function Model.ReadValue(unit, key, defaultValue)
         local auras, shared = Model.EnsureDB()
         if type(shared) ~= "table" then return defaultValue end
@@ -425,16 +384,6 @@ function Factories.Storage(A3, Model, Schema, Common, ExportPublic)
     function Model.WriteSharedBool(key, value)
         local _, shared = Model.EnsureDB()
         if type(shared) == "table" then shared[key] = value and true or false end
-    end
-
-    function Model.ReadSharedNumber(key, defaultValue, minValue, maxValue)
-        local _, shared = Model.EnsureDB()
-        return ClampNumber(type(shared) == "table" and shared[key] or nil, defaultValue, minValue, maxValue)
-    end
-
-    function Model.WriteSharedNumber(key, value, minValue, maxValue)
-        local _, shared = Model.EnsureDB()
-        if type(shared) == "table" then shared[key] = ClampNumber(value, 0, minValue, maxValue) end
     end
 
 

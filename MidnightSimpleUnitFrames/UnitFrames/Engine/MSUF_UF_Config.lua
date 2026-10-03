@@ -1602,9 +1602,10 @@ local function CompileUnitPrediction(out, conf, general, key)
   if pred.healAbsorbTest == true then pred.healAbsorb = true end
   pred.enabled = pred.heal == true or pred.absorb == true or pred.healAbsorb == true
   pred.texture = out.texture
-  pred.healAnchorMode = Number(ScopedValue(conf, general, "healPredAnchorMode", 3), 3)
-  pred.absorbAnchorMode = Number(ScopedValue(conf, general, "absorbAnchorMode", 2), 2)
-  pred.healAbsorbAnchorMode = Number(ScopedValue(conf, general, "healAbsorbAnchorMode", 3), 3)
+  local follow, right = Shared.ABSORB_ANCHOR.FOLLOW_HP, Shared.ABSORB_ANCHOR.RIGHT
+  pred.healAnchorMode = Number(ScopedValue(conf, general, "healPredAnchorMode", follow), follow)
+  pred.absorbAnchorMode = Number(ScopedValue(conf, general, "absorbAnchorMode", right), right)
+  pred.healAbsorbAnchorMode = Number(ScopedValue(conf, general, "healAbsorbAnchorMode", follow), follow)
   pred.healHeight = max(0, min(100, Number(ScopedValue(conf, general, "healPredictionBarHeight", 0), 0)))
   pred.healOffsetY = max(-100, min(100, Number(ScopedValue(conf, general, "healPredictionBarOffsetY", 0), 0)))
   pred.absorbHeight = max(0, min(100, Number(ScopedValue(conf, general, "absorbBarHeight", 0), 0)))

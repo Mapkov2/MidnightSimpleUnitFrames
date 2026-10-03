@@ -47,7 +47,8 @@ local function GetInterruptFeedbackDuration()
 end
 ExportPublic("MSUF_GetInterruptFeedbackDuration", GetInterruptFeedbackDuration)
 
-if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
+-- The castbar preview hard sync; this file is its only provider.
+do
     local function HardSyncCastbarPreview(preview, source)
         if not preview or not source then return end
 
@@ -171,9 +172,8 @@ local function SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, alpha
     statusBar:SetStatusBarColor(red, green, blue, alpha)
 end
 
-if type(_G.MSUF_SetStatusBarColorIfChanged) ~= "function" then
-    ExportPublic("MSUF_SetStatusBarColorIfChanged", SetStatusBarColorIfChangedImpl)
-end
+-- This file is the only provider; its own writes below call the local.
+ExportPublic("MSUF_SetStatusBarColorIfChanged", SetStatusBarColorIfChangedImpl)
 
 -- Castbar colors are global settings, so all target/focus/boss bars can share
 -- the same three ColorObjects. Keep only one object per semantic color and
@@ -412,14 +412,34 @@ local function GetCastbarReverseFillForFrame(frame, _)
 end
 ExportPublic("MSUF_GetCastbarReverseFillForFrame", GetCastbarReverseFillForFrame)
 
+local function GetInterruptibleCastColor()
+    EnsureDBLazy()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local red = tonumber(general.castbarInterruptibleR)
+    local green = tonumber(general.castbarInterruptibleG)
+    local blue = tonumber(general.castbarInterruptibleB)
+    if red and green and blue then return red, green, blue, 1 end
+end
+ExportPublic("MSUF_GetInterruptibleCastColor", GetInterruptibleCastColor)
+
+local function GetNonInterruptibleCastColor()
+    EnsureDBLazy()
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local red = tonumber(general.castbarNonInterruptibleR)
+    local green = tonumber(general.castbarNonInterruptibleG)
+    local blue = tonumber(general.castbarNonInterruptibleB)
+    if red and green and blue then return red, green, blue, 1 end
+end
+ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
+
+-- The custom colours come from this file's getters, the only owner of the
+-- public aliases (Runtime/MSUF_Colors.lua keeps its palette-fallback getters
+-- for the menu's MSUF._colorsAPI only).
 local function ResolveCastbarColors()
     EnsureDBLazy()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
 
-    local castR, castG, castB
-    if type(_G.MSUF_GetInterruptibleCastColor) == "function" then
-        castR, castG, castB = _G.MSUF_GetInterruptibleCastColor()
-    end
+    local castR, castG, castB = GetInterruptibleCastColor()
     if not (castR and castG and castB) then
         local key = general.castbarInterruptibleColor or "teal"
         local getRGB = _G.MSUF_GetColorRGBFromKey
@@ -431,10 +451,7 @@ local function ResolveCastbarColors()
     end
     if not (castR and castG and castB) then castR, castG, castB = 0, 0.85, 0.85 end
 
-    local nonR, nonG, nonB
-    if type(_G.MSUF_GetNonInterruptibleCastColor) == "function" then
-        nonR, nonG, nonB = _G.MSUF_GetNonInterruptibleCastColor()
-    end
+    local nonR, nonG, nonB = GetNonInterruptibleCastColor()
     if not (nonR and nonG and nonB) then
         local key = general.castbarNonInterruptibleColor or "red"
         local getRGB = _G.MSUF_GetColorRGBFromKey
@@ -501,26 +518,6 @@ local function PlayCastbarShake(frame)
 end
 ExportPublic("MSUF_PlayCastbarShake", PlayCastbarShake)
 
-local function GetInterruptibleCastColor()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-    local red = tonumber(general.castbarInterruptibleR)
-    local green = tonumber(general.castbarInterruptibleG)
-    local blue = tonumber(general.castbarInterruptibleB)
-    if red and green and blue then return red, green, blue, 1 end
-end
-ExportPublic("MSUF_GetInterruptibleCastColor", GetInterruptibleCastColor)
-
-local function GetNonInterruptibleCastColor()
-    EnsureDBLazy()
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-    local red = tonumber(general.castbarNonInterruptibleR)
-    local green = tonumber(general.castbarNonInterruptibleG)
-    local blue = tonumber(general.castbarNonInterruptibleB)
-    if red and green and blue then return red, green, blue, 1 end
-end
-ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
-
 local function GetInterruptUnavailableCastColor()
     EnsureDBLazy()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
@@ -563,28 +560,42 @@ local function ResolveInterruptFeedbackCastColor()
 end
 ExportPublic("MSUF_ResolveInterruptFeedbackCastColor", ResolveInterruptFeedbackCastColor)
 
+--- Interrupt-ready units: a castbar unit's config row (target, focus, boss for
+--- boss and bossN, arena for arena and arenaN; nil for any other unit) and the
+--- setting that shows the indicator on it. The one rule for the indicator
+--- (MSUF_InterruptReady.lua) and the unavailable tint below.
+local KICK_READY_SHOW_KEY = {
+    target = "kickReadyShowTarget",
+    focus = "kickReadyShowFocus",
+    boss = "kickReadyShowBoss",
+    arena = "kickReadyShowArena",
+}
+
+local function KickReadyUnitKey(unit)
+    if type(unit) ~= "string" then return nil end
+    if KICK_READY_SHOW_KEY[unit] then return unit end
+    if unit:match("^boss%d+$") then return "boss" end
+    if unit:match("^arena%d+$") then return "arena" end
+    return nil
+end
+
+--- unit token -> its config row or false, classified once per token (the
+--- indicator asks for every castbar on every cooldown event).
+local KICK_READY_ROW = setmetatable({}, { __index = function(rows, unit)
+    local row = KickReadyUnitKey(unit) or false
+    rawset(rows, unit, row)
+    return row
+end })
+
+MSUF.Castbars = MSUF.Castbars or {}
+MSUF.Castbars.KickReadyUnits = { Key = KickReadyUnitKey, ShowKey = KICK_READY_SHOW_KEY, Row = KICK_READY_ROW }
+
 local function UnitSupportsInterruptUnavailableTint(frame, general)
     local unit = frame and frame.unit
-    if type(unit) ~= "string" then return false end
-
-    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
-    local key
-    if unit == "target" then
-        if general.kickReadyShowTarget ~= true then return false end
-        key = "target"
-    elseif unit == "focus" then
-        if general.kickReadyShowFocus ~= true then return false end
-        key = "focus"
-    elseif unit:sub(1, 4) == "boss" then
-        if general.kickReadyShowBoss ~= true then return false end
-        key = "boss"
-    elseif unit:sub(1, 5) == "arena" then
-        if general.kickReadyShowArena ~= true then return false end
-        key = "arena"
-    else
-        return false
-    end
+    local key = unit and KICK_READY_ROW[unit]
+    if not key or general[KICK_READY_SHOW_KEY[key]] ~= true then return false end
     -- Resolve live ownership directly; no per-query closure is needed.
+    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
     return type(shouldUse) ~= "function" or shouldUse(key, general) == true
 end
 
@@ -601,9 +612,8 @@ local function ResolveInterruptUnavailableCastColor()
     local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
     local red, green, blue
 
-    if type(_G.MSUF_GetInterruptUnavailableCastColor) == "function" then
-        red, green, blue = _G.MSUF_GetInterruptUnavailableCastColor()
-    end
+    -- This file's getter (the public alias's only owner).
+    red, green, blue = GetInterruptUnavailableCastColor()
 
     if not (red and green and blue) then
         local key = general.castbarInterruptUnavailableColor
@@ -651,14 +661,15 @@ local toPlainHuge = math.huge
 --- export instead of carrying a body of their own. A harness that loads one of
 --- those files standalone has to load this file first.
 local function PlainNumber(value)
-    if value == nil then
+    -- A secret is rejected before anything compares it, nil included.
+    if toPlainIsSecret(value) == true or value == nil then
         return nil
     end
 
     -- The duration APIs normally return an ordinary number. Avoid ToPlain and
     -- the allocating tostring/tonumber round-trip on that overwhelmingly hot
     -- path while retaining the wrapper fallback below.
-    if type(value) == "number" and toPlainIsSecret(value) ~= true
+    if type(value) == "number"
         and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
         return value
     end
@@ -684,11 +695,10 @@ local function PlainNumber(value)
 
     local valueType = type(value)
     if valueType == "number" then
-        if toPlainIsSecret(value) ~= true
-            and value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
+        if value == value and value ~= toPlainHuge and value ~= -toPlainHuge then
             return value
         end
-    elseif valueType == "string" and toPlainIsSecret(value) ~= true then
+    elseif valueType == "string" then
         return tonumber(value)
     end
 
@@ -732,11 +742,7 @@ local function ResetCastbarGlowFade(frame)
 
     if alpha == nil then alpha = 1 end
     statusBar._msufGlowSkipBase = true
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, alpha)
-    else
-        statusBar:SetStatusBarColor(red, green, blue, alpha)
-    end
+    SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, alpha)
     statusBar._msufGlowSkipBase = nil
     statusBar._msufGlowApplied = nil
     statusBar._msufGlowLastP = nil
@@ -795,11 +801,7 @@ local function ApplyCastbarGlowFade(frame, remainingSeconds, totalSeconds)
     local blue = baseB + (1 - baseB) * progress
 
     statusBar._msufGlowSkipBase = true
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, baseA)
-    else
-        statusBar:SetStatusBarColor(red, green, blue, baseA)
-    end
+    SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, baseA)
     statusBar._msufGlowSkipBase = nil
     statusBar._msufGlowApplied = true
 end
@@ -912,6 +914,22 @@ local function FitToBoxWidth(fs, text, fitWidth)
     return best, true
 end
 
+--- general.castbarSpellNameShortening / bossCastSpellNameShortening (saved):
+--- the menu writes OFF or ON; older profiles may hold true/false or a larger
+--- mode number, which counts as on. MODE_KEY_MAX bounds the field the cache
+--- key packs (modes above it fold onto it: only on/off is decided).
+local SPELL_NAME_SHORTENING = { OFF = 0, ON = 1, MODE_KEY_MAX = 3 }
+MSUF.Castbars = MSUF.Castbars or {}
+MSUF.Castbars.SpellNameShortening = SPELL_NAME_SHORTENING
+
+local function ShorteningMode(value, fallback)
+    local mode = tonumber(value)
+    if mode then return mode end
+    if value == true then return SPELL_NAME_SHORTENING.ON end
+    if value == false then return SPELL_NAME_SHORTENING.OFF end
+    return fallback
+end
+
 local function GetSpellNameShorteningConfig(frame)
     if not frame then return false end
 
@@ -923,13 +941,11 @@ local function GetSpellNameShorteningConfig(frame)
     -- This runs on every castbar text write, so resolve "is this a boss bar"
     -- once with a plain prefix compare instead of two tostring+pattern passes.
     local isBoss = unit ~= nil and string_sub(tostring(unit), 1, 4) == "boss"
-    local modeValue = general.castbarSpellNameShortening
-    local mode = tonumber(modeValue) or (modeValue == true and 1 or 0)
+    local mode = ShorteningMode(general.castbarSpellNameShortening, SPELL_NAME_SHORTENING.OFF)
     if isBoss and general.bossCastSpellNameShortening ~= nil then
-        local bossMode = general.bossCastSpellNameShortening
-        mode = tonumber(bossMode) or (bossMode == true and 1 or bossMode == false and 0 or mode)
+        mode = ShorteningMode(general.bossCastSpellNameShortening, mode)
     end
-    if mode <= 0 then return false end
+    if mode <= SPELL_NAME_SHORTENING.OFF then return false end
 
     local maxLen = tonumber(general.castbarSpellNameMaxLen) or 30
     local reserved = tonumber(general.castbarSpellNameReservedSpace) or 8
@@ -956,11 +972,12 @@ local function GetSpellNameShorteningConfig(frame)
     if fitWidth < 0 then fitWidth = 0 elseif fitWidth > 4000 then fitWidth = 4000 end
     -- Packed as a number rather than a concatenated string: that concatenation
     -- was the one allocation every text write paid before the cache could even
-    -- be consulted. Every field is clamped below its factor (mode < 4,
-    -- maxLen <= 80 < 128, reserved <= 160 < 256, fitWidth <= 4000 < 4096) so no
-    -- two configurations can pack to the same number. mode only ever decides
-    -- on/off above, so folding 4+ onto 3 costs nothing.
-    local modeKey = mode > 3 and 3 or mode
+    -- be consulted. Every field is clamped below its factor (mode <= MODE_KEY_MAX
+    -- < 4, maxLen <= 80 < 128, reserved <= 160 < 256, fitWidth <= 4000 < 4096)
+    -- so no two configurations can pack to the same number. mode only ever
+    -- decides on/off above, so folding larger modes onto MODE_KEY_MAX costs nothing.
+    local modeKeyMax = SPELL_NAME_SHORTENING.MODE_KEY_MAX
+    local modeKey = mode > modeKeyMax and modeKeyMax or mode
     local revision = tonumber(_G.MSUF_CastbarStyleRevision) or 1
     local cacheKey = (((revision * 4 + modeKey) * 128 + maxLen) * 256 + reserved)
         * 4096 + math_floor(fitWidth + 0.5)
@@ -969,10 +986,19 @@ end
 ExportPublic("MSUF_GetCastbarSpellNameShorteningConfig", GetSpellNameShorteningConfig)
 
 local function ShortenCastbarSpellName(frame, text)
-    if text == nil then return text end
-
     local isSecret = _G.issecretvalue
-    if type(isSecret) == "function" and isSecret(text) == true then return text end
+    if type(isSecret) == "function" and isSecret(text) == true then
+        -- A secret name is neither measured nor cached, but the previous plain
+        -- name must go too: RefreshCastbarSpellNameText (the cold re-layout)
+        -- would otherwise repaint it over the current secret one.
+        if frame then
+            frame._msufRawCastText = nil
+            frame._msufShortCastText = nil
+            frame._msufShortCastTextKey = false
+        end
+        return text
+    end
+    if text == nil then return text end
 
     local valueType = type(text)
     if valueType ~= "string" and valueType ~= "number" and valueType ~= "boolean" then return text end
@@ -1108,7 +1134,9 @@ local function ApplyCastbarTexts(frame, source, castText, timeText)
         if castText == nil then castText = source.castText end
         if timeText == nil then timeText = source.timeText end
     end
-    if castText ~= nil and frame.castText then SetText(frame.castText, ComposeCastText(frame, castText)) end
+    if ((IsSecretValue and IsSecretValue(castText)) or castText ~= nil) and frame.castText then
+        SetText(frame.castText, ComposeCastText(frame, castText))
+    end
     if timeText ~= nil and frame.timeText then SetText(frame.timeText, timeText) end
 end
 ExportPublic("MSUF_CB_ApplyTexts", ApplyCastbarTexts)

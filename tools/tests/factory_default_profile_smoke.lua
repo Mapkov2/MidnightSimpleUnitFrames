@@ -78,10 +78,14 @@ Check(ns.Client.Flavor == flavor, "client detection reported " .. tostring(ns.Cl
 function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return value end
 _G.MSUF_NS, _G.MSUF = ns, ns
 manifest.LoadSelected(repo, flavor, ns, {
-    "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
+    -- Kernel/MSUF_Util.lua publishes MSUF_PixelLayoutRegion, which the group DB files require.
+    "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "Kernel/MSUF_Util.lua", "Locales/MSUF_Localization.lua",
+    "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua",
     "State/MSUF_Defaults.lua",
+    -- The general key owner registry every partial export asks.
+    "State/MSUF_ProfileFields.lua",
 })
 Check(_G.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT == factory, "the loaded defaults publish a different factory string")
 
@@ -184,6 +188,10 @@ Check(second.general._msufFactoryProfileApplied == true and second.player.width 
 AssertFactory(second, "new profile")
 
 -- Exercise the real group normalization and layout metrics, not just raw DB keys.
+-- The group repair resolves the aura filter helpers it owns no copy of: the
+-- public MSUF_GF_AuraFilter table of Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua,
+-- which loads before the group files. The factory check needs none of its filters.
+_G.MSUF_GF_AuraFilter = _G.MSUF_GF_AuraFilter or {}
 for _, part in ipairs({ "", "_Geometry", "_Text", "_Textures" }) do
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB" .. part .. ".lua"))("MidnightSimpleUnitFrames", ns)
 end

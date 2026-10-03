@@ -219,11 +219,14 @@ end
 local function OpenMenuPage(pageKey)
     local M = Menu2()
     if M and pageKey and type(M.InvalidatePage) == "function" then M.InvalidatePage(pageKey) end
-    if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-        _G.MSUF_OpenStandaloneOptionsWindow(pageKey)
+    -- Options entry points (load-on-demand; the options loader forwards them).
+    local openWindow = MSUF.Optional("MSUF_OpenStandaloneOptionsWindow")
+    local openPage = not openWindow and MSUF.Optional("MSUF_OpenPage")
+    if openWindow then
+        openWindow(pageKey)
         return true
-    elseif type(_G.MSUF_OpenPage) == "function" then
-        _G.MSUF_OpenPage(pageKey)
+    elseif openPage then
+        openPage(pageKey)
         return true
     elseif M and type(M.Open) == "function" then
         M.Open(pageKey)

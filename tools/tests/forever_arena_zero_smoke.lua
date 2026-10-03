@@ -162,8 +162,11 @@ local function NewSandbox(forever)
     if forever then env.GameEvent = { RegisterCamelotEvents = function() end } end
 
     local absent = { GameEvent = true, MAX_ARENA_ENEMIES = true, C_GameRules = true, C_EventUtils = true }
+    -- Addon-owned globals (MSUF_*, and the __MSUF_* load guards such as
+    -- ClassPower's __MSUF_ClassPower_Loaded) are unset until the addon sets
+    -- them; a stub there would make a load guard skip its whole file.
     setmetatable(env, { __index = function(_, key)
-        if absent[key] or (type(key) == "string" and (key:find("^MSUF") or key == "LibStub")) then return nil end
+        if absent[key] or (type(key) == "string" and (key:find("^_*MSUF") or key == "LibStub")) then return nil end
         return Stub
     end })
     return env
@@ -207,8 +210,9 @@ Check(forever.core.Client.MaxArenaOpponents == 0 and forever.env.MSUF_MAX_ARENA_
     "Forever arena slots are not zero")
 Check(forever.core.Client.SupportsUnit("arena1") == false and midnight.core.Client.SupportsUnit("arena1") == true,
     "arena unit support does not follow the client")
--- Stubbed APIs make a few chunks raise in both runs. Forever may skip arena
--- work Midnight does, but must never raise where Midnight does not.
+-- The permissive harness loads every chunk of both runs (since the W4-C6
+-- fixture fix: unset __MSUF_* load guards). Forever may skip arena work
+-- Midnight does, but no chunk may raise in either run.
 local midnightFailures = {}
 for i = 1, #midnight.failures do midnightFailures[midnight.failures[i]] = true end
 for i = 1, #forever.failures do
@@ -216,8 +220,10 @@ for i = 1, #forever.failures do
         "Forever raised at load where Midnight does not: " .. forever.failures[i]
             .. "\nMidnight load failures:\n  " .. table.concat(midnight.failures, "\n  "))
 end
--- The harness must reach the consumers below; a broad stub failure would hide them.
-Check(#forever.failures <= 3, "permissive load harness failed in too many chunks:\n  " .. table.concat(forever.failures, "\n  "))
+-- The harness must reach the consumers below; any load failure would hide them
+-- (a skipped ClassPower controller once passed under a tolerance of three).
+Check(#midnight.failures == 0, "Midnight load failures:\n  " .. table.concat(midnight.failures, "\n  "))
+Check(#forever.failures == 0, "Forever load failures:\n  " .. table.concat(forever.failures, "\n  "))
 
 -- Engine -------------------------------------------------------------------
 local function ManagedArenaUnits(run)

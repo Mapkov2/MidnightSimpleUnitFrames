@@ -3,15 +3,13 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- Menu-only composition for ClassPower, detached Player Power, and the
 --- optional Class Resources Player HP bar. Edit Mode owns movement; this
 --- surface only displays the configured layout and opens element settings.
-local addonName, MSUF = ...
+local MSUF = select(2, ...)
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-local C_Timer = M.MenuTimer or _G.C_Timer
 local Preview = M.ClassPowerStackPreview or {}
 M.ClassPowerStackPreview = Preview
-local ClassPowerSurfaceShown = Preview.SurfaceShown
 local ActivateClassPowerSurface = Preview.ActivateSurface
 local RequestClassPowerPreviewRefresh = Preview.RequestRefresh
 local W = M.Widgets
@@ -66,7 +64,8 @@ local CP_OUTLINE_OPTS = {
     texture = WHITE8,
     color = function() return PREVIEW_BORDER_COLOR[1], PREVIEW_BORDER_COLOR[2], PREVIEW_BORDER_COLOR[3], PREVIEW_BORDER_COLOR[4] end,
 }
-local HP_TEXT_REVERSE = { CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT", CURMAXPERCENT = "PERCENTCURMAX", PERCENTCURMAX = "CURMAXPERCENT", PERCENTMAXCUR = "CURMAXPERCENT" }
+local HP_TEXT_REVERSE = { CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", MAXPERCENT = "PERCENTMAX",
+    PERCENTMAX = "MAXPERCENT", CURMAXPERCENT = "PERCENTCURMAX", PERCENTCURMAX = "CURMAXPERCENT", PERCENTMAXCUR = "CURMAXPERCENT" }
 local DELIMITERS = { [""] = " ", ["-"] = " - ", ["/"] = " / ", ["\\"] = " \\ ", ["|"] = " | ", ["<"] = " < ", [">"] = " > ", ["~"] = " ~ ", [":"] = " : " }
 local function TR(text)
     return (M.Tr and M.Tr(text)) or text
@@ -231,7 +230,8 @@ local function ResolveTexture(key, fallback)
     end
     return WHITE8
 end
-local PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER", mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
+local PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER",
+    mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
 local function PreviewClassToken(spec)
     if spec and spec.classToken then return tostring(spec.classToken):upper() end
     if spec and spec.class then return tostring(spec.class):upper() end
@@ -684,7 +684,8 @@ local function PlaceTextHandle(handle, parent, regions)
         local region = regions[i]
         if region and region.IsShown and region:IsShown() then
             handle:ClearAllPoints()
-            handle:SetSize(max(24, (region.GetStringWidth and region:GetStringWidth() or 20) + 10), max(18, (region.GetStringHeight and region:GetStringHeight() or 12) + 6))
+            handle:SetSize(max(24, (region.GetStringWidth and region:GetStringWidth() or 20) + 10),
+                max(18, (region.GetStringHeight and region:GetStringHeight() or 12) + 6))
             handle:SetPoint("CENTER", region, "CENTER", 0, 0)
             handle._msufPlaced = true
             handle:Show()
@@ -1492,7 +1493,8 @@ local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spe
         local leftMode, centerMode, rightMode, delimiter, hideLeft, hideCenter, hideRight = HPTextConfig(bars, player)
         local maxValue = 1000000
         local current = floor((maxValue * fraction) + 0.5)
-        ApplyMeterText(frame, Clamp(bars.playerHPBarUsePlayerText ~= false and player.hpFontSize or bars.playerHPBarTextSize, 14, 6, 48), tonumber(bars.playerHPBarTextOffsetX) or 0, tonumber(bars.playerHPBarTextOffsetY) or 0,
+        ApplyMeterText(frame, Clamp(bars.playerHPBarUsePlayerText ~= false and player.hpFontSize or bars.playerHPBarTextSize, 14, 6, 48),
+            tonumber(bars.playerHPBarTextOffsetX) or 0, tonumber(bars.playerHPBarTextOffsetY) or 0,
             ModeText(leftMode, current, maxValue, delimiter, hideLeft),
             ModeText(centerMode, current, maxValue, delimiter, hideCenter),
             ModeText(rightMode, current, maxValue, delimiter, hideRight))
@@ -1601,7 +1603,8 @@ local function UpdateDetachedPowerAnimation(preview, frame, bars, player)
         local delimiter = player.powerTextSeparator or player.hpTextSeparator or ""
         local current = floor((fraction * 100) + 0.5)
         if frame.left then frame.left:SetText(ModeText(leftMode, current, 100, delimiter, HidePercentValue(player, "powerTextLeftHidePercentSymbol"))) end
-        if frame.center then frame.center:SetText(ModeText(centerMode, current, 100, delimiter, HidePercentValue(player, "powerTextCenterHidePercentSymbol"))) end
+        if frame.center then frame.center:SetText(ModeText(centerMode, current, 100, delimiter,
+            HidePercentValue(player, "powerTextCenterHidePercentSymbol"))) end
         if frame.right then frame.right:SetText(ModeText(rightMode, current, 100, delimiter, HidePercentValue(player, "powerTextRightHidePercentSymbol"))) end
     end
     return true
@@ -1755,17 +1758,26 @@ local function SampleMeter(preview, samples, bars, key, row, colorKey, fallback,
     frame.center:SetFont((_G.MSUF_GetFontPath and _G.MSUF_GetFontPath()) or STANDARD_TEXT_FONT,
         tonumber(bars.classPowerFontSize) or 14, "OUTLINE")
     frame.center:SetTextColor(textColor[1], textColor[2], textColor[3], 1)
-    frame.center:SetText(text); frame.center:SetPoint("CENTER", frame, "CENTER")
+    frame.center:SetText(text)
+    frame.center:SetPoint("CENTER", frame, "CENTER")
     frame.center:SetAlpha(1)
-    frame.center:Show(); frame._sampleLayer = "class"; frame._sampleActive=true; frame:Show()
+    frame.center:Show()
+    frame._sampleLayer = "class"
+    frame._sampleActive=true
+    frame:Show()
     return frame
 end
 local function SampleStrip(preview, samples, bars, powerFrame, key, height, anchor, offset, colorKey, fallback, fraction)
-    local frame = samples[key] or EnsureMeter(preview, "resourceSample" .. key); samples[key] = frame
-    frame:ClearAllPoints(); frame:SetPoint(anchor, powerFrame, anchor == "BOTTOMLEFT" and "TOPLEFT" or "BOTTOMLEFT", 0, offset)
+    local frame = samples[key] or EnsureMeter(preview, "resourceSample" .. key)
+    samples[key] = frame
+    frame:ClearAllPoints()
+    frame:SetPoint(anchor, powerFrame, anchor == "BOTTOMLEFT" and "TOPLEFT" or "BOTTOMLEFT", 0, offset)
     RenderMeter(frame, nil, SAMPLE.MeterOpts(powerFrame:GetWidth(), height, fraction, WHITE8,
         SAMPLE.Color(bars, colorKey, fallback)))
-    frame._sampleLayer="power";frame._sampleActive=true;frame:Show(); return frame
+    frame._sampleLayer="power"
+    frame._sampleActive=true
+    frame:Show()
+    return frame
 end
 -- The live power bar the marks sit on: the Mana display source, else the
 -- player's real power type (MSUF_CP_ResourceMarks Target), and its maximum for
@@ -1783,12 +1795,19 @@ local function SamplePowerTarget(mana)
     return token, maximum
 end
 local function RenderExtraSamples(preview, bars, player, spec, classFrame, powerFrame)
-    local samples = preview.resourceSamples or {}; preview.resourceSamples = samples
-    for _, frame in pairs(samples) do frame:Hide(); frame._sampleActive=false end
+    local samples = preview.resourceSamples or {}
+    preview.resourceSamples = samples
+    for _, frame in pairs(samples) do
+        frame:Hide()
+        frame._sampleActive=false
+    end
     local base = preview.resourceSamplePowerBaseState
     preview.resourceSamplePowerBase=nil
     if powerFrame then
-        if not base then base = {}; preview.resourceSamplePowerBaseState = base end
+        if not base then
+            base = {}
+            preview.resourceSamplePowerBaseState = base
+        end
         local r,g,b,a=powerFrame.fill:GetVertexColor()
         base.host, base.r, base.g, base.b, base.a = powerFrame, r or 1, g or 1, b or 1, a or 1
         preview.resourceSamplePowerBase = base
@@ -1798,8 +1817,10 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
     if pain then
         local frame = SampleMeter(preview, samples, bars, "PAIN", 0, "ignorePainColor", SAMPLE.BLUE, .65, "7.8 s", SAMPLE.WHITE)
         frame.marker = frame.marker or MakeTexture(frame, "OVERLAY")
-        frame.marker:SetColorTexture(1,1,1,1); frame.marker:SetWidth(2)
-        frame.marker:ClearAllPoints(); frame.marker:SetPoint("TOP", frame.fill, "TOPRIGHT")
+        frame.marker:SetColorTexture(1,1,1,1)
+        frame.marker:SetWidth(2)
+        frame.marker:ClearAllPoints()
+        frame.marker:SetPoint("TOP", frame.fill, "TOPRIGHT")
         frame.marker:SetPoint("BOTTOM", frame.fill, "BOTTOMRIGHT")
         frame.marker:SetShown(bars.ignorePainTimeMarker ~= false)
     end
@@ -1828,25 +1849,37 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
     if mana then
         local regenTimers = MSUF.CPBuilders and MSUF.CPBuilders.ManaRegenTimersSupported
         regenTimers = regenTimers and regenTimers() or false
-        if regenTimers and bars.manaRegenPause == true then SampleStrip(preview, samples, bars, powerFrame, "FIVE",3,"BOTTOMLEFT",1,"manaRegenPauseColor",SAMPLE.FIVE,.6) end
-        if regenTimers and bars.manaGainPulse == true then SampleStrip(preview, samples, bars, powerFrame, "TICK",2,"TOPLEFT",-1,"manaGainPulseColor",SAMPLE.TICK,.5) end
+        if regenTimers and bars.manaRegenPause == true then SampleStrip(preview, samples, bars, powerFrame, "FIVE",3,"BOTTOMLEFT",1,
+            "manaRegenPauseColor",SAMPLE.FIVE,.6) end
+        if regenTimers and bars.manaGainPulse == true then SampleStrip(preview, samples, bars, powerFrame, "TICK",2,"TOPLEFT",-1,
+            "manaGainPulseColor",SAMPLE.TICK,.5) end
         if bars.manaUpcomingCost == true then
             local frame=SampleStrip(preview, samples, bars, powerFrame, "COST",powerFrame:GetHeight(),"TOPLEFT",0,"manaCostColor",SAMPLE.COST,.18)
-            frame:ClearAllPoints();frame:SetPoint("TOPRIGHT",powerFrame.fill,"TOPRIGHT")
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPRIGHT",powerFrame.fill,"TOPRIGHT")
             frame:SetWidth(max(1,powerFrame:GetWidth()*.18))
             frame.fill:SetWidth(frame:GetWidth())
             if powerFrame._msufCPPreviewShapeAxis=="VERTICAL" then
-                frame:ClearAllPoints();frame:SetPoint("BOTTOMLEFT",powerFrame.fill,"TOPLEFT",0,-powerFrame:GetHeight()*.18)
+                frame:ClearAllPoints()
+                frame:SetPoint("BOTTOMLEFT",powerFrame.fill,"TOPLEFT",0,-powerFrame:GetHeight()*.18)
                 frame:SetSize(powerFrame:GetWidth(),max(1,powerFrame:GetHeight()*.18))
                 frame.fill:SetSize(frame:GetWidth(),frame:GetHeight())
             end
             frame.bg:Hide()
             if powerFrame._msufCPPreviewHasShape then
                 local mask=frame.costMask
-                if not mask then mask=PixelLayoutRegion(powerFrame:CreateMaskTexture(nil,"OVERLAY"));frame.costMask=mask end
-                if not frame.costMasked then frame.fill:AddMaskTexture(mask);frame.costMasked=true end
+                if not mask then
+                    mask=PixelLayoutRegion(powerFrame:CreateMaskTexture(nil,"OVERLAY"))
+                    frame.costMask=mask
+                end
+                if not frame.costMasked then
+                    frame.fill:AddMaskTexture(mask)
+                    frame.costMasked=true
+                end
                 mask:SetTexture(powerFrame.fill:GetTexture(),"CLAMPTOBLACKADDITIVE","CLAMPTOBLACKADDITIVE")
-                mask:ClearAllPoints();mask:SetAllPoints(powerFrame);mask:Show()
+                mask:ClearAllPoints()
+                mask:SetAllPoints(powerFrame)
+                mask:Show()
             elseif frame.costMasked then frame.fill:RemoveMaskTexture(frame.costMask);frame.costMasked=false;frame.costMask:Hide() end
         end
     end
@@ -1865,7 +1898,10 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
         if rule.target=="CLASS" and classFrame and spec and spec.mode~="aura_segmented" then
             host,token,maximum=classFrame,spec.token,tonumber(spec.segments)
         elseif rule.target~="CLASS" and rule.target~="ALTMANA" and powerFrame then
-            if not powerResolved then powerToken, powerMaximum = SamplePowerTarget(mana); powerResolved = true end
+            if not powerResolved then
+                powerToken, powerMaximum = SamplePowerTarget(mana)
+                powerResolved = true
+            end
             host,token,maximum=powerFrame,powerToken,powerMaximum
         end
         local value=tonumber(rule.value)
@@ -1876,8 +1912,11 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
             count=count+1
             -- Live marks draw on OVERLAY sublevel 7, above the fill and its edge.
             local texture=preview.resourceSampleMarks[count] or MakeTexture(host,"OVERLAY",7)
-            preview.resourceSampleMarks[count]=texture;texture:SetParent(host);texture:ClearAllPoints()
-            local color=rule.color or SAMPLE.WHITE;texture:SetColorTexture(color[1],color[2],color[3],1)
+            preview.resourceSampleMarks[count]=texture
+            texture:SetParent(host)
+            texture:ClearAllPoints()
+            local color=rule.color or SAMPLE.WHITE
+            texture:SetColorTexture(color[1],color[2],color[3],1)
             texture:SetWidth(max(1,min(20,tonumber(rule.width) or 2)))
             texture:SetPoint("TOP",host,"TOPLEFT",host:GetWidth()*fraction,0)
             texture:SetPoint("BOTTOM",host,"BOTTOMLEFT",host:GetWidth()*fraction,0)
@@ -1885,7 +1924,10 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
             if rule.threshold==true then
                 thresholdCount = thresholdCount + 1
                 local entry = thresholds[thresholdCount]
-                if not entry then entry = {}; thresholds[thresholdCount] = entry end
+                if not entry then
+                    entry = {}
+                    thresholds[thresholdCount] = entry
+                end
                 entry.host, entry.spec, entry.fraction = host, host==classFrame and spec or nil, fraction
                 entry.direction, entry.color, entry.maximum = rule.direction, color, maximum
             end
@@ -2112,24 +2154,11 @@ local function CreateLayerSidebar(box, sideW)
         box.layerButtons[#box.layerButtons + 1] = btn
     end
 end
+local ANIMATE_IDLE_FILL, ANIMATE_IDLE_BORDER = { 0.025, 0.030, 0.045, 0.88 }, { 0.12, 0.16, 0.24, 0.92 }
 local function RefreshAnimateButton(preview)
     local btn = preview and preview.animateButton
     if not btn then return end
-    local active = AnimationEnabled(preview)
-    if btn.fs then
-        btn.fs:SetText(active and TR("Stop") or TR("Animate"))
-        btn.fs:SetTextColor(active and 0.06 or 0.78, active and 0.95 or 0.84, active and 1.00 or 0.96, 1)
-    end
-    if btn.MSUF2RefreshPreviewPill then btn:MSUF2RefreshPreviewPill(active) end
-    if btn.SetBackdropColor and not btn._msuf2PreviewPillFill then
-        if active then
-            btn:SetBackdropColor(0.020, 0.125, 0.155, 0.96)
-            btn:SetBackdropBorderColor(0.10, 0.82, 0.95, 1)
-        else
-            btn:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
-            btn:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
-        end
-    end
+    Helpers.PaintAnimateButton(btn, AnimationEnabled(preview), TR, ANIMATE_IDLE_FILL, ANIMATE_IDLE_BORDER)
 end
 local function StopAnimationDriver(preview)
     local driver = preview and preview.animationDriver
@@ -2244,27 +2273,7 @@ local function EnsureClassPowerLayersButton(box)
 end
 local SetClassPowerPreviewToolsShown = M.PreviewHelpers.SetCanvasToolsShown
 local function LayoutClassPowerHeaderControls(box, compact)
-    if not box then return end
-    local header = box._msuf2CompactHeader
-    local expandBtn = box._msuf2CompactExpandButton
-    local layersBtn = box._msuf2LayersButton
-    if compact and header then
-        if layersBtn then
-            layersBtn:SetText(TR("Layers") .. " v", true)
-            layersBtn:SetParent(header)
-            layersBtn:ClearAllPoints()
-            if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
-            else layersBtn:SetPoint("RIGHT", header, "RIGHT", -108, 0) end
-            if layersBtn.SetFrameLevel and header.GetFrameLevel then layersBtn:SetFrameLevel((header:GetFrameLevel() or 1) + 3) end
-        end
-        return
-    end
-    if layersBtn then
-        layersBtn:SetText("Layers")
-        layersBtn:SetParent(box)
-        layersBtn:ClearAllPoints()
-        layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
-    end
+    Helpers.LayoutCompactLayersButton(box, compact, TR)
 end
 local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     if not box then return end

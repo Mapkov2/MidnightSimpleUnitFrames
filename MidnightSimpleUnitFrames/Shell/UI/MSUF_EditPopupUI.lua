@@ -71,7 +71,8 @@ local function FS(parent, role, color)
     else
         fs:SetFont(FONT, FontSize(role or "body"), "")
     end
-    fs:SetShadowOffset(1, -1); fs:SetShadowColor(0, 0, 0, 0.35)
+    fs:SetShadowOffset(1, -1)
+    fs:SetShadowColor(0, 0, 0, 0.35)
     local c = color or C.white
     fs:SetTextColor(c[1], c[2], c[3], c[4] or 1)
     return fs
@@ -519,12 +520,15 @@ function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2,
     l1:SetPoint("LEFT", row, "LEFT", 0, 0)
     l1:SetText(Tr(label1))
     if key1 then owner[key1 .. "Label"] = l1 end
-    local m1 = Quick.Button(row, "-", 32, 32, nil, opts); m1:SetPoint("LEFT", l1, "RIGHT", Space("sm", 8), 0)
+    local m1 = Quick.Button(row, "-", 32, 32, nil, opts)
+    m1:SetPoint("LEFT", l1, "RIGHT", Space("sm", 8), 0)
     local boxOpts = {}
     for key, value in pairs(opts or {}) do boxOpts[key] = value end
     boxOpts.boxHeight = 32
-    local b1 = Quick.Box(row, opts and opts.boxWidth or 64, boxOpts); b1:SetPoint("LEFT", m1, "RIGHT", 4)
-    local p1 = Quick.Button(row, "+", 32, 32, nil, opts); p1:SetPoint("LEFT", b1, "RIGHT", 4)
+    local b1 = Quick.Box(row, opts and opts.boxWidth or 64, boxOpts)
+    b1:SetPoint("LEFT", m1, "RIGHT", 4)
+    local p1 = Quick.Button(row, "+", 32, 32, nil, opts)
+    p1:SetPoint("LEFT", b1, "RIGHT", 4)
     Quick.WireStepper(m1, b1, p1, cb1)
     owner[key1] = b1
 
@@ -532,9 +536,12 @@ function Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2,
     l2:SetPoint("LEFT", p1, "RIGHT", 20, 0)
     l2:SetText(Tr(label2))
     if key2 then owner[key2 .. "Label"] = l2 end
-    local m2 = Quick.Button(row, "-", 32, 32, nil, opts); m2:SetPoint("LEFT", l2, "RIGHT", Space("sm", 8), 0)
-    local b2 = Quick.Box(row, opts and opts.boxWidth or 64, boxOpts); b2:SetPoint("LEFT", m2, "RIGHT", 4)
-    local p2 = Quick.Button(row, "+", 32, 32, nil, opts); p2:SetPoint("LEFT", b2, "RIGHT", 4)
+    local m2 = Quick.Button(row, "-", 32, 32, nil, opts)
+    m2:SetPoint("LEFT", l2, "RIGHT", Space("sm", 8), 0)
+    local b2 = Quick.Box(row, opts and opts.boxWidth or 64, boxOpts)
+    b2:SetPoint("LEFT", m2, "RIGHT", 4)
+    local p2 = Quick.Button(row, "+", 32, 32, nil, opts)
+    p2:SetPoint("LEFT", b2, "RIGHT", 4)
     Quick.WireStepper(m2, b2, p2, cb2)
     owner[key2] = b2
 
@@ -550,12 +557,15 @@ function Quick.SingleValue(owner, parent, y, label, key, cb, opts)
     local l = SetReadableSize(FS(row, "caption", c.white), 13)
     l:SetPoint("LEFT", row, "LEFT", 0, 0)
     l:SetText(Tr(label))
-    local m = Quick.Button(row, "-", 32, 32, nil, opts); m:SetPoint("LEFT", l, "RIGHT", Space("sm", 8), 0)
+    local m = Quick.Button(row, "-", 32, 32, nil, opts)
+    m:SetPoint("LEFT", l, "RIGHT", Space("sm", 8), 0)
     local boxOpts = {}
     for option, value in pairs(opts or {}) do boxOpts[option] = value end
     boxOpts.boxHeight = 32
-    local b = Quick.Box(row, opts and opts.boxWidth or 64, boxOpts); b:SetPoint("LEFT", m, "RIGHT", 4)
-    local p = Quick.Button(row, "+", 32, 32, nil, opts); p:SetPoint("LEFT", b, "RIGHT", 4)
+    local b = Quick.Box(row, opts and opts.boxWidth or 64, boxOpts)
+    b:SetPoint("LEFT", m, "RIGHT", 4)
+    local p = Quick.Button(row, "+", 32, 32, nil, opts)
+    p:SetPoint("LEFT", b, "RIGHT", 4)
     Quick.WireStepper(m, b, p, cb)
     owner[key] = b
     return row
@@ -837,7 +847,10 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
         end
     end
     btn:SetScript("OnClick", function()
-        if menu:IsShown() then menu:Hide(); return end
+        if menu:IsShown() then
+            menu:Hide()
+            return
+        end
         BuildRows()
         menu._closeTimer = nil
         menu:ClearAllPoints()

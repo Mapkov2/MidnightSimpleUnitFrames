@@ -7,6 +7,7 @@ IsInGroup=function() return count>0 end
 GetRaidRosterInfo=function(i) return "Member"..i,0, i<=10 and 1 or 5 end
 wipe=function(t) for k in pairs(t) do t[k]=nil end return t end
 local ns={ExportPublic=function() end}
+dofile(root .. "/tools/tests/group_dependencies.lua")(ns)
 for _,part in ipairs({"","_Geometry","_Text","_Textures"}) do assert(loadfile(root.."/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB"..part..".lua"))("MSUF",ns) end
 local GF=ns.GF
 -- The Party layout takes a small raid only while the Party scope is on.
@@ -19,7 +20,11 @@ assert(GF.GetLayoutGroupCount("raid")==10)
 assert(GF.GetLayoutTier("raid")=="tier10")
 local w,h=GF.GetScaledFrameMetrics("raid"); assert(w==130 and h==50,"concrete tier must override proportional scale")
 assert(GF.ResolveLayoutGrowth("raid",conf)=="DOWN")
+-- A table holding a true is an allow-list (the native header shows only group 5),
+-- any other table a deny-list: one reading for the grid and the header.
 conf.groupFilter[5]=true; GF.InvalidateLayoutRoster()
+assert(GF.GetLayoutGroupCount("raid")==10,"an allow-list must size the grid for its own subgroups")
+conf.groupFilter[5]=nil; GF.InvalidateLayoutRoster()
 assert(GF.GetLayoutGroupCount("raid")==20 and GF.GetLayoutTier("raid")=="tier20")
 w,h=GF.GetScaledFrameMetrics("raid"); assert(w==90 and h==30)
 assert(GF.ResolveLayoutGrowth("raid",conf)=="LEFT")
@@ -70,7 +75,7 @@ assert(prioritySpec.group==base.group and prioritySpec.health==base.health and p
 local headersFile=assert(io.open(root.."/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua","rb"))
 local headersSource=headersFile:read("*a"):gsub("\r","");headersFile:close()
 local allowedBody=assert(headersSource:match("\nRaidGroupAllowed = function%(conf, groupIndex%)\n(.-)\nend\n"),"RaidGroupAllowed moved")
-local RaidGroupAllowed=assert(loadstring("local GF=...\nreturn function(conf, groupIndex)\n"..allowedBody.."\nend"))({IsMythicRaidContext=function() return true end})
+local RaidGroupAllowed=assert(loadstring("local GF=...\nreturn function(conf, groupIndex)\n"..allowedBody.."\nend"))({IsMythicRaidContext=function() return true end,GroupFilterAllowsSubgroup=GF.GroupFilterAllowsSubgroup})
 assert(RaidGroupAllowed(nil,6)==true,"a missing conf broke the raid group filter")
 assert(RaidGroupAllowed({hideMythicGroupsFiveToEight=true},6)==false and RaidGroupAllowed({groupFilter={[2]=false}},2)==false,"raid group filter rules changed")
 local dbFile=assert(io.open(root.."/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Geometry.lua","rb"))

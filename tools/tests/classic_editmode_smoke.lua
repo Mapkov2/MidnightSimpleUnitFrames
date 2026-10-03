@@ -13,6 +13,31 @@ local function ClearExports()
     end
 end
 
+-- The adapter reads its switch at PLAYER_LOGIN, never while it loads (the
+-- client loads the SavedVariables after every file ran): each load here is
+-- followed by that login, delivered to the frames the module created while it
+-- loaded. beforeLogin stands for the SavedVariables step.
+local function LoadModule(namespace, beforeLogin)
+    local create, created = CreateFrame, {}
+    CreateFrame = function(...)
+        local frame = create and create(...)
+        if not frame then
+            frame = { events = {} }
+            function frame:RegisterEvent(event) self.events[event] = true end
+            function frame:UnregisterEvent(event) self.events[event] = nil end
+            function frame:SetScript(_, fn) self.onEvent = fn end
+        end
+        created[#created + 1] = frame
+        return frame
+    end
+    assert(loadfile(modulePath))("MidnightSimpleUnitFrames", namespace)
+    CreateFrame = create
+    if beforeLogin then beforeLogin() end
+    for _, frame in ipairs(created) do
+        if frame.events and frame.events.PLAYER_LOGIN and frame.onEvent then frame.onEvent(frame, "PLAYER_LOGIN") end
+    end
+end
+
 -- Older or partial Classic clients must load the shared manifest without
 -- constructing a Blizzard adapter when the native Edit Mode enum is absent.
 ClearExports()
@@ -23,7 +48,7 @@ MSUF_EditModeAPI = {
         error("Blizzard element registered without Enum.EditModeSystem")
     end,
 }
-assert(loadfile(modulePath))("MidnightSimpleUnitFrames", {})
+LoadModule({})
 assert(MSUF_BlizzardEditMode_IsAvailable == nil,
     "unsupported Classic client exported a partial Blizzard adapter")
 
@@ -40,7 +65,7 @@ MSUF_EditModeAPI = {
 }
 MSUF_DB = { general = { blizzardEditModeIntegration = true } }
 ClearExports()
-assert(loadfile(modulePath))("MidnightSimpleUnitFrames", {})
+LoadModule({})
 assert(type(MSUF_BlizzardEditMode_IsAvailable) == "function"
     and MSUF_BlizzardEditMode_IsAvailable() == false,
     "partial Classic client reported Blizzard Edit Mode as available")
@@ -197,8 +222,11 @@ function namespace.ExportPublic(name, value)
     _G[name] = value
     return value
 end
+-- Edit Mode resolves the functions other modules publish through MSUF.Require.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.Install(root, namespace)
 ClearExports()
-assert(loadfile(modulePath))("MidnightSimpleUnitFrames", namespace)
+LoadModule(namespace)
 
 assert(type(MSUF_BlizzardEditMode_IsAvailable) == "function"
     and MSUF_BlizzardEditMode_IsAvailable() == true,
@@ -358,13 +386,16 @@ local function LoadAdapter(opts)
     }
     EditModePresetLayoutManager = opts.presetManager
     MSUF_DB = { general = { blizzardEditModeIntegration = true, blizzardEditModeSnapshot = opts.snapshot } }
+    if opts.atLogin then MSUF_DB = nil end
     local clientNamespace = { Client = opts.client }
     function clientNamespace.ExportPublic(name, value)
         _G[name] = value
         return value
     end
+    RequireFixture.Install(root, clientNamespace)
     ClearExports()
-    assert(loadfile(modulePath))("MidnightSimpleUnitFrames", clientNamespace)
+    -- opts.atLogin(ctx): the saved profile arrives (SavedVariables step).
+    LoadModule(clientNamespace, opts.atLogin and function() opts.atLogin(ctx) end)
     return ctx
 end
 
@@ -638,6 +669,92 @@ do
     assert(Count() == loaded, "Blizzard elements did not register again after the second on")
 end
 
+-- The client loads the SavedVariables after every file ran, so the adapter
+-- reads its switch at PLAYER_LOGIN: while it loads there is no profile, and an
+-- integration the player turned off stayed on (it read "no profile" as on).
+do
+    local function Count(ctx)
+        local n = 0
+        for _ in pairs(ctx.registered) do n = n + 1 end
+        return n
+    end
+    local saved = { general = { blizzardEditModeIntegration = false, blizzardEditModeSnapshot = {} } }
+    local function Login(ctx)
+        assert(Count(ctx) == 0, "the Blizzard adapter registered elements while it loaded, before the saved profile")
+        MSUF_DB = saved
+    end
+    local micro = { Orientation = 0, Order = 1, Size = 2, EyeSize = 3 }
+    local ctx = LoadAdapter({ microSetting = micro, atLogin = Login })
+    assert(Count(ctx) == 0, "the Blizzard adapter activated at login with the integration turned off")
+    saved.general.blizzardEditModeIntegration = true
+    ctx = LoadAdapter({ microSetting = micro, atLogin = Login })
+    assert(Count(ctx) == 6, "the Blizzard adapter did not activate at login with the integration on: " .. Count(ctx))
+end
+
+
+-- Review R7 P2: MicroMenu and BagsBar have no Blizzard setter for orientation,
+-- order, direction or slot padding. Blizzard's own system mixin assigns these
+-- plain fields and only for dirty settings (EditModeSystemTemplates), and its
+-- Layout reads them back. The adapter writes a field only when its value
+-- changes: a size change, a repeated click or an unchanged profile snapshot
+-- leaves both frames untouched; a real change still applies.
+do
+    local ctx = LoadAdapter({ microSetting = { Orientation = 0, Order = 1, Size = 2, EyeSize = 3 }, snapshot = {} })
+    -- Only the layout fields count; the stub frame records its own calls too.
+    local LAYOUT_FIELDS = { isHorizontal = true, layoutFramesGoingRight = true, layoutFramesGoingUp = true,
+        direction = true, bagPadding = true }
+    local writes = {}
+    local function Record(label, target, defaults)
+        local store = {}
+        for key, value in pairs(defaults) do store[key] = value end
+        return setmetatable(target, {
+            __index = store,
+            __newindex = function(_, key, value)
+                if LAYOUT_FIELDS[key] then writes[#writes + 1] = label .. "." .. tostring(key) end
+                store[key] = value
+            end,
+        })
+    end
+    -- MicroMenuContainer.xml and MainMenuBarBagButtons.xml seed these values.
+    MicroMenu = Record("MicroMenu", { SetNormalScale = function() end, SetQueueStatusScale = function() end },
+        { isHorizontal = true, layoutFramesGoingRight = true, layoutFramesGoingUp = false })
+    local bags = Record("BagsBar", ctx.registered.bags.getFrame(), { isHorizontal = true })
+    local function Control(element, id)
+        for _, control in ipairs(ctx.registered[element].extraControls) do
+            if control.id == id then return control end
+        end
+        error("missing " .. element .. " control " .. id)
+    end
+    local function Expect(label, wanted)
+        local got = table.concat(writes, ",")
+        assert(got == wanted, label .. ": wrote '" .. got .. "', expected '" .. wanted .. "'")
+        for i = #writes, 1, -1 do writes[i] = nil end
+    end
+    assert(Control("micromenu", "vertical").set(true) == true, "Micro Menu vertical did not commit")
+    Expect("Micro Menu vertical", "MicroMenu.isHorizontal")
+    assert(MicroMenu.isHorizontal == false, "Micro Menu vertical did not apply")
+    assert(Control("micromenu", "size").set(110) == true, "Micro Menu size did not commit")
+    Expect("Micro Menu size", "")
+    assert(Control("micromenu", "vertical").set(true) == true, "repeated Micro Menu vertical did not commit")
+    Expect("repeated Micro Menu vertical", "")
+    assert(Control("micromenu", "reverse").set(true) == true, "Micro Menu reverse did not commit")
+    Expect("Micro Menu reverse", "MicroMenu.layoutFramesGoingRight,MicroMenu.layoutFramesGoingUp")
+    assert(MicroMenu.layoutFramesGoingRight == false and MicroMenu.layoutFramesGoingUp == true,
+        "Micro Menu reverse did not apply")
+    assert(Control("bags", "vertical").set(true) == true, "Bags vertical did not commit")
+    Expect("Bags vertical", "BagsBar.isHorizontal")
+    assert(Control("bags", "padding").set(4) == true, "Bags padding did not commit")
+    Expect("Bags padding", "BagsBar.bagPadding")
+    assert(bags.bagPadding == 2 and bags.isHorizontal == false, "Bags padding or orientation did not apply")
+    assert(Control("bags", "size").set(100) == true, "Bags size did not commit")
+    Expect("Bags size", "")
+    assert(Control("bags", "reversedir").set(true) == true, "Bags direction did not commit")
+    Expect("Bags direction", "BagsBar.direction")
+    assert(bags.direction == 1, "Bags direction did not apply")
+    assert(MSUF_BlizzardEditMode_ApplyProfileSnapshot() == true, "the unchanged profile snapshot did not apply")
+    Expect("unchanged profile snapshot", "")
+    setmetatable(bags, nil)
+end
 local function Read(relativePath)
     local file = assert(io.open(root .. "/" .. relativePath, "rb"))
     local source = file:read("*a")
@@ -657,9 +774,10 @@ for _, contract in ipairs({
     assert(profileSource:find(contract, 1, true),
         "Classic profile Edit Mode contract missing: " .. contract)
 end
-local auraModel = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua")
-assert(auraModel:find("buffSpacing = true", 1, true)
-    and auraModel:find("debuffSpacing = true", 1, true),
+-- The menu takes its lane keys from the one lane-key schema in the Auras3 core:
+-- per-lane spacing must stay a frame-local layout key.
+local auraLaneKeys = Read("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua")
+assert(auraLaneKeys:find('{ "spacingKey", "Spacing", "layout" }', 1, true),
     "Classic profile model drops per-lane aura spacing")
 
 local editCore = Read("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua")

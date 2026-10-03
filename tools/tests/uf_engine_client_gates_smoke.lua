@@ -419,11 +419,21 @@ sandbox.CompactRaidFrameManagerToggleButton = toggle
 sandbox.CompactRaidFrameContainer = container
 
 local party = { enabled = false, showSolo = false, raidManagerMode = "HIDDEN" }
+local raid = {}
 local namespace = {
     Client = client,
     ExportPublic = function(name, value) sandbox[name] = value; return value end,
-    GF = { GetConf = function(kind) return kind == "party" and party or {} end },
+    GF = { GetConf = function(kind) return kind == "party" and party or raid end },
 }
+-- The group file's hard dependencies come from the same providers the client loads before it:
+-- the real Kernel/MSUF_Require.lua resolves them against this sandbox, and
+-- MSUF_PixelLayoutRegion is the export the booted flavor graph took from Kernel/MSUF_Util.lua.
+sandbox.MSUF_PixelLayoutRegion = assert(env.MSUF_PixelLayoutRegion,
+    flavor .. ": the booted graph does not export MSUF_PixelLayoutRegion")
+local requireChunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))
+setfenv(requireChunk, sandbox)
+requireChunk("MidnightSimpleUnitFrames", namespace)
+Check(namespace.Require == sandbox.MSUF_Require and namespace.Optional ~= nil, "the real Require provider did not publish MSUF.Require")
 local chunk = assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"))
 setfenv(chunk, sandbox)
 chunk("MidnightSimpleUnitFrames", namespace)
@@ -439,7 +449,10 @@ else
         "Mainline must never touch a legacy toggle button")
 end
 
-GF.HideBlizzardRaidFrames()
+-- The ownership pass hides the raid container while MSUF owns the raid frames.
+raid.enabled = true
+GF.ApplyBlizzardGroupFrameOwnership("addon-loaded:client-gates")
+raid.enabled = nil
 Check(hiddenParent ~= nil, "the hidden parent was never created")
 if classic then
     Check(container.parent == hiddenParent and container.shown == false,

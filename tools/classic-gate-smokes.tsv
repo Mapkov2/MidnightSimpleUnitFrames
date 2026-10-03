@@ -32,6 +32,13 @@ clients+Forever	lua	tools/tests/group_header_combat_child_smoke.lua	{root} {flav
 -	lua	tools/tests/group_runtime_defer_merge_smoke.lua	{root}	Group runtime deferred scope merge smoke failed
 -	lua	tools/tests/group_event_cost_smoke.lua	{root}	Group runtime event cost smoke failed
 -	lua	tools/tests/group_db_split_smoke.lua	{root}	Group DB split load-order and export smoke failed
+-	lua	tools/tests/group_heal_absorb_migration_smoke.lua	{root}	Group heal-absorb scope migration smoke failed
+-	lua	tools/tests/group_status_raid_group_defer_smoke.lua	{root}	Group raid-group label combat deferral smoke failed
+clients	lua	tools/tests/group_filter_predicate_smoke.lua	{root} {flavor}	Group subgroup filter predicate smoke failed: {flavor}
+clients	lua	tools/tests/group_headers_secret_identity_smoke.lua	{root} {flavor}	Group header secret name/role smoke failed: {flavor}
+-	lua	tools/tests/group_text_secret_percent_smoke.lua	{root}	Group text secret percent smoke failed
+clients+Forever	lua	tools/tests/group_preview_combat_restore_smoke.lua	{root} {flavor}	Group preview combat restore smoke failed: {flavor}
+-	lua	tools/tests/group_editmode_labels_locale_smoke.lua	{root}	Group Edit Mode label locale smoke failed
 -	lua	tools/tests/group_quality_contract_smoke.lua	{root}	Group quality contract smoke failed
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline	Group roster settle and apply budget smoke failed: Mainline
 -	lua	tools/tests/group_roster_budget_smoke.lua	{root} Vanilla	Group roster settle and apply budget smoke failed: Vanilla
@@ -39,6 +46,10 @@ clients+Forever	lua	tools/tests/group_header_combat_child_smoke.lua	{root} {flav
 -	lua	tools/tests/uf_unit_shift_budget_smoke.lua	{root} Vanilla	Unit shift retarget budget smoke failed: Vanilla
 -	lua	tools/tests/uf_dispatch_budget_smoke.lua	{root} Mainline	Unit-frame dispatch budget smoke failed: Mainline
 -	lua	tools/tests/uf_dispatch_budget_smoke.lua	{root} Vanilla	Unit-frame dispatch budget smoke failed: Vanilla
+-	lua	tools/tests/health_tick_native_budget_smoke.lua	{root} Mainline	Health tick native-call budget smoke failed: Mainline
+-	lua	tools/tests/health_tick_native_budget_smoke.lua	{root} Vanilla	Health tick native-call budget smoke failed: Vanilla
+-	lua	tools/tests/group_gone_state_smoke.lua	{root} Mainline	Group dead background gone-state smoke failed: Mainline
+-	lua	tools/tests/group_gone_state_smoke.lua	{root} Vanilla	Group dead background gone-state smoke failed: Vanilla
 -	lua	tools/tests/forever_raid_manager_gamepad_smoke.lua	{root}	Forever Raid Manager gamepad smoke failed
 -	python	.github/scripts/menu2_search_index_hash_smoke.py		Menu2 search index source-hash contract failed
 -	lua	tools/tests/changelog_dual_source_smoke.lua	{root}	MSUF and Suite changelog source switch failed
@@ -137,9 +148,18 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	tools/tests/classic_prediction_contract_smoke.lua	{root/}	Classic prediction contract smoke failed
 -	lua+driver	tools/tests/classic_aura_backend_smoke.lua	{root/}	Classic aura backend smoke failed
 -	lua+driver	tools/tests/classic_aura_edit_forbidden_mouse_smoke.lua	{root/}	Classic aura edit forbidden mouse smoke failed
+-	lua	tools/tests/aura_secret_truth_test_smoke.lua	{root}	Aura secret truth-test smoke failed
+-	lua	tools/tests/aura_native_lane_park_smoke.lua	{root}	Aura native lane park smoke failed
+-	lua	tools/tests/aura_label_i18n_smoke.lua	{root}	Aura label i18n smoke failed
+-	lua	tools/tests/aura_icon_shape_shared_smoke.lua	{root}	Aura icon shape shared smoke failed
 -	lua+driver	tools/tests/classic_aura_update_path_smoke.lua	{root/}	Classic aura update path smoke failed
 -	lua+driver	tools/tests/classic_aura_hotpath_budget_smoke.lua	{root/}	Classic aura hot-path budget smoke failed
 -	lua+driver	tools/tests/classic_aura_lane_schema_smoke.lua	{root/}	Classic aura lane schema smoke failed
+-	lua	tools/tests/aura_lane_key_schema_smoke.lua	{root}	Aura lane-key schema smoke failed
+-	lua	tools/tests/classic_aura_module_refs_smoke.lua	{root}	Classic aura module refs smoke failed
+-	lua	tools/tests/aura_custom_container_constants_smoke.lua	{root}	Aura custom container constants smoke failed
+-	lua	tools/tests/classic_aura_secret_pass_smoke.lua	{root}	Classic aura strict secret pass failed
+-	lua	tools/tests/aura_identity_secret_pass_smoke.lua	{root}	Aura identity runtime strict secret pass failed
 -	lua+driver	tools/tests/classic_dispel_symbol_chain_smoke.lua	{root/}	Classic dispel symbol chain smoke failed
 -	lua+driver	tools/tests/classic_aura_menu_filters_smoke.lua	{root/}	Classic Aura menu filter smoke failed
 clients+Forever	lua	tools/tests/classic_aura_page_client_gates_smoke.lua	{root} {flavor}	Classic aura page client gates smoke failed: {flavor}
@@ -152,6 +172,7 @@ classics	lua+driver	tools/tests/classic_aura_faction_smoke.lua	{root/} {flavor}	
 -	lua+driver	tools/tests/classic_aura_rank_name_match_smoke.lua	{root/}	Classic aura rank name-match smoke failed
 -	lua+driver	tools/tests/classic_group_indicator_data_smoke.lua	{root/}	Classic group indicator data smoke failed
 -	lua+driver	tools/tests/classic_raid_manager_mode_smoke.lua	{root/}	Classic Raid Manager mode smoke failed
+-	lua	tools/tests/group_raid_manager_toggles_smoke.lua	{root}	Mainline Raid Manager toggle-button mouse smoke failed
 clients+Forever	lua	tools/tests/uf_engine_client_gates_smoke.lua	{root/} {flavor}	Unit-frame engine client gates smoke failed: {flavor}
 clients+Forever	lua	tools/tests/uf_engine_preview_exports_smoke.lua	{root} {flavor}	Unit-frame engine preview exports smoke failed: {flavor}
 -	lua	tools/tests/uf_core_hidden_frame_smoke.lua	{root}	Unit-frame core hidden-frame contract smoke failed
@@ -171,8 +192,10 @@ clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/editmode_public_api_session_smoke.lua	{root}	Edit Mode public API session smoke failed
 -	lua	tools/tests/editmode_shell_labels_smoke.lua	{root}	Edit Mode shell labels smoke failed
 -	lua	tools/tests/editmode_shell_locale_smoke.lua	{root}	Edit Mode shell locale smoke failed
+-	lua	tools/tests/menu_history_locale_smoke.lua	{root}	The menu history shows English or a split character on a German client
 -	lua	tools/tests/editmode_popup_focus_combat_smoke.lua	{root}	Edit Mode popup focus and combat smoke failed
 -	lua	tools/tests/editmode_hud_toolbar_smoke.lua	{root}	Edit Mode toolbar wiring smoke failed
+-	lua	tools/tests/editmode_group_geometry_util_smoke.lua	{root}	Edit Mode group geometry refresh lost its single Util owner
 -	lua	tools/tests/editmode_castbar_edit_info_smoke.lua	{root}	Edit Mode castbar mover and readout refresh smoke failed
 -	lua	tools/tests/classic_resource_editmode_smoke.lua	{root/}	Class Resource and detached Power Edit Mode smoke failed
 -	lua+driver	tools/tests/arena_editmode_exit_restore_smoke.lua	{root/}	Arena Edit Mode exit restore smoke failed
@@ -186,15 +209,21 @@ clients+Forever	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.l
 -	lua	tools/tests/classic_history_ui_scale_smoke.lua	{root/}	Classic History UI scale smoke failed
 clients+Forever	lua	tools/tests/menu_page_reset_history_smoke.lua	{root} {flavor}	Page resets and undo history: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}	Menu combat quiescence: {flavor}
+clients+Forever	lua	tools/tests/menu_combat_edge_refusal_smoke.lua	{root} {flavor}	The menu flushed an apply or committed history on the combat-start frame: {flavor}
 clients+Forever	lua	tools/tests/menu_refresh_queue_smoke.lua	{root} {flavor}	Menu refresh requests re-queue after a cancelled task: {flavor}
 clients+Forever	lua	tools/tests/menu_core_text_smoke.lua	{root} {flavor}	Menu core text, slider names and feedback settle: {flavor}
 clients+Forever	lua	tools/tests/menu_pages_translate_once_smoke.lua	{root} {flavor}	Menu pages and previews translate their text once: {flavor}
 clients+Forever	lua	tools/tests/menu_button_history_smoke.lua	{root} {flavor}	Menu button history checkpoint is opt-in and keeps undo: {flavor}
 clients+Forever	lua	tools/tests/menu_page_rebuild_leak_smoke.lua	{root} {flavor}	Undo, reset and view switches repaint pages without new frames: {flavor}
+clients+Forever	lua	tools/tests/menu_aura_workspace_views_smoke.lua	{root} {flavor}	Aura workspace views and list edits create no frames: {flavor}
+clients+Forever	lua	tools/tests/search_results_repaint_smoke.lua	{root} {flavor}	Search results repaint in place without new frames: {flavor}
+clients+Forever	lua	tools/tests/menu_default_drift_smoke.lua	{root} {flavor}	Menu fallbacks drifted from the seeded defaults: {flavor}
 clients+Forever	lua	tools/tests/menu_preview_focus_clear_smoke.lua	{root} {flavor}	Leaving a text control clears the unit preview text focus: {flavor}
 -	lua	tools/tests/menu_search_page_side_effects_smoke.lua	{root} Mainline	Search keeps the page on screen and filters deleted variants: Mainline
 -	lua	tools/tests/menu_search_page_side_effects_smoke.lua	{root} Vanilla	Search keeps the page on screen and filters deleted variants: Vanilla
 -	lua	tools/tests/menu_popup_contracts_smoke.lua	{root}	Menu popup OnAccept and Edit Mode strata contracts failed
+-	lua	tools/tests/menu_prompt_ownership_smoke.lua	{root}	An Options file writes StaticPopupDialogs, or a menu prompt lost its buttons, text or Escape rule
+-	lua	tools/tests/menu_discarded_values_smoke.lua	{root}	An Options local declares more values than names, or the history castbar fallback lost an owner
 -	lua	tools/tests/menu_control_catalog_contracts_smoke.lua	{root}	Menu control catalog contracts failed
 -	lua	tools/tests/menu_color_picker_fallback_smoke.lua	{root}	Menu color picker fallback owner contract failed
 -	lua	tools/tests/classic_unit_menu_runtime_parity_smoke.lua	{root/}	Classic unit menu runtime parity smoke failed
@@ -203,9 +232,23 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua+driver	tools/tests/classic_aura_render_smoke.lua	{root/} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua} {p/:MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua}	Classic aura live-render smoke failed
 -	lua	tools/tests/startup_locale_manifest_smoke.lua	{root/}	Startup client-language manifest parity failed
 -	lua	tools/tests/locale_key_coverage_smoke.lua	{root/}	Locale key coverage smoke failed
+-	lua	tools/tests/menu_i18n_composed_labels_smoke.lua	{root}	Composed menu and Edit Mode labels are back or lost a translation
 -	lua	tools/tests/locale_english_overwrite_smoke.lua	{root}	Translated packs turned translations back into English
 -	lua	tools/tests/keybind_labels_locale_smoke.lua	{root}	Key binding labels ignore the menu language
 -	lua	tools/tests/classpower_client_resource_gates_smoke.lua	{root/}	Class resource client gates failed
+-	lua	tools/tests/classpower_visual_refresh_smoke.lua	{root}	ClassPower visual refresh repaints the active mode failed
+-	lua	tools/tests/classpower_player_hp_secret_smoke.lua	{root}	ClassPower Player HP secret text smoke failed
+-	lua	tools/tests/classpower_paint_stamps_smoke.lua	{root}	ClassPower paint stamp smoke failed
+-	lua	tools/tests/classpower_secret_minmax_smoke.lua	{root}	ClassPower secret min/max smoke failed
+-	lua	tools/tests/classpower_warlock_prediction_smoke.lua	{root}	ClassPower Warlock shard prediction smoke failed
+-	lua	tools/tests/classpower_mists_embers_smoke.lua	{root}	ClassPower Mists Burning Embers smoke failed
+-	lua	tools/tests/classpower_ebon_slot_smoke.lua	{root}	ClassPower Ebon Might sealed slot smoke failed
+-	lua	tools/tests/classpower_max_resolution_smoke.lua	{root}	ClassPower max resolution smoke failed
+-	lua	tools/tests/classpower_strict_secrets_smoke.lua	{root}	ClassPower strict secrets across every mode failed
+-	lua	tools/tests/classpower_balance_aura_budget_smoke.lua	{root}	ClassPower Balance aura query budget failed
+-	lua	tools/tests/classpower_lifecycle_smoke.lua	{root}	ClassPower lifecycle transitions failed
+-	lua	tools/tests/classpower_load_profile_smoke.lua	{root}	A ClassPower file reads the profile while the addon loads
+-	lua	tools/tests/resource_extra_aura_names_smoke.lua	{root}	Resource extra aura fallback names smoke failed
 -	lua	tools/tests/pixel_layout_profile_smoke.lua	{root}	Pixel layout profile preservation smoke failed
 -	python	tools/tests/pixel_layout_coverage_smoke.py	{root}	Pixel layout creation coverage failed
 -	lua	tools/tests/suite_cooldown_anchor_smoke.lua	{root/}	MSUF Suite cooldown anchor smoke failed
@@ -233,6 +276,7 @@ clients+Forever	lua	tools/tests/portrait_details_smoke.lua	{root} {flavor}	Portr
 clients+Forever	lua	tools/tests/alpha_text_layer_smoke.lua	{root} {flavor}	Alpha text layer smoke failed: {flavor}
 clients+Forever	lua	tools/tests/status_atlas_memo_smoke.lua	{root} {flavor}	Status atlas memo smoke failed: {flavor}
 -	lua	tools/tests/forever_swing_details_smoke.lua	{root}	Forever swing range, latency and background details
+-	lua	tools/tests/forever_swing_native_ownership_smoke.lua	{root}	Forever swing timer leaves Blizzard bar layout to the CVar path
 -	lua	tools/tests/profile_fields_smoke.lua	{root}	Sparse profile fields and import bounds
 -	lua	tools/tests/profile_fields_roots_smoke.lua	{root}	Variants or sync miss a profile root
 -	lua	tools/tests/profile_snapshot_reason_smoke.lua	{root}	Profile snapshot failures report the wrong reason
@@ -286,8 +330,13 @@ clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}
 -	lua	tools/tests/castbar_module_topology_smoke.lua	{root}	Castbar module topology smoke failed
 -	lua	tools/tests/castbar_pool_preview_smoke.lua	{root}	Castbar pool preview smoke failed
 -	lua	tools/tests/interrupt_ready_perf_smoke.lua	{root}	Interrupt-ready perf smoke failed
+-	lua	tools/tests/interrupt_ready_visual_cache_smoke.lua	{root}	Interrupt-ready visual cache smoke failed
+-	lua	tools/tests/focus_kick_cast_state_budget_smoke.lua	{root}	Focus interrupt tracker cast-state budget or layout ownership failed
+-	lua	tools/tests/empower_tick_blink_smoke.lua	{root}	Empower stage tick blink or its budget failed
 -	lua	tools/tests/castbar_hotpath_budget_smoke.lua	{root}	Castbar hotpath budget smoke failed
 -	lua	tools/tests/castbar_hotpath_smoke.lua	{root}	Castbar hotpath smoke failed
+-	lua	tools/tests/castbar_correctness_smoke.lua	{root}	Castbar correctness smoke failed
+-	lua	tools/tests/castbar_pool_residue_smoke.lua	{root}	Castbar boss/arena pool walkers changed the recorded trace
 clients+Forever,MistsDuration	lua	tools/tests/interrupt_ready_classic_cooldown_smoke.lua	{root} {flavor}	Interrupt-ready cooldown source: {flavor}
 -	lua	tools/tests/resource_marks_smoke.lua	{root}	Resource marks: restricted colours, overlay, fill axis, combat shapeshift
 clients+Forever	lua	tools/tests/resource_extras_lifecycle_smoke.lua	{root} {flavor}	Resource helper lifecycle: {flavor}
@@ -299,7 +348,53 @@ clients	lua	tools/tests/defaults_pass_trust_smoke.lua	{root} {flavor}	Defaults p
 -	lua	tools/tests/profile_suite_notify_combat_smoke.lua	{root}	Profile Suite notification combat smoke failed
 -	lua	tools/tests/blizzard_aura_visibility_load_smoke.lua	{root}	Blizzard aura visibility load smoke failed
 -	lua	tools/tests/global_links_smoke.lua	{root}	Global link smoke failed (a _G.MSUF_* name is read but defined nowhere)
+-	lua	tools/tests/menu_theme_names_smoke.lua	{root}	Menu theme or UI kit field is read but set nowhere
+-	lua	tools/tests/color_power_token_contexts_smoke.lua	{root}	Group power color contexts drifted from the Colors page power list
 -	lua	tools/tests/deprecated_aliases_smoke.lua	{root}	Deprecated alias smoke failed
 clients+Forever	lua	tools/tests/bugreport_layout_smoke.lua	{root} {flavor}	Bug report menu geometry regression: {flavor}
 clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game menu cold Options open boundary: {flavor}
 -	lua	tools/tests/aura_icon_zoom_smoke.lua	{root}	Aura icon baked border crop regression
+-	lua	tools/tests/combat_regen_edge_smoke.lua	{root}	Combat regen edge smoke failed
+-	lua	tools/tests/general_key_ownership_smoke.lua	{root}	General key ownership smoke failed
+-	lua	tools/tests/profile_migration_version_smoke.lua	{root}	Profile migration version smoke failed
+-	lua	tools/tests/first_load_saved_variables_smoke.lua	{root}	First-load SavedVariables smoke failed
+-	lua+driver	tools/tests/inline_tot_secret_anchor_smoke.lua		Inline ToT secret anchor smoke failed
+-	lua	tools/tests/rounded_group_block_border_smoke.lua	{root}	Rounded group block border smoke failed
+-	lua	tools/tests/rounded_clip_request_smoke.lua	{root}	Rounded clip request smoke failed
+-	lua	tools/tests/afk_timer_combat_return_smoke.lua	{root}	AFK timer combat return smoke failed
+-	lua	tools/tests/over_absorb_protected_glow_smoke.lua	{root}	Protected over-absorb glow smoke failed
+-	lua	tools/tests/health_dispatch_free_death_smoke.lua	{root}	Dispatch-free health death smoke failed
+-	python	tools/tests/quality_ratchet_smoke.py	{root}	Quality ratchet tool self-test failed
+-	python	tools/tests/quality_ratchet_gate_smoke.py	{root}	Quality ratchet regression: run tools/quality_ratchet.py --check
+-	python	tools/tests/feature_inventory_smoke.py	{root}	Feature inventory tool self-test failed
+-	python	tools/tests/feature_inventory_gate_smoke.py	{root}	Feature inventory removal: run tools/feature_inventory.py --diff
+-	lua	tools/tests/group_priority_secret_identity_smoke.lua	{root}	Priority group secret identity regression
+-	lua	tools/tests/group_preview_secret_name_smoke.lua	{root}	Group preview secret identity regression
+-	python	.github/scripts/group_structure_smoke.py	{root}	Group structure headroom smoke failed
+-	lua	tools/tests/group_roster_budget_smoke.lua	{root} Mainline native	Group roster native-call budget failed: Mainline
+-	lua	tools/tests/group_roster_budget_smoke.lua	{root} Vanilla native	Group roster native-call budget failed: Vanilla
+-	lua	tools/tests/load_time_profile_read_smoke.lua	{root}	A file reads the profile while the addon loads, before the SavedVariables exist
+-	lua	tools/tests/group_aura_filter_token_owner_smoke.lua	{root}	State reaches into the Auras3 menu model for the Group Aura filter tokens, or the two lists drifted
+-	lua	tools/tests/resource_extras_translator_smoke.lua	{root}	Former class power resource extras keys are not carried by the profile translator
+-	lua	tools/tests/totem_manager_flag_smoke.lua	{root}	TotemFrame managed-frame flag is rewritten on Blizzard rebuilds or not handed back
+-	lua	tools/tests/engine_chat_locale_smoke.lua	{root}	An engine or state chat line, binding label, tooltip or status word is untranslated
+-	lua	tools/tests/defaults_aura_lane_schema_smoke.lua	{root}	The defaults' unit aura lane keys drifted from the aura schema's lane specs
+-	lua	tools/tests/host_api_smoke.lua	{root}	Host API v1 core setters smoke failed
+-	lua	tools/tests/host_page_reset_provider_smoke.lua	{root}	Host API v1 page-reset provider smoke failed
+clients+Forever	lua	tools/tests/host_api_client_boot_smoke.lua	{root/} {flavor}	Host API v1 real-boot smoke failed: {flavor}
+-	lua	tools/tests/uf_sibling_called_exports_smoke.lua	{root}	An engine export a sibling addon tree still calls was removed
+-	lua	tools/tests/castbar_secret_paths_smoke.lua	{root}	Castbar runtime paths on a strict-secret Midnight and Forever client
+-	lua	tools/tests/castbar_cast_path_budget_smoke.lua	{root}	Castbar cast paths over their instruction, byte, native-object or field-churn budget
+-	lua	tools/tests/castbar_login_profile_smoke.lua	{root}	Castbar lifecycles read no profile at file load and follow the saved one at login
+-	lua	tools/tests/prediction_anchor_mode_smoke.lua	{root}	Prediction overlay anchor modes drifted from the numbers profiles saved
+-	lua	tools/tests/group_db_aura_filter_repair_smoke.lua	{root}	Group DB aura filter repair of old profiles changed or reads the retired default categories
+clients+Forever	lua	tools/tests/castbar_preview_time_offset_smoke.lua	{root} {flavor}	Castbar preview time offsets drifted from the live bar: {flavor}
+-	lua	tools/tests/menu_required_owners_smoke.lua	{root}	A menu or Edit Mode owner is guarded or falls back instead of being required
+clients+Forever	lua	tools/tests/group_preview_repaint_budget_smoke.lua	{root} {flavor}	Group preview repaint allocates or calls more than its budget: {flavor}
+clients+Forever	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} {flavor}	Menu previews paint an English status word on a German client: {flavor}
+-	lua	tools/tests/focus_kick_preview_combat_keyboard_smoke.lua	{root}	The focus interrupt tracker preview calls a restricted keyboard API in combat or swallows keybinds
+-	lua	tools/tests/castbar_target_name_font_pass_smoke.lua	{root}	A castbar font pass mid-cast leaves the cast target name in the font colour
+-	lua	tools/tests/castbar_preview_native_conceal_smoke.lua	{root}	The castbar previews hide a shown managed Blizzard player castbar (tainted container layout)
+classics	lua	tools/tests/classic_aura_arena_custom_containers_smoke.lua	{root} {flavor}	Classic Custom Aura containers do not reach the arena frames: {flavor}
+-	lua+driver	tools/tests/aura_native_container_growth_smoke.lua	{root/}	Native AuraContainers grow with menu edits instead of being parked and reused
+-	lua	tools/tests/secret_guard_order_smoke.lua	{root}	A secret-capable value is compared before issecretvalue (texture layer, name clip, identity follow-up, legacy name truncation)

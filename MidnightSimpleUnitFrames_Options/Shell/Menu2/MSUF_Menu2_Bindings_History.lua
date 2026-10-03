@@ -276,7 +276,10 @@ local function RestoreProfileRouting(snapshot)
     if type(gdb) ~= "table" then return end
     if type(gdb.char) ~= "table" then gdb.char = {} end
     local char = gdb.char[routing.key]
-    if type(char) ~= "table" then char = {}; gdb.char[routing.key] = char end
+    if type(char) ~= "table" then
+        char = {}
+        gdb.char[routing.key] = char
+    end
     if routing.existed then
         char.specAutoSwitch = routing.specAutoSwitch
         char.specProfileMap = DeepCopy(routing.specProfileMap)
@@ -353,10 +356,13 @@ local function HistoryLabelToken(token, forceWords)
     end
     return out or token
 end
+--- The label as the history surfaces show it: machine-shaped keys become
+--- words, and the result is translated (a label built from translated pieces
+--- stays as it is).
 function M.HistoryDisplayLabel(label)
     local text = tostring(label or "")
     text = text:gsub("^%s+", ""):gsub("%s+$", "")
-    if text == "" then return "Menu change" end
+    if text == "" then return M.Tr("Menu change") end
     local cached = historyLabelCache[text]
     if cached then return cached end
     local out = HISTORY_LABEL_OVERRIDES[text]
@@ -368,6 +374,7 @@ function M.HistoryDisplayLabel(label)
         out = out:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
         if out == "" then out = text end
     end
+    out = M.Tr(out)
     if historyLabelCacheCount > 300 then
         WipeTable(historyLabelCache)
         historyLabelCacheCount = 0
@@ -376,15 +383,14 @@ function M.HistoryDisplayLabel(label)
     historyLabelCacheCount = historyLabelCacheCount + 1
     return out
 end
+-- Counted in UTF-8 characters: a translated label must not lose half a letter.
 local function FeedbackLabel(text, limit)
-    text = tostring(text or "")
-    limit = tonumber(limit) or 34
-    if #text <= limit then return text end
-    return text:sub(1, math.max(1, limit - 3)) .. "..."
+    return M.ShortenUtf8(text, tonumber(limit) or 34)
 end
-local function CommandFeedback(text, kind, seconds)
+-- translated = true: the text is a formatted, already translated message.
+local function CommandFeedback(text, kind, seconds, translated)
     local fn = M.ShowStatusFeedback or M.ShowInlineFeedback
-    if type(fn) == "function" then fn(text, kind or "info", seconds or 1.25) end
+    if type(fn) == "function" then fn(text, kind or "info", seconds or 1.25, translated) end
 end
 -- Estimated bytes of one snapshot: table headers plus hash entries. Strings
 -- are interned and shared with the live profile, so they add nothing.
@@ -412,8 +418,14 @@ local function HistoryStackBytes(stack)
     for i = 1, #stack do
         local entry = stack[i]
         local before, after = entry.before, entry.after
-        if before and not counted[before] then counted[before] = true; bytes = bytes + SnapshotBytes(before) end
-        if after and not counted[after] then counted[after] = true; bytes = bytes + SnapshotBytes(after) end
+        if before and not counted[before] then
+            counted[before] = true
+            bytes = bytes + SnapshotBytes(before)
+        end
+        if after and not counted[after] then
+            counted[after] = true
+            bytes = bytes + SnapshotBytes(after)
+        end
     end
     return bytes
 end
@@ -528,11 +540,11 @@ local function ApplyScopedFeatureRuntime(kind, reason, scope)
     if kind == "external" then return true end
     if kind == "castbar" then
         if ApplyService.RequestCastbars then return ApplyService.RequestCastbars(reason, "history") ~= false end
-        if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { history = false, preview = true, applyAll = false, castbar = true, castbarTextures = true }) ~= false end
-        local did = true, _G.MSUF_UpdateCastbarVisuals()
+        if M.RequestGeneralApply then return M.RequestGeneralApply(reason, { history = false, preview = true, applyAll = false, castbar = true,
+            castbarTextures = true }) ~= false end
+        _G.MSUF_UpdateCastbarVisuals()
         _G.MSUF_UpdateBossCastbarPreview()
-did = true
-        return did
+        return true
     end
     if kind == "classpower" then
         -- A ClassPower-owned setting can also decide whether the module has any
@@ -1064,7 +1076,7 @@ function M.Undo()
         undo[#undo + 1] = entry
     end
     NotifyHistoryChanged()
-    if ok then CommandFeedback("Undid " .. FeedbackLabel(M.HistoryDisplayLabel(entry.label)), "info", 1.25) end
+    if ok then CommandFeedback(M.Format("Undid %s", FeedbackLabel(M.HistoryDisplayLabel(entry.label))), "info", 1.25, true) end
     return ok
 end
 function M.Redo()
@@ -1085,7 +1097,7 @@ function M.Redo()
         redo[#redo + 1] = entry
     end
     NotifyHistoryChanged()
-    if ok then CommandFeedback("Redid " .. FeedbackLabel(M.HistoryDisplayLabel(entry.label)), "info", 1.25) end
+    if ok then CommandFeedback(M.Format("Redid %s", FeedbackLabel(M.HistoryDisplayLabel(entry.label))), "info", 1.25, true) end
     return ok
 end
 function M.RequestUnitApply(unit, reason, opts)

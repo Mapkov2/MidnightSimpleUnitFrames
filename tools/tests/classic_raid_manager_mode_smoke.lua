@@ -78,6 +78,7 @@ _G.C_Timer = { After = function(_, callback) callback() end }
 _G.CompactRaidFrameManager = manager
 _G.CompactRaidFrameManagerToggleButton = button
 
+dofile(root .. "/tools/tests/group_dependencies.lua")(_G.MSUF_NS)
 local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua"
 local chunk = assert(loadfile(path))
 chunk("MidnightSimpleUnitFrames", _G.MSUF_NS)
@@ -183,7 +184,14 @@ function container:IsForbidden() return false end
 function container:IsProtected() return false end
 function manager:IsShown() return false end
 _G.CompactRaidFrameContainer = container
-GF.HideBlizzardRaidFrames()
+-- The ownership pass hides the container while MSUF owns the raid frames; an
+-- "addon-loaded" reason bypasses its unchanged-state signature.
+local function OwnRaidFrames(reason)
+    configs.raid.enabled = true
+    GF.ApplyBlizzardGroupFrameOwnership("addon-loaded:" .. reason)
+    configs.raid.enabled = false
+end
+OwnRaidFrames("container")
 assert(container.parent == eventFrame and container.shown == false,
     "container under Classic's hidden manager must be reparented to the hidden parent")
 local containerHooks = secureHooks[container]
@@ -195,7 +203,7 @@ assert(container.parent == eventFrame,
 local foreignHidden = {}
 function foreignHidden:IsShown() return false end
 container.parent = foreignHidden
-GF.HideBlizzardRaidFrames()
+OwnRaidFrames("foreign")
 assert(container.parent == foreignHidden, "a foreign hidden parent must keep the container")
 containerHooks.SetParent(container, foreignHidden)
 assert(container.parent == foreignHidden, "the SetParent hook must leave a foreign hidden parent alone")

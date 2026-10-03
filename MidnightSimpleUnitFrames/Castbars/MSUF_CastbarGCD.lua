@@ -7,9 +7,12 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- the GCD dummy spell 61304) and binds it to the player castbar through the
 --- shared castbar Runtime (StatusBar timer + DurationTextBinding). No OnUpdate
 --- tick exists anywhere in this module; fill and time text advance in C, and
---- teardown is one C_Timer armed from the plain remaining time. When the
---- cooldown values are secret, a coarse ticker polls SpellCooldownInfo.isActive
---- instead - that field is NeverSecret in the 12.1 API contract.
+--- teardown is one keyed Kernel-scheduler deadline from the plain remaining
+--- time. When the cooldown values are secret, a hidden Cooldown frame's native
+--- OnCooldownDone ends the bar instead (a bounded deadline force-clears a stuck
+--- state); a client without that frame API polls SpellCooldownInfo.isActive,
+--- which is NeverSecret in the 12.1 API contract. No path creates a C_Timer
+--- handle, and a readable GCD never builds the SpellCooldownInfo table.
 ---
 --- Unlike 5.x this is haste-correct: the duration object describes the real
 --- scaled GCD, so no base-GCD approximation and no GetHaste() taint hazard.
@@ -26,17 +29,24 @@ ns = ns or _G.MSUF_NS or {}
 
 local _G = _G
 local CreateFrame = CreateFrame
-local C_Timer = C_Timer
 local IS_FOREVER = ns.Client ~= nil and ns.Client.IsForever == true
+-- Kernel/MSUF_Scheduler.lua loads first in every TOC: keyed deadlines that
+-- allocate nothing after the first use of a key.
+local Scheduler = ns.Scheduler
+local ScheduleAfter, CancelScheduled = Scheduler.ScheduleAfter, Scheduler.CancelScheduled
 
 --- The classic "Global Cooldown" dummy spell: querying its cooldown yields the
 --- player's current GCD window.
 local GCD_SPELL_ID = 61304
 
---- Safety cap for the secret-cooldown poll fallback (0.1s cadence). The GCD
---- never exceeds 1.5s; anything past this is a stuck state we force-clear.
+--- Safety cap for a secret GCD (2.5 s, the old 25 polls at 0.1 s). The GCD
+--- never exceeds 1.5 s; anything past this is a stuck state we force-clear.
+--- The poll fallback (no native completion frame) keeps the 0.1 s cadence.
 local POLL_INTERVAL = 0.1
 local POLL_MAX_TICKS = 25
+local SECRET_FINISH_CAP = POLL_INTERVAL * POLL_MAX_TICKS
+--- The finish deadline after a readable remaining time.
+local FINISH_PAD = 0.03
 
 -- ============================================================
 -- Settings
@@ -126,8 +136,9 @@ local function LayoutDetached(frame, g)
     frame:SetAlpha((tonumber(g.gcdBarOpacity) or 100) / 100)
     frame.icon:SetSize(height, height)
     -- The castbars' configured font; the size follows the bar height.
-    local font = (type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath()) or _G.STANDARD_TEXT_FONT
-    local flags = (type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags()) or "OUTLINE"
+    -- Castbars/MSUF_Castbars_Core.lua (loads before this file) owns both.
+    local font = _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
+    local flags = _G.MSUF_GetFontFlags() or "OUTLINE"
     local size = math.min(12, math.max(8, height - 2))
     frame.castText:SetFont(font, size, flags)
     frame.timeText:SetFont(font, size, flags)
@@ -271,16 +282,27 @@ end
 -- ============================================================
 -- Bar lifecycle
 -- ============================================================
-local function CancelFinishTimers(frame)
-    local timer = frame._msufGCDTimer
-    if timer then
-        frame._msufGCDTimer = nil
-        if timer.Cancel then timer:Cancel() end
+-- Exactly one GCD bar is active at a time (activeFrame), so its finish
+-- callbacks are module-level keys of the Kernel scheduler.
+local OnFinishTimer, OnPollTicker, OnSecretCap
+local finishWake, finishWakeUnsupported, finishWakeArmed
+-- The scheduler key of the pending finish deadline, if any.
+local armedKey
+local pollTicks = 0
+
+local function Arm(key, delay)
+    armedKey = key
+    ScheduleAfter(key, delay, key)
+end
+
+local function CancelFinishTimers()
+    if armedKey then
+        CancelScheduled(armedKey)
+        armedKey = nil
     end
-    local ticker = frame._msufGCDTicker
-    if ticker then
-        frame._msufGCDTicker = nil
-        if ticker.Cancel then ticker:Cancel() end
+    if finishWakeArmed then
+        finishWakeArmed = false
+        finishWake:Clear()
     end
 end
 
@@ -294,9 +316,9 @@ end
 
 FinishGCDBar = function(frame)
     if not frame then return end
-    -- Cancel before the active check: a stray ticker must never survive an
+    -- Cancel before the active check: a stray deadline must never survive an
     -- already-cleared GCD state.
-    CancelFinishTimers(frame)
+    CancelFinishTimers()
     if frame._msufGCDActive ~= true then return end
     frame._msufGCDActive = nil
 
@@ -326,8 +348,10 @@ FinishGCDBar = function(frame)
     if frame._msufDetachedGCD then RefreshDetached() else frame:Hide() end
 end
 
---- Poll fallback for secret cooldown values: SpellCooldownInfo.isActive is
---- NeverSecret, so this stays legal when startTime/duration are not.
+--- Secret cooldown values: SpellCooldownInfo.isActive is NeverSecret, so this
+--- stays legal when startTime/duration are not. The client builds a new
+--- SpellCooldownInfo table per call (about half a kilobyte), so readable
+--- GCDs use their duration object instead (GCDActive).
 local function GCDStillActive()
     local spellAPI = _G.C_Spell
     local getCooldown = spellAPI and spellAPI.GetSpellCooldown
@@ -336,19 +360,38 @@ local function GCDStillActive()
     return cooldown ~= nil and cooldown.isActive == true
 end
 
---- Persistent finish callbacks: exactly one player castbar exists and
---- CancelFinishTimers guarantees at most one pending timer/ticker, so the
---- per-GCD closure allocation of the 5.x version is not needed.
-local pollTicks = 0
+--- The plain remaining time of a duration object, or nil when it has none
+--- (secret values, no getter). HasSecretValues is ReturnsNeverSecret.
+local function PlainRemaining(durationObj)
+    if not durationObj then return nil end
+    local hasSecret = durationObj.HasSecretValues
+    if hasSecret and hasSecret(durationObj) == true then return nil end
+    local getRemaining = durationObj.GetRemainingDuration or durationObj.GetRemaining
+    if type(getRemaining) ~= "function" then return nil end
+    return PlainNumber(getRemaining(durationObj))
+end
 
-local function OnFinishTimer()
+--- Is the GCD running at this synchronous UNIT_SPELLCAST_SUCCEEDED? A readable
+--- GCD duration answers it (isActive is true exactly while the GCD window has
+--- time left; the GCD dummy spell is never held); a secret or missing one asks
+--- the NeverSecret isActive.
+local function GCDActive(durationObj)
+    local remaining = PlainRemaining(durationObj)
+    if remaining ~= nil then return remaining > 0 end
+    return GCDStillActive()
+end
+
+OnFinishTimer = function()
+    armedKey = nil
     local frame = activeFrame
     if not frame then return end
-    frame._msufGCDTimer = nil
     FinishGCDBar(frame)
 end
 
-local function OnPollTicker()
+OnSecretCap = function() OnFinishTimer() end
+
+OnPollTicker = function()
+    armedKey = nil
     local frame = activeFrame
     if not frame then return end
     pollTicks = pollTicks + 1
@@ -357,29 +400,61 @@ local function OnPollTicker()
         or not GCDStillActive()
     then
         FinishGCDBar(frame)
+        return
     end
+    Arm(OnPollTicker, POLL_INTERVAL)
 end
 
-local function ArmFinish(frame, durationObj)
-    CancelFinishTimers(frame)
-
-    -- Preferred: one exact timer from the plain remaining time.
-    local getRemaining = durationObj.GetRemainingDuration or durationObj.GetRemaining
-    local remaining
-    if type(getRemaining) == "function" then
-        -- Secret GCD durations return secret values; PlainNumber rejects them
-        -- into the bounded NeverSecret poll ticker below.
-        remaining = PlainNumber(getRemaining(durationObj))
+--- The hidden Cooldown frame whose native OnCooldownDone ends a secret GCD.
+local function FinishWake()
+    if finishWake or finishWakeUnsupported then return finishWake end
+    local frame = CreateFrame("Cooldown", nil, UIParent)
+    if not (frame and frame.SetCooldownFromDurationObject and frame.Clear) then
+        finishWakeUnsupported = true
+        return nil
     end
+    frame:SetSize(1, 1)
+    frame:SetAlpha(0)
+    if frame.SetDrawSwipe then frame:SetDrawSwipe(false) end
+    if frame.SetDrawEdge then frame:SetDrawEdge(false) end
+    if frame.SetDrawBling then frame:SetDrawBling(false) end
+    if frame.SetHideCountdownNumbers then frame:SetHideCountdownNumbers(true) end
+    frame:SetScript("OnCooldownDone", function()
+        if not finishWakeArmed then return end
+        finishWakeArmed = false
+        -- The secret cap is still armed (armedKey): FinishGCDBar cancels it.
+        -- OnFinishTimer would forget the key first and leave the cap to end
+        -- the next GCD.
+        local active = activeFrame
+        if active then FinishGCDBar(active) else CancelFinishTimers() end
+    end)
+    frame:Show()
+    finishWake = frame
+    return frame
+end
 
+local function ArmFinish(durationObj)
+    CancelFinishTimers()
+
+    -- Preferred: one exact deadline from the plain remaining time.
+    local remaining = PlainRemaining(durationObj)
     if remaining and remaining > 0 then
-        frame._msufGCDTimer = C_Timer.NewTimer(remaining + 0.03, OnFinishTimer)
+        Arm(OnFinishTimer, remaining + FINISH_PAD)
         return
     end
 
-    -- Secret cooldown: coarse NeverSecret poll, hard-capped.
+    -- Secret cooldown: the native completion of the same duration, capped.
+    local wake = FinishWake()
+    if wake then
+        finishWakeArmed = true
+        wake:SetCooldownFromDurationObject(durationObj, true)
+        Arm(OnSecretCap, SECRET_FINISH_CAP)
+        return
+    end
+
+    -- No native completion frame: coarse NeverSecret poll, hard-capped.
     pollTicks = 0
-    frame._msufGCDTicker = C_Timer.NewTicker(POLL_INTERVAL, OnPollTicker)
+    Arm(OnPollTicker, POLL_INTERVAL)
 end
 
 local function StartGCDBar(frame, spellID, durationObj)
@@ -449,7 +524,7 @@ local function StartGCDBar(frame, spellID, durationObj)
     end
 
     if frame._msufDetachedGCD then RefreshDetached() else frame:Show() end
-    ArmFinish(frame, stable)
+    ArmFinish(stable)
 end
 
 -- ============================================================
@@ -507,9 +582,12 @@ local function OnSucceeded(spellID)
     if ResolveInstantSpell(spellID) == nil then return end
 
     -- Instant cast confirmed. If no GCD is active at this synchronous event
-    -- the spell is off-GCD (GCD-triggering instants always leave isActive
-    -- true here) - cache that verdict.
-    if not GCDStillActive() then
+    -- the spell is off-GCD (GCD-triggering instants always leave the GCD
+    -- running here) - cache that verdict.
+    local spellAPI = _G.C_Spell
+    local getDuration = spellAPI and spellAPI.GetSpellCooldownDuration
+    local durationObj = type(getDuration) == "function" and getDuration(GCD_SPELL_ID) or nil
+    if not GCDActive(durationObj) then
         spellSkip[spellID] = true
         return
     end
@@ -527,10 +605,6 @@ local function OnSucceeded(spellID)
         if not frame then return end
     end
 
-    local spellAPI = _G.C_Spell
-    local getDuration = spellAPI and spellAPI.GetSpellCooldownDuration
-    if type(getDuration) ~= "function" then return end
-    local durationObj = getDuration(GCD_SPELL_ID)
     if not durationObj then return end
 
     StartGCDBar(frame, spellID, durationObj)
@@ -553,7 +627,6 @@ driver:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- ============================================================
 local ExportPublic = ns.ExportPublic
 
-ExportPublic("MSUF_IsGCDBarEnabled", IsGCDBarEnabled)
 ExportPublic("MSUF_GCDBar_IsSupported", GCDBarSupported)
 ExportPublic("MSUF_GCDBar_SyncRegistration", SyncRegistration)
 ExportPublic("MSUF_GCDBar_RefreshLayout", function()

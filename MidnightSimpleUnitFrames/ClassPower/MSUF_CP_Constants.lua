@@ -9,6 +9,34 @@ local ExportPublic = MSUF.ExportPublic
 ExportPublic("MSUF_CP_CONST", _G.MSUF_CP_CONST or {})
 local K = _G.MSUF_CP_CONST
 
+--- The builder registries the ClassPower files add their builders to. This
+--- file loads first in every client TOC, so it publishes all three; a file
+--- reads its registry with K.BuilderRegistry(name).
+local builderRegistries = {
+    MSUF_CP_CORE_BUILDERS = {},
+    MSUF_CP_MODE_BUILDERS = {},
+    MSUF_CP_FEATURE_BUILDERS = {},
+}
+ExportPublic("MSUF_CP_CORE_BUILDERS", builderRegistries.MSUF_CP_CORE_BUILDERS)
+ExportPublic("MSUF_CP_MODE_BUILDERS", builderRegistries.MSUF_CP_MODE_BUILDERS)
+ExportPublic("MSUF_CP_FEATURE_BUILDERS", builderRegistries.MSUF_CP_FEATURE_BUILDERS)
+function K.BuilderRegistry(name)
+    return builderRegistries[name]
+end
+
+--- The one reader of a class resource colour override: map[token] as
+--- { r, g, b } or { r = , g = , b = }. Returns r, g, b, or nothing unless all
+--- three are numbers. Every Colors panel override (class power, background,
+--- charged, per slot, full, Stagger tiers, eclipse, text) is read through it.
+function K.OverrideRGB(map, token)
+    if type(map) ~= "table" or token == nil then return nil end
+    local c = map[token]
+    if type(c) ~= "table" then return nil end
+    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
+    return nil
+end
+
 K.CPK = {
     MODE = {
         NONE           = 0,
@@ -211,9 +239,12 @@ local K = _G.MSUF_CP_CONST or {}
 local CPK = K.CPK or {}
 local MODE = CPK.MODE or {}
 
+--- warlockPred binds the shard prediction cast events; the profile builder
+--- keeps it for Warlocks only. Affliction and Demonology shards render
+--- SEGMENTED and predict there too (WL_SHARD_DELTAS[1] and [2]).
 ExportPublic("MSUF_CP_MODE_EVENT_PROFILE", {
     [MODE.NONE]           = { power = false, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false },
-    [MODE.SEGMENTED]      = { power = true,  maxPower = true,  aura = false, rune = false, health = false, pointCharge = true,  warlockPred = false },
+    [MODE.SEGMENTED]      = { power = true,  maxPower = true,  aura = false, rune = false, health = false, pointCharge = true,  warlockPred = true  },
     [MODE.FRACTIONAL]     = { power = true,  maxPower = true,  aura = false, rune = false, health = false, pointCharge = false, warlockPred = true  },
     [MODE.RUNE_CD]        = { power = false, maxPower = false, aura = false, rune = true,  health = false, pointCharge = false, warlockPred = false },
     [MODE.AURA_SEGMENTED] = { power = false, maxPower = false, aura = true,  rune = false, health = false, pointCharge = false, warlockPred = false },
@@ -248,5 +279,11 @@ if (MSUF.Client and MSUF.Client.IsClassic) == true then
     tokens[PT.Balance]       = "BALANCE"
     tokens[PT.ShadowOrbs]    = "SHADOW_ORBS"
     tokens.MISTS_ARCANE_CHARGES = "ARCANE_CHARGES"
-    _G.MSUF_CP_MODE_EVENT_PROFILE[MODE.SIGNED_CONTINUOUS] = { power = true, maxPower = false, aura = false, rune = false, health = false, pointCharge = false, warlockPred = false }
+    _G.MSUF_CP_MODE_EVENT_PROFILE[MODE.SIGNED_CONTINUOUS] = {
+        power = true, maxPower = false, aura = false, rune = false, health = false,
+        pointCharge = false, warlockPred = false,
+    }
+    --- WL_SHARD_DELTAS lists Midnight's shard generators only; Mists
+    --- Affliction shards keep their event set without the cast events.
+    _G.MSUF_CP_MODE_EVENT_PROFILE[MODE.SEGMENTED].warlockPred = false
 end

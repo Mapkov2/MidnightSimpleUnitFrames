@@ -3,6 +3,17 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua", {
+    "MSUF_GetAllProfiles",
+    "MSUF_ShowReloadRecommendedPopup",
+    "MSUF_ExportSelectionToString",
+    "MSUF_IsSpecAutoSwitchEnabled",
+    "MSUF_GetSpecProfile",
+    "MSUF_ImportFromString",
+    "MSUF_ImportIntoNewProfile",
+})
 
 -- Advanced Profiles page.
 -- Builds profile copy/import/export/spec-switch controls and Wago import affordances.
@@ -105,7 +116,7 @@ end
 local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = "None", text = "None" } end
-    local list = type(_G.MSUF_GetAllProfiles) == "function" and _G.MSUF_GetAllProfiles() or { "Default" }
+    local list = _G.MSUF_GetAllProfiles() or { "Default" }
     for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i] } end
     return values
 end
@@ -142,26 +153,19 @@ end
 local function ActiveProfileName() return _G.MSUF_ActiveProfile or "Default" end
 
 local function ClearProfileHistory() if M.ClearHistory then M.ClearHistory() end end
-local function PrintProfileMessage(color, message)
-    message = M.Tr(tostring(message or ""))
+--- message is an English key, or a format key followed by its arguments; it is
+--- translated exactly once here (the status line gets the translated text).
+local function PrintProfileMessage(color, message, ...)
+    message = M.Format(tostring(message or ""), ...)
     if M.ShowStatusFeedback then
         local kind = tostring(color or ""):find("ff0000", 1, true) and "danger" or "info"
-        M.ShowStatusFeedback(message, kind, kind == "danger" and 2.0 or 1.7)
+        M.ShowStatusFeedback(message, kind, kind == "danger" and 2.0 or 1.7, true)
     end
     print((color or "|cffffd700") .. "MSUF:|r " .. message)
 end
+-- M.BlockCombatAction (MSUF_Menu2_Bindings.lua) loads before every page.
 local function BlockCombatAction()
-    if M.BlockCombatAction then return M.BlockCombatAction() and true or false end
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then return _G.MSUF_BlockConfigCombatLocked() and true or false end
-    if _G.InCombatLockdown and _G.InCombatLockdown() then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
-        return true
-    end
-    if _G.UnitAffectingCombat and _G.UnitAffectingCombat("player") then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
-        return true
-    end
-    return false
+    return M.BlockCombatAction() and true or false
 end
 local function StyleProfileInput(editBox, width, height, multiline)
     if not editBox then return editBox end
@@ -238,59 +242,37 @@ local function WrapMultilineProfileInput(editBox, card, x, y, width, height)
     end)
     return editBox
 end
-local function InstallProfilePopup(key, spec)
-    return M.InstallStaticPopup and M.InstallStaticPopup(key, spec)
-end
-
--- Static popups are the safety boundary for destructive profile operations.
--- Keep the actual profile mutations inside the OnAccept handlers so callers cannot bypass
--- confirmation by invoking helper functions directly.
-local function EnsureProfilePopups()
-    if not _G.StaticPopupDialogs then return end
-    InstallProfilePopup("MSUF2_IMPORT_RELOAD_PROMPT", {
-        text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
-        button1 = _G.RELOAD or M.Tr("Reload"),
-        button2 = _G.CANCEL or M.Tr("Not now"),
-        OnAccept = function()
-            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
-        end,
-    })
-    InstallProfilePopup("MSUF2_PROFILE_SWITCH_RELOAD", {
-        text = M.Tr("Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"),
-        button1 = YES or M.Tr("Yes"),
-        button2 = NO or M.Tr("No"),
-        OnAccept = function()
-            if _G.InCombatLockdown and _G.InCombatLockdown() then
-                PrintProfileMessage("|cffffd700", "Can't reload the UI in combat. Leave combat, then type /reload.")
-                return
-            end
-            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
-        end,
-    })
-    InstallProfilePopup("MSUF2_CONFIRM_RESET_PROFILE", {
-        text = M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."),
-        button1 = YES or M.Tr("Yes"),
-        button2 = NO or M.Tr("No"),
-        OnAccept = function(_, data)
+-- Prompts are the safety boundary for destructive profile operations. Keep the
+-- actual profile mutations inside their accept handlers so callers cannot
+-- bypass confirmation by invoking helper functions directly. M.ShowPrompt
+-- shows Blizzard's generic confirmation; nothing is written to
+-- StaticPopupDialogs.
+local ProfilePrompts = {}
+function ProfilePrompts.ConfirmReset(name, after)
+    M.ShowPrompt("MSUF2_CONFIRM_RESET_PROFILE", {
+        text = string.format(M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."), name),
+        accept = YES or M.Tr("Yes"),
+        cancel = NO or M.Tr("No"),
+        onAccept = function()
             if BlockCombatAction() then return end
-            if not (data and data.name) then return end
-            _G.MSUF_ResetProfile(data.name)
+            _G.MSUF_ResetProfile(name)
             ClearProfileHistory()
             if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_PROFILE_RESET", { preview = true, applyAll = false, notify = false }) end
-            if type(data.after) == "function" then data.after() end
+            after()
             _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
         end,
     })
-    InstallProfilePopup("MSUF2_CONFIRM_DELETE_PROFILE", {
-        text = M.Tr("Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other profiles are not affected, but this profile cannot be restored unless you exported or copied it first."),
-        button1 = DELETE or M.Tr("Delete"),
-        button2 = CANCEL or M.Tr("Cancel"),
-        OnAccept = function(_, data)
+end
+function ProfilePrompts.ConfirmDelete(name, after)
+    M.ShowPrompt("MSUF2_CONFIRM_DELETE_PROFILE", {
+        text = string.format(M.Tr("Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other profiles are not affected, but this profile cannot be restored unless you exported or copied it first."), name),
+        accept = DELETE or M.Tr("Delete"),
+        cancel = CANCEL or M.Tr("Cancel"),
+        onAccept = function()
             if BlockCombatAction() then return end
-            if not (data and data.name) then return end
-            _G.MSUF_DeleteProfile(data.name)
+            _G.MSUF_DeleteProfile(name)
             ClearProfileHistory()
-            if type(data.after) == "function" then data.after() end
+            after()
         end,
     })
 end
@@ -299,39 +281,43 @@ local function ShowImportReloadPrompt()
         PrintProfileMessage("|cffffd700", "Profile imported. Reload after combat with /reload.")
         return
     end
-    if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_IMPORT_RELOAD_PROMPT then
-        _G.StaticPopup_Show("MSUF2_IMPORT_RELOAD_PROMPT")
-        return
-    end
-    if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-        _G.MSUF_ShowReloadRecommendedPopup("Profile import")
-    else
-        PrintProfileMessage("|cffffd700", "Profile imported. Reload the UI with /reload.")
-    end
+    M.ShowPrompt("MSUF2_IMPORT_RELOAD_PROMPT", {
+        text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
+        accept = RELOAD or M.Tr("Reload"),
+        cancel = CANCEL or M.Tr("Not now"),
+        onAccept = function() ReloadUI() end,
+    })
 end
 -- A profile switch swaps the whole DB under a live UI. Frames re-apply, but anything baked
 -- at load time (group headers, module gating) only settles after a reload, so offer one.
 local function ShowProfileSwitchReloadPrompt(profileName)
     local name = tostring(profileName or ActiveProfileName())
     if _G.InCombatLockdown and _G.InCombatLockdown() then
-        PrintProfileMessage("|cffffd700", M.Format("Switched to profile '%s'. Reload after combat with /reload.", name))
+        PrintProfileMessage("|cffffd700", "Switched to profile '%s'. Reload after combat with /reload.", name)
         return
     end
-    if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_PROFILE_SWITCH_RELOAD then
-        _G.StaticPopup_Show("MSUF2_PROFILE_SWITCH_RELOAD", name)
-        return
-    end
-    PrintProfileMessage("|cffffd700", M.Format("Switched to profile '%s'. Reload the UI with /reload.", name))
+    M.ShowPrompt("MSUF2_PROFILE_SWITCH_RELOAD", {
+        text = string.format(M.Tr("Switched to profile '%s'.\n\nA UI reload is required to fully apply this profile.\n\nReload now?"), name),
+        accept = YES or M.Tr("Yes"),
+        cancel = NO or M.Tr("No"),
+        onAccept = function()
+            if _G.InCombatLockdown and _G.InCombatLockdown() then
+                PrintProfileMessage("|cffffd700", "Can't reload the UI in combat. Leave combat, then type /reload.")
+                return
+            end
+            ReloadUI()
+        end,
+    })
 end
 local function ReloadAfterNewProfileImport(profileName)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
-        PrintProfileMessage("|cffffd700", M.Format("Imported profile '%s'. Reload after combat with /reload.", tostring(profileName)))
+        PrintProfileMessage("|cffffd700", "Imported profile '%s'. Reload after combat with /reload.", tostring(profileName))
         return
     end
     if type(_G.ReloadUI) == "function" then
         _G.ReloadUI()
     else
-        PrintProfileMessage("|cffffd700", M.Format("Imported profile '%s'. Reload the UI with /reload.", tostring(profileName)))
+        PrintProfileMessage("|cffffd700", "Imported profile '%s'. Reload the UI with /reload.", tostring(profileName))
     end
 end
 local function ProfileExists(name)
@@ -344,12 +330,14 @@ end
 local ProfilesPage = {}
 function ProfilesPage.Prepare(ctx)
     local b = W.PageBuilder(ctx)
-    EnsureProfilePopups()
     local contentW = b.width or ctx.width or 920
     local buttonW, buttonH, buttonGap = 190, 24, 14
     local PROFILE_TOOLTIP = { hook = true, titleAsLine = true, bodyColor = { 0.85, 0.85, 0.85 } }
     local function AddProfileTooltip(frame, title, text) return M.AddTooltip and M.AddTooltip(frame, tostring(title or ""), text, PROFILE_TOOLTIP) or frame end
-    local function PlaceActionRow(parent, x, left, right, y) left:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); right:SetPoint("LEFT", left, "RIGHT", buttonGap, 0) end
+    local function PlaceActionRow(parent, x, left, right, y)
+        left:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+        right:SetPoint("LEFT", left, "RIGHT", buttonGap, 0)
+    end
     local function ProfileButton(parent, label, onClick, danger, semanticPath, confirmRequired, prepareValue, validateValue, directCommand, width)
         local btn = T.Button(parent, label, width or buttonW, buttonH)
         if danger and T.SkinDangerButton then T.SkinDangerButton(btn) end
@@ -387,10 +375,6 @@ function ProfilesPage.Prepare(ctx)
     local function ExportProfileString(kind)
         kind = kind or M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all")
         local suiteKind = kind == "suite_all" or kind:match("^suite_module:") ~= nil
-        if not suiteKind and type(_G.MSUF_ExportSelectionToString) ~= "function" then
-            if M.ShowStatusFeedback then M.ShowStatusFeedback("Export unavailable", "danger", 1.8) end
-            return false
-        end
         local selected = M.profileExportUnits or { player = true }
         if kind == "unitselection" then
             local any = false
@@ -404,7 +388,7 @@ function ProfilesPage.Prepare(ctx)
         if suiteKind then value, reason = SuiteExport(kind)
         else value = _G.MSUF_ExportSelectionToString(kind, selected) end
         if type(value) ~= "string" then
-            if reason then PrintProfileMessage("|cffff0000", "Export failed: " .. tostring(reason)) end
+            if reason then PrintProfileMessage("|cffff0000", "Export failed: %s", tostring(reason)) end
             if M.ShowStatusFeedback then M.ShowStatusFeedback("Export failed", "danger", 1.8) end
             return false
         end
@@ -524,7 +508,10 @@ function ProfilesPage.Hero(state)
 
     local heroExport = T.Button(hero, "Export backup", 150, 34, { noSearch = true })
     local heroSwitch = T.Button(hero, "Switch profile", 168, 34, { noSearch = true })
-    if T.CenterButtonLabel then T.CenterButtonLabel(heroExport); T.CenterButtonLabel(heroSwitch) end
+    if T.CenterButtonLabel then
+        T.CenterButtonLabel(heroExport)
+        T.CenterButtonLabel(heroSwitch)
+    end
     if T.ApplyButtonRole then T.ApplyButtonRole(heroSwitch, "primary") end
     if compactHero then
         heroExport:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -202, -164)
@@ -700,12 +687,7 @@ end
             M.ShowPageResetConfirm("profiles")
             return
         end
-        local name = ActiveProfileName()
-        if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
-            _G.StaticPopup_Show("MSUF2_CONFIRM_RESET_PROFILE", name, nil, { name = name, after = function() RefreshAfterProfileChange(ctx) end })
-        else
-            error("MSUF profile reset confirmation is unavailable")
-        end
+        ProfilePrompts.ConfirmReset(ActiveProfileName(), function() RefreshAfterProfileChange(ctx) end)
     end, nil, "profile.reset_current", true, nil, nil, {
         kind = "button", historyMode = "none", confirmRequired = true,
         set = function()
@@ -736,13 +718,7 @@ end
         if BlockCombatAction() then return end
         local name = ActiveProfileName()
         if name == "Default" then return end
-        if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE then
-            _G.StaticPopup_Show("MSUF2_CONFIRM_DELETE_PROFILE", name, nil, { name = name, after = function() RefreshAfterProfileChange(ctx) end })
-        else
-            _G.MSUF_DeleteProfile(name)
-            ClearProfileHistory()
-            RefreshAfterProfileChange(ctx)
-        end
+        ProfilePrompts.ConfirmDelete(name, function() RefreshAfterProfileChange(ctx) end)
     end, true, "profile.delete_current", true, nil, nil, {
         kind = "button", historyMode = "none", confirmRequired = true,
         set = function()
@@ -792,7 +768,7 @@ end
         local profiles = ProfileValues(false)
         local profileCount = #profiles
         local profileCountText = profileCount == 1 and M.Tr("1 profile") or M.Format("%d profiles", profileCount)
-        local specAuto = type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled() or false
+        local specAuto = _G.MSUF_IsSpecAutoSwitchEnabled() or false
         local locked = ConfigLocked()
         activeName:SetText(active)
         if currentStatus then
@@ -846,7 +822,7 @@ function ProfilesPage.Specializations(state)
         min(380, max(220, specInnerW - 40)))
     M.BindBoolWidget(ctx, auto,
         function()
-            return type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled() or false
+            return _G.MSUF_IsSpecAutoSwitchEnabled() or false
         end,
         function(v)
             _G.MSUF_SetSpecAutoSwitchEnabled(v and true or false)
@@ -874,8 +850,7 @@ function ProfilesPage.Specializations(state)
             MoveWidget(drop, assignmentCard, 18, -58, dropW)
             M.BindDropdownWidget(ctx, drop,
                 function()
-                    if type(_G.MSUF_GetSpecProfile) == "function" then return _G.MSUF_GetSpecProfile(s.id) or "None" end
-                    return "None"
+                    return _G.MSUF_GetSpecProfile(s.id) or "None"
                 end,
                 function(v)
                     _G.MSUF_SetSpecProfile(s.id, (v ~= "None") and v or nil)
@@ -887,13 +862,11 @@ function ProfilesPage.Specializations(state)
         end
     end
     local function RefreshSpecState()
-        local enabled = type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled() or false
+        local enabled = _G.MSUF_IsSpecAutoSwitchEnabled() or false
         local assigned = 0
-        if type(_G.MSUF_GetSpecProfile) == "function" then
-            for i = 1, #specs do
-                local value = _G.MSUF_GetSpecProfile(specs[i].id)
-                if value and value ~= "" and value ~= "None" then assigned = assigned + 1 end
-            end
+        for i = 1, #specs do
+            local value = _G.MSUF_GetSpecProfile(specs[i].id)
+            if value and value ~= "" and value ~= "None" then assigned = assigned + 1 end
         end
         if W.SetCollapsibleBadges then
             W.SetCollapsibleBadges(spec, {
@@ -995,7 +968,10 @@ function ProfilesPage.ImportExport(state)
                 else
                     payload = Trim(value)
                 end
-                if payload ~= "" then M.profileImportString = payload; blob:SetText(payload) end
+                if payload ~= "" then
+                    M.profileImportString = payload
+                    blob:SetText(payload)
+                end
                 if newName and newName ~= "" then
                     M.profileImportCreateNew = true
                     M.profileImportNewName = newName
@@ -1007,11 +983,13 @@ function ProfilesPage.ImportExport(state)
             end,
         },
     }), "Import to current profile", "button")
-    AddProfileTooltip(import, "Import to current profile", "Applies the import string to the active profile. Export or copy your profile first if you want an easy backup.")
+    AddProfileTooltip(import, "Import to current profile",
+        "Applies the import string to the active profile. Export or copy your profile first if you want an easy backup.")
     importCreateNew = W.SwitchAt(actionsCard, "Import and create new profile", 20, -176,
         max(220, actionsCardW - 40))
     RegisterControl(importCreateNew, ProfilesMeta("import.create_new_mode", "ephemeral"), "Import and create new profile", "toggle")
-    AddProfileTooltip(importCreateNew, "Import and create new profile", "Creates a separate profile before importing so you can test the import without changing your current profile.")
+    AddProfileTooltip(importCreateNew, "Import and create new profile",
+        "Creates a separate profile before importing so you can test the import without changing your current profile.")
     local importNameW = min(380, max(180, actionsCardW - 40))
     importProfileName = W.TextInput(actionsCard, "New profile name", importNameW)
     RegisterControl(importProfileName, ProfilesMeta("import.new_profile_name", "ephemeral"), "New profile name", "textinput")
@@ -1057,14 +1035,10 @@ function ProfilesPage.ImportActions(state)
             local suite = SuiteProfiles()
             if not suite then PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this module."); return false end
             local ok, reason = suite.ImportModule(text)
-            if not ok then PrintProfileMessage("|cffff0000", "Module import failed: " .. tostring(reason)); return false end
+            if not ok then PrintProfileMessage("|cffff0000", "Module import failed: %s", tostring(reason)); return false end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
             return true
-        end
-        if type(_G.MSUF_ImportFromString) ~= "function" then
-            PrintProfileMessage("|cffff0000", "Import failed: profile import API is not available.")
-            return false
         end
         -- `text` is a string the user pasted
         local imported = _G.MSUF_ImportFromString(text)
@@ -1084,7 +1058,7 @@ function ProfilesPage.ImportActions(state)
             return false
         end
         if ProfileExists(name) then
-            PrintProfileMessage("|cffff0000", M.Format("Profile '%s' already exists.", name))
+            PrintProfileMessage("|cffff0000", "Profile '%s' already exists.", name)
             return false
         end
         local suiteKind = SuiteImportKind(text)
@@ -1094,7 +1068,7 @@ function ProfilesPage.ImportActions(state)
             local ok, reason
             if suiteKind == "full" then ok, reason = suite.Import(name, text)
             else ok, reason = suite.ImportModuleIntoNew(name, text) end
-            if not ok then PrintProfileMessage("|cffff0000", "Suite import failed: " .. tostring(reason)); return false end
+            if not ok then PrintProfileMessage("|cffff0000", "Suite import failed: %s", tostring(reason)); return false end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
             M.profileImportNewName = ""
@@ -1102,25 +1076,21 @@ function ProfilesPage.ImportActions(state)
             ReloadAfterNewProfileImport(name)
             return true
         end
-        if type(_G.MSUF_ImportIntoNewProfile) ~= "function" then
-            PrintProfileMessage("|cffff0000", "Import failed: profile API is not available.")
-            return false
-        end
 
         -- MSUF_ImportIntoNewProfile decodes, validates and stages the string before it creates
         -- or switches a profile; a rejected string leaves SavedVariables untouched.
         local ok, _, stage = _G.MSUF_ImportIntoNewProfile(name, text)
         if ok ~= true then
             if stage == "create" then
-                PrintProfileMessage("|cffff0000", M.Format("Import failed: could not create profile '%s'.", name))
+                PrintProfileMessage("|cffff0000", "Import failed: could not create profile '%s'.", name)
                 RefreshAfterProfileChange(ctx)
             elseif stage == "switch" then
-                PrintProfileMessage("|cffff0000", M.Format("Import failed: could not switch to profile '%s'.", name))
+                PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '%s'.", name)
                 RefreshAfterProfileChange(ctx)
             elseif stage == "exists" then
-                PrintProfileMessage("|cffff0000", M.Format("Profile '%s' already exists.", name))
+                PrintProfileMessage("|cffff0000", "Profile '%s' already exists.", name)
             else
-                PrintProfileMessage("|cffff0000", M.Tr("Import failed."))
+                PrintProfileMessage("|cffff0000", "Import failed.")
             end
             return false
         end

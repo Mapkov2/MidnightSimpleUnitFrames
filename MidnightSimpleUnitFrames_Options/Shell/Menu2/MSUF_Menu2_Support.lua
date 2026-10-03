@@ -30,9 +30,10 @@ local Tr = MSUF.Translate
 M.TranslateText = Tr
 -- The core (Kernel/MSUF_Util.lua) owns the combat lock and its throttled,
 -- translated message, and publishes both on MSUF.Public before the Options
--- package can load.
-local function IsConfigCombatLocked()
-    return MSUF.Public.IsConfigCombatLocked() and true or false
+-- package can load. A handler running for a combat event passes the event:
+-- at PLAYER_REGEN_DISABLED the lockdown has not started yet.
+local function IsConfigCombatLocked(event)
+    return MSUF.Public.IsConfigCombatLocked(event) and true or false
 end
 local function ShowConfigCombatLockMessage()
     return MSUF.Public.ShowConfigCombatLockMessage()
@@ -44,6 +45,15 @@ local function BlockConfigCombatLocked(silent)
 end
 M.IsConfigCombatLocked = M.IsConfigCombatLocked or IsConfigCombatLocked
 M.ShowConfigCombatLockMessage = ShowConfigCombatLockMessage
+-- A menu file lists the core functions it calls by their global names. Each
+-- must exist when the file loads: the core loads before this load-on-demand
+-- addon on every client, so a missing one is a wiring bug and MSUF.Require
+-- raises naming the file. The calls still go through _G, so a hook installed
+-- on the global later applies.
+function M.RequireGlobals(context, names)
+    local Require = MSUF.Require
+    for i = 1, #names do Require(names[i], context) end
+end
 
 -- Every delayed Menu2-only task goes through this registry. C_Timer.After
 -- cannot be cancelled, so a callback queued while the menu is open would
@@ -131,9 +141,9 @@ function Runtime:Resume(reason)
     self.lastReason = tostring(reason or "menu-show")
     return true
 end
-function Runtime:Quiesce(reason)
+function Runtime:Quiesce(reason, event)
     reason = tostring(reason or "menu-hide")
-    local combat = IsConfigCombatLocked()
+    local combat = IsConfigCombatLocked(event)
     self.active = false
     self:CancelPendingTasks(reason)
     if type(self._quiesceScale) == "function" then self._quiesceScale(combat) end
@@ -192,7 +202,8 @@ local function AddTooltip(widget, title, body, opts)
                 _G.GameTooltip:SetText(Tr(resolvedTitle), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1, titleColor[4])
             end
         end
-        if resolvedBody and resolvedBody ~= "" then _G.GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86, bodyColor[3] or 1.00, true) end
+        if resolvedBody and resolvedBody ~= "" then _G.GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86,
+            bodyColor[3] or 1.00, true) end
         if reason then _G.GameTooltip:AddLine(reason, 1, 0.82, 0.35, true) end
         _G.GameTooltip:Show()
     end
@@ -378,6 +389,35 @@ local function RaisePopupOverMenuWindow(dialog)
     dialog:SetFrameStrata(strata)
     if dialog.Raise then dialog:Raise() end
 end
+-- Menu prompts. Nothing here writes Blizzard's StaticPopupDialogs: the one
+-- prompt layer is the core's (Shell/UI/MSUF_Widgets.lua, MSUF.UI.ShowPrompt,
+-- which also documents the spec). The menu passes its look: the menu popup
+-- panel and priority for the owned frame, and a generic dialog lifted over the
+-- menu window.
+local PROMPT_STYLE = {
+    panel = function(parent) return M.CreateMenuPopupPanel(parent) end,
+    text = function(text)
+        if M.Theme and M.Theme.StyleFontString then M.Theme.StyleFontString(text, M.Theme.colors and M.Theme.colors.text or { 1, 1, 1, 1 }, 0) end
+    end,
+    priority = function(frame) M.ApplyPopupFramePriority(frame) end,
+    raise = RaisePopupOverMenuWindow,
+}
+--- Shows the prompt for `key` and returns its frame.
+function M.ShowPrompt(key, spec)
+    return MSUF.UI.ShowPrompt(key, spec, PROMPT_STYLE)
+end
+function M.HidePrompt(key)
+    return MSUF.UI.HidePrompt(key)
+end
+function M.IsPromptShown(key)
+    return MSUF.UI.IsPromptShown(key)
+end
+--- Host API kept for callers outside this addon that register a named dialog
+--- and call StaticPopup_Show themselves: the MSUF Suite's page-reset, copy-bars
+--- and run-history prompts. Without it
+--- the Suite would either raise in StaticPopup_Show or run those actions
+--- without asking. Nothing in the Options addon calls it (menu_prompt_ownership
+--- smoke); the menu's own prompts use M.ShowPrompt.
 function M.InstallStaticPopup(key, spec, defaults)
     if not (_G.StaticPopupDialogs and key and type(spec) == "table") then return nil end
     local existing = _G.StaticPopupDialogs[key]
@@ -507,7 +547,12 @@ function M.CopyFieldsFromSpecs(specs, values, seed, props)
         for i = 1, #(specs or {}) do
             local spec = specs[i]
             if spec.value == value then
-                for prop in tostring(spec.copyProps or props):gmatch("%S+") do local key = spec[prop]; if key then out[#out + 1] = key end end
+                for prop in tostring(spec.copyProps or props):gmatch("%S+") do
+                    local key = spec[prop]
+                    if key then
+                        out[#out + 1] = key
+                    end
+                end
                 -- colorPrefix names a key family rather than one key, so it is
                 -- expanded here: a copied text indicator has to bring its color
                 -- along with its placement or the copy looks half applied.
@@ -517,7 +562,12 @@ function M.CopyFieldsFromSpecs(specs, values, seed, props)
                     out[#out + 1] = colorPrefix .. "ColorG"
                     out[#out + 1] = colorPrefix .. "ColorB"
                 end
-                local extra = spec.copyExtra; if extra then for j = 1, #extra do out[#out + 1] = extra[j] end end
+                local extra = spec.copyExtra
+                if extra then
+                    for j = 1, #extra do
+                        out[#out + 1] = extra[j]
+                    end
+                end
                 break
             end
         end
@@ -627,8 +677,25 @@ function M.Assign(target, values)
     for key, value in pairs(values) do target[key] = value end
     return target
 end
-function M.AppendValues(target, ...) if type(target) ~= "table" then target = {} end; for i = 1, select("#", ...) do target[#target + 1] = select(i, ...) end; return target end
-function M.AppendNamedValues(target, source, names) if type(target) ~= "table" then target = {} end; source = source or {}; for name in tostring(names or ""):gmatch("%S+") do target[#target + 1] = source[name] end; return target end
+function M.AppendValues(target, ...)
+    if type(target) ~= "table" then
+        target = {}
+    end
+    for i = 1, select("#", ...) do
+        target[#target + 1] = select(i, ...)
+    end
+    return target
+end
+function M.AppendNamedValues(target, source, names)
+    if type(target) ~= "table" then
+        target = {}
+    end
+    source = source or {}
+    for name in tostring(names or ""):gmatch("%S+") do
+        target[#target + 1] = source[name]
+    end
+    return target
+end
 function M.AssignNamedValues(target, names, ...)
     if type(target) ~= "table" then target = {} end
     local index = 1
@@ -769,7 +836,10 @@ function M.BindGateGroup(ctx, source, entries, opts)
     -- during a refresh and applied once at its end: no per-refresh tables.
     local pendingReasons
     for i = 1, #entries do
-        if entries[i].reason ~= nil then pendingReasons = {}; break end
+        if entries[i].reason ~= nil then
+            pendingReasons = {}
+            break
+        end
     end
     local function noteReason(control, reason)
         if not control then return end
@@ -914,7 +984,8 @@ function M.SeedGameplayMeleeSpellScope(scope)
         g.nameplateMeleeSpellIDByClass = type(g.nameplateMeleeSpellIDByClass) == "table" and g.nameplateMeleeSpellIDByClass or {}
         if UnitClass then
             local _, class = UnitClass("player")
-            if class and (tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0) <= 0 then g.nameplateMeleeSpellIDByClass[class] = M.GetGameplayMeleeSpellID(g) end
+            if class and (tonumber(g.nameplateMeleeSpellIDByClass[class])
+                or 0) <= 0 then g.nameplateMeleeSpellIDByClass[class] = M.GetGameplayMeleeSpellID(g) end
         end
     end
 end
@@ -1071,6 +1142,13 @@ function M.TruncateUtf8Chars(value, maxChars)
         chars = chars + 1
     end
     return string.sub(value, 1, bytePos - 1)
+end
+--- `text` cut to at most `limit` UTF-8 characters, ending in "..." when it was
+--- cut; a multi-byte character is never split.
+function M.ShortenUtf8(text, limit)
+    text = tostring(text or "")
+    if M.TruncateUtf8Chars(text, limit) == text then return text end
+    return M.TruncateUtf8Chars(text, math.max(1, limit - 3)) .. "..."
 end
 function M.CleanToTInlineCustomSeparator(value, maxChars)
     value = tostring(value or ""):gsub("[%c]", " ")
@@ -1291,42 +1369,37 @@ ExportPublic("MSUF_GetNextTip", GetNextTip)
 local pendingReloadRecommendedLabel
 local function ShowReloadRecommendedPopup(label)
     if BlockConfigCombatLocked(false) then return end
-    if not _G.StaticPopupDialogs then return end
     pendingReloadRecommendedLabel = tostring(label or "")
     if pendingReloadRecommendedLabel == "" then pendingReloadRecommendedLabel = "these changes" end
     pendingReloadRecommendedLabel = Tr(pendingReloadRecommendedLabel)
-    M.InstallStaticPopup("MSUF_RELOAD_RECOMMENDED", {
-        text = Tr("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
-        button1 = _G.RELOAD or Tr("Reload"),
-        button2 = _G.CANCEL or Tr("Not now"),
-        OnAccept = function()
+    M.ShowPrompt("MSUF_RELOAD_RECOMMENDED", {
+        text = string.format(Tr("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
+            pendingReloadRecommendedLabel),
+        accept = RELOAD or Tr("Reload"),
+        cancel = CANCEL or Tr("Not now"),
+        onAccept = function()
             pendingReloadRecommendedLabel = nil
-            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+            ReloadUI()
         end,
-        OnCancel = function() pendingReloadRecommendedLabel = nil end,
+        onCancel = function() pendingReloadRecommendedLabel = nil end,
     })
-    _G.StaticPopup_Show("MSUF_RELOAD_RECOMMENDED", pendingReloadRecommendedLabel)
 end
 ExportPublic("MSUF_ShowReloadRecommendedPopup", ShowReloadRecommendedPopup)
+-- Escape does not answer it: a menu-owned prompt (M.ShowPrompt).
 local function ShowGroupFrameReloadRequiredPopup()
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-        if _G.print then _G.print(Tr("|cffffd700MSUF:|r Group frames were enabled or disabled. Reload the UI with /reload.")) end
-        return
-    end
-    M.InstallStaticPopup("MSUF2_GROUPFRAMES_RELOAD_REQUIRED", {
+    return M.ShowPrompt("MSUF2_GROUPFRAMES_RELOAD_REQUIRED", {
         text = Tr("Group frames were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"),
-        button1 = _G.RELOAD or Tr("Reload"),
-        button2 = _G.CANCEL or Tr("Not now"),
+        accept = RELOAD or Tr("Reload"),
+        cancel = CANCEL or Tr("Not now"),
         hideOnEscape = false,
-        OnAccept = function()
-            if _G.InCombatLockdown and _G.InCombatLockdown() then
-                if _G.print then _G.print(Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
+        onAccept = function()
+            if InCombatLockdown() then
+                print(Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload."))
                 return
             end
-            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+            ReloadUI()
         end,
     })
-    _G.StaticPopup_Show("MSUF2_GROUPFRAMES_RELOAD_REQUIRED")
 end
 ExportPublic("MSUF_ShowGroupFrameReloadRequiredPopup", ShowGroupFrameReloadRequiredPopup)
 -- One popup for every link: frames are never freed, and a new named frame,
@@ -1431,23 +1504,23 @@ local function ShowCopyLink(title, url)
     if frame._msufOkButton and frame._msufOkButton.Raise then frame._msufOkButton:Raise() end
 end
 ExportPublic("MSUF_ShowCopyLink", ShowCopyLink)
-do
-    -- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
-    -- the core resolves it once from the TOC this client loaded, so the Options
-    -- package never reports its own "## Version" here.
+-- The alpha-build notice. Alpha builds used to register it as the named dialog
+-- MSUF_ALPHA_DISCORD, which nothing ever showed (no StaticPopup_Show of it in
+-- Classic, Retail or the Suite, nor in their history). It is a prompt now and
+-- stays unwired, as before; showing it on alpha builds is the owner's call.
+-- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
+-- the core resolves it once from the TOC this client loaded, so the Options
+-- package never reports its own "## Version" here.
+function M.ShowAlphaDiscordPrompt()
     local getVersion = MSUF.GetAddonVersion
     local version = type(getVersion) == "function" and getVersion() or nil
-    local isAlpha = type(version) == "string" and version:lower():find("alpha", 1, true) ~= nil
-    if isAlpha then
-        M.InstallStaticPopup("MSUF_ALPHA_DISCORD", {
-            text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"),
-            button1 = Tr("Copy Discord Link"),
-            button2 = _G.CLOSE or Tr("Close"),
-            OnAccept = function()
-                _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz")
-            end,
-        })
-    end
+    if not (type(version) == "string" and version:lower():find("alpha", 1, true)) then return nil end
+    return M.ShowPrompt("MSUF_ALPHA_DISCORD", {
+        text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"),
+        accept = Tr("Copy Discord Link"),
+        cancel = CLOSE or Tr("Close"),
+        onAccept = function() ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end,
+    })
 end
 
 local function PlayerDisplayName()

@@ -17,7 +17,10 @@ if not (UF and UF.RegisterElement) then return end
 local Range = UF.Range or {}
 UF.Range = Range
 
-local NewTimer = _G.C_Timer.NewTimer
+-- The poll heartbeat is one keyed deadline on the shared scheduler
+-- (Kernel/MSUF_Scheduler.lua): a re-arm reschedules that key. It used to create
+-- a new C_Timer.NewTimer object on every re-arm.
+local Scheduler = MSUF.Scheduler
 local After = _G.C_Timer.After
 local UnitCanAssist = _G.UnitCanAssist
 local UnitCanAttack = _G.UnitCanAttack
@@ -139,7 +142,7 @@ local pollQueued = false
 local pollNextAt
 local pollFallbackNextAt
 local pollBossNextAt
-local pollTimer
+local POLL_SCHEDULE_KEY = "MSUF_UF_RangeFade_Poll"
 local pollSetDirty = true
 local targetChecked = 0
 local targetInRange = 0
@@ -710,10 +713,9 @@ local function RangeCanChange()
 end
 
 local function CancelPollTimer()
-  if pollTimer then
-    pollTimer:Cancel()
+  if pollQueued then
+    Scheduler.CancelScheduled(POLL_SCHEDULE_KEY)
   end
-  pollTimer = nil
   pollQueued = false
   pollNextAt = nil
 end
@@ -747,22 +749,21 @@ local function ArmPollTimer()
   -- The callback checks that deadline before sampling, so bursts need no
   -- cancel/recreate pair per edge and never move a range evaluation forward.
   if pollQueued and pollNextAt <= nextAt then return end
-  if pollTimer then CancelPollTimer() end
   local delay = nextAt - PollClock()
   if delay < 0 then delay = 0 end
   pollQueued = true
   pollNextAt = nextAt
-  pollTimer = NewTimer(delay, PollTimerCallback)
+  -- Replaces a pending earlier deadline of the same key in place.
+  Scheduler.ScheduleAfter(POLL_SCHEDULE_KEY, delay, PollTimerCallback)
 end
 
 PollTimerCallback = function()
-  pollTimer = nil
   if not pollQueued then return end
   local now = PollClock()
   local nextAt = NextPollDeadline()
   if nextAt and now < nextAt then
     pollNextAt = nextAt
-    pollTimer = NewTimer(nextAt - now, PollTimerCallback)
+    Scheduler.ScheduleAfter(POLL_SCHEDULE_KEY, nextAt - now, PollTimerCallback)
     return
   end
   pollQueued = false

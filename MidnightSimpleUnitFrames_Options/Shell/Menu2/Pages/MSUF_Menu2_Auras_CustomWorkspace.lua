@@ -26,6 +26,8 @@ local AURA_SORT_DIRECTION_VALUES, ActionButton = M.AuraSettings.AURA_SORT_DIRECT
 local AddAuraTooltipHelp, AddTooltip, AnchorLabel = M.AuraControls.AddAuraTooltipHelp, M.AuraControls.AddTooltip, M.AuraSettings.AnchorLabel
 local ApplyUnit, AuraCatalogToken, AuraControlMeta = M.AuraControls.ApplyUnit, M.AuraControls.AuraCatalogToken, M.AuraControls.AuraControlMeta
 local AuraControlMetaAtVisiblePath, AuraSortMethodValues = M.AuraControls.AuraControlMetaAtVisiblePath, M.AuraSettings.AuraSortMethodValues
+-- Custom container entries always carry their spell ID.
+local FilterSpellEntries = M.AuraControls.FilterSpellEntries
 local COOLDOWN_SWIPE_DIRECTION_VALUES, CUSTOM_FRAME_EFFECTS = M.AuraSettings.COOLDOWN_SWIPE_DIRECTION_VALUES, M.AuraSettings.CUSTOM_FRAME_EFFECTS
 local ChoiceLabel, ConfigureAuraSpellPriorityDrag = M.AuraSettings.ChoiceLabel, M.AuraControls.ConfigureAuraSpellPriorityDrag
 local ConfigureMaxDurationSlider, DEBUFF_TYPE_BORDER_MODE_VALUES = M.AuraControls.ConfigureMaxDurationSlider, M.AuraSettings.DEBUFF_TYPE_BORDER_MODE_VALUES
@@ -33,6 +35,9 @@ local DURATION_BAR_DIRECTION_VALUES, DURATION_BAR_DISPLAY_VALUES = M.AuraSetting
 local DURATION_BAR_POSITION_VALUES, MatchSuffix = M.AuraSettings.DURATION_BAR_POSITION_VALUES, M.AuraSettings.MatchSuffix
 local NATIVE_EXACT_AURA_FILTERS_TEXT, NormalizeAuraSortMethodForLane = M.AuraSettings.NATIVE_EXACT_AURA_FILTERS_TEXT, M.AuraSettings.NormalizeAuraSortMethodForLane
 local QueueAurasPageRefresh, Rebuild, RegisterAuraControl = M.AuraControls.QueueAurasPageRefresh, M.AuraControls.Rebuild, M.AuraControls.RegisterAuraControl
+-- A list edit repaints the page in place; Rebuild is kept for the edits that
+-- change which controls the tools build (aura type, a container reset).
+local Repaint = M.AuraControls.Repaint
 local RegisterAuraTextAction, Round, Tr = M.AuraControls.RegisterAuraTextAction, M.AuraSettings.Round, M.AuraSettings.Tr
 local function CustomStyleSectionId(index, suffix)
     return "aura_style_custom_" .. tostring(index or 1) .. "_" .. tostring(suffix or "section")
@@ -42,6 +47,13 @@ local CUSTOM_AURA_TYPES = VTP "BUFF=Buff|DEBUFF=Debuff"
 -- a compacting list into one fixed slot per whitelisted entry. It belongs
 -- next to Aura type, where the other structural decision already lives.
 local CUSTOM_DISPLAY_MODES = VTP "active=Only active auras|reminder=Fixed slots (reminder)"
+-- Section titles compose the translated container name into one translated
+-- format string, so they are shown as they are.
+local TRANSLATED_TITLE = { translated = true }
+local function ContainerTitle(C)
+    if C.isPlayerDefensives or C.isTargetDots then return Tr(C.containerLabel) end
+    return M.Format("Custom %d", C.index)
+end
 -- Every tool builder below receives the workspace record C and re-establishes the
 -- same local names the inline body used; a builder returns true when its tool
 -- matched, so the dispatcher keeps the original first-match order.
@@ -147,7 +159,7 @@ local function BuildCustomDefensivesTool(C)
                 if customInput and customInput.SetText then customInput:SetText("") end
                 customInputValue = ""
                 Apply("AURAS3_PLAYER_DEFENSIVE_CUSTOM_ADD", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -184,7 +196,7 @@ local function BuildCustomDefensivesTool(C)
             row:SetScript("OnClick", function(self)
                 if self._spellID and Model.RemoveCustomContainerSpell(unit, index, self._spellID) then
                     Apply("AURAS3_PLAYER_DEFENSIVE_CUSTOM_REMOVE", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             rows[i] = row
@@ -194,13 +206,7 @@ local function BuildCustomDefensivesTool(C)
             local entries = Model.CustomContainerSpellEntries(unit, index)
             local enabledPredefined = type(Model.PlayerDefensivePreviewEntries) == "function"
                 and #Model.PlayerDefensivePreviewEntries() or 0
-            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-            local visible = {}
-            for i = 1, #entries do
-                local entry = entries[i]
-                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
-                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-            end
+            local query, visible = FilterSpellEntries(entries, searchValue)
             T.SetTranslatedText(status, M.Format("%d predefined enabled · %d custom · click a custom entry to remove",
                 enabledPredefined, #entries) .. MatchSuffix(query, #visible))
             T.SetTranslatedText(empty, #entries == 0 and Tr("No custom buffs added.")
@@ -245,7 +251,7 @@ local function BuildCustomDotsTool(C)
         add:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -56)
         add:SetScript("OnClick", function()
             local changed = selected and Model.AddCustomContainerSpell(unit, index, selected)
-            if changed then Apply("AURAS3_TARGET_DOT_ADD", true); Rebuild(ctx) end
+            if changed then Apply("AURAS3_TARGET_DOT_ADD", true); Repaint(ctx) end
             return changed and true or false
         end)
         RegisterAuraTextAction(ctx, add, {
@@ -270,7 +276,7 @@ local function BuildCustomDotsTool(C)
                 if customInput and customInput.SetText then customInput:SetText("") end
                 customInputValue = ""
                 Apply("AURAS3_TARGET_DOT_CUSTOM_ADD", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -332,19 +338,19 @@ local function BuildCustomDotsTool(C)
             row.up:SetScript("OnClick", function()
                 if row._spellID and Model.MoveCustomContainerSpell(unit, index, row._spellID, -1) then
                     Apply("AURAS3_TARGET_DOT_PRIORITY", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             row.down:SetScript("OnClick", function()
                 if row._spellID and Model.MoveCustomContainerSpell(unit, index, row._spellID, 1) then
                     Apply("AURAS3_TARGET_DOT_PRIORITY", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             row.remove:SetScript("OnClick", function()
                 if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_TARGET_DOT_REMOVE", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             AddTooltip(row.up, "Move up", "Raises this DoT in the fixed priority order.")
@@ -355,7 +361,7 @@ local function BuildCustomDotsTool(C)
                 if Model.MoveCustomContainerSpellToIndex(unit, index, spellID, target) then
                     Model.EnableCustomContainerSpellPriority(unit, index)
                     Apply("AURAS3_TARGET_DOT_PRIORITY", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             rows[i] = row
@@ -363,13 +369,7 @@ local function BuildCustomDotsTool(C)
         end
         refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
-            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-            local visible = {}
-            for i = 1, #entries do
-                local entry = entries[i]
-                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
-                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-            end
+            local query, visible = FilterSpellEntries(entries, searchValue)
             local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
             T.SetTranslatedText(status, M.Format("%d tracked DoTs", #entries)
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
@@ -424,7 +424,7 @@ local function BuildCustomWhitelistEnchants(C)
             function(value)
                 item.reminderEnchantMainHand = value == true
                 Apply("AURAS3_CUSTOM_REMINDER_ENCHANT", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end,
             AuraControlMeta(ctx, "custom-container.reminder.enchant-main-hand"))
         AddTooltip(enchantMain, "Track the Main Hand enchant",
@@ -434,7 +434,7 @@ local function BuildCustomWhitelistEnchants(C)
             function(value)
                 item.reminderEnchantOffHand = value == true
                 Apply("AURAS3_CUSTOM_REMINDER_ENCHANT", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end,
             AuraControlMeta(ctx, "custom-container.reminder.enchant-off-hand"))
         AddTooltip(enchantOff, "Track the Off Hand enchant",
@@ -454,7 +454,7 @@ local function BuildCustomWhitelistEnchants(C)
                 if enchantInput and enchantInput.SetText then enchantInput:SetText("") end
                 enchantInputValue = ""
                 Apply("AURAS3_CUSTOM_REMINDER_ENCHANT_ITEM", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -505,14 +505,13 @@ local function BuildCustomWhitelistEnchants(C)
 end
 
 local function BuildCustomWhitelistTool(C)
-    local ctx, b, unit, index, tool, customActionPath, containerLabel, item, Apply = C.ctx, C.b, C.unit, C.index, C.tool, C.customActionPath, C.containerLabel, C.item, C.Apply
+    local ctx, b, unit, index, tool, customActionPath, item, Apply = C.ctx, C.b, C.unit, C.index, C.tool, C.customActionPath, C.item, C.Apply
     if tool == "whitelist" then
-        local section = b:Section(containerLabel .. " Whitelist", 430)
+        local section = b:Section(M.Format("%s Whitelist", ContainerTitle(C)), 430, TRANSLATED_TITLE)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
         local auraType = item.auraType == "DEBUFF" and "DEBUFF" or "BUFF"
         local auraNoun = auraType == "DEBUFF" and "debuff" or "buff"
-        local auraPlural = auraNoun .. "s"
         -- Whole sentences per lane: inserting the noun with %s breaks declension in
         -- German and Russian. `auraNoun` itself stays raw - it feeds Search action ids.
         local isDebuff = auraType == "DEBUFF"
@@ -539,7 +538,7 @@ local function BuildCustomWhitelistTool(C)
                 if input and input.SetText then input:SetText("") end
                 inputValue = ""
                 Apply("AURAS3_CUSTOM_WHITELIST_ADD", true)
-                Rebuild(ctx)
+                Repaint(ctx)
             end
             return changed and true or false
         end)
@@ -567,34 +566,16 @@ local function BuildCustomWhitelistTool(C)
                 if refreshList then refreshList() end
             end)
         end
-        local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, section))
-        listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -214)
-        listScroll:SetSize(inner - 20, 190)
-        local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
-        listChild:SetSize(inner - 44, 190)
-        listScroll:SetScrollChild(listChild)
-        M._StyleNestedAuraScrollFrame(listScroll, section, 44)
+        local listScroll, listChild = M.AuraControls.SpellListScroll(section, -214, inner, 190)
         local rows = {}
         local function EnsureRow(i)
             local row = rows[i]
             if row then return row end
-            row = PixelLayoutRegion(CreateFrame("Frame", nil, listChild))
-            row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
-            row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
-            row:SetHeight(40)
-            if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
+            row = M.AuraControls.SpellListRow(listChild, i)
             row.rank = T.Font(row, "GameFontDisableSmall", "", T.colors.accent)
             row.rank:SetPoint("LEFT", row, "LEFT", 7, 0)
             row.rank:SetWidth(24)
-            row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
-            row.icon:SetPoint("LEFT", row.rank, "RIGHT", 3, 0)
-            row.icon:SetSize(28, 28)
-            row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-            row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
-            row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
-            row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
-            row.remove = ActionButton(row, "Remove", 80)
-            row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+            M.AuraControls.SpellListRowLabels(row, row.rank, "RIGHT", 3)
             -- Two static buttons instead of one relabelled one: the styled
             -- action button has no guaranteed text setter, and a fixed label
             -- always states what the click will do.
@@ -607,13 +588,13 @@ local function BuildCustomWhitelistTool(C)
             row.keepOn:SetScript("OnClick", function()
                 if row._spellID and Model.ToggleCustomContainerKeepSpell(unit, index, row._spellID, true) then
                     Apply("AURAS3_CUSTOM_REMINDER_KEEP", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             row.keepOff:SetScript("OnClick", function()
                 if row._spellID and Model.ToggleCustomContainerKeepSpell(unit, index, row._spellID, false) then
                     Apply("AURAS3_CUSTOM_REMINDER_KEEP", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             AddTooltip(row.keepOn, "Always show",
@@ -630,7 +611,7 @@ local function BuildCustomWhitelistTool(C)
             row.remove:SetScript("OnClick", function()
                 if row._spellID and Model.RemoveCustomContainerSpell(unit, index, row._spellID) then
                     Apply("AURAS3_CUSTOM_WHITELIST_REMOVE", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             AddTooltip(row.remove, "Remove from whitelist", removeBody)
@@ -639,7 +620,7 @@ local function BuildCustomWhitelistTool(C)
                 if Model.MoveCustomContainerSpellToIndex(unit, index, spellID, target) then
                     Model.EnableCustomContainerSpellPriority(unit, index)
                     Apply("AURAS3_CUSTOM_PRIORITY", true)
-                    Rebuild(ctx)
+                    Repaint(ctx)
                 end
             end)
             rows[i] = row
@@ -647,15 +628,11 @@ local function BuildCustomWhitelistTool(C)
         end
         refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
-            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local query, visible = FilterSpellEntries(entries, searchValue)
             local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
-            local visible = {}
-            for i = 1, #entries do
-                local entry = entries[i]
-                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
-                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-            end
-            T.SetTranslatedText(status, tostring("Tracked ") .. auraPlural .. " (" .. tostring(#entries) .. " of 40)"
+            -- Whole sentence per lane: the noun cannot be joined to a fragment, so each
+            -- language orders and inflects the label itself.
+            T.SetTranslatedText(status, M.Format(isDebuff and "Tracked debuffs (%d of 40)" or "Tracked buffs (%d of 40)", #entries)
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
                     or customPriority and Tr(" - dynamic priority active")
                     or Tr(" - drag to set Custom Priority"))
@@ -727,7 +704,7 @@ local function BuildCustomWhitelistTool(C)
 end
 
 local function BuildCustomFiltersTool(C)
-    local ctx, b, tool, isPlayerDefensives, isTargetDots, containerLabel, item, Apply, Grid = C.ctx, C.b, C.tool, C.isPlayerDefensives, C.isTargetDots, C.containerLabel, C.item, C.Apply, C.Grid
+    local ctx, b, tool, isPlayerDefensives, isTargetDots, item, Apply, Grid = C.ctx, C.b, C.tool, C.isPlayerDefensives, C.isTargetDots, C.item, C.Apply, C.Grid
     local WriteMaxDuration = function(value)
 item.filters.maxDuration = Round(min(180, max(0, tonumber(value) or 0)))
                 Apply("AURAS3_CUSTOM_MAX_DURATION", true)
@@ -735,7 +712,7 @@ end
 
     if tool == "filters" then
         if isPlayerDefensives or isTargetDots then
-            local section = b:Section(containerLabel .. " Filters", 160)
+            local section = b:Section(M.Format("%s Filters", ContainerTitle(C)), 160, TRANSLATED_TITLE)
             local w = section._msuf2Width or b.width or 720
             local inner = w - 48
             local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24, -40, inner,
@@ -763,13 +740,14 @@ end
             { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
             { "Important", "onlyImportant" }, { "Crowd control", "crowdControl" },
         } or {
-            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only",
+                "includeNameplateOnly" },
             { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
             { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
             { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
         }
         local optionRows = max(1, ceil(#specs / 4))
-        local section = b:Section(containerLabel .. " Filters", 160 + optionRows * 32)
+        local section = b:Section(M.Format("%s Filters", ContainerTitle(C)), 160 + optionRows * 32, TRANSLATED_TITLE)
         local w = section._msuf2Width or b.width or 720
         local colW, gap = Grid(w, 4)
         local controls = {}
@@ -817,10 +795,10 @@ end
 end
 
 local function BuildCustomLayoutTool(C)
-    local ctx, b, unit, tool, containerLabel, item, Apply, Grid = C.ctx, C.b, C.unit, C.tool, C.containerLabel, C.item, C.Apply, C.Grid
+    local ctx, b, unit, tool, item, Apply, Grid = C.ctx, C.b, C.unit, C.tool, C.item, C.Apply, C.Grid
     if tool == "layout" then
-        local layoutTitle = M.Format("%s Layout", Tr(containerLabel))
-        local section = b:Section(layoutTitle, 190)
+        local layoutTitle = M.Format("%s Layout", ContainerTitle(C))
+        local section = b:Section(layoutTitle, 190, TRANSLATED_TITLE)
         M.AttachAuraFontsAndColors(section, layoutTitle, unit)
         local w = section._msuf2Width or b.width or 720
         local col3, gap3 = Grid(w, 3)
@@ -980,7 +958,7 @@ local function BuildCustomAppearancePandemic(C, StyleGrid)
 end
 
 local function BuildCustomAppearanceTool(C)
-    local ctx, b, unit, index, tool, isTargetDots, containerLabel, styleItem, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.tool, C.isTargetDots, C.containerLabel, C.styleItem, C.Apply, C.Grid
+    local ctx, b, unit, index, tool, isTargetDots, styleItem, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.tool, C.isTargetDots, C.styleItem, C.Apply, C.Grid
     if tool == "appearance" then
         -- Every Custom container, including Player Defensives and Dots on
         -- Target, binds visual controls to this UnitFrame-owned record.
@@ -1061,7 +1039,7 @@ local function BuildCustomAppearanceTool(C)
         local cooldown = b:CollapsibleSection(CustomStyleSectionId(index, "cooldown"), "Cooldown Text", 184, true)
         if W.AttachContextColorShortcut then
             W.AttachContextColorShortcut(cooldown, {
-                title = containerLabel .. " Cooldown Text Settings",
+                title = M.Format("%s Cooldown Text Settings", ContainerTitle(C)),
                 historyLabel = "Custom aura cooldown text color",
                 historySource = "menu:custom-auras-cooldown-text-color",
                 scopeTag = "Shared",
@@ -1071,7 +1049,7 @@ local function BuildCustomAppearanceTool(C)
                     unit = unit,
                     kind = "aura",
                     colorReferences = AURA_COOLDOWN_COLOR_REFERENCES,
-                    colorTitle = containerLabel .. " Cooldown Colors",
+                    colorTitle = M.Format("%s Cooldown Colors", ContainerTitle(C)),
                     subtitle = "Custom aura text follows the shared Fonts settings.",
                     capabilities = {
                         opacity = false, baseline = false,
@@ -1230,7 +1208,8 @@ local function BuildCustomEffectTool(C)
         end
         BindSlider(ctx, section, "Opacity", 24, -96, 5, 100, 5, col3,
             function() return floor(((item.frame.color[4] or 0.8) * 100) + 0.5) end,
-            function(value) item.frame.color[4] = (tonumber(value) or 80) / 100; item.frame.tintAlpha = item.frame.color[4]; Apply("AURAS3_CUSTOM_EFFECT_ALPHA") end,
+            function(value) item.frame.color[4] = (tonumber(value)
+                or 80) / 100; item.frame.tintAlpha = item.frame.color[4]; Apply("AURAS3_CUSTOM_EFFECT_ALPHA") end,
             AuraControlMeta(ctx, "custom-container.effect.opacity"))
         BindSlider(ctx, section, "Layer (0-30)", 24 + col3 + gap, -96, 0, 30, 1, col3,
             function() return tonumber(item.frame.layer) or 0 end,
@@ -1401,17 +1380,23 @@ local function BuildCustomDefensivesSetup(C)
         RegisterAuraControl(ctx, reset, "Reset", "button", customActionPath .. ".setup.reset", "action", {
             actionKey = "reset_aura_custom_container", actionFixedArgs = { scope = unit, index = index },
         })
-        local predefined = type(Model.PlayerDefensivePreviewEntries) == "function"
-            and #Model.PlayerDefensivePreviewEntries() or 0
-        local predefinedTotal = type(Model.PlayerDefensiveClassEntries) == "function"
-            and #Model.PlayerDefensiveClassEntries(true) or predefined
-        local custom = #Model.CustomContainerSpellEntries(unit, index)
+        -- The counts change in the Defensives tool. Its view stays cached while
+        -- this one is shown, so the line repaints instead of keeping build data.
+        local function SourceText()
+            local predefined = type(Model.PlayerDefensivePreviewEntries) == "function"
+                and #Model.PlayerDefensivePreviewEntries() or 0
+            local predefinedTotal = type(Model.PlayerDefensiveClassEntries) == "function"
+                and #Model.PlayerDefensiveClassEntries(true) or predefined
+            local custom = #Model.CustomContainerSpellEntries(unit, index)
+            return M.Format("Source: player buffs · %d / %d predefined enabled · %d custom · passive talent procs included",
+                predefined, predefinedTotal, custom)
+        end
         -- The 12.1 native aura buttons render their icon unmaskable; shaping
         -- was attempted exhaustively and reverted (2026-07-31). Keep users
         -- informed instead of letting them hunt for a shape option.
         W.Text(section, "Aura Style > Defensive Buffs can follow the frame portrait shape.", 24, -312, inner, T.colors.muted)
-        W.Text(section, M.Format("Source: player buffs · %d / %d predefined enabled · %d custom · passive talent procs included",
-        predefined, predefinedTotal, custom), 24, -344, inner, T.colors.muted)
+        local source = W.Text(section, SourceText(), 24, -344, inner, T.colors.muted)
+        M.TrackRefresh(ctx, function() source:SetText(SourceText()) end)
         return true
     end
 end
@@ -1479,18 +1464,30 @@ local function BuildCustomDotsSetup(C)
         RegisterAuraControl(ctx, reset, "Reset", "button", customActionPath .. ".setup.reset", "action", {
             actionKey = "reset_aura_custom_container", actionFixedArgs = { scope = unit, index = index },
         })
-        local count = #Model.CustomContainerSpellEntries(unit, index)
-        W.Text(section, M.Format("Source: this UnitFrame · Ownership: only mine · Harmful DoTs only · %d selected", count), 24, -324, inner, T.colors.muted)
-        W.Text(section, "Display: " .. (item.portraitIcon == true and "portrait position" or "normal DoT lane"), 24, -356, inner, T.colors.muted)
+        -- The DoT list changes in the Dots tool, whose view stays cached while
+        -- this one is shown: both lines repaint from the saved data.
+        local function SourceText()
+            return M.Format("Source: this UnitFrame · Ownership: only mine · Harmful DoTs only · %d selected",
+                #Model.CustomContainerSpellEntries(unit, index))
+        end
+        local function DisplayText()
+            return item.portraitIcon == true and "Display: portrait position" or "Display: normal DoT lane"
+        end
+        local source = W.Text(section, SourceText(), 24, -324, inner, T.colors.muted)
+        local display = W.Text(section, DisplayText(), 24, -356, inner, T.colors.muted)
+        M.TrackRefresh(ctx, function()
+            source:SetText(SourceText())
+            display:SetText(DisplayText())
+        end)
         return true
     end
 end
 
 local function BuildCustomContainerSetup(C)
-    local ctx, b, unit, index, customActionPath, containerLabel, item, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.customActionPath, C.containerLabel, C.item, C.Apply, C.Grid
+    local ctx, b, unit, index, customActionPath, item, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.customActionPath, C.item, C.Apply, C.Grid
     local setupW = b.width or 720
     local compactSetup = setupW < 680
-    local section = b:Section(containerLabel .. " Setup", compactSetup and 262 or 210)
+    local section = b:Section(M.Format("%s Setup", ContainerTitle(C)), compactSetup and 262 or 210, TRANSLATED_TITLE)
     local w = section._msuf2Width or setupW
     local inner = w - 48
     local enabled = BindSwitch(ctx, section, "Enabled", 24, compactSetup and -52 or -62, 106,
@@ -1515,9 +1512,19 @@ local function BuildCustomContainerSetup(C)
         or max(150, min(max(170, floor(inner * 0.18)), fieldSpace - 200))
     local nameW = compactSetup and max(120, fieldSpace - typeW)
         or max(120, min(max(260, floor(inner * 0.42)), fieldSpace - typeW))
+    -- The model stores the factory name in English ("Custom N"). It is shown
+    -- translated, and the shown text coming back unchanged keeps that saved name.
+    local factoryName = "Custom " .. tostring(index)
+    local shownFactoryName = M.Format("Custom %d", index)
     BindTextInput(ctx, section, "Container name", fieldX, fieldY, nameW,
-        function() return item.name or ("Custom " .. tostring(index)) end,
-        function(value) item.name = value ~= "" and value or ("Custom " .. tostring(index)); Apply("AURAS3_CUSTOM_CONTAINER_NAME") end,
+        function()
+            local name = item.name or factoryName
+            return name == factoryName and shownFactoryName or name
+        end,
+        function(value)
+            item.name = (value == "" or value == shownFactoryName) and factoryName or value
+            Apply("AURAS3_CUSTOM_CONTAINER_NAME")
+        end,
         false, AuraControlMeta(ctx, "custom-container.setup.name"))
     BindDropdown(ctx, section, "Aura type", fieldX + nameW + fieldGap, fieldY, CUSTOM_AURA_TYPES, typeW,
         function() return item.auraType == "DEBUFF" and "DEBUFF" or "BUFF" end,
@@ -1541,17 +1548,22 @@ local function BuildCustomContainerSetup(C)
         function(value)
             item.placed.reminderEnabled = value == "reminder"
             Apply("AURAS3_CUSTOM_REMINDER", true)
-            Rebuild(ctx)
+            Repaint(ctx)
         end,
         AuraControlMeta(ctx, "custom-container.reminder.enabled"))
     local modeNote = W.Text(section, "", 24, modeY - 44, inner, T.colors.muted)
-    local count = #Model.CustomContainerSpellEntries(unit, index)
-    W.Text(section, count == 1 and "1 whitelisted spell · style remains live in Menu Preview and Edit Mode."
-        or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count), 24, modeY - 66, inner, T.colors.muted)
+    -- The Whitelist tool changes the count while this view stays cached.
+    local function CountText()
+        local count = #Model.CustomContainerSpellEntries(unit, index)
+        return count == 1 and "1 whitelisted spell · style remains live in Menu Preview and Edit Mode."
+            or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count)
+    end
+    local countNote = W.Text(section, CountText(), 24, modeY - 66, inner, T.colors.muted)
     M.TrackRefresh(ctx, function()
         modeNote:SetText(item.placed.reminderEnabled == true
             and "Every whitelisted entry keeps its own place. A dimmed icon means that entry is missing."
             or "Only auras that are currently active are shown, packed together.")
+        countNote:SetText(CountText())
     end)
 
     -- Buff Reminder. Exact Spell ID whitelists are the only aura source that

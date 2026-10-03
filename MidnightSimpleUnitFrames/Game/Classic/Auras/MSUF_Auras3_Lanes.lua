@@ -14,7 +14,8 @@ local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 local A3 = MSUF.MSUF_Auras3
 local Backend = type(A3) == "table" and A3._ClassicBackend
-if not Backend or Backend.Lanes then return end
+assert(Backend, "Classic aura lanes require Game/Classic/Auras/MSUF_Auras3_Buttons.lua")
+if Backend.Lanes then return end
 local Compile = A3._ClassicCompile
 local Buttons, Filters, FrameVisuals = Backend.Buttons, Backend.Filters, Backend.FrameVisuals
 local Lanes = {}
@@ -44,6 +45,7 @@ local HideTrailingButtons = Buttons.HideTrailingButtons
 local UpdateButton = Buttons.UpdateButton
 local BuildButtonUpdater = Buttons.BuildButtonUpdater
 local ProcessData = Filters.ProcessData
+local SourceMemo = Filters.SourceMemo
 local ShouldShowAura = Filters.ShouldShowAura
 local DataMatchesLane = Filters.DataMatchesLane
 local ResetLaneVisualCache = FrameVisuals.ResetLaneVisualCache
@@ -256,7 +258,12 @@ local function AddAuraToLane(lane, unit, data, fromLaneScan)
     local auraInstanceID = data.auraInstanceID
     local isNew = lane.all[auraInstanceID] == nil
     lane.all[auraInstanceID] = data
-    if isNew then
+    -- Arrival order is kept for the natural-order render alone, which also
+    -- compacts it (RenderLaneNatural). A sorted lane rebuilds its order from
+    -- lane.active on every render, so an id appended there was never read or
+    -- dropped again and the list grew with every delta-added aura until the
+    -- next full scan.
+    if isNew and lane.config.naturalOrder == true then
         local n = (lane.orderedCount or 0) + 1
         lane.ordered[n] = auraInstanceID
         lane.orderedCount = n
@@ -391,6 +398,8 @@ end
 local function FullScanLane(lane, unit, renderInline)
     local cfg = lane.config
     if not (cfg and cfg.enabled) then return false end
+    -- One scan shares the source-is-player answers (Filters.ProcessData).
+    SourceMemo.serial = SourceMemo.serial + 1
 
     local inlineRender = renderInline == true
         and cfg.naturalOrder == true

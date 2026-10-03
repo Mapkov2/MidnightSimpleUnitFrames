@@ -42,8 +42,10 @@ local TEXT_SLOT_SIDE_SET = { Left = true, Center = true, Right = true }
 local DIRECT_TEXT_GROUP_ORDER = { "name", "hp", "power" }
 local DIRECT_TEXT_GROUPS = {
     name = { single = true, basePrefix = "name", baseAliasPrefix = "nameText", directPrefix = "directName", defaultX = 4, defaultY = -4 },
-    hp = { basePrefix = "hp", baseAliasPrefix = "hpText", directPrefix = "directHealth", slotPrefix = "hpText", legacySlotPrefix = "hp", defaultX = -4, defaultY = -4 },
-    power = { basePrefix = "power", baseAliasPrefix = "powerText", directPrefix = "directPower", slotPrefix = "powerText", legacySlotPrefix = "power", defaultX = -4, defaultY = 4 },
+    hp = { basePrefix = "hp", baseAliasPrefix = "hpText", directPrefix = "directHealth", slotPrefix = "hpText", legacySlotPrefix = "hp",
+        defaultX = -4, defaultY = -4 },
+    power = { basePrefix = "power", baseAliasPrefix = "powerText", directPrefix = "directPower", slotPrefix = "powerText", legacySlotPrefix = "power",
+        defaultX = -4, defaultY = 4 },
 }
 
 local function ProfileSystemNeedsInit()
@@ -184,12 +186,14 @@ function M.SyncDirectPowerTextOffsets(conf, changedKey, changedValue)
     return SyncDirectTextGroupOffsets(conf, "power", changedKey, changedValue)
 end
 local IsConfigCombatLocked = M.IsConfigCombatLocked
-function M.IsConfigCombatLocked()
-    return IsConfigCombatLocked()
+function M.IsConfigCombatLocked(event)
+    return IsConfigCombatLocked(event)
 end
 local ShowConfigCombatLockMessage = M.ShowConfigCombatLockMessage
-function M.BlockCombatAction()
-    if not IsConfigCombatLocked() then return false end
+--- A combat event handler passes its event (Kernel InCombat(event)): the
+--- refusal then holds on the PLAYER_REGEN_DISABLED frame as well.
+function M.BlockCombatAction(event)
+    if not IsConfigCombatLocked(event) then return false end
     ShowConfigCombatLockMessage()
     return true
 end

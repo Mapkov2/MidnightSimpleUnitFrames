@@ -33,11 +33,16 @@ local registerAttempted = false
 local sessionSent = false
 local pendingAfterCombat = false
 
-local function Print(msg)
+--- Chat line; the sentence is translated and formatted after, the coloured tag
+--- and the commands to type are not part of it.
+local CMD_ON, CMD_OFF = "|cffc0caf5/msuf analytics on|r", "|cffc0caf5/msuf analytics off|r"
+local CMD_STATUS = "|cffc0caf5/msuf analytics status|r"
+local function Print(text, ...)
+    local line = "|cff7aa2f7MSUF|r: " .. string.format(MSUF.Translate(text), ...)
     if _G.DEFAULT_CHAT_FRAME and _G.DEFAULT_CHAT_FRAME.AddMessage then
-        _G.DEFAULT_CHAT_FRAME:AddMessage("|cff7aa2f7MSUF|r: " .. tostring(msg))
+        _G.DEFAULT_CHAT_FRAME:AddMessage(line)
     elseif _G.print then
-        _G.print("|cff7aa2f7MSUF|r: " .. tostring(msg))
+        _G.print(line)
     end
 end
 
@@ -343,22 +348,22 @@ function Analytics.SetEnabled(enabled, quiet)
         end
         pendingAfterCombat = false
         if not quiet then
-            Print("Wago Analytics disabled. Use |cffc0caf5/msuf analytics on|r to enable it again.")
+            Print("Wago Analytics disabled. Use %s to enable it again.", CMD_ON)
         end
         return
     end
 
     if not quiet then
-        Print("Wago Analytics enabled. Use |cffc0caf5/msuf analytics off|r to disable it.")
+        Print("Wago Analytics enabled. Use %s to disable it.", CMD_OFF)
     end
     FlushSession("slash")
 end
 
 function Analytics.PrintStatus()
     if IsEnabled() then
-        Print("Wago Analytics is enabled. Use |cffc0caf5/msuf analytics off|r to disable it.")
+        Print("Wago Analytics is enabled. Use %s to disable it.", CMD_OFF)
     else
-        Print("Wago Analytics is disabled. Use |cffc0caf5/msuf analytics on|r to enable it.")
+        Print("Wago Analytics is disabled. Use %s to enable it.", CMD_ON)
     end
 end
 
@@ -375,7 +380,7 @@ function Analytics.HandleSlash(rest)
     elseif cmd == "status" or cmd == "" then
         Analytics.PrintStatus()
     else
-        Print("Usage: |cffc0caf5/msuf analytics off|r, |cffc0caf5/msuf analytics on|r, |cffc0caf5/msuf analytics status|r")
+        Print("Usage: %s, %s, %s", CMD_OFF, CMD_ON, CMD_STATUS)
     end
 end
 

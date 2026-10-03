@@ -13,7 +13,6 @@ local UNIT_CONFIG = {
         y = "castbarPlayerOffsetY",
         dx = 0,
         dy = 5,
-        reanchor = "MSUF_ReanchorPlayerCastBar",
         test = "MSUF_SetPlayerCastbarTestMode",
     },
     target = {
@@ -23,7 +22,6 @@ local UNIT_CONFIG = {
         y = "castbarTargetOffsetY",
         dx = 65,
         dy = -15,
-        reanchor = "MSUF_ReanchorTargetCastBar",
         test = "MSUF_SetTargetCastbarTestMode",
     },
     focus = {
@@ -35,7 +33,6 @@ local UNIT_CONFIG = {
         fallbackY = "castbarTargetOffsetY",
         dx = 65,
         dy = -15,
-        reanchor = "MSUF_ReanchorFocusCastBar",
         test = "MSUF_SetFocusCastbarTestMode",
     },
     boss = {
@@ -45,7 +42,6 @@ local UNIT_CONFIG = {
         y = "bossCastbarOffsetY",
         dx = 0,
         dy = 0,
-        reanchor = "MSUF_ReanchorBossCastBar",
         test = "MSUF_SetBossCastbarTestMode",
     },
     arena = {
@@ -55,7 +51,6 @@ local UNIT_CONFIG = {
         y = "arenaCastbarOffsetY",
         dx = 0,
         dy = 0,
-        reanchor = "MSUF_ReanchorArenaCastBar",
         test = "MSUF_SetArenaCastbarTestMode",
     },
 }
@@ -83,43 +78,11 @@ local function OffsetY(general, config)
         or 0
 end
 
+--- Castbars/MSUF_Castbars_Core.lua loads before this file in every TOC and
+--- owns the apply and sync (reanchor, visuals, edit info, popup); the per-step
+--- fallback that stood here never ran. Late-bound: the menu preview wraps it.
 local function ApplyUnitAndSync(unit)
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
-        return
-    end
-
-    local config = UNIT_CONFIG[unit]
-    local reanchor = config and config.reanchor and _G[config.reanchor]
-
-    if type(reanchor) == "function" then
-        reanchor()
-    end
-
-    local refreshed = false
-    if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        refreshed = true
-    elseif type(MSUF_UpdateCastbarVisuals) == "function" then
-        MSUF_UpdateCastbarVisuals(unit)
-        refreshed = true
-    end
-
-    if not refreshed and unit == "boss" and not InCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
-        _G.MSUF_UpdateBossCastbarPreview()
-    end
-
-    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then
-        _G.MSUF_PositionCastbarPreviewUnit(unit)
-    end
-
-    if type(MSUF_UpdateCastbarEditInfo) == "function" then
-        MSUF_UpdateCastbarEditInfo(unit)
-    end
-
-    if type(MSUF_SyncCastbarPositionPopup) == "function" then
-        MSUF_SyncCastbarPositionPopup(unit)
-    end
+    _G.MSUF_ApplyCastbarUnitAndSync(unit)
 end
 
 local function PositionPreviewOnly(unit)
@@ -136,23 +99,6 @@ local function ThrottledApplyUnitAndSync(frame, unit, elapsed)
     frame._msufPreviewApplyAcc = 0
     ApplyUnitAndSync(unit)
     return true
-end
-
-local function ClampBossOffsets(general, config)
-    if type(MSUF_ClampToSlider) ~= "function" then
-        return
-    end
-
-    local xSlider = _G.MSUF_CastbarBossXOffsetSlider
-    local ySlider = _G.MSUF_CastbarBossYOffsetSlider
-
-    if xSlider then
-        general[config.x] = MSUF_ClampToSlider(xSlider, tonumber(general[config.x]) or 0)
-    end
-
-    if ySlider then
-        general[config.y] = MSUF_ClampToSlider(ySlider, tonumber(general[config.y]) or 0)
-    end
 end
 
 local function PulsePreview(unit)
@@ -223,16 +169,10 @@ local function RegisterPreviewNudgeTarget(frame, unit, config)
             end
 
             local general = GeneralDB()
-            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-                _G.MSUF_EM_UndoBeforeChange("castbar", unit, true)
-            end
+            _G.MSUF_EM_UndoBeforeChange("castbar", unit, true)
 
             general[config.x] = Round(OffsetX(general, config) + (deltaX or 0))
             general[config.y] = Round(OffsetY(general, config) + (deltaY or 0))
-
-            if unit == "boss" then
-                ClampBossOffsets(general, config)
-            end
 
             ApplyUnitAndSync(unit)
         end,
@@ -251,19 +191,76 @@ local function UsesWidthSource(general, unit)
     return widthSource == "unitframe" or widthSource == "essential" or widthSource == "utility"
 end
 
-local function SetupCastbarPreviewEditHandlers(frame, unit)
-    if not frame or frame.MSUF_PreviewEditHandlersSetup then
-        return
+--- One preview press's drag follow (a new closure per press, as before):
+--- move or size the bar's settings with the cursor, snapped in Edit Mode.
+local function PreviewDragUpdate(unit, config)
+    return function(dragFrame, elapsed)
+        if not dragFrame.isDragging then
+            dragFrame:SetScript("OnUpdate", nil)
+            return
+        end
+
+        local scale = UIParent:GetEffectiveScale() or 1
+        local currentCursorX, currentCursorY = GetCursorPosition()
+        local deltaX = currentCursorX / scale - (dragFrame.dragStartCursorX or currentCursorX / scale)
+        local deltaY = currentCursorY / scale - (dragFrame.dragStartCursorY or currentCursorY / scale)
+
+        if not dragFrame.dragMoved and math.abs(deltaX) + math.abs(deltaY) < 6 then
+            return
+        end
+
+        if not dragFrame.dragMoved then
+            dragFrame.dragMoved = true
+
+            dragFrame._msufCastbarHistoryDrag = _G.MSUF_EM_UndoBeginChange("castbar", unit, "Move") == true
+        end
+
+        local liveGeneral = GeneralDB()
+        if dragFrame.dragMode == "SIZE" then
+            if not UsesWidthSource(liveGeneral, unit) then
+                liveGeneral[config.w] = Round(math.max(50, (dragFrame.dragStartWidth or 250) + deltaX))
+            end
+
+            liveGeneral[config.h] = Round(math.max(8, (dragFrame.dragStartHeight or 18) + deltaY))
+        else
+            local snappedDeltaX = deltaX
+            local snappedDeltaY = deltaY
+            local snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+
+            if snap and snap.IsEnabled and snap.IsEnabled() and snap.Apply then
+                local snappedX, snappedY = snap.Apply(
+                    (dragFrame._snapStartCX or 0) + deltaX,
+                    (dragFrame._snapStartCY or 0) + deltaY,
+                    dragFrame._snapHW or 0,
+                    dragFrame._snapHH or 0,
+                    "castbar_" .. unit
+                )
+
+                snappedDeltaX = snappedX - (dragFrame._snapStartCX or 0)
+                snappedDeltaY = snappedY - (dragFrame._snapStartCY or 0)
+            end
+
+            liveGeneral[config.x] = Round((dragFrame.dragStartOffsetX or 0) + snappedDeltaX)
+            liveGeneral[config.y] = Round((dragFrame.dragStartOffsetY or 0) + snappedDeltaY)
+        end
+
+        if dragFrame.dragMode == "MOVE" and PositionPreviewOnly(unit) then
+            dragFrame._msufPreviewApplyAcc = CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL
+            dragFrame._msufPopupSyncAcc = (tonumber(dragFrame._msufPopupSyncAcc) or 0) + (tonumber(elapsed) or 0)
+            if dragFrame._msufPopupSyncAcc >= CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL then
+                dragFrame._msufPopupSyncAcc = 0
+                MSUF_SyncCastbarPositionPopup(unit)
+            end
+        else
+            ThrottledApplyUnitAndSync(dragFrame, unit, elapsed)
+        end
     end
+end
 
-    local config = UNIT_CONFIG[unit] or UNIT_CONFIG.player
-
-    frame.MSUF_PreviewEditHandlersSetup = true
-    frame:SetClampedToScreen(true)
-    frame:SetFrameStrata("DIALOG")
-    frame:EnableMouse(true)
-
-    frame:SetScript("OnMouseDown", function(self, button)
+--- The preview's OnMouseDown: the Edit Mode nudge target, the right-click
+--- position popup and the start of a move or size drag.
+local function PreviewMouseDown(unit, config)
+    return function(self, button)
         if _G.MSUF_UnitEditModeActive then
             RegisterPreviewNudgeTarget(self, unit, config)
         end
@@ -272,7 +269,6 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             if _G.MSUF_UnitEditModeActive
                 and not MSUF_EditModeSizing
                 and not InCombat()
-                and type(MSUF_OpenCastbarPositionPopup) == "function"
             then
                 MSUF_OpenCastbarPositionPopup(unit, self)
             end
@@ -325,80 +321,14 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
             self._snapHH = (top - bottom) * 0.5 * frameScale / uiScale
         end
 
-        self:SetScript("OnUpdate", function(dragFrame, elapsed)
-            if not dragFrame.isDragging then
-                dragFrame:SetScript("OnUpdate", nil)
-                return
-            end
+        self:SetScript("OnUpdate", PreviewDragUpdate(unit, config))
+    end
+end
 
-            local scale = UIParent:GetEffectiveScale() or 1
-            local currentCursorX, currentCursorY = GetCursorPosition()
-            local deltaX = currentCursorX / scale - (dragFrame.dragStartCursorX or currentCursorX / scale)
-            local deltaY = currentCursorY / scale - (dragFrame.dragStartCursorY or currentCursorY / scale)
-
-            if not dragFrame.dragMoved and math.abs(deltaX) + math.abs(deltaY) < 6 then
-                return
-            end
-
-            if not dragFrame.dragMoved then
-                dragFrame.dragMoved = true
-
-                if type(_G.MSUF_EM_UndoBeginChange) == "function" then
-                    dragFrame._msufCastbarHistoryDrag = _G.MSUF_EM_UndoBeginChange("castbar", unit, "Move") == true
-                elseif type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-                    _G.MSUF_EM_UndoBeforeChange("castbar", unit, false)
-                end
-            end
-
-            local liveGeneral = GeneralDB()
-            if dragFrame.dragMode == "SIZE" then
-                if not UsesWidthSource(liveGeneral, unit) then
-                    liveGeneral[config.w] = Round(math.max(50, (dragFrame.dragStartWidth or 250) + deltaX))
-                end
-
-                liveGeneral[config.h] = Round(math.max(8, (dragFrame.dragStartHeight or 18) + deltaY))
-            else
-                local snappedDeltaX = deltaX
-                local snappedDeltaY = deltaY
-                local snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
-
-                if snap and snap.IsEnabled and snap.IsEnabled() and snap.Apply then
-                    local snappedX, snappedY = snap.Apply(
-                        (dragFrame._snapStartCX or 0) + deltaX,
-                        (dragFrame._snapStartCY or 0) + deltaY,
-                        dragFrame._snapHW or 0,
-                        dragFrame._snapHH or 0,
-                        "castbar_" .. unit
-                    )
-
-                    snappedDeltaX = snappedX - (dragFrame._snapStartCX or 0)
-                    snappedDeltaY = snappedY - (dragFrame._snapStartCY or 0)
-                end
-
-                liveGeneral[config.x] = Round((dragFrame.dragStartOffsetX or 0) + snappedDeltaX)
-                liveGeneral[config.y] = Round((dragFrame.dragStartOffsetY or 0) + snappedDeltaY)
-
-                if unit == "boss" then
-                    ClampBossOffsets(liveGeneral, config)
-                end
-            end
-
-            if dragFrame.dragMode == "MOVE" and PositionPreviewOnly(unit) then
-                dragFrame._msufPreviewApplyAcc = CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL
-                if type(MSUF_SyncCastbarPositionPopup) == "function" then
-                    dragFrame._msufPopupSyncAcc = (tonumber(dragFrame._msufPopupSyncAcc) or 0) + (tonumber(elapsed) or 0)
-                    if dragFrame._msufPopupSyncAcc >= CASTBAR_PREVIEW_DRAG_APPLY_INTERVAL then
-                        dragFrame._msufPopupSyncAcc = 0
-                        MSUF_SyncCastbarPositionPopup(unit)
-                    end
-                end
-            else
-                ThrottledApplyUnitAndSync(dragFrame, unit, elapsed)
-            end
-        end)
-    end)
-
-    frame:SetScript("OnMouseUp", function(self, button)
+--- The preview's OnMouseUp: end the drag, apply it and commit its undo step;
+--- a click without a drag opens the position popup.
+local function PreviewMouseUp(unit)
+    return function(self, button)
         if button ~= "LeftButton" then
             return
         end
@@ -420,7 +350,7 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         if moved then
             ApplyUnitAndSync(unit)
         end
-        if self._msufCastbarHistoryDrag and type(_G.MSUF_EM_UndoCommitChange) == "function" then
+        if self._msufCastbarHistoryDrag then
             self._msufCastbarHistoryDrag = nil
             _G.MSUF_EM_UndoCommitChange()
         end
@@ -428,11 +358,26 @@ local function SetupCastbarPreviewEditHandlers(frame, unit)
         if not moved
             and _G.MSUF_UnitEditModeActive
             and not InCombat()
-            and type(MSUF_OpenCastbarPositionPopup) == "function"
         then
             MSUF_OpenCastbarPositionPopup(unit, self)
         end
-    end)
+    end
+end
+
+local function SetupCastbarPreviewEditHandlers(frame, unit)
+    if not frame or frame.MSUF_PreviewEditHandlersSetup then
+        return
+    end
+
+    local config = UNIT_CONFIG[unit] or UNIT_CONFIG.player
+
+    frame.MSUF_PreviewEditHandlersSetup = true
+    frame:SetClampedToScreen(true)
+    frame:SetFrameStrata("DIALOG")
+    frame:EnableMouse(true)
+
+    frame:SetScript("OnMouseDown", PreviewMouseDown(unit, config))
+    frame:SetScript("OnMouseUp", PreviewMouseUp(unit))
 end
 
 ExportPublic("MSUF_SetupCastbarPreviewEditHandlers", SetupCastbarPreviewEditHandlers)

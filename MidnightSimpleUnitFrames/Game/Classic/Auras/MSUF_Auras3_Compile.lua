@@ -58,11 +58,10 @@ end
 local BOSS_UNITS = {
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
-local MANAGED_UNITS = {
-    player = true, pet = true, target = true, focus = true,
-    boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
-    arena1 = true, arena2 = true, arena3 = true,
-}
+-- The managed units and their show flags, arena slots included (5 on TBC and
+-- Mists), come from the lane-key schema in Auras3/MSUF_Auras3_Core.lua.
+local MANAGED_UNITS = A3.LaneKeySchema.MANAGED_UNITS
+local UNIT_FLAG = A3.LaneKeySchema.UNIT_FLAG
 
 local DISPEL_POINTS = {
     { 0, "None", 0.80, 0.00, 0.00 },
@@ -74,24 +73,26 @@ local DISPEL_POINTS = {
     { 11, "Bleed", 0.80, 0.10, 0.10 },
 }
 
-local UNIT_FLAG = {
-    player = "showPlayer", pet = "showPet",
-    target = "showTarget",
-    focus = "showFocus",
-    boss1 = "showBoss",
-    boss2 = "showBoss",
-    boss3 = "showBoss",
-    boss4 = "showBoss",
-    boss5 = "showBoss",
-    arena1 = "showArena",
-    arena2 = "showArena",
-    arena3 = "showArena",
+--- Classic aura sort modes. SortMode parses the sort names the shared menu
+--- writes into these, and every lane carries one as lane.sortOrder.
+local SORT_MODE = {
+    ARRIVAL = 0,         -- aura instance ID; Reverse turns it into newest first
+    PLAYER_FIRST = 1,    -- the menu's Default: own auras, then castable ones, then ID
+    DURATION = 2,        -- longest first, own auras first on ties
+    EXPIRATION = 3,      -- soonest expiry first, own auras first on ties
+    EXPIRATION_ONLY = 4, -- soonest expiry first, then ID
+    NAME = 5,            -- by name, own auras first on ties
+    NAME_ONLY = 6,       -- by name, then ID
 }
--- TBC and Mists field five arena opponents (Game/Shared/Initialize.lua).
-for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-    MANAGED_UNITS["arena" .. i] = true
-    UNIT_FLAG["arena" .. i] = "showArena"
-end
+--- The modes whose comparators read the lane's "cast by the player" answers.
+local SORT_READS_OWNERSHIP = {
+    [SORT_MODE.PLAYER_FIRST] = true, [SORT_MODE.DURATION] = true,
+    [SORT_MODE.EXPIRATION] = true, [SORT_MODE.NAME] = true,
+}
+--- The time-keyed modes, the only ones an in-place refresh can reorder.
+local SORT_REORDERS_ON_UPDATE = {
+    [SORT_MODE.DURATION] = true, [SORT_MODE.EXPIRATION] = true, [SORT_MODE.EXPIRATION_ONLY] = true,
+}
 
 local DEFAULT_SHARED = {
     showBuffs = true,
@@ -111,7 +112,7 @@ local DEFAULT_SHARED = {
     perRow = 12,
     maxBuffs = 12,
     maxDebuffs = 12,
-    sortOrder = 1,
+    sortOrder = SORT_MODE.PLAYER_FIRST,
     growth = "RIGHT",
     rowWrap = "DOWN",
     offsetX = 0,
@@ -388,32 +389,17 @@ end
 --- slots: a Custom Priority container keeps arrival order, like INSTANCE_ID.
 local function SortMode(value, fallback)
     value = tostring(value or ""):upper():gsub("[%s%-]+", "_")
-    if value == "DEFAULT" or value == "PLAYER" then return 1 end
-    if value == "DURATION" or value == "DURATION_ONLY" or value == "BIG_DEFENSIVE" then return 2 end
-    if value == "EXPIRATION" or value == "TIME_REMAINING" or value == "TIME" then return 3 end
-    if value == "EXPIRATION_ONLY" then return 4 end
-    if value == "NAME" then return 5 end
-    if value == "NAME_ONLY" then return 6 end
-    if value == "INSTANCE_ID" or value == "CUSTOM_PRIORITY" then return 0 end
+    if value == "DEFAULT" or value == "PLAYER" then return SORT_MODE.PLAYER_FIRST end
+    if value == "DURATION" or value == "DURATION_ONLY" or value == "BIG_DEFENSIVE" then return SORT_MODE.DURATION end
+    if value == "EXPIRATION" or value == "TIME_REMAINING" or value == "TIME" then return SORT_MODE.EXPIRATION end
+    if value == "EXPIRATION_ONLY" then return SORT_MODE.EXPIRATION_ONLY end
+    if value == "NAME" then return SORT_MODE.NAME end
+    if value == "NAME_ONLY" then return SORT_MODE.NAME_ONLY end
+    if value == "INSTANCE_ID" or value == "CUSTOM_PRIORITY" then return SORT_MODE.ARRIVAL end
     return fallback
 end
 
-local function PlainNumber(value)
-    if IsSecret(value) then return nil end
-    return type(value) == "number" and value or nil
-end
-
-local function PlainString(value)
-    if IsSecret(value) then return nil end
-    return type(value) == "string" and value or nil
-end
-
-local function PlainBool(value)
-    if IsSecret(value) then return nil end
-    if value == true then return true end
-    if value == false then return false end
-    return nil
-end
+local PlainNumber, PlainString, PlainBool = Visuals.PlainNumber, Visuals.PlainString, Visuals.PlainBool
 
 local function ReadGeneralColor(key, defaultR, defaultG, defaultB)
     local general = _G.MSUF_DB and _G.MSUF_DB.general
@@ -572,10 +558,18 @@ local function ReadNumber(primary, secondary, key, defaultValue, minValue, maxVa
     return ClampNumber(v, defaultValue, minValue, maxValue)
 end
 
+--- The nine anchors the aura menu offers (AURA_ANCHORS in
+--- Auras3/MenuModel/MSUF_Auras3_Menu_Schema.lua) and Retail's runtime accepts
+--- (ReadAnchor in Auras3/Runtime/MSUF_Auras3_Runtime_ConfigValues.lua).
+local AURA_ANCHOR_OK = {
+    TOPLEFT = true, TOP = true, TOPRIGHT = true,
+    LEFT = true, CENTER = true, RIGHT = true,
+    BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+}
+
 local function ReadAnchor(primary, secondary, key, fallback)
     local value = ReadRaw(primary, secondary, key) or fallback or "TOPLEFT"
-    if value ~= "TOPLEFT" and value ~= "TOPRIGHT" and value ~= "BOTTOMLEFT"
-        and value ~= "BOTTOMRIGHT" and value ~= "CENTER" then
+    if AURA_ANCHOR_OK[value] ~= true then
         value = fallback or "TOPLEFT"
     end
     return value
@@ -770,9 +764,12 @@ end
 local function SortAurasDefault(a, b)
     local am, bm = sortOwnership[a.auraInstanceID] == true, sortOwnership[b.auraInstanceID] == true
     if am ~= bm then return am end
-    local ca = PlainBool(a.canApplyAura)
-    local cb = PlainBool(b.canApplyAura)
-    if ca ~= cb then return ca == true end
+    -- A missing or secret canApplyAura (a synthetic weapon enchant) ranks as
+    -- false. As a third class it tied with both others, which broke the strict
+    -- weak order table.sort needs.
+    local ca = PlainBool(a.canApplyAura) == true
+    local cb = PlainBool(b.canApplyAura) == true
+    if ca ~= cb then return ca end
     return AuraID(a) < AuraID(b)
 end
 
@@ -822,14 +819,14 @@ local function SortAurasNameOnly(a, b)
 end
 
 SortComparator = function(mode)
-    if mode == 1 then return SortAurasDefault end
-    if mode == 2 then return SortAurasDurationDesc end
-    if mode == 3 then return SortAurasExpiration end
-    if mode == 4 then return SortAurasExpirationOnly end
-    if mode == 5 then return SortAurasName end
-    if mode == 6 then return SortAurasNameOnly end
+    if mode == SORT_MODE.PLAYER_FIRST then return SortAurasDefault end
+    if mode == SORT_MODE.DURATION then return SortAurasDurationDesc end
+    if mode == SORT_MODE.EXPIRATION then return SortAurasExpiration end
+    if mode == SORT_MODE.EXPIRATION_ONLY then return SortAurasExpirationOnly end
+    if mode == SORT_MODE.NAME then return SortAurasName end
+    if mode == SORT_MODE.NAME_ONLY then return SortAurasNameOnly end
     -- Arrival order (instance ID); what Reverse turns into newest first.
-    if mode == 0 then return SortAurasID end
+    if mode == SORT_MODE.ARRIVAL then return SortAurasID end
     return SortAuras
 end
 
@@ -855,15 +852,15 @@ function LaneSchema.FilterTokens(lane, filter, nativePlayerFilter, bossFilter)
 end
 
 --- Sort mode (SortMode) and Reverse. Arrival order renders unsorted unless it
---- is reversed. A refresh can move an aura only in the time-keyed modes (2
---- duration, 3 expiration, 4 expiration only); every other key is fixed for
---- the aura's lifetime, and an ownership flip is caught by the update path.
+--- is reversed. A refresh can move an aura only in the time-keyed modes
+--- (SORT_REORDERS_ON_UPDATE); every other key is fixed for the aura's
+--- lifetime, and an ownership flip is caught by the update path.
 function LaneSchema.Ordering(lane, sortOrder, sortReverse)
     lane.sortOrder = sortOrder
     lane.sortComparator = SortComparator(sortOrder)
     lane.sortReverse = sortReverse == true
-    lane.naturalOrder = sortOrder == 0 and sortReverse ~= true
-    lane.reorderOnUpdate = sortOrder == 2 or sortOrder == 3 or sortOrder == 4
+    lane.naturalOrder = sortOrder == SORT_MODE.ARRIVAL and sortReverse ~= true
+    lane.reorderOnUpdate = SORT_REORDERS_ON_UPDATE[sortOrder] == true
 end
 
 --- The global text colours (Colors page): the countdown colour buckets with
@@ -1107,7 +1104,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local x = ReadNumber(layout, nil, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)
     local y = ReadNumber(layout, nil, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)
     local anchor = ReadAnchor(layout, nil, spec.anchorKey, spec.defaultAnchor)
-    local layer = ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 1, 15)
+    local layer = ReadNumber(layout, nil, spec.layerKey, spec.defaultLayer, 0, 30)
     local filters = FilterTable(filtersRoot, spec.dbKey)
     local nonPlayerFilter = kind == "debuff" and filters and filters.nonPlayer == true or false
     local explicitLaneBlacklist = type(blacklist) == "table"
@@ -1162,7 +1159,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         ReadBool(sharedLayout, nil, "useDebuffTypeBorders", false), false) or "OFF"
     local needsPlayerFlag = (filterPlan and filterPlan.needsPlayerFlag == true)
         or onlyMine == true or ownHighlight == true or (visualNeedsPlayer == true and visualDirect ~= true)
-        or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
+        or SORT_READS_OWNERSHIP[sortOrder] == true
 
     local lane = {
         kind = kind,
@@ -1285,12 +1282,8 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local growthX, growthY, xSign, ySign, verticalGrowth = GroupGrowthParts(source[spec.growthXKey], source[spec.growthYKey])
     local x = ClampNumber(source[spec.xKey], 0, -4096, 4096)
     local y = ClampNumber(source[spec.yKey], 0, -4096, 4096)
-    local anchor = source[spec.anchorKey] or spec.defaultAnchor
-    if anchor ~= "TOPLEFT" and anchor ~= "TOPRIGHT" and anchor ~= "BOTTOMLEFT"
-        and anchor ~= "BOTTOMRIGHT" and anchor ~= "CENTER" then
-        anchor = spec.defaultAnchor
-    end
-    local layer = ClampNumber(source[spec.layerKey], spec.defaultLayer, 1, 15)
+    local anchor = ReadAnchor(source, nil, spec.anchorKey, spec.defaultAnchor)
+    local layer = ClampNumber(source[spec.layerKey], spec.defaultLayer, 0, 30)
     local alpha = ClampNumber(source[spec.alphaKey], 1, 0, 1)
     local rawFilter = GroupLaneRawFilter(kind, spec, source[spec.filterKey] or spec.filter)
     local filterPlan = Features.CompileRawFilter(rawFilter, spec.harmful ~= true) or nil
@@ -1329,7 +1322,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local needsPlayerFlag = source.preferPlayer == true
         or (filterPlan and filterPlan.needsPlayerFlag == true)
         or (kind == "debuff" and visual and visual.needsPlayerFlag == true and visualDirect ~= true)
-        or sortOrder == 1 or sortOrder == 2 or sortOrder == 3 or sortOrder == 5
+        or SORT_READS_OWNERSHIP[sortOrder] == true
 
     local lane = {
         kind = kind,
@@ -1571,7 +1564,7 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
     local rawKind = tostring(kind or "buff"):lower()
     local customIndex = rawKind:match("^custom(%d)$")
     if customIndex then
-        customIndex = math_min(4, math_max(1, tonumber(customIndex) or 1))
+        customIndex = math_min(A3.CUSTOM_CONTAINER_COUNT, math_max(1, tonumber(customIndex) or 1))
         kind = "custom" .. tostring(customIndex)
     else
         kind = (rawKind == "debuff" or rawKind == "debuffs") and "debuff" or "buff"
@@ -1638,6 +1631,8 @@ A3._ClassicCompile = {
     LaneSchema = LaneSchema,
     BASE_LANE_ORDER = BASE_LANE_ORDER,
     SortMode = SortMode,
+    SORT_MODE = SORT_MODE,
+    SORT_READS_OWNERSHIP = SORT_READS_OWNERSHIP,
     BindFrameUnit = BindFrameUnit,
     ReadBlacklistHidePermanent = ReadBlacklistHidePermanent,
     AuraRuntimeCombatBlocked = AuraRuntimeCombatBlocked,

@@ -160,6 +160,7 @@ local function Start(spec)
         assert(name == "ClassPower", "unexpected module " .. tostring(name))
         module = callbacks
     end
+    assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().Install(repo, ns)
     for i = 1, #LOAD_ORDER do
         assert(loadfile(LOAD_ORDER[i]))("MSUF", ns)
     end
@@ -443,9 +444,15 @@ Case("arcane charges text shows the charge count", MISTS, function()
 end)
 
 -- Mists runes carry a type (RuneFrame_Shared.lua GetRuneType, runeColors) and
--- repaint on RUNE_TYPE_UPDATE; an explicit Runes colour still wins.
+-- repaint on RUNE_TYPE_UPDATE; an explicit Runes colour still wins. A rune
+-- changes its type only with RUNE_TYPE_UPDATE, so a RUNE_POWER_UPDATE reads no
+-- type (it read all six, 2026-10-03).
 Case("rune types colour each rune", MISTS, function()
-    local runeTypes = { 1, 1, 2, 2, 3, 3 }
+    local types, reads = { 1, 1, 2, 2, 3, 3 }, 0
+    local runeTypes = setmetatable({}, {
+        __index = function(_, rune) reads = reads + 1 return types[rune] end,
+        __newindex = function(_, rune, runeType) types[rune] = runeType end,
+    })
     local t = Start({ class = "DEATHKNIGHT", spec = 1, primary = 6, runeTypes = runeTypes })
     assert(t.CP.renderMode == t.MODE.RUNE_CD, "DK route")
     assert(Registered(t, "RUNE_TYPE_UPDATE"), "RUNE_TYPE_UPDATE is not bound for Mists runes")
@@ -459,10 +466,20 @@ Case("rune types colour each rune", MISTS, function()
         end
     end
     ExpectColors(expected, "rune types")
+    reads = 0
+    Fire(t, "RUNE_POWER_UPDATE", 3, true)
+    assert(reads == 0, "a RUNE_POWER_UPDATE read " .. reads .. " rune types (GetRuneType), budget 0")
+    ExpectColors(expected, "rune types after a rune power update")
     runeTypes[1] = 4
+    reads = 0
     Fire(t, "RUNE_TYPE_UPDATE", 1)
+    assert(reads > 0 and reads <= 6, "a RUNE_TYPE_UPDATE read " .. reads .. " rune types, budget 6")
     expected[1] = { 0.8, 0.1, 1 }
     ExpectColors(expected, "a Blood rune turned Death")
+    reads = 0
+    Fire(t, "RUNE_POWER_UPDATE", 1, true)
+    assert(reads == 0, "a RUNE_POWER_UPDATE after a type change read " .. reads .. " rune types")
+    ExpectColors(expected, "a Death rune after a rune power update")
     MSUF_DB.general.classPowerColorOverrides = { RUNES = { 0.2, 0.3, 0.4 } }
     _G.MSUF_ClassPower_InvalidateColors()
     t.FullRefresh()

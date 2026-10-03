@@ -38,6 +38,8 @@ local FillPredictionColors = UF.FillPredictionColors
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local EMPTY_EVENTS = {}
+local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
+local ABSORB_DISPLAY = GF.ABSORB_DISPLAY_MODES
 
 local function PVPIndicatorContextActive()
   return UF and type(UF.PVPIndicatorContextActive) == "function" and UF.PVPIndicatorContextActive() == true
@@ -65,10 +67,6 @@ local function CachedGroupSize()
   _groupSizeCacheAt = now
   _groupSizeCacheValue = GetNumGroupMembers and GetNumGroupMembers() or 0
   return _groupSizeCacheValue
-end
-
-function GF.InvalidateGroupSizeCache()
-  _groupSizeCacheAt = 0
 end
 
 local function DynamicAuraScale(root)
@@ -131,7 +129,15 @@ end
 --- texture resolver (Castbars/MSUF_Castbars_Core.lua). Resolved once, on first
 --- use, so a fixture that never compiles those parts need not stub them.
 local CONFIG_FILE = "UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua"
-local GetSettingsCache, ResolveTextureKeyExport
+local GetSettingsCache, ResolveTextureKeyExport, AuraFilterExport
+
+--- The group aura filter helpers: MSUF_GF_AuraFilter, owned by
+--- Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua, which loads before the
+--- group files on every client. GF carries no copy of it.
+local function AuraFilter()
+  AuraFilterExport = AuraFilterExport or MSUF.Require("MSUF_GF_AuraFilter", CONFIG_FILE)
+  return AuraFilterExport
+end
 
 local function SettingsCache()
   GetSettingsCache = GetSettingsCache or MSUF.Require("MSUF_UFCore_GetSettingsCache", CONFIG_FILE)
@@ -185,6 +191,19 @@ local function BackgroundColorMode(cache, general)
   return "custom"
 end
 
+local function ApplyFixedBarColor(out, conf, cache, general, mode)
+  if mode == "dark" then
+    local gray = Num(general and (general.darkBarGray or general.darkBgBrightness), 0.07)
+    out.r = Num(conf.gfDarkR, cache and cache.darkBarR or general and general.darkBarR or gray)
+    out.g = Num(conf.gfDarkG, cache and cache.darkBarG or general and general.darkBarG or gray)
+    out.b = Num(conf.gfDarkB, cache and cache.darkBarB or general and general.darkBarB or gray)
+  elseif mode == "unified" then
+    out.r = Num(conf.gfUnifiedR, cache and cache.unifiedBarR or general and general.unifiedBarR or 0.10)
+    out.g = Num(conf.gfUnifiedG, cache and cache.unifiedBarG or general and general.unifiedBarG or 0.60)
+    out.b = Num(conf.gfUnifiedB, cache and cache.unifiedBarB or general and general.unifiedBarB or 0.90)
+  end
+end
+
 --- Resolve the effective health-color model once per compile. Runtime visual
 --- code receives concrete mode/color fields instead of profile fallback logic.
 local function ResolveHealthVisual(conf)
@@ -221,15 +240,8 @@ local function ResolveHealthVisual(conf)
     gradientHighG = Num(cache and cache.healthGradientHighG or general and general.healthGradientHighG, 1),
     gradientHighB = Num(cache and cache.healthGradientHighB or general and general.healthGradientHighB, 0),
   }
-  if mode == "dark" then
-    local gray = Num(general and (general.darkBarGray or general.darkBgBrightness), 0.07)
-    out.r = Num(conf.gfDarkR, cache and cache.darkBarR or general and general.darkBarR or gray)
-    out.g = Num(conf.gfDarkG, cache and cache.darkBarG or general and general.darkBarG or gray)
-    out.b = Num(conf.gfDarkB, cache and cache.darkBarB or general and general.darkBarB or gray)
-  elseif mode == "unified" then
-    out.r = Num(conf.gfUnifiedR, cache and cache.unifiedBarR or general and general.unifiedBarR or 0.10)
-    out.g = Num(conf.gfUnifiedG, cache and cache.unifiedBarG or general and general.unifiedBarG or 0.60)
-    out.b = Num(conf.gfUnifiedB, cache and cache.unifiedBarB or general and general.unifiedBarB or 0.90)
+  if mode == "dark" or mode == "unified" then
+    ApplyFixedBarColor(out, conf, cache, general, mode)
   elseif mode == "gradient" or mode == "class" then
     out.r = Num(cache and cache.unifiedBarR or general and general.unifiedBarR, out.r)
     out.g = Num(cache and cache.unifiedBarG or general and general.unifiedBarG, out.g)
@@ -272,15 +284,8 @@ local function ResolvePowerVisual(conf)
     -- global bar-background runtime); keep it truthful instead of hardcoded.
     backgroundMatchHealth = (general and general.powerBarBgMatchBarColor == true) or false,
   }
-  if mode == "dark" then
-    local gray = Num(general and (general.darkBarGray or general.darkBgBrightness), 0.07)
-    out.r = Num(conf.gfDarkR, cache and cache.darkBarR or general and general.darkBarR or gray)
-    out.g = Num(conf.gfDarkG, cache and cache.darkBarG or general and general.darkBarG or gray)
-    out.b = Num(conf.gfDarkB, cache and cache.darkBarB or general and general.darkBarB or gray)
-  elseif mode == "unified" then
-    out.r = Num(conf.gfUnifiedR, cache and cache.unifiedBarR or general and general.unifiedBarR or 0.10)
-    out.g = Num(conf.gfUnifiedG, cache and cache.unifiedBarG or general and general.unifiedBarG or 0.60)
-    out.b = Num(conf.gfUnifiedB, cache and cache.unifiedBarB or general and general.unifiedBarB or 0.90)
+  if mode == "dark" or mode == "unified" then
+    ApplyFixedBarColor(out, conf, cache, general, mode)
   elseif mode == "static" then
     out.r = Num(general and general.powerBarColorR, 0.10)
     out.g = Num(general and general.powerBarColorG, 0.35)
@@ -403,16 +408,7 @@ end
 local ResolvePowerTextColorByType = Shared.ResolvePowerTextColorByType
 local ResolveTextSlotHidePercentSymbol = Shared.ResolveTextSlotHidePercentSymbol
 
-local function GetRole(unit)
-  if GF.GetUnitGroupRole then
-    return GF.GetUnitGroupRole(unit)
-  end
-  local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
-  if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
-    return role
-  end
-  return "DAMAGER"
-end
+local GetRole = GF.GetUnitGroupRole
 
 local function EffectivePowerHeight(kind, unit, role, conf)
   if conf.powerBarEnabled == false then
@@ -426,7 +422,8 @@ end
 
 local AddEvent = Shared.AddEvent
 
-local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextFlags, statusTextPlayerFlags, incomingRes, pvp, level, levelColored)
+local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextFlags,
+    statusTextPlayerFlags, incomingRes, pvp, level, levelColored)
   local events, unitlessEvents
   if level then
     events = AddEvent(events, "UNIT_LEVEL")
@@ -500,7 +497,8 @@ local GROUP_STATUS_REGIONS = {
   statusText = { "statusTextSize", 14, "statusTextAnchor", "CENTER", "statusOffsetX", 0, "statusOffsetY", 0, "statusTextLayer", 7 },
   statusGhost = { "statusGhostTextSize", 14, "statusGhostTextAnchor", "CENTER", "statusGhostOffsetX", 0, "statusGhostOffsetY", 0, "statusGhostTextLayer", 7 },
   statusAFK = { "statusAFKTextSize", 14, "statusAFKTextAnchor", "CENTER", "statusAFKOffsetX", 0, "statusAFKOffsetY", 0, "statusAFKTextLayer", 7 },
-  statusAFKTimer = { "statusAFKTimerTextSize", 10, "statusAFKTimerTextAnchor", "CENTER", "statusAFKTimerOffsetX", 0, "statusAFKTimerOffsetY", -10, "statusAFKTimerTextLayer", 7 },
+  statusAFKTimer = { "statusAFKTimerTextSize", 10, "statusAFKTimerTextAnchor", "CENTER", "statusAFKTimerOffsetX", 0, "statusAFKTimerOffsetY",
+      -10, "statusAFKTimerTextLayer", 7 },
   statusDND = { "statusDNDTextSize", 14, "statusDNDTextAnchor", "CENTER", "statusDNDOffsetX", 0, "statusDNDOffsetY", 0, "statusDNDTextLayer", 7 },
   raidGroup = { "groupNumberSize", 10, "groupNumberAnchor", "BOTTOMRIGHT", "groupNumberX", -2, "groupNumberY", 2, "groupNumberLayer", 7 },
   level = { "levelTextSize", 10, "levelTextAnchor", "BOTTOMLEFT", "levelTextX", 2, "levelTextY", 2, "levelTextLayer", 7 },
@@ -648,7 +646,7 @@ local function CompilePrediction(kind, conf, texture)
   end
   if absorbEnabled == nil then
     local absorbMode = Num(ScopedValue(conf, general, "absorbTextMode", nil), nil)
-    absorbEnabled = absorbMode == nil or absorbMode == 2 or absorbMode == 3
+    absorbEnabled = absorbMode == nil or absorbMode == ABSORB_DISPLAY.BAR or absorbMode == ABSORB_DISPLAY.LEGACY_BAR_AND_TEXT
   end
   local absorb = absorbEnabled ~= false
   local heal = GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf) or conf.healPredEnabled == true
@@ -676,9 +674,9 @@ local function CompilePrediction(kind, conf, texture)
     healTest = healTest == true,
     absorbTest = absorbTest == true,
     healAbsorbTest = healAbsorbTest == true,
-    healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", 3), 3),
-    absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", 2), 2),
-    healAbsorbAnchorMode = Num(ScopedValue(conf, general, "healAbsorbAnchorMode", 3), 3),
+    healAnchorMode = Num(ScopedValue(conf, general, "healPredAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH),
+    absorbAnchorMode = Num(ScopedValue(conf, general, "absorbAnchorMode", PREDICTION_ANCHOR.RIGHT), PREDICTION_ANCHOR.RIGHT),
+    healAbsorbAnchorMode = Num(ScopedValue(conf, general, "healAbsorbAnchorMode", PREDICTION_ANCHOR.FOLLOW_HEALTH), PREDICTION_ANCHOR.FOLLOW_HEALTH),
     healHeight = Geometry("healPredictionBarHeight", 0, 0, 100),
     healOffsetY = Geometry("healPredictionBarOffsetY", 0, -100, 100),
     absorbHeight = Geometry("absorbBarHeight", 0, 0, 100),
@@ -863,13 +861,6 @@ local function IsBlizzardAuraTypeEnabled(confOrRoot, nativeKey)
   return true
 end
 
-function GF.GetBlizzardAuraTypeFlags(conf)
-  return IsBlizzardAuraTypeEnabled(conf, "buffs"),
-    IsBlizzardAuraTypeEnabled(conf, "debuffs"),
-    IsBlizzardAuraTypeEnabled(conf, "dispels"),
-    IsBlizzardAuraTypeEnabled(conf, "externals")
-end
-
 local NATIVE_AURA_BLACKLIST_HASHES_ENABLED = true
 
 -- A missing highlight catalog must never degrade the semantic filter to plain
@@ -884,7 +875,7 @@ local function AuraBlacklistHash(kind, groupKey, group)
   -- pass only the resolved hash into the compiled spec.
   if not NATIVE_AURA_BLACKLIST_HASHES_ENABLED then return nil end
 
-  local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+  local filter = AuraFilter()
   if filter and filter.GetBlacklistHashForGroup then
     return filter.GetBlacklistHashForGroup(kind, groupKey)
   end
@@ -895,7 +886,7 @@ local function AuraBlacklistHash(kind, groupKey, group)
 end
 
 local function AuraFilterString(groupKey, group)
-  local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+  local filter = AuraFilter()
   local token = group and group.filterToken
   if groupKey == "buff" or groupKey == "trackedBuff" then
     return filter and filter.ResolveBuffFilter and filter.ResolveBuffFilter(token) or "HELPFUL"
@@ -911,7 +902,7 @@ end
 local function AuraIncludeHash(groupKey, group)
   if groupKey ~= "buff" then return nil, nil, false end
 
-  local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+  local filter = AuraFilter()
   local token = group and group.filterToken
   local isGroupHighlights
   if filter and type(filter.IsGroupHighlightsFilter) == "function" then
@@ -1023,7 +1014,7 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
     out[prefix .. "MaxDuration"] = Num(blacklist and blacklist.maxDuration, 0)
   end
   if prefix == "debuff" then
-    local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
+    local filter = AuraFilter()
     local nonPlayer = tostring(group.filterToken or ""):upper():gsub("[^A-Z0-9]", "") == "NONPLAYER"
     if filter and filter.IsNonPlayerDebuffFilter then
       nonPlayer = filter.IsNonPlayerDebuffFilter(group.filterToken) == true
@@ -1062,88 +1053,11 @@ local function SpellIndicatorModule()
   return GF.SpellIndicators or _G.MSUF_GF_SpellIndicators
 end
 
-local function AddSpellIDToHash(hash, spellID)
-  spellID = tonumber(spellID)
-  if not spellID then return 0 end
-  spellID = floor(spellID + 0.5)
-  if spellID <= 0 or hash[spellID] == true then return 0 end
-  hash[spellID] = true
-  return 1
-end
-
-local function AddSpellIDAliasesToHash(hash, si, spellID)
-  spellID = tonumber(spellID)
-  if not spellID then return 0 end
-  spellID = floor(spellID + 0.5)
-  local aliases = si and ((si.AuraSpellIDAliases and si.AuraSpellIDAliases[spellID])
-    or (si.CustomAuraAliases and si.CustomAuraAliases[spellID]))
-  if aliases == nil then return 0 end
-  if type(aliases) ~= "table" then return AddSpellIDToHash(hash, aliases) end
-  local count = 0
-  for key, value in pairs(aliases) do
-    if value == true then
-      count = count + AddSpellIDToHash(hash, key)
-    elseif value ~= false then
-      count = count + AddSpellIDToHash(hash, value)
-    end
-  end
-  return count
-end
-
-local function AddSpellIDToHashWithAliases(hash, si, spellID)
-  local count = AddSpellIDToHash(hash, spellID)
-  count = count + AddSpellIDAliasesToHash(hash, si, spellID)
-  return count
-end
-
+--- Spell indicator aura IDs come from the indicator compiler (Group_Config_Indicators,
+--- which loads first): one resolver for both. The aura compile reads an entry's
+--- `spells` string for custom entries only, as it always did.
 local function AddSpellIDsForAura(hash, si, specKey, auraName, entry)
-  if not (hash and si and specKey and auraName) then return 0 end
-  local count = 0
-  local includeAliases = type(entry) == "table" and entry.custom == true
-  local function AddResolved(spellID)
-    if includeAliases then return AddSpellIDToHashWithAliases(hash, si, spellID) end
-    return AddSpellIDToHash(hash, spellID)
-  end
-  local id = tonumber(auraName)
-  if id then count = count + AddResolved(id) end
-  if type(entry) == "table" then
-    count = count + AddResolved(entry.spellID or entry.spellId or entry.id)
-    if includeAliases and type(entry.spells) == "string" then
-      for token in entry.spells:gmatch("%d+") do
-        count = count + AddResolved(token)
-      end
-    end
-  end
-  local ids = si.SpellIDs and si.SpellIDs[specKey]
-  if ids then count = count + AddResolved(ids[auraName]) end
-  local secretIDs = si.SecretSpellIDs and si.SecretSpellIDs[specKey]
-  if secretIDs then count = count + AddResolved(secretIDs[auraName]) end
-  local altIDs = si.AltSpellIDs and si.AltSpellIDs[specKey]
-  if type(altIDs) == "table" then
-    for spellID, mappedAuraName in pairs(altIDs) do
-      if mappedAuraName == auraName then count = count + AddResolved(spellID) end
-    end
-  end
-  local linked = si.LinkedAuraRules and si.LinkedAuraRules[specKey] and si.LinkedAuraRules[specKey][auraName]
-  if type(linked) == "table" then
-    count = count + AddResolved(linked.sourceSpellID)
-    if type(linked.targetSpellIDs) == "table" then
-      for i = 1, #linked.targetSpellIDs do
-        count = count + AddResolved(linked.targetSpellIDs[i])
-      end
-    end
-  end
-  local trackable = si.TrackableAuras and si.TrackableAuras[specKey]
-  if type(trackable) == "table" then
-    for i = 1, #trackable do
-      local info = trackable[i]
-      if info and info.name == auraName then
-        count = count + AddResolved(info.spellID or info.spellId or info.id)
-        break
-      end
-    end
-  end
-  return count
+  return GF.AddSpellIndicatorAuraSpellIDs(hash, nil, si, specKey, auraName, entry, true)
 end
 
 local function CollectSpellIndicatorSpecs(siCfg, si)
@@ -1372,7 +1286,8 @@ local function CompileCoreAuras(kind, conf)
     stackY = buff.trackedStackY,
   }
   local function T(value, fallback, minValue) return ScaleAuraValue(Num(value, fallback), trackedScale, minValue) end
-  ApplyAuraLane(out, "trackedBuff", "trackedBuff", trackedBuff, AURA_LANE_DEFAULTS.trackedBuff, 8, defaultTrackedBuffSize, trackedBuffGrowthX, trackedBuffGrowthY, T, kind)
+  ApplyAuraLane(out, "trackedBuff", "trackedBuff", trackedBuff, AURA_LANE_DEFAULTS.trackedBuff, 8, defaultTrackedBuffSize, trackedBuffGrowthX,
+      trackedBuffGrowthY, T, kind)
   out.trackedBuffIncludeHash = trackedBuffIncludeHash
   out.trackedBuffTrackedCount = trackedBuffCount or 0
   ApplyAuraLane(out, "debuff", "debuff", debuff, AURA_LANE_DEFAULTS.debuff, Num(conf.auraMaxIcons, 4), defaultDebuffSize, debuffGrowthX, debuffGrowthY, S, kind)
@@ -1559,7 +1474,8 @@ local function CompileTextSpec(kind, conf, general, baselineOffset, nameTextOpti
     -- The name bar centres the name in its strip: like nameY below, the free
     -- offsets (default X 28 for the LEFT anchor) do not apply to it.
     nameX = conf.nameBarEnabled == true and 0 or Num(conf.nameOffsetX, 0),
-    nameY = conf.nameBarEnabled == true and (-math.max(0, NameBarHeight(kind, conf) - Num(conf.nameFontSize, 12)) / 2 + baselineOffset) or Num(conf.nameOffsetY, 0) + baselineOffset,
+    nameY = conf.nameBarEnabled == true and (-math.max(0, NameBarHeight(kind, conf) - Num(conf.nameFontSize,
+        12)) / 2 + baselineOffset) or Num(conf.nameOffsetY, 0) + baselineOffset,
     nameLayer = Layer(conf.nameTextLayer, 5),
     nameShorten = nameTextOptions.nameShorten == true,
     nameShortenMax = nameTextOptions.nameShortenMax,
@@ -1647,7 +1563,8 @@ local function CompileBorderSpec(kind, conf, general)
   local prioEnabled, prioOrder = CompileBorderPriority(conf, general)
   local borderThickness = GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)
   local bars = _G.MSUF_DB and _G.MSUF_DB.bars or nil
-  local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or (bars and bars.barOutlineStrata))
+  local borderStrata = NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata
+      or (bars and bars.barOutlineStrata))
   local borderLayer = Layer(conf.hlOverride == true and conf.barOutlineLayer ~= nil and conf.barOutlineLayer or (bars and bars.barOutlineLayer), 0)
   -- Optional typed outline media, same scope rails as thickness/layer. True
   -- borders use edgeFile geometry; textures use the historic stretched edges.
@@ -1717,6 +1634,22 @@ local function BumpCompiledSpecRevision(kind)
   end
 end
 
+local function ResolveFontDomain(kind)
+  local font = GF.ResolveFontPath and GF.ResolveFontPath(kind) or "Fonts\\FRIZQT__.TTF"
+  local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "OUTLINE"
+  local tr, tg, tb = 1, 1, 1
+  if GF.ResolveFontColor then
+    tr, tg, tb = GF.ResolveFontColor(kind)
+  end
+  local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
+  local baselineOffset = GF.ResolveFontBaselineOffset and GF.ResolveFontBaselineOffset(kind) or 0
+  local fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = true, 1, 1, -1
+  if GF.ResolveFontShadow then
+    fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = GF.ResolveFontShadow(kind)
+  end
+  return font, fontFlags, tr, tg, tb, textAlpha, baselineOffset, fontShadow, fontShadowAlpha, fontShadowX, fontShadowY
+end
+
 local function CompileSpecUncached(kind, frame, unit, conf)
   kind = kind or "party"
   if not conf then
@@ -1738,18 +1671,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
   local powerHeight = EffectivePowerHeight(kind, unit, role, conf)
   local texture = ResolveTexture(GF.ResolveBarTexture, kind)
   local bgTexture = ResolveTexture(GF.ResolveBarBgTexture, kind)
-  local font = GF.ResolveFontPath and GF.ResolveFontPath(kind) or "Fonts\\FRIZQT__.TTF"
-  local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "OUTLINE"
-  local tr, tg, tb = 1, 1, 1
-  if GF.ResolveFontColor then
-    tr, tg, tb = GF.ResolveFontColor(kind)
-  end
-  local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
-  local baselineOffset = GF.ResolveFontBaselineOffset and GF.ResolveFontBaselineOffset(kind) or 0
-  local fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = true, 1, 1, -1
-  if GF.ResolveFontShadow then
-    fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = GF.ResolveFontShadow(kind)
-  end
+  local font, fontFlags, tr, tg, tb, textAlpha, baselineOffset, fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = ResolveFontDomain(kind)
 
   local general = GeneralDB() or {}
   local healthVisual = ResolveHealthVisual(conf)
@@ -1857,18 +1779,7 @@ local function BumpSpecDomain(base, key)
 end
 
 local function RefreshFontDomain(kind, base, conf)
-  local font = GF.ResolveFontPath and GF.ResolveFontPath(kind) or "Fonts\\FRIZQT__.TTF"
-  local fontFlags = GF.ResolveFontFlags and GF.ResolveFontFlags(kind) or "OUTLINE"
-  local tr, tg, tb = 1, 1, 1
-  if GF.ResolveFontColor then
-    tr, tg, tb = GF.ResolveFontColor(kind)
-  end
-  local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
-  local baselineOffset = GF.ResolveFontBaselineOffset and GF.ResolveFontBaselineOffset(kind) or 0
-  local fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = true, 1, 1, -1
-  if GF.ResolveFontShadow then
-    fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = GF.ResolveFontShadow(kind)
-  end
+  local font, fontFlags, tr, tg, tb, textAlpha, baselineOffset, fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = ResolveFontDomain(kind)
   local general = GeneralDB() or {}
   local nameTextOptions = ResolveNameTextOptions(kind, conf)
   if type(nameTextOptions.nameColor) == "table" then
@@ -2089,14 +2000,6 @@ function GF.GetCompiledSpecRevision(kind)
     .. ":" .. tostring(base and base._msufTextColorRevision or 0)
     .. ":" .. tostring(base and base._msufPowerVisualRevision or 0)
     .. ":" .. tostring(base and base._msufBorderVisualRevision or 0)
-end
-
-function GF.DropCompiledSpecs(kind)
-  if kind then
-    compiledSpecCache[kind] = nil
-  else
-    wipe(compiledSpecCache)
-  end
 end
 
 local function CompiledSpecSettingsToken(kind)

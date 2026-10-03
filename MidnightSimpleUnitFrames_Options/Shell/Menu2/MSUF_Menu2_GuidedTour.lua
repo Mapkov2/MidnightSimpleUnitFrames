@@ -6,7 +6,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- It never copies settings into a second wizard and never mutates a value when
 --- the user deliberately chooses Keep unchanged or Skip.
 
-local _, MSUF = ...
+local MSUF = select(2, ...)
 MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
@@ -162,19 +162,22 @@ local STAGES = {
     {
         id = "gf_party_resource", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Build the Party resource bar",
         includeSections = { power = true }, includeLockedControls = true, controlLimit = 4,
-        controlPaths = { "group/layout/field/powerbarenabled", "group/layout/field/powerheight", "group/layout/field/powersmoothfill", "group/layout/field/powershowhealer" },
+        controlPaths = { "group/layout/field/powerbarenabled", "group/layout/field/powerheight", "group/layout/field/powersmoothfill",
+            "group/layout/field/powershowhealer" },
         impact = "Skipping keeps the current Party resource bar.",
     },
     {
         id = "gf_party_range", pageKey = "gf_layout", icon = "gf_layout", area = "groupframes", title = "Tune Party range fade",
         includeSections = { range = true }, includeLockedControls = true, controlLimit = 4,
-        controlPaths = { "group/layout/field/rangefadeenabled", "group/layout/field/rangefadelayermode", "group/layout/field/rangefadealpha", "group/layout/field/offlinealpha" },
+        controlPaths = { "group/layout/field/rangefadeenabled", "group/layout/field/rangefadelayermode", "group/layout/field/rangefadealpha",
+            "group/layout/field/offlinealpha" },
         impact = "Skipping keeps the current Party range and offline opacity.",
     },
     {
         id = "gf_party_dispel", pageKey = "gf_bars", icon = "gf_bars", area = "groupframes", title = "Build the Party dispel overlay",
         includeSections = { dispel = true }, includeLockedControls = true, controlLimit = 4,
-        controlPaths = { "group/bars/field/dispeloverlayenabled", "group/bars/field/dispeloverlaytrigger", "group/bars/field/dispeloverlaystyle", "group/bars/field/dispeloverlayalpha" },
+        controlPaths = { "group/bars/field/dispeloverlayenabled", "group/bars/field/dispeloverlaytrigger", "group/bars/field/dispeloverlaystyle",
+            "group/bars/field/dispeloverlayalpha" },
         impact = "Skipping keeps the current Party dispel overlay.",
     },
     {
@@ -186,20 +189,23 @@ local STAGES = {
     {
         id = "gf_party_indicators", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Choose Party frame indicators",
         includeSections = { indicators = true }, controlLimit = 4,
-        controlPaths = { "group/indicators/field/targetindicator", "group/indicators/field/showgroupnumber", "group/indicators/field/hlfocusenabled", "group/indicators/field/groupborderenabled" },
+        controlPaths = { "group/indicators/field/targetindicator", "group/indicators/field/showgroupnumber", "group/indicators/field/hlfocusenabled",
+            "group/indicators/field/groupborderenabled" },
         impact = "Skipping keeps the current Party frame indicators.",
     },
     {
         id = "gf_party_status", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Choose Party status icons",
         includeSections = { sicons = true }, includeEphemeralControls = true, includeLockedControls = true,
         prepareSection = "sicons", prepareTab = "basic", prepareState = "gfStatusIconTabSelection", prepareStateIndex = "party", controlLimit = 4,
-        controlPaths = { "group/indicators/status/selector", "group/indicators/status/selected/enabled", "group/indicators/status/selected/size", "group/indicators/field/usemidnighticons" },
+        controlPaths = { "group/indicators/status/selector", "group/indicators/status/selected/enabled", "group/indicators/status/selected/size",
+            "group/indicators/field/usemidnighticons" },
         impact = "Skipping keeps the current Party status icons.",
     },
     {
         id = "gf_party_corner_icons", pageKey = "gf_indicators", icon = "gf_indicators", area = "groupframes", title = "Build Party corner indicators",
         includeSections = { ci = true }, includeEphemeralControls = true, includeLockedControls = true, controlLimit = 5,
-        controlPaths = { "group/indicators/field/cienabled", "group/indicators/field/cisize", "group/indicators/corner/editor/slot", "group/indicators/corner/editor/category", "group/indicators/corner/editor/spell_ids" },
+        controlPaths = { "group/indicators/field/cienabled", "group/indicators/field/cisize", "group/indicators/corner/editor/slot",
+            "group/indicators/corner/editor/category", "group/indicators/corner/editor/spell_ids" },
         impact = "Skipping keeps Party corner assignments and custom spells unchanged.",
     },
     {
@@ -289,11 +295,15 @@ local LEGACY_STAGE_TARGET = {
     opt_castbar = "opt_bars", opt_colors = "opt_bars", auras3_styling = "power_moves",
 }
 
-local STAGE_BY_ID = {}
-for i = 1, #STAGES do
-    STAGES[i].index = i
-    STAGE_BY_ID[STAGES[i].id] = STAGES[i]
+local function IndexStagesById(stages)
+    local byId = {}
+    for i = 1, #stages do
+        stages[i].index = i
+        byId[stages[i].id] = stages[i]
+    end
+    return byId
 end
+local STAGE_BY_ID = IndexStagesById(STAGES)
 M.guidedTourStageCount = #STAGES
 
 local Tour, Invoke, CurrentStage
@@ -756,7 +766,10 @@ local function RefreshEditModeOpenCue(show)
         local function Arrow(point, rotation)
             local texture = PixelLayoutRegion(cue:CreateTexture(nil, "OVERLAY", nil, 7))
             local usedAtlas = false
-            if texture.SetAtlas then texture:SetAtlas("NPE_ArrowRight", false); usedAtlas = true end
+            if texture.SetAtlas then
+                texture:SetAtlas("NPE_ArrowRight", false)
+                usedAtlas = true
+            end
             if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
             texture:SetSize(20, 20)
             texture:SetPoint(point, cue, point, point == "LEFT" and 3 or -3, 0)
@@ -1033,7 +1046,10 @@ local function EnsureStageSurface(stage)
         end
         if not prepared then
             local state = M[stage.prepareSlotState]
-            if type(state) ~= "table" then state = {}; M[stage.prepareSlotState] = state end
+            if type(state) ~= "table" then
+                state = {}
+                M[stage.prepareSlotState] = state
+            end
             local index = stage.prepareStateIndex or "player"
             if type(state[index]) ~= "table" then state[index] = {} end
             state[index][stage.prepareTab] = stage.prepareSlot
@@ -1362,7 +1378,8 @@ local function AllStageControls(stage)
     local records = RuntimeControlRecords()
     local controls, seen = {}, {}
     for i = 1, #sections do
-        local list = SectionControls(stage.pageKey, sections[i], sections, records, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
+        local list = SectionControls(stage.pageKey, sections[i], sections, records, stage.includeEphemeralControls, stage.includeLockedControls,
+            EffectiveStageControlLimit(stage), stage.controlPaths)
         for j = 1, #list do
             local control = list[j]
             if not seen[control.id] then
@@ -1438,10 +1455,22 @@ local function EmphasizeControl(stage, section, controls, current)
         leftArrow:SetVertexColor(color[1], color[2], color[3], 1)
         rightArrow:SetVertexColor(color[1], color[2], color[3], 1)
         local top, right, bottom, left = marker._msuf2Edges[1], marker._msuf2Edges[2], marker._msuf2Edges[3], marker._msuf2Edges[4]
-        top:ClearAllPoints(); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top:SetHeight(2)
-        right:ClearAllPoints(); right:SetPoint("TOPRIGHT"); right:SetPoint("BOTTOMRIGHT"); right:SetWidth(2)
-        bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT"); bottom:SetPoint("BOTTOMRIGHT"); bottom:SetHeight(2)
-        left:ClearAllPoints(); left:SetPoint("TOPLEFT"); left:SetPoint("BOTTOMLEFT"); left:SetWidth(2)
+        top:ClearAllPoints()
+        top:SetPoint("TOPLEFT")
+        top:SetPoint("TOPRIGHT")
+        top:SetHeight(2)
+        right:ClearAllPoints()
+        right:SetPoint("TOPRIGHT")
+        right:SetPoint("BOTTOMRIGHT")
+        right:SetWidth(2)
+        bottom:ClearAllPoints()
+        bottom:SetPoint("BOTTOMLEFT")
+        bottom:SetPoint("BOTTOMRIGHT")
+        bottom:SetHeight(2)
+        left:ClearAllPoints()
+        left:SetPoint("TOPLEFT")
+        left:SetPoint("BOTTOMLEFT")
+        left:SetWidth(2)
         for i = 1, 4 do marker._msuf2Edges[i]:SetColorTexture(color[1], color[2], color[3], 0.92) end
         marker:Show()
         Runtime.controlEmphasis[#Runtime.controlEmphasis + 1] = { marker = marker }
@@ -1503,7 +1532,8 @@ end
 
 local function RecordSectionAndControls(stage, section, result, sections, records)
     records = type(records) == "table" and records or RuntimeControlRecords()
-    local controls = SectionControls(stage.pageKey, section, sections, records, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
+    local controls = SectionControls(stage.pageKey, section, sections, records, stage.includeEphemeralControls, stage.includeLockedControls,
+        EffectiveStageControlLimit(stage), stage.controlPaths)
     RecordControls(stage, section, controls, result)
     RecordSectionOnly(stage, section, result)
     return #controls
@@ -1680,7 +1710,8 @@ local function FocusCurrentSection(stage)
         WriteCursor(stage, InitialCursor(stage))
         return
     end
-    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
+    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls,
+        EffectiveStageControlLimit(stage), stage.controlPaths)
     local control, controlIndex = FindCursorControl(cursor, controls)
     if cursor.sectionId ~= section.id
         or cursor.sectionIndex ~= index
@@ -1790,7 +1821,8 @@ local function FindAvailableControl(stage, sections, startIndex, direction)
     local index = min(max(tonumber(startIndex) or (direction == 1 and 1 or #sections), 1), max(1, #sections))
     while sections[index] do
         local section = sections[index]
-        local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
+        local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls,
+            EffectiveStageControlLimit(stage), stage.controlPaths)
         if #controls > 0 then
             local controlIndex = direction == 1 and 1 or #controls
             return section, index, controls, controls[controlIndex], controlIndex
@@ -1805,7 +1837,8 @@ local function CurrentPosition(stage)
     local sections = StageSections(stage)
     local cursor = ReadCursor(stage)
     local section, index = FindCursorSection(cursor, sections)
-    local controls = section and SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths) or {}
+    local controls = section and SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls,
+        EffectiveStageControlLimit(stage), stage.controlPaths) or {}
     local control, controlIndex = FindCursorControl(cursor, controls)
     local normalized = false
     if cursor.overview ~= false or not section or not control then
@@ -1893,7 +1926,8 @@ end
 local function SetSectionCursor(stage, sections, sectionIndex, controlIndex, reason)
     local section = sections[sectionIndex]
     if not section then return false end
-    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
+    local controls = SectionControls(stage.pageKey, section, sections, nil, stage.includeEphemeralControls, stage.includeLockedControls,
+        EffectiveStageControlLimit(stage), stage.controlPaths)
     if #controls == 0 then return false end
     controlIndex = min(max(tonumber(controlIndex) or 1, 1), #controls)
     local control = controls[controlIndex]
@@ -2206,7 +2240,8 @@ local function ProgressFraction(stage, position)
         local total, completed = 0, 0
         local records = RuntimeControlRecords()
         for i = 1, #position.sections do
-            local controls = SectionControls(stage.pageKey, position.sections[i], position.sections, records, stage.includeEphemeralControls, stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
+            local controls = SectionControls(stage.pageKey, position.sections[i], position.sections, records, stage.includeEphemeralControls,
+                stage.includeLockedControls, EffectiveStageControlLimit(stage), stage.controlPaths)
             total = total + #controls
             if i < position.index then
                 completed = completed + #controls
@@ -2328,6 +2363,46 @@ local function FlashGuidedClickTargets(chrome, stage, position, context, reason)
     end
 end
 
+--- The chrome's title and section line for the current stage and position.
+local function PaintChromeHeadings(chrome, stage, position, profileMismatch, manualAway, tourProfile, activeProfile)
+    if profileMismatch then
+        M.Theme.SetTranslatedText(chrome.title, Tr("Active profile changed"))
+        M.Theme.SetTranslatedText(chrome.section, format(Tr("Tour profile: %s - Active profile: %s"), tourProfile, activeProfile))
+    elseif manualAway then
+        M.Theme.SetTranslatedText(chrome.title, format(Tr("Tour paused - %s"), PersonalizedTitle(stage)))
+        M.Theme.SetTranslatedText(chrome.section, Tr("Progress is saved while you use another page."))
+    else
+        chrome.title:SetText(PersonalizedTitle(stage))
+        if stage.special then
+            local labels = {
+                menu_basics = "QUICK START",
+                unit_intro = "PART 1 - UNITFRAMES",
+                edit_mode = "MOVE VS SIZE",
+                group_intro = "PART 2 - GROUP FRAMES",
+                group_edit_mode = "MOVE VS SIZE",
+                class_intro = "PART 3 - CLASS RESOURCES",
+                power_moves = "MSUF POWER MOVES",
+                final_review = "READY TO PLAY",
+            }
+            M.Theme.SetTranslatedText(chrome.section, Tr(labels[stage.id] or "GUIDED SETUP"))
+        elseif position.overview then
+            local controls = AllStageControls(stage, position.sections)
+            M.Theme.SetTranslatedText(chrome.section, format(Tr("MISSION BRIEF - %d checkpoints - %d settings"), #position.sections, #controls))
+        elseif position.control then
+            if ControlIsAction(position.control) then
+                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - ACTION %d/%d - %s"), position.index, #position.sections,
+                    position.controlIndex, #position.controls, Tr(position.control.label)))
+            else
+                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - SETTING %d/%d - %s"), position.index, #position.sections,
+                    position.controlIndex, #position.controls, Tr(position.control.label)))
+            end
+        elseif position.section then
+            M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - %s - %d settings"), position.index, #position.sections,
+                Tr(position.section.label), #position.controls))
+        end
+    end
+end
+
 function M.RefreshGuidedTourChrome(reason)
     local chrome = Runtime.chrome
     if not chrome then return false end
@@ -2392,42 +2467,8 @@ function M.RefreshGuidedTourChrome(reason)
     local stagePosition, stageTotal = ActiveStagePosition(stage)
     M.Theme.SetTranslatedText(chrome.step, format(Tr("MISSION %d/%d - %d XP"), stagePosition, stageTotal, TourExperience()))
 
-    if profileMismatch then
-        M.Theme.SetTranslatedText(chrome.title, Tr("Active profile changed"))
-        M.Theme.SetTranslatedText(chrome.section, format(Tr("Tour profile: %s - Active profile: %s"), tourProfile, activeProfile))
-        chrome.help:SetText(displayHelp)
-    elseif manualAway then
-        M.Theme.SetTranslatedText(chrome.title, format(Tr("Tour paused - %s"), PersonalizedTitle(stage)))
-        M.Theme.SetTranslatedText(chrome.section, Tr("Progress is saved while you use another page."))
-        chrome.help:SetText(displayHelp)
-    else
-        chrome.title:SetText(PersonalizedTitle(stage))
-        if stage.special then
-            local labels = {
-                menu_basics = "QUICK START",
-                unit_intro = "PART 1 - UNITFRAMES",
-                edit_mode = "MOVE VS SIZE",
-                group_intro = "PART 2 - GROUP FRAMES",
-                group_edit_mode = "MOVE VS SIZE",
-                class_intro = "PART 3 - CLASS RESOURCES",
-                power_moves = "MSUF POWER MOVES",
-                final_review = "READY TO PLAY",
-            }
-            M.Theme.SetTranslatedText(chrome.section, Tr(labels[stage.id] or "GUIDED SETUP"))
-        elseif position.overview then
-            local controls = AllStageControls(stage, position.sections)
-            M.Theme.SetTranslatedText(chrome.section, format(Tr("MISSION BRIEF - %d checkpoints - %d settings"), #position.sections, #controls))
-        elseif position.control then
-            if ControlIsAction(position.control) then
-                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - ACTION %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
-            else
-                M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - SETTING %d/%d - %s"), position.index, #position.sections, position.controlIndex, #position.controls, Tr(position.control.label)))
-            end
-        elseif position.section then
-            M.Theme.SetTranslatedText(chrome.section, format(Tr("CHECKPOINT %d/%d - %s - %d settings"), position.index, #position.sections, Tr(position.section.label), #position.controls))
-        end
-        chrome.help:SetText(displayHelp)
-    end
+    PaintChromeHeadings(chrome, stage, position, profileMismatch, manualAway, tourProfile, activeProfile)
+    chrome.help:SetText(displayHelp)
     local alert = profileMismatch or warning
     local controlCue = not alert and not stage.special and position.control ~= nil
     local guidedGreen = M.Theme.colors.ok or { 0.24, 0.88, 0.40, 1 }
@@ -2639,7 +2680,10 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     chrome.section:SetJustifyH("LEFT")
     local cueArrow = PixelLayoutRegion(chrome:CreateTexture(nil, "OVERLAY", nil, 4))
     local cueAtlas = false
-    if cueArrow.SetAtlas then cueArrow:SetAtlas("NPE_ArrowRight", false); cueAtlas = true end
+    if cueArrow.SetAtlas then
+        cueArrow:SetAtlas("NPE_ArrowRight", false)
+        cueAtlas = true
+    end
     if not cueAtlas then cueArrow:SetTexture(T.media.collapseArrow) end
     cueArrow:SetSize(16, 16)
     cueArrow:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
@@ -3055,11 +3099,12 @@ local function BuildEditModePage(ctx, T, W)
     if decisionCard.title then decisionCard.title:SetText("") end
     local decision
     if cooldownSupported then
+        -- W.Segment translates its label and option texts itself.
         local decisionValues = {
-            { value = "cooldown", text = Tr("Follow Blizzard's Essential Cooldowns") },
-            { value = "independent", text = Tr("Independent placement") },
+            { value = "cooldown", text = "Follow Blizzard's Essential Cooldowns" },
+            { value = "independent", text = "Independent placement" },
         }
-        decision = W.Segment(decisionCard, Tr("Should all Unitframes follow the Cooldown Manager?"), decisionValues, max(240, b.width - 32))
+        decision = W.Segment(decisionCard, "Should all Unitframes follow the Cooldown Manager?", decisionValues, max(240, b.width - 32))
         RegisterSpecialClickTargets("edit_mode", "anchor", decision.buttons)
         if type(W.MoveWidget) == "function" then W.MoveWidget(decision, decisionCard, 16, -18, max(240, b.width - 32), "LEFT") end
     end
@@ -3067,7 +3112,8 @@ local function BuildEditModePage(ctx, T, W)
     decisionCopy:SetPoint("TOPLEFT", decisionCard, "TOPLEFT", 16, cooldownSupported and -88 or -20)
     SetWrapped(decisionCopy, b.width - 32)
 
-    InfoCard(b, T, "Two different actions", "DRAG = move the whole frame. CLICK = open its size and detail popup. Arrow keys nudge; Undo stays available.", "uf_player", 82)
+    InfoCard(b, T, "Two different actions", "DRAG = move the whole frame. CLICK = open its size and detail popup. Arrow keys nudge; Undo stays available.",
+        "uf_player", 82)
 
     local action = b:Section("", 84)
     if action.title then action.title:SetText("") end
@@ -3097,7 +3143,7 @@ local function BuildEditModePage(ctx, T, W)
                 SetButtonEnabled(decision.buttons[i], true)
             end
             if decision._msuf2Title and decision._msuf2Title.SetText then
-                decision._msuf2Title:SetText(automaticProviderLabel
+                M.Theme.SetTranslatedText(decision._msuf2Title, automaticProviderLabel
                     and M.Format("Cooldown Manager anchoring (%s)", automaticProviderLabel)
                     or Tr("Should all Unitframes follow the Cooldown Manager?"))
             end
@@ -3107,13 +3153,16 @@ local function BuildEditModePage(ctx, T, W)
         elseif anchorDecision == "cooldown" then
             M.Theme.SetTranslatedText(decisionCopy, Tr("Selected: Unitframes follow Blizzard's Essential Cooldowns. If Blizzard's Essential Cooldowns move, the anchored Unitframe layout follows."))
         elseif anchorDecision == "independent" then
-            M.Theme.SetTranslatedText(decisionCopy, Tr("Selected: Unitframes use the current global/custom anchor. Moving Blizzard's Essential Cooldowns will not move them."))
+            M.Theme.SetTranslatedText(decisionCopy,
+                Tr("Selected: Unitframes use the current global/custom anchor. Moving Blizzard's Essential Cooldowns will not move them."))
         else
-            M.Theme.SetTranslatedText(decisionCopy, Tr("Required before placement. Changing this later can shift the whole layout because the saved offsets use a different anchor."))
+            M.Theme.SetTranslatedText(decisionCopy,
+                Tr("Required before placement. Changing this later can shift the whole layout because the saved offsets use a different anchor."))
         end
         if placementComplete then
             M.Theme.SetTranslatedText(stateLabel, Tr("Frame moved - placement complete"))
-            M.Theme.SetTranslatedText(stateCopy, active and Tr("Exit keeps the result. You can now continue the guide.") or Tr("The required Edit Mode movement is complete."))
+            M.Theme.SetTranslatedText(stateCopy, active and Tr("Exit keeps the result. You can now continue the guide.")
+                or Tr("The required Edit Mode movement is complete."))
         elseif movementComplete then
             M.Theme.SetTranslatedText(stateLabel, Tr("Player moved - now open its size popup"))
             M.Theme.SetTranslatedText(stateCopy, Tr("Click the highlighted Player mover. Width and Height live in that popup."))
@@ -3164,7 +3213,8 @@ local function BuildGroupEditModePage(ctx, T, W)
     Runtime.specialClickTargets = { stageId = "group_edit_mode", groups = {} }
     local b = W.PageBuilder(ctx)
     Header(b, "Move vs size", "Drag Party Frames to move the group. Click it for Width, Height, and Spacing.")
-    InfoCard(b, T, "Practice the real workflow", "DRAG the green-marked Party Frames mover once. CLICK the mover to inspect its geometry popup.", "gf_layout", 86)
+    InfoCard(b, T, "Practice the real workflow", "DRAG the green-marked Party Frames mover once. CLICK the mover to inspect its geometry popup.", "gf_layout",
+        86)
 
     local action = b:Section("", 92)
     if action.title then action.title:SetText("") end
@@ -3204,7 +3254,8 @@ local function BuildGroupEditModePage(ctx, T, W)
     end
     button:SetScript("OnClick", CreateEditModeClick(Refresh))
     RegisterSpecialClickTargets("group_edit_mode", "group_edit_mode_toggle", { button })
-    RegisterGuidedPageButton(button, "group_edit_mode_toggle", "Open or exit MSUF Edit Mode for Party Frames", "Drag moves the group container; clicking its mover opens Width, Height, and Spacing.")
+    RegisterGuidedPageButton(button, "group_edit_mode_toggle", "Open or exit MSUF Edit Mode for Party Frames",
+        "Drag moves the group container; clicking its mover opens Width, Height, and Spacing.")
     if type(ctx.AddRefresher) == "function" then ctx:AddRefresher(Refresh) end
     Refresh()
     return math.abs(b.y) + 34
@@ -3218,9 +3269,11 @@ local function BuildPowerMovesPage(ctx, T, W)
     PreviewCard(b, T, W, "Rounded frames that match, corner for corner",
         "One clean corner style with five strength levels covers Health, embedded or detached Power, frame outlines, aggro, dispel and highlight borders, on Unitframes and Group Frames alike.",
         "opt_bars", TourPreview("rounded_frames"))
-    InfoCard(b, T, "Spell Icons by spec", "Track presets or custom Spell IDs per spec, then choose icon or bar placement, cooldown behavior, and full-frame effects.", "gf_auras", 92)
+    InfoCard(b, T, "Spell Icons by spec",
+        "Track presets or custom Spell IDs per spec, then choose icon or bar placement, cooldown behavior, and full-frame effects.", "gf_auras", 92)
     InfoCard(b, T, "Party combat intelligence", "Corner Indicators and External Defensives keep critical group information compact.", "gf_indicators", 92)
-    InfoCard(b, T, "Cooldown-aware layouts", "Anchor Unitframes and Class Resources to Essential Cooldowns, or keep every frame independently placed.", "classpower", 86)
+    InfoCard(b, T, "Cooldown-aware layouts", "Anchor Unitframes and Class Resources to Essential Cooldowns, or keep every frame independently placed.",
+        "classpower", 86)
     InfoCard(b, T, "Find settings with Search", "Search Menu2 in everyday language to jump to the exact setting. Search only includes controls available in your active modules.", "home", 86)
     return math.abs(b.y) + 34
 end
@@ -3236,7 +3289,8 @@ local function BuildFinalReviewPage(ctx, T, W)
     InfoCard(b, T, quick and "You are ready to play" or "Anything else? Just ask", quick
         and "Use the Dashboard for common tasks, or type a setting or full question into Smart Search."
         or "Try searches such as 'Party frame width', 'Spell Icons', or 'Class Resources'. Search opens the matching setting in Menu2.", "home", 104)
-    InfoCard(b, T, "You trained on real settings", format(Tr("%d guided settings were changed or deliberately kept. Nothing was copied into a separate wizard."), handled), "uf_player", 82)
+    InfoCard(b, T, "You trained on real settings",
+        format(Tr("%d guided settings were changed or deliberately kept. Nothing was copied into a separate wizard."), handled), "uf_player", 82)
 
     local restorePoint = select(2, Invoke(Tour(), "GetRestorePoint"))
     if type(restorePoint) == "table" then
@@ -3254,7 +3308,8 @@ local function BuildFinalReviewPage(ctx, T, W)
             restoreAlreadyUsed and (T.colors.ok or T.colors.accent) or T.colors.muted)
         copy:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
         SetWrapped(copy, max(120, b.width - 260))
-        local button = T.Button(restore, restoreAlreadyUsed and "Starting setup restored" or "Restore starting setup", min(220, max(170, floor(b.width * 0.32))), 28)
+        local button = T.Button(restore, restoreAlreadyUsed and "Starting setup restored" or "Restore starting setup",
+            min(220, max(170, floor(b.width * 0.32))), 28)
         button:SetPoint("RIGHT", restore, "RIGHT", -16, 0)
         button._msuf2SkipHistoryCheckpoint = true
         if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
@@ -3281,7 +3336,8 @@ local function BuildFinalReviewPage(ctx, T, W)
                 SetFontColor(copy, T.colors.warning or T.colors.warn or T.colors.muted)
             end
         end)
-        RegisterGuidedPageButton(button, "restore_start", "Restore starting setup", "Restores the active profile values captured before guided setup began after a second confirmation.")
+        RegisterGuidedPageButton(button, "restore_start", "Restore starting setup",
+            "Restores the active profile values captured before guided setup began after a second confirmation.")
     end
 
     -- The optional MSUF Suite gets one line and a way in, offered only while the

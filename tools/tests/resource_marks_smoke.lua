@@ -110,6 +110,7 @@ end
 
 MSUF_CP_CONST = { CPK = { MODE = { SIGNED_CONTINUOUS = 12 } } }
 local ns = { CPBuilders = {} }
+assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().Install(root, ns)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceMarks.lua"))("MSUF", ns)
 
 local player = NewObject("Frame")
@@ -249,5 +250,121 @@ bars.resourceMarks = {}
 marks.Refresh()
 bar.hooks.OnSizeChanged(bar)
 Check(requests == 1, "a host without marks still requests rebuilds")
+
+---------------------------------------------------------------------------
+-- 6. Class resource threshold colours on the power hot path (a Classic Rogue
+--    Energy tick reaches every pip through AcceptPowerToken). Native calls per
+--    event: the class resource is read once for all pips (reader + maximum, or
+--    one percent), the pips past the current maximum are skipped, and a pip
+--    whose colour stays is not written. Before: every allocated pip read the
+--    resource, evaluated its curve and wrote its colour, 8 x 4 = 32 calls.
+---------------------------------------------------------------------------
+do
+    local natives = 0
+    local createCurve = C_CurveUtil.CreateColorCurve
+    C_CurveUtil.CreateColorCurve = function()
+        local curve = createCurve()
+        local evaluate = curve.EvaluateUnpacked
+        curve.EvaluateUnpacked = function(...) natives = natives + 1 return evaluate(...) end
+        return curve
+    end
+    local combo = { value = 4, max = 5, restricted = false }
+    local unitPowerMax, unitPowerPercent = UnitPowerMax, UnitPowerPercent
+    UnitPowerMax = function(unit, powerType)
+        natives = natives + 1
+        if powerType == 4 then return combo.max end
+        return unitPowerMax(unit, powerType)
+    end
+    UnitPowerPercent = function(unit, powerType, unmodified, curve)
+        natives = natives + 1
+        if powerType ~= 4 then return unitPowerPercent(unit, powerType, unmodified, curve) end
+        if curve then return curve:Native(combo.value / combo.max) end
+        if combo.restricted then return Secret() end
+        return combo.value / combo.max
+    end
+    local setColor = M.SetStatusBarColor
+    local pipWrites = {}
+    M.SetStatusBarColor = function(self, ...)
+        if self.pip then
+            natives = natives + 1
+            pipWrites[self.pip] = (pipWrites[self.pip] or 0) + 1
+        end
+        return setColor(self, ...)
+    end
+    local function Pips()
+        local list = {}
+        for i = 1, 8 do
+            local pip = NewObject("StatusBar", container)
+            pip.level, pip.pip, pip.color = 11, i, { 0.1 * i, 0.2, 0.3, 1 }
+            list[i] = pip
+        end
+        return list
+    end
+    local function Tick(event, token)
+        natives = 0
+        for key in pairs(pipWrites) do pipWrites[key] = nil end
+        Fire(event or "UNIT_POWER_FREQUENT", "player", token or "ENERGY")
+        return natives
+    end
+    local function IsRed(pip) return pip.color[1] == 1 and pip.color[2] == 0 and pip.color[3] == 0 end
+    local function IsBase(pip) return math.abs(pip.color[1] - 0.1 * pip.pip) < 1e-9 and pip.color[2] == 0.2 end
+    local rule = { target = "CLASS", mode = "PERCENT", value = 60, width = 2, color = { 1, 0, 0 },
+        threshold = true, direction = "ABOVE", mark = false }
+
+    -- A client-owned class resource (a reader exists): plain values.
+    local pips = Pips()
+    E.CP.bars, E.CP.currentMax = pips, 5
+    E.ClassPowerReader = function() natives = natives + 1 return combo.value end
+    E.ClassPowerEvent = function() return "UNIT_POWER_FREQUENT" end
+    E.AcceptPowerToken = function(_, token) return token == "ENERGY" end
+    bars.resourceMarks = { rule }
+    marks.Refresh()
+    for i = 1, 5 do Check(IsRed(pips[i]), "combo points above the mark must paint pip " .. i .. " red") end
+    local cost = Tick()
+    Check(cost <= 2, "an Energy tick that changes no pip costs " .. cost .. " native calls, budget 2 (one read)")
+    combo.value = 2
+    cost = Tick()
+    Check(cost <= 2 + 5, "a threshold change costs " .. cost .. " native calls, budget 7 (one read, five pips)")
+    for i = 1, 5 do Check(IsBase(pips[i]), "pip " .. i .. " did not return to its own base colour") end
+    Check(not pipWrites[6] and not pipWrites[7] and not pipWrites[8], "a pip past the current maximum was painted")
+    -- The maximum grows in combat (the rebuild waits): the next tick paints the new pips.
+    E.CP.currentMax = 7
+    Tick()
+    Check(IsBase(pips[6]) and IsBase(pips[7]) and not pipWrites[8], "the pips a grown maximum shows were not painted")
+    -- The owner repaints a pip over the threshold colour: it is painted again.
+    combo.value = 4
+    Tick()
+    pips[3]:SetStatusBarColor(0.9, 0.9, 0.9, 1)
+    Check(IsRed(pips[3]), "an owner write over a threshold pip was not repainted")
+    cost = Tick()
+    Check(cost <= 2, "the tick after an owner write costs " .. cost .. " native calls, budget 2")
+    -- A target change repaints with one read too.
+    cost = Tick("PLAYER_TARGET_CHANGED")
+    Check(cost <= 2, "a target change costs " .. cost .. " native calls, budget 2")
+
+    -- Without a reader (Midnight): one percent read for all pips; a restricted
+    -- percent needs the native curve evaluation of each shown pip.
+    pips = Pips()
+    E.CP.bars, E.CP.currentMax = pips, 5
+    E.ClassPowerReader = nil
+    combo.value, combo.restricted = 4, false
+    marks.Refresh()
+    cost = Tick()
+    Check(cost <= 1, "a plain class percent tick costs " .. cost .. " native calls, budget 1")
+    combo.restricted = true
+    combo.value = 2
+    cost = Tick()
+    Check(cost <= 1 + 2 * 5, "a restricted class percent tick costs " .. cost .. " native calls, budget 11")
+    for i = 1, 5 do Check(IsBase(pips[i]), "restricted: pip " .. i .. " did not return to its base colour") end
+    Check(not pipWrites[6], "restricted: a pip past the current maximum was painted")
+    combo.restricted = false
+
+    M.SetStatusBarColor = setColor
+    UnitPowerMax, UnitPowerPercent = unitPowerMax, unitPowerPercent
+    C_CurveUtil.CreateColorCurve = createCurve
+    E.ClassPowerReader, E.AcceptPowerToken = nil, nil
+    bars.resourceMarks = {}
+    marks.Refresh()
+end
 
 print("resource_marks_smoke: OK")

@@ -207,11 +207,6 @@ local function TickConfig(frame)
     return tickCount > 0, tickCount, playerCastbar.channelTickPosPct, true, tickCount + 1
 end
 
-local function ChannelTickLinesEnabled()
-    local enabled = TickConfig()
-    return enabled == true
-end
-
 local UpdatePlayerChannelHasteMarkers
 
 local function EnsurePlayerChannelTickMarkers(frame, tickCount)
@@ -425,10 +420,7 @@ local function UpdateCastbarChannelTicks()
     UpdatePlayerChannelHasteMarkers(_G.MSUF_PlayerCastbar, true)
     UpdatePlayerChannelHasteMarkers(_G.MSUF_PlayerCastbarPreview, true)
 end
-ExportPublic("MSUF_UpdateCastbarChannelTicks", UpdateCastbarChannelTicks)
 
-ExportPublic("MSUF_IsChannelTickLinesEnabled", ChannelTickLinesEnabled)
 ExportPublic("MSUF_PlayerChannelHasteMarkers_Update", UpdatePlayerChannelHasteMarkers)
 ExportPublic("MSUF_PlayerChannelHasteMarkers_Hide", HidePlayerChannelTickMarkers)
-ExportPublic("MSUF_PlayerChannelHasteMarkers_Ensure", EnsurePlayerChannelTickMarkers)
 ExportPublic("MSUF_ApplyPlayerChannelTickMarkers", UpdateCastbarChannelTicks)

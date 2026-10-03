@@ -313,4 +313,8 @@ if CreateFrame then
   eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 end
 
-TryEnableNSRT(false)
+-- Not tried while this file loads: the nickname switch lives in the profile,
+-- and the SavedVariables arrive after every file ran. A try at load could see
+-- NSRT ready with no profile, stop the discovery events and keep nicknames on
+-- for a player who turned the integration off. MSUF's own ADDON_LOADED (right
+-- after its SavedVariables), PLAYER_LOGIN and PLAYER_ENTERING_WORLD try it.

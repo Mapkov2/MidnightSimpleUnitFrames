@@ -63,6 +63,7 @@ local interruptLabelSource = Slice(driver, { "function _G.MSUF_Castbar_ResolveIn
 _G.UnitNameFromGUID = function(guid) return guid == "arena-guid" and "Arena Kicker" or "Boss Kicker" end
 _G.UnitClassFromGUID = nil
 _G.SPELL_INTERRUPTED_BY = "Interrupted by %s"
+_G.INTERRUPTED = "Interrupted" -- Blizzard GlobalString; the label falls back to it
 Compile(configHelpers .. interruptLabelSource, "Arena interrupt-label harness")()
 assert(_G.MSUF_Castbar_ResolveInterruptLabel("arena-guid", "arena2") == "Interrupted by Arena Kicker",
     "Arena interrupter-source label does not read the Arena settings root")
@@ -88,6 +89,8 @@ local ApplyInterruptValues
 local GetTime = function() return 0 end
 local C_Timer = { After = function() end }
 local function EnsureDriverCallbacks() end
+-- The driver resolves the castbar Utils' lazy DB bootstrap at load.
+local function EnsureDBLazy() end
 _G.MSUF_CB_ResetStateOnStop = function() end
 function frame:Hide() self.hidden = true end
 ]] .. setInterruptedSource .. [[
@@ -97,9 +100,13 @@ interruptedFrame:SetInterrupted("arena-guid")
 assert(interruptedFrame.hidden == true and interruptedFrame.interrupted == nil,
     "arena.showInterrupt=false does not suppress Arena interrupt feedback")
 
--- Reason: the cast-target colour fan-out is one walker function.
+-- Reason: the cast-target colour fan-out is one walker function. It walks the
+-- real pool modules (tools/tests/castbar_pool_namespace.lua), which read the
+-- pool tables and named frames published below.
+local PoolNamespace = assert(loadfile("tools/tests/castbar_pool_namespace.lua"))()
 local refreshAllSource = Slice(driver, { "local function RefreshAllCastTargetTextColors" })
 local refreshAllHarness = [[
+local MSUF = ...
 local liveVisited, previewVisited = {}, {}
 local function RefreshCastTargetText(frame) liveVisited[#liveVisited + 1] = frame end
 local function ApplyCastTargetTextColor(frame) previewVisited[#previewVisited + 1] = frame end
@@ -107,7 +114,7 @@ local function ApplyCastTargetTextColor(frame) previewVisited[#previewVisited + 
 return RefreshAllCastTargetTextColors, liveVisited, previewVisited
 ]]
 local refreshAll, liveVisited, previewVisited =
-    Compile(refreshAllHarness, "Arena cast-target color refresh harness")()
+    Compile(refreshAllHarness, "Arena cast-target color refresh harness")(PoolNamespace(".", nil))
 -- 3-slot pass: MSUF_MAX_ARENA_FRAMES unset (Mainline fallback 3); slots 4..5
 -- are decoys that must stay untouched.
 _G.MSUF_MAX_ARENA_FRAMES = nil
@@ -145,7 +152,7 @@ _G.MSUF_ArenaCastbars = { arenaLive5[1], nil, arenaLive5[3], arenaLive5[4], nil,
 _G.MSUF_ArenaCastbarPreview = arenaPreview5[1]
 _G.MSUF_MAX_ARENA_FRAMES = 5
 local refreshAll5, liveVisited5, previewVisited5 =
-    Compile(refreshAllHarness, "Arena cast-target color refresh 5-slot harness")()
+    Compile(refreshAllHarness, "Arena cast-target color refresh 5-slot harness")(PoolNamespace(".", 5))
 refreshAll5()
 AssertList(liveVisited5, expectedLive5, "5-slot Arena live cast-target color refresh")
 AssertList(previewVisited5, expectedPreview5, "5-slot Arena preview cast-target color refresh")
@@ -211,6 +218,14 @@ local MSUF = { MSUF_Auras3 = {
     RequestScope = function(unit) refreshRequests[#refreshRequests + 1] = unit end,
     RefreshEditPreview = function(unit) previewRequests[#previewRequests + 1] = unit end,
 } }
+-- Kernel/MSUF_Require.lua's soft resolver: the unit preview belongs to the
+-- load-on-demand menu, which this harness does not load.
+function MSUF.Optional(name)
+    local value = _G[name]
+    local kind = type(value)
+    if kind == "function" or kind == "table" then return value end
+    return nil
+end
 local function SyncMovers() end
 ]] .. auraScopeHelpers .. affectedUnitsSource .. reapplySource .. [[
 return AffectedUnits, ReapplyAuras, refreshRequests, previewRequests

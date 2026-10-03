@@ -14,13 +14,8 @@
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-local ExportPublic = MSUF.ExportPublic
 
-local builders = _G.MSUF_CP_CORE_BUILDERS
-if type(builders) ~= "table" then
-    builders = {}
-    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
-end
+local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 local type, pairs = type, pairs
 
@@ -230,6 +225,7 @@ local function CP_RefreshEventBindings()
             or CP.augLifecycleDisablePending == true
             or CP.ebonSensorRetryPending == true
             or CP.ebonTextLayerRetryPending == true
+            or CP.ebonStyleRetryPending == true
         CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", false, "player")
@@ -304,6 +300,7 @@ local function CP_RefreshEventBindings()
         or (GetAutoHideActive() and CP.visible)
         or CP.ebonSensorRetryPending == true
         or CP.ebonTextLayerRetryPending == true
+        or CP.ebonStyleRetryPending == true
         or CP.augLifecycleRetryPending == true
         or CP.augLifecycleDisablePending == true
     local wantDeadAlive = (CP.visible and profile.deadAlive == true) or PHP.visible

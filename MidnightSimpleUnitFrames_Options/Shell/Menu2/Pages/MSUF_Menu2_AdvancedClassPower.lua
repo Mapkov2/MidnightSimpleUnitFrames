@@ -5,6 +5,13 @@ MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedClassPower.lua", {
+    "MSUF_UFPreview_RequestRefresh",
+    "MSUF_GetEffectiveCooldownFrame",
+    "MSUF_IsCooldownAnchorSupported",
+})
 local C_Timer = M.MenuTimer or _G.C_Timer
 local W = M.Widgets
 local T = M.Theme
@@ -217,38 +224,47 @@ local PLAYER_HP_SEPARATORS = DETACHED_POWER_SEPARATORS
 local TEXT_SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
 local DETACHED_POWER_TEXT_PRESETS = M.KeySetFromWords "CURRENT CURMAX PERCENT CURPERCENT CURMAXPERCENT"
 local CLASS_POWER_PREVIEW_SPECS = {
-    { key = "deathknight_runes", label = "Death Knight - Runes", token = "RUNES", mode = "rune", segments = 6, value = 3, previewText = "3", runeDuration = 10 },
+    { key = "deathknight_runes", label = "Death Knight - Runes", token = "RUNES", mode = "rune", segments = 6, value = 3,
+        previewText = "3", runeDuration = 10 },
     --- Devourer's Soul Fragment maximum is talent-dependent and far above the
     --- ten-pip ceiling, so the live bar is one continuous fill whose fragment
     --- boundaries are drawn as separator notches. `fragments` previews that
     --- division at a representative maximum.
-    { key = "demonhunter_devourer", label = "Demon Hunter - Soul Fragments", token = "SOUL_FRAGMENTS", mode = "aura_single", segments = 1, value = 0.5, previewText = "20", fragments = 40 },
+    { key = "demonhunter_devourer", label = "Demon Hunter - Soul Fragments", token = "SOUL_FRAGMENTS", mode = "aura_single", segments = 1, value = 0.5,
+        previewText = "20", fragments = 40 },
     { key = "demonhunter_vengeance", label = "Demon Hunter - Vengeance Fragments", token = "SOUL_FRAGMENTS_VENG", mode = "aura_segmented", segments = 6, value = 4, previewText = "4 / 6" },
     { key = "druid_feral", label = "Druid - Feral Combo Points", token = "COMBO_POINTS", mode = "segmented", segments = 5, value = 3, previewText = "3" },
     { key = "druid_guardian", label = "Druid - Guardian Ironfur", token = "IRONFUR", mode = "ironfur", segments = 1, value = 0.72, previewText = "3" },
     { key = "druid_balance", label = "Druid - Balance (no class bar)", mode = "none", enabled = false },
     { key = "evoker_essence", label = "Evoker - Essence", token = "ESSENCE", mode = "segmented", segments = 6, value = 4, previewText = "4" },
-    { key = "evoker_augmentation_ebon", label = "Evoker - Augmentation Ebon Might", token = "ESSENCE", mode = "segmented", segments = 6, value = 4, previewText = "4",
+    { key = "evoker_augmentation_ebon", label = "Evoker - Augmentation Ebon Might", token = "ESSENCE", mode = "segmented", segments = 6,
+        value = 4, previewText = "4",
         secondaryTimer = { token = "EBON_MIGHT", mode = "timer_bar", segments = 1, value = 0.6, previewText = "12.0", nativeDurationText = true } },
     { key = "hunter_survival_tip", label = "Hunter - Survival Tip of the Spear", token = "TIP_OF_THE_SPEAR", mode = "aura_segmented", segments = 3, value = 2, previewText = "2" },
     { key = "mage_arcane", label = "Mage - Arcane Charges", token = "ARCANE_CHARGES", mode = "segmented", segments = 4, value = 3, previewText = "3" },
     { key = "mage_frost", label = "Mage - Frost Icicles", token = "ICICLES", mode = "aura_segmented", segments = 5, value = 3, previewText = "3" },
-    { key = "monk_brewmaster", label = "Monk - Brewmaster Stagger", token = "STAGGER_YELLOW", mode = "stagger", segments = 1, value = 0.42, previewText = "14K" },
+    { key = "monk_brewmaster", label = "Monk - Brewmaster Stagger", token = "STAGGER_YELLOW", mode = "stagger", segments = 1,
+        value = 0.42, previewText = "14K" },
     { key = "monk_windwalker", label = "Monk - Windwalker Chi", token = "CHI", mode = "segmented", segments = 6, value = 4, previewText = "4" },
     { key = "paladin_holy_power", label = "Paladin - Holy Power", token = "HOLY_POWER", mode = "segmented", segments = 5, value = 3, previewText = "3" },
-    { key = "priest_shadow", label = "Priest - Shadow Insanity", token = "INSANITY", mode = "continuous", segments = 1, value = 0.62, previewText = "62 / 100" },
-    { key = "rogue_combo", label = "Rogue - Combo Points", token = "COMBO_POINTS", mode = "segmented", segments = 7, value = 5, previewText = "5", chargedSlots = { [1] = true, [2] = true } },
-    { key = "shaman_elemental", label = "Shaman - Elemental Maelstrom", token = "MAELSTROM", mode = "continuous", segments = 1, value = 0.68, previewText = "68 / 100" },
+    { key = "priest_shadow", label = "Priest - Shadow Insanity", token = "INSANITY", mode = "continuous", segments = 1, value = 0.62,
+        previewText = "62 / 100" },
+    { key = "rogue_combo", label = "Rogue - Combo Points", token = "COMBO_POINTS", mode = "segmented", segments = 7, value = 5, previewText = "5",
+        chargedSlots = { [1] = true, [2] = true } },
+    { key = "shaman_elemental", label = "Shaman - Elemental Maelstrom", token = "MAELSTROM", mode = "continuous", segments = 1, value = 0.68,
+        previewText = "68 / 100" },
     { key = "shaman_enhancement", label = "Shaman - Enhancement Maelstrom Weapon", token = "MAELSTROM", mode = "aura_segmented", segments = 10, value = 7, previewText = "7", threshold = 5, thresholdToken = "MAELSTROM_ABOVE_5" },
     { key = "warlock_soul_shards", label = "Warlock - Soul Shards", token = "SOUL_SHARDS", mode = "segmented", segments = 5, value = 3, previewText = "3" },
-    { key = "warlock_destruction", label = "Warlock - Destruction Soul Shards", token = "SOUL_SHARDS", mode = "fractional", segments = 5, value = 3.4, previewText = "3.4" },
+    { key = "warlock_destruction", label = "Warlock - Destruction Soul Shards", token = "SOUL_SHARDS", mode = "fractional", segments = 5,
+        value = 3.4, previewText = "3.4" },
     { key = "warrior_whirlwind", label = "Warrior - Whirlwind Stacks", token = "WHIRLWIND", mode = "aura_segmented", segments = 4, value = 2, previewText = "2" },
     { key = "warrior_sweeping", label = "Warrior - Sweeping Strikes", token = "SWEEPING_STRIKES", mode = "aura_segmented", segments = 18, value = 12, previewText = "12" },
 }
 -- Preview the active provider's resources, including its Classic variants.
 if MSUF.Client and MSUF.Client.IsMists then
     local replacements = {
-        druid_balance = { token = "ECLIPSE_SOLAR", label = "Druid - Eclipse", mode = "continuous", segments = 1, value = 0.65, previewText = "65", enabled = true },
+        druid_balance = { token = "ECLIPSE_SOLAR", label = "Druid - Eclipse", mode = "continuous", segments = 1, value = 0.65,
+            previewText = "65", enabled = true },
         mage_arcane = { mode = "aura_segmented" },
         monk_windwalker = { label = "Monk - Chi", segments = 5, value = 3, previewText = "3" },
         priest_shadow = { label = "Priest - Shadow Orbs", token = "SHADOW_ORBS", mode = "segmented", segments = 3, value = 2, previewText = "2" },
@@ -280,8 +296,12 @@ for i = 1, #CLASS_POWER_PREVIEW_SPECS do
         CLASS_POWER_PREVIEW_VALUES[#CLASS_POWER_PREVIEW_VALUES + 1] = { value = spec.key, text = spec.label }
     end
 end
-local function NormalizeClassPowerPreviewSpecKey(key) key = tostring(key or "rogue_combo"); return CLASS_POWER_PREVIEW_BY_KEY[key] and key or "rogue_combo" end
-local CLASS_POWER_PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER", mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
+local function NormalizeClassPowerPreviewSpecKey(key)
+    key = tostring(key or "rogue_combo")
+    return CLASS_POWER_PREVIEW_BY_KEY[key] and key or "rogue_combo"
+end
+local CLASS_POWER_PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER",
+    mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
 local function ClassPowerPreviewClassTokenForSpec(spec)
     if spec and spec.classToken then return tostring(spec.classToken):upper() end
     if spec and spec.class then return tostring(spec.class):upper() end
@@ -291,11 +311,7 @@ local function ClassPowerPreviewClassTokenForSpec(spec)
 end
 local function RequestClassPowerPreviewRefresh()
     RefreshClassPowerInlinePreview()
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-        _G.MSUF_UFPreview_RequestRefresh("MSUF2_CLASSPOWER_PREVIEW_SPEC")
-    elseif type(M.RequestGeneralApply) == "function" then
-        M.RequestGeneralApply("MSUF2_CLASSPOWER_PREVIEW_SPEC", { preview = true, applyAll = false, notify = false, classpower = true })
-    end
+    _G.MSUF_UFPreview_RequestRefresh("MSUF2_CLASSPOWER_PREVIEW_SPEC")
 end
 function M.GetClassPowerPreviewSpecKey() return NormalizeClassPowerPreviewSpecKey(M._msuf2ClassPowerPreviewSpecKey or "rogue_combo") end
 function M.SetClassPowerPreviewSpecKey(key)
@@ -457,7 +473,10 @@ local function PlayerPowerTextShown(player)
     if player.showPowerText ~= nil then return player.showPowerText ~= false end
     return player.showPower ~= false
 end
-local function SetPlayerPowerTextShown(player, shown) player = player or Player(); player.showPowerText = shown and true or false end
+local function SetPlayerPowerTextShown(player, shown)
+    player = player or Player()
+    player.showPowerText = shown and true or false
+end
 local function NormalizeDetachedPowerTextPreset(player)
     player = player or Player()
     if not PlayerPowerTextShown(player) then return "OFF" end
@@ -519,8 +538,7 @@ local function QuickRestore(snapshot)
     end
 end
 local function QuickGetVisibleCDM()
-    local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
-        or _G.EssentialCooldownViewer
+    local ecv = _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer") or _G.EssentialCooldownViewer
     if not (MSUF.Client and MSUF.Client.IsClassic) then
         local usable = _G.MSUF_GetUsableCooldownAnchorSize
         return type(usable) == "function" and usable(ecv, true) and ecv or nil
@@ -536,7 +554,10 @@ local function QuickPlayerFrame()
     local frame = uf and type(uf.GetFrame) == "function" and uf.GetFrame("player") or nil
     return frame or (uf and uf.frames and uf.frames.player) or _G.MSUF_player
 end
-local function QuickClassPowerVisible() local frame = _G.MSUF_ClassPowerContainer; return frame and frame.IsShown and frame:IsShown() end
+local function QuickClassPowerVisible()
+    local frame = _G.MSUF_ClassPowerContainer
+    return frame and frame.IsShown and frame:IsShown()
+end
 local function QuickCalcCPAboveCDM(ecv)
     if not (MSUF.Client and MSUF.Client.IsClassic) then
         -- Retail anchors to Essential's top edge. No viewer-height offset.
@@ -662,19 +683,22 @@ local function QuickOffered(mark)
     if mark then db.general[QUICK_SETUP_FLAG] = true end
     return db.general and db.general[QUICK_SETUP_FLAG] == true
 end
-local function QuickEnsurePopups()
-    if not _G.StaticPopupDialogs then return end
-    M.InstallStaticPopup("MSUF2_CLASSPOWER_QUICK_RESULT", {
-        text = "%s", button1 = OKAY, button2 = QuickTr("Undo"), hideOnEscape = false,
-        OnAccept = function() quickSetupUndoSnapshot = nil end,
-        OnCancel = function()
+-- The result offers Undo; Escape must not answer it, so it is a menu-owned
+-- prompt (M.ShowPrompt). The offer is Blizzard's generic confirmation.
+local function ShowQuickSetupResult(popupText)
+    M.ShowPrompt("MSUF2_CLASSPOWER_QUICK_RESULT", {
+        text = QuickTr(popupText), accept = OKAY, cancel = QuickTr("Undo"), hideOnEscape = false,
+        onAccept = function() quickSetupUndoSnapshot = nil end,
+        onCancel = function()
             if not quickSetupUndoSnapshot then return end
             QuickRestore(quickSetupUndoSnapshot)
             quickSetupUndoSnapshot = nil
             QuickRefreshAll("ClassPowerQuickSetupUndo")
         end,
     })
-    M.InstallStaticPopup("MSUF2_CLASSPOWER_QUICK_OFFER", {
+end
+local function ShowQuickSetupOffer()
+    M.ShowPrompt("MSUF2_CLASSPOWER_QUICK_OFFER", {
         text = QuickTr("Welcome to Class Resources!\n\n"
             .. "Would you like to automatically set up a\n"
             .. "detached Class Bar positioned above your\n"
@@ -684,23 +708,21 @@ local function QuickEnsurePopups()
             .. "Player Power in one click.\n\n"
             .. "You can always run this later via the\n"
             .. "|cff00ff00Quick Setup: Class Bar|r button below."),
-        button1 = QuickTr("Setup Now"), button2 = QuickTr("Not Now"), hideOnEscape = true, showAlert = true,
-        OnAccept = function()
+        accept = QuickTr("Setup Now"), cancel = QuickTr("Not Now"), showAlert = true,
+        onAccept = function()
             QuickOffered(true)
             C_Timer.After(0.05, function()
                 if _G.MSUF2_ClassPowerQuickSetup then _G.MSUF2_ClassPowerQuickSetup() end
             end)
         end,
-        OnCancel = function() QuickOffered(true) end,
+        onCancel = function() QuickOffered(true) end,
     })
 end
 local function ExecuteQuickSetup()
-    QuickEnsurePopups()
     QuickOffered(true)
     local ecv = QuickGetVisibleCDM()
     local retail = not (MSUF.Client and MSUF.Client.IsClassic)
-    local supportsCooldown = retail and type(_G.MSUF_IsCooldownAnchorSupported) == "function"
-        and _G.MSUF_IsCooldownAnchorSupported()
+    local supportsCooldown = retail and _G.MSUF_IsCooldownAnchorSupported()
     local offsets = (ecv or supportsCooldown) and QuickCalcCPAboveCDM(ecv) or QuickCalcScreenCenter()
     quickSetupUndoSnapshot = QuickSnapshot()
     QuickApplyPhase1(offsets)
@@ -717,7 +739,7 @@ local function ExecuteQuickSetup()
         popupText = "Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."
     end
     QuickRefreshAll("ClassPowerQuickSetup")
-    if StaticPopup_Show then StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_RESULT", QuickTr(popupText)) end
+    ShowQuickSetupResult(popupText)
 end
 _G.MSUF2_ClassPowerQuickSetup = ExecuteQuickSetup
 ExportPublic("MSUF_QuickSetup_ResetFirstRun", function()
@@ -729,9 +751,8 @@ end)
 local function MaybeOfferQuickSetup()
     if quickSetupFirstRunChecked or QuickOffered() then return end
     quickSetupFirstRunChecked = true
-    QuickEnsurePopups()
     C_Timer.After(0.15, function()
-        if not QuickOffered() and StaticPopup_Show then StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_OFFER") end
+        if not QuickOffered() then ShowQuickSetupOffer() end
     end)
 end
 local function BuildInlineClassPowerPreview(ctx, b)
@@ -772,7 +793,8 @@ local function ShowQuickSetupTooltip(owner)
     GameTooltip:AddLine(QuickTr("Quick Setup: Detached Class Bar"), 1, 1, 1)
     GameTooltip:AddLine(QuickTr("One-click setup for a ready-to-use class bar:"), .85, .85, .85, true)
     GameTooltip:AddLine(" ")
-    for _, line in ipairs({ "Enables Class Resources", "Positions class bar ABOVE Essential Cooldowns", "Match width: Essential Cooldowns", "Does not change Player power bar" }) do
+    for _, line in ipairs({ "Enables Class Resources", "Positions class bar ABOVE Essential Cooldowns", "Match width: Essential Cooldowns",
+        "Does not change Player power bar" }) do
         GameTooltip:AddLine(QuickTr(line), .7, .7, .7, true)
     end
     local ecv = QuickGetVisibleCDM()
@@ -788,7 +810,8 @@ end
 
 function Page.New(ctx)
     local groups = {}
-    for _, key in ipairs({ "cp", "cpText", "detached", "detachedPlayer", "detachedText", "detachedSlot", "hp", "hpText", "hpCustomText", "hpTextPosition", "hpManual", "hpOrb", "hpTexture", "altMana" }) do groups[key] = {} end
+    for _, key in ipairs({ "cp", "cpText", "detached", "detachedPlayer", "detachedText", "detachedSlot", "hp", "hpText", "hpCustomText", "hpTextPosition",
+        "hpManual", "hpOrb", "hpTexture", "altMana" }) do groups[key] = {} end
     local self = setmetatable({ ctx = ctx, b = W.PageBuilder(ctx), width = ctx.width or 900, groups = groups, refresh = M.RefreshProxy() }, Page)
     self.kinds = self:CreateControlKinds()
     return self
@@ -950,9 +973,11 @@ function Page:BuildClassLayout()
     local applySourceRefresh = self:WithRefresh(ApplyClassPowerSource)
     self.cpEnable = SwitchAt(self.ctx, section, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, applySourceRefresh, Meta("layout.enabled"))
     self.cp = self:Controls(section, Bars, ApplyClassPower, "layout", {
-        { "shape", "dropdown", "Class Resource shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260, "classPowerShape", "BAR", applyRefresh },
+        { "shape", "dropdown", "Class Resource shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260,
+            "classPowerShape", "BAR", applyRefresh },
         { "height", "slider", "Height", 1, 40, 1, 300, "classPowerHeight", 4 },
-        { "widthMode", "dropdown", "Width mode", VT("player", "Player frame", "auto_pips", "Auto fit pips", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260, "classPowerWidthMode", "player", applySourceRefresh,
+        { "widthMode", "dropdown", "Width mode", VT("player", "Player frame", "auto_pips", "Auto fit pips", "cooldown", "Essential Cooldowns", "utility",
+            "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260, "classPowerWidthMode", "player", applySourceRefresh,
             help = "Auto fit pips is active only for Circle, Diamond and Hex. It uses pip count x pip size plus gaps." },
         { "width", "slider", "Width", 30, 800, 1, 300, "classPowerWidth", 0 },
         { "x", "slider", "Offset X", -800, 800, 1, 300, "classPowerOffsetX", 0 },
@@ -972,10 +997,12 @@ function Page:BuildClassLayout()
             local player = Player()
             player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
             if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
-            ApplyDetachedPowerSource(); self.refresh()
+            ApplyDetachedPowerSource()
+            self.refresh()
         end,
         Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }))
-    AddTooltip(self.cpPowerShape, "Independent Powerbar Shape", "Changes only the detached Player Powerbar. Class Resource shape on the left changes only Class Resources.")
+    AddTooltip(self.cpPowerShape, "Independent Powerbar Shape",
+        "Changes only the detached Player Powerbar. Class Resource shape on the left changes only Class Resources.")
     AddTooltip(self.cp.level, "Class Resource Layer", "Orders the Class Resource bar and pips. Its numeric, Rune and Ebon duration text uses the separate Class Resource text layer under Appearance > Text.")
     self:Add("detachedPlayer", self.cpPowerShape)
     local rightX = compact and 32 or min(max(430, floor(width * .52)), max(360, width - 360))
@@ -1019,7 +1046,10 @@ function Page:BuildClassBehavior()
     local function PlaceSupported(x, keys)
         local y = -38
         for key in keys:gmatch("%S+") do
-            if fields[key] then MoveWidget(fields[key], section, x, y); y = y - 32 end
+            if fields[key] then
+                MoveWidget(fields[key], section, x, y)
+                y = y - 32
+            end
         end
     end
     PlaceSupported(14, "anchor charged text rune reverse sweeping")
@@ -1037,9 +1067,12 @@ function Page:BuildClassStyle()
         width = min(620, inner), frames = frames, defaultTab = "resources", x = 32, y = -44 }), "style.workspace_tab", values)
     M.Assign(self.cp, self:Controls(resources, Bars, ApplyClassPowerVisuals, "style.resources", {
         { "color", "toggle", "Color by resource type", "classPowerColorByType", true, group = "cp" },
-        { "comboColor", "dropdown", "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260, "classPowerComboPointColorMode", "default", group = "cp" },
-        { "fgTex", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "classPowerTexture", "", group = "cp" },
-        { "bgTex", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "classPowerBgTexture", "", group = "cp" },
+        { "comboColor", "dropdown", "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260,
+            "classPowerComboPointColorMode", "default", group = "cp" },
+        { "fgTex", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300,
+            "classPowerTexture", "", group = "cp" },
+        { "bgTex", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300,
+            "classPowerBgTexture", "", group = "cp" },
     }))
     M.Assign(self.cp, self:Controls(text, Bars, ApplyClassPowerText, "style.text", {
         { "mode", "dropdown", "Resource text", CLASS_POWER_TEXT_MODE_VALUES, 300, "classPowerTextMode", "AUTO", group = "cpText" },
@@ -1049,7 +1082,8 @@ function Page:BuildClassStyle()
         { "textY", "slider", "Text Y", -200, 200, 1, 300, "classPowerTextOffsetY", 0, group = "cpText" },
     }))
     AddTooltip(self.cp.mode, "Resource Text", "Automatic keeps each resource's established text, such as Current for Combo Points and Current / Maximum for Vengeance Soul Fragments. The explicit modes override only the central resource value; Rune timers, Ebon Might duration and the Ironfur stack counter keep their native formats.")
-    AddTooltip(self.cp.layer, "Class Resource Text Layer", "Orders Class Resource numeric text, Rune times and the Ebon Might duration text independently from the Class Resource bar and Player Power text.")
+    AddTooltip(self.cp.layer, "Class Resource Text Layer",
+        "Orders Class Resource numeric text, Rune times and the Ebon Might duration text independently from the Class Resource bar and Player Power text.")
     M.Assign(self.cp, self:Controls(opacity, Bars, ApplyClassPower, "style.opacity", {
         { "bg", "alpha", "BG opacity", "classPowerBgAlpha", .3, nil, 1, group = "cp" },
         { "filled", "alpha", "Filled %", "classPowerFilledAlpha", 1, nil, 5, group = "cp" },
@@ -1333,7 +1367,8 @@ function Page:BuildPlayerHP()
         width = min(520, max(320, width - 64)), frames = frames, defaultTab = "layout", x = 32, y = -44 }), "player_hp.workspace_tab", values)
     W.ControlCard(layout, "Visibility & Position", nil, 14, -38, cardW, twoColumns and 500 or 760)
     local applyRefresh = self:WithRefresh(ApplyPlayerHPBar)
-    self.hpUse = SwitchAt(self.ctx, layout, "Second Player HP bar", 32, -104, controlW, Bars, "playerHPBarEnabled", false, applyRefresh, Meta("player_hp.enabled"))
+    self.hpUse = SwitchAt(self.ctx, layout, "Second Player HP bar", 32, -104, controlW, Bars, "playerHPBarEnabled", false, applyRefresh,
+        Meta("player_hp.enabled"))
     self.hp = self:Controls(layout, Bars, ApplyPlayerHPBar, "player_hp.layout", {
         { "anchor", "dropdown", "Anchor", PLAYER_HP_ANCHOR_VALUES, 300, "playerHPBarAnchor", "CLASS_TOP" },
         { "widthMode", "dropdown", "Width mode", PLAYER_HP_WIDTH_VALUES, 300, "playerHPBarWidthMode", "class", applyRefresh },
@@ -1347,14 +1382,22 @@ function Page:BuildPlayerHP()
         { "y", "slider", "Offset Y", -1000, 1000, 1, 300, "playerHPBarOffsetY", 0 },
         { "layer", "slider", "Frame layer", 0, 30, 1, 300, "playerHPBarFrameLevelOffset", 7 },
     })
-    PlaceColumn(layout, 32, -154, 54, controlW, "LEFT", self.hp.anchor, self.hp.widthMode, self.hp.manualWidth, self.hp.shape, self.hp.orbSize, self.hp.height, self.hp.smooth)
+    PlaceColumn(layout, 32, -154, 54, controlW, "LEFT", self.hp.anchor, self.hp.widthMode, self.hp.manualWidth, self.hp.shape, self.hp.orbSize,
+        self.hp.height, self.hp.smooth)
     PlaceColumn(layout, rightX, twoColumns and -154 or -580, 54, controlW, "LEFT", self.hp.gap, self.hp.x, self.hp.y, self.hp.layer)
-    self:AddNamed("hp", self.hp, "anchor widthMode shape height smooth gap x y layer"); self:AddNamed("hpManual", self.hp, "manualWidth"); self:AddNamed("hpOrb", self.hp, "orbSize")
-    AddTooltip(self.hpUse, "Second Player HP Bar", "Renders a second native Player health bar. The normal Player unitframe HP bar is untouched, so you can show HP twice.")
-    AddTooltip(self.hp.anchor, "Anchor", "Power anchors use the Player power bar when it is visible; otherwise the HP bar falls back to the Class Resource anchor.")
-    AddTooltip(self.hp.widthMode, "Width Mode", "Class Resource and Player Power follow existing frames. Custom uses the slider below. Width is resolved only during layout refresh.")
-    AddTooltip(self.hp.shape, "HP Shape", "Bar keeps the normal statusbar. Follow Player Power mirrors the independent detached Player power shape. Orb uses a single vertical fill.")
-    AddTooltip(self.hp.orbSize, "Orb Size", "Used only when this HP bar is explicitly set to Orb. Follow Player Power inherits the Player power orb size instead.")
+    self:AddNamed("hp", self.hp, "anchor widthMode shape height smooth gap x y layer")
+    self:AddNamed("hpManual", self.hp, "manualWidth")
+    self:AddNamed("hpOrb", self.hp, "orbSize")
+    AddTooltip(self.hpUse, "Second Player HP Bar",
+        "Renders a second native Player health bar. The normal Player unitframe HP bar is untouched, so you can show HP twice.")
+    AddTooltip(self.hp.anchor, "Anchor",
+        "Power anchors use the Player power bar when it is visible; otherwise the HP bar falls back to the Class Resource anchor.")
+    AddTooltip(self.hp.widthMode, "Width Mode",
+        "Class Resource and Player Power follow existing frames. Custom uses the slider below. Width is resolved only during layout refresh.")
+    AddTooltip(self.hp.shape, "HP Shape",
+        "Bar keeps the normal statusbar. Follow Player Power mirrors the independent detached Player power shape. Orb uses a single vertical fill.")
+    AddTooltip(self.hp.orbSize, "Orb Size",
+        "Used only when this HP bar is explicitly set to Orb. Follow Player Power inherits the Player power orb size instead.")
     AddTooltip(self.hp.smooth, "Smooth Fill", "Optional interpolation for this second HP bar. Off keeps direct native SetValue updates.")
     local hpTexturesCard = W.ControlCard(textures, "HP Textures", nil, 14, -38, cardW, 346)
     if W.AttachContextColorReferences then
@@ -1380,16 +1423,21 @@ function Page:BuildPlayerHP()
     end
     local texture = self:Controls(textures, Bars, ApplyPlayerHPBar, "player_hp.textures", {
         { "color", "dropdown", "HP color", PLAYER_HP_COLOR_VALUES, 300, "playerHPBarColorMode", "GLOBAL", ApplyPlayerHPColorMode },
-        { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "playerHPBarTexture", "", ApplyPlayerHPTextures },
-        { "bg", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "playerHPBarBgTexture", "", ApplyPlayerHPTextures },
+        { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "playerHPBarTexture", "",
+            ApplyPlayerHPTextures },
+        { "bg", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "playerHPBarBgTexture", "",
+            ApplyPlayerHPTextures },
         { "bgAlpha", "alpha", "BG opacity", "playerHPBarBgAlpha", .35, ApplyPlayerHPBar, 1 },
         { "outline", "slider", "Outline", 0, 8, 1, 300, "playerHPBarOutline", 1 },
     })
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.color, texture.fg, texture.bg, texture.bgAlpha, texture.outline)
-    self:AddNamed("hp", texture, "color fg bg bgAlpha outline"); self:AddNamed("hpTexture", texture, "fg bg")
+    self:AddNamed("hp", texture, "color fg bg bgAlpha outline")
+    self:AddNamed("hpTexture", texture, "fg bg")
     AddTooltip(texture.color, "HP Color", "Global follows the normal MSUF health color mode. Class Color forces your class color. Dark Mode forces the configured dark bar color. HP Gradient colors only this second HP bar by current health.")
-    AddTooltip(texture.bg, "Background Texture", "Visible behind the filled HP amount. At 100% HP the fill covers the background; Outline 0 does not disable this texture.")
-    AddTooltip(texture.outline, "HP Outline", "Controls only the second HP bar outline. Bar uses four outside border edges; shapes use their fixed edge texture. 0 disables only the outline.")
+    AddTooltip(texture.bg, "Background Texture",
+        "Visible behind the filled HP amount. At 100% HP the fill covers the background; Outline 0 does not disable this texture.")
+    AddTooltip(texture.outline, "HP Outline",
+        "Controls only the second HP bar outline. Bar uses four outside border edges; shapes use their fixed edge texture. 0 disables only the outline.")
     local hpTextCard = W.ControlCard(text, "HP Text", nil, 14, -38, cardW, twoColumns and 520 or 690)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(hpTextCard, {
@@ -1448,8 +1496,10 @@ function Page:BuildPlayerHP()
         MoveWidget(control, text, 32, ({ -188, -240, -274, -326, -360, -412, -446 })[i], controlW, "LEFT")
     end
     PlaceColumn(text, rightX, twoColumns and -188 or -440, 54, controlW, "LEFT", self.hpText.reverse, self.hpText.size, self.hpText.x, self.hpText.y)
-    self:Add("hp", self.hpTextEnable); self:Add("hpText", shared)
-    self:AddNamed("hpCustomText", self.hpText, "right left center sep reverse size"); self:Add("hpCustomText", unpack(self.hpHide))
+    self:Add("hp", self.hpTextEnable)
+    self:Add("hpText", shared)
+    self:AddNamed("hpCustomText", self.hpText, "right left center sep reverse size")
+    self:Add("hpCustomText", unpack(self.hpHide))
     self:AddNamed("hpTextPosition", self.hpText, "x y")
     AddTooltip(self.hpTextEnable, "HP Text", "Controls only this second HP bar. The normal Player unitframe HP text remains separate.")
     AddTooltip(shared, "Use Player HP Text", "Uses Player HP text settings and copies already-rendered Player HP text when it is current. Local Text X/Y still belong to this bar.")
@@ -1467,8 +1517,10 @@ function Page:BuildAlternativeMana()
         })
     end
     local applyRefresh = self:WithRefresh(ApplyClassPower)
-    self.altToggle = SwitchAt(self.ctx, section, "Show mana bar (dual resource)", 32, -98, controlW, Bars, "showAltMana", false, applyRefresh, Meta("alternative_mana.enabled"))
-    local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", false, ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
+    self.altToggle = SwitchAt(self.ctx, section, "Show mana bar (dual resource)", 32, -98, controlW, Bars, "showAltMana", false, applyRefresh,
+        Meta("alternative_mana.enabled"))
+    local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", false, ApplyClassPowerSmoothing,
+        Meta("alternative_mana.smooth_fill"))
     local fields = self:Controls(section, Bars, ApplyClassPower, "alternative_mana.layout", {
         { "widthMode", "dropdown", "Width mode", ALT_MANA_WIDTH_VALUES, 300, "altManaWidthMode", "player", applyRefresh },
         { "width", "slider", "Custom width", 20, 1200, 1, 300, "altManaWidth", 0 },
@@ -1478,7 +1530,8 @@ function Page:BuildAlternativeMana()
     })
     PlaceColumn(section, 32, -174, 54, controlW, "LEFT", fields.widthMode, fields.width, fields.height, fields.x, fields.y)
     self.altManaWidth = fields.width
-    self:AddNamed("altMana", fields, "widthMode width height x y"); self:Add("altMana", smooth)
+    self:AddNamed("altMana", fields, "widthMode width height x y")
+    self:Add("altMana", smooth)
 end
 
 function Page:RefreshControlState()
@@ -1492,17 +1545,22 @@ function Page:RefreshControlState()
     SetControlEnabled(self.cp.width, cpOn and (bars.classPowerWidthMode or "player") == "custom")
     local classBar = NormalizeClassPowerShape(bars.classPowerShape) == "BAR"
     if self.cp.height and self.cp.height._msuf2Title then self.cp.height._msuf2Title:SetText(classBar and "Height" or "Pip size") end
-    SetControlEnabled(self.cp.separator, cpOn and classBar); SetControlEnabled(self.cp.outline, cpOn and classBar)
+    SetControlEnabled(self.cp.separator, cpOn and classBar)
+    SetControlEnabled(self.cp.outline, cpOn and classBar)
     SetControlEnabled(self.cpAlign, cpOn and not classBar)
     -- Ebon Might owns a native duration text even when the optional aggregate
     -- resource text is disabled, so its shared text styling/layer stays usable.
     SetControlsEnabled(self.groups.cpText, cpOn)
     local anyDetached = false
     for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena" }) do
-        if db[key] and db[key].powerBarDetached then anyDetached = true; break end
+        if db[key] and db[key].powerBarDetached then
+            anyDetached = true
+            break
+        end
     end
     local playerDetached = db.player and db.player.powerBarDetached == true
-    SetControlsEnabled(self.groups.detached, anyDetached); SetControlsEnabled(self.groups.detachedPlayer, playerDetached)
+    SetControlsEnabled(self.groups.detached, anyDetached)
+    SetControlsEnabled(self.groups.detachedPlayer, playerDetached)
     SetControlEnabled(self.dpbUse, true)
     -- Lazy sections leave their control tables nil until first expand.
     local playerShape = NormalizeDetachedPowerShape(db.player and db.player.detachedPowerBarShape)
@@ -1520,11 +1578,13 @@ function Page:RefreshControlState()
     end
     local playerTextOn = db.player and PlayerPowerTextShown(db.player)
     if self.dpbText then
-        SetControlEnabled(self.dpbText.onBar, playerDetached); SetControlEnabled(self.dpbText.size, playerDetached and playerTextOn)
+        SetControlEnabled(self.dpbText.onBar, playerDetached)
+        SetControlEnabled(self.dpbText.size, playerDetached and playerTextOn)
     end
     SetControlsEnabled(self.groups.detachedText, playerDetached and playerTextOn)
     if self.dpbHide then
-        for i, mode in ipairs({ (db.player and (db.player.powerTextRight or db.player.powerTextMode)) or "CURPERCENT", db.player and db.player.powerTextLeft or "NONE", db.player and db.player.powerTextCenter or "NONE" }) do
+        for i, mode in ipairs({ (db.player and (db.player.powerTextRight or db.player.powerTextMode)) or "CURPERCENT", db.player and db.player.powerTextLeft
+            or "NONE", db.player and db.player.powerTextCenter or "NONE" }) do
             SetControlEnabled(self.dpbHide[i], playerDetached and playerTextOn and HasPercent(mode))
         end
     end
@@ -1538,7 +1598,8 @@ function Page:RefreshControlState()
     if self.hp then SetControlEnabled(self.hp.height, hpOn and not hpOrb) end
     local hpTextOn = hpOn and BoolValue(bars, "playerHPBarTextEnabled", true)
     local hpCustom = hpTextOn and not BoolValue(bars, "playerHPBarUsePlayerText", true)
-    SetControlsEnabled(self.groups.hpText, hpTextOn); SetControlsEnabled(self.groups.hpCustomText, hpCustom)
+    SetControlsEnabled(self.groups.hpText, hpTextOn)
+    SetControlsEnabled(self.groups.hpCustomText, hpCustom)
     if self.hpHide then
         for i, mode in ipairs({ bars.playerHPBarTextRight or "CURPERCENT", bars.playerHPBarTextLeft or "NONE", bars.playerHPBarTextCenter or "NONE" }) do
             SetControlEnabled(self.hpHide[i], hpCustom and HasPercent(mode))
@@ -1549,7 +1610,8 @@ function Page:RefreshControlState()
     local altManaOn = BoolValue(bars, "showAltMana", false)
     SetControlsEnabled(self.groups.altMana, altManaOn)
     SetControlEnabled(self.altManaWidth, altManaOn and (bars.altManaWidthMode or "player") == "custom")
-    SetControlEnabled(self.altToggle, true); SetControlEnabled(self.cpEnable, true)
+    SetControlEnabled(self.altToggle, true)
+    SetControlEnabled(self.cpEnable, true)
     -- Hover reasons for the three master switches. Lazy sections add controls
     -- to these groups later, so each refresh re-points them (a field write).
     if W.SetControlsDisabledReason and W.TurnOnReason then

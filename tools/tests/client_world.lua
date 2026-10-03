@@ -345,6 +345,21 @@ function Methods:FirstFailure()
     return self.failures[1]
 end
 
+-- Combat edges in the client's order (msuf_test_stubs Environment:EnterCombat):
+-- PLAYER_REGEN_DISABLED reaches every registered frame while
+-- InCombatLockdown() is still false; PLAYER_REGEN_ENABLED after it is false.
+function Methods:EnterCombat() self.widgets:EnterCombat() end
+function Methods:LeaveCombat() self.widgets:LeaveCombat() end
+function Methods:FireEvent(event, ...) return self.widgets:FireEvent(event, ...) end
+
+-- The client's SavedVariables step for one addon: it runs after every Lua file
+-- of the addon ran. Each saved global the client has a value for replaces what
+-- the files assigned (a missing one keeps it), then ADDON_LOADED fires.
+function Methods:LoadSavedVariables(addonName, saved)
+    for name, value in pairs(saved or {}) do rawset(self.env, name, value) end
+    return self.widgets:FireEvent("ADDON_LOADED", addonName, false)
+end
+
 --------------------------------------------------------------------------
 -- Factory
 --------------------------------------------------------------------------

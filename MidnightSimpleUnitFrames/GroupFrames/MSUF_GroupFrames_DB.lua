@@ -41,10 +41,8 @@ local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 --       _RefreshVisuals, _RefreshGeometry, _RefreshOverlays, _RefreshBorder,
 --       _RefreshOutlineGeometry, _RefreshColors, _RefreshFonts,
 --       _UpdateGroupVisibility, _EM2_SetActivePreviewKind, _EM2_NudgePreview,
---       _InvalidateCooldownTextCurve, _ForceCooldownTextRecolor,
---       _ForceAuraTextColorRefresh   (EM2 re-wraps _RefreshVisuals/_RebuildAll
---       in-place to add edit-mode preview sync -- that re-assignment is
---       intentional, not a duplicate definition).
+--       _ForceAuraTextColorRefresh. EM2 follows runtime mutations through
+--       GF.RegisterRuntimeObserver; nothing re-wraps these bridges.
 --   Preview (Preview):  MSUF_GF_ShowPreview, _HidePreview, _SetPreviewAnchor,
 --       _RefreshPreviewLayout, _RefreshPreviewBox.  NOTE: Preview.lua loads
 --       after Runtime.lua and OWNS the real preview implementation -- Runtime
@@ -85,6 +83,17 @@ GF.PRIORITY_ANCHOR_MODES = {
     BOTTOM = "RAID_BOTTOM",
     FREE = "FREE",
 }
+
+-- Numeric values are saved in profiles and shared with the unit-frame renderer.
+GF.PREDICTION_ANCHOR_MODES = {
+    LEFT = 1,
+    RIGHT = 2,
+    FOLLOW_HEALTH = 3,
+    FOLLOW_HEALTH_OVERFLOW = 4,
+    REVERSE_FROM_MAX = 5,
+}
+GF.ABSORB_DISPLAY_MODES = { BAR = 2, LEGACY_BAR_AND_TEXT = 3 }
+local PREDICTION_ANCHOR = GF.PREDICTION_ANCHOR_MODES
 
 ---
 --- Defaults
@@ -447,20 +456,20 @@ local PARTY_DEFAULTS = {
     tempMaxHealthColorB  = 0.10,
     tempMaxHealthOpacity = 1,
     tempMaxHealthBackgroundOpacity = 0.65,
-    healPredAnchorMode   = 3,
+    healPredAnchorMode   = PREDICTION_ANCHOR.FOLLOW_HEALTH,
     healPredictionBarHeight = 0,
     healPredictionBarOffsetY = 0,
     healPredictionBarOpacity = 0.45,
     healPredictionBarTexture = "",
     enableAbsorbBar      = true,
     healAbsorbEnabled    = true,
-    absorbTextMode       = 2,
-    absorbAnchorMode     = 5,
+    absorbTextMode       = GF.ABSORB_DISPLAY_MODES.BAR,
+    absorbAnchorMode     = PREDICTION_ANCHOR.REVERSE_FROM_MAX,
     absorbBarHeight      = 0,
     absorbBarOffsetY     = 0,
     absorbBarOpacity     = 1,
     absorbBarTexture     = "MSUF Smooth v2",
-    healAbsorbAnchorMode = 3,
+    healAbsorbAnchorMode = PREDICTION_ANCHOR.FOLLOW_HEALTH,
     healAbsorbBarHeight  = 0,
     healAbsorbBarOffsetY = 0,
     healAbsorbBarOpacity = 1,
@@ -979,7 +988,10 @@ function GF.SaveRaidLayout(conf, situationKey)
     if not conf then return end
     if type(conf.raidLayouts) ~= "table" then conf.raidLayouts = {} end
     local slot = conf.raidLayouts[situationKey]
-    if not slot then slot = {}; conf.raidLayouts[situationKey] = slot end
+    if not slot then
+        slot = {}
+        conf.raidLayouts[situationKey] = slot
+    end
     for _, k in ipairs(LAYOUT_GEO_KEYS) do
         slot[k] = conf[k]
     end
@@ -1067,7 +1079,10 @@ function GF.DetectRaidSituation()
     return "openworld"
 end
 
---- Auto-switch handler (called on PLAYER_ENTERING_WORLD)
+--- Auto-switch handler. Nothing calls it: no setting, menu control, default or
+--- changelog has ever enabled raidLayoutMode (none since 6.0 alpha 1), so the
+--- situation layouts are not user-visible. Kept for an owner decision (quality
+--- program wave 3); wire it to PLAYER_ENTERING_WORLD only together with a control.
 function GF.AutoSwitchRaidLayout(kind)
     kind = kind or (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
     local conf = GF.GetConf(kind)

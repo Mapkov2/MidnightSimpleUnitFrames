@@ -300,7 +300,10 @@ local function AttachBoundColorToContextCard(colorControl)
     if not card then
         for _ = 1, 12 do
             if not parent then break end
-            if parent._msuf2ControlCard then card = parent; break end
+            if parent._msuf2ControlCard then
+                card = parent
+                break
+            end
             if not nearestHost and parent._msuf2ContextColorHost then nearestHost = parent end
             parent = parent.GetParent and parent:GetParent()
         end
@@ -388,7 +391,10 @@ function W.AttachBoundColorToCollapsible(ctx, colorControl)
     for _ = 1, 12 do
         if not parent then break end
         entry = parent._msuf2CollapsibleEntry
-        if entry then section = entry.body or parent; break end
+        if entry then
+            section = entry.body or parent
+            break
+        end
         parent = parent.GetParent and parent:GetParent()
     end
     if not (section and entry) then return contextAttached end

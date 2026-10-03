@@ -12,6 +12,14 @@ local ExportPublic = MSUF.ExportPublic
 -- MSUF_UF_RoundedResources.lua; both load before this file, which applies the
 -- surfaces to unit and group frames.
 local Kit = MSUF.RoundedSurfaceKit
+-- Every provider below loads ahead of this file on every client TOC: the
+-- colors runtime, the defaults, the unit-frame and group engines with their
+-- elements, and the class power controller.
+local ROUNDED_FILE = "UnitFrames/Effects/MSUF_UF_RoundedFrames.lua"
+local GetBarOutlineColor = MSUF.Require("MSUF_GetBarOutlineColor", ROUNDED_FILE)
+local RefreshSquareFrameBorderVisual = MSUF.Require("MSUF_RefreshSquareFrameBorderVisual", ROUNDED_FILE)
+local ApplyRoundedClassPower = MSUF.Require("MSUF_ClassPower_ApplyRoundedSurface", ROUNDED_FILE)
+local EnsureProfileDB = MSUF.Require("MSUF_EnsureDB", ROUNDED_FILE)
 if type(Kit) ~= "table" then
   error("UnitFrames/Effects/MSUF_UF_RoundedSurface.lua must load before UnitFrames/Effects/MSUF_UF_RoundedFrames.lua")
 end
@@ -58,12 +66,9 @@ local function ResolveBaseEdgeColor(f)
       border.a or BASE_BORDER_A
   end
 
-  local fn = _G.MSUF_GetBarOutlineColor
-  if type(fn) == "function" then
-    local r, g, b = fn()
-    if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-      return r, g, b, BASE_BORDER_A
-    end
+  local r, g, b = GetBarOutlineColor()
+  if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+    return r, g, b, BASE_BORDER_A
   end
   local gen = _G.MSUF_DB and _G.MSUF_DB.general
   if gen then
@@ -76,10 +81,7 @@ local function ResolveBaseEdgeColor(f)
 end
 
 local function EnsureDB()
-  local ensureDB = _G.MSUF_EnsureDB
-  if ensureDB then
-    ensureDB()
-  end
+  EnsureProfileDB()
 end
 
 local _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = 1, 1, 1, 0.78
@@ -649,6 +651,10 @@ local function ApplyGroupBlockRoundedBorder(host, conf, enabled)
     host._msufRGFBlockBorderState = state
   end
   state.enabled = true
+  -- RefreshGroupBlockRoundedBorders replays this state as its conf. Keep the
+  -- scope's shape with it, or the replay resolves a ROUNDED or SLANTED scope
+  -- under global Rounded off to SQUARE and removes the border it just drew.
+  state.frameBarShape = requested
   state.size = ClampEdgeSize(conf.groupBorderSize or conf.size, 1, 16)
   state.pad = tonumber(conf.groupBorderPadding or conf.pad) or 2
   state.r, state.g, state.b, state.a = conf.groupBorderR or conf.r or 0.38,
@@ -773,7 +779,6 @@ local function RefreshSpellIndicatorRoundedEdges(frame, enabled)
   end
 end
 
-local MODERN_BORDER_EDGE_KEYS = { "top", "bottom", "left", "right" }
 
 local function SetModernBorderEdgesSuppressed(f, suppressed)
   if not f then return end
@@ -794,18 +799,7 @@ local function SetModernBorderEdgesSuppressed(f, suppressed)
   else
     f._msufRUFModernBorderSuppressed = nil
   end
-  local refreshSquare = _G.MSUF_RefreshSquareFrameBorderVisual
-  if type(refreshSquare) == "function" then
-    refreshSquare(f)
-    return
-  end
-  local shown = not suppressed and f._msufBorderShown == true
-  for i = 1, #MODERN_BORDER_EDGE_KEYS do
-    local edge = edges[MODERN_BORDER_EDGE_KEYS[i]]
-    if edge then
-      if shown and edge.Show then edge:Show() elseif edge.Hide then edge:Hide() end
-    end
-  end
+  RefreshSquareFrameBorderVisual(f)
 end
 
 local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
@@ -969,11 +963,8 @@ ResolveGroupOutlineThickness = function(f)
   local GF = ResolveGF()
   local kind = ResolveGroupKind(f)
   local thickness
-  if GF and type(GF.GetBarOutlineThickness) == "function" then
-    thickness = GF.GetBarOutlineThickness(kind)
-  end
-  if GF and type(GF.ScaleFrameValue) == "function" then
-    thickness = GF.ScaleFrameValue(kind, thickness or 0, 0)
+  if GF then
+    thickness = GF.ScaleFrameValue(kind, GF.GetBarOutlineThickness(kind) or 0, 0)
   end
   return ClampEdgeSize(thickness, 0, 8)
 end
@@ -1162,6 +1153,12 @@ end
 
 -- MSUF-owned overlays and previews never enter Blizzard's forbidden native
 -- display-element path, so they continue using the normal mutable mask cache.
+-- The surface mask anchor for a texture another module asks to clip.
+local function UnitClipRequestAnchor(f)
+  local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and f or nil
+  return shared or f.hpBar or f.bg or f
+end
+
 local function ApplyDispelOverlayMask(f, region)
   if not (f and region) then return false end
   if IsCombatLocked() then
@@ -1174,9 +1171,17 @@ local function ApplyDispelOverlayMask(f, region)
     local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and (f.barGroup or f) or nil
     MaskGroupTexture(f, region, shared or f.health or f.barGroup or f)
   else
+    -- Remember the request: ApplyToUnitFrame's mask refresh drops every mask
+    -- its own pass does not repeat, and texture layer clips and live dispel
+    -- overlays are not part of that pass otherwise.
+    local requests = f._msufRUF_ClipRequests
+    if not requests then
+      requests = setmetatable({}, { __mode = "k" })
+      f._msufRUF_ClipRequests = requests
+    end
+    requests[region] = true
     if not RoundedFrameEnabled(f) then return false end
-    local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and f or nil
-    MaskTexture(f, region, shared or f.hpBar or f.bg or f)
+    MaskTexture(f, region, UnitClipRequestAnchor(f))
   end
   return true
 end
@@ -1341,6 +1346,11 @@ local function ApplyToUnitFrame(f)
   if f.portrait then
     MaskTexture(f, f.portrait, f.portrait, Kit.MASK_PATH_1X)
   end
+  local clipRequests = f._msufRUF_ClipRequests
+  if clipRequests then
+    local clipAnchor = UnitClipRequestAnchor(f)
+    for region in pairs(clipRequests) do MaskTexture(f, region, clipAnchor) end
+  end
   EndMaskRefresh(f, "_msufRUF_Mask", "_msufRUF_MaskedTextures")
 end
 
@@ -1440,30 +1450,15 @@ end
 
 local function ForEachUnitFrame(fn)
   if type(fn) ~= "function" then return end
-  local UF = MSUF and MSUF.UF
-  if UF and type(UF.ForEachFrame) == "function" then
-    UF.ForEachFrame(fn)
-    return
-  end
-  local frames = UF and UF.frames
-  if not frames then return end
-  for _, f in pairs(frames) do
-    fn(f)
-  end
+  MSUF.UF.ForEachFrame(fn)
 end
 
 local function ForEachGroupFrame(fn)
   local GF = ResolveGF()
   if not GF then return end
-  if type(GF.ForEachFrame) == "function" then
-    GF.ForEachFrame(function(f, _, kind)
-      fn(f, kind)
-    end, true)
-  elseif type(GF.frames) == "table" then
-    for f, stored in pairs(GF.frames) do
-      fn(f, type(stored) == "string" and stored or nil)
-    end
-  end
+  GF.ForEachFrame(function(f, _, kind)
+    fn(f, kind)
+  end, true)
   if type(GF._previewFrames) == "table" then
     for kind, list in pairs(GF._previewFrames) do
       for i = 1, #list do
@@ -1501,10 +1496,7 @@ local function ApplyAll()
   MSUF.__msufRoundedPending = nil
   local enabled = IsEnabled()
   groupIndicatorHotEnabled = enabled and RoundedGroupFramesEnabled() or false
-  local applyRoundedClassPower = _G.MSUF_ClassPower_ApplyRoundedSurface
-  if type(applyRoundedClassPower) == "function" then
-    applyRoundedClassPower(enabled)
-  end
+  ApplyRoundedClassPower(enabled)
   if not enabled and not MSUF.__msufRoundedUF_Hooked then
     ExportPublic("MSUF_RoundedUF_Active", nil)
     UpdateMouseoverHotState(false)
@@ -1569,12 +1561,8 @@ local function ApplyVisualRefreshUnit(unit)
   ExportPublic("MSUF_RoundedUF_Active", true)
   UpdateMouseoverHotState(true)
 
-  local UF = MSUF and MSUF.UF
   if unit ~= nil and unit ~= "*" then
-    local frame = nil
-    if UF and type(UF.GetFrame) == "function" then frame = UF.GetFrame(unit) end
-    if not frame and UF and type(UF.frames) == "table" then frame = UF.frames[unit] end
-    if not frame then frame = _G["MSUF_" .. tostring(unit)] end
+    local frame = MSUF.UF.GetFrame(unit) or _G["MSUF_" .. tostring(unit)]
     if frame then
       if IsGroupFrame(frame) then ApplyToGroupFrame(frame) else ApplyToUnitFrame(frame) end
     end
@@ -1599,10 +1587,7 @@ local function HookOnce()
   if eventFrame and eventFrame.RegisterEvent then
     eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
   end
-  local UF = MSUF and MSUF.UF
-  if UF and type(UF.RegisterVisualRefreshCallback) == "function" then
-    UF.RegisterVisualRefreshCallback("RoundedFrames", ApplyVisualRefreshUnit)
-  end
+  MSUF.UF.RegisterVisualRefreshCallback("RoundedFrames", ApplyVisualRefreshUnit)
   if MSUF.__msufRoundedUF_Hooked then return end
   MSUF.__msufRoundedUF_Hooked = true
 
@@ -1728,23 +1713,13 @@ local function SetRoundedCallbacksActive(enabled)
         ExportPublic(name, fn)
       end
     end
-    if UF and type(UF.SetRoundedBorderVisualCallback) == "function" then
-      UF.SetRoundedBorderVisualCallback(_G.MSUF_RoundedUF_OnBorderVisualChanged)
-    end
-    if UF and type(UF.SetRoundedPowerBorderCallback) == "function" then
-      UF.SetRoundedPowerBorderCallback(_G.MSUF_RoundedUF_OnPowerBorderChanged)
-    end
+    UF.SetRoundedBorderVisualCallback(_G.MSUF_RoundedUF_OnBorderVisualChanged)
+    UF.SetRoundedPowerBorderCallback(_G.MSUF_RoundedUF_OnPowerBorderChanged)
     return
   end
-  if UF and type(UF.SetRoundedBorderVisualCallback) == "function" then
-    UF.SetRoundedBorderVisualCallback(nil)
-  end
-  if UF and type(UF.SetRoundedPowerBorderCallback) == "function" then
-    UF.SetRoundedPowerBorderCallback(nil)
-  end
-  if UF and type(UF.UnregisterVisualRefreshCallback) == "function" then
-    UF.UnregisterVisualRefreshCallback("RoundedFrames")
-  end
+  UF.SetRoundedBorderVisualCallback(nil)
+  UF.SetRoundedPowerBorderCallback(nil)
+  UF.UnregisterVisualRefreshCallback("RoundedFrames")
   for i = 1, #ROUNDED_CALLBACK_NAMES do
     local name = ROUNDED_CALLBACK_NAMES[i]
     local fn = _G[name]

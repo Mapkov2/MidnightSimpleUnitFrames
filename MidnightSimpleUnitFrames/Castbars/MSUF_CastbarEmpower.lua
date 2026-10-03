@@ -12,6 +12,7 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
 local C_Timer = _G.C_Timer
+local issecretvalue = _G.issecretvalue
 local type = type
 local tonumber = tonumber
 local tostring = tostring
@@ -150,7 +151,6 @@ local STAGE_SEGMENT_COLORS = {
     { 1.00, 0.25, 0.25, 0.18 },
 }
 
-local cachedUnifiedDirection
 local cachedColorStages
 
 local function GetEmpowerStageBlinkTime()
@@ -253,35 +253,10 @@ local function EnsureEmpowerStageSegments(frame, count)
     for index = count + 1, #frame.empowerSegments do
         frame.empowerSegments[index]:Hide()
     end
-    if created and type(_G.MSUF_RoundedCastbar_RefreshFrame) == "function" then
+    if created then
+        -- Castbars/MSUF_CastbarRounded.lua (loads after this file).
         _G.MSUF_RoundedCastbar_RefreshFrame(frame)
     end
-end
-
-local function GetUnifiedDirection()
-    local db = _G.MSUF_DB
-    if db and db.general ~= nil then
-        cachedUnifiedDirection = db.general.castbarUnifiedDirection and true or false
-        return cachedUnifiedDirection
-    end
-    if cachedUnifiedDirection ~= nil then
-        return cachedUnifiedDirection
-    end
-
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-        db = _G.MSUF_DB
-    end
-    cachedUnifiedDirection = (db and db.general and db.general.castbarUnifiedDirection) and true or false
-    return cachedUnifiedDirection
-end
-
-local function GetUnifiedFillEnabled(frame)
-    local enabled = GetUnifiedDirection()
-    if frame then
-        frame.MSUF_cachedUnifiedDirection = enabled
-    end
-    return enabled
 end
 
 local function IsEmpowerColorStagesEnabled()
@@ -294,10 +269,8 @@ local function IsEmpowerColorStagesEnabled()
         return cachedColorStages
     end
 
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-        db = _G.MSUF_DB
-    end
+    _G.MSUF_EnsureDB()
+    db = _G.MSUF_DB
     cachedColorStages = not (db and db.general and db.general.empowerColorStages == false)
     return cachedColorStages
 end
@@ -389,6 +362,35 @@ local function LayoutEmpowerStageSegments(frame)
     frame.MSUF_empowerLayoutPending = false
 end
 
+--- The reset of one tick's blink, built once per tick: a blink must not build
+--- a closure. Every blink schedules it once; only the last pending timer (the
+--- last blink's deadline) restores the base width and colour, as a re-blink
+--- before the reset keeps the tick lit until the later blink ends.
+local function TickBlinkReset(tick)
+    local reset = tick.MSUF_blinkReset
+    if reset then return reset end
+    reset = function()
+        -- The blink counted itself and stored the base width before it
+        -- scheduled this; tick creation is the only other writer of both.
+        local pending = tick.MSUF_blinkPending - 1
+        tick.MSUF_blinkPending = pending
+        if pending > 0 then return end
+
+        local baseWidth = tick.MSUF_baseWidth
+        local baseAlpha = tick.MSUF_baseAlpha or TICK_BASE_ALPHA
+        if tick.SetWidth then tick:SetWidth(baseWidth) end
+        if tick.SetVertexColor then
+            tick:SetVertexColor(1.0, 1.0, 1.0, baseAlpha)
+        elseif tick.SetColorTexture then
+            tick:SetColorTexture(1.0, 1.0, 1.0, baseAlpha)
+        elseif tick.SetAlpha then
+            tick:SetAlpha(baseAlpha)
+        end
+    end
+    tick.MSUF_blinkReset = reset
+    return reset
+end
+
 local function BlinkEmpowerTick(frame, index)
     if not frame or not frame.empowerTicks then return end
 
@@ -397,11 +399,8 @@ local function BlinkEmpowerTick(frame, index)
 
     local flash = tick.MSUF_flash
     local flashGroup = tick.MSUF_flashGroup
-    local baseAlpha = tick.MSUF_baseAlpha or TICK_BASE_ALPHA
-    local baseWidth = tick.MSUF_baseWidth or TICK_BASE_WIDTH
-    tick.MSUF_baseWidth = baseWidth
-    tick.MSUF_blinkToken = (tick.MSUF_blinkToken or 0) + 1
-    local token = tick.MSUF_blinkToken
+    tick.MSUF_baseWidth = tick.MSUF_baseWidth or TICK_BASE_WIDTH
+    tick.MSUF_blinkPending = (tick.MSUF_blinkPending or 0) + 1
 
     if flash then
         flash:SetVertexColor(1.0, 0.10, 0.10, 1.0)
@@ -423,19 +422,7 @@ local function BlinkEmpowerTick(frame, index)
         tick:SetColorTexture(1.0, 0.10, 0.10, 1.0)
     end
 
-    local blinkTime = GetEmpowerStageBlinkTime()
-    C_Timer.After(blinkTime, function()
-        if not tick or token ~= tick.MSUF_blinkToken then return end
-
-        if tick.SetWidth then tick:SetWidth(baseWidth) end
-        if tick.SetVertexColor then
-            tick:SetVertexColor(1.0, 1.0, 1.0, baseAlpha)
-        elseif tick.SetColorTexture then
-            tick:SetColorTexture(1.0, 1.0, 1.0, baseAlpha)
-        elseif tick.SetAlpha then
-            tick:SetAlpha(baseAlpha)
-        end
-    end)
+    C_Timer.After(GetEmpowerStageBlinkTime(), tick.MSUF_blinkReset or TickBlinkReset(tick))
 end
 
 local function LayoutEmpowerTicks(frame)
@@ -497,10 +484,12 @@ local function PlayerCastbarEmpowerStart(frame)
     frame.interruptFeedbackEndTime = nil
     if frame.latencyBar then frame.latencyBar:Hide() end
 
-    local castState = type(_G.MSUF_BuildCastState) == "function" and _G.MSUF_BuildCastState("player") or nil
+    -- Castbars/MSUF_CastbarEngine.lua (loads after this file).
+    local castState = _G.MSUF_BuildCastState("player")
     local spellName = castState and castState.spellName
     local icon = castState and castState.icon
-    if not spellName then
+    -- SecretWhenUnitSpellCastRestricted: only a plain missing name falls back.
+    if not issecretvalue(spellName) and not spellName then
         spellName, _, icon = _G.UnitCastingInfo("player")
         if not spellName then spellName, _, icon = _G.UnitChannelInfo("player") end
     end
@@ -509,11 +498,7 @@ local function PlayerCastbarEmpowerStart(frame)
         frame.icon:SetTexture(icon)
     end
     if frame.castText then
-        if type(_G.MSUF_CB_ApplyTexts) == "function" then
-            _G.MSUF_CB_ApplyTexts(frame, nil, spellName or "", nil)
-        else
-            _G.MSUF_SetTextIfChanged(frame.castText, spellName or "")
-        end
+        _G.MSUF_CB_ApplyTexts(frame, nil, spellName or "", nil)
     end
 
     local timeline = BuildEmpowerTimeline("player", castState)
@@ -572,8 +557,9 @@ local function PlayerCastbarEmpowerStart(frame)
 
     frame:SetScript("OnUpdate", nil)
     frame:Show()
-    if type(_G.MSUF_RegisterCastbar) == "function" then _G.MSUF_RegisterCastbar(frame) end
-    if type(_G.MSUF_UpdateCastbarFrame) == "function" then _G.MSUF_UpdateCastbarFrame(frame, 0) end
+    -- Castbars/MSUF_Castbars.lua (loads after this file) owns the manager.
+    _G.MSUF_RegisterCastbar(frame)
+    _G.MSUF_UpdateCastbarFrame(frame, 0)
 
     local updateColor = _G.MSUF_PlayerCastbar_UpdateColorForInterruptible
     if type(updateColor) == "function" then
@@ -620,9 +606,7 @@ local function PlayerCastbarClearEmpower(frame, hideFrame)
     if frame.SetScript then
         frame:SetScript("OnUpdate", nil)
     end
-    if type(_G.MSUF_UnregisterCastbar) == "function" then
-        _G.MSUF_UnregisterCastbar(frame)
-    end
+    _G.MSUF_UnregisterCastbar(frame)
     if frame.timeText then
         _G.MSUF_SetTextIfChanged(frame.timeText, "")
     end
@@ -634,15 +618,8 @@ local function PlayerCastbarClearEmpower(frame, hideFrame)
     end
 end
 
-ExportPublic("MSUF_BuildEmpowerTimeline", BuildEmpowerTimeline)
 ExportPublic("MSUF_BlinkEmpowerTick", BlinkEmpowerTick)
 ExportPublic("MSUF_LayoutEmpowerTicks", LayoutEmpowerTicks)
-ExportPublic("MSUF_EnsureEmpowerTicks", EnsureEmpowerTicks)
-ExportPublic("MSUF_EnsureEmpowerStageSegments", EnsureEmpowerStageSegments)
-ExportPublic("MSUF_LayoutEmpowerStageSegments", LayoutEmpowerStageSegments)
-ExportPublic("MSUF_GetUnifiedDirection", GetUnifiedDirection)
-ExportPublic("MSUF_GetUnifiedFillEnabled", GetUnifiedFillEnabled)
-ExportPublic("MSUF_IsEmpowerColorStagesEnabled", IsEmpowerColorStagesEnabled)
 ExportPublic("MSUF_GetEmpowerStageBlinkTime", GetEmpowerStageBlinkTime)
 ExportPublic("MSUF_IsEmpowerStageBlinkEnabled", IsEmpowerStageBlinkEnabled)
 ExportPublic("MSUF_PlayerCastbar_EmpowerStart", PlayerCastbarEmpowerStart)

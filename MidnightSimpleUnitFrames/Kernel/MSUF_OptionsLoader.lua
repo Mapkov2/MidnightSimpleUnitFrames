@@ -35,10 +35,10 @@ local function IsReady()
 end
 
 local function PrintLoadFailure(detail)
-    local message = "|cffff4040MSUF:|r Please enable MSUF Options in Blizzard's AddOns menu"
-    if detail and detail ~= "" then message = message .. " (" .. tostring(detail) .. ")" end
-    message = message .. "."
-    if type(_G.print) == "function" then _G.print(message) end
+    -- The technical detail stays English and is not part of the sentence.
+    local suffix = (detail and detail ~= "") and (" (" .. tostring(detail) .. ")") or ""
+    local message = string.format(MSUF.Translate("Please enable MSUF Options in Blizzard's AddOns menu%s."), suffix)
+    if type(_G.print) == "function" then _G.print("|cffff4040MSUF:|r " .. message) end
 end
 
 local ConfigurationLocked = _G.InCombatLockdown

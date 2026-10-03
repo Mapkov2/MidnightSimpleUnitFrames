@@ -90,8 +90,9 @@ local profiles = Read("MidnightSimpleUnitFrames/State/MSUF_Profiles.lua")
     .. Read("MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua")
 Check(profiles:find('"focus", "pet", "pettarget", "boss", "arena" }', 1, true),
     "MSUF_PROFILEIO_UNIT_KEYS lost the arena scope")
-Check(profiles:find('lk:find("arenacast", 1, true)', 1, true),
-    "MSUF_IsCastbarKey no longer recognizes arenaCast keys")
+-- General key ownership lives in the owner registry (State/MSUF_ProfileFields.lua).
+Check(Read("MidnightSimpleUnitFrames/State/MSUF_ProfileFields.lua"):find('lower:find("arenacast", 1, true)', 1, true),
+    "the general key owner registry no longer recognizes arenaCast keys as castbar keys")
 Check(profiles:find('"arena", "arena1", "arena2", "arena3",', 1, true),
     "profile text-scope ledger lost the arena scopes")
 Check(profiles:find("alphaExcludePredictionBars = true", 1, true)
@@ -188,7 +189,8 @@ for _, marker in ipairs({
     'h = "arenaCastbarHeight"',
     'x = "arenaCastbarOffsetX"',
     'y = "arenaCastbarOffsetY"',
-    'reanchor = "MSUF_ReanchorArenaCastBar"',
+    -- No reanchor name: Castbars_Core's MSUF_ApplyCastbarUnitAndSync applies
+    -- every unit (the pinned MSUF_ReanchorArenaCastBar never existed).
     'test = "MSUF_SetArenaCastbarTestMode"',
     'or (unit == "arena" and "arenaCastbarTestMode")',
 }) do
@@ -204,7 +206,9 @@ for _, marker in ipairs({
     'if unit == "arena" then return "arenaCastbarHeight" end',
     'if unit == "arena" then return "arenaCastbarMatchWidth" end',
     'if unit == "arena" then return "arenaCastbarDetached" end',
-    'or (unit == "arena" and "MSUF_ReanchorArenaCastBar")',
+    -- The popup re-applies through MSUF_ApplyCastbarUnitAndSync, which owns
+    -- the per-unit reanchor (MSUF_ReanchorArenaCastBar for arena).
+    'MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(unit)',
 }) do
     Check(castPopup:find(marker, 1, true),
         "Arena Edit Mode cast popup ownership is incomplete: " .. marker)

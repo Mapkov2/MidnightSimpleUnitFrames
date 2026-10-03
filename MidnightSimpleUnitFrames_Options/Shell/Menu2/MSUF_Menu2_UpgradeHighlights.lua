@@ -90,7 +90,10 @@ local function ApplyTargetRoute(item)
         if type(route.unitAuraTool) == "string" then
             M.unitAuraToolSelection = type(M.unitAuraToolSelection) == "table" and M.unitAuraToolSelection or {}
             local tools = M.unitAuraToolSelection[unit]
-            if type(tools) ~= "table" then tools = {}; M.unitAuraToolSelection[unit] = tools end
+            if type(tools) ~= "table" then
+                tools = {}
+                M.unitAuraToolSelection[unit] = tools
+            end
             tools[route.unitAuraTab] = route.unitAuraTool
         end
     end

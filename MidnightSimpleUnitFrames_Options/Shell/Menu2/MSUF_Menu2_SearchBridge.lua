@@ -20,7 +20,8 @@ end
 function Bridge.UpdateSearchPlaceholder(searchBox)
     local called = SearchCall("UpdateSearchPlaceholder", searchBox)
     if called then return end
-    if searchBox and searchBox._msuf2SearchPlaceholder and searchBox._msuf2SearchPlaceholder.SetText then searchBox._msuf2SearchPlaceholder:SetText(M.Tr("Search settings...")) end
+    if searchBox and searchBox._msuf2SearchPlaceholder
+        and searchBox._msuf2SearchPlaceholder.SetText then searchBox._msuf2SearchPlaceholder:SetText(M.Tr("Search settings...")) end
 end
 function Bridge.MarkSearchIndexDirty()
     SearchCall("MarkIndexDirty")

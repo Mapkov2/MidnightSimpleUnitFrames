@@ -86,7 +86,7 @@ local GATES = {
     {
         key = "portrait", name = "LEGACY_BLIZZARD_PORTRAIT",
         statement = Statement("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua",
-            "local LEGACY_BLIZZARD_PORTRAIT = ", "\n\nlocal V = "),
+            "local LEGACY_BLIZZARD_PORTRAIT = ", "\n\nlocal Visuals = "),
         forever = false, harness = false,
     },
 }
@@ -145,12 +145,16 @@ local function LoadAnchors(client, projectID, state)
         frames[#frames + 1] = frame
         return frame
     end
-    StaticPopupDialogs = {}
-    StaticPopup_Show = function(name) popups[#popups + 1] = name; return {} end
-    StaticPopup_Hide = function() end
+    -- The core prompt layer (MSUF_UI, Shell/UI/MSUF_Widgets.lua): this smoke
+    -- counts the prompts the file shows.
+    MSUF_UI = { ShowPrompt = function(name) popups[#popups + 1] = name; return {} end, HidePrompt = function() end }
     MSUF_DB = { general = { anchorToCooldown = state.anchor ~= false } }
     MSUF_GlobalDB = {}
     local namespace = { Client = client }
+    -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
+    namespace.ExportPublic = function(name, value) _G[name] = value return value end
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
+    namespace.ExportPublic = nil
     assert(loadfile(ANCHORS))("MidnightSimpleUnitFrames", namespace)
     return namespace, frames, timers, popups
 end
@@ -254,6 +258,8 @@ local function OpenOptions(client, loadResult, reason)
         return loaded
     end
     print = function(message) lines[#lines + 1] = tostring(message) end
+    -- The translation core loads ahead of the loader in every core TOC; its failure line uses it.
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Locales/MSUF_Localization.lua"))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(LOADER))("MidnightSimpleUnitFrames", namespace)
     -- The loader exports MSUF_EnsureAddonLoaded-independent entry points; the
     -- wrapper above stands in for Kernel/MSUF_Libs.lua.

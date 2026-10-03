@@ -110,6 +110,7 @@ end }
 
 local ns = { Client = { IsRetail = flavor == "Mainline" or flavor == "Forever", IsForever = flavor == "Forever",
     IsClassic = flavor == "Vanilla" or flavor == "TBC" or flavor == "Mists" }, CPBuilders = {} }
+assert(loadfile(root .. "/tools/tests/classpower_collaborators.lua"))().Install(root, ns)
 for _, name in ipairs({ "ExtraAuras", "ManaExtras", "ResourceMarks", "ResourceExtras" }) do
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/ClassPower/MSUF_CP_" .. name .. ".lua"))("MSUF", ns)
 end

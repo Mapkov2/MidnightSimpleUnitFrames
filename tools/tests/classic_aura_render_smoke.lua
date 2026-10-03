@@ -19,6 +19,14 @@ local namespace = {
         end,
         -- No live unit or group frames: the smoke renders its one frame directly.
         ForEachFrame = function() end,
+        -- UF.ApplyElementToFrame as the core runs it for the aura element: the
+        -- spec, then Enable, and Disable when Enable declines.
+        frames = {},
+        ApplyElementToFrame = function(frame, _, spec)
+            if spec then frame.MSUFSpec = spec end
+            if registered.Enable(frame) == false then registered.Disable(frame) end
+            return true
+        end,
     },
     GF = {
         ForEachFrame = function() return false end, FrameForUnit = function() end,
@@ -346,6 +354,8 @@ local frame = setmetatable({
     },
 }, Widget)
 
+-- The unit-frame factory registers every unit frame in UF.frames (RegisterGlobals).
+namespace.UF.frames.target = frame
 registered.Create(frame)
 assert(registered.Enable(frame) == true, "Classic aura element did not enable")
 local state = assert(frame._msufA3State, "Classic aura state was not created")
@@ -746,6 +756,7 @@ local playerFrame = setmetatable({
     MSUFUnitKey = "player",
     MSUFSpec = {},
 }, Widget)
+namespace.UF.frames.player = playerFrame
 assert(registered.Enable(playerFrame) == true, "Classic player aura element did not enable")
 local playerBuff = assert(playerFrame._msufA3State.lanes.buff, "player buff lane missing")
 assert(playerBuff.visible == 3, "weapon enchants were not merged into the player buff lane")
@@ -1167,8 +1178,8 @@ assert(namespace.MSUF_Auras3.RequestScope("target", "render-smoke-enable") == tr
     "Classic target scope enable did not apply")
 assert(state.root._shown == true and state.lanes.buff[1]._shown == true,
     "Classic RequestScope did not render re-enabled target auras")
-assert(namespace.MSUF_Auras3.RefreshRuntime == namespace.MSUF_Auras3.RefreshAll,
-    "Classic RefreshRuntime still points at the core no-op stub")
+-- Review 2026-10-02: nothing read the A3.RefreshRuntime alias; it stays gone.
+assert(namespace.MSUF_Auras3.RefreshRuntime == nil, "the unread A3.RefreshRuntime alias is back")
 
 combat = true
 assert(namespace.MSUF_Auras3.RequestScope("target", "render-smoke-combat") == false,

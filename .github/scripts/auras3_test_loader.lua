@@ -80,7 +80,7 @@ function Loader.Group(path)
     local entry = path:match("([^/]+)$")
     local directory = path:match("^(.*)/")
     if entry == "MSUF_Profiles.lua" or entry == "MSUF_Menu2_Window.lua"
-        or entry == "MSUF_Menu2_ClassPowerPreview.lua" then
+        or entry == "MSUF_Menu2_ClassPowerPreview.lua" or entry == "MSUF_Menu2_Widgets.lua" then
         local file = originalOpen(path, "rb")
         if not file then return nil end
         file:close()
@@ -89,6 +89,9 @@ function Loader.Group(path)
         return { directory .. "/MSUF_ProfileRuntime.lua", directory .. "/MSUF_ProfileNormalize.lua", path }
     elseif entry == "MSUF_Menu2_Window.lua" then
         return { directory .. "/MSUF_Menu2_PageLifecycle.lua", path }
+    elseif entry == "MSUF_Menu2_Widgets.lua" then
+        -- W.Color and W.ParseHexColor: the color picker module loads right after.
+        return { path, directory .. "/MSUF_Menu2_ColorPicker.lua" }
     elseif entry == "MSUF_Menu2_ClassPowerPreview.lua" then
         return { directory .. "/MSUF_Menu2_ClassPowerPreview_Lifecycle.lua",
             directory .. "/MSUF_Menu2_ClassPowerPreview_Interaction.lua", path }
@@ -141,6 +144,23 @@ local function PrepareDirectContracts(source, namespace)
     _G.wipe = _G.wipe or function(t) for k in pairs(t) do t[k] = nil end return t end
     _G.canaccesstable = _G.canaccesstable or function() return true end
     local function Uses(text) return source:find(text, 1, true) ~= nil end
+    -- A menu file that requires the core's PixelLayoutRegion gets the stand-in
+    -- the other menu files fall back to (the harness lays out no pixels).
+    -- Both aura backends lay their dispel overlay strip out through the shared
+    -- border runtime (Runtime/MSUF_BorderStyles.lua, loaded early by every TOC).
+    if Uses("MSUF.BorderStyles.LayoutEdgeStrip") or Uses("MSUF.BorderStyles and MSUF.BorderStyles.LayoutEdgeStrip") then
+        local styles = namespace.BorderStyles
+        if not (type(styles) == "table" and type(styles.LayoutEdgeStrip) == "function") then
+            local owner = "MidnightSimpleUnitFrames/Runtime/MSUF_BorderStyles.lua"
+            assert(compileSource(Read(owner), "@" .. owner))("MidnightSimpleUnitFrames", namespace)
+        end
+    end
+    if Uses('MSUF.Require("MSUF_PixelLayoutRegion"') and type(_G.MSUF_PixelLayoutRegion) ~= "function" then
+        _G.MSUF_PixelLayoutRegion = function(region, policy, ...)
+            if type(policy) == "string" then return region[policy](region, ...) end
+            return region
+        end
+    end
     local function Bind(owner, name, preamble, ...)
         local text = Read(SourcePath(owner))
         local body = Slice.Function(text, "local function " .. name, owner)
@@ -155,7 +175,7 @@ local function PrepareDirectContracts(source, namespace)
         _G.MSUF_EM2 = _G.MSUF_EM2 or {}
         _G.MSUF_EM2.ExternalProviders = _G.MSUF_EM2.ExternalProviders or {}
         local target = _G.MSUF_EM2.ExternalProviders
-        for _, name in ipairs({"CreateEnabledSetter", "CreateElementRegistrar"}) do
+        for _, name in ipairs({"CreateEnabledSetter", "CreateElementRegistrar", "ActivateAtLogin"}) do
             if not target[name] then BindPublic("MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_ExternalProvider.lua", "External", name, target) end
         end
     end
@@ -322,11 +342,32 @@ local function PrepareDirectContracts(source, namespace)
         auras3.ReadParentFrameStrata = auras3.ReadParentFrameStrata or Bind(owner, "ReadParentFrameStrata", preamble)
         auras3.SyncFrameStrata = Bind(owner, "SyncFrameStrata", preamble)
     end
+    -- The Auras3 core's unit lane-key schema, built from its owner for harnesses
+    -- that load the menu or runtime schema without the core.
+    if Uses("A3.LaneKeySchema") and type(auras3) == "table" and auras3.LaneKeySchema == nil then
+        local owner = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"
+        local text = Read(SourcePath(owner))
+        local parts = {
+            Slice.Function(text, "local function DeepCopy", owner),
+            Slice.Function(text, "local function LaneKeySchemaRows", owner),
+            Slice.Function(text, "local function BuildLaneKeySchema", owner),
+            "return BuildLaneKeySchema()",
+        }
+        auras3.LaneKeySchema = assert(compileSource("local MSUF = ...\n" .. table.concat(parts, "\n")))(namespace)
+    end
+    -- The core's Custom Aura container constants, read from their owner.
+    if (Uses("A3.CUSTOM_CONTAINER_COUNT") or Uses("A3.PRESET_CUSTOM_CONTAINER_INDEX")) and type(auras3) == "table"
+        and auras3.CUSTOM_CONTAINER_COUNT == nil then
+        local owner = "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua"
+        local text = Read(SourcePath(owner))
+        for _, name in ipairs({ "CUSTOM_CONTAINER_COUNT", "PRESET_CUSTOM_CONTAINER_INDEX" }) do
+            local value = text:match("\nlocal " .. name .. " = (%d+)")
+            assert(value, "auras3_test_loader: " .. name .. " is missing from " .. owner)
+            auras3[name] = tonumber(value)
+        end
+    end
     if Uses("local Shape = A3.IconShape") then
         assert(originalLoadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", namespace)
-    end
-    if Uses("M.InstallColorPicker({") then
-        assert(originalLoadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua"))("MidnightSimpleUnitFrames", namespace)
     end
     if Uses("A3.NormalizeProfileDB") and not namespace.MSUF_MaterializeUnitAuraLaneOwners then
         assert(originalLoadfile(SourcePath("MidnightSimpleUnitFrames/State/MSUF_StateHelpers.lua")))("MSUF", namespace)
@@ -435,7 +476,8 @@ local function NeedsDirectContracts(source)
     for _, key in ipairs({ "CreateAnimationStarter", "_G.MSUF_EM2.ExternalProviders.Create", "MSUF_IsGroupUnitToken", "Text.ApplyNameTextColor", "Text.ApplyInlineTextColor", "MSUF.Secrets", "Layers.BorderOffset", "= Apply.ColorTexture", "_G.issecretvalue", "_G.wipe", "M.Lines", "M.KeySetFromWords", "M.FindPageEntry", "M.PageKeyForWidget", "MSUF_NormalizeFontKey", "A3.NormalizeProfileDB", "M.TranslateText", "M.Tr", "= MSUF.Translate", "= MSUF.UF.GetFrame", "MSUF.Secrets.PlainBool",
         "MSUF.MSUF_Auras3.GetDurationBarColor", "Layers.BaseFrameLevel", "= Apply.Text", "= Apply.Shown", "= Apply.Texture", "MSUF.UF.Clamp01", "MSUF.UFBarTextCommon.HealthModeNeedsIdentity", "UF.IsBossUnit", "GF.GetLiveGroupKind", "GF.GetAnchorPoint", "_G.MSUF_UF_ScheduleApplyCommit", "_G.MSUF_GetSharedMedia", "_G.MSUF_EnsureCastbarGeneralDB", "M.AuraCatalogToken", "M.GroupAuraSettingKeys", "M.TrimText", "PreviewHelpers.ReadPreviewBarsBool", "M.Widgets.SetTextLayout", "M.Widgets.ResolveContextColorOption", "M.NormalizeControlPath", "M.PortableControlToken", "M.AccessibleNumber",
         "M.ApplyService.CallGlobal", "= M.Format", "W.ThemedControlCard", "W.ToggleBadge", "W.SetTileVisual", "PreviewHelpers.ExactPreviewDelta",
-        "MSUF.Optional(", "MSUF.MSUF_GetGlobalFontSettings()", "A3.SyncFrameStrata(", "A3.ReadParentFrameStrata(" }) do
+        "MSUF.Optional(", "MSUF.MSUF_GetGlobalFontSettings()", "A3.SyncFrameStrata(", "A3.ReadParentFrameStrata(",
+        "A3.LaneKeySchema", "A3.CUSTOM_CONTAINER_COUNT", "A3.PRESET_CUSTOM_CONTAINER_INDEX" }) do
         if source:find(key, 1, true) then return true end
     end
     return false

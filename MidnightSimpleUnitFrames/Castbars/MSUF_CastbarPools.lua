@@ -226,6 +226,13 @@ local function SetEventsRegistered(frame, enabled)
     frame._msufCastLifecycleOwned = nil
 end
 
+--- Shows a bar's cast state through the driver (MSUF_CastbarDriver.lua, loaded
+--- before this file): identity and engine publication as on the driver's own
+--- events. Resolved at use, when every castbar file has loaded.
+local function ShowState(frame, state)
+    MSUF.Castbars.Driver.ShowState(frame, state)
+end
+
 local function BuildCastState(frame)
     local unit = frame and frame.unit
     local getEngine = _G.MSUF_GetCastbarEngine
@@ -278,69 +285,17 @@ Pools.kinds = kinds
 local order = Pools.order or {}
 Pools.order = order
 
---- Builds one pool from its descriptor. Called once per kind at load.
-function Pools.Define(desc)
+--- Pools.Define stage 1: the anchor/size pass of one bar.
+local function DefinePoolAnchorBase(desc)
     local KIND = desc.kind
     local UNIT_PREFIX = desc.unitPrefix
-    local MAX_FRAMES = desc.maxFrames
-    local HAS_UNITS = desc.hasUnits ~= false
-    local FRAME_PREFIX = desc.framePrefix
-    local POOL_GLOBAL = desc.poolGlobal
-    local KIND_FLAG = desc.kindFlag
-    local INDEX_FIELD = desc.indexField
-    local FRAME_LEVEL_BASE = desc.frameLevelBase
     local FALLBACK_Y = desc.fallbackY
-    local ENABLE_KEY = desc.enableKey
     local DB_OFFSET_X = desc.db.offsetX
     local DB_OFFSET_Y = desc.db.offsetY
     local DB_DETACHED = desc.db.detached
     local DB_WIDTH = desc.db.width
     local DB_HEIGHT = desc.db.height
     local LAYOUT_DELTA = desc.layoutDelta
-    local PREVIEW_UPDATE = desc.previewUpdate
-    local SCHEDULE_PASS = desc.scheduleKeys.pass
-    local SCHEDULE_PREWARM = desc.scheduleKeys.prewarm
-    local PUBLISH_POOL = desc.publishPool
-
-    local pool = { descriptor = desc, kind = KIND, maxFrames = MAX_FRAMES }
-    kinds[KIND] = pool
-    order[#order + 1] = pool
-
-    local function Enabled()
-        if not HAS_UNITS then return false end
-        EnsureDB()
-
-        local general = _G.MSUF_DB and _G.MSUF_DB.general
-        local shouldUseMSUF = _G.MSUF_ShouldUseMSUFCastbar
-
-        if type(shouldUseMSUF) == "function" then
-            return shouldUseMSUF(KIND, general) == true
-        end
-
-        return (not general) or general[ENABLE_KEY] ~= false
-    end
-    pool.Enabled = Enabled
-
-    --- Applies only internal region layout. Positioning relative to the unit
-    --- frames or UIParent is handled by UpdateAnchor.
-    local function ApplyLayout(frame)
-        if not (frame and frame.statusBar) then
-            return
-        end
-
-        EnsureDB()
-
-        local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
-        local refreshFrame = _G.MSUF_RefreshCastbarFrame
-        if type(refreshFrame) == "function" then
-            refreshFrame(frame, KIND, general)
-        elseif type(_G.MSUF_ApplyCastbarDetailLayout) == "function" then
-            _G.MSUF_ApplyCastbarDetailLayout(frame, KIND, general)
-        end
-        if type(_G.MSUF_ApplyCastbarSparkVisual) == "function" then
-            _G.MSUF_ApplyCastbarSparkVisual(frame, general)
-        end
-    end
 
     --- Anchor/size pass for one bar. Called from settings, login, lifecycle
     --- events and preview sync, so it only mutates when values changed.
@@ -455,6 +410,34 @@ function Pools.Define(desc)
         frame._msufPoolAnchorValidationRev = tonumber(_G.MSUF__castbarStyleGlobalRev) or 1
         return changed, sizeChanged
     end
+    return UpdateAnchorBase
+end
+
+--- Pools.Define stage 2: the internal layout, the anchor pass and the
+--- pre-cast validation of one bar.
+local function DefinePoolLayout(desc, UpdateAnchorBase)
+    local KIND = desc.kind
+
+    --- Applies only internal region layout. Positioning relative to the unit
+    --- frames or UIParent is handled by UpdateAnchor.
+    local function ApplyLayout(frame)
+        if not (frame and frame.statusBar) then
+            return
+        end
+
+        EnsureDB()
+
+        local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+        local refreshFrame = _G.MSUF_RefreshCastbarFrame
+        if type(refreshFrame) == "function" then
+            refreshFrame(frame, KIND, general)
+        elseif type(_G.MSUF_ApplyCastbarDetailLayout) == "function" then
+            _G.MSUF_ApplyCastbarDetailLayout(frame, KIND, general)
+        end
+        if type(_G.MSUF_ApplyCastbarSparkVisual) == "function" then
+            _G.MSUF_ApplyCastbarSparkVisual(frame, general)
+        end
+    end
 
     local function UpdateAnchor(frame, forceLayout)
         local changed, sizeChanged = UpdateAnchorBase(frame)
@@ -493,6 +476,38 @@ function Pools.Define(desc)
         end
         return false
     end
+    return ApplyLayout, UpdateAnchor, PrepareForCast
+end
+
+--- Pools.Define stage 3: the enable rule, the pool's bars (built on demand)
+--- and the refresh of one bar from its unit.
+local function DefinePoolBars(desc, pool, ApplyLayout, UpdateAnchor, UpdateAnchorBase, PrepareForCast)
+    local KIND = desc.kind
+    local UNIT_PREFIX = desc.unitPrefix
+    local MAX_FRAMES = desc.maxFrames
+    local HAS_UNITS = desc.hasUnits ~= false
+    local FRAME_PREFIX = desc.framePrefix
+    local POOL_GLOBAL = desc.poolGlobal
+    local KIND_FLAG = desc.kindFlag
+    local INDEX_FIELD = desc.indexField
+    local FRAME_LEVEL_BASE = desc.frameLevelBase
+    local ENABLE_KEY = desc.enableKey
+    local PUBLISH_POOL = desc.publishPool
+
+    local function Enabled()
+        if not HAS_UNITS then return false end
+        EnsureDB()
+
+        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        local shouldUseMSUF = _G.MSUF_ShouldUseMSUFCastbar
+
+        if type(shouldUseMSUF) == "function" then
+            return shouldUseMSUF(KIND, general) == true
+        end
+
+        return (not general) or general[ENABLE_KEY] ~= false
+    end
+    pool.Enabled = Enabled
 
     local function RefreshFromUnit(frame, refreshLayout)
         if not frame then return false end
@@ -519,7 +534,7 @@ function Pools.Define(desc)
         -- full visual refresh is only necessary when that geometry changed.
         -- Visual settings already own their explicit force-layout path.
         if refreshLayout then frame:UpdateAnchor(false) end
-        if frame.Cast then frame:Cast(state) end
+        ShowState(frame, state)
         return true
     end
 
@@ -584,8 +599,8 @@ function Pools.Define(desc)
             local frame = EnsureCastbar(index, true)
             castbars[index] = frame
 
-            if frame and UnitExists(frame.unit) and frame.Cast then
-                frame:Cast()
+            if frame and UnitExists(frame.unit) then
+                ShowState(frame)
             end
         end
 
@@ -596,6 +611,22 @@ function Pools.Define(desc)
     function pool.Castbars()
         return _G[POOL_GLOBAL]
     end
+
+    --- The live bar of one slot, nil until the pool is built. The pool table
+    --- and the named frame are the same bar; the name covers callers that run
+    --- while EnsureCastbars is still filling the table.
+    function pool.Bar(index)
+        local castbars = _G[POOL_GLOBAL]
+        return (castbars and castbars[index]) or _G[FRAME_PREFIX .. index]
+    end
+    return Enabled, RefreshFromUnit, EnsureCastbars
+end
+
+--- Pools.Define stage 4: the queued pool pass and the anchor prewarm.
+local function DefinePoolPasses(desc, Enabled, RefreshFromUnit)
+    local POOL_GLOBAL = desc.poolGlobal
+    local SCHEDULE_PASS = desc.scheduleKeys.pass
+    local SCHEDULE_PREWARM = desc.scheduleKeys.prewarm
 
     --------------------------------------------------------------------
     -- Lifecycle: one next-frame pass per same-frame burst, a generation that
@@ -707,6 +738,16 @@ function Pools.Define(desc)
         prewarmPendingGeneration = nil
         prewarmIndex = nil
     end
+    return QueuePass, QueuePrewarm, CancelLifecycle
+end
+
+--- Pools.Define stage 5: the lifecycle events (shared bus, else a private
+--- driver frame).
+local function DefinePoolLifecycle(desc, pool, EnsureCastbars, RefreshFromUnit, QueuePass, QueuePrewarm, CancelLifecycle)
+    local UNIT_PREFIX = desc.unitPrefix
+    local MAX_FRAMES = desc.maxFrames
+    local POOL_GLOBAL = desc.poolGlobal
+    local SCHEDULE_PREWARM = desc.scheduleKeys.prewarm
 
     -- event -> lifecycle row, for the events this client supports.
     local rows = {}
@@ -830,6 +871,16 @@ function Pools.Define(desc)
         RegisterLifecycleFrame()
         return true
     end
+    return SyncLifecycle
+end
+
+--- Pools.Define stage 6: the menu and profile entry points.
+local function DefinePoolSettings(desc, Enabled, EnsureCastbars, SyncLifecycle)
+    local KIND = desc.kind
+    local HAS_UNITS = desc.hasUnits ~= false
+    local POOL_GLOBAL = desc.poolGlobal
+    local ENABLE_KEY = desc.enableKey
+    local PREVIEW_UPDATE = desc.previewUpdate
 
     --------------------------------------------------------------------
     -- Menu/profile entry points
@@ -891,8 +942,8 @@ function Pools.Define(desc)
 
                 if enabled then
                     if frame.UpdateAnchorBase then frame:UpdateAnchorBase() else frame:UpdateAnchor(true) end
-                    if UnitExists(frame.unit) and frame.Cast then
-                        frame:Cast()
+                    if UnitExists(frame.unit) then
+                        ShowState(frame)
                     end
                 else
                     StopCastbar(frame)
@@ -925,6 +976,36 @@ function Pools.Define(desc)
         SetEnabled(enabled)
         SyncLifecycle(enabled)
     end
+    return ApplyPositionSetting, SetEnabled, ApplyEnabled
+end
+
+--- Builds one pool from its descriptor. Called once per kind at load.
+function Pools.Define(desc)
+    local KIND = desc.kind
+    local UNIT_PREFIX = desc.unitPrefix
+    local MAX_FRAMES = desc.maxFrames
+    local HAS_UNITS = desc.hasUnits ~= false
+
+    local pool = {
+        descriptor = desc,
+        kind = KIND,
+        maxFrames = MAX_FRAMES,
+        unitPrefix = UNIT_PREFIX,
+        -- One slot's unit token (boss1 .. bossN), for callers that map a bar
+        -- or a preview back to its unit frame.
+        slotUnitPattern = "^" .. UNIT_PREFIX .. "%d+$",
+    }
+    kinds[KIND] = pool
+    order[#order + 1] = pool
+
+    local UpdateAnchorBase = DefinePoolAnchorBase(desc)
+    local ApplyLayout, UpdateAnchor, PrepareForCast = DefinePoolLayout(desc, UpdateAnchorBase)
+    local Enabled, RefreshFromUnit, EnsureCastbars =
+        DefinePoolBars(desc, pool, ApplyLayout, UpdateAnchor, UpdateAnchorBase, PrepareForCast)
+    local QueuePass, QueuePrewarm, CancelLifecycle = DefinePoolPasses(desc, Enabled, RefreshFromUnit)
+    local SyncLifecycle = DefinePoolLifecycle(desc, pool, EnsureCastbars, RefreshFromUnit,
+        QueuePass, QueuePrewarm, CancelLifecycle)
+    local ApplyPositionSetting, SetEnabled, ApplyEnabled = DefinePoolSettings(desc, Enabled, EnsureCastbars, SyncLifecycle)
 
     pool.ApplyPositionSetting = ApplyPositionSetting
     pool.ApplyEnabled = ApplyEnabled
@@ -933,6 +1014,12 @@ function Pools.Define(desc)
     pool.RefreshFromUnit = RefreshFromUnit
     pool.Stop = StopCastbar
 
-    SyncLifecycle(Enabled())
+    -- The lifecycle listens wherever the client has the kind's units: its
+    -- PLAYER_LOGIN row builds the pool only when the saved profile enables it
+    -- (EnsureCastbars asks Enabled() then). Not Enabled() here: the client
+    -- loads the SavedVariables after every file ran, so this read built a
+    -- throwaway profile, and only its default (enabled) let the login row
+    -- register at all.
+    SyncLifecycle(HAS_UNITS)
     return pool
 end

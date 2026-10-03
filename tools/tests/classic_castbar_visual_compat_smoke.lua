@@ -85,6 +85,25 @@ _G.MSUF_ApplyAllCastbarsAndSync = function()
     return _G.MSUF_ApplyCastbarVisualsForUnit("target")
 end
 
+-- The compat walks boss and arena bars through the real pool modules (one slot
+-- each: MAX_BOSS_FRAMES and MSUF_MAX_ARENA_FRAMES are 1 above).
+_G.CreateFrame = function()
+    local stub = {}
+    function stub:SetScript() end
+    function stub:RegisterEvent() end
+    function stub:UnregisterEvent() end
+    function stub:UnregisterAllEvents() end
+    return stub
+end
+_G.C_Timer = { After = function() end }
+for _, file in ipairs({
+    "MSUF_CastbarPools.lua", "MSUF_CastbarPoolPreviews.lua",
+    "MSUF_BossCastbars.lua", "MSUF_BossCastbars_Preview.lua",
+    "MSUF_ArenaCastbars.lua", "MSUF_ArenaCastbars_Preview.lua",
+}) do
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/" .. file))("MidnightSimpleUnitFrames", namespace)
+end
+
 local compatPath = root .. "/MidnightSimpleUnitFrames/Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua"
 assert(loadfile(compatPath))("MidnightSimpleUnitFrames", namespace)
 

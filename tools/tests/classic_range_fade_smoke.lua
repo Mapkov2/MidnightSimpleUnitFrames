@@ -9,6 +9,7 @@ assert(type(root) == "string" and root ~= "", "usage: lua classic_range_fade_smo
 root = root:gsub("\\", "/"):gsub("/+$", "")
 local DRIVER = root .. "/MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade_Driver.lua"
 local ELEMENT = root .. "/MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade.lua"
+local SCHEDULER = root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Scheduler.lua"
 local OUT_ALPHA = 0.35
 
 -- Copied from Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua (PlainBool).
@@ -46,12 +47,18 @@ local function Load(opts)
     _G.MSUF_ScheduleOnce = function(key, fn) st.scheduled[key] = fn end
   end
   _G.issecretvalue = function() return false end
+  st.newTimers, st.pollArms = 0, 0
   _G.C_Timer = {
     NewTimer = function(_, callback)
+      st.newTimers = st.newTimers + 1
       st.timerCallback = callback
       return { Cancel = function() end }
     end,
-    After = function() end,
+    -- The shared scheduler's backend: it captures the poll heartbeat.
+    After = function(_, callback)
+      st.pollArms = st.pollArms + 1
+      st.timerCallback = callback
+    end,
   }
   _G.MSUF_MAX_ARENA_FRAMES = opts.maxArena
   _G.CreateFrame = function()
@@ -129,6 +136,13 @@ local function Load(opts)
     Secrets = { PlainBool = PlainBool },
     ExportPublic = function() end,
   }
+  -- The real keyed scheduler (Kernel loads it first). Its own frame is not a
+  -- range driver, and RangeFade's next-frame After(0, ...) stays a no-op.
+  local createFrame = _G.CreateFrame
+  _G.CreateFrame = function() return { SetScript = function() end } end
+  assert(loadfile(SCHEDULER))("MidnightSimpleUnitFrames", ns)
+  _G.CreateFrame = createFrame
+  _G.C_Timer.After = function() end
   assert(loadfile(DRIVER))("MidnightSimpleUnitFrames", ns)
   assert(loadfile(ELEMENT))("MidnightSimpleUnitFrames", ns)
   assert(elements.RangeFade, "RangeFade element was not registered")
@@ -510,6 +524,32 @@ scenarios[#scenarios + 1] = { "P the group range health alpha builds no string p
   for i = 1, #fn.ops do
     assert(fn.ops[i] ~= OP_CONCAT, "P SetStatusAlpha concatenates a string on the range hot path")
   end
+end }
+
+-- Wave 4 (raid trace: ArmPollTimer 391 and PollTimerCallback 137 calls in 120 s,
+-- each allocating a timer object): the heartbeat re-arms one keyed deadline.
+-- Budget per 50 polls of a moving blind target: no C_Timer.NewTimer object and
+-- no Lua allocation; every poll arms exactly one native C_Timer.After.
+scenarios[#scenarios + 1] = { "O the poll heartbeat re-arms without a timer object", function()
+  local st = Load({ classic = true, armed = true, known = { [355] = true }, rangeResult = 1, interact = false })
+  st.speed.target = 7
+  local poll = assert(st.timerCallback, "O blind target must keep the poll timer armed")
+  st.now = 1
+  poll()
+  local timers, arms = st.newTimers, st.pollArms
+  collectgarbage("collect")
+  collectgarbage("stop")
+  local before = collectgarbage("count")
+  for i = 1, 50 do
+    st.now = st.now + 1
+    st.timerCallback()
+  end
+  local kb = collectgarbage("count") - before
+  collectgarbage("restart")
+  assert(st.newTimers == timers and st.newTimers == 0,
+    "O re-arming the poll created " .. (st.newTimers - timers) .. " timer objects (" .. st.newTimers .. " in total)")
+  assert(st.pollArms - arms == 50, "O 50 polls armed " .. (st.pollArms - arms) .. " native timers")
+  assert(kb <= 0.05, string.format("O 50 polls allocated %.2f KB", kb))
 end }
 
 local failures = {}

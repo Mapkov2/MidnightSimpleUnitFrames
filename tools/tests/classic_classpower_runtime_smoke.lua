@@ -23,6 +23,7 @@ C_UnitAuras = { GetAuraDataBySpellName = function() return nil end }
 MSUF_DB = { general = {}, bars = { showClassPower = false, showAltMana = false, playerHPBarEnabled = false } }
 local module
 function MSUF_RegisterModule(name, callbacks) assert(name == "ClassPower"); module = callbacks end
+assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().Install(repo, ns)
 local function load(path) assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. path))("MSUF", ns) end
 load("Libs/MSUFUnitFrames/MSUF_UF_Secrets.lua")
 load("ClassPower/MSUF_CP_Constants.lua")

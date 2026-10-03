@@ -465,6 +465,42 @@ end
 function Environment:SetCombat(inCombat) self.inCombat = inCombat and true or false end
 function Environment:IsInCombat() return self.inCombat end
 
+-- Deliver an event to every frame registered for it (RegisterEvent,
+-- RegisterUnitEvent or RegisterAllEvents), in creation order, whether the frame
+-- is shown or not, the way the client walks its frame list. Frames created by a
+-- handler during the dispatch wait for the next event. Returns the number of
+-- handlers that ran.
+function Environment:FireEvent(event, ...)
+    local frames, ran = self.frames, 0
+    for index = 1, #frames do
+        local frame = frames[index]
+        local events = rawget(frame, "events")
+        local handler = rawget(frame, "scripts")
+        handler = handler and handler.OnEvent
+        if handler and events and (events[event] or events["*"]) then
+            ran = ran + 1
+            handler(frame, event, ...)
+        end
+    end
+    return ran
+end
+
+-- The client's combat edges. PLAYER_REGEN_DISABLED is dispatched while
+-- InCombatLockdown() still answers false and the lockdown starts after it;
+-- PLAYER_REGEN_ENABLED is dispatched after the lockdown ended. A handler that
+-- asks InCombatLockdown() at either edge reads the old state. Combat lasts at
+-- least one frame, so GetTime() has moved on when it ends.
+local FRAME_SECONDS = 1 / 60
+function Environment:EnterCombat()
+    self:FireEvent("PLAYER_REGEN_DISABLED")
+    self.inCombat = true
+end
+function Environment:LeaveCombat()
+    self.now = self.now + FRAME_SECONDS
+    self.inCombat = false
+    self:FireEvent("PLAYER_REGEN_ENABLED")
+end
+
 function Environment:SetTime(now) self.now = now end
 function Environment:AdvanceTime(delta) self.now = self.now + delta end
 function Environment:GetTime() return self.now end

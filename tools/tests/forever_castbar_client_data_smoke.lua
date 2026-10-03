@@ -3,7 +3,9 @@
 -- Blizzard player castbar. This smoke pins the castbar files that branch on it:
 --   Bridge:     GamepadPlayerCastingBarFrame is suppressed and restored with
 --               PlayerCastingBarFrame, and a client without it (every other
---               client) still owns PlayerCastingBarFrame alone.
+--               client) still owns PlayerCastingBarFrame alone. As in the
+--               client, PlayerCastingBarFrame is a managed frame (concealed,
+--               never hidden by MSUF) and the gamepad bar is not (hidden).
 --   Interrupt:  Forever resolves the Vanilla interrupt table (no Paladin or
 --               Hunter entry); Retail, Vanilla and a harness without
 --               MSUF.Client keep their own tables.
@@ -48,6 +50,7 @@ local function NewFrame(name)
     function frame:SetScript(script, fn) if script == "OnEvent" then self.onEvent = fn end end
     function frame:Hide() self.shown = false end
     function frame:Show() self.shown = true end
+    function frame:IsShown() return self.shown == true end
     return frame
 end
 
@@ -69,13 +72,28 @@ local function Namespace(client)
     return {
         Client = client,
         ExportPublic = function(name, value) _G[name] = value; return value end,
+        -- Kernel/MSUF_Scheduler.lua's keyed deadlines (the GCD bar's finish).
+        Scheduler = { ScheduleAfter = function() return true end, CancelScheduled = function() return false end },
     }
 end
 
 -- Bridge ----------------------------------------------------------------------
-local function NewCastbar(name)
+-- managed: BottomManagedFrameTemplate's isManagedFrame key (PlayerCastingBarFrame
+-- on Forever; GamepadPlayerCastingBarFrame inherits no managed template).
+local function NewCastbar(name, managed)
     local bar = NewFrame(name)
     bar.unit, bar.showTradeSkills, bar.showShield, bar.shown = "player", true, false, false
+    bar.isManagedFrame, bar.alpha, bar.mouse = managed or nil, 1, false
+    function bar:GetAlpha() return self.alpha end
+    function bar:SetAlpha(alpha) self.alpha = alpha end
+    function bar:IsMouseEnabled() return self.mouse end
+    function bar:EnableMouse(enabled) self.mouse = enabled == true end
+    if managed then
+        -- A hidden frame runs no OnHide; a shown one runs the container layout.
+        function bar:Hide()
+            if self.shown then error("MSUF hid the managed " .. self.name .. " (its OnHide lays out the container tainted)", 2) end
+        end
+    end
     bar.events.UNIT_SPELLCAST_START = true
     bar.setUnitCalls = {}
     function bar:HookScript(script, fn) if script == "OnShow" then self.onShowHook = fn end end
@@ -97,7 +115,7 @@ local function LoadBridge(withGamepad)
     end
     _G.MSUF_DB = { general = {} }
     _G.CastingBarFrame = nil
-    _G.PlayerCastingBarFrame = NewCastbar("PlayerCastingBarFrame")
+    _G.PlayerCastingBarFrame = NewCastbar("PlayerCastingBarFrame", true)
     _G.GamepadPlayerCastingBarFrame = withGamepad and NewCastbar("GamepadPlayerCastingBarFrame") or nil
     local ns = Namespace(nil)
     ns.MSUF_CastbarBackend = { Resolve = function() return backend end }
@@ -105,11 +123,15 @@ local function LoadBridge(withGamepad)
     return ns
 end
 
+local function Invisible(bar)
+    return bar.shown == false or (bar.isManagedFrame == true and bar.alpha == 0)
+end
+
 local function CheckSuppressed(bar, label)
-    Check(bar.shown == false, label .. ": " .. bar.name .. " must be hidden")
+    Check(Invisible(bar), label .. ": " .. bar.name .. " must not be visible")
     Check(next(bar.events) == nil, label .. ": " .. bar.name .. " must lose its cast events")
     bar:Show()
-    Check(bar.shown == false, label .. ": " .. bar.name .. " OnShow guard must hide it again")
+    Check(Invisible(bar), label .. ": " .. bar.name .. " OnShow guard must make it invisible again")
 end
 
 local function CheckRestored(bar, label)
@@ -118,7 +140,7 @@ local function CheckRestored(bar, label)
         and calls[2].showTradeSkills == true and calls[2].showShield == false,
         label .. ": " .. bar.name .. " must be restored through SetUnit(nil) then SetUnit(\"player\", true, false)")
     bar:Show()
-    Check(bar.shown == true, label .. ": " .. bar.name .. " OnShow guard must stand down once Blizzard owns it")
+    Check(bar.shown == true and bar.alpha == 1, label .. ": " .. bar.name .. " OnShow guard must stand down once Blizzard owns it")
 end
 
 do -- (a) Forever: MSUF backend suppresses both player castbars, Blizzard restores both.
@@ -145,10 +167,26 @@ do -- (c) Combat defers ownership but still hides both bars.
     LoadBridge(true)
     _G.InCombatLockdown = function() return true end
     Check(_G.MSUF_ApplyBlizzardCastbarOwnership() == false, "(c) combat apply must defer")
-    Check(_G.GamepadPlayerCastingBarFrame.shown == false and _G.PlayerCastingBarFrame.shown == false,
-        "(c) combat apply must hide both player castbars")
+    Check(Invisible(_G.GamepadPlayerCastingBarFrame) and Invisible(_G.PlayerCastingBarFrame),
+        "(c) combat apply must make both player castbars invisible")
     Check(_G.GamepadPlayerCastingBarFrame.events.UNIT_SPELLCAST_START == true,
         "(c) combat apply must not unregister events")
+end
+
+do -- (d) A managed bar shown at the takeover (a Blizzard cast in flight) is
+    -- concealed, never hidden; the release gives back its alpha and mouse.
+    backend = "MSUF"
+    LoadBridge(false)
+    local bar = _G.PlayerCastingBarFrame
+    bar.shown, bar.alpha, bar.mouse = true, 0.6, true
+    Check(_G.MSUF_ApplyBlizzardCastbarOwnership() == true, "(d) ownership apply must find PlayerCastingBarFrame")
+    Check(bar.shown and bar.alpha == 0 and bar.mouse == false and next(bar.events) == nil,
+        "(d) a shown managed bar must be concealed (alpha 0, no mouse, no cast events)")
+    _G.MSUF_ApplyBlizzardCastbarOwnership()
+    Check(bar.alpha == 0, "(d) a second apply must keep the concealed bar's recorded alpha")
+    backend = "BLIZZARD"
+    _G.MSUF_ApplyBlizzardCastbarOwnership()
+    Check(bar.alpha == 0.6 and bar.mouse == true, "(d) the release must restore the bar's alpha and mouse")
 end
 
 -- Interrupt Ready ---------------------------------------------------------------
@@ -160,7 +198,10 @@ local function ResolveInterrupt(client, classToken)
     _G.UnitClass = function() return classToken, classToken end
     _G.C_SpellBook = { IsSpellKnownOrInSpellBook = function() return false end }
     _G.C_SpecializationInfo = nil
-    assert(loadfile(root .. "/" .. INTERRUPT_FILE))("MidnightSimpleUnitFrames", Namespace(client))
+    local ns = Namespace(client)
+    -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_CastbarUtils.lua"))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(root .. "/" .. INTERRUPT_FILE))("MidnightSimpleUnitFrames", ns)
     return _G.MSUF_KickReady_GetSpellID()
 end
 

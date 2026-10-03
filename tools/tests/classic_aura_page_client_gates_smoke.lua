@@ -299,6 +299,8 @@ local MSUF = { MSUF2 = M, MSUF_Auras3 = A3, Client = Client, AddonName = "Midnig
 -- Load the shared crop owner, as the shipped Core graph does before Options.
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))("MidnightSimpleUnitFrames", MSUF)
 local pages = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/"
+-- The group page requires the shipped group aura filter table at load.
+assert(loadfile(root .. "/tools/tests/gf_aura_filter_fixture.lua"))().Install(root, _G, MSUF)
 for _, file in ipairs({ "MSUF_Menu2_AuraSettings.lua", "MSUF_Menu2_AuraControls.lua", "MSUF_Menu2_Auras.lua",
     "MSUF_Menu2_Auras_Group.lua", "MSUF_Menu2_Auras_Preview.lua" }) do
     assert(loadfile(pages .. file))("MidnightSimpleUnitFrames", MSUF)
@@ -424,11 +426,16 @@ assert(clicked > 0, flavor .. ": no group blacklist action queued a group apply"
 local presetNS = {}
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Presets.lua"))(
     "MidnightSimpleUnitFrames", presetNS)
+-- The shipped spell label helper (MSUF_Auras3_Menu_Common.lua) names the rows.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MenuModel/MSUF_Auras3_Menu_Common.lua"))(
+    "MidnightSimpleUnitFrames", presetNS)
+local shippedCommon = presetNS.Auras3MenuModelFactories.Common({})
 local presetModel = {}
 local Presets = presetNS.Auras3MenuModelFactories.Presets(presetModel, {
     AuraFilter = function() return nil end,
     NormalizeKind = function(kind) return tostring(kind) == "debuff" and "debuff" or "buff" end,
     NormalizeScope = function(scope) return scope end,
+    SpellIDText = shippedCommon.SpellIDText,
     SpellInfo = function(id) return id, "Spell " .. tostring(id), 136000 end,
 })
 -- MSUF_Auras3_Menu_GroupFilters.lua GroupBlacklistPresetValues and GroupBlacklistSpellValues.

@@ -279,21 +279,16 @@ local function ForEachCastbar(callback)
     Visit(_G.MSUF_PlayerCastbarPreview)
     Visit(_G.MSUF_TargetCastbarPreview)
     Visit(_G.MSUF_FocusCastbarPreview)
-    Visit(_G.MSUF_BossCastbarPreview)
-    local bossCastbars = _G.MSUF_BossCastbars
-    local maxBoss = tonumber(_G.MAX_BOSS_FRAMES) or 5
-    if maxBoss < 1 or maxBoss > 12 then maxBoss = 5 end
-    for index = 1, maxBoss do
-        Visit(type(bossCastbars) == "table" and bossCastbars[index] or nil)
-        Visit(_G["MSUF_BossCastbar" .. index] or _G["MSUF_boss" .. index .. "CastBar"])
-        Visit(_G["MSUF_BossCastbarPreview" .. index])
-    end
-    Visit(_G.MSUF_ArenaCastbarPreview or _G.MSUF_ArenaCastbarPreview1)
-    local arenaCastbars = _G.MSUF_ArenaCastbars
-    for index = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-        Visit(type(arenaCastbars) == "table" and arenaCastbars[index] or nil)
-        Visit(_G["MSUF_ArenaCastbar" .. index])
-        Visit(_G["MSUF_ArenaCastbarPreview" .. index])
+    -- Boss, then arena: every slot's live bar and preview (MSUF_CastbarPools.lua).
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    local order = pools and pools.order
+    for poolIndex = 1, order and #order or 0 do
+        local pool = order[poolIndex]
+        local preview = pool.preview
+        for index = 1, pool.maxFrames do
+            Visit(pool.Bar(index))
+            if preview then Visit(preview:Frame(index)) end
+        end
     end
 end
 
@@ -305,9 +300,6 @@ local function ApplyAll(masterActive)
 end
 
 MSUF.RoundedCastbarsApplyAll = ApplyAll
-ExportPublic("MSUF_ApplyRoundedCastbars", function()
-    ApplyAll(SettingEnabled())
-end)
 ExportPublic("MSUF_RoundedCastbar_RefreshFrame", ApplyFrame)
 ExportPublic("MSUF_RoundedCastbar_ApplyOutline", ApplyRoundedOutline)
 ExportPublic("MSUF_RoundedCastbar_TintOutline", TintRoundedOutline)

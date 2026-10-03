@@ -8,13 +8,18 @@
 # Evidence is the provider file that defines the name. Rows only shrink or follow new Optional reads.
 Name	Kind	Evidence	Reason
 MSUF_Analytics_HandleSlash	optional-module	MidnightSimpleUnitFrames/Features/Telemetry/MSUF_Analytics.lua	/msuf analytics reports a missing telemetry module instead of failing
+MSUF_BAL_RefreshRuntime	optional-module	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_BalanceDruid.lua	the Balance runtime loads for Druids on Midnight only
 MSUF_ClassPower_Apply	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
 MSUF_ClassPower_RefreshLayout	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
 MSUF_ClassPower_RefreshTextures	load-order	MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller.lua	media registered while the core loads refreshes at once in combat
 MSUF_ClearResolvedStatusbarTextureCache	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua	media registered while the core loads refreshes at once in combat
+MSUF_EllesmereEditMode_ClearMoveState	optional-module	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua	the EllesmereUI bridge loads on the Mainline TOC only; a suspended Unlock Mode clears its move state through it
+MSUF_EllesmereEditMode_IsAvailable	optional-module	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua	the EllesmereUI bridge loads on the Mainline TOC only; Misc shows its section only where the bridge exists
 MSUF_EnsureCooldownWidthObservers	load-order	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
 MSUF_EnsureDB	load-order	MidnightSimpleUnitFrames/State/MSUF_Defaults.lua	Kernel/MSUF_Util.lua EnsureDBSafe can run before State/MSUF_Defaults.lua loads
 MSUF_FocusKick_ApplyTimeTextFont	load-order	MidnightSimpleUnitFrames/Castbars/MSUF_FocusKickIcon.lua	a font apply can run while the core loads, before the castbars
+MSUF_GetEmpowerStageBlinkTime	optional-module	MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEmpower.lua	the empower castbar module loads on the Mainline TOC only; the Classic castbar page preview reads empowerStageBlinkTime directly
+MSUF_IsEmpowerStageBlinkEnabled	optional-module	MidnightSimpleUnitFrames/Castbars/MSUF_CastbarEmpower.lua	the empower castbar module loads on the Mainline TOC only; the Classic castbar page preview reads empowerStageBlink directly
 MSUF_NormalizeFontKey	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRegistry.lua	Kernel/MSUF_Libs.lua resolves font paths before the font registry loads
 MSUF_OpenPage	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua	options entry point; Kernel/MSUF_OptionsLoader.lua forwards it until the menu loads
 MSUF_OpenStandaloneOptionsWindow	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_API.lua	options entry point; Kernel/MSUF_OptionsLoader.lua forwards it until the menu loads
@@ -26,6 +31,8 @@ MSUF_RoundedUF_OnApplyAll	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Effe
 MSUF_RoundedUF_OnDispelOverlayChanged	module-toggle	MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedFrames.lua	exported only while the rounded frames module is enabled
 MSUF_ScheduleCooldownWidthRefresh	load-order	MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Factory.lua	a cooldown anchor provider the Suite registers first is acquired while Integrations loads
 MSUF_SetGlobalUiScale	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua	MSUF_InstallGlobalScaleGate reports whether the scale owner has loaded
+MSUF_TryCloseExternalEditMode	optional-module	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua	the EllesmereUI bridge loads on the Mainline TOC only; without it Edit Mode closes its own mode
+MSUF_TryOpenExternalEditMode	optional-module	MidnightSimpleUnitFrames/Integrations/MSUF_Integration_EllesmereUnlock.lua	the EllesmereUI bridge loads on the Mainline TOC only; without it Edit Mode opens its own mode
 MSUF_UFPreview_RequestRefresh	lod-options	MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_API.lua	the unit preview exists only while the options addon is loaded
 MSUF_UpdateAbsorbBarTextures	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_TextureRuntime.lua	media registered while the core loads refreshes at once in combat
 MSUF_UpdateAllFonts	load-order	MidnightSimpleUnitFrames/Runtime/MSUF_FontRuntime.lua	media registered while the core loads refreshes at once in combat

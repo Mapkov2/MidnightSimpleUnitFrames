@@ -141,7 +141,11 @@ local function Start(spec)
         return S.primary
     end
     function UnitPower(_, powerType) return S.power[powerType] or 0 end
-    function UnitPowerMax(_, powerType) return S.max[powerType] or 0 end
+    function UnitPowerMax(_, powerType, unmodified)
+        -- Unmodified Burning Ember power is 10 per ember (Blizzard Mists ShardBar.lua).
+        if unmodified and powerType == PT.BurningEmbers then return (S.max[powerType] or 0) * 10 end
+        return S.max[powerType] or 0
+    end
     -- A client modifier of 1 would render raw ember power as whole embers.
     function UnitPowerDisplayMod() return 1 end
     function GetComboPoints(unit)
@@ -198,6 +202,7 @@ local function Start(spec)
         assert(name == "ClassPower", "unexpected module " .. tostring(name))
         module = callbacks
     end
+    assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().Install(repo, ns)
     for i = 1, #LOAD_ORDER do
         assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. LOAD_ORDER[i]))("MSUF", ns)
     end

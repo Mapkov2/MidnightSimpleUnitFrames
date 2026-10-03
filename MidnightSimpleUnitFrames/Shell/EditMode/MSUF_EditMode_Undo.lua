@@ -2,6 +2,10 @@
 --- Captures DB snapshots before changes, restores on undo.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Undo.lua"
 local ExportPublic = MSUF.ExportPublic
 local EM2 = _G.MSUF_EM2
 local Util = EM2.Util
@@ -39,16 +43,26 @@ local HISTORY_CATEGORY_LABELS = {
     external = "External frame",
 }
 
+--- Whole-sentence keys for the actions Edit Mode records, so each language
+--- orders verb and object itself.
+local HISTORY_ACTION_FORMATS = {
+    Change = "Change %s", Move = "Move %s", Nudge = "Nudge %s",
+    Reset = "Reset %s", Set = "Set %s", Toggle = "Toggle %s",
+}
+
 --- Menu2's undo surfaces show the label as given, so it is built from
 --- translated pieces through translated format strings ("Move Unit frame:
---- player"). The key is a profile identifier and stays as it is.
+--- player"). The key is a profile identifier and stays as it is. An external
+--- provider's own control label has no sentence key; it keeps "%s %s".
 local function HistoryChangeLabel(category, key, action)
     local tr = Util.Tr or tostring
     local label = tr(HISTORY_CATEGORY_LABELS[tostring(category or "")] or "Edit Mode")
-    action = tr(tostring(action or "Change"))
+    action = tostring(action or "Change")
+    local format = HISTORY_ACTION_FORMATS[action]
+    local phrase = format and string.format(tr(format), label) or string.format(tr("%s %s"), tr(action), label)
     key = tostring(key or "")
-    if key ~= "" then return string.format(tr("%s %s: %s"), action, label, key) end
-    return string.format(tr("%s %s"), action, label)
+    if key ~= "" then return string.format(tr("%s: %s"), phrase, key) end
+    return phrase
 end
 
 local function HistoryChangeSource(category, key)
@@ -115,19 +129,12 @@ end
 
 local function ApplyCastbarUndo(unit)
     unit = NormalizeCastbarUndoUnit(unit)
-    if unit and type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
+    if unit then
+        MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(unit)
         return true
     end
-    if unit and type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-        _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        return true
-    end
-    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals(unit)
-        return true
-    end
-    return false
+    MSUF.Require("MSUF_UpdateCastbarVisuals", CALLER)(unit)
+    return true
 end
 
 local function ApplyAuraUndo(unit)
@@ -160,24 +167,6 @@ local function ApplyGFUndo(key, dbKey)
     end
     if gf and type(gf.RefreshVisuals) == "function" then
         gf.RefreshVisuals(kind, gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)
-        return true
-    end
-    if kind and type(_G.MSUF_GF_RefreshGeometry) == "function" then
-        _G.MSUF_GF_RefreshGeometry(kind)
-        if type(_G.MSUF_GF_RefreshUnitBindings) == "function" then
-            _G.MSUF_GF_RefreshUnitBindings(kind)
-        end
-        if type(_G.MSUF_GF_RefreshVisuals) == "function" then
-            _G.MSUF_GF_RefreshVisuals(kind)
-        end
-        return true
-    end
-    if type(_G.MSUF_GF_RefreshAll) == "function" then
-        _G.MSUF_GF_RefreshAll()
-        return true
-    end
-    if type(_G.MSUF_GF_Refresh) == "function" then
-        _G.MSUF_GF_Refresh()
         return true
     end
     return false
@@ -231,7 +220,10 @@ local function RestoreState(snap)
         return
     end
     local db = _G.MSUF_DB
-    if not db then ExportPublic("MSUF__UndoRestoring", false); return end
+    if not db then
+        ExportPublic("MSUF__UndoRestoring", false)
+        return
+    end
 
     if snap.category == "unit" then
         db[snap.key] = db[snap.key] or {}
@@ -248,19 +240,15 @@ local function RestoreState(snap)
     elseif snap.category == "classpower" then
         db.bars = db.bars or {}
         DeepRestore(db.bars, snap.data)
-        if type(_G.MSUF_ClassPower_RefreshLayout) == "function" then _G.MSUF_ClassPower_RefreshLayout() end
-        if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
-            _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey("player", true)
-        end
+        MSUF.Require("MSUF_ClassPower_RefreshLayout", CALLER)()
+        MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", CALLER)("player", true)
     elseif snap.category == "power" then
         db[snap.key] = db[snap.key] or {}
         db.bars = db.bars or {}
         DeepRestore(db[snap.key], snap.data.unit)
         DeepRestore(db.bars, snap.data.bars)
         ApplySettingsForKeySafe(snap.key)
-        if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
-            _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(snap.key, true)
-        end
+        MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", CALLER)(snap.key, true)
     elseif snap.category == "aura" then
         db.auras3 = db.auras3 or {}
         DeepRestore(db.auras3, snap.data)
@@ -271,13 +259,11 @@ local function RestoreState(snap)
             db[dbKey] = db[dbKey] or {}
             DeepRestore(db[dbKey], snap.data)
             ApplyGFUndo(snap.key, dbKey)
-            if _G.MSUF_EM2_SyncGFPopups then _G.MSUF_EM2_SyncGFPopups() end
+            MSUF.Require("MSUF_EM2_SyncGFPopups", CALLER)()
         end
     end
 
-    if snap.category == "unit" and type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
-        _G.MSUF_ForceTextLayoutForUnitKey(snap.key)
-    end
+    if snap.category == "unit" then MSUF.Require("MSUF_ForceTextLayoutForUnitKey", CALLER)(snap.key) end
 
     --- Sync popups
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
@@ -464,7 +450,10 @@ function Undo.DoUndo()
     if #undoStack == 0 then return end
     local snap = undoStack[#undoStack]
     undoStack[#undoStack] = nil
-    if IsForeignProfileSnap(snap) then ClearLocalHistory(); return end
+    if IsForeignProfileSnap(snap) then
+        ClearLocalHistory()
+        return
+    end
     local current = CaptureState(snap.category, snap.key)
     if current then redoStack[#redoStack + 1] = current end
     RestoreState(snap)
@@ -478,7 +467,10 @@ function Undo.DoRedo()
     if #redoStack == 0 then return end
     local snap = redoStack[#redoStack]
     redoStack[#redoStack] = nil
-    if IsForeignProfileSnap(snap) then ClearLocalHistory(); return end
+    if IsForeignProfileSnap(snap) then
+        ClearLocalHistory()
+        return
+    end
     local current = CaptureState(snap.category, snap.key)
     if current then undoStack[#undoStack + 1] = current end
     RestoreState(snap)
@@ -519,9 +511,7 @@ function Undo.RefreshControls()
     if EM2.AuraPopup and EM2.AuraPopup.RefreshHistory then EM2.AuraPopup.RefreshHistory() end
     if EM2.ResourcePopup and EM2.ResourcePopup.RefreshHistory then EM2.ResourcePopup.RefreshHistory() end
     if EM2.ExternalPopup and EM2.ExternalPopup.RefreshHistory then EM2.ExternalPopup.RefreshHistory() end
-    if type(_G.MSUF_EM2_RefreshGFHistoryControls) == "function" then
-        _G.MSUF_EM2_RefreshGFHistoryControls()
-    end
+    MSUF.Require("MSUF_EM2_RefreshGFHistoryControls", CALLER)()
 end
 
 function EM2.RefreshAfterHistoryRestore(reason)
@@ -537,17 +527,13 @@ function EM2.RefreshAfterHistoryRestore(reason)
     if EM2.ResourcePopup and EM2.ResourcePopup.Sync then EM2.ResourcePopup.Sync() end
     local external = EM2.ExternalPopup
     if external and external.Sync and external.IsOpen and external.IsOpen() then external.Sync() end
-    if type(_G.MSUF_EM2_SyncGFPopups) == "function" then _G.MSUF_EM2_SyncGFPopups() end
+    MSUF.Require("MSUF_EM2_SyncGFPopups", CALLER)()
     Util.SyncMovers()
     Util.RefreshUFPreview(reason or "EM2_HISTORY_RESTORE")
 
     -- This is a cold, user-triggered restore path. The async preview pipeline
     -- coalesces all UnitFrame preview work without adding an idle/combat loop.
-    if type(_G.MSUF_SyncAllUnitPreviewsAsync) == "function" then
-        _G.MSUF_SyncAllUnitPreviewsAsync()
-    elseif type(_G.MSUF_SyncAllUnitPreviews) == "function" then
-        _G.MSUF_SyncAllUnitPreviews()
-    end
+    MSUF.Require("MSUF_SyncAllUnitPreviewsAsync", CALLER)()
     local gf = MSUF and MSUF.GF
     if gf and type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout() end
 end

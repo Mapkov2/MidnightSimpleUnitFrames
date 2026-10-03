@@ -305,6 +305,10 @@ local MSUF_PROFILEIO_UNIT_AURA_RESET_BASELINE_REVISION = 1
 local MSUF_PROFILEIO_GROUP_AURA_MODEL_REVISION = 1
 local MSUF_PROFILEIO_GROUP_AURA_SCOPES = { "gf_party", "gf_raid", "gf_mythicraid" }
 local MSUF_PROFILEIO_GROUP_AURA_FILTER_LANES = { "buff", "debuff" }
+--- The Group Aura filter tokens a stored profile may keep. Profile normalization
+--- owns this list: it runs before the Auras3 menu model loads (factory and
+--- fresh-install profiles are built from State alone), and the menu model's
+--- stored-token check (MSUF_GF_AuraFilter.NormalizeFilterToken) is the same list.
 local MSUF_PROFILEIO_GF_CURRENT_FILTER_TOKENS = {
     buff = {
         ALL = "ALL",
@@ -335,14 +339,9 @@ local function MSUF_ProfileIO_HasCanonicalUnitAuraBaseline(auras)
         and (tonumber(auras[MSUF_PROFILEIO_UNIT_AURA_MODEL_KEY]) or 0)
             >= MSUF_PROFILEIO_UNIT_AURA_RESET_BASELINE_REVISION
 end
+--- A retired or unknown token resets to the lane's visible default, "ALL".
 local function MSUF_ProfileIO_NormalizeGFAuraFilterToken(lane, token)
     if lane ~= "buff" and lane ~= "debuff" then return token end
-    local auraFilter = (type(MSUF) == "table" and type(MSUF.GF) == "table" and MSUF.GF.AuraFilter)
-        or _G.MSUF_GF_AuraFilter
-    local normalize = auraFilter and auraFilter.NormalizeFilterToken
-    if type(normalize) == "function" then
-        return normalize(lane, token)
-    end
     local key = tostring(token or "ALL"):upper():gsub("[^A-Z0-9]", "")
     return MSUF_PROFILEIO_GF_CURRENT_FILTER_TOKENS[lane][key] or "ALL"
 end
@@ -440,6 +439,97 @@ local function MSUF_ProfileIO_ProfileHasDeprecatedUnitAliases(profile)
     return false
 end
 
+--- Class power resource extras saved under their former names (profile.bars):
+--- each value moves to its current key once and the former key goes. A player
+--- who had the Arcane helper on keeps its former look (seconds with the global
+--- cooldown count, the text from 6 seconds left, the warning in the last global
+--- cooldown) unless they had chosen otherwise. This ran inside the class power
+--- "is a helper wanted" check on every refresh (ClassPower/MSUF_CP_ResourceExtras.lua).
+local MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS = {
+    showArcaneSoul = "showArcaneWindow", arcaneSoulCountdownWindow = "arcaneWindowTextFrom",
+    arcaneSoulBeforeColor = "arcaneWindowColor", arcaneSoulActiveColor = "arcaneWindowSoulColor",
+    arcaneSoulLastColor = "arcaneWindowWarnColor", manaFiveSecondRule = "manaRegenPause",
+    manaRegenTicks = "manaGainPulse", manaFiveSecondColor = "manaRegenPauseColor", manaTickColor = "manaGainPulseColor",
+}
+local MSUF_PROFILEIO_FORMER_ARCANE_TEXT = { SECONDS = "seconds", GCD = "gcds", BOTH = "both" }
+local function MSUF_ProfileIO_HasFormerResourceExtras(bars)
+    if type(bars) ~= "table" then return false end
+    if bars.arcaneSoulDisplay ~= nil then return true end
+    for former in pairs(MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS) do
+        if bars[former] ~= nil then return true end
+    end
+    return false
+end
+local function MSUF_ProfileIO_CarryFormerResourceExtras(bars)
+    if not MSUF_ProfileIO_HasFormerResourceExtras(bars) then return false end
+    if bars.showArcaneSoul ~= nil or bars.arcaneSoulDisplay ~= nil then
+        local used = bars.showArcaneSoul == true
+        bars.arcaneWindowText = MSUF_PROFILEIO_FORMER_ARCANE_TEXT[bars.arcaneSoulDisplay or (used and "BOTH") or ""]
+            or bars.arcaneWindowText
+        if used and bars.arcaneSoulCountdownWindow == nil then bars.arcaneSoulCountdownWindow = 6 end
+        if used and bars.arcaneWindowWarnLastGCD == nil then bars.arcaneWindowWarnLastGCD = true end
+        bars.arcaneSoulDisplay = nil
+    end
+    for former, current in pairs(MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS) do
+        if bars[former] ~= nil then bars[current], bars[former] = bars[former], nil end
+    end
+    return true
+end
+
+--- The same rules for a variant patch (State/MSUF_ProfileVariants.lua), which names
+--- settings field by field and is applied to the effective profile after normalization:
+--- the fields saved under a former name are carried over as one set, including the
+--- implicit Arcane look, and the former fields leave the patch. A former key the patch
+--- removes becomes a removal of its current key (arcaneSoulDisplay: the text mode), so
+--- the variant still resets that setting; a value for the current key wins over it,
+--- whether the variant sets it itself or the carried Arcane look does. Registered with
+--- State/MSUF_ProfileFields.lua, which loads first in every TOC; a harness that loads
+--- this file alone has no variants.
+local function MSUF_ProfileIO_IsFormerResourceExtrasField(field, currentKeys)
+    local path = field.path
+    if #path ~= 2 or path[1] ~= "bars" then return false end
+    local key = path[2]
+    return MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS[key] ~= nil or key == "arcaneSoulDisplay"
+        or (currentKeys == true and (key == "arcaneWindowText" or key == "arcaneWindowWarnLastGCD"))
+end
+local function MSUF_ProfileIO_CarryFormerResourceExtrasPatch(patch)
+    local found = false
+    for i = 1, #patch do
+        if MSUF_ProfileIO_IsFormerResourceExtrasField(patch[i]) then found = true break end
+    end
+    if not found then return patch end
+    --- The carry rules read two current keys (the text mode it may replace and the
+    --- last-global-cooldown warning it only defaults), so the patch's own values
+    --- for them take part.
+    local carried, removed = {}, {}
+    for i = 1, #patch do
+        local field = patch[i]
+        if not field.remove and MSUF_ProfileIO_IsFormerResourceExtrasField(field, true) then
+            carried[field.path[2]] = field.value
+        elseif field.remove and MSUF_ProfileIO_IsFormerResourceExtrasField(field) then
+            removed[MSUF_PROFILEIO_FORMER_RESOURCE_EXTRAS[field.path[2]] or "arcaneWindowText"] = true
+        end
+    end
+    MSUF_ProfileIO_CarryFormerResourceExtras(carried)
+    local out = {}
+    for i = 1, #patch do
+        local field = patch[i]
+        local key = field.path[2]
+        if not (MSUF_ProfileIO_IsFormerResourceExtrasField(field) or (#field.path == 2 and field.path[1] == "bars"
+            and carried[key] ~= nil)) then
+            out[#out + 1] = field
+            if #field.path == 2 and field.path[1] == "bars" then removed[key] = nil end
+        end
+    end
+    for key, value in pairs(carried) do
+        out[#out + 1] = { path = { "bars", key }, value = value, remove = false }
+        removed[key] = nil
+    end
+    for key in pairs(removed) do out[#out + 1] = { path = { "bars", key }, remove = true } end
+    return out
+end
+if MSUF.ProfileFields then MSUF.ProfileFields.RegisterPatchTranslator(MSUF_ProfileIO_CarryFormerResourceExtrasPatch) end
+
 local function MSUF_ProfileIO_ProfileNeedsNormalization(profile)
     if type(profile) ~= "table" then return false end
     if MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, false) then return true end
@@ -462,6 +552,7 @@ local function MSUF_ProfileIO_ProfileNeedsNormalization(profile)
     end
     if MSUF_ProfileIO_AuraOverridesNeedRepair(profile) then return true end
     if MSUF_ProfileIO_ProfileHasDeprecatedUnitAliases(profile) then return true end
+    if MSUF_ProfileIO_HasFormerResourceExtras(profile.bars) then return true end
     for i = 1, #MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS do
         local scope = profile[MSUF_PROFILEIO_LEGACY_SIGNAL_UNIT_KEYS[i]]
         if type(scope) == "table"
@@ -1147,8 +1238,14 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
             profile._msufDefaultsRevision = nil
             changed = true
         end
+        --- The dispel priority stamp is the payload's portable data-format
+        --- version, not a fast-path marker: dropping it re-ran the one-time
+        --- TOP -> ALL lift on every import of a current profile. Migrate the
+        --- payload from its own version now; the forced run still repeats
+        --- every idempotent normalization, so a copied stamp skips nothing
+        --- but the lift.
         if profile._msufDispelPriorityMigration ~= nil then
-            profile._msufDispelPriorityMigration = nil
+            MSUF.Require("MSUF_MigrateDispelPriorityProfile", "State/MSUF_ProfileNormalize.lua")(profile, true)
             changed = true
         end
         --- Navigation icons are the supported Menu2 baseline for imports.
@@ -1182,6 +1279,7 @@ MSUF_ProfileIO_TranslateProfileToCurrent = function(profile, context)
     changed = StateHelpers.MigrateSplitStatusText(profile, MSUF_PROFILEIO_TEXT_SCOPE_KEYS) or changed
     changed = MSUF_ProfileIO_NormalizeProfileAuras(profile) or changed
     changed = MSUF_ProfileIO_NormalizeGFAuraFilterTokens(profile, true) or changed
+    changed = MSUF_ProfileIO_CarryFormerResourceExtras(profile.bars) or changed
     local normalizeLayers = _G.MSUF_NormalizeNumericLayers
     if type(normalizeLayers) ~= "function" and type(MSUF) == "table" then
         normalizeLayers = MSUF.MSUF_NormalizeNumericLayers
@@ -1226,6 +1324,8 @@ MSUF.ProfileNormalize = {
     EnsureProfileMenuDefaults = MSUF_ProfileIO_EnsureProfileMenuDefaults,
     NormalizeImportedFontSizes = MSUF_ProfileIO_NormalizeImportedFontSizes,
     NormalizeGFAuraFilterToken = MSUF_ProfileIO_NormalizeGFAuraFilterToken,
+    CarryFormerResourceExtras = MSUF_ProfileIO_CarryFormerResourceExtras,
+    CarryFormerResourceExtrasPatch = MSUF_ProfileIO_CarryFormerResourceExtrasPatch,
     TranslateProfileToCurrent = MSUF_ProfileIO_TranslateProfileToCurrent,
     TranslateProfilesToCurrent = MSUF_ProfileIO_TranslateProfilesToCurrent,
 }

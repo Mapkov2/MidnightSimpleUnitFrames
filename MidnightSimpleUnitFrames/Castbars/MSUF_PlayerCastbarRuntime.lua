@@ -260,23 +260,18 @@ local function UpdateColorForInterruptible(frame)
                 blue = tonumber(general.playerCastbarOverrideB)
             else
                 local _, classToken = UnitClass("player")
-                if classToken then
-                    if type(_G.MSUF_GetClassBarColor) == "function" then
-                        red, green, blue = _G.MSUF_GetClassBarColor(classToken)
-                    end
-                    if not red and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken] then
-                        local color = _G.RAID_CLASS_COLORS[classToken]
-                        red, green, blue = color.r, color.g, color.b
-                    end
+                -- A secret class token is never a table key (the client
+                -- raises): the override then keeps the cast colours below.
+                if not issecretvalue(classToken) and classToken then
+                    -- Runtime/MSUF_FontRegistry.lua (loads before the castbars)
+                    -- owns it: MSUF's custom class colour (db.classColors, the
+                    -- one the unit frames use), else RAID_CLASS_COLORS.
+                    red, green, blue = _G.MSUF_GetClassBarColor(classToken)
                 end
             end
 
             if red and green and blue then
-                if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-                    _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, 1)
-                else
-                    frame.statusBar:SetStatusBarColor(red, green, blue, 1)
-                end
+                _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, 1)
                 return
             end
         end
@@ -332,17 +327,8 @@ local function UpdateColorForInterruptible(frame)
         end
     end
 
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, alpha or 1)
-    else
-        frame.statusBar:SetStatusBarColor(red, green, blue, alpha or 1)
-    end
-end
-
-local function GetInterruptFeedbackColor()
-    local resolveColor = _G.MSUF_ResolveInterruptFeedbackCastColor
-    if type(resolveColor) == "function" then return resolveColor() end
-    return 1.0, 0.82, 0.0, 1
+    -- Castbars/MSUF_CastbarUtils.lua (loads first) owns the colour write.
+    _G.MSUF_SetStatusBarColorIfChanged(frame.statusBar, red, green, blue, alpha or 1)
 end
 
 local function InvalidateCastState(unit)
@@ -415,6 +401,7 @@ local function ClearPendingPlayerInterrupt(frame)
     if not frame then return end
     frame._msufPlayerInterruptCastUnit = nil
     frame._msufPlayerInterruptCastGUID = nil
+    frame._msufPlayerInterruptCastBarID = nil
     frame._msufPlayerInterruptCastDeadline = nil
 end
 
@@ -425,11 +412,20 @@ local function ActiveCastBarIDMatches(frame, castBarID)
     return castBarID == frame._msufActiveCastBarID
 end
 
+--- castGUID and spellID are SecretWhenUnitSpellCastRestricted in the payload
+--- and in the stored identity (castBarID is NeverSecret). Two values differ
+--- only when both are known and plain; a secret on either side is no
+--- information, like a missing one.
+local function KnownDifferent(left, right)
+    if issecretvalue(left) or issecretvalue(right) then return false end
+    return left ~= nil and right ~= nil and left ~= right
+end
+
 local function IsDifferentActiveCast(frame, castGUID, spellID, castBarID)
     if not frame then return false end
     if castBarID and frame._msufActiveCastBarID and castBarID ~= frame._msufActiveCastBarID then return true end
-    if castGUID and frame._msufActiveCastGUID and castGUID ~= frame._msufActiveCastGUID then return true end
-    if spellID and frame._msufActiveSpellID and spellID ~= frame._msufActiveSpellID then return true end
+    if KnownDifferent(castGUID, frame._msufActiveCastGUID) then return true end
+    if KnownDifferent(spellID, frame._msufActiveSpellID) then return true end
     return false
 end
 
@@ -553,8 +549,7 @@ local function ApplyActiveCast(
     local reverseFill = _G.MSUF_GetReverseFillSafe(frame, isChannel)
     -- The anchor never flips per cast type any more, so the drain has to come
     -- from the value: channels count down unless unified direction is on.
-    local countsDown = type(_G.MSUF_GetCastbarCountsDown) == "function"
-        and _G.MSUF_GetCastbarCountsDown(frame, isChannel) == true
+    local countsDown = _G.MSUF_GetCastbarCountsDown(frame, isChannel) == true
     local timerDriven = false
 
     if durationObj then
@@ -581,11 +576,7 @@ local function ApplyActiveCast(
         frame.MSUF_timerDriven = nil
         if frame.icon then frame.icon:SetTexture(icon or nil) end
         if frame.castText then
-            if type(_G.MSUF_CB_ApplyTexts) == "function" then
-                _G.MSUF_CB_ApplyTexts(frame, nil, spellName or "", nil)
-            else
-                _G.MSUF_SetTextIfChanged(frame.castText, spellName or "")
-            end
+            _G.MSUF_CB_ApplyTexts(frame, nil, spellName or "", nil)
         end
     end
 
@@ -672,7 +663,7 @@ local function ApplyCastState(frame, state)
     else
         frame._msufPushbackMS = PlainNumber(state.delayTimeMS)
     end
-    if frame.castText and type(_G.MSUF_RefreshCastbarSpellNameText) == "function" then
+    if frame.castText then
         _G.MSUF_RefreshCastbarSpellNameText(frame)
     end
     return true
@@ -697,13 +688,23 @@ local CHANNEL_START_EVENTS = {
 local function StopPlayerCastbar(frame)
     -- Some player terminal sequences deliver STOP before INTERRUPTED. Preserve
     -- the real displayed cast's identity for that short event burst before the
-    -- normal stop cleanup clears it. Instant/GCD casts never populate this.
+    -- normal stop cleanup clears it. Instant/GCD casts and channels never
+    -- store a castGUID, so they never populate this. castGUID is
+    -- SecretWhenUnitSpellCastRestricted: only a plain one is kept; the
+    -- NeverSecret castBarID is kept beside it and matched first.
     local interruptUnit = frame._msufActiveCastUnit
     local interruptCastGUID = frame._msufActiveCastGUID
-    if interruptUnit ~= nil and interruptCastGUID ~= nil then
-        frame._msufPlayerInterruptCastUnit = interruptUnit
-        frame._msufPlayerInterruptCastGUID = interruptCastGUID
-        frame._msufPlayerInterruptCastDeadline = GetTime() + INTERRUPT_IDENTITY_GRACE
+    local guidSecret = issecretvalue(interruptCastGUID)
+    if interruptUnit ~= nil and (guidSecret or interruptCastGUID ~= nil) then
+        local castBarID = frame._msufActiveCastBarID
+        if issecretvalue(castBarID) or type(castBarID) ~= "number" then castBarID = nil end
+        local plainGUID = (not guidSecret) and interruptCastGUID or nil
+        if castBarID ~= nil or plainGUID ~= nil then
+            frame._msufPlayerInterruptCastUnit = interruptUnit
+            frame._msufPlayerInterruptCastGUID = plainGUID
+            frame._msufPlayerInterruptCastBarID = castBarID
+            frame._msufPlayerInterruptCastDeadline = GetTime() + INTERRUPT_IDENTITY_GRACE
+        end
     end
     MarkPlayerStateInactive(frame)
 
@@ -846,10 +847,6 @@ local function HidePlayerFrameIfNoLongerCasting(frame)
     frame:Hide()
 end
 
-local function HideIfNoLongerCasting(owner)
-    HidePlayerFrameIfNoLongerCasting(owner and owner.msuCastbarFrame)
-end
-
 local function EnsureInterruptHideCallback(frame)
     if frame._msufPlayerInterruptHideCB then return end
     frame._msufPlayerInterruptHideCB = function()
@@ -976,15 +973,7 @@ local function HandleActiveEmpowerEvent(frame, event, ...)
     if not frame.isEmpower then return false end
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
-        if type(_G.MSUF_PlayerCastbar_ShowInterruptFeedback) == "function" then
-            local label = "Interrupted"
-            if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
-                label = _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", label)
-            end
-            _G.MSUF_PlayerCastbar_ShowInterruptFeedback(frame, label)
-        else
-            ClearEmpower(frame, true)
-        end
+        ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", INTERRUPTED))
         return true
     elseif event == "UNIT_SPELLCAST_STOP"
         or event == "UNIT_SPELLCAST_FAILED"
@@ -994,6 +983,24 @@ local function HandleActiveEmpowerEvent(frame, event, ...)
     end
 
     return false
+end
+
+--- The identity StopPlayerCastbar kept for an INTERRUPTED that follows its
+--- STOP (always plain, see there), inside its grace window and for its unit.
+--- The NeverSecret castBarID decides when both sides have one; otherwise a
+--- plain payload castGUID has to equal the kept one (a restricted payload's
+--- castGUID is secret).
+local function MatchesPendingInterrupt(frame, eventUnit, castGUID, castBarID)
+    local deadline = frame._msufPlayerInterruptCastDeadline
+    if deadline == nil or GetTime() > deadline then return false end
+    if eventUnit ~= frame._msufPlayerInterruptCastUnit then return false end
+    local pendingBarID = frame._msufPlayerInterruptCastBarID
+    if pendingBarID ~= nil and type(castBarID) == "number" and not issecretvalue(castBarID) then
+        return castBarID == pendingBarID
+    end
+    local pendingGUID = frame._msufPlayerInterruptCastGUID
+    if pendingGUID == nil or castGUID == nil or issecretvalue(castGUID) then return false end
+    return castGUID == pendingGUID
 end
 
 local function PlayerCastbarOnEventImpl(frame, event, ...)
@@ -1014,11 +1021,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
             or event == "UNIT_SPELLCAST_CHANNEL_STOP")
         and not HasActivePlayerCast(frame)
         and not (event == "UNIT_SPELLCAST_INTERRUPTED"
-            and eventUnit == frame._msufPlayerInterruptCastUnit
-            and frame._msufPlayerInterruptCastGUID ~= nil
-            and select(2, ...) == frame._msufPlayerInterruptCastGUID
-            and frame._msufPlayerInterruptCastDeadline ~= nil
-            and GetTime() <= frame._msufPlayerInterruptCastDeadline) then
+            and MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)), (select(5, ...)))) then
         return
     end
     if event == "UNIT_SPELLCAST_START"
@@ -1048,11 +1051,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
         if IsDifferentActiveCast(frame, castGUID, spellID, castBarID) then return end
 
         ClearActiveCastIdentity(frame)
-        local interruptLabel = INTERRUPTED
-        if type(_G.MSUF_Castbar_ResolveInterruptLabel) == "function" then
-            interruptLabel = _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", interruptLabel)
-        end
-        ShowInterruptFeedback(frame, interruptLabel)
+        ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", INTERRUPTED))
         return
     end
 
@@ -1114,10 +1113,6 @@ end
 
 ExportPublic("MSUF_PlayerCastbar_UpdateLatencyZone", UpdateLatencyZone)
 ExportPublic("MSUF_PlayerCastbar_UpdateColorForInterruptible", UpdateColorForInterruptible)
-ExportPublic("MSUF_GetInterruptFeedbackColor", GetInterruptFeedbackColor)
-ExportPublic("MSUF_PlayerCastbar_HideIfNoLongerCasting", HideIfNoLongerCasting)
 ExportPublic("MSUF_PlayerCastbar_ShowInterruptFeedback", ShowInterruptFeedback)
-ExportPublic("MSUF_PlayerCastbar_GetEffectiveUnit", GetEffectiveUnit)
-ExportPublic("MSUF_PlayerCastbar_UnhaltedUpdate", UnhaltedUpdate)
 ExportPublic("MSUF_PlayerCastbar_Cast", CastPlayerCastbar)
 ExportPublic("MSUF_PlayerCastbar_OnEvent", PlayerCastbarOnEvent)

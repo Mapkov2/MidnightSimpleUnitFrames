@@ -198,7 +198,11 @@ local function MSUF_NormalizeStoredFontKeys()
 end
 G.MSUF_NormalizeStoredFontKeys = MSUF_NormalizeStoredFontKeys
 MSUF.MSUF_NormalizeStoredFontKeys = MSUF_NormalizeStoredFontKeys
-MSUF_NormalizeStoredFontKeys()
+-- Not run while this file loads: the SavedVariables arrive after every file
+-- ran, so it would only see a throwaway profile. The defaults pass
+-- (State/MSUF_Defaults.lua: NormalizeFontField and ClearScopedFontKeys) does
+-- the same on the saved profile when it loads, and the Fonts page calls this
+-- after its own edits.
 
 local MSUF_FONT_COLORS = {
     white     = { 1.0, 1.0, 1.0 },

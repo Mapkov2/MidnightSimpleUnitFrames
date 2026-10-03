@@ -60,7 +60,9 @@ A3.EnsureDB()
 Check(Normalizes(function() for _ = 1, 25 do A3.EnsureDB() end end) == 0,
     "an unchanged profile is normalized again on every read")
 local auras = A3.EnsureDB()
-Check(A3.DBRef == auras, "A3.DBRef does not name the current aura tree")
+Check(auras == env.MSUF_DB.auras3, "A3.EnsureDB does not return the current aura tree")
+-- Review 2026-10-02: nothing read A3.DBRef; the write-only export stays gone.
+Check(A3.DBRef == nil, "the write-only A3.DBRef export is back")
 
 -- An aura apply bumps the runtime config revision: normalize once, then stop.
 A3.BumpRuntimeConfig()
@@ -93,7 +95,7 @@ item.enabled = true
 -- A replaced aura tree (reset, import) and a replaced profile (switch).
 env.MSUF_DB.auras3 = {}
 local fresh = A3.EnsureDB()
-Check(fresh == env.MSUF_DB.auras3 and type(Defensive(fresh)) == "table" and A3.DBRef == fresh,
+Check(fresh == env.MSUF_DB.auras3 and type(Defensive(fresh)) == "table",
     "a replaced aura tree is not normalized")
 Check(Normalizes(function() A3.EnsureDB(); A3.EnsureDB() end) == 0, "the replaced aura tree is normalized twice")
 local profile = env.MSUF_DB

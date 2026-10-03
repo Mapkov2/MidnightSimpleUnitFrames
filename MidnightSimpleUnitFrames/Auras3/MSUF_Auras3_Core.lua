@@ -25,6 +25,10 @@ local FRAME_LIST_RUNTIME_UNITS = { "player", "pet", "target", "focus", "boss1", 
 local FRAME_LIST_SCOPES = { "player", "pet", "target", "focus", "boss" }
 local PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER = "_msufA3PlayerDefensivesCoreDefault_v1"
 local PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER = "_msufFactoryPlayerDefensivesEnabled_v1"
+--- Custom Aura containers per frame. The last one is the fixed preset slot:
+--- Defensive Buffs on the player frame, Target DoTs on every other frame.
+local CUSTOM_CONTAINER_COUNT = 4
+local PRESET_CUSTOM_CONTAINER_INDEX = 4
 
 local function FillMissing(dst, defaults)
     if type(dst) ~= "table" or type(defaults) ~= "table" then return dst end
@@ -51,10 +55,10 @@ local function EnsurePlayerDefensiveCoreDefault(auras, factoryEnabled)
     local record = type(root.perUnit.player) == "table" and root.perUnit.player or { items = {} }
     root.perUnit.player = record
     record.items = type(record.items) == "table" and record.items or {}
-    local item = record.items[4]
+    local item = record.items[PRESET_CUSTOM_CONTAINER_INDEX]
     if type(item) ~= "table" then
         item = NewPlayerDefensiveContainer()
-        record.items[4] = item
+        record.items[PRESET_CUSTOM_CONTAINER_INDEX] = item
     end
     local canonicalAuraModel = (tonumber(auras.profileModelRevision) or 0) >= 1
     if canonicalAuraModel then
@@ -189,20 +193,256 @@ if type(MSUF.UFCore) == "table" then
 end
 
 A3.version = 3
-A3.frontendOnly = false
-A3.backendEnabled = true
-A3.unitFrameAuras = true
 A3._runtimeConfigGen = A3._runtimeConfigGen or 1
 A3._unitFrameOwners = A3._unitFrameOwners or {}
 A3.PlayerDefensiveCoreDefaultMarker = PLAYER_DEFENSIVE_CORE_DEFAULT_MARKER
+A3.CUSTOM_CONTAINER_COUNT = CUSTOM_CONTAINER_COUNT
+A3.PRESET_CUSTOM_CONTAINER_INDEX = PRESET_CUSTOM_CONTAINER_INDEX
 A3.PlayerDefensiveFactoryPolicyMarker = PLAYER_DEFENSIVE_FACTORY_POLICY_MARKER
 A3.NewPlayerDefensiveContainer = NewPlayerDefensiveContainer
 A3.EnsurePlayerDefensiveCoreDefault = EnsurePlayerDefensiveCoreDefault
 
-MSUF.AuraBackendEnabled = true
 MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
 ExportPublic("MSUF_AuraCore", MSUF.AuraCore)
 MSUF.AuraCore.Auras3 = A3
+
+--- Unit aura lane-key schema: the one source for the Buff and Debuff lane keys
+--- of the player, pet, target, focus, boss and arena frames. Every saved key is
+--- listed once with the profile table that owns it and its Shared default. The
+--- menu schema (MenuModel/MSUF_Auras3_Menu_Schema.lua) and the runtime schema
+--- (Runtime/MSUF_Auras3_Runtime_Schema.lua) take their key sets, lane specs and
+--- default tables from A3.LaneKeySchema. Every client loads this file before
+--- both; the Classic flavors load only the menu schema.
+---
+--- Owner: where Menu2 writes a unit-scope value.
+---   layout             perUnit.layout (frame-local placement)
+---   layoutShared       perUnit.layoutShared (counts and growth)
+---   styleLayout        perUnit.layout, inherited from Shared Style until the
+---                      unit overrides its style
+---   styleLayoutShared  perUnit.layoutShared, inherited the same way
+---   false              Shared only, never routed to a unit
+--- Defaults: the Shared default tables a key's value belongs to.
+---   S  the legacy defaults the menu seeds once into a pre-canonical Shared
+---      table (Menu_Storage, Model.EnsureDB)
+---   F  the fallbacks the runtime compiler reads when a key is absent
+--- Both sets are saved-profile contracts: change one only with a migration.
+---
+--- The rows of the lane-key schema: data only, read once by BuildLaneKeySchema.
+local function LaneKeySchemaRows()
+    local SF, S, F = "SF", "S", "F"
+
+    -- Shared keys without a lane prefix: key, owner, default, defaults.
+    local SHARED_KEYS = {
+        { "iconSize", "layout", 26, SF },
+        { "spacing", "layout", 2, SF },
+        { "offsetX", "layout", 0, S },
+        { "offsetY", "layout", 6, S },
+        { "perRow", "layoutShared", 12, SF },
+        { "growth", "layoutShared", "RIGHT", SF },
+        { "rowWrap", "layoutShared", "DOWN", SF },
+        { "iconZoom", "styleLayout", 100, SF },
+        { "stylePadding", "styleLayout", 0, F },
+        { "durationBarHeight", "styleLayout", 2, SF },
+        { "stackTextSize", "styleLayout", 14, SF },
+        { "stackTextOffsetX", "styleLayout", -1, SF },
+        { "stackTextOffsetY", "styleLayout", 1, SF },
+        { "cooldownTextSize", "styleLayout", 14, SF },
+        { "cooldownTextOffsetX", "styleLayout", 0, SF },
+        { "cooldownTextOffsetY", "styleLayout", 0, SF },
+        { "showTooltip", "styleLayoutShared", true, SF },
+        { "showCooldownSwipe", "styleLayoutShared", true, SF },
+        { "cooldownSwipeReverse", "styleLayoutShared", false, SF },
+        { "sortMethod", "styleLayoutShared", "DEFAULT", F },
+        { "sortReverse", "styleLayoutShared", false, F },
+        { "showDurationBar", "styleLayoutShared", false, SF },
+        { "durationBarDisplay", "styleLayoutShared", "BAR_ONLY", SF },
+        { "durationBarPosition", "styleLayoutShared", "BOTTOM", SF },
+        { "durationBarDirection", "styleLayoutShared", "REMAINING", SF },
+        { "showCooldownText", "styleLayoutShared", true, SF },
+        { "showStackCount", "styleLayoutShared", true, SF },
+        { "debuffTypeBorderMode", "styleLayoutShared", "OFF", SF },
+        { "dispelBorderMode", "styleLayoutShared" },
+        { "useDebuffTypeBorders", "styleLayoutShared", false, SF },
+        { "stackCountAnchor", "styleLayoutShared", "TOPRIGHT", SF },
+        { "cooldownTextAnchor", "styleLayoutShared", "CENTER", SF },
+        { "cooldownDecimalSeconds", "styleLayoutShared", 3, SF },
+        { "iconShape", false, "RECTANGLE", S },
+        { "showWeaponEnchants", false, false, F },
+        { "styleBorderEnabled", false, false, F },
+        { "styleBorderStyle", false, "SOLID", F },
+        { "styleBorderThickness", false, 1, F },
+        { "styleBorderColor", false, { 0, 0, 0, 1 }, F },
+        { "styleShadowEnabled", false, false, F },
+        { "styleShadowSize", false, 4, F },
+        { "styleShadowColor", false, { 0, 0, 0, 0.8 }, F },
+    }
+
+    -- The two lanes. Lane defaults cover the fields whose default differs per lane.
+    local LANES = {
+        buff = { prefix = "buff", rootKey = "Buffs", filter = "HELPFUL",
+            defaults = { yKey = 36, anchorKey = "BOTTOMRIGHT", layerKey = 5 } },
+        debuff = { prefix = "debuff", rootKey = "Debuffs", filter = "HARMFUL",
+            defaults = { yKey = 6, anchorKey = "TOPLEFT", layerKey = 6 } },
+    }
+
+    -- Lane spec fields: field, key (prefix .. suffix; "%s" takes the lane's
+    -- rootKey instead), owner, the Shared key the lane field overrides, default,
+    -- defaults. A field with a Shared key and no default takes the Shared key's.
+    local LANE_FIELDS = {
+        { "xKey", "GroupOffsetX", "layout", nil, 0, SF },
+        { "yKey", "GroupOffsetY", "layout", nil, nil, SF },
+        { "sizeKey", "GroupIconSize", "layout", nil, 26, SF },
+        { "anchorKey", "Anchor", "layout", nil, nil, SF },
+        { "layerKey", "Layer", "layout", nil, nil, SF },
+        { "strataKey", "Strata", "layout" },
+        { "spacingKey", "Spacing", "layout" },
+        { "showKey", "show%s", "layoutShared", nil, true, SF },
+        { "maxKey", "max%s", "layoutShared", nil, 12, SF },
+        { "perRowKey", "PerRow", "layoutShared" },
+        { "growthKey", "GrowthX", "layoutShared" },
+        { "wrapKey", "GrowthY", "layoutShared" },
+        { "iconZoomKey", "IconZoom", "styleLayout", "iconZoom", nil, S },
+        { "paddingKey", "StylePadding", "styleLayout", "stylePadding" },
+        { "durationBarHeightKey", "DurationBarHeight", "styleLayout", "durationBarHeight", nil, S },
+        { "stackSizeKey", "StackTextSize", "styleLayout", "stackTextSize", nil, S },
+        { "stackXKey", "StackTextOffsetX", "styleLayout", "stackTextOffsetX", nil, S },
+        { "stackYKey", "StackTextOffsetY", "styleLayout", "stackTextOffsetY", nil, S },
+        { "cooldownSizeKey", "CooldownTextSize", "styleLayout", "cooldownTextSize", nil, S },
+        { "cooldownXKey", "CooldownTextOffsetX", "styleLayout", "cooldownTextOffsetX", nil, S },
+        { "cooldownYKey", "CooldownTextOffsetY", "styleLayout", "cooldownTextOffsetY", nil, S },
+        { "showTextKey", "ShowCooldownText", "styleLayoutShared", "showCooldownText", nil, S },
+        { "swipeKey", "ShowCooldownSwipe", "styleLayoutShared", "showCooldownSwipe", nil, S },
+        { "swipeReverseKey", "CooldownSwipeReverse", "styleLayoutShared", "cooldownSwipeReverse", nil, S },
+        { "sortMethodKey", "SortMethod", "styleLayoutShared", "sortMethod", nil, S },
+        { "sortReverseKey", "SortReverse", "styleLayoutShared", "sortReverse", nil, S },
+        { "showDurationBarKey", "ShowDurationBar", "styleLayoutShared", "showDurationBar", nil, S },
+        { "durationBarDisplayKey", "DurationBarDisplay", "styleLayoutShared", "durationBarDisplay", nil, S },
+        { "durationBarPositionKey", "DurationBarPosition", "styleLayoutShared", "durationBarPosition", nil, S },
+        { "durationBarDirectionKey", "DurationBarDirection", "styleLayoutShared", "durationBarDirection", nil, S },
+        { "tooltipKey", "ShowTooltip", "styleLayoutShared", "showTooltip", nil, SF },
+        { "showStackKey", "ShowStackCount", "styleLayoutShared", "showStackCount", nil, S },
+        { "stackAnchorKey", "StackCountAnchor", "styleLayoutShared", "stackCountAnchor", nil, S },
+        { "cooldownAnchorKey", "CooldownTextAnchor", "styleLayoutShared", "cooldownTextAnchor", nil, S },
+        { "cooldownDecimalKey", "CooldownDecimalSeconds", "styleLayoutShared", "cooldownDecimalSeconds", nil, S },
+        { "iconShapeKey", "IconShape", false, "iconShape", nil, S },
+        { "filterKey", "s", false },
+    }
+
+    -- Lane keys outside the spec: lanes, key suffix, owner, the menu's style
+    -- name for it, default, defaults.
+    local LANE_EXTRA_KEYS = {
+        { "buff debuff", "FrameEffectType", "styleLayoutShared", nil, "none", SF },
+        { "buff debuff", "FrameEffectColor", "styleLayoutShared", nil, { 0.69, 0.50, 0.88, 0.80 }, SF },
+        { "buff debuff", "FrameEffectPriority", "styleLayoutShared", nil, 5, SF },
+        { "buff debuff", "FrameEffectThickness", "styleLayoutShared", nil, 2, SF },
+        { "buff debuff", "FrameEffectLayer", "styleLayoutShared", nil, 0, SF },
+        { "buff debuff", "FrameEffectStrata", "styleLayoutShared", nil, "AUTO", SF },
+        { "buff", "ShowStealable", "styleLayoutShared", "showStealable", false, S },
+        { "buff", "StealableStyle", "styleLayoutShared", "stealableStyle", "BORDER_ICON", S },
+        -- Pre-6.0 Buffs lane offsets: seeded into old profiles, read by nothing new.
+        { "buff", "OffsetX", false, nil, 0, S },
+        { "buff", "OffsetY", false, nil, 30, S },
+    }
+
+    -- The Debuffs lane has no prefixed copy of these; its style key is the
+    -- Shared key itself.
+    local LANE_STYLE_ALIASES = { debuff = { "debuffTypeBorderMode", "useDebuffTypeBorders" } }
+    return SHARED_KEYS, LANES, LANE_FIELDS, LANE_EXTRA_KEYS, LANE_STYLE_ALIASES
+end
+
+local function BuildLaneKeySchema()
+    local SHARED_KEYS, LANES, LANE_FIELDS, LANE_EXTRA_KEYS, LANE_STYLE_ALIASES = LaneKeySchemaRows()
+    local SF, S, F = "SF", "S", "F"
+    local schema = {
+        LANE_SPECS = {},
+        LANE_LAYOUT_FIELDS = {},
+        LANE_SHARED_LAYOUT_FIELDS = {},
+        LAYOUT_KEYS = {},
+        SHARED_LAYOUT_KEYS = {},
+        STYLE_LAYOUT_KEYS = {},
+        STYLE_SHARED_LAYOUT_KEYS = {},
+        SCOPE_MATERIALIZED_LAYOUT_KEYS = {},
+        LANE_STYLE_KEYS = {},
+    }
+    local OWNER_SETS = {
+        layout = { schema.LAYOUT_KEYS },
+        layoutShared = { schema.SHARED_LAYOUT_KEYS },
+        styleLayout = { schema.LAYOUT_KEYS, schema.STYLE_LAYOUT_KEYS },
+        styleLayoutShared = { schema.SHARED_LAYOUT_KEYS, schema.STYLE_SHARED_LAYOUT_KEYS },
+    }
+    local seedDefaults, fallbackDefaults, ownerOf = {}, {}, {}
+    local function AddKey(key, owner, default, defaults)
+        assert(ownerOf[key] == nil, "MSUF Auras3 lane key listed twice: " .. tostring(key))
+        ownerOf[key] = owner
+        assert(owner == false or OWNER_SETS[owner], "MSUF Auras3 lane key has an unknown owner: " .. tostring(key))
+        for _, set in ipairs(owner and OWNER_SETS[owner] or {}) do set[key] = true end
+        if defaults == SF or defaults == S then seedDefaults[key] = default end
+        if defaults == SF or defaults == F then fallbackDefaults[key] = default end
+    end
+
+    local sharedDefault = {}
+    for _, row in ipairs(SHARED_KEYS) do
+        AddKey(row[1], row[2], row[3], row[4])
+        sharedDefault[row[1]] = row[3]
+    end
+    for _, field in ipairs(LANE_FIELDS) do
+        if field[3] == "layout" then
+            schema.LANE_LAYOUT_FIELDS[#schema.LANE_LAYOUT_FIELDS + 1] = field[1]
+        elseif field[3] == "layoutShared" then
+            schema.LANE_SHARED_LAYOUT_FIELDS[#schema.LANE_SHARED_LAYOUT_FIELDS + 1] = field[1]
+        end
+    end
+    for kind, lane in pairs(LANES) do
+        local spec = { rootKey = lane.rootKey, filter = lane.filter,
+            defaultAnchor = lane.defaults.anchorKey, defaultLayer = lane.defaults.layerKey }
+        local styleKeys = {}
+        for _, field in ipairs(LANE_FIELDS) do
+            local name, suffix, owner, sharedKey = field[1], field[2], field[3], field[4]
+            local key = suffix:find("%s", 1, true) and suffix:format(lane.rootKey) or lane.prefix .. suffix
+            local default = lane.defaults[name]
+            if default == nil then default = field[5] end
+            if default == nil and sharedKey then default = sharedDefault[sharedKey] end
+            spec[name] = key
+            AddKey(key, owner, default, field[6])
+            if sharedKey then styleKeys[sharedKey] = key end
+        end
+        for _, extra in ipairs(LANE_EXTRA_KEYS) do
+            if (" " .. extra[1] .. " "):find(" " .. kind .. " ", 1, true) then
+                local key = lane.prefix .. extra[2]
+                AddKey(key, extra[3], extra[5], extra[6])
+                if extra[4] then styleKeys[extra[4]] = key end
+            end
+        end
+        for _, key in ipairs(LANE_STYLE_ALIASES[kind] or {}) do styleKeys[key] = key end
+        -- Per-lane spacing is materialized into every scope rather than inherited.
+        schema.SCOPE_MATERIALIZED_LAYOUT_KEYS[spec.spacingKey] = true
+        schema.LANE_SPECS[kind] = spec
+        schema.LANE_STYLE_KEYS[kind] = styleKeys
+    end
+
+    -- The runtime units and the saved show flag of each: boss1-5, and arena1-3
+    -- or as many arena slots as the client fields (Client.MaxArenaOpponents,
+    -- Game/Shared/Initialize.lua: 5 on TBC and Mists).
+    local unitFlag = { player = "showPlayer", pet = "showPet", target = "showTarget", focus = "showFocus" }
+    for index = 1, 5 do unitFlag["boss" .. index] = "showBoss" end
+    for index = 1, math.max(3, tonumber(MSUF.Client and MSUF.Client.MaxArenaOpponents) or 3) do
+        unitFlag["arena" .. index] = "showArena"
+    end
+    schema.UNIT_FLAG, schema.MANAGED_UNITS = unitFlag, {}
+    for unit in pairs(unitFlag) do schema.MANAGED_UNITS[unit] = true end
+
+    -- Each default-table build hands out fresh value tables, so no reader can
+    -- change another's defaults through a shared color table.
+    local function Copy(values)
+        local out = {}
+        for key, value in pairs(values) do out[key] = DeepCopy(value) end
+        return out
+    end
+    function schema.SeedDefaults() return Copy(seedDefaults) end
+    function schema.FallbackDefaults() return Copy(fallbackDefaults) end
+    return schema
+end
+A3.LaneKeySchema = BuildLaneKeySchema()
 
 local function EnsureRootDB()
     local db = _G.MSUF_DB
@@ -245,7 +485,7 @@ local sDB, sAuras, sItem, sGen
 local function DefensiveItem(a)
     a = a.customContainers; a = type(a) == "table" and a.perUnit
     a = type(a) == "table" and a.player; a = type(a) == "table" and a.items
-    return type(a) == "table" and a[4] or nil
+    return type(a) == "table" and a[PRESET_CUSTOM_CONTAINER_INDEX] or nil
 end
 function A3.EnsureDB()
     local db = EnsureRootDB()
@@ -255,13 +495,8 @@ function A3.EnsureDB()
         return cur, cur.shared
     end
     local current, shared = A3.NormalizeProfileDB(db)
-    A3.DBRef = current
     sDB, sAuras, sItem, sGen = db, current, DefensiveItem(current), A3._runtimeConfigGen
     return current, shared
-end
-
-function A3.BackendEnabled()
-    return A3.backendEnabled == true
 end
 
 function A3.BumpRuntimeConfig()
@@ -314,21 +549,61 @@ function A3.RequestScope()
     return true
 end
 
-local REQUEST_APPLY_SCOPE_KEYS = {
-    player = true, pet = true, target = true, focus = true, boss = true,
+--- Request helpers both client backends share: Retail's
+--- Auras3/Runtime/MSUF_Auras3_Runtime_Facade.lua and Classic's
+--- Game/Classic/Auras/MSUF_Auras3_Requests.lua each kept a copy, and this
+--- core's own scope list had drifted from them (no arena).
+A3._requestApplyScopeKeys = A3._requestApplyScopeKeys or {
+    player = true, pet = true, target = true, focus = true, boss = true, arena = true,
     party = true, raid = true, mythicraid = true,
     gf_party = true, gf_raid = true, gf_mythicraid = true,
     group = true, groups = true,
     shared = true, global = true, all = true, ["*"] = true,
 }
 
-local function LooksLikeApplyScope(value)
+A3._LooksLikeApplyScope = function(value)
     value = tostring(value or ""):lower()
     if value == "" then return false end
-    if REQUEST_APPLY_SCOPE_KEYS[value] then return true end
+    if A3._requestApplyScopeKeys[value] then return true end
     return value:match("^boss%d+$") ~= nil
+        or value:match("^arena%d+$") ~= nil
         or value:match("^party%d+$") ~= nil
         or value:match("^raid%d+$") ~= nil
+end
+
+--- The group frame kind a preview refresh for `scope` touches, and whether it
+--- touches the group previews at all.
+function A3._AuraPreviewGroupKind(scope)
+    local key = tostring(scope or ""):lower()
+    if key == "party" or key == "gf_party" or key:match("^party%d+$") then return "party", true end
+    if key == "raid" or key == "gf_raid" or key:match("^raid%d+$") then return "raid", true end
+    if key == "mythicraid" or key == "gf_mythicraid" then return "mythicraid", true end
+    if key == "" or key == "shared" or key == "global" or key == "all" or key == "*"
+        or key == "group" or key == "groups" then
+        return nil, true
+    end
+    return nil, false
+end
+
+--- Queues aura runtime work that combat blocked. The backend owns the driver
+--- (A3._EnsureDeferredAuraRuntimeDriver) and the flush, and names the reason a
+--- request without one carries (A3._deferredAuraDefaultReason).
+function A3._QueueDeferredAuraRuntime(scope, reason, visuals)
+    scope = tostring(scope or "shared"):lower()
+    A3._deferredAuraRuntime = true
+    A3._deferredAuraRuntimeReason = reason or A3._deferredAuraRuntimeReason
+        or A3._deferredAuraDefaultReason or "AURAS3_DEFERRED"
+    if visuals == true then A3._deferredAuraRuntimeVisuals = true end
+    if scope == "" or scope == "shared" or scope == "global" or scope == "all" or scope == "*" then
+        A3._deferredAuraRuntimeAll = true
+        A3._deferredAuraRuntimeScopes = nil
+    elseif A3._deferredAuraRuntimeAll ~= true then
+        A3._deferredAuraRuntimeScopes = A3._deferredAuraRuntimeScopes or {}
+        A3._deferredAuraRuntimeScopes[scope] = true
+    end
+    local frame = A3._EnsureDeferredAuraRuntimeDriver()
+    if frame then frame:RegisterEvent("PLAYER_REGEN_ENABLED") end
+    return false
 end
 
 function A3.RefreshAll()
@@ -336,10 +611,8 @@ function A3.RefreshAll()
     return true
 end
 
-A3.RefreshRuntime = A3.RefreshAll
-
 function A3.RequestApply(scopeOrReason, reason)
-    if LooksLikeApplyScope(scopeOrReason) and type(A3.RequestScope) == "function" then
+    if A3._LooksLikeApplyScope(scopeOrReason) and type(A3.RequestScope) == "function" then
         return A3.RequestScope(scopeOrReason, reason or "AURAS3_REQUEST_APPLY")
     end
     return A3.RefreshAll()
@@ -400,7 +673,6 @@ local function NormalizeDispelBorderMode(value, legacyEnabled)
   if value == "OFF" or value == "NONE" or value == "DISABLED" then return legacyEnabled == true and "SYMBOL" or "OFF" end
   return legacyEnabled == true and "SYMBOL" or "OFF"
 end
-A3.NormalizeLegacyDispelBorderMode = NormalizeDispelBorderMode
 ExportPublic("MSUF_NormalizeLegacyDispelBorderMode", NormalizeDispelBorderMode)
 
 local AuraStrataIsSecret = _G.issecretvalue
@@ -439,6 +711,34 @@ local function AnchorOffset(anchor, w, h)
 end
 A3.AnchorOffset = AnchorOffset
 ExportPublic("MSUF_AuraAnchorOffset", AnchorOffset)
+
+--- The offset pair that reproduces `host`'s on-screen rect from `anchor` on
+--- `parent`, unrounded, or nil while either rect is unresolved. The dispel
+--- symbol previews of both backends turn a drag into saved offsets with it;
+--- the host is parented to the frame, so the raw edges share one scale.
+function A3.HostAnchorOffset(host, parent, anchor)
+    local hl, hr, ht, hb = host:GetLeft(), host:GetRight(), host:GetTop(), host:GetBottom()
+    local pl, pr, pt, pb = parent:GetLeft(), parent:GetRight(), parent:GetTop(), parent:GetBottom()
+    if not (hl and hr and ht and hb and pl and pr and pt and pb) then return nil, nil end
+    anchor = tostring(anchor or "TOPRIGHT")
+    local x
+    if anchor:find("LEFT", 1, true) then
+        x = hl - pl
+    elseif anchor:find("RIGHT", 1, true) then
+        x = hr - pr
+    else
+        x = ((hl + hr) * 0.5) - ((pl + pr) * 0.5)
+    end
+    local y
+    if anchor:find("TOP", 1, true) then
+        y = ht - pt
+    elseif anchor:find("BOTTOM", 1, true) then
+        y = hb - pb
+    else
+        y = ((ht + hb) * 0.5) - ((pt + pb) * 0.5)
+    end
+    return x, y
+end
 
 local function PaddingInset(anchor, pad)
     pad = tonumber(pad) or 0

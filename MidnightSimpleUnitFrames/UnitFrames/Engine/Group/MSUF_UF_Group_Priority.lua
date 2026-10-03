@@ -94,10 +94,6 @@ local function PriorityBaseKind(groupType)
   return nil
 end
 
-function GF.GetPriorityGroupType()
-  return CurrentGroupType()
-end
-
 function GF.GetPriorityBaseKind()
   return PriorityBaseKind()
 end
@@ -188,10 +184,6 @@ function GF.GetPriorityPins()
   return Pins(false)
 end
 
-function GF.GetPriorityPinCount()
-  return #Pins(false)
-end
-
 local function BaseFramesEnabled(groupType)
   local kind = PriorityBaseKind(groupType)
   local baseConf = kind and type(GF.GetConf) == "function" and GF.GetConf(kind) or nil
@@ -203,7 +195,10 @@ local function FillPriorityPinView(out, groupType, featureEnabled, baseFramesEna
   local pins = Pins(false)
   for i = 1, #pins do
     local row = out[i]
-    if type(row) ~= "table" then row = {}; out[i] = row end
+    if type(row) ~= "table" then
+      row = {}
+      out[i] = row
+    end
     local guid, name = PinIdentity(pins[i])
     local entry = guid and rosterByGUID[guid] or nil
     if not entry and name then entry = rosterByName[name] or rosterByFoldedName[name:lower()] end
@@ -215,7 +210,8 @@ local function FillPriorityPinView(out, groupType, featureEnabled, baseFramesEna
     local active = selected and featureEnabled == true and groupType ~= nil and baseFramesEnabled == true
     row.index = i
     row.guid = guid
-    row.name = entry and entry.name or name or "Unknown"
+    -- nil when unknown: the Priority page paints its translated "Unknown player".
+    row.name = entry and entry.name or name
     row.present = entry ~= nil
     row.selected = selected
     row.active = active
@@ -293,13 +289,20 @@ local function PartyUnitName(unit)
   return realm and (name .. "-" .. realm) or name
 end
 
+local function UnitGUIDAndRole(unit)
+  local guid
+  if UnitGUID then guid = UnitGUID(unit) end
+  guid = PlainString(guid)
+  local role
+  if UnitGroupRolesAssigned then role = UnitGroupRolesAssigned(unit) end
+  if issecretvalue(role) == true then role = nil end
+  return guid, role
+end
+
 local function AddRosterUnit(unit, name)
   name = PlainString(name)
   if not name then return end
-  local guid = UnitGUID and UnitGUID(unit) or nil
-  guid = PlainString(guid)
-  local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or nil
-  if issecretvalue(role) == true then role = nil end
+  local guid, role = UnitGUIDAndRole(unit)
   rosterCount = rosterCount + 1
   local entry = rosterEntries[rosterCount]
   if not entry then
@@ -316,7 +319,9 @@ local function AddRosterUnit(unit, name)
 end
 
 local function AddRaidRosterEntry(index)
-  AddRosterUnit("raid" .. index, GetRaidRosterInfo and GetRaidRosterInfo(index) or nil)
+  local name
+  if GetRaidRosterInfo then name = GetRaidRosterInfo(index) end
+  AddRosterUnit("raid" .. index, name)
 end
 
 ResetRosterIndex = function()
@@ -478,16 +483,13 @@ local function UnitRosterIdentity(unit)
   local name
   if groupType == "raid" then
     local index = tonumber(unit:match("^raid(%d+)$"))
-    name = index and GetRaidRosterInfo and GetRaidRosterInfo(index) or nil
+    if index and GetRaidRosterInfo then name = GetRaidRosterInfo(index) end
   else
     name = PartyUnitName(unit)
   end
   name = PlainString(name)
   if not name then return nil end
-  local guid = UnitGUID and UnitGUID(unit) or nil
-  guid = PlainString(guid)
-  local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or nil
-  if issecretvalue(role) == true then role = nil end
+  local guid, role = UnitGUIDAndRole(unit)
   return guid, name, role
 end
 
@@ -539,7 +541,10 @@ local function FindHoveredFrame(frame, unit, kind)
   if frame.IsShown and not frame:IsShown() then return end
   if frame.IsMouseOver and frame:IsMouseOver() then
     local candidate = unit or frame.MSUFUnitKey
-    if GF.IsPriorityGroupUnit(candidate) then hoveredUnit = candidate; return true end
+    if GF.IsPriorityGroupUnit(candidate) then
+      hoveredUnit = candidate
+      return true
+    end
   end
 end
 
@@ -610,7 +615,6 @@ function GF.ToggleHoveredPriorityFrame()
   Notify(code, name, limit)
   return ok, code
 end
-GF.TogglePriorityMouseover = GF.ToggleHoveredPriorityFrame
 
 function GF.RequestPriorityApply(_, reason)
   return RequestRefresh(reason or "menu")

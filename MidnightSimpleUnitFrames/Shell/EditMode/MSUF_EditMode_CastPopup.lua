@@ -3,6 +3,10 @@
 --- existing castbar DB/reanchor helpers and must respect combat-safe mover sync.
 
 local addonName, MSUF = ...
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_CastPopup.lua"
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
 
@@ -156,28 +160,7 @@ local function SyncMenuAfterSizeWrite()
 end
 
 local function ReapplyCastbar(unit)
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(unit)
-    else
-        if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then
-            _G.MSUF_UpdateCastbarWidthSourceSync(General(), unit)
-        end
-        if type(_G.MSUF_ApplyCastbarEffectiveSizeUnit) == "function" then
-            _G.MSUF_ApplyCastbarEffectiveSizeUnit(unit)
-        end
-        local fn = (unit == "player" and "MSUF_ReanchorPlayerCastBar")
-            or (unit == "target" and "MSUF_ReanchorTargetCastBar")
-            or (unit == "focus" and "MSUF_ReanchorFocusCastBar")
-            or (unit == "boss" and "MSUF_ReanchorBossCastBar")
-            or (unit == "arena" and "MSUF_ReanchorArenaCastBar")
-        if type(_G[fn]) == "function" then _G[fn]() end
-        if type(_G.MSUF_ApplyCastbarVisualsForUnit) == "function" then
-            _G.MSUF_ApplyCastbarVisualsForUnit(unit)
-        elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-            _G.MSUF_UpdateCastbarVisuals(unit)
-        end
-        if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then _G.MSUF_PositionCastbarPreviewUnit(unit) end
-    end
+    MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(unit)
     SyncMovers()
     RefreshUFPreview("EM2_CASTBAR_POPUP_APPLY")
 end
@@ -191,7 +174,7 @@ local function Apply(mode)
     local wKey, hKey = WidthKey(unit), HeightKey(unit)
     if not (xKey and yKey and wKey and hKey) then return end
 
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", unit) end
+    _G.MSUF_EM_UndoBeforeChange("castbar", unit)
 
     local dx, dy = DefaultOffsets(unit)
     local currentX = Quick.San(g[xKey], dx)
@@ -236,7 +219,7 @@ local function ResetPosition()
     local unit = pf.unit
     local xKey, yKey = OffsetKeys(unit)
     if not (xKey and yKey) then return end
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", unit) end
+    _G.MSUF_EM_UndoBeforeChange("castbar", unit)
     local dx, dy = DefaultOffsets(unit)
     g[xKey], g[yKey] = dx, dy
     ReapplyCastbar(unit)
@@ -250,7 +233,7 @@ local function ApplyDetach(checked)
     local key = DetachedKey(pf.unit)
     if not key then return end
 
-    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", pf.unit) end
+    _G.MSUF_EM_UndoBeforeChange("castbar", pf.unit)
     local setAnchored = _G.MSUF_EM_SetCastbarAnchoredToUnit
     if type(setAnchored) == "function" then
         --- The canonical owner preserves the current on-screen center when a
@@ -308,7 +291,8 @@ local function OpenGeneralCastbars()
 end
 
 local function WirePopupFocus(btn)
-    return Util.WirePopupFocus and Util.WirePopupFocus(btn, function() return pf and pf.unit and (pf.unit == "boss" and "boss" or pf.unit) end, "castbar", "cast-popup") or btn
+    return Util.WirePopupFocus and Util.WirePopupFocus(btn, function() return pf and pf.unit and (pf.unit == "boss" and "boss" or pf.unit) end,
+        "castbar", "cast-popup") or btn
 end
 
 function Sync()
@@ -322,7 +306,7 @@ function Sync()
         x, y = FramePositionValues(CastbarFrame(unit))
     end
 
-    if pf._titleFS then pf._titleFS:SetText(Quick.Tr(UnitLabel(unit)) .. " " .. Quick.Tr("Castbar")) end
+    if pf._titleFS then pf._titleFS:SetText(string.format(Quick.Tr("%s Castbar"), Quick.Tr(UnitLabel(unit)))) end
     Quick.SetBoxText(pf.xBox, x ~= nil and x or Quick.San(xKey and g[xKey], dx))
     Quick.SetBoxText(pf.yBox, y ~= nil and y or Quick.San(yKey and g[yKey], dy))
     Quick.SetBoxText(pf.wBox, w)

@@ -68,9 +68,10 @@ assert(contains(core, 'ExportPublic("MSUF_UpdateCastbarTextures", UpdateCastbarT
 assert(contains(core, 'ExportPublic("MSUF_UpdateCastbarTextures_Immediate", UpdateCastbarTextures)'))
 assert(not contains(fonts, 'ExportPublic("MSUF_UpdateCastbarTextures",'))
 assert(contains(core, 'ExportPublic("MSUF_ApplyAllCastbarsAndSync", ApplyAllCastbarsAndSync)'))
-assert(ownerCountFor('ExportPublic("MSUF_UpdateCastbarFillDirection",', { core, style }) == 1,
-    "castbar fill direction must have exactly one public owner")
-assert(contains(style, 'ExportPublic("MSUF_UpdateCastbarFillDirection",'))
+-- The fill-direction refresher had no caller and was removed (quality wave 3);
+-- the menu applies castbarFillDirection through the castbar visual refresh.
+assert(ownerCountFor('ExportPublic("MSUF_UpdateCastbarFillDirection",', { core, style }) == 0,
+    "the unused castbar fill-direction refresher came back")
 assert(ownerCountFor('ExportPublic("MSUF_GetCastbarReverseFillForFrame",', { core, utils }) == 1,
     "castbar reverse-fill resolution must have exactly one public owner")
 assert(contains(utils, 'ExportPublic("MSUF_GetCastbarReverseFillForFrame",'))
@@ -109,12 +110,13 @@ assert(contains(spawnBody, "MSUF_FocusKickDriver_ForceUpdate")
 local coldStart = assert(core:find("local function ApplyCastbarVisualFrameCold", 1, true))
 local coldEnd = assert(core:find("local function BumpCastbarVisualRevisions", coldStart, true))
 local coldBody = core:sub(coldStart, coldEnd - 1)
-local _, coldRefreshCount = coldBody:gsub("MSUF_RefreshCastbarFrame%(", "")
+-- Core resolves the Visuals follower when it runs (Visuals loads later).
+local _, coldRefreshCount = coldBody:gsub('Later%("MSUF_RefreshCastbarFrame"%)%(', "")
 assert(coldRefreshCount == 1, "each Core frame pass must invoke exactly one Visuals follower")
 assert(contains(coldBody, "ApplyCastbarBaseGeometry(frame, general, forcedUnit)"))
 assert(contains(coldBody, "frame._msufCastbarColdGlobalRev == globalRevision"),
     "cold visual pass must skip an already-applied revision and geometry")
-assert(contains(coldBody, "MSUF_RefreshCastbarFrame(frame, forcedUnit, general)"))
+assert(contains(coldBody, 'Later("MSUF_RefreshCastbarFrame")(frame, forcedUnit, general)'))
 assert(contains(coldBody, "ApplyCastbarSparkVisual(frame, general)"))
 assert(contains(core, "spark:SetShown(enabled)"),
     "cold castbar style pass must own spark visibility")
@@ -131,7 +133,9 @@ local _, detailCount = refreshBody:gsub("ApplyCastbarDetailLayout%(", "")
 assert(detailCount == 1, "each Visuals frame refresh must invoke detail layout exactly once")
 assert(contains(refreshBody, "ApplyCastbarDetailLayout(frame, forcedUnit, general)"))
 
-local castStart = assert(driver:find("function frame:Cast(state)", 1, true))
+-- frame:Cast and its stages (ResolveCastState .. ShowNoCast) up to SetInterrupted.
+local castStart = assert(driver:find("local function ResolveCastState(frame, state)", 1, true))
+assert(driver:find("function frame:Cast(state)", castStart, true), "frame:Cast must follow its stages")
 local interruptStart = assert(driver:find("function frame:SetInterrupted(interruptedBy)", castStart, true))
 local castBody = driver:sub(castStart, interruptStart - 1)
 assert(not contains(castBody, "self.timer = true"), "ordinary casts must not arm interrupt feedback")
@@ -147,7 +151,7 @@ assert(not contains(driver, "ScheduleTargetFocusChanged")
     and not contains(driver, "_msufTargetFocusRefreshQueued")
     and not contains(driver, "_msufTargetFocusRefreshCallback"),
     "target/focus identity retained a zero-delay scheduler")
-assert(contains(driver, "RunNextFrame(self._msufInactiveRecheckCB)"),
+assert(contains(driver, "RunNextFrame(frame._msufInactiveRecheckCB)"),
     "inactive recheck must use the shared next-frame queue")
 assert(contains(driver, "ScheduleDelayed(self._msufInterruptHideCB, feedbackDuration)"),
     "interrupt feedback must use the keyed 12.1.5 delayed scheduler")
@@ -160,10 +164,13 @@ assert(contains(player, "ScheduleDelayed(frame._msufPlayerInterruptHideCB, durat
 assert(not contains(player, "HideIfNoLongerCasting({"), "player interrupt callback must not allocate an owner table")
 assert(contains(player, "local INTERRUPT_IDENTITY_GRACE = 0.25"),
     "player interrupt feedback must retain a bounded STOP-before-INTERRUPTED identity window")
-assert(contains(player, "frame._msufPlayerInterruptCastGUID = interruptCastGUID")
-    and contains(player, "select(2, ...) == frame._msufPlayerInterruptCastGUID")
-    and contains(player, "GetTime() <= frame._msufPlayerInterruptCastDeadline"),
-    "player interrupt feedback must match the stopped cast GUID before accepting the late terminal event")
+assert(contains(player, "frame._msufPlayerInterruptCastGUID = plainGUID")
+    and contains(player, "frame._msufPlayerInterruptCastBarID = castBarID")
+    and contains(player, "MatchesPendingInterrupt(frame, eventUnit, (select(2, ...)), (select(5, ...)))")
+    and contains(player, "return castBarID == pendingBarID")
+    and contains(player, "return castGUID == pendingGUID")
+    and contains(player, "if deadline == nil or GetTime() > deadline then return false end"),
+    "player interrupt feedback must match the stopped cast (castBarID, else castGUID) before accepting the late terminal event")
 local playerEventStart = assert(player:find("local function PlayerCastbarOnEventImpl", 1, true))
 local playerInterruptStart = assert(player:find('if event == "UNIT_SPELLCAST_INTERRUPTED" then', playerEventStart, true))
 local playerInterruptEnd = assert(player:find("if not frame.isEmpower then", playerInterruptStart, true))
@@ -242,9 +249,10 @@ assert(contains(driver, "frame:RegisterUnitEvent(ACTIVE_LIFECYCLE_EVENTS[index],
 assert(contains(anchors, 'ExportPublic("MSUF_ReanchorPlayerCastBarBase", ReanchorPlayerCastBarBase)'))
 assert(contains(anchors, 'ExportPublic("MSUF_ReanchorTargetCastBarBase", ReanchorTargetCastBarBase)'))
 assert(contains(anchors, 'ExportPublic("MSUF_ReanchorFocusCastBarBase", ReanchorFocusCastBarBase)'))
-assert(contains(core, "_G.MSUF_ReanchorPlayerCastBarBase()"))
-assert(contains(core, "_G.MSUF_ReanchorTargetCastBarBase()"))
-assert(contains(core, "_G.MSUF_ReanchorFocusCastBarBase()"))
+-- Core resolves the Anchors re-anchors when it runs (Anchors loads later).
+assert(contains(core, 'Later("MSUF_ReanchorPlayerCastBarBase")()'))
+assert(contains(core, 'Later("MSUF_ReanchorTargetCastBarBase")()'))
+assert(contains(core, 'Later("MSUF_ReanchorFocusCastBarBase")()'))
 assert(not contains(visuals, 'ExportPublic("MSUF_ReanchorPlayerCastBar",'))
 
 local sizeStart = assert(anchors:find("local function ApplyPlayerCastbarSizeAndLayout", 1, true))

@@ -2,6 +2,12 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", {
+    "MSUF_SuppressBlizzardPlayerCastbars",
+    "MSUF_ShowReloadRecommendedPopup",
+})
 
 -- Menu2 Unit visual sections.
 -- Builds controls for portrait, castbar detail, detached power, border/shape, and related
@@ -22,6 +28,13 @@ local ReviewedMeta, RegisterControl = UP.ReviewedMeta, UP.RegisterControl
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast", arena = "arenaCast" }
 local CASTBAR_UNITS = M.KeySetFromWords "player target focus boss arena"
+-- Castbar width and height an unset key reads as: the values the defaults
+-- pass seeds (State/Defaults/MSUF_Defaults_Bars.lua). One table for the
+-- sliders, their reset values and the spell text width.
+local CASTBAR_DEFAULT_SIZE = {
+    player = { width = 271, height = 18 }, target = { width = 272, height = 18 },
+    focus = { width = 175, height = 18 }, boss = { width = 176, height = 12 }, arena = { width = 176, height = 12 },
+}
 local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT", "Inside Left", "INSIDE_RIGHT", "Inside Right")
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
@@ -32,7 +45,8 @@ local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Sp
 local CASTBAR_ICON_BORDER_STYLES = VT("NONE", "None", "DARK", "Dark", "CASTBAR", "Castbar border color")
 -- general grew by 32px when "Show interrupter name" pushed the Size card down.
 local CASTBAR_TAB_HEIGHTS = { general = 424, icon = 540, spell = 386, time = 386, advanced = 480 }
-local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
+local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility",
+    "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
 local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
@@ -1004,7 +1018,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
         end
         M.RequestUnitApply(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
         _G.MSUF_Castbars_OnSettingsChanged("menu2_backend")
-        if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
+        if unit == "player" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
         if state.refresh then state.refresh() end
     end
     local function ReadCastbarProvider()
@@ -1023,11 +1037,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
         local previousBackend = ReadCastbarBackend()
         SetCastbarBackend(backend)
         if backend == "BLIZZARD" and previousBackend ~= "BLIZZARD" then
-            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-                _G.MSUF_ShowReloadRecommendedPopup("Player Blizzard castbar")
-            elseif _G.print then
-                _G.print("|cffffd700MSUF:|r Switching to the Blizzard player castbar requires a /reload.")
-            end
+            _G.MSUF_ShowReloadRecommendedPopup("Player Blizzard castbar")
         end
     end
     local function SetCastbarEnabled(enabled)
@@ -1052,21 +1062,12 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
             "Castbar visibility coordinates backend, enable state, and remembered provider."))
     return enabled
 end
-local function BuildCastbar(ctx, builder, unit)
-    local fields = CASTBAR_FIELDS[unit]
-    if not fields then return end
-    local sec = builder:CollapsibleSection("castbar", "Castbar", CastbarTabHeight(unit, CurrentCastbarTab(unit)), false)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 16
-    local cardGap = 28
-    local leftW = floor((sectionW - 48 - cardGap) * 0.5)
-    leftW = max(310, min(430, leftW))
-    local rightX = leftX + leftW + cardGap
-    local rightW = max(310, min(430, sectionW - rightX - 16))
-    local prefix = CASTBAR_PREFIX[unit]
-    local RefreshCastbarEnabled = M.RefreshProxy()
-    local canUseBlizzardProvider = (unit == "player")
-    local allCastbarControls, iconControls, spellControls, targetNameControls, timeControls = {}, {}, {}, {}, {}
+-- The unit Castbar section builds in order through these functions; s carries
+-- the section frame, its layout, the control lists and every binder, card
+-- and control a later part or the closing gate group reads.
+local CastbarSection = {}
+function CastbarSection.Binders(s)
+    local ctx, unit, prefix, allCastbarControls = s.ctx, s.unit, s.prefix, s.allCastbarControls
     local function AddControl(list, control)
         if control then
             allCastbarControls[#allCastbarControls + 1] = control
@@ -1170,6 +1171,16 @@ local function BuildCastbar(ctx, builder, unit)
             slider = function(s) return BindDetailSlider(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12]) end,
         })
     end
+    s.AddControl, s.DetailKey, s.CastbarWidthKey = AddControl, DetailKey, CastbarWidthKey
+    s.CastbarHeightKey, s.CastbarWidthSourceKey = CastbarHeightKey, CastbarWidthSourceKey
+    s.NormalizeWidthSource, s.ReadWidthSource = NormalizeWidthSource, ReadWidthSource
+    s.ReadGeneralValue, s.ReadGeneralNumber, s.SetGeneralValue = ReadGeneralValue, ReadGeneralNumber, SetGeneralValue
+    s.SetGeneralNumber, s.BuildDetailControls = SetGeneralNumber, BuildDetailControls
+end
+function CastbarSection.Cards(s)
+    local ctx, unit, fields, sec, sectionW, leftX, leftW = s.ctx, s.unit, s.fields, s.sec, s.sectionW, s.leftX, s.leftW
+    local rightX, rightW, RefreshCastbarEnabled, DetailKey = s.rightX, s.rightW, s.RefreshCastbarEnabled, s.DetailKey
+    local ReadGeneralValue = s.ReadGeneralValue
     local castbarState = PrepareCastbarSwitch(ctx, sec, unit)._msuf2CastbarState
     castbarState.refresh = function() RefreshCastbarEnabled() end
     local ReadCastbarBackend, SetCastbarBackend = castbarState.read, castbarState.set
@@ -1270,6 +1281,18 @@ local function BuildCastbar(ctx, builder, unit)
             historySource = "menu:unit-castbar-advanced-icon-border-color",
         })
     end
+    s.ReadCastbarBackend, s.SetCastbarBackend = ReadCastbarBackend, SetCastbarBackend
+    s.ReadCastbarProvider, s.SetCastbarProvider = ReadCastbarProvider, SetCastbarProvider
+    s.SetCastbarEnabled, s.controlWLeft, s.controlWRight = SetCastbarEnabled, controlWLeft, controlWRight
+    s.SetCastbarSectionHeight, s.tabFrames, s.generalTab = SetCastbarSectionHeight, tabFrames, generalTab
+    s.generalCard, s.providerCard, s.sizeCard, s.iconCard = generalCard, providerCard, sizeCard, iconCard
+    s.portraitIconCard, s.spellCard, s.targetNameCard = portraitIconCard, spellCard, targetNameCard
+    s.timeCard, s.textAdvancedCard, s.iconAdvancedCard = timeCard, textAdvancedCard, iconAdvancedCard
+    s.layerAdvancedCard = layerAdvancedCard
+end
+function CastbarSection.Tabs(s)
+    local ctx, unit, sec, sectionW = s.ctx, s.unit, s.sec, s.sectionW
+    local SetCastbarSectionHeight, tabFrames = s.SetCastbarSectionHeight, s.tabFrames
     local castbarTabs, RefreshCastbarTabs, ReadCastbarTab, SetGuidedCastbarTab = W.SegmentTabs(ctx, sec, {
         label = "", values = CASTBAR_TAB_VALUES, width = min(620, sectionW - 48),
         frames = tabFrames, defaultTab = "general",
@@ -1310,6 +1333,20 @@ local function BuildCastbar(ctx, builder, unit)
             return sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab(tab) == true
         end
     end
+    s.BindExactCastbarTabTarget = BindExactCastbarTabTarget
+end
+function CastbarSection.General(s)
+    local ctx, unit, fields, sec, sectionW, rightW = s.ctx, s.unit, s.fields, s.sec, s.sectionW, s.rightW
+    local RefreshCastbarEnabled, canUseBlizzardProvider = s.RefreshCastbarEnabled, s.canUseBlizzardProvider
+    local AddControl, CastbarWidthKey, CastbarHeightKey = s.AddControl, s.CastbarWidthKey, s.CastbarHeightKey
+    local CastbarWidthSourceKey, NormalizeWidthSource = s.CastbarWidthSourceKey, s.NormalizeWidthSource
+    local ReadWidthSource, ReadGeneralNumber = s.ReadWidthSource, s.ReadGeneralNumber
+    local SetGeneralValue, SetGeneralNumber = s.SetGeneralValue, s.SetGeneralNumber
+    local ReadCastbarBackend, SetCastbarBackend = s.ReadCastbarBackend, s.SetCastbarBackend
+    local ReadCastbarProvider, SetCastbarProvider = s.ReadCastbarProvider, s.SetCastbarProvider
+    local SetCastbarEnabled, controlWRight, generalTab = s.SetCastbarEnabled, s.controlWRight, s.generalTab
+    local generalCard, providerCard, sizeCard = s.generalCard, s.providerCard, s.sizeCard
+    local BindExactCastbarTabTarget = s.BindExactCastbarTabTarget
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -334, "Use MSUF", 96)
     if castbarNoticeButton then
         RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "setting", {
@@ -1381,13 +1418,14 @@ local function BuildCastbar(ctx, builder, unit)
     W.MoveWidget(manualWidth, sizeCard, sizeRightX, -52, sizeControlWRight)
     AddControl(nil, manualWidth)
     W.AttachUnitEditFocus(manualWidth, unit, "castbar")
+    local defaultSize = CASTBAR_DEFAULT_SIZE[unit] or CASTBAR_DEFAULT_SIZE.target
     M.BindNumberWidget(ctx, manualWidth,
-        function() return ReadGeneralNumber(widthKey, (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272)) end,
+        function() return ReadGeneralNumber(widthKey, defaultSize.width) end,
         function(v)
             if not widthKey then return end
             SetGeneralNumber(widthKey, v, "MSUF2_CASTBAR_WIDTH")
         end,
-        (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272), (function()
+        defaultSize.width, (function()
             local meta = SettingMeta(ctx, "castbar.manual_width", "general", widthKey)
             meta.step, meta.roundStep = 1, true
             return meta
@@ -1397,16 +1435,26 @@ local function BuildCastbar(ctx, builder, unit)
     AddControl(nil, height)
     W.AttachUnitEditFocus(height, unit, "castbar")
     M.BindNumberWidget(ctx, height,
-        function() return ReadGeneralNumber(heightKey, (unit == "boss" or unit == "arena") and 12 or 18) end,
+        function() return ReadGeneralNumber(heightKey, defaultSize.height) end,
         function(v)
             if not heightKey then return end
             SetGeneralNumber(heightKey, v, "MSUF2_CASTBAR_HEIGHT")
         end,
-        (unit == "boss" or unit == "arena") and 12 or 18, (function()
+        defaultSize.height, (function()
             local meta = SettingMeta(ctx, "castbar.height", "general", heightKey)
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
+    s.castbarNotice, s.enabled, s.provider, s.interrupt = castbarNotice, enabled, provider, interrupt
+    s.manualWidth, s.defaultSize = manualWidth, defaultSize
+end
+function CastbarSection.IconAndText(s)
+    local ctx, unit, fields, rightW, RefreshCastbarEnabled = s.ctx, s.unit, s.fields, s.rightW, s.RefreshCastbarEnabled
+    local iconControls, spellControls, targetNameControls = s.iconControls, s.spellControls, s.targetNameControls
+    local AddControl, DetailKey, ReadGeneralValue = s.AddControl, s.DetailKey, s.ReadGeneralValue
+    local BuildDetailControls, controlWLeft, controlWRight = s.BuildDetailControls, s.controlWLeft, s.controlWRight
+    local iconCard, portraitIconCard, spellCard = s.iconCard, s.portraitIconCard, s.spellCard
+    local targetNameCard = s.targetNameCard
     local function BindCastbarFeatureToggle(parent, field, reason)
         local control = W.SwitchAt(parent, "Enable", 16, -52, 160)
         W.AttachUnitEditFocus(control, unit, "castbar")
@@ -1464,7 +1512,8 @@ local function BuildCastbar(ctx, builder, unit)
     if portraitCastIconNote.SetWordWrap then portraitCastIconNote:SetWordWrap(true) end
     local text = BindCastbarFeatureToggle(spellCard, fields.text, "MSUF2_CASTBAR_TEXT")
     BuildDetailControls(spellCard, spellControls, {
-        { "dropdown", "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT", "MSUF2_CASTBAR_SPELL_POSITION" },
+        { "dropdown", "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT",
+            "MSUF2_CASTBAR_SPELL_POSITION" },
         { "slider", "Size", 16, -142, controlWLeft, 0, 48, 1, DetailKey("SpellNameFontSize"), 0, "MSUF2_CASTBAR_SPELL_SIZE" },
         -- Position owns the visible justification, matching Time Text.
         -- Spell text color deliberately lives on the Colors page (castbar
@@ -1484,14 +1533,29 @@ local function BuildCastbar(ctx, builder, unit)
             end,
             SettingMeta(ctx, "castbar.show_target_name", "general", fields.targetName))
         BuildDetailControls(targetNameCard, targetNameControls, {
-            { "dropdown", "Position preset", 16, -88, min(260, controlWRight), CASTBAR_TEXT_POSITIONS, DetailKey("TargetNamePosition"), "BELOW", "MSUF2_CASTBAR_TARGET_NAME_POSITION" },
+            { "dropdown", "Position preset", 16, -88, min(260, controlWRight), CASTBAR_TEXT_POSITIONS, DetailKey("TargetNamePosition"), "BELOW",
+                "MSUF2_CASTBAR_TARGET_NAME_POSITION" },
             { "slider", "Size", 16, -142, controlWRight, 6, 48, 1, DetailKey("TargetNameFontSize"), 10, "MSUF2_CASTBAR_TARGET_NAME_SIZE" },
-            { "dropdown", "Alignment", 16, -196, min(260, controlWRight), CASTBAR_TEXT_ALIGN, DetailKey("TargetNameAlign"), "RIGHT", "MSUF2_CASTBAR_TARGET_NAME_ALIGN" },
+            { "dropdown", "Alignment", 16, -196, min(260, controlWRight), CASTBAR_TEXT_ALIGN, DetailKey("TargetNameAlign"), "RIGHT",
+                "MSUF2_CASTBAR_TARGET_NAME_ALIGN" },
             -- Target text color deliberately lives on the Colors page (castbar
             -- detail colors) and in the per-control color shortcuts only; a second
             -- inline swatch here double-writes the same key.
         })
     end
+    s.BindCastbarFeatureToggle, s.icon, s.portraitCastIcon = BindCastbarFeatureToggle, icon, portraitCastIcon
+    s.text, s.targetNameToggle = text, targetNameToggle
+end
+function CastbarSection.Advanced(s)
+    local ctx, unit, fields, rightW, RefreshCastbarEnabled = s.ctx, s.unit, s.fields, s.rightW, s.RefreshCastbarEnabled
+    local iconControls, spellControls, timeControls = s.iconControls, s.spellControls, s.timeControls
+    local AddControl, DetailKey, CastbarWidthKey = s.AddControl, s.DetailKey, s.CastbarWidthKey
+    local ReadGeneralValue, ReadGeneralNumber = s.ReadGeneralValue, s.ReadGeneralNumber
+    local SetGeneralValue, SetGeneralNumber = s.SetGeneralValue, s.SetGeneralNumber
+    local BuildDetailControls, controlWLeft, controlWRight = s.BuildDetailControls, s.controlWLeft, s.controlWRight
+    local timeCard, textAdvancedCard, iconAdvancedCard = s.timeCard, s.textAdvancedCard, s.iconAdvancedCard
+    local layerAdvancedCard, defaultSize = s.layerAdvancedCard, s.defaultSize
+    local BindCastbarFeatureToggle = s.BindCastbarFeatureToggle
     local function ReadSpellTextWidthMode()
         local value = tostring(ReadGeneralValue(DetailKey("SpellNameTruncate"), "AUTO") or "AUTO"):upper()
         if value == "CLIP" or value == "NONE" then return value end
@@ -1501,8 +1565,7 @@ local function BuildCastbar(ctx, builder, unit)
         return ReadSpellTextWidthMode() == "CLIP"
     end
     local function DefaultSpellTextManualWidth()
-        local base = (unit == "boss" or unit == "arena") and 176 or (unit == "focus" and 175 or 272)
-        local value = ReadGeneralNumber(CastbarWidthKey(), base) - 64
+        local value = ReadGeneralNumber(CastbarWidthKey(), defaultSize.width) - 64
         return max(40, min(260, floor(value + 0.5)))
     end
     local spellTextWidthMode = W.Dropdown(textAdvancedCard, "Width behavior", CASTBAR_TRUNCATE_VALUES, min(260, controlWLeft))
@@ -1560,12 +1623,47 @@ local function BuildCastbar(ctx, builder, unit)
     local time = BindCastbarFeatureToggle(timeCard, fields.time, "MSUF2_CASTBAR_TIME")
     BuildDetailControls(timeCard, timeControls, {
         { "dropdown", "Format", 16, -88, min(260, controlWLeft), CASTBAR_TIME_FORMATS, fields.timeFormat, "CURRENT", "MSUF2_CASTBAR_TIME_FORMAT" },
-        { "dropdown", "Position preset", 16, -142, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("TimePosition"), "RIGHT", "MSUF2_CASTBAR_TIME_POSITION" },
+        { "dropdown", "Position preset", 16, -142, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("TimePosition"), "RIGHT",
+            "MSUF2_CASTBAR_TIME_POSITION" },
         { "slider", "Size", 16, -196, controlWLeft, 0, 48, 1, DetailKey("TimeFontSize"), 0, "MSUF2_CASTBAR_TIME_SIZE" },
         -- Cast time color deliberately lives on the Colors page (castbar
         -- detail colors) and in the per-control color shortcuts only; a second
         -- inline swatch here double-writes the same key.
     })
+    s.IsManualSpellTextWidth, s.spellTextManualWidth, s.time = IsManualSpellTextWidth, spellTextManualWidth, time
+end
+local function BuildCastbar(ctx, builder, unit)
+    local fields = CASTBAR_FIELDS[unit]
+    if not fields then return end
+    local sec = builder:CollapsibleSection("castbar", "Castbar", CastbarTabHeight(unit, CurrentCastbarTab(unit)), false)
+    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
+    local leftX = 16
+    local cardGap = 28
+    local leftW = floor((sectionW - 48 - cardGap) * 0.5)
+    leftW = max(310, min(430, leftW))
+    local rightX = leftX + leftW + cardGap
+    local rightW = max(310, min(430, sectionW - rightX - 16))
+    local prefix = CASTBAR_PREFIX[unit]
+    local RefreshCastbarEnabled = M.RefreshProxy()
+    local canUseBlizzardProvider = (unit == "player")
+    local allCastbarControls, iconControls, spellControls, targetNameControls, timeControls = {}, {}, {}, {}, {}
+    local s = {
+        ctx = ctx, builder = builder, unit = unit, fields = fields, sec = sec, sectionW = sectionW, leftX = leftX,
+        cardGap = cardGap, leftW = leftW, rightX = rightX, rightW = rightW, prefix = prefix,
+        RefreshCastbarEnabled = RefreshCastbarEnabled, canUseBlizzardProvider = canUseBlizzardProvider,
+        allCastbarControls = allCastbarControls, iconControls = iconControls, spellControls = spellControls,
+        targetNameControls = targetNameControls, timeControls = timeControls,
+    }
+    CastbarSection.Binders(s)
+    CastbarSection.Cards(s)
+    CastbarSection.Tabs(s)
+    CastbarSection.General(s)
+    CastbarSection.IconAndText(s)
+    CastbarSection.Advanced(s)
+    local ReadWidthSource, ReadCastbarBackend, castbarNotice = s.ReadWidthSource, s.ReadCastbarBackend, s.castbarNotice
+    local enabled, provider, interrupt, manualWidth, icon = s.enabled, s.provider, s.interrupt, s.manualWidth, s.icon
+    local portraitCastIcon, text, targetNameToggle = s.portraitCastIcon, s.text, s.targetNameToggle
+    local IsManualSpellTextWidth, spellTextManualWidth, time = s.IsManualSpellTextWidth, s.spellTextManualWidth, s.time
     local castbarFeatureToggles = { time, interrupt, icon, text, targetNameToggle }
     local function MsufOn() return ReadCastbarBackend() == "MSUF" end
     -- Hover reason for the locked castbar controls: the section notice wording.
@@ -1577,7 +1675,8 @@ local function BuildCastbar(ctx, builder, unit)
     end
     RefreshCastbarEnabled = RefreshCastbarEnabled(M.BindGateGroup(ctx, nil, {
         { enable = { enabled }, controls = castbarFeatureToggles, on = MsufOn, reason = BackendReason },
-        { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end, reason = BackendReason },
+        { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end,
+            reason = BackendReason },
         { controls = allCastbarControls, on = MsufOn, reason = BackendReason },
         { controls = manualWidth, on = function() return MsufOn() and ReadWidthSource() == "manual" end },
         { controls = iconControls, on = function() return MsufOn() and ReadGeneralBool(fields.icon, true) end },
@@ -1594,7 +1693,8 @@ local function BuildCastbar(ctx, builder, unit)
                 if backend == "HIDE" then
                     castbarNotice:SetMessage(M.Format("%s castbar is off. Turn it on to use the MSUF castbar.", UnitTopLabel(unit)), "warning")
                 else
-                    castbarNotice:SetMessage(M.Format("%s castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.", UnitTopLabel(unit)), "warning")
+                    castbarNotice:SetMessage(M.Format("%s castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.",
+                        UnitTopLabel(unit)), "warning")
                 end
                 castbarNotice:Show()
             else
@@ -1606,7 +1706,11 @@ local function BuildCastbar(ctx, builder, unit)
     }))
 end
 if type(UP.RegisterSection) == "function" then
-    UP.RegisterSection({ id = "portrait", title = "Portrait", height = function(ctx, _, unit) return PortraitLayoutForWidth(ctx and ctx.width, CurrentPortraitTab(unit)).height end, placement = "after_inline_text", order = 10, build = BuildPortrait, prepareShell = function(ctx, sec, unit) PreparePortraitSwitch(ctx, sec, unit) end })
-    UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end, placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower, prepareShell = PreparePowerSwitch })
-    UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CastbarTabHeight(unit, CurrentCastbarTab(unit)) end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar, prepareShell = PrepareCastbarSwitch })
+    UP.RegisterSection({ id = "portrait", title = "Portrait", height = function(ctx, _, unit) return PortraitLayoutForWidth(ctx and ctx.width,
+        CurrentPortraitTab(unit)).height end, placement = "after_inline_text", order = 10, build = BuildPortrait,
+        prepareShell = function(ctx, sec, unit) PreparePortraitSwitch(ctx, sec, unit) end })
+    UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end,
+        placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower, prepareShell = PreparePowerSwitch })
+    UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CastbarTabHeight(unit, CurrentCastbarTab(unit)) end,
+        placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar, prepareShell = PrepareCastbarSwitch })
 end

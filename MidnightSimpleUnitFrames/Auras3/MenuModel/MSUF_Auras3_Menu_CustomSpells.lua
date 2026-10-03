@@ -25,7 +25,9 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
     local ClampNumber = Common.ClampNumber
     local NormalizeScope = Common.NormalizeScope
     local SpellIDFromInput = Common.SpellIDFromInput
+    local SpellIDText = Common.SpellIDText
     local SpellInfo = Common.SpellInfo
+    local Translate = Common.Translate
 
     --- Item input for Buff Reminder slots. Only an explicit item link or an
     --- `item:<id>` token counts: a bare number stays a Spell ID so the existing
@@ -366,9 +368,7 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
             local entry = {
                 value = tostring(id), spellID = id, icon = icon,
                 itemID = itemID, itemName = itemName, itemIcon = itemIcon,
-                text = (type(itemName) == "string" and itemName ~= "" and itemName
-                    or (type(name) == "string" and name ~= "" and name or "Spell"))
-                    .. " (#" .. tostring(id) .. ")",
+                text = SpellIDText((type(itemName) == "string" and itemName ~= "") and itemName or name, id),
                 customID = customSpellIDs and customSpellIDs[id] == true or false,
                 clickAction = Model.ReminderClickAction(id, itemID),
                 -- A bound item already proves the row is not class bound.
@@ -418,7 +418,7 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
                 itemName = itemName,
                 itemIcon = icon,
                 icon = icon,
-                text = label .. (itemName and (" - " .. itemName) or ""),
+                text = itemName and string.format(Translate("%s - %s"), Translate(label), itemName) or Translate(label),
                 clickAction = itemID and ("item:" .. tostring(itemID)) or nil,
                 keep = true,
             }
@@ -506,13 +506,14 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
             local class = order[i]
             local spells = A3.TargetDotData and A3.TargetDotData[class]
             if type(spells) == "table" and #spells > 0 then
-                values[#values + 1] = { text = TARGET_DOT_CLASS_LABELS[class] or class, header = true, disabled = true, translate = false }
+                -- Class headers are English keys; the dropdown translates them.
+                values[#values + 1] = { text = TARGET_DOT_CLASS_LABELS[class] or class, header = true, disabled = true }
                 for j = 1, #spells do
                     local spellID, fallback = tonumber(spells[j][1]), spells[j][2]
                     local id, name, icon = SpellInfo(spellID)
                     values[#values + 1] = {
                         value = tostring(id or spellID), spellID = id or spellID, icon = icon,
-                        text = (type(name) == "string" and name ~= "" and name or fallback or "Spell") .. " (#" .. tostring(id or spellID) .. ")",
+                        text = SpellIDText(name, id or spellID, fallback),
                         class = class,
                     }
                 end
@@ -549,8 +550,7 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
         id = id or spellID
         return {
             value = tostring(id), spellID = id, icon = icon,
-            text = (type(name) == "string" and name ~= "" and name or fallback or "Spell")
-                .. " (#" .. tostring(id) .. ")",
+            text = SpellIDText(name, id, fallback),
             class = class,
             predefined = true,
         }
@@ -618,7 +618,7 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
             if type(spells) == "table" and #spells > 0 then
                 values[#values + 1] = {
                     text = TARGET_DOT_CLASS_LABELS[class] or class,
-                    header = true, disabled = true, translate = false,
+                    header = true, disabled = true,
                 }
                 for j = 1, #spells do
                     values[#values + 1] = DefensiveEntry(tonumber(spells[j][1]), spells[j][2], class)

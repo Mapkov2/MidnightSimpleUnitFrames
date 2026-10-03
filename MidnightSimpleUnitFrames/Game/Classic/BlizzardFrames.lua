@@ -19,18 +19,29 @@ local function Protected(frame)
     return frame and frame.IsProtected and frame:IsProtected() or false
 end
 
---- Mists bars inherit PlayerFrameBottomManagedFrameTemplate: their OnShow/OnHide
---- run layoutParent:Layout(), which re-anchors the secure PetFrame. Treat them
---- like protected frames in combat even though IsProtected() reports false.
-local function CombatDeferred(frame)
-    return InCombat() and (Protected(frame) or (frame ~= nil and frame.layoutParent ~= nil))
+--- Mists class bars inherit PlayerFrameBottomManagedFrameTemplate
+--- (Blizzard_UnitFrame/Shared/PlayerFrameTemplates.xml: isManagedFrame and a
+--- layoutParent). Their OnShow/OnHide add them to or remove them from
+--- PlayerFrameBottomManagedFramesContainer and lay it out, which also
+--- re-anchors the secure PetFrame. A Show() or Hide() from addon code runs that
+--- layout tainted, in combat or out of it, so a managed bar is never shown or
+--- hidden here: it is concealed (alpha 0, no mouse) while Blizzard keeps
+--- showing and hiding it, and the release gives the alpha and the mouse back.
+local function Managed(frame)
+    return frame ~= nil and (frame.isManagedFrame == true or frame.layoutParent ~= nil)
 end
 
---- In-combat visual suppression for a deferred, unprotected frame. The alpha is
---- recorded once so repeated mutes never overwrite the original value with 0.
---- A recorded 0 (a showAnim fade-in, e.g. Mists PriestBarFrame:CheckAndShow)
---- is stored as 1, the alpha those bars settle at, so unmute never blanks them.
-local function MuteManagedFrame(frame)
+--- A protected frame is not touched in combat lockdown; the change waits for
+--- PLAYER_REGEN_ENABLED.
+local function CombatDeferred(frame)
+    return InCombat() and Protected(frame)
+end
+
+--- Conceals a managed frame. The alpha and the mouse are recorded once, so
+--- repeated conceals never record the concealed state. A recorded alpha 0 (a
+--- showAnim fade-in, e.g. Mists PriestBarFrame:CheckAndShow) is stored as 1,
+--- the alpha those bars settle at, so the release never blanks them.
+local function ConcealManagedFrame(frame)
     if not frame or Protected(frame) or not (frame.SetAlpha and frame.GetAlpha) then return end
     state.muted = state.muted or {}
     if state.muted[frame] == nil then
@@ -38,14 +49,26 @@ local function MuteManagedFrame(frame)
         state.muted[frame] = (alpha and alpha > 0) and alpha or 1
     end
     frame:SetAlpha(0)
+    state.mouse = state.mouse or {}
+    if state.mouse[frame] == nil and frame.IsMouseEnabled and frame.EnableMouse then
+        local mouse = frame:IsMouseEnabled() == true
+        state.mouse[frame] = mouse
+        if mouse then frame:EnableMouse(false) end
+    end
 end
 
-local function UnmuteManagedFrame(frame)
+local function RevealManagedFrame(frame)
     local muted = state.muted
     local alpha = muted and muted[frame]
-    if alpha == nil then return end
-    muted[frame] = nil
-    frame:SetAlpha(alpha)
+    if alpha ~= nil then
+        muted[frame] = nil
+        frame:SetAlpha(alpha)
+    end
+    local mouse = state.mouse and state.mouse[frame]
+    if mouse ~= nil then
+        state.mouse[frame] = nil
+        if mouse then frame:EnableMouse(true) end
+    end
 end
 
 local function EnsureDeferredDriver()
@@ -63,9 +86,6 @@ local function EnsureDeferredDriver()
                 and type(action.restore) == "function" then
                 action.restore(frame)
             end
-            -- Alpha restoration is independent of the hide/restore decision:
-            -- every drained frame gets its recorded alpha back exactly once.
-            UnmuteManagedFrame(frame)
         end
     end)
     state.driver = driver
@@ -80,13 +100,27 @@ end
 
 local function HideOwnedResourceFrame(frame)
     if state.suppressed == true and frame and frame.Hide then
-        if CombatDeferred(frame) then
-            MuteManagedFrame(frame)
+        if Managed(frame) then
+            ConcealManagedFrame(frame)
+        elseif CombatDeferred(frame) then
             Defer(frame, true)
         else
             frame:Hide()
         end
     end
+end
+
+--- A managed bar's fade-in (showAnim: alpha 0 to 1, then SetAlpha(1) when it
+--- finishes) would reveal a concealed bar, so it is stopped while MSUF owns
+--- the bar; the finish re-conceals in case it ran anyway.
+local function StopOwnedFadeIn(anim)
+    if state.suppressed ~= true then return end
+    anim:Stop()
+    ConcealManagedFrame(anim:GetParent())
+end
+
+local function ConcealOwnedFadeIn(anim)
+    if state.suppressed == true then ConcealManagedFrame(anim:GetParent()) end
 end
 
 function Compat.SetBlizzardClassResourcesSuppressed(suppress)
@@ -104,22 +138,32 @@ function Compat.SetBlizzardClassResourcesSuppressed(suppress)
         local frame = definition and _G[definition.name]
         if frame then
             found = true
+            local managed = Managed(frame)
             if state.frames[definition.name] ~= frame then
                 state.frames[definition.name] = frame
                 if frame.HookScript then
                     frame:HookScript("OnShow", HideOwnedResourceFrame)
                 end
+                local fadeIn = managed and frame.showAnim
+                if fadeIn and fadeIn.HookScript then
+                    fadeIn:HookScript("OnPlay", StopOwnedFadeIn)
+                    fadeIn:HookScript("OnFinished", ConcealOwnedFadeIn)
+                end
             end
 
             if suppress then
-                if CombatDeferred(frame) then
-                    MuteManagedFrame(frame)
+                if managed then
+                    ConcealManagedFrame(frame)
+                elseif CombatDeferred(frame) then
                     Defer(frame, true)
                 elseif not frame.IsShown or frame:IsShown() then
                     frame:Hide()
                 end
+            elseif managed then
+                -- Blizzard kept showing and hiding it: only the concealment ends.
+                if state.pending then state.pending[frame] = nil end
+                RevealManagedFrame(frame)
             elseif wasSuppressed and type(definition.restore) == "function" then
-                UnmuteManagedFrame(frame)
                 if CombatDeferred(frame) then
                     Defer(frame, definition)
                 else

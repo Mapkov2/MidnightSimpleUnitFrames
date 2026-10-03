@@ -9,6 +9,30 @@ if type(A3) ~= "table" then
     MSUF.MSUF_Auras3 = A3
 end
 A3.EditModeModules = A3.EditModeModules or {}
+--- Places a preview aura's duration bar inside icon: height px tall on the
+--- configured edge (TOP, else bottom), inset px in. With a fill share it
+--- covers that share of the inner width from the left edge, otherwise all of
+--- it. The Edit Mode and the menu previews share it.
+function A3.LayoutPreviewDurationBar(bar, icon, position, height, inset, width, frac)
+    bar:ClearAllPoints()
+    bar:SetHeight(height)
+    if frac then
+        bar:SetWidth(math.max(1, math.floor(math.max(1, width - inset * 2) * frac + 0.5)))
+        if position == "TOP" then
+            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        else
+            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        end
+    elseif position == "TOP" then
+        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
+        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
+    else
+        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
+        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
+    end
+    bar:Show()
+end
+
 A3.EditModeModules.Preview = function(config, layout, drag, IsBossScope, ForEachBossUnit, EditPreviewActive, UnitPreviewActive, SyncPreviewGroupStrata)
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor, math_min, math_max = math.floor, math.min, math.max
@@ -38,8 +62,7 @@ local NormalizeKind = config.NormalizeKind
 local CustomItem = config.CustomItem
 local CustomPreviewEntries = config.CustomPreviewEntries
 local CustomPreviewEntriesSignature = config.CustomPreviewEntriesSignature
-local UnitLabel = config.UnitLabel
-local GroupLabel = config.GroupLabel
+local GroupTitle = config.GroupTitle
 local EnsureDB = config.EnsureDB
 local UnitEnabled = config.UnitEnabled
 local UnitHasCustomPreview = config.UnitHasCustomPreview
@@ -333,23 +356,7 @@ local function ApplyPreviewDurationBarProgress(icon, cfg, auraState)
     local r, g, b = AuraDurationBarColor()
     bar:SetVertexColor(r, g, b, 0.92)
     frac = math_max(0.02, math_min(1, tonumber(frac) or 1))
-    bar:ClearAllPoints()
-    bar:SetHeight(height)
-    if auraState then
-        bar:SetWidth(math_max(1, math_floor(math_max(1, size - inset * 2) * frac + 0.5)))
-        if cfg.durationBarPosition == "TOP" then
-            bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        else
-            bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        end
-    elseif cfg.durationBarPosition == "TOP" then
-        bar:SetPoint("TOPLEFT", icon, "TOPLEFT", inset, -inset)
-        bar:SetPoint("TOPRIGHT", icon, "TOPRIGHT", -inset, -inset)
-    else
-        bar:SetPoint("BOTTOMLEFT", icon, "BOTTOMLEFT", inset, inset)
-        bar:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -inset, inset)
-    end
-    bar:Show()
+    A3.LayoutPreviewDurationBar(bar, icon, cfg.durationBarPosition, height, inset, size, auraState and frac or nil)
 end
 
 local function ApplyPreviewAuraAnimation(group, kind, shownIcons, textCfg, elapsed)
@@ -406,7 +413,7 @@ local function CreateGroup(unit, kind)
     label:SetPoint("RIGHT", header, "RIGHT", -6, 0)
     label:SetJustifyH("LEFT")
     StyleLabel(label)
-    label:SetText(UnitLabel(unit) .. " " .. GroupLabel(unit, kind, spec))
+    label:SetText(GroupTitle(unit, kind, spec))
     group.Label = label
 
     local body = PixelLayoutRegion(CreateFrame("Frame", nil, group))
@@ -646,7 +653,7 @@ function EM.RefreshUnit(unit)
         -- Target DoTs retain their configuration preview while disabled.
         -- Player Defensives obey their master switch in Edit Mode as well.
         local laneShown = cfg.show
-            or (unit ~= "player" and spec.customIndex == 4 and entries ~= nil)
+            or (unit ~= "player" and spec.preset and entries ~= nil)
         -- Outside edit mode custom lanes stay strictly 1:1 with the runtime:
         -- nothing tracked means nothing to preview. Placeholder-only custom
         -- lanes exist purely as edit-mode drag surfaces.
@@ -686,8 +693,8 @@ function EM.RefreshUnit(unit)
             -- bar-only lane renders no icon chrome, so the style stays off.
             local padding = Clamp(metrics and metrics.padding, 0, 0, 16)
             local barOnly = textCfg.showDurationBar == true and textCfg.durationBarDisplay == "BAR_ONLY"
-            local appearanceKind = spec.customIndex == 4 and unit == "player" and "playerDefensives"
-                or spec.customIndex == 4 and "targetDots"
+            local appearanceKind = spec.preset and unit == "player" and "playerDefensives"
+                or spec.preset and "targetDots"
                 or ((kind == "debuff" or cfg.auraType == "DEBUFF") and "debuff" or "buff")
             local iconStyle = (not barOnly) and LaneIconStyle(metrics, unit, appearanceKind) or nil
             local requestedIconShape = (metrics and metrics.requestedIconShape) or cfg.iconShape
@@ -717,7 +724,7 @@ function EM.RefreshUnit(unit)
                     group.Hitbox:SetFrameLevel((group:GetFrameLevel() or 0) + 20)
                 end
                 if group.Label then
-                    group.Label:SetText(UnitLabel(unit) .. " " .. GroupLabel(unit, kind, spec))
+                    group.Label:SetText(GroupTitle(unit, kind, spec))
                     StyleLabel(group.Label)
                 end
                 ApplyGroupChrome(group, spec, chrome)

@@ -231,7 +231,10 @@ local function GlobalFontTarget()
     end
     local function SetRGB(r, g, b)
         local api = (MSUF and MSUF._colorsAPI) or {}
-        if type(api.SetGlobalFontColor) == "function" then api.SetGlobalFontColor(r, g, b); return end
+        if type(api.SetGlobalFontColor) == "function" then
+            api.SetGlobalFontColor(r, g, b)
+            return
+        end
         local general = GlobalPage().G and GlobalPage().G()
         if not general then return end
         general.fontColorCustomR, general.fontColorCustomG, general.fontColorCustomB = r, g, b
@@ -269,7 +272,10 @@ local function ClassColorTarget(token, label)
         end,
         setRGB = function(r, g, b)
             local api = (MSUF and MSUF._colorsAPI) or {}
-            if type(api.SetClassColor) == "function" then api.SetClassColor(token, r, g, b); return end
+            if type(api.SetClassColor) == "function" then
+                api.SetClassColor(token, r, g, b)
+                return
+            end
             local db = _G.MSUF_DB
             if not db then return end
             db.classColors = type(db.classColors) == "table" and db.classColors or {}
@@ -292,7 +298,10 @@ local function NPCColorTarget(kind)
         end,
         setRGB = function(r, g, b)
             local api = (MSUF and MSUF._colorsAPI) or {}
-            if type(api.SetNPCColor) == "function" then api.SetNPCColor(kind, r, g, b); return end
+            if type(api.SetNPCColor) == "function" then
+                api.SetNPCColor(kind, r, g, b)
+                return
+            end
             local db = _G.MSUF_DB
             if not db then return end
             db.npcColors = type(db.npcColors) == "table" and db.npcColors or {}
@@ -399,7 +408,10 @@ local function RestoreScopeFields(scope, state)
     for i = 1, #state do
         local saved = state[i]
         local entry = db[saved.key]
-        if type(entry) ~= "table" then entry = {}; db[saved.key] = entry end
+        if type(entry) ~= "table" then
+            entry = {}
+            db[saved.key] = entry
+        end
         for field, value in pairs(saved.fields or {}) do entry[field] = value.had and value.value or nil end
         if not saved.hadEntry and next(entry) == nil then db[saved.key] = nil end
     end
@@ -740,7 +752,10 @@ end
 function W.OpenTextQuickSettings(anchor, options)
     if not anchor or Blocked() then return false end
     if W.CloseDropdown then W.CloseDropdown({ immediate = true }) end
-    if textQuickPopup and textQuickPopup:IsShown() and activeAnchor == anchor then textQuickPopup:Hide(); return true end
+    if textQuickPopup and textQuickPopup:IsShown() and activeAnchor == anchor then
+        textQuickPopup:Hide()
+        return true
+    end
 
     activeAnchor = anchor
     activeOptions = options or {}

@@ -2,8 +2,8 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
-local F = (MSUF.Cache and MSUF.Cache.F) or {}
-local UnitExists = type(F.UnitExists) == "function" and F.UnitExists or _G.UnitExists
+local CachedAPI = (MSUF.Cache and MSUF.Cache.F) or {}
+local UnitExists = type(CachedAPI.UnitExists) == "function" and CachedAPI.UnitExists or _G.UnitExists
 local UnitIsEnemy = _G.UnitIsEnemy
 local UnitIsFriend = _G.UnitIsFriend
 local PlaySound = _G.PlaySound
@@ -114,5 +114,11 @@ do
     ExportPublic("MSUF_TargetSoundDriver_ApplySetting", MSUF_TargetSoundDriver_ApplySetting)
 
     -- Saved settings must take effect after login/reload without reopening the menu.
-    MSUF_TargetSoundDriver_ApplySetting()
+    -- Not at file load: the client loads the SavedVariables after every file ran,
+    -- so that read built a throwaway profile and always saw the default (off).
+    -- PLAYER_LOGIN is the first event with the saved profile; later profile
+    -- changes re-apply through State/MSUF_ProfileRuntime.lua.
+    if EventBusRegister then
+        EventBusRegister("PLAYER_LOGIN", "MSUF_TARGET_SOUND_LOGIN", MSUF_TargetSoundDriver_ApplySetting, nil, true)
+    end
 end

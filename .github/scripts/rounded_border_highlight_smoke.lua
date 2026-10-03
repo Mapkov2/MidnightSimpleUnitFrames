@@ -181,6 +181,9 @@ end
 _G.MSUF_NS = MSUF
 -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
 assert(loadfile('MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua'))('MidnightSimpleUnitFrames', MSUF)
+-- Kernel/MSUF_Util.lua (after Require in every core TOC) publishes MSUF_PixelLayoutRegion,
+-- which the group files require.
+assert(loadfile('MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua'))('MidnightSimpleUnitFrames', MSUF)
 -- UnitFrames/Engine/MSUF_UF_Factory.lua owns the boss bar geometry each border
 -- apply calls; this harness builds no boss frames.
 _G.MSUF_ApplyBossPhysicalBarGeometry = function() end
@@ -208,12 +211,16 @@ end
 LoadEngine("MSUF_UF_Metadata.lua")
 LoadEngine("MSUF_UF_Core.lua")
 assert(loadfile(libraryRoot .. "MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", MSUF)
+-- The visual refresh callback registry the rounded controller hooks into.
+assert(loadfile(libraryRoot .. "MSUF_UF_Runtime.lua"))("MidnightSimpleUnitFrames", MSUF)
 LoadEngine("Elements/MSUF_UF_Visuals_Common.lua")
 LoadEngine("Elements/MSUF_UF_Elements_Borders.lua")
 LoadEngine("Elements/MSUF_UF_Elements_LoadConditions.lua")
 LoadEngine("Group/MSUF_UF_Group_Indicators.lua")
 
 local UF = assert(MSUF.UF)
+-- The Power element (not built here) owns the rounded power border callback slot.
+UF.SetRoundedPowerBorderCallback = UF.SetRoundedPowerBorderCallback or function() end
 
 local function NewUnitFrame(unit)
   local frame = NewObject(nil)
@@ -332,6 +339,12 @@ local startupFrames = {
  NewStartupFrame('target'), NewStartupFrame('pet'), NewStartupFrame('pettarget'),
  NewStartupFrame('party1','party'),
 }
+-- Providers the frame controller requires at load, which this harness does not
+-- build: the colors runtime (no outline color, so the profile value decides), the
+-- defaults pass and the class power controller.
+_G.MSUF_GetBarOutlineColor = function() end
+_G.MSUF_EnsureDB = function() end
+_G.MSUF_ClassPower_ApplyRoundedSurface = function() end
 -- The rounded surface layer and the class resource renderers load before the
 -- frame controller, exactly as the TOC lists them.
 assert(loadfile('MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedSurface.lua'))('MidnightSimpleUnitFrames',MSUF)

@@ -27,15 +27,33 @@ local ADDON = root .. "/MidnightSimpleUnitFrames/"
 -- operations cheaper (targetAddRemove 11224 -> 11164, targetForceFull
 -- 10942 -> 10898, targetReapply 27935 -> 27653); their budgets are the new
 -- values plus 2 %.
+-- 2026-10-02 (W4-C5): a lane scan asks UnitIsUnit once per source token
+-- instead of once per aura, so a full scan and a re-apply got cheaper
+-- (targetForceFull 10975 -> 10749, targetReapply 27730 -> 27432); their
+-- budgets are the new values plus 2 %.
 -- MSUF_AURA_BUDGET_MEASURE=1 prints the measured values without asserting.
 local BUDGET = {
     targetDelta = 781,         -- UNIT_AURA, one refreshed aura (in-place update)
     targetAddRemove = 11387,   -- UNIT_AURA, one aura added, then removed
-    targetForceFull = 11116,   -- ForceUpdate: full scan and render of both lanes
-    targetReapply = 28206,     -- UF.ApplyElementToFrame on an active frame (C3.2: was 56621)
+    targetForceFull = 10964,   -- ForceUpdate: full scan and render of both lanes
+    targetReapply = 27981,     -- UF.ApplyElementToFrame on an active frame (C3.2: was 56621)
     partyDelta = 702,          -- group frame UNIT_AURA, one refreshed aura
     partyReapply = 12898,      -- UF.ApplyElementToFrame on an active group frame (C3.2: was 25598)
     combatRender = 173,        -- PLAYER_REGEN_DISABLED render of the cached lanes
+}
+-- Native API calls per operation (C_UnitAuras getters, unit queries,
+-- issecretvalue, GetTime). A call count is exact, so any extra call fails.
+-- Lower one with the change that saves it; raise one only together with a
+-- recorded reason. Measured 2026-10-02 (W4-C5) against the wave-3 base
+-- (before -> now): a lane scan asks UnitIsUnit once per source token instead
+-- of once per aura (targetForceFull 328 -> 294, targetReapply 334 -> 300,
+-- partyReapply 109 -> 99), and the restricted-comparison guard on that
+-- answer costs a delta one issecretvalue (targetDelta 13 -> 14, partyDelta
+-- 12 -> 13, targetAddRemove 312 -> 313).
+local NATIVE_BUDGET = {
+    targetDelta = 14, targetAddRemove = 313,
+    targetForceFull = 294, targetReapply = 300,
+    partyDelta = 13, partyReapply = 99, combatRender = 1,
 }
 local MEASURE_ONLY = os.getenv("MSUF_AURA_BUDGET_MEASURE") == "1"
 
@@ -283,6 +301,27 @@ local function Instructions(fn, n)
     return math.floor(ticks / n + 0.5)
 end
 
+-- Native API calls per operation (wave 4 rule: a hot-path budget also counts
+-- the client calls, whose cost no VM instruction count sees). A call hook
+-- counts the C API stubs the backend reaches; the stubs stay unwrapped, so the
+-- instruction counts above are unchanged.
+local NATIVE = {}
+for _, name in ipairs({ "issecretvalue", "UnitExists", "UnitIsUnit", "UnitInRange", "UnitGUID", "GetTime" }) do
+    NATIVE[_G[name]] = name
+end
+for name, api in pairs(_G.C_UnitAuras) do NATIVE[api] = "C_UnitAuras." .. name end
+local function NativeCalls(fn, n)
+    n = n or 20
+    fn()
+    local calls = 0
+    debug.sethook(function()
+        if NATIVE[debug.getinfo(2, "f").func] then calls = calls + 1 end
+    end, "c")
+    for _ = 1, n do fn() end
+    debug.sethook()
+    return math.floor(calls / n + 0.5)
+end
+
 --- Bytes allocated per call with the collector stopped, so nothing is freed.
 local function BytesPerCall(fn, n)
     fn()
@@ -319,6 +358,13 @@ local function Record(name, value, budget)
         failures[#failures + 1] = string.format("%s: %d instructions, budget %d", name, value, budget)
     end
 end
+local function RecordNative(name, fn)
+    local value, budget = NativeCalls(fn), NATIVE_BUDGET[name]
+    results[#results + 1] = string.format("%sNative=%d", name, value)
+    if not MEASURE_ONLY and value > budget then
+        failures[#failures + 1] = string.format("%s: %d native calls, budget %d", name, value, budget)
+    end
+end
 
 -- 1. Element apply ------------------------------------------------------------------------
 local scans, configs = Steps(target, function() Apply(target) end)
@@ -329,6 +375,7 @@ assert(targetState.lanes.buff.visible == 9 and targetState.lanes.debuff.visible 
     "precondition: the target lanes did not render the unit's auras")
 local targetReapplyScans, targetReapplyConfigs = Steps(target, function() Apply(target) end)
 Record("targetReapply", Instructions(function() Apply(target) end), BUDGET.targetReapply)
+RecordNative("targetReapply", function() Apply(target) end)
 
 Steps(party, function() Apply(party) end)
 assert(party._msufActiveElements.Auras == true, "party aura element did not enable")
@@ -337,11 +384,13 @@ assert(partyState.lanes.buff.visible == 4 and partyState.lanes.debuff.visible ==
     "precondition: the party lanes did not render the unit's auras")
 local partyReapplyScans, partyReapplyConfigs = Steps(party, function() Apply(party) end)
 Record("partyReapply", Instructions(function() Apply(party) end), BUDGET.partyReapply)
+RecordNative("partyReapply", function() Apply(party) end)
 
 -- 2. Hot events -----------------------------------------------------------------------------
 local refreshPayload = { updatedAuraInstanceIDs = { refreshed.auraInstanceID } }
 local function TargetDelta() Update(target, "UNIT_AURA", refreshPayload) end
 Record("targetDelta", Instructions(TargetDelta), BUDGET.targetDelta)
+RecordNative("targetDelta", TargetDelta)
 local bytes = BytesPerCall(TargetDelta, 200)
 assert(bytes == 0, string.format("a refreshed target aura allocated %.1f bytes per event", bytes))
 
@@ -357,21 +406,25 @@ local function TargetAddRemove()
     Update(target, "UNIT_AURA", removePayload)
 end
 Record("targetAddRemove", Instructions(TargetAddRemove), BUDGET.targetAddRemove)
+RecordNative("targetAddRemove", TargetAddRemove)
 assert(targetState.lanes.buff.visible == 9, "the add/remove cycle left the target buff lane changed")
 
 local function TargetForceFull() Update(target, "ForceUpdate") end
 local forceScans = Steps(target, TargetForceFull)
 assert(forceScans == 2, "a forced target update did not scan each enabled lane once: " .. forceScans)
 Record("targetForceFull", Instructions(TargetForceFull), BUDGET.targetForceFull)
+RecordNative("targetForceFull", TargetForceFull)
 
 local partyPayload = { updatedAuraInstanceIDs = { partyList[1].auraInstanceID } }
 local function PartyDelta() Update(party, "UNIT_AURA", partyPayload) end
 Record("partyDelta", Instructions(PartyDelta), BUDGET.partyDelta)
+RecordNative("partyDelta", PartyDelta)
 bytes = BytesPerCall(PartyDelta, 200)
 assert(bytes == 0, string.format("a refreshed party aura allocated %.1f bytes per event", bytes))
 
 local function CombatRender() Update(target, "PLAYER_REGEN_DISABLED") end
 Record("combatRender", Instructions(CombatRender), BUDGET.combatRender)
+RecordNative("combatRender", CombatRender)
 
 local steps = string.format("re-apply steps: target %d scans/%d configs, party %d scans/%d configs",
     targetReapplyScans, targetReapplyConfigs, partyReapplyScans, partyReapplyConfigs)
