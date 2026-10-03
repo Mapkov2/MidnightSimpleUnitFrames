@@ -33,4 +33,26 @@ S.RenameOrDelete("A","Renamed")
 MSUF_GlobalDB.profiles.Renamed,MSUF_GlobalDB.profiles.A=MSUF_GlobalDB.profiles.A,nil
 assert(S.GetGroups()[1].members.Renamed)
 S.RenameOrDelete("B"); assert(not S.GetGroups()[1].members.B)
+-- profile.bars holds the class resource settings next to the unit frame bar
+-- settings. The Class Resources module syncs classPower*, arcaneWindow*, mana*
+-- and resourceMarks; the Unit Frames module keeps the other bar keys and no
+-- longer carries those.
+local function Bars() return {classPowerHeight=10,arcaneWindowText=true,manaGainPulse=true,resourceMarks={},powerBarHeight=5} end
+local c,d,e={bars=Bars(),general={}},{bars=Bars(),general={}},{bars=Bars(),general={}}
+MSUF_GlobalDB={profiles={C=c,D=d,E=e},global={}}
+MSUF_ActiveProfile,MSUF_DB="C",c
+assert(S.Replace({{name="Resources",members={C=true,D=true},modules={resources=true}},
+    {name="Frames",members={C=true,E=true},modules={unitframes=true}}}))
+c.bars.classPowerHeight=22; c.bars.arcaneWindowText=false; c.bars.manaGainPulse=false
+c.bars.resourceMarks[1]={value=3}; c.bars.powerBarHeight=9
+assert(S.Flush())
+assert(d.bars.classPowerHeight==22 and d.bars.arcaneWindowText==false and d.bars.manaGainPulse==false
+    and type(d.bars.resourceMarks[1])=="table" and d.bars.resourceMarks[1].value==3,
+    "the Class Resources module syncs the class resource keys in profile.bars")
+assert(d.bars.powerBarHeight==5,"the Class Resources module carries a unit frame bar key")
+assert(e.bars.powerBarHeight==9,"the Unit Frames module stopped syncing its bar keys")
+assert(e.bars.classPowerHeight==10 and e.bars.arcaneWindowText==true and e.bars.manaGainPulse==true
+    and e.bars.resourceMarks[1]==nil,"the Unit Frames module still carries class resource keys")
+assert(S.Owner({"bars","classPowerShape"})=="resources" and S.Owner({"bars","roundedClassResources"})=="unitframes"
+    and S.Owner({"player","width"})=="unitframes","profile sync owners of profile.bars")
 print("profile_sync_smoke: OK")

@@ -8,8 +8,16 @@ Sync.Modules = { "unitframes", "groupframes", "castbars", "colors", "auras", "re
 local modules = {}; for _,id in ipairs(Sync.Modules) do modules[id]=true end
 -- Root ownership is shared with the variants (State/MSUF_ProfileFields.lua).
 local roots = Fields.RootModules
+-- profile.bars holds the class resource settings next to the unit frame bar
+-- settings; the class resource keys belong to the Class Resources module.
+local function BarsOwner(key)
+    if type(key)=="string" and (key:sub(1,10)=="classPower" or key:sub(1,12)=="arcaneWindow"
+        or key:sub(1,4)=="mana" or key=="resourceMarks") then return "resources" end
+    return roots.bars
+end
 function Sync.Owner(path)
     if Fields.ExternalOwner then local owner=Fields.ExternalOwner(path); if owner then return owner end end
+    if path[1]=="bars" then return BarsOwner(path[2]) end
     if path[1]~="general" then return roots[path[1]] end
     local key=path[2]
     if type(key)~="string" or key:match("^_") then return end
