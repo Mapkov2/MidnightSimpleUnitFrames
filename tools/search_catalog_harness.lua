@@ -249,6 +249,14 @@ do
     end
 end
 
+-- A page may offer a prompt when it first builds (the Class Resources quick
+-- setup). Menu prompts use Blizzard's generic dialogs (M.ShowPrompt); the
+-- catalog world shows no dialog, so the missing ones answer nothing.
+for _, name in ipairs({ "StaticPopup_ShowCustomGenericConfirmation",
+    "StaticPopup_ShowCustomGenericInputBox", "StaticPopup_FindVisible", "StaticPopup_Hide" }) do
+    if type(rawget(_G, name)) ~= "function" then rawset(_G, name, function() return nil end) end
+end
+
 local loadedMenuFiles = 0
 for _, relativeXml in ipairs(MENU_XML) do
     local xmlPath = Join(OPTIONS, relativeXml)
