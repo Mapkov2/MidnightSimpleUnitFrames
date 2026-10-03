@@ -389,3 +389,6 @@ clients+Forever	lua	tools/tests/castbar_preview_time_offset_smoke.lua	{root} {fl
 -	lua	tools/tests/menu_required_owners_smoke.lua	{root}	A menu or Edit Mode owner is guarded or falls back instead of being required
 clients+Forever	lua	tools/tests/group_preview_repaint_budget_smoke.lua	{root} {flavor}	Group preview repaint allocates or calls more than its budget: {flavor}
 clients+Forever	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} {flavor}	Menu previews paint an English status word on a German client: {flavor}
+-	lua	tools/tests/focus_kick_preview_combat_keyboard_smoke.lua	{root}	The focus interrupt tracker preview calls a restricted keyboard API in combat or swallows keybinds
+-	lua	tools/tests/castbar_target_name_font_pass_smoke.lua	{root}	A castbar font pass mid-cast leaves the cast target name in the font colour
+-	lua	tools/tests/castbar_preview_native_conceal_smoke.lua	{root}	The castbar previews hide a shown managed Blizzard player castbar (tainted container layout)

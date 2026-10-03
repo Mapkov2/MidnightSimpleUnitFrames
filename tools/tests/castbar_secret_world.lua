@@ -492,6 +492,19 @@ local function InstallClient(world, env)
         IsTargetWithinSwingRange = function() return S("boolean") end,
     }
     env.UnitAttackSpeed = function() return S(), S(), S() end
+    -- Blizzard_SwingTimer's three bars (upstream/forever Blizzard_SwingTimer.xml):
+    -- managed frames, hidden while the CVar is off, outside Edit Mode. MSUF only
+    -- hooks them and may change their alpha; showing or hiding one is an error.
+    for _, hand in ipairs({ "MainHand", "OffHand", "Ranged" }) do
+        local bar = { isManagedFrame = true, isInEditMode = false, shown = false, alpha = 1 }
+        function bar:IsShown() return self.shown end
+        function bar:HookScript() end
+        function bar:GetAlpha() return self.alpha end
+        function bar:SetAlpha(alpha) self.alpha = alpha end
+        function bar:Show() error("MSUF showed Blizzard's SwingTimer" .. hand .. "Frame", 2) end
+        function bar:Hide() error("MSUF hid Blizzard's SwingTimer" .. hand .. "Frame", 2) end
+        env["SwingTimer" .. hand .. "Frame"] = bar
+    end
     env.UnitExists = function(unit) return world.exists[unit] == true end
     env.UnitIsDeadOrGhost = function(unit) return world.dead[unit] == true end
     env.UnitIsUnconscious = function() return false end

@@ -172,7 +172,8 @@ local function Load(client)
     MSUF.Client = client
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua"))("MSUF", MSUF)
 end
-Load({ SupportsUnit = function() return true end })
+local supportedEvents = { INSTANCE_ENCOUNTER_ENGAGE_UNIT = true, UNIT_TARGETABLE_CHANGED = true }
+Load({ SupportsUnit = function() return true end, SupportsEvent = function(event) return supportedEvents[event] == true end })
 
 ---------------------------------------------------------------------------
 -- Defaults: every block has its own start spot (P3-1)
@@ -345,12 +346,24 @@ for _ = 1, 100 do manaRow.scripts.OnEvent(manaRow, "UNIT_POWER_UPDATE", "party2"
 debug.sethook()
 manaKB = collectgarbage("count") - manaKB
 collectgarbage("restart")
-assert(counters.UnitPower == 100 and counters.UnitPowerMax == 100 and counters.SetMinMaxValues == 100
-    and counters.SetValue == 100 and counters.SetText == 100 and not counters.UnitName,
+-- Three natives per mana tick: UnitPower, SetValue, SetText. The maximum is
+-- UNIT_MAXPOWER's (registered by BindManaRow) and the bind's; before the fix
+-- every tick also called UnitPowerMax and SetMinMaxValues (5 natives).
+assert(counters.UnitPower == 100 and counters.SetValue == 100 and counters.SetText == 100 and not counters.UnitName,
     "mana tick native-call budget changed")
-print(string.format("group additional mana: %.2f instructions / %.3f KB / 5 native calls per event",
+assert(not counters.UnitPowerMax and not counters.SetMinMaxValues, "a mana tick re-read the maximum: UnitPowerMax "
+    .. tostring(counters.UnitPowerMax) .. ", SetMinMaxValues " .. tostring(counters.SetMinMaxValues) .. " per 100 ticks")
+print(string.format("group additional mana: %.2f instructions / %.3f KB / 3 native calls per event",
     manaInstructions / 100, manaKB / 100))
 assert(manaInstructions <= 16000 and manaKB <= 1, "mana tick VM/allocation budget exceeded")
+-- The maximum follows UNIT_MAXPOWER (mana only) and the value with it.
+assert(manaRow.events.UNIT_MAXPOWER and manaRow.units.UNIT_MAXPOWER == "party2", "mana row lost UNIT_MAXPOWER")
+Reset()
+manaRow.scripts.OnEvent(manaRow, "UNIT_MAXPOWER", "party2", "RAGE")
+assert(not counters.UnitPowerMax and not counters.UnitPower, "a non-mana maximum touched the mana row")
+manaRow.scripts.OnEvent(manaRow, "UNIT_MAXPOWER", "party2", "MANA")
+assert(counters.UnitPowerMax == 1 and counters.SetMinMaxValues == 1 and manaRow.bar.maxValue == 1000
+    and counters.UnitPower == 1 and counters.SetValue == 1, "UNIT_MAXPOWER did not set the maximum and the value")
 combat = false
 
 combat = true
@@ -396,10 +409,41 @@ assert(#bosses == 5 and bosses[1].driver == "[@boss1,help,exists] show; hide", "
 Reset()
 GF.RefreshAdditionalGroups()
 assert(not counters.RegisterStateDriver, "boss drivers re-registered on an unchanged refresh")
+-- A boss token passed to another friendly NPC while its button stays shown
+-- (no OnShow, no name event): the encounter engage and targetable events
+-- repaint the identity, as Blizzard's boss frames do (TargetFrame.lua).
+local bossHolder = MSUF_GroupAdditional_FriendlyBosses
+assert(bossHolder.events.INSTANCE_ENCOUNTER_ENGAGE_UNIT and bossHolder.events.UNIT_TARGETABLE_CHANGED,
+    "allied bosses do not listen for a boss token changing hands")
+for _, button in ipairs(bosses) do button:Show() end
+names.boss1, names.boss2 = "Second ally", "Third ally"
+Reset()
+bossHolder.scripts.OnEvent(bossHolder, "INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+assert(bosses[1].Name.text == "Second ally" and bosses[2].Name.text == "Third ally" and counters.Paint == 5,
+    "a boss token changing hands left the old name and colour on a shown button")
+bosses[3]:Hide()
+names.boss2 = "Fourth ally"
+Reset()
+bossHolder.scripts.OnEvent(bossHolder, "UNIT_TARGETABLE_CHANGED", "boss2")
+assert(bosses[2].Name.text == "Fourth ally" and counters.UnitName == 1 and counters.Paint == 1,
+    "UNIT_TARGETABLE_CHANGED did not repaint exactly its own boss button")
+Reset()
+bossHolder.scripts.OnEvent(bossHolder, "UNIT_TARGETABLE_CHANGED", "boss3")
+bossHolder.scripts.OnEvent(bossHolder, "UNIT_TARGETABLE_CHANGED", "nameplate1")
+bossHolder.scripts.OnEvent(bossHolder, "UNIT_TARGETABLE_CHANGED", Secrets.New("string"))
+assert(not counters.UnitName and not counters.Paint, "a hidden, foreign or secret unit repainted a boss button")
+bosses[3]:Show()
 roles.player = "DAMAGER"
 GF.RefreshAdditionalGroups()
 assert(counters.UnregisterStateDriver == 5 and bosses[1].driver == nil and not bosses[1].shown, "boss drivers kept running after the block turned off")
+assert(next(bossHolder.events) == nil, "the allied boss holder kept listening after the block turned off")
+-- A client without an event (Client.SupportsEvent) registers only the others.
+supportedEvents.UNIT_TARGETABLE_CHANGED = nil
 roles.player = "HEALER"
+GF.RefreshAdditionalGroups()
+assert(bossHolder.events.INSTANCE_ENCOUNTER_ENGAGE_UNIT and not bossHolder.events.UNIT_TARGETABLE_CHANGED,
+    "the allied boss holder did not follow the client's events")
+supportedEvents.UNIT_TARGETABLE_CHANGED = true
 
 ---------------------------------------------------------------------------
 -- A nil scope enable is off, like the group runtime (P3-7)
@@ -419,7 +463,7 @@ for k, v in pairs({ GetConf = function() return conf end, EnsureDB = function() 
     ResolveBarTexture = function() return "bar" end, ResolveFontPath = function() return "font" end, ResolveFontFlags = function() return "" end,
     GetCompiledSpec = function() return spec end, ResolveNameColor = function() return 1, 1, 1 end,
     GetUnitGroupRole = function(unit) return roles[unit] or "DAMAGER" end, RegisterRuntimeObserver = function() end }) do GF[k] = v end
-Load({ SupportsUnit = function(unit) return unit ~= "boss1" end })
+Load({ SupportsUnit = function(unit) return unit ~= "boss1" end, SupportsEvent = function() return true end })
 Reset()
 GF.RefreshAdditionalGroups()
 assert(not counters.RegisterStateDriver and GF.GetAdditionalPreviewSpec("party", "friendlyBoss") == nil

@@ -420,9 +420,15 @@ local function SetPreviewSelected(selected)
     end
 end
 
+-- Kernel/MSUF_Util.lua loads before this file in every TOC. Resolved at use
+-- time (the preview keyboard paths only), so castbar harnesses without it load.
+local function InCombat(event)
+    return MSUF.Util.InCombat(event)
+end
+
 local function NudgePreview(deltaX, deltaY)
     if not (previewEnabled and previewSelected) then return false end
-    if InCombatLockdown and InCombatLockdown() then return false end
+    if InCombat() then return false end
 
     local general = EnsureOptions()
     local step = (IsControlKeyDown and IsControlKeyDown()) and 10
@@ -436,6 +442,28 @@ local function NudgePreview(deltaX, deltaY)
     return true
 end
 
+--- The preview takes the keyboard (arrow-key nudges) only out of combat.
+--- SetPropagateKeyboardInput is restricted in combat, and OnKeyDown calls it
+--- for every key, so a preview left on into combat raised a blocked action per
+--- key press, and a nudge just before the pull left keybinds swallowed. The
+--- keyboard is released at PLAYER_REGEN_DISABLED, while the lockdown has not
+--- started yet (propagation back on first), and taken again at
+--- PLAYER_REGEN_ENABLED. EnableKeyboard is protected only on protected frames.
+local function SetPreviewKeyboard(frame, enabled)
+    if InCombatLockdown and InCombatLockdown() then return false end
+    if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
+    frame:EnableKeyboard(enabled)
+    return true
+end
+
+local function OnPreviewCombatEvent(frame, event)
+    if InCombat(event) then
+        SetPreviewKeyboard(frame, false)
+    else
+        SetPreviewKeyboard(frame, true)
+    end
+end
+
 local function EnsurePreviewFrame()
     if previewFrame then return previewFrame end
 
@@ -444,8 +472,11 @@ local function EnsurePreviewFrame()
     previewFrame:SetFrameLevel(70)
     previewFrame:SetMovable(true)
     previewFrame:EnableMouse(true)
-    previewFrame:EnableKeyboard(true)
-    if previewFrame.SetPropagateKeyboardInput then previewFrame:SetPropagateKeyboardInput(true) end
+    -- Built in combat: the keyboard waits for PLAYER_REGEN_ENABLED.
+    SetPreviewKeyboard(previewFrame, true)
+    previewFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    previewFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    previewFrame:SetScript("OnEvent", OnPreviewCombatEvent)
 
     previewFrame:RegisterForDrag("LeftButton")
     previewFrame.icon = PixelLayoutRegion(previewFrame:CreateTexture(nil, "ARTWORK"))
@@ -478,6 +509,9 @@ local function EnsurePreviewFrame()
         if button == "LeftButton" then SetPreviewSelected(true) end
     end)
     previewFrame:SetScript("OnKeyDown", function(frame, key)
+        -- A key reaching the preview in combat (built at the combat edge) only
+        -- propagates: no restricted call and no nudge.
+        if InCombat() then return end
         local deltaX, deltaY = 0, 0
         if key == "LEFT" then
             deltaX = -1
@@ -502,7 +536,9 @@ local function EnsurePreviewFrame()
     end)
     previewFrame:SetScript("OnHide", function(frame)
         SetPreviewSelected(false)
-        if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(true) end
+        if frame.SetPropagateKeyboardInput and not (InCombatLockdown and InCombatLockdown()) then
+            frame:SetPropagateKeyboardInput(true)
+        end
     end)
     previewFrame:SetScript("OnDragStart", function(frame)
         if not previewEnabled then return end

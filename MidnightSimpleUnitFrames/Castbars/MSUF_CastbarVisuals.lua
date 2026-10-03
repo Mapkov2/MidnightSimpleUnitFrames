@@ -348,7 +348,14 @@ local function ApplyFont(fontString, g, unit, prefix, suffix, size, colorSuffix)
     fontString._msufCastbarFontReady = requestedReady
 
     if fontString.SetTextColor then fontString:SetTextColor(r, green, b, targetTextAlpha and 1 or alpha) end
-    if targetTextAlpha and fontString.SetAlpha then fontString:SetAlpha(alpha) end
+    if targetTextAlpha then
+        -- This write replaced the colour the cast target writer
+        -- (CastbarDriver ApplyCastTargetTextColor) remembers per cast, so its
+        -- repaint after this pass (MSUF_RefreshCastTargetText) must write again.
+        fontString._msufCastTargetColorPlain = false
+        fontString._msufCastTargetClassSequence = false
+        if fontString.SetAlpha then fontString:SetAlpha(alpha) end
+    end
 
     if shadowEnabled then
         if fontString.SetShadowColor then fontString:SetShadowColor(0, 0, 0, shadowAlpha) end
