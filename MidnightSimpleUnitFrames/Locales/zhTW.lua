@@ -6555,6 +6555,32 @@ L["Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above E
 L["Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."] = "快速設定已套用！\n\n職業資源已分離，\n並放置在螢幕中央。\n\n未偵測到核心冷卻。\n玩家資源已分離，\n並附著在其下方。\n\n請使用編輯模式進行微調。"
 L["Reload the UI to apply the menu appearance preset?"] = "重新載入介面以套用選單外觀預設？"
 L["these changes"] = "這些變更"
+
+-- Menu history, Edit Mode toolbar, popup titles and the combat lock message.
+L["Undid %s"] = "已撤銷：%s"
+L["Redid %s"] = "已重做：%s"
+L["Session changes reset"] = "已重設本次工作階段的變更"
+L["Undo: %s"] = "撤銷：%s"
+L["Redo: %s"] = "重做：%s"
+L["Redo"] = "重做"
+L["Menu change"] = "選單變更"
+L["Motion"] = "動畫"
+L["Settings"] = "設定"
+L["Preview animation on"] = "預覽動畫已開啟"
+L["Preview animation off"] = "預覽動畫已關閉"
+L["Keep the current positions and exit Edit Mode."] = "保留目前位置並退出編輯模式。"
+L["Undo the last MSUF change from Edit Mode or the in-game menu."] = "撤銷在編輯模式或遊戲內選單中做出的最後一次 MSUF 變更。"
+L["Redo the last MSUF change from Edit Mode or the in-game menu."] = "重做在編輯模式或遊戲內選單中做出的最後一次 MSUF 變更。"
+L["Copied frame size"] = "已複製框架大小"
+L["|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."] = "|cffffd700MSUF:|r 戰鬥中選單和編輯模式已鎖定。請脫離戰鬥後再設定 MSUF。"
+L["%s Frame"] = "%s框架"
+L["%s Castbar"] = "%s施法條"
+L["%s Auras"] = "%s光環"
+L["Move %s"] = "移動%s"
+L["Nudge %s"] = "微調%s"
+L["Set %s"] = "設定%s"
+L["Toggle %s"] = "切換%s"
+L["Change %s"] = "變更%s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

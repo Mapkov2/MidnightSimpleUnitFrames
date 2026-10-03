@@ -705,7 +705,10 @@ function M.ResetPageToDefaults(pageKey)
     local info = ResolvePageResetInfo(pageKey)
     if not info then return false end
     if info.kind == "profile" then return ResetPageImpl(pageKey) end
-    return M.RunWithHistory("Reset " .. tostring(info.label or pageKey), "page:reset:" .. tostring(pageKey), function()
+    -- The undo entry's name, like the provider path: "Reset %s" over the
+    -- translated page title.
+    local label = string.format(M.Tr("Reset %s"), M.Tr(tostring(info.label or pageKey)))
+    return M.RunWithHistory(label, "page:reset:" .. tostring(pageKey), function()
         return ResetPageImpl(pageKey)
     end)
 end

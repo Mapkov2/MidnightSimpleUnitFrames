@@ -43,16 +43,26 @@ local HISTORY_CATEGORY_LABELS = {
     external = "External frame",
 }
 
+--- Whole-sentence keys for the actions Edit Mode records, so each language
+--- orders verb and object itself.
+local HISTORY_ACTION_FORMATS = {
+    Change = "Change %s", Move = "Move %s", Nudge = "Nudge %s",
+    Reset = "Reset %s", Set = "Set %s", Toggle = "Toggle %s",
+}
+
 --- Menu2's undo surfaces show the label as given, so it is built from
 --- translated pieces through translated format strings ("Move Unit frame:
---- player"). The key is a profile identifier and stays as it is.
+--- player"). The key is a profile identifier and stays as it is. An external
+--- provider's own control label has no sentence key; it keeps "%s %s".
 local function HistoryChangeLabel(category, key, action)
     local tr = Util.Tr or tostring
     local label = tr(HISTORY_CATEGORY_LABELS[tostring(category or "")] or "Edit Mode")
-    action = tr(tostring(action or "Change"))
+    action = tostring(action or "Change")
+    local format = HISTORY_ACTION_FORMATS[action]
+    local phrase = format and string.format(tr(format), label) or string.format(tr("%s %s"), tr(action), label)
     key = tostring(key or "")
-    if key ~= "" then return string.format(tr("%s %s: %s"), action, label, key) end
-    return string.format(tr("%s %s"), action, label)
+    if key ~= "" then return string.format(tr("%s: %s"), phrase, key) end
+    return phrase
 end
 
 local function HistoryChangeSource(category, key)

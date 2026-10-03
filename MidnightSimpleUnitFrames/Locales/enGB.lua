@@ -4473,6 +4473,33 @@ L["Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above E
 L["Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."] = "Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."
 L["Reload the UI to apply the menu appearance preset?"] = "Reload the UI to apply the menu appearance preset?"
 L["these changes"] = "these changes"
+
+-- Menu history, Edit Mode toolbar, popup titles and the combat lock message.
+L["Undid %s"] = "Undid %s"
+L["Redid %s"] = "Redid %s"
+L["Session changes reset"] = "Session changes reset"
+L["Undo: %s"] = "Undo: %s"
+L["Redo: %s"] = "Redo: %s"
+L["Redo"] = "Redo"
+L["Menu change"] = "Menu change"
+L["Motion"] = "Motion"
+L["Settings"] = "Settings"
+L["Preview animation on"] = "Preview animation on"
+L["Preview animation off"] = "Preview animation off"
+L["Keep the current positions and exit Edit Mode."] = "Keep the current positions and exit Edit Mode."
+L["Undo the last MSUF change from Edit Mode or the in-game menu."] = "Undo the last MSUF change from Edit Mode or the in-game menu."
+L["Redo the last MSUF change from Edit Mode or the in-game menu."] = "Redo the last MSUF change from Edit Mode or the in-game menu."
+L["Copied frame size"] = "Copied frame size"
+L["|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."] = "|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."
+L["%s Frame"] = "%s Frame"
+L["%s Castbar"] = "%s Castbar"
+L["%s Auras"] = "%s Auras"
+L["Move %s"] = "Move %s"
+L["Nudge %s"] = "Nudge %s"
+L["Set %s"] = "Set %s"
+L["Toggle %s"] = "Toggle %s"
+L["Change %s"] = "Change %s"
+L["%s: %s"] = "%s: %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

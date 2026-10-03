@@ -167,6 +167,12 @@ local function Boot()
         if not globals.StaticPopupDialogs[key] then globals.StaticPopupDialogs[key] = spec end
         return globals.StaticPopupDialogs[key]
     end
+    -- Support.lua's label shortener (UTF-8 aware there; the labels here are ASCII).
+    M.ShortenUtf8 = function(text, limit)
+        text = tostring(text or "")
+        if #text <= limit then return text end
+        return text:sub(1, math.max(1, limit - 3)) .. "..."
+    end
     M.ShowPrompt = function(key, spec)
         Log("ShowPrompt " .. key .. " " .. tostring(spec.text))
         world.prompt = { key = key, spec = spec }

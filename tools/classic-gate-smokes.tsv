@@ -192,6 +192,7 @@ clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/editmode_public_api_session_smoke.lua	{root}	Edit Mode public API session smoke failed
 -	lua	tools/tests/editmode_shell_labels_smoke.lua	{root}	Edit Mode shell labels smoke failed
 -	lua	tools/tests/editmode_shell_locale_smoke.lua	{root}	Edit Mode shell locale smoke failed
+-	lua	tools/tests/menu_history_locale_smoke.lua	{root}	The menu history shows English or a split character on a German client
 -	lua	tools/tests/editmode_popup_focus_combat_smoke.lua	{root}	Edit Mode popup focus and combat smoke failed
 -	lua	tools/tests/editmode_hud_toolbar_smoke.lua	{root}	Edit Mode toolbar wiring smoke failed
 -	lua	tools/tests/editmode_group_geometry_util_smoke.lua	{root}	Edit Mode group geometry refresh lost its single Util owner

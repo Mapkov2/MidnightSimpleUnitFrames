@@ -1254,6 +1254,13 @@ function M.TruncateUtf8Chars(value, maxChars)
     end
     return string.sub(value, 1, bytePos - 1)
 end
+--- `text` cut to at most `limit` UTF-8 characters, ending in "..." when it was
+--- cut; a multi-byte character is never split.
+function M.ShortenUtf8(text, limit)
+    text = tostring(text or "")
+    if M.TruncateUtf8Chars(text, limit) == text then return text end
+    return M.TruncateUtf8Chars(text, math.max(1, limit - 3)) .. "..."
+end
 function M.CleanToTInlineCustomSeparator(value, maxChars)
     value = tostring(value or ""):gsub("[%c]", " ")
     return M.TruncateUtf8Chars(value, maxChars or 5)

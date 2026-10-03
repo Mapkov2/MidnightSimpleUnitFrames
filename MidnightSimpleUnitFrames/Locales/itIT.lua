@@ -6616,6 +6616,32 @@ L["Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above E
 L["Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."] = "Configurazione rapida applicata!\n\nLe risorse di classe sono staccate\ne posizionate al centro dello schermo.\n\nRecuperi essenziali non rilevati.\nLa risorsa del giocatore è staccata\ne agganciata sotto.\n\nUsa la modalità modifica per le rifiniture."
 L["Reload the UI to apply the menu appearance preset?"] = "Ricaricare l'interfaccia per applicare il preset di aspetto del menu?"
 L["these changes"] = "queste modifiche"
+
+-- Menu history, Edit Mode toolbar, popup titles and the combat lock message.
+L["Undid %s"] = "Annullato: %s"
+L["Redid %s"] = "Ripristinato: %s"
+L["Session changes reset"] = "Modifiche della sessione ripristinate"
+L["Undo: %s"] = "Annulla: %s"
+L["Redo: %s"] = "Ripeti: %s"
+L["Redo"] = "Ripeti"
+L["Menu change"] = "Modifica del menu"
+L["Motion"] = "Animazione"
+L["Settings"] = "Impostazioni"
+L["Preview animation on"] = "Animazione dell'anteprima attiva"
+L["Preview animation off"] = "Animazione dell'anteprima disattivata"
+L["Keep the current positions and exit Edit Mode."] = "Mantieni le posizioni attuali ed esci dalla modalità modifica."
+L["Undo the last MSUF change from Edit Mode or the in-game menu."] = "Annulla l'ultima modifica di MSUF fatta in modalità modifica o nel menu di gioco."
+L["Redo the last MSUF change from Edit Mode or the in-game menu."] = "Ripeti l'ultima modifica di MSUF fatta in modalità modifica o nel menu di gioco."
+L["Copied frame size"] = "Dimensione del riquadro copiata"
+L["|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."] = "|cffffd700MSUF:|r Il menu e la modalità modifica sono bloccati in combattimento. Esci dal combattimento per configurare MSUF."
+L["%s Frame"] = "Riquadro: %s"
+L["%s Castbar"] = "Barra di lancio: %s"
+L["%s Auras"] = "Aure: %s"
+L["Move %s"] = "Sposta %s"
+L["Nudge %s"] = "Spostamento fine: %s"
+L["Set %s"] = "Imposta %s"
+L["Toggle %s"] = "Attiva/disattiva %s"
+L["Change %s"] = "Modifica %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

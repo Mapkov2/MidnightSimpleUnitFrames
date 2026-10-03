@@ -327,7 +327,7 @@ function Sync()
     if not conf then
         return
     end
-    if pf._titleFS then pf._titleFS:SetText(Tr(UnitLabel(key)) .. " " .. Tr("Frame")) end
+    if pf._titleFS then pf._titleFS:SetText(string.format(Tr("%s Frame"), Tr(UnitLabel(key)))) end
     local frame = FrameForUnitKey(key) or pf.parent
     local x, y, width, height
     if type(FramePositionValues) == "function" then

@@ -558,8 +558,11 @@ function Sync()
     local layout = RuntimeLayout(pf.unit)
     local activeGroup, spec = ActiveGroup()
     if pf._titleFS then
-        local laneLabel = spec.customIndex and LaneLabel(pf.unit, activeGroup, spec) or "Auras"
-        pf._titleFS:SetText(string.format(Quick.Tr("%s %s"), UnitLabel(pf.unit), Quick.Tr(laneLabel)))
+        -- Whole-sentence keys: the frame's auras, or the frame and its named
+        -- custom lane.
+        pf._titleFS:SetText(spec.customIndex
+            and string.format(Quick.Tr("%s: %s"), UnitLabel(pf.unit), Quick.Tr(LaneLabel(pf.unit, activeGroup, spec)))
+            or string.format(Quick.Tr("%s Auras"), UnitLabel(pf.unit)))
     end
     SetLabel(pf.xBoxLabel, "X")
     SetLabel(pf.yBoxLabel, "Y")

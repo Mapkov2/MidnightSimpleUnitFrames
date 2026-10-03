@@ -6566,6 +6566,32 @@ L["Quick Setup applied!\n\nClass Resources and Player Power\nwill follow above E
 L["Quick Setup applied!\n\nClass Power is detached and\npositioned at screen center.\n\nEssential Cooldowns not detected.\nPlayer Power is detached and\nattached below it.\n\nUse Edit Mode for fine-tuning."] = "Быстрая настройка применена!\n\nРесурсы класса откреплены\nи размещены в центре экрана.\n\nВажные способности не обнаружены.\nРесурс игрока откреплён\nи закреплён под ними.\n\nТочную настройку выполните в режиме редактирования."
 L["Reload the UI to apply the menu appearance preset?"] = "Перезагрузить интерфейс, чтобы применить пресет оформления меню?"
 L["these changes"] = "эти изменения"
+
+-- Menu history, Edit Mode toolbar, popup titles and the combat lock message.
+L["Undid %s"] = "Отменено: %s"
+L["Redid %s"] = "Повторено: %s"
+L["Session changes reset"] = "Изменения сеанса сброшены"
+L["Undo: %s"] = "Отменить: %s"
+L["Redo: %s"] = "Повторить: %s"
+L["Redo"] = "Повторить"
+L["Menu change"] = "Изменение в меню"
+L["Motion"] = "Анимация"
+L["Settings"] = "Настройки"
+L["Preview animation on"] = "Анимация предварительного просмотра включена"
+L["Preview animation off"] = "Анимация предварительного просмотра выключена"
+L["Keep the current positions and exit Edit Mode."] = "Сохранить текущие позиции и выйти из режима редактирования."
+L["Undo the last MSUF change from Edit Mode or the in-game menu."] = "Отменить последнее изменение MSUF, сделанное в режиме редактирования или во внутриигровом меню."
+L["Redo the last MSUF change from Edit Mode or the in-game menu."] = "Повторить последнее изменение MSUF, сделанное в режиме редактирования или во внутриигровом меню."
+L["Copied frame size"] = "Размер рамки скопирован"
+L["|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."] = "|cffffd700MSUF:|r Меню и режим редактирования заблокированы в бою. Выйдите из боя, чтобы настроить MSUF."
+L["%s Frame"] = "Рамка: %s"
+L["%s Castbar"] = "Полоса произнесения: %s"
+L["%s Auras"] = "Ауры: %s"
+L["Move %s"] = "Перемещение: %s"
+L["Nudge %s"] = "Сдвиг: %s"
+L["Set %s"] = "Установка: %s"
+L["Toggle %s"] = "Переключение: %s"
+L["Change %s"] = "Изменение: %s"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end
