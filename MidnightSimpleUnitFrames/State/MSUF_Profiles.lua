@@ -539,10 +539,12 @@ function MSUF_RenameProfile(sourceName, destName)
         return false
     end
     --- The Suite renames its own and its skin's profile first. It refuses,
-    --- with nothing changed, a name one of them already holds, and any rename
-    --- in combat. Out of combat the variant overlay is lifted before it is
-    --- asked, so it moves the base settings; a refusal lays the overlay again.
-    local overlay = Variants and MSUF_ActiveProfile == sourceName and not InCombatLockdown()
+    --- with nothing changed, a name one of them already holds, a name it
+    --- cannot store, and any rename in combat. Out of combat the variant
+    --- overlay is lifted before it is asked, so it moves the base settings; a
+    --- refusal lays the overlay again.
+    local active = MSUF_ActiveProfile == sourceName
+    local overlay = active and Variants and not InCombatLockdown()
     if overlay then Variants.Restore() end
     local accepted, refusal = MSUF_ProfileIO_NotifySuiteLifecycle("rename", sourceName, destName)
     if accepted == false then
@@ -551,11 +553,12 @@ function MSUF_RenameProfile(sourceName, destName)
             ProfileChat("error", "Profile '%s' already exists.", destName)
         elseif InCombatLockdown() then
             print(Translate("|cffff0000MSUF:|r Cannot change profiles while in combat."))
+        else
+            ProfileChat("error", "Profile names can be at most %d bytes long.", 80)
         end
         return false, refusal
     end
 
-    if MSUF_ActiveProfile == sourceName then local ok,why=BeforeProfileSwitch(); if not ok then return false,why end end
     if ProfileSync then ProfileSync.RenameOrDelete(sourceName,destName) end
     profiles[destName] = src
     profiles[sourceName] = nil
@@ -582,7 +585,11 @@ function MSUF_RenameProfile(sourceName, destName)
     if globalMeta.defaultProfileForNewChars == sourceName then
         globalMeta.defaultProfileForNewChars = destName
     end
-    if MSUF_ActiveProfile == sourceName then
+    --- The switch prepares (sync flush, variant restore) under the new name:
+    --- the old one is gone from every store, and resolving it would make the
+    --- Suite create a stray profile under it.
+    if active then
+        MSUF_ActiveProfile = destName
         MSUF_SwitchProfile(destName)
     end
     ProfileChat("ok", "Renamed '%s' -> '%s'.", sourceName, destName)

@@ -58,7 +58,7 @@ Check(V.Replace(db, { version = 1, entries = { { name = "Solo", conditions = { c
 Check(db.player.width == 250, "harness: the variant overlay is not laid")
 local charKey = env.MSUF_GetCharKey()
 
-local asked, refusals = {}, {}
+local asked, refusals, suiteStore = {}, {}, nil
 local function UseSuite()
     env.MSUFSuite = {
         OnMSUFProfileLifecycle = function(kind, from, to)
@@ -66,7 +66,9 @@ local function UseSuite()
             asked[#asked + 1] = { kind = kind, from = from, to = to, fromStored = profiles[from] ~= nil,
                 toStored = profiles[to] ~= nil, width = env.MSUF_DB.player.width }
             if combat then return false end
-            if refusals[to] then return false, refusals[to] end
+            -- true: an older Suite's refusal, which names no reason.
+            if refusals[to] then return false, refusals[to] ~= true and refusals[to] or nil end
+            if kind == "rename" and suiteStore then suiteStore[to], suiteStore[from] = suiteStore[from], nil end
             return true
         end,
         OnMSUFProfileChanged = function(name) asked[#asked + 1] = { kind = "changed", to = name } end,
@@ -112,7 +114,26 @@ Check(ok == false and env.MSUF_GlobalDB.profiles.Later == nil and Said("Cannot c
 Unchanged("combat")
 Check(#asked == 1 and widthInCombat == 250 and V.IsMaterialized(db), "a rename refused in combat lifted the variant overlay")
 
--- 3. A Suite that accepts gets the rename first, then MSUF renames and switches.
+-- 3. An older Suite refuses without a reason: MSUF still says why.
+asked, w.prints = {}, {}
+refusals.Odd = true
+Check(env.MSUF_RenameProfile(source, "Odd") == false and Said("Profile names can be at most 80 bytes long."),
+    "a refusal without a reason was not reported")
+Unchanged("refused without a reason")
+
+-- 4. A Suite that accepts gets the rename first, then MSUF renames and switches.
+--    The Suite lends its store to sync and variants and creates a profile it
+--    is asked for by a name it does not hold (MSUF_Suite Core/ProfileVariants.lua),
+--    and the profile is in a sync group: once the Suite moved the store, no
+--    later step may ask for the old name and bring it back.
+suiteStore = { [source] = { marker = source } }
+ns.ProfileFields.RegisterExternal("suiteModules", { Resolve = function(name, create)
+    if suiteStore[name] == nil and create then suiteStore[name] = {} end
+    return suiteStore[name]
+end })
+Check(env.MSUF_CopyProfile(source, "Peer") == true, "harness: the sync peer was not created")
+Check(ns.ProfileSync.Replace({ { name = "Shared", members = { [source] = true, Peer = true }, modules = { unitframes = true } } }),
+    "harness: the sync group was not saved")
 asked = {}
 Check(env.MSUF_RenameProfile(source, "Renamed") == true, "an accepted rename failed")
 AskedBeforeMove("accepted", asked[1])
@@ -121,8 +142,10 @@ Check(env.MSUF_GlobalDB.profiles.Renamed == db and env.MSUF_GlobalDB.profiles[so
     "MSUF did not rename its profile after the Suite accepted")
 Check(asked[#asked].kind == "changed" and asked[#asked].to == "Renamed", "the Suite did not follow the renamed profile")
 Check(db.player.width == 250, "the variant overlay was not laid on the renamed profile")
+Check(suiteStore.Renamed and suiteStore.Renamed.marker == source and suiteStore[source] == nil,
+    "the Suite's store got a profile under the old name back after the rename")
 
--- 4. Without the Suite the rename works alone.
+-- 5. Without the Suite the rename works alone.
 env.MSUFSuite = nil
 Check(env.MSUF_RenameProfile("Renamed", "Alone") == true and env.MSUF_ActiveProfile == "Alone",
     "a rename without the Suite failed")
