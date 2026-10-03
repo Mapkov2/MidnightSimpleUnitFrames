@@ -1738,7 +1738,9 @@ local function InstallWindowStatusRuntime(state)
             return
         end
         if event == "PLAYER_REGEN_DISABLED" then
-            M.BlockCombatAction()
+            -- The event marks the combat edge before the lockdown starts, so
+            -- the teardown below (history commit, runtime quiesce) refuses too.
+            M.BlockCombatAction(event)
             M.HideSlashMenuAndMinibar(f)
             return
         elseif event == "PLAYER_REGEN_ENABLED" and M.activeKey == "search" then

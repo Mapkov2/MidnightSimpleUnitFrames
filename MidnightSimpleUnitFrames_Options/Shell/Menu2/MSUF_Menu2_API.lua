@@ -87,7 +87,7 @@ do
     local function EnsureCombatFrame()
         if combatFrame then return end
         combatFrame = CreateFrame("Frame")
-        combatFrame:SetScript("OnEvent", function()
+        combatFrame:SetScript("OnEvent", function(_, event)
             if not MenuVisible() then
                 M.UpdateMenuCombatListener()
                 return
@@ -96,9 +96,10 @@ do
             local winShown = win and win.IsShown and win:IsShown()
             -- A visible full window quiesces from its synchronous OnHide.
             -- The fallback owns teardown only when the minimized bar is the
-            -- remaining visible Menu2 surface.
-            if not winShown and type(MenuRuntime.Quiesce) == "function" then MenuRuntime:Quiesce("combat") end
-            M.BlockCombatAction()
+            -- remaining visible Menu2 surface. The event goes along: the
+            -- lockdown starts only after PLAYER_REGEN_DISABLED.
+            if not winShown and type(MenuRuntime.Quiesce) == "function" then MenuRuntime:Quiesce("combat", event) end
+            M.BlockCombatAction(event)
             M.HideSlashMenuAndMinibar(win)
             M.UpdateMenuCombatListener()
         end)

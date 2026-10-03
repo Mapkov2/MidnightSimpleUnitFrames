@@ -30,9 +30,10 @@ local Tr = MSUF.Translate
 M.TranslateText = Tr
 -- The core (Kernel/MSUF_Util.lua) owns the combat lock and its throttled,
 -- translated message, and publishes both on MSUF.Public before the Options
--- package can load.
-local function IsConfigCombatLocked()
-    return MSUF.Public.IsConfigCombatLocked() and true or false
+-- package can load. A handler running for a combat event passes the event:
+-- at PLAYER_REGEN_DISABLED the lockdown has not started yet.
+local function IsConfigCombatLocked(event)
+    return MSUF.Public.IsConfigCombatLocked(event) and true or false
 end
 local function ShowConfigCombatLockMessage()
     return MSUF.Public.ShowConfigCombatLockMessage()
@@ -140,9 +141,9 @@ function Runtime:Resume(reason)
     self.lastReason = tostring(reason or "menu-show")
     return true
 end
-function Runtime:Quiesce(reason)
+function Runtime:Quiesce(reason, event)
     reason = tostring(reason or "menu-hide")
-    local combat = IsConfigCombatLocked()
+    local combat = IsConfigCombatLocked(event)
     self.active = false
     self:CancelPendingTasks(reason)
     if type(self._quiesceScale) == "function" then self._quiesceScale(combat) end

@@ -208,6 +208,7 @@ clients+Forever	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.l
 -	lua	tools/tests/classic_history_ui_scale_smoke.lua	{root/}	Classic History UI scale smoke failed
 clients+Forever	lua	tools/tests/menu_page_reset_history_smoke.lua	{root} {flavor}	Page resets and undo history: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}	Menu combat quiescence: {flavor}
+clients+Forever	lua	tools/tests/menu_combat_edge_refusal_smoke.lua	{root} {flavor}	The menu flushed an apply or committed history on the combat-start frame: {flavor}
 clients+Forever	lua	tools/tests/menu_refresh_queue_smoke.lua	{root} {flavor}	Menu refresh requests re-queue after a cancelled task: {flavor}
 clients+Forever	lua	tools/tests/menu_core_text_smoke.lua	{root} {flavor}	Menu core text, slider names and feedback settle: {flavor}
 clients+Forever	lua	tools/tests/menu_pages_translate_once_smoke.lua	{root} {flavor}	Menu pages and previews translate their text once: {flavor}
