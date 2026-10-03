@@ -31,6 +31,10 @@ local ADDON = root .. "/MidnightSimpleUnitFrames/"
 -- instead of once per aura, so a full scan and a re-apply got cheaper
 -- (targetForceFull 10975 -> 10749, targetReapply 27730 -> 27432); their
 -- budgets are the new values plus 2 %.
+-- 2026-10-03 (fx2 C4-2): a group lane compiles its own stack anchor, stack
+-- X/Y and cooldown X/Y (Menu2 Auras > Group), which were dead settings on
+-- Classic; the re-apply recompiles them (partyReapply 12821 -> 13029, no new
+-- native call). Its budget is the new value plus 2 %.
 -- MSUF_AURA_BUDGET_MEASURE=1 prints the measured values without asserting.
 local BUDGET = {
     targetDelta = 781,         -- UNIT_AURA, one refreshed aura (in-place update)
@@ -38,7 +42,7 @@ local BUDGET = {
     targetForceFull = 10964,   -- ForceUpdate: full scan and render of both lanes
     targetReapply = 27981,     -- UF.ApplyElementToFrame on an active frame (C3.2: was 56621)
     partyDelta = 702,          -- group frame UNIT_AURA, one refreshed aura
-    partyReapply = 12898,      -- UF.ApplyElementToFrame on an active group frame (C3.2: was 25598)
+    partyReapply = 13290,      -- UF.ApplyElementToFrame on an active group frame (C3.2: was 25598)
     combatRender = 173,        -- PLAYER_REGEN_DISABLED render of the cached lanes
 }
 -- Native API calls per operation (C_UnitAuras getters, unit queries,

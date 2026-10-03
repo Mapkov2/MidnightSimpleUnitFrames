@@ -119,6 +119,13 @@ local function ApplyFont(fs, size)
     end
 end
 
+--- The edge and centre stack anchors the group and custom container menus
+--- offer, justified (H, V) as the menu preview places them.
+local STACK_EDGE_JUSTIFY = {
+    TOP = { "CENTER", "TOP" }, BOTTOM = { "CENTER", "BOTTOM" }, CENTER = { "CENTER", "MIDDLE" },
+    LEFT = { "LEFT", "MIDDLE" }, RIGHT = { "RIGHT", "MIDDLE" },
+}
+
 local function PlaceStackText(fs, button, cfg)
     if not (fs and button and cfg) then return end
     fs:ClearAllPoints()
@@ -134,6 +141,11 @@ local function PlaceStackText(fs, button, cfg)
         fs:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", cfg.stackX, cfg.stackY)
         fs:SetJustifyH("RIGHT")
         fs:SetJustifyV("BOTTOM")
+    elseif cfg.stackAnchor ~= "TOPRIGHT" and STACK_EDGE_JUSTIFY[cfg.stackAnchor] then
+        local anchor, justify = cfg.stackAnchor, STACK_EDGE_JUSTIFY[cfg.stackAnchor]
+        fs:SetPoint(anchor, button, anchor, cfg.stackX, cfg.stackY)
+        fs:SetJustifyH(justify[1])
+        fs:SetJustifyV(justify[2])
     else
         fs:SetPoint("TOPRIGHT", button, "TOPRIGHT", cfg.stackX, cfg.stackY)
         fs:SetJustifyH("RIGHT")
