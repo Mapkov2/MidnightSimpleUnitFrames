@@ -122,9 +122,12 @@ local function WriteTooltipBehavior(mode, modifier)
     SetG("unitTooltipModifier", modifier, "MSUF2_TOOLTIP_MODIFIER", { preview = false, applyAll = false, notify = false })
     RefreshTooltipPreview()
 end
-local function BuildMisc(ctx)
-    local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Miscellaneous", "Language, menu behavior, frame highlights, tooltips and Blizzard frames.", 72)
+-- The Miscellaneous page builds its sections in page order through these
+-- functions; s carries the page context, the builder, the binders and the
+-- few values a later section reads.
+local MiscSection = {}
+function MiscSection.Binders(s)
+    local ctx = s.ctx
     local function BindMiscToggle(parent, label, key, default, reason, x, y, width, opts, afterSet)
         local control = W.Toggle(parent, label)
         M.BindBoolWidget(ctx, control,
@@ -163,6 +166,11 @@ local function BuildMisc(ctx)
             }))
         return control
     end
+    s.BindMiscToggle, s.BindMiscDropdown = BindMiscToggle, BindMiscDropdown
+    s.BindGroupTargetSwitch = BindGroupTargetSwitch
+end
+function MiscSection.Language(s)
+    local ctx, b, BindMiscDropdown = s.ctx, s.b, s.BindMiscDropdown
     local language = b:CollapsibleSection("misc_language", "Language", 268, true)
     local languageW = language._msuf2Width or ctx.width or 720
     local languageDropW = max(260, min(360, languageW - 70))
@@ -235,6 +243,9 @@ local function BuildMisc(ctx)
             RefreshAbbrevSample()
         end)
     end
+end
+function MiscSection.MenuBehavior(s)
+    local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
     local hasAppearancePresets = type(T.GetMenuAppearancePreset) == "function"
     local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", hasAppearancePresets and 508 or 380, true)
     local menuBehaviorW = menuBehavior._msuf2Width or ctx.width or 720
@@ -289,6 +300,13 @@ local function BuildMisc(ctx)
     menuFontPreview = W.Text(menuBehavior, "AaBbCc 12345 - MSUF Menu", menuFontRightX, -178, menuBehaviorW - menuFontRightX - 30, T.colors.text)
     if menuFontPreview.SetHeight then menuFontPreview:SetHeight(24) end
     if menuFontPreview.SetJustifyV then menuFontPreview:SetJustifyV("MIDDLE") end
+    s.hasAppearancePresets, s.menuBehavior, s.menuBehaviorW = hasAppearancePresets, menuBehavior, menuBehaviorW
+    s.menuFontRightX, s.menuFontW = menuFontRightX, menuFontW
+end
+function MiscSection.MenuAccent(s)
+    local ctx, BindMiscToggle, BindMiscDropdown = s.ctx, s.BindMiscToggle, s.BindMiscDropdown
+    local hasAppearancePresets, menuBehavior, menuBehaviorW = s.hasAppearancePresets, s.menuBehavior, s.menuBehaviorW
+    local menuFontRightX, menuFontW = s.menuFontRightX, s.menuFontW
     M.InstallStaticPopup("MSUF2_ACCENT_RELOAD_REQUIRED", {
         text = M.Tr("The menu accent color is baked in while the menu is built, so a UI reload is required to apply it.\n\nReload now?"),
         button1 = RELOADUI or M.Tr("Reload"),
@@ -429,6 +447,9 @@ local function BuildMisc(ctx)
         W.MoveWidget(opacity, menuBehavior, 14, -372, 250, "LEFT")
         W.SetControlEnabled(opacity, T.classicAtlas == true)
     end
+end
+function MiscSection.Integrations(s)
+    local ctx, b, BindMiscToggle, menuBehaviorW = s.ctx, s.b, s.BindMiscToggle, s.menuBehaviorW
     local mapkoSkin = b:CollapsibleSection("misc_mapkoskin", "MapkoSkin", 108, true)
     BindMiscToggle(mapkoSkin, "Use MapkoSkin for MSUF menus", "mapkoSkinMenus", true,
         "MSUF2_MAPKOSKIN_MENUS", 14, -42, 360, MENU_WRITE_OPTS,
@@ -468,6 +489,9 @@ local function BuildMisc(ctx)
             30, -88, (ellesmere._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
         if ellesmereHelp.SetWordWrap then ellesmereHelp:SetWordWrap(true) end
     end
+end
+function MiscSection.ExternalEditMode(s)
+    local ctx, b, BindMiscToggle = s.ctx, s.b, s.BindMiscToggle
     local external = b:CollapsibleSection("misc_external_edit_mode", "External Edit Mode", 298, true)
     local grid2 = BindMiscToggle(external, "Show Grid2 in MSUF Edit Mode",
         "grid2EditModeIntegration", true, "MSUF2_GRID2_EDIT_MODE", 14, -42, 430, PREVIEW_FALSE,
@@ -513,6 +537,10 @@ local function BuildMisc(ctx)
         "Turn any of these switches off to remove only those external movers. The third-party addons and their settings are not modified.",
         30, -232, (external._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
     if externalHelp.SetWordWrap then externalHelp:SetWordWrap(true) end
+end
+function MiscSection.FrameHighlights(s)
+    local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
+    local BindGroupTargetSwitch = s.BindGroupTargetSwitch
     local mouseover = b:CollapsibleSection("misc_mouseover_highlight", "Frame Highlights", 340, true)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(mouseover, { "highlight.mouseover" }, {
@@ -581,6 +609,9 @@ local function BuildMisc(ctx)
     BindGroupTargetSwitch(targetCard, "Party frames", "party", 18, -78, targetColumnW - 42)
     BindGroupTargetSwitch(targetCard, "Raid frames", "raid", 18 + targetColumnW, -78, targetColumnW - 42)
     if mythicSupported then BindGroupTargetSwitch(targetCard, "Mythic Raid frames", "mythicraid", 18 + (targetColumnW * 2), -78, targetColumnW - 42) end
+end
+function MiscSection.Tooltips(s)
+    local ctx, b, BindMiscToggle, BindMiscDropdown = s.ctx, s.b, s.BindMiscToggle, s.BindMiscDropdown
     -- Classic has no aura tooltip switch rows below the help text (-226 and -252).
     local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", IS_MAINLINE and 290 or 226, false)
     local tooltipW = tooltips._msuf2Width or ctx.width or 720
@@ -636,6 +667,9 @@ local function BuildMisc(ctx)
             "On: aura tooltips show the numeric spell ID through the game's own 12.1 option, and MSUF re-enables that option after every login because the game forgets it between sessions. Off (default): MSUF never touches the game option, so other addons or a manual console setting keep control; turning this switch off clears the option once.",
             { hook = true })
     end
+end
+function MiscSection.BlizzardFrames(s)
+    local b, BindMiscToggle = s.b, s.BindMiscToggle
     --- Blizzard frame ownership is per unit ("Force Blizzard frame on" in each
     --- unit's Basics), so this section only carries the remaining
     --- Blizzard-adjacent chrome toggles.
@@ -657,6 +691,20 @@ local function BuildMisc(ctx)
     M.AddTooltip(resourcePing, "Native Player resource pings",
         "Contextual pings over the MSUF Player frame can call out health and, when Blizzard supports it, mana. Blizzard does not expose separate Health/Power selection or Energy, Rage and Focus pings. The portrait keeps the normal Player unit ping and radial wheel.",
         { hook = true })
+end
+local function BuildMisc(ctx)
+    local b = W.PageBuilder(ctx)
+    b:GlobalStyleHeader("Miscellaneous", "Language, menu behavior, frame highlights, tooltips and Blizzard frames.", 72)
+    local s = { ctx = ctx, b = b }
+    MiscSection.Binders(s)
+    MiscSection.Language(s)
+    MiscSection.MenuBehavior(s)
+    MiscSection.MenuAccent(s)
+    MiscSection.Integrations(s)
+    MiscSection.ExternalEditMode(s)
+    MiscSection.FrameHighlights(s)
+    MiscSection.Tooltips(s)
+    MiscSection.BlizzardFrames(s)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_misc", { title = "MSUF Miscellaneous", build = BuildMisc, version = 17 })
