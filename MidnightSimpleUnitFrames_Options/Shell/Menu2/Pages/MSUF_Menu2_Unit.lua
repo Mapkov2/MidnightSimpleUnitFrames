@@ -366,6 +366,8 @@ local COPY_FRAME_BASIC_FIELDS = WL [[
     healPredEnabled healPredAllHealers healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     overAbsorbOverlay fullHealthAbsorbStripe
     enableGradient enablePowerGradient gradientStrength gradientDirection
+    powerGradientStrength aggroMode tempMaxHealthEnabled tempMaxHealthTexture tempMaxHealthOpacity
+    tempMaxHealthBackgroundOpacity tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
     gradientDirRight gradientDirLeft gradientDirUp gradientDirDown
     gradientOverride gradientOverrideVersion gradientOverrideKeys
     healthBarGradientColorR healthBarGradientColorG healthBarGradientColorB
