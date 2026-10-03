@@ -3865,49 +3865,12 @@ end
 
 --- Install render helpers onto the shared unit-preview object. View owns frame
 --- construction; this module owns repeated visual composition.
-function Render.Install(Preview, deps)
-    if type(Preview) ~= "table" then return end
-    deps = deps or Preview.RefreshDeps or {}
-    Preview.RefreshDeps = deps
-    local renderState = PickFallbackTable(deps, UNIT_RENDER_FALLBACKS, [[
-        RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls
-        ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide CastbarShowIcon CastbarShowText ReadCastbarNum FormatCastbarPreviewTime
-        ClassColor GradientPreviewColor HealthColor DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
-        PreviewNameColor PreviewToTInlineColor NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor
-        LayoutUnitPreviewOverlay PositionFromAnchor PositionRuntimeLayoutIconPreview PositionStatusCornerPreview PositionSameAnchorPreview PositionLevelPreview ResolveStatusPreviewAnchor SetPreviewIconTexture NormalizeStatusPreviewId
-    ]])
-    renderState.GradientPreviewColor = Preview.Model and Preview.Model.GradientPreviewColor
-        or renderState.GradientPreviewColor
-    renderState.ZOOM_MIN = tonumber(deps.ZOOM_MIN) or 0.35
-    --- Mock body clamp = the shared legal size range every conf.width/height
-    --- writer enforces (State/MSUF_Defaults.lua exports it; the EM2 popup
-    --- clamps writes against the same table). Clamping the mock any narrower
-    --- makes the preview lie about tall/narrow frames — and every
-    --- frame-relative offset (status icons, drag targets) with it.
-    renderState.ClampUnitPreviewSize = function(w, h)
-        local b = _G.MSUF_UnitFrameSizeBounds
-        local minW = tonumber(b and b.minW) or 40
-        local maxW = tonumber(b and b.maxW) or 800
-        local minH = tonumber(b and b.minH) or 8
-        local maxH = tonumber(b and b.maxH) or 200
-        if w < minW then w = minW elseif w > maxW then w = maxW end
-        if h < minH then h = minH elseif h > maxH then h = maxH end
-        return w, h
-    end
-    renderState.UnitPreviewPortraitTexture = deps.UnitPreviewPortraitTexture
-    renderState.ClassPortraitVisual = deps.ClassPortraitVisual
-    renderState.PreviewStatus = MSUF.UFPreviewStatus or {}
-    renderState.STATUS_RUNTIME_KEYS = {
-        raidmarker = "raidMarker", leader = "leader", assist = "assist", level = "level",
-        raceText = "race", classText = "classText",
-        elite = "elite", statusText = "statusDeadText", statusGhostText = "statusGhostText",
-        statusAFKText = "statusAFKText", statusDNDText = "statusDNDText",
-        statusCombat = "combat", statusResting = "resting",
-        statusIncomingRes = "incomingRes", statusPvp = "pvp",
-        statusPetHappiness = "petHappiness", statusThreat = "threat",
-        statusPetXP = "petXP",
-    }
-    renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
+-- Render.Install fills the shared render state in these stages, in order;
+-- s carries the preview object, its deps, the render state and the values a
+-- later stage reads.
+local InstallStage = {}
+function InstallStage.ClassPowerColors(s)
+    local renderState = s.renderState
     local PowerColor = renderState.PowerColor
     local SharedCPPreview = MenuState.ClassPowerPreview or {}
     local function FallbackBase(_, _, r, g, b) return r or 1, g or 1, b or 1 end
@@ -3938,6 +3901,10 @@ function Render.Install(Preview, deps)
         TextForValue = SharedCPPreview.TextForValue,
         ConfiguredTextForValue = SharedCPPreview.ConfiguredTextForValue,
     }
+    s.CPPreview = CPPreview
+end
+function InstallStage.PreviewFont(s)
+    local deps = s.deps
     local fallbackFont = deps.FONT or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     if type(deps.ApplyPreviewFont) ~= "function" then
         deps.ApplyPreviewFont = function(fs, size)
@@ -3985,6 +3952,9 @@ function Render.Install(Preview, deps)
             end
         end
     end
+end
+function InstallStage.PortraitShape(s)
+    local renderState = s.renderState
     -- Portrait rectangle in preview frame space (origin = frame bottom-left).
     -- Mirrors ResolvePortraitAnchor in the live element so the preview bounding
     -- box and the mock frame agree with what the unit frame actually renders.
@@ -4092,6 +4062,12 @@ function Render.Install(Preview, deps)
         end
     end
     renderState.ApplyPreviewPortraitShapeMask = ApplyPreviewPortraitShapeMask
+    s.PREVIEW_RING_ART_BASE, s.PREVIEW_RING_ROTATION = PREVIEW_RING_ART_BASE, PREVIEW_RING_ROTATION
+    s.PREVIEW_RING_SHAPES, s.PREVIEW_BLIZZ = PREVIEW_RING_SHAPES, PREVIEW_BLIZZ
+    s.PREVIEW_SHAPE_MASKS = PREVIEW_SHAPE_MASKS
+end
+function InstallStage.PortraitRings(s)
+    local renderState, PREVIEW_BLIZZ, PREVIEW_SHAPE_MASKS = s.renderState, s.PREVIEW_BLIZZ, s.PREVIEW_SHAPE_MASKS
     -- Mirrors the live element's solid ring renderer for shaped silhouettes:
     -- an inflated quad below the art, clipped by the same mask shape at the
     -- inflated size, tinted by the border colour.
@@ -4216,6 +4192,12 @@ function Render.Install(Preview, deps)
         end
     end
     renderState.LayoutPreviewBlizzardPortrait = LayoutPreviewBlizzardPortrait
+    s.LayoutPreviewPortraitShapeRing = LayoutPreviewPortraitShapeRing
+end
+function InstallStage.PortraitBorders(s)
+    local deps, renderState, CPPreview = s.deps, s.renderState, s.CPPreview
+    local PREVIEW_RING_ART_BASE, PREVIEW_RING_ROTATION = s.PREVIEW_RING_ART_BASE, s.PREVIEW_RING_ROTATION
+    local PREVIEW_RING_SHAPES, LayoutPreviewPortraitShapeRing = s.PREVIEW_RING_SHAPES, s.LayoutPreviewPortraitShapeRing
     local function LayoutPreviewPortraitArtBorder(portrait, thickness, r, g, b, a)
         local art = portrait._msufPreviewArtBorder
         if not art then
@@ -4302,6 +4284,9 @@ function Render.Install(Preview, deps)
     renderState.CPPreview = CPPreview
     renderState.LayoutPreviewPortraitBorder = LayoutPreviewPortraitBorder
     deps._RenderState = renderState
+end
+function InstallStage.Refreshers(s)
+    local Preview = s.Preview
 
 --- Hot refresh for the unit preview. It composes current DB/model values into
 --- mock regions and handle positions, but never mutates live unit frames. The
@@ -4388,4 +4373,55 @@ function Preview.RefreshAnimation(box)
     if Auras and Auras.Animate then Auras.Animate(box) end
     return true
 end
+end
+function Render.Install(Preview, deps)
+    if type(Preview) ~= "table" then return end
+    deps = deps or Preview.RefreshDeps or {}
+    Preview.RefreshDeps = deps
+    local renderState = PickFallbackTable(deps, UNIT_RENDER_FALLBACKS, [[
+        RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls
+        ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide CastbarShowIcon CastbarShowText ReadCastbarNum FormatCastbarPreviewTime
+        ClassColor GradientPreviewColor HealthColor DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
+        PreviewNameColor PreviewToTInlineColor NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor
+        LayoutUnitPreviewOverlay PositionFromAnchor PositionRuntimeLayoutIconPreview PositionStatusCornerPreview PositionSameAnchorPreview PositionLevelPreview ResolveStatusPreviewAnchor SetPreviewIconTexture NormalizeStatusPreviewId
+    ]])
+    renderState.GradientPreviewColor = Preview.Model and Preview.Model.GradientPreviewColor
+        or renderState.GradientPreviewColor
+    renderState.ZOOM_MIN = tonumber(deps.ZOOM_MIN) or 0.35
+    --- Mock body clamp = the shared legal size range every conf.width/height
+    --- writer enforces (State/MSUF_Defaults.lua exports it; the EM2 popup
+    --- clamps writes against the same table). Clamping the mock any narrower
+    --- makes the preview lie about tall/narrow frames — and every
+    --- frame-relative offset (status icons, drag targets) with it.
+    renderState.ClampUnitPreviewSize = function(w, h)
+        local b = _G.MSUF_UnitFrameSizeBounds
+        local minW = tonumber(b and b.minW) or 40
+        local maxW = tonumber(b and b.maxW) or 800
+        local minH = tonumber(b and b.minH) or 8
+        local maxH = tonumber(b and b.maxH) or 200
+        if w < minW then w = minW elseif w > maxW then w = maxW end
+        if h < minH then h = minH elseif h > maxH then h = maxH end
+        return w, h
+    end
+    renderState.UnitPreviewPortraitTexture = deps.UnitPreviewPortraitTexture
+    renderState.ClassPortraitVisual = deps.ClassPortraitVisual
+    renderState.PreviewStatus = MSUF.UFPreviewStatus or {}
+    renderState.STATUS_RUNTIME_KEYS = {
+        raidmarker = "raidMarker", leader = "leader", assist = "assist", level = "level",
+        raceText = "race", classText = "classText",
+        elite = "elite", statusText = "statusDeadText", statusGhostText = "statusGhostText",
+        statusAFKText = "statusAFKText", statusDNDText = "statusDNDText",
+        statusCombat = "combat", statusResting = "resting",
+        statusIncomingRes = "incomingRes", statusPvp = "pvp",
+        statusPetHappiness = "petHappiness", statusThreat = "threat",
+        statusPetXP = "petXP",
+    }
+    renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
+    local s = { Preview = Preview, deps = deps, renderState = renderState }
+    InstallStage.ClassPowerColors(s)
+    InstallStage.PreviewFont(s)
+    InstallStage.PortraitShape(s)
+    InstallStage.PortraitRings(s)
+    InstallStage.PortraitBorders(s)
+    InstallStage.Refreshers(s)
 end
