@@ -42,7 +42,7 @@ local EnsureDB = MSUF.Require("MSUF_EnsureDB", "Runtime/MSUF_SlashCommands.lua")
 --- writer of all five globals. The /msuf profile commands are the user-facing
 --- half of that API, so a rename has to surface at login rather than as a
 --- "profiles system unavailable" message that blames the user's install.
-local CreateProfile = MSUF.Require("MSUF_CreateProfile", "Runtime/MSUF_SlashCommands.lua")
+local CopyProfile = MSUF.Require("MSUF_CopyProfile", "Runtime/MSUF_SlashCommands.lua")
 local SwitchProfile = MSUF.Require("MSUF_SwitchProfile", "Runtime/MSUF_SlashCommands.lua")
 local DeleteProfile = MSUF.Require("MSUF_DeleteProfile", "Runtime/MSUF_SlashCommands.lua")
 local ResetProfile = MSUF.Require("MSUF_ResetProfile", "Runtime/MSUF_SlashCommands.lua")
@@ -468,8 +468,8 @@ Commands.Register({
     run = function(rest)
         local list = CommandsProfileList()
         if not list then return CommandsProfilesUnavailable() end
+        local active = tostring(_G.MSUF_ActiveProfile or "")
         if rest == "" then
-            local active = tostring(_G.MSUF_ActiveProfile or "")
             print(Tr("|cff00b7ebMSUF|r profiles:"))
             for i = 1, #list do
                 if list[i] == active then
@@ -481,13 +481,15 @@ Commands.Register({
             print(Tr("  /msuf load <name> switches profile, /msuf profile <name> saves a new one."))
             return
         end
-        --- Creating only copies a table, but the switch that follows runs the
-        --- full apply pipeline, so the whole command stays out of combat.
+        --- Saving the current settings copies the active profile (as the menu's
+        --- "Copy current profile" does), then switches to the copy. Copying only
+        --- copies a table, but the switch runs the full apply pipeline, so the
+        --- whole command stays out of combat.
         if CommandsInCombat() then
             print(Tr("|cffff0000MSUF:|r Cannot change profiles while in combat."))
             return
         end
-        if CreateProfile(rest) then SwitchProfile(rest) end
+        if CopyProfile(active, rest) then SwitchProfile(rest) end
     end,
 })
 

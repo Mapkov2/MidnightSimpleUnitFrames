@@ -156,6 +156,11 @@ local function RunScenario(kind)
     end
 
     assert(loadfile(modulePath))("MidnightSimpleUnitFrames", MSUF)
+    -- The first sync reads the arena switches, so it waits for PLAYER_LOGIN
+    -- (the SavedVariables arrive after every file ran).
+    Check(framesByName["MSUF_ArenaTrinket" .. slot] == nil, kind .. " synced the trinkets while the file loaded")
+    Check(callbacks.PLAYER_LOGIN ~= nil, kind .. " does not sync the trinkets at PLAYER_LOGIN")
+    callbacks.PLAYER_LOGIN("PLAYER_LOGIN")
     local holder = framesByName["MSUF_ArenaTrinket" .. slot]
     Check(holder and holder.createdTexture, kind .. " did not create the trinket holder")
     Check(holder.shown == true, kind .. " did not show the live arena slot")

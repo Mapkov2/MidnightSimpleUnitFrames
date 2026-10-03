@@ -128,28 +128,12 @@ end
 do
     local POPUP_KEY = "MSUF_GAMEPLAY_COLORS_TIP"
 
-    local function EnsureDialog()
-        if not _G.StaticPopupDialogs then return false end
-        if not _G.StaticPopupDialogs[POPUP_KEY] then
-            _G.StaticPopupDialogs[POPUP_KEY] = {
-                text = L_GAMEPLAY_COLORS_TIP,
-                button1 = OKAY,
-                timeout = 0,
-                whileDead = true,
-                hideOnEscape = true,
-                preferredIndex = 3,
-            }
-        end
-        return true
-    end
-
+    -- One button: an MSUF-owned prompt (Shell/UI/MSUF_Widgets.lua); Escape closes it.
     function MSUF.MSUF_MaybeShowGameplayColorsTip()
         local g = EnsureGameplayDefaults()
         if g and g.shownGameplayColorsTip then return end
-        if EnsureDialog() and _G.StaticPopup_Show then
-            if g then g.shownGameplayColorsTip = true end
-            _G.StaticPopup_Show(POPUP_KEY)
-        end
+        if g then g.shownGameplayColorsTip = true end
+        MSUF.UI.ShowPrompt(POPUP_KEY, { text = L_GAMEPLAY_COLORS_TIP, accept = OKAY, single = true })
     end
 end
 

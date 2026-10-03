@@ -206,6 +206,16 @@ do
     local boundaryOK, boundaryResult = pcall(boundaryChunk, "MidnightSimpleUnitFrames", MSUF)
     assert(boundaryOK, boundaryPath .. ": " .. tostring(boundaryResult))
     assert(type(MSUF.ReportError) == "function", "current validation reporter did not load")
+
+    -- Menu2 prompts (M.ShowPrompt) run on the core prompt layer, which the
+    -- main addon loads with its shared UI primitives long before Menu2, over
+    -- Blizzard's StaticPopup system (modelled by tools/tests/static_popup_stub.lua).
+    assert(loadfile(Join(ROOT, "tools/tests/static_popup_stub.lua")))().Install(_G)
+    local widgetsPath = Join(CORE, "Shell/UI/MSUF_Widgets.lua")
+    local widgetsChunk, widgetsErr = loadfile(widgetsPath)
+    assert(widgetsChunk, widgetsPath .. ": " .. tostring(widgetsErr))
+    widgetsChunk("MidnightSimpleUnitFrames", MSUF)
+    assert(MSUF.UI and type(MSUF.UI.ShowPrompt) == "function", "the core prompt layer did not load")
 end
 
 -- Load the real Menu2 product modules in their shipped XML order.  No catalog

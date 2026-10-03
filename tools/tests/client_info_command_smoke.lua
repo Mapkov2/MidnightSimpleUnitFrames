@@ -71,6 +71,7 @@ local addOnKeys, gameRuleKeys = CountKeys(C_AddOns), CountKeys(C_GameRules)
 
 MSUF_EnsureDB = function() end
 MSUF_CreateProfile = function() return false end
+MSUF_CopyProfile = function() return false end
 MSUF_SwitchProfile = function() return false end
 MSUF_DeleteProfile = function() return false end
 MSUF_ResetProfile = function() return false end

@@ -90,18 +90,38 @@ assert(updateCount == 2 and ComboFrame.shown == true,
     "deferred ComboFrame restore did not reconcile after combat")
 
 --- Mists: RuneFrame and the other class bars inherit
---- PlayerFrameBottomManagedFrameTemplate. They are not protected, but their
---- OnShow/OnHide run layoutParent:Layout(), which re-anchors the secure PetFrame,
---- so addon code must not Show/Hide them in combat.
+--- PlayerFrameBottomManagedFrameTemplate (isManagedFrame, layoutParent). They
+--- are not protected, but their OnShow/OnHide run layoutParent:Layout(), which
+--- re-anchors the secure PetFrame, so a Show() or Hide() from addon code runs
+--- that layout tainted, in combat or out of it. MSUF conceals them (alpha 0,
+--- mouse off) and never shows or hides them; Blizzard keeps doing that, and
+--- the release gives the alpha and the mouse back. Their fade-in (showAnim,
+--- which ends in SetAlpha(1)) is stopped while MSUF owns the bar.
 combat = false
 function UnitClass() return "Death Knight", "DEATHKNIGHT" end
 
 local runeOnShow
-local runeCombatToggles = 0
+local addonToggles, blizzard = 0, false
+local fadeIn = { scripts = {}, stops = 0 }
+function fadeIn:HookScript(script, callback) self.scripts[script] = callback end
+function fadeIn:GetParent() return RuneFrame end
+function fadeIn:Stop() self.stops = self.stops + 1; self.playing = false end
+function fadeIn:Play()
+    self.playing = true
+    if self.scripts.OnPlay then self.scripts.OnPlay(self) end
+end
+function fadeIn:Finish()
+    self.playing = false
+    RuneFrame.alpha = 1 -- Blizzard's OnFinished: self:GetParent():SetAlpha(1.0)
+    if self.scripts.OnFinished then self.scripts.OnFinished(self) end
+end
 RuneFrame = {
     shown = true,
     alpha = 1,
+    mouse = true,
+    isManagedFrame = true,
     layoutParent = {},
+    showAnim = fadeIn,
     HookScript = function(_, script, callback)
         assert(script == "OnShow", "unexpected RuneFrame script hook")
         runeOnShow = callback
@@ -110,79 +130,82 @@ RuneFrame = {
     IsShown = function(self) return self.shown end,
     SetAlpha = function(self, alpha) self.alpha = alpha end,
     GetAlpha = function(self) return self.alpha end,
+    IsMouseEnabled = function(self) return self.mouse end,
+    EnableMouse = function(self, on) self.mouse = on and true or false end,
     Hide = function(self)
-        if combat then runeCombatToggles = runeCombatToggles + 1 end
+        if not blizzard then addonToggles = addonToggles + 1 end
         self.shown = false
     end,
     Show = function(self)
-        if combat then runeCombatToggles = runeCombatToggles + 1 end
+        if not blizzard then addonToggles = addonToggles + 1 end
+        local wasShown = self.shown
         self.shown = true
-        if runeOnShow then runeOnShow(self) end
+        if not wasShown and runeOnShow then runeOnShow(self) end
     end,
 }
+--- Blizzard's own code shows and hides the bar (spec changes, CheckAndShow).
+local function Blizzard(method, ...)
+    blizzard = true
+    RuneFrame[method](RuneFrame, ...)
+    blizzard = false
+end
 
 assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Game/Mists/ClassPower.lua"))(addonName, namespace)
 
-assert(setter(true) == true, "suppression did not find RuneFrame")
-assert(RuneFrame.shown == false, "visible RuneFrame was not hidden out of combat")
+for _, inCombat in ipairs({ false, true }) do
+    local when = inCombat and "in combat" or "out of combat"
+    combat = inCombat
+    deferredDriver.event = nil
+    assert(setter(true) == true, "suppression did not find RuneFrame")
+    assert(RuneFrame.shown == true and RuneFrame.alpha == 0 and RuneFrame.mouse == false,
+        "managed RuneFrame was not concealed " .. when)
+    assert(addonToggles == 0, "MSUF showed or hid the managed RuneFrame " .. when)
+    assert(deferredDriver.event == nil, "the managed RuneFrame concealment was deferred " .. when)
 
-combat = true
-RuneFrame:Show()
-assert(RuneFrame.shown == true and RuneFrame.alpha == 0 and runeCombatToggles == 1,
-    "managed RuneFrame was hidden from addon code in combat instead of muted")
-assert(deferredDriver.event == "PLAYER_REGEN_ENABLED",
-    "managed RuneFrame suppression was not deferred")
+    -- Blizzard hides and shows it again while MSUF owns it.
+    Blizzard("Hide")
+    RuneFrame.alpha = 1
+    Blizzard("Show")
+    assert(RuneFrame.shown == true and RuneFrame.alpha == 0, "a Blizzard re-show escaped the concealment " .. when)
+    -- Its fade-in is stopped, and a finish that ran anyway re-conceals.
+    RuneFrame.alpha = 0
+    fadeIn.stops = 0
+    fadeIn:Play()
+    assert(fadeIn.stops == 1 and not fadeIn.playing and RuneFrame.alpha == 0, "the fade-in ran on a concealed bar " .. when)
+    fadeIn:Finish()
+    assert(RuneFrame.alpha == 0, "the fade-in's finish revealed the concealed bar " .. when)
 
+    setter(false)
+    assert(RuneFrame.shown == true and RuneFrame.alpha == 1 and RuneFrame.mouse == true,
+        "the release did not give RuneFrame its alpha and mouse back " .. when)
+    assert(addonToggles == 0, "the release showed or hid the managed RuneFrame " .. when)
+    fadeIn.stops = 0
+    fadeIn:Play()
+    assert(fadeIn.stops == 0 and fadeIn.playing, "the fade-in was stopped after the release " .. when)
+    fadeIn.playing = false
+end
 combat = false
-deferredDriver.handler(deferredDriver, "PLAYER_REGEN_ENABLED")
-assert(RuneFrame.shown == false and RuneFrame.alpha == 1,
-    "deferred RuneFrame suppression did not reconcile after combat")
 
-combat = true
-setter(false)
-assert(RuneFrame.shown == false and runeCombatToggles == 1,
-    "managed RuneFrame restore toggled visibility in combat")
-combat = false
-deferredDriver.handler(deferredDriver, "PLAYER_REGEN_ENABLED")
-assert(RuneFrame.shown == true, "deferred RuneFrame restore did not reconcile after combat")
-
-combat = true
-setter(true)
-assert(RuneFrame.shown == true and RuneFrame.alpha == 0 and runeCombatToggles == 1,
-    "in-combat RuneFrame suppression was not alpha-only")
-setter(false)
-assert(RuneFrame.shown == true and RuneFrame.alpha == 1 and runeCombatToggles == 1,
-    "in-combat RuneFrame restore did not unmute")
-combat = false
-deferredDriver.handler(deferredDriver, "PLAYER_REGEN_ENABLED")
-assert(RuneFrame.shown == true and RuneFrame.alpha == 1,
-    "RuneFrame did not stay visible after the in-combat suppress/restore round trip")
-
---- Record-once: a second mute in the same combat (setter plus Blizzard OnShow)
---- must keep the original alpha, not the muted 0.
+--- Record-once: a second conceal (setter plus Blizzard OnShow) keeps the
+--- original alpha, not the concealed 0.
 RuneFrame.alpha = 0.5
-combat = true
 setter(true)
-RuneFrame:Show()
+Blizzard("Hide")
+Blizzard("Show")
 setter(true)
-assert(RuneFrame.alpha == 0 and runeCombatToggles == 2,
-    "repeated in-combat RuneFrame suppression was not alpha-only")
-combat = false
-deferredDriver.handler(deferredDriver, "PLAYER_REGEN_ENABLED")
-assert(RuneFrame.shown == false and RuneFrame.alpha == 0.5,
-    "repeated in-combat mute overwrote the recorded RuneFrame alpha")
+setter(false)
+assert(RuneFrame.alpha == 0.5 and addonToggles == 0, "a repeated conceal overwrote the recorded RuneFrame alpha")
 
---- A frame muted mid fade-in (alpha 0) must not be restored invisible.
-setter(false)
-assert(RuneFrame.shown == true and RuneFrame.alpha == 0.5, "RuneFrame restore after record-once phase failed")
+--- A bar concealed mid fade-in (alpha 0) is not released invisible.
 RuneFrame.alpha = 0
-combat = true
 setter(true)
 setter(false)
-assert(RuneFrame.alpha == 1, "RuneFrame muted at alpha 0 was restored invisible")
-combat = false
-deferredDriver.handler(deferredDriver, "PLAYER_REGEN_ENABLED")
-assert(RuneFrame.shown == true and RuneFrame.alpha == 1,
-    "RuneFrame muted at alpha 0 did not settle visible after combat")
+assert(RuneFrame.alpha == 1, "RuneFrame concealed at alpha 0 was released invisible")
+
+--- A bar without mouse stays without mouse.
+RuneFrame.mouse = false
+setter(true)
+setter(false)
+assert(RuneFrame.mouse == false and addonToggles == 0, "the release turned the mouse on for a bar that had none")
 
 print("classic class-resource ownership smoke passed")

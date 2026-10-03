@@ -75,28 +75,6 @@ local function PopupText()
         .. Tr("Everything else keeps working normally — no action is needed.")
 end
 
-local function InstallPopup()
-    if not _G.StaticPopupDialogs then return false end
-    if _G.StaticPopupDialogs[POPUP_KEY] then return true end
-
-    local spec = {
-        text = "%s",
-        button1 = _G.OKAY or "Okay",
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        preferredIndex = 3,
-    }
-
-    local M = _G.MSUF2 or (type(MSUF) == "table" and MSUF.MSUF2)
-    if M and type(M.InstallStaticPopup) == "function" then
-        M.InstallStaticPopup(POPUP_KEY, spec)
-    else
-        _G.StaticPopupDialogs[POPUP_KEY] = spec
-    end
-    return true
-end
-
 local shownThisSession = false
 
 local function Show(force)
@@ -105,16 +83,9 @@ local function Show(force)
         if not IsLegacyClient() then return false end
     end
     shownThisSession = true
-
-    if InstallPopup() and _G.StaticPopup_Show then
-        _G.StaticPopup_Show(POPUP_KEY, PopupText())
-        return true
-    end
-
-    if print then
-        print("|cff7aa2f7MSUF|r: " .. (PopupText():gsub("\n\n", " ")))
-    end
-    return false
+    -- One button: an MSUF-owned prompt (Shell/UI/MSUF_Widgets.lua); Escape closes it.
+    MSUF.UI.ShowPrompt(POPUP_KEY, { text = PopupText(), accept = OKAY or "Okay", single = true })
+    return true
 end
 
 local wired = false

@@ -653,7 +653,7 @@ function Text.RefreshNameCenterClipFit(frame)
   end
   local overflow = false
   local raw = fs.GetText and fs:GetText()
-  if not (raw == nil or issecretvalue(raw) == true) and raw ~= "" and fs.GetStringWidth then
+  if issecretvalue(raw) ~= true and raw ~= nil and raw ~= "" and fs.GetStringWidth then
     local window = tonumber(frame._msufNameInlineClipWidth) or 0
     local width = fs:GetStringWidth()
     if window > 0 and type(width) == "number" and width > window + 0.5 then

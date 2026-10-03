@@ -143,6 +143,7 @@ _G.C_Timer = { After = function() end }
 _G.MSUF_ActiveProfile = "Default"
 _G.MSUF_GetAllProfiles = function() return { "Default" } end
 _G.MSUF_CreateProfile = function() return true end
+_G.MSUF_CopyProfile = function() return true end
 _G.MSUF_SwitchProfile = function() return true end
 _G.MSUF_DeleteProfile = function() return true end
 _G.MSUF_ResetProfile = function() return true end

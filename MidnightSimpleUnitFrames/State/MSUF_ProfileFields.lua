@@ -32,8 +32,9 @@ Fields.RootModules, Fields.ScalarRoots = ROOT_MODULES, SCALAR_ROOTS
 --   castbarColors  Colors export; synced with the castbars
 --   auraColors     Unit Frames and Colors exports; synced with the auras
 --   profile        no partial export: the menu, the slash menu, integrations,
---                  Blizzard Edit Mode and the global UI scale stay with their
---                  profile and travel only with a full profile export
+--                  MSUF and Blizzard Edit Mode preferences and the global UI
+--                  scale stay with their profile and travel only with a full
+--                  profile export
 local GENERAL_OWNERS = {
     unitframes = { kinds = { unitframe = true }, sync = "unitframes" },
     castbars = { kinds = { castbar = true }, sync = "castbars" },
@@ -53,13 +54,45 @@ DeclareGeneral("profile", [[
     detailsEditModeIntegration dominosEditModeIntegration ellesmereEditModeIntegration
     grid2EditModeIntegration nsrtNicknameIntegration
 ]])
+-- Menu preferences: the options window geometry, dropdown style, tips, preview
+-- guides and motion, and the selector the bar text editors remember.
+DeclareGeneral("profile", [[
+    flashFullW flashFullH flashFullPoint flashFullRelPoint flashFullX flashFullY flashFullXpx flashFullYpx
+    msuf2WindowW msuf2WindowH dropdownStyleMode pendingDropdownStyleMode tipCycleIndex
+    unitPreviewGuidesEnabled classPowerPreviewGuidesEnabled previewDragHintAnimationEnabled
+    showNavigationIcons reduceMotion hpPowerTextSelectedKey
+]])
+-- MSUF Edit Mode preferences: grid, snapping, popup and the Blizzard Edit Mode link.
+DeclareGeneral("profile", [[
+    editModeBgAlpha editModeGridEnabled editModeGridStep editModeHideWhiteArrows editModeSnapEnabled
+    editModeSnapMode editModeSnapModeFrames editModeSnapModeGrid editModeSnapToGrid editModePopupPos
+    editModePopupScale linkEditModes
+]])
 DeclareGeneral("auraColors", "aurasOwnBuffHighlightColor aurasOwnDebuffHighlightColor aurasStackCountColor")
+-- The Colors page also owns the player castbar colour override switches and
+-- the custom channels the colour API (Runtime/MSUF_Colors.lua) stores.
 DeclareGeneral("castbarColors", [[
     castbarInterruptColor castbarInterruptibleColor castbarNonInterruptibleColor empowerColorStages
+    playerCastbarOverrideEnabled playerCastbarOverrideMode playerCastbarOverrideR playerCastbarOverrideG
+    playerCastbarOverrideB castbarInterruptibleR castbarInterruptibleG castbarInterruptibleB
+    castbarNonInterruptibleR castbarNonInterruptibleG castbarNonInterruptibleB castbarInterruptFeedbackR
+    castbarInterruptFeedbackG castbarInterruptFeedbackB castbarInterruptUnavailableR
+    castbarInterruptUnavailableG castbarInterruptUnavailableB castbarTargetNameR castbarTargetNameG
+    castbarTargetNameB
+]])
+-- Castbars page and unit castbar sections: the GCD bar, the kick-ready
+-- indicator, the focus kick icon and the cast time switches.
+DeclareGeneral("castbars", [[
+    showGCDBar showGCDBarSpell showGCDBarTime gcdBarCombatOnly gcdBarDetached gcdBarHeight gcdBarIdle
+    gcdBarOpacity gcdBarWidth gcdBarX gcdBarY kickReadyAnchor kickReadyAutoSize kickReadyOffsetX
+    kickReadyOffsetY kickReadyShowArena kickReadyShowBoss kickReadyShowFocus kickReadyShowTarget
+    kickReadySize kickReadyStyle kickReadyTimeMarker kickReadyTimeSegment enableFocusKickIcon
+    focusKickIconHeight focusKickIconOffsetX focusKickIconOffsetY focusKickIconWidth focusKickShowCastbar
+    focusKickTextSize showPlayerCastTime showTargetCastTime showFocusCastTime
 ]])
 -- Unit frame settings whose names read like colours to the fallback rule.
 DeclareGeneral("unitframes", [[
-    useBarBorder portraitFillBorder dispelBorderTrigger fontSlug fontTextAlpha editModeBgAlpha
+    useBarBorder portraitFillBorder dispelBorderTrigger fontSlug fontTextAlpha
     hpBarAlpha powerBarAlpha hpBgAlpha powerBarBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars
 ]])
 DeclareGeneral("colors", [[
@@ -77,6 +110,12 @@ DeclareGeneral("colors", [[
     powerBarGradientColorR powerBarGradientColorG powerBarGradientColorB powerLossColorR
     powerLossColorG powerLossColorB tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
     useClassColors useCustomFontColor
+]])
+-- Colors page settings whose names do not read like colours.
+DeclareGeneral("colors", [[
+    unifiedBarR unifiedBarG unifiedBarB darkBarR darkBarG darkBarB darkBarGray barBgFillMode
+    npcTypeBoss npcTypeFocus npcTypeTarget npcTypeToT tapDeniedGray aurasCooldownTextUseBuckets
+    aurasCooldownTextSafeSeconds aurasCooldownTextWarningSeconds aurasCooldownTextUrgentSeconds
 ]])
 
 -- Every key whose name holds castbar, bossCast, arenaCast or empower is a

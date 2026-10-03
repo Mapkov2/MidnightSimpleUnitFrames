@@ -152,6 +152,9 @@ local cooldownConsentPromptAfterCombat = false
 local COOLDOWN_CONSENT_POPUP = "MSUF_COOLDOWN_ANCHOR_CONSENT"
 local COOLDOWN_CONFIRM_POPUP = "MSUF_COOLDOWN_ANCHOR_CONFIRM"
 local COOLDOWN_MISSING_ANCHOR_POPUP = "MSUF_COOLDOWN_ANCHOR_MISSING"
+--- The core prompt layer (Shell/UI/MSUF_Widgets.lua); nothing here writes
+--- Blizzard's StaticPopupDialogs.
+local UI = MSUF.Require("MSUF_UI", "Integrations/MSUF_Integration_ThirdPartyAnchors.lua")
 --- The existing bounded provider acquisition chain can take up to 4.05 seconds.
 --- Warn only after it has had time to resolve so login order does not create a
 --- false positive for Skiron, Coolinator or EllesmereUI.
@@ -203,6 +206,11 @@ local function RefreshAutomaticCooldownAnchorConsumers(reanchor)
     end
 end
 
+local function HideCooldownConsentPrompts()
+    UI.HidePrompt(COOLDOWN_CONSENT_POPUP)
+    UI.HidePrompt(COOLDOWN_CONFIRM_POPUP)
+end
+
 local function RefreshAutomaticCooldownProvider(notify)
     local providerId, providerLabel = DetectAutomaticCooldownProvider()
     local changed = automaticCooldownProviderResolved
@@ -216,10 +224,7 @@ local function RefreshAutomaticCooldownProvider(notify)
     if providerId ~= nil and cooldownAnchorClientSupported then cooldownAnchorSupported = true end
     if changed then
         cooldownConsentPromptProviderId = nil
-        if type(_G.StaticPopup_Hide) == "function" then
-            _G.StaticPopup_Hide(COOLDOWN_CONSENT_POPUP)
-            _G.StaticPopup_Hide(COOLDOWN_CONFIRM_POPUP)
-        end
+        HideCooldownConsentPrompts()
     end
     if changed and notify ~= false then
         local general = type(_G.MSUF_DB) == "table" and _G.MSUF_DB.general or nil
@@ -293,10 +298,7 @@ function MSUF.SetCooldownAnchorEnabled(enabled, rememberDecision)
     if rememberDecision ~= false and providerId then RememberCooldownConsent(providerId, enabled) end
     cooldownConsentPromptProviderId = nil
     cooldownConsentPromptAfterCombat = false
-    if type(_G.StaticPopup_Hide) == "function" then
-        _G.StaticPopup_Hide(COOLDOWN_CONSENT_POPUP)
-        _G.StaticPopup_Hide(COOLDOWN_CONFIRM_POPUP)
-    end
+    HideCooldownConsentPrompts()
     RefreshAutomaticCooldownAnchorConsumers(changed)
     return true, changed
 end
@@ -358,45 +360,27 @@ local function ResolveCooldownConsent(data, enabled)
     if classPowerAdopted then RefreshAdoptedSuiteClassPower() end
 end
 
-local function InstallCooldownConsentPopups()
-    local dialogs = _G.StaticPopupDialogs
-    if type(dialogs) ~= "table" then return false end
-    if not dialogs[COOLDOWN_CONFIRM_POPUP] then
-        dialogs[COOLDOWN_CONFIRM_POPUP] = {
-            text = "%s",
-            button1 = Tr("Confirm anchoring"),
-            button2 = _G.CANCEL or Tr("Cancel"),
-            OnAccept = function(_, data) ResolveCooldownConsent(data, true) end,
-            OnCancel = function(_, data, reason)
-                if reason == "clicked" then ResolveCooldownConsent(data, false) end
-            end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-        }
-    end
-    if not dialogs[COOLDOWN_CONSENT_POPUP] then
-        dialogs[COOLDOWN_CONSENT_POPUP] = {
-            text = "%s",
-            button1 = Tr("Continue"),
-            button2 = Tr("Keep independent"),
-            OnAccept = function(_, data)
-                if type(data) ~= "table" or data.providerId ~= automaticCooldownProviderId then return end
-                if type(_G.StaticPopup_Show) == "function" then
-                    _G.StaticPopup_Show(COOLDOWN_CONFIRM_POPUP, FinalConsentText(data.providerLabel), nil, data)
-                end
-            end,
-            OnCancel = function(_, data, reason)
-                if reason == "clicked" then ResolveCooldownConsent(data, false) end
-            end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-        }
-    end
-    return true
+-- Both consent steps store the answer, so they are MSUF-owned prompts: only
+-- their buttons or Escape answer them. (Blizzard's generic dialog also cancels
+-- when it finds no free dialog frame or another dialog replaces it, which would
+-- store a refusal nobody gave.)
+local function ShowFinalCooldownConsent(data)
+    if data.providerId ~= automaticCooldownProviderId then return end
+    UI.ShowPrompt(COOLDOWN_CONFIRM_POPUP, {
+        text = FinalConsentText(data.providerLabel), accept = Tr("Confirm anchoring"), cancel = CANCEL or Tr("Cancel"),
+        owned = true,
+        onAccept = function() ResolveCooldownConsent(data, true) end,
+        onCancel = function() ResolveCooldownConsent(data, false) end,
+    })
+end
+
+local function ShowFirstCooldownConsent(data)
+    UI.ShowPrompt(COOLDOWN_CONSENT_POPUP, {
+        text = FirstConsentText(data.providerLabel), accept = Tr("Continue"), cancel = Tr("Keep independent"),
+        owned = true,
+        onAccept = function() ShowFinalCooldownConsent(data) end,
+        onCancel = function() ResolveCooldownConsent(data, false) end,
+    })
 end
 
 local function MaybeShowCooldownConsent()
@@ -419,11 +403,7 @@ local function MaybeShowCooldownConsent()
         watcher:RegisterEvent("PLAYER_REGEN_ENABLED")
         return false
     end
-    if not InstallCooldownConsentPopups() or type(_G.StaticPopup_Show) ~= "function" then return false end
-
-    local data = { providerId = providerId, providerLabel = providerLabel }
-    local popup = _G.StaticPopup_Show(COOLDOWN_CONSENT_POPUP, FirstConsentText(providerLabel), nil, data)
-    if not popup then return false end
+    ShowFirstCooldownConsent({ providerId = providerId, providerLabel = providerLabel })
     cooldownConsentPromptProviderId = providerId
     return true
 end
@@ -905,25 +885,6 @@ local function OpenCooldownAnchorSetting()
     return open("general.anchorToCooldown", Tr("Follow Blizzard's Essential Cooldowns"), "uf_player")
 end
 
-local function InstallMissingCooldownAnchorPopup()
-    local dialogs = _G.StaticPopupDialogs
-    if type(dialogs) ~= "table" then return false end
-    if dialogs[COOLDOWN_MISSING_ANCHOR_POPUP] then return true end
-    dialogs[COOLDOWN_MISSING_ANCHOR_POPUP] = {
-        text = "%s",
-        button1 = "|cff40ff80" .. Tr("Fix now") .. "|r",
-        button2 = _G.CANCEL or Tr("Cancel"),
-        -- StaticPopup keeps the dialog open when OnAccept returns true, and the
-        -- navigation returns true when it found the setting: discard it.
-        OnAccept = function() OpenCooldownAnchorSetting() end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        preferredIndex = 3,
-    }
-    return true
-end
-
 --- WoW Forever characters start at level 1, and Blizzard's Cooldown Manager
 --- asks C_CooldownViewer.IsCooldownViewerAvailable() again on every
 --- PLAYER_LEVEL_CHANGED, so the client itself can report the manager
@@ -948,15 +909,12 @@ local function ShowMissingCooldownAnchorWarning()
     if ForeverCooldownManagerUnavailable() then return false end
     missingAnchorWarningShown = true
 
-    local text = MissingCooldownAnchorWarningText()
-    if InstallMissingCooldownAnchorPopup() and type(_G.StaticPopup_Show) == "function" then
-        _G.StaticPopup_Show(COOLDOWN_MISSING_ANCHOR_POPUP, text)
-        return true
-    end
-    if type(_G.print) == "function" then
-        _G.print("|cffffd700MSUF:|r " .. text:gsub("\n\n", " "))
-    end
-    return false
+    -- Blizzard's generic confirmation: Escape and Cancel only close it.
+    UI.ShowPrompt(COOLDOWN_MISSING_ANCHOR_POPUP, {
+        text = MissingCooldownAnchorWarningText(), accept = "|cff40ff80" .. Tr("Fix now") .. "|r",
+        cancel = CANCEL or Tr("Cancel"), onAccept = OpenCooldownAnchorSetting,
+    })
+    return true
 end
 
 local function ScheduleMissingCooldownAnchorWarning()
@@ -991,9 +949,8 @@ end
 
 local function RefreshEssentialCooldownAnchorConsumers(transition)
     if transition ~= "acquired" and transition ~= "lost" and transition ~= "switched" and transition ~= "changed" then return end
-    if (transition == "acquired" or transition == "switched")
-        and type(_G.StaticPopup_Hide) == "function" then
-        _G.StaticPopup_Hide(COOLDOWN_MISSING_ANCHOR_POPUP)
+    if transition == "acquired" or transition == "switched" then
+        UI.HidePrompt(COOLDOWN_MISSING_ANCHOR_POPUP)
     end
     local UF = MSUF.UF
     local factory = UF and UF.Factory

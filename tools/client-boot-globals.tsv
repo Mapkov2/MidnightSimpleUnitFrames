@@ -27,7 +27,6 @@ C_IncomingSummon	*	namespace	Blizzard C_* namespace the harness does not model
 C_NamePlate	*	namespace	Blizzard C_* namespace the harness does not model
 C_PetInfo	Vanilla,TBC,Forever	namespace	Blizzard C_* namespace the harness does not model
 C_PlayerInteractionManager	*	namespace	Blizzard C_* namespace the harness does not model
-C_PvP	Mainline	namespace	Blizzard C_* namespace the harness does not model
 C_SpecializationInfo	*	namespace	Blizzard C_* namespace the harness does not model
 C_Spell	*	namespace	Blizzard C_* namespace the harness does not model
 C_SpellBook	*	namespace	Blizzard C_* namespace the harness does not model
@@ -36,9 +35,6 @@ C_Texture	Vanilla,TBC,Forever	namespace	Blizzard C_* namespace the harness does 
 C_UIFileAsset	*	namespace	Blizzard C_* namespace the harness does not model
 C_UnitAuras	*	namespace	Blizzard C_* namespace the harness does not model
 CheckInteractDistance	*	api	Blizzard client API the harness does not model
-CompactArenaFrameMember1	Mainline	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
-CompactArenaFrameMember2	Mainline	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
-CompactArenaFrameMember3	Mainline	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
 Constants	*	table	Blizzard Constants table (power and spec ids)
 CoolinatorPrimaryGroupAnchor	*	thirdparty	third-party addon global MSUF probes to detect that addon
 CreateUnitHealPredictionCalculator	*	api	Blizzard client API the harness does not model
@@ -98,8 +94,6 @@ LE_PARTY_CATEGORY_INSTANCE	*	constant	Blizzard UI constant the harness does not 
 MAX_BOSS_FRAMES	*	constant	Blizzard UI constant the harness does not model
 MapkoSkin	*	thirdparty	third-party addon global MSUF probes to detect that addon
 MiniAurasApi	Mainline,Forever	thirdparty	third-party addon global MSUF probes to detect that addon
-NSAPI	*	thirdparty	third-party addon global MSUF probes to detect that addon
-NSRT	*	thirdparty	third-party addon global MSUF probes to detect that addon
 PetBattleFrameHider	*	frame	Blizzard UI frame MSUF anchors to or hides; the harness builds none
 PlaySound	*	api	Blizzard client API the harness does not model
 PlayerVehicleHasComboPoints	*	api	Blizzard client API the harness does not model

@@ -154,12 +154,9 @@ local function CancelScaleTimer(timer)
     if not (timer and type(timer.Cancel) == "function") then return end
     timer.Cancel(timer)
 end
-local function CancelPendingScaleTimers()
-    local reanchorPending = _G.MSUF_ScaleReanchorPending == true
-    local reanchorTimer = scaleReanchorTimer
-    scaleReanchorTimer = nil
-    CancelScaleTimer(reanchorTimer)
-    ExportPublic("MSUF_ScaleReanchorPending", false)
+--- Cancels the Blizzard-scale restores RestoreBlizzardUiScale scheduled and
+--- returns how many were pending.
+local function CancelBlizzardRestoreTimers()
     local restoreCount = 0
     while true do
         local record = next(restoreBlizzardScaleTimers)
@@ -168,7 +165,15 @@ local function CancelPendingScaleTimers()
         CancelScaleTimer(record.timer)
         restoreCount = restoreCount + 1
     end
-    return reanchorPending, restoreCount
+    return restoreCount
+end
+local function CancelPendingScaleTimers()
+    local reanchorPending = _G.MSUF_ScaleReanchorPending == true
+    local reanchorTimer = scaleReanchorTimer
+    scaleReanchorTimer = nil
+    CancelScaleTimer(reanchorTimer)
+    ExportPublic("MSUF_ScaleReanchorPending", false)
+    return reanchorPending, CancelBlizzardRestoreTimers()
 end
 local function ApplyMsufScale(scale)
     scale = tonumber(scale)
@@ -295,6 +300,8 @@ local function RestoreBlizzardUiScale(silent)
         local record = {}
         restoreBlizzardScaleTimers[record] = true
         local function Run()
+            -- Cancelled (C_Timer.After has no handle to cancel).
+            if not restoreBlizzardScaleTimers[record] then return end
             restoreBlizzardScaleTimers[record] = nil
             if IsConfigCombatLocked() then return end
             RestoreBlizzardUiScaleOnce()
@@ -344,6 +351,9 @@ local function SetGlobalUiScale(scale, silent)
         if not silent then ShowConfigCombatLockMessage() end
         return
     end
+    -- A reset just before (ApplyUIScaleProfile resets, then sets) scheduled
+    -- Blizzard-scale restores for 0, 0.25 and 1 s; they must not undo this scale.
+    CancelBlizzardRestoreTimers()
     CaptureBlizzardUiScale()
     EnforceUIParentScale(scale)
     if UpdateGlobalScaleEvents then UpdateGlobalScaleEvents() end

@@ -1,15 +1,19 @@
 -- menu_prompt_ownership_smoke.lua <repoRoot>
 --
--- The Options addon never writes Blizzard's StaticPopupDialogs (re-review
--- CX-RVC #2, R7 P2). M.InstallStaticPopup wrote it for 18 menu prompts in 11
--- files and GroupPriority wrote it directly; the prompts now go through
--- M.ShowPrompt (Support.lua): Blizzard's generic confirmation or text-input
--- dialog, or a menu-owned frame when the prompt has one button or Escape must
--- not answer it.
---   1. Source: no Options Lua file writes StaticPopupDialogs (an index or field
---      assignment, rawset, StaticPopup_AddDefinition or SetButtonText) except
---      the M.InstallStaticPopup host export kept for the MSUF Suite and the
---      core, and no Options file calls that export.
+-- Neither the core nor the Options addon writes Blizzard's StaticPopupDialogs
+-- (re-review CX-RVC #2, R7 P2, R5 P1). M.InstallStaticPopup wrote it for 18
+-- menu prompts in 11 files and GroupPriority wrote it directly; the core wrote
+-- it for the cooldown-anchor consent (shown by itself at login when a layout
+-- addon is detected), the missing-anchor warning, the client-version warning
+-- and the gameplay colours tip. Every prompt now goes through the one core
+-- prompt layer (Shell/UI/MSUF_Widgets.lua, MSUF.UI.ShowPrompt; the menu's
+-- M.ShowPrompt passes its look): Blizzard's generic confirmation or
+-- text-input dialog, or an MSUF-owned frame when the prompt has one button,
+-- Escape must not answer it, or its answer is stored.
+--   1. Source: no core or Options Lua file writes StaticPopupDialogs (an index
+--      or field assignment, rawset, StaticPopup_AddDefinition or SetButtonText)
+--      except the M.InstallStaticPopup host export kept for the MSUF Suite, and
+--      no core or Options file calls that export.
 --   2. Behaviour on the real Mainline graph (tools/tests/static_popup_stub.lua
 --      models Blizzard's StaticPopup system and records every write):
 --      * the page reset asks one question per key however often it is shown,
@@ -24,11 +28,18 @@
 --        not undo, and Undo restores the settings it changed;
 --      * a text prompt opens Blizzard's input box with its letter limit, keeps
 --        Add disabled while empty and passes the text on;
+--      * the core prompts: the cooldown-anchor consent is two owned steps
+--        (Continue / Keep independent, Confirm anchoring / Cancel) whose
+--        buttons and Escape store the answer; the missing-anchor warning is
+--        Blizzard's generic confirmation (Fix now / Cancel); the client-version
+--        warning and the gameplay colours tip are one Okay button that Escape
+--        closes; nothing times out;
 --      * none of it writes StaticPopupDialogs.
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local OPTIONS = "MidnightSimpleUnitFrames_Options"
+local CORE = "MidnightSimpleUnitFrames"
 
 local failures = {}
 local function Check(condition, message)
@@ -98,15 +109,20 @@ local WRITES = {
     "StaticPopup_AddDefinition%s*%(",
     "StaticPopup_SetButtonText%s*%(",
     "StaticPopupDialogs%s*=[^=]",
+    -- The whole table in a local, which then takes the writes.
+    "[%w_]%s*=%s*[%w_%.]*StaticPopupDialogs%s*\n",
 }
 local EXPORT = OPTIONS .. "/Shell/Menu2/MSUF_Menu2_Support.lua"
-local files = {}
-do
-    local pipe = assert(io.popen('git -C "' .. root .. '" ls-files -- "' .. OPTIONS .. '/*.lua"'))
-    for line in pipe:lines() do files[#files + 1] = line end
+local files, coreFiles = {}, 0
+for _, addon in ipairs({ OPTIONS, CORE }) do
+    local pipe = assert(io.popen('git -C "' .. root .. '" ls-files -- "' .. addon .. '/*.lua"'))
+    for line in pipe:lines() do
+        files[#files + 1] = line
+        if addon == CORE then coreFiles = coreFiles + 1 end
+    end
     pipe:close()
 end
-Fatal(#files > 100, "the Options addon lists only " .. #files .. " Lua files")
+Fatal(#files - coreFiles > 100 and coreFiles > 200, "the addons list only " .. #files .. " Lua files")
 local exportFound = false
 for _, path in ipairs(files) do
     local code = Blank(Read(path))
@@ -312,11 +328,100 @@ if Check(type(M.ShowPrompt) == "function", "Support.lua publishes no M.ShowPromp
     end
 end
 
-Check(#popups.writes == writesAtBoot, "the menu prompts wrote StaticPopupDialogs: " .. table.concat(popups.writes, ",", writesAtBoot + 1))
+-- The core prompts.
+do
+    -- The client-version warning: one Okay button, Escape closes it.
+    local frame = e.MSUF_ShowClientVersionWarning()
+    Check(frame == true and n.UI.IsPromptShown("MSUF_CLIENT_VERSION_WARNING"), "the client-version warning did not show")
+    local warning
+    for _, candidate in ipairs(world.widgets.frames) do
+        if candidate._msufPromptSpec and candidate:IsShown()
+            and candidate._msufPromptSpec.text == n.ClientVersionWarning.GetPopupText() then warning = candidate end
+    end
+    local accept, cancel = OwnedButtons(warning)
+    if Check(warning and accept, "the client-version warning is not an MSUF-owned prompt") then
+        Check(accept:GetText() == e.OKAY and not cancel:IsShown(), "the client-version warning lost its one Okay button")
+        Check(warning.keyboard == true, "Escape does not close the client-version warning")
+        warning:GetScript("OnKeyDown")(warning, "ESCAPE")
+        Check(not warning:IsShown() and not n.UI.IsPromptShown("MSUF_CLIENT_VERSION_WARNING"),
+            "Escape did not close the client-version warning")
+    end
+    -- The gameplay colours tip: once per profile, one Okay button.
+    local gameplay = e.MSUF_DB.gameplay
+    gameplay.shownGameplayColorsTip = false
+    n.MSUF_MaybeShowGameplayColorsTip()
+    Check(n.UI.IsPromptShown("MSUF_GAMEPLAY_COLORS_TIP") and e.MSUF_DB.gameplay.shownGameplayColorsTip == true,
+        "the gameplay colours tip did not show, or did not remember it")
+    n.UI.HidePrompt("MSUF_GAMEPLAY_COLORS_TIP")
+    n.MSUF_MaybeShowGameplayColorsTip()
+    Check(not n.UI.IsPromptShown("MSUF_GAMEPLAY_COLORS_TIP"), "the gameplay colours tip showed twice")
+end
+do
+    -- The cooldown-anchor consent: a detected layout addon asks at login.
+    -- The file keeps the C_AddOns table it loaded with; its loaded check is
+    -- read on every call.
+    local loaded = { Coolinator = true }
+    local isLoaded = e.C_AddOns.IsAddOnLoaded
+    e.C_AddOns.IsAddOnLoaded = function(name) return loaded[name] == true, loaded[name] == true end
+    e.MSUF_DB.general.anchorToCooldown = false
+    e.MSUF_GlobalDB.global = e.MSUF_GlobalDB.global or {}
+    local watcher
+    for _, frame in ipairs(world.widgets.frames) do
+        local handler = frame.scripts and frame.scripts.OnEvent
+        if handler and frame.events and frame.events.ADDON_LOADED and frame.events.PLAYER_LOGIN
+            and debug.getinfo(handler, "S").source:find("MSUF_Integration_ThirdPartyAnchors.lua", 1, true) then
+            watcher = frame
+        end
+    end
+    local function Consent(answers)
+        e.MSUF_GlobalDB.global.cooldownAnchorProviderDecisions = nil
+        e.MSUF_DB.general.anchorToCooldown = false
+        loaded.Coolinator = nil
+        watcher.scripts.OnEvent(watcher, "ADDON_LOADED", "Coolinator")
+        loaded.Coolinator = true
+        watcher.scripts.OnEvent(watcher, "ADDON_LOADED", "Coolinator")
+        for step, answer in ipairs(answers) do
+            local key = step == 1 and "MSUF_COOLDOWN_ANCHOR_CONSENT" or "MSUF_COOLDOWN_ANCHOR_CONFIRM"
+            local frame
+            for _, candidate in ipairs(world.widgets.frames) do
+                if candidate._msufPromptSpec and candidate:IsShown() then frame = candidate end
+            end
+            local accept, cancel = OwnedButtons(frame)
+            if not Check(frame and n.UI.IsPromptShown(key), "consent step " .. step .. " is not an MSUF-owned prompt") then return end
+            local labels = step == 1 and { "Continue", "Keep independent" } or { "Confirm anchoring", e.CANCEL }
+            Check(accept:GetText() == labels[1] and cancel:GetText() == labels[2] and cancel:IsShown(),
+                "consent step " .. step .. " lost " .. labels[1] .. " / " .. labels[2])
+            Check(frame._msufPromptText:GetText():find("Coolinator", 1, true), "consent step " .. step .. " lost its text")
+            Check(frame.keyboard == true, "Escape does not answer consent step " .. step)
+            if answer == "escape" then
+                frame:GetScript("OnKeyDown")(frame, "ESCAPE")
+            else
+                local button = answer == "accept" and accept or cancel
+                button:GetScript("OnClick")(button)
+            end
+            Check(not frame:IsShown(), "answering consent step " .. step .. " left it open")
+        end
+        return n.GetCooldownAnchorConsentDecision("Coolinator"), e.MSUF_DB.general.anchorToCooldown
+    end
+    if Check(watcher, "the third-party anchor watcher is missing") then
+        local decision, anchored = Consent({ "accept", "accept" })
+        Check(decision == "accepted" and anchored == true, "accepting both consent steps did not anchor the layout")
+        decision, anchored = Consent({ "cancel" })
+        Check(decision == "declined" and anchored == false, "Keep independent did not store the refusal")
+        decision, anchored = Consent({ "escape" })
+        Check(decision == "declined" and anchored == false, "Escape on the first step did not store the refusal")
+        decision, anchored = Consent({ "accept", "escape" })
+        Check(decision == "declined" and anchored == false, "Escape on the second step did not store the refusal")
+    end
+    e.C_AddOns.IsAddOnLoaded = isLoaded
+end
+
+Check(#popups.writes == writesAtBoot, "the prompts wrote StaticPopupDialogs: " .. table.concat(popups.writes, ",", writesAtBoot + 1))
 Check(writesAtBoot == 0, "booting the menu wrote StaticPopupDialogs: " .. table.concat(popups.writes, ","))
 
 if #failures > 0 then
     error("menu_prompt_ownership_smoke failed:\n  " .. table.concat(failures, "\n  "))
 end
-print("menu_prompt_ownership_smoke: ok (" .. #files .. " Options files write no StaticPopupDialogs; page reset, reload,"
-    .. " language, group-frame, quick-setup and text prompts keep their buttons, texts and Escape rules)")
+print("menu_prompt_ownership_smoke: ok (" .. #files .. " core and Options files write no StaticPopupDialogs; page reset,"
+    .. " reload, language, group-frame, quick-setup, text, consent, version and tip prompts keep their buttons,"
+    .. " texts and Escape rules)")

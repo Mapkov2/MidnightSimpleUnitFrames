@@ -5,8 +5,10 @@
 --   Pass:     hides exactly the MSUF arena slots, stands down at 0 slots or
 --             when MAX_ARENA_ENEMIES exceeds them, never compares a nil
 --             MAX_ARENA_ENEMIES, and arms one ADDON_LOADED watcher at login.
---   Driver:   a deferred restore action restores the recorded alpha exactly
---             once, after the restore callback.
+--   Driver:   a managed class bar (isManagedFrame / layoutParent) is
+--             concealed and released at once, in combat too, and never
+--             shown, hidden, deferred or restored through its callback; a
+--             protected bar's restore waits for combat to end and runs once.
 --   Contract: the Kernel runs the pass loop and owns no legacy arena code.
 -- Run with Lua 5.1 and the repo root as arg 1.
 local root = assert(arg[1], "repo root required"):gsub("\\", "/")
@@ -287,13 +289,14 @@ do
     Check(#calls == 0 and #Watchers() == 0, "(h) CompactArenaFrame present must skip the legacy pass")
 end
 
--- Deferred driver: a restore action restores the recorded alpha exactly once.
+-- Deferred driver: managed bars are concealed at once, protected bars wait.
 do
     ResetGlobals()
     local MSUF = Load()
     local frame = NewFrame("ManagedBar")
     frame.alpha = 0.8
     frame.layoutParent = {}
+    frame.isManagedFrame = true
     local definition = { name = "MSUF_SmokeManagedBar" }
     function definition.restore(target)
         target.log[#target.log + 1] = "restore"
@@ -305,29 +308,49 @@ do
 
     inCombat = true
     Compat.SetBlizzardClassResourcesSuppressed(true)
-    Check(frame.alpha == 0 and state.muted[frame] == 0.8, "driver: combat suppress must mute and record alpha")
+    Check(frame.alpha == 0 and state.muted[frame] == 0.8, "driver: a combat suppress must conceal and record the alpha")
     Compat.SetBlizzardClassResourcesSuppressed(false)
-    Check(state.pending[frame] == definition, "driver: combat restore must defer the definition")
-    -- A later in-combat mute leaves a recorded alpha for the driver to restore.
-    frame.alpha = 0
-    state.muted[frame] = 0.8
-    for i = 1, #frame.log do frame.log[i] = nil end
+    Check(frame.alpha == 0.8 and state.muted[frame] == nil, "driver: a combat release must give the alpha back at once")
+    Check(state.pending == nil or state.pending[frame] == nil, "driver: a managed bar was deferred")
+    for _, entry in ipairs(frame.log) do
+        Check(entry ~= "hide" and entry ~= "restore", "driver: a managed bar was hidden or restored: " .. entry)
+    end
+    inCombat = false
+    Compat.SetBlizzardClassResourcesSuppressed(true)
+    Compat.SetBlizzardClassResourcesSuppressed(false)
+    for _, entry in ipairs(frame.log) do
+        Check(entry ~= "hide" and entry ~= "restore", "driver: a managed bar was hidden or restored out of combat: " .. entry)
+    end
 
+    -- A protected bar: the release in combat waits and runs its restore once.
+    ResetGlobals()
+    MSUF = Load()
+    local guarded = NewFrame("ProtectedBar")
+    function guarded:IsProtected() return true end
+    local guardedDefinition = { name = "MSUF_SmokeProtectedBar" }
+    function guardedDefinition.restore(target)
+        target.log[#target.log + 1] = "restore"
+    end
+    _G.MSUF_SmokeManagedBar = nil
+    _G.MSUF_SmokeProtectedBar = guarded
+    MSUF.CPClient = { BlizzardFrames = { guardedDefinition } }
+    Compat = MSUF.Compat
+    state = Compat.ClassicFrameOwnership
+    Compat.SetBlizzardClassResourcesSuppressed(true)
+    Check(guarded.log[1] == "hide", "driver: a protected bar was not hidden out of combat")
+    inCombat = true
+    Compat.SetBlizzardClassResourcesSuppressed(false)
+    Check(state.pending[guarded] == guardedDefinition and #guarded.log == 1,
+        "driver: a protected bar's combat restore must defer the definition")
     local driver = state.driver
     Check(driver and driver.onEvent, "driver: deferred driver must exist")
     inCombat = false
     driver.onEvent(driver, "PLAYER_REGEN_ENABLED")
-    local alphaWrites, restores = 0, 0
-    for _, entry in ipairs(frame.log) do
-        if entry == "alpha 0.8" then alphaWrites = alphaWrites + 1 end
-        if entry == "restore" then restores = restores + 1 end
-    end
+    driver.onEvent(driver, "PLAYER_REGEN_ENABLED")
+    local restores = 0
+    for _, entry in ipairs(guarded.log) do if entry == "restore" then restores = restores + 1 end end
     Check(restores == 1, "driver: restore must run once, got " .. restores)
-    Check(alphaWrites == 1, "driver: recorded alpha must be restored once, got " .. alphaWrites)
-    Check(frame.log[1] == "restore" and frame.log[2] == "alpha 0.8" and #frame.log == 2,
-        "driver: alpha restoration must follow the restore callback, got " .. table.concat(frame.log, ", "))
-    Check(state.muted[frame] == nil and frame.alpha == 0.8, "driver: frame must end unmuted at its recorded alpha")
-    _G.MSUF_SmokeManagedBar = nil
+    _G.MSUF_SmokeProtectedBar = nil
 end
 
 -- Source contracts.
@@ -335,8 +358,8 @@ do
     local classic = Read(CLASSIC_FILE)
     local driverBody = classic:match("local function EnsureDeferredDriver%(%)(.-)\nend\n")
     Check(driverBody, "contract: EnsureDeferredDriver body not found")
-    local _, unmutes = driverBody:gsub("UnmuteManagedFrame%(frame%)", "")
-    Check(unmutes == 1, "contract: EnsureDeferredDriver must call UnmuteManagedFrame once, found " .. unmutes)
+    Check(not driverBody:find("Alpha", 1, true) and not driverBody:find("ManagedFrame", 1, true),
+        "contract: the deferred driver must not conceal or reveal managed bars (they are never deferred)")
     Check(not classic:find("MAX_ARENA_ENEMIES%s*[<>=~]"), "contract: MAX_ARENA_ENEMIES must never be compared bare")
 
     local kernel = Read(KERNEL_FILE)

@@ -22,10 +22,16 @@
 -- once (capability lookups counted over 1010 calls of each setter); a repeated
 -- call allocates 0 KB.
 --
+-- With the real scale owner (Runtime/MSUF_UIScaleRuntime.lua) and its timers:
+-- a global scale ApplyUIScaleProfile sets survives the Blizzard-scale restore
+-- the reset before it schedules (at 0, 0.25 and 1 s); a plain reset still
+-- restores Blizzard's scale.
+--
 -- Plain Lua 5.1 (loadstring, setfenv). Repo root as arg 1, default ".".
 
 local root = ((arg and arg[1]) or "."):gsub("\\", "/"):gsub("/$", "")
 local HOST_API = root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua"
+local SCALE_RUNTIME = root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_UIScaleRuntime.lua"
 local REQUIRE = root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"
 local BOUNDARY = root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua"
 
@@ -599,7 +605,88 @@ do
     Check(host.globals.MSUF_HostAPI == api, "MSUF_HostAPI must stay the table created at file load")
 end
 
+-- 6. The real scale owner and its timers.
+do
+    local timers, now = {}, 0
+    local uiParentScale = 0.75 -- Blizzard's own scale (the uiScale CVar)
+    local cvars = { useUiScale = "1", uiScale = "0.75" }
+    local globals = {}
+    for _, name in ipairs({ "type", "tonumber", "tostring", "pairs", "ipairs", "next", "error", "select",
+        "string", "table", "math", "assert", "rawget", "rawset", "setmetatable", "unpack", "pcall" }) do
+        globals[name] = _G[name]
+    end
+    local errors = {}
+    globals.print = function() end
+    globals.geterrorhandler = function() return function(message) errors[#errors + 1] = tostring(message) end end
+    globals.InCombatLockdown = function() return false end
+    globals.UnitAffectingCombat = function() return false end
+    globals.GetCVarBool = function(name) return cvars[name] == "1" end
+    globals.GetCVar = function(name) return cvars[name] end
+    globals.GetPhysicalScreenSize = function() return 2560, 1440 end
+    globals.UIParent = {
+        GetScale = function() return uiParentScale end,
+        SetScale = function(_, scale) uiParentScale = scale end,
+        GetHeight = function() return 768 / uiParentScale end,
+    }
+    globals.CreateFrame = function()
+        return { RegisterEvent = function() end, UnregisterEvent = function() end,
+            UnregisterAllEvents = function() end, SetScript = function() end }
+    end
+    local function Queue(delay, callback)
+        local timer = { at = now + delay, callback = callback }
+        timer.Cancel = function(self) self.cancelled = true end
+        timers[#timers + 1] = timer
+        return timer
+    end
+    globals.C_Timer = { After = function(delay, callback) Queue(delay, callback) end, NewTimer = Queue }
+    local function RunTimers(untilTime)
+        while true do
+            table.sort(timers, function(a, b) return a.at < b.at end)
+            local timer = timers[1]
+            if not timer or timer.at > untilTime then break end
+            table.remove(timers, 1)
+            now = timer.at
+            if not timer.cancelled then timer.callback() end
+        end
+        now = untilTime
+    end
+    globals.MSUF_DB = { general = { msufUiScale = 1 } }
+    globals.MSUF_ShowConfigCombatLockMessage = function() end
+    globals.MSUF_EnsureDB = function() return globals.MSUF_DB end
+    globals.MSUF_InstallGlobalScaleGate = function() return true end
+    globals.MSUF_UpdateAllExternalAnchorProxies = function() end
+    globals.MSUF_ForceReanchorAllUnitFrames_Once = function() end
+    local env = setmetatable({}, { __index = globals, __newindex = function(_, key, value) globals[key] = value end })
+    globals._G = env
+    local ns = { Util = { InCombat = function() return false end }, Translate = function(text) return text end }
+    ns.ExportPublic = function(name, value)
+        globals[name] = value
+        return value
+    end
+    for _, path in ipairs({ REQUIRE, BOUNDARY, SCALE_RUNTIME, HOST_API }) do
+        local chunk = assert(LoadChunk(path))
+        setfenv(chunk, env)("MidnightSimpleUnitFrames", ns)
+    end
+    RunTimers(5) -- the load-time queue
+    local api = globals.MSUF_HostAPI
+    local ok, why = api.ApplyUIScaleProfile({ msufScale = 1, global = { preset = "custom", scale = 0.6 } })
+    Check(ok == true, "the real scale owner refused the profile: " .. tostring(why) .. " " .. table.concat(errors, "; "))
+    Check(math.abs(uiParentScale - 0.6) < 0.0001, "the global scale was not applied: " .. tostring(uiParentScale))
+    local general = globals.MSUF_DB.general
+    Check(type(general.UIScale) == "table" and general.UIScale.Enabled == true and general.UIScale.Scale == 0.6,
+        "the global scale was not saved")
+    RunTimers(now + 2)
+    Check(math.abs(uiParentScale - 0.6) < 0.0001, "the Blizzard restore the reset scheduled undid the profile's "
+        .. "global scale: UIParent is at " .. tostring(uiParentScale) .. " after 2 s")
+    -- A plain reset still restores Blizzard's scale, timers included.
+    Check(globals.MSUF_ResetGlobalUiScale(true) ~= false, "the reset refused")
+    uiParentScale = 0.9 -- something moved UIParent before the timers run
+    RunTimers(now + 2)
+    Check(math.abs(uiParentScale - 0.75) < 0.0001, "the reset did not restore Blizzard's scale: " .. tostring(uiParentScale))
+    Check(#errors == 0, "the real scale owner raised: " .. table.concat(errors, "; "))
+end
+
 local owners = 0
 for _ in pairs(CAPABILITIES) do owners = owners + 1 end
 print(("host_api_smoke: PASS (%d legacy-oracle comparisons; refusals; rollback of a raising applier; "
-    .. "%d owner lookups in 3030 calls; 0 KB per call)"):format(compared, owners))
+    .. "%d owner lookups in 3030 calls; 0 KB per call; a global scale survives the reset's timers)"):format(compared, owners))
