@@ -300,8 +300,10 @@ if IS_FOREVER_RUN then
     Check(#dropdowns == 2, "Forever page built " .. #dropdowns .. " profile pickers")
     dropdowns[2].set("Raid")
     Check(MSUF_GetSpecProfile(2) == "Raid" and dropdowns[2].get() == "Raid", "secondary talent group picker did not bind group 2")
+    -- "None" without a profile of that name clears; the picker then shows its
+    -- unassigned row, whose value is "" (no profile can be named "").
     dropdowns[1].set("None")
-    Check(MSUF_GetSpecProfile(1) == nil and dropdowns[1].get() == "None", "primary talent group picker did not clear group 1")
+    Check(MSUF_GetSpecProfile(1) == nil and dropdowns[1].get() == "", "primary talent group picker did not clear group 1")
 
     DUAL_SPEC_PRIMARY, DUAL_SPEC_SECONDARY = nil, nil
     BuildSpecializations()

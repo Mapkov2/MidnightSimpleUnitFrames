@@ -634,7 +634,10 @@ end
 function MSUF_SetSpecProfile(specID, profileName)
     local char = MSUF_GetCharMeta()
     if type(specID) ~= "number" then  return end
-    if type(profileName) ~= "string" or profileName == "" or profileName == "None" then
+    --- "None" clears unless a real profile owns the name (the contract of
+    --- MSUF_SetDefaultProfileForNewCharacters).
+    if type(profileName) ~= "string" or profileName == ""
+        or (profileName == "None" and type(MSUF_GlobalDB.profiles.None) ~= "table") then
         char.specProfileMap[specID] = nil
     else
         char.specProfileMap[specID] = profileName
