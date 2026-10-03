@@ -4,6 +4,10 @@
 --- Builds EditMode HUD widgets only; secure frame mutation stays behind EditMode helpers.
 --- Loads last of the toolbar files in MSUF_EditMode.xml.
 local addonName, MSUF = ...
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_HUD.lua"
 local ExportPublic = (MSUF or _G.MSUF_NS or {}).ExportPublic
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -93,10 +97,16 @@ local function ApplyDockLayout()
     hudFrame:ClearAllPoints()
     DockUI.primaryContainer:ClearAllPoints()
     DockUI.historyContainer:ClearAllPoints()
-    DockUI.grip:ClearAllPoints(); DockUI.logo:ClearAllPoints(); DockUI.title:ClearAllPoints(); DockUI.contextBtn:ClearAllPoints()
-    helpBtn:ClearAllPoints(); cancelAllBtn:ClearAllPoints(); exitBtn:ClearAllPoints()
+    DockUI.grip:ClearAllPoints()
+    DockUI.logo:ClearAllPoints()
+    DockUI.title:ClearAllPoints()
+    DockUI.contextBtn:ClearAllPoints()
+    helpBtn:ClearAllPoints()
+    cancelAllBtn:ClearAllPoints()
+    exitBtn:ClearAllPoints()
     row2Frame:ClearAllPoints()
-    DockUI.inspectorSelection:ClearAllPoints(); hintFS:ClearAllPoints()
+    DockUI.inspectorSelection:ClearAllPoints()
+    hintFS:ClearAllPoints()
     for _, cell in ipairs(DockUI.inspectorMetrics or {}) do cell:ClearAllPoints() end
     if DockUI.primaryContainer.SetScale then DockUI.primaryContainer:SetScale(1) end
     if vertical then
@@ -107,14 +117,20 @@ local function ApplyDockLayout()
         hudFrame:SetSize(DOCK_VERTICAL_W, max(390, totalHeight))
         DockUI.AnchorDock(dock, edge)
 
-        DockUI.grip:SetSize(58, 16); DockUI.grip:SetPoint("TOP", hudFrame, "TOP", 0, -8)
-        DockUI.logo:SetSize(30, 30); DockUI.logo:SetPoint("TOP", DockUI.grip, "BOTTOM", 0, -4)
-        DockUI.title:Hide(); DockUI.contextBtn:Hide()
-        helpBtn:SetSize(58, 26); helpBtn:SetPoint("TOP", DockUI.logo, "BOTTOM", 0, -5)
+        DockUI.grip:SetSize(58, 16)
+        DockUI.grip:SetPoint("TOP", hudFrame, "TOP", 0, -8)
+        DockUI.logo:SetSize(30, 30)
+        DockUI.logo:SetPoint("TOP", DockUI.grip, "BOTTOM", 0, -4)
+        DockUI.title:Hide()
+        DockUI.contextBtn:Hide()
+        helpBtn:SetSize(58, 26)
+        helpBtn:SetPoint("TOP", DockUI.logo, "BOTTOM", 0, -5)
         DockUI.historyContainer:SetPoint("TOP", helpBtn, "BOTTOM", 0, -7)
         DockUI.primaryContainer:SetPoint("TOP", DockUI.historyContainer, "BOTTOM", 0, -7)
-        exitBtn:SetSize(58, 28); exitBtn:SetPoint("BOTTOM", hudFrame, "BOTTOM", 0, 8)
-        cancelAllBtn:SetSize(58, 28); cancelAllBtn:SetPoint("BOTTOM", exitBtn, "TOP", 0, 4)
+        exitBtn:SetSize(58, 28)
+        exitBtn:SetPoint("BOTTOM", hudFrame, "BOTTOM", 0, 8)
+        cancelAllBtn:SetSize(58, 28)
+        cancelAllBtn:SetPoint("BOTTOM", exitBtn, "TOP", 0, 4)
 
         row2Frame:SetSize(320, 34)
         if dock == "LEFT" then row2Frame:SetPoint("LEFT", hudFrame, "RIGHT", 8, 0)
@@ -139,17 +155,23 @@ local function ApplyDockLayout()
         end
         DockUI.AnchorDock(dock, edge)
 
-        DockUI.grip:SetSize(20, BTN_H); DockUI.grip:SetPoint("LEFT", hudFrame, "LEFT", 12, 0)
-        DockUI.logo:SetSize(32, 32); DockUI.logo:SetPoint("LEFT", DockUI.grip, "RIGHT", 4, 0)
+        DockUI.grip:SetSize(20, BTN_H)
+        DockUI.grip:SetPoint("LEFT", hudFrame, "LEFT", 12, 0)
+        DockUI.logo:SetSize(32, 32)
+        DockUI.logo:SetPoint("LEFT", DockUI.grip, "RIGHT", 4, 0)
         local compact = dockWidth < 1080
         DockUI.title:SetShown(not compact)
         if not compact then DockUI.title:SetPoint("LEFT", DockUI.logo, "RIGHT", 7, 0) end
-        DockUI.contextBtn:Show(); DockUI.contextBtn:SetSize(compact and 80 or 96, BTN_H)
+        DockUI.contextBtn:Show()
+        DockUI.contextBtn:SetSize(compact and 80 or 96, BTN_H)
         DockUI.contextBtn:SetPoint("LEFT", compact and DockUI.logo or DockUI.title, "RIGHT", 8, 0)
-        helpBtn:SetSize(BTN_H, BTN_H); helpBtn:SetPoint("LEFT", DockUI.contextBtn, "RIGHT", 8, 0)
+        helpBtn:SetSize(BTN_H, BTN_H)
+        helpBtn:SetPoint("LEFT", DockUI.contextBtn, "RIGHT", 8, 0)
         DockUI.historyContainer:SetPoint("LEFT", helpBtn, "RIGHT", 8, 0)
-        exitBtn:SetSize(80, BTN_H); exitBtn:SetPoint("RIGHT", hudFrame, "RIGHT", -16, -7)
-        cancelAllBtn:SetSize(88, BTN_H); cancelAllBtn:SetPoint("RIGHT", exitBtn, "LEFT", -8, 0)
+        exitBtn:SetSize(80, BTN_H)
+        exitBtn:SetPoint("RIGHT", hudFrame, "RIGHT", -16, -7)
+        cancelAllBtn:SetSize(88, BTN_H)
+        cancelAllBtn:SetPoint("RIGHT", exitBtn, "LEFT", -8, 0)
 
         -- Keep the task clusters physically anchored after History.  Merely
         -- centering a scaled container inside an estimated lane allowed its
@@ -213,7 +235,8 @@ local function BuildDockFrame()
     --- Compact MSUF command dock.  The existing actions remain unchanged;
     --- only their chrome and cold-path layout are owned here.
     hudFrame = DockUI.PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_HUD", UIParent, "BackdropTemplate"))
-    hudFrame:SetFrameStrata("TOOLTIP"); hudFrame:SetFrameLevel(1200)
+    hudFrame:SetFrameStrata("TOOLTIP")
+    hudFrame:SetFrameLevel(1200)
     hudFrame:SetSize(DockUI.horizontalWidth, DOCK_HORIZONTAL_H)
     DockUI.PixelLayoutRegion(hudFrame, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=2,right=2,top=2,bottom=2} })
     hudFrame:SetBackdropColor(unpack(TH.r1Bg))
@@ -221,17 +244,23 @@ local function BuildDockFrame()
     ApplyHUDMaterial(hudFrame, "status")
     hudFrame:SetMovable(true)
     hudFrame:SetClampedToScreen(true)
-    hudFrame:EnableMouse(true); hudFrame:Hide()
+    hudFrame:EnableMouse(true)
+    hudFrame:Hide()
 
     --- Entry slide: built once, driven entirely C-side.  Both animations share
     --- order 1 so the fade and the move run together.
     if hudFrame.CreateAnimationGroup then
         local intro = hudFrame:CreateAnimationGroup()
         local slide = intro:CreateAnimation("Translation")
-        slide:SetDuration(DockUI.introDuration); slide:SetOrder(1); slide:SetSmoothing("OUT")
+        slide:SetDuration(DockUI.introDuration)
+        slide:SetOrder(1)
+        slide:SetSmoothing("OUT")
         local fade = intro:CreateAnimation("Alpha")
-        fade:SetFromAlpha(0); fade:SetToAlpha(1)
-        fade:SetDuration(DockUI.introDuration); fade:SetOrder(1); fade:SetSmoothing("OUT")
+        fade:SetFromAlpha(0)
+        fade:SetToAlpha(1)
+        fade:SetDuration(DockUI.introDuration)
+        fade:SetOrder(1)
+        fade:SetSmoothing("OUT")
         intro:SetScript("OnFinished", function() DockUI.FinishDockIntro() end)
         intro:SetScript("OnStop", function() DockUI.FinishDockIntro() end)
         DockUI.introGroup = intro
@@ -299,24 +328,33 @@ local function BuildHelpButton()
     helpBtn:SetBackdropBorderColor(TH.onR, TH.onG, TH.onB, 0.60)
     do
         local glow = DockUI.PixelLayoutRegion(helpBtn:CreateTexture(nil, "BACKGROUND", nil, -1))
-        glow:SetPoint("TOPLEFT", -3, 3); glow:SetPoint("BOTTOMRIGHT", 3, -3)
+        glow:SetPoint("TOPLEFT", -3, 3)
+        glow:SetPoint("BOTTOMRIGHT", 3, -3)
         glow:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.08)
         helpBtn._glow = glow
 
         local hl = DockUI.PixelLayoutRegion(helpBtn:CreateTexture(nil, "HIGHLIGHT"))
-        hl:SetAllPoints(); hl:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.12)
+        hl:SetAllPoints()
+        hl:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.12)
 
         local lbl = MakeFS(helpBtn, "body", TH.onR, TH.onG, TH.onB, 1)
-        lbl:SetPoint("CENTER", 0, 0); lbl:SetText("?")
+        lbl:SetPoint("CENTER", 0, 0)
+        lbl:SetText("?")
         helpBtn._label = lbl
 
         local pulse = helpBtn:CreateAnimationGroup()
         local fadeOut = pulse:CreateAnimation("Alpha")
-        fadeOut:SetFromAlpha(1); fadeOut:SetToAlpha(0.45)
-        fadeOut:SetDuration(0.8); fadeOut:SetOrder(1); fadeOut:SetSmoothing("IN_OUT")
+        fadeOut:SetFromAlpha(1)
+        fadeOut:SetToAlpha(0.45)
+        fadeOut:SetDuration(0.8)
+        fadeOut:SetOrder(1)
+        fadeOut:SetSmoothing("IN_OUT")
         local fadeIn = pulse:CreateAnimation("Alpha")
-        fadeIn:SetFromAlpha(0.45); fadeIn:SetToAlpha(1)
-        fadeIn:SetDuration(0.8); fadeIn:SetOrder(2); fadeIn:SetSmoothing("IN_OUT")
+        fadeIn:SetFromAlpha(0.45)
+        fadeIn:SetToAlpha(1)
+        fadeIn:SetDuration(0.8)
+        fadeIn:SetOrder(2)
+        fadeIn:SetSmoothing("IN_OUT")
         pulse:SetLooping("REPEAT")
         helpBtn._pulse = pulse
     end
@@ -345,11 +383,15 @@ local function BuildExitControls()
     cancelAllBtn = MakeBtn(hudFrame, "Discard", 88, BTN_H, "body", function()
         if not EM2.State or not EM2.State.CancelAll then return end
         local cf = _G["MSUF_EM2_CancelConfirm"]
-        if cf then cf:Show(); return end
+        if cf then
+            cf:Show()
+            return
+        end
         cf = DockUI.PixelLayoutRegion(CreateFrame("Frame", "MSUF_EM2_CancelConfirm", UIParent, "BackdropTemplate"))
         cf:SetSize(320, 120)
         cf:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
-        cf:SetFrameStrata("TOOLTIP"); cf:SetFrameLevel(1400)
+        cf:SetFrameStrata("TOOLTIP")
+        cf:SetFrameLevel(1400)
         DockUI.PixelLayoutRegion(cf, "SetBackdrop", { bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
         cf:SetBackdropColor(TH.r1Bg[1], TH.r1Bg[2], TH.r1Bg[3], TH.r1Bg[4] or 0.97)
         cf:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.90)
@@ -380,9 +422,11 @@ local function BuildExitControls()
                 b:SetBackdropColor(TH.r2Bg[1], TH.r2Bg[2], TH.r2Bg[3], TH.r2Bg[4] or 0.90)
                 b:SetBackdropBorderColor(TH.edge[1], TH.edge[2], TH.edge[3], 0.65)
                 local hl = DockUI.PixelLayoutRegion(b:CreateTexture(nil, "HIGHLIGHT"))
-                hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.06)
+                hl:SetAllPoints()
+                hl:SetColorTexture(1, 1, 1, 0.06)
                 local fs = MakeFS(b, "body", TH.textR, TH.textG, TH.textB, 1)
-                fs:SetPoint("CENTER"); fs:SetText(HelpText(text))
+                fs:SetPoint("CENTER")
+                fs:SetText(HelpText(text))
                 b:SetScript("OnClick", onClick)
             end
             return b
@@ -426,7 +470,7 @@ local function BuildPreviewCluster(advancedHUD)
             return
         end
         local ok, reason = toggle("edit_mode")
-        local active = type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true
+        local active = MSUF.Require("MSUF_IsPreviewAnimationEnabled", CALLER)() == true
         SetActive(previewAnimBtn, active)
         if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
         if ok == false and reason == "combat" then
@@ -438,9 +482,18 @@ local function BuildPreviewCluster(advancedHUD)
     RegisterPreviewAnimationRefreshOwner()
 
     auraBtn = AddRowButton(previewItems, previewCluster, "Auras", 64, CLUSTER_BTN_H, "caption", function()
-        local db = _G.MSUF_DB; if not db then return end
-        local a2 = db.auras3; if not a2 then return end
-        local sh = a2.shared; if not sh then return end
+        local db = _G.MSUF_DB
+        if not db then
+            return
+        end
+        local a2 = db.auras3
+        if not a2 then
+            return
+        end
+        local sh = a2.shared
+        if not sh then
+            return
+        end
         local undo = EM2.Undo
         local tracked = undo and undo.BeginChange and undo.BeginChange("aura", "shared", "Toggle") == true
         sh.showInEditMode = not (sh.showInEditMode and true or false)
@@ -463,7 +516,8 @@ local function BuildLayoutCluster()
     snapToggle = AddRowButton(layoutItems, layoutCluster, "Snap", 56, CLUSTER_BTN_H, "caption", function()
         if EM2.Snap then
             local on = not EM2.Snap.IsEnabled()
-            EM2.Snap.SetEnabled(on); SetActive(snapToggle, on)
+            EM2.Snap.SetEnabled(on)
+            SetActive(snapToggle, on)
             HUD.SetStatus(HelpText(on and "EM_SNAP_ON" or "EM_SNAP_OFF"), "info")
         end
     end, "Snap frames to edges of\nother frames while dragging.")
@@ -508,7 +562,10 @@ local function BuildToolsCluster()
 
     if HUD.CooldownAnchorSupported() then
         cdmBtn = AddRowButton(linksItems, linksCluster, "Cooldown", 116, CLUSTER_BTN_H, "caption", function()
-            local db = _G.MSUF_DB; if not db then return end
+            local db = _G.MSUF_DB
+            if not db then
+                return
+            end
             db.general = db.general or {}
             local enabled = not HUD.CooldownAnchorEnabled(db.general)
             local setter = _G.MSUF_SetCooldownAnchorEnabled
@@ -531,7 +588,7 @@ local function BuildToolsCluster()
     end
 
     anchorBtn = AddRowButton(linksItems, linksCluster, "Anchor", 60, CLUSTER_BTN_H, "caption", function()
-        local ov = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker()
+        local ov = MSUF.Require("MSUF_EnsureAnchorPicker", CALLER)()
         if not ov then return end
         ov._isCandidateAllowed = function(frame)
             local factory = MSUF and MSUF.UF and MSUF.UF.Factory
@@ -539,7 +596,10 @@ local function BuildToolsCluster()
                 or factory.IsAnchorCandidateAllowed(frame)
         end
         ov._onPick = function(frameName)
-            local db = _G.MSUF_DB; if not db then return end
+            local db = _G.MSUF_DB
+            if not db then
+                return
+            end
             db.general = db.general or {}
             local undo = EM2.Undo
             local tracked = undo and undo.BeginChange and undo.BeginChange("general", "anchor", "Set") == true
@@ -656,9 +716,15 @@ local function BuildHistoryRow()
 end
 
 local function AttachDockHovers()
-    AttachDockHover(hudFrame); AttachDockHover(row2Frame); AttachDockHover(DockUI.grip)
-    AttachDockHover(DockUI.logo); AttachDockHover(DockUI.contextBtn); AttachDockHover(helpBtn)
-    AttachDockHover(exitBtn); AttachDockHover(cancelAllBtn); AttachDockHover(DockUI.positionBtn)
+    AttachDockHover(hudFrame)
+    AttachDockHover(row2Frame)
+    AttachDockHover(DockUI.grip)
+    AttachDockHover(DockUI.logo)
+    AttachDockHover(DockUI.contextBtn)
+    AttachDockHover(helpBtn)
+    AttachDockHover(exitBtn)
+    AttachDockHover(cancelAllBtn)
+    AttachDockHover(DockUI.positionBtn)
     for _, cluster in ipairs(DockUI.row1) do
         AttachDockHover(cluster)
         for _, item in ipairs(cluster._dockItems or {}) do AttachDockHover(item) end
@@ -802,7 +868,7 @@ function HUD.RefreshControls(force)
     RegisterPreviewAnimationRefreshOwner()
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
     if previewAnimBtn then
-        local active = type(_G.MSUF_IsPreviewAnimationEnabled) == "function" and _G.MSUF_IsPreviewAnimationEnabled() == true
+        local active = MSUF.Require("MSUF_IsPreviewAnimationEnabled", CALLER)() == true
         SetActive(previewAnimBtn, active)
     end
     if cdmBtn then
@@ -828,7 +894,9 @@ function HUD.RefreshControls(force)
     end
     SetControlEnabled(anchorBtn, true)
     if auraBtn then
-        local db = _G.MSUF_DB; local a2 = db and db.auras3; local sh = a2 and a2.shared
+        local db = _G.MSUF_DB
+        local a2 = db and db.auras3
+        local sh = a2 and a2.shared
         SetActive(auraBtn, sh and sh.showInEditMode and _G.MSUF_UnitPreviewActive == true)
     end
     SetHistoryEnabled(undoBtn, EM2.Undo and EM2.Undo.CanUndo())
@@ -843,7 +911,10 @@ function HUD.Show()
     --- calls it again while the toolbar is already on screen, which must not
     --- replay the slide.
     local entering = not hudFrame:IsShown()
-    hudFrame:Show(); if row2Frame then row2Frame:Show() end
+    hudFrame:Show()
+    if row2Frame then
+        row2Frame:Show()
+    end
     ApplyDockLayout()
     DockUI.ScheduleLayoutSettle()
     HUD.RefreshControls(true)
@@ -858,10 +929,18 @@ end
 function HUD.Hide()
     if DockUI.tooltipRestoreLevel ~= nil then DockUI.ReleaseTooltip() end
     if DockUI.drag then StopDockDrag() end
-    local cf = _G["MSUF_EM2_CancelConfirm"]; if cf then cf:Hide() end
+    local cf = _G["MSUF_EM2_CancelConfirm"]
+    if cf then
+        cf:Hide()
+    end
     SetLayoutEventsEnabled(false)
     if helpBtn and helpBtn._pulse then helpBtn._pulse:Stop() end
-    if row2Frame then row2Frame:Hide() end; if hudFrame then hudFrame:Hide() end
+    if row2Frame then
+        row2Frame:Hide()
+    end
+    if hudFrame then
+        hudFrame:Hide()
+    end
     --- After the Hide: the slide gives back the anchor and clamping without
     --- reviving alpha or auto-hide work for a toolbar that just left.
     DockUI.StopDockIntro()

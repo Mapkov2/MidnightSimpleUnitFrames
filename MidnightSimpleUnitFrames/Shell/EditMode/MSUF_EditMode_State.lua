@@ -62,13 +62,10 @@ local anyEditModeListeners = _G.MSUF_AnyEditModeListeners
 if type(anyEditModeListeners) ~= "table" then anyEditModeListeners = {} end
 PublishCompat("MSUF_AnyEditModeListeners", anyEditModeListeners)
 
-local MSUF_RegisterAnyEditModeListener = _G.MSUF_RegisterAnyEditModeListener
-if type(MSUF_RegisterAnyEditModeListener) ~= "function" then
-    MSUF_RegisterAnyEditModeListener = function(fn)
-        if type(fn) ~= "function" then return end
-        local t = _G.MSUF_AnyEditModeListeners
-        t[#t + 1] = fn
-    end
+local function MSUF_RegisterAnyEditModeListener(fn)
+    if type(fn) ~= "function" then return end
+    local t = _G.MSUF_AnyEditModeListeners
+    t[#t + 1] = fn
 end
 ExportPublic("MSUF_RegisterAnyEditModeListener", MSUF_RegisterAnyEditModeListener)
 
@@ -92,7 +89,10 @@ local function EnsureDB()
     local fn = _G.MSUF_EnsureDB
     if type(fn) == "function" then fn(); return _G.MSUF_DB ~= nil end
     local nsEnsureDB = MSUF and (MSUF.MSUF_EnsureDB or MSUF.EnsureDB)
-    if type(nsEnsureDB) == "function" then nsEnsureDB(); return _G.MSUF_DB ~= nil end
+    if type(nsEnsureDB) == "function" then
+        nsEnsureDB()
+        return _G.MSUF_DB ~= nil
+    end
     return false
 end
 local ApplyAllSettingsSafe = Util.ApplyAllSettingsSafe
@@ -129,7 +129,12 @@ end
 
 local function SnapshotDB()
     local dc = GetDeepCopy()
-    local db = _G.MSUF_DB; if not db or not dc then _snapshot = nil; _snapshotProfile = nil; return end
+    local db = _G.MSUF_DB
+    if not db or not dc then
+        _snapshot = nil
+        _snapshotProfile = nil
+        return
+    end
     _snapshot = dc(db)
     _snapshotProfile = ProfileIdentity()
 end
@@ -242,7 +247,10 @@ end
 
 local function RestoreDB()
     if type(_snapshot) ~= "table" then return false end
-    local db = _G.MSUF_DB; if not db then return false end
+    local db = _G.MSUF_DB
+    if not db then
+        return false
+    end
     if not IsCurrentProfile(_snapshotProfile) then
         _snapshot, _snapshotProfile = nil, nil
         return false
@@ -596,8 +604,10 @@ function State.SuspendExternalPreview()
     local suspendBridge = _G.MSUF_EllesmereEditMode_SuspendPreview
     if type(suspendBridge) == "function" then
         suspendBridge()
-    elseif type(_G.MSUF_EllesmereEditMode_ClearMoveState) == "function" then
-        _G.MSUF_EllesmereEditMode_ClearMoveState()
+    else
+        -- The EllesmereUI bridge loads on the Mainline TOC only.
+        local clearMoveState = MSUF.Optional("MSUF_EllesmereEditMode_ClearMoveState")
+        if clearMoveState then clearMoveState() end
     end
     externalPreviewSuspended = true
     SyncLegacy()

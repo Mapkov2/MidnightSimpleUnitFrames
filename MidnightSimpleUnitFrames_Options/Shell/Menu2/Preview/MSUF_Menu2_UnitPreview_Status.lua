@@ -148,6 +148,12 @@ local function ApplyStatusIconPackPreview(tex, spec, conf, g, runtimeCfg, iconTy
     if tex.SetTexCoord then tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1) end
     return true
 end
+--- DEAD, GHOST, OFFLINE, AFK and DND are state tokens; the live status text
+--- paints their translation (MSUF.Translate), and so does the preview. The
+--- sample values ("5m", "85%") have no key and come back unchanged.
+function Status.StatusTokenText(token)
+    return MSUF.Translate(token)
+end
 function Status.StatusTextPreviewText(source, preferredText)
     local cfg
     if type(source) == "table" and (source.showDead ~= nil or source.showGhost ~= nil or source.showAFK ~= nil or source.showDND ~= nil) then
@@ -298,7 +304,8 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
             if tex.SetTexCoord then tex:SetTexCoord(0.5, 1, 0, 0.5) end
         end
     elseif spec.id == "statusResting" then
-        local symbol = (runtimeCfg and runtimeCfg.symbol) or conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol or g.restingStateIndicatorSymbol
+        local symbol = (runtimeCfg and runtimeCfg.symbol) or conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol
+            or g.restingStateIndicatorSymbol
         local path = StatusSymbolTexture(symbol)
         if tex and symbol == RESTING_ANIMATED_SYMBOL and ApplyRestingFlipbook and ApplyRestingFlipbook(tex, true) then
             -- Blizzard's native 42-frame rested loop applied above.
@@ -388,8 +395,8 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg, statu
         end
         if txt then
             txt:SetText(Status.IsIdentityText(spec) and Status.IdentityPreviewText(spec, data)
-                or STATUS_TEXT_STATE_IDS[spec.id]
-                or statusPreviewText or Status.StatusTextPreviewText(runtimeCfg or g) or "")
+                or Status.StatusTokenText(STATUS_TEXT_STATE_IDS[spec.id]
+                    or statusPreviewText or Status.StatusTextPreviewText(runtimeCfg or g) or ""))
             txt:SetTextColor(Status.TextIndicatorColor(spec, conf, g, data))
             txt:Show()
         end

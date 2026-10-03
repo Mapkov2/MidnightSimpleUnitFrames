@@ -525,7 +525,12 @@ function Dashboard.PrepareActionHelpers(state)
     end
     local function RefreshDashboardEditModeButtonSafe() M.RefreshDashboardEditModeButton() end
     local function RefreshMenuFramePrioritySafe() M.RefreshMenuFramePriority() end
-    local function RefreshDashboardFrameStatus() local f = M.frame; if f and f.RefreshStatus then f:RefreshStatus() end end
+    local function RefreshDashboardFrameStatus()
+        local f = M.frame
+        if f and f.RefreshStatus then
+            f:RefreshStatus()
+        end
+    end
     local function ToggleEditMode()
         local active = IsDashboardEditModeActive()
         if (not active) and IsDashboardEditModeCombatLocked() then
@@ -902,7 +907,8 @@ function Dashboard.BuildScalingColumns(state, ctx, scaling)
     local recoveryW, scalingColumns, Button, Percent, Clamp = state.recoveryW, state.scalingColumns, state.Button, state.Percent, state.Clamp
     local SnapPct, SetSliderValueSafe, HideSliderValueBox = state.SnapPct, state.SetSliderValueSafe, state.HideSliderValueBox
     local EnablePercentWheel, PixelScale, GlobalState = state.EnablePercentWheel, state.PixelScale, state.GlobalState
-    W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value.", 16, -60, recoveryW - 32, T.colors.muted)
+    W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value.", 16, -60,
+        recoveryW - 32, T.colors.muted)
     local pendingGlobalEnabled, pendingGlobalScale, pendingMsufScale, pendingMenuScale
     local colGap = 24
     local colW = (scalingColumns == 3) and math.floor((recoveryW - 32 - (colGap * 2)) / 3)
@@ -1151,10 +1157,14 @@ function Dashboard.BuildSupportCard(state)
     support:SetHeight(supportH)
     local supportLinks = {
         { key = "discord", texture = "Discord.png", title = "Discord", tooltip = "Copy Discord Link", url = "https://discord.gg/2Gf9b2Wprz" },
-        { key = "patreon", texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
-        { key = "paypal", texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.", url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
-        { key = "kofi", texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.", url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
-        { key = "github", texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.", url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
+        { key = "patreon", texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.",
+            url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
+        { key = "paypal", texture = "PayPal.png", title = "PayPal", tooltip = "Click to copy the PayPal support link.",
+            url = "https://www.paypal.com/ncp/payment/H3N2P87S53KBQ" },
+        { key = "kofi", texture = "Ko-Fi.png", title = "Ko-fi", tooltip = "Click to copy the Ko-fi link.",
+            url = "https://ko-fi.com/midnightsimpleunitframes#linkModal" },
+        { key = "github", texture = "GitHub.png", title = "GitHub", tooltip = "Click to copy the GitHub repository link.",
+            url = "https://github.com/Mapkov2/MidnightSimpleUnitFrames" },
     }
     local iconRow = PixelLayoutRegion(CreateFrame("Frame", nil, support))
     iconRow:SetSize(168, 24)

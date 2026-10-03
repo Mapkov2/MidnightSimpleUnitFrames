@@ -187,18 +187,8 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
         if host then host:Hide() end
         return
     end
-    if not host then
-        if type(_G.CreateFrame) ~= "function" then return end
-        host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-        if host.EnableMouse then host:EnableMouse(false) end
-        host.edges = {}
-        for i = 1, 4 do
-            local line = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6))
-            line:SetTexture(WHITE8X8)
-            host.edges[i] = line
-        end
-        mock._msufGFPreviewPowerBorder = host
-    end
+    host = host or PreviewHelpers.EnsurePowerBorderHost(mock, "_msufGFPreviewPowerBorder")
+    if not host then return end
     -- Elements_Power parents this rectangular border surface to the power bar
     -- and keeps it two details above that bar. The preview host is mock-owned,
     -- so explicitly follow the bar when a detached Layer moves it far above
@@ -210,7 +200,6 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
         host:Hide()
         return
     end
-    local top, bottom, left, right = host.edges[1], host.edges[2], host.edges[3], host.edges[4]
     for i = 1, 4 do host.edges[i]:Hide() end
     host:ClearAllPoints()
     host:SetAllPoints(mock._power)
@@ -220,29 +209,7 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
     local a = mock._msufGFPreviewPowerBorderA
     if r == nil then r, g, b, a = BaseEdgeColor(mock) end
     for i = 1, 4 do host.edges[i]:SetVertexColor(r or 0, g or 0, b or 0, a == nil and 1 or a) end
-    top:ClearAllPoints()
-    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-    top:SetHeight(edge)
-    top:Show()
-    if not roundedPower then
-        bottom:ClearAllPoints()
-        bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-        bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-        bottom:SetHeight(edge)
-        left:ClearAllPoints()
-        left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-        left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-        left:SetWidth(edge)
-        right:ClearAllPoints()
-        right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-        right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-        right:SetWidth(edge)
-        bottom:Show()
-        left:Show()
-        right:Show()
-    end
-    host:Show()
+    PreviewHelpers.LayoutPowerBorderEdges(host, edge, roundedPower)
 end
 local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDetached, powerEdgeSize)
     if not mock then return false end

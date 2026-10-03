@@ -2,6 +2,10 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_ExternalMovement.lua"
 local EM2 = _G.MSUF_EM2
 local External = EM2 and EM2.ExternalProviders
 local Controller = External and External.Controller
@@ -313,8 +317,8 @@ end
 function Controller:ClearPosition(externalKey, cfg, key)
     local binding = self.externalBindings[externalKey]
     local category, historyKey = self:HistoryIdentity(binding)
-    if self:IsGroupConfig(cfg) and type(_G.MSUF_GF_EM2_ResetPosition) == "function" then
-        self:BridgeUndoCall(_G.MSUF_GF_EM2_ResetPosition, tostring(key):gsub("^gf_", ""))
+    if self:IsGroupConfig(cfg) then
+        self:BridgeUndoCall(MSUF.Require("MSUF_GF_EM2_ResetPosition", CALLER), tostring(key):gsub("^gf_", ""))
         self.sessionDirty = true
         self:SyncProxy(externalKey, cfg, true)
         return
@@ -546,9 +550,7 @@ function Controller:SyncCastbarMover(unit)
     if not CASTBAR_FIELDS[unit] or InCombat() then return false end
     local api = self:GetAPI()
     if not (api and self:IsEnabled() and self.spec.IsModeActive(api)) then return false end
-    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then
-        _G.MSUF_PositionCastbarPreviewUnit(unit)
-    end
+    MSUF.Require("MSUF_PositionCastbarPreviewUnit", CALLER)(unit)
     local externalKey = self:ExternalKey("castbar_" .. unit)
     local binding = self.externalBindings[externalKey]
     local sourceMissing = false

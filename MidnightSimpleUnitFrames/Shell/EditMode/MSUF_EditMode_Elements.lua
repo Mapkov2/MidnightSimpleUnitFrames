@@ -2,6 +2,10 @@
 --- Deferred to PLAYER_LOGIN so unit frames exist.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Elements.lua"
 local ExportPublic = MSUF.ExportPublic
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -148,7 +152,7 @@ local function GetBossCastbarSupplementalMoverBounds()
 end
 
 local function GetCastbarConf()
-    if type(_G.MSUF_EnsureDB) == "function" then _G.MSUF_EnsureDB() end
+    MSUF.Require("MSUF_EnsureDB", CALLER)()
     local db = _G.MSUF_DB
     if type(db) ~= "table" then
         ExportPublic("MSUF_DB", {})

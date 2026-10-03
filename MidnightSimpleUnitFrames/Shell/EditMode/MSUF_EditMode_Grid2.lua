@@ -208,7 +208,10 @@ end
 
 local function RestoreAfterScale()
     scaleQueued = false
-    if not scalePending or not active or not Enabled() then scalePending = false; return end
+    if not scalePending or not active or not Enabled() then
+        scalePending = false
+        return
+    end
     if InCombat() then
         if eventFrame then eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
         return

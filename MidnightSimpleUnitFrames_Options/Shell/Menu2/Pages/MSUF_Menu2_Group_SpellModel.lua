@@ -251,6 +251,28 @@ local function SpellAuraValues(kind)
     if #values == 0 then values[1] = { value = "", text = "No spells for current spec", disabled = true } end
     return values
 end
+-- The aura picker's choices (SpellAuraValues) without building its list:
+-- whether wanted is one of them, and the first one (nil when there is none).
+-- The preview asks for the current aura several times per repaint.
+local function ScanSpellAuras(kind, specKey, wanted)
+    local gf = GF()
+    local si = gf and gf.SpellIndicators
+    local trackable = specKey and si and si.TrackableAuras and si.TrackableAuras[specKey]
+    local siCfg = SpellIndicators(kind)
+    local specCfg = type(siCfg.specs) == "table" and specKey and siCfg.specs[specKey] or nil
+    local first
+    if type(trackable) == "table" then
+        for i = 1, #trackable do
+            local info = trackable[i]
+            local key = info and info.name
+            if key and (info.custom ~= true or (type(specCfg) == "table" and specCfg[key] ~= nil)) then
+                if key == wanted then return true, first or key end
+                first = first or key
+            end
+        end
+    end
+    return false, first
+end
 local function SpellSelectionKey(kind, specKey)
     return tostring(kind or "") .. "\030" .. tostring(specKey or "")
 end
@@ -271,14 +293,13 @@ local function CurrentSpellAura(kind)
     local specKey = EffectiveSpellSpec(kind)
     local selected = specKey and M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] or nil
     if selected == nil and not specKey then selected = M.gfSpellIndicatorSelection[kind] end
-    local values = SpellAuraValues(kind)
-    for i = 1, #values do
-        if values[i].value == selected then
-            if specKey then M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] = selected end
-            return selected
-        end
+    -- An empty picker offers the single "" placeholder row.
+    local found, first = ScanSpellAuras(kind, specKey, selected)
+    if found or (first == nil and selected == "") then
+        if specKey then M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] = selected end
+        return selected
     end
-    selected = values[1] and values[1].value or ""
+    selected = first or ""
     if specKey then M.gfSpellIndicatorSelection[SpellSelectionKey(kind, specKey)] = selected end
     M.gfSpellIndicatorSelection[kind] = selected
     return selected

@@ -118,7 +118,10 @@ ScheduleDockAutoHide = function()
     if not (hudFrame and hudFrame:IsShown()) then return end
     if InCombatLockdown and InCombatLockdown() then return end
     local state = EnsureDockState()
-    if not state.autoHide then SetDockExpanded(true); return end
+    if not state.autoHide then
+        SetDockExpanded(true)
+        return
+    end
     C_Timer.After(0.45, function()
         if generation ~= autoHideGeneration then return end
         if not (hudFrame and hudFrame:IsShown()) then return end
@@ -395,7 +398,10 @@ local function EnsurePositionPopup()
             local state = EnsureDockState()
             state.dock = dock
             state.snapToEdge = true
-            if ApplyDockLayout then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
+            if ApplyDockLayout then
+                ApplyDockLayout()
+                DockUI.ScheduleLayoutSettle()
+            end
             if RefreshPositionPopup then RefreshPositionPopup() end
         end)
         button:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -18, -43 - (i - 1) * 30)
@@ -418,14 +424,20 @@ local function EnsurePositionPopup()
     local minus = MakeBtn(popup, "-", 28, 24, "body", function()
         local state = EnsureDockState()
         state.edgeOffset = ClampDockNumber(state.edgeOffset - 2, 0, 64, DOCK_EDGE_DEFAULT)
-        if ApplyDockLayout then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
+        if ApplyDockLayout then
+            ApplyDockLayout()
+            DockUI.ScheduleLayoutSettle()
+        end
         RefreshPositionPopup()
     end)
     minus:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -102, -243)
     local plus = MakeBtn(popup, "+", 28, 24, "body", function()
         local state = EnsureDockState()
         state.edgeOffset = ClampDockNumber(state.edgeOffset + 2, 0, 64, DOCK_EDGE_DEFAULT)
-        if ApplyDockLayout then ApplyDockLayout(); DockUI.ScheduleLayoutSettle() end
+        if ApplyDockLayout then
+            ApplyDockLayout()
+            DockUI.ScheduleLayoutSettle()
+        end
         RefreshPositionPopup()
     end)
     plus:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -18, -243)
@@ -434,7 +446,8 @@ local function EnsurePositionPopup()
     offsetValue:SetWidth(46)
     offsetValue:SetJustifyH("CENTER")
     popup._offsetValue = offsetValue
-    AttachDockHover(minus); AttachDockHover(plus)
+    AttachDockHover(minus)
+    AttachDockHover(plus)
 
     local dragHelp = MakeFS(popup, "micro", TH.mutedR, TH.mutedG, TH.mutedB, 0.76)
     dragHelp:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 18, 14)
@@ -464,7 +477,8 @@ local function EnsurePositionPopup()
         if button and button.SetActive then button:SetActive(false) end
         ScheduleDockAutoHide()
     end)
-    AttachDockHover(popup); AttachDockHover(monitor)
+    AttachDockHover(popup)
+    AttachDockHover(monitor)
     return popup
 end
 

@@ -68,6 +68,10 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     assert(menu.SupportsUnitPage("opt_castbar", "general.castbarShowPushback") == true, flavor .. " general castbar setting gate")
     local source = read(options .. "Shell/Menu2/Pages/MSUF_Menu2_Unit.lua")
     source = source:sub(1, assert(source:find("local POWER_UNITS", 1, true)) - 1)
+    -- The page requires its core collaborators at load (M.RequireGlobals).
+    local RequireFixture = assert(loadfile("tools/tests/require_fixture.lua"))()
+    RequireFixture.Install(".", ns, menu)
+    RequireFixture.StubRequirements(".", { options .. "Shell/Menu2/Pages/MSUF_Menu2_Unit.lua" })
     local pages = assert(loadstring(source .. "\nreturn UNIT_PAGES"))("Options", ns)
     assert((pages.uf_boss ~= nil) == boss, flavor .. " boss page registered")
     assert((pages.uf_arena ~= nil) == arena, flavor .. " arena page registered")

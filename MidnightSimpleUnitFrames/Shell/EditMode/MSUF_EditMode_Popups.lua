@@ -3,6 +3,10 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 -- Owns popup composition only; protected frame edits route through EditMode apply helpers.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Popups.lua"
 local ExportPublic = MSUF.ExportPublic
 
 local EM2 = _G.MSUF_EM2
@@ -147,15 +151,18 @@ function Popups.IsAnyOpen()
         or (EM2.UnitPopup and EM2.UnitPopup.IsOpen())
         or (EM2.CastPopup and EM2.CastPopup.IsOpen())
         or (EM2.AuraPopup and EM2.AuraPopup.IsOpen())
-        or (type(_G.MSUF_EM2_GFPopupIsOpen) == "function" and _G.MSUF_EM2_GFPopupIsOpen())
+        or MSUF.Require("MSUF_EM2_GFPopupIsOpen", CALLER)()
         or false
 end
 
---- MSUF_EM2_Popup_Unit.lua - v5
+--- Unit frame popup (EM2.UnitPopup).
 local floor = math.floor
 local max, min = math.max, math.min
 local function DB() return _G.MSUF_DB end
-local function Conf(k) local db=DB(); return db and db[k] end
+local function Conf(k)
+    local db=DB()
+    return db and db[k]
+end
 local CK = U.NormalizeUnitKey
 local UnitLabel = U.UnitLabel
 local UnitPageKey = U.UnitPageKey
@@ -211,35 +218,41 @@ local function ApplyPowerLayoutForUnitKey(key, detached)
     if ApplyService and type(ApplyService.ApplyPowerLayout) == "function" then
         return ApplyService.ApplyPowerLayout(key, detached == true, true)
     end
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
-        return _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true)
-    end
-    local frame = FrameForUnitKey(key) or (pf and pf.parent)
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout) == "function" and frame then
-        return _G.MSUF_ApplyPowerBarEmbedLayout(frame)
-    end
-    if type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
-        return _G.MSUF_ApplyPowerBarEmbedLayout_All()
-    end
-    return false
+    return MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", CALLER)(key, true)
 end
 
 local function Apply()
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit then return end
-    local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
+    local key=CK(pf.unit)
+    local conf=key and Conf(key)
+    if not conf then
+        return
+    end
     _G.MSUF_EM_UndoBeforeChange("unit", key)
     local frame = FrameForUnitKey(key) or pf.parent
     local currentX, currentY = San(conf.offsetX, 0), San(conf.offsetY, 0)
     local displayX = pf.xBox and tonumber(pf.xBox:GetText())
     local displayY = pf.yBox and tonumber(pf.yBox:GetText())
-    local w=pf.wBox and tonumber(pf.wBox:GetText()); if w then conf.width=floor(max(SizeBounds.minW,min(SizeBounds.maxW,w))+0.5) end
-    local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then conf.height=floor(max(SizeBounds.minH,min(SizeBounds.maxH,h))+0.5) end
+    local w=pf.wBox and tonumber(pf.wBox:GetText())
+    if w then
+        conf.width=floor(max(SizeBounds.minW,min(SizeBounds.maxW,w))+0.5)
+    end
+    local h=pf.hBox and tonumber(pf.hBox:GetText())
+    if h then
+        conf.height=floor(max(SizeBounds.minH,min(SizeBounds.maxH,h))+0.5)
+    end
     local sharedDetachedWidthSourceChanged = false
     if conf.powerBarDetached and CanDetachPower(key) then
         local manualDetachedWidthSelected = false
-        local dx=pf.dpbXBox and tonumber(pf.dpbXBox:GetText()); if dx then conf.detachedPowerBarOffsetX=San(dx,0) end
-        local dy=pf.dpbYBox and tonumber(pf.dpbYBox:GetText()); if dy then conf.detachedPowerBarOffsetY=San(dy,-4) end
+        local dx=pf.dpbXBox and tonumber(pf.dpbXBox:GetText())
+        if dx then
+            conf.detachedPowerBarOffsetX=San(dx,0)
+        end
+        local dy=pf.dpbYBox and tonumber(pf.dpbYBox:GetText())
+        if dy then
+            conf.detachedPowerBarOffsetY=San(dy,-4)
+        end
         local dw=pf.dpbWBox and tonumber(pf.dpbWBox:GetText())
         if dw then
             dw = floor(max(20,min(800,dw))+0.5)
@@ -257,8 +270,14 @@ local function Apply()
             end
             pf._msufDetachedWidthOriginal = dw
         end
-        local dh=pf.dpbHBox and tonumber(pf.dpbHBox:GetText()); if dh then conf.detachedPowerBarHeight=floor(max(2,min(80,dh))+0.5) end
-        local dl=pf.dpbLevelBox and tonumber(pf.dpbLevelBox:GetText()); if dl then conf.detachedPowerBarFrameLevelOffset=floor(max(0,min(30,dl))+0.5) end
+        local dh=pf.dpbHBox and tonumber(pf.dpbHBox:GetText())
+        if dh then
+            conf.detachedPowerBarHeight=floor(max(2,min(80,dh))+0.5)
+        end
+        local dl=pf.dpbLevelBox and tonumber(pf.dpbLevelBox:GetText())
+        if dl then
+            conf.detachedPowerBarFrameLevelOffset=floor(max(0,min(30,dl))+0.5)
+        end
         if pf.dpbTextBtn then conf.detachedPowerBarTextOnBar = pf.dpbTextBtn._checked and true or false end
         if key == "player" then
             if pf.dpbSyncBtn and not manualDetachedWidthSelected then
@@ -267,7 +286,7 @@ local function Apply()
             if pf.dpbAnchorBtn then conf.detachedPowerBarAnchorToClassPower = pf.dpbAnchorBtn._checked and true or false end
         end
     end
-    --- Direct SetSize: MarkDirty/UpdateSimpleUnitFrame only handles health/power/text,
+    --- Direct SetSize: UF.MarkDirty only refreshes health/power/text,
     --- not frame dimensions. Apply width/height immediately.
     if frame and conf.width and conf.height then
         frame:SetSize(conf.width, conf.height)
@@ -281,14 +300,17 @@ local function Apply()
     --- Full layout re-apply (power bar embed, text anchors, borders, etc.)
     if sharedDetachedWidthSourceChanged then
         ApplyAllSettingsSafe()
-        if type(_G.MSUF_EnsureCooldownWidthObservers) == "function" then _G.MSUF_EnsureCooldownWidthObservers() end
+        MSUF.Require("MSUF_EnsureCooldownWidthObservers", CALLER)()
     elseif not ApplySettingsForKeySafe(key) then
         ApplyAllSettingsSafe()
     end
-    if type(_G.MSUF_ForceTextLayoutForUnitKey)=="function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
+    MSUF.Require("MSUF_ForceTextLayoutForUnitKey", CALLER)(key)
     --- Clear PBEmbedLayout stamp so width/height changes are re-applied
     if frame then
-        local cs=_G.MSUF_NS and _G.MSUF_NS.Cache; if cs and cs.ClearStamp then cs.ClearStamp(frame, "PBEmbedLayout") end
+        local cs=_G.MSUF_NS and _G.MSUF_NS.Cache
+        if cs and cs.ClearStamp then
+            cs.ClearStamp(frame, "PBEmbedLayout")
+        end
     end
     ApplyPowerLayoutForUnitKey(key, conf.powerBarDetached == true and CanDetachPower(key))
     if pf._refreshVisibility then pf._refreshVisibility() end
@@ -300,14 +322,19 @@ end
 
 function Sync()
     if not pf or not pf.unit then return end
-    local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
+    local key=CK(pf.unit)
+    local conf=key and Conf(key)
+    if not conf then
+        return
+    end
     if pf._titleFS then pf._titleFS:SetText(Tr(UnitLabel(key)) .. " " .. Tr("Frame")) end
     local frame = FrameForUnitKey(key) or pf.parent
     local x, y, width, height
     if type(FramePositionValues) == "function" then
         x, y, width, height = FramePositionValues(frame)
     end
-    Quick.SetBoxText(pf.xBox,x ~= nil and x or San(conf.offsetX,0)); Quick.SetBoxText(pf.yBox,y ~= nil and y or San(conf.offsetY,0))
+    Quick.SetBoxText(pf.xBox,x ~= nil and x or San(conf.offsetX,0))
+    Quick.SetBoxText(pf.yBox,y ~= nil and y or San(conf.offsetY,0))
     Quick.SetBoxText(pf.wBox,conf.width or width or (frame and frame:GetWidth()) or 250)
     Quick.SetBoxText(pf.hBox,conf.height or height or (frame and frame:GetHeight()) or 40)
     if pf.detachBtn and pf.detachBtn.SetCheckedVisual then
@@ -359,9 +386,7 @@ function Sync()
 end
 
 local function SetHUDStatus(text, kind)
-    if type(_G.MSUF_EM2_SetHUDStatus) == "function" then
-        _G.MSUF_EM2_SetHUDStatus(Tr(text), kind)
-    end
+    MSUF.Require("MSUF_EM2_SetHUDStatus", CALLER)(Tr(text), kind)
 end
 
 local function ApplyMenu2UnitSelection(component, slot)
@@ -446,8 +471,7 @@ local function ResetPosition()
     local conf = key and Conf(key)
     if not conf then return end
     _G.MSUF_EM_UndoBeforeChange("unit", key)
-    local dx, dy = 0, 0
-    if type(_G.MSUF_GetDefaultUnitOffsets) == "function" then dx, dy = _G.MSUF_GetDefaultUnitOffsets(key) end
+    local dx, dy = MSUF.Require("MSUF_GetDefaultUnitOffsets", CALLER)(key)
     conf.offsetX, conf.offsetY = dx, dy
     if not ApplySettingsForKeySafe(key) then ApplyAllSettingsSafe() end
     if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP_RESETPOS") end
@@ -472,7 +496,10 @@ local function CopySizeTo(targetKey)
     if not src or targetKey == srcKey then return end
     _G.MSUF_EM_UndoBeforeChange("unit", targetKey)
     local dst = db[targetKey]
-    if not dst then db[targetKey] = {}; dst = db[targetKey] end
+    if not dst then
+        db[targetKey] = {}
+        dst = db[targetKey]
+    end
     if src.width ~= nil then dst.width = floor(max(SizeBounds.minW, min(SizeBounds.maxW, tonumber(src.width) or 250)) + 0.5) end
     if src.height ~= nil then dst.height = floor(max(SizeBounds.minH, min(SizeBounds.maxH, tonumber(src.height) or 40)) + 0.5) end
     local applied = ApplySettingsForKeySafe(targetKey)
@@ -641,7 +668,8 @@ local function Build()
     return pf
 end
 
-local UnitPopup = {}; EM2.UnitPopup = UnitPopup
+local UnitPopup = {}
+EM2.UnitPopup = UnitPopup
 function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); if pf._lockRatio then Quick.CaptureSizeRatio(pf) end; pf:Show(); if Menu2Style.FadeIn then Menu2Style.FadeIn(pf, 0.12, 0.86, 1) end; return true end
 function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
@@ -670,7 +698,10 @@ function ResourcePopup.Sync()
     local cfg, conf = ResourceConfig()
     if not (cfg and conf) then return end
     local frame = cfg.getFrame and cfg.getFrame()
-    if not frame then ResourcePopup.Close(); return end
+    if not frame then
+        ResourcePopup.Close()
+        return
+    end
     resourceFrame._titleFS:SetText(cfg.resourceKind == "classpower" and Tr("Class Resources")
         or (U.ElementLabel and U.ElementLabel(resourceFrame.resourceKey, cfg)) or Tr("Detached power bar"))
     Quick.SetBoxText(resourceFrame.xBox, conf[cfg.subframeOffsetXKey] or 0)
@@ -701,7 +732,10 @@ local function ApplyResource()
     local widthKey = kind == "classpower" and "classPowerWidth" or "detachedPowerBarWidth"
     local heightKey = kind == "classpower" and "classPowerHeight" or "detachedPowerBarHeight"
     local frame = cfg.getFrame and cfg.getFrame()
-    if not frame then ResourcePopup.Close(); return end
+    if not frame then
+        ResourcePopup.Close()
+        return
+    end
     local oldWidth = frame and floor(frame:GetWidth() + 0.5) or tonumber(conf[widthKey]) or 0
     local oldHeight = tonumber(conf[heightKey]) or (kind == "classpower" and 4 or 6)
     local width = ResourceValue(resourceFrame.wBox:GetText(), oldWidth, kind == "classpower" and 30 or 20, 800)

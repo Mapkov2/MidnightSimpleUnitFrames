@@ -97,6 +97,10 @@ local function LoadPages(client)
             UnitSectionsShared = {},
         },
     }
+    -- The page requires its core collaborators at load (M.RequireGlobals).
+    local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+    RequireFixture.Install(root, ns)
+    RequireFixture.StubRequirements(root, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Unit.lua" })
     assert(loadfile(MENU .. "MSUF_Menu2_Support.lua"))("MidnightSimpleUnitFrames_Options", ns)
     local M = ns.MSUF2
     local db = { general = {} }

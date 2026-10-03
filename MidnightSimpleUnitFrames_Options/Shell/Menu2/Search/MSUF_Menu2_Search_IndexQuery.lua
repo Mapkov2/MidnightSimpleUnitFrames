@@ -156,11 +156,18 @@ local function EnsureSearchLexicon()
         local folded = NormalizeSearchText(key)
         if folded ~= "" then
             local terms = aliases[folded]
-            if not terms then terms = {}; aliases[folded] = terms; seenByKey[folded] = {} end
+            if not terms then
+                terms = {}
+                aliases[folded] = terms
+                seenByKey[folded] = {}
+            end
             local seen, source = seenByKey[folded], sourceAliases[key]
             for _, term in ipairs(source) do
                 term = NormalizeSearchText(term)
-                if term ~= "" and not seen[term] then terms[#terms + 1] = term; seen[term] = true end
+                if term ~= "" and not seen[term] then
+                    terms[#terms + 1] = term
+                    seen[term] = true
+                end
             end
         end
     end
@@ -174,7 +181,10 @@ local function EnsureSearchLexicon()
             local words = {}
             for word in folded:gmatch("%S+") do words[#words + 1] = word end
             local bucket = multiWord[words[1]]
-            if not bucket then bucket = {}; multiWord[words[1]] = bucket end
+            if not bucket then
+                bucket = {}
+                multiWord[words[1]] = bucket
+            end
             bucket[#bucket + 1] = { key = folded, words = words }
         end
     end
@@ -302,7 +312,10 @@ local function CompactQueryKeys()
         else
             local lead = key:sub(1, leadLength)
             local bucket = byLead[lead]
-            if not bucket then bucket = {}; byLead[lead] = bucket end
+            if not bucket then
+                bucket = {}
+                byLead[lead] = bucket
+            end
             bucket[#bucket + 1] = key
         end
     end
@@ -315,7 +328,10 @@ local function CompactKeyAt(compact, word, index)
     if bucket then
         for k = 1, #bucket do
             local key = bucket[k]
-            if word:sub(index, index + #key - 1) == key then found = key; break end
+            if word:sub(index, index + #key - 1) == key then
+                found = key
+                break
+            end
         end
     end
     local short = compact.short
@@ -347,7 +363,10 @@ local function SearchRawWords(normalized, allowSoftStop)
             local candidate = bucket[b].words
             local matched = true
             for k = 2, #candidate do
-                if words[position + k - 1] ~= candidate[k] then matched = false; break end
+                if words[position + k - 1] ~= candidate[k] then
+                    matched = false
+                    break
+                end
             end
             if matched then
                 word = bucket[b].key
@@ -493,7 +512,10 @@ local function SearchAliasKeyForTypo(word)
         end
     end
     SEARCH_STATE.aliasTypoCount = (SEARCH_STATE.aliasTypoCount or 0) + 1
-    if SEARCH_STATE.aliasTypoCount > 128 then SEARCH_STATE.aliasTypoCache = {}; SEARCH_STATE.aliasTypoCount = 1 end
+    if SEARCH_STATE.aliasTypoCount > 128 then
+        SEARCH_STATE.aliasTypoCache = {}
+        SEARCH_STATE.aliasTypoCount = 1
+    end
     SEARCH_STATE.aliasTypoCache[word] = bestKey or false
     return bestKey
 end
@@ -2289,7 +2311,10 @@ function SearchPages(query)
     return CurateSearchResults(results, supportQuestion and not genericLocationQuestion)
 end
 
-SetSearchResults = function(results, query) M.searchResults = results or {}; M.searchResultsQuery = query or "" end
+SetSearchResults = function(results, query)
+    M.searchResults = results or {}
+    M.searchResultsQuery = query or ""
+end
 
 local function ShowSearchPageForQuery(query)
     query = TrimText(query)
@@ -2304,7 +2329,10 @@ local function ShowSearchPageForQuery(query)
 end
 
 local function RunSearchInputQuery(query, openPage)
-    if SearchCombatLocked() or SearchMenuClosed() then CancelSearchBackgroundIndex(); return end
+    if SearchCombatLocked() or SearchMenuClosed() then
+        CancelSearchBackgroundIndex()
+        return
+    end
     query = TrimText(query)
     M.searchQuery = query
     M.searchResultsPending = nil
@@ -2326,7 +2354,10 @@ local function RunSearchInputQuery(query, openPage)
 end
 
 local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
-    if SearchCombatLocked() or SearchMenuClosed() then CancelSearchBackgroundIndex(); return end
+    if SearchCombatLocked() or SearchMenuClosed() then
+        CancelSearchBackgroundIndex()
+        return
+    end
     query = TrimText(query)
     openPage = openPage == true
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1

@@ -2,6 +2,13 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GlobalFonts.lua", {
+    "MSUF_GetClassBarColor",
+    "MSUF_GetNPCReactionColor",
+    "MSUF_NormalizeStoredFontKeys",
+})
 local C_Timer = M.MenuTimer or _G.C_Timer
 
 -- Menu2 global Fonts page.
@@ -170,7 +177,7 @@ local function PlayerClassColorPreview()
         classToken = token
     end
     classToken = classToken or "WARRIOR"
-    if type(_G.MSUF_GetClassBarColor) == "function" then
+    do
         local r, g, b = _G.MSUF_GetClassBarColor(classToken)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
@@ -192,7 +199,7 @@ local function NPCReactionColorPreview()
             end
         end
     end
-    if type(_G.MSUF_GetNPCReactionColor) == "function" then
+    do
         local r, g, b = _G.MSUF_GetNPCReactionColor(kind)
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
@@ -424,7 +431,8 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
         end
         local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -194,
             function()
-                if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
+                if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0))
+                    or 0) > 0) and true or false end
                 return SharedNameShorteningEnabled()
             end,
             function(v)
@@ -557,7 +565,8 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
                 FontScopeSet("shortenNameShowDots", not (v and true or false), "MSUF2_SHORTEN_DOTS")
                 ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
             end)
-        shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis, controls.scopeNotice; nameShorteningControls = { side, chars }
+        shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis, controls.scopeNotice
+        nameShorteningControls = { side, chars }
         if fontScopeReason and W.SetControlsDisabledReason then
             local shortenReason = W.TurnOnReason(nameScope == "shared" and "Shorten names" or "Shorten unit names", NameShorteningEnabled)
             W.SetControlsDisabledReason({ shorten, noEllipsis }, fontScopeReason)
@@ -689,7 +698,7 @@ local function BuildFonts(ctx)
         function() return FontKeyGet() end,
         function(v)
             FontKeySet(v)
-            if type(_G.MSUF_NormalizeStoredFontKeys) == "function" then _G.MSUF_NormalizeStoredFontKeys() end
+            _G.MSUF_NormalizeStoredFontKeys()
             ApplyFonts("MSUF2_FONT_KEY")
             RefreshFontPreview()
         end,
@@ -813,7 +822,8 @@ local function BuildFonts(ctx)
             nil,
             path)
     end
-    local function BuildNameShorteningControls(parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide, getChars, setChars, getNoEllipsis, setNoEllipsis, formatChars)
+    local function BuildNameShorteningControls(parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide, getChars, setChars,
+        getNoEllipsis, setNoEllipsis, formatChars)
         local controls = {}
         controls.shorten = W.Toggle(parent, label)
         M.BindBoolWidget(ctx, controls.shorten, getEnabled, setEnabled, Meta("name_shortening.enabled"))
@@ -835,8 +845,10 @@ local function BuildFonts(ctx)
         if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
         if controls.scopeNotice.SetHeight then controls.scopeNotice:SetHeight(44) end
         if M.AddControlTooltip then
-            M.AddControlTooltip(controls.side, "Truncation style", "Chooses which side of a long name is cut. Keep end drops the front, which helps when many names start the same way.", { hook = true })
-            M.AddControlTooltip(controls.chars, "Max name length", "About how many letters of a name stay visible before it is cut. Names with wide letters may show a little less.", { hook = true })
+            M.AddControlTooltip(controls.side, "Truncation style",
+                "Chooses which side of a long name is cut. Keep end drops the front, which helps when many names start the same way.", { hook = true })
+            M.AddControlTooltip(controls.chars, "Max name length",
+                "About how many letters of a name stay visible before it is cut. Names with wide letters may show a little less.", { hook = true })
             M.AddControlTooltip(controls.noEllipsis, "No Ellipsis (truncate without ..)", "Shortened names end at the cut without the .. marker. Only names that are actually too long are affected.", { hook = true, labelHit = true })
         end
         return controls
@@ -857,12 +869,18 @@ local function BuildFonts(ctx)
     local scopedFontControls = { outline, rendering, shadow, shadowOpacity, shadowDistance, opacity, baseline, nameColor, healthColor, powerColor }
     if M.AddControlTooltip then
         local tip = { hook = true }
-        M.AddControlTooltip(outline, "Outline", "Draws a dark edge around each letter for readability. Thick Outline helps on bright or busy bars; Slug rendering allows only None or Outline.", tip)
-        M.AddControlTooltip(shadow, "Text shadow", "Adds a black drop shadow below and to the right of the text so it stands out from the bar. Unavailable while Slug rendering is active.", tip)
-        M.AddControlTooltip(baseline, "Baseline", "Shifts name, health and power text up (+) or down (-) by up to 4 px on top of their own offsets. Handy when a font sits too high or low.", tip)
-        M.AddControlTooltip(nameColor, "Player Name Color", "Class Color tints player character names only; NPC names follow NPC / Boss Name Color. Custom Color gives every name one color.", tip)
+        M.AddControlTooltip(outline, "Outline",
+            "Draws a dark edge around each letter for readability. Thick Outline helps on bright or busy bars; Slug rendering allows only None or Outline.",
+            tip)
+        M.AddControlTooltip(shadow, "Text shadow",
+            "Adds a black drop shadow below and to the right of the text so it stands out from the bar. Unavailable while Slug rendering is active.", tip)
+        M.AddControlTooltip(baseline, "Baseline",
+            "Shifts name, health and power text up (+) or down (-) by up to 4 px on top of their own offsets. Handy when a font sits too high or low.", tip)
+        M.AddControlTooltip(nameColor, "Player Name Color",
+            "Class Color tints player character names only; NPC names follow NPC / Boss Name Color. Custom Color gives every name one color.", tip)
         M.AddControlTooltip(npcColor, "NPC / Boss Name Color", "Colors names of non-player units. NPC / Reaction uses hostile, neutral and friendly colors; Class Color uses the NPC's class and falls back to reaction.", tip)
-        M.AddControlTooltip(healthColor, "HP Text Color", "Health Gradient colors the health text by current health, using the health bar's gradient colors. Class Color uses the unit's class color.", tip)
+        M.AddControlTooltip(healthColor, "HP Text Color",
+            "Health Gradient colors the health text by current health, using the health bar's gradient colors. Class Color uses the unit's class color.", tip)
     end
     -- Hover reasons: a scope without its own settings locks this page; the
     -- shadow sliders also wait for Text shadow (Slug is explained on hover).

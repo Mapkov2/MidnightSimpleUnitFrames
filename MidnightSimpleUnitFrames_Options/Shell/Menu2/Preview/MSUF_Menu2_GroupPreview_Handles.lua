@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Handles = M.GroupPreviewHandles or {}
 M.GroupPreviewHandles = Handles
-local F = M.Fallbacks or {}
+local Fallbacks = M.Fallbacks or {}
 local HANDLE_CLICK_DRAG_THRESHOLD = 3
 local HANDLE_LABEL_HIT_HEIGHT = 14
 local function ResolveTextDragPixelDelta(round, current, startValue, scale, endpointBias)
@@ -23,9 +23,9 @@ local function FallbackHandleText(handle)
     return handle and (handle._previewText or handle._key) or "Handle"
 end
 local HANDLE_FALLBACKS = {
-    TR = F.Identity, Round = F.Round, ResolveAnchor = F.Center, PointOffset = F.ZeroPair, HandleOffset = F.ZeroPair, OffsetToConfig = F.Round,
-    CurrentStatusSpec = F.Nil, CurrentSpellConfig = F.Nil, CurrentSpellPlaced = F.Nil, HandleText = FallbackHandleText, HandleOffsets = F.Nil,
-    UpdateHint = F.Noop, RefreshHandleSelection = F.Noop, StatusLabel = F.Status, StartPan = F.False, StopPan = F.Noop, ZoomWheel = F.Noop,
+    TR = Fallbacks.Identity, Round = Fallbacks.Round, ResolveAnchor = Fallbacks.Center, PointOffset = Fallbacks.ZeroPair, HandleOffset = Fallbacks.ZeroPair, OffsetToConfig = Fallbacks.Round,
+    CurrentStatusSpec = Fallbacks.Nil, CurrentSpellConfig = Fallbacks.Nil, CurrentSpellPlaced = Fallbacks.Nil, HandleText = FallbackHandleText, HandleOffsets = Fallbacks.Nil,
+    UpdateHint = Fallbacks.Noop, RefreshHandleSelection = Fallbacks.Noop, StatusLabel = Fallbacks.Status, StartPan = Fallbacks.False, StopPan = Fallbacks.Noop, ZoomWheel = Fallbacks.Noop,
 }
 local SPELL_DROP_ANCHOR_FRAC = {
     TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 },
@@ -409,7 +409,8 @@ function Stage.BindTextDrag(st)
         end
         if handle._dragPoint then
             handle:ClearAllPoints()
-            handle:SetPoint(handle._dragPoint, handle._dragRelTo or box._mock, handle._dragRelPoint or handle._dragPoint, (handle._dragStartX or 0) + dx, (handle._dragStartY or 0) + dy)
+            handle:SetPoint(handle._dragPoint, handle._dragRelTo or box._mock, handle._dragRelPoint or handle._dragPoint, (handle._dragStartX or 0) + dx,
+                (handle._dragStartY or 0) + dy)
             moved = true
         end
         return moved
@@ -459,7 +460,10 @@ function Stage.BindPositionWriters(st)
             if not conf then return end
             conf.dispelSymbolX = OffsetToConfig(offX or 0, scale)
             conf.dispelSymbolY = OffsetToConfig(offY or 0, scale)
-            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
+            if not previewOnly then
+                RefreshGroupPreviewAfterMove(handle)
+                CheckpointHandleHistory(handle, action)
+            end
             return true
         end
         if handle._cfgPortrait then
@@ -471,7 +475,10 @@ function Stage.BindPositionWriters(st)
             if not conf then return end
             conf.portraitOffsetX = OffsetToConfig(offX or 0, scale)
             conf.portraitOffsetY = OffsetToConfig(offY or 0, scale)
-            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
+            if not previewOnly then
+                RefreshGroupPreviewAfterMove(handle)
+                CheckpointHandleHistory(handle, action)
+            end
             return true
         end
         if handle._cfgPower then
@@ -483,7 +490,10 @@ function Stage.BindPositionWriters(st)
             if not conf then return end
             conf.detachedPowerBarOffsetX = OffsetToConfig(offX or 0, scale)
             conf.detachedPowerBarOffsetY = OffsetToConfig(offY or 0, scale)
-            if not previewOnly then RefreshGroupPreviewAfterMove(handle); CheckpointHandleHistory(handle, action) end
+            if not previewOnly then
+                RefreshGroupPreviewAfterMove(handle)
+                CheckpointHandleHistory(handle, action)
+            end
             return true
         end
         local m = box._mock
@@ -916,6 +926,23 @@ function Stage.BindDrag(st)
     st.StartHandleDrag, st.StopHandleDrag = StartHandleDrag, StopHandleDrag
 end
 
+-- Runtime AuraButtons keep the duration bar, cooldown swipe and text on
+-- separate child frames inside the selected universal Layer slot.  The
+-- preview used to create every region directly on the handle, which
+-- made all of them inherit the icon's base level and let overlapping
+-- text lie about the real runtime ordering.
+local function EnsureIconDetailLayer(handle, key)
+    local layer = handle[key]
+    if not layer then
+        layer = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
+        layer:SetAllPoints(handle)
+        layer:EnableMouse(false)
+        if layer.SetMouseMotionEnabled then layer:SetMouseMotionEnabled(false) end
+        handle[key] = layer
+    end
+    return layer
+end
+
 --- Handle factory: the preview handle button (scripts, tooltip, quick actions,
 --- control registration) and its pooled aura icon regions.
 function Stage.BindHandleFactory(st)
@@ -1061,25 +1088,9 @@ function Stage.BindHandleFactory(st)
         handle._iconStacks = handle._iconStacks or {}
         handle._iconTimers = handle._iconTimers or {}
         handle._iconDurationBars = handle._iconDurationBars or {}
-        -- Runtime AuraButtons keep the duration bar, cooldown swipe and text on
-        -- separate child frames inside the selected universal Layer slot.  The
-        -- preview used to create every region directly on the handle, which
-        -- made all of them inherit the icon's base level and let overlapping
-        -- text lie about the real runtime ordering.
-        local function EnsureDetailLayer(key)
-            local layer = handle[key]
-            if not layer then
-                layer = PixelLayoutRegion(CreateFrame("Frame", nil, handle))
-                layer:SetAllPoints(handle)
-                layer:EnableMouse(false)
-                if layer.SetMouseMotionEnabled then layer:SetMouseMotionEnabled(false) end
-                handle[key] = layer
-            end
-            return layer
-        end
-        local durationLayer = EnsureDetailLayer("_iconDurationLayer")
-        local swipeLayer = EnsureDetailLayer("_iconSwipeLayer")
-        local textLayer = EnsureDetailLayer("_iconTextLayer")
+        local durationLayer = EnsureIconDetailLayer(handle, "_iconDurationLayer")
+        local swipeLayer = EnsureIconDetailLayer(handle, "_iconSwipeLayer")
+        local textLayer = EnsureIconDetailLayer(handle, "_iconTextLayer")
         for i = 1, count do
             local tex = handle._icons[i] or PixelLayoutRegion(handle:CreateTexture(nil, "ARTWORK"))
             tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -1194,7 +1205,8 @@ function Stage.CreateLayerHandles(st)
         local handle = spellIndicatorHandles[key]
         if not handle then
             local c = item.color or { 0.69, 0.50, 0.88 }
-            handle = CreatePreviewHandle(key, "si", { c[1] or 0.69, c[2] or 0.50, c[3] or 0.88 }, tostring(item.display or item.auraName or "SPELL"):upper(), 44, 44, false)
+            handle = CreatePreviewHandle(key, "si", { c[1] or 0.69, c[2] or 0.50, c[3] or 0.88 },
+                tostring(item.display or item.auraName or "SPELL"):upper(), 44, 44, false)
             handle._cfgSpell = true
             handle._sectionKey = "si"
             AddIconPool(handle, 1)

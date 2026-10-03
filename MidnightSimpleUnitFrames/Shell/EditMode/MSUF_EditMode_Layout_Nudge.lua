@@ -3,6 +3,10 @@
 --- 1/5/10 px or one grid step through override bindings on secure buttons.
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local _, MSUF = ...
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua"
 local ExportPublic = (MSUF or _G.MSUF_NS or {}).ExportPublic
 
 local EM2 = _G.MSUF_EM2
@@ -112,12 +116,7 @@ local function CallCastbarNudgeSync(fn, ...)
 end
 
 local function SyncCastbarNudge(unit)
-    local ok = CallCastbarNudgeSync(_G.MSUF_SyncCastbarPositionPopup, unit)
-    if type(_G.MSUF_SyncCastbarPositionPopup) ~= "function" and EM2.CastPopup and EM2.CastPopup.IsOpen then
-        local popupOpen = EM2.CastPopup.IsOpen()
-        ok = ok
-        if popupOpen then ok = CallCastbarNudgeSync(EM2.CastPopup.Sync) and ok end
-    end
+    local ok = CallCastbarNudgeSync(MSUF.Require("MSUF_SyncCastbarPositionPopup", CALLER), unit)
     if EM2.Movers then ok = CallCastbarNudgeSync(EM2.Movers.SyncAll) and ok end
     if EM2.Focus then ok = CallCastbarNudgeSync(EM2.Focus.NotifyPositionChanged, "castbar_" .. unit, true) and ok end
     ok = CallCastbarNudgeSync(RefreshUFPreview, "EM2_CASTBAR_NUDGE", unit) and ok
@@ -272,7 +271,10 @@ local function NudgeTarget(dx, dy, exactDelta)
     local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
     local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
     local a2PopupOpen = false
-    do local ap = _G.MSUF_EM2_AuraPopup; a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false end
+    do
+        local ap = _G.MSUF_EM2_AuraPopup
+        a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false
+    end
     if auraGroup and (auraPopupOpen or a2PopupOpen) then
         local unitKey = _G.MSUF_EM2_ActiveAuraUnit
         if not unitKey then
@@ -359,9 +361,9 @@ local function NudgeTarget(dx, dy, exactDelta)
                 if auraPopupOpen and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
                 local syncFn = _G.MSUF_SyncAuras3PositionPopup
                 if type(syncFn) == "function" then syncFn(unitKey) end
-                if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-                    _G.MSUF_UFPreview_RequestRefresh("AURAS3_EDITMODE_NUDGE")
-                end
+                -- The unit preview belongs to the load-on-demand menu.
+                local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+                if refreshPreview then refreshPreview("AURAS3_EDITMODE_NUDGE") end
             end
         end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
@@ -374,8 +376,7 @@ local function NudgeTarget(dx, dy, exactDelta)
 
     local key = EM2.State.GetUnitKey() or "player"
     if (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority")
-        and type(_G.MSUF_GF_EM2_NudgePreview) == "function"
-        and _G.MSUF_GF_EM2_NudgePreview(key, ndx, ndy)
+        and MSUF.Require("MSUF_GF_EM2_NudgePreview", CALLER)(key, ndx, ndy)
     then
         if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
         return true

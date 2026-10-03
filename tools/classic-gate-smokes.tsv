@@ -380,3 +380,7 @@ clients+Forever	lua	tools/tests/host_api_client_boot_smoke.lua	{root/} {flavor}	
 -	lua	tools/tests/castbar_login_profile_smoke.lua	{root}	Castbar lifecycles read no profile at file load and follow the saved one at login
 -	lua	tools/tests/prediction_anchor_mode_smoke.lua	{root}	Prediction overlay anchor modes drifted from the numbers profiles saved
 -	lua	tools/tests/group_db_aura_filter_repair_smoke.lua	{root}	Group DB aura filter repair of old profiles changed or reads the retired default categories
+clients+Forever	lua	tools/tests/castbar_preview_time_offset_smoke.lua	{root} {flavor}	Castbar preview time offsets drifted from the live bar: {flavor}
+-	lua	tools/tests/menu_required_owners_smoke.lua	{root}	A menu or Edit Mode owner is guarded or falls back instead of being required
+clients+Forever	lua	tools/tests/group_preview_repaint_budget_smoke.lua	{root} {flavor}	Group preview repaint allocates or calls more than its budget: {flavor}
+clients+Forever	lua	tools/tests/preview_status_text_locale_smoke.lua	{root} {flavor}	Menu previews paint an English status word on a German client: {flavor}

@@ -3,6 +3,12 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_AdvancedColors.lua", {
+    "MSUF_GetBarTexture",
+    "MSUF_GetBarBackgroundTexture",
+})
 local EnsureDB = M.EnsureDB
 
 -- Advanced Colors page.
@@ -391,10 +397,8 @@ function M.RefreshHealthBackgroundInlinePreview(preview)
     end
     backgroundAlpha = max(0, min(1, backgroundAlpha)) * max(0, min(1, tonumber(tintAlpha) or 1))
     local foregroundAlpha = max(0, min(1, tonumber(player.hpBarAlpha) or 1))
-    local foregroundTexture = type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()
-        or "Interface\\Buttons\\WHITE8X8"
-    local backgroundTexture = type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()
-        or foregroundTexture
+    local foregroundTexture = _G.MSUF_GetBarTexture() or "Interface\\Buttons\\WHITE8X8"
+    local backgroundTexture = _G.MSUF_GetBarBackgroundTexture() or foregroundTexture
 
     if bar.SetMinMaxValues then bar:SetMinMaxValues(0, 1) end
     if bar.SetValue then bar:SetValue(pct) end
@@ -671,17 +675,20 @@ local function TableColorAt(ctx, section, label, x, y, getTable, key, dr, dg, db
 end
 local function BuildApiColorSpecs(ctx, section, specs, apply)
     return M.BuildControlSpecs(specs, {
-        ["*"] = function(s, i) return ApiColorAt(ctx, section, s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9] or apply, s[10], s[11]), s[12] or s[5] or i end,
+        ["*"] = function(s, i) return ApiColorAt(ctx, section, s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9] or apply, s[10],
+            s[11]), s[12] or s[5] or i end,
     })
 end
 local function BuildTableColorSpecs(ctx, section, getTable, specs, apply)
     return M.BuildControlSpecs(specs, {
-        ["*"] = function(s, i) return TableColorAt(ctx, section, s[1], s[2], s[3], getTable, s[4], s[5], s[6], s[7], s[8] or apply, s[9]), s[10] or s[4] or i end,
+        ["*"] = function(s, i) return TableColorAt(ctx, section, s[1], s[2], s[3], getTable, s[4], s[5], s[6], s[7], s[8] or apply,
+            s[9]), s[10] or s[4] or i end,
     })
 end
 local function BuildApiOrGeneralColorSpecs(ctx, section, specs, apply)
     return M.BuildControlSpecs(specs, {
-        ["*"] = function(s, i) return ApiOrGeneralColorAt(ctx, section, s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10] or apply, s[11]), s[12] or s[6] or i end,
+        ["*"] = function(s, i) return ApiOrGeneralColorAt(ctx, section, s[1], s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10] or apply,
+            s[11]), s[12] or s[6] or i end,
     })
 end
 local function ButtonAt(parent, label, x, y, width, onClick, semanticPath)
@@ -1189,7 +1196,10 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
         local db = DB()
         local key = StatusTextUnit()
         local conf = db[key]
-        if type(conf) ~= "table" then conf = {}; db[key] = conf end
+        if type(conf) ~= "table" then
+            conf = {}
+            db[key] = conf
+        end
         return conf
     end
     local function ApplyStatusTextColors()
@@ -1382,8 +1392,10 @@ end
 local function BuildBackgroundAndAppearance(ctx, b, CH, part)
     if part ~= "appearance" then
     local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 332, false)
-    LabelAt(background, "Fill and color mode affect only the health background; foreground health coloring stays independent.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
-    LabelAt(background, "Texture comes from Bars; preview uses Player background opacity multiplied by tint opacity.", 12, -24, 660, "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(background, "Fill and color mode affect only the health background; foreground health coloring stays independent.", 12, -8, 660,
+        "GameFontHighlightSmall", T.colors.muted)
+    LabelAt(background, "Texture comes from Bars; preview uses Player background opacity multiplied by tint opacity.", 12, -24, 660,
+        "GameFontHighlightSmall", T.colors.muted)
     local refreshBackgroundPreview
     local function SetBackgroundFill(value)
         M.ColorsBackgroundMode.SetFill(value)
@@ -1531,7 +1543,8 @@ local function BuildBackgroundAndAppearance(ctx, b, CH, part)
             ApplyUnitframeColorWithReload()
         end,
         Meta("appearance.dark_mode_tone"))
-    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45, ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
+    local gradientStrength = SliderAt(ctx, appearance, "Gradient strength", 360, -94, 0, 1, 0.05, 250, G, "gradientStrength", 0.45,
+        ApplyUnitframeColorWithReload, Meta("appearance.gradient.strength"))
     local healthGradient = SwitchAt(ctx, appearance, "Health Gradient", 360, -142, 230, G, "enableHealthGradient", true, function()
         ApplyUnitframeColorWithReload()
         if refreshBarModeControls then refreshBarModeControls() end
@@ -1646,7 +1659,10 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
         if enabled == nil then enabled = npcMaster and npcMaster:GetChecked() and true or false end
         SetControlsEnabled(npcControls, enabled)
     end
-    local function AddNPCTypeControl(control) M.AppendValues(npcControls, control); return control end
+    local function AddNPCTypeControl(control)
+        M.AppendValues(npcControls, control)
+        return control
+    end
     local function AddNPCTypeToggle(label, x, y, apiGet, apiSet, key, apiArg)
         return AddNPCTypeControl(ValueToggleAt(ctx, npcType, label, x, y,
             function() return ApiValue(apiGet, function() return G()[key] ~= false end, apiArg) end,
@@ -1842,7 +1858,8 @@ local function BuildCastbarColors(ctx, b, CH)
         { "Ready color (kick available)", 12, -310, "kickReadyColor", 0, 1, 0 },
         { "Not ready color (kick on cooldown)", 12, -346, "kickNotReadyColor", 1, 0, 0 },
     }, ApplyCastbarColors)
-    CH.ApiColorAt(ctx, castbar, "Unavailable fill color", 12, -382, "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor", 1.0, 0.494117647, 0.137254902, ApplyCastbarColors)
+    CH.ApiColorAt(ctx, castbar, "Unavailable fill color", 12, -382, "GetInterruptUnavailableCastColor", "SetInterruptUnavailableCastColor", 1.0, 0.494117647,
+        0.137254902, ApplyCastbarColors)
     CH.ButtonAt(castbar, "Reset castbar colors", 12, -506, 170, function()
         local apiOwnsRefresh = ApiCall("ResetCastbarTextColorToGlobal")
         apiOwnsRefresh = ApiCall("ResetCastbarTargetNameColor") or apiOwnsRefresh
@@ -1887,7 +1904,8 @@ local function BuildCastbarColors(ctx, b, CH)
     LabelAt(detail, "Each castbar text can override the shared castbar text color. Target text exists on Target, Focus, Boss, and Arena.",
         12, -8, detailW - 28, "GameFontHighlightSmall", T.colors.muted)
     local detailUnitDropdown = ValueDropdownAt(ctx, detail, "Editing:", 12, -44,
-        (M.FilterSupportedUnitValues or function(values) return values end)(ValueTextPairs "player=Player|target=Target|focus=Focus|boss=Boss|arena=Arena"), min(260, detailW - 32),
+        (M.FilterSupportedUnitValues
+            or function(values) return values end)(ValueTextPairs "player=Player|target=Target|focus=Focus|boss=Boss|arena=Arena"), min(260, detailW - 32),
         DetailUnit,
         function(value)
             M._colorsCastbarDetailUnit = value

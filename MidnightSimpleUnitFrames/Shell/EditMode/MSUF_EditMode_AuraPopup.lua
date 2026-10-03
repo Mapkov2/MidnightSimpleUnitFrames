@@ -32,10 +32,14 @@ local GROUP_SPECS = {
         defaultY = 6,
         defaultSize = 26,
     },
-    custom1 = { label = "Custom 1", customIndex = 1, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
-    custom2 = { label = "Custom 2", customIndex = 2, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
-    custom3 = { label = "Custom 3", customIndex = 3, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
-    custom4 = { label = "Dots on target", customIndex = 4, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0, defaultSize = 24, defaultSpacing = 2 },
+    custom1 = { label = "Custom 1", customIndex = 1, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0,
+        defaultSize = 24, defaultSpacing = 2 },
+    custom2 = { label = "Custom 2", customIndex = 2, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0,
+        defaultSize = 24, defaultSpacing = 2 },
+    custom3 = { label = "Custom 3", customIndex = 3, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0,
+        defaultSize = 24, defaultSpacing = 2 },
+    custom4 = { label = "Dots on target", customIndex = 4, xKey = "x", yKey = "y", sizeKey = "size", spacingKey = "spacing", defaultX = 0, defaultY = 0,
+        defaultSize = 24, defaultSpacing = 2 },
 }
 
 local pf
@@ -72,12 +76,14 @@ local function AuraScope(unit)
     return unit
 end
 
+-- The translated frame name; numbered frames use the "Boss %s" / "Arena %s"
+-- format keys, the same ones the aura Edit Mode preview header uses.
 local function UnitLabel(unit)
-    if unit == "player" then return "Player" end
-    if unit == "target" then return "Target" end
-    if unit == "focus" then return "Focus" end
-    if IsBoss(unit) then return "Boss " .. (unit:match("%d+") or "1") end
-    if IsArena(unit) then return "Arena " .. (unit:match("%d+") or "1") end
+    if unit == "player" then return Quick.Tr("Player") end
+    if unit == "target" then return Quick.Tr("Target") end
+    if unit == "focus" then return Quick.Tr("Focus") end
+    if IsBoss(unit) then return string.format(Quick.Tr("Boss %s"), unit:match("%d+") or "1") end
+    if IsArena(unit) then return string.format(Quick.Tr("Arena %s"), unit:match("%d+") or "1") end
     return tostring(unit or "")
 end
 
@@ -257,7 +263,9 @@ local function ReapplyAuras(units)
         end
     end
     SyncMovers()
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh("EM2_AURA_POPUP_APPLY") end
+    -- The unit preview belongs to the load-on-demand menu.
+    local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+    if refreshPreview then refreshPreview("EM2_AURA_POPUP_APPLY") end
 end
 
 local function ReadBox(box, fallback, low, high)
@@ -551,7 +559,7 @@ function Sync()
     local activeGroup, spec = ActiveGroup()
     if pf._titleFS then
         local laneLabel = spec.customIndex and LaneLabel(pf.unit, activeGroup, spec) or "Auras"
-        pf._titleFS:SetText(Quick.Tr(UnitLabel(pf.unit)) .. " " .. Quick.Tr(laneLabel))
+        pf._titleFS:SetText(string.format(Quick.Tr("%s %s"), UnitLabel(pf.unit), Quick.Tr(laneLabel)))
     end
     SetLabel(pf.xBoxLabel, "X")
     SetLabel(pf.yBoxLabel, "Y")
@@ -618,8 +626,10 @@ local function Build()
         liveStatus = true,
         hoverSource = "aura-popup",
     })
-    pf.buffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Buffs", 20, -58, 250, 32, function() SetActiveGroup("buff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
-    pf.debuffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Debuffs", 290, -58, 250, 32, function() SetActiveGroup("debuff") end, ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
+    pf.buffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Buffs", 20, -58, 250, 32, function() SetActiveGroup("buff") end,
+        ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
+    pf.debuffLaneBtn = WirePopupFocus(Quick.ToggleAt(pf, "Debuffs", 290, -58, 250, 32, function() SetActiveGroup("debuff") end,
+        ButtonOpts(function() if pf and pf:IsShown() then Sync() end end)))
     Quick.ValueCard(pf, pf, 20, -102, 250, "Position", {
         { label = "X", key = "xBox", onChanged = Apply },
         { label = "Y", key = "yBox", onChanged = Apply },

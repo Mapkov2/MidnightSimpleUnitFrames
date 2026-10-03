@@ -55,7 +55,10 @@ local function ColorRows(rows)
         local key, values = line:match("^([^=]+)=(.+)$")
         if key then
             local c, n = {}, 0
-            for value in values:gmatch("[^,]+") do n = n + 1; c[n] = tonumber(value) end
+            for value in values:gmatch("[^,]+") do
+                n = n + 1
+                c[n] = tonumber(value)
+            end
             out[key] = c
         end
     end
@@ -141,7 +144,10 @@ local function NavIconColors(rows)
         local keys, values = line:match("^([^=]+)=(.+)$")
         if keys then
             local c, n = {}, 0
-            for value in values:gmatch("[^,]+") do n = n + 1; c[n] = tonumber(value) end
+            for value in values:gmatch("[^,]+") do
+                n = n + 1
+                c[n] = tonumber(value)
+            end
             for key in keys:gmatch("%S+") do out[key] = { c[1], c[2], c[3] } end
         end
     end
@@ -154,7 +160,10 @@ local function GlassVariants(rows)
         local spec = {}
         for field, values in tostring(rest or ""):gmatch("(%w+)=([%d%.,]+)") do
             local c, n = {}, 0
-            for value in values:gmatch("[^,]+") do n = n + 1; c[n] = tonumber(value) end
+            for value in values:gmatch("[^,]+") do
+                n = n + 1
+                c[n] = tonumber(value)
+            end
             spec[field] = c
         end
         if key then out[key] = spec end
@@ -269,8 +278,10 @@ DefaultToken(T.dropdownMotion, "focusFadeOut", T.motion.focusOut)
 T.motionProfiles = T.motionProfiles or {}
 DefaultToken(T.motionProfiles, "dropdownIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "dropdownIn", smoothing = "OUT" })
 DefaultToken(T.motionProfiles, "dropdownOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "dropdownOut", smoothing = "IN" })
-DefaultToken(T.motionProfiles, "popupIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "popupIn", smoothing = "OUT", scaleFrom = T.motionPolicy.popupScaleFrom, scaleTo = 1, scaleOrigin = "CENTER" })
-DefaultToken(T.motionProfiles, "popupOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "popupOut", smoothing = "IN", scaleFrom = 1, scaleTo = T.motionPolicy.popupScaleOut, scaleOrigin = "CENTER" })
+DefaultToken(T.motionProfiles, "popupIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "popupIn", smoothing = "OUT",
+    scaleFrom = T.motionPolicy.popupScaleFrom, scaleTo = 1, scaleOrigin = "CENTER" })
+DefaultToken(T.motionProfiles, "popupOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "popupOut", smoothing = "IN", scaleFrom = 1,
+    scaleTo = T.motionPolicy.popupScaleOut, scaleOrigin = "CENTER" })
 DefaultToken(T.motionProfiles, "focusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "focusIn", smoothing = "OUT" })
 DefaultToken(T.motionProfiles, "focusOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "focusOut", smoothing = "IN" })
 DefaultToken(T.motionProfiles, "controlFocusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "controlFocusIn", smoothing = "OUT" })
@@ -290,8 +301,10 @@ T.focusVeils = T.focusVeils or {}
 T.focusVeils.dropdown = T.focusVeils.dropdown or {
     { key = "_msuf2FocusDim", layer = "BACKGROUND", subLevel = 0, color = { 0.000, 0.000, 0.000, 0.145 } },
     { key = "_msuf2FocusHaze", layer = "BACKGROUND", subLevel = 1, color = { 0.010, 0.014, 0.026, 0.045 } },
-    { key = "_msuf2FocusSmearA", layer = "BORDER", subLevel = 0, texture = "bgSmooth", points = { -5, 5, 5, -5 }, color = { 0.018, 0.026, 0.052, 0.032 }, blend = "BLEND" },
-    { key = "_msuf2FocusSmearB", layer = "BORDER", subLevel = 1, texture = "bgSmooth", points = { 4, -4, -4, 4 }, texCoord = { 0, 0, 1, 0, 0, 1, 1, 1 }, color = { 0.014, 0.022, 0.046, 0.026 }, blend = "BLEND" },
+    { key = "_msuf2FocusSmearA", layer = "BORDER", subLevel = 0, texture = "bgSmooth", points = { -5, 5, 5, -5 },
+        color = { 0.018, 0.026, 0.052, 0.032 }, blend = "BLEND" },
+    { key = "_msuf2FocusSmearB", layer = "BORDER", subLevel = 1, texture = "bgSmooth", points = { 4, -4, -4, 4 }, texCoord = { 0, 0, 1, 0, 0, 1, 1, 1 },
+        color = { 0.014, 0.022, 0.046, 0.026 }, blend = "BLEND" },
     { key = "_msuf2FocusWash", layer = "BORDER", subLevel = 2, texture = "bgSmooth", color = { 0.024, 0.034, 0.068, 0.040 }, blend = "BLEND" },
     { key = "_msuf2FocusGrain", layer = "BORDER", subLevel = 3, texture = "bgCharcoal", color = { 0.035, 0.040, 0.070, 0.052 }, blend = "BLEND" },
 }

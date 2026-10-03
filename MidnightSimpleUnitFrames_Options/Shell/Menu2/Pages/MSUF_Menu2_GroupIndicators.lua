@@ -3,6 +3,11 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GroupIndicators.lua", {
+    "MSUF_SetIconTexture",
+})
 
 -- Menu2 Group Status & Indicators page.
 -- Builds party/raid status icon, placed indicator, frame effect, and spell-indicator controls.
@@ -240,11 +245,13 @@ local function BuildIndicatorsSection(ctx, b)
     local rightW = innerW - leftW - cardGap
     local function AddScopeSlider(list, parent, label, minValue, maxValue, step, width, key, defaultValue, mode, y, moveWidth)
         local control = ScopeSlider(ctx, parent, label, minValue, maxValue, step, width, key, defaultValue, mode, 16, y, moveWidth or (width - 58))
-        M.AppendValues(list, control); return control
+        M.AppendValues(list, control)
+        return control
     end
     local function AddScopeDropdown(list, parent, label, values, width, key, defaultValue, mode, y)
         local control = ScopeDropdown(ctx, parent, label, values, width, key, defaultValue, mode, 16, y, width - 32)
-        M.AppendValues(list, control); return control
+        M.AppendValues(list, control)
+        return control
     end
     local highlightCard = W.ControlCard(indicators, "Target Highlight",
         M.Format("Configure target highlighting in %s.", M.NavPath("opt_misc", "Frame Highlights")),
@@ -293,7 +300,8 @@ local function BuildIndicatorsSection(ctx, b)
             },
         })
     end
-    local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(groupNumberCard, "Group Number", leftW - 62, -24, 0, "HIDDEN"), "showGroupNumber", false, "visual")
+    local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(groupNumberCard, "Group Number", leftW - 62, -24, 0, "HIDDEN"),
+        "showGroupNumber", false, "visual")
     groupNumberToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupNumberControls = {}
     -- Same three styles as the unit-frame Raid Group indicator, so both
@@ -332,7 +340,8 @@ local function BuildIndicatorsSection(ctx, b)
             offsetX = -76,
         })
     end
-    local groupBorderToggle = BindScopeToggle(ctx, W.SwitchAt(groupBorderCard, "Group Border", leftW - 62, -24, 0, "HIDDEN"), "groupBorderEnabled", false, "visual")
+    local groupBorderToggle = BindScopeToggle(ctx, W.SwitchAt(groupBorderCard, "Group Border", leftW - 62, -24, 0, "HIDDEN"),
+        "groupBorderEnabled", false, "visual")
     groupBorderToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local groupBorderControls = {}
     AddScopeSlider(groupBorderControls, groupBorderCard, "Border Thickness", 1, 12, 1, leftW, "groupBorderSize", 1, "visual", -66)
@@ -361,7 +370,8 @@ local function BuildIndicatorsSection(ctx, b)
         SetSectionBadgesAndStatus(indicators, {
             OnOffBadge(targetEnabled, "Target on", "Target off"),
             OnOffBadge(focusEnabled, "Focus on", "Focus off"),
-            { text = groupNumberEnabled and "Group #" or (groupBorderEnabled and "Group border" or "Clean"), kind = (groupNumberEnabled or groupBorderEnabled) and "accent" or "muted" },
+            { text = groupNumberEnabled and "Group #" or (groupBorderEnabled and "Group border" or "Clean"), kind = (groupNumberEnabled or groupBorderEnabled)
+                and "accent" or "muted" },
         })
     end
     TrackSectionRefresh(ctx, indicators, RefreshIndicatorsState)
@@ -433,27 +443,7 @@ function StatusIcons.IconPackValues()
     return out
 end
 function StatusIcons.IconAssetValues()
-    local spec = CurrentGFStatusSpec()
-    local entries = StatusIcons.PreviewEntries(spec)
-    local valuesFn = _G.MSUF_GetStatusIconAssetValues
-    if type(valuesFn) ~= "function" or type(entries) ~= "table" then
-        return { { value = "", text = "Use default icon" } }
-    end
-    local out, used = {}, {}
-    for i = 1, #entries do
-        local entry = entries[i]
-        local values = valuesFn(entry[1], entry[2], i == 1, true)
-        for j = 1, #(values or {}) do
-            local item = values[j]
-            local value = item and item.value
-            if type(value) == "string" and not used[value] then
-                used[value] = true
-                out[#out + 1] = item
-            end
-        end
-    end
-    if #out == 0 then out[1] = { value = "", text = "Use default icon" } end
-    return out
+    return M.UnitPage.StatusIconAssetValues(StatusIcons.PreviewEntries(CurrentGFStatusSpec()))
 end
 function StatusIcons.ResolvePreviewIcon(style, iconType, variant, useMidnight)
     local resolver = _G.MSUF_GetStatusIconTexture
@@ -638,7 +628,8 @@ function StatusIcons.PrepareBinders(state, ctx)
     function state.BuildStatusControls(parent, specs)
         return M.BuildControlSpecs(specs, {
             dropdown = function(s, i) return BindStatusDropdown(parent, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11]), s[12] or s[5] or i end,
-            slider = function(s, i) return BindStatusSlider(parent, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s[13], s.identitySuffix), s[14] or s[7] or i end,
+            slider = function(s, i) return BindStatusSlider(parent, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s[13],
+                s.identitySuffix), s[14] or s[7] or i end,
         })
     end
 end
@@ -688,7 +679,8 @@ function StatusIcons.BuildSelectedCard(state, ctx)
         end,
         ControlMeta(ctx, "status.selected.iconStyle"))
     W.MoveWidget(iconPack, selectedCard, 16, -106, siconLeftW - 32, "LEFT")
-    local customIcon = state.BindStatusDropdown(selectedCard, "Custom icon", StatusIcons.IconAssetValues, siconLeftW, "customIcon", "", "visual", 16, -158, siconLeftW - 32,
+    local customIcon = state.BindStatusDropdown(selectedCard, "Custom icon", StatusIcons.IconAssetValues, siconLeftW, "customIcon", "", "visual",
+        16, -158, siconLeftW - 32,
         function()
             RefreshGFPreview()
             if state.Refresh then state.Refresh() end
@@ -793,22 +785,7 @@ function StatusIcons.BuildPreviewCard(state, ctx)
     statusReset:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -86)
     statusReset:SetSize(min(160, previewInnerW), 24)
     local iconPreviewLabel = W.LabelAt(previewCard, "Icon preview", 16, -120, previewInnerW, "GameFontNormalSmall", T.colors.accent)
-    local iconPreviewStrip = PixelLayoutRegion(CreateFrame("Frame", nil, previewCard))
-    iconPreviewStrip:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -132)
-    iconPreviewStrip:SetSize(previewInnerW, 24)
-    local iconPreviewTextures = {}
-    for i = 1, 5 do
-        local holder = PixelLayoutRegion(CreateFrame("Frame", nil, iconPreviewStrip))
-        holder:SetSize(24, 24)
-        holder:SetPoint("LEFT", iconPreviewStrip, "LEFT", (i - 1) * 28, 0)
-        holder.bg = PixelLayoutRegion(holder:CreateTexture(nil, "BACKGROUND"))
-        holder.bg:SetAllPoints()
-        holder.bg:SetColorTexture(0.020, 0.026, 0.052, 0.70)
-        holder.tex = PixelLayoutRegion(holder:CreateTexture(nil, "ARTWORK"))
-        holder.tex:SetPoint("CENTER", holder, "CENTER", 0, 0)
-        holder.tex:SetSize(22, 22)
-        iconPreviewTextures[i] = holder
-    end
+    local iconPreviewStrip, iconPreviewTextures = M.UnitPage.CreateStatusIconStrip(previewCard, -132, previewInnerW)
     state.previewCurrent, state.previewAll, state.statusReset = previewCurrent, previewAll, statusReset
     state.iconPreviewLabel, state.iconPreviewStrip, state.iconPreviewTextures = iconPreviewLabel, iconPreviewStrip, iconPreviewTextures
 end
@@ -854,12 +831,14 @@ function StatusIcons.BuildPlacement(state, ctx)
     local PreviewActionButton, statusReset, previewCurrent, previewAll = state.PreviewActionButton, state.statusReset, state.previewCurrent, state.previewAll
     state.statusControls = state.BuildStatusControls(state.placementCard, {
         { "slider", "Size", 6, 40, 1, siconRightW, "size", function(spec) return spec.defaultSize end, "visual", 16, -58, siconRightW - 58 },
-        { "dropdown", "Anchor", STATUS_ICON_ANCHORS, siconRightW, "anchor", function(spec) return spec.defaultAnchor end, "geometry", 16, -108, siconRightW - 32 },
+        { "dropdown", "Anchor", STATUS_ICON_ANCHORS, siconRightW, "anchor", function(spec) return spec.defaultAnchor end, "geometry", 16,
+            -108, siconRightW - 32 },
     })
     local advanced = {}
     advanced.card = W.ControlCard(state.siconAdvancedTab, "Advanced Placement", nil, siconLeftX, -38, state.siconInnerW, 232)
     M.Assign(advanced, state.BuildStatusControls(advanced.card, {
-        { "slider", "Layer", 0, 30, 1, siconLeftW, "layer", function(spec) return spec.defaultLayer end, "visual", 16, -58, siconLeftW - 58, true, identitySuffix = "extended" },
+        { "slider", "Layer", 0, 30, 1, siconLeftW, "layer", function(spec) return spec.defaultLayer end, "visual", 16, -58, siconLeftW - 58, true,
+            identitySuffix = "extended" },
     }))
     advanced.reset = W.Button(advanced.card, "Reset selected", 160)
     advanced.reset._msuf2SkipHistoryCheckpoint = true
@@ -1028,7 +1007,12 @@ local function TrackableSpellID(runtime, specKey, info)
     end
     local altIDs = runtime and runtime.AltSpellIDs and runtime.AltSpellIDs[specKey]
     for altID, mappedAura in pairs(type(altIDs) == "table" and altIDs or {}) do
-        if mappedAura == auraName then id = CustomBuffSpellID(altID); if id then return id end end
+        if mappedAura == auraName then
+            id = CustomBuffSpellID(altID)
+            if id then
+                return id
+            end
+        end
     end
     return CustomBuffSpellID(auraName)
 end
@@ -1073,8 +1057,14 @@ local function RefreshSpellPage(refreshPage)
 end
 local function AddCustomBuffResolved(refreshPage, kind, specKey, spellIDs)
     local spellID = spellIDs and spellIDs[1]
-    if not spellID then SpellFeedback("Enter a valid buff Spell ID, link, or name.", "error"); return false end
-    if not specKey then SpellFeedback("No spell-indicator spec selected.", "error"); return false end
+    if not spellID then
+        SpellFeedback("Enter a valid buff Spell ID, link, or name.", "error")
+        return false
+    end
+    if not specKey then
+        SpellFeedback("No spell-indicator spec selected.", "error")
+        return false
+    end
     local runtime, key, cfg = SpellIndicatorRuntime(), tostring(spellID), SpellIndicators(kind)
     cfg.specs = cfg.specs or {}
     cfg.specs[specKey] = cfg.specs[specKey] or {}
@@ -1087,7 +1077,10 @@ local function AddCustomBuffResolved(refreshPage, kind, specKey, spellIDs)
         return true
     end
     local exists, customCount = type(specCfg[key]) == "table", CountCustomBuffs(specCfg)
-    if not exists and customCount >= CUSTOM_BUFF_LIMIT then SpellFeedback("Custom buff limit reached.", "error"); return false end
+    if not exists and customCount >= CUSTOM_BUFF_LIMIT then
+        SpellFeedback("Custom buff limit reached.", "error")
+        return false
+    end
     local display, icon = CustomBuffInfo(spellID)
     local spellIDListText = CustomBuffSpellIDListText(spellIDs)
     local function ApplyCustomBuff()
@@ -1161,7 +1154,13 @@ local function ShowCustomBuffPopup(refreshPage, kind, specKey)
         text = Tr("Enter buff Spell ID, link, or name"), button1 = Tr("Add"), button2 = _G.CANCEL or Tr("Cancel"), hasEditBox = true, maxLetters = 255,
         OnShow = function(self)
             local edit = self.editBox or self.EditBox
-            if edit then edit:SetText(""); edit:SetFocus(); if edit.HighlightText then edit:HighlightText() end end
+            if edit then
+                edit:SetText("")
+                edit:SetFocus()
+                if edit.HighlightText then
+                    edit:HighlightText()
+                end
+            end
         end,
         OnAccept = function(self, data)
             local edit = self.editBox or self.EditBox
@@ -1214,7 +1213,12 @@ end
 local function InsertSpellAt(siCfg, specKey, trackable, auraName, targetSlot)
     local order = EnsureSpellSortOrder(siCfg, specKey, trackable)
     local from
-    for i = 1, #order do if order[i] == auraName then from = i; break end end
+    for i = 1, #order do
+        if order[i] == auraName then
+            from = i
+            break
+        end
+    end
     if not from then return end
     targetSlot = max(1, min(#order, tonumber(targetSlot) or from))
     if from == targetSlot then return end
@@ -1258,7 +1262,8 @@ function SpellTileGrid:OnEnter(tile)
     if tile._isAddTile then
         GameTooltip:SetOwner(tile, "ANCHOR_RIGHT")
         GameTooltip:AddLine(Tr("Add custom buff"), 1, 1, 1)
-        GameTooltip:AddLine(Tr("Accepts a buff Spell ID, spell link, or spell name and tracks exact Aura IDs through native AuraSlot filters."), 0.75, 0.78, 0.86)
+        GameTooltip:AddLine(Tr("Accepts a buff Spell ID, spell link, or spell name and tracks exact Aura IDs through native AuraSlot filters."), 0.75, 0.78,
+            0.86)
         GameTooltip:AddLine(M.Format("%d / %d", tonumber(tile._customCount) or 0, CUSTOM_BUFF_LIMIT), 0.55, 0.70, 0.95)
         GameTooltip:Show()
         tile:SetBackdropColor(0.055, 0.075, 0.115, 1)
@@ -1332,8 +1337,15 @@ function SpellTileGrid:OnDragStop(tile)
 end
 function SpellTileGrid:OnMouseUp(tile, button)
     if SpellIndicators(CurrentScope()).enabled ~= true then return end
-    if tile._suppressNextClick then tile._suppressNextClick = nil; tile._dragged = false; return end
-    if tile._dragged then tile._dragged = false; return end
+    if tile._suppressNextClick then
+        tile._suppressNextClick = nil
+        tile._dragged = false
+        return
+    end
+    if tile._dragged then
+        tile._dragged = false
+        return
+    end
     local kind = CurrentScope()
     if tile._isAddTile then
         if button == "LeftButton" then ShowCustomBuffPopup(self.refreshPage, kind, tile._specKey) end
@@ -1502,8 +1514,7 @@ function SpellTileGrid:Refresh()
         tile.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         tile.icon:SetVertexColor(1, 1, 1, 1)
         if runtime and type(runtime.GetAuraIcon) == "function" then
-            if type(MSUF_SetIconTexture) == "function" then MSUF_SetIconTexture(tile.icon, runtime.GetAuraIcon(specKey, info.name), "")
-            else tile.icon:SetTexture(runtime.GetAuraIcon(specKey, info.name)) end
+            _G.MSUF_SetIconTexture(tile.icon, runtime.GetAuraIcon(specKey, info.name), "")
         else
             tile.icon:SetTexture(136243)
         end
@@ -1653,7 +1664,10 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         end
         local function FlushRuntime()
             if not pendingApply then return end
-            if CombatLocked() then releaseScheduled = nil; return false end
+            if CombatLocked() then
+                releaseScheduled = nil
+                return false
+            end
             local scope = pendingScope or CurrentScope()
             pendingApply, pendingScope, releaseScheduled = nil, nil, nil
             QueueSpellIndicators(scope, "auras")
@@ -1735,7 +1749,8 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
 
     if M.AddTooltip then
         M.AddTooltip(tooltip, "Spell Icon tooltip", "Controls native Aura tooltips for Spell Icons only.", { hook = true })
-        M.AddTooltip(decimals, "Cooldown text format", "Below this value, remaining whole seconds may show one decimal place. Set 0 for whole seconds only.", { hook = true })
+        M.AddTooltip(decimals, "Cooldown text format", "Below this value, remaining whole seconds may show one decimal place. Set 0 for whole seconds only.",
+            { hook = true })
     end
 
     RefreshStyleState = RefreshStyleState(function()
@@ -1817,7 +1832,8 @@ function SpellSection.BuildSpecControls(state, ctx)
     local function SelectedSpellConfigTable()
         return CurrentSpellConfig(CurrentScope(), true) or SpellIndicators(CurrentScope())
     end
-    local siLayer = BindNestedSlider(ctx, W.Slider(spells, "Layer (0-30)", 0, 30, 1, siRightW), SelectedSpellConfigTable, "layer", 9, "visual", "spell.selected.layer")
+    local siLayer = BindNestedSlider(ctx, W.Slider(spells, "Layer (0-30)", 0, 30, 1, siRightW), SelectedSpellConfigTable, "layer", 9, "visual",
+        "spell.selected.layer")
     W.MoveWidget(siLayer, spells, siRightX, -72, siRightW, "LEFT")
     local specDrop = W.Dropdown(spells, "Spec", SpellSpecValues, siLeftW)
     M.BindDropdownWidget(ctx, specDrop,
@@ -1868,7 +1884,9 @@ function SpellSection.BuildSpecControls(state, ctx)
     }
     RegisterControl(previewAll, ctx, "spell.preview_all", "Preview all spells", "button", "ephemeral")
     if M.AddTooltip then
-        M.AddTooltip(previewAll, "Preview all spells", "On previews every enabled spell of every tracked spec, including spells that only draw a frame effect. Off previews only the selected spell.", { hook = true })
+        M.AddTooltip(previewAll, "Preview all spells",
+            "On previews every enabled spell of every tracked spec, including spells that only draw a frame effect. Off previews only the selected spell.",
+            { hook = true })
     end
     RefreshPreviewAllButton()
     local multiSpecDrop = W.Dropdown(spells, "Multi-Spec Entry", function() return SpellTrackedSpecValues() end, siRightW)
@@ -2410,7 +2428,8 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     W.MoveWidget(ciAlpha, corners, leftX, -170, leftW, "LEFT")
     local ciLayer = ScopeSlider(ctx, corners, "Layer (0-30)", 0, 30, 1, leftW, "ciLayer", 7, "visual", leftX, -224, leftW, "LEFT")
     W.LabelAt(corners, "Slot Assignments", leftX, -282, leftW, "GameFontNormalSmall", T.colors.accent)
-    W.Text(corners, "Assign what each corner dot should show. Choosing Custom Spell enables that slot's editor on the right.", leftX, -304, leftW, T.colors.muted)
+    W.Text(corners, "Assign what each corner dot should show. Choosing Custom Spell enables that slot's editor on the right.", leftX,
+        -304, leftW, T.colors.muted)
     local slotControls = {}
     local slotPositions = {
         TL = { x = leftX, y = -358 },
@@ -2440,7 +2459,8 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
         slotControls[#slotControls + 1] = slotDrop
     end
     W.LabelAt(corners, "Custom Spell Editor", rightX, -42, rightW, "GameFontNormalSmall", T.colors.accent)
-    W.Text(corners, "Pick a slot, set it to Custom Spell, then enter spell IDs. This edits one slot at a time and keeps the five slot assignments visible.", rightX, -64, rightW, T.colors.muted)
+    W.Text(corners, "Pick a slot, set it to Custom Spell, then enter spell IDs. This edits one slot at a time and keeps the five slot assignments visible.",
+        rightX, -64, rightW, T.colors.muted)
     local slotDrop = W.Dropdown(corners, "Editor Slot", CI_SLOT_VALUES, rightW)
     M.BindDropdownWidget(ctx, slotDrop,
         function() return CurrentCISlot() end,
@@ -2529,9 +2549,11 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
             historySource = "menu:group-corner-indicator-color",
         })
     end
-    local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX, -506, rightW, T.colors.dim)
+    local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX,
+        -506, rightW, T.colors.dim)
     if customHelp.SetWordWrap then customHelp:SetWordWrap(true) end
-    local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha, ciLayer }, { slotDrop, categoryDrop }, { customSpells, customMode, customFilter, customColor }
+    local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha, ciLayer }, { slotDrop, categoryDrop }, { customSpells, customMode,
+        customFilter, customColor }
     local function RefreshCornerIndicatorState()
         local slot = CurrentCISlot()
         local category = Val(CurrentScope(), "ciSlot" .. slot, CI_SLOT_DEFAULTS[slot] or "none")

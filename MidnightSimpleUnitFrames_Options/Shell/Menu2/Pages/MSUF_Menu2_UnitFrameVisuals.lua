@@ -2,6 +2,12 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", {
+    "MSUF_SuppressBlizzardPlayerCastbars",
+    "MSUF_ShowReloadRecommendedPopup",
+})
 
 -- Menu2 Unit visual sections.
 -- Builds controls for portrait, castbar detail, detached power, border/shape, and related
@@ -39,7 +45,8 @@ local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Sp
 local CASTBAR_ICON_BORDER_STYLES = VT("NONE", "None", "DARK", "Dark", "CASTBAR", "Castbar border color")
 -- general grew by 32px when "Show interrupter name" pushed the Size card down.
 local CASTBAR_TAB_HEIGHTS = { general = 424, icon = 540, spell = 386, time = 386, advanced = 480 }
-local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility", "Auto: Utility Cooldowns")
+local CASTBAR_WIDTH_SOURCE_VALUES = VT("manual", "Manual width", "unitframe", "Auto: Unit Frame", "essential", "Auto: Essential Cooldowns", "utility",
+    "Auto: Utility Cooldowns")
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto fit", "CLIP", "Manual width", "NONE", "No width limit")
 local DETACHED_POWER_SHAPE_VALUES = VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
@@ -332,15 +339,19 @@ local function BuildPortrait(ctx, builder, unit)
             RefreshPortraitControls()
         end,
         PortraitControlMeta("portrait.position", tostring(unit) .. ".portraitMode"))
-    local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER", nil, RefreshPortraitControls)
+    local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER",
+        nil, RefreshPortraitControls)
     local clickable = BindPortraitToggle(mainCard, "Clickable portrait", 16, -174, leftW - 32, "portraitClickable", false, "MSUF2_PORTRAIT_CLICKABLE")
     clickable._msuf2SearchText = "Clickable portrait unit frame target right click menu click casting mouseover"
     BindExactPortraitTabTarget(clickable, "general", tostring(unit) .. ".portraitClickable")
-    local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE", nil, RefreshPortraitControls)
-    local eliteDragon = BindPortraitToggle(borderCard, "Elite and rare dragon", 16, -112, leftW - 32, "portraitBlizzardElite", false, "MSUF2_PORTRAIT_BLIZZARD_ELITE", RefreshPortraitControls)
+    local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE",
+        nil, RefreshPortraitControls)
+    local eliteDragon = BindPortraitToggle(borderCard, "Elite and rare dragon", 16, -112, leftW - 32, "portraitBlizzardElite", false,
+        "MSUF2_PORTRAIT_BLIZZARD_ELITE", RefreshPortraitControls)
     eliteDragon._msuf2SearchText = "Blizzard portrait ring elite rare rareelite boss gold silver dragon classification"
     BindExactPortraitTabTarget(eliteDragon, "border", tostring(unit) .. ".portraitBlizzardElite")
-    local blizzardCorner = BindPortraitToggle(borderCard, "Bottom-right gold connector", 16, -148, leftW - 32, "portraitBlizzardCorner", false, "MSUF2_PORTRAIT_BLIZZARD_CORNER", RefreshPortraitControls)
+    local blizzardCorner = BindPortraitToggle(borderCard, "Bottom-right gold connector", 16, -148, leftW - 32, "portraitBlizzardCorner", false,
+        "MSUF2_PORTRAIT_BLIZZARD_CORNER", RefreshPortraitControls)
     blizzardCorner._msuf2SearchText = "Blizzard portrait frame gold corner triangle connector embellishment Forever"
     BindExactPortraitTabTarget(blizzardCorner, "border", tostring(unit) .. ".portraitBlizzardCorner")
     local dragonPreview = W.Dropdown(borderCard, "Runtime Preview", PORTRAIT_PLACEMENT.classificationPreview, 220)
@@ -390,31 +401,43 @@ local function BuildPortrait(ctx, builder, unit)
     local zoom = BindPortraitSlider(geometryCard, "Portrait zoom", 16, -278, rightW - 58, 100, 300, 1, "portraitZoom", 100, "MSUF2_PORTRAIT_ZOOM")
     local panX = BindPortraitSlider(geometryCard, "Zoom center X", 16, -332, rightW - 58, -100, 100, 1, "portraitPanX", 0, "MSUF2_PORTRAIT_PAN_X")
     local panY = BindPortraitSlider(geometryCard, "Zoom center Y", 16, -386, rightW - 58, -100, 100, 1, "portraitPanY", 0, "MSUF2_PORTRAIT_PAN_Y")
-    local placement = BindPortraitDropdown(placementCard, "Placement", PORTRAIT_PLACEMENT.modes, 16, -58, min(220, leftW - 32), "portraitPlacement", "ATTACHED", "MSUF2_PORTRAIT_PLACEMENT", nil, RefreshPortraitControls)
+    local placement = BindPortraitDropdown(placementCard, "Placement", PORTRAIT_PLACEMENT.modes, 16, -58, min(220, leftW - 32), "portraitPlacement", "ATTACHED",
+        "MSUF2_PORTRAIT_PLACEMENT", nil, RefreshPortraitControls)
     placement._msuf2SearchText = "Portrait placement attached detached overlay free position anchor"
-    local detachedPoint = BindPortraitDropdown(placementCard, "Portrait anchor point", PORTRAIT_PLACEMENT.points, 16, -112, min(220, leftW - 32), "portraitDetachedPoint", "RIGHT", "MSUF2_PORTRAIT_DETACHED_POINT")
-    local detachedTo = BindPortraitDropdown(placementCard, "Attach to frame point", PORTRAIT_PLACEMENT.points, 16, -166, min(220, leftW - 32), "portraitDetachedTo", "LEFT", "MSUF2_PORTRAIT_DETACHED_TO")
-    local overlayAlign = BindPortraitDropdown(placementCard, "Overlay alignment", PORTRAIT_PLACEMENT.overlay, 16, -220, min(220, leftW - 32), "portraitOverlayAlign", "LEFT", "MSUF2_PORTRAIT_OVERLAY_ALIGN")
+    local detachedPoint = BindPortraitDropdown(placementCard, "Portrait anchor point", PORTRAIT_PLACEMENT.points, 16, -112, min(220, leftW - 32),
+        "portraitDetachedPoint", "RIGHT", "MSUF2_PORTRAIT_DETACHED_POINT")
+    local detachedTo = BindPortraitDropdown(placementCard, "Attach to frame point", PORTRAIT_PLACEMENT.points, 16, -166, min(220, leftW - 32),
+        "portraitDetachedTo", "LEFT", "MSUF2_PORTRAIT_DETACHED_TO")
+    local overlayAlign = BindPortraitDropdown(placementCard, "Overlay alignment", PORTRAIT_PLACEMENT.overlay, 16, -220, min(220, leftW - 32),
+        "portraitOverlayAlign", "LEFT", "MSUF2_PORTRAIT_OVERLAY_ALIGN")
     local levelOffset = BindPortraitSlider(placementCard, "Layer offset", 16, -274, leftW - 58, 0, 30, 1, "portraitLevelOffset", 7, "MSUF2_PORTRAIT_LEVEL")
     levelOffset._msuf2SearchText = "Portrait layer offset frame level behind in front of bars"
     local portraitAlpha = BindPortraitSlider(placementCard, "Portrait opacity", 16, -328, leftW - 58, 0, 100, 1, "portraitAlpha", 100, "MSUF2_PORTRAIT_ALPHA")
-    local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle", "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
+    local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle",
+        "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
-    local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -256, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
-    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -310, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0, "MSUF2_PORTRAIT_EDGE_SOFTNESS")
+    local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -256, min(220, leftW - 32), "portraitBorderStyle", "NONE",
+        "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
+    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -310, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0,
+        "MSUF2_PORTRAIT_EDGE_SOFTNESS")
     BindExactPortraitTabTarget(edgeSoftness, "border", tostring(unit) .. ".portraitEdgeSoftness")
     edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
-    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -364, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
+    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -364, min(220, leftW - 32), "portraitBorderArt", "FLAT",
+        "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
     borderArt._msuf2SearchText = "Portrait border art flat relief beveled ring blizzard style"
-    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -418, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
+    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -418, min(220, leftW - 32),
+        "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
     borderDirection._msuf2SearchText = "Portrait border direction rotate light up right down left"
-    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -472, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
-    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -540, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
+    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -472, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2,
+        "MSUF2_PORTRAIT_BORDER_SIZE")
+    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -540, leftW - 32, "portraitFillBorder", false,
+        "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
     -- The Castbar section's Icon tab hosts a second toggle for this same key on
     -- every unit that has a castbar. Re-run the page refreshers so the twin
     -- surface picks up the new state instead of showing a stale checkbox.
-    local castSpellIcon = BindPortraitToggle(styleCard, "Show cast spell icon in portrait", 16, -166, rightW - 32, "portraitCastSpellIcon", false, "MSUF2_PORTRAIT_CAST_ICON",
+    local castSpellIcon = BindPortraitToggle(styleCard, "Show cast spell icon in portrait", 16, -166, rightW - 32, "portraitCastSpellIcon", false,
+        "MSUF2_PORTRAIT_CAST_ICON",
         CASTBAR_UNITS[unit] and function() M.RequestRefresh(ctx, "portrait-cast-icon-mirror") end or nil)
     castSpellIcon._msuf2SearchText = "Portrait cast spell icon casting channel empower"
     local flip = BindPortraitToggle(styleCard, "Flip portrait left to right", 16, -220, rightW - 32, "portraitFlip", false, "MSUF2_PORTRAIT_FLIP")
@@ -436,20 +459,24 @@ local function BuildPortrait(ctx, builder, unit)
         BindPortraitSlider(dragonCard, "Dragon size", 16, -112, leftW - 58, 25, 300, 1, "portraitDragonScale", 100, "MSUF2_DRAGON_SCALE"),
         BindPortraitSlider(dragonCard, "Dragon horizontal shift", 16, -166, leftW - 58, -200, 200, 1, "portraitDragonX", 0, "MSUF2_DRAGON_X"),
         BindPortraitSlider(dragonCard, "Dragon vertical shift", 16, -220, leftW - 58, -200, 200, 1, "portraitDragonY", 0, "MSUF2_DRAGON_Y"),
-        BindPortraitDropdown(dragonCard, "Dragon draw order", PORTRAIT_PLACEMENT.dragonLayer, 16, -274, min(220, leftW - 32), "portraitDragonLayer", "OVERLAY", "MSUF2_DRAGON_LAYER"),
+        BindPortraitDropdown(dragonCard, "Dragon draw order", PORTRAIT_PLACEMENT.dragonLayer, 16, -274, min(220, leftW - 32), "portraitDragonLayer",
+            "OVERLAY", "MSUF2_DRAGON_LAYER"),
         BindPortraitSlider(dragonCard, "Dragon level above portrait", 16, -328, leftW - 58, 0, 30, 1, "portraitDragonLevel", 1, "MSUF2_DRAGON_LEVEL"),
         BindPortraitToggle(dragonCard, "Flip dragon left to right", 16, -382, leftW - 32, "portraitDragonFlip", false, "MSUF2_DRAGON_FLIP"),
         BindPortraitToggle(dragonCard, "Color dragon by unit class", 16, -428, leftW - 32, "portraitDragonClassColor", false, "MSUF2_DRAGON_COLOR"),
         BindPortraitToggle(dragonCard, "Keep enemy dragons in instances", 16, -474, leftW - 32, "portraitDragonInInstances", true, "MSUF2_DRAGON_INSTANCES"),
     }
-    local dragonKeys = { "portraitDragonScale", "portraitDragonX", "portraitDragonY", "portraitDragonLayer", "portraitDragonLevel", "portraitDragonFlip", "portraitDragonClassColor", "portraitDragonInInstances" }
+    local dragonKeys = { "portraitDragonScale", "portraitDragonX", "portraitDragonY", "portraitDragonLayer", "portraitDragonLevel", "portraitDragonFlip",
+        "portraitDragonClassColor", "portraitDragonInInstances" }
     for i, control in ipairs(dragonControls) do
         BindExactPortraitTabTarget(control, "dragon", tostring(unit) .. "." .. dragonKeys[i])
     end
     BindExactPortraitTabTarget(flip, "advanced", tostring(unit) .. ".portraitFlip")
     BindExactPortraitTabTarget(shadow, "advanced", tostring(unit) .. ".portraitInnerShadow")
     if M.AddTooltip then
-        M.AddTooltip(render, "Render", "3D shows the unit's live model in a rectangle. While the game keeps a unit's identity private, the regular 2D portrait stands in.", { hook = true })
+        M.AddTooltip(render, "Render",
+            "3D shows the unit's live model in a rectangle. While the game keeps a unit's identity private, the regular 2D portrait stands in.",
+            { hook = true })
         M.AddTooltip(shadow, "Inset shadow strength", "Darkens the inner edges of square portraits, 3D models included.", { hook = true })
         M.AddTooltip(dragonControls[4], "Dragon draw order", "Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring.", { hook = true })
     end
@@ -503,7 +530,8 @@ local function BuildPortrait(ctx, builder, unit)
         { controls = zoom, on = function(conf) return PortraitActive() and conf.portraitRender ~= "CLASS" end },
         { controls = shape, on = function(conf) return PortraitActive() and conf.portraitRender ~= "3D" end },
         { controls = flip, on = function(conf) return PortraitActive() and conf.portraitRender ~= "3D" end },
-        { controls = shadow, on = function(conf) return PortraitActive() and ((conf.portraitShape or "SQUARE") == "SQUARE" or conf.portraitRender == "3D") end },
+        { controls = shadow, on = function(conf) return PortraitActive() and ((conf.portraitShape or "SQUARE") == "SQUARE"
+            or conf.portraitRender == "3D") end },
         { controls = dragonControls, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true end },
         { controls = { eliteDragon, blizzardCorner }, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) end },
         { controls = { dragonPreview, dragonPreviewExtra }, on = function(conf)
@@ -597,8 +625,15 @@ local function BuildPower(ctx, builder, unit)
     local detachedHeight
     local orbSize
     local detachedTextToggle
-    local function AddPowerControl(control) M.AppendValues(powerControls, control); W.AttachUnitEditFocus(control, unit, "powerbar"); return control end
-    local function AddDetachedControl(control) M.AppendValues(detachedControls, control); return AddPowerControl(control) end
+    local function AddPowerControl(control)
+        M.AppendValues(powerControls, control)
+        W.AttachUnitEditFocus(control, unit, "powerbar")
+        return control
+    end
+    local function AddDetachedControl(control)
+        M.AppendValues(detachedControls, control)
+        return AddPowerControl(control)
+    end
     local function ResolveDefault(value)
         if type(value) == "function" then return value() end
         return value
@@ -694,7 +729,8 @@ local function BuildPower(ctx, builder, unit)
     local function BuildPowerControls(parent, addFn, specs)
         return M.BuildControlSpecs(specs, {
             toggle = function(s, i) return BindPowerToggle(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11]), s[12] or s[6] or i end,
-            slider = function(s, i) return BindPowerSlider(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12], s.opts), s[13] or s[9] or i end,
+            slider = function(s, i) return BindPowerSlider(parent, addFn, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12],
+                s.opts), s[13] or s[9] or i end,
         })
     end
     local function SetPowerFillMode(key, peerKey, value, reason, historyLabel)
@@ -748,7 +784,8 @@ local function BuildPower(ctx, builder, unit)
     end
     local mainCard = PowerCard("Visibility & Size", nil, leftX, -38, cardW, mainCardHeight)
     local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, mainCardHeight)
-    local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
+    local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY,
+        fullW, detachedCardHeight)
     -- Power bar art is configured once on the Bars page. The per-unit keys stay
     -- scope-aware in the UF compiler (conf -> bars -> unit bar texture); they
     -- simply have no control on this page anymore.
@@ -888,9 +925,12 @@ local function BuildPower(ctx, builder, unit)
         detachedSync = playerDetached.sync
     end
     local detachedFields = BuildPowerControls(detachedCard, AddDetachedControl, {
-        { "slider", "Detached width", 16, sliderTop, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached height", detachedRightX, sliderTop, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil, "height", opts = DETACHED_POWER_OPTS },
-        { "slider", "Detached layer", 16, sliderTop - 66, detachedSliderW, 0, 30, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached width", 16, sliderTop, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end,
+            "MSUF2_POWER_DETACHED_W", nil, "width", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached height", detachedRightX, sliderTop, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H", nil,
+            "height", opts = DETACHED_POWER_OPTS },
+        { "slider", "Detached layer", 16, sliderTop - 66, detachedSliderW, 0, 30, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER",
+            opts = DETACHED_POWER_OPTS },
     })
     detachedWidth, detachedHeight = detachedFields.width, detachedFields.height
     if detachedWidth and M.AddTooltip then
@@ -916,8 +956,11 @@ local function BuildPower(ctx, builder, unit)
                 RefreshClassPowerDetachedState()
             end,
             SettingMeta(ctx, "power.detached_shape", unit, "detachedPowerBarShape"))
-        if M.AddTooltip then M.AddTooltip(detachedShape, "Independent Powerbar Shape", "Changes only Player power. Class Resources keep their own shape setting. Round and Crystal fill horizontally; Orb fills bottom-to-top.", { hook = true, owner = "ANCHOR_RIGHT" }) end
-        orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 132, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE", nil, DETACHED_POWER_OPTS)
+        if M.AddTooltip then M.AddTooltip(detachedShape, "Independent Powerbar Shape",
+            "Changes only Player power. Class Resources keep their own shape setting. Round and Crystal fill horizontally; Orb fills bottom-to-top.",
+            { hook = true, owner = "ANCHOR_RIGHT" }) end
+        orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 132, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54,
+            "MSUF2_POWER_DETACHED_ORB_SIZE", nil, DETACHED_POWER_OPTS)
     end
     local function PowerOn() return ReadBool(unit, "showPowerBar", true) end
     local function DetachedOn() return PowerOn() and ReadBool(unit, "powerBarDetached", false) end
@@ -959,7 +1002,8 @@ local function BuildPower(ctx, builder, unit)
                 powerNotice:Show()
             elseif not PowerOn() then
                 if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
-                powerNotice:SetMessage(M.Format("%s power bar is hidden. Turn it on to configure size, embed, or detached settings.", UnitTopLabel(unit)), "warning")
+                powerNotice:SetMessage(M.Format("%s power bar is hidden. Turn it on to configure size, embed, or detached settings.",
+                    UnitTopLabel(unit)), "warning")
                 powerNotice:Show()
             else
                 if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
@@ -1011,7 +1055,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
         end
         M.RequestUnitApply(unit, "MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true })
         _G.MSUF_Castbars_OnSettingsChanged("menu2_backend")
-        if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
+        if unit == "player" then _G.MSUF_SuppressBlizzardPlayerCastbars() end
         if state.refresh then state.refresh() end
     end
     local function ReadCastbarProvider()
@@ -1030,11 +1074,7 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
         local previousBackend = ReadCastbarBackend()
         SetCastbarBackend(backend)
         if backend == "BLIZZARD" and previousBackend ~= "BLIZZARD" then
-            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-                _G.MSUF_ShowReloadRecommendedPopup("Player Blizzard castbar")
-            elseif _G.print then
-                _G.print("|cffffd700MSUF:|r Switching to the Blizzard player castbar requires a /reload.")
-            end
+            _G.MSUF_ShowReloadRecommendedPopup("Player Blizzard castbar")
         end
     end
     local function SetCastbarEnabled(enabled)
@@ -1059,21 +1099,12 @@ local function PrepareCastbarSwitch(ctx, sec, unit)
             "Castbar visibility coordinates backend, enable state, and remembered provider."))
     return enabled
 end
-local function BuildCastbar(ctx, builder, unit)
-    local fields = CASTBAR_FIELDS[unit]
-    if not fields then return end
-    local sec = builder:CollapsibleSection("castbar", "Castbar", CastbarTabHeight(unit, CurrentCastbarTab(unit)), false)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 16
-    local cardGap = 28
-    local leftW = floor((sectionW - 48 - cardGap) * 0.5)
-    leftW = max(310, min(430, leftW))
-    local rightX = leftX + leftW + cardGap
-    local rightW = max(310, min(430, sectionW - rightX - 16))
-    local prefix = CASTBAR_PREFIX[unit]
-    local RefreshCastbarEnabled = M.RefreshProxy()
-    local canUseBlizzardProvider = (unit == "player")
-    local allCastbarControls, iconControls, spellControls, targetNameControls, timeControls = {}, {}, {}, {}, {}
+-- The unit Castbar section builds in order through these functions; s carries
+-- the section frame, its layout, the control lists and every binder, card
+-- and control a later part or the closing gate group reads.
+local CastbarSection = {}
+function CastbarSection.Binders(s)
+    local ctx, unit, prefix, allCastbarControls = s.ctx, s.unit, s.prefix, s.allCastbarControls
     local function AddControl(list, control)
         if control then
             allCastbarControls[#allCastbarControls + 1] = control
@@ -1177,6 +1208,16 @@ local function BuildCastbar(ctx, builder, unit)
             slider = function(s) return BindDetailSlider(parent, list, s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10], s[11], s[12]) end,
         })
     end
+    s.AddControl, s.DetailKey, s.CastbarWidthKey = AddControl, DetailKey, CastbarWidthKey
+    s.CastbarHeightKey, s.CastbarWidthSourceKey = CastbarHeightKey, CastbarWidthSourceKey
+    s.NormalizeWidthSource, s.ReadWidthSource = NormalizeWidthSource, ReadWidthSource
+    s.ReadGeneralValue, s.ReadGeneralNumber, s.SetGeneralValue = ReadGeneralValue, ReadGeneralNumber, SetGeneralValue
+    s.SetGeneralNumber, s.BuildDetailControls = SetGeneralNumber, BuildDetailControls
+end
+function CastbarSection.Cards(s)
+    local ctx, unit, fields, sec, sectionW, leftX, leftW = s.ctx, s.unit, s.fields, s.sec, s.sectionW, s.leftX, s.leftW
+    local rightX, rightW, RefreshCastbarEnabled, DetailKey = s.rightX, s.rightW, s.RefreshCastbarEnabled, s.DetailKey
+    local ReadGeneralValue = s.ReadGeneralValue
     local castbarState = PrepareCastbarSwitch(ctx, sec, unit)._msuf2CastbarState
     castbarState.refresh = function() RefreshCastbarEnabled() end
     local ReadCastbarBackend, SetCastbarBackend = castbarState.read, castbarState.set
@@ -1277,6 +1318,18 @@ local function BuildCastbar(ctx, builder, unit)
             historySource = "menu:unit-castbar-advanced-icon-border-color",
         })
     end
+    s.ReadCastbarBackend, s.SetCastbarBackend = ReadCastbarBackend, SetCastbarBackend
+    s.ReadCastbarProvider, s.SetCastbarProvider = ReadCastbarProvider, SetCastbarProvider
+    s.SetCastbarEnabled, s.controlWLeft, s.controlWRight = SetCastbarEnabled, controlWLeft, controlWRight
+    s.SetCastbarSectionHeight, s.tabFrames, s.generalTab = SetCastbarSectionHeight, tabFrames, generalTab
+    s.generalCard, s.providerCard, s.sizeCard, s.iconCard = generalCard, providerCard, sizeCard, iconCard
+    s.portraitIconCard, s.spellCard, s.targetNameCard = portraitIconCard, spellCard, targetNameCard
+    s.timeCard, s.textAdvancedCard, s.iconAdvancedCard = timeCard, textAdvancedCard, iconAdvancedCard
+    s.layerAdvancedCard = layerAdvancedCard
+end
+function CastbarSection.Tabs(s)
+    local ctx, unit, sec, sectionW = s.ctx, s.unit, s.sec, s.sectionW
+    local SetCastbarSectionHeight, tabFrames = s.SetCastbarSectionHeight, s.tabFrames
     local castbarTabs, RefreshCastbarTabs, ReadCastbarTab, SetGuidedCastbarTab = W.SegmentTabs(ctx, sec, {
         label = "", values = CASTBAR_TAB_VALUES, width = min(620, sectionW - 48),
         frames = tabFrames, defaultTab = "general",
@@ -1317,6 +1370,20 @@ local function BuildCastbar(ctx, builder, unit)
             return sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab(tab) == true
         end
     end
+    s.BindExactCastbarTabTarget = BindExactCastbarTabTarget
+end
+function CastbarSection.General(s)
+    local ctx, unit, fields, sec, sectionW, rightW = s.ctx, s.unit, s.fields, s.sec, s.sectionW, s.rightW
+    local RefreshCastbarEnabled, canUseBlizzardProvider = s.RefreshCastbarEnabled, s.canUseBlizzardProvider
+    local AddControl, CastbarWidthKey, CastbarHeightKey = s.AddControl, s.CastbarWidthKey, s.CastbarHeightKey
+    local CastbarWidthSourceKey, NormalizeWidthSource = s.CastbarWidthSourceKey, s.NormalizeWidthSource
+    local ReadWidthSource, ReadGeneralNumber = s.ReadWidthSource, s.ReadGeneralNumber
+    local SetGeneralValue, SetGeneralNumber = s.SetGeneralValue, s.SetGeneralNumber
+    local ReadCastbarBackend, SetCastbarBackend = s.ReadCastbarBackend, s.SetCastbarBackend
+    local ReadCastbarProvider, SetCastbarProvider = s.ReadCastbarProvider, s.SetCastbarProvider
+    local SetCastbarEnabled, controlWRight, generalTab = s.SetCastbarEnabled, s.controlWRight, s.generalTab
+    local generalCard, providerCard, sizeCard = s.generalCard, s.providerCard, s.sizeCard
+    local BindExactCastbarTabTarget = s.BindExactCastbarTabTarget
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -334, "Use MSUF", 96)
     if castbarNoticeButton then
         RegisterControl(castbarNoticeButton, ctx, "castbar.use_msuf", "Use MSUF", "button", "setting", {
@@ -1415,6 +1482,16 @@ local function BuildCastbar(ctx, builder, unit)
             meta.step, meta.roundStep = 1, true
             return meta
         end)())
+    s.castbarNotice, s.enabled, s.provider, s.interrupt = castbarNotice, enabled, provider, interrupt
+    s.manualWidth, s.defaultSize = manualWidth, defaultSize
+end
+function CastbarSection.IconAndText(s)
+    local ctx, unit, fields, rightW, RefreshCastbarEnabled = s.ctx, s.unit, s.fields, s.rightW, s.RefreshCastbarEnabled
+    local iconControls, spellControls, targetNameControls = s.iconControls, s.spellControls, s.targetNameControls
+    local AddControl, DetailKey, ReadGeneralValue = s.AddControl, s.DetailKey, s.ReadGeneralValue
+    local BuildDetailControls, controlWLeft, controlWRight = s.BuildDetailControls, s.controlWLeft, s.controlWRight
+    local iconCard, portraitIconCard, spellCard = s.iconCard, s.portraitIconCard, s.spellCard
+    local targetNameCard = s.targetNameCard
     local function BindCastbarFeatureToggle(parent, field, reason)
         local control = W.SwitchAt(parent, "Enable", 16, -52, 160)
         W.AttachUnitEditFocus(control, unit, "castbar")
@@ -1472,7 +1549,8 @@ local function BuildCastbar(ctx, builder, unit)
     if portraitCastIconNote.SetWordWrap then portraitCastIconNote:SetWordWrap(true) end
     local text = BindCastbarFeatureToggle(spellCard, fields.text, "MSUF2_CASTBAR_TEXT")
     BuildDetailControls(spellCard, spellControls, {
-        { "dropdown", "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT", "MSUF2_CASTBAR_SPELL_POSITION" },
+        { "dropdown", "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT",
+            "MSUF2_CASTBAR_SPELL_POSITION" },
         { "slider", "Size", 16, -142, controlWLeft, 0, 48, 1, DetailKey("SpellNameFontSize"), 0, "MSUF2_CASTBAR_SPELL_SIZE" },
         -- Position owns the visible justification, matching Time Text.
         -- Spell text color deliberately lives on the Colors page (castbar
@@ -1492,14 +1570,29 @@ local function BuildCastbar(ctx, builder, unit)
             end,
             SettingMeta(ctx, "castbar.show_target_name", "general", fields.targetName))
         BuildDetailControls(targetNameCard, targetNameControls, {
-            { "dropdown", "Position preset", 16, -88, min(260, controlWRight), CASTBAR_TEXT_POSITIONS, DetailKey("TargetNamePosition"), "BELOW", "MSUF2_CASTBAR_TARGET_NAME_POSITION" },
+            { "dropdown", "Position preset", 16, -88, min(260, controlWRight), CASTBAR_TEXT_POSITIONS, DetailKey("TargetNamePosition"), "BELOW",
+                "MSUF2_CASTBAR_TARGET_NAME_POSITION" },
             { "slider", "Size", 16, -142, controlWRight, 6, 48, 1, DetailKey("TargetNameFontSize"), 10, "MSUF2_CASTBAR_TARGET_NAME_SIZE" },
-            { "dropdown", "Alignment", 16, -196, min(260, controlWRight), CASTBAR_TEXT_ALIGN, DetailKey("TargetNameAlign"), "RIGHT", "MSUF2_CASTBAR_TARGET_NAME_ALIGN" },
+            { "dropdown", "Alignment", 16, -196, min(260, controlWRight), CASTBAR_TEXT_ALIGN, DetailKey("TargetNameAlign"), "RIGHT",
+                "MSUF2_CASTBAR_TARGET_NAME_ALIGN" },
             -- Target text color deliberately lives on the Colors page (castbar
             -- detail colors) and in the per-control color shortcuts only; a second
             -- inline swatch here double-writes the same key.
         })
     end
+    s.BindCastbarFeatureToggle, s.icon, s.portraitCastIcon = BindCastbarFeatureToggle, icon, portraitCastIcon
+    s.text, s.targetNameToggle = text, targetNameToggle
+end
+function CastbarSection.Advanced(s)
+    local ctx, unit, fields, rightW, RefreshCastbarEnabled = s.ctx, s.unit, s.fields, s.rightW, s.RefreshCastbarEnabled
+    local iconControls, spellControls, timeControls = s.iconControls, s.spellControls, s.timeControls
+    local AddControl, DetailKey, CastbarWidthKey = s.AddControl, s.DetailKey, s.CastbarWidthKey
+    local ReadGeneralValue, ReadGeneralNumber = s.ReadGeneralValue, s.ReadGeneralNumber
+    local SetGeneralValue, SetGeneralNumber = s.SetGeneralValue, s.SetGeneralNumber
+    local BuildDetailControls, controlWLeft, controlWRight = s.BuildDetailControls, s.controlWLeft, s.controlWRight
+    local timeCard, textAdvancedCard, iconAdvancedCard = s.timeCard, s.textAdvancedCard, s.iconAdvancedCard
+    local layerAdvancedCard, defaultSize = s.layerAdvancedCard, s.defaultSize
+    local BindCastbarFeatureToggle = s.BindCastbarFeatureToggle
     local function ReadSpellTextWidthMode()
         local value = tostring(ReadGeneralValue(DetailKey("SpellNameTruncate"), "AUTO") or "AUTO"):upper()
         if value == "CLIP" or value == "NONE" then return value end
@@ -1567,12 +1660,47 @@ local function BuildCastbar(ctx, builder, unit)
     local time = BindCastbarFeatureToggle(timeCard, fields.time, "MSUF2_CASTBAR_TIME")
     BuildDetailControls(timeCard, timeControls, {
         { "dropdown", "Format", 16, -88, min(260, controlWLeft), CASTBAR_TIME_FORMATS, fields.timeFormat, "CURRENT", "MSUF2_CASTBAR_TIME_FORMAT" },
-        { "dropdown", "Position preset", 16, -142, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("TimePosition"), "RIGHT", "MSUF2_CASTBAR_TIME_POSITION" },
+        { "dropdown", "Position preset", 16, -142, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("TimePosition"), "RIGHT",
+            "MSUF2_CASTBAR_TIME_POSITION" },
         { "slider", "Size", 16, -196, controlWLeft, 0, 48, 1, DetailKey("TimeFontSize"), 0, "MSUF2_CASTBAR_TIME_SIZE" },
         -- Cast time color deliberately lives on the Colors page (castbar
         -- detail colors) and in the per-control color shortcuts only; a second
         -- inline swatch here double-writes the same key.
     })
+    s.IsManualSpellTextWidth, s.spellTextManualWidth, s.time = IsManualSpellTextWidth, spellTextManualWidth, time
+end
+local function BuildCastbar(ctx, builder, unit)
+    local fields = CASTBAR_FIELDS[unit]
+    if not fields then return end
+    local sec = builder:CollapsibleSection("castbar", "Castbar", CastbarTabHeight(unit, CurrentCastbarTab(unit)), false)
+    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
+    local leftX = 16
+    local cardGap = 28
+    local leftW = floor((sectionW - 48 - cardGap) * 0.5)
+    leftW = max(310, min(430, leftW))
+    local rightX = leftX + leftW + cardGap
+    local rightW = max(310, min(430, sectionW - rightX - 16))
+    local prefix = CASTBAR_PREFIX[unit]
+    local RefreshCastbarEnabled = M.RefreshProxy()
+    local canUseBlizzardProvider = (unit == "player")
+    local allCastbarControls, iconControls, spellControls, targetNameControls, timeControls = {}, {}, {}, {}, {}
+    local s = {
+        ctx = ctx, builder = builder, unit = unit, fields = fields, sec = sec, sectionW = sectionW, leftX = leftX,
+        cardGap = cardGap, leftW = leftW, rightX = rightX, rightW = rightW, prefix = prefix,
+        RefreshCastbarEnabled = RefreshCastbarEnabled, canUseBlizzardProvider = canUseBlizzardProvider,
+        allCastbarControls = allCastbarControls, iconControls = iconControls, spellControls = spellControls,
+        targetNameControls = targetNameControls, timeControls = timeControls,
+    }
+    CastbarSection.Binders(s)
+    CastbarSection.Cards(s)
+    CastbarSection.Tabs(s)
+    CastbarSection.General(s)
+    CastbarSection.IconAndText(s)
+    CastbarSection.Advanced(s)
+    local ReadWidthSource, ReadCastbarBackend, castbarNotice = s.ReadWidthSource, s.ReadCastbarBackend, s.castbarNotice
+    local enabled, provider, interrupt, manualWidth, icon = s.enabled, s.provider, s.interrupt, s.manualWidth, s.icon
+    local portraitCastIcon, text, targetNameToggle = s.portraitCastIcon, s.text, s.targetNameToggle
+    local IsManualSpellTextWidth, spellTextManualWidth, time = s.IsManualSpellTextWidth, s.spellTextManualWidth, s.time
     local castbarFeatureToggles = { time, interrupt, icon, text, targetNameToggle }
     local function MsufOn() return ReadCastbarBackend() == "MSUF" end
     -- Hover reason for the locked castbar controls: the section notice wording.
@@ -1584,7 +1712,8 @@ local function BuildCastbar(ctx, builder, unit)
     end
     RefreshCastbarEnabled = RefreshCastbarEnabled(M.BindGateGroup(ctx, nil, {
         { enable = { enabled }, controls = castbarFeatureToggles, on = MsufOn, reason = BackendReason },
-        { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end, reason = BackendReason },
+        { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end,
+            reason = BackendReason },
         { controls = allCastbarControls, on = MsufOn, reason = BackendReason },
         { controls = manualWidth, on = function() return MsufOn() and ReadWidthSource() == "manual" end },
         { controls = iconControls, on = function() return MsufOn() and ReadGeneralBool(fields.icon, true) end },
@@ -1601,7 +1730,8 @@ local function BuildCastbar(ctx, builder, unit)
                 if backend == "HIDE" then
                     castbarNotice:SetMessage(M.Format("%s castbar is off. Turn it on to use the MSUF castbar.", UnitTopLabel(unit)), "warning")
                 else
-                    castbarNotice:SetMessage(M.Format("%s castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.", UnitTopLabel(unit)), "warning")
+                    castbarNotice:SetMessage(M.Format("%s castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.",
+                        UnitTopLabel(unit)), "warning")
                 end
                 castbarNotice:Show()
             else
@@ -1613,7 +1743,11 @@ local function BuildCastbar(ctx, builder, unit)
     }))
 end
 if type(UP.RegisterSection) == "function" then
-    UP.RegisterSection({ id = "portrait", title = "Portrait", height = function(ctx, _, unit) return PortraitLayoutForWidth(ctx and ctx.width, CurrentPortraitTab(unit)).height end, placement = "after_inline_text", order = 10, build = BuildPortrait, prepareShell = function(ctx, sec, unit) PreparePortraitSwitch(ctx, sec, unit) end })
-    UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end, placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower, prepareShell = PreparePowerSwitch })
-    UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CastbarTabHeight(unit, CurrentCastbarTab(unit)) end, placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar, prepareShell = PrepareCastbarSwitch })
+    UP.RegisterSection({ id = "portrait", title = "Portrait", height = function(ctx, _, unit) return PortraitLayoutForWidth(ctx and ctx.width,
+        CurrentPortraitTab(unit)).height end, placement = "after_inline_text", order = 10, build = BuildPortrait,
+        prepareShell = function(ctx, sec, unit) PreparePortraitSwitch(ctx, sec, unit) end })
+    UP.RegisterSection({ id = "power", sectionId = "power_bar", title = "Power Bar", height = function(_, _, unit) return PowerSectionHeight(unit) end,
+        placement = "after_inline_text", order = 20, units = POWER_UNITS, build = BuildPower, prepareShell = PreparePowerSwitch })
+    UP.RegisterSection({ id = "castbar", title = "Castbar", height = function(_, _, unit) return CastbarTabHeight(unit, CurrentCastbarTab(unit)) end,
+        placement = "after_inline_text", order = 30, units = CASTBAR_UNITS, build = BuildCastbar, prepareShell = PrepareCastbarSwitch })
 end

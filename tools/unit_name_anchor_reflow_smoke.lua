@@ -319,14 +319,14 @@ Check(runtimeFontPos ~= nil, "identity Preview does not use the compiled runtime
 Check(previewSource:find('return (anchor == "NAMERIGHT" or anchor == "NAMELEFT") and "name" or nil', 1, true),
   "identity Preview changes font roles outside name-relative anchors")
 local previewTextPos = runtimeFontPos and previewSource:find(
-  "R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)",
+  "RenderState.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)",
   runtimeFontPos, true)
 Check(previewTextPos ~= nil and runtimeFontPos < previewTextPos,
   "identity Preview applies its font after its indicator color")
 local identityLayoutPos = previewTextPos and previewSource:find(
   "if isIdentityText then", previewTextPos, true)
 local statusTextLayoutPos = identityLayoutPos and previewSource:find(
-  "elseif R.PreviewStatus.IsStatusTextState", identityLayoutPos, true)
+  "elseif RenderState.PreviewStatus.IsStatusTextState", identityLayoutPos, true)
 local identityLayout = identityLayoutPos and statusTextLayoutPos
   and previewSource:sub(identityLayoutPos, statusTextLayoutPos - 1) or ""
 Check(identityLayout ~= "", "identity Preview layout branch is missing")

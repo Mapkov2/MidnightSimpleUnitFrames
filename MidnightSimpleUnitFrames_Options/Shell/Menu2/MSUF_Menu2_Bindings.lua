@@ -42,8 +42,10 @@ local TEXT_SLOT_SIDE_SET = { Left = true, Center = true, Right = true }
 local DIRECT_TEXT_GROUP_ORDER = { "name", "hp", "power" }
 local DIRECT_TEXT_GROUPS = {
     name = { single = true, basePrefix = "name", baseAliasPrefix = "nameText", directPrefix = "directName", defaultX = 4, defaultY = -4 },
-    hp = { basePrefix = "hp", baseAliasPrefix = "hpText", directPrefix = "directHealth", slotPrefix = "hpText", legacySlotPrefix = "hp", defaultX = -4, defaultY = -4 },
-    power = { basePrefix = "power", baseAliasPrefix = "powerText", directPrefix = "directPower", slotPrefix = "powerText", legacySlotPrefix = "power", defaultX = -4, defaultY = 4 },
+    hp = { basePrefix = "hp", baseAliasPrefix = "hpText", directPrefix = "directHealth", slotPrefix = "hpText", legacySlotPrefix = "hp",
+        defaultX = -4, defaultY = -4 },
+    power = { basePrefix = "power", baseAliasPrefix = "powerText", directPrefix = "directPower", slotPrefix = "powerText", legacySlotPrefix = "power",
+        defaultX = -4, defaultY = 4 },
 }
 
 local function ProfileSystemNeedsInit()

@@ -297,6 +297,8 @@ local Client = {
 }
 local MSUF = { MSUF2 = M, MSUF_Auras3 = A3, Client = Client, AddonName = "MidnightSimpleUnitFrames" }
 local pages = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/"
+-- The group page requires the shipped group aura filter table at load.
+assert(loadfile(root .. "/tools/tests/gf_aura_filter_fixture.lua"))().Install(root, _G, MSUF)
 for _, file in ipairs({ "MSUF_Menu2_AuraSettings.lua", "MSUF_Menu2_AuraControls.lua", "MSUF_Menu2_Auras.lua",
     "MSUF_Menu2_Auras_Group.lua", "MSUF_Menu2_Auras_Preview.lua" }) do
     assert(loadfile(pages .. file))("MidnightSimpleUnitFrames", MSUF)

@@ -26,6 +26,8 @@ local AURA_SORT_DIRECTION_VALUES, ActionButton = M.AuraSettings.AURA_SORT_DIRECT
 local AddAuraTooltipHelp, AddTooltip, AnchorLabel = M.AuraControls.AddAuraTooltipHelp, M.AuraControls.AddTooltip, M.AuraSettings.AnchorLabel
 local ApplyUnit, AuraCatalogToken, AuraControlMeta = M.AuraControls.ApplyUnit, M.AuraControls.AuraCatalogToken, M.AuraControls.AuraControlMeta
 local AuraControlMetaAtVisiblePath, AuraSortMethodValues = M.AuraControls.AuraControlMetaAtVisiblePath, M.AuraSettings.AuraSortMethodValues
+-- Custom container entries always carry their spell ID.
+local FilterSpellEntries = M.AuraControls.FilterSpellEntries
 local COOLDOWN_SWIPE_DIRECTION_VALUES, CUSTOM_FRAME_EFFECTS = M.AuraSettings.COOLDOWN_SWIPE_DIRECTION_VALUES, M.AuraSettings.CUSTOM_FRAME_EFFECTS
 local ChoiceLabel, ConfigureAuraSpellPriorityDrag = M.AuraSettings.ChoiceLabel, M.AuraControls.ConfigureAuraSpellPriorityDrag
 local ConfigureMaxDurationSlider, DEBUFF_TYPE_BORDER_MODE_VALUES = M.AuraControls.ConfigureMaxDurationSlider, M.AuraSettings.DEBUFF_TYPE_BORDER_MODE_VALUES
@@ -201,13 +203,7 @@ local function BuildCustomDefensivesTool(C)
             local entries = Model.CustomContainerSpellEntries(unit, index)
             local enabledPredefined = type(Model.PlayerDefensivePreviewEntries) == "function"
                 and #Model.PlayerDefensivePreviewEntries() or 0
-            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-            local visible = {}
-            for i = 1, #entries do
-                local entry = entries[i]
-                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
-                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-            end
+            local query, visible = FilterSpellEntries(entries, searchValue)
             T.SetTranslatedText(status, M.Format("%d predefined enabled · %d custom · click a custom entry to remove",
                 enabledPredefined, #entries) .. MatchSuffix(query, #visible))
             T.SetTranslatedText(empty, #entries == 0 and Tr("No custom buffs added.")
@@ -242,7 +238,10 @@ local function BuildCustomDotsTool(C)
         local values = type(Model.TargetDotValues) == "function" and Model.TargetDotValues() or {}
         local selected
         for i = 1, #values do
-            if values[i].value then selected = values[i].value; break end
+            if values[i].value then
+                selected = values[i].value
+                break
+            end
         end
         local dropdown = BindDropdown(ctx, section, "DoT", 24, -34, values, max(140, inner - 132),
             function() return selected end,
@@ -252,7 +251,10 @@ local function BuildCustomDotsTool(C)
         add:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -56)
         add:SetScript("OnClick", function()
             local changed = selected and Model.AddCustomContainerSpell(unit, index, selected)
-            if changed then Apply("AURAS3_TARGET_DOT_ADD", true); Rebuild(ctx) end
+            if changed then
+                Apply("AURAS3_TARGET_DOT_ADD", true)
+                Rebuild(ctx)
+            end
             return changed and true or false
         end)
         RegisterAuraTextAction(ctx, add, {
@@ -370,13 +372,7 @@ local function BuildCustomDotsTool(C)
         end
         refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
-            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-            local visible = {}
-            for i = 1, #entries do
-                local entry = entries[i]
-                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
-                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-            end
+            local query, visible = FilterSpellEntries(entries, searchValue)
             local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
             T.SetTranslatedText(status, M.Format("%d tracked DoTs", #entries)
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
@@ -654,14 +650,8 @@ local function BuildCustomWhitelistTool(C)
         end
         refreshList = function()
             local entries = Model.CustomContainerSpellEntries(unit, index)
-            local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            local query, visible = FilterSpellEntries(entries, searchValue)
             local customPriority = tostring(item.placed.sortMethod or ""):upper() == "CUSTOM_PRIORITY"
-            local visible = {}
-            for i = 1, #entries do
-                local entry = entries[i]
-                local haystack = (tostring(entry.text or "") .. " " .. tostring(entry.spellID or "")):lower()
-                if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-            end
             T.SetTranslatedText(status, tostring("Tracked ") .. auraPlural .. " (" .. tostring(#entries) .. " of 40)"
                 .. (customPriority and query ~= "" and Tr(" - clear Search to reorder")
                     or customPriority and Tr(" - dynamic priority active")
@@ -770,7 +760,8 @@ end
             { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
             { "Important", "onlyImportant" }, { "Crowd control", "crowdControl" },
         } or {
-            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only", "includeNameplateOnly" },
+            { "Only mine", "onlyMine" }, { "Important", "onlyImportant" }, { "Raid", "raid" }, { "Raid combat", "raidInCombat" }, { "Nameplate-only",
+                "includeNameplateOnly" },
             { "Removable by group", "includeDispellable" }, { "Any removable type", "dispellableAny" },
             { "Cancelable", "cancelable", { "notCancelable" } }, { "Not cancelable", "notCancelable", { "cancelable" } },
             { "External defensive", "externalDefensive" }, { "Big defensive", "bigDefensive" },
@@ -987,7 +978,7 @@ local function BuildCustomAppearancePandemic(C, StyleGrid)
 end
 
 local function BuildCustomAppearanceTool(C)
-    local ctx, b, unit, index, tool, isTargetDots, containerLabel, styleItem, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.tool, C.isTargetDots, C.containerLabel, C.styleItem, C.Apply, C.Grid
+    local ctx, b, unit, index, tool, isTargetDots, styleItem, Apply, Grid = C.ctx, C.b, C.unit, C.index, C.tool, C.isTargetDots, C.styleItem, C.Apply, C.Grid
     if tool == "appearance" then
         -- Every Custom container, including Player Defensives and Dots on
         -- Target, binds visual controls to this UnitFrame-owned record.
@@ -1068,7 +1059,7 @@ local function BuildCustomAppearanceTool(C)
         local cooldown = b:CollapsibleSection(CustomStyleSectionId(index, "cooldown"), "Cooldown Text", 184, true)
         if W.AttachContextColorShortcut then
             W.AttachContextColorShortcut(cooldown, {
-                title = containerLabel .. " Cooldown Text Settings",
+                title = M.Format("%s Cooldown Text Settings", ContainerTitle(C)),
                 historyLabel = "Custom aura cooldown text color",
                 historySource = "menu:custom-auras-cooldown-text-color",
                 scopeTag = "Shared",
@@ -1078,7 +1069,7 @@ local function BuildCustomAppearanceTool(C)
                     unit = unit,
                     kind = "aura",
                     colorReferences = AURA_COOLDOWN_COLOR_REFERENCES,
-                    colorTitle = containerLabel .. " Cooldown Colors",
+                    colorTitle = M.Format("%s Cooldown Colors", ContainerTitle(C)),
                     subtitle = "Custom aura text follows the shared Fonts settings.",
                     capabilities = {
                         opacity = false, baseline = false,
@@ -1131,7 +1122,9 @@ local function BuildCustomAppearanceTool(C)
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(durationBar, {{
                     text = reminder and Tr("Unavailable")
-                        or (enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off"),
+                        or (enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / "
+                            .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / "
+                            .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off"),
                     kind = enabled and "accent" or "muted", showWhenClosed = true,
                 }})
             end
@@ -1196,14 +1189,18 @@ local function BuildCustomAppearanceTool(C)
 
                 local stackEnabled = placed.showStacks ~= false
                 W.SetCollapsibleBadges(stack, {{
-                    text = stackEnabled and (tostring(Round(tonumber(placed.stackSize) or 14)) .. "px / " .. AnchorLabel(placed.stackAnchor or "BOTTOMRIGHT")) or "Off",
+                    text = stackEnabled and (tostring(Round(tonumber(placed.stackSize) or 14)) .. "px / "
+                        .. AnchorLabel(placed.stackAnchor or "BOTTOMRIGHT")) or "Off",
                     kind = stackEnabled and "accent" or "muted", showWhenClosed = true,
                 }})
 
                 local cooldownEnabled = placed.showCooldown ~= false
                 local decimal = Round(tonumber(placed.cooldownDecimalSeconds) or 3)
                 W.SetCollapsibleBadges(cooldown, {
-                    { text = cooldownEnabled and (tostring(Round(tonumber(placed.cooldownSize) or 14)) .. "px / " .. AnchorLabel(placed.cooldownAnchor or "CENTER") .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
+                    { text = cooldownEnabled and (tostring(Round(tonumber(placed.cooldownSize) or 14)) .. "px / "
+                        .. AnchorLabel(placed.cooldownAnchor or "CENTER") .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES,
+                        placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted",
+                        showWhenClosed = true },
                     { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
                 })
 
@@ -1237,7 +1234,8 @@ local function BuildCustomEffectTool(C)
         end
         BindSlider(ctx, section, "Opacity", 24, -96, 5, 100, 5, col3,
             function() return floor(((item.frame.color[4] or 0.8) * 100) + 0.5) end,
-            function(value) item.frame.color[4] = (tonumber(value) or 80) / 100; item.frame.tintAlpha = item.frame.color[4]; Apply("AURAS3_CUSTOM_EFFECT_ALPHA") end,
+            function(value) item.frame.color[4] = (tonumber(value)
+                or 80) / 100; item.frame.tintAlpha = item.frame.color[4]; Apply("AURAS3_CUSTOM_EFFECT_ALPHA") end,
             AuraControlMeta(ctx, "custom-container.effect.opacity"))
         BindSlider(ctx, section, "Layer (0-30)", 24 + col3 + gap, -96, 0, 30, 1, col3,
             function() return tonumber(item.frame.layer) or 0 end,

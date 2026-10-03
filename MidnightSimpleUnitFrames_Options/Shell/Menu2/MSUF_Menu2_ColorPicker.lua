@@ -390,7 +390,11 @@ local function ColorButtonOnClick(self)
         picker:Show()
     end
     local plus = EnsureColorPickerPlus()
-    if plus then plus:LayoutBesidePicker(); plus:Show(); plus:Refresh() end
+    if plus then
+        plus:LayoutBesidePicker()
+        plus:Show()
+        plus:Refresh()
+    end
 end
 
 --- Color buttons use Blizzard's shared ColorPickerFrame but keep previous RGB

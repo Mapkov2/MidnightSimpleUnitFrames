@@ -18,7 +18,7 @@ MSUF.UFPreviewRender = Render
 local MenuState = MSUF.MSUF2 or _G.MSUF2 or {}
 local EnsureDB = MenuState.EnsureDB
 local PickFallbackTable = MenuState.PickFallbackTable
-local F = MenuState.Fallbacks or {}
+local Fallbacks = MenuState.Fallbacks or {}
 local PreviewHelpers = MenuState.PreviewHelpers or {}
 local CPPreview = MenuState.ClassPowerPreview or {}
 local CastbarPreview = MSUF.UFPreviewCastbar or {}
@@ -35,6 +35,23 @@ local function Slot(conf, g, prefix, side, axis)
     local primary = prefix .. "Text" .. side .. "Offset" .. axis
     local legacy = prefix .. side .. "Offset" .. axis
     return NumField(conf, g, primary, legacy, primary, legacy, 0)
+end
+
+--- A bar's three text slot offsets from the stored settings: the bar's base
+--- offset (plus the font baseline) and each slot's own. leftSide/rightSide
+--- name the configured slot drawn on that physical side, so reverse order
+--- passes them mirrored.
+local function ConfiguredSlotOffsets(conf, g, prefix, fallbackY, baseline, leftSide, rightSide)
+    local baseX = NumField(conf, g, prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
+    local baseY = NumField(conf, g, prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + baseline
+    return {
+        leftX = baseX + Slot(conf, g, prefix, leftSide, "X"),
+        leftY = baseY + Slot(conf, g, prefix, leftSide, "Y"),
+        centerX = baseX + Slot(conf, g, prefix, "Center", "X"),
+        centerY = baseY + Slot(conf, g, prefix, "Center", "Y"),
+        rightX = baseX + Slot(conf, g, prefix, rightSide, "X"),
+        rightY = baseY + Slot(conf, g, prefix, rightSide, "Y"),
+    }
 end
 
 local PreviewBackgroundColorMode = MenuState.PreviewHelpers.HealthBackgroundColorMode
@@ -404,6 +421,28 @@ local function PreviewLiveStatusText(key)
     end
     return nil
 end
+--- Whether a status indicator shows in the preview: the compiled runtime
+--- switch when there is one (PvP also previews while only its context is
+--- off), otherwise the stored or default switch. Units the indicator does
+--- not support never show it; outside "all" mode only the selected one does.
+local function StatusPreviewShown(RenderState, Preview, spec, statusCfg, conf, g, key)
+    local show
+    if statusCfg then
+        show = statusCfg.enabled == true
+        if not show and spec.id == "statusPvp" and statusCfg.contextDisabled == true then show = true end
+    else
+        local showVal = conf[spec.show]
+        if showVal == nil then showVal = g[spec.show] end
+        show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
+    end
+    if spec.allowed and not spec.allowed(key) then show = false end
+    if Preview.GetStatusPreviewMode() ~= "all" then
+        local selected = RenderState.NormalizeStatusPreviewId(Preview.selectedStatusId)
+        if selected == "" then selected = "raidmarker" end
+        show = show and (spec.id == selected)
+    end
+    return show
+end
 local function PreviewLivePowerBar(key)
     local frame = PreviewLiveFrame(key)
     return frame and (frame.targetPowerBar or frame.powerBar or frame.Power) or nil
@@ -512,14 +551,20 @@ local function PreviewDirectTextPoint(value, fallback)
     if value and PREVIEW_DIRECT_TEXT_POINTS[value] then return value end
     return fallback or "CENTER"
 end
-local function PlaceDirectPreviewText(fs, parent, text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY, fallbackJustify, S)
-    if not fs then return end
+--- A direct-layout text's anchor from the compiled runtime text, with the
+--- caller's fallbacks for fields the runtime left out.
+local function DirectTextAnchor(text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY)
     local point = PreviewDirectTextPoint(text and text[prefix .. "Point"], fallbackPoint)
     local relPoint = PreviewDirectTextPoint(text and text[prefix .. "RelativePoint"], fallbackRelPoint or point)
     local x = tonumber(text and text[prefix .. "X"])
     local y = tonumber(text and text[prefix .. "Y"])
     if x == nil then x = fallbackX or 0 end
     if y == nil then y = fallbackY or 0 end
+    return point, relPoint, x, y
+end
+local function PlaceDirectPreviewText(fs, parent, text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY, fallbackJustify, S)
+    if not fs then return end
+    local point, relPoint, x, y = DirectTextAnchor(text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY)
     local justify = fallbackJustify or "CENTER"
     if point:find("LEFT", 1, true) then
         justify = "LEFT"
@@ -544,9 +589,18 @@ local function SetPreviewTextColor(fs, color, fallbackAlpha)
     fs:SetTextColor(r, g, b, a)
     return true
 end
-local function SetLeftSpan(region, parent, x, y) region:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0); region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", x or 0, y or 0) end
-local function SetRightSpan(region, parent, x, y) region:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x or 0, y or 0); region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", x or 0, y or 0) end
-local function SetBottomSpan(region, parent, leftX, rightX, y) region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", leftX or 0, y or 0); region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", rightX or 0, y or 0) end
+local function SetLeftSpan(region, parent, x, y)
+    region:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
+    region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", x or 0, y or 0)
+end
+local function SetRightSpan(region, parent, x, y)
+    region:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x or 0, y or 0)
+    region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", x or 0, y or 0)
+end
+local function SetBottomSpan(region, parent, leftX, rightX, y)
+    region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", leftX or 0, y or 0)
+    region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", rightX or 0, y or 0)
+end
 local function PointCoord(point, w, h)
     point = tostring(point or "CENTER"):upper()
     local x = (point:find("RIGHT", 1, true) and w) or (point:find("LEFT", 1, true) and 0) or (w * 0.5)
@@ -565,13 +619,9 @@ local function ExpandAnchoredRect(minX, maxX, minY, maxY, point, relPoint, x, y,
     local bottom = ty + (tonumber(y) or 0) - py
     return ExpandRect(minX, maxX, minY, maxY, left, bottom, left + rw, bottom + rh)
 end
-local function ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY, rw, rh, targetW, targetH)
-    local point = PreviewDirectTextPoint(text and text[prefix .. "Point"], fallbackPoint)
-    local relPoint = PreviewDirectTextPoint(text and text[prefix .. "RelativePoint"], fallbackRelPoint or point)
-    local x = tonumber(text and text[prefix .. "X"])
-    local y = tonumber(text and text[prefix .. "Y"])
-    if x == nil then x = fallbackX or 0 end
-    if y == nil then y = fallbackY or 0 end
+local function ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY,
+    rw, rh, targetW, targetH)
+    local point, relPoint, x, y = DirectTextAnchor(text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY)
     return ExpandAnchoredRect(minX, maxX, minY, maxY, point, relPoint, x, y, rw, rh, targetW, targetH)
 end
 local function ExpandRuntimeAnchorRect(minX, maxX, minY, maxY, anchor, x, y, rw, rh, targetW, targetH)
@@ -682,16 +732,16 @@ local function ApplyCastbarPreviewRounded(cast, g, edgeSize, bgR, bgG, bgB, bgA)
     return true
 end
 local UNIT_RENDER_FALLBACKS = {
-    RuntimeSpecForPreviewKey = F.Nil, RuntimeAppliedPortraitSizeForPreviewKey = F.Nil, RuntimeVisualScaleForPreviewKey = F.One, RuntimeCastbarVisualScaleForPreviewKey = F.One, ClampPreviewZoom = NumberOrOne, ResolveDefaultPreviewZoomLock = F.Noop, UpdatePreviewZoomControls = F.Noop,
-    ApplyPreviewRounded = F.Noop, ApplyPreviewFrameBorder = F.Noop, PreviewRoundedOutlineThickness = F.One, ApplyPreviewBoundsGuide = F.Noop,
-    CastbarShowIcon = F.True, CastbarShowText = F.TruePair, ReadCastbarNum = CastbarNumFallback, FormatCastbarPreviewTime = CastbarTimeFallback,
-    ClassColor = F.WhiteRGB, GradientPreviewColor = F.HealthRGB, HealthColor = F.HealthRGB, DarkMatchHPColor = F.HealthRGB, HealthBackgroundColor = F.DarkRGBA, PowerBackgroundColor = F.DarkRGBA, PowerColor = F.PowerRGB, FontColor = F.WhiteRGB,
-    PreviewResolveHealPredAnchorMode = F.Right, PreviewResolveAbsorbAnchorMode = F.Right, PreviewHealPredictionEnabled = F.False, PreviewAbsorbBarEnabled = F.False,
-    PreviewNameColor = F.WhiteRGB, PreviewToTInlineColor = F.WhiteRGB, NormalizeHpMode = F.Identity, NormalizePowerMode = F.Identity,
-    TextScopeGet = F.Nil, TextScopeHasSlots = F.False, TextScopeSlotGet = F.Nil, FormatMode = F.Empty, ShortenPreviewName = F.Identity, ToTInlineSeparator = F.Identity,
-    ResolveNameAnchor = ResolveNameAnchorFallback, LayoutUnitPreviewOverlay = F.Noop, PositionFromAnchor = F.Noop, PositionRuntimeLayoutIconPreview = F.Noop,
-    PositionStatusCornerPreview = F.Noop, PositionSameAnchorPreview = F.Noop, PositionLevelPreview = F.Noop, ResolveStatusPreviewAnchor = F.Center,
-    SetPreviewIconTexture = F.Noop, NormalizeStatusPreviewId = F.Identity, ApplyPreviewTextFocus = F.Noop,
+    RuntimeSpecForPreviewKey = Fallbacks.Nil, RuntimeAppliedPortraitSizeForPreviewKey = Fallbacks.Nil, RuntimeVisualScaleForPreviewKey = Fallbacks.One, RuntimeCastbarVisualScaleForPreviewKey = Fallbacks.One, ClampPreviewZoom = NumberOrOne, ResolveDefaultPreviewZoomLock = Fallbacks.Noop, UpdatePreviewZoomControls = Fallbacks.Noop,
+    ApplyPreviewRounded = Fallbacks.Noop, ApplyPreviewFrameBorder = Fallbacks.Noop, PreviewRoundedOutlineThickness = Fallbacks.One, ApplyPreviewBoundsGuide = Fallbacks.Noop,
+    CastbarShowIcon = Fallbacks.True, CastbarShowText = Fallbacks.TruePair, ReadCastbarNum = CastbarNumFallback, FormatCastbarPreviewTime = CastbarTimeFallback,
+    ClassColor = Fallbacks.WhiteRGB, GradientPreviewColor = Fallbacks.HealthRGB, HealthColor = Fallbacks.HealthRGB, DarkMatchHPColor = Fallbacks.HealthRGB, HealthBackgroundColor = Fallbacks.DarkRGBA, PowerBackgroundColor = Fallbacks.DarkRGBA, PowerColor = Fallbacks.PowerRGB, FontColor = Fallbacks.WhiteRGB,
+    PreviewResolveHealPredAnchorMode = Fallbacks.Right, PreviewResolveAbsorbAnchorMode = Fallbacks.Right, PreviewHealPredictionEnabled = Fallbacks.False, PreviewAbsorbBarEnabled = Fallbacks.False,
+    PreviewNameColor = Fallbacks.WhiteRGB, PreviewToTInlineColor = Fallbacks.WhiteRGB, NormalizeHpMode = Fallbacks.Identity, NormalizePowerMode = Fallbacks.Identity,
+    TextScopeGet = Fallbacks.Nil, TextScopeHasSlots = Fallbacks.False, TextScopeSlotGet = Fallbacks.Nil, FormatMode = Fallbacks.Empty, ShortenPreviewName = Fallbacks.Identity, ToTInlineSeparator = Fallbacks.Identity,
+    ResolveNameAnchor = ResolveNameAnchorFallback, LayoutUnitPreviewOverlay = Fallbacks.Noop, PositionFromAnchor = Fallbacks.Noop, PositionRuntimeLayoutIconPreview = Fallbacks.Noop,
+    PositionStatusCornerPreview = Fallbacks.Noop, PositionSameAnchorPreview = Fallbacks.Noop, PositionLevelPreview = Fallbacks.Noop, ResolveStatusPreviewAnchor = Fallbacks.Center,
+    SetPreviewIconTexture = Fallbacks.Noop, NormalizeStatusPreviewId = Fallbacks.Identity, ApplyPreviewTextFocus = Fallbacks.Noop,
 }
 
 --- Castbar preview detail layout mirrors the live CastbarVisuals rules without
@@ -708,19 +758,28 @@ local CHANNEL_SAMPLE_TICKS = 5
 local NO_CASTBAR_SAMPLE_CONFIG = {}
 local function CastbarSampleTexture(samples, surface, name)
     local region = samples[name]
-    if not region then region = PixelLayoutRegion(surface:CreateTexture(nil, "OVERLAY")); samples[name] = region end
+    if not region then
+        region = PixelLayoutRegion(surface:CreateTexture(nil, "OVERLAY"))
+        samples[name] = region
+    end
     region:ClearAllPoints()
     return region
 end
 local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, height, S, ApplyFont, TR, timeFontSize)
     local samples = mock.cast._featureSamples
-    if not samples then samples = {ticks={}}; mock.cast._featureSamples = samples end
+    if not samples then
+        samples = {ticks={}}
+        mock.cast._featureSamples = samples
+    end
     if key == "player" and g.castbarShowLatencyText == true then
         local text = samples.latency
         if not text then text = PixelLayoutRegion(surface:CreateFontString(nil, "OVERLAY")); samples.latency = text end
         ApplyFont(text, timeFontSize)
-        text:ClearAllPoints(); text:SetPoint("TOPRIGHT", surface, "BOTTOMRIGHT", 0, -S(2))
-        text:SetTextColor(1, 1, 1); text:SetText("50 ms"); text:Show()
+        text:ClearAllPoints()
+        text:SetPoint("TOPRIGHT", surface, "BOTTOMRIGHT", 0, -S(2))
+        text:SetTextColor(1, 1, 1)
+        text:SetText("50 ms")
+        text:Show()
     elseif samples.latency then samples.latency:Hide() end
     local channel = key == "player" and g.castbarShowChannelTicks == true
     local player = _G.MSUF_DB and _G.MSUF_DB.player
@@ -745,7 +804,10 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
     for i = 1, math.max(count, #samples.ticks) do
         local marker = samples.ticks[i]
         if i <= count then
-            if not marker then marker = PixelLayoutRegion(surface:CreateTexture(nil, "OVERLAY", nil, 7)); samples.ticks[i] = marker end
+            if not marker then
+                marker = PixelLayoutRegion(surface:CreateTexture(nil, "OVERLAY", nil, 7))
+                samples.ticks[i] = marker
+            end
             local percent = positions and type(positions[i]) == "number" and positions[i] or nil
             local fraction = percent and math.max(0, math.min(100, percent)) / 100
                 or math.max(0.02, math.min(0.98, i / (count + 1)))
@@ -759,7 +821,8 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
                 marker:SetPoint("BOTTOM", surface, "BOTTOMLEFT", width * fraction, 0)
             end
             marker:SetWidth(math.max(1, S(accent and 3 or 2)))
-            marker:SetColorTexture(1, accent and .72 or 1, accent and .2 or 1, 1); marker:Show()
+            marker:SetColorTexture(1, accent and .72 or 1, accent and .2 or 1, 1)
+            marker:Show()
         elseif marker then marker:Hide() end
     end
     mock.cast._msufPreviewChannelSample = channel
@@ -773,12 +836,16 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
     if kick and g.kickReadyTimeMarker == true then
         local marker = CastbarSampleTexture(samples, surface, "kickMarker")
         marker:SetPoint("TOPLEFT", surface, "TOPLEFT", width * .4, 0)
-        marker:SetSize(math.max(1, S(2)), height); marker:SetColorTexture(r, green, blue, alpha); marker:Show()
+        marker:SetSize(math.max(1, S(2)), height)
+        marker:SetColorTexture(r, green, blue, alpha)
+        marker:Show()
     elseif samples.kickMarker then samples.kickMarker:Hide() end
     if kick and g.kickReadyTimeSegment == true then
         local segment = CastbarSampleTexture(samples, surface, "kickSegment")
         segment:SetPoint("TOPLEFT", surface, "TOPLEFT", width * .4, 0)
-        segment:SetSize(width * .6, height); segment:SetColorTexture(r, green, blue, .25 * alpha); segment:Show()
+        segment:SetSize(width * .6, height)
+        segment:SetColorTexture(r, green, blue, .25 * alpha)
+        segment:Show()
     elseif samples.kickSegment then samples.kickSegment:Hide() end
     -- A separate representative strip retains the ordinary cast details. The
     -- detached sample uses configured dimensions/opacity and bounded canvas
@@ -787,7 +854,8 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
         local gcd = samples.gcd
         if not gcd then
             gcd = PixelLayoutRegion(CreateFrame("Frame", nil, canvas))
-            gcd.bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, gcd)); gcd.bar:SetAllPoints()
+            gcd.bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, gcd))
+            gcd.bar:SetAllPoints()
             gcd.bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8"); gcd.bar:SetStatusBarColor(.2, .75, 1, 1)
             local bg = PixelLayoutRegion(gcd.bar:CreateTexture(nil, "BACKGROUND")); bg:SetAllPoints(); bg:SetColorTexture(.05, .05, .05, .8)
             gcd.text = PixelLayoutRegion(gcd.bar:CreateFontString(nil, "OVERLAY")); gcd.text:SetPoint("LEFT", 3, 0)
@@ -802,16 +870,24 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
         h = math.min(h, math.max(4, ch - S(16)))
         local minX = g.showGCDBarSpell ~= false and math.max(S(12), h + S(2)) or S(12)
         w = math.min(w, math.max(20, cw - minX - S(12)))
-        gcd:SetSize(w, h); gcd:SetAlpha(detached and ((tonumber(g.gcdBarOpacity) or 100) / 100) or 1)
+        gcd:SetSize(w, h)
+        gcd:SetAlpha(detached and ((tonumber(g.gcdBarOpacity) or 100) / 100) or 1)
         gcd:ClearAllPoints()
         local x = detached and (cw * .5 + S(tonumber(g.gcdBarX) or 0) - w * .5) or S(12)
         local y = detached and (ch * .5 + S(tonumber(g.gcdBarY) or -180) - h * .5) or S(8)
         gcd:SetPoint("BOTTOMLEFT", canvas, "BOTTOMLEFT", math.max(minX, math.min(cw - w - S(12), x)), math.max(S(8), math.min(ch - h - S(8), y)))
-        gcd.bar:SetMinMaxValues(0, 1); gcd.bar:SetValue(.65)
-        ApplyFont(gcd.text, math.max(7, math.min(S(12), h - S(2)))); ApplyFont(gcd.time, math.max(7, math.min(S(12), h - S(2))))
-        gcd.text:SetText("GCD"); gcd.time:SetText("0.8")
-        gcd.text:SetShown(g.showGCDBarSpell ~= false); gcd.time:SetShown(g.showGCDBarTime ~= false)
-        gcd.icon:ClearAllPoints(); gcd.icon:SetPoint("TOPRIGHT", gcd, "TOPLEFT", -S(2), 0); gcd.icon:SetSize(h, h); gcd.icon:SetShown(g.showGCDBarSpell ~= false)
+        gcd.bar:SetMinMaxValues(0, 1)
+        gcd.bar:SetValue(.65)
+        ApplyFont(gcd.text, math.max(7, math.min(S(12), h - S(2))))
+        ApplyFont(gcd.time, math.max(7, math.min(S(12), h - S(2))))
+        gcd.text:SetText("GCD")
+        gcd.time:SetText("0.8")
+        gcd.text:SetShown(g.showGCDBarSpell ~= false)
+        gcd.time:SetShown(g.showGCDBarTime ~= false)
+        gcd.icon:ClearAllPoints()
+        gcd.icon:SetPoint("TOPRIGHT", gcd, "TOPLEFT", -S(2), 0)
+        gcd.icon:SetSize(h, h)
+        gcd.icon:SetShown(g.showGCDBarSpell ~= false)
         gcd:Show()
     elseif samples.gcd then samples.gcd:Hide() end
 end
@@ -831,7 +907,10 @@ end
 -- One-region lists for the handle placer, kept on the region itself.
 local function RegionList(region)
     local list = region._msufPreviewRegionList
-    if not list then list = { region }; region._msufPreviewRegionList = list end
+    if not list then
+        list = { region }
+        region._msufPreviewRegionList = list
+    end
     return list
 end
 --- The time text's handle around the text as it reads now: the refresh and
@@ -845,7 +924,8 @@ local function PlaceCastbarTimeHandle(box, mock, canvas, UnitPreviewText, PlaceH
         PlaceHandle(box.handleCastbarTime, time)
     end
 end
-local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, CastbarShowIcon, CastbarShowText, ReadCastbarNum, FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle, animState)
+local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, CastbarShowIcon,
+    CastbarShowText, ReadCastbarNum, FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle, animState)
     local detailPrefix = CastbarPreviewDetailPrefix(key)
     local showIcon = CastbarShowIcon(key, g)
     mock.cast.icon:SetShown(showIcon)
@@ -945,7 +1025,8 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         mock.cast.target:SetText(TR("Cleave Training Dummy"))
         local targetX = ReadCastbarNum(g, key, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0)
         local targetY = ReadCastbarNum(g, key, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1)
-        local targetPosition = NormalizeCastbarPreviewTextPos(CastbarPreview.ReadString(g, key, "TargetNamePosition", "bossCastTargetNamePosition", "BELOW"), "BELOW")
+        local targetPosition = NormalizeCastbarPreviewTextPos(CastbarPreview.ReadString(g, key, "TargetNamePosition",
+            "bossCastTargetNamePosition", "BELOW"), "BELOW")
         local targetJustify = NormalizeCastbarPreviewJustify(CastbarPreview.ReadString(g, key, "TargetNameAlign", "bossCastTargetNameAlign", "RIGHT"), "RIGHT")
         -- Runtime sizes and anchors this rect against frame.statusBar, whose
         -- width excludes external icons and the castbar outline. `surface` is
@@ -975,15 +1056,7 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
     ApplyPreviewFont(mock.cast.time, max(7, S(timeSize)))
     ApplyCastbarPreviewProgress(mock.cast, g, key, S, animState, FormatCastbarPreviewTime)
     if showTime then
-        local timeX = ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", g.castbarPlayerTimeOffsetX or -2)
-        local timeY = ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", g.castbarPlayerTimeOffsetY or 0)
-        if key == "boss" then
-            timeX = -2 + (tonumber(g.bossCastTimeOffsetX) or 0)
-            timeY = tonumber(g.bossCastTimeOffsetY) or 0
-        elseif key == "arena" then
-            timeX = -2 + (tonumber(g.arenaCastTimeOffsetX) or 0)
-            timeY = tonumber(g.arenaCastTimeOffsetY) or 0
-        end
+        local timeX, timeY = CastbarPreview.TimeOffsets(g, key)
         local tr, tg, tb = g[(detailPrefix or "") .. "TimeColorR"], g[(detailPrefix or "") .. "TimeColorG"], g[(detailPrefix or "") .. "TimeColorB"]
         if tr or tg or tb then mock.cast.time:SetTextColor(tr or fr, tg or fg, tb or fb, 1) else mock.cast.time:SetTextColor(fr, fg, fb, 1) end
         local timePosition = NormalizeCastbarPreviewTextPos(CastbarPreview.ReadString(g, key, "TimePosition", "bossCastTimePosition", "RIGHT"), "RIGHT")
@@ -1110,7 +1183,10 @@ local NO_TEXTURES = {}
 -- or animation tick passes the same object instead of a new one per gradient.
 local function TextureLayerColor(owner, field, r, g, b, a)
     local color = owner[field]
-    if color and color.SetRGBA then color:SetRGBA(r, g, b, a); return color end
+    if color and color.SetRGBA then
+        color:SetRGBA(r, g, b, a)
+        return color
+    end
     color = _G.CreateColor(r, g, b, a)
     owner[field] = color
     return color
@@ -1394,19 +1470,19 @@ local Stage = {}
 --- Resolves deps, the previewed unit, its config, live or mock data and the
 --- runtime specs, then refreshes the bound menu controls and the title.
 function Stage.ResolveInputs(st)
-    local D, R, box, reason = st.D, st.R, st.box, st.reason
-    local TR, PortraitStyleGet, max, min, abs, floor, format, TEX_W8 = D.TR, D.PortraitStyleGet, D.max, D.min, D.abs, D.floor, D.format, D.TEX_W8
-    local ApplyPreviewFont, CastbarEnabled, ReadCastbarSize = D.ApplyPreviewFont, D.CastbarEnabled, D.ReadCastbarSize
-    local CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey = D.CastbarOffsetFields, D.CastbarDetached, D.CanDetachPowerBarKey
-    local ClampPreviewLayer, SetTex, ReadPowerBarHeight, PlaceHandle = D.ClampPreviewLayer, D.SetTex, D.ReadPowerBarHeight, D.PlaceHandle
-    local UnitPreviewText, UnitPreviewTextMovesTogether, SetShownSafe = D.UnitPreviewText, D.UnitPreviewTextMovesTogether, D.SetShownSafe
-    local ApplyPreviewLayerVisibility, ApplyPreviewTransparency = D.ApplyPreviewLayerVisibility, D.ApplyPreviewTransparency
-    local RefreshHandleSelectionVisuals, Auras = D.RefreshHandleSelectionVisuals, D.Auras
+    local Deps, RenderState, box, reason = st.D, st.R, st.box, st.reason
+    local TR, PortraitStyleGet, max, min, abs, floor, format, TEX_W8 = Deps.TR, Deps.PortraitStyleGet, Deps.max, Deps.min, Deps.abs, Deps.floor, Deps.format, Deps.TEX_W8
+    local ApplyPreviewFont, CastbarEnabled, ReadCastbarSize = Deps.ApplyPreviewFont, Deps.CastbarEnabled, Deps.ReadCastbarSize
+    local CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey = Deps.CastbarOffsetFields, Deps.CastbarDetached, Deps.CanDetachPowerBarKey
+    local ClampPreviewLayer, SetTex, ReadPowerBarHeight, PlaceHandle = Deps.ClampPreviewLayer, Deps.SetTex, Deps.ReadPowerBarHeight, Deps.PlaceHandle
+    local UnitPreviewText, UnitPreviewTextMovesTogether, SetShownSafe = Deps.UnitPreviewText, Deps.UnitPreviewTextMovesTogether, Deps.SetShownSafe
+    local ApplyPreviewLayerVisibility, ApplyPreviewTransparency = Deps.ApplyPreviewLayerVisibility, Deps.ApplyPreviewTransparency
+    local RefreshHandleSelectionVisuals, Auras = Deps.RefreshHandleSelectionVisuals, Deps.Auras
     local panel = box._msufPanel
-    local UNIT_DATA = D.UNIT_DATA or {}
-    local UNIT_LABELS = D.UNIT_LABELS or {}
-    local key = D.CurrentPanelKey(panel)
-    local conf, g = D.UnitDB(key)
+    local UNIT_DATA = Deps.UNIT_DATA or {}
+    local UNIT_LABELS = Deps.UNIT_LABELS or {}
+    local key = Deps.CurrentPanelKey(panel)
+    local conf, g = Deps.UnitDB(key)
     --- Guides are setting-backed, unlike the other ephemeral preview layers.
     --- Re-read them on every visible preview refresh so a factory reset or
     --- profile switch cannot leave the already-built layer rail stale.
@@ -1418,17 +1494,17 @@ function Stage.ResolveInputs(st)
     box._playerManaSourcePreviewActive = key == "player"
         and PreviewHelpers.PlayerManaSourceActive
         and PreviewHelpers.PlayerManaSourceActive(conf) or false
-    local data = (D.LiveUnitData and D.LiveUnitData(key, box._playerManaSourcePreviewActive))
+    local data = (Deps.LiveUnitData and Deps.LiveUnitData(key, box._playerManaSourcePreviewActive))
         or UNIT_DATA[key] or UNIT_DATA.player or {}
-    local runtimeSpec = R.RuntimeSpecForPreviewKey(key)
+    local runtimeSpec = RenderState.RuntimeSpecForPreviewKey(key)
     local runtimePower = runtimeSpec and runtimeSpec.power
     local runtimeStatus = runtimeSpec and runtimeSpec.status
-    box._previewStatusText = R.PreviewStatus.StatusTextPreviewText
-        and R.PreviewStatus.StatusTextPreviewText((runtimeStatus and runtimeStatus.statusText) or g, PreviewLiveStatusText(key))
+    box._previewStatusText = RenderState.PreviewStatus.StatusTextPreviewText
+        and RenderState.PreviewStatus.StatusTextPreviewText((runtimeStatus and runtimeStatus.statusText) or g, PreviewLiveStatusText(key))
     local runtimeText = runtimeSpec and runtimeSpec.text
     local runtimeClassPower = runtimeSpec and runtimeSpec.classPower
     box.key = key
-    if D.SyncLiveStateDriver then D.SyncLiveStateDriver(box, key) end
+    if Deps.SyncLiveStateDriver then Deps.SyncLiveStateDriver(box, key) end
     local skipControlRefresh = (reason == "OPTIONS_APPLY_DB" or reason == "UNIT_MENU_ENTER" or reason == "UNIT_MENU_REENTER")
         or reason == "UNIT_PREVIEW_DRAG"
         or reason == "UNIT_PREVIEW_ANIMATE"
@@ -1458,7 +1534,7 @@ end
 --- Canvas size, frame size, portrait side/placement/size/border and castbar
 --- size/offsets, plus the boss border inset.
 function Stage.ResolveFrameGeometry(st)
-    local Auras, CastbarDetached, CastbarEnabled, CastbarOffsetFields, PortraitStyleGet, R, ReadCastbarSize, box = st.Auras, st.CastbarDetached, st.CastbarEnabled, st.CastbarOffsetFields, st.PortraitStyleGet, st.R, st.ReadCastbarSize, st.box
+    local Auras, CastbarDetached, CastbarEnabled, CastbarOffsetFields, PortraitStyleGet, RenderState, ReadCastbarSize, box = st.Auras, st.CastbarDetached, st.CastbarEnabled, st.CastbarOffsetFields, st.PortraitStyleGet, st.R, st.ReadCastbarSize, st.box
     local conf, floor, g, key, max, runtimeSpec = st.conf, st.floor, st.g, st.key, st.max, st.runtimeSpec
     local canvas = box.canvas
     local cw = canvas:GetWidth() or 600
@@ -1467,7 +1543,7 @@ function Stage.ResolveFrameGeometry(st)
     if ch <= 1 then ch = 180 end
     local w = tonumber(runtimeSpec and runtimeSpec.width) or tonumber(conf.width or conf.frameWidth) or ((key == "boss" or key == "arena") and 180 or (key == "focus" and 180 or 275))
     local h = tonumber(runtimeSpec and runtimeSpec.height) or tonumber(conf.height or conf.frameHeight) or ((key == "boss" or key == "arena") and 30 or (key == "focus" and 30 or 40))
-    w, h = R.ClampUnitPreviewSize(w, h)
+    w, h = RenderState.ClampUnitPreviewSize(w, h)
     local mode = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.side) or conf.portraitMode
     local hasPortrait
     if runtimeSpec and runtimeSpec.portrait then
@@ -1510,7 +1586,7 @@ function Stage.ResolveFrameGeometry(st)
     if runtimeSizeMode == "SEPARATE"
         or (tonumber(PortraitStyleGet(key, "portraitSizeOverride", 0)) or 0) <= 0
     then
-        box._runtimeAppliedPortraitW, box._runtimeAppliedPortraitH = R.RuntimeAppliedPortraitSizeForPreviewKey(key)
+        box._runtimeAppliedPortraitW, box._runtimeAppliedPortraitH = RenderState.RuntimeAppliedPortraitSizeForPreviewKey(key)
         if tonumber(box._runtimeAppliedPortraitW) and box._runtimeAppliedPortraitW > 0 then
             box._runtimePortraitW = box._runtimeAppliedPortraitW
         end
@@ -1520,12 +1596,15 @@ function Stage.ResolveFrameGeometry(st)
     else
         box._runtimeAppliedPortraitW, box._runtimeAppliedPortraitH = nil, nil
     end
-    box._runtimePortraitBorderStyle = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border and runtimeSpec.portrait.border.style) or PortraitStyleGet(key, "portraitBorderStyle", "NONE") or "NONE"
+    box._runtimePortraitBorderStyle = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border and runtimeSpec.portrait.border.style)
+        or PortraitStyleGet(key, "portraitBorderStyle", "NONE") or "NONE"
     box._runtimePortraitBorderThickness = 0
     box._runtimePortraitBorderFill = false
     if hasPortrait and box._runtimePortraitBorderStyle ~= "NONE" then
-        box._runtimePortraitBorderThickness = max(1, tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border and runtimeSpec.portrait.border.thickness) or tonumber(PortraitStyleGet(key, "portraitBorderThickness", 2)) or 2)
-        box._runtimePortraitBorderFill = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border and runtimeSpec.portrait.border.fill == true) or (not (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border) and PortraitStyleGet(key, "portraitFillBorder", false) == true)
+        box._runtimePortraitBorderThickness = max(1, tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border
+            and runtimeSpec.portrait.border.thickness) or tonumber(PortraitStyleGet(key, "portraitBorderThickness", 2)) or 2)
+        box._runtimePortraitBorderFill = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border and runtimeSpec.portrait.border.fill == true)
+            or (not (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.border) and PortraitStyleGet(key, "portraitFillBorder", false) == true)
     end
     local castEnabled = runtimeSpec and runtimeSpec.castbar and runtimeSpec.castbar.enabled == true
     if not (runtimeSpec and runtimeSpec.castbar) then castEnabled = CastbarEnabled(key, g) end
@@ -1540,8 +1619,8 @@ function Stage.ResolveFrameGeometry(st)
     local castPreviewVisible = castEnabled and PreviewLayerWanted(box, "castbar")
     -- Projected position of a detached castbar, from the live layout.
     box._detachedCastProjectedX, box._detachedCastProjectedY = nil, nil
-    if castDetached and type(R.DetachedCastbarOffsetForPreviewKey) == "function" then
-        box._detachedCastProjectedX, box._detachedCastProjectedY = R.DetachedCastbarOffsetForPreviewKey(key)
+    if castDetached and type(RenderState.DetachedCastbarOffsetForPreviewKey) == "function" then
+        box._detachedCastProjectedX, box._detachedCastProjectedY = RenderState.DetachedCastbarOffsetForPreviewKey(key)
         if tonumber(box._detachedCastProjectedX) and tonumber(box._detachedCastProjectedY) then
             castOffsetX, castOffsetY = box._detachedCastProjectedX, box._detachedCastProjectedY
         end
@@ -1561,7 +1640,7 @@ end
 --- Class power preview spec, embedded/attached/detached power bar geometry,
 --- combat animation state and the detached bar width/height.
 function Stage.ResolvePowerGeometry(st)
-    local CanDetachPowerBarKey, D, ReadPowerBarHeight, box, conf, data, floor, key = st.CanDetachPowerBarKey, st.D, st.ReadPowerBarHeight, st.box, st.conf, st.data, st.floor, st.key
+    local CanDetachPowerBarKey, Deps, ReadPowerBarHeight, box, conf, data, floor, key = st.CanDetachPowerBarKey, st.D, st.ReadPowerBarHeight, st.box, st.conf, st.data, st.floor, st.key
     local max, runtimeClassPower, runtimePower, w = st.max, st.runtimeClassPower, st.runtimePower, st.w
     local bars = EnsureDB().bars or {}
     local classPowerPreviewSpec
@@ -1586,8 +1665,9 @@ function Stage.ResolvePowerGeometry(st)
         end
     end
     local powerAllowed = runtimePower and runtimePower.enabled == true
-    if runtimePower == nil then powerAllowed = D.ReadPowerBarEnabled(conf, key) end
-    local detachedPower = CanDetachPowerBarKey(key) and powerAllowed and ((runtimePower and runtimePower.detached == true) or (runtimePower == nil and conf.powerBarDetached == true))
+    if runtimePower == nil then powerAllowed = Deps.ReadPowerBarEnabled(conf, key) end
+    local detachedPower = CanDetachPowerBarKey(key) and powerAllowed and ((runtimePower and runtimePower.detached == true)
+        or (runtimePower == nil and conf.powerBarDetached == true))
     box._runtimePowerEmbedded = powerAllowed and not detachedPower and (
         (runtimePower and runtimePower.embed ~= false)
         or (runtimePower == nil and conf.embedPowerBarIntoHealth == true)
@@ -1599,7 +1679,8 @@ function Stage.ResolvePowerGeometry(st)
         or 0
     local classPowerOn = key == "player" and runtimeClassPower and runtimeClassPower.enabled == true or false
     if key == "player" and runtimeClassPower == nil then classPowerOn = bars.showClassPower ~= false end
-    if key == "player" and classPowerPreviewSpec then classPowerOn = bars.showClassPower ~= false and classPowerPreviewSpec.enabled ~= false and classPowerPreviewSpec.mode ~= "none" end
+    if key == "player" and classPowerPreviewSpec then classPowerOn = bars.showClassPower ~= false and classPowerPreviewSpec.enabled ~= false
+        and classPowerPreviewSpec.mode ~= "none" end
     local powerFrac = tonumber(data.power) or 1
     if not detachedPower and key ~= "player" and data.live ~= true then powerFrac = 1 end
     if powerFrac < 0 then powerFrac = 0 elseif powerFrac > 1 then powerFrac = 1 end
@@ -1639,7 +1720,8 @@ function Stage.ResolvePowerGeometry(st)
         box._runtimeDetachedPowerY = floor(box._runtimeDetachedPowerY + 0.5)
     end
     box._runtimeDetachedPowerAnchorClass = key == "player" and ((runtimePower and runtimePower.detachedAnchorClass == true) or (runtimePower == nil and conf.detachedPowerBarAnchorToClassPower == true))
-    box._runtimeDetachedPowerTextOnBar = (runtimePower and runtimePower.textOnDetached == true) or (runtimePower == nil and conf.detachedPowerBarTextOnBar == true)
+    box._runtimeDetachedPowerTextOnBar = (runtimePower and runtimePower.textOnDetached == true)
+        or (runtimePower == nil and conf.detachedPowerBarTextOnBar == true)
     box._runtimeDetachedPowerShape = key == "player"
         and ResolvePreviewPowerShape((runtimePower and runtimePower.shape) or conf.detachedPowerBarShape or "FOLLOW_CLASS", bars.classPowerShape)
         or "BAR"
@@ -1701,7 +1783,7 @@ end
 --- Footprint pass one: name, health/power text slots, status indicators and
 --- the boss target marker expand the fit rectangle.
 function Stage.MeasureTextFootprint(st, Preview)
-    local D, R, box, conf, data, detachedPowerInUnitPreview, g, h = st.D, st.R, st.box, st.conf, st.data, st.detachedPowerInUnitPreview, st.g, st.h
+    local Deps, RenderState, box, conf, data, detachedPowerInUnitPreview, g, h = st.D, st.R, st.box, st.conf, st.data, st.detachedPowerInUnitPreview, st.g, st.h
     local key, runtimeSpec, runtimeStatus, runtimeText, w = st.key, st.runtimeSpec, st.runtimeStatus, st.runtimeText, st.w
     local minX, maxX, minY, maxY = 0, w, 0, h
     box._statusFootprintVisible = nil
@@ -1713,48 +1795,52 @@ function Stage.MeasureTextFootprint(st, Preview)
         local rawBaseline = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
         if rawBaseline < -4 then rawBaseline = -4 elseif rawBaseline > 4 then rawBaseline = 4 end
         if PreviewLayerWanted(box, "nameText") and conf.showName ~= false and (not runtimeSpec or runtimeSpec.showName ~= false) then
-            local label = R.ShortenPreviewName(data.name, runtimeText, conf)
+            local label = RenderState.ShortenPreviewName(data.name, runtimeText, conf)
             if runtimeText and runtimeText.directLayout == true then
-                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directName", "CENTER", "CENTER", 0, 0, ApproxTextWidth(label, rawNameSize, 14), rawNameSize + 6, w, h)
+                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directName", "CENTER", "CENTER", 0, 0,
+                    ApproxTextWidth(label, rawNameSize, 14), rawNameSize + 6, w, h)
             else
-                local npt, nrel, nx = R.ResolveNameAnchor(conf.nameTextAnchor or "TOPLEFT", tonumber(conf.nameOffsetX) or 4)
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, npt, nrel, nx, (tonumber(conf.nameOffsetY) or -4) + rawBaseline, ApproxTextWidth(label, rawNameSize, 14), rawNameSize + 6, w, h)
+                local npt, nrel, nx = RenderState.ResolveNameAnchor(conf.nameTextAnchor or "TOPLEFT", tonumber(conf.nameOffsetX) or 4)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, npt, nrel, nx, (tonumber(conf.nameOffsetY) or -4) + rawBaseline,
+                    ApproxTextWidth(label, rawNameSize, 14), rawNameSize + 6, w, h)
             end
         end
 
         local function TextOffsets(prefix, fallbackY, mirrorSlots)
-            local baseX = NumField(conf, g, prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
-            local baseY = NumField(conf, g, prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + rawBaseline
-
             -- Reverse order renders the configured Right slot on the physical
             -- left side (and vice versa); its offsets follow the content.
             local leftSide = mirrorSlots and "Right" or "Left"
             local rightSide = mirrorSlots and "Left" or "Right"
-            return {
-                leftX = baseX + Slot(conf, g, prefix, leftSide, "X"),
-                leftY = baseY + Slot(conf, g, prefix, leftSide, "Y"),
-                centerX = baseX + Slot(conf, g, prefix, "Center", "X"),
-                centerY = baseY + Slot(conf, g, prefix, "Center", "Y"),
-                rightX = baseX + Slot(conf, g, prefix, rightSide, "X"),
-                rightY = baseY + Slot(conf, g, prefix, rightSide, "Y"),
-            }
+            return ConfiguredSlotOffsets(conf, g, prefix, fallbackY, rawBaseline, leftSide, rightSide)
         end
         local hpTextVisible = PreviewLayerWanted(box, "hpText") and conf.showHP ~= false and (not runtimeSpec or runtimeSpec.showHealthText ~= false)
         if hpTextVisible then
-            local hpRev = R.TextScopeGet(key, "hpTextReverse", false) == true
+            local hpRev = RenderState.TextScopeGet(key, "hpTextReverse", false) == true
             local leftSizeRuntimeKey = hpRev and "healthRightFontSize" or "healthLeftFontSize"
             local leftSizeDbKey = hpRev and "hpTextRightFontSize" or "hpTextLeftFontSize"
             local rightSizeRuntimeKey = hpRev and "healthLeftFontSize" or "healthRightFontSize"
             local rightSizeDbKey = hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize"
             local o = TextOffsets("hp", -4, hpRev)
             if runtimeText and runtimeText.directLayout == true then
-                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, hpRev and "directHealthRight" or "directHealthLeft", "LEFT", "LEFT", 4, 0, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey, rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey, rawHPSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directHealthCenter", "CENTER", "CENTER", 0, 0, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, hpRev and "directHealthLeft" or "directHealthRight", "RIGHT", "RIGHT", -4, 0, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, hpRev and "directHealthRight" or "directHealthLeft",
+                    "LEFT", "LEFT", 4, 0, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey,
+                    rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey, rawHPSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directHealthCenter", "CENTER", "CENTER", 0, 0,
+                    ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize), 10),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, hpRev and "directHealthLeft" or "directHealthRight",
+                    "RIGHT", "RIGHT", -4, 0, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey,
+                    rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize) + 6, w, h)
             else
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "LEFT", "LEFT", 4 + o.leftX, o.leftY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey, rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey, rawHPSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "CENTER", "CENTER", o.centerX, o.centerY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "RIGHT", "RIGHT", -4 + o.rightX, o.rightY, ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize), 10), ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "LEFT", "LEFT", 4 + o.leftX, o.leftY,
+                    ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey, rawHPSize), 10),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, leftSizeRuntimeKey, leftSizeDbKey, rawHPSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "CENTER", "CENTER", o.centerX, o.centerY,
+                    ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize), 10),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", rawHPSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "RIGHT", "RIGHT", -4 + o.rightX, o.rightY,
+                    ApproxTextWidth("410K - 41%", ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize), 10),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, rightSizeRuntimeKey, rightSizeDbKey, rawHPSize) + 6, w, h)
             end
         end
         local powerTextVisible = box._runtimeAugCompositePreview ~= true
@@ -1762,42 +1848,40 @@ function Stage.MeasureTextFootprint(st, Preview)
         if powerTextVisible then
             local o = TextOffsets("power", 4)
             if runtimeText and runtimeText.directLayout == true and not (detachedPowerInUnitPreview and box._runtimeDetachedPowerTextOnBar) then
-                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directPowerLeft", "LEFT", "LEFT", 4, 0, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directPowerCenter", "CENTER", "CENTER", 0, 0, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directPowerRight", "RIGHT", "RIGHT", -4, 0, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directPowerLeft", "LEFT", "LEFT", 4, 0,
+                    ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize), 6),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directPowerCenter", "CENTER", "CENTER", 0, 0,
+                    ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize), 6),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandDirectPreviewTextRect(minX, maxX, minY, maxY, runtimeText, "directPowerRight", "RIGHT", "RIGHT", -4, 0,
+                    ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize), 6),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize) + 6, w, h)
             else
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMLEFT", "BOTTOMLEFT", 4 + o.leftX, o.leftY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOM", "BOTTOM", o.centerX, o.centerY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize) + 6, w, h)
-                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + o.rightX, o.rightY, ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize), 6), ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMLEFT", "BOTTOMLEFT", 4 + o.leftX, o.leftY,
+                    ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize), 6),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, "powerLeftFontSize", "powerTextLeftFontSize", rawPowerSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOM", "BOTTOM", o.centerX, o.centerY,
+                    ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize), 6),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", rawPowerSize) + 6, w, h)
+                minX, maxX, minY, maxY = ExpandAnchoredRect(minX, maxX, minY, maxY, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + o.rightX, o.rightY,
+                    ApproxTextWidth("240K", ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize), 6),
+                    ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", rawPowerSize) + 6, w, h)
             end
         end
         if PreviewLayerWanted(box, "status") then
-            for i = 1, #(D.STATUS_PREVIEW or {}) do
-                local spec = D.STATUS_PREVIEW[i]
-                local statusCfg = runtimeStatus and runtimeStatus[R.STATUS_RUNTIME_KEYS[spec.id]]
-                local show
-                if statusCfg then
-                    show = statusCfg.enabled == true
-                    if not show and spec.id == "statusPvp" and statusCfg.contextDisabled == true then show = true end
-                else
-                    local showVal = conf[spec.show]
-                    if showVal == nil then showVal = g[spec.show] end
-                    show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
-                end
-                if spec.allowed and not spec.allowed(key) then show = false end
-                if Preview.GetStatusPreviewMode() ~= "all" then
-                    local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
-                    if selected == "" then selected = "raidmarker" end
-                    show = show and (spec.id == selected)
-                end
+            for i = 1, #(Deps.STATUS_PREVIEW or {}) do
+                local spec = Deps.STATUS_PREVIEW[i]
+                local statusCfg = runtimeStatus and runtimeStatus[RenderState.STATUS_RUNTIME_KEYS[spec.id]]
+                local show = StatusPreviewShown(RenderState, Preview, spec, statusCfg, conf, g, key)
                 if show then
                     box._statusFootprintVisible = true
-                    local isIdentityText = R.PreviewStatus.IsIdentityText and R.PreviewStatus.IsIdentityText(spec)
+                    local isIdentityText = RenderState.PreviewStatus.IsIdentityText and RenderState.PreviewStatus.IsIdentityText(spec)
                     local rawSize = tonumber(statusCfg and statusCfg.size) or tonumber(conf[spec.size]) or tonumber(g[spec.size])
                     if rawSize == nil then
                         if isIdentityText then
                             rawSize = rawNameSize
-                        elseif R.PreviewStatus.IsStatusTextState and R.PreviewStatus.IsStatusTextState(spec) then
+                        elseif RenderState.PreviewStatus.IsStatusTextState and RenderState.PreviewStatus.IsStatusTextState(spec) then
                             rawSize = rawNameSize + 2
                         else
                             rawSize = spec.defaultSize
@@ -1808,12 +1892,13 @@ function Stage.MeasureTextFootprint(st, Preview)
                         rw = tonumber(statusCfg and statusCfg.width) or tonumber(conf[spec.width]) or tonumber(g[spec.width]) or spec.defaultWidth or 80
                     end
                     if isIdentityText then
-                        local previewText = R.PreviewStatus.IdentityPreviewText and R.PreviewStatus.IdentityPreviewText(spec, data) or spec.text
+                        local previewText = RenderState.PreviewStatus.IdentityPreviewText and RenderState.PreviewStatus.IdentityPreviewText(spec, data) or spec.text
                         rw, rh = ApproxTextWidth(previewText, rawSize, 2), rawSize + 4
-                    elseif R.PreviewStatus.IsStatusTextState and R.PreviewStatus.IsStatusTextState(spec) then
-                        rw, rh = ApproxTextWidth(box._previewStatusText or "DEAD", rawSize, 4), rawSize + 4
+                    elseif RenderState.PreviewStatus.IsStatusTextState and RenderState.PreviewStatus.IsStatusTextState(spec) then
+                        rw, rh = ApproxTextWidth(RenderState.PreviewStatus.StatusTokenText(box._previewStatusText or "DEAD"),
+                            rawSize, 4), rawSize + 4
                     end
-                    local anchor = (statusCfg and statusCfg.anchor) or conf[spec.anchor] or R.ResolveStatusPreviewAnchor(spec, conf, g)
+                    local anchor = (statusCfg and statusCfg.anchor) or conf[spec.anchor] or RenderState.ResolveStatusPreviewAnchor(spec, conf, g)
                     local sx = tonumber(statusCfg and statusCfg.x) or tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0
                     local sy = tonumber(statusCfg and statusCfg.y) or tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0
                     minX, maxX, minY, maxY = ExpandRuntimeAnchorRect(minX, maxX, minY, maxY, anchor, sx, sy, rw, rh, w, h)
@@ -1841,7 +1926,7 @@ end
 --- Footprint pass two: portrait, class power, detached/attached power,
 --- castbar details, auras and dispel layers, then the padding.
 function Stage.MeasureLayerFootprint(st)
-    local Auras, PortraitStyleGet, R, ReadPowerBarHeight, abs, bars, box, castBarH = st.Auras, st.PortraitStyleGet, st.R, st.ReadPowerBarHeight, st.abs, st.bars, st.box, st.castBarH
+    local Auras, PortraitStyleGet, RenderState, ReadPowerBarHeight, abs, bars, box, castBarH = st.Auras, st.PortraitStyleGet, st.R, st.ReadPowerBarHeight, st.abs, st.bars, st.box, st.castBarH
     local castDetached, castEnabled, castOffsetX, castOffsetY, castPreviewVisible, castW, classPowerOn, classPowerSegCount = st.castDetached, st.castEnabled, st.castOffsetX, st.castOffsetY, st.castPreviewVisible, st.castW, st.classPowerOn, st.classPowerSegCount
     local conf, cpH, detachedH, detachedPower, detachedPowerInUnitPreview, g, h, hasPortrait = st.conf, st.cpH, st.detachedH, st.detachedPower, st.detachedPowerInUnitPreview, st.g, st.h, st.hasPortrait
     local key, max, maxX, maxY, min, minX, minY, mode = st.key, st.max, st.maxX, st.maxY, st.min, st.minX, st.minY, st.mode
@@ -1850,7 +1935,7 @@ function Stage.MeasureLayerFootprint(st)
         or (box._runtimeDefensivePortraitPositionOnly and PreviewLayerWanted(box, "auras")) then
         local poX = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.x) or tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0
         local poY = tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.y) or tonumber(PortraitStyleGet(key, "portraitOffsetY", 0)) or 0
-        local left, bottom, pw, ph = R.PreviewPortraitRect(
+        local left, bottom, pw, ph = RenderState.PreviewPortraitRect(
             box._runtimePortraitPlacement,
             box._runtimePortraitPlacement == "ATTACHED" and (mode == "RIGHT" and "LEFT" or "RIGHT") or box._runtimePortraitPoint,
             box._runtimePortraitRelPoint, box._runtimePortraitOverlayAlign,
@@ -1927,18 +2012,20 @@ function Stage.MeasureLayerFootprint(st)
                 or (key == "focus" and g.castbarFocusShowTargetName == true)
                 or (key == "boss" and g.showBossCastTargetName == true)
                 or (key == "arena" and g.showArenaCastTargetName == true)
-            local targetPadX = showTargetName and (abs(R.ReadCastbarNum(g, key, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0) or 0) + 96) or 0
-            local targetPadY = showTargetName and (abs(R.ReadCastbarNum(g, key, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1) or 1) + 24) or 0
+            local targetPadX = showTargetName and (abs(RenderState.ReadCastbarNum(g, key, "TargetNameOffsetX", "bossCastTargetNameOffsetX", 0) or 0) + 96) or 0
+            local targetPadY = showTargetName and (abs(RenderState.ReadCastbarNum(g, key, "TargetNameOffsetY", "bossCastTargetNameOffsetY", 1) or 1) + 24) or 0
             local detailPadX = max(
-                abs(R.ReadCastbarNum(g, key, "IconOffsetX", "bossCastIconOffsetX", 0) or 0) + abs(R.ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH) or castBarH),
-                abs(R.ReadCastbarNum(g, key, "TextOffsetX", "bossCastTextOffsetX", 0) or 0) + 80,
-                abs(R.ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", 0) or 0) + 46,
+                abs(RenderState.ReadCastbarNum(g, key, "IconOffsetX", "bossCastIconOffsetX", 0)
+                    or 0) + abs(RenderState.ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH) or castBarH),
+                abs(RenderState.ReadCastbarNum(g, key, "TextOffsetX", "bossCastTextOffsetX", 0) or 0) + 80,
+                abs(RenderState.ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", 0) or 0) + 46,
                 targetPadX
             )
             local detailPadY = max(
-                abs(R.ReadCastbarNum(g, key, "IconOffsetY", "bossCastIconOffsetY", 0) or 0) + abs(R.ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH) or castBarH),
-                abs(R.ReadCastbarNum(g, key, "TextOffsetY", "bossCastTextOffsetY", 0) or 0) + 24,
-                abs(R.ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", 0) or 0) + 24,
+                abs(RenderState.ReadCastbarNum(g, key, "IconOffsetY", "bossCastIconOffsetY", 0)
+                    or 0) + abs(RenderState.ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH) or castBarH),
+                abs(RenderState.ReadCastbarNum(g, key, "TextOffsetY", "bossCastTextOffsetY", 0) or 0) + 24,
+                abs(RenderState.ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", 0) or 0) + 24,
                 targetPadY
             )
             minX, maxX = min(minX, cLeft - detailPadX), max(maxX, cLeft + castW + detailPadX)
@@ -1949,7 +2036,8 @@ function Stage.MeasureLayerFootprint(st)
         and Auras.BuildState(key, w, h, runtimeSpec, box._msuf2ColorPainterForceAuras == true)
     local auraFootprintState = Auras and Auras.HasVisibleLayer
         and Auras.HasVisibleLayer(auraPreviewState, box.layerVisibility) and auraPreviewState or nil
-    if auraFootprintState and Auras.ExpandFootprint then minX, maxX, minY, maxY = Auras.ExpandFootprint(auraFootprintState, minX, maxX, minY, maxY, box.layerVisibility) end
+    if auraFootprintState and Auras.ExpandFootprint then minX, maxX, minY, maxY = Auras.ExpandFootprint(auraFootprintState, minX, maxX, minY, maxY,
+        box.layerVisibility) end
     if Auras and type(Auras.DispelPreview) == "table" and type(Auras.DispelPreview.Availability) == "function" then
         box._previewDispelOverlayAvailable, box._previewDispelSymbolAvailable =
             Auras.DispelPreview.Availability(key, runtimeSpec)
@@ -1973,33 +2061,33 @@ end
 --- Fit/manual zoom, the S() scaler, frame levels, bar textures and the mock
 --- body placement on the canvas.
 function Stage.ResolveScaleAndLevels(st)
-    local ClampPreviewLayer, R, SetTex, TEX_W8, bars, box, canvas, ch = st.ClampPreviewLayer, st.R, st.SetTex, st.TEX_W8, st.bars, st.box, st.canvas, st.ch
+    local ClampPreviewLayer, RenderState, SetTex, TEX_W8, bars, box, canvas, ch = st.ClampPreviewLayer, st.R, st.SetTex, st.TEX_W8, st.bars, st.box, st.canvas, st.ch
     local conf, cw, floor, format, g, h, key, max = st.conf, st.cw, st.floor, st.format, st.g, st.h, st.key, st.max
     local maxX, maxY, min, minX, minY, runtimePower, runtimeSpec, runtimeStatus = st.maxX, st.maxY, st.min, st.minX, st.minY, st.runtimePower, st.runtimeSpec, st.runtimeStatus
     local runtimeText, w, wideW = st.runtimeText, st.w, st.wideW
     local centerX = ((minX + maxX) * 0.5) - (w * 0.5)
     local centerY = ((minY + maxY) * 0.5) - (h * 0.5)
-    local runtimeScale = R.RuntimeVisualScaleForPreviewKey(key, canvas)
-    box._mockCastRuntimeScale = R.RuntimeCastbarVisualScaleForPreviewKey(key, canvas)
+    local runtimeScale = RenderState.RuntimeVisualScaleForPreviewKey(key, canvas)
+    box._mockCastRuntimeScale = RenderState.RuntimeCastbarVisualScaleForPreviewKey(key, canvas)
     box._mockCastFrameScale = runtimeScale > 0 and (box._mockCastRuntimeScale / runtimeScale) or 1
     local autoScale = min(1.0, (cw - 60) / max(max(wideW, maxX - minX) * runtimeScale, 1), (ch - 42) / max(max(h, maxY - minY) * runtimeScale, 1))
     -- Fit mode must fit the complete configured footprint. Manual zoom keeps
     -- its usability floor, but forcing that same floor here clips status icons
     -- with large offsets instead of showing the true layout.
     if autoScale < 0.05 then autoScale = 0.05 end
-    R.ResolveDefaultPreviewZoomLock(box, autoScale)
+    RenderState.ResolveDefaultPreviewZoomLock(box, autoScale)
     local manualZoom = tonumber(box._manualZoom)
     local frozenScale = tonumber(box._dragFrozenScale)
-    local previewScale = manualZoom and R.ClampPreviewZoom(manualZoom) or (frozenScale and R.ClampPreviewZoom(frozenScale) or autoScale)
+    local previewScale = manualZoom and RenderState.ClampPreviewZoom(manualZoom) or (frozenScale and RenderState.ClampPreviewZoom(frozenScale) or autoScale)
     local scale = runtimeScale * previewScale
     box._mockRuntimeScale = runtimeScale
     box._mockAutoScale = autoScale
     box._mockScale = previewScale
     box._mockEffectiveScale = scale
-    R.UpdatePreviewZoomControls(box)
+    RenderState.UpdatePreviewZoomControls(box)
     local function S(v) return floor((tonumber(v) or 0) * scale + 0.5) end
     local function StatusAnchorOffsets(spec, statusCfg)
-        return (statusCfg and statusCfg.anchor) or conf[spec.anchor] or R.ResolveStatusPreviewAnchor(spec, conf, g),
+        return (statusCfg and statusCfg.anchor) or conf[spec.anchor] or RenderState.ResolveStatusPreviewAnchor(spec, conf, g),
             S(tonumber(statusCfg and statusCfg.x) or tonumber(conf[spec.x]) or tonumber(g[spec.x]) or spec.defaultX or 0),
             S(tonumber(statusCfg and statusCfg.y) or tonumber(conf[spec.y]) or tonumber(g[spec.y]) or spec.defaultY or 0)
     end
@@ -2030,7 +2118,8 @@ function Stage.ResolveScaleAndLevels(st)
     if mock.classPower and mock.classPower.textOwner and mock.classPower.textOwner.SetFrameLevel then
         mock.classPower.textOwner:SetFrameLevel(PreviewClassTextLevel(mock.classPower.textOwner, bars))
     end
-    if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(ElementLevel(runtimePower and runtimePower.detachedLevel or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6, 0)) end
+    if mock.detachedPower and mock.detachedPower.SetFrameLevel then mock.detachedPower:SetFrameLevel(ElementLevel(runtimePower and runtimePower.detachedLevel
+        or conf.detachedPowerBarFrameLevelOffset, Layers.POWER_DETACHED_DEFAULT or 6, 0)) end
     local textBase = 0
     -- Portrait rides the shared 0..30 layer scale from the frame, so layer 0
     -- previews behind the bars exactly like the live element does.
@@ -2042,23 +2131,33 @@ function Stage.ResolveScaleAndLevels(st)
     if type(_G.MSUF_GetCastbarFrameLevelOffset) == "function" then
         box._runtimeCastbarLayer = _G.MSUF_GetCastbarFrameLevelOffset(key, g)
     else
-        box._runtimeCastbarLayer = R.ReadCastbarNum(g, key, "FrameLevelOffset", "bossCastFrameLevelOffset", 6)
+        box._runtimeCastbarLayer = RenderState.ReadCastbarNum(g, key, "FrameLevelOffset", "bossCastFrameLevelOffset", 6)
     end
     box._runtimeCastbarLayer = ClampPreviewLayer(box._runtimeCastbarLayer, 6)
     if mock.cast and mock.cast.SetFrameLevel then mock.cast:SetFrameLevel(ElementLevel(box._runtimeCastbarLayer, 6, 0)) end
     if mock.cast and mock.cast.icon and mock.cast.icon.SetFrameLevel then mock.cast.icon:SetFrameLevel(ElementLevel(box._runtimeCastbarLayer, 6, 7)) end
     if mock.textFrame and mock.textFrame.SetFrameLevel then mock.textFrame:SetFrameLevel(textBase) end
-    if mock.nameLayer and mock.nameLayer.SetFrameLevel then mock.nameLayer:SetFrameLevel(ElementLevel(runtimeText and runtimeText.nameLayer or conf.nameTextLayer or g.nameTextLayer, 5, 8)) end
-    if mock.raidGroupLayer and mock.raidGroupLayer.SetFrameLevel then mock.raidGroupLayer:SetFrameLevel(ElementLevel(runtimeStatus and runtimeStatus.raidGroup and runtimeStatus.raidGroup.layer or conf.raidGroupNameLayer or conf.nameTextLayer or g.raidGroupNameLayer or g.nameTextLayer, 5, 8)) end
-    if mock.hpLayer and mock.hpLayer.SetFrameLevel then mock.hpLayer:SetFrameLevel(ElementLevel(runtimeText and runtimeText.healthLayer or conf.hpTextLayer or conf.textLayer or g.hpTextLayer or g.textLayer, 5, 8)) end
-    if mock.powerLayer and mock.powerLayer.SetFrameLevel then mock.powerLayer:SetFrameLevel(ElementLevel(runtimeText and runtimeText.powerLayer or conf.powerTextLayer or g.powerTextLayer, 2, 8)) end
+    if mock.nameLayer and mock.nameLayer.SetFrameLevel then mock.nameLayer:SetFrameLevel(ElementLevel(runtimeText and runtimeText.nameLayer
+        or conf.nameTextLayer or g.nameTextLayer, 5, 8)) end
+    if mock.raidGroupLayer and mock.raidGroupLayer.SetFrameLevel then mock.raidGroupLayer:SetFrameLevel(ElementLevel(runtimeStatus and runtimeStatus.raidGroup
+        and runtimeStatus.raidGroup.layer or conf.raidGroupNameLayer or conf.nameTextLayer or g.raidGroupNameLayer or g.nameTextLayer, 5, 8)) end
+    if mock.hpLayer and mock.hpLayer.SetFrameLevel then mock.hpLayer:SetFrameLevel(ElementLevel(runtimeText and runtimeText.healthLayer or conf.hpTextLayer
+        or conf.textLayer or g.hpTextLayer or g.textLayer, 5, 8)) end
+    if mock.powerLayer and mock.powerLayer.SetFrameLevel then mock.powerLayer:SetFrameLevel(ElementLevel(runtimeText and runtimeText.powerLayer
+        or conf.powerTextLayer or g.powerTextLayer, 2, 8)) end
     if mock.bounds and mock.bounds.SetFrameLevel then mock.bounds:SetFrameLevel(ElementLevel(30, 30, 31) + 16) end
-    mock.healthBar:SetStatusBarTexture((runtimeSpec and runtimeSpec.health and runtimeSpec.health.texture) or (runtimeSpec and runtimeSpec.texture) or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8)
-    SetTex(mock.power, (runtimePower and runtimePower.texture) or (runtimeSpec and runtimeSpec.texture) or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8)
-    SetTex(mock.hpBG, (runtimeSpec and runtimeSpec.health and runtimeSpec.health.backgroundTexture) or (runtimeSpec and runtimeSpec.backgroundTexture) or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()) or TEX_W8)
-    SetTex(mock.powerBG, (runtimePower and runtimePower.backgroundTexture) or (runtimeSpec and runtimeSpec.backgroundTexture) or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()) or TEX_W8)
-    local detachedPowerTexture = (runtimePower and runtimePower.texture) or (runtimeSpec and runtimeSpec.texture) or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8
-    local detachedPowerBgTexture = (runtimePower and runtimePower.backgroundTexture) or (runtimeSpec and runtimeSpec.backgroundTexture) or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()) or detachedPowerTexture
+    mock.healthBar:SetStatusBarTexture((runtimeSpec and runtimeSpec.health and runtimeSpec.health.texture) or (runtimeSpec and runtimeSpec.texture)
+        or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8)
+    SetTex(mock.power, (runtimePower and runtimePower.texture) or (runtimeSpec and runtimeSpec.texture)
+        or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8)
+    SetTex(mock.hpBG, (runtimeSpec and runtimeSpec.health and runtimeSpec.health.backgroundTexture) or (runtimeSpec and runtimeSpec.backgroundTexture)
+        or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()) or TEX_W8)
+    SetTex(mock.powerBG, (runtimePower and runtimePower.backgroundTexture) or (runtimeSpec and runtimeSpec.backgroundTexture)
+        or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()) or TEX_W8)
+    local detachedPowerTexture = (runtimePower and runtimePower.texture) or (runtimeSpec and runtimeSpec.texture)
+        or (type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture()) or TEX_W8
+    local detachedPowerBgTexture = (runtimePower and runtimePower.backgroundTexture) or (runtimeSpec and runtimeSpec.backgroundTexture)
+        or (type(_G.MSUF_GetBarBackgroundTexture) == "function" and _G.MSUF_GetBarBackgroundTexture()) or detachedPowerTexture
     SetTex(mock.detachedPower.fill, detachedPowerTexture)
     SetTex(mock.cast.fill, type(_G.MSUF_GetCastbarTexture) == "function" and _G.MSUF_GetCastbarTexture() or TEX_W8)
     mock:SetSize(sw, sh)
@@ -2076,7 +2175,7 @@ end
 --- prediction and the heal absorb width, so only the animation tick rewrites
 --- those here.
 function Stage.PaintHealthValues(st, fullRefresh)
-    local D, R, UNIT_DATA, box, conf, data, g, key = st.D, st.R, st.UNIT_DATA, st.box, st.conf, st.data, st.g, st.key
+    local Deps, RenderState, UNIT_DATA, box, conf, data, g, key = st.D, st.R, st.UNIT_DATA, st.box, st.conf, st.data, st.g, st.key
     local max, min, mock, runtimeSpec = st.max, st.min, st.mock, st.runtimeSpec
     local hpReverse, hpAreaW = st.hpReverse, st.hpAreaW
     local hpFrac = max(0, min(1, tonumber(data.hp) or 0.6))
@@ -2096,7 +2195,7 @@ function Stage.PaintHealthValues(st, fullRefresh)
         and (runtimeSpec.health.mode == "dark" or runtimeSpec.health.mode == "unified" or runtimeSpec.health.mode == "custom") then
         hr, hg, hb = runtimeSpec.health.r, runtimeSpec.health.g, runtimeSpec.health.b
     end
-    if not hr then hr, hg, hb = R.HealthColor(key, data) end
+    if not hr then hr, hg, hb = RenderState.HealthColor(key, data) end
     local hbr, hbg, hbb, hba
     local healthBg = runtimeSpec and runtimeSpec.health and runtimeSpec.health.background
     mock._msufPreviewBackgroundColorMode = PreviewBackgroundColorMode(runtimeSpec and runtimeSpec.health, g)
@@ -2106,14 +2205,14 @@ function Stage.PaintHealthValues(st, fullRefresh)
             and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
             hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(runtimeSpec.health, hpFrac)
         elseif mock._msufPreviewBackgroundColorMode == "class" then
-            hbr, hbg, hbb = R.ClassColor((data.isPlayer and data.class)
-                or ((D.LiveUnitData and D.LiveUnitData("player") or NO_LIVE_DATA).class)
+            hbr, hbg, hbb = RenderState.ClassColor((data.isPlayer and data.class)
+                or ((Deps.LiveUnitData and Deps.LiveUnitData("player") or NO_LIVE_DATA).class)
                 or (UNIT_DATA.player and UNIT_DATA.player.class))
         elseif mock._msufPreviewBackgroundColorMode == "match_health" then
-            hbr, hbg, hbb = R.DarkMatchHPColor(hr, hg, hb)
+            hbr, hbg, hbb = RenderState.DarkMatchHPColor(hr, hg, hb)
         end
     else
-        hbr, hbg, hbb, hba = R.HealthBackgroundColor(hr, hg, hb, data, conf)
+        hbr, hbg, hbb, hba = RenderState.HealthBackgroundColor(hr, hg, hb, data, conf)
         if mock._msufPreviewBackgroundColorMode == "health_gradient" and MSUF.UFBarTextCommon
             and MSUF.UFBarTextCommon.PreviewHealthGradientColor then
             hbr, hbg, hbb = MSUF.UFBarTextCommon.PreviewHealthGradientColor(g, hpFrac)
@@ -2122,7 +2221,7 @@ function Stage.PaintHealthValues(st, fullRefresh)
     -- Alpha follows the current menu value immediately. The compiled spec
     -- still owns the live texture/RGB mode, but may lag one debounced apply
     -- while a slider is being edited.
-    hba = select(4, R.HealthBackgroundColor(hr, hg, hb, data, conf))
+    hba = select(4, RenderState.HealthBackgroundColor(hr, hg, hb, data, conf))
     -- Match the live background owner: color and configured opacity stay in
     -- the vertex color while the native StatusBar owns fill geometry.
     mock.hpBG:SetVertexColor(hbr, hbg, hbb, hba)
@@ -2134,18 +2233,19 @@ end
 --- Health bar fill/orientation, temp max health, prediction and absorb
 --- overlays, health and background colors, gradient and texture layers.
 function Stage.RenderHealth(st)
-    local D, PlaceHandle, R, ReadPowerBarHeight, S, SetTex, UNIT_DATA, baseLevel = st.D, st.PlaceHandle, st.R, st.ReadPowerBarHeight, st.S, st.SetTex, st.UNIT_DATA, st.baseLevel
+    local Deps, PlaceHandle, RenderState, ReadPowerBarHeight, S, SetTex, UNIT_DATA, baseLevel = st.D, st.PlaceHandle, st.R, st.ReadPowerBarHeight, st.S, st.SetTex, st.UNIT_DATA, st.baseLevel
     local box, conf, data, detachedPower, g, key, max, min = st.box, st.conf, st.data, st.detachedPower, st.g, st.key, st.max, st.min
     local mock, runtimePower, runtimeSpec, sw = st.mock, st.runtimePower, st.runtimeSpec, st.sw
     local powerEnabled = runtimePower and runtimePower.enabled == true
-    if runtimePower == nil then powerEnabled = D.ReadPowerBarEnabled(conf, key) end
+    if runtimePower == nil then powerEnabled = Deps.ReadPowerBarEnabled(conf, key) end
     local powerOn = powerEnabled and not detachedPower and box._runtimeAugCompositePreview ~= true
     local powerH = powerOn and S((runtimePower and runtimePower.height) or ReadPowerBarHeight(conf)) or 0
     if powerOn and powerH < 2 then powerH = 2 end
     mock.healthBar:ClearAllPoints()
     mock.healthBar:SetPoint("TOPLEFT", mock, "TOPLEFT", 0, 0)
     mock.healthBar:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", 0, S(box._runtimeHealthPowerInset))
-    local hpReverse = (runtimeSpec and runtimeSpec.health and runtimeSpec.health.reverse == true) or (not (runtimeSpec and runtimeSpec.health) and conf.reverseFillBars == true)
+    local hpReverse = (runtimeSpec and runtimeSpec.health and runtimeSpec.health.reverse == true)
+        or (not (runtimeSpec and runtimeSpec.health) and conf.reverseFillBars == true)
     local hpAreaW = max(1, sw)
     local hpFrac = max(0, min(1, tonumber(data.hp) or 0.6))
     -- Vertical fill (health.vertical / conf.verticalFillBars) grows the health
@@ -2153,7 +2253,8 @@ function Stage.RenderHealth(st)
     -- horizontal-only in this thumbnail, so they are hidden when vertical rather
     -- than mixing fill axes. The axis test stays inlined: it is read once and a
     -- named local would not make the condition clearer.
-    if (runtimeSpec and runtimeSpec.health and runtimeSpec.health.vertical == true) or (not (runtimeSpec and runtimeSpec.health) and conf.verticalFillBars == true) then
+    if (runtimeSpec and runtimeSpec.health and runtimeSpec.health.vertical == true)
+        or (not (runtimeSpec and runtimeSpec.health) and conf.verticalFillBars == true) then
         if mock.healthBar.SetOrientation then mock.healthBar:SetOrientation("VERTICAL") end
         mock.healthBar._msufOrientation = "VERTICAL"
         mock.tempMaxHealthBg:Hide()
@@ -2173,12 +2274,14 @@ function Stage.RenderHealth(st)
     mock.hp = mock.healthBar:GetStatusBarTexture()
     mock.healthFill = mock.hp
     if mock.hp and mock.hp.SetDrawLayer then mock.hp:SetDrawLayer("ARTWORK", 0) end
-    local healPredMode = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAnchorMode) or R.PreviewResolveHealPredAnchorMode(conf, g)
-    local absorbMode = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbAnchorMode) or R.PreviewResolveAbsorbAnchorMode(conf, g)
+    local healPredMode = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAnchorMode)
+        or RenderState.PreviewResolveHealPredAnchorMode(conf, g)
+    local absorbMode = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbAnchorMode)
+        or RenderState.PreviewResolveAbsorbAnchorMode(conf, g)
     local healPredShown = runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.heal == true
-    if not (runtimeSpec and runtimeSpec.prediction) then healPredShown = R.PreviewHealPredictionEnabled(conf, g) end
+    if not (runtimeSpec and runtimeSpec.prediction) then healPredShown = RenderState.PreviewHealPredictionEnabled(conf, g) end
     local absorbShown = runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorb == true
-    if not (runtimeSpec and runtimeSpec.prediction) then absorbShown = R.PreviewAbsorbBarEnabled(conf, g, key) end
+    if not (runtimeSpec and runtimeSpec.prediction) then absorbShown = RenderState.PreviewAbsorbBarEnabled(conf, g, key) end
     local healAbsorbShown = runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorb == true
     if not (runtimeSpec and runtimeSpec.prediction) then
         local enabled = g and g.healAbsorbEnabled
@@ -2191,7 +2294,8 @@ function Stage.RenderHealth(st)
     -- Overlays are horizontal-only in this thumbnail; omit them on a vertical
     -- health bar so the preview never shows mismatched fill axes. Inline the
     -- axis test: it is used once, so a named local would not add clarity.
-    if (runtimeSpec and runtimeSpec.health and runtimeSpec.health.vertical == true) or (not (runtimeSpec and runtimeSpec.health) and conf.verticalFillBars == true) then
+    if (runtimeSpec and runtimeSpec.health and runtimeSpec.health.vertical == true)
+        or (not (runtimeSpec and runtimeSpec.health) and conf.verticalFillBars == true) then
         healPredShown = false
         absorbShown = false
         healAbsorbShown = false
@@ -2203,7 +2307,7 @@ function Stage.RenderHealth(st)
         local b = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healB) or tonumber(g and g.healPredictionColorB) or 0
         local a = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healA) or tonumber(g and g.healPredictionColorA) or 0.45
         mock.healPred:SetVertexColor(r, gg, b, a)
-        R.LayoutUnitPreviewOverlay(mock.healPred, mock.healthBar, mock.hp, healPredMode, healPredFrac, hpReverse, nil, hpAreaW)
+        RenderState.LayoutUnitPreviewOverlay(mock.healPred, mock.healthBar, mock.hp, healPredMode, healPredFrac, hpReverse, nil, hpAreaW)
     else
         mock.healPred:Hide()
     end
@@ -2211,11 +2315,13 @@ function Stage.RenderHealth(st)
         local r = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbR) or tonumber(g and g.absorbBarColorR) or 1
         local gg = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbG) or tonumber(g and g.absorbBarColorG) or 1
         local b = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbB) or tonumber(g and g.absorbBarColorB) or 1
-        local a = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbA) or tonumber(g and g.absorbBarOpacity) or tonumber(g and g.absorbBarColorA) or 0.75
+        local a = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.absorbA) or tonumber(g and g.absorbBarOpacity)
+            or tonumber(g and g.absorbBarColorA) or 0.75
         mock.absorb:SetVertexColor(r, gg, b, a)
         local absorbAnchor = nil
-        if healPredShown and mock.healPred:IsShown() and (healPredMode == 3 or healPredMode == 4) and (absorbMode == 3 or absorbMode == 4) then absorbAnchor = mock.healPred end
-        R.LayoutUnitPreviewOverlay(mock.absorb, mock.healthBar, mock.hp, absorbMode, 0.10, hpReverse, absorbAnchor, hpAreaW)
+        if healPredShown and mock.healPred:IsShown() and (healPredMode == 3 or healPredMode == 4)
+            and (absorbMode == 3 or absorbMode == 4) then absorbAnchor = mock.healPred end
+        RenderState.LayoutUnitPreviewOverlay(mock.absorb, mock.healthBar, mock.hp, absorbMode, 0.10, hpReverse, absorbAnchor, hpAreaW)
     else
         mock.absorb:Hide()
     end
@@ -2223,7 +2329,8 @@ function Stage.RenderHealth(st)
         local r = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorbR) or tonumber(g and g.healAbsorbBarColorR) or 0.7
         local gg = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorbG) or tonumber(g and g.healAbsorbBarColorG) or 0
         local b = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorbB) or tonumber(g and g.healAbsorbBarColorB) or 0
-        local a = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorbA) or tonumber(g and g.healAbsorbBarOpacity) or tonumber(g and g.healAbsorbBarColorA) or 1
+        local a = tonumber(runtimeSpec and runtimeSpec.prediction and runtimeSpec.prediction.healAbsorbA) or tonumber(g and g.healAbsorbBarOpacity)
+            or tonumber(g and g.healAbsorbBarColorA) or 1
         mock.healAbsorb:ClearAllPoints()
         if hpReverse then
             mock.healAbsorb:SetPoint("TOPLEFT", mock.hp, "TOPLEFT", 0, 0)
@@ -2259,10 +2366,11 @@ end
 
 --- Embedded or attached power bar, its background, gradient and colors.
 function Stage.RenderPowerBar(st)
-    local R, S, box, conf, data, displayPowerToken, hb, hg = st.R, st.S, st.box, st.conf, st.data, st.displayPowerToken, st.hb, st.hg
+    local RenderState, S, box, conf, data, displayPowerToken, hb, hg = st.R, st.S, st.box, st.conf, st.data, st.displayPowerToken, st.hb, st.hg
     local hr, max, mock, powerFrac, powerH, powerOn, runtimePower, sw = st.hr, st.max, st.mock, st.powerFrac, st.powerH, st.powerOn, st.runtimePower, st.sw
     if powerOn then
-        mock.powerBG:Show(); mock.power:Show()
+        mock.powerBG:Show()
+        mock.power:Show()
         mock.powerBG:ClearAllPoints()
         if box._runtimePowerEmbedded == true then
             SetBottomSpan(mock.powerBG, mock)
@@ -2271,14 +2379,15 @@ function Stage.RenderPowerBar(st)
             mock.powerBG:SetPoint("TOPRIGHT", mock, "BOTTOMRIGHT", 0, -max(1, S(1)))
         end
         mock.powerBG:SetHeight(powerH)
-        local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower, displayPowerToken)
-        mock.powerBG:SetVertexColor(PreviewPowerBackgroundColor(R, runtimePower, conf, pr, pg, pb, hr, hg, hb))
+        local pr, pg, pb = ResolvePreviewPowerColor(RenderState, data, runtimePower, displayPowerToken)
+        mock.powerBG:SetVertexColor(PreviewPowerBackgroundColor(RenderState, runtimePower, conf, pr, pg, pb, hr, hg, hb))
         mock.power:ClearAllPoints()
         SetLeftSpan(mock.power, mock.powerBG)
         mock.power:SetWidth(max(1, sw * powerFrac))
         mock.power:SetVertexColor(pr, pg, pb, 1)
     else
-        mock.powerBG:Hide(); mock.power:Hide()
+        mock.powerBG:Hide()
+        mock.power:Hide()
     end
     if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradientToTarget then
         MSUF.UFBarTextCommon.ApplyBarGradientToTarget(mock, mock, mock.power,
@@ -2286,19 +2395,19 @@ function Stage.RenderPowerBar(st)
                 and runtimePower and runtimePower.barGradient or nil,
             "_msufPreviewPowerGradients")
     end
-    local fr, fg, fb = R.FontColor()
-    local pr, pg, pb = ResolvePreviewPowerColor(R, data, runtimePower, displayPowerToken)
+    local fr, fg, fb = RenderState.FontColor()
+    local pr, pg, pb = ResolvePreviewPowerColor(RenderState, data, runtimePower, displayPowerToken)
     st.fb, st.fg, st.fr, st.pb, st.pg, st.pr = fb, fg, fr, pb, pg, pr
 end
 
 --- Class power segments: per-segment width, fill, shape texture, colors and
 --- rune timer texts inside the class power frame.
 function Stage.RenderClassPowerSegments(st)
-    local ApplyPreviewFont, R, S, bars, cpH, fb, fg, floor = st.ApplyPreviewFont, st.R, st.S, st.bars, st.cpH, st.fb, st.fg, st.floor
+    local ApplyPreviewFont, RenderState, S, bars, cpH, fb, fg, floor = st.ApplyPreviewFont, st.R, st.S, st.bars, st.cpH, st.fb, st.fg, st.floor
     local fr, g, max, mock = st.fr, st.g, st.max, st.mock
     local cp, gap, segSpace, slot, startX = st.cp, st.gap, st.segSpace, st.slot, st.startX
         local xPos, prevBoundary = 0, 0
-        cp.runeOrder = cp.isRune and R.CPPreview.BuildRuneOrder(cp, bars, cp.preview) or nil
+        cp.runeOrder = cp.isRune and RenderState.CPPreview.BuildRuneOrder(cp, bars, cp.preview) or nil
         cp.runeShowTime = bars.runeShowTime ~= false
         if bars.runeShowTime == nil and bars.runeShowTimeText ~= nil then cp.runeShowTime = bars.runeShowTimeText == true end
         cp.runeTextSize = max(6, S((tonumber(bars.classPowerFontSize) or 16) - 2))
@@ -2324,10 +2433,11 @@ function Stage.RenderClassPowerSegments(st)
                 seg:Show()
                 seg:ClearAllPoints()
                 cp.rune = cp.runeOrder and cp.runeOrder[i] or nil
-                cp.fill = cp.rune and ((cp.rune.elapsed or 0) / (cp.rune.total or 1)) or R.CPPreview.FillForSegment(cp.preview, i, cp.animatedValue)
+                cp.fill = cp.rune and ((cp.rune.elapsed or 0) / (cp.rune.total or 1)) or RenderState.CPPreview.FillForSegment(cp.preview, i, cp.animatedValue)
                 cp.drawW = segW
                 cp.mode = cp.preview and cp.preview.mode
-                if (cp.mode == "continuous" or cp.mode == "timer_bar" or cp.mode == "stagger" or cp.mode == "aura_single" or cp.mode == "fractional") and cp.fill > 0 and cp.fill < 1 then
+                if (cp.mode == "continuous" or cp.mode == "timer_bar" or cp.mode == "stagger" or cp.mode == "aura_single" or cp.mode == "fractional")
+                    and cp.fill > 0 and cp.fill < 1 then
                     cp.drawW = max(1, floor(segW * cp.fill + 0.5))
                 elseif cp.rune and cp.fill > 0 and cp.fill < 1 then
                     cp.drawW = max(1, floor(segW * cp.fill + 0.5))
@@ -2360,15 +2470,17 @@ function Stage.RenderClassPowerSegments(st)
                 end
                 if segEdge then segEdge:Hide() end
                 cp.sr, cp.sg, cp.sb = cp.r, cp.g, cp.b
-                cp.charged = R.CPPreview.IsCharged(cp.preview, bars, i)
+                cp.charged = RenderState.CPPreview.IsCharged(cp.preview, bars, i)
                 if cp.charged then
-                    cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveColor("CHARGED", 0.60, 0.20, 0.80)
+                    cp.sr, cp.sg, cp.sb = RenderState.CPPreview.ResolveColor("CHARGED", 0.60, 0.20, 0.80)
                 elseif cp.isFull then
                     cp.sr, cp.sg, cp.sb = cp.fullR, cp.fullG, cp.fullB
                 else
-                    cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveSlotColor(bars, cp.token, i, cp.r, cp.g, cp.b)
+                    cp.sr, cp.sg, cp.sb = RenderState.CPPreview.ResolveSlotColor(bars, cp.token, i, cp.r, cp.g, cp.b)
                 end
-                if cp.preview and cp.preview.threshold and cp.fill > 0 and i > cp.preview.threshold then cp.sr, cp.sg, cp.sb = R.CPPreview.ResolveColor(cp.preview.thresholdToken, cp.sr, cp.sg, cp.sb) end
+                if cp.preview and cp.preview.threshold and cp.fill > 0
+                    and i > cp.preview.threshold then cp.sr, cp.sg, cp.sb = RenderState.CPPreview.ResolveColor(cp.preview.thresholdToken,
+                    cp.sr, cp.sg, cp.sb) end
                 cp.alpha = cp.fill > 0 and cp.filledAlpha or cp.emptyAlpha
                 if cp.charged and cp.fill <= 0 then cp.alpha = max(cp.alpha, 0.55) end
                 if cp.shapeInfo then
@@ -2390,10 +2502,10 @@ function Stage.RenderClassPowerSegments(st)
                 end
                 if runeText then
                     if cp.rune and cp.runeShowTime and not cp.rune.ready then
-                        cp.runeText = R.CPPreview.FormatSeconds(cp.rune.remaining)
+                        cp.runeText = RenderState.CPPreview.FormatSeconds(cp.rune.remaining)
                         if cp.runeText ~= "" then
                             ApplyPreviewFont(runeText, cp.runeTextSize)
-                            cp.tr, cp.tg, cp.tb = R.CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
+                            cp.tr, cp.tg, cp.tb = RenderState.CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
                             runeText:SetText(cp.runeText)
                             runeText:SetTextColor(cp.tr, cp.tg, cp.tb, cp.runeTextAlpha)
                             runeText:ClearAllPoints()
@@ -2436,9 +2548,15 @@ local VALUE_TEXT_HANDLE_FIELDS = {
 }
 local function HandleRegionList(box, field, a, b, c)
     local lists = box._msufTextHandleRegionLists
-    if not lists then lists = {}; box._msufTextHandleRegionLists = lists end
+    if not lists then
+        lists = {}
+        box._msufTextHandleRegionLists = lists
+    end
     local list = lists[field]
-    if not list then list = {}; lists[field] = list end
+    if not list then
+        list = {}
+        lists[field] = list
+    end
     list[1], list[2], list[3] = a, b, c
     return list
 end
@@ -2461,7 +2579,8 @@ local function PlaceTextSlotHandle(st, handle, region, field)
     local w = (region.GetStringWidth and region:GetStringWidth()) or region:GetWidth() or 36
     local h = (region.GetStringHeight and region:GetStringHeight()) or region:GetHeight() or 12
     handle:SetSize(max(26, w + 10), max(18, h + 6))
-    if not st.UnitPreviewText.PlaceHandleAroundRegions(handle, st.canvas, HandleRegionList(box, field, region), 3, TextHandleOptions(box, st.scale)) then st.PlaceHandle(handle, region) end
+    if not st.UnitPreviewText.PlaceHandleAroundRegions(handle, st.canvas, HandleRegionList(box, field, region), 3,
+        TextHandleOptions(box, st.scale)) then st.PlaceHandle(handle, region) end
 end
 local function PlaceValueTextHandles(st, kind, together, mainHandle, leftHandle, centerHandle, rightHandle, leftRegion, centerRegion, rightRegion)
     local box = st.box
@@ -2469,7 +2588,8 @@ local function PlaceValueTextHandles(st, kind, together, mainHandle, leftHandle,
         st.SetShownSafe(leftHandle, false)
         st.SetShownSafe(centerHandle, false)
         st.SetShownSafe(rightHandle, false)
-        if st.UnitPreviewText.PlaceHandleAroundRegions(mainHandle, st.canvas, HandleRegionList(box, kind, leftRegion, centerRegion, rightRegion), 3, TextHandleOptions(box, st.scale)) then return end
+        if st.UnitPreviewText.PlaceHandleAroundRegions(mainHandle, st.canvas, HandleRegionList(box, kind, leftRegion, centerRegion, rightRegion), 3,
+            TextHandleOptions(box, st.scale)) then return end
         if not ((leftRegion and leftRegion:IsShown()) or (centerRegion and centerRegion:IsShown()) or (rightRegion and rightRegion:IsShown())) then
             mainHandle:Hide()
             return
@@ -2494,44 +2614,48 @@ function Stage.PlaceValueTextHandles(st)
     -- right FontString (and vice versa); pair each slot handle with the
     -- FontString that actually shows its content so drags edit visible text.
     if st.hpHandlesReversed then
-        PlaceValueTextHandles(st, "hp", st.hpTextMovesTogether, box.handleHP, box.handleHPLeft, box.handleHPCenter, box.handleHPRight, mock.hpText, mock.hpTextCenter, mock.hpTextLeft)
+        PlaceValueTextHandles(st, "hp", st.hpTextMovesTogether, box.handleHP, box.handleHPLeft, box.handleHPCenter, box.handleHPRight, mock.hpText,
+            mock.hpTextCenter, mock.hpTextLeft)
     else
-        PlaceValueTextHandles(st, "hp", st.hpTextMovesTogether, box.handleHP, box.handleHPLeft, box.handleHPCenter, box.handleHPRight, mock.hpTextLeft, mock.hpTextCenter, mock.hpText)
+        PlaceValueTextHandles(st, "hp", st.hpTextMovesTogether, box.handleHP, box.handleHPLeft, box.handleHPCenter, box.handleHPRight, mock.hpTextLeft,
+            mock.hpTextCenter, mock.hpText)
     end
-    PlaceValueTextHandles(st, "power", st.powerTextMovesTogether, box.handlePower, box.handlePowerLeft, box.handlePowerCenter, box.handlePowerRight, mock.powerTextLeft, mock.powerTextCenter, mock.powerText)
+    PlaceValueTextHandles(st, "power", st.powerTextMovesTogether, box.handlePower, box.handlePowerLeft, box.handlePowerCenter, box.handlePowerRight,
+        mock.powerTextLeft, mock.powerTextCenter, mock.powerText)
 end
 function Stage.PlaceClassPowerTextHandle(st)
     local box, max, text = st.box, st.max, st.mock.classPower.text
     box.handleClassPowerText:SetSize(max(26, text:GetStringWidth() + 10), max(18, text:GetStringHeight() + 6))
-    if not st.UnitPreviewText.PlaceHandleAroundRegions(box.handleClassPowerText, st.canvas, HandleRegionList(box, "classPowerText", text), 3, PLAIN_HANDLE_OPTIONS) then st.PlaceHandle(box.handleClassPowerText, text) end
+    if not st.UnitPreviewText.PlaceHandleAroundRegions(box.handleClassPowerText, st.canvas, HandleRegionList(box, "classPowerText", text), 3,
+        PLAIN_HANDLE_OPTIONS) then st.PlaceHandle(box.handleClassPowerText, text) end
 end
 --- Animation tick for the class resource: the animated value drives the
 --- segment fills and the resource text; runes stay static in this preview.
 function Stage.AnimateClassPower(st)
-    local cp, R = st.classPowerOn and st.cp, st.R
+    local cp, RenderState = st.classPowerOn and st.cp, st.R
     if not (cp and cp.preview) or cp.isRune then return end
     local animState = st.animState
-    cp.animatedValue = animState and R.CPPreview.AnimatedValue and R.CPPreview.AnimatedValue(cp.preview, animState.elapsed) or nil
-    cp.isFull = cp.fullEnabled == true and R.CPPreview.IsFull(cp.preview, cp.animatedValue)
+    cp.animatedValue = animState and RenderState.CPPreview.AnimatedValue and RenderState.CPPreview.AnimatedValue(cp.preview, animState.elapsed) or nil
+    cp.isFull = cp.fullEnabled == true and RenderState.CPPreview.IsFull(cp.preview, cp.animatedValue)
     Stage.RenderClassPowerSegments(st)
     local text = st.mock.classPower.text
-    if cp.textOn and cp.animatedValue ~= nil and (R.CPPreview.ConfiguredTextForValue or R.CPPreview.TextForValue) then
-        text:SetText(R.CPPreview.ConfiguredTextForValue
-            and R.CPPreview.ConfiguredTextForValue(st.bars, cp.preview, cp.animatedValue)
-            or R.CPPreview.TextForValue(cp.preview, cp.animatedValue))
+    if cp.textOn and cp.animatedValue ~= nil and (RenderState.CPPreview.ConfiguredTextForValue or RenderState.CPPreview.TextForValue) then
+        text:SetText(RenderState.CPPreview.ConfiguredTextForValue
+            and RenderState.CPPreview.ConfiguredTextForValue(st.bars, cp.preview, cp.animatedValue)
+            or RenderState.CPPreview.TextForValue(cp.preview, cp.animatedValue))
         Stage.PlaceClassPowerTextHandle(st)
     end
 end
 --- Power backgrounds can follow the health colour (match health), so the
 --- animation tick repaints them when that colour moves.
 function Stage.PaintPowerBackgrounds(st)
-    local R = st.R
+    local RenderState = st.R
     if st.powerOn then
-        st.mock.powerBG:SetVertexColor(PreviewPowerBackgroundColor(R, st.runtimePower, st.conf, st.pr, st.pg, st.pb, st.hr, st.hg, st.hb))
+        st.mock.powerBG:SetVertexColor(PreviewPowerBackgroundColor(RenderState, st.runtimePower, st.conf, st.pr, st.pg, st.pb, st.hr, st.hg, st.hb))
     end
     local bg = st.detachedPowerBg
     if bg then
-        bg:SetVertexColor(PreviewPowerBackgroundColor(R, st.runtimePower, st.conf, st.pr, st.pg, st.pb, st.hr, st.hg, st.hb))
+        bg:SetVertexColor(PreviewPowerBackgroundColor(RenderState, st.runtimePower, st.conf, st.pr, st.pg, st.pb, st.hr, st.hg, st.hb))
     end
 end
 
@@ -2539,7 +2663,7 @@ end
 --- RenderClassPowerSegments), fragment notches, rounded surface, text and the
 --- secondary timer, or the fully hidden state.
 function Stage.RenderClassPower(st)
-    local ApplyPreviewFont, PlaceHandle, R, S, SetTex, TEX_W8, UnitPreviewText, animState = st.ApplyPreviewFont, st.PlaceHandle, st.R, st.S, st.SetTex, st.TEX_W8, st.UnitPreviewText, st.animState
+    local ApplyPreviewFont, PlaceHandle, RenderState, S, SetTex, TEX_W8, UnitPreviewText, animState = st.ApplyPreviewFont, st.PlaceHandle, st.R, st.S, st.SetTex, st.TEX_W8, st.UnitPreviewText, st.animState
     local bars, box, canvas, classPowerOn, classPowerPreviewSpec, classPowerSegCount, cpH, detachedPower = st.bars, st.box, st.canvas, st.classPowerOn, st.classPowerPreviewSpec, st.classPowerSegCount, st.cpH, st.detachedPower
     local fb, fg, floor, fr, g, max, mock, pb = st.fb, st.fg, st.floor, st.fr, st.g, st.max, st.mock, st.pb
     local pg, pr, scale, w = st.pg, st.pr, st.scale, st.w
@@ -2570,16 +2694,19 @@ function Stage.RenderClassPower(st)
                 S((tonumber(bars.classPowerOffsetY) or 0) - 2))
         end
         local cp = box._msufClassPowerPreviewScratch
-        if not cp then cp = {}; box._msufClassPowerPreviewScratch = cp end
+        if not cp then
+            cp = {}
+            box._msufClassPowerPreviewScratch = cp
+        end
         cp.preview = classPowerPreviewSpec
         cp.token = cp.preview and cp.preview.token
         cp.isRune = cp.preview and cp.preview.mode == "rune"
         cp.r, cp.g, cp.b = pr, pg, pb
-        cp.animatedValue = animState and R.CPPreview.AnimatedValue and R.CPPreview.AnimatedValue(cp.preview, animState.elapsed) or nil
-        if cp.token then cp.r, cp.g, cp.b = R.CPPreview.ResolveBaseColor(cp.preview, bars, pr, pg, pb) end
-        local fullEnabled, fullR, fullG, fullB = R.CPPreview.ResolveFullColor(bars, cp.token, cp.r, cp.g, cp.b)
+        cp.animatedValue = animState and RenderState.CPPreview.AnimatedValue and RenderState.CPPreview.AnimatedValue(cp.preview, animState.elapsed) or nil
+        if cp.token then cp.r, cp.g, cp.b = RenderState.CPPreview.ResolveBaseColor(cp.preview, bars, pr, pg, pb) end
+        local fullEnabled, fullR, fullG, fullB = RenderState.CPPreview.ResolveFullColor(bars, cp.token, cp.r, cp.g, cp.b)
         cp.fullEnabled = fullEnabled == true
-        cp.isFull = fullEnabled == true and R.CPPreview.IsFull(cp.preview, cp.animatedValue)
+        cp.isFull = fullEnabled == true and RenderState.CPPreview.IsFull(cp.preview, cp.animatedValue)
         cp.fullR, cp.fullG, cp.fullB = fullR, fullG, fullB
         cp.filledAlpha = tonumber(bars.classPowerFilledAlpha) or 0.95
         if cp.filledAlpha < 0 then cp.filledAlpha = 0 elseif cp.filledAlpha > 1 then cp.filledAlpha = 1 end
@@ -2595,7 +2722,7 @@ function Stage.RenderClassPower(st)
             or (bars.roundedFramesEnabled == true and bars.roundedClassResources == true))
         UNIT_CP_ROUNDED_OPTS.style = cp.style
         if mock.classPower.SetBackdropColor then
-            cp.bgr, cp.bgg, cp.bgb = R.CPPreview.ColorOverride("classPowerBgColorOverrides", cp.token)
+            cp.bgr, cp.bgg, cp.bgb = RenderState.CPPreview.ColorOverride("classPowerBgColorOverrides", cp.token)
             mock.classPower:SetBackdropColor(cp.bgr or 0, cp.bgg or 0, cp.bgb or 0,
                 (cp.shapeInfo or cp.rounded) and 0 or cp.bgAlpha)
             mock.classPower:SetBackdropBorderColor(0, 0, 0, (cp.shapeInfo or cp.rounded) and 0 or 1)
@@ -2702,17 +2829,18 @@ function Stage.RenderClassPower(st)
             local cpTextSize = S(tonumber(bars.classPowerFontSize) or 16)
             if cpTextSize < 7 then cpTextSize = 7 end
             ApplyPreviewFont(mock.classPower.text, cpTextSize)
-            if cp.animatedValue ~= nil and (R.CPPreview.ConfiguredTextForValue or R.CPPreview.TextForValue) then
-                mock.classPower.text:SetText(R.CPPreview.ConfiguredTextForValue
-                    and R.CPPreview.ConfiguredTextForValue(bars, cp.preview, cp.animatedValue)
-                    or R.CPPreview.TextForValue(cp.preview, cp.animatedValue))
+            if cp.animatedValue ~= nil and (RenderState.CPPreview.ConfiguredTextForValue or RenderState.CPPreview.TextForValue) then
+                mock.classPower.text:SetText(RenderState.CPPreview.ConfiguredTextForValue
+                    and RenderState.CPPreview.ConfiguredTextForValue(bars, cp.preview, cp.animatedValue)
+                    or RenderState.CPPreview.TextForValue(cp.preview, cp.animatedValue))
             else
                 mock.classPower.text:SetText((cp.preview and cp.preview.previewText) or "3")
             end
-            cp.tr, cp.tg, cp.tb = R.CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
+            cp.tr, cp.tg, cp.tb = RenderState.CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
             mock.classPower.text:SetTextColor(cp.tr, cp.tg, cp.tb, cp.runeTextAlpha)
             mock.classPower.text:ClearAllPoints()
-            mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", S(tonumber(bars.classPowerTextOffsetX) or 0), S(tonumber(bars.classPowerTextOffsetY) or 0))
+            mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", S(tonumber(bars.classPowerTextOffsetX) or 0),
+                S(tonumber(bars.classPowerTextOffsetY) or 0))
             mock.classPower.text:Show()
             Stage.PlaceClassPowerTextHandle(st)
         else
@@ -2721,7 +2849,7 @@ function Stage.RenderClassPower(st)
         end
         if box._runtimeClassPowerSecondaryOn == true then
             RenderPreviewSecondaryClassTimer(mock, box._runtimeClassPowerSecondarySpec,
-                box._runtimeClassPowerSecondaryH, cpW, bars, R, animState, S,
+                box._runtimeClassPowerSecondaryH, cpW, bars, RenderState, animState, S,
                 TEX_W8, ApplyPreviewFont, SetTex, fr, fg, fb, cp)
         else
             HidePreviewSecondaryClassTimer(mock)
@@ -2782,7 +2910,7 @@ end
 --- Power bar outline, the detached power bar (shaped or rounded) with its
 --- handle and gradient, and the dispel overlay/symbol layers.
 function Stage.RenderDetachedPower(st)
-    local Auras, PlaceHandle, R, S, SetTex, TEX_W8, bars, baseLevel = st.Auras, st.PlaceHandle, st.R, st.S, st.SetTex, st.TEX_W8, st.bars, st.baseLevel
+    local Auras, PlaceHandle, RenderState, S, SetTex, TEX_W8, bars, baseLevel = st.Auras, st.PlaceHandle, st.R, st.S, st.SetTex, st.TEX_W8, st.bars, st.baseLevel
     local box, classPowerOn, conf, detachedH, detachedPower, detachedPowerBgTexture, detachedPowerInUnitPreview, detachedPowerTexture = st.box, st.classPowerOn, st.conf, st.detachedH, st.detachedPower, st.detachedPowerBgTexture, st.detachedPowerInUnitPreview, st.detachedPowerTexture
     local floor, g, h, hb, hg, hr, key, max = st.floor, st.g, st.h, st.hb, st.hg, st.hr, st.key, st.max
     local mock, pb, pg, powerFrac, pr, runtimePower, runtimeSpec, scale = st.mock, st.pb, st.pg, st.powerFrac, st.pr, st.runtimePower, st.runtimeSpec, st.scale
@@ -2834,7 +2962,8 @@ function Stage.RenderDetachedPower(st)
         local powerShapeInfo = PREVIEW_POWER_SHAPES[box._runtimeDetachedPowerShape or "BAR"]
         box._runtimeDetachedRoundedPower = powerShapeInfo == nil and true or nil
         if mock.detachedPower.SetBackdropColor then
-            if mock.detachedPower.SetBackdrop then PixelLayoutRegion(mock.detachedPower, "SetBackdrop", DetachedPowerBackdrop(max(1, box._previewPowerOutline))) end
+            if mock.detachedPower.SetBackdrop then PixelLayoutRegion(mock.detachedPower, "SetBackdrop",
+                DetachedPowerBackdrop(max(1, box._previewPowerOutline))) end
             mock.detachedPower:SetBackdropColor(0, 0, 0, 0)
             mock.detachedPower:SetBackdropBorderColor(0, 0, 0, (not powerShapeInfo and box._runtimePowerOutline > 0) and 1 or 0)
         end
@@ -2869,7 +2998,7 @@ function Stage.RenderDetachedPower(st)
         else
             if mock.detachedPower.bg then
                 SetTex(mock.detachedPower.bg, detachedPowerBgTexture)
-                mock.detachedPower.bg:SetVertexColor(PreviewPowerBackgroundColor(R, runtimePower, conf, pr, pg, pb, hr, hg, hb))
+                mock.detachedPower.bg:SetVertexColor(PreviewPowerBackgroundColor(RenderState, runtimePower, conf, pr, pg, pb, hr, hg, hb))
                 st.detachedPowerBg = mock.detachedPower.bg
                 mock.detachedPower.bg:ClearAllPoints()
                 mock.detachedPower.bg:SetAllPoints(mock.detachedPower)
@@ -2904,7 +3033,7 @@ end
 
 --- Rounded surface or frame border (boss highlight aware) and the bounds guide.
 function Stage.RenderFrameChrome(st)
-    local R, box, conf, floor, key, max, mock, powerOn = st.R, st.box, st.conf, st.floor, st.key, st.max, st.mock, st.powerOn
+    local RenderState, box, conf, floor, key, max, mock, powerOn = st.R, st.box, st.conf, st.floor, st.key, st.max, st.mock, st.powerOn
     local runtimeSpec, scale = st.runtimeSpec, st.scale
     do
     local previewBorder = runtimeSpec and runtimeSpec.border
@@ -2918,32 +3047,33 @@ function Stage.RenderFrameChrome(st)
         highlight.r, highlight.g, highlight.b, highlight.a = previewBorder.bossTargetR, previewBorder.bossTargetG, previewBorder.bossTargetB, 1
         previewBorder = highlight
     end
-    R.ApplyPreviewRounded(box, key, powerOn, bossBorder and max(1, floor(previewBorder.thickness * scale + .5)) or R.PreviewRoundedOutlineThickness(key, conf, scale),
+    RenderState.ApplyPreviewRounded(box, key, powerOn, bossBorder and max(1, floor(previewBorder.thickness * scale + .5))
+        or RenderState.PreviewRoundedOutlineThickness(key, conf, scale),
         box._runtimePowerEmbedded == true, box._previewPowerOutline,
         box._runtimeDetachedRoundedPower == true, box._previewPowerOutline)
-    if R.ApplyPreviewFrameBorder then
+    if RenderState.ApplyPreviewFrameBorder then
         local selectedValue1
         if not (mock._msufPreviewRoundedActive == true) then selectedValue1 = previewBorder end
-        R.ApplyPreviewFrameBorder(box, selectedValue1, scale)
+        RenderState.ApplyPreviewFrameBorder(box, selectedValue1, scale)
     end
     end
-    if R.ApplyPreviewBoundsGuide then
+    if RenderState.ApplyPreviewBoundsGuide then
         local guideEdge = 1
         if mock._msufPreviewRoundedActive == true then
-            guideEdge = R.PreviewRoundedOutlineThickness(key, conf, scale)
+            guideEdge = RenderState.PreviewRoundedOutlineThickness(key, conf, scale)
         elseif runtimeSpec and runtimeSpec.border and runtimeSpec.border.enabled == true then
             guideEdge = floor(((tonumber(runtimeSpec.border.thickness) or 1) * scale) + 0.5)
         end
-        R.ApplyPreviewBoundsGuide(box, guideEdge)
+        RenderState.ApplyPreviewBoundsGuide(box, guideEdge)
     end
 end
 
 --- Text fonts (name, raid group, ToT inline, health and power slots) and
 --- their colors.
 function Stage.ApplyTextStyle(st)
-    local ApplyPreviewFont, R, box, conf, data, displayPowerToken, fb, fg = st.ApplyPreviewFont, st.R, st.box, st.conf, st.data, st.displayPowerToken, st.fb, st.fg
+    local ApplyPreviewFont, RenderState, box, conf, data, displayPowerToken, fb, fg = st.ApplyPreviewFont, st.R, st.box, st.conf, st.data, st.displayPowerToken, st.fb, st.fg
     local fr, g, key, mock, runtimeSpec, runtimeStatus, runtimeText = st.fr, st.g, st.key, st.mock, st.runtimeSpec, st.runtimeStatus, st.runtimeText
-    local fr, fg, fb = R.FontColor()
+    local fr, fg, fb = RenderState.FontColor()
     local baseTextSize = tonumber(g.fontSize) or 14
     local nameRawSize = tonumber(runtimeSpec and runtimeSpec.nameFontSize) or tonumber(conf.nameFontSize) or tonumber(g.nameFontSize) or baseTextSize
     local hpSize = tonumber(runtimeSpec and runtimeSpec.healthFontSize) or tonumber(conf.hpFontSize) or tonumber(g.hpFontSize) or baseTextSize
@@ -2966,7 +3096,7 @@ function Stage.ApplyTextStyle(st)
     -- FontString (and vice versa); size and offsets follow the content, so
     -- swap the per-slot keys the physical sides read from.
     local hpRev = runtimeText and runtimeText.healthReverse == true
-        or (not runtimeText and R.TextScopeGet(key, "hpTextReverse", false) == true)
+        or (not runtimeText and RenderState.TextScopeGet(key, "hpTextReverse", false) == true)
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.hpTextLeft, ResolvePreviewTextSlotSize(runtimeText, conf, hpRev and "healthRightFontSize" or "healthLeftFontSize", hpRev and "hpTextRightFontSize" or "hpTextLeftFontSize", hpSize), "health")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.hpTextCenter, ResolvePreviewTextSlotSize(runtimeText, conf, "healthCenterFontSize", "hpTextCenterFontSize", hpSize), "health")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.hpText, ResolvePreviewTextSlotSize(runtimeText, conf, hpRev and "healthLeftFontSize" or "healthRightFontSize", hpRev and "hpTextLeftFontSize" or "hpTextRightFontSize", hpSize), "health")
@@ -2975,7 +3105,7 @@ function Stage.ApplyTextStyle(st)
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.powerTextCenter, ResolvePreviewTextSlotSize(runtimeText, conf, "powerCenterFontSize", "powerTextCenterFontSize", pwrSize), "power")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.powerText, ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", pwrSize), "power")
     ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, mock.powerTextPct, ResolvePreviewTextSlotSize(runtimeText, conf, "powerRightFontSize", "powerTextRightFontSize", pwrSize), "power")
-    box._previewNameR, box._previewNameG, box._previewNameB = R.PreviewNameColor(key, data, fr, fg, fb)
+    box._previewNameR, box._previewNameG, box._previewNameB = RenderState.PreviewNameColor(key, data, fr, fg, fb)
     SetTextColorSet(box._previewNameR, box._previewNameG, box._previewNameB, box._fontPreviewTextAlpha, mock.nameText)
     SetTextColorSet(fr, fg, fb, box._fontPreviewTextAlpha, mock.raidGroupNameText)
     if runtimeText and runtimeText.directLayout == true then
@@ -2983,7 +3113,7 @@ function Stage.ApplyTextStyle(st)
     end
     mock.totInlineSep:SetTextColor(0.72, 0.76, 0.84, box._fontPreviewTextAlpha)
     mock.totInlineText:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
-    local hpTextR, hpTextG, hpTextB, hpTextFollowsHealth = ResolvePreviewHealthTextColor(R, runtimeText, conf, g, data, fr, fg, fb)
+    local hpTextR, hpTextG, hpTextB, hpTextFollowsHealth = ResolvePreviewHealthTextColor(RenderState, runtimeText, conf, g, data, fr, fg, fb)
     st.hpTextFollowsHealth = hpTextFollowsHealth
     SetTextColorSet(hpTextR, hpTextG, hpTextB, box._fontPreviewTextAlpha, mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct)
     if runtimeText and runtimeText.directLayout == true and runtimeText.healthColorByHealth ~= true and runtimeText.healthColorByClass ~= true then
@@ -2992,7 +3122,7 @@ function Stage.ApplyTextStyle(st)
         SetPreviewTextColor(mock.hpText, RuntimeHealthPhysicalSlotValue(runtimeText, "Right", "directHealth", "Color"), box._fontPreviewTextAlpha)
     end
     if (runtimeText and runtimeText.powerColorByType == true) or (not runtimeText and g.colorPowerTextByType == true) then
-        local prt, pgt, pbt = R.PowerColor(displayPowerToken)
+        local prt, pgt, pbt = RenderState.PowerColor(displayPowerToken)
         SetTextColorSet(prt, pgt, pbt, box._fontPreviewTextAlpha, mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct)
     else
         SetTextColorSet(fr, fg, fb, box._fontPreviewTextAlpha, mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct)
@@ -3023,41 +3153,44 @@ local RUNTIME_HIDE_PERCENT_FIELDS = {
     powerTextCenterHidePercentSymbol = "powerCenterHidePercentSymbol",
     powerTextRightHidePercentSymbol = "powerRightHidePercentSymbol",
 }
-local function TextSlotHidePercentSymbol(R, key, runtimeText, field)
+local function TextSlotHidePercentSymbol(RenderState, key, runtimeText, field)
     local value
     if runtimeText then
         value = runtimeText[RUNTIME_HIDE_PERCENT_FIELDS[field]]
     else
-        value = R.TextScopeGet(key, field, nil)
+        value = RenderState.TextScopeGet(key, field, nil)
     end
     if value ~= nil then return value == true end
     return (runtimeText and runtimeText.hidePercentSymbol == true)
-        or (not runtimeText and R.TextScopeGet(key, "hidePercentSymbol", false) == true)
+        or (not runtimeText and RenderState.TextScopeGet(key, "hidePercentSymbol", false) == true)
 end
 --- Health and power value texts from the resolved slot set: the full refresh
 --- and the animation tick share it.
 function Stage.PaintValueTexts(st)
-    local R, data, floor, format, mock, powerFrac = st.R, st.data, st.floor, st.format, st.mock, st.powerFrac
+    local RenderState, data, floor, format, mock, powerFrac = st.R, st.data, st.floor, st.format, st.mock, st.powerFrac
     local tc = st.textContent
     local hpMax, pMax = tonumber(data.hpMax) or 1000000, tonumber(data.powerMax) or 240000
     local hpCur, pCur = tonumber(data.hpCur) or floor(hpMax * data.hp + 0.5), tonumber(data.powerCur) or floor(pMax * powerFrac + 0.5)
     local hpPctValue = tc.hpDecimals and format("%.1f", floor(data.hp * 1000 + 0.5) / 10)
         or floor(data.hp * 100 + 0.5)
-    mock.hpTextLeft:SetText(R.FormatMode(tc.hpLeftMode, hpCur, hpMax, hpPctValue, tc.hpSep, false, tc.hpLeftHide, tc.hpShort, tc.hpLeftAbsorbIcon, data.absorb))
-    mock.hpTextCenter:SetText(R.FormatMode(tc.hpCenterMode, hpCur, hpMax, hpPctValue, tc.hpSep, false, tc.hpCenterHide, tc.hpShort, tc.hpCenterAbsorbIcon, data.absorb))
-    mock.hpText:SetText(R.FormatMode(tc.hpRightMode, hpCur, hpMax, hpPctValue, tc.hpSep, false, tc.hpRightHide, tc.hpShort, tc.hpRightAbsorbIcon, data.absorb))
+    mock.hpTextLeft:SetText(RenderState.FormatMode(tc.hpLeftMode, hpCur, hpMax, hpPctValue, tc.hpSep, false, tc.hpLeftHide, tc.hpShort,
+        tc.hpLeftAbsorbIcon, data.absorb))
+    mock.hpTextCenter:SetText(RenderState.FormatMode(tc.hpCenterMode, hpCur, hpMax, hpPctValue, tc.hpSep, false, tc.hpCenterHide, tc.hpShort,
+        tc.hpCenterAbsorbIcon, data.absorb))
+    mock.hpText:SetText(RenderState.FormatMode(tc.hpRightMode, hpCur, hpMax, hpPctValue, tc.hpSep, false, tc.hpRightHide, tc.hpShort,
+        tc.hpRightAbsorbIcon, data.absorb))
     local powerPctValue = floor(powerFrac * 100 + 0.5)
-    mock.powerTextLeft:SetText(R.FormatMode(tc.powerLeftMode, pCur, pMax, powerPctValue, tc.powerSep, true, tc.powerLeftHide, tc.powerShort))
-    mock.powerTextCenter:SetText(R.FormatMode(tc.powerCenterMode, pCur, pMax, powerPctValue, tc.powerSep, true, tc.powerCenterHide, tc.powerShort))
-    mock.powerText:SetText(R.FormatMode(tc.powerRightMode, pCur, pMax, powerPctValue, tc.powerSep, true, tc.powerRightHide, tc.powerShort))
+    mock.powerTextLeft:SetText(RenderState.FormatMode(tc.powerLeftMode, pCur, pMax, powerPctValue, tc.powerSep, true, tc.powerLeftHide, tc.powerShort))
+    mock.powerTextCenter:SetText(RenderState.FormatMode(tc.powerCenterMode, pCur, pMax, powerPctValue, tc.powerSep, true, tc.powerCenterHide, tc.powerShort))
+    mock.powerText:SetText(RenderState.FormatMode(tc.powerRightMode, pCur, pMax, powerPctValue, tc.powerSep, true, tc.powerRightHide, tc.powerShort))
 end
 --- Text content: name, raid group number, health/power values per slot mode
 --- (reverse order aware) and which texts are shown.
 function Stage.RenderTextContent(st)
-    local D, R, box, conf, data, detachedPowerManagedByClassPreview, floor, format = st.D, st.R, st.box, st.conf, st.data, st.detachedPowerManagedByClassPreview, st.floor, st.format
+    local Deps, RenderState, box, conf, data, detachedPowerManagedByClassPreview, floor, format = st.D, st.R, st.box, st.conf, st.data, st.detachedPowerManagedByClassPreview, st.floor, st.format
     local key, mock, powerFrac, runtimeSpec, runtimeStatus, runtimeText = st.key, st.mock, st.powerFrac, st.runtimeSpec, st.runtimeStatus, st.runtimeText
-    mock.nameText:SetText(R.ShortenPreviewName(data.name, runtimeText, conf))
-    mock.raidGroupNameText:SetText(D.PreviewRaidGroupNameText(conf))
+    mock.nameText:SetText(RenderState.ShortenPreviewName(data.name, runtimeText, conf))
+    mock.raidGroupNameText:SetText(Deps.PreviewRaidGroupNameText(conf))
     -- Live snapshots carry the frame's exact values; the stylized pair only
     -- backs mock data. Animated refreshes strip hpCur/powerCur so texts follow
     -- the combat-preview fraction on the live max scale. The slot set is
@@ -3065,23 +3198,23 @@ function Stage.RenderTextContent(st)
     local tc = box._msufTextContent or {}
     box._msufTextContent = tc
     st.textContent = tc
-    local hpSlots = R.TextScopeHasSlots(key, "textLeft", "textCenter", "textRight")
+    local hpSlots = RenderState.TextScopeHasSlots(key, "textLeft", "textCenter", "textRight")
     local hpLeftMode, hpCenterMode, hpRightMode
     if runtimeText then
         hpLeftMode = runtimeText.healthLeft or "NONE"
         hpCenterMode = runtimeText.healthCenter or "NONE"
         hpRightMode = runtimeText.healthRight or "CURPERCENT"
     elseif hpSlots then
-        hpLeftMode = R.TextScopeSlotGet(key, "textLeft", "NONE", R.NormalizeHpMode)
-        hpCenterMode = R.TextScopeSlotGet(key, "textCenter", "NONE", R.NormalizeHpMode)
-        hpRightMode = R.TextScopeSlotGet(key, "textRight", "CURPERCENT", R.NormalizeHpMode)
+        hpLeftMode = RenderState.TextScopeSlotGet(key, "textLeft", "NONE", RenderState.NormalizeHpMode)
+        hpCenterMode = RenderState.TextScopeSlotGet(key, "textCenter", "NONE", RenderState.NormalizeHpMode)
+        hpRightMode = RenderState.TextScopeSlotGet(key, "textRight", "CURPERCENT", RenderState.NormalizeHpMode)
     else
-        hpLeftMode, hpCenterMode, hpRightMode = "NONE", "NONE", R.NormalizeHpMode(R.TextScopeGet(key, "hpTextMode", "CURPERCENT"))
+        hpLeftMode, hpCenterMode, hpRightMode = "NONE", "NONE", RenderState.NormalizeHpMode(RenderState.TextScopeGet(key, "hpTextMode", "CURPERCENT"))
     end
-    local hpLeftHidePercent = TextSlotHidePercentSymbol(R, key, runtimeText, "hpTextLeftHidePercentSymbol")
-    local hpCenterHidePercent = TextSlotHidePercentSymbol(R, key, runtimeText, "hpTextCenterHidePercentSymbol")
-    local hpRightHidePercent = TextSlotHidePercentSymbol(R, key, runtimeText, "hpTextRightHidePercentSymbol")
-    if (runtimeText and runtimeText.healthReverse == true) or (not runtimeText and R.TextScopeGet(key, "hpTextReverse", false) == true) then
+    local hpLeftHidePercent = TextSlotHidePercentSymbol(RenderState, key, runtimeText, "hpTextLeftHidePercentSymbol")
+    local hpCenterHidePercent = TextSlotHidePercentSymbol(RenderState, key, runtimeText, "hpTextCenterHidePercentSymbol")
+    local hpRightHidePercent = TextSlotHidePercentSymbol(RenderState, key, runtimeText, "hpTextRightHidePercentSymbol")
+    if (runtimeText and runtimeText.healthReverse == true) or (not runtimeText and RenderState.TextScopeGet(key, "hpTextReverse", false) == true) then
         hpLeftMode, hpRightMode = hpRightMode, hpLeftMode
         hpLeftMode = HP_TEXT_REVERSE_MODES[hpLeftMode] or hpLeftMode
         hpCenterMode = HP_TEXT_REVERSE_MODES[hpCenterMode] or hpCenterMode
@@ -3091,32 +3224,41 @@ function Stage.RenderTextContent(st)
     tc.hpLeftMode, tc.hpCenterMode, tc.hpRightMode = hpLeftMode, hpCenterMode, hpRightMode
     tc.hpLeftHide, tc.hpCenterHide, tc.hpRightHide = hpLeftHidePercent, hpCenterHidePercent, hpRightHidePercent
     tc.hpDecimals = runtimeText and tonumber(runtimeText.healthPercentDecimals) and runtimeText.healthPercentDecimals > 0
-        or (not runtimeText and (R.TextScopeGet(key, "healthTextDecimals", false) == true or R.TextScopeGet(key, "hpTextDecimals", false) == true))
-    tc.hpSep = runtimeText and runtimeText.healthDelimiter or R.TextScopeGet(key, "hpTextSeparator", "")
-    tc.hpShort = (runtimeText and runtimeText.healthShortNumbers == true) or (not runtimeText and R.TextScopeGet(key, "hpFullValueShort", R.TextScopeGet(key, "useShortNumbers", true)) == true)
-    tc.hpLeftAbsorbIcon = RuntimeHealthPhysicalSlotValue(runtimeText, "Left", "health", "AbsorbIcon") == true or (not runtimeText and R.TextScopeGet(key, R.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextRightAbsorbIcon" or "hpTextLeftAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true)
-    tc.hpCenterAbsorbIcon = runtimeText and runtimeText.healthCenterAbsorbIcon == true or (not runtimeText and R.TextScopeGet(key, "hpTextCenterAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true)
-    tc.hpRightAbsorbIcon = RuntimeHealthPhysicalSlotValue(runtimeText, "Right", "health", "AbsorbIcon") == true or (not runtimeText and R.TextScopeGet(key, R.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon", R.TextScopeGet(key, "hpAbsorbIcon", false)) == true)
+        or (not runtimeText and (RenderState.TextScopeGet(key, "healthTextDecimals", false) == true
+            or RenderState.TextScopeGet(key, "hpTextDecimals", false) == true))
+    tc.hpSep = runtimeText and runtimeText.healthDelimiter or RenderState.TextScopeGet(key, "hpTextSeparator", "")
+    tc.hpShort = (runtimeText and runtimeText.healthShortNumbers == true) or (not runtimeText
+        and RenderState.TextScopeGet(key, "hpFullValueShort", RenderState.TextScopeGet(key, "useShortNumbers", true)) == true)
+    tc.hpLeftAbsorbIcon = RuntimeHealthPhysicalSlotValue(runtimeText, "Left", "health", "AbsorbIcon") == true
+        or (not runtimeText and RenderState.TextScopeGet(key, RenderState.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextRightAbsorbIcon"
+        or "hpTextLeftAbsorbIcon", RenderState.TextScopeGet(key, "hpAbsorbIcon", false)) == true)
+    tc.hpCenterAbsorbIcon = runtimeText and runtimeText.healthCenterAbsorbIcon == true
+        or (not runtimeText and RenderState.TextScopeGet(key, "hpTextCenterAbsorbIcon", RenderState.TextScopeGet(key, "hpAbsorbIcon", false)) == true)
+    tc.hpRightAbsorbIcon = RuntimeHealthPhysicalSlotValue(runtimeText, "Right", "health", "AbsorbIcon") == true
+        or (not runtimeText and RenderState.TextScopeGet(key, RenderState.TextScopeGet(key, "hpTextReverse", false) == true and "hpTextLeftAbsorbIcon"
+        or "hpTextRightAbsorbIcon", RenderState.TextScopeGet(key, "hpAbsorbIcon", false)) == true)
     mock.hpTextPct:SetText("")
-    local powerSlots = R.TextScopeHasSlots(key, "powerTextLeft", "powerTextCenter", "powerTextRight")
+    local powerSlots = RenderState.TextScopeHasSlots(key, "powerTextLeft", "powerTextCenter", "powerTextRight")
     local powerLeftMode, powerCenterMode, powerRightMode
     if runtimeText then
         powerLeftMode = runtimeText.powerLeft or "NONE"
         powerCenterMode = runtimeText.powerCenter or "NONE"
         powerRightMode = runtimeText.powerRight or "CURPERCENT"
     elseif powerSlots then
-        powerLeftMode = R.TextScopeSlotGet(key, "powerTextLeft", "NONE", R.NormalizePowerMode)
-        powerCenterMode = R.TextScopeSlotGet(key, "powerTextCenter", "NONE", R.NormalizePowerMode)
-        powerRightMode = R.TextScopeSlotGet(key, "powerTextRight", "CURPERCENT", R.NormalizePowerMode)
+        powerLeftMode = RenderState.TextScopeSlotGet(key, "powerTextLeft", "NONE", RenderState.NormalizePowerMode)
+        powerCenterMode = RenderState.TextScopeSlotGet(key, "powerTextCenter", "NONE", RenderState.NormalizePowerMode)
+        powerRightMode = RenderState.TextScopeSlotGet(key, "powerTextRight", "CURPERCENT", RenderState.NormalizePowerMode)
     else
-        powerLeftMode, powerCenterMode, powerRightMode = "NONE", "NONE", R.NormalizePowerMode(R.TextScopeGet(key, "powerTextMode", "CURPERCENT"))
+        powerLeftMode, powerCenterMode, powerRightMode = "NONE", "NONE", RenderState.NormalizePowerMode(RenderState.TextScopeGet(key,
+            "powerTextMode", "CURPERCENT"))
     end
     tc.powerLeftMode, tc.powerCenterMode, tc.powerRightMode = powerLeftMode, powerCenterMode, powerRightMode
-    tc.powerSep = runtimeText and runtimeText.powerDelimiter or R.TextScopeGet(key, "powerTextSeparator", R.TextScopeGet(key, "hpTextSeparator", ""))
-    tc.powerShort = (runtimeText and runtimeText.shortNumbers == true) or (not runtimeText and R.TextScopeGet(key, "useShortNumbers", true) == true)
-    tc.powerLeftHide = TextSlotHidePercentSymbol(R, key, runtimeText, "powerTextLeftHidePercentSymbol")
-    tc.powerCenterHide = TextSlotHidePercentSymbol(R, key, runtimeText, "powerTextCenterHidePercentSymbol")
-    tc.powerRightHide = TextSlotHidePercentSymbol(R, key, runtimeText, "powerTextRightHidePercentSymbol")
+    tc.powerSep = runtimeText and runtimeText.powerDelimiter or RenderState.TextScopeGet(key, "powerTextSeparator",
+        RenderState.TextScopeGet(key, "hpTextSeparator", ""))
+    tc.powerShort = (runtimeText and runtimeText.shortNumbers == true) or (not runtimeText and RenderState.TextScopeGet(key, "useShortNumbers", true) == true)
+    tc.powerLeftHide = TextSlotHidePercentSymbol(RenderState, key, runtimeText, "powerTextLeftHidePercentSymbol")
+    tc.powerCenterHide = TextSlotHidePercentSymbol(RenderState, key, runtimeText, "powerTextCenterHidePercentSymbol")
+    tc.powerRightHide = TextSlotHidePercentSymbol(RenderState, key, runtimeText, "powerTextRightHidePercentSymbol")
     Stage.PaintValueTexts(st)
     mock.powerTextPct:SetText("")
     local showNamePreview = conf.showName ~= false
@@ -3130,10 +3272,10 @@ function Stage.RenderTextContent(st)
     if detachedPowerManagedByClassPreview and box._runtimeDetachedPowerTextOnBar then powerTextOn = false end
     mock.nameText:SetShown(showNamePreview)
     local raidGroupCfg = runtimeStatus and runtimeStatus.raidGroup
-    local raidGroupAnchor = (raidGroupCfg and raidGroupCfg.anchor) or D.NormalizeRaidGroupNameAnchor(conf.raidGroupNameAnchor)
+    local raidGroupAnchor = (raidGroupCfg and raidGroupCfg.anchor) or Deps.NormalizeRaidGroupNameAnchor(conf.raidGroupNameAnchor)
     if not showNamePreview and (raidGroupAnchor == "NAMERIGHT" or raidGroupAnchor == "NAMELEFT") then raidGroupAnchor = "CENTER" end
     local showRaidGroupName = (runtimeStatus and runtimeStatus.raidGroup and runtimeStatus.raidGroup.enabled == true)
-        or (not runtimeStatus and conf.showRaidGroupInName == true and D.PreviewRaidGroupNameAllowed(key))
+        or (not runtimeStatus and conf.showRaidGroupInName == true and Deps.PreviewRaidGroupNameAllowed(key))
     mock.raidGroupNameText:SetShown(showRaidGroupName)
     mock.totInlineSep:Hide()
     mock.totInlineText:Hide()
@@ -3151,14 +3293,14 @@ end
 --- Text placement: name, raid group number, ToT inline name and the health
 --- and power slot anchors (direct layout or configured offsets).
 function Stage.LayoutTextSlots(st)
-    local D, R, UNIT_DATA, box, centerX, centerY, conf, data = st.D, st.R, st.UNIT_DATA, st.box, st.centerX, st.centerY, st.conf, st.data
+    local Deps, RenderState, UNIT_DATA, box, centerX, centerY, conf, data = st.D, st.R, st.UNIT_DATA, st.box, st.centerX, st.centerY, st.conf, st.data
     local detachedPowerInUnitPreview, fb, fg, fr, g, hpRev, key, mock = st.detachedPowerInUnitPreview, st.fb, st.fg, st.fr, st.g, st.hpRev, st.key, st.mock
     local raidGroupAnchor, raidGroupCfg, runtimeText, showRaidGroupName = st.raidGroupAnchor, st.raidGroupCfg, st.runtimeText, st.showRaidGroupName
     mock.nameText:ClearAllPoints()
     if runtimeText and runtimeText.directLayout == true then
         PlaceDirectPreviewText(mock.nameText, mock.textFrame, runtimeText, "directName", "CENTER", "CENTER", 0, 0, "CENTER", RuntimeTextCoordinate)
     else
-        PlaceRuntimePreviewName(mock.nameText, mock.textFrame, runtimeText, conf, box._fontPreviewBaselineOffset, R.ResolveNameAnchor)
+        PlaceRuntimePreviewName(mock.nameText, mock.textFrame, runtimeText, conf, box._fontPreviewBaselineOffset, RenderState.ResolveNameAnchor)
     end
     mock.raidGroupNameText:ClearAllPoints()
     local raidGroupX = tonumber(raidGroupCfg and raidGroupCfg.x) or tonumber(conf.raidGroupNameOffsetX) or 3
@@ -3175,12 +3317,12 @@ function Stage.LayoutTextSlots(st)
         local totConf = EnsureDB().targettarget or {}
         local showInline = key == "target" and conf.showName ~= false and totConf.showToTInTargetName == true
         if showInline then
-            local sep = R.ToTInlineSeparator(totConf.totInlineSeparator, totConf.totInlineCustomSeparator)
-            local totData = (D.LiveUnitData and D.LiveUnitData("targettarget")) or UNIT_DATA.targettarget or { name = "Target" }
-            local tr, tg, tb = R.PreviewNameColor("target", data, fr, fg, fb)
-            local ir, ig, ib = R.PreviewToTInlineColor(totConf.totInlineColorMode, totData, tr, tg, tb, fr, fg, fb)
+            local sep = RenderState.ToTInlineSeparator(totConf.totInlineSeparator, totConf.totInlineCustomSeparator)
+            local totData = (Deps.LiveUnitData and Deps.LiveUnitData("targettarget")) or UNIT_DATA.targettarget or { name = "Target" }
+            local tr, tg, tb = RenderState.PreviewNameColor("target", data, fr, fg, fb)
+            local ir, ig, ib = RenderState.PreviewToTInlineColor(totConf.totInlineColorMode, totData, tr, tg, tb, fr, fg, fb)
             mock.totInlineSep:SetText(sep ~= "" and sep or " ")
-            mock.totInlineText:SetText(R.ShortenPreviewName(totData.name, runtimeText and runtimeText.inlineToT, conf))
+            mock.totInlineText:SetText(RenderState.ShortenPreviewName(totData.name, runtimeText and runtimeText.inlineToT, conf))
             mock.totInlineText:SetTextColor(ir, ig, ib, box._fontPreviewTextAlpha)
             local inlineAnchor = (showRaidGroupName and raidGroupAnchor == "NAMERIGHT") and mock.raidGroupNameText or mock.nameText
             mock.totInlineSep:ClearAllPoints()
@@ -3217,18 +3359,8 @@ function Stage.LayoutTextSlots(st)
                 }
             end
         end
-        local baseX = NumField(conf, g, prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
-        local baseY = NumField(conf, g, prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + box._fontPreviewBaselineOffset
-
         -- Reverse order: the mirrored physical sides read the other slot's offsets.
-        return {
-            leftX = baseX + Slot(conf, g, prefix, leftSide, "X"),
-            leftY = baseY + Slot(conf, g, prefix, leftSide, "Y"),
-            centerX = baseX + Slot(conf, g, prefix, "Center", "X"),
-            centerY = baseY + Slot(conf, g, prefix, "Center", "Y"),
-            rightX = baseX + Slot(conf, g, prefix, rightSide, "X"),
-            rightY = baseY + Slot(conf, g, prefix, rightSide, "Y"),
-        }
+        return ConfiguredSlotOffsets(conf, g, prefix, fallbackY, box._fontPreviewBaselineOffset, leftSide, rightSide)
     end
     local function PlaceTextSet(left, center, right, pct, parent, lPoint, lRel, cPoint, cRel, rPoint, rRel, offsets, coordinate)
         coordinate = coordinate or RuntimeTextCoordinate
@@ -3240,37 +3372,44 @@ function Stage.LayoutTextSlots(st)
     local hpOffsets = TextOffsets("hp", -4, hpRev)
     local powerOffsets = TextOffsets("power", 4)
     if runtimeText and runtimeText.directLayout == true then
-        PlaceDirectPreviewText(mock.hpTextLeft, mock.textFrame, runtimeText, hpRev and "directHealthRight" or "directHealthLeft", "LEFT", "LEFT", 4, 0, "LEFT", RuntimeTextCoordinate)
+        PlaceDirectPreviewText(mock.hpTextLeft, mock.textFrame, runtimeText, hpRev and "directHealthRight" or "directHealthLeft", "LEFT", "LEFT", 4, 0,
+            "LEFT", RuntimeTextCoordinate)
         PlaceDirectPreviewText(mock.hpTextCenter, mock.textFrame, runtimeText, "directHealthCenter", "CENTER", "CENTER", 0, 0, "CENTER", RuntimeTextCoordinate)
-        PlaceDirectPreviewText(mock.hpText, mock.textFrame, runtimeText, hpRev and "directHealthLeft" or "directHealthRight", "RIGHT", "RIGHT", -4, 0, "RIGHT", RuntimeTextCoordinate)
+        PlaceDirectPreviewText(mock.hpText, mock.textFrame, runtimeText, hpRev and "directHealthLeft" or "directHealthRight", "RIGHT", "RIGHT", -4, 0,
+            "RIGHT", RuntimeTextCoordinate)
     else
-        PlaceTextSet(mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct, mock.textFrame, "TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", hpOffsets)
+        PlaceTextSet(mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct, mock.textFrame, "TOPLEFT", "TOPLEFT", "TOP", "TOP",
+            "TOPRIGHT", "TOPRIGHT", hpOffsets)
     end
     if detachedPowerInUnitPreview and box._runtimeDetachedPowerTextOnBar and mock.detachedPower:IsShown() then
         -- The FontStrings inherit the runtime scale from textFrame. Keep their
         -- offsets raw even though the detached bar geometry is canvas-scaled;
         -- scaling the offsets here would apply the preview scale twice.
-        PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.detachedPower, "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", powerOffsets)
+        PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.detachedPower, "LEFT", "LEFT", "CENTER", "CENTER",
+            "RIGHT", "RIGHT", powerOffsets)
     elseif runtimeText and runtimeText.directLayout == true then
         PlaceDirectPreviewText(mock.powerTextLeft, mock.textFrame, runtimeText, "directPowerLeft", "LEFT", "LEFT", 4, 0, "LEFT", RuntimeTextCoordinate)
-        PlaceDirectPreviewText(mock.powerTextCenter, mock.textFrame, runtimeText, "directPowerCenter", "CENTER", "CENTER", 0, 0, "CENTER", RuntimeTextCoordinate)
+        PlaceDirectPreviewText(mock.powerTextCenter, mock.textFrame, runtimeText, "directPowerCenter", "CENTER", "CENTER", 0, 0,
+            "CENTER", RuntimeTextCoordinate)
         PlaceDirectPreviewText(mock.powerText, mock.textFrame, runtimeText, "directPowerRight", "RIGHT", "RIGHT", -4, 0, "RIGHT", RuntimeTextCoordinate)
     else
-        PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT", powerOffsets)
+        PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM",
+            "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT", powerOffsets)
     end
 end
 
 --- Portrait: placement, texture (class/2D/3D), background, shape mask,
 --- border and handle, or the hidden state.
 function Stage.RenderPortrait(st)
-    local PlaceHandle, PortraitStyleGet, R, S, box, data, floor, g = st.PlaceHandle, st.PortraitStyleGet, st.R, st.S, st.box, st.data, st.floor, st.g
+    local PlaceHandle, PortraitStyleGet, RenderState, S, box, data, floor, g = st.PlaceHandle, st.PortraitStyleGet, st.R, st.S, st.box, st.data, st.floor, st.g
     local h, hasPortrait, key, max, mock, mode, runtimeSpec, w = st.h, st.hasPortrait, st.key, st.max, st.mock, st.mode, st.runtimeSpec, st.w
     if hasPortrait or box._runtimeDefensivePortraitPositionOnly then
         mock.portrait:Show()
         mock.portrait:SetSize(S(box._runtimePortraitW), S(box._runtimePortraitH))
         mock.portrait:SetAlpha(box._runtimePortraitAlpha or 1)
         mock.portrait:ClearAllPoints()
-        if mock.portrait.border and mock.portrait.border.SetFrameLevel and mock.portrait.GetFrameLevel then mock.portrait.border:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1) end
+        if mock.portrait.border and mock.portrait.border.SetFrameLevel
+            and mock.portrait.GetFrameLevel then mock.portrait.border:SetFrameLevel((mock.portrait:GetFrameLevel() or 1) + 1) end
         local ox = S(tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.x) or tonumber(PortraitStyleGet(key, "portraitOffsetX", 0)) or 0)
         local oy = S(tonumber(runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.y) or tonumber(PortraitStyleGet(key, "portraitOffsetY", 0)) or 0)
         if box._runtimePortraitPlacement == "DETACHED" then
@@ -3293,13 +3432,14 @@ function Stage.RenderPortrait(st)
         end
         if hasPortrait then
         mock.portrait.tex:Show()
-        local cr, cg, cb = R.ClassColor(data.class)
+        local cr, cg, cb = RenderState.ClassColor(data.class)
         local renderMode = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.render) or PortraitStyleGet(key, "portraitRender", "2D")
         local previewShape = (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.shape)
             or PortraitStyleGet(key, "portraitShape", "SQUARE")
         box._msufPreviewPortraitImageSpec = nil
         if renderMode == "CLASS" then
-            local visual = R.ClassPortraitVisual(data.class, (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.classStyle) or PortraitStyleGet(key, "portraitClassStyle", "BLIZZARD"))
+            local visual = RenderState.ClassPortraitVisual(data.class, (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.classStyle)
+                or PortraitStyleGet(key, "portraitClassStyle", "BLIZZARD"))
             if visual and visual.atlas and mock.portrait.tex.SetAtlas then
                 mock.portrait.tex:SetAtlas(visual.atlas)
                 -- Only a flipped class atlas needs its coordinates.
@@ -3330,7 +3470,7 @@ function Stage.RenderPortrait(st)
                 -- uses the stock unmasked bust render.
                 _G.SetPortraitTexture(mock.portrait.tex, data.liveUnit, (previewShape == "BLIZZARD") or nil)
             else
-                mock.portrait.tex:SetTexture(R.UnitPreviewPortraitTexture(key, data))
+                mock.portrait.tex:SetTexture(RenderState.UnitPreviewPortraitTexture(key, data))
             end
             if mock.portrait.tex.SetVertexColor then mock.portrait.tex:SetVertexColor(1, 1, 1, 1) end
             if mock.portrait.tex.SetTexCoord then
@@ -3352,7 +3492,8 @@ function Stage.RenderPortrait(st)
             mock.portrait.initial:Hide()
         end
         local portraitBg = runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.bg
-        if (portraitBg and portraitBg.enabled == true) or (not (runtimeSpec and runtimeSpec.portrait) and PortraitStyleGet(key, "portraitBgEnabled", false) == true) then
+        if (portraitBg and portraitBg.enabled == true) or (not (runtimeSpec and runtimeSpec.portrait)
+            and PortraitStyleGet(key, "portraitBgEnabled", false) == true) then
             if mock.portrait.bg then
                 mock.portrait.bg:SetVertexColor(
                     (portraitBg and portraitBg.r) or g.portraitBgColorR or 0.05,
@@ -3397,8 +3538,8 @@ function Stage.RenderPortrait(st)
                 mock.portrait._msufPreviewLayoutWidth or S(box._runtimePortraitW),
                 mock.portrait._msufPreviewLayoutHeight or S(box._runtimePortraitH))
         end
-        R.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel)
-        R.LayoutPreviewBlizzardPortrait(mock.portrait, previewShape == "BLIZZARD",
+        RenderState.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel)
+        RenderState.LayoutPreviewBlizzardPortrait(mock.portrait, previewShape == "BLIZZARD",
             S(box._runtimePortraitW), S(box._runtimePortraitH),
             PortraitStyleGet(key, "portraitBlizzardCorner", false) == true,
             not (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.blizzardStandaloneRing == false))
@@ -3417,9 +3558,9 @@ function Stage.RenderPortrait(st)
         -- The Blizzard ring shape parks every MSUF border renderer, exactly
         -- like the live element.
         if previewShape == "BLIZZARD" or bStyle == "NONE" then
-            R.LayoutPreviewPortraitBorder(mock.portrait, 0, false)
+            RenderState.LayoutPreviewPortraitBorder(mock.portrait, 0, false)
         elseif bStyle == "CUSTOM" or bStyle == "SOLID" then
-            R.LayoutPreviewPortraitBorder(
+            RenderState.LayoutPreviewPortraitBorder(
                 mock.portrait,
                 S(box._runtimePortraitBorderThickness),
                 box._runtimePortraitBorderFill,
@@ -3429,12 +3570,13 @@ function Stage.RenderPortrait(st)
                 (portraitBorder and portraitBorder.a) or g.portraitBorderColorA or 1
             )
         elseif bStyle == "CLASS_COLOR" then
-            R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, cr, cg, cb, 1)
+            RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, cr, cg, cb, 1)
         elseif bStyle == "REACTION" then
             local hostile = (key == "target" or key == "boss" or key == "arena" or key == "focus" or key == "focustarget" or key == "pettarget")
-            R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, hostile and 1 or 0.1, hostile and 0.2 or 0.85, 0.1, 1)
+            RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, hostile and 1 or 0.1,
+                hostile and 0.2 or 0.85, 0.1, 1)
         else
-            R.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, 1, 1, 1, 1)
+            RenderState.LayoutPreviewPortraitBorder(mock.portrait, S(box._runtimePortraitBorderThickness), box._runtimePortraitBorderFill, 1, 1, 1, 1)
         end
         box.handlePortrait:SetSize(
             max(18, S(box._runtimePortraitW) + ((box._runtimePortraitBorderFill and 0 or S(box._runtimePortraitBorderThickness)) * 2)),
@@ -3447,14 +3589,14 @@ function Stage.RenderPortrait(st)
             mock.portrait.initial:Hide()
             if mock.portrait.bg then mock.portrait.bg:Hide() end
             mock.portrait:SetBackdropColor(0, 0, 0, 0)
-            R.LayoutPreviewPortraitBorder(mock.portrait, 0, false)
-            R.LayoutPreviewBlizzardPortrait(mock.portrait, false)
+            RenderState.LayoutPreviewPortraitBorder(mock.portrait, 0, false)
+            RenderState.LayoutPreviewBlizzardPortrait(mock.portrait, false)
             box.handlePortrait:Hide()
         end
     else
         mock.portrait:Hide()
-        R.LayoutPreviewPortraitBorder(mock.portrait, 0, false)
-        R.LayoutPreviewBlizzardPortrait(mock.portrait, false)
+        RenderState.LayoutPreviewPortraitBorder(mock.portrait, 0, false)
+        RenderState.LayoutPreviewBlizzardPortrait(mock.portrait, false)
         box.handlePortrait:Hide()
     end
 end
@@ -3462,7 +3604,7 @@ end
 --- Castbar: backdrop, size, placement per unit, fill color, details and
 --- rounded surface plus its handles, or the hidden state.
 function Stage.RenderCastbar(st)
-    local ApplyPreviewFont, PlaceHandle, R, S, TR, UnitPreviewText, animState, box = st.ApplyPreviewFont, st.PlaceHandle, st.R, st.S, st.TR, st.UnitPreviewText, st.animState, st.box
+    local ApplyPreviewFont, PlaceHandle, RenderState, S, TR, UnitPreviewText, animState, box = st.ApplyPreviewFont, st.PlaceHandle, st.R, st.S, st.TR, st.UnitPreviewText, st.animState, st.box
     local canvas, castBarH, castDetached, castOffsetX, castOffsetY, castPreviewVisible, castW, fb = st.canvas, st.castBarH, st.castDetached, st.castOffsetX, st.castOffsetY, st.castPreviewVisible, st.castW, st.fb
     local fg, floor, format, fr, g, key, max, min = st.fg, st.floor, st.format, st.fr, st.g, st.key, st.max, st.min
     local mock, powerH = st.mock, st.powerH
@@ -3521,7 +3663,8 @@ function Stage.RenderCastbar(st)
         local cr, cg, cb = 0.0, 0.9, 0.8
         if type(_G.MSUF_GetInterruptibleCastColor) == "function" then cr, cg, cb = _G.MSUF_GetInterruptibleCastColor() end
         mock.cast.fill:SetVertexColor(cr or 0.0, cg or 0.9, cb or 0.8, 1)
-        ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, R.CastbarShowIcon, R.CastbarShowText, R.ReadCastbarNum, R.FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle, animState)
+        ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, RenderState.CastbarShowIcon,
+            RenderState.CastbarShowText, RenderState.ReadCastbarNum, RenderState.FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle, animState)
         ApplyCastbarPreviewRounded(mock.cast, g, castEdge, castBgR, castBgG, castBgB, castBgA)
         box.handleCastbar:SetSize(
             max(36, scw * (box._mockCastFrameScale or 1)),
@@ -3542,7 +3685,7 @@ end
 --- Aura lanes, the boss target marker and every status indicator icon/text
 --- with its handle.
 function Stage.RenderAurasAndStatus(st, Preview)
-    local ApplyPreviewFont, Auras, ClampPreviewLayer, D, PlaceHandle, R, S, StatusAnchorOffsets = st.ApplyPreviewFont, st.Auras, st.ClampPreviewLayer, st.D, st.PlaceHandle, st.R, st.S, st.StatusAnchorOffsets
+    local ApplyPreviewFont, Auras, ClampPreviewLayer, Deps, PlaceHandle, RenderState, S, StatusAnchorOffsets = st.ApplyPreviewFont, st.Auras, st.ClampPreviewLayer, st.D, st.PlaceHandle, st.R, st.S, st.StatusAnchorOffsets
     local animState, auraPreviewState, baseLevel, box, canvas, conf, data, floor = st.animState, st.auraPreviewState, st.baseLevel, st.box, st.canvas, st.conf, st.data, st.floor
     local g, key, max, mock, nameRawSize, runtimeSpec, runtimeStatus, scale = st.g, st.key, st.max, st.mock, st.nameRawSize, st.runtimeSpec, st.runtimeStatus, st.scale
     local showRaidGroupName = st.showRaidGroupName
@@ -3561,35 +3704,21 @@ function Stage.RenderAurasAndStatus(st, Preview)
     end
     end
     local statusLayerAvailable = false
-    for i = 1, #D.STATUS_PREVIEW do
-        local spec = D.STATUS_PREVIEW[i]
+    for i = 1, #Deps.STATUS_PREVIEW do
+        local spec = Deps.STATUS_PREVIEW[i]
         local icon = mock.icons[spec.id]
         local handle = box.statusHandles[spec.id]
-        local statusCfg = runtimeStatus and runtimeStatus[R.STATUS_RUNTIME_KEYS[spec.id]]
-        local show
-        if statusCfg then
-            show = statusCfg.enabled == true
-            if not show and spec.id == "statusPvp" and statusCfg.contextDisabled == true then show = true end
-        else
-            local showVal = conf[spec.show]
-            if showVal == nil then showVal = g[spec.show] end
-            show = (showVal == nil) and (spec.defaultShow ~= false) or (showVal ~= false)
-        end
-        if spec.allowed and not spec.allowed(key) then show = false end
-        if Preview.GetStatusPreviewMode() ~= "all" then
-            local selected = R.NormalizeStatusPreviewId(Preview.selectedStatusId)
-            if selected == "" then selected = "raidmarker" end
-            show = show and (spec.id == selected)
-        end
+        local statusCfg = runtimeStatus and runtimeStatus[RenderState.STATUS_RUNTIME_KEYS[spec.id]]
+        local show = StatusPreviewShown(RenderState, Preview, spec, statusCfg, conf, g, key)
         icon:SetShown(show)
         if show then
             statusLayerAvailable = true
-            local isIdentityText = R.PreviewStatus.IsIdentityText and R.PreviewStatus.IsIdentityText(spec)
+            local isIdentityText = RenderState.PreviewStatus.IsIdentityText and RenderState.PreviewStatus.IsIdentityText(spec)
             local rawSize = tonumber(statusCfg and statusCfg.size) or tonumber(conf[spec.size]) or tonumber(g[spec.size])
             if rawSize == nil then
                 if isIdentityText then
                     rawSize = nameRawSize
-                elseif R.PreviewStatus.IsStatusTextState and R.PreviewStatus.IsStatusTextState(spec) then
+                elseif RenderState.PreviewStatus.IsStatusTextState and RenderState.PreviewStatus.IsStatusTextState(spec) then
                     rawSize = nameRawSize + 2
                 else
                     rawSize = spec.defaultSize
@@ -3604,7 +3733,8 @@ function Stage.RenderAurasAndStatus(st, Preview)
                 sz = 10
             end
             if icon.SetFrameLevel then
-                local rawLayer = tonumber(statusCfg and statusCfg.layer) or (spec.layer and (tonumber(conf[spec.layer]) or tonumber(g[spec.layer]))) or spec.defaultLayer
+                local rawLayer = tonumber(statusCfg and statusCfg.layer) or (spec.layer and (tonumber(conf[spec.layer])
+                    or tonumber(g[spec.layer]))) or spec.defaultLayer
                 icon:SetFrameLevel((Layers.ElementLevel and Layers.ElementLevel(rawLayer, spec.defaultLayer or 7, 8))
                     or ((canvas.GetFrameLevel and canvas:GetFrameLevel() or 0) + ClampPreviewLayer(rawLayer, spec.defaultLayer or 7)))
             end
@@ -3616,7 +3746,7 @@ function Stage.RenderAurasAndStatus(st, Preview)
                 ApplyRuntimePreviewFont(runtimeSpec, ApplyPreviewFont, icon.txt, max(7, sz),
                     NameRelativeFontRole(StatusAnchorOffsets(spec, statusCfg)))
             end
-            R.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)
+            RenderState.SetPreviewIconTexture(icon, spec, conf, g, key, data, statusCfg, box._previewStatusText)
             if spec.id == "statusCombat" and icon.SetAlpha then
                 icon:SetAlpha(animState and (0.55 + ((tonumber(animState.pulse) or 0) * 0.45)) or 1)
             elseif icon.SetAlpha then
@@ -3632,8 +3762,8 @@ function Stage.RenderAurasAndStatus(st, Preview)
                 local textW = icon.txt and icon.txt.GetStringWidth and icon.txt:GetStringWidth() or sz
                 local textH = icon.txt and icon.txt.GetStringHeight and icon.txt:GetStringHeight() or sz
                 icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
-                R.PositionLevelPreview(icon, anchor, x, y, mock, S(6))
-            elseif R.PreviewStatus.IsStatusTextState and R.PreviewStatus.IsStatusTextState(spec) then
+                RenderState.PositionLevelPreview(icon, anchor, x, y, mock, S(6))
+            elseif RenderState.PreviewStatus.IsStatusTextState and RenderState.PreviewStatus.IsStatusTextState(spec) then
                 local anchor, x, y = StatusAnchorOffsets(spec, statusCfg)
                 if icon.txt then
                     ApplyPreviewFont(icon.txt, max(7, sz))
@@ -3644,13 +3774,14 @@ function Stage.RenderAurasAndStatus(st, Preview)
                 local textW = icon.txt and icon.txt.GetStringWidth and icon.txt:GetStringWidth() or sz
                 local textH = icon.txt and icon.txt.GetStringHeight and icon.txt:GetStringHeight() or sz
                 -- Threat % on its dark plate lays out at the width of "100%", like the runtime.
-                textW = R.PreviewStatus.ThreatPlate and R.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW
+                textW = RenderState.PreviewStatus.ThreatPlate and RenderState.PreviewStatus.ThreatPlate(icon, spec, conf, g, S(2), S(1)) or textW
                 icon:SetSize(max(1, floor((tonumber(textW) or sz) + 0.5)), max(1, floor((tonumber(textH) or sz) + 0.5)))
-                R.PositionSameAnchorPreview(icon, anchor, x, y, mock)
+                RenderState.PositionSameAnchorPreview(icon, anchor, x, y, mock)
             else
                 if spec.id == "statusPetXP" then
-                    icon:SetSize(S(tonumber(statusCfg and statusCfg.width) or tonumber(conf[spec.width]) or tonumber(g[spec.width]) or spec.defaultWidth or 80), sz)
-                    if R.PreviewStatus.LayoutPetXP then R.PreviewStatus.LayoutPetXP(icon) end
+                    icon:SetSize(S(tonumber(statusCfg and statusCfg.width) or tonumber(conf[spec.width]) or tonumber(g[spec.width])
+                        or spec.defaultWidth or 80), sz)
+                    if RenderState.PreviewStatus.LayoutPetXP then RenderState.PreviewStatus.LayoutPetXP(icon) end
                 else
                     icon:SetSize(sz, sz)
                 end
@@ -3662,13 +3793,13 @@ function Stage.RenderAurasAndStatus(st, Preview)
                 end
                 local anchor, x, y = StatusAnchorOffsets(spec, statusCfg)
                 if spec.id == "raidmarker" then
-                    R.PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, true)
+                    RenderState.PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, true)
                 elseif spec.id == "leader" or spec.id == "assist" or spec.id == "elite" then
-                    R.PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, false)
+                    RenderState.PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, false)
                 elseif spec.id == "statusCombat" or spec.id == "statusResting" or spec.id == "statusIncomingRes" or spec.id == "statusPvp" then
-                    R.PositionStatusCornerPreview(icon, anchor, x, y, mock, S(2))
+                    RenderState.PositionStatusCornerPreview(icon, anchor, x, y, mock, S(2))
                 else
-                    R.PositionFromAnchor(icon, anchor, x, y, mock, sz)
+                    RenderState.PositionFromAnchor(icon, anchor, x, y, mock, sz)
                 end
             end
             handle:SetSize(max(18, icon:GetWidth() + 8), max(18, icon:GetHeight() + 8))
@@ -3684,7 +3815,7 @@ end
 --- Layer availability for the layer rail, text handles, text focus, layer
 --- visibility, transparency and handle selection visuals.
 function Stage.FinalizeLayersAndHandles(st)
-    local ApplyPreviewLayerVisibility, ApplyPreviewTransparency, PlaceHandle, R, RefreshHandleSelectionVisuals, S, SetShownSafe, UnitPreviewText = st.ApplyPreviewLayerVisibility, st.ApplyPreviewTransparency, st.PlaceHandle, st.R, st.RefreshHandleSelectionVisuals, st.S, st.SetShownSafe, st.UnitPreviewText
+    local ApplyPreviewLayerVisibility, ApplyPreviewTransparency, PlaceHandle, RenderState, RefreshHandleSelectionVisuals, S, SetShownSafe, UnitPreviewText = st.ApplyPreviewLayerVisibility, st.ApplyPreviewTransparency, st.PlaceHandle, st.R, st.RefreshHandleSelectionVisuals, st.S, st.SetShownSafe, st.UnitPreviewText
     local UnitPreviewTextMovesTogether, auraPreviewState, box, canvas, castEnabled, classPowerOn, conf, h = st.UnitPreviewTextMovesTogether, st.auraPreviewState, st.box, st.canvas, st.castEnabled, st.classPowerOn, st.conf, st.h
     local hasPortrait, hpTextOn, key, max, mock, powerEnabled, powerTextOn, runtimeSpec = st.hasPortrait, st.hpTextOn, st.key, st.max, st.mock, st.powerEnabled, st.powerTextOn, st.runtimeSpec
     local scale, showNamePreview, statusLayerAvailable, w = st.scale, st.showNamePreview, st.statusLayerAvailable, st.w
@@ -3715,15 +3846,17 @@ function Stage.FinalizeLayersAndHandles(st)
     end
     if box.LayoutLayerRail then box:LayoutLayerRail((box.GetWidth and box:GetWidth() or 0) - 24) end
     local nameHandleW = mock.nameText:GetStringWidth() + 10
-    if mock.totInlineSep and mock.totInlineSep:IsShown() then nameHandleW = nameHandleW + mock.totInlineSep:GetStringWidth() + mock.totInlineText:GetStringWidth() + S(8) end
+    if mock.totInlineSep
+        and mock.totInlineSep:IsShown() then nameHandleW = nameHandleW + mock.totInlineSep:GetStringWidth() + mock.totInlineText:GetStringWidth() + S(8) end
     box.handleName:SetSize(max(46, nameHandleW), max(18, mock.nameText:GetStringHeight() + 6))
-    if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, HandleRegionList(box, "name", mock.nameText, mock.totInlineSep, mock.totInlineText), 3, TextHandleOptions(box, scale)) then PlaceHandle(box.handleName, mock.nameText) end
+    if not UnitPreviewText.PlaceHandleAroundRegions(box.handleName, canvas, HandleRegionList(box, "name", mock.nameText, mock.totInlineSep, mock.totInlineText),
+        3, TextHandleOptions(box, scale)) then PlaceHandle(box.handleName, mock.nameText) end
     PlaceTextSlotHandle(st, box.handleRaidGroupName, mock.raidGroupNameText, "raidGroupName")
-    st.hpHandlesReversed = R.TextScopeGet(key, "hpTextReverse", false) == true
+    st.hpHandlesReversed = RenderState.TextScopeGet(key, "hpTextReverse", false) == true
     st.hpTextMovesTogether = UnitPreviewTextMovesTogether(key, "hp")
     st.powerTextMovesTogether = UnitPreviewTextMovesTogether(key, "power")
     Stage.PlaceValueTextHandles(st)
-    R.ApplyPreviewTextFocus(box, canvas, mock)
+    RenderState.ApplyPreviewTextFocus(box, canvas, mock)
     ApplyPreviewLayerVisibility(box)
     ApplyPreviewTransparency(box, conf, runtimeSpec)
     RefreshHandleSelectionVisuals(box)
@@ -3732,49 +3865,12 @@ end
 
 --- Install render helpers onto the shared unit-preview object. View owns frame
 --- construction; this module owns repeated visual composition.
-function Render.Install(Preview, deps)
-    if type(Preview) ~= "table" then return end
-    deps = deps or Preview.RefreshDeps or {}
-    Preview.RefreshDeps = deps
-    local renderState = PickFallbackTable(deps, UNIT_RENDER_FALLBACKS, [[
-        RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls
-        ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide CastbarShowIcon CastbarShowText ReadCastbarNum FormatCastbarPreviewTime
-        ClassColor GradientPreviewColor HealthColor DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
-        PreviewNameColor PreviewToTInlineColor NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor
-        LayoutUnitPreviewOverlay PositionFromAnchor PositionRuntimeLayoutIconPreview PositionStatusCornerPreview PositionSameAnchorPreview PositionLevelPreview ResolveStatusPreviewAnchor SetPreviewIconTexture NormalizeStatusPreviewId
-    ]])
-    renderState.GradientPreviewColor = Preview.Model and Preview.Model.GradientPreviewColor
-        or renderState.GradientPreviewColor
-    renderState.ZOOM_MIN = tonumber(deps.ZOOM_MIN) or 0.35
-    --- Mock body clamp = the shared legal size range every conf.width/height
-    --- writer enforces (State/MSUF_Defaults.lua exports it; the EM2 popup
-    --- clamps writes against the same table). Clamping the mock any narrower
-    --- makes the preview lie about tall/narrow frames — and every
-    --- frame-relative offset (status icons, drag targets) with it.
-    renderState.ClampUnitPreviewSize = function(w, h)
-        local b = _G.MSUF_UnitFrameSizeBounds
-        local minW = tonumber(b and b.minW) or 40
-        local maxW = tonumber(b and b.maxW) or 800
-        local minH = tonumber(b and b.minH) or 8
-        local maxH = tonumber(b and b.maxH) or 200
-        if w < minW then w = minW elseif w > maxW then w = maxW end
-        if h < minH then h = minH elseif h > maxH then h = maxH end
-        return w, h
-    end
-    renderState.UnitPreviewPortraitTexture = deps.UnitPreviewPortraitTexture
-    renderState.ClassPortraitVisual = deps.ClassPortraitVisual
-    renderState.PreviewStatus = MSUF.UFPreviewStatus or {}
-    renderState.STATUS_RUNTIME_KEYS = {
-        raidmarker = "raidMarker", leader = "leader", assist = "assist", level = "level",
-        raceText = "race", classText = "classText",
-        elite = "elite", statusText = "statusDeadText", statusGhostText = "statusGhostText",
-        statusAFKText = "statusAFKText", statusDNDText = "statusDNDText",
-        statusCombat = "combat", statusResting = "resting",
-        statusIncomingRes = "incomingRes", statusPvp = "pvp",
-        statusPetHappiness = "petHappiness", statusThreat = "threat",
-        statusPetXP = "petXP",
-    }
-    renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
+-- Render.Install fills the shared render state in these stages, in order;
+-- s carries the preview object, its deps, the render state and the values a
+-- later stage reads.
+local InstallStage = {}
+function InstallStage.ClassPowerColors(s)
+    local renderState = s.renderState
     local PowerColor = renderState.PowerColor
     local SharedCPPreview = MenuState.ClassPowerPreview or {}
     local function FallbackBase(_, _, r, g, b) return r or 1, g or 1, b or 1 end
@@ -3783,12 +3879,12 @@ function Render.Install(Preview, deps)
     local function FallbackFill(spec, index) return spec and index <= math.floor(tonumber(spec.value) or 0) and 1 or 0 end
     local function FallbackCombo(_, _, r, g, b) return r, g, b end
     local CPPreview = {
-        BuildRuneOrder = SharedCPPreview.BuildRuneOrder or F.Nil,
-        ColorOverride = SharedCPPreview.ColorOverride or F.Nil,
+        BuildRuneOrder = SharedCPPreview.BuildRuneOrder or Fallbacks.Nil,
+        ColorOverride = SharedCPPreview.ColorOverride or Fallbacks.Nil,
         FillForSegment = SharedCPPreview.FillForSegment or FallbackFill,
-        FormatSeconds = SharedCPPreview.FormatSeconds or F.Empty,
-        IsCharged = SharedCPPreview.IsCharged or F.False,
-        IsFull = SharedCPPreview.IsFull or F.False,
+        FormatSeconds = SharedCPPreview.FormatSeconds or Fallbacks.Empty,
+        IsCharged = SharedCPPreview.IsCharged or Fallbacks.False,
+        IsFull = SharedCPPreview.IsFull or Fallbacks.False,
         ResolveComboColor = SharedCPPreview.ResolveComboColor or FallbackCombo,
         ResolveSlotColor = SharedCPPreview.ResolveSlotColor,
         ResolveFullColor = SharedCPPreview.ResolveFullColor,
@@ -3805,6 +3901,10 @@ function Render.Install(Preview, deps)
         TextForValue = SharedCPPreview.TextForValue,
         ConfiguredTextForValue = SharedCPPreview.ConfiguredTextForValue,
     }
+    s.CPPreview = CPPreview
+end
+function InstallStage.PreviewFont(s)
+    local deps = s.deps
     local fallbackFont = deps.FONT or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     if type(deps.ApplyPreviewFont) ~= "function" then
         deps.ApplyPreviewFont = function(fs, size)
@@ -3852,6 +3952,9 @@ function Render.Install(Preview, deps)
             end
         end
     end
+end
+function InstallStage.PortraitShape(s)
+    local renderState = s.renderState
     -- Portrait rectangle in preview frame space (origin = frame bottom-left).
     -- Mirrors ResolvePortraitAnchor in the live element so the preview bounding
     -- box and the mock frame agree with what the unit frame actually renders.
@@ -3959,6 +4062,12 @@ function Render.Install(Preview, deps)
         end
     end
     renderState.ApplyPreviewPortraitShapeMask = ApplyPreviewPortraitShapeMask
+    s.PREVIEW_RING_ART_BASE, s.PREVIEW_RING_ROTATION = PREVIEW_RING_ART_BASE, PREVIEW_RING_ROTATION
+    s.PREVIEW_RING_SHAPES, s.PREVIEW_BLIZZ = PREVIEW_RING_SHAPES, PREVIEW_BLIZZ
+    s.PREVIEW_SHAPE_MASKS = PREVIEW_SHAPE_MASKS
+end
+function InstallStage.PortraitRings(s)
+    local renderState, PREVIEW_BLIZZ, PREVIEW_SHAPE_MASKS = s.renderState, s.PREVIEW_BLIZZ, s.PREVIEW_SHAPE_MASKS
     -- Mirrors the live element's solid ring renderer for shaped silhouettes:
     -- an inflated quad below the art, clipped by the same mask shape at the
     -- inflated size, tinted by the border colour.
@@ -4002,7 +4111,10 @@ function Render.Install(Preview, deps)
         local ring = portrait._msufPreviewBlizzRing
         if PREVIEW_CLASSIC and portrait._msufPreviewBlizzFallback then portrait._msufPreviewBlizzFallback:Hide() end
         if not active then
-            if portrait.blizzElite then portrait.blizzElite:Hide(); portrait.blizzElite._msufShown = false end
+            if portrait.blizzElite then
+                portrait.blizzElite:Hide()
+                portrait.blizzElite._msufShown = false
+            end
             if ring then ring:Hide() end
             if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
             if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end
@@ -4080,6 +4192,12 @@ function Render.Install(Preview, deps)
         end
     end
     renderState.LayoutPreviewBlizzardPortrait = LayoutPreviewBlizzardPortrait
+    s.LayoutPreviewPortraitShapeRing = LayoutPreviewPortraitShapeRing
+end
+function InstallStage.PortraitBorders(s)
+    local deps, renderState, CPPreview = s.deps, s.renderState, s.CPPreview
+    local PREVIEW_RING_ART_BASE, PREVIEW_RING_ROTATION = s.PREVIEW_RING_ART_BASE, s.PREVIEW_RING_ROTATION
+    local PREVIEW_RING_SHAPES, LayoutPreviewPortraitShapeRing = s.PREVIEW_RING_SHAPES, s.LayoutPreviewPortraitShapeRing
     local function LayoutPreviewPortraitArtBorder(portrait, thickness, r, g, b, a)
         local art = portrait._msufPreviewArtBorder
         if not art then
@@ -4166,6 +4284,9 @@ function Render.Install(Preview, deps)
     renderState.CPPreview = CPPreview
     renderState.LayoutPreviewPortraitBorder = LayoutPreviewPortraitBorder
     deps._RenderState = renderState
+end
+function InstallStage.Refreshers(s)
+    local Preview = s.Preview
 
 --- Hot refresh for the unit preview. It composes current DB/model values into
 --- mock regions and handle positions, but never mutates live unit frames. The
@@ -4174,9 +4295,9 @@ function Render.Install(Preview, deps)
 function Preview.Refresh(box, reason)
     box = box or Preview.active
     if not box or not box:IsShown() then return end
-    local D = Preview.RefreshDeps
-    local R = D._RenderState or {}
-    local PreviewInCombat = D.PreviewInCombat
+    local Deps = Preview.RefreshDeps
+    local RenderState = Deps._RenderState or {}
+    local PreviewInCombat = Deps.PreviewInCombat
     if PreviewInCombat() then return end
     local st = box._msufPreviewScene
     if st then
@@ -4185,7 +4306,7 @@ function Preview.Refresh(box, reason)
         st = {}
         box._msufPreviewScene = st
     end
-    st.box, st.reason, st.D, st.R = box, reason, D, R
+    st.box, st.reason, st.D, st.R = box, reason, Deps, RenderState
     st.complete = nil
     Stage.ResolveInputs(st)
     Stage.ResolveFrameGeometry(st)
@@ -4207,7 +4328,7 @@ function Preview.Refresh(box, reason)
     -- Factory.Apply does live, so a layer anchored to Power or the Portrait
     -- follows what this refresh shows instead of the previous one.
     RenderTextureLayerPreview(box, st.mock, st.conf, PreviewLayerWanted(box, "texLayer"), st.S, st.sw, st.baseLevel,
-        st.SetTex, st.PlaceHandle, R, st.data, st.runtimeSpec and st.runtimeSpec.health)
+        st.SetTex, st.PlaceHandle, RenderState, st.data, st.runtimeSpec and st.runtimeSpec.health)
     Stage.RenderCastbar(st)
     Stage.RenderAurasAndStatus(st, Preview)
     Stage.FinalizeLayersAndHandles(st)
@@ -4252,4 +4373,55 @@ function Preview.RefreshAnimation(box)
     if Auras and Auras.Animate then Auras.Animate(box) end
     return true
 end
+end
+function Render.Install(Preview, deps)
+    if type(Preview) ~= "table" then return end
+    deps = deps or Preview.RefreshDeps or {}
+    Preview.RefreshDeps = deps
+    local renderState = PickFallbackTable(deps, UNIT_RENDER_FALLBACKS, [[
+        RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls
+        ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide CastbarShowIcon CastbarShowText ReadCastbarNum FormatCastbarPreviewTime
+        ClassColor GradientPreviewColor HealthColor DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
+        PreviewNameColor PreviewToTInlineColor NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor
+        LayoutUnitPreviewOverlay PositionFromAnchor PositionRuntimeLayoutIconPreview PositionStatusCornerPreview PositionSameAnchorPreview PositionLevelPreview ResolveStatusPreviewAnchor SetPreviewIconTexture NormalizeStatusPreviewId
+    ]])
+    renderState.GradientPreviewColor = Preview.Model and Preview.Model.GradientPreviewColor
+        or renderState.GradientPreviewColor
+    renderState.ZOOM_MIN = tonumber(deps.ZOOM_MIN) or 0.35
+    --- Mock body clamp = the shared legal size range every conf.width/height
+    --- writer enforces (State/MSUF_Defaults.lua exports it; the EM2 popup
+    --- clamps writes against the same table). Clamping the mock any narrower
+    --- makes the preview lie about tall/narrow frames — and every
+    --- frame-relative offset (status icons, drag targets) with it.
+    renderState.ClampUnitPreviewSize = function(w, h)
+        local b = _G.MSUF_UnitFrameSizeBounds
+        local minW = tonumber(b and b.minW) or 40
+        local maxW = tonumber(b and b.maxW) or 800
+        local minH = tonumber(b and b.minH) or 8
+        local maxH = tonumber(b and b.maxH) or 200
+        if w < minW then w = minW elseif w > maxW then w = maxW end
+        if h < minH then h = minH elseif h > maxH then h = maxH end
+        return w, h
+    end
+    renderState.UnitPreviewPortraitTexture = deps.UnitPreviewPortraitTexture
+    renderState.ClassPortraitVisual = deps.ClassPortraitVisual
+    renderState.PreviewStatus = MSUF.UFPreviewStatus or {}
+    renderState.STATUS_RUNTIME_KEYS = {
+        raidmarker = "raidMarker", leader = "leader", assist = "assist", level = "level",
+        raceText = "race", classText = "classText",
+        elite = "elite", statusText = "statusDeadText", statusGhostText = "statusGhostText",
+        statusAFKText = "statusAFKText", statusDNDText = "statusDNDText",
+        statusCombat = "combat", statusResting = "resting",
+        statusIncomingRes = "incomingRes", statusPvp = "pvp",
+        statusPetHappiness = "petHappiness", statusThreat = "threat",
+        statusPetXP = "petXP",
+    }
+    renderState.ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or UNIT_RENDER_FALLBACKS.ApplyPreviewTextFocus
+    local s = { Preview = Preview, deps = deps, renderState = renderState }
+    InstallStage.ClassPowerColors(s)
+    InstallStage.PreviewFont(s)
+    InstallStage.PortraitShape(s)
+    InstallStage.PortraitRings(s)
+    InstallStage.PortraitBorders(s)
+    InstallStage.Refreshers(s)
 end

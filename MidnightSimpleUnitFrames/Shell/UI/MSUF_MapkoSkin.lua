@@ -88,7 +88,10 @@ end
 local function Record(target, kind, paint, a, b, rank)
     if not api or not target then return nil end
     local record = records[target]
-    if not record then record = { kind = kind }; records[target] = record end
+    if not record then
+        record = { kind = kind }
+        records[target] = record
+    end
     if record.kind ~= kind then return nil end
     if (rank or 0) >= (record.rank or 0) then
         if (rank or 0) > (record.rank or 0) then record.suppressed = nil end
@@ -115,7 +118,10 @@ function Skin.Surface(target, role, paint, a, b, rank)
     Suppress(target, record, surfaceKeys)
     if role == "input" then
         local focused = target.HasFocus and target:HasFocus() == true or false
-        if record.focused ~= focused then client:SetActive(target, focused); record.focused = focused end
+        if record.focused ~= focused then
+            client:SetActive(target, focused)
+            record.focused = focused
+        end
     end
     return true
 end
@@ -161,7 +167,10 @@ function Skin.WindowAction(button, kind, paint, hover, down)
     local group = button._msuf2ControlGroup
     if group then
         local hidden = groups[group]
-        if not hidden then hidden = {}; groups[group] = hidden end
+        if not hidden then
+            hidden = {}
+            groups[group] = hidden
+        end
         HidePart(group._msuf2ControlGroupBase, hidden, 0)
         HidePart(group._msuf2ControlGroupHover, hidden, 0)
     end

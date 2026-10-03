@@ -13,6 +13,10 @@
 --- before any edit. An existing "MSUF" layout is reactivated, never duplicated.
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+-- Functions other modules publish are resolved where they are called
+-- (most load after Edit Mode): MSUF.Require raises naming this file when
+-- one is missing, and a hook installed on the global still applies.
+local CALLER = "Shell/EditMode/MSUF_EditMode_Blizzard.lua"
 
 local API = _G.MSUF_EditModeAPI
 if not (API and API.RegisterElement) then return end
@@ -861,10 +865,10 @@ local function OpenSettings()
     --- over is a save-free moment, so dropping the cache is safe here.
     InvalidateLayoutCache()
     _G.ShowUIPanel(panel)
-    if panel ~= manager and type(_G.MSUF_EM2_SetHUDStatus) == "function" then
+    if panel ~= manager then
         local translate = MSUF.Translate or tostring
         local entry = type(_G.HUD_EDIT_MODE_MENU) == "string" and _G.HUD_EDIT_MODE_MENU or "Edit Mode"
-        _G.MSUF_EM2_SetHUDStatus(string.format(translate("Choose %s in the game menu"), entry), "info", 4)
+        MSUF.Require("MSUF_EM2_SetHUDStatus", CALLER)(string.format(translate("Choose %s in the game menu"), entry), "info", 4)
     end
     return true
 end

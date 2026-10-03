@@ -79,9 +79,11 @@ local function BuildDispelOverlaySection(ctx, b)
         end,
         ControlMeta(ctx, "field.dispelOverlayTrigger"))
     W.MoveWidget(dispelTrigger, dispelCard, 16, -54, min(300, dispelCardW - 32), "LEFT")
-    local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -106, min(300, dispelCardW - 32))
+    local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -106,
+        min(300, dispelCardW - 32))
     local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -154, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
-    local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -198, min(360, dispelCardW - 72))
+    local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -198,
+        min(360, dispelCardW - 72))
     local dispelLayer = ScopeNumberSlider(ctx, dispelCard, "Effect Layer (0-30)", 0, 30, 1, 340,
         "dispelOverlayLayer", 0, "visual", 16, -252, min(360, dispelCardW - 72))
     -- The live tint is drawn by Blizzard and only appears while a real
@@ -125,8 +127,10 @@ local function BuildDispelOverlaySection(ctx, b)
             OnOffBadge(overlayOn, "Active", "Off"),
         }
         if DISPEL_OVERLAY_121_PTR_DISABLED then badges[#badges + 1] = { text = "12.1 PTR", kind = "muted", important = true } end
-        badges[#badges + 1] = { text = OptionText(GF_DISPEL_OVERLAY_TRIGGERS, NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")), "Border"), kind = overlayOn and "info" or "muted" }
-        badges[#badges + 1] = { text = OptionText(DISPEL_OVERLAY_STYLES, Val(CurrentScope(), "dispelOverlayStyle", "FULL"), "Full Frame"), kind = overlayOn and "accent" or "muted" }
+        badges[#badges + 1] = { text = OptionText(GF_DISPEL_OVERLAY_TRIGGERS, NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger",
+            "BORDER")), "Border"), kind = overlayOn and "info" or "muted" }
+        badges[#badges + 1] = { text = OptionText(DISPEL_OVERLAY_STYLES, Val(CurrentScope(), "dispelOverlayStyle", "FULL"), "Full Frame"), kind = overlayOn
+            and "accent" or "muted" }
         SetSectionBadgesAndStatus(dispel, badges)
     end
     TrackSectionRefresh(ctx, dispel, RefreshDispelState)
@@ -153,32 +157,8 @@ local function GFDispelSymbolSectionHeight(ctx)
     return width >= 760 and 368 or 564
 end
 local function BindExclusivePowerFill(ctx, parent, label, x, y, width, key, peerKey, historyLabel)
-    local control = W.ToggleAt(parent, label, x, y, width)
-    M.BindBoolWidget(ctx, control,
-        function() return Bool(CurrentScope(), key, false) end,
-        function(value)
-            value = value == true
-            local scope = CurrentScope()
-            local function Write()
-                local conf = Conf(scope)
-                local changed = conf[key] ~= value
-                conf[key] = value
-                if value and conf[peerKey] ~= false then
-                    conf[peerKey] = false
-                    changed = true
-                end
-                if not changed then return false end
-                QueueGF(scope, "visual")
-                RequestGroupBarsRefresh(ctx, "gf-power-fill-mode")
-                return true
-            end
-            if type(M.RunWithHistory) == "function" then
-                return M.RunWithHistory(historyLabel, "group:" .. tostring(scope) .. ":powerFillMode", Write)
-            end
-            return Write()
-        end,
-        ControlMeta(ctx, "field." .. tostring(key)))
-    return control
+    return GP.BindExclusiveScopeToggle(ctx, W.ToggleAt(parent, label, x, y, width), key, peerKey, historyLabel,
+        "powerFillMode", function() RequestGroupBarsRefresh(ctx, "gf-power-fill-mode") end)
 end
 
 local function BuildGFDispelSymbolSection(ctx, b)
@@ -228,8 +208,10 @@ local function BuildGFDispelSymbolSection(ctx, b)
         SetOptionEnabled(toggle, true)
         local badges = {
             OnOffBadge(on, "Active", "Off"),
-            { text = OptionText(GF_DISPEL_SYMBOL_STYLES, Val(CurrentScope(), "dispelSymbolStyle", "BLIZZARD"), "Blizzard symbol"), kind = on and "accent" or "muted" },
-            { text = OptionText(GF_DISPEL_SYMBOL_MODES, Val(CurrentScope(), "dispelSymbolMode", "ALL"), "One per dispel type"), kind = on and "info" or "muted" },
+            { text = OptionText(GF_DISPEL_SYMBOL_STYLES, Val(CurrentScope(), "dispelSymbolStyle", "BLIZZARD"), "Blizzard symbol"), kind = on
+                and "accent" or "muted" },
+            { text = OptionText(GF_DISPEL_SYMBOL_MODES, Val(CurrentScope(), "dispelSymbolMode", "ALL"), "One per dispel type"), kind = on
+                and "info" or "muted" },
         }
         SetSectionBadgesAndStatus(section, badges)
     end
@@ -304,7 +286,8 @@ local function BuildGFResourceBarSection(ctx, b)
     local powerMainCard = W.ControlCard(power, "Visibility & Size", nil, powerLeftX, powerCardY, powerLeftW, powerCardH)
     local powerBorderCard = W.ControlCard(power, "Border & fill", "Outline and fill behavior.", powerRightX, powerCardY, powerRightW, powerCardH)
     local powerRoleCard = W.ControlCard(power, "Roles", nil, powerLeftX, roleCardY, powerLeftW, roleCardH)
-    local detachedCard = W.ControlCard(power, "Detached placement", "Used only when the power bar is detached from the frame.", powerLeftX, detachedCardY, powerInnerW, detachedCardH)
+    local detachedCard = W.ControlCard(power, "Detached placement", "Used only when the power bar is detached from the frame.", powerLeftX, detachedCardY,
+        powerInnerW, detachedCardH)
     local detachedGap = 16
     local detachedColW = floor((powerInnerW - 32 - detachedGap) / 2)
     local detachedRightX = 16 + detachedColW + detachedGap
@@ -487,24 +470,13 @@ end
 local function TextModeHasPercent(mode)
     return tostring(mode or ""):find("PERCENT", 1, true) ~= nil
 end
+-- The group text DB owns the reversed-order mapping (GroupFrames/
+-- MSUF_GroupFrames_DB_Text.lua), loaded with the core on every client.
 local function ReverseHpPreviewMode(mode)
-    local gf = MSUF and MSUF.GF
-    if gf and gf.ReverseHealthTextMode then return gf.ReverseHealthTextMode(mode) end
-    local rev = {
-        CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT",
-        CURMAX = "MAXCUR", MAXCUR = "CURMAX",
-        CURMAXPERCENT = "PERCENTMAXCUR", PERCENTMAXCUR = "CURMAXPERCENT",
-        MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT",
-        PERCENTCURMAX = "CURMAXPERCENT",
-        CURPERCENTABSORB = "PERCENTCURABSORB", PERCENTCURABSORB = "CURPERCENTABSORB",
-        CURMAXABSORB = "MAXCURABSORB", MAXCURABSORB = "CURMAXABSORB",
-        CURMAXPERCENTABSORB = "PERCENTMAXCURABSORB", PERCENTMAXCURABSORB = "CURMAXPERCENTABSORB",
-        MAXPERCENTABSORB = "PERCENTMAXABSORB", PERCENTMAXABSORB = "MAXPERCENTABSORB",
-        PERCENTCURMAXABSORB = "CURMAXPERCENTABSORB",
-    }
-    return rev[mode] or mode
+    return MSUF.GF.ReverseHealthTextMode(mode)
 end
-local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, shortNumbers, hideLeft, hideCenter, hideRight, absorbIconLeft, absorbIconCenter, absorbIconRight)
+local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower, decimalHP, shortNumbers, hideLeft, hideCenter, hideRight,
+    absorbIconLeft, absorbIconCenter, absorbIconRight)
     if reverse and not isPower then
         leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode)
         hideLeft, hideRight = hideRight, hideLeft
@@ -879,7 +851,8 @@ local function BuildGFValueTextTab(ctx, s, kind, tab, cfg)
     end
     local formattingY = hasAbsorb and -310 or -248
     W.Text(content, "Formatting", 16, formattingY, textCardW - 32, T.colors.text)
-    controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, formattingY - 28, textHalfDropW)
+    controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16,
+        formattingY - 28, textHalfDropW)
     if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, formattingY - 50, textHalfDropW), cfg.reverseKey, false, "visual") end
     if cfg.decimalsKey then controls.decimals = BindScopeToggle(ctx, W.ToggleAt(content, "Decimal percent", 28 + textHalfDropW, formattingY - 78, textHalfDropW), cfg.decimalsKey, false, "visual") end
     if cfg.shortNumbersKey then
@@ -972,7 +945,8 @@ end
 local function GFTextAdvancedTab(ctx, s)
     local textLeftX, textCardW, textSliderW = s.textLeftX, s.textCardW, s.textSliderW
     local TextCard = UnitSectionShared.TextCard
-    local advancedLayers = TextCard(s.advancedTab, "Text Layers", "Controls text layers when text overlaps bars, icons, or indicators.", textLeftX, -4, textCardW, 260)
+    local advancedLayers = TextCard(s.advancedTab, "Text Layers", "Controls text layers when text overlaps bars, icons, or indicators.",
+        textLeftX, -4, textCardW, 260)
     local nameLayer = ScopeSlider(ctx, advancedLayers, "Name layer", 0, 30, 1, textSliderW, "nameTextLayer", 5, "font", 16, -76, textCardW - 72)
     local hpLayer = ScopeSlider(ctx, advancedLayers, "HP layer", 0, 30, 1, textSliderW, "textLayer", 5, "font", 16, -136, textCardW - 72)
     local powerLayer = ScopeSlider(ctx, advancedLayers, "Power layer", 0, 30, 1, textSliderW, "powerTextLayer", 2, "font", 16, -196, textCardW - 72)
@@ -1053,7 +1027,8 @@ local function BuildGFDebuffStripeSection(ctx, b)
     local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 284, false)
     local stripeW = stripe._msuf2Width or b.width or 720
     local stripeCardW = min(560, stripeW - 40)
-    local stripeCard = W.ControlCard(stripe, "Appearance & Placement", "Shows a thin colored stripe for debuffs matched by the debuff filter.", 20, -38, stripeCardW, 216)
+    local stripeCard = W.ControlCard(stripe, "Appearance & Placement", "Shows a thin colored stripe for debuffs matched by the debuff filter.",
+        20, -38, stripeCardW, 216)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(stripeCard, { "group.debuff_stripe" }, {
             title = "Debuff Stripe Color",
@@ -1063,7 +1038,8 @@ local function BuildGFDebuffStripeSection(ctx, b)
         })
     end
     local stripeToggle = BindScopeToggle(ctx, W.SectionSwitch(stripe, "Debuff Stripe"), "debuffStripeEnabled", false, "visual")
-    local stripeEdge = ScopeDropdown(ctx, stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260, "debuffStripeEdge", "BOTTOM", "visual", 16, -74, min(260, stripeCardW - 32))
+    local stripeEdge = ScopeDropdown(ctx, stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260, "debuffStripeEdge", "BOTTOM", "visual", 16, -74,
+        min(260, stripeCardW - 32))
     local stripeHeight = ScopeSlider(ctx, stripeCard, "Stripe height", 1, 8, 1, 300, "debuffStripeHeight", 3, "visual", 16, -126, min(360, stripeCardW - 72))
     local stripeHint = W.Text(stripeCard, M.Format("Color and opacity are in %s.", M.NavPath("opt_colors", "Party & Raid Frames")), 16, -176, stripeCardW - 32, T.colors.muted)
     if stripeHint.SetWordWrap then stripeHint:SetWordWrap(true) end

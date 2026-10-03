@@ -31,6 +31,10 @@ local M = {
     },
 }
 local namespace = { MSUF2 = M }
+-- The page requires its core collaborators at load (M.RequireGlobals); the
+-- icon setter is the only one, stubbed like the core's Kernel/MSUF_Util.lua.
+assert(loadfile(root .. "/tools/tests/require_fixture.lua"))().Install(root, namespace, M)
+_G.MSUF_SetIconTexture = function(region, texture) if region and region.SetTexture then region:SetTexture(texture) end end
 assert(loadfile(base .. "MSUF_Menu2_Group_SpellModel.lua"))("MidnightSimpleUnitFrames", namespace)
 local GP = M.GroupPage
 M.Refresh = function() GP.CurrentSpellAura(scope) end

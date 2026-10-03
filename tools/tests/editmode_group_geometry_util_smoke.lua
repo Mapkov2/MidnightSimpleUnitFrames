@@ -3,13 +3,15 @@
 -- Review R7 P3: the layout drag commit (EditMode_Layout) and the HUD Settings
 -- and Reset actions (EditMode_HUD_Selection) carried the same group geometry
 -- refresh chain line for line. It lives once now, as
--- EM2.Util.RefreshGroupGeometryScoped(kind, reason) in EditMode_Core:
---   1. no Edit Mode file keeps a copy of the chain, and both callers pass
---      their own apply reason;
---   2. the chain behaves as before: the menu apply service when it is loaded
---      (one group geometry request, then a flush), else GF.RefreshGeometry,
---      else the public GF aliases with the dirty mask, else the visual and
---      full refreshes; no kind does nothing.
+-- EM2.Util.RefreshGroupGeometryScoped(kind, reason) in EditMode_Core. Wave 4
+-- dropped the public GF alias steps (MSUF_GF_RefreshGeometry and friends call
+-- the same GF methods, which load on every client) and the HUD Reset's own
+-- copy, which only ran without MSUF_GF_EM2_ResetPosition:
+--   1. no Edit Mode file keeps an alias chain, the layout drag passes its own
+--      apply reason, and the HUD Reset goes through the group Edit Mode reset;
+--   2. the chain: the menu apply service when it is loaded (one group
+--      geometry request, then a flush), else GF.RefreshGeometry, else
+--      GF.RefreshVisuals with the dirty mask; no kind or no GF does nothing.
 --
 -- Boots the real Mainline core and Options graph (tools/tests/client_world.lua).
 -- Plain Lua 5.1 with the repo root as argument.
@@ -39,13 +41,11 @@ for path in pipe:lines() do
     copies = copies + count
 end
 pipe:close()
--- EditMode_Core's Util function and EditMode_Undo's own undo variant (it also
--- refreshes bindings and visuals after GF.RefreshGeometry) keep the alias step.
-Check(copies == 2, "the group geometry alias chain exists " .. copies .. " times in Edit Mode; expected Util and Undo only")
+Check(copies == 0, "the group geometry alias chain is back in Edit Mode (" .. copies .. " copies)")
 Check(Read(EDIT .. "MSUF_EditMode_Layout.lua"):find('U.RefreshGroupGeometryScoped(kind, "EM2_LAYOUT_GROUP_GEOMETRY")', 1, true),
     "the layout drag commit no longer calls the Util refresh with its reason")
-Check(Read(EDIT .. "MSUF_EditMode_HUD_Selection.lua"):find('U.RefreshGroupGeometryScoped(kind, "EM2_HUD_GROUP_GEOMETRY")', 1, true),
-    "the HUD actions no longer call the Util refresh with their reason")
+Check(Read(EDIT .. "MSUF_EditMode_HUD_Selection.lua"):find('MSUF.Require("MSUF_GF_EM2_ResetPosition", CALLER)(groupKind)', 1, true),
+    "the HUD Reset no longer goes through the group Edit Mode reset")
 
 ---------------------------------------------------------------------------
 -- 2. The chain
@@ -85,32 +85,16 @@ Check(Refresh("party", "SMOKE_REASON") == true and #calls == 1 and calls[1][1] =
     and calls[1][2] == "party", "without the menu, GF.RefreshGeometry was not the one call")
 Reset()
 
--- Without GF.RefreshGeometry: the public aliases with the dirty mask.
+-- Without GF.RefreshGeometry: GF.RefreshVisuals with the dirty mask; the
+-- public aliases are never asked.
 core.GF = { DIRTY_LAYOUT = 4, RefreshVisuals = Log("GF.RefreshVisuals") }
 for _, name in ipairs(ALIASES) do env[name] = Log(name) end
-Check(Refresh("party", "SMOKE_REASON") == true, "the alias path did not report success")
-Check(#calls == 3 and calls[1][1] == "MSUF_GF_RefreshGeometry" and calls[2][1] == "MSUF_GF_RefreshUnitBindings"
-    and calls[3][1] == "MSUF_GF_RefreshVisuals" and calls[3][3] == 4, "the alias path changed its calls or lost the dirty mask")
-Reset()
-env.MSUF_GF_RefreshGeometry = nil
 Check(Refresh("party", "SMOKE_REASON") == true and #calls == 1 and calls[1][1] == "GF.RefreshVisuals" and calls[1][3] == 4,
-    "without geometry refreshes, GF.RefreshVisuals with the mask was not next")
+    "without geometry refreshes, GF.RefreshVisuals with the mask was not the one call")
 Reset()
 core.GF = nil
-Check(Refresh("party", "SMOKE_REASON") == true and #calls == 1 and calls[1][1] == "MSUF_GF_RefreshVisuals"
-    and calls[1][3] == nil, "without GF, the visual alias without a mask was not next")
-Reset()
-env.MSUF_GF_RefreshVisuals = nil
-Check(Refresh("party", "SMOKE_REASON") == true and #calls == 1 and calls[1][1] == "MSUF_GF_RefreshAll",
-    "the full refresh was not the next fallback")
-Reset()
-env.MSUF_GF_RefreshAll = nil
-Check(Refresh("party", "SMOKE_REASON") == true and #calls == 1 and calls[1][1] == "MSUF_GF_Refresh",
-    "the legacy full refresh was not the last fallback")
-Reset()
-env.MSUF_GF_Refresh = nil
-Check(Refresh("party", "SMOKE_REASON") == false and #calls == 0, "with nothing to call, the refresh reported success")
+Check(Refresh("party", "SMOKE_REASON") == false and #calls == 0, "without GF, the refresh reported success or called an alias")
 
 menu.ApplyService, env.MSUF_Menu2_ApplyService, core.GF = savedApply, savedApplyGlobal, savedGF
 for _, name in ipairs(ALIASES) do env[name] = savedAliases[name] end
-print("editmode_group_geometry_util_smoke: ok (one chain in Util; layout and HUD reasons; 8 fallback steps)")
+print("editmode_group_geometry_util_smoke: ok (one chain in Util; layout reason; HUD reset via GF; 5 steps)")

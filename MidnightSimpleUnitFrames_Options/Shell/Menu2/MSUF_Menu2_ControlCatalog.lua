@@ -181,7 +181,10 @@ local function NormalizeSearchSettingAliases(value, isPattern)
         if valid and isPattern then
             valid = IsValidLuaPattern(item)
         end
-        if valid then seen[item] = true; out[#out + 1] = item end
+        if valid then
+            seen[item] = true
+            out[#out + 1] = item
+        end
     end
     return out
 end
@@ -733,11 +736,17 @@ function Catalog.FindBySettingKey(settingKey, pageKey)
         if not record or record.classification ~= "setting" then return end
         local matched = false
         for i = 1, #(record.searchSettingKeys or {}) do
-            if record.searchSettingKeys[i] == settingKey then matched = true; break end
+            if record.searchSettingKeys[i] == settingKey then
+                matched = true
+                break
+            end
         end
         if not matched then
             for i = 1, #(record.searchSettingKeyPatterns or {}) do
-                if string.match(settingKey, record.searchSettingKeyPatterns[i]) ~= nil then matched = true; break end
+                if string.match(settingKey, record.searchSettingKeyPatterns[i]) ~= nil then
+                    matched = true
+                    break
+                end
             end
         end
         if matched then
@@ -775,7 +784,10 @@ function M.MarkRuntimeControlComponent(widget, owner)
     if not widget or not owner then return false end
     widget._msuf2ControlPartOf = owner
     local record = STATE.byWidget[widget]
-    if record then RemoveRecord(record); STATE.revision = STATE.revision + 1 end
+    if record then
+        RemoveRecord(record)
+        STATE.revision = STATE.revision + 1
+    end
     STATE.components[widget] = {
         owner = owner,
         pageKey = CleanText(M.PageKeyForWidget(widget) or M.activeKey or "unknown"),

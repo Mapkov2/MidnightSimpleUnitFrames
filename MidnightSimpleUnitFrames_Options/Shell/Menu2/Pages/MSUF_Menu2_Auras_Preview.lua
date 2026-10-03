@@ -3,6 +3,11 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Auras_Preview.lua", {
+    "MSUF_GetGlobalFontSettings",
+})
 local EnsureDB = M.EnsureDB
 
 -- Menu2 Auras page: sample previews.
@@ -88,7 +93,7 @@ end
 local function ApplyAuraPreviewFont(fs, size)
     if not fs then return end
     local fontPath, fontFlags, r, g, b, _, useShadow
-    if type(_G.MSUF_GetGlobalFontSettings) == "function" then fontPath, fontFlags, r, g, b, _, useShadow = _G.MSUF_GetGlobalFontSettings() end
+    fontPath, fontFlags, r, g, b, _, useShadow = _G.MSUF_GetGlobalFontSettings()
     if fs.SetFont then
         local px = max(7, tonumber(size) or 10)
         local flags = fontFlags or "OUTLINE"
@@ -293,11 +298,16 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
             cfg.cooldownSwipeReverse = Model.ReadBool(readScope, "cooldownSwipeReverse", false)
             cfg.showDurationBar = Model.ReadBool(readScope, "showDurationBar", false)
         end
-        cfg.stackSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)
-        cfg.stackAnchor = lane and type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(readScope, lane) or Model.ReadStackAnchor(readScope)
-        cfg.stackX = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetX", -1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetX", -1, -2000, 2000)
-        cfg.stackY = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetY", 1, -2000, 2000) or Model.ReadNumber(readScope, "stackTextOffsetY", 1, -2000, 2000)
-        cfg.cooldownSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40) or Model.ReadNumber(readScope, "cooldownTextSize", 14, 6, 40)
+        cfg.stackSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40)
+            or Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)
+        cfg.stackAnchor = lane and type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(readScope, lane)
+            or Model.ReadStackAnchor(readScope)
+        cfg.stackX = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetX", -1, -2000, 2000)
+            or Model.ReadNumber(readScope, "stackTextOffsetX", -1, -2000, 2000)
+        cfg.stackY = lane and Model.ReadLaneStyleNumber(readScope, lane, "stackTextOffsetY", 1, -2000, 2000)
+            or Model.ReadNumber(readScope, "stackTextOffsetY", 1, -2000, 2000)
+        cfg.cooldownSize = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40)
+            or Model.ReadNumber(readScope, "cooldownTextSize", 14, 6, 40)
         if lane and type(Model.ReadLaneCooldownAnchor) == "function" then
             cfg.cooldownAnchor = Model.ReadLaneCooldownAnchor(readScope, lane)
         elseif type(Model.ReadCooldownAnchor) == "function" then
@@ -305,10 +315,14 @@ local function ReadMiniAuraPreviewConfig(scope, lane, width, height)
         elseif runtimePreview and runtimePreview.cooldownAnchor then
             cfg.cooldownAnchor = runtimePreview.cooldownAnchor
         end
-        cfg.cooldownX = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetX", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetX", 0, -2000, 2000)
-        cfg.cooldownY = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetY", 0, -2000, 2000) or Model.ReadNumber(readScope, "cooldownTextOffsetY", 0, -2000, 2000)
-        cfg.cooldownDecimalSeconds = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownDecimalSeconds", 3, 0, 30) or Model.ReadNumber(readScope, "cooldownDecimalSeconds", 3, 0, 30)
-        cfg.durationBarHeight = lane and Model.ReadLaneStyleNumber(readScope, lane, "durationBarHeight", 2, 1, 16) or Model.ReadNumber(readScope, "durationBarHeight", 2, 1, 16)
+        cfg.cooldownX = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetX", 0, -2000, 2000)
+            or Model.ReadNumber(readScope, "cooldownTextOffsetX", 0, -2000, 2000)
+        cfg.cooldownY = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextOffsetY", 0, -2000, 2000)
+            or Model.ReadNumber(readScope, "cooldownTextOffsetY", 0, -2000, 2000)
+        cfg.cooldownDecimalSeconds = lane and Model.ReadLaneStyleNumber(readScope, lane, "cooldownDecimalSeconds", 3, 0, 30)
+            or Model.ReadNumber(readScope, "cooldownDecimalSeconds", 3, 0, 30)
+        cfg.durationBarHeight = lane and Model.ReadLaneStyleNumber(readScope, lane, "durationBarHeight", 2, 1, 16)
+            or Model.ReadNumber(readScope, "durationBarHeight", 2, 1, 16)
         if lane and type(Model.ReadLaneDurationBarDisplay) == "function" then
             cfg.durationBarDisplay = Model.ReadLaneDurationBarDisplay(readScope, lane)
         else
@@ -506,7 +520,10 @@ local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText, opts)
     local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
     local borderAtlas = (not barOnly and not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
     local showPreviewEdges = isBuffIcon == true and not barOnly and cfg.iconShape == "RECTANGLE"
-    for _, edge in pairs(icon.edge) do edge:SetShown(showPreviewEdges); edge:SetVertexColor(r, g, b, 0.95) end
+    for _, edge in pairs(icon.edge) do
+        edge:SetShown(showPreviewEdges)
+        edge:SetVertexColor(r, g, b, 0.95)
+    end
     icon.swipe:SetShown(cfg.showSwipe ~= false and not barOnly)
     icon.swipe:ClearAllPoints()
     if cfg.cooldownSwipeReverse == true then

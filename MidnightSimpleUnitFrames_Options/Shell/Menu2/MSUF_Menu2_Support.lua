@@ -44,6 +44,15 @@ local function BlockConfigCombatLocked(silent)
 end
 M.IsConfigCombatLocked = M.IsConfigCombatLocked or IsConfigCombatLocked
 M.ShowConfigCombatLockMessage = ShowConfigCombatLockMessage
+-- A menu file lists the core functions it calls by their global names. Each
+-- must exist when the file loads: the core loads before this load-on-demand
+-- addon on every client, so a missing one is a wiring bug and MSUF.Require
+-- raises naming the file. The calls still go through _G, so a hook installed
+-- on the global later applies.
+function M.RequireGlobals(context, names)
+    local Require = MSUF.Require
+    for i = 1, #names do Require(names[i], context) end
+end
 
 -- Every delayed Menu2-only task goes through this registry. C_Timer.After
 -- cannot be cancelled, so a callback queued while the menu is open would
@@ -192,7 +201,8 @@ local function AddTooltip(widget, title, body, opts)
                 _G.GameTooltip:SetText(Tr(resolvedTitle), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1, titleColor[4])
             end
         end
-        if resolvedBody and resolvedBody ~= "" then _G.GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86, bodyColor[3] or 1.00, true) end
+        if resolvedBody and resolvedBody ~= "" then _G.GameTooltip:AddLine(Tr(resolvedBody), bodyColor[1] or 0.80, bodyColor[2] or 0.86,
+            bodyColor[3] or 1.00, true) end
         if reason then _G.GameTooltip:AddLine(reason, 1, 0.82, 0.35, true) end
         _G.GameTooltip:Show()
     end
@@ -507,7 +517,12 @@ function M.CopyFieldsFromSpecs(specs, values, seed, props)
         for i = 1, #(specs or {}) do
             local spec = specs[i]
             if spec.value == value then
-                for prop in tostring(spec.copyProps or props):gmatch("%S+") do local key = spec[prop]; if key then out[#out + 1] = key end end
+                for prop in tostring(spec.copyProps or props):gmatch("%S+") do
+                    local key = spec[prop]
+                    if key then
+                        out[#out + 1] = key
+                    end
+                end
                 -- colorPrefix names a key family rather than one key, so it is
                 -- expanded here: a copied text indicator has to bring its color
                 -- along with its placement or the copy looks half applied.
@@ -517,7 +532,12 @@ function M.CopyFieldsFromSpecs(specs, values, seed, props)
                     out[#out + 1] = colorPrefix .. "ColorG"
                     out[#out + 1] = colorPrefix .. "ColorB"
                 end
-                local extra = spec.copyExtra; if extra then for j = 1, #extra do out[#out + 1] = extra[j] end end
+                local extra = spec.copyExtra
+                if extra then
+                    for j = 1, #extra do
+                        out[#out + 1] = extra[j]
+                    end
+                end
                 break
             end
         end
@@ -627,8 +647,25 @@ function M.Assign(target, values)
     for key, value in pairs(values) do target[key] = value end
     return target
 end
-function M.AppendValues(target, ...) if type(target) ~= "table" then target = {} end; for i = 1, select("#", ...) do target[#target + 1] = select(i, ...) end; return target end
-function M.AppendNamedValues(target, source, names) if type(target) ~= "table" then target = {} end; source = source or {}; for name in tostring(names or ""):gmatch("%S+") do target[#target + 1] = source[name] end; return target end
+function M.AppendValues(target, ...)
+    if type(target) ~= "table" then
+        target = {}
+    end
+    for i = 1, select("#", ...) do
+        target[#target + 1] = select(i, ...)
+    end
+    return target
+end
+function M.AppendNamedValues(target, source, names)
+    if type(target) ~= "table" then
+        target = {}
+    end
+    source = source or {}
+    for name in tostring(names or ""):gmatch("%S+") do
+        target[#target + 1] = source[name]
+    end
+    return target
+end
 function M.AssignNamedValues(target, names, ...)
     if type(target) ~= "table" then target = {} end
     local index = 1
@@ -769,7 +806,10 @@ function M.BindGateGroup(ctx, source, entries, opts)
     -- during a refresh and applied once at its end: no per-refresh tables.
     local pendingReasons
     for i = 1, #entries do
-        if entries[i].reason ~= nil then pendingReasons = {}; break end
+        if entries[i].reason ~= nil then
+            pendingReasons = {}
+            break
+        end
     end
     local function noteReason(control, reason)
         if not control then return end
@@ -914,7 +954,8 @@ function M.SeedGameplayMeleeSpellScope(scope)
         g.nameplateMeleeSpellIDByClass = type(g.nameplateMeleeSpellIDByClass) == "table" and g.nameplateMeleeSpellIDByClass or {}
         if UnitClass then
             local _, class = UnitClass("player")
-            if class and (tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0) <= 0 then g.nameplateMeleeSpellIDByClass[class] = M.GetGameplayMeleeSpellID(g) end
+            if class and (tonumber(g.nameplateMeleeSpellIDByClass[class])
+                or 0) <= 0 then g.nameplateMeleeSpellIDByClass[class] = M.GetGameplayMeleeSpellID(g) end
         end
     end
 end

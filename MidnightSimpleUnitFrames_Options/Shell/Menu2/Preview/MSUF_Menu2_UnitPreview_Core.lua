@@ -402,20 +402,9 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
         if host then host:Hide() end
         return
     end
-    if not host then
-        if type(_G.CreateFrame) ~= "function" then return end
-        host = PixelLayoutRegion(CreateFrame("Frame", nil, mock))
-        if host.EnableMouse then host:EnableMouse(false) end
-        host.edges = {}
-        for i = 1, 4 do
-            local line = PixelLayoutRegion(host:CreateTexture(nil, "OVERLAY", nil, 6))
-            line:SetTexture(TEX_W8)
-            host.edges[i] = line
-        end
-        mock._msufPreviewPowerBorder = host
-    end
+    host = host or MSUF.MSUF2.PreviewHelpers.EnsurePowerBorderHost(mock, "_msufPreviewPowerBorder")
+    if not host then return end
     if host.SetFrameLevel and mock.GetFrameLevel then host:SetFrameLevel(mock:GetFrameLevel() + 4) end
-    local top, bottom, left, right = host.edges[1], host.edges[2], host.edges[3], host.edges[4]
     for i = 1, 4 do host.edges[i]:Hide() end
     if roundedPower and not embedded then
         host:Hide()
@@ -425,29 +414,7 @@ local function ApplyPowerBorder(mock, powerOn, thickness, embedded, roundedPower
     host:SetAllPoints(mock.powerBG)
     local r, g, b, a = PreviewPowerEdgeColor(mock)
     for i = 1, 4 do host.edges[i]:SetVertexColor(r, g, b, a) end
-    top:ClearAllPoints()
-    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-    top:SetHeight(edge)
-    top:Show()
-    if not roundedPower then
-        bottom:ClearAllPoints()
-        bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-        bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-        bottom:SetHeight(edge)
-        left:ClearAllPoints()
-        left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-        left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-        left:SetWidth(edge)
-        right:ClearAllPoints()
-        right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-        right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-        right:SetWidth(edge)
-        bottom:Show()
-        left:Show()
-        right:Show()
-    end
-    host:Show()
+    MSUF.MSUF2.PreviewHelpers.LayoutPowerBorderEdges(host, edge, roundedPower)
 end
 function Core.ApplyRounded(box, key, powerOn, outlineThickness, powerEmbedded, powerEdgeSize, detachedRounded, detachedEdgeSize)
     if not (box and box.mock) then return end

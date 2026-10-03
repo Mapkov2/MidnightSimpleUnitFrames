@@ -223,11 +223,12 @@ local function RememberPageLayoutVariant(key, entry)
     end
     variants[entry.layoutSlot] = entry
 end
-M.AssignNamedValues(M, [[
-    SetFrameHeightIfChanged CreateContext BuildSecondaryPageNav BuildPlaceholderPage
-    CurrentPageLayoutSlot PageEntryMatchesLayout RestorePageEntryRegistrations RememberPageLayoutVariant
-]], SetFrameHeightIfChanged, CreateContext, BuildSecondaryPageNav, BuildPlaceholderPage,
-    CurrentPageLayoutSlot, PageEntryMatchesLayout, RestorePageEntryRegistrations, RememberPageLayoutVariant)
+M.Assign(M, {
+    SetFrameHeightIfChanged = SetFrameHeightIfChanged, CreateContext = CreateContext,
+    BuildSecondaryPageNav = BuildSecondaryPageNav, BuildPlaceholderPage = BuildPlaceholderPage,
+    CurrentPageLayoutSlot = CurrentPageLayoutSlot, PageEntryMatchesLayout = PageEntryMatchesLayout,
+    RestorePageEntryRegistrations = RestorePageEntryRegistrations, RememberPageLayoutVariant = RememberPageLayoutVariant,
+})
 
 function M.DisposePageHeader(entry)
     local records = type(entry) == "table" and entry.pageHeaders or nil

@@ -5,6 +5,11 @@ addonName = (type(MSUF.AddonName) == "string" and MSUF.AddonName ~= "" and MSUF.
     or "MidnightSimpleUnitFrames"
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_Auras.lua", {
+    "MSUF_UFPreview_RequestRefresh",
+})
 local EnsureDB = M.EnsureDB
 
 -- Menu2 Auras page.
@@ -413,7 +418,7 @@ local GFAnchorValues = M.AuraSettings.GFAnchorValues
 -- style binders below are created once, and each accordion builder re-establishes
 -- the same local names from that record so the bodies read exactly as before.
 local function CreateUnitStyleState(ctx, b, scope, options)
-    local S = {}
+    local StyleState = {}
     options = type(options) == "table" and options or nil
     local embeddedUnitPreview = options and options.embeddedUnitPreview == true
     local appearanceGlobalsOnly = options and options.appearanceGlobalsOnly == true
@@ -424,13 +429,13 @@ local function CreateUnitStyleState(ctx, b, scope, options)
     local styleCatalogLane = appearanceGlobalsOnly and appearanceKind or lane
     local styleControls = {}
     local function RefreshStylePreview()
-        if S.refreshMiniPreview then
-            AurasPage.RefreshMiniAuraPreviewNow(S.refreshMiniPreview)
+        if StyleState.refreshMiniPreview then
+            AurasPage.RefreshMiniAuraPreviewNow(StyleState.refreshMiniPreview)
         elseif embeddedUnitPreview then
             local refreshOwnedPreview = ctx and ctx._msuf2RefreshUnitPreview
             if type(refreshOwnedPreview) == "function" then
                 refreshOwnedPreview("AURAS3_UNIT_STYLE_DUMMY")
-            elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+            else
                 _G.MSUF_UFPreview_RequestRefresh("AURAS3_UNIT_STYLE_DUMMY")
             end
         end
@@ -559,7 +564,10 @@ local function CreateUnitStyleState(ctx, b, scope, options)
             Model.WriteValue(unit, "durationBarDirection", value)
         end
     end
-    local function AddStyleControl(control) M.AppendValues(styleControls, control); return control end
+    local function AddStyleControl(control)
+        M.AppendValues(styleControls, control)
+        return control
+    end
     local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason, afterSet)
         return AddStyleControl(BindSwitch(ctx, parent, label, x, y, width,
             function() return ReadScopeBool(key, defaultValue) end,
@@ -604,7 +612,7 @@ local function CreateUnitStyleState(ctx, b, scope, options)
         return body and (body._msuf2Width or body.GetWidth and body:GetWidth()) or b.width or 720
     end
     local baseId = "aura_style_" .. tostring(scope or "unit") .. "_" .. lane
-    M.Assign(S, {
+    M.Assign(StyleState, {
         ctx = ctx, b = b, scope = scope,
         embeddedUnitPreview = embeddedUnitPreview, appearanceGlobalsOnly = appearanceGlobalsOnly, previewContainer = previewContainer,
         appearanceKind = appearanceKind, unit = unit, lane = lane,
@@ -619,10 +627,10 @@ local function CreateUnitStyleState(ctx, b, scope, options)
         BindStyleSwitch = BindStyleSwitch, BindStyleDropdown = BindStyleDropdown, BindStyleSlider = BindStyleSlider,
         BodyWidth = BodyWidth,
     })
-    return S
+    return StyleState
 end
-local function BuildUnitStyleFrameBasics(S)
-    local ctx, b, appearanceGlobalsOnly, unit, lane, baseId, ReadScopeBool, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, BindStyleSwitch, BindStyleDropdown, BindStyleSlider, BodyWidth = S.ctx, S.b, S.appearanceGlobalsOnly, S.unit, S.lane, S.baseId, S.ReadScopeBool, S.ReadScopeDebuffBorderMode, S.WriteScopeDebuffBorderMode, S.BindStyleSwitch, S.BindStyleDropdown, S.BindStyleSlider, S.BodyWidth
+local function BuildUnitStyleFrameBasics(StyleState)
+    local ctx, b, appearanceGlobalsOnly, unit, lane, baseId, ReadScopeBool, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, BindStyleSwitch, BindStyleDropdown, BindStyleSlider, BodyWidth = StyleState.ctx, StyleState.b, StyleState.appearanceGlobalsOnly, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.ReadScopeBool, StyleState.ReadScopeDebuffBorderMode, StyleState.WriteScopeDebuffBorderMode, StyleState.BindStyleSwitch, StyleState.BindStyleDropdown, StyleState.BindStyleSlider, StyleState.BodyWidth
     local frameBasics
     local stealableStyleControl
     if not appearanceGlobalsOnly then
@@ -673,10 +681,10 @@ local function BuildUnitStyleFrameBasics(S)
                 basicsCol, ReadScopeDebuffBorderMode, WriteScopeDebuffBorderMode, "AURAS3_DEBUFF_TYPE_BORDER_MODE")
         end
     end
-    S.frameBasics, S.stealableStyleControl = frameBasics, stealableStyleControl
+    StyleState.frameBasics, StyleState.stealableStyleControl = frameBasics, stealableStyleControl
 end
-local function BuildUnitStyleIconStyle(S)
-    local ctx, b, appearanceGlobalsOnly, appearanceKind, baseId, RefreshStylePreview, ReadScopeBool, ReadScopeNumber, AddStyleControl, BodyWidth = S.ctx, S.b, S.appearanceGlobalsOnly, S.appearanceKind, S.baseId, S.RefreshStylePreview, S.ReadScopeBool, S.ReadScopeNumber, S.AddStyleControl, S.BodyWidth
+local function BuildUnitStyleIconStyle(StyleState)
+    local ctx, b, appearanceGlobalsOnly, appearanceKind, baseId, RefreshStylePreview, ReadScopeBool, ReadScopeNumber, AddStyleControl, BodyWidth = StyleState.ctx, StyleState.b, StyleState.appearanceGlobalsOnly, StyleState.appearanceKind, StyleState.baseId, StyleState.RefreshStylePreview, StyleState.ReadScopeBool, StyleState.ReadScopeNumber, StyleState.AddStyleControl, StyleState.BodyWidth
     local iconStyleGates = { border = {}, shadow = {}, Apply = function() end }
     if appearanceGlobalsOnly then
     -- Border and shadow are global for the selected Aura product. There is no
@@ -823,7 +831,8 @@ local function BuildUnitStyleIconStyle(S)
             end,
             function(value)
                 local c = IconStyleReadColor(colorKey, defaultColor)
-                IconStyleWrite(colorKey, { c[1] or defaultColor[1], c[2] or defaultColor[2], c[3] or defaultColor[3], (tonumber(value) or 100) / 100 }, reason, true)
+                IconStyleWrite(colorKey, { c[1] or defaultColor[1], c[2] or defaultColor[2], c[3] or defaultColor[3],
+                    (tonumber(value) or 100) / 100 }, reason, true)
                 QueueIconStyleApply(slider, reason)
             end,
             AuraControlMeta(ctx, "style.appearance.icon-style." .. AuraCatalogToken(colorKey) .. "-alpha")))
@@ -888,15 +897,16 @@ local function BuildUnitStyleIconStyle(S)
         "Solid draws a crisp pixel ring around the icon. Soft Glow adds a halo, and Shadow shades the icon's own edges. The Blizzard entries and any LibSharedMedia border are drawn as edge art. Thickness scales the edge.")
     iconStyleGates.border[1] = borderStyleDropdown
     iconStyleGates.border[2] = IconStyleSlider("Border Thickness", 0, -122, 1, 8, "styleBorderThickness", 1, "AURAS3_ICON_STYLE_BORDER")
-    iconStyleGates.border[3] = IconStyleAlphaSlider("Border Alpha (%)", 1, -122, "styleBorderColor", ICON_STYLE_BORDER_DEFAULT, "AURAS3_ICON_STYLE_BORDER_COLOR")
+    iconStyleGates.border[3] = IconStyleAlphaSlider("Border Alpha (%)", 1, -122, "styleBorderColor", ICON_STYLE_BORDER_DEFAULT,
+        "AURAS3_ICON_STYLE_BORDER_COLOR")
     IconStyleSwitch("Icon Shadow", -178, "styleShadowEnabled", "AURAS3_ICON_STYLE_SHADOW")
     iconStyleGates.shadow[1] = IconStyleSlider("Shadow Size", 0, -210, 1, 16, "styleShadowSize", 4, "AURAS3_ICON_STYLE_SHADOW")
     iconStyleGates.shadow[2] = IconStyleAlphaSlider("Shadow Alpha (%)", 1, -210, "styleShadowColor", ICON_STYLE_SHADOW_DEFAULT, "AURAS3_ICON_STYLE_SHADOW_COLOR")
     end
-    S.iconStyleGates = iconStyleGates
+    StyleState.iconStyleGates = iconStyleGates
 end
-local function BuildUnitStyleStack(S)
-    local ctx, b, scope, unit, lane, baseId, RefreshStylePreview, AddStyleControl, BindStyleSwitch, BindStyleSlider, BodyWidth = S.ctx, S.b, S.scope, S.unit, S.lane, S.baseId, S.RefreshStylePreview, S.AddStyleControl, S.BindStyleSwitch, S.BindStyleSlider, S.BodyWidth
+local function BuildUnitStyleStack(StyleState)
+    local ctx, b, scope, unit, lane, baseId, RefreshStylePreview, AddStyleControl, BindStyleSwitch, BindStyleSlider, BodyWidth = StyleState.ctx, StyleState.b, StyleState.scope, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.RefreshStylePreview, StyleState.AddStyleControl, StyleState.BindStyleSwitch, StyleState.BindStyleSlider, StyleState.BodyWidth
     local stack = b:CollapsibleSection(baseId .. "_stack", "Stack Count", 296, false)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(stack, {
@@ -940,10 +950,10 @@ local function BuildUnitStyleStack(S)
     local stackSmallW = max(120, floor((sw - 72) / 2))
     BindStyleSlider(stack, "X", 24, -212, -40, 40, 1, stackSmallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
     BindStyleSlider(stack, "Y", 32 + stackSmallW, -212, -40, 40, 1, stackSmallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
-    S.stack = stack
+    StyleState.stack = stack
 end
-local function BuildUnitStyleCooldown(S)
-    local b, scope, unit, lane, baseId, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, ReadScopeSwipeDirection, WriteScopeSwipeDirection, BindStyleDropdown, BindStyleSlider, BodyWidth = S.b, S.scope, S.unit, S.lane, S.baseId, S.ReadScopeCooldownAnchor, S.WriteScopeCooldownAnchor, S.ReadScopeSwipeDirection, S.WriteScopeSwipeDirection, S.BindStyleDropdown, S.BindStyleSlider, S.BodyWidth
+local function BuildUnitStyleCooldown(StyleState)
+    local b, scope, unit, lane, baseId, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, ReadScopeSwipeDirection, WriteScopeSwipeDirection, BindStyleDropdown, BindStyleSlider, BodyWidth = StyleState.b, StyleState.scope, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.ReadScopeCooldownAnchor, StyleState.WriteScopeCooldownAnchor, StyleState.ReadScopeSwipeDirection, StyleState.WriteScopeSwipeDirection, StyleState.BindStyleDropdown, StyleState.BindStyleSlider, StyleState.BodyWidth
     -- The final slider begins at -328 and its control sits another 24px lower.
     -- Leave a 16px footer so its buttons cannot bleed into Duration Bar.
     local cooldown = b:CollapsibleSection(baseId .. "_cooldown", "Cooldown Text", 392, true)
@@ -970,17 +980,20 @@ local function BuildUnitStyleCooldown(S)
     end
     local cw = BodyWidth(cooldown)
     BindStyleSlider(cooldown, "Text Size", 24, -48, 6, 40, 1, cw - 48, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
-    BindStyleDropdown(cooldown, "Anchor", 24, -104, type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues(), cw - 48, ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, "AURAS3_COOLDOWN_ANCHOR")
+    BindStyleDropdown(cooldown, "Anchor", 24, -104, type(Model.AuraAnchorValues) == "function" and Model.AuraAnchorValues() or GFAnchorValues(), cw - 48,
+        ReadScopeCooldownAnchor, WriteScopeCooldownAnchor, "AURAS3_COOLDOWN_ANCHOR")
     BindStyleSlider(cooldown, "X", 24, -162, -40, 40, 1, cw - 48, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
     BindStyleSlider(cooldown, "Y", 24, -222, -40, 40, 1, cw - 48, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
-    local swipeDirection = BindStyleDropdown(cooldown, "Swipe Direction", 24, -270, COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48, ReadScopeSwipeDirection, WriteScopeSwipeDirection, "AURAS3_COOLDOWN_SWIPE_DIRECTION")
+    local swipeDirection = BindStyleDropdown(cooldown, "Swipe Direction", 24, -270, COOLDOWN_SWIPE_DIRECTION_VALUES, cw - 48, ReadScopeSwipeDirection,
+        WriteScopeSwipeDirection, "AURAS3_COOLDOWN_SWIPE_DIRECTION")
     AddTooltip(swipeDirection, "Cooldown swipe direction", "Reverses only the swipe overlay. Icon size and position stay unchanged.")
-    local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -328, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil, "AURAS3_COOLDOWN_FORMAT")
+    local decimal = BindStyleSlider(cooldown, "Decimals below sec", 24, -328, 0, 30, 1, cw - 48, "cooldownDecimalSeconds", 3, 0, 30, nil, nil,
+        "AURAS3_COOLDOWN_FORMAT")
     AddTooltip(decimal, "Cooldown text format", "Remaining time below this value uses one decimal place. Timers show unitless seconds below 1 minute and localized minutes above it. Set 0 for whole seconds only.")
-    S.cooldown = cooldown
+    StyleState.cooldown = cooldown
 end
-local function BuildUnitStyleDurationBar(S)
-    local b, lane, baseId, ReadScopeBool, ReadScopeNumber, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, BindStyleSwitch, BindStyleDropdown, BindStyleSlider, BodyWidth = S.b, S.lane, S.baseId, S.ReadScopeBool, S.ReadScopeNumber, S.ReadScopeDurationBarDisplay, S.WriteScopeDurationBarDisplay, S.ReadScopeDurationBarPosition, S.WriteScopeDurationBarPosition, S.ReadScopeDurationBarDirection, S.WriteScopeDurationBarDirection, S.BindStyleSwitch, S.BindStyleDropdown, S.BindStyleSlider, S.BodyWidth
+local function BuildUnitStyleDurationBar(StyleState)
+    local b, lane, baseId, ReadScopeBool, ReadScopeNumber, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, ReadScopeDurationBarPosition, WriteScopeDurationBarPosition, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, BindStyleSwitch, BindStyleDropdown, BindStyleSlider, BodyWidth = StyleState.b, StyleState.lane, StyleState.baseId, StyleState.ReadScopeBool, StyleState.ReadScopeNumber, StyleState.ReadScopeDurationBarDisplay, StyleState.WriteScopeDurationBarDisplay, StyleState.ReadScopeDurationBarPosition, StyleState.WriteScopeDurationBarPosition, StyleState.ReadScopeDurationBarDirection, StyleState.WriteScopeDurationBarDirection, StyleState.BindStyleSwitch, StyleState.BindStyleDropdown, StyleState.BindStyleSlider, StyleState.BodyWidth
     local refreshDurationBarSummary
     local durationInline = (b.width or 720) >= 520
     -- Dropdown buttons sit 24 px below their labels and carry a soft edge/glow.
@@ -998,12 +1011,15 @@ local function BuildUnitStyleDurationBar(S)
         if not W.SetCollapsibleBadges then return end
         local enabled = ReadScopeBool("showDurationBar", false)
         W.SetCollapsibleBadges(durationBar, {{
-            text = enabled and (tostring(Round(ReadScopeNumber("durationBarHeight", 2, 1, 16))) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, ReadScopeDurationBarDisplay(), "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, ReadScopeDurationBarPosition(), "Bottom")) or "Off",
+            text = enabled and (tostring(Round(ReadScopeNumber("durationBarHeight", 2, 1, 16))) .. "px / "
+                .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, ReadScopeDurationBarDisplay(), "Bar Only") .. " / "
+                .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, ReadScopeDurationBarPosition(), "Bottom")) or "Off",
             kind = enabled and "accent" or "muted", showWhenClosed = true,
         }})
     end
     BindStyleSwitch(durationBar, "Show Duration Bar", 24, -48, dbw - 48, "showDurationBar", false, "AURAS3_DURATION_BAR", refreshDurationBarSummary)
-    BindStyleSlider(durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT", refreshDurationBarSummary)
+    BindStyleSlider(durationBar, "Height", 24, -104, 1, 16, 1, dbw - 48, "durationBarHeight", 2, 1, 16, nil, nil, "AURAS3_DURATION_BAR_HEIGHT",
+        refreshDurationBarSummary)
     AddTooltip(BindStyleDropdown(durationBar, "Display", 24, -162,
         type(Model.DurationBarDisplayValues) == "function" and Model.DurationBarDisplayValues() or DURATION_BAR_DISPLAY_VALUES,
         durationChoiceWidth, ReadScopeDurationBarDisplay, WriteScopeDurationBarDisplay, "AURAS3_DURATION_BAR_DISPLAY", refreshDurationBarSummary),
@@ -1016,10 +1032,10 @@ local function BuildUnitStyleDurationBar(S)
         type(Model.DurationBarDirectionValues) == "function" and Model.DurationBarDirectionValues() or DURATION_BAR_DIRECTION_VALUES,
         durationChoiceWidth, ReadScopeDurationBarDirection, WriteScopeDurationBarDirection, "AURAS3_DURATION_BAR_DIRECTION", refreshDurationBarSummary),
         "Duration bar fill mode", "Remaining shrinks as the aura expires. Elapsed grows until the aura expires.")
-    S.durationBar, S.refreshDurationBarSummary = durationBar, refreshDurationBarSummary
+    StyleState.durationBar, StyleState.refreshDurationBarSummary = durationBar, refreshDurationBarSummary
 end
-local function BuildUnitStyleFrameEffect(S)
-    local ctx, b, unit, lane, baseId, RefreshStylePreview, AddStyleControl, BodyWidth = S.ctx, S.b, S.unit, S.lane, S.baseId, S.RefreshStylePreview, S.AddStyleControl, S.BodyWidth
+local function BuildUnitStyleFrameEffect(StyleState)
+    local ctx, b, unit, lane, baseId, RefreshStylePreview, AddStyleControl, BodyWidth = StyleState.ctx, StyleState.b, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.RefreshStylePreview, StyleState.AddStyleControl, StyleState.BodyWidth
     local effectPrefix = lane == "buff" and "buff" or "debuff"
     local function EffectKey(suffix) return effectPrefix .. "FrameEffect" .. suffix end
     local function ReadEffectValue(suffix, fallback)
@@ -1086,10 +1102,10 @@ local function BuildUnitStyleFrameEffect(S)
     EffectSlider("Layer (0-30)", 1, -96, 0, 30, 1, "Layer", 0, "AURAS3_LANE_FRAME_EFFECT_LAYER")
     EffectSlider("Thickness", 2, -96, 1, 16, 1, "Thickness", 2, "AURAS3_LANE_FRAME_EFFECT_THICKNESS")
     EffectSlider("Priority", 0, -150, 1, 10, 1, "Priority", 5, "AURAS3_LANE_FRAME_EFFECT_PRIORITY")
-    S.frameEffect, S.ReadEffectValue = frameEffect, ReadEffectValue
+    StyleState.frameEffect, StyleState.ReadEffectValue = frameEffect, ReadEffectValue
 end
-local function TrackUnitStyleBadges(S)
-    local ctx, unit, lane, styleControls, ReadScopeBool, ReadScopeDebuffBorderMode, ReadScopeNumber, ReadScopeCooldownAnchor, ReadScopeSwipeDirection, frameBasics, stealableStyleControl, iconStyleGates, stack, cooldown, refreshDurationBarSummary, frameEffect, ReadEffectValue = S.ctx, S.unit, S.lane, S.styleControls, S.ReadScopeBool, S.ReadScopeDebuffBorderMode, S.ReadScopeNumber, S.ReadScopeCooldownAnchor, S.ReadScopeSwipeDirection, S.frameBasics, S.stealableStyleControl, S.iconStyleGates, S.stack, S.cooldown, S.refreshDurationBarSummary, S.frameEffect, S.ReadEffectValue
+local function TrackUnitStyleBadges(StyleState)
+    local ctx, unit, lane, styleControls, ReadScopeBool, ReadScopeDebuffBorderMode, ReadScopeNumber, ReadScopeCooldownAnchor, ReadScopeSwipeDirection, frameBasics, stealableStyleControl, iconStyleGates, stack, cooldown, refreshDurationBarSummary, frameEffect, ReadEffectValue = StyleState.ctx, StyleState.unit, StyleState.lane, StyleState.styleControls, StyleState.ReadScopeBool, StyleState.ReadScopeDebuffBorderMode, StyleState.ReadScopeNumber, StyleState.ReadScopeCooldownAnchor, StyleState.ReadScopeSwipeDirection, StyleState.frameBasics, StyleState.stealableStyleControl, StyleState.iconStyleGates, StyleState.stack, StyleState.cooldown, StyleState.refreshDurationBarSummary, StyleState.frameEffect, StyleState.ReadEffectValue
     M.TrackRefresh(ctx, function()
         -- Individual Style editors are always actionable. The first write to a
         -- formerly inherited lane activates its sparse per-frame override.
@@ -1126,14 +1142,18 @@ local function TrackUnitStyleBadges(S)
 
             local stackEnabled = ReadScopeBool("showStackCount", true)
             W.SetCollapsibleBadges(stack, {{
-                text = stackEnabled and (tostring(Round(ReadScopeNumber("stackTextSize", 14, 6, 40))) .. "px / " .. AnchorLabel(type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(unit, lane) or Model.ReadStackAnchor(unit))) or "Off",
+                text = stackEnabled and (tostring(Round(ReadScopeNumber("stackTextSize", 14, 6, 40))) .. "px / "
+                    .. AnchorLabel(type(Model.ReadLaneStackAnchor) == "function" and Model.ReadLaneStackAnchor(unit, lane)
+                    or Model.ReadStackAnchor(unit))) or "Off",
                 kind = stackEnabled and "accent" or "muted", showWhenClosed = true,
             }})
 
             local cooldownEnabled = ReadScopeBool("showCooldownText", true)
             local decimal = Round(ReadScopeNumber("cooldownDecimalSeconds", 3, 0, 30))
             W.SetCollapsibleBadges(cooldown, {
-                { text = cooldownEnabled and (tostring(Round(ReadScopeNumber("cooldownTextSize", 14, 6, 40))) .. "px / " .. AnchorLabel(ReadScopeCooldownAnchor()) .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, ReadScopeSwipeDirection(), "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
+                { text = cooldownEnabled and (tostring(Round(ReadScopeNumber("cooldownTextSize", 14, 6, 40))) .. "px / "
+                    .. AnchorLabel(ReadScopeCooldownAnchor()) .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, ReadScopeSwipeDirection(), "Normal"))
+                    or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
                 { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
             })
 
@@ -1151,14 +1171,14 @@ local function TrackUnitStyleBadges(S)
     end)
 end
 local function BuildUnitStyle(ctx, b, scope, options)
-    local S = CreateUnitStyleState(ctx, b, scope, options)
-    local embeddedUnitPreview, appearanceGlobalsOnly, previewContainer, unit, lane, baseId, RefreshStylePreview, ReadScopeIconShape, WriteScopeIconShape, BindStyleDropdown, BodyWidth = S.embeddedUnitPreview, S.appearanceGlobalsOnly, S.previewContainer, S.unit, S.lane, S.baseId, S.RefreshStylePreview, S.ReadScopeIconShape, S.WriteScopeIconShape, S.BindStyleDropdown, S.BodyWidth
+    local StyleState = CreateUnitStyleState(ctx, b, scope, options)
+    local embeddedUnitPreview, appearanceGlobalsOnly, previewContainer, unit, lane, baseId, RefreshStylePreview, ReadScopeIconShape, WriteScopeIconShape, BindStyleDropdown, BodyWidth = StyleState.embeddedUnitPreview, StyleState.appearanceGlobalsOnly, StyleState.previewContainer, StyleState.unit, StyleState.lane, StyleState.baseId, StyleState.RefreshStylePreview, StyleState.ReadScopeIconShape, StyleState.WriteScopeIconShape, StyleState.BindStyleDropdown, StyleState.BodyWidth
 
     if not embeddedUnitPreview then
-        S.refreshMiniPreview = AurasPage.BuildAuraStylePreviewWorkbench(ctx, b, unit, lane, previewContainer)
+        StyleState.refreshMiniPreview = AurasPage.BuildAuraStylePreviewWorkbench(ctx, b, unit, lane, previewContainer)
     end
 
-    BuildUnitStyleFrameBasics(S)
+    BuildUnitStyleFrameBasics(StyleState)
 
     if appearanceGlobalsOnly then
         local appearanceShape = b:CollapsibleSection(baseId .. "_appearance_shape", "Icon Shape", 112, false)
@@ -1171,8 +1191,8 @@ local function BuildUnitStyle(ctx, b, scope, options)
             "Applies to every UnitFrame and GroupFrame icon of this Aura type. Spell Icons use the Buff appearance.")
     end
 
-    BuildUnitStyleIconStyle(S)
-    local iconStyleGates = S.iconStyleGates
+    BuildUnitStyleIconStyle(StyleState)
+    local iconStyleGates = StyleState.iconStyleGates
 
     if appearanceGlobalsOnly then
         -- Re-apply the master-toggle gates whenever any Appearance page is
@@ -1257,13 +1277,13 @@ local function BuildUnitStyle(ctx, b, scope, options)
     end
     if appearanceGlobalsOnly then return end
 
-    BuildUnitStyleStack(S)
-    BuildUnitStyleCooldown(S)
-    BuildUnitStyleDurationBar(S)
+    BuildUnitStyleStack(StyleState)
+    BuildUnitStyleCooldown(StyleState)
+    BuildUnitStyleDurationBar(StyleState)
     -- No Classic aura backend renders a lane Full-Frame Effect; its badge is
     -- skipped under the same gate in TrackUnitStyleBadges.
-    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then BuildUnitStyleFrameEffect(S) end
-    TrackUnitStyleBadges(S)
+    if M.CLASSIC_AURA_FILTERS_REDUCED ~= true then BuildUnitStyleFrameEffect(StyleState) end
+    TrackUnitStyleBadges(StyleState)
 end
 
 local function BuildUnitOrdering(ctx, b, unit, lane)
@@ -1296,7 +1316,7 @@ local function BuildUnitOrdering(ctx, b, unit, lane)
         local refreshOwnedPreview = ctx and ctx._msuf2RefreshUnitPreview
         if type(refreshOwnedPreview) == "function" then
             refreshOwnedPreview(reason)
-        elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+        else
             _G.MSUF_UFPreview_RequestRefresh(reason)
         end
     end
@@ -1355,13 +1375,20 @@ local function UniformChoiceWidths(values, width)
     return values
 end
 local UNIT_AURA_CHOICE_WIDTH = 92
-local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target", UNIT_AURA_CHOICE_WIDTH)
-M._unitAuraWorkspaceTabsPlayer = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensives", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_WORKSPACE_TABS_PET = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|behavior=Ordering|filters=Filters|blacklist=Blacklist|style=Style", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|whitelist=Whitelist|style=Style", UNIT_AURA_CHOICE_WIDTH)
-local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|dots=Dots|style=Style", UNIT_AURA_CHOICE_WIDTH)
-M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|defensives=Defensives|style=Style", UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_WORKSPACE_TABS = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Dots on target",
+    UNIT_AURA_CHOICE_WIDTH)
+M._unitAuraWorkspaceTabsPlayer = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3|custom4=Defensives",
+    UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_WORKSPACE_TABS_PET = UniformChoiceWidths(VTP "buff=Buffs|debuff=Debuffs|custom1=Custom 1|custom2=Custom 2|custom3=Custom 3",
+    UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_NORMAL_TOOLS = UniformChoiceWidths(VTP "layout=Layout|behavior=Ordering|filters=Filters|blacklist=Blacklist|style=Style",
+    UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_CUSTOM_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|whitelist=Whitelist|style=Style",
+    UNIT_AURA_CHOICE_WIDTH)
+local UNIT_AURA_TARGET_DOT_TOOLS = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|dots=Dots|style=Style",
+    UNIT_AURA_CHOICE_WIDTH)
+M._unitAuraPlayerDefensiveTools = UniformChoiceWidths(VTP "setup=Setup|layout=Layout|behavior=Ordering|filters=Filters|defensives=Defensives|style=Style",
+    UNIT_AURA_CHOICE_WIDTH)
 local UNIT_AURA_NORMAL_TOOL_OK = { layout = true, behavior = true, filters = true, blacklist = true, style = true }
 local UNIT_AURA_CUSTOM_TOOL_OK = { setup = true, behavior = true, whitelist = true, filters = true, layout = true, style = true }
 local UNIT_AURA_TARGET_DOT_TOOL_OK = { setup = true, layout = true, behavior = true, filters = true, dots = true, style = true }
@@ -1370,21 +1397,30 @@ M._unitAuraPlayerDefensiveToolOK = { setup = true, layout = true, behavior = tru
 local function CurrentUnitAuraTool(unit, container)
     M.unitAuraToolSelection = M.unitAuraToolSelection or {}
     local unitState = M.unitAuraToolSelection[unit]
-    if type(unitState) ~= "table" then unitState = {}; M.unitAuraToolSelection[unit] = unitState end
+    if type(unitState) ~= "table" then
+        unitState = {}
+        M.unitAuraToolSelection[unit] = unitState
+    end
     local custom = tostring(container or ""):match("^custom") ~= nil
     local playerDefensives = unit == "player" and container == "custom4"
     local targetDots = unit ~= "player" and container == "custom4"
     local tool = unitState[container]
     local valid = playerDefensives and M._unitAuraPlayerDefensiveToolOK
         or (targetDots and UNIT_AURA_TARGET_DOT_TOOL_OK or (custom and UNIT_AURA_CUSTOM_TOOL_OK or UNIT_AURA_NORMAL_TOOL_OK))
-    if not valid[tool] then tool = custom and "setup" or "layout"; unitState[container] = tool end
+    if not valid[tool] then
+        tool = custom and "setup" or "layout"
+        unitState[container] = tool
+    end
     return tool
 end
 
 local function SetUnitAuraTool(unit, container, tool)
     M.unitAuraToolSelection = M.unitAuraToolSelection or {}
     local unitState = M.unitAuraToolSelection[unit]
-    if type(unitState) ~= "table" then unitState = {}; M.unitAuraToolSelection[unit] = unitState end
+    if type(unitState) ~= "table" then
+        unitState = {}
+        M.unitAuraToolSelection[unit] = unitState
+    end
     unitState[container] = tool
 end
 
@@ -1471,7 +1507,8 @@ local function BuildCompactUnitAuraLayout(ctx, b, unit, kind)
                 function(v) Model.WriteLaneSpacing(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end),
             NumberRow("Layer (0-30)", "layer", "layer", 0, 30, kind == "buff" and 5 or 6,
                 function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end,
-                function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end),
+                function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit,
+                    "AURAS3_UNIT_LAYER") end end),
         },
     })
     local function CollectRows(result)
@@ -1554,7 +1591,8 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         function(value) Model.SetLaneFiltersEnabled(unit, lane, value); ApplyUnit(ctx, unit, "AURAS3_FILTER_ENABLE", true) end,
         AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.enabled", nil,
             "auras3." .. unit .. "." .. lane .. ".filtersEnabled"))
-    AddTooltip(enabled, "Enable filters", "Turns aura classification filters on or off for this exact lane. Big Defensive uses MSUF's curated list on friendly frames.")
+    AddTooltip(enabled, "Enable filters",
+        "Turns aura classification filters on or off for this exact lane. Big Defensive uses MSUF's curated list on friendly frames.")
     local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
         function()
             return type(Model.ReadBlacklistHidePermanent) == "function"
@@ -1584,7 +1622,8 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         { "Important", "onlyImportant", "Only auras Blizzard flags as important." },
         { "Applicable by me", "raid", "Helpful auras your character can apply (Blizzard RAID token)." },
         { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Buff filter." },
-        { "Also include nameplate-only", "includeNameplateOnly", "Broadens the selected filter to also admit Buffs Blizzard marks nameplate-only; it is not a standalone only-filter." },
+        { "Also include nameplate-only", "includeNameplateOnly",
+            "Broadens the selected filter to also admit Buffs Blizzard marks nameplate-only; it is not a standalone only-filter." },
         { "Dispellable / stealable by group", "includeDispellable", "Helpful enemy auras someone in your group can dispel, purge, or steal." },
         { "Any dispel / steal type", "dispellableAny", "Helpful enemy auras with any dispel type, even when your group cannot remove them." },
         { "External defensive", "externalDefensive", "External defensive Buffs." },
@@ -1596,7 +1635,8 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
         { "Important", "onlyImportant", "Only Debuffs Blizzard flags as important." },
         { "Dispellable by me", "raid", "Harmful auras your character can dispel (Blizzard RAID token)." },
         { "Raid combat", "raidInCombat", "Blizzard's in-combat raid Debuff filter." },
-        { "Also include nameplate-only", "includeNameplateOnly", "Broadens the selected filter to also admit Debuffs Blizzard marks nameplate-only; it is not a standalone only-filter." },
+        { "Also include nameplate-only", "includeNameplateOnly",
+            "Broadens the selected filter to also admit Debuffs Blizzard marks nameplate-only; it is not a standalone only-filter." },
         { "Dispellable by group", "includeDispellable", "Debuffs someone in your group can dispel." },
         { "Any dispel type", "dispellableAny", "Debuffs with a dispel type, even when your group cannot remove them." },
         { "Crowd control", "crowdControl", "Crowd-control Debuffs." },
@@ -2012,7 +2052,8 @@ local function BuildUnitBlacklistManualEntry(B)
             else
                 local c = T.colors.accent2 or T.colors.accent
                 if c and verifyText.SetTextColor then verifyText:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1) end
-                T.SetTranslatedText(verifyText, M.Format("#%d is not active on this frame, but %s is currently active as #%d. The aura's ID can differ from your cast's Spell ID.",
+                T.SetTranslatedText(verifyText,
+                    M.Format("#%d is not active on this frame, but %s is currently active as #%d. The aura's ID can differ from your cast's Spell ID.",
                     mine.enteredID or 0, tostring(mine.suggestName or "Spell"), mine.suggestID or 0))
             end
             local showSwap = mine ~= nil and mine.status == "mismatch" and mine.suggestID ~= nil
@@ -2105,23 +2146,15 @@ local function BuildUnitBlacklistPresetsAndList(B)
         local values = type(Model.UnitBlacklistSpellValues) == "function"
             and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
             or Model.BlacklistSpellValues(CurrentPreset())
-        local selected = M.auraBlacklistSpell
-        local entries = Model.BlacklistEntries(unit, lane)
-        local blocked = {}
-        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
-        for i = 1, #values do
-            if values[i].value == selected and not blocked[tostring(selected)] then return selected end
-        end
-        for i = 1, #values do
-            if values[i].value ~= nil and not blocked[tostring(values[i].value)] then return values[i].value end
-        end
-        return nil
+        local blocked = M.AuraControls.BlockedSet(Model.BlacklistEntries(unit, lane))
+        return M.AuraControls.FirstUnblockedSpell(values, M.auraBlacklistSpell, blocked)
     end
     local selectedSummary, addSet, addSpell
     if showPresets then
         local preset = W.Dropdown(section, "Preset", PresetValues, presetW)
         W.MoveWidget(preset, section, 24, -36 + curatedOffset, presetW)
-        M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value) M.auraBlacklistPreset = value; M.auraBlacklistSpell = nil; QueueAurasPageRefresh(ctx, "aura-blacklist-preset") end,
+        M.BindDropdownWidget(ctx, preset, CurrentPreset, function(value) M.auraBlacklistPreset = value; M.auraBlacklistSpell = nil; QueueAurasPageRefresh(ctx,
+            "aura-blacklist-preset") end,
             AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.preset-selection", "ephemeral"))
         addSet = ActionButton(section, "Add entire set", 126, "primary")
         addSet:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + presetW, -60 + curatedOffset)
@@ -2135,7 +2168,8 @@ local function BuildUnitBlacklistPresetsAndList(B)
             end
             return count > 0
         end)
-        RegisterAuraControl(ctx, addSet, "Add entire set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.add-preset-set", "action", {
+        RegisterAuraControl(ctx, addSet, "Add entire set", "button", "unit-workspace.lane." .. AuraCatalogToken(lane)
+            .. ".blacklist.add-preset-set", "action", {
             actionKey = "aura_blacklist_add_preset", actionFixedArgs = { scope = unit, lane = lane }, actionInputArg = "preset",
         })
         AddTooltip(addSet, "Add entire set", "Blocks every aura in the selected curated MSUF set.")
@@ -2192,88 +2226,28 @@ local function BuildUnitBlacklistPresetsAndList(B)
         or (enemyDebuff and "No blocked spells. Add one above or use a preset.")
         or (isDebuff and "No blocked spells. Add one from the allowed presets above."
         or "No blocked spells. Add one above or use a preset.")
-    local empty = W.Text(section, emptyText, 24, -284 + listOffset, inner, T.colors.muted)
-    local listScroll = PixelLayoutRegion(CreateFrame("ScrollFrame", nil, section))
-    listScroll:SetPoint("TOPLEFT", section, "TOPLEFT", 24, -260 + listOffset)
-    listScroll:SetSize(inner - 20, 150)
-    local listChild = PixelLayoutRegion(CreateFrame("Frame", nil, listScroll))
-    listChild:SetSize(inner - 44, 150)
-    listScroll:SetScrollChild(listChild)
-    M._StyleNestedAuraScrollFrame(listScroll, section, 44)
-    local rows = {}
-    local function EnsureRow(i)
-        local row = rows[i]
-        if row then return row end
-        row = PixelLayoutRegion(CreateFrame("Frame", nil, listChild))
-        row:SetPoint("TOPLEFT", listChild, "TOPLEFT", 0, -((i - 1) * 44))
-        row:SetPoint("TOPRIGHT", listChild, "TOPRIGHT", 0, -((i - 1) * 44))
-        row:SetHeight(40)
-        if T.ApplyBackdrop then T.ApplyBackdrop(row, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft) end
-        row.icon = PixelLayoutRegion(row:CreateTexture(nil, "ARTWORK"))
-        row.icon:SetPoint("LEFT", row, "LEFT", 7, 0)
-        row.icon:SetSize(28, 28)
-        row.name = T.Font(row, "GameFontHighlightSmall", "", T.colors.text)
-        row.name:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 9, -1)
-        row.id = T.Font(row, "GameFontDisableSmall", "", T.colors.muted)
-        row.id:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 9, 1)
-        row.remove = ActionButton(row, "Remove", 80)
-        row.remove:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-        row.remove:SetScript("OnClick", function()
-            if row._spellID and Model.RemoveBlacklistSpell(unit, row._spellID, lane) then
-                ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_REMOVE", true)
-                if refreshList then refreshList() end
-                QueueAurasPageRefresh(ctx, "aura-blacklist-removed")
-            end
-        end)
-        AddTooltip(row.remove, "Remove from blacklist", "Stops blocking this aura.")
-        rows[i] = row
-        return row
-    end
+    local blockedList = M.AuraControls.BlockedSpellList(ctx, section, inner, listOffset, emptyText, {
+        remove = function(spellID)
+            if not Model.RemoveBlacklistSpell(unit, spellID, lane) then return end
+            ApplyUnit(ctx, unit, "AURAS3_BLACKLIST_REMOVE", true)
+            if refreshList then refreshList() end
+            QueueAurasPageRefresh(ctx, "aura-blacklist-removed")
+        end,
+        removePath = function(value)
+            return "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.entry." .. AuraCatalogToken(value) .. ".remove"
+        end,
+    })
     refreshList = function()
         local entries = Model.BlacklistEntries(unit, lane)
-        local blocked = {}
-        for i = 1, #entries do blocked[tostring(entries[i].value)] = true end
+        local blocked = M.AuraControls.BlockedSet(entries)
         if B.refreshLiveBlock then B.refreshLiveBlock(blocked) end
         if showPresets then
             local setSpells = type(Model.UnitBlacklistSpellValues) == "function"
                 and Model.UnitBlacklistSpellValues(unit, lane, CurrentPreset())
                 or Model.BlacklistSpellValues(CurrentPreset())
-            local missing = 0
-            for i = 1, #setSpells do if not blocked[tostring(setSpells[i].value)] then missing = missing + 1 end end
-            T.SetTranslatedText(selectedSummary, missing == 0
-                and M.Format("%d spells in this set - all already blocked", #setSpells)
-                or M.Format("%d spells in this set - %d can still be added", #setSpells, missing))
-            W.SetControlEnabled(addSet, missing > 0)
-            local selectedSpell = CurrentSpell()
-            W.SetControlEnabled(addSpell, selectedSpell ~= nil and not blocked[tostring(selectedSpell)])
+            M.AuraControls.PaintPresetSummary(selectedSummary, addSet, addSpell, setSpells, blocked, CurrentSpell)
         end
-        local query = tostring(searchValue or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-        local visible = {}
-        for i = 1, #entries do
-            local entry = entries[i]
-            local haystack = (tostring(entry.text or "") .. " "
-                .. tostring(entry.spellID or entry.value or "")):lower()
-            if query == "" or haystack:find(query, 1, true) then visible[#visible + 1] = entry end
-        end
-        T.SetTranslatedText(prepared, M.Format("Blocked spells (%d)", #entries) .. MatchSuffix(query, #visible))
-        T.SetTranslatedText(empty, #entries == 0 and Tr(emptyText) or M.Format("No results for \"%s\".", query))
-        empty:SetShown(#visible == 0)
-        listScroll:SetShown(#visible > 0)
-        listChild:SetHeight(max(150, #visible * 44))
-        for i = 1, max(#rows, #visible) do
-            local row, entry = rows[i], visible[i]
-            if entry then
-                row = EnsureRow(i)
-                row._spellID = entry.value
-                row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                local name = tostring(entry.text or entry.value or "Spell"):gsub("%s*%(#%d+%)$", "")
-                row.name:SetText(name)
-                row.id:SetText(entry.spellID and (tostring("Spell ID ") .. tostring(entry.spellID)) or tostring(entry.value or ""))
-                RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button",
-                    "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".blacklist.entry." .. AuraCatalogToken(entry.value) .. ".remove", "action")
-                row:Show()
-            elseif row then row._spellID = nil; row:Hide() end
-        end
+        blockedList.Paint(entries, searchValue, prepared)
         if B.renderVerify then B.renderVerify() end
     end
     B.refreshList = refreshList
@@ -2306,7 +2280,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         local refreshOwnedPreview = ctx._msuf2RefreshUnitPreview
         if type(refreshOwnedPreview) == "function" then
             refreshOwnedPreview(reason or "AURAS3_UNIT_STYLE_DUMMY")
-        elseif type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+        else
             _G.MSUF_UFPreview_RequestRefresh("AURAS3_UNIT_STYLE_DUMMY")
         end
     end
@@ -2459,7 +2433,8 @@ end
 
 local function BuildMovedAuraPage(ctx)
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Aura Controls moved to Frames", "Layout, filters, lists and every container-specific Style live in each frame. Frames > Auras owns only the global icon theme.", 96)
+    b:GlobalStyleHeader("Aura Controls moved to Frames",
+        "Layout, filters, lists and every container-specific Style live in each frame. Frames > Auras owns only the global icon theme.", 96)
     local section = b:Section("Open a Frame", 190)
     local w = section._msuf2Width or b.width or 720
     local pages = {

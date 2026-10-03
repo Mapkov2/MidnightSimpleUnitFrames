@@ -96,7 +96,8 @@ local function PaintDropdownScrollbar(hover)
         local c = hover and thumbHover or thumbBase
         local a = (hover and 0.90 or 0.68) * alpha
         if T.ApplyTextureGradient then
-            T.ApplyTextureGradient(thumb, "VERTICAL", { min(c[1] * 1.22, 1), min(c[2] * 1.18, 1), min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
+            T.ApplyTextureGradient(thumb, "VERTICAL", { min(c[1] * 1.22, 1), min(c[2] * 1.18, 1), min(c[3] * 1.12, 1), a },
+                { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
         elseif thumb.SetColorTexture then
             thumb:SetColorTexture(c[1], c[2], c[3], a)
         end
@@ -467,7 +468,10 @@ local function EnsureDropdownFrame()
         if dropdownFrame.SetAlpha then dropdownFrame:SetAlpha(1) end
     end)
     if IS_FOREVER then
-        dropdownFrame.SmartNavigationCloseHandler = function() CloseDropdown(true); return true end
+        dropdownFrame.SmartNavigationCloseHandler = function()
+            CloseDropdown(true)
+            return true
+        end
     end
     dropdownFrame:SetScript("OnUpdate", function(self, elapsed)
         if not dropdownOwner then return end
@@ -919,7 +923,10 @@ DropdownKeyDown = function(self, key)
         or key == "HOME" or key == "END" or key == "ENTER" or key == "SPACE")
     if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(not handled) end
     if not handled then return end
-    if key == "ESCAPE" then CloseDropdown({ immediate = true }); return end
+    if key == "ESCAPE" then
+        CloseDropdown({ immediate = true })
+        return
+    end
     if key == "ENTER" or key == "SPACE" then
         local row = dropdownRows[self._msuf2KeyboardIndex or 0]
         if row then row:GetScript("OnClick")(row) end
@@ -932,7 +939,10 @@ DropdownKeyDown = function(self, key)
     index = index + step
     while index >= 1 and index <= count do
         local row = dropdownRows[index]
-        if row and not row._msuf2DropdownDisabled then FocusDropdownRow(index, true); return end
+        if row and not row._msuf2DropdownDisabled then
+            FocusDropdownRow(index, true)
+            return
+        end
         index = index + step
     end
 end

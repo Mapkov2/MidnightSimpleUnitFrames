@@ -206,7 +206,9 @@ for _, marker in ipairs({
     'if unit == "arena" then return "arenaCastbarHeight" end',
     'if unit == "arena" then return "arenaCastbarMatchWidth" end',
     'if unit == "arena" then return "arenaCastbarDetached" end',
-    'or (unit == "arena" and "MSUF_ReanchorArenaCastBar")',
+    -- The popup re-applies through MSUF_ApplyCastbarUnitAndSync, which owns
+    -- the per-unit reanchor (MSUF_ReanchorArenaCastBar for arena).
+    'MSUF.Require("MSUF_ApplyCastbarUnitAndSync", CALLER)(unit)',
 }) do
     Check(castPopup:find(marker, 1, true),
         "Arena Edit Mode cast popup ownership is incomplete: " .. marker)

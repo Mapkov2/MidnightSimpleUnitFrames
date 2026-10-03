@@ -1,15 +1,16 @@
 local _,MSUF=...
 local M=MSUF.MSUF2
 local W,T,AP=M.Widgets,M.Theme,M.AdvancedPage
-local F,V=MSUF.ProfileFields,MSUF.ProfileVariants
-local P={}; M.ProfileVariantPage=P
+local Fields,Variants=MSUF.ProfileFields,MSUF.ProfileVariants
+local P={}
+M.ProfileVariantPage=P
 local selected,fieldID,editorBar
 -- A saved schema that fails validation (a newer import, too many variants, a
 -- tightened rule) must never look empty: the page names the error and every write
 -- refuses with it, so the next Create or Delete cannot replace the saved variants.
 local function Schema()
     local saved=M.EnsureDB().profileVariants
-    local clean,err=V.Validate(saved)
+    local clean,err=Variants.Validate(saved)
     if clean then return clean end
     if saved==nil then return {version=1,entries={}} end
     return nil,err or "invalid profile variants"
@@ -28,7 +29,12 @@ function P.Refresh(ctx)
     if M.RequestRefresh then M.RequestRefresh(ctx,"profile-variants") end
 end
 function P.EditorBar(ctx)
-    if not V.IsRecording() then if editorBar then editorBar:Hide() end; return end
+    if not Variants.IsRecording() then
+        if editorBar then
+            editorBar:Hide()
+        end
+        return
+    end
     if not editorBar then
         editorBar=T.Panel(UIParent)
         editorBar:SetSize(460,86)
@@ -37,16 +43,16 @@ function P.EditorBar(ctx)
         editorBar.title=W.Text(editorBar,"",16,-14,428,T.colors.text)
         local save=T.Button(editorBar,"Save variant values",206,26)
         save:SetPoint("TOPLEFT",editorBar,"TOPLEFT",16,-46)
-        save:SetScript("OnClick",function() P.Result(editorBar.ctx,V.SaveRecording()) end)
+        save:SetScript("OnClick",function() P.Result(editorBar.ctx,Variants.SaveRecording()) end)
         local cancel=T.Button(editorBar,"Cancel variant editing",206,26)
         cancel:SetPoint("TOPRIGHT",editorBar,"TOPRIGHT",-16,-46)
         cancel:SetScript("OnClick",function()
             if InCombatLockdown() then return end
-            P.Result(editorBar.ctx,V.CancelRecording())
+            P.Result(editorBar.ctx,Variants.CancelRecording())
         end)
     end
     editorBar.ctx=ctx
-    T.SetTranslatedText(editorBar.title,M.Format("Editing profile variant: %s",V.RecordingName()))
+    T.SetTranslatedText(editorBar.title,M.Format("Editing profile variant: %s",Variants.RecordingName()))
     editorBar:Show()
 end
 function P.Result(ctx,ok,err)
@@ -66,7 +72,7 @@ function P.FieldLabel(path)
     end
     return table.concat(parts," / ")
 end
-local function Put(ctx,schema) return P.Result(ctx,V.Replace(M.EnsureDB(),schema)) end
+local function Put(ctx,schema) return P.Result(ctx,Variants.Replace(M.EnsureDB(),schema)) end
 function P.Button(state,section,label,path,x,y,fn,width)
     local button=state.ProfileButton(section,label,function()
         if state.ConfigLocked() then return end
@@ -113,7 +119,8 @@ local function Conditions(state,section,entry,schema,width,specs)
     for i=1,8 do hotkeys[#hotkeys+1]={value=i,text=M.Format("Hotkey slot %d",i)} end
     P.Drop(state,section,"Activation","variant.condition.hotkey",hotkeys,
         function() return entry.hotkey or 0 end,function(value)
-            entry.hotkey=value~=0 and value or nil; c.manual=value~=0
+            entry.hotkey=value~=0 and value or nil
+            c.manual=value~=0
         end,left,-350,width)
     local enabled=W.SwitchAt(section,"Enable variant",right,-350,width)
     P.BindBool(state.ctx,enabled,function() return entry.enabled~=false end,
@@ -130,12 +137,15 @@ local function Conditions(state,section,entry,schema,width,specs)
     return -464-math.ceil(#specs/2)*32
 end
 function P.Build(state,specs)
-    if not V then return end
+    if not Variants then return end
     local ctx=state.ctx
     P.EditorBar(ctx)
     local schema,schemaError=Schema()
     local entry=schema and Entry(schema)
-    if schema and not entry and schema.entries[1] then selected=schema.entries[1].name; entry=schema.entries[1] end
+    if schema and not entry and schema.entries[1] then
+        selected=schema.entries[1].name
+        entry=schema.entries[1]
+    end
     M.ProfileSearch.Selecting("variant",selected)
     local width=math.max(180,math.floor((state.contentW-50)/2))
     local section=state.b:CollapsibleSection("profiles_variants","Profile variants",entry and (850+math.ceil(#specs/2)*32) or 250,true)
@@ -155,7 +165,7 @@ function P.Build(state,specs)
         local current,err=Schema()
         if not current then return P.Result(ctx,false,err) end
         current.entries[#current.entries+1]={name=name,conditions={},patch={}}
-        local ok,err=V.Replace(M.EnsureDB(),current)
+        local ok,err=Variants.Replace(M.EnsureDB(),current)
         if ok then selected=name end
         return P.Result(ctx,ok,err)
     end,width)
@@ -167,33 +177,40 @@ function P.Build(state,specs)
     P.Button(state,section,"Delete variant","variant.delete",30+width,y,function()
         local current,err=Schema()
         if not current then return P.Result(ctx,false,err) end
-        for i,v in ipairs(current.entries) do if v.name==selected then table.remove(current.entries,i); break end end
+        for i,v in ipairs(current.entries) do
+            if v.name==selected then
+                table.remove(current.entries,i)
+                break
+            end
+        end
         selected=nil
         return Put(ctx,current)
     end,width)
     y=y-64
-    local editing=V.IsRecording()
-    W.Text(section,editing and M.Format("Editing %s: use the normal settings pages or Edit Mode, then return here to save or cancel.",V.RecordingName())
+    local editing=Variants.IsRecording()
+    W.Text(section,editing and M.Format("Editing %s: use the normal settings pages or Edit Mode, then return here to save or cancel.",Variants.RecordingName())
         or "Edit values records only changed settings. Removing an overridden value returns that setting to the base profile.",
         20,y,state.contentW-40,T.colors.muted)
     y=y-64
     if editing then
-        P.Button(state,section,"Save variant values","variant.values.save",20,y,function() return P.Result(ctx,V.SaveRecording()) end,width)
-        P.Button(state,section,"Cancel variant editing","variant.values.cancel",30+width,y,function() return P.Result(ctx,V.CancelRecording()) end,width)
+        P.Button(state,section,"Save variant values","variant.values.save",20,y,function() return P.Result(ctx,Variants.SaveRecording()) end,width)
+        P.Button(state,section,"Cancel variant editing","variant.values.cancel",30+width,y,function() return P.Result(ctx,Variants.CancelRecording()) end,width)
     else
-        P.Button(state,section,"Edit variant values","variant.values.edit",20,y,function() return P.Result(ctx,V.BeginRecording(selected)) end,width)
+        P.Button(state,section,"Edit variant values","variant.values.edit",20,y,function() return P.Result(ctx,Variants.BeginRecording(selected)) end,width)
         P.Button(state,section,"Use hotkey variant","variant.activate",30+width,y,function()
             -- The saved entry decides, not this page's unsaved copy of the conditions.
-            local saved=V.Find(M.EnsureDB(),selected)
+            local saved=Variants.Find(M.EnsureDB(),selected)
             if not (saved and type(saved.conditions)=="table" and saved.conditions.manual) then
                 return P.Result(ctx,false,"Choose a hotkey slot and save the conditions first.")
             end
-            V.SetManual(selected); V.RequestApply("PROFILE_VARIANT_PREVIEW",true); P.Refresh(ctx)
+            Variants.SetManual(selected)
+            Variants.RequestApply("PROFILE_VARIANT_PREVIEW",true)
+            P.Refresh(ctx)
         end,width)
     end
     y=y-56
     local fields={{value="",text="Choose an overridden setting"}}
-    for _,field in ipairs(entry.patch) do fields[#fields+1]={value=F.ID(field.path),text=P.FieldLabel(field.path)} end
+    for _,field in ipairs(entry.patch) do fields[#fields+1]={value=Fields.ID(field.path),text=P.FieldLabel(field.path)} end
     P.Drop(state,section,M.Format("Overridden settings (%d)",#entry.patch),"variant.field.select",fields,
         function() return fieldID or "" end,function(value) fieldID=value end,20,y,width)
     P.Button(state,section,"Return setting to base","variant.field.remove",30+width,y-24,function()
@@ -201,7 +218,12 @@ function P.Build(state,specs)
         if not current then return P.Result(ctx,false,err) end
         local owner=Entry(current)
         if owner then
-            for i,field in ipairs(owner.patch) do if F.ID(field.path)==fieldID then table.remove(owner.patch,i); break end end
+            for i,field in ipairs(owner.patch) do
+                if Fields.ID(field.path)==fieldID then
+                    table.remove(owner.patch,i)
+                    break
+                end
+            end
         end
         return Put(ctx,current)
     end,width)
@@ -214,7 +236,8 @@ function P.Transport(state)
         {"Import profile variants","profileImportVariants","MSUF_Profiles_SetImportVariants"}}) do
         local toggle=W.SwitchAt(section,spec[1],20,-104-(i-1)*36,state.contentW-40)
         P.BindBool(state.ctx,toggle,function() return M[spec[2]]~=false end,function(value)
-            M[spec[2]]=value==true; _G[spec[3]](value)
+            M[spec[2]]=value==true
+            _G[spec[3]](value)
         end,P.Meta("profiles_variant_transport",spec[2]))
     end
 end

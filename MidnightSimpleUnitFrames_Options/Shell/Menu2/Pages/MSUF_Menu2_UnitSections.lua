@@ -3,6 +3,13 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
+-- Core functions this page calls by their global names: required here at
+-- load, called through _G so a hook installed on one later still applies.
+M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua", {
+    "MSUF_UFCore_NotifyConfigChanged",
+    "MSUF_ShowReloadRecommendedPopup",
+    "MSUF_ApplyRoundedUnitframes",
+})
 local EnsureDB = M.EnsureDB
 local C_Timer = M.MenuTimer or _G.C_Timer
 
@@ -152,11 +159,8 @@ local function RequestUnitRuntimeApply(unit, reason, opts, flushNow)
         if flushNow and type(apply.Flush) == "function" then apply.Flush() end
         return true
     end
-    if type(_G.MSUF_UFCore_NotifyConfigChanged) == "function" then
-        _G.MSUF_UFCore_NotifyConfigChanged(unit, true, true, reason or "MSUF2_UNIT_SECTION")
-        return true
-    end
-    return false
+    _G.MSUF_UFCore_NotifyConfigChanged(unit, true, true, reason or "MSUF2_UNIT_SECTION")
+    return true
 end
 local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "arena", "pet", "pettarget", "all" }
 -- The Copy To popup offers only frames the client can produce
@@ -171,10 +175,12 @@ if MSUF.Client ~= nil and type(M.SupportsFrameScope) == "function" then
     end
     UF_COPY_TARGET_ORDER = kept
 end
-local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, arena = 50, pet = 38, pettarget = 40, all = 38 }
+local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, arena = 50, pet = 38,
+    pettarget = 40, all = 38 }
 local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", pettarget = "PT", boss = "Boss", arena = "Arena", all = "All" }
 local UNIT_TAB_ORDER = { "player", "target", "boss", "arena", "focus", "pet", "pettarget", "targettarget", "focustarget" }
-local UNIT_TAB_LABELS = { boss = "Boss Frames", arena = "Arena Frames", targettarget = "Target of Target", focustarget = "Focus Target", pettarget = "Pet Target" }
+local UNIT_TAB_LABELS = { boss = "Boss Frames", arena = "Arena Frames", targettarget = "Target of Target", focustarget = "Focus Target",
+    pettarget = "Pet Target" }
 local UNIT_TAB_COMPACT_LABELS = { boss = "Boss", arena = "Arena", targettarget = "ToT", focustarget = "FT", pettarget = "PT" }
 local UNIT_TAB_WIDTHS = { player = 58, target = 62, boss = 92, arena = 96, focus = 58, pet = 46, targettarget = 108, focustarget = 98, pettarget = 90 }
 local UNIT_TAB_COMPACT_WIDTHS = { player = 50, target = 54, boss = 54, arena = 56, focus = 50, pet = 40, targettarget = 42, focustarget = 36, pettarget = 36 }
@@ -204,7 +210,8 @@ local function CleanToTInlineCustomSeparator(value) return M.CleanToTInlineCusto
 local function ToTInlineSeparatorDropdownValue(conf)
     local token = conf and conf.totInlineSeparator
     if token == TOT_INLINE_CUSTOM_SEPARATOR then return TOT_INLINE_CUSTOM_SEPARATOR end
-    if type(token) == "string" and token ~= "" then return TOT_INLINE_SEPARATOR_VALUES[token] and (token == " " and "" or token) or TOT_INLINE_CUSTOM_SEPARATOR end
+    if type(token) == "string" and token ~= "" then return TOT_INLINE_SEPARATOR_VALUES[token] and (token == " " and "" or token)
+        or TOT_INLINE_CUSTOM_SEPARATOR end
     return "|"
 end
 local function NormalizeToTInlineColorMode(value)
@@ -597,7 +604,8 @@ local function AttachUnitSectionUX(ctx, unit)
         castbar = { copy = "castbar", canCopy = function(a, b) return UP.CASTBAR_FIELDS[a] and UP.CASTBAR_FIELDS[b] end },
         unit_dispel_overlay = { prefixes = "unitDispelOverlay" },
         unit_dispel_symbol = { prefixes = "unitDispelSymbol" },
-        transparency = { fields = fields.transparency, copy = "transparency", summary = function(c) return SectionNumber((c.hpBarAlpha or 1) * 100) .. "%" end },
+        transparency = { fields = fields.transparency, copy = "transparency", summary = function(c) return SectionNumber((c.hpBarAlpha
+            or 1) * 100) .. "%" end },
         load_conditions = { fields = fields.load_conditions, copy = "load", summary = function(c)
             local count = 0
             for key, value in pairs(c) do if key:find("loadCond", 1, true) == 1 and key ~= "loadCondActive" and value == true then count = count + 1 end end
@@ -919,11 +927,7 @@ local function BuildBasics(ctx, builder, unit, label)
             if ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
             SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
             local reloadLabel = M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit))
-            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-                _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
-            elseif print then
-                print("|cffffd700MSUF:|r Changing Blizzard frame ownership requires a /reload.")
-            end
+            _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
         end,
         SettingMeta(ctx, "basics.force_blizzard_frame", unit, "useBlizzardFrame"))
     local blizzardHint = "Independent from MSUF Enable; /reload required."
@@ -956,7 +960,9 @@ local function BuildBasics(ctx, builder, unit, label)
         end,
         SettingMeta(ctx, "basics.health_color_mode", unit, "healthColorMode"))
     if M.AddTooltip then
-        M.AddTooltip(colorMode, "Health Color Scheme", "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.", { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(colorMode, "Health Color Scheme",
+            "Use Global follows the Unitframe Global Coloring mode from Colors. Other choices override only this frame.",
+            { hook = true, owner = "ANCHOR_RIGHT" })
     end
     -- Shares the Health Color Scheme row so the section stays within its
     -- declared height instead of overlapping the next accordion header. Snap to
@@ -985,7 +991,9 @@ local function BuildBasics(ctx, builder, unit, label)
         end,
         SettingMeta(ctx, "basics.fill_direction", unit, "verticalFillBars"))
     if M.AddTooltip then
-        M.AddTooltip(fillDir, "Fill Direction", "Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill.", { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(fillDir, "Fill Direction",
+            "Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill.",
+            { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local barShape = W.Dropdown(sec, "Frame bar shape", FRAME_BAR_SHAPE_OPTIONS, math.min(270, math.max(220, colW * 2)))
     UnitSectionShared.PlaceDropdown(sec, barShape, x1, -164, math.min(270, math.max(220, colW * 2)))
@@ -997,12 +1005,13 @@ local function BuildBasics(ctx, builder, unit, label)
             if conf.frameBarShape == value then return end
             conf.frameBarShape = value
             M.RequestUnitApply(unit, "MSUF2_FRAME_BAR_SHAPE", { preview = true })
-            if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then _G.MSUF_ApplyRoundedUnitframes() end
+            _G.MSUF_ApplyRoundedUnitframes()
             if M.Refresh then M.Refresh(ctx) end
         end,
         SettingMeta(ctx, "basics.frame_bar_shape", unit, "frameBarShape"))
     if M.AddTooltip then
-        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.", M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
+        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.",
+            M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local petPlayerClassColor
     if unit == "pet" then
@@ -1049,7 +1058,8 @@ local function BuildBasics(ctx, builder, unit, label)
         unit ~= "focustarget" and "setting" or "action", enableShortcutMeta)
     notice:SetMessage(M.Format("%s frame is disabled and will not appear.", unitLabel), "warning")
     enableNow:SetScript("OnClick", function()
-        if unit == "focustarget" and not ReadBool("focus", "enabled", true) then SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true }) end
+        if unit == "focustarget" and not ReadBool("focus", "enabled", true) then SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED",
+            { preview = true }) end
         SetBool(unit, "enabled", true, "MSUF2_FRAME_ENABLED", { preview = true })
         M.RequestOrRefresh(ctx, "frame-basics-enable-now")
     end)
@@ -1086,8 +1096,11 @@ local function BuildLayout(ctx, builder, unit)
     local anchorRightX = anchorLeftX + anchorColumnW + anchorGap
     local anchorControlW = min(300, max(180, anchorColumnW - 16))
     local customAnchorW = min(260, max(180, anchorColumnW - 128))
-    local anchorChoices = VT("GLOBAL", "Global anchor", "EssentialCooldownViewer", "Essential cooldown viewer", "UtilityCooldownViewer", "Utility cooldown viewer", "BuffIconCooldownViewer", "Tracked buffs viewer", "player", "Player frame", "target", "Target frame", "targettarget", "Target of Target frame", "focustarget", "Focus Target frame", "focus", "Focus frame", "pet", "Pet frame")
-    local anchorPoints = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
+    local anchorChoices = VT("GLOBAL", "Global anchor", "EssentialCooldownViewer", "Essential cooldown viewer", "UtilityCooldownViewer",
+        "Utility cooldown viewer", "BuffIconCooldownViewer", "Tracked buffs viewer", "player", "Player frame", "target", "Target frame", "targettarget",
+        "Target of Target frame", "focustarget", "Focus Target frame", "focus", "Focus frame", "pet", "Pet frame")
+    local anchorPoints = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT",
+        "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
     local standardAnchorValues = M.KeySetFromWords "GLOBAL global FREE EssentialCooldownViewer UtilityCooldownViewer BuffIconCooldownViewer player target targettarget focustarget focus pet"
     local function CustomAnchorName(conf)
         local custom = (type(conf.anchorFrameName) == "string" and conf.anchorFrameName) or ""
@@ -1352,7 +1365,8 @@ local function BuildInlineText(ctx, builder, unit)
         function()
             local conf = GetConf("targettarget")
             local token = conf and conf.totInlineSeparator
-            if token ~= TOT_INLINE_CUSTOM_SEPARATOR and type(token) == "string" and token ~= "" and not TOT_INLINE_SEPARATOR_VALUES[token] then return CleanToTInlineCustomSeparator(token) end
+            if token ~= TOT_INLINE_CUSTOM_SEPARATOR and type(token) == "string" and token ~= ""
+                and not TOT_INLINE_SEPARATOR_VALUES[token] then return CleanToTInlineCustomSeparator(token) end
             return CleanToTInlineCustomSeparator(conf and conf.totInlineCustomSeparator)
         end,
         function(v)
@@ -1516,12 +1530,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
             end
             tex:Show()
         end
-        if not btn._firstText then
-            btn._firstText = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._firstText.SetFont then btn._firstText:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("micro"), "OUTLINE") end
-            btn._firstText:SetText("1")
-            btn._firstText:SetTextColor(0, 0, 0, 1)
-        end
+        W.EnsureTileFirstBadge(btn)
         local firstVisualIndex = (info.dy == 1 or info.dx == -1) and (count - 1) or 0
         btn._firstText:ClearAllPoints()
         btn._firstText:SetPoint("CENTER", btn, "TOPLEFT",
@@ -1529,23 +1538,7 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
             originY - ((info.dy ~= 0 and firstVisualIndex or 0) * (frameH + frameGap)) - (frameH * 0.5))
         btn._firstText:Show()
 
-        if not btn._arrow then
-            btn._arrow = PixelLayoutRegion(btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
-            if btn._arrow.SetFont then btn._arrow:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", T.FontSize("caption"), "OUTLINE") end
-            btn._arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
-        end
-        btn._arrow:SetText(info.arrow)
-        btn._arrow:ClearAllPoints()
-        if info.dy == -1 then
-            btn._arrow:SetPoint("BOTTOM", btn, "BOTTOM", 0, labelH + 1)
-        elseif info.dy == 1 then
-            btn._arrow:SetPoint("TOP", btn, "TOP", 0, -4)
-        elseif info.dx == 1 then
-            btn._arrow:SetPoint("RIGHT", btn, "RIGHT", -4, labelH * 0.5)
-        else
-            btn._arrow:SetPoint("LEFT", btn, "LEFT", 4, labelH * 0.5)
-        end
-        btn._arrow:Show()
+        W.PaintTileDirectionArrow(btn, info, labelH)
     end
 
     function control:SetValue(value)
@@ -1581,7 +1574,8 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
         btn._label = text
         btn:SetScript("OnEnter", function(self) SetTileVisual(self, control._msuf2Value == info.value, true) end)
         btn:SetScript("OnLeave", function(self) SetTileVisual(self, control._msuf2Value == info.value, false) end)
-        M.AddTooltip(btn, function() return M.Format("Boss frame layout: %s", M.Tr(info.tooltip or info.text or "")) end, "Click to set how boss frames are arranged.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
+        M.AddTooltip(btn, function() return M.Format("Boss frame layout: %s", M.Tr(info.tooltip or info.text or "")) end,
+            "Click to set how boss frames are arranged.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
         control.buttons[i] = btn
     end
     control:SetValue("VERTICAL_DOWN")
@@ -1825,7 +1819,8 @@ local function BuildUnitPage(info)
         BuildStatus(ctx, builder, info.unit)
         if info.unit == "boss" then
             BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout, { sectionId = "boss_layout", title = "Boss Layout", height = 150 })
-            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossTargetHighlight, { sectionId = "boss_target_highlight", title = "Boss target highlight", height = 450 })
+            BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossTargetHighlight, { sectionId = "boss_target_highlight",
+                title = "Boss target highlight", height = 450 })
         end
         if info.unit == "arena" then
             BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildArenaLayout, { sectionId = "arena_layout", title = "Arena Layout", height = 160 })

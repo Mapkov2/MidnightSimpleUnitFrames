@@ -197,6 +197,9 @@ function namespace.ExportPublic(name, value)
     _G[name] = value
     return value
 end
+-- Edit Mode resolves the functions other modules publish through MSUF.Require.
+local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
+RequireFixture.Install(root, namespace)
 ClearExports()
 assert(loadfile(modulePath))("MidnightSimpleUnitFrames", namespace)
 
@@ -363,6 +366,7 @@ local function LoadAdapter(opts)
         _G[name] = value
         return value
     end
+    RequireFixture.Install(root, clientNamespace)
     ClearExports()
     assert(loadfile(modulePath))("MidnightSimpleUnitFrames", clientNamespace)
     return ctx

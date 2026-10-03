@@ -537,7 +537,8 @@ false=import current profile|import to current|current profile import
 ]]
 
 local DASHBOARD_ROUTE_TERMS = {
-    { DASHBOARD_ROUTE_RECOVERY, "discord|factory reset|fullreset|print help|display recovery|recovery tools|recover menu|reset all|help reset|copy discord|support discord" },
+    { DASHBOARD_ROUTE_RECOVERY,
+        "discord|factory reset|fullreset|print help|display recovery|recovery tools|recover menu|reset all|help reset|copy discord|support discord" },
     { DASHBOARD_ROUTE_SCALING, "scaling|ui scale|menu scale|msuf frame scale|msuf menu scale|make menu bigger|make menu smaller|options too big|options too small|resize window|groesser|kleiner|skalierung" },
 }
 
@@ -770,7 +771,10 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
             container = "custom4"
         end
         for index = 1, 4 do
-            if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then container = "custom" .. index; break end
+            if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then
+                container = "custom" .. index
+                break
+            end
         end
         if not container and SearchRouteHasAny(normalized, "custom aura|custom display|whitelist") then container = "custom1" end
         if not container and SearchRouteHasAny(normalized, "debuff|debuffs") then container = "debuff" end
@@ -1038,7 +1042,10 @@ local function ApplySearchRoute(pageKey, route)
         -- other fields even if an external caller supplies a route table.
         for _, key in ipairs({ "hpPowerTextSelectedKey", "_fontScopeKey" }) do
             local value = general[key]
-            if value ~= nil and db[key] ~= value then db[key] = value; changed = true end
+            if value ~= nil and db[key] ~= value then
+                db[key] = value
+                changed = true
+            end
         end
     end
     if changed and pageKey and type(M.InvalidatePage) == "function" then

@@ -644,10 +644,13 @@ local function TextureLayerSetupCard(ctx, s)
     W.LabelAt(setupCard, "Use the colored Texture handle in Preview for exact placement.", colX, -342,
         colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
     if M.AddTooltip then
-        M.AddTooltip(textBackgroundPreset, "Text background", "Creates a simple monochrome texture on the health bar. You can then choose any bar texture and place HP text above it.", { hook = true })
+        M.AddTooltip(textBackgroundPreset, "Text background",
+            "Creates a simple monochrome texture on the health bar. You can then choose any bar texture and place HP text above it.", { hook = true })
         M.AddTooltip(highlightPreset, "Highlight", "Applies the built-in additive highlight style to this texture slot.", { hook = true })
-        M.AddTooltip(texturePackPreset, "MSUF textures", "Choose one of the bundled MSUF textures for this texture slot. Frames fit around the unit frame on their own.", { hook = true })
-        M.AddTooltip(colorMode, "Color mode", "Single color uses this layer's configured tint. HP gradient follows the shared low, mid and high HP colors.", { hook = true })
+        M.AddTooltip(texturePackPreset, "MSUF textures",
+            "Choose one of the bundled MSUF textures for this texture slot. Frames fit around the unit frame on their own.", { hook = true })
+        M.AddTooltip(colorMode, "Color mode", "Single color uses this layer's configured tint. HP gradient follows the shared low, mid and high HP colors.",
+            { hook = true })
     end
     s.customPath = customPath
 end
@@ -817,9 +820,12 @@ local function TextureLayerRulesCard(ctx, s)
         colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
 
     if M.AddTooltip then
-        M.AddTooltip(healthCondition, "Show by health", "Below threshold hides this texture until the unit reaches the configured HP threshold.", { hook = true })
-        M.AddTooltip(aboveThreshold, "Color above threshold", "With HP gradient selected, choose what the texture uses after it passes the threshold.", { hook = true })
-        M.AddTooltip(lowAlphaEnabled, "Change opacity below threshold", "Uses a separate texture opacity below the HP threshold. The normal Opacity from Setup remains active above it.", { hook = true })
+        M.AddTooltip(healthCondition, "Show by health", "Below threshold hides this texture until the unit reaches the configured HP threshold.",
+            { hook = true })
+        M.AddTooltip(aboveThreshold, "Color above threshold", "With HP gradient selected, choose what the texture uses after it passes the threshold.",
+            { hook = true })
+        M.AddTooltip(lowAlphaEnabled, "Change opacity below threshold",
+            "Uses a separate texture opacity below the HP threshold. The normal Opacity from Setup remains active above it.", { hook = true })
     end
     s.healthThreshold, s.aboveThreshold, s.lowAlpha = healthThreshold, aboveThreshold, lowAlpha
     s.conditionSummary, s.healthBehaviorSummary = conditionSummary, healthBehaviorSummary
