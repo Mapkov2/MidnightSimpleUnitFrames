@@ -567,8 +567,9 @@ local function ApplyVisual(systemId, entry)
         end
         local direction = map[setting.Direction or 1]
         if direction ~= nil then AssignLayoutField(frame, "direction", direction) end
+        --- Stored as shown, clamped to the slider's 2..10 like Blizzard's read.
         local padding = map[setting.BagSlotPadding or 3]
-        if padding ~= nil then AssignLayoutField(frame, "bagPadding", padding) end
+        if padding ~= nil then AssignLayoutField(frame, "bagPadding", math.min(math.max(padding, 2), 10)) end
         if type(frame.Layout) == "function" then frame:Layout() end
     elseif systemId == systemEnum.DamageMeter then
         --- Every damage meter setting applies through a plain method on the
@@ -881,15 +882,19 @@ end
 
 --- Setting steppers/toggles mirror Blizzard's Edit Mode sliders: same ranges,
 --- raw layout values converted exactly like their display info does
---- (raw = (display - min) / step). Chat width/height are composite settings
---- split into hundreds and tens-and-ones rows.
-local function SteppedSetting(systemId, controlId, globalName, fallback, minValue, maxValue, step, settingId)
+--- (raw = (display - min) / step). rawIsDisplay is for a slider without a
+--- ConvertValue (Bag Slot Padding): Blizzard's DefaultSettingDisplayInfo then
+--- stores the shown value itself and clamps it to the range on read.
+--- Chat width/height are composite settings split into hundreds and
+--- tens-and-ones rows.
+local function SteppedSetting(systemId, controlId, globalName, fallback, minValue, maxValue, step, settingId, rawIsDisplay)
     return {
         id = controlId, kind = "number", label = BlizzardLabel(globalName, fallback),
         min = minValue, max = maxValue, step = step,
         get = function()
             local raw = ReadSetting(systemId, settingId)
             if not raw then return nil end
+            if rawIsDisplay then return math.min(math.max(raw, minValue), maxValue) end
             return raw * step + minValue
         end,
         set = function(value)
@@ -898,6 +903,7 @@ local function SteppedSetting(systemId, controlId, globalName, fallback, minValu
             local raw = math.floor((value - minValue) / step + 0.5)
             local maxRaw = math.floor((maxValue - minValue) / step + 0.5)
             if raw < 0 then raw = 0 elseif raw > maxRaw then raw = maxRaw end
+            if rawIsDisplay then raw = raw * step + minValue end
             return MutateSettings(systemId, { [settingId] = raw })
         end,
     }
@@ -1124,7 +1130,7 @@ local function Activate()
                 SteppedSetting(systemEnum.Bags, "size", "HUD_EDIT_MODE_SETTING_BAGS_SIZE",
                     "Size", 75, 200, 5, bagsSize),
                 SteppedSetting(systemEnum.Bags, "padding", "HUD_EDIT_MODE_SETTING_BAGS_BAG_SLOT_PADDING",
-                    "Bag Slot Padding", 2, 10, 1, bagsPadding),
+                    "Bag Slot Padding", 2, 10, 1, bagsPadding, true),
                 OrientationSetting(systemEnum.Bags, "horizontal",
                     "HUD_EDIT_MODE_SETTING_BAGS_ORIENTATION_HORIZONTAL", "Horizontal",
                     bagsOrientation, bagDirections.Horizontal or 0, bagDirections.Horizontal or 0),

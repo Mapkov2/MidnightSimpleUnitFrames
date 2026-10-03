@@ -745,7 +745,8 @@ do
     Expect("Bags vertical", "BagsBar.isHorizontal")
     assert(Control("bags", "padding").set(4) == true, "Bags padding did not commit")
     Expect("Bags padding", "BagsBar.bagPadding")
-    assert(bags.bagPadding == 2 and bags.isHorizontal == false, "Bags padding or orientation did not apply")
+    -- Bag Slot Padding stores the shown value (no ConvertValue in Blizzard's display info).
+    assert(bags.bagPadding == 4 and bags.isHorizontal == false, "Bags padding or orientation did not apply")
     assert(Control("bags", "size").set(100) == true, "Bags size did not commit")
     Expect("Bags size", "")
     assert(Control("bags", "reversedir").set(true) == true, "Bags direction did not commit")
