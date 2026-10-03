@@ -101,9 +101,12 @@ local function SuiteImportKind(text)
     if text:match("^%s*MSUFS[123]:") then return "full" end
     if text:match("^%s*MSUFM2:") or text:match("^%s*MSKIN1:") then return "module" end
 end
+-- The unassigned row of a profile picker. No profile can be named "" (every
+-- name entry point refuses it), so a real profile named "None" keeps its row.
+local NO_PROFILE = ""
 local function ProfileValues(includeNone)
     local values = {}
-    if includeNone then values[#values + 1] = { value = "None", text = "None" } end
+    if includeNone then values[#values + 1] = { value = NO_PROFILE, text = "None" } end
     local list = type(_G.MSUF_GetAllProfiles) == "function" and _G.MSUF_GetAllProfiles() or { "Default" }
     for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i] } end
     return values
@@ -756,10 +759,10 @@ end
     M.BindDropdownWidget(ctx, newCharDrop,
         function()
             local fn = _G.MSUF_GetDefaultProfileForNewCharacters
-            return (type(fn) == "function" and fn()) or "None"
+            return (type(fn) == "function" and fn()) or NO_PROFILE
         end,
         function(v)
-            _G.MSUF_SetDefaultProfileForNewCharacters((v ~= "None") and v or nil)
+            _G.MSUF_SetDefaultProfileForNewCharacters((v ~= NO_PROFILE) and v or nil)
             RefreshAfterProfileChange(ctx)
         end,
         ProfilesMeta("new_character.default_profile", "action"))
@@ -854,11 +857,11 @@ function ProfilesPage.Specializations(state)
             MoveWidget(drop, assignmentCard, 18, -58, dropW)
             M.BindDropdownWidget(ctx, drop,
                 function()
-                    if type(_G.MSUF_GetSpecProfile) == "function" then return _G.MSUF_GetSpecProfile(s.id) or "None" end
-                    return "None"
+                    if type(_G.MSUF_GetSpecProfile) == "function" then return _G.MSUF_GetSpecProfile(s.id) or NO_PROFILE end
+                    return NO_PROFILE
                 end,
                 function(v)
-                    _G.MSUF_SetSpecProfile(s.id, (v ~= "None") and v or nil)
+                    _G.MSUF_SetSpecProfile(s.id, (v ~= NO_PROFILE) and v or nil)
                     RefreshAfterProfileChange(ctx)
                 end,
                 ProfilesMeta("specialization.mapping.slot." .. tostring(i), "action", {
@@ -872,7 +875,7 @@ function ProfilesPage.Specializations(state)
         if type(_G.MSUF_GetSpecProfile) == "function" then
             for i = 1, #specs do
                 local value = _G.MSUF_GetSpecProfile(specs[i].id)
-                if value and value ~= "" and value ~= "None" then assigned = assigned + 1 end
+                if value and (value ~= "None" or ProfileExists(value)) then assigned = assigned + 1 end
             end
         end
         if W.SetCollapsibleBadges then

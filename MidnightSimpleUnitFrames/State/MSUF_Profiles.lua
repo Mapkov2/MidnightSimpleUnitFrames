@@ -183,6 +183,26 @@ function MSUF_InitProfiles()
             active = "Default"
         end
     end
+    --- Older builds stored the pickers' unassigned row as the name "None".
+    --- MSUF_SetSpecProfile never stored "None" there, so each character's
+    --- spec map clears it once (specProfileMapVersion 1); an assignment to a
+    --- real "None" profile made after that stays. The new-character choice
+    --- could name a real "None" profile: it is cleared only without one.
+    for _, entry in pairs(chars) do
+        if type(entry) == "table" and entry.specProfileMapVersion ~= 1 then
+            local map = entry.specProfileMap
+            if type(map) == "table" then
+                for slot, mapped in pairs(map) do
+                    if mapped == "None" then map[slot] = nil end
+                end
+            end
+            entry.specProfileMapVersion = 1
+        end
+    end
+    local meta = MSUF_ProfileIO_EnsureGlobalMeta()
+    if meta.defaultProfileForNewChars == "None" and type(profiles.None) ~= "table" then
+        meta.defaultProfileForNewChars = nil
+    end
     if not active then
         --- A character that has never chosen a profile follows the account-wide
         --- preference when it still names a live profile. Everything else keeps
@@ -218,11 +238,22 @@ function MSUF_InitProfiles()
 local function MSUF_ProfileIO_NotifySuiteLifecycle(kind, source, target)
     local suite = rawget(_G, "MSUFSuite")
     if type(suite) == "table" and type(suite.OnMSUFProfileLifecycle) == "function" then
-        suite.OnMSUFProfileLifecycle(kind, source, target)
+        return suite.OnMSUFProfileLifecycle(kind, source, target)
     end
+    return true
+end
+--- The one profile name rule of MSUF, the Suite and its skin: at most 80
+--- bytes (MAX_PROFILE_NAME_BYTES, MSUF_Suite/Core/Database.lua). The Suite
+--- cannot follow a longer name, so every entry point that names a new
+--- profile refuses it before anything changes. quiet: the caller reports.
+local function MSUF_ProfileNameTooLong(name, quiet)
+    if type(name) ~= "string" or #name <= 80 then return false end
+    if not quiet then print("|cffff0000MSUF:|r Profile names can be at most 80 bytes long.") end
+    return true
 end
 function MSUF_CreateProfile(name)
     if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
+    if MSUF_ProfileNameTooLong(name) then return false, "profile name too long" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     if profiles[name] then
         print("|cffff0000MSUF:|r Profile '"..name.."' already exists.")
@@ -386,6 +417,7 @@ function MSUF_CopyProfile(sourceName, destName)
         print("|cffff0000MSUF:|r No destination name specified.")
         return false
     end
+    if MSUF_ProfileNameTooLong(destName) then return false, "profile name too long" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     local src = profiles[sourceName]
     if type(src) ~= "table" then
@@ -421,6 +453,7 @@ function MSUF_RenameProfile(sourceName, destName)
         print("|cffffd700MSUF:|r Profile is already named '"..sourceName.."'.")
         return true
     end
+    if MSUF_ProfileNameTooLong(destName) then return false, "profile name too long" end
     if sourceName == "Default" then
         print("|cffff0000MSUF:|r You cannot rename the 'Default' profile. Copy it instead.")
         return false
@@ -435,6 +468,20 @@ function MSUF_RenameProfile(sourceName, destName)
     if profiles[destName] then
         print("|cffff0000MSUF:|r Profile '"..destName.."' already exists.")
         return false
+    end
+    --- The Suite renames its own and its skin's profile first. It refuses,
+    --- with nothing changed, a name one of them already holds, a name it
+    --- cannot store, and any rename in combat.
+    local accepted, refusal = MSUF_ProfileIO_NotifySuiteLifecycle("rename", sourceName, destName)
+    if accepted == false then
+        if refusal == "profile-exists" then
+            print("|cffff0000MSUF:|r Profile '"..destName.."' already exists.")
+        elseif InCombatLockdown() then
+            print("|cffff0000MSUF:|r Cannot change profiles while in combat.")
+        else
+            print("|cffff0000MSUF:|r Profile names can be at most 80 bytes long.")
+        end
+        return false, refusal
     end
 
     profiles[destName] = src
@@ -462,7 +509,6 @@ function MSUF_RenameProfile(sourceName, destName)
     if globalMeta.defaultProfileForNewChars == sourceName then
         globalMeta.defaultProfileForNewChars = destName
     end
-    MSUF_ProfileIO_NotifySuiteLifecycle("rename", sourceName, destName)
     if MSUF_ActiveProfile == sourceName then
         MSUF_SwitchProfile(destName)
     end
@@ -534,7 +580,10 @@ end
 function MSUF_SetSpecProfile(specID, profileName)
     local char = MSUF_GetCharMeta()
     if type(specID) ~= "number" then  return end
-    if type(profileName) ~= "string" or profileName == "" or profileName == "None" then
+    --- "None" clears unless a real profile owns the name (the contract of
+    --- MSUF_SetDefaultProfileForNewCharacters).
+    if type(profileName) ~= "string" or profileName == ""
+        or (profileName == "None" and type(MSUF_GlobalDB.profiles.None) ~= "table") then
         char.specProfileMap[specID] = nil
     else
         char.specProfileMap[specID] = profileName
@@ -3459,6 +3508,11 @@ function MSUF_ImportExternal(profileString, profileKey)
          return false, "empty profileString"
     end
     if type(profileKey) ~= "string" or profileKey == "" then
+         return false, "invalid profileKey"
+    end
+    local knownProfiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
+    if not (type(knownProfiles) == "table" and knownProfiles[profileKey] ~= nil)
+        and MSUF_ProfileNameTooLong(profileKey, true) then
          return false, "invalid profileKey"
     end
     --- Prefer compact decode (no loadstring).
