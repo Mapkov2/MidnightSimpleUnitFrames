@@ -44,6 +44,10 @@ end
 
 local function Relative(path)
     path = tostring(path or ""):gsub("\\", "/")
+    -- The checkout itself may be named MidnightSimpleUnitFrames-Classic.
+    -- Remove its literal prefix before identifying the loaded addon folder.
+    local prefix = root .. "/"
+    if path:sub(1, #prefix) == prefix then path = path:sub(#prefix + 1) end
     local index = path:find("MidnightSimpleUnitFrames", 1, true)
     return index and path:sub(index) or path
 end
