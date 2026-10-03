@@ -105,15 +105,15 @@ local BARS_SCOPE_KEYS = KSW [[
     healPredEnabled healPredAllHealers healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
     aggroOutlineMode dispelOutlineMode dispelBorderTrigger dispelBorderShowOn
-    purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength
+    purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength powerGradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill powerChunkedFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
 ]]
 local BARS_TABLE_KEYS = KSW [[
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture smoothPowerBar chunkedPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
-    roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover
+    roundedGroupFrames roundedPowerBars roundedCastbars roundedClassResources roundedMouseover roundedCornerStrength powerBarTexture
 ]]
-local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth nameColorMode nameColorR nameColorG nameColorB characterNameParts"
+local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth shortenNameClipSide shortenNameMaxChars shortenNameShowDots nameColorMode nameColorR nameColorG nameColorB characterNameParts"
 local FONT_SCOPE_KEYS = KSW [[
     fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontSlug fontShadowStrength fontShadowOpacity fontShadowDistance fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth
     fontOutline useGlobalFontColor fontR fontG fontB nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide
@@ -134,7 +134,7 @@ local MISC_UNIT_RESET_KEYS = WL [[target focus boss]]
 local CASTBAR_GENERAL_KEYS = KSW [[
     empowerColorStages enableFocusKickIcon focusKickShowCastbar focusKickIconWidth focusKickIconHeight focusKickTextSize
     focusKickIconOffsetX focusKickIconOffsetY kickReadyShowTarget kickReadyShowFocus kickReadyShowBoss kickReadyShowArena
-    kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY
+    kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY kickReadyTimeMarker kickReadyTimeSegment
 ]]
 local MODULES_GENERAL_KEYS = KS("styleEnabled")
 local COLOR_GENERAL_KEYS = KSW "playerCastbarOverrideEnabled playerCastbarOverrideMode npcClassColorBar npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT"
@@ -255,6 +255,9 @@ local function IsClassPowerBarsKey(key)
         or key == "showEleMaelstrom"
         or key == "showEbonMight"
         or key == "showShadowMana"
+        or key == "showGuardianIronfur"
+        or key == "showSweepingStrikes"
+        or key == "manaUpcomingCost"
         or key == "showAltMana"
         or key == "classPowerComboPointColorMode"
 end

@@ -15,6 +15,8 @@
 -- 2. Arena castbar (C7-1): Reset Arena Frames and Reset Castbar left the arena
 --    castbar switches and styling (enableArenaCastbar, showArenaCast*,
 --    arenaCast*) at the user's values while resetting every boss twin.
+-- 3. Named settings (C7-3): the Fonts, Castbar, Bars and Class Resources
+--    resets skipped settings their own page writes and their summary names.
 --
 -- Plain Lua 5.1, repo root as arg 1 and the client flavor as arg 2.
 
@@ -28,7 +30,10 @@ local function Check(condition, message)
 end
 local function Words(text)
     local list, set = {}, {}
-    for word in text:gmatch("%S+") do list[#list + 1] = word; set[word] = true end
+    for word in text:gmatch("%S+") do
+        list[#list + 1] = word
+        set[word] = true
+    end
     return list, set
 end
 
@@ -264,5 +269,43 @@ if M.pages and M.pages.uf_arena then
 else
     summary[#summary + 1] = "no Arena Frames page on this client"
 end
+
+
+---------------------------------------------------------------------------
+-- 3. Page resets cover the controls their summaries name (C7-3)
+---------------------------------------------------------------------------
+-- Each path is written by a control on that page and read by the runtime, and
+-- the page's reset summary names it (Fonts: name shortening; Castbar:
+-- interrupt indicator; Bars: shared bar textures, gradients, rounded corners
+-- and per-unit/group bar overrides; Class Resources: behavior), yet the reset
+-- left it at the user's value.
+local PAGE_OWNED = {
+    { "opt_fonts", Words [[general.shortenNameMaxChars general.shortenNameClipSide general.shortenNameShowDots]] },
+    { "opt_castbar", Words [[general.kickReadyTimeMarker general.kickReadyTimeSegment]] },
+    { "opt_bars", Words [[bars.powerBarTexture bars.roundedCornerStrength general.powerGradientStrength
+        player.powerGradientStrength gf_party.powerGradientStrength]] },
+    { "classpower", Words [[bars.showGuardianIronfur bars.showSweepingStrikes bars.manaUpcomingCost]] },
+}
+local covered = 0
+for _, row in ipairs(PAGE_OWNED) do
+    local pageKey, paths = row[1], row[2]
+    local live = Restore()
+    for i = 1, #paths do
+        local rootKey, key = paths[i]:match("^([%w_]+)%.(.+)$")
+        live[rootKey] = type(live[rootKey]) == "table" and live[rootKey] or {}
+        live[rootKey][key] = SENTINEL
+    end
+    live = Reset(pageKey)
+    for i = 1, #paths do
+        local rootKey, key = paths[i]:match("^([%w_]+)%.(.+)$")
+        local expected
+        if type(factory[rootKey]) == "table" then expected = factory[rootKey][key] end
+        Check(type(live[rootKey]) == "table" and live[rootKey][key] == expected,
+            "resetting " .. pageKey .. " left " .. paths[i] .. " at the user's value")
+        covered = covered + 1
+    end
+end
+summary[#summary + 1] = string.format("%d named settings restored by the Fonts, Castbar, Bars and Class Resources resets",
+    covered)
 
 print("menu_page_reset_scope_smoke: " .. flavor .. " ok (" .. table.concat(summary, "; ") .. ")")
