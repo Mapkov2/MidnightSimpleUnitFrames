@@ -538,12 +538,10 @@ local function RequiredHeaderColumns(kind, conf, count)
     if columns < 1 then columns = 1 elseif columns > 40 then columns = 40 end
     return columns
   end
-  local upc = ClampInt(conf and conf.unitsPerColumn, 5, 1, 40)
-  local maxColumns = ClampInt(conf and conf.maxColumns, 8, 1, 40)
-  local columns = floor(((count + upc - 1) / upc))
-  if columns < 1 then columns = 1 elseif columns > 40 then columns = 40 end
-  if columns > maxColumns then columns = maxColumns end
-  return columns
+  -- The configured cap, not the live count: SecureGroupHeader re-lays itself out
+  -- on roster events in combat, where SetupHeader defers, and shows at most
+  -- unitsPerColumn * maxColumns units, so a count-sized cap drops a joiner.
+  return ClampInt(conf and conf.maxColumns, 8, 1, 40)
 end
 
 local function RoleOrder(conf)
