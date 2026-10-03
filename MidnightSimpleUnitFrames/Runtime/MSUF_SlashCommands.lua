@@ -338,24 +338,30 @@ local function CommandsProfileList()
     return (type(list) == "table") and list or nil
 end
 
---- Profile names are free text, so a chat argument matches case-insensitively
---- and by unique prefix. An ambiguous prefix must never silently pick one:
---- loading the wrong profile is a destructive-feeling surprise.
+--- Profile names are free text, so a chat argument matches exactly first, then
+--- case-insensitively, then by unique prefix. More than one case-insensitive
+--- or prefix match must never silently pick one: loading or deleting the
+--- wrong profile is a destructive-feeling surprise.
 local function CommandsResolveProfile(name)
     local list = CommandsProfileList()
     if not list then return nil, "unavailable" end
     name = tostring(name or "")
     if name == "" then return nil, "empty" end
     local lowered = name:lower()
-    local prefix
+    local folded, prefix, foldedCount, prefixCount = nil, nil, 0, 0
     for i = 1, #list do
         local candidate = list[i]
-        if candidate == name or candidate:lower() == lowered then return candidate end
-        if candidate:lower():sub(1, #lowered) == lowered then
-            if prefix and prefix ~= candidate then return nil, "ambiguous" end
-            prefix = candidate
+        if candidate == name then return candidate end
+        local lower = candidate:lower()
+        if lower == lowered then
+            folded, foldedCount = candidate, foldedCount + 1
+        elseif lower:sub(1, #lowered) == lowered then
+            prefix, prefixCount = candidate, prefixCount + 1
         end
     end
+    if foldedCount > 1 then return nil, "ambiguous" end
+    if folded then return folded end
+    if prefixCount > 1 then return nil, "ambiguous" end
     if prefix then return prefix end
     return nil, "unknown"
 end
