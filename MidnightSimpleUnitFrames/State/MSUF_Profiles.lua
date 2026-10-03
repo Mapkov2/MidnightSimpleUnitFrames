@@ -1655,7 +1655,7 @@ end
 -- Only explicitly owned settings cross this boundary; shared appearance stays local.
 local UnitSelection = {
     units = { player = true, target = true, targettarget = true, focustarget = true,
-        focus = true, pet = true, boss = true, arena = true },
+        focus = true, pet = true, pettarget = true, boss = true, arena = true },
     auraFlags = { showPlayer = "player", showPet = "pet", showTarget = "target", showFocus = "focus",
         showBoss = "boss", showArena = "arena" },
     barKeys = { showPlayerPowerBar = "player", showTargetPowerBar = "target",
