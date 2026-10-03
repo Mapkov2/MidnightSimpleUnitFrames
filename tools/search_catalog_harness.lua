@@ -222,6 +222,33 @@ local MENU_XML = rawget(_G, "__MSUF_MENU2_XML_MANIFEST") or {
     "Shell/Menu2/MSUF_Menu2_AfterGroupPreview.xml",
 }
 
+-- Menu pages list their core collaborators with M.RequireGlobals, which raises
+-- at load for a name the catalog world does not define. The catalog only reads
+-- labels and registrations, and before those pages required their collaborators
+-- they found them absent here, so each missing one answers nil: the generated
+-- rows stay those of the absent-collaborator world the index was built from.
+do
+    local menuPaths = {}
+    for _, relativeXml in ipairs(MENU_XML) do
+        local xmlPath = Join(OPTIONS, relativeXml)
+        local xmlDir = Dirname(xmlPath)
+        for relativeLua in Read(xmlPath):gmatch('<Script%s+file="([^"]+)"') do
+            local path = Join(xmlDir, relativeLua:gsub("\\", "/"))
+            menuPaths[#menuPaths + 1] = path:sub(#ROOT + 2)
+        end
+    end
+    for _, path in ipairs(menuPaths) do
+        for list in Read(Join(ROOT, path)):gmatch("M%.RequireGlobals%(%s*\"[^\"]+\"%s*,%s*(%b{})") do
+            for name in list:gmatch("\"(MSUF_[%w_]+)\"") do
+                local kind = type(rawget(_G, name))
+                if kind ~= "function" and kind ~= "table" then
+                    rawset(_G, name, function() return nil end)
+                end
+            end
+        end
+    end
+end
+
 local loadedMenuFiles = 0
 for _, relativeXml in ipairs(MENU_XML) do
     local xmlPath = Join(OPTIONS, relativeXml)
