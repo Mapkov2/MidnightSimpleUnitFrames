@@ -1425,6 +1425,7 @@ do
             GetPlayerFrame = GetPlayerFrame,
             CP_EnsureBars = CP_EnsureBars,
             CP_Layout = CP_Layout,
+            CP_CompileVisual = CP_CompileVisual,
             RefreshChargedPoints = RefreshChargedPoints,
             RunActiveUpdate = function(powerType, maxP) return CP_RunActiveUpdate(powerType, maxP) end,
             RunAuraSegmentedUpdate = function()

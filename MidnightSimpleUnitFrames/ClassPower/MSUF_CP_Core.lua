@@ -1124,7 +1124,7 @@ do
     --- (target-owned combo points); nil on Midnight.
     local CP, AM, CPK, PT, POWER_TYPE_TOKENS, PLAYER_CLASS
     local UnitPower, NotSecret, tonumber, C_Timer
-    local GetPlayerFrame, CP_EnsureBars, CP_Layout, RefreshChargedPoints
+    local GetPlayerFrame, CP_EnsureBars, CP_Layout, RefreshChargedPoints, CP_CompileVisual
     local RunActiveUpdate, RunAuraSegmentedUpdate, ResolveMaxPower, AM_UpdateValue
     local CP_ComputeStructuralSignature, CP_RefreshEventBindings
     local ThrottledFullRefresh, FullRefresh, CP_SyncRuntimeOnUpdates, CP_ShouldUseLiteBindings
@@ -1158,6 +1158,9 @@ do
             else
                 CP.currentMax = maxP
             end
+            --- The compiled visual knows the slots of the old maximum only: per-slot
+            --- colours (ramp, custom) would leave the new pips white.
+            CP_CompileVisual(CP.powerType, CP.renderMode, maxP)
         end
 
         if PLAYER_CLASS == "ROGUE"
@@ -1339,6 +1342,7 @@ do
         POWER_TYPE_TOKENS, PLAYER_CLASS = env.POWER_TYPE_TOKENS, env.PLAYER_CLASS
         UnitPower, NotSecret, tonumber, C_Timer = env.UnitPower, env.NotSecret, env.tonumber, env.C_Timer
         GetPlayerFrame, CP_EnsureBars, CP_Layout = env.GetPlayerFrame, env.CP_EnsureBars, env.CP_Layout
+        CP_CompileVisual = env.CP_CompileVisual
         RefreshChargedPoints, RunActiveUpdate = env.RefreshChargedPoints, env.RunActiveUpdate
         RunAuraSegmentedUpdate, ResolveMaxPower = env.RunAuraSegmentedUpdate, env.ResolveMaxPower
         AM_UpdateValue, CP_ComputeStructuralSignature = env.AM_UpdateValue, env.CP_ComputeStructuralSignature
