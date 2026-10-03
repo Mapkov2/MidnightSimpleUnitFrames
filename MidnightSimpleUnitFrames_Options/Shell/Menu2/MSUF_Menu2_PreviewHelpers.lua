@@ -1421,7 +1421,10 @@ function H.ShouldShowPreviewHandleTooltip(owner)
     return true
 end
 function H.ShowPreviewMoveCue(owner, handle)
-    if not PreviewDragCueEnabled() then H.HidePreviewMoveCue(); return false end
+    if not PreviewDragCueEnabled() then
+        H.HidePreviewMoveCue()
+        return false
+    end
     if not handle or handle._locked == true or handle._msufPlaced == false then return false end
     if handle.IsShown and not handle:IsShown() then return false end
     PreparePreviewMoveCueOwner(owner)
@@ -3113,7 +3116,10 @@ function H.LayoutEdgeLines(frame, edge, opts)
     if not (frame and frame.CreateTexture) then return false end
     opts = opts or {}
     edge = H.ClampEdgeSize(edge, 1, opts.maxEdgeSize or 30)
-    if edge <= 0 then H.SetEdgeLinesShown(frame, false, opts); return false end
+    if edge <= 0 then
+        H.SetEdgeLinesShown(frame, false, opts)
+        return false
+    end
     local linesKey = opts.linesKey or "_lines"
     local keys = opts.keys or EDGE_LINE_KEYS
     frame[linesKey] = frame[linesKey] or {}

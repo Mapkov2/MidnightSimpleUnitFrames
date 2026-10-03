@@ -223,7 +223,10 @@ end
 function Popup.Sync()
     if not (frame and frame._key) then return false end
     local label, group, settingsLabel, canSettings, canReset = External.GetDisplayInfo(frame._key)
-    if not label then frame:Hide(); return false end
+    if not label then
+        frame:Hide()
+        return false
+    end
     frame._titleFS:SetText(label)
     frame._summaryFS:SetText(FormatValues(External.GetInspectorValues(frame._key)))
     local set = LayoutControls(frame._key)

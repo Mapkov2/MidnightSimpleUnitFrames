@@ -760,7 +760,10 @@ local function RefreshEditModeOpenCue(show)
         local function Arrow(point, rotation)
             local texture = PixelLayoutRegion(cue:CreateTexture(nil, "OVERLAY", nil, 7))
             local usedAtlas = false
-            if texture.SetAtlas then texture:SetAtlas("NPE_ArrowRight", false); usedAtlas = true end
+            if texture.SetAtlas then
+                texture:SetAtlas("NPE_ArrowRight", false)
+                usedAtlas = true
+            end
             if not usedAtlas and T.media then texture:SetTexture(T.media.collapseArrow) end
             texture:SetSize(20, 20)
             texture:SetPoint(point, cue, point, point == "LEFT" and 3 or -3, 0)
@@ -1037,7 +1040,10 @@ local function EnsureStageSurface(stage)
         end
         if not prepared then
             local state = M[stage.prepareSlotState]
-            if type(state) ~= "table" then state = {}; M[stage.prepareSlotState] = state end
+            if type(state) ~= "table" then
+                state = {}
+                M[stage.prepareSlotState] = state
+            end
             local index = stage.prepareStateIndex or "player"
             if type(state[index]) ~= "table" then state[index] = {} end
             state[index][stage.prepareTab] = stage.prepareSlot
@@ -1442,10 +1448,22 @@ local function EmphasizeControl(stage, section, controls, current)
         leftArrow:SetVertexColor(color[1], color[2], color[3], 1)
         rightArrow:SetVertexColor(color[1], color[2], color[3], 1)
         local top, right, bottom, left = marker._msuf2Edges[1], marker._msuf2Edges[2], marker._msuf2Edges[3], marker._msuf2Edges[4]
-        top:ClearAllPoints(); top:SetPoint("TOPLEFT"); top:SetPoint("TOPRIGHT"); top:SetHeight(2)
-        right:ClearAllPoints(); right:SetPoint("TOPRIGHT"); right:SetPoint("BOTTOMRIGHT"); right:SetWidth(2)
-        bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT"); bottom:SetPoint("BOTTOMRIGHT"); bottom:SetHeight(2)
-        left:ClearAllPoints(); left:SetPoint("TOPLEFT"); left:SetPoint("BOTTOMLEFT"); left:SetWidth(2)
+        top:ClearAllPoints()
+        top:SetPoint("TOPLEFT")
+        top:SetPoint("TOPRIGHT")
+        top:SetHeight(2)
+        right:ClearAllPoints()
+        right:SetPoint("TOPRIGHT")
+        right:SetPoint("BOTTOMRIGHT")
+        right:SetWidth(2)
+        bottom:ClearAllPoints()
+        bottom:SetPoint("BOTTOMLEFT")
+        bottom:SetPoint("BOTTOMRIGHT")
+        bottom:SetHeight(2)
+        left:ClearAllPoints()
+        left:SetPoint("TOPLEFT")
+        left:SetPoint("BOTTOMLEFT")
+        left:SetWidth(2)
         for i = 1, 4 do marker._msuf2Edges[i]:SetColorTexture(color[1], color[2], color[3], 0.92) end
         marker:Show()
         Runtime.controlEmphasis[#Runtime.controlEmphasis + 1] = { marker = marker }
@@ -2646,7 +2664,10 @@ function M.InstallGuidedTourChrome(frame, status, host, scroll)
     chrome.section:SetJustifyH("LEFT")
     local cueArrow = PixelLayoutRegion(chrome:CreateTexture(nil, "OVERLAY", nil, 4))
     local cueAtlas = false
-    if cueArrow.SetAtlas then cueArrow:SetAtlas("NPE_ArrowRight", false); cueAtlas = true end
+    if cueArrow.SetAtlas then
+        cueArrow:SetAtlas("NPE_ArrowRight", false)
+        cueAtlas = true
+    end
     if not cueAtlas then cueArrow:SetTexture(T.media.collapseArrow) end
     cueArrow:SetSize(16, 16)
     cueArrow:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)

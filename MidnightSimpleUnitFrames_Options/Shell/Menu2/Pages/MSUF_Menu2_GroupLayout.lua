@@ -504,9 +504,18 @@ local function BuildClassPriorityRows(ctx, parent, width, topY)
         local seen, slot = {}, 0
         for token in (Conf(CurrentScope()).classOrder or tokens):gmatch("[^,%s]+") do
             local index = byKey[token]
-            if index and not seen[index] then slot=slot+1; holder.rows[index].slotIndex=slot; seen[index]=true end
+            if index and not seen[index] then
+                slot=slot+1
+                holder.rows[index].slotIndex=slot
+                seen[index]=true
+            end
         end
-        for i=1,#holder.rows do if not seen[i] then slot=slot+1;holder.rows[i].slotIndex=slot end end
+        for i=1,#holder.rows do
+            if not seen[i] then
+                slot=slot+1
+                holder.rows[i].slotIndex=slot
+            end
+        end
         holder:SnapRows()
         holder:SetRowsEnabled(Conf(CurrentScope()).sortClassPriority == true)
     end)

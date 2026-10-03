@@ -213,7 +213,10 @@ function HUD.ResetCurrentPosition()
     if BlockHUDConfigLocked() then return end
 
     local key = CurrentSelectionKey()
-    if not key then HUD.SetStatus(HelpText("EM_SELECT_FIRST"), "warn"); return end
+    if not key then
+        HUD.SetStatus(HelpText("EM_SELECT_FIRST"), "warn")
+        return
+    end
     local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(key) or nil
     if cfg and cfg.externalPublicElement == true then
         local external = EM2.ExternalElements
@@ -235,7 +238,10 @@ function HUD.ResetCurrentPosition()
         return
     end
 
-    if not UNIT_KEYS[key] then HUD.SetStatus(HelpText("Reset unavailable"), "warn"); return end
+    if not UNIT_KEYS[key] then
+        HUD.SetStatus(HelpText("Reset unavailable"), "warn")
+        return
+    end
     local db = _G.MSUF_DB
     local conf = db and db[key]
     if not conf then return end

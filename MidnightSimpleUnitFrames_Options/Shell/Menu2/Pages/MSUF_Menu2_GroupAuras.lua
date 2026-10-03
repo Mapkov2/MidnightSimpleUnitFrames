@@ -110,7 +110,10 @@ end
 local function CurrentAuraWorkspaceTool(scope, lane)
     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
     local scopeState = M.gfAuraToolSelection[scope]
-    if type(scopeState) ~= "table" then scopeState = {}; M.gfAuraToolSelection[scope] = scopeState end
+    if type(scopeState) ~= "table" then
+        scopeState = {}
+        M.gfAuraToolSelection[scope] = scopeState
+    end
     local tool = scopeState[lane]
     if not AuraWorkspaceToolAllowed(lane, tool) then
         tool = tool == "blacklist" and "filters" or "layout"
@@ -122,13 +125,19 @@ end
 local function SetAuraWorkspaceTool(scope, lane, tool)
     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
     local scopeState = M.gfAuraToolSelection[scope]
-    if type(scopeState) ~= "table" then scopeState = {}; M.gfAuraToolSelection[scope] = scopeState end
+    if type(scopeState) ~= "table" then
+        scopeState = {}
+        M.gfAuraToolSelection[scope] = scopeState
+    end
     scopeState[lane] = AuraWorkspaceToolAllowed(lane, tool) and tool or "layout"
 end
 local function CurrentAuraWorkspaceLane(scope)
     M.gfAuraLaneSelection = M.gfAuraLaneSelection or {}
     local lane = M.gfAuraLaneSelection[scope]
-    if lane ~= "buff" and lane ~= "debuff" and lane ~= "externals" then lane = "buff"; M.gfAuraLaneSelection[scope] = lane end
+    if lane ~= "buff" and lane ~= "debuff" and lane ~= "externals" then
+        lane = "buff"
+        M.gfAuraLaneSelection[scope] = lane
+    end
     return lane
 end
 local function SetAuraWorkspaceLane(scope, lane)

@@ -91,7 +91,10 @@ local function CreateAccordionRoundedRegions(header, layer, subLevel)
         tex:SetSize(radius, radius)
         tex:SetPoint(point, header, point, 0, 0)
         local bucket = regions[sideKey .. "Corners"]
-        if not bucket then bucket = {}; regions[sideKey .. "Corners"] = bucket end
+        if not bucket then
+            bucket = {}
+            regions[sideKey .. "Corners"] = bucket
+        end
         bucket[#bucket + 1] = tex
         regions[#regions + 1] = tex
     end

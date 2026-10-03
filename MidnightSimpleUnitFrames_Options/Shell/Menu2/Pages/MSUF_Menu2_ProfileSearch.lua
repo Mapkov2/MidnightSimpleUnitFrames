@@ -1,7 +1,8 @@
 -- Search navigation for profile editors is independent of mutation eligibility.
 local _, MSUF = ...
 local M = MSUF.MSUF2
-local H = {}; M.ProfileSearch = H
+local H = {}
+M.ProfileSearch = H
 local serial, targets, tokens = 0, {}, setmetatable({}, { __mode = "k" })
 local selectors, selectedNames = {}, {}
 local lastDB, lastSchema, lastGroups, lastProfile, lastRecording
@@ -58,7 +59,11 @@ end
 local function Token(scope, entry)
     local existing = tokens[entry]
     local id = existing and existing.name == entry.name and existing.id
-    if not id then serial = serial + 1; id = tostring(serial); tokens[entry] = { id = id, name = entry.name } end
+    if not id then
+        serial = serial + 1
+        id = tostring(serial)
+        tokens[entry] = { id = id, name = entry.name }
+    end
     targets[id] = { scope = scope, entry = entry, name = entry.name,
         db = _G.MSUF_DB, profile = _G.MSUF_ActiveProfile or "Default" }
     return id

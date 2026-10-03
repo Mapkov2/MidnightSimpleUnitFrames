@@ -89,7 +89,10 @@ local function EnsureDB()
     local fn = _G.MSUF_EnsureDB
     if type(fn) == "function" then fn(); return _G.MSUF_DB ~= nil end
     local nsEnsureDB = MSUF and (MSUF.MSUF_EnsureDB or MSUF.EnsureDB)
-    if type(nsEnsureDB) == "function" then nsEnsureDB(); return _G.MSUF_DB ~= nil end
+    if type(nsEnsureDB) == "function" then
+        nsEnsureDB()
+        return _G.MSUF_DB ~= nil
+    end
     return false
 end
 local ApplyAllSettingsSafe = Util.ApplyAllSettingsSafe
@@ -126,7 +129,12 @@ end
 
 local function SnapshotDB()
     local dc = GetDeepCopy()
-    local db = _G.MSUF_DB; if not db or not dc then _snapshot = nil; _snapshotProfile = nil; return end
+    local db = _G.MSUF_DB
+    if not db or not dc then
+        _snapshot = nil
+        _snapshotProfile = nil
+        return
+    end
     _snapshot = dc(db)
     _snapshotProfile = ProfileIdentity()
 end
@@ -239,7 +247,10 @@ end
 
 local function RestoreDB()
     if type(_snapshot) ~= "table" then return false end
-    local db = _G.MSUF_DB; if not db then return false end
+    local db = _G.MSUF_DB
+    if not db then
+        return false
+    end
     if not IsCurrentProfile(_snapshotProfile) then
         _snapshot, _snapshotProfile = nil, nil
         return false

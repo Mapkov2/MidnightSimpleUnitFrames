@@ -329,7 +329,10 @@ function Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
         state = "unitCastbarTabSelection"
         tab = key == "castbarIcon" and "icon" or (key == "castbarTime" and "time" or ((key == "castbarText" or key == "castbarTarget") and "spell" or "general"))
     end
-    if state then menu[state] = menu[state] or {}; menu[state][unit] = tab end
+    if state then
+        menu[state] = menu[state] or {}
+        menu[state][unit] = tab
+    end
     local textureSlot = section == "texture_layer" and (tonumber(key:match("^texLayer(%d)$")) or 1)
     local textureSlotChanged = false
     if textureSlot then
@@ -370,7 +373,10 @@ OpenPreviewHandleSettings = function(handle, source)
             menu.unitAuraTabSelection[unit] = lane
             menu.unitAuraToolSelection = menu.unitAuraToolSelection or {}
             local tools = menu.unitAuraToolSelection[unit]
-            if type(tools) ~= "table" then tools = {}; menu.unitAuraToolSelection[unit] = tools end
+            if type(tools) ~= "table" then
+                tools = {}
+                menu.unitAuraToolSelection[unit] = tools
+            end
             previousAuraTool = tools[lane]
             tools[lane] = "layout"
         end

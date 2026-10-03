@@ -271,7 +271,10 @@ local function NudgeTarget(dx, dy, exactDelta)
     local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
     local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
     local a2PopupOpen = false
-    do local ap = _G.MSUF_EM2_AuraPopup; a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false end
+    do
+        local ap = _G.MSUF_EM2_AuraPopup
+        a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false
+    end
     if auraGroup and (auraPopupOpen or a2PopupOpen) then
         local unitKey = _G.MSUF_EM2_ActiveAuraUnit
         if not unitKey then

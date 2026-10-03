@@ -1753,17 +1753,26 @@ local function SampleMeter(preview, samples, bars, key, row, colorKey, fallback,
     frame.center:SetFont((_G.MSUF_GetFontPath and _G.MSUF_GetFontPath()) or STANDARD_TEXT_FONT,
         tonumber(bars.classPowerFontSize) or 14, "OUTLINE")
     frame.center:SetTextColor(textColor[1], textColor[2], textColor[3], 1)
-    frame.center:SetText(text); frame.center:SetPoint("CENTER", frame, "CENTER")
+    frame.center:SetText(text)
+    frame.center:SetPoint("CENTER", frame, "CENTER")
     frame.center:SetAlpha(1)
-    frame.center:Show(); frame._sampleLayer = "class"; frame._sampleActive=true; frame:Show()
+    frame.center:Show()
+    frame._sampleLayer = "class"
+    frame._sampleActive=true
+    frame:Show()
     return frame
 end
 local function SampleStrip(preview, samples, bars, powerFrame, key, height, anchor, offset, colorKey, fallback, fraction)
-    local frame = samples[key] or EnsureMeter(preview, "resourceSample" .. key); samples[key] = frame
-    frame:ClearAllPoints(); frame:SetPoint(anchor, powerFrame, anchor == "BOTTOMLEFT" and "TOPLEFT" or "BOTTOMLEFT", 0, offset)
+    local frame = samples[key] or EnsureMeter(preview, "resourceSample" .. key)
+    samples[key] = frame
+    frame:ClearAllPoints()
+    frame:SetPoint(anchor, powerFrame, anchor == "BOTTOMLEFT" and "TOPLEFT" or "BOTTOMLEFT", 0, offset)
     RenderMeter(frame, nil, SAMPLE.MeterOpts(powerFrame:GetWidth(), height, fraction, WHITE8,
         SAMPLE.Color(bars, colorKey, fallback)))
-    frame._sampleLayer="power";frame._sampleActive=true;frame:Show(); return frame
+    frame._sampleLayer="power"
+    frame._sampleActive=true
+    frame:Show()
+    return frame
 end
 -- The live power bar the marks sit on: the Mana display source, else the
 -- player's real power type (MSUF_CP_ResourceMarks Target), and its maximum for
@@ -1781,12 +1790,19 @@ local function SamplePowerTarget(mana)
     return token, maximum
 end
 local function RenderExtraSamples(preview, bars, player, spec, classFrame, powerFrame)
-    local samples = preview.resourceSamples or {}; preview.resourceSamples = samples
-    for _, frame in pairs(samples) do frame:Hide(); frame._sampleActive=false end
+    local samples = preview.resourceSamples or {}
+    preview.resourceSamples = samples
+    for _, frame in pairs(samples) do
+        frame:Hide()
+        frame._sampleActive=false
+    end
     local base = preview.resourceSamplePowerBaseState
     preview.resourceSamplePowerBase=nil
     if powerFrame then
-        if not base then base = {}; preview.resourceSamplePowerBaseState = base end
+        if not base then
+            base = {}
+            preview.resourceSamplePowerBaseState = base
+        end
         local r,g,b,a=powerFrame.fill:GetVertexColor()
         base.host, base.r, base.g, base.b, base.a = powerFrame, r or 1, g or 1, b or 1, a or 1
         preview.resourceSamplePowerBase = base
@@ -1796,8 +1812,10 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
     if pain then
         local frame = SampleMeter(preview, samples, bars, "PAIN", 0, "ignorePainColor", SAMPLE.BLUE, .65, "7.8 s", SAMPLE.WHITE)
         frame.marker = frame.marker or MakeTexture(frame, "OVERLAY")
-        frame.marker:SetColorTexture(1,1,1,1); frame.marker:SetWidth(2)
-        frame.marker:ClearAllPoints(); frame.marker:SetPoint("TOP", frame.fill, "TOPRIGHT")
+        frame.marker:SetColorTexture(1,1,1,1)
+        frame.marker:SetWidth(2)
+        frame.marker:ClearAllPoints()
+        frame.marker:SetPoint("TOP", frame.fill, "TOPRIGHT")
         frame.marker:SetPoint("BOTTOM", frame.fill, "BOTTOMRIGHT")
         frame.marker:SetShown(bars.ignorePainTimeMarker ~= false)
     end
@@ -1830,21 +1848,31 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
         if regenTimers and bars.manaGainPulse == true then SampleStrip(preview, samples, bars, powerFrame, "TICK",2,"TOPLEFT",-1,"manaGainPulseColor",SAMPLE.TICK,.5) end
         if bars.manaUpcomingCost == true then
             local frame=SampleStrip(preview, samples, bars, powerFrame, "COST",powerFrame:GetHeight(),"TOPLEFT",0,"manaCostColor",SAMPLE.COST,.18)
-            frame:ClearAllPoints();frame:SetPoint("TOPRIGHT",powerFrame.fill,"TOPRIGHT")
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPRIGHT",powerFrame.fill,"TOPRIGHT")
             frame:SetWidth(max(1,powerFrame:GetWidth()*.18))
             frame.fill:SetWidth(frame:GetWidth())
             if powerFrame._msufCPPreviewShapeAxis=="VERTICAL" then
-                frame:ClearAllPoints();frame:SetPoint("BOTTOMLEFT",powerFrame.fill,"TOPLEFT",0,-powerFrame:GetHeight()*.18)
+                frame:ClearAllPoints()
+                frame:SetPoint("BOTTOMLEFT",powerFrame.fill,"TOPLEFT",0,-powerFrame:GetHeight()*.18)
                 frame:SetSize(powerFrame:GetWidth(),max(1,powerFrame:GetHeight()*.18))
                 frame.fill:SetSize(frame:GetWidth(),frame:GetHeight())
             end
             frame.bg:Hide()
             if powerFrame._msufCPPreviewHasShape then
                 local mask=frame.costMask
-                if not mask then mask=PixelLayoutRegion(powerFrame:CreateMaskTexture(nil,"OVERLAY"));frame.costMask=mask end
-                if not frame.costMasked then frame.fill:AddMaskTexture(mask);frame.costMasked=true end
+                if not mask then
+                    mask=PixelLayoutRegion(powerFrame:CreateMaskTexture(nil,"OVERLAY"))
+                    frame.costMask=mask
+                end
+                if not frame.costMasked then
+                    frame.fill:AddMaskTexture(mask)
+                    frame.costMasked=true
+                end
                 mask:SetTexture(powerFrame.fill:GetTexture(),"CLAMPTOBLACKADDITIVE","CLAMPTOBLACKADDITIVE")
-                mask:ClearAllPoints();mask:SetAllPoints(powerFrame);mask:Show()
+                mask:ClearAllPoints()
+                mask:SetAllPoints(powerFrame)
+                mask:Show()
             elseif frame.costMasked then frame.fill:RemoveMaskTexture(frame.costMask);frame.costMasked=false;frame.costMask:Hide() end
         end
     end
@@ -1863,7 +1891,10 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
         if rule.target=="CLASS" and classFrame and spec and spec.mode~="aura_segmented" then
             host,token,maximum=classFrame,spec.token,tonumber(spec.segments)
         elseif rule.target~="CLASS" and rule.target~="ALTMANA" and powerFrame then
-            if not powerResolved then powerToken, powerMaximum = SamplePowerTarget(mana); powerResolved = true end
+            if not powerResolved then
+                powerToken, powerMaximum = SamplePowerTarget(mana)
+                powerResolved = true
+            end
             host,token,maximum=powerFrame,powerToken,powerMaximum
         end
         local value=tonumber(rule.value)
@@ -1874,8 +1905,11 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
             count=count+1
             -- Live marks draw on OVERLAY sublevel 7, above the fill and its edge.
             local texture=preview.resourceSampleMarks[count] or MakeTexture(host,"OVERLAY",7)
-            preview.resourceSampleMarks[count]=texture;texture:SetParent(host);texture:ClearAllPoints()
-            local color=rule.color or SAMPLE.WHITE;texture:SetColorTexture(color[1],color[2],color[3],1)
+            preview.resourceSampleMarks[count]=texture
+            texture:SetParent(host)
+            texture:ClearAllPoints()
+            local color=rule.color or SAMPLE.WHITE
+            texture:SetColorTexture(color[1],color[2],color[3],1)
             texture:SetWidth(max(1,min(20,tonumber(rule.width) or 2)))
             texture:SetPoint("TOP",host,"TOPLEFT",host:GetWidth()*fraction,0)
             texture:SetPoint("BOTTOM",host,"BOTTOMLEFT",host:GetWidth()*fraction,0)
@@ -1883,7 +1917,10 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
             if rule.threshold==true then
                 thresholdCount = thresholdCount + 1
                 local entry = thresholds[thresholdCount]
-                if not entry then entry = {}; thresholds[thresholdCount] = entry end
+                if not entry then
+                    entry = {}
+                    thresholds[thresholdCount] = entry
+                end
                 entry.host, entry.spec, entry.fraction = host, host==classFrame and spec or nil, fraction
                 entry.direction, entry.color, entry.maximum = rule.direction, color, maximum
             end

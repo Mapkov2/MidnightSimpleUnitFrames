@@ -564,7 +564,8 @@ local function BuildFontsNameShortening(ctx, b, BuildNameShorteningControls, fon
                 FontScopeSet("shortenNameShowDots", not (v and true or false), "MSUF2_SHORTEN_DOTS")
                 ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
             end)
-        shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis, controls.scopeNotice; nameShorteningControls = { side, chars }
+        shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis, controls.scopeNotice
+        nameShorteningControls = { side, chars }
         if fontScopeReason and W.SetControlsDisabledReason then
             local shortenReason = W.TurnOnReason(nameScope == "shared" and "Shorten names" or "Shorten unit names", NameShorteningEnabled)
             W.SetControlsDisabledReason({ shorten, noEllipsis }, fontScopeReason)

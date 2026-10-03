@@ -564,7 +564,10 @@ local function CreateUnitStyleState(ctx, b, scope, options)
             Model.WriteValue(unit, "durationBarDirection", value)
         end
     end
-    local function AddStyleControl(control) M.AppendValues(styleControls, control); return control end
+    local function AddStyleControl(control)
+        M.AppendValues(styleControls, control)
+        return control
+    end
     local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason, afterSet)
         return AddStyleControl(BindSwitch(ctx, parent, label, x, y, width,
             function() return ReadScopeBool(key, defaultValue) end,
@@ -1375,21 +1378,30 @@ M._unitAuraPlayerDefensiveToolOK = { setup = true, layout = true, behavior = tru
 local function CurrentUnitAuraTool(unit, container)
     M.unitAuraToolSelection = M.unitAuraToolSelection or {}
     local unitState = M.unitAuraToolSelection[unit]
-    if type(unitState) ~= "table" then unitState = {}; M.unitAuraToolSelection[unit] = unitState end
+    if type(unitState) ~= "table" then
+        unitState = {}
+        M.unitAuraToolSelection[unit] = unitState
+    end
     local custom = tostring(container or ""):match("^custom") ~= nil
     local playerDefensives = unit == "player" and container == "custom4"
     local targetDots = unit ~= "player" and container == "custom4"
     local tool = unitState[container]
     local valid = playerDefensives and M._unitAuraPlayerDefensiveToolOK
         or (targetDots and UNIT_AURA_TARGET_DOT_TOOL_OK or (custom and UNIT_AURA_CUSTOM_TOOL_OK or UNIT_AURA_NORMAL_TOOL_OK))
-    if not valid[tool] then tool = custom and "setup" or "layout"; unitState[container] = tool end
+    if not valid[tool] then
+        tool = custom and "setup" or "layout"
+        unitState[container] = tool
+    end
     return tool
 end
 
 local function SetUnitAuraTool(unit, container, tool)
     M.unitAuraToolSelection = M.unitAuraToolSelection or {}
     local unitState = M.unitAuraToolSelection[unit]
-    if type(unitState) ~= "table" then unitState = {}; M.unitAuraToolSelection[unit] = unitState end
+    if type(unitState) ~= "table" then
+        unitState = {}
+        M.unitAuraToolSelection[unit] = unitState
+    end
     unitState[container] = tool
 end
 

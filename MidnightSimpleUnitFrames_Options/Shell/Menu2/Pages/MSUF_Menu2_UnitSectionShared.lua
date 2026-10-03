@@ -735,20 +735,40 @@ function Shared.ValueTextControlSets(kind, controls, layer, hookControls, curren
         if control then hookSpecs[#hookSpecs + 1] = { control, focus } end
     end
     AddHook(controls.show)
-    AddHook(controls.left, "left"); AddHook(controls.center, "center"); AddHook(controls.right, "right")
-    AddHook(controls.leftHidePercent, "left"); AddHook(controls.centerHidePercent, "center"); AddHook(controls.rightHidePercent, "right")
-    AddHook(controls.mode, CurrentSlotFocus); AddHook(controls.hidePercent, CurrentSlotFocus); AddHook(controls.absorb, CurrentSlotFocus)
-    AddHook(delimiter); AddHook(controls.moveTogether)
-    AddHook(controls.slot, CurrentSlotFocus); AddHook(controls.slotSize, CurrentSlotFocus)
-    AddHook(controls.size); AddHook(layer)
+    AddHook(controls.left, "left")
+    AddHook(controls.center, "center")
+    AddHook(controls.right, "right")
+    AddHook(controls.leftHidePercent, "left")
+    AddHook(controls.centerHidePercent, "center")
+    AddHook(controls.rightHidePercent, "right")
+    AddHook(controls.mode, CurrentSlotFocus)
+    AddHook(controls.hidePercent, CurrentSlotFocus)
+    AddHook(controls.absorb, CurrentSlotFocus)
+    AddHook(delimiter)
+    AddHook(controls.moveTogether)
+    AddHook(controls.slot, CurrentSlotFocus)
+    AddHook(controls.slotSize, CurrentSlotFocus)
+    AddHook(controls.size)
+    AddHook(layer)
     local textControls = {}
     local function AddControl(control)
         if control then textControls[#textControls + 1] = control end
     end
-    AddControl(controls.left); AddControl(controls.center); AddControl(controls.right)
-    AddControl(controls.leftHidePercent); AddControl(controls.centerHidePercent); AddControl(controls.rightHidePercent)
-    AddControl(controls.mode); AddControl(controls.hidePercent); AddControl(controls.absorb); AddControl(controls.slot)
-    AddControl(delimiter); AddControl(controls.size); AddControl(controls.slotSize); AddControl(controls.moveTogether); AddControl(layer)
+    AddControl(controls.left)
+    AddControl(controls.center)
+    AddControl(controls.right)
+    AddControl(controls.leftHidePercent)
+    AddControl(controls.centerHidePercent)
+    AddControl(controls.rightHidePercent)
+    AddControl(controls.mode)
+    AddControl(controls.hidePercent)
+    AddControl(controls.absorb)
+    AddControl(controls.slot)
+    AddControl(delimiter)
+    AddControl(controls.size)
+    AddControl(controls.slotSize)
+    AddControl(controls.moveTogether)
+    AddControl(layer)
     if controls.reverse then
         hookSpecs[#hookSpecs + 1] = { controls.reverse }
         textControls[#textControls + 1] = controls.reverse
@@ -760,10 +780,14 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     opts = opts or {}
     local x, y, width = opts.x or 14, opts.y or -104, opts.width or 200
     local label = T.Font(parent, "GameFontHighlightSmall", opts.label or "Custom Anchor Frame", opts.labelColor or { 0.62, 0.74, 0.96, 1 })
-    label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); label:SetJustifyH("LEFT")
+    label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    label:SetJustifyH("LEFT")
     local box = PixelLayoutRegion(CreateFrame("EditBox", nil, parent, "InputBoxTemplate"))
-    box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24); box:SetSize(width, 24); box:SetAutoFocus(false)
-    box:SetMaxLetters(opts.maxLetters or 100); box:SetJustifyH("LEFT")
+    box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 24)
+    box:SetSize(width, 24)
+    box:SetAutoFocus(false)
+    box:SetMaxLetters(opts.maxLetters or 100)
+    box:SetJustifyH("LEFT")
     box._msuf2Title, box._msuf2ControlKind = label, "textinput"
     T.SkinEditBox(box)
     local function Attach(widget) if opts.attachFocus then opts.attachFocus(widget) end end
@@ -784,8 +808,14 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     RegisterSharedControl(box, opts, "value", opts.label or "Custom Anchor Frame", "textinput", "setting")
     local function SmallButton(after, labelText, widthText, gap, danger)
         local btn = T.Button(parent, labelText, widthText, 24)
-        if danger and T.SkinDangerButton then btn = T.SkinDangerButton(btn) end; btn:SetPoint("LEFT", after, "RIGHT", gap, 0)
-        if T.CenterButtonLabel then T.CenterButtonLabel(btn) end; Attach(btn)
+        if danger and T.SkinDangerButton then
+            btn = T.SkinDangerButton(btn)
+        end
+        btn:SetPoint("LEFT", after, "RIGHT", gap, 0)
+        if T.CenterButtonLabel then
+            T.CenterButtonLabel(btn)
+        end
+        Attach(btn)
         return btn
     end
     local pick = SmallButton(box, opts.pickLabel or "Pick", opts.pickWidth or 50, 6)

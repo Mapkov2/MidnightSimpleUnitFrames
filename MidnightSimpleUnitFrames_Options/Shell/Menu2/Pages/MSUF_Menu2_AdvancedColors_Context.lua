@@ -99,7 +99,10 @@ local function ContextDBRowsState(rowKeys, keys, apply)
             for i = 1, #(state or {}) do
                 local rowState = state[i]
                 local row = db[rowState[1]]
-                if type(row) ~= "table" then row = {}; db[rowState[1]] = row end
+                if type(row) ~= "table" then
+                    row = {}
+                    db[rowState[1]] = row
+                end
                 for j = 1, #(rowState[3] or {}) do
                     local item = rowState[3][j]
                     row[item[1]] = item[2] and ContextCopy(item[3]) or nil
@@ -767,14 +770,20 @@ local function RegisterCastContextFactories()
     FixedContextFactory("cast.border", function()
         local target = ContextApiOrGeneral("cast.border", "Castbar border", "GetCastbarBorderColor", "SetCastbarBorderColor", "castbarBorder", 0, 0, 0, ApplyCastbarColors, 1)
         local state = ContextStoredState(G, { "castbarBorderR", "castbarBorderG", "castbarBorderB", "castbarBorderA" }, ApplyCastbarColors)
-        target.hasOpacity, target.getOpacity = true, function() local _, _, _, a = ApiRGB("GetCastbarBorderColor", 0, 0, 0); return tonumber(a) or 1 end
+        target.hasOpacity, target.getOpacity = true, function()
+            local _, _, _, a = ApiRGB("GetCastbarBorderColor", 0, 0, 0)
+            return tonumber(a) or 1
+        end
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)
     FixedContextFactory("cast.background", function()
         local target = ContextApiOrGeneral("cast.background", "Castbar background", "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", "castbarBg", 0.10, 0.10, 0.10, ApplyCastbarColors, 0.85)
         local state = ContextStoredState(G, { "castbarBgR", "castbarBgG", "castbarBgB", "castbarBgA" }, ApplyCastbarColors)
-        target.hasOpacity, target.getOpacity = true, function() local _, _, _, a = ApiRGB("GetCastbarBackgroundColor", 0.10, 0.10, 0.10); return tonumber(a) or 0.85 end
+        target.hasOpacity, target.getOpacity = true, function()
+            local _, _, _, a = ApiRGB("GetCastbarBackgroundColor", 0.10, 0.10, 0.10)
+            return tonumber(a) or 0.85
+        end
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)
@@ -997,7 +1006,9 @@ local function RegisterPowerContextFactories()
             return { generalState.captureState(), barsState.captureState() }
         end
         local function RestoreClassPowerState(state)
-            generalState.restoreState(state and state[1]); barsState.restoreState(state and state[2]); ApplyColors()
+            generalState.restoreState(state and state[1])
+            barsState.restoreState(state and state[2])
+            ApplyColors()
         end
         local function ClassPowerTarget(id, label, getRGB, setRGB)
             return ContextTarget(id, label, getRGB, setRGB, {
@@ -1062,7 +1073,9 @@ local function RegisterGradientContextFactories()
                         tonumber(GradientScopeGet(prefix .. "B", 0)) or 0
             end,
             function(r, g, b)
-                    GradientScopeSet(prefix .. "R", r); GradientScopeSet(prefix .. "G", g); GradientScopeSet(prefix .. "B", b)
+                    GradientScopeSet(prefix .. "R", r)
+                    GradientScopeSet(prefix .. "G", g)
+                    GradientScopeSet(prefix .. "B", b)
                     ApplyScopedBarGradientColors(reason)
             end)
             local state = ContextDBRowsState(rows, {
@@ -1090,7 +1103,10 @@ local function AppendContextTargets(out, seen, value, reference)
     if type(value.getRGB) == "function" and type(value.setRGB) == "function" then
         if type(reference) == "table" and type(reference.label) == "string" then value.label = reference.label end
         local identity = value._msuf2ContextColorId or value
-        if not seen[identity] then seen[identity] = true; out[#out + 1] = value end
+        if not seen[identity] then
+            seen[identity] = true
+            out[#out + 1] = value
+        end
         return
     end
     for i = 1, #value do AppendContextTargets(out, seen, value[i], reference) end

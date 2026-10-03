@@ -770,7 +770,10 @@ local function SearchRouteUnitPage(route, pageKey, normalized)
             container = "custom4"
         end
         for index = 1, 4 do
-            if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then container = "custom" .. index; break end
+            if SearchRouteHasAny(normalized, "custom " .. index .. "|custom" .. index) then
+                container = "custom" .. index
+                break
+            end
         end
         if not container and SearchRouteHasAny(normalized, "custom aura|custom display|whitelist") then container = "custom1" end
         if not container and SearchRouteHasAny(normalized, "debuff|debuffs") then container = "debuff" end
@@ -1038,7 +1041,10 @@ local function ApplySearchRoute(pageKey, route)
         -- other fields even if an external caller supplies a route table.
         for _, key in ipairs({ "hpPowerTextSelectedKey", "_fontScopeKey" }) do
             local value = general[key]
-            if value ~= nil and db[key] ~= value then db[key] = value; changed = true end
+            if value ~= nil and db[key] ~= value then
+                db[key] = value
+                changed = true
+            end
         end
     end
     if changed and pageKey and type(M.InvalidatePage) == "function" then

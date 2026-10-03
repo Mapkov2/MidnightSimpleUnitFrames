@@ -793,8 +793,14 @@ local function CopyUnitSettings(unit, target, scopes, onComplete, allConfirmed)
             auraStyleRequested = scopes.aurastyle == true,
             castbarRequested = scopes.castbar == true,
         }
-        if not dst or not dstKey then result.reason = "invalid_destination"; return false, result end
-        if dstKey == srcKey then result.reason = "same_destination"; return false, result end
+        if not dst or not dstKey then
+            result.reason = "invalid_destination"
+            return false, result
+        end
+        if dstKey == srcKey then
+            result.reason = "same_destination"
+            return false, result
+        end
         result.castbarSupported = CASTBAR_FIELDS[srcKey] ~= nil and CASTBAR_FIELDS[dstKey] ~= nil
         result.castbarSkipped = result.castbarRequested and not result.castbarSupported
         if scopes.basics then CopyFields(dst, src, COPY_FRAME_BASIC_FIELDS) end

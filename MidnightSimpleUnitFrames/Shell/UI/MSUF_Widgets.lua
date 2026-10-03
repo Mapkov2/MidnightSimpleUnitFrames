@@ -354,7 +354,10 @@ end
 
 function UI.SetButtonText(btn, text)
     if not btn then return end
-    if btn.SetText then btn:SetText(text or ""); return end
+    if btn.SetText then
+        btn:SetText(text or "")
+        return
+    end
     local label = btn._msuf2Label or btn._label
     if label and label.SetText then label:SetText(Tr(text or "")) end
 end

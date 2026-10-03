@@ -287,7 +287,10 @@ for i = 1, #CLASS_POWER_PREVIEW_SPECS do
         CLASS_POWER_PREVIEW_VALUES[#CLASS_POWER_PREVIEW_VALUES + 1] = { value = spec.key, text = spec.label }
     end
 end
-local function NormalizeClassPowerPreviewSpecKey(key) key = tostring(key or "rogue_combo"); return CLASS_POWER_PREVIEW_BY_KEY[key] and key or "rogue_combo" end
+local function NormalizeClassPowerPreviewSpecKey(key)
+    key = tostring(key or "rogue_combo")
+    return CLASS_POWER_PREVIEW_BY_KEY[key] and key or "rogue_combo"
+end
 local CLASS_POWER_PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER", mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
 local function ClassPowerPreviewClassTokenForSpec(spec)
     if spec and spec.classToken then return tostring(spec.classToken):upper() end
@@ -460,7 +463,10 @@ local function PlayerPowerTextShown(player)
     if player.showPowerText ~= nil then return player.showPowerText ~= false end
     return player.showPower ~= false
 end
-local function SetPlayerPowerTextShown(player, shown) player = player or Player(); player.showPowerText = shown and true or false end
+local function SetPlayerPowerTextShown(player, shown)
+    player = player or Player()
+    player.showPowerText = shown and true or false
+end
 local function NormalizeDetachedPowerTextPreset(player)
     player = player or Player()
     if not PlayerPowerTextShown(player) then return "OFF" end
@@ -538,7 +544,10 @@ local function QuickPlayerFrame()
     local frame = uf and type(uf.GetFrame) == "function" and uf.GetFrame("player") or nil
     return frame or (uf and uf.frames and uf.frames.player) or _G.MSUF_player
 end
-local function QuickClassPowerVisible() local frame = _G.MSUF_ClassPowerContainer; return frame and frame.IsShown and frame:IsShown() end
+local function QuickClassPowerVisible()
+    local frame = _G.MSUF_ClassPowerContainer
+    return frame and frame.IsShown and frame:IsShown()
+end
 local function QuickCalcCPAboveCDM(ecv)
     if not (MSUF.Client and MSUF.Client.IsClassic) then
         -- Retail anchors to Essential's top edge. No viewer-height offset.
@@ -973,7 +982,8 @@ function Page:BuildClassLayout()
             local player = Player()
             player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
             if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
-            ApplyDetachedPowerSource(); self.refresh()
+            ApplyDetachedPowerSource()
+            self.refresh()
         end,
         Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }))
     AddTooltip(self.cpPowerShape, "Independent Powerbar Shape", "Changes only the detached Player Powerbar. Class Resource shape on the left changes only Class Resources.")
@@ -1020,7 +1030,10 @@ function Page:BuildClassBehavior()
     local function PlaceSupported(x, keys)
         local y = -38
         for key in keys:gmatch("%S+") do
-            if fields[key] then MoveWidget(fields[key], section, x, y); y = y - 32 end
+            if fields[key] then
+                MoveWidget(fields[key], section, x, y)
+                y = y - 32
+            end
         end
     end
     PlaceSupported(14, "anchor charged text rune reverse sweeping")
@@ -1170,7 +1183,8 @@ function Page:BuildDetachedPower()
                 player.detachedPowerBarHeight = tonumber(player.detachedPowerBarHeight) or 6
                 player.detachedPowerBarFrameLevelOffset = tonumber(player.detachedPowerBarFrameLevelOffset) or 6
             end
-            ApplyDetachedPowerSource(); self.refresh()
+            ApplyDetachedPowerSource()
+            self.refresh()
         end, Meta("detached_power.enabled"))
     local smooth = SwitchAt(self.ctx, layout, "Smooth fill", twoColumns and rightX or 32, twoColumns and -104 or -138, controlW,
         Player, "powerSmoothFill", false, ApplyDetachedPlayerPowerSmoothing, Meta("detached_power.layout.smooth_fill"))
@@ -1350,7 +1364,9 @@ function Page:BuildPlayerHP()
     })
     PlaceColumn(layout, 32, -154, 54, controlW, "LEFT", self.hp.anchor, self.hp.widthMode, self.hp.manualWidth, self.hp.shape, self.hp.orbSize, self.hp.height, self.hp.smooth)
     PlaceColumn(layout, rightX, twoColumns and -154 or -580, 54, controlW, "LEFT", self.hp.gap, self.hp.x, self.hp.y, self.hp.layer)
-    self:AddNamed("hp", self.hp, "anchor widthMode shape height smooth gap x y layer"); self:AddNamed("hpManual", self.hp, "manualWidth"); self:AddNamed("hpOrb", self.hp, "orbSize")
+    self:AddNamed("hp", self.hp, "anchor widthMode shape height smooth gap x y layer")
+    self:AddNamed("hpManual", self.hp, "manualWidth")
+    self:AddNamed("hpOrb", self.hp, "orbSize")
     AddTooltip(self.hpUse, "Second Player HP Bar", "Renders a second native Player health bar. The normal Player unitframe HP bar is untouched, so you can show HP twice.")
     AddTooltip(self.hp.anchor, "Anchor", "Power anchors use the Player power bar when it is visible; otherwise the HP bar falls back to the Class Resource anchor.")
     AddTooltip(self.hp.widthMode, "Width Mode", "Class Resource and Player Power follow existing frames. Custom uses the slider below. Width is resolved only during layout refresh.")
@@ -1387,7 +1403,8 @@ function Page:BuildPlayerHP()
         { "outline", "slider", "Outline", 0, 8, 1, 300, "playerHPBarOutline", 1 },
     })
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.color, texture.fg, texture.bg, texture.bgAlpha, texture.outline)
-    self:AddNamed("hp", texture, "color fg bg bgAlpha outline"); self:AddNamed("hpTexture", texture, "fg bg")
+    self:AddNamed("hp", texture, "color fg bg bgAlpha outline")
+    self:AddNamed("hpTexture", texture, "fg bg")
     AddTooltip(texture.color, "HP Color", "Global follows the normal MSUF health color mode. Class Color forces your class color. Dark Mode forces the configured dark bar color. HP Gradient colors only this second HP bar by current health.")
     AddTooltip(texture.bg, "Background Texture", "Visible behind the filled HP amount. At 100% HP the fill covers the background; Outline 0 does not disable this texture.")
     AddTooltip(texture.outline, "HP Outline", "Controls only the second HP bar outline. Bar uses four outside border edges; shapes use their fixed edge texture. 0 disables only the outline.")
@@ -1449,8 +1466,10 @@ function Page:BuildPlayerHP()
         MoveWidget(control, text, 32, ({ -188, -240, -274, -326, -360, -412, -446 })[i], controlW, "LEFT")
     end
     PlaceColumn(text, rightX, twoColumns and -188 or -440, 54, controlW, "LEFT", self.hpText.reverse, self.hpText.size, self.hpText.x, self.hpText.y)
-    self:Add("hp", self.hpTextEnable); self:Add("hpText", shared)
-    self:AddNamed("hpCustomText", self.hpText, "right left center sep reverse size"); self:Add("hpCustomText", unpack(self.hpHide))
+    self:Add("hp", self.hpTextEnable)
+    self:Add("hpText", shared)
+    self:AddNamed("hpCustomText", self.hpText, "right left center sep reverse size")
+    self:Add("hpCustomText", unpack(self.hpHide))
     self:AddNamed("hpTextPosition", self.hpText, "x y")
     AddTooltip(self.hpTextEnable, "HP Text", "Controls only this second HP bar. The normal Player unitframe HP text remains separate.")
     AddTooltip(shared, "Use Player HP Text", "Uses Player HP text settings and copies already-rendered Player HP text when it is current. Local Text X/Y still belong to this bar.")
@@ -1479,7 +1498,8 @@ function Page:BuildAlternativeMana()
     })
     PlaceColumn(section, 32, -174, 54, controlW, "LEFT", fields.widthMode, fields.width, fields.height, fields.x, fields.y)
     self.altManaWidth = fields.width
-    self:AddNamed("altMana", fields, "widthMode width height x y"); self:Add("altMana", smooth)
+    self:AddNamed("altMana", fields, "widthMode width height x y")
+    self:Add("altMana", smooth)
 end
 
 function Page:RefreshControlState()
@@ -1493,17 +1513,22 @@ function Page:RefreshControlState()
     SetControlEnabled(self.cp.width, cpOn and (bars.classPowerWidthMode or "player") == "custom")
     local classBar = NormalizeClassPowerShape(bars.classPowerShape) == "BAR"
     if self.cp.height and self.cp.height._msuf2Title then self.cp.height._msuf2Title:SetText(classBar and "Height" or "Pip size") end
-    SetControlEnabled(self.cp.separator, cpOn and classBar); SetControlEnabled(self.cp.outline, cpOn and classBar)
+    SetControlEnabled(self.cp.separator, cpOn and classBar)
+    SetControlEnabled(self.cp.outline, cpOn and classBar)
     SetControlEnabled(self.cpAlign, cpOn and not classBar)
     -- Ebon Might owns a native duration text even when the optional aggregate
     -- resource text is disabled, so its shared text styling/layer stays usable.
     SetControlsEnabled(self.groups.cpText, cpOn)
     local anyDetached = false
     for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "pettarget", "boss", "arena" }) do
-        if db[key] and db[key].powerBarDetached then anyDetached = true; break end
+        if db[key] and db[key].powerBarDetached then
+            anyDetached = true
+            break
+        end
     end
     local playerDetached = db.player and db.player.powerBarDetached == true
-    SetControlsEnabled(self.groups.detached, anyDetached); SetControlsEnabled(self.groups.detachedPlayer, playerDetached)
+    SetControlsEnabled(self.groups.detached, anyDetached)
+    SetControlsEnabled(self.groups.detachedPlayer, playerDetached)
     SetControlEnabled(self.dpbUse, true)
     -- Lazy sections leave their control tables nil until first expand.
     local playerShape = NormalizeDetachedPowerShape(db.player and db.player.detachedPowerBarShape)
@@ -1521,7 +1546,8 @@ function Page:RefreshControlState()
     end
     local playerTextOn = db.player and PlayerPowerTextShown(db.player)
     if self.dpbText then
-        SetControlEnabled(self.dpbText.onBar, playerDetached); SetControlEnabled(self.dpbText.size, playerDetached and playerTextOn)
+        SetControlEnabled(self.dpbText.onBar, playerDetached)
+        SetControlEnabled(self.dpbText.size, playerDetached and playerTextOn)
     end
     SetControlsEnabled(self.groups.detachedText, playerDetached and playerTextOn)
     if self.dpbHide then
@@ -1539,7 +1565,8 @@ function Page:RefreshControlState()
     if self.hp then SetControlEnabled(self.hp.height, hpOn and not hpOrb) end
     local hpTextOn = hpOn and BoolValue(bars, "playerHPBarTextEnabled", true)
     local hpCustom = hpTextOn and not BoolValue(bars, "playerHPBarUsePlayerText", true)
-    SetControlsEnabled(self.groups.hpText, hpTextOn); SetControlsEnabled(self.groups.hpCustomText, hpCustom)
+    SetControlsEnabled(self.groups.hpText, hpTextOn)
+    SetControlsEnabled(self.groups.hpCustomText, hpCustom)
     if self.hpHide then
         for i, mode in ipairs({ bars.playerHPBarTextRight or "CURPERCENT", bars.playerHPBarTextLeft or "NONE", bars.playerHPBarTextCenter or "NONE" }) do
             SetControlEnabled(self.hpHide[i], hpCustom and HasPercent(mode))
@@ -1550,7 +1577,8 @@ function Page:RefreshControlState()
     local altManaOn = BoolValue(bars, "showAltMana", false)
     SetControlsEnabled(self.groups.altMana, altManaOn)
     SetControlEnabled(self.altManaWidth, altManaOn and (bars.altManaWidthMode or "player") == "custom")
-    SetControlEnabled(self.altToggle, true); SetControlEnabled(self.cpEnable, true)
+    SetControlEnabled(self.altToggle, true)
+    SetControlEnabled(self.cpEnable, true)
     -- Hover reasons for the three master switches. Lazy sections add controls
     -- to these groups later, so each refresh re-points them (a field write).
     if W.SetControlsDisabledReason and W.TurnOnReason then

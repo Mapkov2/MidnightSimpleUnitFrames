@@ -139,7 +139,10 @@ local function EnsureBindingConflictPopup()
         button2 = _G.CANCEL or Tr("Cancel"),
         OnAccept = function(_, data)
             if not data then return end
-            if type(data.commit) == "function" then data.commit(data.key, true); return end
+            if type(data.commit) == "function" then
+                data.commit(data.key, true)
+                return
+            end
             local ok = _G.MSUF_SetManagedBinding(PRIORITY_BINDING, data.key, true)
             if ok and type(data.refresh) == "function" then data.refresh("priority-binding-replaced") end
         end,
@@ -225,14 +228,20 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
         end
     end
     local function ClearBinding()
-        if not CurrentKey() then StopListening(); return true end
+        if not CurrentKey() then
+            StopListening()
+            return true
+        end
         local ok, code = _G.MSUF_ClearManagedBinding(PRIORITY_BINDING)
         if ok then Changed("priority-binding-cleared") end
         if not ok then BindingFailed(code) end
         return ok
     end
     local function ApplyKey(key, replaceConflict)
-        if CurrentKey() == key then StopListening(); return true end
+        if CurrentKey() == key then
+            StopListening()
+            return true
+        end
         local set = _G.MSUF_SetManagedBinding
         if type(set) ~= "function" then return false, "UNAVAILABLE" end
         local ok, code, action = set(PRIORITY_BINDING, key, replaceConflict == true)
@@ -244,8 +253,14 @@ local function BuildBindingCapture(ctx, parent, x, y, width)
         if not listening or type(key) ~= "string" then return end
         key = key:upper()
         if MODIFIER_KEYS[key] or key == "UNKNOWN" then return end
-        if key == "ESCAPE" then StopListening(); return end
-        if key == "BACKSPACE" or key == "DELETE" then ClearBinding(); return end
+        if key == "ESCAPE" then
+            StopListening()
+            return
+        end
+        if key == "BACKSPACE" or key == "DELETE" then
+            ClearBinding()
+            return
+        end
         local prefix = ""
         if _G.IsShiftKeyDown and _G.IsShiftKeyDown() then prefix = prefix .. "SHIFT-" end
         if _G.IsControlKeyDown and _G.IsControlKeyDown() then prefix = prefix .. "CTRL-" end
@@ -433,7 +448,10 @@ local function BuildPriorityPage(ctx)
     nextPage:SetPoint("TOPRIGHT", pinsCard, "TOPRIGHT", -16, -36)
     pageText:SetPoint("RIGHT", nextPage, "LEFT", -8, 0)
     prevPage:SetPoint("RIGHT", pageText, "LEFT", -8, 0)
-    if T.CenterButtonLabel then T.CenterButtonLabel(prevPage); T.CenterButtonLabel(nextPage) end
+    if T.CenterButtonLabel then
+        T.CenterButtonLabel(prevPage)
+        T.CenterButtonLabel(nextPage)
+    end
     RegisterAction(prevPage, ctx, "pins.page.previous", "Previous pinned players")
     RegisterAction(nextPage, ctx, "pins.page.next", "Next pinned players")
     local emptyPins = W.Text(pinsCard,
@@ -464,7 +482,11 @@ local function BuildPriorityPage(ctx)
         remove:SetPoint("RIGHT", row, "RIGHT", -4, 0)
         down:SetPoint("RIGHT", remove, "LEFT", -4, 0)
         up:SetPoint("RIGHT", down, "LEFT", -4, 0)
-        if T.CenterButtonLabel then T.CenterButtonLabel(up); T.CenterButtonLabel(down); T.CenterButtonLabel(remove) end
+        if T.CenterButtonLabel then
+            T.CenterButtonLabel(up)
+            T.CenterButtonLabel(down)
+            T.CenterButtonLabel(remove)
+        end
         RegisterAction(up, ctx, "pins.row." .. i .. ".up", "Move pinned player up")
         RegisterAction(down, ctx, "pins.row." .. i .. ".down", "Move pinned player down")
         RegisterAction(remove, ctx, "pins.row." .. i .. ".remove", "Remove pinned player")
@@ -490,7 +512,10 @@ local function BuildPriorityPage(ctx)
         local entries = pinViewScratch
         local count = #entries
         local pages = max(1, math.ceil(count / PIN_ROWS_PER_PAGE))
-        if pinPage > pages then pinPage = pages; M.gfPriorityPinPage = pinPage end
+        if pinPage > pages then
+            pinPage = pages
+            M.gfPriorityPinPage = pinPage
+        end
         local first = (pinPage - 1) * PIN_ROWS_PER_PAGE + 1
         T.SetTranslatedText(pinsStatus, count == 1 and Tr("1 saved player") or (tostring(count) .. " " .. Tr("saved players")))
         pageText:SetText(tostring(pinPage) .. " / " .. tostring(pages))

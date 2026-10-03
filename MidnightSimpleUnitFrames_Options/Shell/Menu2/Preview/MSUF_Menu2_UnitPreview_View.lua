@@ -196,7 +196,10 @@ local function RefreshHandleSelectionVisuals(box)
     if not box._selectedHandle and Preview.RestoreQueuedHandle(box) then return end
     local guidesOn = PreviewGuidesVisible(box)
     local selected = box._selectedHandle
-    if selected and selected.IsShown and not selected:IsShown() then selected = nil; box._selectedHandle = nil end
+    if selected and selected.IsShown and not selected:IsShown() then
+        selected = nil
+        box._selectedHandle = nil
+    end
     if PreviewHelpers.RefreshSelectedLayerButtons then
         PreviewHelpers.RefreshSelectedLayerButtons(box, selected, "layerButtons")
     end

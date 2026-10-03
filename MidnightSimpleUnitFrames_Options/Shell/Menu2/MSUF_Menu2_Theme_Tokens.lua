@@ -55,7 +55,10 @@ local function ColorRows(rows)
         local key, values = line:match("^([^=]+)=(.+)$")
         if key then
             local c, n = {}, 0
-            for value in values:gmatch("[^,]+") do n = n + 1; c[n] = tonumber(value) end
+            for value in values:gmatch("[^,]+") do
+                n = n + 1
+                c[n] = tonumber(value)
+            end
             out[key] = c
         end
     end
@@ -141,7 +144,10 @@ local function NavIconColors(rows)
         local keys, values = line:match("^([^=]+)=(.+)$")
         if keys then
             local c, n = {}, 0
-            for value in values:gmatch("[^,]+") do n = n + 1; c[n] = tonumber(value) end
+            for value in values:gmatch("[^,]+") do
+                n = n + 1
+                c[n] = tonumber(value)
+            end
             for key in keys:gmatch("%S+") do out[key] = { c[1], c[2], c[3] } end
         end
     end
@@ -154,7 +160,10 @@ local function GlassVariants(rows)
         local spec = {}
         for field, values in tostring(rest or ""):gmatch("(%w+)=([%d%.,]+)") do
             local c, n = {}, 0
-            for value in values:gmatch("[^,]+") do n = n + 1; c[n] = tonumber(value) end
+            for value in values:gmatch("[^,]+") do
+                n = n + 1
+                c[n] = tonumber(value)
+            end
             spec[field] = c
         end
         if key then out[key] = spec end

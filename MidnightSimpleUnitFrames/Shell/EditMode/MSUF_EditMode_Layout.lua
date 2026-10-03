@@ -1014,9 +1014,12 @@ function Ticker.EndDrag()
     local mover = d.mover
     local mL, cx, mR, mB, cy, mT = GetFrameEdgesUI(mover)
     if not mL then
-        mL = mover:GetLeft() or 0; mR = mover:GetRight() or 0
-        mT = mover:GetTop() or 0; mB = mover:GetBottom() or 0
-        cx = (mL + mR) * 0.5; cy = (mT + mB) * 0.5
+        mL = mover:GetLeft() or 0
+        mR = mover:GetRight() or 0
+        mT = mover:GetTop() or 0
+        mB = mover:GetBottom() or 0
+        cx = (mL + mR) * 0.5
+        cy = (mT + mB) * 0.5
     end
     local uiScale = UIParent:GetEffectiveScale() or d.uiScale or 1
     if uiScale <= 0 then uiScale = 1 end
@@ -1119,7 +1122,8 @@ function Ticker.Start()
     end
     tickerActive = true
     activeDrag = nil
-    idleMoverDirty = true; idleHUDDirty = true
+    idleMoverDirty = true
+    idleHUDDirty = true
     dirtyFlushGeneration = dirtyFlushGeneration + 1
     tickerFrame:SetScript("OnUpdate", nil)
     tickerFrame:Hide()
@@ -1154,7 +1158,8 @@ function Ticker.Stop(commitHeldDrag)
         SetActiveDragFlags(activeDrag, false)
     end
     activeDrag = nil
-    idleMoverDirty = false; idleHUDDirty = false
+    idleMoverDirty = false
+    idleHUDDirty = false
     dirtyFlushScheduled = false
     dirtyFlushGeneration = dirtyFlushGeneration + 1
     if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides(true) end

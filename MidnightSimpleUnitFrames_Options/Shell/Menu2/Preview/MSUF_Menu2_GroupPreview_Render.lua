@@ -21,7 +21,10 @@ Render.NO_GROUP_VISUAL = {}
 local MOCK_BACKDROPS = {}
 function Render.MockBackdrop(file)
     local backdrop = MOCK_BACKDROPS[file]
-    if not backdrop then backdrop = { bgFile = file }; MOCK_BACKDROPS[file] = backdrop end
+    if not backdrop then
+        backdrop = { bgFile = file }
+        MOCK_BACKDROPS[file] = backdrop
+    end
     return backdrop
 end
 -- Friendly bosses need boss units, which Classic Era and TBC do not have: a
@@ -41,7 +44,10 @@ function Render.AdditionalPreviewLayout(gf, kind, conf, liveW, liveH, out)
     local count = kind == "party" and 5 or 10
     local result = out or {}
     local items = result._items
-    if not items then items = {}; result._items = items end
+    if not items then
+        items = {}
+        result._items = items
+    end
     result.minX, result.maxX, result.minY, result.maxY = -liveW / 2, liveW / 2, -liveH / 2, liveH / 2
     local left = liveW / 2 + 18
     for i = 1, #ADDITIONAL_PREVIEW_PREFIXES do
@@ -50,7 +56,10 @@ function Render.AdditionalPreviewLayout(gf, kind, conf, liveW, liveH, out)
         if spec and spec.enabled then
             local x, y = left + spec.totalWidth / 2, liveH / 2 - spec.totalHeight / 2
             local item = items[prefix]
-            if not item then item = {}; items[prefix] = item end
+            if not item then
+                item = {}
+                items[prefix] = item
+            end
             item.spec, item.x, item.y = spec, x, y
             result[prefix] = item
             result.maxX = x + spec.totalWidth / 2
@@ -1292,9 +1301,15 @@ local TEXT_SLOT_HANDLE_KEYS = {
 }
 local function TextRegionList(box, key, a, b, c)
     local lists = box._msufGFTextRegionLists
-    if not lists then lists = {}; box._msufGFTextRegionLists = lists end
+    if not lists then
+        lists = {}
+        box._msufGFTextRegionLists = lists
+    end
     local list = lists[key]
-    if not list then list = {}; lists[key] = list end
+    if not list then
+        list = {}
+        lists[key] = list
+    end
     list[1], list[2], list[3] = a, b, c
     return list
 end
@@ -1561,13 +1576,25 @@ local function GroupPreviewAuraState(box, previewAnimation, groupKey, index, han
     local buildAuraState = previewAnimation and previewAnimation.BuildAuraState or _G.MSUF_BuildPreviewAnimationAuraState
     if type(buildAuraState) ~= "function" then return nil end
     local states = handle._previewAuraStates
-    if not states then states = {}; handle._previewAuraStates = states end
+    if not states then
+        states = {}
+        handle._previewAuraStates = states
+    end
     local scratch = states[index]
-    if not scratch then scratch = {}; states[index] = scratch end
+    if not scratch then
+        scratch = {}
+        states[index] = scratch
+    end
     local optionsByIndex = handle._previewAuraOptions
-    if not optionsByIndex then optionsByIndex = {}; handle._previewAuraOptions = optionsByIndex end
+    if not optionsByIndex then
+        optionsByIndex = {}
+        handle._previewAuraOptions = optionsByIndex
+    end
     local options = optionsByIndex[index]
-    if not options then options = {}; optionsByIndex[index] = options end
+    if not options then
+        options = {}
+        optionsByIndex[index] = options
+    end
     options.decimalThreshold = tonumber(cfg and cfg.cooldownDecimalSeconds) or 3
     return buildAuraState(groupKey, index, scratch, options, box._animationElapsed)
 end
@@ -2019,7 +2046,10 @@ function Stage.LayoutAuraGroup(st, handle, groupKey, cfg, defaults)
             end
         end
         local anim = handle._msufGFAuraAnim
-        if not anim then anim = {}; handle._msufGFAuraAnim = anim end
+        if not anim then
+            anim = {}
+            handle._msufGFAuraAnim = anim
+        end
         anim.groupKey, anim.maxIcons, anim.cfg, anim.size = groupKey, maxIcons, cfg, size
         anim.swipe, anim.swipeReverse = showSwipe and not barOnly, cooldownSwipeReverse
         anim.showStacks, anim.showCooldown = showStacks, showCooldown
@@ -2792,7 +2822,10 @@ function Stage.LayoutMockFrame(st, env)
         local additional = self._additionalPreviewLayout
         if st.reason ~= "GROUP_PREVIEW_ANIMATE" then
             local layoutScratch = self._additionalPreviewLayoutScratch
-            if not layoutScratch then layoutScratch = {}; self._additionalPreviewLayoutScratch = layoutScratch end
+            if not layoutScratch then
+                layoutScratch = {}
+                self._additionalPreviewLayoutScratch = layoutScratch
+            end
             additional = Render.AdditionalPreviewLayout(gf, kind, conf, liveW, liveH, layoutScratch)
             self._additionalPreviewLayout = additional
             local topology = additional and ((additional.pets and 1 or 0) + (additional.targets and 2 or 0)
@@ -2903,7 +2936,8 @@ function Stage.LayoutMockFrame(st, env)
                     local holder = gf.RenderAdditionalPreview(root, kind, prefix, kind == "party" and 5 or 10, MENU_EXTRA_OPTIONS)
                     if holder then
                         holder:SetScale(previewScale)
-                        holder:ClearAllPoints(); holder:SetPoint("CENTER", root, "CENTER", 0, 0)
+                        holder:ClearAllPoints()
+                        holder:SetPoint("CENTER", root, "CENTER", 0, 0)
                         root:Show()
                     else root:Hide() end
                 elseif root then
@@ -3459,7 +3493,10 @@ function Stage.RenderHealthText(st, env)
         -- The slot set is kept on the box: the animation tick formats the
         -- values from it (Stage.PaintHealthTexts).
         local htx = st.self._msufGFHealthTextState
-        if not htx then htx = {}; st.self._msufGFHealthTextState = htx end
+        if not htx then
+            htx = {}
+            st.self._msufGFHealthTextState = htx
+        end
         st.healthText = htx
         htx.fakeMax = (scene.liveData and scene.liveData.hpMax) or 1000000
         local fakeHP = (not scene.animState and scene.liveData and scene.liveData.hpCur)
@@ -3539,7 +3576,10 @@ function Stage.RenderPowerText(st, env)
         end
         -- Kept on the box for the animation tick (Stage.PaintPowerTexts).
         local ptx = st.self._msufGFPowerTextState
-        if not ptx then ptx = {}; st.self._msufGFPowerTextState = ptx end
+        if not ptx then
+            ptx = {}
+            st.self._msufGFPowerTextState = ptx
+        end
         st.powerText = ptx
         ptx.fakeMax = (scene.liveData and scene.liveData.powerMax) or 100
         local fakePow = (not scene.animState and scene.liveData and scene.liveData.powerCur)

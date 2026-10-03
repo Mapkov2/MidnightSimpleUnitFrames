@@ -73,9 +73,15 @@ local GFPreviewNormalizeTextFocusSlot = PreviewHelpers.NormalizeTextFocusSlot
 -- table, so a repaint or an animation tick refits the ring without allocating.
 local function FocusRegionList(mock, field, a, b, c)
     local lists = mock._msufFocusRegionLists
-    if not lists then lists = {}; mock._msufFocusRegionLists = lists end
+    if not lists then
+        lists = {}
+        mock._msufFocusRegionLists = lists
+    end
     local list = lists[field]
-    if not list then list = {}; lists[field] = list end
+    if not list then
+        list = {}
+        lists[field] = list
+    end
     list[1], list[2], list[3] = a, b, c
     return list
 end

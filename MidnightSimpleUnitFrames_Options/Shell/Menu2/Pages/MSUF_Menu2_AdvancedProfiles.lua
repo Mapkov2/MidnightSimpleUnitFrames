@@ -349,7 +349,10 @@ function ProfilesPage.Prepare(ctx)
     local buttonW, buttonH, buttonGap = 190, 24, 14
     local PROFILE_TOOLTIP = { hook = true, titleAsLine = true, bodyColor = { 0.85, 0.85, 0.85 } }
     local function AddProfileTooltip(frame, title, text) return M.AddTooltip and M.AddTooltip(frame, tostring(title or ""), text, PROFILE_TOOLTIP) or frame end
-    local function PlaceActionRow(parent, x, left, right, y) left:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); right:SetPoint("LEFT", left, "RIGHT", buttonGap, 0) end
+    local function PlaceActionRow(parent, x, left, right, y)
+        left:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+        right:SetPoint("LEFT", left, "RIGHT", buttonGap, 0)
+    end
     local function ProfileButton(parent, label, onClick, danger, semanticPath, confirmRequired, prepareValue, validateValue, directCommand, width)
         local btn = T.Button(parent, label, width or buttonW, buttonH)
         if danger and T.SkinDangerButton then T.SkinDangerButton(btn) end
@@ -520,7 +523,10 @@ function ProfilesPage.Hero(state)
 
     local heroExport = T.Button(hero, "Export backup", 150, 34, { noSearch = true })
     local heroSwitch = T.Button(hero, "Switch profile", 168, 34, { noSearch = true })
-    if T.CenterButtonLabel then T.CenterButtonLabel(heroExport); T.CenterButtonLabel(heroSwitch) end
+    if T.CenterButtonLabel then
+        T.CenterButtonLabel(heroExport)
+        T.CenterButtonLabel(heroSwitch)
+    end
     if T.ApplyButtonRole then T.ApplyButtonRole(heroSwitch, "primary") end
     if compactHero then
         heroExport:SetPoint("TOPRIGHT", hero, "TOPRIGHT", -202, -164)
@@ -653,7 +659,10 @@ function ProfilesPage.ManagementControls(state)
     local PrepareProfileName = function(value)
 local name = Trim(value)
         local prepared = { name = name, existed = name ~= "" and ProfileExists(name) or false }
-        if name ~= "" then M.profileCreateCopyName = name; nameInput:SetText(name) end
+        if name ~= "" then
+            M.profileCreateCopyName = name
+            nameInput:SetText(name)
+        end
         return prepared
 end
 
@@ -988,7 +997,10 @@ function ProfilesPage.ImportExport(state)
                 else
                     payload = Trim(value)
                 end
-                if payload ~= "" then M.profileImportString = payload; blob:SetText(payload) end
+                if payload ~= "" then
+                    M.profileImportString = payload
+                    blob:SetText(payload)
+                end
                 if newName and newName ~= "" then
                     M.profileImportCreateNew = true
                     M.profileImportNewName = newName
@@ -1048,9 +1060,15 @@ function ProfilesPage.ImportActions(state)
             return false
         elseif suiteKind == "module" then
             local suite = SuiteProfiles()
-            if not suite then PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this module."); return false end
+            if not suite then
+                PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this module.")
+                return false
+            end
             local ok, reason = suite.ImportModule(text)
-            if not ok then PrintProfileMessage("|cffff0000", "Module import failed: %s", tostring(reason)); return false end
+            if not ok then
+                PrintProfileMessage("|cffff0000", "Module import failed: %s", tostring(reason))
+                return false
+            end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
             return true
@@ -1079,11 +1097,17 @@ function ProfilesPage.ImportActions(state)
         local suiteKind = SuiteImportKind(text)
         if suiteKind then
             local suite = SuiteProfiles()
-            if not suite then PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this profile."); return false end
+            if not suite then
+                PrintProfileMessage("|cffff0000", "Install MSUF Suite to import this profile.")
+                return false
+            end
             local ok, reason
             if suiteKind == "full" then ok, reason = suite.Import(name, text)
             else ok, reason = suite.ImportModuleIntoNew(name, text) end
-            if not ok then PrintProfileMessage("|cffff0000", "Suite import failed: %s", tostring(reason)); return false end
+            if not ok then
+                PrintProfileMessage("|cffff0000", "Suite import failed: %s", tostring(reason))
+                return false
+            end
             ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
             M.profileImportNewName = ""

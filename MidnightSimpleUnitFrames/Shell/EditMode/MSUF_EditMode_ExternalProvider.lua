@@ -357,7 +357,10 @@ function Controller:MarkShellDirty()
         mover = mover or candidate
     end
     if not mover then self:HookMovers() end
-    if not mover then local _, first = next(self.externalMovers); mover = first end
+    if not mover then
+        local _, first = next(self.externalMovers)
+        mover = first
+    end
     if not mover then return false end
     local binding = self.externalBindings[self.spec.GetMoverKey(mover)]
     local proxy = binding and self.resolvedFrames[binding.externalKey]

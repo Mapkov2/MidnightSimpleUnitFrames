@@ -206,7 +206,10 @@ local function OpenGFSection(sectionKey)
                     M.gfAuraLaneSelection[scope] = lane
                     M.gfAuraToolSelection = M.gfAuraToolSelection or {}
                     local tools = M.gfAuraToolSelection[scope]
-                    if type(tools) ~= "table" then tools = {}; M.gfAuraToolSelection[scope] = tools end
+                    if type(tools) ~= "table" then
+                        tools = {}
+                        M.gfAuraToolSelection[scope] = tools
+                    end
                     previousAuraTool = tools[lane]
                     tools[lane] = "layout"
                     if lane ~= "externals" then M.SetMenuStateValue("auraStyleGFLane", lane) end

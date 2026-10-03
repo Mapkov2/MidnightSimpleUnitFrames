@@ -28,7 +28,9 @@ local function FieldCatalog()
         if type(value)=="table" then
             for key,child in pairs(value) do
                 if not (type(key)=="string" and key:match("^_")) then
-                    path[depth+1]=key; Visit(child,depth+1); path[depth+1]=nil
+                    path[depth+1]=key
+                    Visit(child,depth+1)
+                    path[depth+1]=nil
                 end
             end
         elseif depth>=2 and Fields.Path(path) and Sync.Owner(path) then
@@ -78,7 +80,12 @@ local function Exclusions(state,section,group,groups,y,width)
     VariantPage.Drop(state,section,"Excluded settings","sync.exclusion.select",Excluded,function() return excludedField or "" end,
         function(value) excludedField=value end,20,y,width)
     VariantPage.Button(state,section,"Remove exclusion","sync.exclusion.remove",30+width,y-24,function()
-        for i,path in ipairs(group.exclude) do if Fields.ID(path)==excludedField then table.remove(group.exclude,i); break end end
+        for i,path in ipairs(group.exclude) do
+            if Fields.ID(path)==excludedField then
+                table.remove(group.exclude,i)
+                break
+            end
+        end
         return Save(state.ctx,groups)
     end,width)
 end
@@ -87,7 +94,10 @@ function M.ProfileSyncPageBuild(state)
     local ctx=state.ctx
     local groups=Sync.GetGroups() or {}
     local group=Entry(groups)
-    if not group and groups[1] then selected=groups[1].name; group=groups[1] end
+    if not group and groups[1] then
+        selected=groups[1].name
+        group=groups[1]
+    end
     M.ProfileSearch.Selecting("sync",selected)
     local names=_G.MSUF_GetAllProfiles()
     local rows=math.ceil(#names/2)
@@ -127,7 +137,12 @@ function M.ProfileSyncPageBuild(state)
     VariantPage.Button(state,section,"Save sync group","sync.group.save",20,y,function() return Save(ctx,groups) end,width)
     VariantPage.Button(state,section,"Delete sync group","sync.group.delete",30+width,y,function()
         local current=Sync.GetGroups() or {}
-        for i,g in ipairs(current) do if g.name==selected then table.remove(current,i); break end end
+        for i,g in ipairs(current) do
+            if g.name==selected then
+                table.remove(current,i)
+                break
+            end
+        end
         selected=nil
         return Save(ctx,current)
     end,width)

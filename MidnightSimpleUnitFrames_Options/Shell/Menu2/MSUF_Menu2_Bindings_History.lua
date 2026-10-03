@@ -276,7 +276,10 @@ local function RestoreProfileRouting(snapshot)
     if type(gdb) ~= "table" then return end
     if type(gdb.char) ~= "table" then gdb.char = {} end
     local char = gdb.char[routing.key]
-    if type(char) ~= "table" then char = {}; gdb.char[routing.key] = char end
+    if type(char) ~= "table" then
+        char = {}
+        gdb.char[routing.key] = char
+    end
     if routing.existed then
         char.specAutoSwitch = routing.specAutoSwitch
         char.specProfileMap = DeepCopy(routing.specProfileMap)
@@ -412,8 +415,14 @@ local function HistoryStackBytes(stack)
     for i = 1, #stack do
         local entry = stack[i]
         local before, after = entry.before, entry.after
-        if before and not counted[before] then counted[before] = true; bytes = bytes + SnapshotBytes(before) end
-        if after and not counted[after] then counted[after] = true; bytes = bytes + SnapshotBytes(after) end
+        if before and not counted[before] then
+            counted[before] = true
+            bytes = bytes + SnapshotBytes(before)
+        end
+        if after and not counted[after] then
+            counted[after] = true
+            bytes = bytes + SnapshotBytes(after)
+        end
     end
     return bytes
 end

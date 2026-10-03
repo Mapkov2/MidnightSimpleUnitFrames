@@ -467,7 +467,10 @@ local function EnsureDropdownFrame()
         if dropdownFrame.SetAlpha then dropdownFrame:SetAlpha(1) end
     end)
     if IS_FOREVER then
-        dropdownFrame.SmartNavigationCloseHandler = function() CloseDropdown(true); return true end
+        dropdownFrame.SmartNavigationCloseHandler = function()
+            CloseDropdown(true)
+            return true
+        end
     end
     dropdownFrame:SetScript("OnUpdate", function(self, elapsed)
         if not dropdownOwner then return end
@@ -919,7 +922,10 @@ DropdownKeyDown = function(self, key)
         or key == "HOME" or key == "END" or key == "ENTER" or key == "SPACE")
     if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(not handled) end
     if not handled then return end
-    if key == "ESCAPE" then CloseDropdown({ immediate = true }); return end
+    if key == "ESCAPE" then
+        CloseDropdown({ immediate = true })
+        return
+    end
     if key == "ENTER" or key == "SPACE" then
         local row = dropdownRows[self._msuf2KeyboardIndex or 0]
         if row then row:GetScript("OnClick")(row) end
@@ -932,7 +938,10 @@ DropdownKeyDown = function(self, key)
     index = index + step
     while index >= 1 and index <= count do
         local row = dropdownRows[index]
-        if row and not row._msuf2DropdownDisabled then FocusDropdownRow(index, true); return end
+        if row and not row._msuf2DropdownDisabled then
+            FocusDropdownRow(index, true)
+            return
+        end
         index = index + step
     end
 end

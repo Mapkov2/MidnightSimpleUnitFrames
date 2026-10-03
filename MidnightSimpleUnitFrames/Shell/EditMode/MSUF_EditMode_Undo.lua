@@ -210,7 +210,10 @@ local function RestoreState(snap)
         return
     end
     local db = _G.MSUF_DB
-    if not db then ExportPublic("MSUF__UndoRestoring", false); return end
+    if not db then
+        ExportPublic("MSUF__UndoRestoring", false)
+        return
+    end
 
     if snap.category == "unit" then
         db[snap.key] = db[snap.key] or {}
@@ -437,7 +440,10 @@ function Undo.DoUndo()
     if #undoStack == 0 then return end
     local snap = undoStack[#undoStack]
     undoStack[#undoStack] = nil
-    if IsForeignProfileSnap(snap) then ClearLocalHistory(); return end
+    if IsForeignProfileSnap(snap) then
+        ClearLocalHistory()
+        return
+    end
     local current = CaptureState(snap.category, snap.key)
     if current then redoStack[#redoStack + 1] = current end
     RestoreState(snap)
@@ -451,7 +457,10 @@ function Undo.DoRedo()
     if #redoStack == 0 then return end
     local snap = redoStack[#redoStack]
     redoStack[#redoStack] = nil
-    if IsForeignProfileSnap(snap) then ClearLocalHistory(); return end
+    if IsForeignProfileSnap(snap) then
+        ClearLocalHistory()
+        return
+    end
     local current = CaptureState(snap.category, snap.key)
     if current then undoStack[#undoStack + 1] = current end
     RestoreState(snap)

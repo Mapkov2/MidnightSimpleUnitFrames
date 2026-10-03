@@ -589,9 +589,18 @@ local function SetPreviewTextColor(fs, color, fallbackAlpha)
     fs:SetTextColor(r, g, b, a)
     return true
 end
-local function SetLeftSpan(region, parent, x, y) region:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0); region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", x or 0, y or 0) end
-local function SetRightSpan(region, parent, x, y) region:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x or 0, y or 0); region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", x or 0, y or 0) end
-local function SetBottomSpan(region, parent, leftX, rightX, y) region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", leftX or 0, y or 0); region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", rightX or 0, y or 0) end
+local function SetLeftSpan(region, parent, x, y)
+    region:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
+    region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", x or 0, y or 0)
+end
+local function SetRightSpan(region, parent, x, y)
+    region:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x or 0, y or 0)
+    region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", x or 0, y or 0)
+end
+local function SetBottomSpan(region, parent, leftX, rightX, y)
+    region:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", leftX or 0, y or 0)
+    region:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", rightX or 0, y or 0)
+end
 local function PointCoord(point, w, h)
     point = tostring(point or "CENTER"):upper()
     local x = (point:find("RIGHT", 1, true) and w) or (point:find("LEFT", 1, true) and 0) or (w * 0.5)
@@ -748,19 +757,28 @@ local CHANNEL_SAMPLE_TICKS = 5
 local NO_CASTBAR_SAMPLE_CONFIG = {}
 local function CastbarSampleTexture(samples, surface, name)
     local region = samples[name]
-    if not region then region = PixelLayoutRegion(surface:CreateTexture(nil, "OVERLAY")); samples[name] = region end
+    if not region then
+        region = PixelLayoutRegion(surface:CreateTexture(nil, "OVERLAY"))
+        samples[name] = region
+    end
     region:ClearAllPoints()
     return region
 end
 local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, height, S, ApplyFont, TR, timeFontSize)
     local samples = mock.cast._featureSamples
-    if not samples then samples = {ticks={}}; mock.cast._featureSamples = samples end
+    if not samples then
+        samples = {ticks={}}
+        mock.cast._featureSamples = samples
+    end
     if key == "player" and g.castbarShowLatencyText == true then
         local text = samples.latency
         if not text then text = PixelLayoutRegion(surface:CreateFontString(nil, "OVERLAY")); samples.latency = text end
         ApplyFont(text, timeFontSize)
-        text:ClearAllPoints(); text:SetPoint("TOPRIGHT", surface, "BOTTOMRIGHT", 0, -S(2))
-        text:SetTextColor(1, 1, 1); text:SetText("50 ms"); text:Show()
+        text:ClearAllPoints()
+        text:SetPoint("TOPRIGHT", surface, "BOTTOMRIGHT", 0, -S(2))
+        text:SetTextColor(1, 1, 1)
+        text:SetText("50 ms")
+        text:Show()
     elseif samples.latency then samples.latency:Hide() end
     local channel = key == "player" and g.castbarShowChannelTicks == true
     local player = _G.MSUF_DB and _G.MSUF_DB.player
@@ -785,7 +803,10 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
     for i = 1, math.max(count, #samples.ticks) do
         local marker = samples.ticks[i]
         if i <= count then
-            if not marker then marker = PixelLayoutRegion(surface:CreateTexture(nil, "OVERLAY", nil, 7)); samples.ticks[i] = marker end
+            if not marker then
+                marker = PixelLayoutRegion(surface:CreateTexture(nil, "OVERLAY", nil, 7))
+                samples.ticks[i] = marker
+            end
             local percent = positions and type(positions[i]) == "number" and positions[i] or nil
             local fraction = percent and math.max(0, math.min(100, percent)) / 100
                 or math.max(0.02, math.min(0.98, i / (count + 1)))
@@ -799,7 +820,8 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
                 marker:SetPoint("BOTTOM", surface, "BOTTOMLEFT", width * fraction, 0)
             end
             marker:SetWidth(math.max(1, S(accent and 3 or 2)))
-            marker:SetColorTexture(1, accent and .72 or 1, accent and .2 or 1, 1); marker:Show()
+            marker:SetColorTexture(1, accent and .72 or 1, accent and .2 or 1, 1)
+            marker:Show()
         elseif marker then marker:Hide() end
     end
     mock.cast._msufPreviewChannelSample = channel
@@ -813,12 +835,16 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
     if kick and g.kickReadyTimeMarker == true then
         local marker = CastbarSampleTexture(samples, surface, "kickMarker")
         marker:SetPoint("TOPLEFT", surface, "TOPLEFT", width * .4, 0)
-        marker:SetSize(math.max(1, S(2)), height); marker:SetColorTexture(r, green, blue, alpha); marker:Show()
+        marker:SetSize(math.max(1, S(2)), height)
+        marker:SetColorTexture(r, green, blue, alpha)
+        marker:Show()
     elseif samples.kickMarker then samples.kickMarker:Hide() end
     if kick and g.kickReadyTimeSegment == true then
         local segment = CastbarSampleTexture(samples, surface, "kickSegment")
         segment:SetPoint("TOPLEFT", surface, "TOPLEFT", width * .4, 0)
-        segment:SetSize(width * .6, height); segment:SetColorTexture(r, green, blue, .25 * alpha); segment:Show()
+        segment:SetSize(width * .6, height)
+        segment:SetColorTexture(r, green, blue, .25 * alpha)
+        segment:Show()
     elseif samples.kickSegment then samples.kickSegment:Hide() end
     -- A separate representative strip retains the ordinary cast details. The
     -- detached sample uses configured dimensions/opacity and bounded canvas
@@ -827,7 +853,8 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
         local gcd = samples.gcd
         if not gcd then
             gcd = PixelLayoutRegion(CreateFrame("Frame", nil, canvas))
-            gcd.bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, gcd)); gcd.bar:SetAllPoints()
+            gcd.bar = PixelLayoutRegion(CreateFrame("StatusBar", nil, gcd))
+            gcd.bar:SetAllPoints()
             gcd.bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8"); gcd.bar:SetStatusBarColor(.2, .75, 1, 1)
             local bg = PixelLayoutRegion(gcd.bar:CreateTexture(nil, "BACKGROUND")); bg:SetAllPoints(); bg:SetColorTexture(.05, .05, .05, .8)
             gcd.text = PixelLayoutRegion(gcd.bar:CreateFontString(nil, "OVERLAY")); gcd.text:SetPoint("LEFT", 3, 0)
@@ -842,16 +869,24 @@ local function ApplyCastbarFeatureSamples(mock, canvas, surface, g, key, width, 
         h = math.min(h, math.max(4, ch - S(16)))
         local minX = g.showGCDBarSpell ~= false and math.max(S(12), h + S(2)) or S(12)
         w = math.min(w, math.max(20, cw - minX - S(12)))
-        gcd:SetSize(w, h); gcd:SetAlpha(detached and ((tonumber(g.gcdBarOpacity) or 100) / 100) or 1)
+        gcd:SetSize(w, h)
+        gcd:SetAlpha(detached and ((tonumber(g.gcdBarOpacity) or 100) / 100) or 1)
         gcd:ClearAllPoints()
         local x = detached and (cw * .5 + S(tonumber(g.gcdBarX) or 0) - w * .5) or S(12)
         local y = detached and (ch * .5 + S(tonumber(g.gcdBarY) or -180) - h * .5) or S(8)
         gcd:SetPoint("BOTTOMLEFT", canvas, "BOTTOMLEFT", math.max(minX, math.min(cw - w - S(12), x)), math.max(S(8), math.min(ch - h - S(8), y)))
-        gcd.bar:SetMinMaxValues(0, 1); gcd.bar:SetValue(.65)
-        ApplyFont(gcd.text, math.max(7, math.min(S(12), h - S(2)))); ApplyFont(gcd.time, math.max(7, math.min(S(12), h - S(2))))
-        gcd.text:SetText("GCD"); gcd.time:SetText("0.8")
-        gcd.text:SetShown(g.showGCDBarSpell ~= false); gcd.time:SetShown(g.showGCDBarTime ~= false)
-        gcd.icon:ClearAllPoints(); gcd.icon:SetPoint("TOPRIGHT", gcd, "TOPLEFT", -S(2), 0); gcd.icon:SetSize(h, h); gcd.icon:SetShown(g.showGCDBarSpell ~= false)
+        gcd.bar:SetMinMaxValues(0, 1)
+        gcd.bar:SetValue(.65)
+        ApplyFont(gcd.text, math.max(7, math.min(S(12), h - S(2))))
+        ApplyFont(gcd.time, math.max(7, math.min(S(12), h - S(2))))
+        gcd.text:SetText("GCD")
+        gcd.time:SetText("0.8")
+        gcd.text:SetShown(g.showGCDBarSpell ~= false)
+        gcd.time:SetShown(g.showGCDBarTime ~= false)
+        gcd.icon:ClearAllPoints()
+        gcd.icon:SetPoint("TOPRIGHT", gcd, "TOPLEFT", -S(2), 0)
+        gcd.icon:SetSize(h, h)
+        gcd.icon:SetShown(g.showGCDBarSpell ~= false)
         gcd:Show()
     elseif samples.gcd then samples.gcd:Hide() end
 end
@@ -871,7 +906,10 @@ end
 -- One-region lists for the handle placer, kept on the region itself.
 local function RegionList(region)
     local list = region._msufPreviewRegionList
-    if not list then list = { region }; region._msufPreviewRegionList = list end
+    if not list then
+        list = { region }
+        region._msufPreviewRegionList = list
+    end
     return list
 end
 --- The time text's handle around the text as it reads now: the refresh and
@@ -1142,7 +1180,10 @@ local NO_TEXTURES = {}
 -- or animation tick passes the same object instead of a new one per gradient.
 local function TextureLayerColor(owner, field, r, g, b, a)
     local color = owner[field]
-    if color and color.SetRGBA then color:SetRGBA(r, g, b, a); return color end
+    if color and color.SetRGBA then
+        color:SetRGBA(r, g, b, a)
+        return color
+    end
     color = _G.CreateColor(r, g, b, a)
     owner[field] = color
     return color
@@ -2271,7 +2312,8 @@ function Stage.RenderPowerBar(st)
     local RenderState, S, box, conf, data, displayPowerToken, hb, hg = st.R, st.S, st.box, st.conf, st.data, st.displayPowerToken, st.hb, st.hg
     local hr, max, mock, powerFrac, powerH, powerOn, runtimePower, sw = st.hr, st.max, st.mock, st.powerFrac, st.powerH, st.powerOn, st.runtimePower, st.sw
     if powerOn then
-        mock.powerBG:Show(); mock.power:Show()
+        mock.powerBG:Show()
+        mock.power:Show()
         mock.powerBG:ClearAllPoints()
         if box._runtimePowerEmbedded == true then
             SetBottomSpan(mock.powerBG, mock)
@@ -2287,7 +2329,8 @@ function Stage.RenderPowerBar(st)
         mock.power:SetWidth(max(1, sw * powerFrac))
         mock.power:SetVertexColor(pr, pg, pb, 1)
     else
-        mock.powerBG:Hide(); mock.power:Hide()
+        mock.powerBG:Hide()
+        mock.power:Hide()
     end
     if MSUF.UFBarTextCommon and MSUF.UFBarTextCommon.ApplyBarGradientToTarget then
         MSUF.UFBarTextCommon.ApplyBarGradientToTarget(mock, mock, mock.power,
@@ -2445,9 +2488,15 @@ local VALUE_TEXT_HANDLE_FIELDS = {
 }
 local function HandleRegionList(box, field, a, b, c)
     local lists = box._msufTextHandleRegionLists
-    if not lists then lists = {}; box._msufTextHandleRegionLists = lists end
+    if not lists then
+        lists = {}
+        box._msufTextHandleRegionLists = lists
+    end
     local list = lists[field]
-    if not list then list = {}; lists[field] = list end
+    if not list then
+        list = {}
+        lists[field] = list
+    end
     list[1], list[2], list[3] = a, b, c
     return list
 end
@@ -2579,7 +2628,10 @@ function Stage.RenderClassPower(st)
                 S((tonumber(bars.classPowerOffsetY) or 0) - 2))
         end
         local cp = box._msufClassPowerPreviewScratch
-        if not cp then cp = {}; box._msufClassPowerPreviewScratch = cp end
+        if not cp then
+            cp = {}
+            box._msufClassPowerPreviewScratch = cp
+        end
         cp.preview = classPowerPreviewSpec
         cp.token = cp.preview and cp.preview.token
         cp.isRune = cp.preview and cp.preview.mode == "rune"
@@ -3987,7 +4039,10 @@ function Render.Install(Preview, deps)
         local ring = portrait._msufPreviewBlizzRing
         if PREVIEW_CLASSIC and portrait._msufPreviewBlizzFallback then portrait._msufPreviewBlizzFallback:Hide() end
         if not active then
-            if portrait.blizzElite then portrait.blizzElite:Hide(); portrait.blizzElite._msufShown = false end
+            if portrait.blizzElite then
+                portrait.blizzElite:Hide()
+                portrait.blizzElite._msufShown = false
+            end
             if ring then ring:Hide() end
             if portrait._msufPreviewBlizzMirror then portrait._msufPreviewBlizzMirror:Hide() end
             if portrait._msufPreviewBlizzCorner then portrait._msufPreviewBlizzCorner:Hide() end

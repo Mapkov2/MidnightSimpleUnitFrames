@@ -110,7 +110,8 @@ local function MakeFS(p, fontRole, r, g, b, a)
     end
     fs:SetShadowOffset(1, -1)
     if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0.35) end
-    fs:SetTextColor(r or 1, g or 1, b or 1, a or 1); return fs
+    fs:SetTextColor(r or 1, g or 1, b or 1, a or 1)
+    return fs
 end
 
 local function SetActive(btn, on)
@@ -244,7 +245,8 @@ local function AttachHoverTextAccent(widget, label)
 end
 
 local function MakeBtn(parent, text, w, h, fontRole, onClick)
-    w = w or (#text * 8 + 18); h = h or BTN_H
+    w = w or (#text * 8 + 18)
+    h = h or BTN_H
     local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
     local btn = ui and ui.Button and ui.Button(parent, HelpText(text), w, h, {
         align = "CENTER",
@@ -255,9 +257,11 @@ local function MakeBtn(parent, text, w, h, fontRole, onClick)
     local label = btn._msuf2Label or btn._label
     if not label then
         local hl = DockUI.PixelLayoutRegion(btn:CreateTexture(nil, "HIGHLIGHT"))
-        hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.05)
         label = MakeFS(btn, fontRole or "body", TH.textR, TH.textG, TH.textB, 0.92)
-        label:SetPoint("CENTER"); label:SetText(HelpText(text))
+        label:SetPoint("CENTER")
+        label:SetText(HelpText(text))
     elseif ui and ui.ApplyFontRole then
         --- Shared buttons build their label from a Blizzard font object, which
         --- carries Blizzard's face and ignores the configured menu font that
@@ -267,8 +271,10 @@ local function MakeBtn(parent, text, w, h, fontRole, onClick)
     end
     btn._label = label
     local dot = DockUI.PixelLayoutRegion(btn:CreateTexture(nil, "OVERLAY"))
-    dot:SetSize(w - 8, 2); dot:SetPoint("BOTTOM", btn, "BOTTOM", 0, 2)
-    dot:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.90); dot:Hide()
+    dot:SetSize(w - 8, 2)
+    dot:SetPoint("BOTTOM", btn, "BOTTOM", 0, 2)
+    dot:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.90)
+    dot:Hide()
     btn._dot = dot
     if onClick and not (ui and ui.Button) then btn:SetScript("OnClick", onClick) end
     AttachHoverTextAccent(btn, label)
@@ -352,16 +358,20 @@ end
 
 local function AddAdjustWidget(row, parent, width, height, withStateBg, onMouseWheel, onMouseUp, tip)
     local f = DockUI.PixelLayoutRegion(CreateFrame("Frame", nil, parent))
-    f:SetSize(width, height); f:EnableMouse(true); f:EnableMouseWheel(true)
+    f:SetSize(width, height)
+    f:EnableMouse(true)
+    f:EnableMouseWheel(true)
     if withStateBg then
         local stateBg = DockUI.PixelLayoutRegion(f:CreateTexture(nil, "BACKGROUND"))
-        stateBg:SetAllPoints(); stateBg:SetColorTexture(0, 0, 0, 0)
+        stateBg:SetAllPoints()
+        stateBg:SetColorTexture(0, 0, 0, 0)
         f._stateBg = stateBg
     end
     local fs = MakeFS(f, "caption", TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
     fs:SetPoint("CENTER")
     local hl = DockUI.PixelLayoutRegion(f:CreateTexture(nil, "HIGHLIGHT"))
-    hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.04)
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 1, 1, 0.04)
     if onMouseUp then f:SetScript("OnMouseUp", onMouseUp) end
     if onMouseWheel then f:SetScript("OnMouseWheel", onMouseWheel) end
     if tip then SetTip(f, tip) end

@@ -516,7 +516,12 @@ function M.CopyFieldsFromSpecs(specs, values, seed, props)
         for i = 1, #(specs or {}) do
             local spec = specs[i]
             if spec.value == value then
-                for prop in tostring(spec.copyProps or props):gmatch("%S+") do local key = spec[prop]; if key then out[#out + 1] = key end end
+                for prop in tostring(spec.copyProps or props):gmatch("%S+") do
+                    local key = spec[prop]
+                    if key then
+                        out[#out + 1] = key
+                    end
+                end
                 -- colorPrefix names a key family rather than one key, so it is
                 -- expanded here: a copied text indicator has to bring its color
                 -- along with its placement or the copy looks half applied.
@@ -526,7 +531,12 @@ function M.CopyFieldsFromSpecs(specs, values, seed, props)
                     out[#out + 1] = colorPrefix .. "ColorG"
                     out[#out + 1] = colorPrefix .. "ColorB"
                 end
-                local extra = spec.copyExtra; if extra then for j = 1, #extra do out[#out + 1] = extra[j] end end
+                local extra = spec.copyExtra
+                if extra then
+                    for j = 1, #extra do
+                        out[#out + 1] = extra[j]
+                    end
+                end
                 break
             end
         end
@@ -636,8 +646,25 @@ function M.Assign(target, values)
     for key, value in pairs(values) do target[key] = value end
     return target
 end
-function M.AppendValues(target, ...) if type(target) ~= "table" then target = {} end; for i = 1, select("#", ...) do target[#target + 1] = select(i, ...) end; return target end
-function M.AppendNamedValues(target, source, names) if type(target) ~= "table" then target = {} end; source = source or {}; for name in tostring(names or ""):gmatch("%S+") do target[#target + 1] = source[name] end; return target end
+function M.AppendValues(target, ...)
+    if type(target) ~= "table" then
+        target = {}
+    end
+    for i = 1, select("#", ...) do
+        target[#target + 1] = select(i, ...)
+    end
+    return target
+end
+function M.AppendNamedValues(target, source, names)
+    if type(target) ~= "table" then
+        target = {}
+    end
+    source = source or {}
+    for name in tostring(names or ""):gmatch("%S+") do
+        target[#target + 1] = source[name]
+    end
+    return target
+end
 function M.AssignNamedValues(target, names, ...)
     if type(target) ~= "table" then target = {} end
     local index = 1
@@ -778,7 +805,10 @@ function M.BindGateGroup(ctx, source, entries, opts)
     -- during a refresh and applied once at its end: no per-refresh tables.
     local pendingReasons
     for i = 1, #entries do
-        if entries[i].reason ~= nil then pendingReasons = {}; break end
+        if entries[i].reason ~= nil then
+            pendingReasons = {}
+            break
+        end
     end
     local function noteReason(control, reason)
         if not control then return end

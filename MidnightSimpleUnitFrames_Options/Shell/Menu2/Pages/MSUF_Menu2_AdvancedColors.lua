@@ -1193,7 +1193,10 @@ local function BuildFontAndClassColors(ctx, b, CH, part)
         local db = DB()
         local key = StatusTextUnit()
         local conf = db[key]
-        if type(conf) ~= "table" then conf = {}; db[key] = conf end
+        if type(conf) ~= "table" then
+            conf = {}
+            db[key] = conf
+        end
         return conf
     end
     local function ApplyStatusTextColors()
@@ -1650,7 +1653,10 @@ local function BuildUnitAndNPCColors(ctx, b, CH)
         if enabled == nil then enabled = npcMaster and npcMaster:GetChecked() and true or false end
         SetControlsEnabled(npcControls, enabled)
     end
-    local function AddNPCTypeControl(control) M.AppendValues(npcControls, control); return control end
+    local function AddNPCTypeControl(control)
+        M.AppendValues(npcControls, control)
+        return control
+    end
     local function AddNPCTypeToggle(label, x, y, apiGet, apiSet, key, apiArg)
         return AddNPCTypeControl(ValueToggleAt(ctx, npcType, label, x, y,
             function() return ApiValue(apiGet, function() return G()[key] ~= false end, apiArg) end,

@@ -168,8 +168,14 @@ local function ApplyGroupSettingsForKeySafe(kind)
         gf.DeferGroupRuntime("layout", kind, dirty)
         did = true
     else
-        if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry(kind); did = true end
-        if type(gf.RefreshVisuals) == "function" and dirty then gf.RefreshVisuals(kind, dirty); did = true end
+        if type(gf.RefreshGeometry) == "function" then
+            gf.RefreshGeometry(kind)
+            did = true
+        end
+        if type(gf.RefreshVisuals) == "function" and dirty then
+            gf.RefreshVisuals(kind, dirty)
+            did = true
+        end
     end
     return did
 end

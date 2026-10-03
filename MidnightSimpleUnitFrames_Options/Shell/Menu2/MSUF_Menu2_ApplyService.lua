@@ -618,9 +618,15 @@ did = true
             gf.RebuildAll()
             did = true
         else
-            if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry(kind); did = true end
+            if type(gf.RefreshGeometry) == "function" then
+                gf.RefreshGeometry(kind)
+                did = true
+            end
             if type(gf.RefreshUnitBindings) == "function" then gf.RefreshUnitBindings(kind); did = true end
-            if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind, gf.DIRTY_ALL or dirty); did = true end
+            if type(gf.RefreshVisuals) == "function" then
+                gf.RefreshVisuals(kind, gf.DIRTY_ALL or dirty)
+                did = true
+            end
         end
         return FinishGroupRecord(gf, rec, kind, reason, did)
     end

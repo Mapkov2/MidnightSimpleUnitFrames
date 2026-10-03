@@ -145,7 +145,10 @@ function Style.ApplyToFrame(root)
     return root
 end
 
-function Style.SkinEditModePopupFrame(frame) Style.ApplyBackdrop(frame); return Style.ApplyToFrame(frame) end
+function Style.SkinEditModePopupFrame(frame)
+    Style.ApplyBackdrop(frame)
+    return Style.ApplyToFrame(frame)
+end
 function Style.ScanAndSkinEditMode()
     for _, name in ipairs({ "MSUF_EM2_UnitPopup", "MSUF_EM2_CastPopup", "MSUF_EM2_AuraPopup" }) do
         local frame = rawget(_G, name)
@@ -155,7 +158,12 @@ end
 function Style.InstallEditModeAutoSkin() end
 function Style.InstallStandaloneOptionsAutoSkin() end
 
-local function DropdownNoop(drop) if drop then drop.__msufMSUFDropdown = true end; return drop end
+local function DropdownNoop(drop)
+    if drop then
+        drop.__msufMSUFDropdown = true
+    end
+    return drop
+end
 function Style.ApplyPeelDropdownTemplate(drop) return DropdownNoop(drop) end
 Style.SkinUIDDropDownTinyBars = Style.ApplyPeelDropdownTemplate
 Style.RevertPeelDropdownTemplate = DropdownNoop

@@ -508,7 +508,10 @@ InvalidatePageEntries = function(key)
         if key == "home" then M.dashboardEditModeButton = nil end
         local entries, seen = {}, {}
         local entry = M.cache[key]
-        if entry then entries[#entries + 1] = entry; seen[entry] = true end
+        if entry then
+            entries[#entries + 1] = entry
+            seen[entry] = true
+        end
         local variants = M._msuf2PageLayoutVariants[key]
         if type(variants) == "table" then
             for _, variant in pairs(variants) do

@@ -525,7 +525,12 @@ function Dashboard.PrepareActionHelpers(state)
     end
     local function RefreshDashboardEditModeButtonSafe() M.RefreshDashboardEditModeButton() end
     local function RefreshMenuFramePrioritySafe() M.RefreshMenuFramePriority() end
-    local function RefreshDashboardFrameStatus() local f = M.frame; if f and f.RefreshStatus then f:RefreshStatus() end end
+    local function RefreshDashboardFrameStatus()
+        local f = M.frame
+        if f and f.RefreshStatus then
+            f:RefreshStatus()
+        end
+    end
     local function ToggleEditMode()
         local active = IsDashboardEditModeActive()
         if (not active) and IsDashboardEditModeCombatLocked() then

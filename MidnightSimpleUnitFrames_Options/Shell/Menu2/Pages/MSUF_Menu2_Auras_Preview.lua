@@ -511,7 +511,10 @@ local function RenderPreviewIcon(icon, index, cfg, isBuffIcon, forceText, opts)
     local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
     local borderAtlas = (not barOnly and not isBuffIcon) and DEBUFF_TYPE_BORDER_PREVIEW_ATLAS[cfg.debuffBorderMode] or nil
     local showPreviewEdges = isBuffIcon == true and not barOnly and cfg.iconShape == "RECTANGLE"
-    for _, edge in pairs(icon.edge) do edge:SetShown(showPreviewEdges); edge:SetVertexColor(r, g, b, 0.95) end
+    for _, edge in pairs(icon.edge) do
+        edge:SetShown(showPreviewEdges)
+        edge:SetVertexColor(r, g, b, 0.95)
+    end
     icon.swipe:SetShown(cfg.showSwipe ~= false and not barOnly)
     icon.swipe:ClearAllPoints()
     if cfg.cooldownSwipeReverse == true then

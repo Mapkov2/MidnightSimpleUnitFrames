@@ -238,7 +238,10 @@ local function BuildCustomDotsTool(C)
         local values = type(Model.TargetDotValues) == "function" and Model.TargetDotValues() or {}
         local selected
         for i = 1, #values do
-            if values[i].value then selected = values[i].value; break end
+            if values[i].value then
+                selected = values[i].value
+                break
+            end
         end
         local dropdown = BindDropdown(ctx, section, "DoT", 24, -34, values, max(140, inner - 132),
             function() return selected end,
@@ -248,7 +251,10 @@ local function BuildCustomDotsTool(C)
         add:SetPoint("TOPRIGHT", section, "TOPRIGHT", -24, -56)
         add:SetScript("OnClick", function()
             local changed = selected and Model.AddCustomContainerSpell(unit, index, selected)
-            if changed then Apply("AURAS3_TARGET_DOT_ADD", true); Rebuild(ctx) end
+            if changed then
+                Apply("AURAS3_TARGET_DOT_ADD", true)
+                Rebuild(ctx)
+            end
             return changed and true or false
         end)
         RegisterAuraTextAction(ctx, add, {

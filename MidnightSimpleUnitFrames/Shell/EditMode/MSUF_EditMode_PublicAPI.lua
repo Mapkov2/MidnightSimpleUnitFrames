@@ -47,14 +47,20 @@ local function Copy(value, seen, depth)
     local result, count = {}, 0
     for key, child in pairs(value) do
         count = count + 1
-        if count > 512 then seen[value] = nil; return nil, "too_many_items" end
+        if count > 512 then
+            seen[value] = nil
+            return nil, "too_many_items"
+        end
         local keyType = type(key)
         if keyType ~= "string" and keyType ~= "number" and keyType ~= "boolean" then
             seen[value] = nil
             return nil, "invalid_key"
         end
         local copied, reason = Copy(child, seen, depth + 1)
-        if reason then seen[value] = nil; return nil, reason end
+        if reason then
+            seen[value] = nil
+            return nil, reason
+        end
         result[key] = copied
     end
     seen[value] = nil
@@ -89,7 +95,10 @@ local function Capture(record)
     local ok, state = Invoke(record, name)
     if not ok or state == nil then return nil end
     local copy, reason = SafeCopy(state)
-    if reason then Report(record, name, reason); return nil end
+    if reason then
+        Report(record, name, reason)
+        return nil
+    end
     return copy
 end
 
@@ -290,7 +299,8 @@ function API.RegisterElements(owner, elements)
     end
     if #prepared == 0 then return false, "no_elements" end
     for i = 1, #prepared do Add(prepared[i]) end
-    SyncHistory(); Refresh()
+    SyncHistory()
+    Refresh()
     return true
 end
 
@@ -299,7 +309,9 @@ function API.RegisterElement(owner, element) return API.RegisterElements(owner, 
 function API.UnregisterElement(owner, id)
     local record = ValidName(owner) and ValidName(id) and records[Key(owner, id)]
     if not record or record.owner ~= owner then return false, "not_registered" end
-    Remove(record); SyncHistory(); Refresh()
+    Remove(record)
+    SyncHistory()
+    Refresh()
     return true
 end
 
@@ -310,7 +322,8 @@ function API.UnregisterOwner(owner)
     for _, record in pairs(owned) do remove[#remove + 1] = record end
     for i = 1, #remove do Remove(remove[i]) end
     listeners[owner] = nil
-    SyncHistory(); Refresh()
+    SyncHistory()
+    Refresh()
     return true
 end
 
@@ -329,11 +342,13 @@ end
 function API.IsActive() return IsActive() end
 function API.RefreshElement(owner, id)
     if not (ValidName(owner) and ValidName(id) and records[Key(owner, id)]) then return false, "not_registered" end
-    Refresh(); return true
+    Refresh()
+    return true
 end
 function API.RefreshOwner(owner)
     if not owners[owner] then return false, "not_registered" end
-    Refresh(); return true
+    Refresh()
+    return true
 end
 
 function API.Open(owner, id)
@@ -423,9 +438,12 @@ function External.Nudge(key, dx, dy)
     if InCombat() or not state or not (undo and undo.BeginChange and undo.CommitChange and undo.CancelChange)
         or undo.BeginChange("external", key, "Nudge") ~= true then return false end
     if not External.ApplyMove(key, state, dx, dy, nil, nil, "commit") then
-        undo.CancelChange(); Restore(records[key], state, "rollback"); return false
+        undo.CancelChange()
+        Restore(records[key], state, "rollback")
+        return false
     end
-    undo.CommitChange(); Refresh()
+    undo.CommitChange()
+    Refresh()
     if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
     return true
 end
@@ -493,8 +511,12 @@ function External.Reset(key)
     if not record or not record.resetPosition or not IsActive() or InCombat()
         or not (undo and undo.BeginChange and undo.CommitChange and undo.CancelChange)
         or undo.BeginChange("external", key, "Reset") ~= true then return false end
-    if not Invoke(record, "resetPosition", "commit") then undo.CancelChange(); return false end
-    undo.CommitChange(); Refresh()
+    if not Invoke(record, "resetPosition", "commit") then
+        undo.CancelChange()
+        return false
+    end
+    undo.CommitChange()
+    Refresh()
     return true
 end
 

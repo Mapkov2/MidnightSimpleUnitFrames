@@ -1921,7 +1921,10 @@ local function BuildSlantedSection(ctx, b)
         function(value)
             local allowed = false
             for i = 1, #SLANTED_DIRECTION_VALUES do
-                if SLANTED_DIRECTION_VALUES[i].value == value then allowed = true; break end
+                if SLANTED_DIRECTION_VALUES[i].value == value then
+                    allowed = true
+                    break
+                end
             end
             if not allowed or Bars().slantedBarDirection == value then return end
             Bars().slantedBarDirection = value

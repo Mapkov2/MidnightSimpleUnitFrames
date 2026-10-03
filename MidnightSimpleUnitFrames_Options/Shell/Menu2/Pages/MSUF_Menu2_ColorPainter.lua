@@ -33,7 +33,10 @@ end
 local function Label(parent, text, x, y, width, color, template)
     local fs = T.Font(parent, template or "GameFontHighlightSmall", text, color or T.colors.text)
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    if width then fs:SetWidth(width); fs:SetJustifyH("LEFT") end
+    if width then
+        fs:SetWidth(width)
+        fs:SetJustifyH("LEFT")
+    end
     return fs
 end
 

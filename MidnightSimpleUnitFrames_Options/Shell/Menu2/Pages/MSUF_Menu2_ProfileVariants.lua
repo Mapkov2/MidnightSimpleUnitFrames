@@ -2,7 +2,8 @@ local _,MSUF=...
 local M=MSUF.MSUF2
 local W,T,AP=M.Widgets,M.Theme,M.AdvancedPage
 local Fields,Variants=MSUF.ProfileFields,MSUF.ProfileVariants
-local P={}; M.ProfileVariantPage=P
+local P={}
+M.ProfileVariantPage=P
 local selected,fieldID,editorBar
 -- A saved schema that fails validation (a newer import, too many variants, a
 -- tightened rule) must never look empty: the page names the error and every write
@@ -28,7 +29,12 @@ function P.Refresh(ctx)
     if M.RequestRefresh then M.RequestRefresh(ctx,"profile-variants") end
 end
 function P.EditorBar(ctx)
-    if not Variants.IsRecording() then if editorBar then editorBar:Hide() end; return end
+    if not Variants.IsRecording() then
+        if editorBar then
+            editorBar:Hide()
+        end
+        return
+    end
     if not editorBar then
         editorBar=T.Panel(UIParent)
         editorBar:SetSize(460,86)
@@ -113,7 +119,8 @@ local function Conditions(state,section,entry,schema,width,specs)
     for i=1,8 do hotkeys[#hotkeys+1]={value=i,text=M.Format("Hotkey slot %d",i)} end
     P.Drop(state,section,"Activation","variant.condition.hotkey",hotkeys,
         function() return entry.hotkey or 0 end,function(value)
-            entry.hotkey=value~=0 and value or nil; c.manual=value~=0
+            entry.hotkey=value~=0 and value or nil
+            c.manual=value~=0
         end,left,-350,width)
     local enabled=W.SwitchAt(section,"Enable variant",right,-350,width)
     P.BindBool(state.ctx,enabled,function() return entry.enabled~=false end,
@@ -135,7 +142,10 @@ function P.Build(state,specs)
     P.EditorBar(ctx)
     local schema,schemaError=Schema()
     local entry=schema and Entry(schema)
-    if schema and not entry and schema.entries[1] then selected=schema.entries[1].name; entry=schema.entries[1] end
+    if schema and not entry and schema.entries[1] then
+        selected=schema.entries[1].name
+        entry=schema.entries[1]
+    end
     M.ProfileSearch.Selecting("variant",selected)
     local width=math.max(180,math.floor((state.contentW-50)/2))
     local section=state.b:CollapsibleSection("profiles_variants","Profile variants",entry and (850+math.ceil(#specs/2)*32) or 250,true)
@@ -167,7 +177,12 @@ function P.Build(state,specs)
     P.Button(state,section,"Delete variant","variant.delete",30+width,y,function()
         local current,err=Schema()
         if not current then return P.Result(ctx,false,err) end
-        for i,v in ipairs(current.entries) do if v.name==selected then table.remove(current.entries,i); break end end
+        for i,v in ipairs(current.entries) do
+            if v.name==selected then
+                table.remove(current.entries,i)
+                break
+            end
+        end
         selected=nil
         return Put(ctx,current)
     end,width)
@@ -188,7 +203,9 @@ function P.Build(state,specs)
             if not (saved and type(saved.conditions)=="table" and saved.conditions.manual) then
                 return P.Result(ctx,false,"Choose a hotkey slot and save the conditions first.")
             end
-            Variants.SetManual(selected); Variants.RequestApply("PROFILE_VARIANT_PREVIEW",true); P.Refresh(ctx)
+            Variants.SetManual(selected)
+            Variants.RequestApply("PROFILE_VARIANT_PREVIEW",true)
+            P.Refresh(ctx)
         end,width)
     end
     y=y-56
@@ -201,7 +218,12 @@ function P.Build(state,specs)
         if not current then return P.Result(ctx,false,err) end
         local owner=Entry(current)
         if owner then
-            for i,field in ipairs(owner.patch) do if Fields.ID(field.path)==fieldID then table.remove(owner.patch,i); break end end
+            for i,field in ipairs(owner.patch) do
+                if Fields.ID(field.path)==fieldID then
+                    table.remove(owner.patch,i)
+                    break
+                end
+            end
         end
         return Put(ctx,current)
     end,width)
@@ -214,7 +236,8 @@ function P.Transport(state)
         {"Import profile variants","profileImportVariants","MSUF_Profiles_SetImportVariants"}}) do
         local toggle=W.SwitchAt(section,spec[1],20,-104-(i-1)*36,state.contentW-40)
         P.BindBool(state.ctx,toggle,function() return M[spec[2]]~=false end,function(value)
-            M[spec[2]]=value==true; _G[spec[3]](value)
+            M[spec[2]]=value==true
+            _G[spec[3]](value)
         end,P.Meta("profiles_variant_transport",spec[2]))
     end
 end

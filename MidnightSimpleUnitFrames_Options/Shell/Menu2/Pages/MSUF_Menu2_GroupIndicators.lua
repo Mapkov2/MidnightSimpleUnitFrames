@@ -245,11 +245,13 @@ local function BuildIndicatorsSection(ctx, b)
     local rightW = innerW - leftW - cardGap
     local function AddScopeSlider(list, parent, label, minValue, maxValue, step, width, key, defaultValue, mode, y, moveWidth)
         local control = ScopeSlider(ctx, parent, label, minValue, maxValue, step, width, key, defaultValue, mode, 16, y, moveWidth or (width - 58))
-        M.AppendValues(list, control); return control
+        M.AppendValues(list, control)
+        return control
     end
     local function AddScopeDropdown(list, parent, label, values, width, key, defaultValue, mode, y)
         local control = ScopeDropdown(ctx, parent, label, values, width, key, defaultValue, mode, 16, y, width - 32)
-        M.AppendValues(list, control); return control
+        M.AppendValues(list, control)
+        return control
     end
     local highlightCard = W.ControlCard(indicators, "Target Highlight",
         M.Format("Configure target highlighting in %s.", M.NavPath("opt_misc", "Frame Highlights")),
@@ -998,7 +1000,12 @@ local function TrackableSpellID(runtime, specKey, info)
     end
     local altIDs = runtime and runtime.AltSpellIDs and runtime.AltSpellIDs[specKey]
     for altID, mappedAura in pairs(type(altIDs) == "table" and altIDs or {}) do
-        if mappedAura == auraName then id = CustomBuffSpellID(altID); if id then return id end end
+        if mappedAura == auraName then
+            id = CustomBuffSpellID(altID)
+            if id then
+                return id
+            end
+        end
     end
     return CustomBuffSpellID(auraName)
 end
@@ -1043,8 +1050,14 @@ local function RefreshSpellPage(refreshPage)
 end
 local function AddCustomBuffResolved(refreshPage, kind, specKey, spellIDs)
     local spellID = spellIDs and spellIDs[1]
-    if not spellID then SpellFeedback("Enter a valid buff Spell ID, link, or name.", "error"); return false end
-    if not specKey then SpellFeedback("No spell-indicator spec selected.", "error"); return false end
+    if not spellID then
+        SpellFeedback("Enter a valid buff Spell ID, link, or name.", "error")
+        return false
+    end
+    if not specKey then
+        SpellFeedback("No spell-indicator spec selected.", "error")
+        return false
+    end
     local runtime, key, cfg = SpellIndicatorRuntime(), tostring(spellID), SpellIndicators(kind)
     cfg.specs = cfg.specs or {}
     cfg.specs[specKey] = cfg.specs[specKey] or {}
@@ -1057,7 +1070,10 @@ local function AddCustomBuffResolved(refreshPage, kind, specKey, spellIDs)
         return true
     end
     local exists, customCount = type(specCfg[key]) == "table", CountCustomBuffs(specCfg)
-    if not exists and customCount >= CUSTOM_BUFF_LIMIT then SpellFeedback("Custom buff limit reached.", "error"); return false end
+    if not exists and customCount >= CUSTOM_BUFF_LIMIT then
+        SpellFeedback("Custom buff limit reached.", "error")
+        return false
+    end
     local display, icon = CustomBuffInfo(spellID)
     local spellIDListText = CustomBuffSpellIDListText(spellIDs)
     local function ApplyCustomBuff()
@@ -1131,7 +1147,13 @@ local function ShowCustomBuffPopup(refreshPage, kind, specKey)
         text = Tr("Enter buff Spell ID, link, or name"), button1 = Tr("Add"), button2 = _G.CANCEL or Tr("Cancel"), hasEditBox = true, maxLetters = 255,
         OnShow = function(self)
             local edit = self.editBox or self.EditBox
-            if edit then edit:SetText(""); edit:SetFocus(); if edit.HighlightText then edit:HighlightText() end end
+            if edit then
+                edit:SetText("")
+                edit:SetFocus()
+                if edit.HighlightText then
+                    edit:HighlightText()
+                end
+            end
         end,
         OnAccept = function(self, data)
             local edit = self.editBox or self.EditBox
@@ -1184,7 +1206,12 @@ end
 local function InsertSpellAt(siCfg, specKey, trackable, auraName, targetSlot)
     local order = EnsureSpellSortOrder(siCfg, specKey, trackable)
     local from
-    for i = 1, #order do if order[i] == auraName then from = i; break end end
+    for i = 1, #order do
+        if order[i] == auraName then
+            from = i
+            break
+        end
+    end
     if not from then return end
     targetSlot = max(1, min(#order, tonumber(targetSlot) or from))
     if from == targetSlot then return end
@@ -1302,8 +1329,15 @@ function SpellTileGrid:OnDragStop(tile)
 end
 function SpellTileGrid:OnMouseUp(tile, button)
     if SpellIndicators(CurrentScope()).enabled ~= true then return end
-    if tile._suppressNextClick then tile._suppressNextClick = nil; tile._dragged = false; return end
-    if tile._dragged then tile._dragged = false; return end
+    if tile._suppressNextClick then
+        tile._suppressNextClick = nil
+        tile._dragged = false
+        return
+    end
+    if tile._dragged then
+        tile._dragged = false
+        return
+    end
     local kind = CurrentScope()
     if tile._isAddTile then
         if button == "LeftButton" then ShowCustomBuffPopup(self.refreshPage, kind, tile._specKey) end
@@ -1622,7 +1656,10 @@ GP.BuildSpellIndicatorStyleSection = function(ctx, b)
         end
         local function FlushRuntime()
             if not pendingApply then return end
-            if CombatLocked() then releaseScheduled = nil; return false end
+            if CombatLocked() then
+                releaseScheduled = nil
+                return false
+            end
             local scope = pendingScope or CurrentScope()
             pendingApply, pendingScope, releaseScheduled = nil, nil, nil
             QueueSpellIndicators(scope, "auras")

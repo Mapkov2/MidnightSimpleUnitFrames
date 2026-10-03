@@ -172,11 +172,20 @@ local DEFAULT_PANEL_COLOR = { 0.04, 0.05, 0.08, 1 }
 local gradientColorCache = {}
 local function GradientColor(r, g, b, a)
     local byG = gradientColorCache[r]
-    if not byG then byG = {}; gradientColorCache[r] = byG end
+    if not byG then
+        byG = {}
+        gradientColorCache[r] = byG
+    end
     local byB = byG[g]
-    if not byB then byB = {}; byG[g] = byB end
+    if not byB then
+        byB = {}
+        byG[g] = byB
+    end
     local byA = byB[b]
-    if not byA then byA = {}; byB[b] = byA end
+    if not byA then
+        byA = {}
+        byB[b] = byA
+    end
     local color = byA[a]
     if not color then
         color = _G.CreateColor(r, g, b, a)
@@ -1070,18 +1079,33 @@ local function EnsurePanelAsset(frame)
         local h = (frame.GetHeight and frame:GetHeight()) or 80
         local c = math.max(6, math.min(16, math.floor(math.min(w, h) * 0.34 + 0.5)))
         local os = 2
-        art.TL:ClearAllPoints(); art.T:ClearAllPoints(); art.TR:ClearAllPoints()
-        art.L:ClearAllPoints(); art.C:ClearAllPoints(); art.R:ClearAllPoints()
-        art.BL:ClearAllPoints(); art.B:ClearAllPoints(); art.BR:ClearAllPoints()
-        art.TL:SetPoint("TOPLEFT", frame, "TOPLEFT", -os, os); art.TL:SetSize(c, c)
-        art.TR:SetPoint("TOPRIGHT", frame, "TOPRIGHT", os, os); art.TR:SetSize(c, c)
-        art.BL:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -os, -os); art.BL:SetSize(c, c)
-        art.BR:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", os, -os); art.BR:SetSize(c, c)
-        art.T:SetPoint("TOPLEFT", art.TL, "TOPRIGHT", 0, 0); art.T:SetPoint("BOTTOMRIGHT", art.TR, "BOTTOMLEFT", 0, 0)
-        art.B:SetPoint("TOPLEFT", art.BL, "TOPRIGHT", 0, 0); art.B:SetPoint("BOTTOMRIGHT", art.BR, "BOTTOMLEFT", 0, 0)
-        art.L:SetPoint("TOPLEFT", art.TL, "BOTTOMLEFT", 0, 0); art.L:SetPoint("BOTTOMRIGHT", art.BL, "TOPRIGHT", 0, 0)
-        art.R:SetPoint("TOPLEFT", art.TR, "BOTTOMLEFT", 0, 0); art.R:SetPoint("BOTTOMRIGHT", art.BR, "TOPRIGHT", 0, 0)
-        art.C:SetPoint("TOPLEFT", art.TL, "BOTTOMRIGHT", 0, 0); art.C:SetPoint("BOTTOMRIGHT", art.BR, "TOPLEFT", 0, 0)
+        art.TL:ClearAllPoints()
+        art.T:ClearAllPoints()
+        art.TR:ClearAllPoints()
+        art.L:ClearAllPoints()
+        art.C:ClearAllPoints()
+        art.R:ClearAllPoints()
+        art.BL:ClearAllPoints()
+        art.B:ClearAllPoints()
+        art.BR:ClearAllPoints()
+        art.TL:SetPoint("TOPLEFT", frame, "TOPLEFT", -os, os)
+        art.TL:SetSize(c, c)
+        art.TR:SetPoint("TOPRIGHT", frame, "TOPRIGHT", os, os)
+        art.TR:SetSize(c, c)
+        art.BL:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -os, -os)
+        art.BL:SetSize(c, c)
+        art.BR:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", os, -os)
+        art.BR:SetSize(c, c)
+        art.T:SetPoint("TOPLEFT", art.TL, "TOPRIGHT", 0, 0)
+        art.T:SetPoint("BOTTOMRIGHT", art.TR, "BOTTOMLEFT", 0, 0)
+        art.B:SetPoint("TOPLEFT", art.BL, "TOPRIGHT", 0, 0)
+        art.B:SetPoint("BOTTOMRIGHT", art.BR, "BOTTOMLEFT", 0, 0)
+        art.L:SetPoint("TOPLEFT", art.TL, "BOTTOMLEFT", 0, 0)
+        art.L:SetPoint("BOTTOMRIGHT", art.BL, "TOPRIGHT", 0, 0)
+        art.R:SetPoint("TOPLEFT", art.TR, "BOTTOMLEFT", 0, 0)
+        art.R:SetPoint("BOTTOMRIGHT", art.BR, "TOPRIGHT", 0, 0)
+        art.C:SetPoint("TOPLEFT", art.TL, "BOTTOMRIGHT", 0, 0)
+        art.C:SetPoint("BOTTOMRIGHT", art.BR, "TOPLEFT", 0, 0)
     end
     art.Layout = Layout
     Layout()
@@ -2390,7 +2414,10 @@ end
 local function SetSkinnedSelectionCue(btn, active)
     local cue = btn._msuf2SkinnedSelectionCue
     if not active then
-        if cue then cue.wash:Hide(); cue.line:Hide() end
+        if cue then
+            cue.wash:Hide()
+            cue.line:Hide()
+        end
         return
     end
     if not cue then

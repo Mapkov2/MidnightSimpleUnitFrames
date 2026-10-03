@@ -603,8 +603,15 @@ local function BuildPower(ctx, builder, unit)
     local detachedHeight
     local orbSize
     local detachedTextToggle
-    local function AddPowerControl(control) M.AppendValues(powerControls, control); W.AttachUnitEditFocus(control, unit, "powerbar"); return control end
-    local function AddDetachedControl(control) M.AppendValues(detachedControls, control); return AddPowerControl(control) end
+    local function AddPowerControl(control)
+        M.AppendValues(powerControls, control)
+        W.AttachUnitEditFocus(control, unit, "powerbar")
+        return control
+    end
+    local function AddDetachedControl(control)
+        M.AppendValues(detachedControls, control)
+        return AddPowerControl(control)
+    end
     local function ResolveDefault(value)
         if type(value) == "function" then return value() end
         return value

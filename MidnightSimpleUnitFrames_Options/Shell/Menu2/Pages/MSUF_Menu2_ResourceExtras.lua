@@ -1,7 +1,8 @@
 local _,MSUF=...
 local M=MSUF.MSUF2
 local W,AP=M.Widgets,M.AdvancedPage
-local ResourceExtras={};M.ResourceExtrasPage=ResourceExtras
+local ResourceExtras={}
+M.ResourceExtrasPage=ResourceExtras
 local function Meta(path,key,kind)
     return M.ControlMeta("classpower","advanced","resource_extras."..path,kind or "setting",
         key and {settingKey="bars."..key} or {searchSettingKeys={"bars.resourceMarks"}})
@@ -99,7 +100,13 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     local function Rules() return Bars().resourceMarks or empty end
     local function Rule() return Rules()[selected] end
     local function Refresh() if M.RequestRefresh then M.RequestRefresh(ctx,"resource-marks") end end
-    local function Write(key,value) local rule=Rule();if rule then rule[key]=value;Apply() end end
+    local function Write(key,value)
+        local rule=Rule()
+        if rule then
+            rule[key]=value
+            Apply()
+        end
+    end
     local function Values()
         local out={}
         for i=1,#Rules() do out[i]={value=i,text=tostring(i)} end
@@ -110,21 +117,35 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     W.MoveWidget(selector,section,24,-40,280)
     M.BindDropdownWidget(ctx,selector,function() return selected end,function(value) selected=value;Refresh() end,Meta("marks.select",nil,"ephemeral"))
     local function Button(label,x,path,callback)
-        local button=M.Theme.Button(section,label,130,26,{history=true});button:SetPoint("TOPLEFT",section,"TOPLEFT",x,-98)
+        local button=M.Theme.Button(section,label,130,26,{history=true})
+        button:SetPoint("TOPLEFT",section,"TOPLEFT",x,-98)
         button:SetScript("OnClick",callback)
         AP.RegisterControl(button,Meta(path,nil,"action"),label,"button")
     end
     Button("Add resource mark",24,"marks.add",function()
-        local b=Bars();if not b.resourceMarks then b.resourceMarks={} end
-        local rules=b.resourceMarks;rules[#rules+1]={target="PLAYER",resource="ALL",mode="PERCENT",value=50,width=2,color={1,1,1},mark=true}
-        selected=#rules;Apply();Refresh()
+        local b=Bars()
+        if not b.resourceMarks then
+            b.resourceMarks={}
+        end
+        local rules=b.resourceMarks
+        rules[#rules+1]={target="PLAYER",resource="ALL",mode="PERCENT",value=50,width=2,color={1,1,1},mark=true}
+        selected=#rules
+        Apply()
+        Refresh()
     end)
     Button("Remove resource mark",164,"marks.remove",function()
-        if Rule() then table.remove(Rules(),selected);selected=math.max(1,math.min(selected,#Rules()));Apply();Refresh() end
+        if Rule() then
+            table.remove(Rules(),selected)
+            selected=math.max(1,math.min(selected,#Rules()))
+            Apply()
+            Refresh()
+        end
     end)
     local y=-154
     local function Drop(key,label,values,default)
-        local widget=W.Dropdown(section,label,values,280);W.MoveWidget(widget,section,24,y,280);y=y-54
+        local widget=W.Dropdown(section,label,values,280)
+        W.MoveWidget(widget,section,24,y,280)
+        y=y-54
         M.BindDropdownWidget(ctx,widget,function() local rule=Rule();return rule and rule[key] or default end,
             function(value) Write(key,value) end,Meta("marks."..key))
     end
@@ -132,17 +153,24 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     Drop("resource","Power type",PowerTypeValues(),"ALL")
     Drop("mode","Value mode",{{value="PERCENT",text="Percent"},{value="ABSOLUTE",text="Absolute value"}},"PERCENT")
     for _,spec in ipairs({{"value","Resource value",0,10000000,1,50},{"width","Mark width",1,20,1,2}}) do
-        local key=spec[1];local widget=W.Slider(section,spec[2],spec[3],spec[4],spec[5],280);W.MoveWidget(widget,section,24,y,280);y=y-54
+        local key=spec[1]
+        local widget=W.Slider(section,spec[2],spec[3],spec[4],spec[5],280)
+        W.MoveWidget(widget,section,24,y,280)
+        y=y-54
         M.BindNumberWidget(ctx,widget,function() local rule=Rule();return rule and rule[key] or spec[6] end,
             function(value) Write(key,value) end,spec[6],Meta("marks."..key))
     end
     for _,spec in ipairs({{"mark","Show resource mark",true},{"threshold","Change color at threshold",false}}) do
-        local key=spec[1];local widget=W.Toggle(section,spec[2]);W.MoveWidget(widget,section,24,y,280);y=y-38
+        local key=spec[1]
+        local widget=W.Toggle(section,spec[2])
+        W.MoveWidget(widget,section,24,y,280)
+        y=y-38
         M.BindBoolWidget(ctx,widget,function() local rule=Rule();return rule and rule[key]~=false and (key=="mark" or rule[key]==true) or false end,
             function(value) Write(key,value) end,Meta("marks."..key))
     end
     Drop("direction","Threshold direction",{{value="ABOVE",text="At or above"},{value="BELOW",text="Below"}},"ABOVE")
-    local color=W.Color(section,"Mark and threshold color");W.MoveWidget(color,section,24,y,280)
+    local color=W.Color(section,"Mark and threshold color")
+    W.MoveWidget(color,section,24,y,280)
     M.BindColor(ctx,color,function() local rule=Rule();local c=rule and rule.color or {1,1,1};return c[1],c[2],c[3] end,
         function(r,g,b) Write("color",{r,g,b}) end,Meta("marks.color"))
 end

@@ -165,7 +165,10 @@ local function BuildFullChangelog(ctx)
     local selectedVersion = tostring(M[selectedField] or data.currentVersion or entries[1].version or "")
     local selectedFound = false
     for i = 1, #entries do
-        if tostring(entries[i].version or "") == selectedVersion then selectedFound = true; break end
+        if tostring(entries[i].version or "") == selectedVersion then
+            selectedFound = true
+            break
+        end
     end
     if not selectedFound then selectedVersion = tostring(entries[1].version or "") end
     M[selectedField] = selectedVersion

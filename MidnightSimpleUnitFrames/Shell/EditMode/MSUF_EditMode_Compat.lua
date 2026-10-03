@@ -243,7 +243,10 @@ local function MSUF_SyncAllUnitPreviews()
     SyncCastbarEditModeWithUnitEdit()
     --- Animated castbar motion is owned by the on-demand preview animation driver.
     for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
-        local f = _G[fn]; if type(f) == "function" then f(false, true) end
+        local f = _G[fn]
+        if type(f) == "function" then
+            f(false, true)
+        end
     end
     if batchingBossPreview then endBossBatch() end
 
@@ -429,7 +432,10 @@ do
             SyncCastbarEditModeWithUnitEdit()
             --- Animated castbar motion is owned by the on-demand preview animation driver.
             for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
-                local f = _G[fn]; if type(f) == "function" then f(false, true) end
+                local f = _G[fn]
+                if type(f) == "function" then
+                    f(false, true)
+                end
             end
             if batchingBossPreview then endBossBatch() end
         end)
@@ -515,7 +521,10 @@ local RoundCastbarOffset = _G.MSUF_RoundOffset
 
 local MSUF_EM_SetCastbarAnchoredToUnit = function(unit, anchored)
     if not unit then return end
-    local db = _G.MSUF_DB; if not db then return end
+    local db = _G.MSUF_DB
+    if not db then
+        return
+    end
     db.general = db.general or {}
     local g = db.general
 

@@ -463,7 +463,10 @@ local function Label(parent, text, anchor, x, y, width)
     local rel = (anchor and anchor ~= parent) and "BOTTOMLEFT" or "TOPLEFT"
     fs:SetPoint("TOPLEFT", anchor or parent, rel, x or 12, y or -8)
     fs:SetText(TR(text or ""))
-    if width then fs:SetWidth(width); fs:SetJustifyH("LEFT") end
+    if width then
+        fs:SetWidth(width)
+        fs:SetJustifyH("LEFT")
+    end
     return fs
 end
 local function PlaceTopLeft(widget, anchor, x, y)

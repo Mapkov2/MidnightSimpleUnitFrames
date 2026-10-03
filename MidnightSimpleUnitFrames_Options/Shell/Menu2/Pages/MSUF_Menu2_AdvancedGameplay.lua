@@ -83,7 +83,12 @@ local function BuildGameplay(ctx)
         end
         return AddTableControlSpecs(ctx, list, section, Gameplay, specs, ApplyGameplayUI)
     end
-    local function AddBackdrops(section, specs) for i = 1, #specs do local s = specs[i]; W.ControlCardBackdrop(section, 14, s[1], s[2], s[3]) end end
+    local function AddBackdrops(section, specs)
+        for i = 1, #specs do
+            local s = specs[i]
+            W.ControlCardBackdrop(section, 14, s[1], s[2], s[3])
+        end
+    end
     local function AddTextInput(list, input, getValue, setValue, metadata)
         M.BindTextInput(ctx, input, getValue, function(v) setValue(v); ApplyGameplayUI() end, true, metadata)
         M.AppendValues(list, input)
