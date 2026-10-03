@@ -123,6 +123,24 @@ local function RegrowStack(depth)
     return 0
 end
 
+-- The frozen byte ceilings used 32-bit Lua strings (16-byte headers).
+-- These casts create five short strings when readable and four when secret:
+-- MSUF_Colors' detail key and its R/G/B suffixes, plus one additional transient
+-- string in the readable path. Count their payloads and baseline headers, correcting
+-- only the runtime's larger header representation, never other allocations.
+local STRING_COUNTS = {
+    ["target cast, readable"] = 5, ["target cast, secret"] = 4, ["boss cast, secret"] = 4,
+}
+collectgarbage("collect")
+collectgarbage("stop")
+RegrowStack(300)
+local stringBefore = collectgarbage("count")
+local stringProbe = string.rep("q", 257)
+local stringHeader = (collectgarbage("count") - stringBefore) * 1024 - #stringProbe - 1
+collectgarbage("restart")
+assert(stringHeader == 16 or stringHeader == 24, "unexpected Lua 5.1 string representation")
+local stringHeaderExcess = stringHeader - 16
+
 local WARMUP, REPS = 4, 12
 local measured = {}
 for _, operation in ipairs(OPERATIONS) do
@@ -144,6 +162,7 @@ for _, operation in ipairs(OPERATIONS) do
         local start = collectgarbage("count")
         run()
         bytes = bytes + (collectgarbage("count") - start) * 1024 - (world.harnessBytes - harness)
+            - (STRING_COUNTS[label] or 0) * stringHeaderExcess
         collectgarbage("restart")
     end
     local natives, detail = 0, {}

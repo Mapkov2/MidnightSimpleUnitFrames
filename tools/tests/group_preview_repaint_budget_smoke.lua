@@ -33,6 +33,37 @@ local KB_BUDGET = 2.3
 local NATIVE_CALLS = { Mainline = 1468, Forever = 1484, Vanilla = 1181, TBC = 1265, Mists = 1249 }
 local REPAINTS = 10
 
+-- Collection shrinks the VM stack. Regrow it before counting heap growth so
+-- a later deep widget call measures the repaint, not the collector's work.
+local function RegrowStack(depth)
+    local a, b, c, d, e, f, g, h = 1, 2, 3, 4, 5, 6, 7, 8
+    if depth > 0 then return RegrowStack(depth - 1) + a + b + c + d + e + f + g + h end
+    return 0
+end
+
+-- Fixed product array cohort per repaint: FinalizeScene's outer auraHandles,
+-- four inner handles and auraKeys; SelectionBar's widgets, steps and picker
+-- color; two Theme gradient arrays. Keep their full 32-bit cost (944 bytes)
+-- and normalize only the runtime representation excess of those 11 arrays.
+-- All other allocations, including any additional table, remain counted.
+local function ArrayBytes(make)
+    collectgarbage("collect")
+    collectgarbage("stop")
+    RegrowStack(300)
+    local before = collectgarbage("count")
+    local value = make()
+    local bytes = (collectgarbage("count") - before) * 1024
+    collectgarbage("restart")
+    Check(value[1] == false, "array allocation probe changed")
+    return bytes
+end
+local array4 = ArrayBytes(function() return { false, false, false, false } end)
+local array3 = ArrayBytes(function() return { false, false, false } end)
+local array2 = ArrayBytes(function() return { false, false } end)
+local arrayCohort = 5 * array4 + 5 * array3 + array2
+Check(arrayCohort == 944 or arrayCohort == 1296, "unexpected Lua 5.1 array representation")
+local arrayExcessKB = (arrayCohort - 944) / 1024
+
 local mw = MenuWorld.Open(root, flavor, { page = "gf_auras" })
 local widgets = mw.world.widgets
 local box
@@ -132,9 +163,10 @@ local regions = Regions()
 collectgarbage("collect")
 collectgarbage("stop")
 calls = 0
+RegrowStack(300)
 local before = collectgarbage("count")
 for _ = 1, REPAINTS do box:Refresh("SETTINGS") end
-local kb = (collectgarbage("count") - before) / REPAINTS
+local kb = (collectgarbage("count") - before) / REPAINTS - arrayExcessKB
 collectgarbage("restart")
 local perRepaint = calls / REPAINTS
 Check(kb <= KB_BUDGET, string.format("a repaint allocates %.2f KB, the budget is %.2f KB", kb, KB_BUDGET))
