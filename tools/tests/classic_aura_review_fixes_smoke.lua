@@ -452,6 +452,7 @@ do
         target = { layout = {}, layoutShared = { showBuffs = true, showDebuffs = true }, filters = {} },
     }))
     A3.BumpRuntimeConfig()
+    assert(loadfile(root .. "/tools/tests/profile_normalize_loader.lua"))().Install(root, namespace)
     assert(loadfile(ADDON .. "Auras3/MSUF_Auras3_Menu_Model.lua"))("MidnightSimpleUnitFrames", namespace)
     local Model = assert(A3.MenuModel and A3.MenuModel.Apply, "F12: the shared menu model did not load")
     world.pet, world.target = { Aura(true) }, { Aura(true) }

@@ -20,6 +20,7 @@ _G.UnitGetTotalHealAbsorbs = function() return 5 end
 _G.issecretvalue = function() return false end
 
 local namespace = {
+    ExportPublic = function() end,
     UF = {
         Layers = {},
         RegisterElement = function(name, element)
@@ -29,6 +30,8 @@ local namespace = {
     },
 }
 
+-- The saved overlay anchor modes (UF.Shared.ABSORB_ANCHOR) come from the file that owns them.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Shared.lua"))("MidnightSimpleUnitFrames", namespace)
 local path = root .. "/MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"
 assert(loadfile(path))("MidnightSimpleUnitFrames", namespace)
 assert(registered, "prediction element did not register")

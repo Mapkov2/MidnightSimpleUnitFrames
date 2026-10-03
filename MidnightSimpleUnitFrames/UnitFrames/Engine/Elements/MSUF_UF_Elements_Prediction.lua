@@ -28,6 +28,8 @@ local Enum = _G.Enum
 local CurveAPI = _G.C_CurveUtil
 local LuaCurveType = Enum and Enum.LuaCurveType
 local ReadUnitExistsCached = UF.ReadUnitExistsCached
+-- The saved overlay anchor modes (MSUF_UF_Shared.lua).
+local ABSORB_ANCHOR = UF.Shared.ABSORB_ANCHOR
 local UnitMissing
 do
   local issv = _G.issecretvalue
@@ -212,17 +214,17 @@ local function SetColorCached(bar, r, g, b, a)
 end
 
 local function NormalizeAnchorMode(mode, fallback)
-  mode = tonumber(mode) or fallback or 2
-  if mode < 1 or mode > 5 then
-    return fallback or 2
+  mode = tonumber(mode) or fallback or ABSORB_ANCHOR.RIGHT
+  if mode < ABSORB_ANCHOR.LEFT or mode > ABSORB_ANCHOR.REVERSE_FROM_MAX then
+    return fallback or ABSORB_ANCHOR.RIGHT
   end
   return mode
 end
 
 local function AnchorModeReverse(mode, hpReverse)
-  if mode == 1 then
+  if mode == ABSORB_ANCHOR.LEFT then
     return false
-  elseif mode == 5 then
+  elseif mode == ABSORB_ANCHOR.REVERSE_FROM_MAX then
     return hpReverse ~= true
   end
   return true
@@ -233,7 +235,7 @@ local function FollowModeReverse(hpReverse)
 end
 
 local function ReverseForMode(mode, hpReverse)
-  if mode == 3 or mode == 4 then
+  if mode == ABSORB_ANCHOR.FOLLOW_HP or mode == ABSORB_ANCHOR.FOLLOW_HP_OVERFLOW then
     return FollowModeReverse(hpReverse)
   end
   return AnchorModeReverse(mode, hpReverse)

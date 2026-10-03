@@ -378,3 +378,5 @@ clients+Forever	lua	tools/tests/host_api_client_boot_smoke.lua	{root/} {flavor}	
 -	lua	tools/tests/castbar_secret_paths_smoke.lua	{root}	Castbar runtime paths on a strict-secret Midnight and Forever client
 -	lua	tools/tests/castbar_cast_path_budget_smoke.lua	{root}	Castbar cast paths over their instruction, byte, native-object or field-churn budget
 -	lua	tools/tests/castbar_login_profile_smoke.lua	{root}	Castbar lifecycles read no profile at file load and follow the saved one at login
+-	lua	tools/tests/prediction_anchor_mode_smoke.lua	{root}	Prediction overlay anchor modes drifted from the numbers profiles saved
+-	lua	tools/tests/group_db_aura_filter_repair_smoke.lua	{root}	Group DB aura filter repair of old profiles changed or reads the retired default categories

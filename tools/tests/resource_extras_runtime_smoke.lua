@@ -577,10 +577,26 @@ assert(ns.CPBuilders.ManaRegenTimersSupported()==regen,"regeneration strips on t
 local durationUtil=C_DurationUtil;C_DurationUtil=nil
 assert(ns.CPBuilders.ManaRegenTimersSupported()==false,"regeneration strips without the duration API")
 C_DurationUtil=durationUtil
--- A profile saved under the former names keeps the player's choices.
+-- A profile saved under the former names keeps the player's choices. The profile
+-- translator carries them (State/MSUF_ProfileNormalize.lua; every entry point is
+-- covered by resource_extras_translator_smoke), so the helper switch check reads
+-- the current keys only and a carried profile wants its helper.
+local Carry
+do
+    local World=assert(loadfile(root.."/tools/tests/client_world.lua"))()
+    local carryWorld=World.New(root,flavor)
+    carryWorld:Boot()
+    local failure=carryWorld:FirstFailure();assert(not failure,tostring(failure and failure.message))
+    Carry=assert(carryWorld.core.ProfileNormalize and carryWorld.core.ProfileNormalize.CarryFormerResourceExtras,
+        "the profile translator does not own the former resource extras keys")
+end
 local former={showArcaneSoul=true,arcaneSoulBeforeColor={.1,.1,.1},arcaneSoulActiveColor={.2,.2,.2},
     arcaneSoulLastColor={.3,.3,.3},manaFiveSecondRule=true,manaRegenTicks=false,manaFiveSecondColor={.4,.4,.4},
     manaTickColor={.5,.5,.5},arcaneSoulGCDSeconds=1.5}
+assert(ns.CPBuilders.CarryFormerExtras==nil,"the class power code keeps its own copy of the former-key migration")
+assert(ns.CPBuilders.ResourceExtrasWanted(former)==false and former.showArcaneSoul==true and former.showArcaneWindow==nil,
+    "the helper switch check migrated former keys itself")
+assert(Carry(former)==true,"the translator found nothing to carry")
 assert(ns.CPBuilders.ResourceExtrasWanted(former)==true,"a profile with the former Arcane helper on wants no helper")
 assert(former.showArcaneWindow==true and former.arcaneWindowText=="both" and former.arcaneWindowTextFrom==6
     and former.arcaneWindowWarnLastGCD==true,"the former Arcane helper's look was not kept")
@@ -594,13 +610,13 @@ for _,key in ipairs({"showArcaneSoul","arcaneSoulDisplay","arcaneSoulCountdownWi
 end
 assert(former.arcaneSoulGCDSeconds==1.5,"a former key without a current one was removed")
 local chosen={showArcaneSoul=true,arcaneSoulDisplay="SECONDS",arcaneSoulCountdownWindow=0}
-ns.CPBuilders.ResourceExtrasWanted(chosen)
+Carry(chosen)
 assert(chosen.arcaneWindowText=="seconds" and chosen.arcaneWindowTextFrom==0,"the player's own former choices were replaced")
 local off={showArcaneSoul=false,arcaneSoulDisplay="GCD"}
-ns.CPBuilders.ResourceExtrasWanted(off)
+Carry(off)
 assert(off.showArcaneWindow==false and off.arcaneWindowText=="gcds" and off.arcaneWindowTextFrom==nil
     and off.arcaneWindowWarnLastGCD==nil,"a former helper that was off gained the former look")
 local current={showArcaneWindow=true,arcaneWindowText="gcds"}
-ns.CPBuilders.ResourceExtrasWanted(current)
+assert(Carry(current)==false)
 assert(current.arcaneWindowText=="gcds" and current.arcaneWindowWarnLastGCD==nil,"a current profile was changed")
 print("resource extras runtime: "..flavor.." OK")

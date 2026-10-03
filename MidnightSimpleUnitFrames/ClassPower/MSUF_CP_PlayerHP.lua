@@ -22,6 +22,15 @@ local GetFontFlags = MSUF.Require("MSUF_GetFontFlags", FILE)
 local FontPathEquals = MSUF.Require("MSUF_FontPathEquals", FILE)
 local MarkFontApplyFailed = MSUF.Require("MSUF_MarkFontApplyFailed", FILE)
 
+--- The text writers' change-check modes (rt.healthDispatchKeyMode), named where
+--- they are compiled: UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua loads
+--- before ClassPower in every client TOC.
+local DISPATCH_KEY = MSUF.UFText and MSUF.UFText.DISPATCH_KEY
+if type(DISPATCH_KEY) ~= "table" then
+    error("MSUF: missing required dependency 'UFText.DISPATCH_KEY' required by " .. FILE
+        .. " - check that MSUF_UF_Text_Format.lua still names it and still loads first in MidnightSimpleUnitFrames.toc.", 2)
+end
+
 --- Global abbreviation style (see Runtime/MSUF_NumberFormat.lua). Registered at
 --- file scope, not inside the builder, so rebuilding the HP bar never stacks a
 --- second sink.
@@ -399,16 +408,16 @@ end
 local function RenderedTextMatches(rt, hp, maxHP)
     if not (rt and rt.healthSlotCount and rt.healthSlotCount > 0) then return false end
     local keyHP, keyMax = false, false
-    local mode = rt.healthDispatchKeyMode or 0
-    if mode == 1 then
+    local mode = rt.healthDispatchKeyMode or DISPATCH_KEY.NONE
+    if mode == DISPATCH_KEY.CURRENT then
         keyHP = hp
-    elseif mode == 2 then
+    elseif mode == DISPATCH_KEY.MAX then
         keyMax = maxHP
-    elseif mode == 3 then
+    elseif mode == DISPATCH_KEY.CURRENT_MAX then
         keyHP, keyMax = hp, maxHP
-    elseif mode == 4 or mode == 5 then
+    elseif mode == DISPATCH_KEY.PERCENT or mode == DISPATCH_KEY.PERCENT_MAX then
         keyHP = Percent(hp, maxHP)
-        keyMax = mode == 5 and maxHP or false
+        keyMax = mode == DISPATCH_KEY.PERCENT_MAX and maxHP or false
     end
     local missing
     if rt.healthNeedsMissing == true then

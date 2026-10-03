@@ -11,6 +11,8 @@ end
 
 local MSUF = { MSUF_Auras3 = {} }
 _G.MSUF_NS = MSUF
+-- The model's Group Aura filter code reads State's stored-token check.
+assert(loadfile("tools/tests/profile_normalize_loader.lua"))().Install(".", MSUF)
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua"))("MidnightSimpleUnitFrames", MSUF)
 local A3 = assert(MSUF.MSUF_Auras3)
 assert(loadfile("MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_GroupHighlightsData.lua"))("MidnightSimpleUnitFrames", MSUF)

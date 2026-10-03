@@ -65,6 +65,7 @@ assert(GroupTitle("player", "custom4", groups.custom4) == "Player · Defensive",
 -- (re-review 2026-10-02: the MSUF Highlights tooltip had none, so it read
 -- English in every language). The menu translates item tooltips at display.
 _G.MSUF_GF_AuraFilter = nil
+assert(loadfile(root .. "/tools/tests/profile_normalize_loader.lua"))().Install(root, namespace)
 assert(loadfile(ADDON .. "Auras3/MenuModel/MSUF_Auras3_Menu_GroupFilters.lua"))("MidnightSimpleUnitFrames", namespace)
 namespace.Auras3MenuModelFactories.GroupFilters({}, {}, {}, {}, function(name, value) _G[name] = value; return value end)
 local groupFilters = assert(_G.MSUF_GF_AuraFilter, "the group aura filter list did not load")

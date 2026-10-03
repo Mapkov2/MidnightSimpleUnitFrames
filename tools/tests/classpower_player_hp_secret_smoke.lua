@@ -164,7 +164,56 @@ do
         "compact text with secret health is blank instead of the native percent")
 end
 
+-- 5. The mirror of the player frame's text follows the text writers' change-key modes
+--    (rt.healthDispatchKeyMode, named by MSUF.UFText.DISPATCH_KEY in the text formatter).
+--    Each mode stamps the values its writer compared; the text is copied only from a
+--    frame stamped for the same health inputs. The mode numbers are written out here on
+--    purpose: they are what the writers compile, so a renamed or renumbered enum shows.
+do
+    local MODES = {
+        -- { label, mode, stamped health, stamped max } for 500 of 1000 health
+        { "unset", nil, false, false },
+        { "none", 0, false, false },
+        { "current", 1, 500, false },
+        { "max", 2, false, 1000 },
+        { "current and max", 3, 500, 1000 },
+        { "percent", 4, 50, false },
+        { "percent and max", 5, 50, 1000 },
+    }
+    local DISPATCH_KEY = assert(loadfile(repo .. "/tools/tests/classpower_collaborators.lua"))().DispatchKey(repo)
+    for index, name in ipairs({ "NONE", "CURRENT", "MAX", "CURRENT_MAX", "PERCENT", "PERCENT_MAX" }) do
+        Check(DISPATCH_KEY[name] == index - 1, "the change-key mode " .. name .. " is not " .. (index - 1))
+    end
+    for _, row in ipairs(MODES) do
+        local label, mode, stampHP, stampMax = row[1], row[2], row[3], row[4]
+        for _, stale in ipairs({ false, true }) do
+            local api, playerFrame = Build({ playerHPBarUsePlayerText = true })
+            for _, slot in ipairs({ { "hpTextLeft", "L" }, { "hpTextCenter", "C" }, { "hpTextRight", "R" } }) do
+                local fs = playerFrame:CreateFontString(nil, "OVERLAY")
+                fs.shown = true
+                fs._aText = slot[2]
+                playerFrame[slot[1]] = fs
+            end
+            local rt = { healthSlotCount = 1, healthDispatchKeyMode = mode, _lastHealthTextHP = stampHP,
+                _lastHealthTextMax = stampMax }
+            if stale then
+                -- A frame stamped for other inputs: one more health, one more max.
+                if stampHP ~= false then rt._lastHealthTextHP = stampHP + 1 else rt._lastHealthTextHP = 1 end
+                if stampMax ~= false then rt._lastHealthTextMax = stampMax + 1 end
+            end
+            playerFrame._msufTextRuntime = rt
+            S.hp, S.maxHP = 500, 1000
+            api.PHP._hp = nil -- the bar repaints its text as if the health had just changed
+            api.Update("UNIT_HEALTH")
+            local copied = api.PHP.right.text == "R" and api.PHP.left.text == "L" and api.PHP.center.text == "C"
+            Check(copied == not stale, "mode " .. label .. (stale and " (stale stamps)" or " (current stamps)")
+                .. (stale and " copied text rendered for other health inputs" or " did not copy the rendered text")
+                .. ": right=" .. tostring(api.PHP.right.text))
+        end
+    end
+end
+
 if #failures > 0 then
     error("classpower_player_hp_secret_smoke:\n  " .. table.concat(failures, "\n  "), 0)
 end
-print("classpower_player_hp_secret_smoke: ok (secret copy, own percent, hidden symbol, compact)")
+print("classpower_player_hp_secret_smoke: ok (secret copy, own percent, hidden symbol, compact, change-key modes)")

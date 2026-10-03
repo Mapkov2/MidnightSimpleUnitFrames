@@ -365,6 +365,7 @@ _G.MSUF_DB.gf_party = {
         externals = { enabled = true, max = 2, autoBlacklistBuffs = true },
     },
 }
+assert(loadfile(root .. "/tools/tests/profile_normalize_loader.lua"))().Install(root, namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Menu_Model.lua"))(
     "MidnightSimpleUnitFrames", namespace)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MSUF", namespace)

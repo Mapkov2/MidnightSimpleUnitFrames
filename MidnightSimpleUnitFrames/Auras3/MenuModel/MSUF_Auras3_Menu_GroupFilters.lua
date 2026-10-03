@@ -204,38 +204,12 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         if type(getter) ~= "function" then return nil end
         return getter()
     end
-    local GF_CURRENT_BUFF_FILTER_TOKENS = {
-        ALL = "ALL",
-        MSUFGROUPHIGHLIGHTSV1 = "MSUF_GROUP_HIGHLIGHTS_V1",
-        PLAYER = "Player",
-        BIGDEFENSIVE = "BigDefensive",
-        BIGDEFENSIVEPLAYER = "BigDefensivePlayer",
-        EXTERNALDEFENSIVE = "ExternalDefensive",
-        EXTERNALDEFENSIVEPLAYER = "ExternalDefensivePlayer",
-        RAIDINCOMBAT = "RaidInCombat",
-        RAID = "Raid",
-        RAIDPLAYER = "RaidPlayer",
-    }
-    local GF_CURRENT_DEBUFF_FILTER_TOKENS = {
-        ALL = "ALL",
-        PLAYER = "Player",
-        RAID = "Raid",
-        RAIDINCOMBAT = "RaidInCombat",
-        RAIDPLAYERDISPELLABLE = "RAID_PLAYER_DISPELLABLE",
-        DISPELLABLE = "DISPELLABLE",
-        CROWDCONTROL = "CROWD_CONTROL",
-        NONPLAYER = "NonPlayer",
-    }
     --- Stored Group Aura filters must never retain a token that the current UI no
-    --- longer exposes. Reset retired/unknown filters to the lane's visible default
-    --- instead of silently continuing an uneditable Blizzard filter expression.
-    local function NormalizeGFStoredFilterToken(lane, token)
-        local current = lane == "debuff" and GF_CURRENT_DEBUFF_FILTER_TOKENS
-            or lane == "buff" and GF_CURRENT_BUFF_FILTER_TOKENS
-            or nil
-        if not current then return token end
-        return current[GFNativeFilterKey(token)] or "ALL"
-    end
+    --- longer exposes. Profile normalization (State/MSUF_ProfileNormalize.lua, which
+    --- loads first) owns the list of tokens a stored profile may keep and resets
+    --- retired/unknown ones to the lane's visible default instead of silently
+    --- continuing an uneditable Blizzard filter expression.
+    local NormalizeGFStoredFilterToken = MSUF.ProfileNormalize.NormalizeGFAuraFilterToken
     GF_AURA_FILTER.NormalizeFilterToken = NormalizeGFStoredFilterToken
     local GF_NATIVE_BUFF_FILTERS = {
         ALL = false,
@@ -260,9 +234,8 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         NONPLAYER = false,
     }
     local function ResolveGFNativeFilter(lane, token, baseFilter, filterMap)
-        local key = GFNativeFilterKey(token)
-        local current = lane == "debuff" and GF_CURRENT_DEBUFF_FILTER_TOKENS or GF_CURRENT_BUFF_FILTER_TOKENS
-        if not current[key] then key = "ALL" end
+        -- A token the lane no longer offers resolves like the lane's default, "ALL".
+        local key = GFNativeFilterKey(NormalizeGFStoredFilterToken(lane, token))
         local filter = filterMap[key]
         if filter == false then return baseFilter end
         if type(filter) == "string" and filter ~= "" then return baseFilter .. "|" .. filter end

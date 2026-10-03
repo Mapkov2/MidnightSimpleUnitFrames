@@ -346,23 +346,9 @@ local function RepairAuraFilters(conf)
                         g.filterToken = normalize(gk, g.filterToken)
                     end
                 end
-                if type(g.blacklistCats) ~= "table" then
-                    --- Apply sensible defaults from AuraFilter module
-                    local AF = AuraFilter()
-                    if AF then
-                        local defs = (gk == "buff") and AF.DEFAULT_BLACKLIST_BUFF
-                                  or (gk == "debuff") and AF.DEFAULT_BLACKLIST_DEBUFF
-                                  or nil
-                        if defs then
-                            g.blacklistCats = {}
-                            for k, v in pairs(defs) do g.blacklistCats[k] = v end
-                        else
-                            g.blacklistCats = {}
-                        end
-                    else
-                        g.blacklistCats = {}
-                    end
-                end
+                --- No default categories: MSUF_GF_AuraFilter.DEFAULT_BLACKLIST_BUFF/DEBUFF,
+                --- which this used to copy, are gone since 6.0 alpha 1 and read as nil.
+                if type(g.blacklistCats) ~= "table" then g.blacklistCats = {} end
                 if type(g.blacklist) ~= "table" then g.blacklist = {} end
                 if type(g.blacklist.spells) ~= "table" then g.blacklist.spells = {} end
                 if g.showDurationBar == nil then g.showDurationBar = false end
