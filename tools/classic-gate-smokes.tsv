@@ -312,6 +312,7 @@ clients+Forever	lua	tools/tests/profile_variants_menu_smoke.lua	{root} {flavor}	
 clients+Forever	lua	tools/tests/resource_extras_runtime_smoke.lua	{root} {flavor}	Resource helper native/secret contracts
 -	lua	tools/tests/profile_external_smoke.lua	{root}	External profile ownership and snapshot contracts
 clients+Forever	lua	tools/tests/profile_unit_selection_pettarget_smoke.lua	{root} {flavor}	Selected unitframes export refused Pet Target: {flavor}
+clients+Forever	lua	tools/tests/profile_gameplay_swing_timers_smoke.lua	{root} {flavor}	Swing timers did not travel with the Gameplay export: {flavor}
 -	lua	tools/tests/slash_profile_resolve_smoke.lua	{root}	/msuf load or delete resolved the wrong profile
 clients+Forever	lua	tools/tests/search_feature_targets_smoke.lua	{root} {flavor}	Exact feature search targets and profile navigation: {flavor}
 clients+Forever	lua	tools/tests/options_loader_readiness_smoke.lua	{root} {flavor}	Cold Options keybind readiness and menu navigation: {flavor}

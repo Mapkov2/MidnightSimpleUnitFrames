@@ -1812,11 +1812,11 @@ local function MSUF_SnapshotForKind(kind, selectedUnits)
         if not next(selected) then return nil end
         payload = UnitSelection.Copy(MSUF_DB, selected)
     elseif kind == "unitframe" then
-        --- Everything EXCEPT: gameplay, colors, castbars
+        --- Everything EXCEPT: gameplay (with the swing timers), colors, castbars
         for k, v in pairs(MSUF_DB or {}) do
             if k == "general" then
                 payload.general = MSUF_CopyGeneralSubset(MSUF_GeneralKeysOfKind("unitframe"), MSUF_DB)
-            elseif k == "classColors" or k == "npcColors" or k == "gameplay" then
+            elseif k == "classColors" or k == "npcColors" or k == "gameplay" or k == "swingTimers" then
                 --- exclude
             else
                 payload[k] = MSUF_DeepCopy(v)
@@ -1831,6 +1831,8 @@ local function MSUF_SnapshotForKind(kind, selectedUnits)
         payload.npcColors   = MSUF_DeepCopy((MSUF_DB and MSUF_DB.npcColors) or {})
     elseif kind == "gameplay" then
         payload.gameplay = MSUF_DeepCopy((MSUF_DB and MSUF_DB.gameplay) or {})
+        --- The swing timers belong to Gameplay (State/MSUF_ProfileFields.lua).
+        payload.swingTimers = MSUF_DeepCopy(MSUF_DB.swingTimers)
     elseif kind == "groupframe" or kind == "groupframes" then
         payload = MSUF_CopyGroupFramePayload(MSUF_DB)
     elseif kind == "all" then
@@ -2288,8 +2290,10 @@ function ImportTx.Merge(kind, payload, db)
         if type(payload.general) == "table" then
             MSUF_ApplyGeneralSubset(payload.general, db, owned)
         end
+        --- Older Unitframes strings still carry the swing timers, which belong
+        --- to Gameplay now: they never overwrite the local ones.
         for k, v in pairs(payload) do
-            if k ~= "general" then
+            if k ~= "general" and k ~= "swingTimers" then
                 if type(v) == "table" then
                     if type(db[k]) ~= "table" then
                         db[k] = {}
@@ -2352,6 +2356,8 @@ function ImportTx.Merge(kind, payload, db)
                 db.gameplay[kk] = MSUF_DeepCopy(vv)
             end
         end
+        --- An older Gameplay string has no swing timers: the local ones stay.
+        if type(payload.swingTimers) == "table" then UnitSelection.ReplaceTable(db, "swingTimers", payload.swingTimers) end
     end
 end
 function ImportTx.Stage(plan, base)
