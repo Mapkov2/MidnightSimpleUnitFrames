@@ -201,6 +201,7 @@ clients	lua	tools/tests/classic_optional_integrations_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/editmode_group_geometry_util_smoke.lua	{root}	Edit Mode group geometry refresh lost its single Util owner
 -	lua	tools/tests/editmode_castbar_edit_info_smoke.lua	{root}	Edit Mode castbar mover and readout refresh smoke failed
 -	lua	tools/tests/editmode_bags_padding_smoke.lua	{root}	Edit Mode Bag Slot Padding no longer stores the value Blizzard shows
+-	lua	tools/tests/editmode_castbar_drag_scale_smoke.lua	{root}	Edit Mode castbar drags no longer follow the cursor at the MSUF Frame Scale
 -	lua	tools/tests/classic_resource_editmode_smoke.lua	{root/}	Class Resource and detached Power Edit Mode smoke failed
 -	lua+driver	tools/tests/arena_editmode_exit_restore_smoke.lua	{root/}	Arena Edit Mode exit restore smoke failed
 -	lua+driver	tools/tests/classic_menu_retail_parity_smoke.lua	{root/}	Classic Menu2 Retail parity smoke failed

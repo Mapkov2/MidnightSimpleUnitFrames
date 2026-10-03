@@ -240,8 +240,9 @@ local function PreviewDragUpdate(unit, config)
                 snappedDeltaY = snappedY - (dragFrame._snapStartCY or 0)
             end
 
-            liveGeneral[config.x] = Round((dragFrame.dragStartOffsetX or 0) + snappedDeltaX)
-            liveGeneral[config.y] = Round((dragFrame.dragStartOffsetY or 0) + snappedDeltaY)
+            local toBar = dragFrame._msufDragToBarScale or 1
+            liveGeneral[config.x] = Round((dragFrame.dragStartOffsetX or 0) + snappedDeltaX * toBar)
+            liveGeneral[config.y] = Round((dragFrame.dragStartOffsetY or 0) + snappedDeltaY * toBar)
         end
 
         if dragFrame.dragMode == "MOVE" and PositionPreviewOnly(unit) then
@@ -310,6 +311,9 @@ local function PreviewMouseDown(unit, config)
             self.dragStartOffsetY = OffsetY(general, config)
 
             local frameScale = self:GetEffectiveScale() or 1
+            --- The offsets are SetPoint offsets in this bar's own (MSUF Frame
+            --- Scale) units; the cursor delta is in UIParent units.
+            self._msufDragToBarScale = frameScale > 0 and uiScale / frameScale or 1
             local left = self:GetLeft() or 0
             local right = self:GetRight() or 0
             local top = self:GetTop() or 0

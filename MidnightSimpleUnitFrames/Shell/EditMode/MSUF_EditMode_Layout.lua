@@ -476,11 +476,16 @@ local function CastbarDefaultOffsets(unit)
     return 0, 0
 end
 
-local function ApplyCastbarDragPosition(d, centerX, centerY)
+--- Castbar offsets are SetPoint offsets in the bar's own units, and the bar
+--- carries the MSUF Frame Scale: the UIParent-space delta converts like the
+--- unit drag's (a factor of exactly 1 at scale 1.0).
+local function ApplyCastbarDragPosition(d, centerX, centerY, uiScale)
     if not (d and d.conf and d.castbarXKey and d.castbarYKey) then return false end
     local g = d.conf
-    local dx = (centerX or d.startCX or 0) - (d.startCX or 0)
-    local dy = (centerY or d.startCY or 0) - (d.startCY or 0)
+    local barScale = d.bar and d.bar.GetEffectiveScale and d.bar:GetEffectiveScale() or 0
+    local toBar = barScale > 0 and (uiScale or barScale) / barScale or 1
+    local dx = ((centerX or d.startCX or 0) - (d.startCX or 0)) * toBar
+    local dy = ((centerY or d.startCY or 0) - (d.startCY or 0)) * toBar
     local nextX = round((d.castbarStartX or 0) + dx)
     local nextY = round((d.castbarStartY or 0) + dy)
 
@@ -694,7 +699,7 @@ local function OnUpdate(self, elapsed)
         elseif d.isSubframe then
             positioned = ApplySubframeDragPosition(d, snapCX, snapCY, sc)
         elseif d.isCastbar then
-            positioned = ApplyCastbarDragPosition(d, snapCX, snapCY)
+            positioned = ApplyCastbarDragPosition(d, snapCX, snapCY, sc)
         elseif d.isGroupFrame then
             positioned = ApplyGroupDragPosition(d, snapCX, snapCY)
         else
@@ -989,7 +994,7 @@ function Ticker.ApplyExternalDrag(drag)
     elseif drag.isSubframe then
         return ApplySubframeDragPosition(drag, centerX, centerY, UIParent:GetEffectiveScale() or drag.uiScale or 1)
     elseif drag.isCastbar then
-        return ApplyCastbarDragPosition(drag, centerX, centerY)
+        return ApplyCastbarDragPosition(drag, centerX, centerY, UIParent:GetEffectiveScale() or drag.uiScale or 1)
     elseif drag.isGroupFrame then
         return ApplyGroupDragPosition(drag, centerX, centerY)
     end
