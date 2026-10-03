@@ -212,8 +212,10 @@ local function IsColorKey(key)
     if lower == "useclasscolors" or lower == "enablehealthgradient" or lower == "gradientstrength" then return true end
     if lower == "fontcolor" or lower == "highlightcolor" or lower == "usecustomfontcolor" then return true end
     if lower == "nameclasscolor" or lower == "npcnamered" then return true end
-    local last = lower:sub(-1)
-    if last == "r" or last == "g" or last == "b" or last == "a" then
+    -- A channel is a capital R/G/B/A closing a colour stem (classBarBgR,
+    -- castbarBorderA); a lowercase last letter ends a word (fontSlug, useBarBorder).
+    local last = key:sub(-1)
+    if last == "R" or last == "G" or last == "B" or last == "A" then
         if lower:find("color", 1, true)
             or lower:find("font", 1, true)
             or lower:find("bg", 1, true)

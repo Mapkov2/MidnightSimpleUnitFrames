@@ -10,7 +10,7 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 local Search = M.Search or {}
 M.Search = Search
-Search.StaticIndexSourceSha256 = "DA4A51F9645C5C34FE117B8B91AC9F40E438D1DAF77A88490714FEA7BDE07BAA"
+Search.StaticIndexSourceSha256 = "F9714A60DEE3E98B46295BEE738C6EDFC706DC4462EB1644E0DAD37342A44462"
 Search.StaticIndexRecordCount = 3369
 Search.StaticIndexBlob = [==[
 auras3_buffs	Border Alpha (%)	slider			Appearance > Icon Style	border alpha	idauras3_buffsmenu2%2Eauras3_buffs%2Eauras%2Estyle%2Eappearance%2Eicon-style%2Estylebordercolor-alpha	aura_style_appearance_buff_icon_style			border alpha appearance icon style auras style appearance icon style stylebordercolor alpha auras3 buffs slider
