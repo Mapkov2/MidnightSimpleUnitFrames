@@ -1,5 +1,36 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta15 - 2026-10-03
+
+### Fixes
+
+- Aura icons no longer show the border baked into Blizzard's icon artwork (#159). Runtime icons, reminders and menu/Edit Mode previews share the same minimum crop while retaining stronger configured zoom.
+- Classic aura lanes honor all nine anchors, the menu's layer range and Player-first sorting. Combat-only filters refresh at the combat transition, AUTO dispel symbols follow the frame's strata, and Pet overrides apply to Pet settings.
+- Custom auras compile on supported Classic arena frames. Edit Mode keeps click forwarding on Classic aura lanes and avoids rewiring sealed native aura buttons.
+- Group frames defer layout changes at combat entry and return previewed groups to their live headers. Newly created group and pet buttons retain their click handling and pixel alignment in combat.
+- Healer mana rows and allied boss frames repaint when a unit token changes hands. Group filters, class-priority identity reads and saved negative-heal-absorb overrides remain consistent across layouts and logins.
+- The Raid Manager retains its expanded state when settings are reapplied; Hidden mode leaves its toggles click-through.
+- Arena castbars honor Show icon, Spell name and Cast time settings and use the corrected time-text offset in runtime and previews. Castbar movers follow the bar after it moves, and font refreshes retain cast-target class colors.
+- Interrupt feedback follows the displayed cast, including late interrupt events. Restricted cast, duration, swing, aura, health and power values follow the supported native formatting and rendering paths without Lua comparisons.
+- Class Resource settings apply after saved profiles load and stay synchronized with profile variants and page resets. Growing resource maxima trigger the required layout refresh; relayouts, Stagger colors, Ironfur and aura-count visibility repaint correctly.
+- Mists Burning Embers use the unmodified resource maximum, and Affliction shards use the supported spell gate. Eclipse respects its text mode and drops auras that end early. On Midnight, Affliction/Demonology shard prediction receives cast events.
+- Alternative Mana returns after Edit Mode, Player Power regains its color after Eclipse, and disabling the secondary Player HP module hides its bar. AFK timers resume after combat; death state also updates on direct health ticks.
+- Rounded borders and masks retain their selected shape. Inline target-of-target text follows the name's visible glyph edge, and protected prediction values retain their over-absorb glow.
+- /msuf reset restores factory frame sizes, positions, layout and text visibility, and /msuf profile <name> saves the current settings. Profile imports preserve dispel-migration stamps, variants retain removed resource-extra keys, and oversized compressed imports are rejected before inflation.
+- New and reset Forever profiles leave global UI scaling disabled, matching the other clients. Explicitly enabled scaling in existing profiles is retained, including settings made immediately after a reset.
+- Native managed cast and class-resource bars keep Blizzard's lifecycle handling while MSUF conceals their visuals. Totem takeover restores only the frame-position flag owned by MSUF.
+- Options, aura workspaces and search results reuse their existing page state instead of repeatedly creating page trees. Configuration and focus-preview keyboard input stop at combat entry; Edit Mode history commits defer safely through that transition.
+
+### Changes
+
+- Aura containers are reused after retirement. Class Resource thresholds share one resource read, Mists rune types refresh on their native event, and affected aura-resource and cast-expiry paths avoid per-event closures.
+- Updated translations for menu and Edit Mode labels, history, prompts, status text, tooltips and chat messages across all twelve supported locales.
+- This package contains the core and Options addons. The retired in-game Assistant is no longer shipped; when updating manually, remove any old MidnightSimpleUnitFrames_Assistant folder from Interface/AddOns.
+
+### Compatibility
+
+- Recognizes the marker-qualified Forever client in build 70170, including its dedicated project identifier. Unknown clients continue to use the guarded fallback.
+
 ## 6.5-beta14 - 2026-10-02
 
 ### Highlights

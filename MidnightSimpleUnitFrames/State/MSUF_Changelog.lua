@@ -8,12 +8,53 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E563EFFB576559E040C65AC8969EC8FD324C54AEC763627BEE888B0D0A786840",
-    currentVersion = "6.5-beta14",
-    historyFromVersion = "6.5-beta10",
-    previousVersion = "6.5-beta12",
-    rangeLabel = "6.5-beta12 -> 6.5-beta14",
+    sourceSha256 = "356443D6CCA6704946511F1974E2E003D5079C2430C2832551AA0133B615D035",
+    currentVersion = "6.5-beta15",
+    historyFromVersion = "6.5-beta11",
+    previousVersion = "6.5-beta14",
+    rangeLabel = "6.5-beta14 -> 6.5-beta15",
     entries = {
+        {
+            version = "6.5-beta15",
+            date = "2026-10-03",
+            sections = {
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Aura icons no longer show the border baked into Blizzard's icon artwork (#159). Runtime icons, reminders and menu/Edit Mode previews share the same minimum crop while retaining stronger configured zoom.",
+                        "Classic aura lanes honor all nine anchors, the menu's layer range and Player-first sorting. Combat-only filters refresh at the combat transition, AUTO dispel symbols follow the frame's strata, and Pet overrides apply to Pet settings.",
+                        "Custom auras compile on supported Classic arena frames. Edit Mode keeps click forwarding on Classic aura lanes and avoids rewiring sealed native aura buttons.",
+                        "Group frames defer layout changes at combat entry and return previewed groups to their live headers. Newly created group and pet buttons retain their click handling and pixel alignment in combat.",
+                        "Healer mana rows and allied boss frames repaint when a unit token changes hands. Group filters, class-priority identity reads and saved negative-heal-absorb overrides remain consistent across layouts and logins.",
+                        "The Raid Manager retains its expanded state when settings are reapplied; Hidden mode leaves its toggles click-through.",
+                        "Arena castbars honor Show icon, Spell name and Cast time settings and use the corrected time-text offset in runtime and previews. Castbar movers follow the bar after it moves, and font refreshes retain cast-target class colors.",
+                        "Interrupt feedback follows the displayed cast, including late interrupt events. Restricted cast, duration, swing, aura, health and power values follow the supported native formatting and rendering paths without Lua comparisons.",
+                        "Class Resource settings apply after saved profiles load and stay synchronized with profile variants and page resets. Growing resource maxima trigger the required layout refresh; relayouts, Stagger colors, Ironfur and aura-count visibility repaint correctly.",
+                        "Mists Burning Embers use the unmodified resource maximum, and Affliction shards use the supported spell gate. Eclipse respects its text mode and drops auras that end early. On Midnight, Affliction/Demonology shard prediction receives cast events.",
+                        "Alternative Mana returns after Edit Mode, Player Power regains its color after Eclipse, and disabling the secondary Player HP module hides its bar. AFK timers resume after combat; death state also updates on direct health ticks.",
+                        "Rounded borders and masks retain their selected shape. Inline target-of-target text follows the name's visible glyph edge, and protected prediction values retain their over-absorb glow.",
+                        "/msuf reset restores factory frame sizes, positions, layout and text visibility, and /msuf profile <name> saves the current settings. Profile imports preserve dispel-migration stamps, variants retain removed resource-extra keys, and oversized compressed imports are rejected before inflation.",
+                        "New and reset Forever profiles leave global UI scaling disabled, matching the other clients. Explicitly enabled scaling in existing profiles is retained, including settings made immediately after a reset.",
+                        "Native managed cast and class-resource bars keep Blizzard's lifecycle handling while MSUF conceals their visuals. Totem takeover restores only the frame-position flag owned by MSUF.",
+                        "Options, aura workspaces and search results reuse their existing page state instead of repeatedly creating page trees. Configuration and focus-preview keyboard input stop at combat entry; Edit Mode history commits defer safely through that transition.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Aura containers are reused after retirement. Class Resource thresholds share one resource read, Mists rune types refresh on their native event, and affected aura-resource and cast-expiry paths avoid per-event closures.",
+                        "Updated translations for menu and Edit Mode labels, history, prompts, status text, tooltips and chat messages across all twelve supported locales.",
+                        "This package contains the core and Options addons. The retired in-game Assistant is no longer shipped; when updating manually, remove any old MidnightSimpleUnitFrames_Assistant folder from Interface/AddOns.",
+                    },
+                },
+                {
+                    title = "Compatibility",
+                    bullets = {
+                        "Recognizes the marker-qualified Forever client in build 70170, including its dedicated project identifier. Unknown clients continue to use the guarded fallback.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta14",
             date = "2026-10-02",
@@ -348,65 +389,6 @@ local data = {
                         "Imported Slanted frame styles follow the active Rounded fallback when Slanted is disabled.",
                         "Status badges and level numbers stay within native overlay sublevel limits for imported high layer values.",
                         "Menu section switch labels toggle their feature.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta10",
-            date = "2026-09-27",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Add a Pet Target frame. Enable it under Pet Target > Basics, then place it in Edit Mode.",
-                            link = {
-                                pageKey = "uf_pettarget",
-                                query = "pet target",
-                                label = "Pet Target",
-                                sectionId = "frame_basics",
-                                controlId = "menu2.uf_pettarget.unit.basics.enabled",
-                                settingKey = "pettarget.enabled",
-                            },
-                        },
-                        {
-                            text = "Move Class Resources in Edit Mode even while their resource is inactive. Combo Points keep an editable position outside Cat Form, and the drag area remains visible in the preview.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "class resource offset x",
-                                label = "Class Resource X offset",
-                                sectionId = "classpower_display",
-                                controlId = "menu2.classpower.advanced.layout.x",
-                                settingKey = "bars.classPowerOffsetX",
-                            },
-                        },
-                        {
-                            text = "Place a detached Power bar together with Class Resources or on its own. Its Edit Mode mover and width, height, and position controls work independently of the Class Resource settings.",
-                            link = {
-                                pageKey = "classpower",
-                                query = "detached power x",
-                                label = "Detached Power X offset",
-                                sectionId = "classpower_detached_power",
-                                controlId = "menu2.classpower.advanced.detached.power.layout.x",
-                                settingKey = "player.detachedPowerBarOffsetX",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Pet Target has its own runtime frame, defaults, menu controls, and preview on supported clients.",
-                        "Class Resources and detached Power bars can be moved separately; an Energy bar anchored to Combo Points continues to follow them.",
-                        "The Mainline core and Options addons use the MSUF category in the addon list.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Edit Mode retains movers for temporarily hidden Class Resources and detached Power bars, including an inactive Druid resource.",
-                        "Profile scale and menu dropdown alignment are preserved across UI updates.",
                     },
                 },
             },
