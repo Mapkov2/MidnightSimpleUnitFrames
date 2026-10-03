@@ -6473,6 +6473,7 @@ L["Source profile '%s' not found."] = "원본 프로필 '%s'을(를) 찾을 수 
 L["Copied '%s' -> '%s'."] = "'%s' -> '%s' 복사했습니다."
 L["Profile is already named '%s'."] = "프로필 이름이 이미 '%s'입니다."
 L["You cannot rename the 'Default' profile. Copy it instead."] = "'Default' 프로필은 이름을 바꿀 수 없습니다. 대신 복사하세요."
+L["Profile names can be at most %d bytes long."] = "프로필 이름은 최대 %d바이트까지 사용할 수 있습니다."
 L["Renamed '%s' -> '%s'."] = "'%s' -> '%s' 이름을 바꿨습니다."
 L["Import warning: missing font '%s' in %s. Using fallback font."] = "가져오기 경고: 글꼴 '%s'이(가) 없습니다(%s). 대체 글꼴을 사용합니다."
 L["Import warning: missing texture '%s' in %s. Using fallback texture."] = "가져오기 경고: 텍스처 '%s'이(가) 없습니다(%s). 대체 텍스처를 사용합니다."

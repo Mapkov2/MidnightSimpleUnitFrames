@@ -6532,6 +6532,7 @@ L["Source profile '%s' not found."] = "No se encontró el perfil de origen «%s�
 L["Copied '%s' -> '%s'."] = "Se copió «%s» -> «%s»."
 L["Profile is already named '%s'."] = "El perfil ya se llama «%s»."
 L["You cannot rename the 'Default' profile. Copy it instead."] = "No puedes cambiar el nombre del perfil «Default». Cópialo en su lugar."
+L["Profile names can be at most %d bytes long."] = "Los nombres de perfil pueden tener como máximo %d bytes."
 L["Renamed '%s' -> '%s'."] = "Se cambió el nombre de «%s» -> «%s»."
 L["Import warning: missing font '%s' in %s. Using fallback font."] = "Aviso de importación: falta la fuente «%s» en %s. Se usa la fuente de reserva."
 L["Import warning: missing texture '%s' in %s. Using fallback texture."] = "Aviso de importación: falta la textura «%s» en %s. Se usa la textura de reserva."

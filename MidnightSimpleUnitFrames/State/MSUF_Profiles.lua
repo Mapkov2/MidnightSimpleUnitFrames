@@ -78,6 +78,15 @@ end
 local function ProfileChat(tone, text, ...)
     print(ProfileChatLine(tone, text, ...))
 end
+--- The one profile name rule of MSUF, the Suite and its skin: at most 80
+--- bytes (MAX_PROFILE_NAME_BYTES, MSUF_Suite/Core/Database.lua). The Suite
+--- cannot follow a longer name, so every entry point that names a new
+--- profile refuses it before anything changes. quiet: the caller reports.
+local function ProfileNameTooLong(name, quiet)
+    if type(name) ~= "string" or #name <= 80 then return false end
+    if not quiet then ProfileChat("error", "Profile names can be at most %d bytes long.", 80) end
+    return true
+end
 local Variants, ProfileSync = MSUF.ProfileVariants, MSUF.ProfileSync
 local function PrepareProfileMutation(rebindOnly)
     local beforeMutation = MSUF.ProfileRuntime.BeforeMutation
@@ -277,6 +286,7 @@ local function MSUF_ProfileIO_NotifySuiteLifecycle(kind, source, target)
 end
 function MSUF_CreateProfile(name)
     if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
+    if ProfileNameTooLong(name) then return false, "profile name too long" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     if profiles[name] then
         ProfileChat("error", "Profile '%s' already exists.", name)
@@ -469,6 +479,7 @@ function MSUF_CopyProfile(sourceName, destName)
         ProfileChat("error", "No destination name specified.")
         return false
     end
+    if ProfileNameTooLong(destName) then return false, "profile name too long" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     local src = profiles[sourceName]
     if type(src) ~= "table" then
@@ -511,6 +522,7 @@ function MSUF_RenameProfile(sourceName, destName)
         ProfileChat("note", "Profile is already named '%s'.", sourceName)
         return true
     end
+    if ProfileNameTooLong(destName) then return false, "profile name too long" end
     if sourceName == "Default" then
         ProfileChat("error", "You cannot rename the 'Default' profile. Copy it instead.")
         return false
@@ -2543,6 +2555,7 @@ function MSUF_ImportIntoNewProfile(name, str)
     if name == "" then
         return false, "enter a new profile name", "name"
     end
+    if ProfileNameTooLong(name) then return false, "profile name too long", "name" end
     --- Read-only existence check: the profile roots are not created before
     --- the string has been accepted.
     local profiles = type(MSUF_GlobalDB) == "table" and MSUF_GlobalDB.profiles or nil
@@ -2643,6 +2656,7 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, plan)
     MSUF_ProfileIO_EnsureProfileSystemInitialized()
     if Variants and not Variants.CanMutateProfile() then return false,"finish editing the variant first" end
     local existing = MSUF_GlobalDB.profiles[profileKey]
+    if existing == nil and ProfileNameTooLong(profileKey, true) then return false, "invalid profileKey" end
     local isActive = (profileKey == MSUF_ActiveProfile)
     local base = {}
     if not MSUF_ProfileIO_ImportVariants and type(existing) == "table" then

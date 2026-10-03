@@ -316,6 +316,7 @@ clients+Forever	lua	tools/tests/profile_gameplay_swing_timers_smoke.lua	{root} {
 -	lua	tools/tests/profile_none_name_smoke.lua	{root} Mainline	A profile named None could not be assigned: Mainline
 -	lua	tools/tests/profile_none_name_smoke.lua	{root} Forever	A profile named None could not be assigned: Forever
 -	lua	tools/tests/slash_profile_resolve_smoke.lua	{root}	/msuf load or delete resolved the wrong profile
+-	lua	tools/tests/profile_name_length_smoke.lua	{root}	A profile name the Suite cannot follow was accepted
 clients+Forever	lua	tools/tests/search_feature_targets_smoke.lua	{root} {flavor}	Exact feature search targets and profile navigation: {flavor}
 clients+Forever	lua	tools/tests/options_loader_readiness_smoke.lua	{root} {flavor}	Cold Options keybind readiness and menu navigation: {flavor}
 clients+Forever	lua	tools/tests/search_locale_queries_smoke.lua	{root} {flavor}	Localized menu search queries and FAQ coverage: {flavor}
