@@ -1189,8 +1189,6 @@ local function CompileUnitPortrait(out, conf, general)
   out.portrait.border.a = Number(general.portraitBorderColorA, 1)
   local portraitEdgeSoftnessLevel = min(15, max(0,
     floor((Number(conf.portraitEdgeSoftness, 0) / 2) + 0.5)))
-  -- A 3D model is a native rectangle no mask can feather; the softness still
-  -- feathers the 2D portrait that stands in while the unit's identity is private.
   if out.portrait.shape == "BLIZZARD" or out.portrait.border.style ~= "NONE" then
     portraitEdgeSoftnessLevel = 0
   end

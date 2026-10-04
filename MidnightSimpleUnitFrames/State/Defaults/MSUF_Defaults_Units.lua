@@ -576,6 +576,7 @@ local function MSUF_Defaults_Stage_SeedUnitPortraitDefaults(profileDB, g, legacy
         PortraitDefault("portraitOffsetY", 0)
         PortraitDefault("portraitZoom", 100)
         PortraitDefault("portraitFlip", false)
+        PortraitDefault("portraitBlizzardDirection", "AUTO")
         PortraitDefault("portraitInnerShadow", 0)
         PortraitDefault("portraitDragonScale", 100)
         PortraitDefault("portraitDragonX", 0)
@@ -598,7 +599,6 @@ local function MSUF_Defaults_Stage_SeedUnitPortraitDefaults(profileDB, g, legacy
         PortraitDefault("portraitBgColorB", 0.05)
         PortraitDefault("portraitBgColorA", 0.85)
         PortraitDefault("portraitFillBorder", false)
-        --- 6.0: relief ring art plus the 90-degree direction it is lit from.
         PortraitDefault("portraitBorderArt", "FLAT")
         PortraitDefault("portraitBorderDirection", "UP")
         u.portraitDecoOverride = nil

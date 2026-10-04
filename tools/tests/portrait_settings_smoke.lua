@@ -31,6 +31,7 @@ local UF=core.UF
 env.MSUF_InitProfiles()
 env.MSUF_EnsureDB(true)
 local conf=env.MSUF_DB.player
+assert(conf.portraitBlizzardDirection == "AUTO", "new profiles default to automatic frame direction")
 conf.portraitMode="LEFT"
 conf.portraitRender="2D"
 conf.portraitClickable=false
@@ -206,8 +207,8 @@ local group=env.MSUF_DB.gf_party
 for k,v in pairs({portraitMode="LEFT",portraitRender="2D",portraitShape="CIRCLE",
  portraitSizeOverride=40,portraitAlpha=40,portraitLevelOffset=0,portraitBorderStyle="NONE",
  hpBarAlpha=.5,alphaExcludeTextPortrait=false,portraitClickable=false}) do group[k]=v end
--- The group page offers 2D and class art only; an imported 3D value must not
--- reach the runtime, which would build a native model per party/raid button.
+-- The group page offers 2D and class art only; an imported value of the
+-- retired 3D mode compiles to 2D.
 for _,render in ipairs({"3D","CLASS","2D"}) do
     group.portraitRender=render
     core.GF.InvalidateCompiledSpecs("party")
@@ -360,4 +361,165 @@ binding.set("rare")
 conf.portraitShape="CIRCLE"; apply(); gateRefresh()
 assert(binding.get()=="OFF" and not dragon:IsShown(),"changing shape clears runtime session")
 UF.frameList=priorFrameList
-print("portrait_settings_smoke: OK ("..flavor..", including elite/rare dragons)")
+-- Direction changes dress the frame, never rotate the unit image. Auto
+-- repairs old portraitFlip profiles, while explicit corners stay independent.
+do
+    conf.portraitMode, conf.portraitRender, conf.portraitShape = "LEFT", "2D", "BLIZZARD"
+    conf.portraitBlizzardCorner = true
+    conf.portraitBlizzardStandaloneRing = true
+    conf.portraitPlacement, conf.portraitSizeMode = "ATTACHED", "SEPARATE"
+    conf.portraitWidth, conf.portraitHeight = 73, 47
+    local cases = {
+        { "BOTTOMRIGHT", { 0, 1, 0, 1 }, "TOPLEFT", 1, -1 },
+        { "BOTTOMLEFT", { 1, 0, 0, 1 }, "TOPRIGHT", -1, -1 },
+        { "TOPRIGHT", { 0, 1, 1, 0 }, "BOTTOMLEFT", 1, 1 },
+        { "TOPLEFT", { 1, 0, 1, 0 }, "BOTTOMRIGHT", -1, 1 },
+    }
+    local function checkUV(texture, expected, message)
+        assert(texture, message .. " missing")
+        for i = 1, 4 do near(texture.texCoord[i], expected[i], message .. " UV" .. i) end
+    end
+    local originalSetTexCoord = Methods.SetTexCoord
+    Methods.SetTexCoord = function(self, ...)
+        assert(self ~= frame.MSUFPortraitHolder.mask and self ~= box.mock.portrait._msufPreviewShapeMask,
+            "frame direction must never change native portrait mask UVs")
+        return originalSetTexCoord(self, ...)
+    end
+    local maskBase = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\portrait_blizzard_mask"
+    local function maskPath(case)
+        return maskBase .. (case[1] == "BOTTOMRIGHT" and "" or "_" .. case[1]:lower()) .. ".tga"
+    end
+    local function checkDirection(case)
+        local compiled = apply()
+        Preview.Refresh(box, "PORTRAIT_DIRECTION_SMOKE")
+        local holder, sample = frame.MSUFPortraitHolder, box.mock.portrait
+        if core.Client.IsVanilla then
+            assert(holder.mask.texture:find("circle_mask", 1, true), "native Era circle mask")
+            assert(sample._msufPreviewShapeMask.texture == holder.mask.texture, "Era sample mask")
+        else
+            checkUV(holder.blizzRing, case[2], "live ring")
+            assert(holder.mask.texture == maskPath(case), "live mask orientation " .. case[1])
+            checkUV(sample._msufPreviewBlizzRing, case[2], "sample ring")
+            assert(sample._msufPreviewShapeMask.texture == maskPath(case), "sample mask orientation " .. case[1])
+            local corner = holder.blizzCorner
+            if corner and corner:IsShown() then
+                checkUV(corner, case[2], "live connector")
+                local point, _, relativePoint, x, y = corner:GetPoint()
+                assert(point == case[3] and relativePoint == case[3], "connector anchor " .. case[1])
+                near(x, case[4] * 34.5 / 60 * 73, "connector X")
+                near(y, case[5] * 34.5 / 60 * 47, "connector Y")
+                checkUV(sample._msufPreviewBlizzCorner, case[2], "sample connector")
+            end
+        end
+        assert(frame.portrait:IsShown() and frame.portrait.texture == "portrait:player", "unit portrait survives frame changes")
+        assert(sample.tex:IsShown() and sample.tex.texture, "preview image survives frame changes")
+        assert(holder.mask.allPoints == holder and sample._msufPreviewShapeMask.allPoints == sample, "fixed coverage anchors")
+        crop(compiled)
+        return compiled
+    end
+    for _, flipValue in ipairs({ false, true }) do
+        conf.portraitFlip = flipValue
+        for _, case in ipairs(cases) do
+            conf.portraitBlizzardDirection = case[1]
+            assert(checkDirection(case).blizzardDirection == case[1], "compiled direction")
+            checkDirection(case) -- cached repeat keeps image and mask
+            for _, offset in ipairs({ -25, 0, 25 }) do
+                conf.portraitOffsetX, conf.portraitOffsetY = offset, -offset
+                checkDirection(case) -- moving the portrait preserves its native image
+            end
+        end
+        for _, value in ipairs({ "AUTO", "invalid" }) do
+            conf.portraitBlizzardDirection = value
+            assert(checkDirection(cases[flipValue and 2 or 1]).blizzardDirection == "AUTO", "invalid direction falls back")
+        end
+        conf.portraitBlizzardDirection = nil
+        checkDirection(cases[flipValue and 2 or 1])
+    end
+    conf.portraitBlizzardDirection = "TOPLEFT"
+    checkDirection(cases[4])
+    conf.portraitShape = "ROUNDED"
+    apply(); Preview.Refresh(box, "PORTRAIT_DIRECTION_RESET")
+    assert(frame.MSUFPortraitHolder.mask.texture:find("rounded", 1, true), "changing shape restores rounded coverage")
+    assert(box.mock.portrait._msufPreviewShapeMask.texture == frame.MSUFPortraitHolder.mask.texture, "sample rounded coverage")
+    conf.portraitShape, conf.portraitBlizzardDirection = "BLIZZARD", "BOTTOMLEFT"
+    conf.portraitBlizzardStandaloneRing = false
+    apply(); Preview.Refresh(box, "PORTRAIT_DIRECTION_NATIVE_RING")
+    if not core.Client.IsVanilla then
+        assert(not frame.MSUFPortraitHolder.blizzRing:IsShown(), "standalone ring suppression preserved")
+        assert(not box.mock.portrait._msufPreviewBlizzRing:IsShown(), "sample suppression preserved")
+        assert(frame.MSUFPortraitHolder.mask.texture == maskPath(cases[2]), "native frame mask still oriented")
+    end
+    Methods.SetTexCoord = originalSetTexCoord
+    -- All unit-frame pages get one logical setting, five real bound buttons,
+    -- exact search preparation and a D-pad that fits the narrowest card.
+    local bindSegment, found = M.BindSegment, nil
+    M.BindSegment = function(c, control, get, set, meta)
+        if meta and meta.settingKey and meta.settingKey:find("portraitBlizzardDirection", 1, true) then
+            found = { control = control, get = get, set = set, meta = meta }
+        end
+        return bindSegment(c, control, get, set, meta)
+    end
+    for _, unit in ipairs({ "player", "target", "focus", "pet", "pettarget", "targettarget", "focustarget", "boss", "arena" }) do
+        local unitConf = env.MSUF_DB[unit]
+        unitConf.portraitMode, unitConf.portraitShape, unitConf.portraitRender = "LEFT", "BLIZZARD", "2D"
+        unitConf.portraitBlizzardDirection, unitConf.portraitFlip = "AUTO", false
+        local narrowCtx = { key = "uf_" .. unit, width = 300, refreshers = {} }
+        local narrowBuilder = {}
+        function narrowBuilder:CollapsibleSection(_, _, height)
+            local section = env.CreateFrame("Frame", nil, env.UIParent)
+            section:SetSize(300, height)
+            section._msuf2Width = 300
+            return section
+        end
+        found = nil
+        sectionSpec.build(narrowCtx, narrowBuilder, unit)
+        assert(found and found.meta.settingKey == unit .. ".portraitBlizzardDirection", "direction setting for " .. unit)
+        local pad = found.control
+        assert(#pad.buttons == 5 and pad:GetWidth() == 104 and pad:GetHeight() == 78, "five direction buttons")
+        assert(pad._msuf2ExactTargetContracts.unitPortraitTab.border == unit .. ".portraitBlizzardDirection", "exact target")
+        local surface = pad:GetParent()
+        assert(surface:GetWidth() == 104 and surface:GetHeight() == 78, "Bars-style panel")
+        local expected = { { "^", 41, -7 }, { "<", 18, -30 }, { ">", 64, -30 }, { "v", 41, -53 } }
+        for i, button in ipairs(pad.buttons) do
+            local _, _, _, x, y = button:GetPoint()
+            if i < 5 then
+                assert(button:GetText() == expected[i][1], "ASCII direction label")
+                near(x, expected[i][2], "Bars D-pad X"); near(y, expected[i][3], "Bars D-pad Y")
+                near(button:GetWidth(), 22, "Bars button width"); near(button:GetHeight(), 18, "Bars button height")
+            else
+                assert(x > 104 and x + button:GetWidth() <= 244, "Auto sits beside the pad inside the narrow card")
+            end
+            if core.Client.IsVanilla then
+                assert(not button:IsEnabled(), "Era's round frame has no selectable direction")
+            else
+                button:GetScript("OnClick")(button)
+                assert(unitConf.portraitBlizzardDirection == button._msuf2Value, "direction click writes its unit")
+                assert(pad:GetValue() == button._msuf2Value and button._msuf2Active, "immediate selected state")
+            end
+        end
+        if not core.Client.IsVanilla then
+            for _, move in ipairs({ { 1, "TOPRIGHT" }, { 2, "TOPLEFT" }, { 4, "BOTTOMLEFT" }, { 3, "BOTTOMRIGHT" } }) do
+                pad.buttons[move[1]]:GetScript("OnClick")(pad.buttons[move[1]])
+                assert(unitConf.portraitBlizzardDirection == move[2], "arrows reach all four corners")
+            end
+            pad.buttons[5]:GetScript("OnClick")(pad.buttons[5])
+            unitConf.portraitFlip = true
+            M.Refresh(narrowCtx)
+            assert(pad:GetValue() == "AUTO" and pad.buttons[5]._msuf2Active, "automatic remains saved")
+            assert(pad.buttons[2]._msuf2Active and pad.buttons[4]._msuf2Active, "automatic follows portrait mirroring")
+            pad.buttons[1]:GetScript("OnClick")(pad.buttons[1])
+            unitConf.portraitFlip = false
+            M.Refresh(narrowCtx)
+            assert(pad:GetValue() == "TOPLEFT" and pad.buttons[2]._msuf2Active, "explicit corner survives portrait flip")
+        end
+        unitConf.portraitShape = "ROUNDED"
+        M.Refresh(narrowCtx)
+        assert(pad._msuf2DesiredEnabled == false, "a non-Blizzard shape disables frame direction")
+    end
+    M.BindSegment = bindSegment
+    env.MSUF_DB.player.portraitBlizzardDirection = "TOPRIGHT"
+    env.MSUF_DB.target.portraitBlizzardDirection = "BOTTOMLEFT"
+    assert(M.UnitPage.CopyUnitSettings("player", "target", { portrait = true }), "portrait Copy To")
+    assert(env.MSUF_DB.target.portraitBlizzardDirection == env.MSUF_DB.player.portraitBlizzardDirection, "Copy To preserves direction")
+end
+print("portrait_settings_smoke: OK ("..flavor..", including Blizzard frame direction and elite/rare dragons)")

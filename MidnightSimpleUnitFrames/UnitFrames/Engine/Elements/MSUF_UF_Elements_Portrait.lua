@@ -137,11 +137,8 @@ local PORTRAIT_RING_ROTATION = {
 --- Blizzard's full PlayerFrame atlas also contains bar housing, so cannot be
 --- used as a freestanding rim. Raw portrait rendering still follows
 --- upstream/forever Blizzard_UnitFrame/Mainline/PlayerFrame.xml.
-local BLIZZARD_PORTRAIT_MASK = ADDON_PATH .. "\\Media\\Masks\\portrait_blizzard_mask.tga"
 local BLIZZARD_PORTRAIT_RING = ADDON_PATH .. "\\Media\\Borders\\msuf_portrait_ring_blizzard.tga"
 local BLIZZARD_PORTRAIT_CORNER_ATLAS = "UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment"
-local BLIZZARD_CORNER_OFFSET = 34.5 / 60
-local BLIZZARD_CORNER_SIZE = 23 / 60
 local QUEUED_2D_PORTRAIT_EVENTS = Visuals.QUEUED_2D_PORTRAIT_EVENTS or {
   UNIT_PORTRAIT_UPDATE = true,
   UNIT_MODEL_CHANGED = true,
@@ -643,7 +640,7 @@ local function ApplyPortraitMask(holder, p)
   if not mask then
     return
   end
-  if p and p.shape == "BLIZZARD" and ApplyBlizzardPortraitMask(mask) then
+  if p and p.shape == "BLIZZARD" and ApplyBlizzardPortraitMask(mask, p) then
     return
   end
   local shape = p and p.shape or "SQUARE"
@@ -857,21 +854,7 @@ local function ArenaPreviewClassToken(unit, frame)
   return nil
 end
 
--- Class atlas data cannot change while the client runs; GetAtlasInfo builds a
--- new table per call, so each class atlas is asked once per session.
-local classAtlasInfo = {}
-local function ClassAtlasInfo(atlas)
-  local info = classAtlasInfo[atlas]
-  if info == nil then
-    local textureAPI = _G.C_Texture
-    info = textureAPI and textureAPI.GetAtlasInfo and textureAPI.GetAtlasInfo(atlas) or false
-    classAtlasInfo[atlas] = info
-  end
-  return info or nil
-end
-
 ApplyClassPortrait = function(texture, unit, p, class, frame, force)
-  Details.HideModel(frame)
   class = class or BossPreviewClassToken(unit, frame) or ArenaPreviewClassToken(unit, frame) or UnitClassToken(unit)
   local frameUnit = frame and frame.MSUFUnitKey
   local classStyle = p and p.classStyle or "BLIZZARD"
@@ -893,12 +876,10 @@ ApplyClassPortrait = function(texture, unit, p, class, frame, force)
   if type(visual) == "table" then
     if visual.atlas and texture and texture.SetAtlas then
       SetAtlasCached(texture, visual.atlas)
-      local info = ClassAtlasInfo(visual.atlas)
-      if info then
-        local left, right = info.leftTexCoord or 0, info.rightTexCoord or 1
-        SetTexCoordCached(texture, p and p.flip and right or left, p and p.flip and left or right,
-          info.topTexCoord or 0, info.bottomTexCoord or 1)
-      end
+      -- SetAtlas owns the sheet crop; texcoords set after it are local to the
+      -- atlas. Sheet coordinates here would crop into a corner of the icon.
+      local flip = p and p.flip == true
+      SetTexCoordCached(texture, flip and 1 or 0, flip and 0 or 1, 0, 1)
     elseif visual.texture then
       SetTextureCached(texture, visual.texture)
       local left, right = visual.left or 0, visual.right or 1
@@ -932,7 +913,6 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
   ClearClassPortraitCache(texture)
   local l, r, t, b = Get2DPortraitTexCoords(p)
   if BossPreviewActive(unit, frame) then
-    Details.HideModel(frame)
     SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
     SetTexCoordCached(texture, l, r, t, b)
     SetVertexColorCached(texture, 1, 1, 1, 1)
@@ -953,15 +933,9 @@ ApplyUnitPortrait = function(texture, unit, frame, p, force,
   end
 
   if force ~= true and key ~= nil and texture._msufPortraitKey == key then
-    if p.render == "3D" and frame.MSUFPortraitModel and frame.MSUFPortraitModel._msufReady then SetShown(texture, false) end
     return
   end
 
-  if Details.ApplyModel(frame, unit, p) then
-    texture._msufPortraitKey = key
-    return
-  end
-  SetShown(texture, true)
   texture._msufTexture = nil
   texture._msufAtlas = nil
   -- Blizzard's stock frames pass disablePortraitMask (UnitFrame.lua) so the
@@ -1035,7 +1009,6 @@ local function ApplyCastPortraitIcon(frame, icon)
   end
   SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
   SetVertexColorCached(texture, 1, 1, 1, 1)
-  Details.SuspendModel(frame)
   SetShown(frame.portrait, false)
   -- The native defensive AuraButton lives on the next absolute frame level.
   -- Keep normal cast state independent underneath it; Blizzard's secret
@@ -1056,8 +1029,7 @@ local function RestoreCastPortraitIcon(frame, forceHideIcon)
   frame._msufPortraitCastIconActive = nil
   if active then
     SetShown(texture, false)
-    local modelShown = Details.ResumeModel(frame)
-    SetShown(frame.portrait, not modelShown and frame._msufPortraitPositionAnchorOnly ~= true)
+    SetShown(frame.portrait, frame._msufPortraitPositionAnchorOnly ~= true)
   elseif forceHideIcon == true and texture then
     -- The active flag and the cached shown state can both go stale when the
     -- option is switched off while a cast overlay is up (deferred applies,
@@ -1267,8 +1239,8 @@ local function LayoutPortraitArtBorder(holder, p, shape, thick, direction, r, g,
   return true
 end
 
-ApplyBlizzardPortraitMask = function(mask)
-  SetMaskTextureCached(mask, LEGACY_BLIZZARD_PORTRAIT and PORTRAIT_MASKS.CIRCLE or BLIZZARD_PORTRAIT_MASK)
+ApplyBlizzardPortraitMask = function(mask, p)
+  SetMaskTextureCached(mask, LEGACY_BLIZZARD_PORTRAIT and PORTRAIT_MASKS.CIRCLE or Details.GetBlizzardMask(p))
   return true
 end
 
@@ -1316,14 +1288,8 @@ local function LayoutBlizzardPortraitCorner(holder, p)
   if not corner then return end
   local width = tonumber(holder._msufLayoutWidth) or tonumber(p.width) or tonumber(p.size) or 36
   local height = tonumber(holder._msufLayoutHeight) or tonumber(p.height) or tonumber(p.size) or 36
-  local key = width .. "|" .. height
-  if holder._msufBlizzCornerKey ~= key then
-    corner:ClearAllPoints()
-    corner:SetPoint("TOPLEFT", holder, "TOPLEFT", BLIZZARD_CORNER_OFFSET * width, -BLIZZARD_CORNER_OFFSET * height)
-    corner:SetSize(BLIZZARD_CORNER_SIZE * width, BLIZZARD_CORNER_SIZE * height)
-    holder._msufBlizzCornerKey = key
-  end
   SetAtlasCached(corner, BLIZZARD_PORTRAIT_CORNER_ATLAS)
+  Details.LayoutBlizzardCorner(corner, holder, width, height, p)
   SetVertexColorCached(corner, 1, 1, 1, 1)
   SetShown(corner, true)
 end
@@ -1350,7 +1316,7 @@ local function LayoutBlizzardPortraitRing(holder, p)
     holder._msufBlizzRingKey = true
   end
   SetTextureCached(ring, BLIZZARD_PORTRAIT_RING)
-  SetTexCoordCached(ring, 0, 1, 0, 1)
+  Details.PaintBlizzardDirection(ring, p)
   SetVertexColorCached(ring, 1, 1, 1, 1)
   SetShown(ring, true)
   if holder.blizzRingMirror then SetShown(holder.blizzRingMirror, false) end
@@ -1681,7 +1647,6 @@ function Portrait.AcquirePositionAnchor(frame, p)
   LayoutPortrait(frame, p)
   ApplyPortraitMask(holder, p)
   frame._msufPortraitPositionAnchorOnly = true
-  Details.HideModel(frame)
   if holder.innerShadow then holder.innerShadow:Hide() end
   SetShown(frame.portrait, false)
   if frame.MSUFPortraitCastIcon then SetShown(frame.MSUFPortraitCastIcon, false) end
@@ -1768,7 +1733,6 @@ function Portrait.Apply(frame, spec)
 end
 
 function Portrait.Disable(frame)
-  Details.HideModel(frame)
   ApplyPortraitClickTarget(frame, nil)
   SyncPlayerPortraitWorldEvent(frame, frame and frame.MSUFSpec, nil)
   local holder = frame.MSUFPortraitHolder
@@ -1841,12 +1805,6 @@ function Portrait.Update(frame, event, unit)
     or event == "MSUF_UNIT_IDENTITY_SOFT"
     or event == "MSUF_UNIT_IDENTITY_SOFT_VISUAL"
   local forceRefresh = PORTRAIT_GUID_BUST_EVENTS[event] == true
-  -- Only a 3D portrait listens to combat edges, where identity secrecy can
-  -- change: rebind when that answer changed, otherwise nothing else to do.
-  if Details.COMBAT_EDGE_EVENTS[event] then
-    if not Details.IdentityRestrictionChanged(frame, unit, p) then return end
-    forceRefresh = true
-  end
   if forceRefresh then
     frame._msufPortraitForceRefresh = true
   end

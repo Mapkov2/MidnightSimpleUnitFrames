@@ -6,8 +6,6 @@ MSUF.PortraitDetails = D
 -- Client functions read once: every portrait refresh passes through here.
 local CreateFrame = _G.CreateFrame
 local issecretvalue = _G.issecretvalue
-local UnitIsVisible = _G.UnitIsVisible
-local UnitGUID = _G.UnitGUID
 local UnitClass = _G.UnitClass
 local UnitCanAttack = _G.UnitCanAttack
 local IsInInstance = _G.IsInInstance
@@ -19,8 +17,54 @@ local function Number(value, fallback, low, high)
     return math.max(low, math.min(high, value))
 end
 
+-- The stock contour's flat corner is bottom right. Mirror both dressing and
+-- mask selection through one table; the image and classification dragon keep their own controls.
+local BLIZZARD_DIRECTIONS = {
+    BOTTOMRIGHT = { point = "TOPLEFT", x = 1, y = -1, left = 0, right = 1, top = 0, bottom = 1 },
+    BOTTOMLEFT = { point = "TOPRIGHT", x = -1, y = -1, left = 1, right = 0, top = 0, bottom = 1 },
+    TOPRIGHT = { point = "BOTTOMLEFT", x = 1, y = 1, left = 0, right = 1, top = 1, bottom = 0 },
+    TOPLEFT = { point = "BOTTOMRIGHT", x = -1, y = 1, left = 1, right = 0, top = 1, bottom = 0 },
+}
+local BLIZZARD_MASK_BASE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\portrait_blizzard_mask"
+local BLIZZARD_MASKS = {
+    BOTTOMRIGHT = BLIZZARD_MASK_BASE .. ".tga",
+    BOTTOMLEFT = BLIZZARD_MASK_BASE .. "_bottomleft.tga",
+    TOPRIGHT = BLIZZARD_MASK_BASE .. "_topright.tga",
+    TOPLEFT = BLIZZARD_MASK_BASE .. "_topleft.tga",
+}
+function D.NormalizeBlizzardDirection(value)
+    return BLIZZARD_DIRECTIONS[value] and value or "AUTO"
+end
+function D.GetBlizzardDirection(p)
+    local direction = p and D.NormalizeBlizzardDirection(p.blizzardDirection) or "AUTO"
+    if direction == "AUTO" then direction = p and p.flip and "BOTTOMLEFT" or "BOTTOMRIGHT" end
+    return direction, BLIZZARD_DIRECTIONS[direction]
+end
+function D.GetBlizzardMask(p)
+    local direction = D.GetBlizzardDirection(p)
+    return BLIZZARD_MASKS[direction]
+end
+function D.PaintBlizzardDirection(texture, p)
+    local direction, coords = D.GetBlizzardDirection(p)
+    if texture._msufBlizzardDirection == direction then return end
+    texture:SetTexCoord(coords.left, coords.right, coords.top, coords.bottom)
+    texture._msufBlizzardDirection = direction
+end
+function D.LayoutBlizzardCorner(corner, holder, width, height, p)
+    local direction, coords = D.GetBlizzardDirection(p)
+    local key = width .. "|" .. height .. "|" .. direction
+    if corner._msufBlizzardCornerLayout ~= key then
+        corner:ClearAllPoints()
+        corner:SetPoint(coords.point, holder, coords.point, coords.x * (34.5 / 60) * width, coords.y * (34.5 / 60) * height)
+        corner:SetSize((23 / 60) * width, (23 / 60) * height)
+        corner._msufBlizzardCornerLayout = key
+    end
+    D.PaintBlizzardDirection(corner, p)
+end
+
 function D.Compile(p, conf)
     p.flip = conf.portraitFlip == true
+    p.blizzardDirection = D.NormalizeBlizzardDirection(conf.portraitBlizzardDirection)
     p.innerShadow = Number(conf.portraitInnerShadow, 0, 0, 100) / 100
     p.dragonScale = Number(conf.portraitDragonScale, 100, 25, 300) / 100
     p.dragonX = Number(conf.portraitDragonX, 0, -200, 200)
@@ -31,154 +75,24 @@ function D.Compile(p, conf)
     p.dragonLevel = Number(conf.portraitDragonLevel, 1, 0, 30)
     local layer = conf.portraitDragonLayer
     p.dragonLayer = (layer == "BACKGROUND" or layer == "BORDER" or layer == "ARTWORK") and layer or "OVERLAY"
-    -- PlayerModel is a rectangular native render surface; texture masks cannot clip it.
-    if p.render == "3D" then p.shape = "SQUARE" end
 end
 
--- Unitless events a detail adds to the portrait's own set. A 3D model only
--- needs the two combat edges (identity secrecy can change there); the hostile
--- dragon rule for instances only needs the zone changes. Each union is built
--- the first time a base set asks for it and then reused.
-local COMBAT_EDGES = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
+-- Unitless events a detail adds to the portrait's own set: the hostile dragon
+-- rule for instances needs the zone changes. Each union is built the first
+-- time a base set asks for it and then reused.
 local ZONE_CHANGES = { "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }
-D.COMBAT_EDGE_EVENTS = { PLAYER_REGEN_DISABLED = true, PLAYER_REGEN_ENABLED = true }
 local unions = {}
 
-local function Append(target, source)
-    for i = 1, #source do target[#target + 1] = source[i] end
-end
-
 function D.UnitlessEvents(base, p)
-    local combat = p.render == "3D"
-    local zone = p.shape == "BLIZZARD" and p.blizzardElite == true and p.dragonInInstances == false
-    if not (combat or zone) then return base end
-    local byBase = unions[base]
-    if not byBase then
-        byBase = {}
-        unions[base] = byBase
-    end
-    local key = (combat and 1 or 0) + (zone and 2 or 0)
-    local union = byBase[key]
+    if not (p.shape == "BLIZZARD" and p.blizzardElite == true and p.dragonInInstances == false) then return base end
+    local union = unions[base]
     if not union then
         union = {}
-        Append(union, base)
-        if combat then Append(union, COMBAT_EDGES) end
-        if zone then Append(union, ZONE_CHANGES) end
-        byBase[key] = union
+        for i = 1, #base do union[i] = base[i] end
+        for i = 1, #ZONE_CHANGES do union[#union + 1] = ZONE_CHANGES[i] end
+        unions[base] = union
     end
     return union
-end
-
--- The secret predicates return plain booleans. C_Secrets is feature-detected
--- per call, like every other reader of it; clients without it never restrict.
-local function IdentityRestricted(unit)
-    local secrets = _G.C_Secrets
-    local predicate = secrets and secrets.ShouldUnitIdentityBeSecret
-    return predicate ~= nil and predicate(unit) == true
-end
-
--- ApplyModel records the answer it acted on; a combat edge compares against it
--- so an unchanged answer costs one predicate call and nothing else.
-function D.IdentityRestrictionChanged(frame, unit, p)
-    if not (p and p.render == "3D" and unit) then return false end
-    return IdentityRestricted(unit) ~= (frame._msufPortraitIdentityRestricted == true)
-end
-
--- Hiding a model drops its binding, so the next visible refresh binds the unit
--- again. The cast icon covers the model only while a cast lasts: it suspends
--- the model instead, and the end of the cast shows the same binding again.
-local function ClearHiddenModel(model)
-    if model._msufSuspending then return end
-    model:ClearModel()
-    model._msufReady = nil
-    model._msufSuspended = nil
-    local owner = model._msufOwner
-    if owner.portrait then owner.portrait._msufPortraitKey = nil end
-    owner._msufPortraitNeedsVisibleRefresh = true
-end
-
-function D.HideModel(frame)
-    local model = frame.MSUFPortraitModel
-    if not model then return end
-    -- A suspended model is hidden already; drop its binding now.
-    if model._msufSuspended then ClearHiddenModel(model) end
-    model:Hide()
-end
-
-function D.SuspendModel(frame)
-    local model = frame and frame.MSUFPortraitModel
-    if not model or model._msufSuspended then return end
-    if model._msufReady ~= true then
-        D.HideModel(frame)
-        return
-    end
-    model._msufSuspending = true
-    model:Hide()
-    model._msufSuspending = nil
-    model._msufSuspended = true
-end
-
--- Shows a suspended model again while it may still show its unit and returns
--- true; otherwise the clear it skipped runs now and the caller keeps the 2D
--- texture, whose next refresh resolves the portrait from scratch.
-function D.ResumeModel(frame)
-    local model = frame and frame.MSUFPortraitModel
-    if not (model and model._msufSuspended) then return false end
-    model._msufSuspended = nil
-    local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
-    local unit = frame.MSUFUnitKey
-    local visible = unit and UnitIsVisible(unit)
-    if not (p and p.render == "3D" and model._msufReady == true and unit)
-        or (issecretvalue and issecretvalue(visible)) or not visible
-        or IdentityRestricted(unit) then
-        ClearHiddenModel(model)
-        return false
-    end
-    model:Show()
-    model:SetPortraitZoom(0.6)
-    model:SetCamDistanceScale(100 / (p.zoom or 100))
-    model:SetRotation(0, false)
-    return true
-end
-
--- SetUnit requires a declassified identity on current clients. Native 2D
--- portraits remain the fallback; never inspect, branch on or cache secret IDs.
-function D.ApplyModel(frame, unit, p)
-    if p.render ~= "3D" or not unit then
-        D.HideModel(frame)
-        return false
-    end
-    local restricted = IdentityRestricted(unit)
-    frame._msufPortraitIdentityRestricted = restricted
-    if restricted then
-        D.HideModel(frame)
-        return false
-    end
-    local visible = UnitIsVisible(unit)
-    if (issecretvalue and issecretvalue(visible)) or not visible then
-        D.HideModel(frame)
-        return false
-    end
-    local model = frame.MSUFPortraitModel
-    if not model then
-        model = PixelLayoutRegion(CreateFrame("PlayerModel", nil, frame.MSUFPortraitHolder))
-        model:SetAllPoints(frame.MSUFPortraitHolder)
-        model:EnableMouse(false)
-        model._msufOwner = frame
-        model:SetScript("OnHide", ClearHiddenModel)
-        frame.MSUFPortraitModel = model
-    end
-    model._msufSuspended = nil
-    model:SetFrameLevel(frame.MSUFPortraitHolder:GetFrameLevel())
-    model:SetUnit(unit, false)
-    model:SetPortraitZoom(0.6)
-    model:SetCamDistanceScale(100 / (p.zoom or 100))
-    model:SetRotation(0, false)
-    model._msufReady = true
-    model:Show()
-    frame.portrait:Hide()
-    frame.portrait._msufShown = false
-    return true
 end
 
 function D.ApplyShadow(holder, p)
@@ -198,35 +112,6 @@ function D.ApplyShadow(holder, p)
     holder.innerShadowFrame:SetFrameLevel(holder:GetFrameLevel() + 1)
     shadow:SetVertexColor(0, 0, 0, p.innerShadow)
     shadow:Show()
-end
-
-function D.ApplyPreview(holder, p, unit)
-    local owner = holder._msufDetailsPreviewOwner
-    if not owner then
-        owner = { portrait = holder.tex, MSUFPortraitHolder = holder }
-        holder._msufDetailsPreviewOwner = owner
-    end
-    D.ApplyShadow(holder, p)
-    if p.render ~= "3D" or not unit then D.HideModel(owner); return end
-    if IdentityRestricted(unit) then
-        D.HideModel(owner)
-        return
-    end
-    local visible = UnitIsVisible(unit)
-    if (issecretvalue and issecretvalue(visible)) or not visible then
-        D.HideModel(owner)
-        return
-    end
-    local guid = UnitGUID(unit)
-    if issecretvalue and issecretvalue(guid) then guid = nil end
-    local model = owner.MSUFPortraitModel
-    if model and model._msufReady and guid and owner.guid == guid and owner.zoom == p.zoom then
-        model:SetFrameLevel(holder:GetFrameLevel())
-        holder.tex:Hide()
-        return
-    end
-    D.ApplyModel(owner, unit, p)
-    owner.guid, owner.zoom = guid, p.zoom
 end
 
 function D.DragonAllowed(p, unit)

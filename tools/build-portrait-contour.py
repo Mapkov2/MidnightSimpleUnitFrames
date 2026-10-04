@@ -34,6 +34,19 @@ def write_tga(path, pixels):
     path.write_bytes(header + pixels)
 
 
+def build_direction_masks(media):
+    # Native masks keep their original full UV range. Bake the reflected
+    # coverage from the analytic field instead of changing MaskTexture UVs.
+    for name, x_sign, y_sign in (("bottomleft", -1, 1), ("topright", 1, -1), ("topleft", -1, -1)):
+        pixels = bytearray()
+        for row in range(SIZE):
+            for col in range(SIZE):
+                x, y = col + 0.5 - SIZE / 2, row + 0.5 - SIZE / 2
+                alpha = round(255 * coverage(distance(x_sign * x, y_sign * y) + STROKE / 2))
+                pixels.extend((255, 255, 255, alpha))
+        write_tga(media / f'Masks/portrait_blizzard_mask_{name}.tga', pixels)
+
+
 def build():
     mask, rim = bytearray(), bytearray()
     for row in range(SIZE):
@@ -55,6 +68,7 @@ def build():
     media = ROOT / 'MidnightSimpleUnitFrames/Media'
     write_tga(media / 'Masks/portrait_blizzard_mask.tga', mask)
     write_tga(media / 'Borders/msuf_portrait_ring_blizzard.tga', rim)
+    build_direction_masks(media)
 
 
 if __name__ == '__main__':

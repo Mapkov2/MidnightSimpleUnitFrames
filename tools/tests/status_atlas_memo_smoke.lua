@@ -2,8 +2,8 @@
 --
 -- C_Texture.GetAtlasInfo builds a new table on every call, and atlas data
 -- cannot change while the client runs. The combat icon asks for its atlas on
--- every UNIT_FLAGS in combat and a class portrait on every class change, so
--- both ask the client once per atlas name and session. The combat icon atlas
+-- every UNIT_FLAGS in combat, so it asks the client once per session. A class
+-- portrait never asks: SetAtlas owns the icon crop. The combat icon atlas
 -- is Blizzard's Mainline PlayerFrame one (AttackIcon,
 -- UI-HUD-UnitFrame-Player-CombatIcon); clients without it, and the preview
 -- animation on them, draw the classic state icon instead.
@@ -55,7 +55,7 @@ else
     Check(icon.atlas == nil and icon.texture == STATE_TEXTURE, "a client without the atlas must draw the classic state icon")
 end
 
--- 2. Class portraits: a class atlas seen once is never asked for again.
+-- 2. Class portraits: class changes show the whole icon and never ask for atlas info.
 local conf = env.MSUF_DB.player
 conf.portraitMode, conf.portraitRender, conf.portraitShape = "LEFT", "CLASS", "SQUARE"
 conf.portraitClassStyle = "BLIZZARD"
@@ -72,9 +72,11 @@ for _, class in ipairs({ "WARRIOR", "MAGE", "WARRIOR", "MAGE" }) do
     unitClass = class
     portrait.Update(player, "MSUF_UNIT_IDENTITY_VISUAL", "player")
     Check(player.portrait.atlas == "classicon-" .. class, "the class portrait did not follow the class")
+    local uv = player.portrait.texCoord
+    Check(uv and uv[1] == 0 and uv[2] == 1 and uv[3] == 0 and uv[4] == 1, "the class portrait must show its whole atlas")
 end
-Check(reads["classicon-MAGE"] == 1 and reads["classicon-WARRIOR"] == 1,
-    "class atlases were asked for again: MAGE " .. tostring(reads["classicon-MAGE"])
+Check(reads["classicon-MAGE"] == nil and reads["classicon-WARRIOR"] == nil,
+    "class portraits asked for atlas info: MAGE " .. tostring(reads["classicon-MAGE"])
     .. ", WARRIOR " .. tostring(reads["classicon-WARRIOR"]))
 
 -- 3. Preview animation: never the atlas name no client has.

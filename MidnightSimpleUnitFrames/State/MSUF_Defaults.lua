@@ -140,7 +140,8 @@ end
 --- any frame/compiler code sees the DB so downstream modules only need to
 --- understand the current enum set.
 local function MSUF_Defaults_NormalizePortraitRenderValue(v)
-    if v == "CLASS" or v == "3D" then return v end
+    -- The retired 3D model mode, like any unknown value, loads as 2D.
+    if v == "CLASS" then return v end
     return "2D"
 end
 

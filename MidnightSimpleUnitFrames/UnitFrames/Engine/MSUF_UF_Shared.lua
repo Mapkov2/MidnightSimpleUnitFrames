@@ -180,8 +180,9 @@ function Shared.NormalizePortraitMode(conf)
   return "OFF"
 end
 
+--- Retired render values, such as the removed "3D" model mode, fall back to 2D.
 function Shared.NormalizePortraitRender(mode)
-  return (mode == "CLASS" or mode == "3D") and mode or "2D"
+  return mode == "CLASS" and mode or "2D"
 end
 
 function Shared.NormalizePortraitClassStyle(value)

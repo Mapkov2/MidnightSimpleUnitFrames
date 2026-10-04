@@ -272,7 +272,8 @@ do
     ns.MSUF2.PickFallbackTable = function(deps, defaults)
         return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
     end
-    assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
+    assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"))("MidnightSimpleUnitFrames", ns)
+assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
     local preview = {}
     ns.UFPreviewRender.Install(preview, {})
     local render = preview.RefreshDeps._RenderState
@@ -334,6 +335,7 @@ local ns = { MSUF2 = {}, Client = { Family = "Classic", IsClassic = true, IsVani
 ns.MSUF2.PickFallbackTable = function(deps, defaults)
     return setmetatable({}, { __index = function(_, key) return deps[key] or defaults[key] end })
 end
+assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"))("MidnightSimpleUnitFrames", ns)
 assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
 local preview = {}
 ns.UFPreviewRender.Install(preview, {})
@@ -354,6 +356,7 @@ era.Apply(eraFrame, eraFrame.MSUFSpec)
 assert(eraFrame.MSUFPortraitHolder.artBorder.shown, "Era default Blizzard shape needs gold art")
 assert(eraFrame.MSUFPortraitHolder.mask.texture:find("circle_mask", 1, true))
 ns = { MSUF2 = ns.MSUF2, Client = { Family = "Classic", IsClassic = true, IsVanilla = true } }
+assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"))("MidnightSimpleUnitFrames", ns)
 assert(loadfile("MidnightSimpleUnitFrames_Options/Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Render.lua"))("Options", ns)
 preview = {}
 ns.UFPreviewRender.Install(preview, {})
