@@ -44,7 +44,9 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- translated packs (every pack is parsed at startup); no catalog was added.
         -- 2026-10-03: bytes are counted with LF line ends (checkout-independent);
         -- the LF tree measured Mainline 15,979,430 and Vanilla 13,830,064.
-        assert(bytes < (suffix == "Mainline" and 16200000 or 14050000),
+        -- 2026-10-04: complete menu translations add about 503 KB across twelve
+        -- packs; raise only this source-size tripwire by that translation budget.
+        assert(bytes < (suffix == "Mainline" and 16710000 or 14560000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

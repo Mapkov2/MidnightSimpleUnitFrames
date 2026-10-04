@@ -30,9 +30,57 @@ end
 
 -- Page files whose literal labels must all be translated, and the pages that build them.
 local CHECKED_FILES = {
-    "MSUF_Menu2_SwingTimers.lua", "MSUF_Menu2_UnitFrameVisuals.lua", "MSUF_Menu2_ResourceExtras.lua",
-    "MSUF_Menu2_ProfileVariants.lua", "MSUF_Menu2_ProfileSync.lua",
+    "MSUF_Menu2_Advanced.lua",
+    "MSUF_Menu2_AdvancedClassPower.lua",
+    "MSUF_Menu2_AdvancedColors.lua",
+    "MSUF_Menu2_AdvancedColors_Context.lua",
+    "MSUF_Menu2_AdvancedColors_Group.lua",
+    "MSUF_Menu2_AdvancedColors_Meta.lua",
+    "MSUF_Menu2_AdvancedColors_Resources.lua",
+    "MSUF_Menu2_AdvancedGameplay.lua",
+    "MSUF_Menu2_AdvancedProfiles.lua",
+    "MSUF_Menu2_AuraControls.lua",
+    "MSUF_Menu2_AuraSettings.lua",
+    "MSUF_Menu2_Auras.lua",
+    "MSUF_Menu2_Auras_CustomWorkspace.lua",
+    "MSUF_Menu2_Auras_Group.lua",
+    "MSUF_Menu2_Auras_Preview.lua",
+    "MSUF_Menu2_ColorPainter.lua",
+    "MSUF_Menu2_Global.lua",
+    "MSUF_Menu2_GlobalBars.lua",
+    "MSUF_Menu2_GlobalCastbars.lua",
+    "MSUF_Menu2_GlobalCastbars_Preview.lua",
+    "MSUF_Menu2_GlobalFonts.lua",
+    "MSUF_Menu2_GlobalMisc.lua",
+    "MSUF_Menu2_Group.lua",
+    "MSUF_Menu2_GroupAuras.lua",
+    "MSUF_Menu2_GroupBars.lua",
+    "MSUF_Menu2_GroupIndicators.lua",
+    "MSUF_Menu2_GroupLayout.lua",
+    "MSUF_Menu2_GroupLayoutAdditional.lua",
+    "MSUF_Menu2_GroupPreview.lua",
+    "MSUF_Menu2_GroupPriority.lua",
+    "MSUF_Menu2_GroupSpecs.lua",
+    "MSUF_Menu2_Group_SpellModel.lua",
+    "MSUF_Menu2_ProfileSearch.lua",
+    "MSUF_Menu2_ProfileSync.lua",
+    "MSUF_Menu2_ProfileVariants.lua",
+    "MSUF_Menu2_ResourceExtras.lua",
+    "MSUF_Menu2_SwingTimers.lua",
+    "MSUF_Menu2_SwingTimersPreview.lua",
+    "MSUF_Menu2_Unit.lua",
+    "MSUF_Menu2_UnitAlpha.lua",
+    "MSUF_Menu2_UnitDispel.lua",
+    "MSUF_Menu2_UnitFrameVisuals.lua",
+    "MSUF_Menu2_UnitLazy.lua",
+    "MSUF_Menu2_UnitRangeFade.lua",
+    "MSUF_Menu2_UnitSectionShared.lua",
+    "MSUF_Menu2_UnitSections.lua",
+    "MSUF_Menu2_UnitStatusSection.lua",
+    "MSUF_Menu2_UnitText.lua",
+    "MSUF_Menu2_UnitTextureLayer.lua"
 }
+
 local PAGES = { "swingtimers", "uf_player", "uf_target", "classpower", "opt_colors", "opt_castbar", "profiles" }
 -- Labels of other page files that these pages show and must translate too, and
 -- labels these files show only in a state the build does not reach.
@@ -73,7 +121,7 @@ local function LoadPack(locale)
     namespace.FinalizeLocale()
     local keys = {}
     for key, value in pairs(namespace.L) do
-        if type(key) == "string" and type(value) == "string" then keys[key] = true end
+        if type(key) == "string" and type(value) == "string" then keys[key] = value end
     end
     _G.GetLocale, _G.CreateFrame = previousGetLocale, previousCreateFrame
     _G.MSUF_NS, _G.MSUF, _G.MSUF_L = previousNS, previousMSUF, previousL
@@ -82,9 +130,13 @@ end
 local packs = {}
 for _, locale in ipairs(LOCALES) do packs[locale] = LoadPack(locale) end
 local function MissingIn(key)
+    local _, words = key:gsub("%S+", "")
+    local proper = key:find("^MSUF ") or key == "Midnight Simple Unit Frames"
     local missing = {}
     for _, locale in ipairs(LOCALES) do
-        if not packs[locale][key] then missing[#missing + 1] = locale end
+        if not packs[locale][key] or (words >= 3 and not proper and packs[locale][key] == key) then
+            missing[#missing + 1] = locale
+        end
     end
     return missing
 end
@@ -203,6 +255,9 @@ if Shortcut then
     end
 end
 
+PAGES = {}
+for key in pairs(M.pages) do PAGES[#PAGES + 1] = key end
+table.sort(PAGES)
 local built = {}
 for _, key in ipairs(PAGES) do
     if M.pages[key] then
@@ -219,6 +274,7 @@ local function Literal(source, text)
     local quoted = '"' .. text:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("\n", "\\n") .. '"'
     return source:find(quoted, 1, true) ~= nil
 end
+local NON_TEXT = { Mapko = true, MapkoSkin = true, P = true, HEX = true, Hex = true, ["404K - 100.0%"] = true }
 local problems, checked = {}, 0
 for _, file in ipairs(CHECKED_FILES) do
     local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/" .. file, "rb"))
@@ -226,7 +282,7 @@ for _, file in ipairs(CHECKED_FILES) do
     handle:close()
     local keys = {}
     for text in pairs(byFile[file] or {}) do
-        if text:find("%a") and not text:find("|c", 1, true) and not text:find("|T", 1, true) and Literal(source, text) then
+        if not NON_TEXT[text] and not text:find("^MSUF ") and text:find("%a") and not text:find("|c", 1, true) and not text:find("|T", 1, true) and Literal(source, text) then
             keys[#keys + 1] = text
         end
     end
@@ -245,6 +301,26 @@ for _, text in ipairs(REQUIRED) do
         problems[#problems + 1] = string.format("required: %q is missing from %s", text, table.concat(missing, ","))
     end
 end
+-- Composed labels must translate the format and its label independently.
+do
+    local oldTr, oldTranslateText, oldFormat = M.Tr, M.TranslateText, M.Format
+    local dictionary = {
+        Text = "TEXT_DE", ["%s On"] = "%s AN", ["%s Off"] = "%s AUS",
+        ["Buff Appearance"] = "BUFF_AUSSEHEN",
+        ["only the global %s icon shape, border and shadow settings; other Aura types and all Unit/Group lane settings stay unchanged"] = "SUMMARY %s",
+        ["only the global %s icon shape, border and shadow settings, plus the shared Blizzard Buff/Debuff visibility settings; other Aura types and all Unit/Group lane settings stay unchanged"] = "SUMMARY %s",
+        ["Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."] = "RESET %s | %s",
+    }
+    M.Tr = function(key) return dictionary[key] or key end
+    M.TranslateText = M.Tr
+    M.Format = function(key, ...) return string.format(M.Tr(key), ...) end
+    Check(M.Widgets.ToggleBadge("Text", true).text == "TEXT_DE AN", "toggle badge left the label or state English")
+    Check(M.Widgets.ToggleBadge("Text", false).text == "TEXT_DE AUS", "disabled badge left the label or state English")
+    local warning = M.BuildPageResetWarning("auras3_buffs")
+    Check(warning == "RESET BUFF_AUSSEHEN | SUMMARY BUFF_AUSSEHEN", "aura reset summary left its inner label English")
+    M.Tr, M.TranslateText, M.Format = oldTr, oldTranslateText, oldFormat
+end
+
 Check(#problems == 0, #problems .. " untranslated menu label(s):\n  " .. table.concat(problems, "\n  "))
 Check(checked > 0, "no literal label of the checked page files was recorded")
 if flavor == "Forever" then
