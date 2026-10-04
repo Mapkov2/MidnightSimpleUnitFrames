@@ -556,7 +556,7 @@ function Shared.MakeScopeCopyPopup(anchorButton, opts)
                     if opts.onTargetClick then opts.onTargetClick(key, api, popup) end
                     RefreshTargets()
                 end)
-                RegisterSharedControl(btn, opts, "target." .. tostring(key), "Copy target " .. tostring(label), "button", opts.runLabel and "ephemeral" or "action")
+                RegisterSharedControl(btn, opts, "target." .. tostring(key), M.Format("Copy target %s", M.Tr(label)), "button", opts.runLabel and "ephemeral" or "action")
                 popup._targetBtns[key] = btn
             end
             local catLabel = T.Font(popup, "GameFontDisableSmall", opts.categoryLabel or "Copy categories", T.colors.dim)

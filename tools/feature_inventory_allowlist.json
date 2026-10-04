@@ -175,6 +175,74 @@
    "evidence": "e23ccb853 refactor(editmode): load the layout family as XML-ordered modules",
    "reason": "The installer export was a loader indirection; the layout modules now load straight from MSUF_EditMode.xml, so the feature is unchanged.",
    "date": "2026-10-02"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: uf_arena | Unit > Portrait | Bottom-right gold connector | toggle | arena.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "classic: uf_boss | Unit > Portrait | Bottom-right gold connector | toggle | boss.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "classic: uf_focus | Unit > Portrait | Bottom-right gold connector | toggle | focus.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "classic: uf_focustarget | Unit > Portrait | Bottom-right gold connector | toggle | focustarget.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "classic: uf_pet | Unit > Portrait | Bottom-right gold connector | toggle | pet.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "classic: uf_pettarget | Unit > Portrait | Bottom-right gold connector | toggle | pettarget.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "classic: uf_player | Unit > Portrait | Bottom-right gold connector | toggle | player.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "classic: uf_target | Unit > Portrait | Bottom-right gold connector | toggle | target.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "classic: uf_targettarget | Unit > Portrait | Bottom-right gold connector | toggle | targettarget.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "main: uf_arena | Unit > Portrait | Bottom-right gold connector | toggle | arena.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "main: uf_boss | Unit > Portrait | Bottom-right gold connector | toggle | boss.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "main: uf_focus | Unit > Portrait | Bottom-right gold connector | toggle | focus.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "main: uf_focustarget | Unit > Portrait | Bottom-right gold connector | toggle | focustarget.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "main: uf_pet | Unit > Portrait | Bottom-right gold connector | toggle | pet.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "main: uf_pettarget | Unit > Portrait | Bottom-right gold connector | toggle | pettarget.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "main: uf_player | Unit > Portrait | Bottom-right gold connector | toggle | player.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "main: uf_target | Unit > Portrait | Bottom-right gold connector | toggle | target.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner",
+    "main: uf_targettarget | Unit > Portrait | Bottom-right gold connector | toggle | targettarget.portraitBlizzardCorner | unit.portrait.portraitblizzardcorner"
+   ],
+   "basis": "moved",
+   "evidence": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua: existing portraitBlizzardCorner binding now labeled Gold corner connector.",
+   "reason": "The unchanged connector toggle is named for its selected corner rather than the former fixed bottom-right location. All setting keys, reset and Copy To behavior remain available; the new Blizzard frame direction setting moves the connector with the mask and ring.",
+   "date": "2026-10-04"
+  },
+  {
+   "category": "locale",
+   "items": [
+    "3D portrait",
+    "3D shows the unit's live model in a rectangle. While the game keeps a unit's identity private, the regular 2D portrait stands in."
+   ],
+   "basis": "owner",
+   "evidence": "Mapko, 2026-10-04: remove the 3D portrait render mode. State/MSUF_Defaults.lua and UnitFrames/Engine/MSUF_UF_Shared.lua load saved 3D values as 2D; tools/tests/portrait_details_smoke.lua pins it.",
+   "reason": "The 3D model render mode is retired; its dropdown entry and explanatory tooltip went with it, and saved 3D portraits render as 2D.",
+   "date": "2026-10-04"
+  },
+  {
+   "category": "locale",
+   "item": "Darkens the inner edges of square portraits, 3D models included.",
+   "basis": "moved",
+   "evidence": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua: the Inset shadow strength tooltip uses \"Darkens the inner edges of square portraits.\"",
+   "reason": "The inset shadow tooltip stays; only its reference to the retired 3D model mode was dropped.",
+   "date": "2026-10-04"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: classpower | Advanced > Preview | Rogue - Combo Points | dropdown | menu.classPowerPreviewResource | advanced.preview.resource",
+    "main: classpower | Advanced > Preview | Rogue - Combo Points | dropdown | menu.classPowerPreviewResource | advanced.preview.resource"
+   ],
+   "basis": "moved",
+   "evidence": "MSUF_Menu2_AdvancedClassPower.lua: preview resource selector uses a stable semantic search label; classpower_workspace_smoke.lua pins it.",
+   "reason": "The existing selector and its identity remain available. Its search name is Preview resource instead of the currently selected sample.",
+   "date": "2026-10-04"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: classpower | Player > Hp | Second Player HP bar | toggle | bars.playerHPBarEnabled | advanced.player.hp.enabled",
+    "main: classpower | Player > Hp | Second Player HP bar | toggle | bars.playerHPBarEnabled | advanced.player.hp.enabled"
+   ],
+   "basis": "moved",
+   "evidence": "MSUF_Menu2_AdvancedClassPower.lua keeps the always-visible Extra Health Bar SectionSwitch with bars.playerHPBarEnabled and advanced.player.hp.enabled; classpower_workspace_smoke.lua checks header availability on all five clients.",
+   "reason": "The same enable setting and identity remain in the selected Extra Health Bar workspace. Its caption uses the existing localized Extra Health Bar name instead of Second Player HP bar.",
+   "date": "2026-10-04"
   }
  ]
 }

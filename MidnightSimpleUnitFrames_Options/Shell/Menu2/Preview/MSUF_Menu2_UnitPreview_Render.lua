@@ -3383,7 +3383,7 @@ function Stage.LayoutTextSlots(st)
     end
 end
 
---- Portrait: placement, texture (class/2D/3D), background, shape mask,
+--- Portrait: placement, texture (class/2D), background, shape mask,
 --- border and handle, or the hidden state.
 function Stage.RenderPortrait(st)
     local PlaceHandle, PortraitStyleGet, RenderState, S, box, data, floor, g = st.PlaceHandle, st.PortraitStyleGet, st.R, st.S, st.box, st.data, st.floor, st.g
@@ -3425,13 +3425,9 @@ function Stage.RenderPortrait(st)
             local visual = RenderState.ClassPortraitVisual(data.class, (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.classStyle) or PortraitStyleGet(key, "portraitClassStyle", "BLIZZARD"))
             if visual and visual.atlas and mock.portrait.tex.SetAtlas then
                 mock.portrait.tex:SetAtlas(visual.atlas)
-                -- Only a flipped class atlas needs its coordinates.
-                local info = runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.flip
-                    and _G.C_Texture and _G.C_Texture.GetAtlasInfo(visual.atlas)
-                if info then
-                    mock.portrait.tex:SetTexCoord(info.rightTexCoord or 1, info.leftTexCoord or 0,
-                        info.topTexCoord or 0, info.bottomTexCoord or 1)
-                end
+                -- Texcoords after SetAtlas are local to the atlas, as on the live portrait.
+                local flip = runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.flip == true
+                mock.portrait.tex:SetTexCoord(flip and 1 or 0, flip and 0 or 1, 0, 1)
             else
                 mock.portrait.tex:SetTexture(visual and visual.texture or "Interface\\ICONS\\INV_Misc_QuestionMark")
                 if mock.portrait.tex.SetTexCoord then
@@ -3520,11 +3516,18 @@ function Stage.RenderPortrait(st)
                 mock.portrait._msufPreviewLayoutWidth or S(box._runtimePortraitW),
                 mock.portrait._msufPreviewLayoutHeight or S(box._runtimePortraitH))
         end
-        RenderState.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel)
+        local blizzardSpec = runtimeSpec and runtimeSpec.portrait
+        if not blizzardSpec then
+            blizzardSpec = mock.portrait._msufPreviewBlizzardSpec or {}
+            mock.portrait._msufPreviewBlizzardSpec = blizzardSpec
+            blizzardSpec.blizzardDirection = PortraitStyleGet(key, "portraitBlizzardDirection", "AUTO")
+            blizzardSpec.flip = PortraitStyleGet(key, "portraitFlip", false) == true
+        end
+        RenderState.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel, blizzardSpec)
         RenderState.LayoutPreviewBlizzardPortrait(mock.portrait, previewShape == "BLIZZARD",
             S(box._runtimePortraitW), S(box._runtimePortraitH),
             PortraitStyleGet(key, "portraitBlizzardCorner", false) == true,
-            not (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.blizzardStandaloneRing == false))
+            not (runtimeSpec and runtimeSpec.portrait and runtimeSpec.portrait.blizzardStandaloneRing == false), blizzardSpec)
         local portraitElement = MSUF.UF and MSUF.UF.elements and MSUF.UF.elements.Portrait
         if portraitElement and portraitElement.PaintClassification then
             portraitElement.PaintClassification(mock.portrait,
@@ -3535,7 +3538,7 @@ function Stage.RenderPortrait(st)
                 mock.portrait._msufPreviewLayoutHeight or S(box._runtimePortraitH), mock.portrait, runtimeSpec and runtimeSpec.portrait, data.liveUnit)
         end
         if runtimeSpec and runtimeSpec.portrait then
-            MSUF.PortraitDetails.ApplyPreview(mock.portrait, runtimeSpec.portrait, data.liveUnit)
+            MSUF.PortraitDetails.ApplyShadow(mock.portrait, runtimeSpec.portrait)
         end
         -- The Blizzard ring shape parks every MSUF border renderer, exactly
         -- like the live element.
@@ -3564,7 +3567,6 @@ function Stage.RenderPortrait(st)
             max(18, S(box._runtimePortraitH) + ((box._runtimePortraitBorderFill and 0 or S(box._runtimePortraitBorderThickness)) * 2)))
         PlaceHandle(box.handlePortrait, mock.portrait)
         else
-            if mock.portrait._msufDetailsPreviewOwner then MSUF.PortraitDetails.HideModel(mock.portrait._msufDetailsPreviewOwner) end
             if mock.portrait.innerShadow then mock.portrait.innerShadow:Hide() end
             mock.portrait.tex:Hide()
             mock.portrait.initial:Hide()
@@ -4015,7 +4017,7 @@ function InstallStage.PortraitShape(s)
             PREVIEW_SOFT_EDGE_MASKS.DIAMOND[level] = root .. "portrait_edge_softness_diamond_" .. suffix
         end
     end
-    local function ApplyPreviewPortraitShapeMask(portrait, shape, edgeSoftnessLevel)
+    local function ApplyPreviewPortraitShapeMask(portrait, shape, edgeSoftnessLevel, p)
         local wantAtlas = shape == "BLIZZARD"
         local softMasks = PREVIEW_SOFT_EDGE_MASKS[shape]
         local file = softMasks and softMasks[edgeSoftnessLevel] or PREVIEW_SHAPE_MASKS[shape]
@@ -4040,11 +4042,11 @@ function InstallStage.PortraitShape(s)
             portrait.tex:AddMaskTexture(mask)
             if portrait.bg and portrait.bg.AddMaskTexture then portrait.bg:AddMaskTexture(mask) end
         end
-        local key = wantAtlas and "BLIZZARD" or file
+        local key = wantAtlas and (LEGACY_BLIZZARD_PORTRAIT and PREVIEW_BLIZZ.circleMask
+            or MSUF.PortraitDetails.GetBlizzardMask(p)) or file
         if portrait._msufPreviewShapeMaskKey ~= key then
             portrait._msufPreviewShapeMaskKey = key
-            local maskFile = wantAtlas and (LEGACY_BLIZZARD_PORTRAIT and PREVIEW_BLIZZ.circleMask or PREVIEW_BLIZZ.mask) or file
-            mask:SetTexture(maskFile, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+            mask:SetTexture(key, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         end
     end
     renderState.ApplyPreviewPortraitShapeMask = ApplyPreviewPortraitShapeMask
@@ -4093,7 +4095,7 @@ function InstallStage.PortraitRings(s)
         return true
     end
     local cornerAtlasAvailable
-    local function LayoutPreviewBlizzardPortrait(portrait, active, pw, ph, showCorner, showRing)
+    local function LayoutPreviewBlizzardPortrait(portrait, active, pw, ph, showCorner, showRing, p)
         local ring = portrait._msufPreviewBlizzRing
         if PREVIEW_CLASSIC and portrait._msufPreviewBlizzFallback then portrait._msufPreviewBlizzFallback:Hide() end
         if not active then
@@ -4137,8 +4139,11 @@ function InstallStage.PortraitRings(s)
             portrait._msufPreviewBlizzRing = ring
         end
         if ring and showRing ~= false then
-            ring:SetTexture(PREVIEW_BLIZZ.ring)
-            ring:SetTexCoord(0, 1, 0, 1)
+            if ring._msufTexture ~= PREVIEW_BLIZZ.ring then
+                ring:SetTexture(PREVIEW_BLIZZ.ring)
+                ring._msufTexture = PREVIEW_BLIZZ.ring
+            end
+            MSUF.PortraitDetails.PaintBlizzardDirection(ring, p)
             if not portrait._msufPreviewBlizzKey then
                 portrait._msufPreviewBlizzKey = true
                 ring:ClearAllPoints()
@@ -4166,10 +4171,11 @@ function InstallStage.PortraitRings(s)
             if corner then
                 local width = tonumber(pw) or portrait:GetWidth() or 36
                 local height = tonumber(ph) or portrait:GetHeight() or 36
-                corner:ClearAllPoints()
-                corner:SetPoint("TOPLEFT", portrait, "TOPLEFT", (34.5 / 60) * width, -(34.5 / 60) * height)
-                corner:SetSize((23 / 60) * width, (23 / 60) * height)
-                corner:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment")
+                if not corner._msufAtlas then
+                    corner:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment")
+                    corner._msufAtlas = "UI-HUD-UnitFrame-Player-PortraitOn-CornerEmbellishment"
+                end
+                MSUF.PortraitDetails.LayoutBlizzardCorner(corner, portrait, width, height, p)
                 corner:SetVertexColor(1, 1, 1, 1)
                 corner:Show()
             end

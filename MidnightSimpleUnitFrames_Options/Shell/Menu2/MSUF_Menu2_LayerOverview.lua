@@ -454,7 +454,7 @@ Overview.RegisterProvider("unit-auras", function(sink)
             local token = tostring(present and item.id or index)
             local fallback = index == 4
                 and (scope.key == "player" and "Defensive Buffs" or "Dots on target")
-                or ("Custom " .. index)
+                or M.Format("Custom %d", index)
             local label = tostring(present and item.name or fallback)
             local enabled = present and unitEnabled and item.enabled == true
             sink:Layer({
@@ -466,7 +466,7 @@ Overview.RegisterProvider("unit-auras", function(sink)
             })
             sink:Strata({
                 id = "auras3." .. scope.key .. ".custom." .. token .. ".strata",
-                area = "Unit Auras", scope = scope.label, label = label .. " Icons",
+                area = "Unit Auras", scope = scope.label, label = M.Format("%s Icons", Tr(label)),
                 value = present and item.strata or nil, default = "AUTO", enabled = enabled,
                 settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. ".strata",
                 edit = { kind = "aura-custom", scope = scope.key, index = index },
@@ -665,7 +665,7 @@ Overview.RegisterProvider("group-frames", function(sink)
                     })
                     sink:Strata({
                         id = "group." .. scope.key .. ".spellIndicators." .. token .. ".strata",
-                        area = "Spell Indicators", scope = scope.label, label = label .. " Icon",
+                        area = "Spell Indicators", scope = scope.label, label = M.Format("%s Icon", Tr(label)),
                         value = item.strata, default = "AUTO", enabled = enabled,
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".strata",
                         edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "strata" } },
@@ -717,7 +717,7 @@ Overview.RegisterProvider("castbars", function(sink)
         local iconValue = Number(general[iconKey], 0)
         sink:Layer({
             id = "castbar." .. row.scope .. ".icon",
-            area = "Castbars", scope = row.label, label = "Icon" .. (iconValue <= 0 and " (follows castbar)" or ""),
+            area = "Castbars", scope = row.label, label = iconValue <= 0 and "Icon (follows castbar)" or "Icon",
             value = iconValue <= 0 and rootLayer or iconValue, default = rootLayer,
             inherited = iconValue <= 0, settingKey = "general." .. iconKey,
             edit = { kind = "general", key = iconKey, mode = "castbar-icon" },
@@ -859,7 +859,7 @@ end
 
 local function RunLayerHistory(row, callback, fieldLabel)
     if type(M.RunWithHistory) == "function" then
-        return M.RunWithHistory((fieldLabel or "Layer") .. ": " .. tostring(row.label), "layer-overview:" .. tostring(row.id), callback)
+        return M.RunWithHistory(M.Format("%s: %s", Tr(fieldLabel or "Layer"), Tr(tostring(row.label))), "layer-overview:" .. tostring(row.id), callback)
     end
     return callback()
 end
@@ -1109,7 +1109,7 @@ local function CurrentLayerContext()
             scopes = {}
             scopes[SCOPE_LABEL[scope] or scope] = true
         end
-        return { key = key, label = (scope == "shared" and "Shared" or (SCOPE_LABEL[scope] or scope)) .. " Auras", scopes = scopes,
+        return { key = key, label = M.Format("%s Auras", Tr(scope == "shared" and "Shared" or (SCOPE_LABEL[scope] or scope))), scopes = scopes,
             areas = { ["Unit Auras"] = true, ["Group Auras"] = true }, order = AREA_ORDER.auras }
     end
     if key == "classpower" then
@@ -1358,10 +1358,10 @@ local function ConfigureDataRow(row, data, y, width, alternate, strataMode)
             row._valueEdit:Hide()
         end
     end
-    local areaText = data.area .. " / " .. data.scope
-    if data.inherited then areaText = areaText .. " (shared)" end
+    local areaText = M.Format("%s / %s", Tr(data.area), Tr(data.scope))
+    if data.inherited then areaText = M.Format("%s (shared)", areaText) end
     row._area:SetText(areaText)
-    row._label:SetText(data.label .. (data.enabled and "" or " (off)"))
+    row._label:SetText(data.enabled and Tr(data.label) or M.Format("%s (off)", Tr(data.label)))
     local alpha = data.enabled and 1 or 0.48
     SetFontColor(row._value, strataMode and Color("accent", { 0.42, 0.78, 1.00, 1 }) or Color("success", { 0.30, 1.00, 0.62, 1 }), alpha)
     SetFontColor(row._area, Color("muted", { 0.62, 0.72, 0.86, 1 }), alpha)
@@ -1438,7 +1438,7 @@ RebuildPopupRows = function(popup, preserveScroll)
         if #foundLayers == 0 then Section(Tr("No layers match this search.")) end
     else
         if #relevantLayers > 0 then
-            Section(context.label .. " - " .. Tr("MSUF Layers 0-30") .. " (" .. tostring(#relevantLayers) .. ") | " .. layerEditHint)
+            Section(Tr(context.label) .. " - " .. Tr("MSUF Layers 0-30") .. " (" .. tostring(#relevantLayers) .. ") | " .. layerEditHint)
             DataRows(relevantLayers)
         end
         local moreCount = #moreLayers
@@ -1458,7 +1458,7 @@ RebuildPopupRows = function(popup, preserveScroll)
         end
     end
     popup._scrollChild:SetSize(width, math.max(y + 4, popup._scroll:GetHeight()))
-    popup._count:SetText(tostring(#layers) .. " " .. Tr("editable Layer numbers (0-30)"))
+    popup._count:SetText(M.Format("%d editable Layer numbers (0-30)", #layers))
     popup._context = context
     if not preserveScroll then popup._scroll:SetVerticalScroll(0) end
     if popup._scroll._msuf2RefreshScrollBar then popup._scroll:_msuf2RefreshScrollBar() end

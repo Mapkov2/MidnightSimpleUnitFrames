@@ -106,7 +106,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         local button = box.layerButtons[i]
         if button and (button.key ~= "classPower" or previewUnitKey == "player") then
             Register(button, "layer." .. tostring(button.key),
-                tostring((button.fs and button.fs.GetText and button.fs:GetText()) or button.key or "Preview layer") .. " preview layer",
+                M2.Format("%s preview layer", tostring((button.fs and button.fs.GetText and button.fs:GetText()) or button.key or "Preview layer")),
                 "button", "ephemeral")
         end
     end
@@ -123,7 +123,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         local gear = exposeHandle and handle._msuf2SettingsGear
         if gear and gear._msuf2UnitPreviewOpenCommand then
             Register(gear, "handle." .. tostring(key) .. ".open_settings",
-                "Open " .. tostring((handle and handle._label) or key or "preview element") .. " settings",
+                M2.Format("Open %s settings", M2.TranslateText(tostring((handle and handle._label) or key or "preview element"))),
                 "button", "action", {
                     historyMode = "none",
                     help = "Click the highlighted preview button to jump directly to this element's settings below.",
@@ -131,7 +131,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
                 })
         else
             Register(gear, "handle." .. tostring(key) .. ".open_settings",
-                "Open " .. tostring((handle and handle._label) or key or "preview element") .. " settings",
+                M2.Format("Open %s settings", M2.TranslateText(tostring((handle and handle._label) or key or "preview element"))),
                 "button", "navigation", { navigationKey = UnitPreviewHandleNavigationKey(handle, pageKey) })
         end
     end

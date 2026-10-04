@@ -66,9 +66,9 @@ end
 local function ChoiceLabel(values, value, fallback)
     for i = 1, #(values or {}) do
         local item = values[i]
-        if item and item.value == value then return item.text or fallback or tostring(value or "") end
+        if item and item.value == value then return M.Tr(item.text or fallback or tostring(value or "")) end
     end
-    return fallback or tostring(value or "")
+    return M.Tr(fallback or tostring(value or ""))
 end
 
 local AURA_ANCHOR_LABELS = {
@@ -79,7 +79,7 @@ local AURA_ANCHOR_LABELS = {
 
 local function AnchorLabel(value)
     value = tostring(value or "CENTER"):upper()
-    return AURA_ANCHOR_LABELS[value] or value
+    return M.Tr(AURA_ANCHOR_LABELS[value] or value)
 end
 
 local function NormalizeAuraSortMethodForLane(lane, value, allowCustomPriority)

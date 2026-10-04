@@ -489,7 +489,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
         local display = group.durationBarDisplay == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
         local position = group.durationBarPosition == "TOP" and "TOP" or "BOTTOM"
         W.SetCollapsibleBadges(durationBar, {{
-            text = enabled and (tostring(Round(tonumber(group.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, display, "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, position, "Bottom")) or "Off",
+            text = enabled and (M.Format("%d px / %s / %s", Round(tonumber(group.durationBarHeight) or 2), ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, display, "Bar Only"), ChoiceLabel(DURATION_BAR_POSITION_VALUES, position, "Bottom"))) or "Off",
             kind = enabled and "accent" or "muted", showWhenClosed = true,
         }})
     end
@@ -562,7 +562,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
         if lane == "debuff" then
             local borderMode = ReadGroupDebuffTypeBorderMode(scope, lane)
             frameBasicsBadges[#frameBasicsBadges + 1] = {
-                text = "Border " .. ChoiceLabel(DEBUFF_TYPE_BORDER_MODE_VALUES, borderMode, borderMode),
+                text = M.Format("Border %s", ChoiceLabel(DEBUFF_TYPE_BORDER_MODE_VALUES, borderMode, borderMode)),
                 kind = borderMode == "OFF" and "muted" or "accent", showWhenClosed = true,
             }
         end
@@ -570,7 +570,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
 
         local decimal = Round(tonumber(group.cooldownDecimalSeconds) or 3)
         W.SetCollapsibleBadges(cooldown, {
-            { text = cooldownEnabled and (tostring(Round(tonumber(group.cooldownSize) or 8)) .. "px / " .. AnchorLabel(group.cooldownAnchor or "CENTER") .. " / " .. (group.cooldownSwipeReverse == true and "Reverse" or "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
+            { text = cooldownEnabled and (M.Format("%d px / %s / %s", Round(tonumber(group.cooldownSize) or 8), AnchorLabel(group.cooldownAnchor or "CENTER"), Tr(group.cooldownSwipeReverse == true and "Reverse" or "Normal"))) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
             { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
         })
 
@@ -578,7 +578,7 @@ local function BuildGroupStyle(ctx, b, scope, options)
 
         local stackEnabled = group.showStacks ~= false
         W.SetCollapsibleBadges(stack, {{
-            text = stackEnabled and (tostring(Round(tonumber(group.stackSize) or 10)) .. "px / " .. AnchorLabel(group.stackAnchor or "BOTTOMRIGHT")) or "Off",
+            text = stackEnabled and (M.Format("%d px / %s", Round(tonumber(group.stackSize) or 10), AnchorLabel(group.stackAnchor or "BOTTOMRIGHT"))) or "Off",
             kind = stackEnabled and "accent" or "muted", showWhenClosed = true,
         }})
 

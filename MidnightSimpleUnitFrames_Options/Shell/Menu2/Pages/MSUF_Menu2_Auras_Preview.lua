@@ -693,9 +693,9 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
             local label = ScopeLabel(previewScope)
             T.SetTranslatedText(titleLabel, M.Format("%s Sample Preview", Tr(label)))
             if type(opts.getSampleMeta) == "function" then
-                meta:SetText(opts.getSampleMeta(cfg, previewScope) or "")
+                T.SetTranslatedText(meta, opts.getSampleMeta(cfg, previewScope) or "")
             else
-                meta:SetText(label .. " / " .. tostring(Round(cfg.actualSize or cfg.size or 0)) .. "px")
+                T.SetTranslatedText(meta, M.Format("%s / %d px", Tr(label), Round(cfg.actualSize or cfg.size or 0)))
             end
             if zoomPan and zoomPan.UpdateControls then zoomPan.UpdateControls(box) end
             return
@@ -782,7 +782,7 @@ local function BuildAuraStylePreviewWorkbench(ctx, b, scope, lane, previewContai
             local owner = previewContainer == "playerDefensives" and "Shared Player Defensive theme"
                 or previewContainer == "targetDots" and "Shared Dots on Target theme"
                 or "Global Aura theme"
-            return tostring(Round(cfg.actualSize or cfg.size or 0)) .. "px / " .. swipe .. " / " .. owner
+            return M.Format("%d px / %s / %s", Round(cfg.actualSize or cfg.size or 0), Tr(swipe), Tr(owner))
         end,
     })
     if box then box.Refresh = refreshPreview end

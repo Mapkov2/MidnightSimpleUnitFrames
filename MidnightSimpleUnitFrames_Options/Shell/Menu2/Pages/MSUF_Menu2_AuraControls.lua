@@ -427,8 +427,8 @@ local function BlockedSpellList(ctx, section, inner, offsetY, emptyText, opts)
                 row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                 local name = tostring(entry.text or entry.value or "Spell"):gsub("%s*%(#%d+%)$", "")
                 row.name:SetText(name)
-                row.id:SetText(entry.spellID and (tostring("Spell ID ") .. tostring(entry.spellID)) or tostring(entry.value or ""))
-                RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button", opts.removePath(entry.value), "action")
+                row.id:SetText(entry.spellID and (M.Format("Spell ID %s", tostring(entry.spellID))) or tostring(entry.value or ""))
+                RegisterAuraControl(ctx, row.remove, M.Format("Remove %s", name), "button", opts.removePath(entry.value), "action")
                 row:Show()
             elseif row then
                 row._spellID = nil

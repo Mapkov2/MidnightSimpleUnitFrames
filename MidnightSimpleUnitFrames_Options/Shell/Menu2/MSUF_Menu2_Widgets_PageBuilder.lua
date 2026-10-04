@@ -739,7 +739,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
                 identityKey = identity,
                 controlPath = identity:gsub("%.", "/"),
                 pageKey = pageToken,
-                label = tostring(title or sectionId) .. " section",
+                label = M.Format("%s section", M.TranslateText(tostring(title or sectionId))),
                 kind = "toggle",
                 classification = "ephemeral",
                 ephemeral = true,
@@ -764,6 +764,153 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
                 flash = true,
                 persist = focusReq.persistSection == true,
             }) then ConsumeMenuFocusRequest(focusReq) end
+        end
+        return body
+    end
+end
+--- Lazy accordion content. b:LazyCollapsibleSection builds a closed section's
+--- content when it first opens instead of during the page build. Open sections,
+--- hidden (search index) builds, opts.eager and M.EagerSections build at once,
+--- exactly like a CollapsibleSection followed by its content. A closed section
+--- arms three triggers and nothing else (no timer, no queue, no event): its
+--- chained state refresher, a body OnShow hook and entry._msuf2EnsureContent
+--- (W.EnsureSectionContent). A trigger under the configuration combat lock
+--- builds nothing and stays armed for the next show or refresh.
+local NO_LAZY_OPTS = {}
+local LazySection = {}
+--- The owning builder's panel (a facade tab or hand panel) is not selected.
+function LazySection.ParentHidden(entry)
+    local parent = entry.builder and entry.builder.parent
+    return parent ~= nil and parent.IsShown ~= nil and not parent:IsShown()
+end
+function LazySection.Wanted(lazy)
+    local entry = lazy.entry
+    return entry.open and not (lazy.deferWhileHidden and LazySection.ParentHidden(entry)) and true or false
+end
+function LazySection.RunContent(lazy)
+    lazy.build(lazy.body, lazy.entry)
+    if lazy.onBuilt then lazy.onBuilt(lazy.body) end
+end
+--- Builders inside the new content queued their relayout while it was built.
+--- Settle them first, so the owner lays out once with their final heights.
+function LazySection.SettleNested(ctx, owner)
+    local builders = ctx._msuf2PageBuilders
+    if not builders then return end
+    for i = 1, #builders do
+        local nested = builders[i]
+        if nested ~= owner and nested._msuf2RelayoutPending then nested:RelayoutCollapsibles() end
+    end
+end
+--- Hands the section back the refresher it had before the lazy one wrapped it.
+function LazySection.Disarm(lazy)
+    local entry = lazy.entry
+    if entry._msuf2RefreshState ~= lazy.refresh then return end
+    entry._msuf2RefreshState = lazy.previous
+    if lazy.tracked then entry._msuf2TrackedRefreshState = lazy.previous end
+end
+--- Builds the content once; true when it is built. A replaced page entry, a
+--- build already running and the combat lock build nothing.
+function LazySection.Build(lazy)
+    if lazy.built then return lazy.ok end
+    if lazy.building then return false end
+    local combatLocked = M.IsConfigCombatLocked
+    if combatLocked and combatLocked() then return false end
+    local ctx = lazy.ctx
+    local page = ctx.entry
+    if page and M.cache and M.cache[ctx.key] ~= page then return false end
+    lazy.building = true
+    local wasBuilding, pageBuilding = ctx._msuf2Building, page and page._msuf2Building
+    local wasIncomplete = page and page._msuf2BuildIncomplete
+    -- An enclosing build runs the refreshers, the gates and the relayout itself.
+    local enclosed = wasBuilding or pageBuilding
+    ctx._msuf2Building = true
+    if page then page._msuf2Building, page._msuf2BuildIncomplete = true, true end
+    local refreshers = ctx.refreshers or (page and page.refreshers)
+    local first = refreshers and #refreshers or 0
+    -- Kernel/MSUF_Boundary.lua: a raising build is reported and leaves no
+    -- building state behind. The page stays incomplete, so its next selection
+    -- rebuilds it, as after a raise in the page build itself.
+    local runStep = MSUF.RunHostAPIStep
+    local ok = true
+    if runStep then ok = runStep("Menu2 section content", LazySection.RunContent, lazy) else LazySection.RunContent(lazy) end
+    local owner = lazy.entry.builder
+    if not enclosed then LazySection.SettleNested(ctx, owner) end
+    if not ok then wasIncomplete = true end
+    ctx._msuf2Building = wasBuilding
+    if page then page._msuf2Building, page._msuf2BuildIncomplete = pageBuilding, wasIncomplete end
+    lazy.building, lazy.built, lazy.ok = false, true, ok and true or false
+    LazySection.Disarm(lazy)
+    if enclosed then return lazy.ok end
+    if refreshers then
+        for i = first + 1, #refreshers do
+            local refresh = refreshers[i]
+            if refresh then refresh() end
+        end
+    end
+    local gate, gates = page and page._msuf2FrameGate, M.ControlGates
+    if gate and gates and gates.ApplySections then gates.ApplySections(ctx, gate.key, gate.enabled, gate.opts) end
+    if owner and owner.RelayoutCollapsibles then owner:RelayoutCollapsibles() end
+    return lazy.ok
+end
+function LazySection.Arm(ctx, body, entry, build, opts)
+    local previous = entry._msuf2RefreshState
+    local lazy = {
+        ctx = ctx, body = body, entry = entry, build = build, onBuilt = opts.onBuilt,
+        deferWhileHidden = opts.deferWhileHidden, previous = previous,
+        tracked = previous ~= nil and entry._msuf2TrackedRefreshState == previous,
+    }
+    lazy.refresh = function(state)
+        if not lazy.built and LazySection.Wanted(lazy) then LazySection.Build(lazy) end
+        if previous then return previous(state) end
+    end
+    entry._msuf2RefreshState = lazy.refresh
+    if lazy.tracked then entry._msuf2TrackedRefreshState = lazy.refresh end
+    entry._msuf2EnsureContent = function() return LazySection.Build(lazy) end
+    if body.HookScript then
+        body:HookScript("OnShow", function()
+            if not lazy.built and LazySection.Wanted(lazy) then LazySection.Build(lazy) end
+        end)
+    end
+end
+--- Builds a lazy section's content now (exact search, page resolvers). Takes
+--- the body (or outer) or its collapsible entry. True when the content exists:
+--- built now, built before, or never lazy.
+function W.EnsureSectionContent(section)
+    if section == nil then return false end
+    local entry = section._msuf2CollapsibleEntry or section
+    local ensure = entry._msuf2EnsureContent
+    if ensure then return ensure() end
+    return true
+end
+--- The lazy accordion builder; installed once per build.
+---   body = b:LazyCollapsibleSection(id, title, height, defaultOpen, build, opts)
+---   build(body, entry)       the content; ends with FinishSection as usual
+---   opts.shell(body, entry)  runs now: everything a closed header shows
+---   opts.eager               true, or fn(ctx) returning true: build now
+---   opts.deferWhileHidden    open, but the owning builder's panel is hidden:
+---                            build on its first show
+---   opts.onBuilt(body)       post-processing that needs the content widgets
+function PageBuilderStages.InstallLazySection(b, ctx)
+    function b:LazyCollapsibleSection(id, title, height, defaultOpen, build, opts)
+        opts = opts or NO_LAZY_OPTS
+        local page = ctx.entry
+        local before = page and page._msuf2GuidedTourOrder or 0
+        -- Through self: builder facades route the shell to their tab builder,
+        -- and lazy proxies hand back the body they are filling right now.
+        local body = self:CollapsibleSection(id, title, height, defaultOpen)
+        local entry = body and body._msuf2CollapsibleEntry
+        if opts.shell then opts.shell(body, entry) end
+        local eager = opts.eager
+        if eager and eager ~= true then eager = eager(ctx) end
+        -- A body this call did not create belongs to a build already running.
+        local created = entry and (entry.guidedOrder == nil or entry.guidedOrder > before)
+        if eager or not created or M.EagerSections or ctx.hiddenBuild or (page and page.hiddenBuild)
+            or (entry.open and not (opts.deferWhileHidden and LazySection.ParentHidden(entry)))
+        then
+            build(body, entry)
+            if opts.onBuilt then opts.onBuilt(body) end
+        else
+            LazySection.Arm(ctx, body, entry, build, opts)
         end
         return body
     end
@@ -881,6 +1028,7 @@ function W.PageBuilder(ctx, opts)
     end
     PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
     PageBuilderStages.InstallCollapsibleSection(b, ctx)
+    PageBuilderStages.InstallLazySection(b, ctx)
     PageBuilderStages.InstallSectionMethods(b, ctx, UpdateContentHeight)
     return b
 end

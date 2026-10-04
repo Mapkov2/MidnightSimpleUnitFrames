@@ -63,11 +63,14 @@ local function BuildRangeFade(ctx, builder, unit)
         SettingMeta(ctx, "range_fade.enabled", unit, "rangeFadeEnabled"))
     local slider = W.Slider(alphaCard, "", 0, 1, 0.05, rightW - 58)
     if slider.SetValueFormatter then slider:SetValueFormatter(PercentValue) end
+    -- The card title names the slider on screen; search needs it as the label.
+    local alphaMeta = SettingMeta(ctx, "range_fade.alpha", unit, "rangeFadeAlpha")
+    alphaMeta.label = "Out of range"
     M.BindNumberWidget(ctx, slider,
         function() return ReadNumber(unit, "rangeFadeAlpha", 0.4) end,
         function(v) SetNumber(unit, "rangeFadeAlpha", v, "MSUF2_RANGE_FADE_ALPHA", { preview = true }) end,
         0.4,
-        SettingMeta(ctx, "range_fade.alpha", unit, "rangeFadeAlpha"))
+        alphaMeta)
     if M.BindSliderDragPreview and M.SetRangeFadePreviewState then
         M.BindSliderDragPreview(slider, function(active, value)
             local layerMode = GetConf(unit).rangeFadeLayerMode == "health" and "health" or "frame"

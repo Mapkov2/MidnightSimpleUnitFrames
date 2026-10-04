@@ -1451,7 +1451,7 @@ function SpellTileGrid:EnsureTile(index)
             return tile._grid:OnMouseUp(tile, "LeftButton")
         end,
     }
-    RegisterControl(tile, self.ctx, "spell.tile.slot." .. tostring(index), "Tracked spell tile " .. tostring(index), "button", "action")
+    RegisterControl(tile, self.ctx, "spell.tile.slot." .. tostring(index), M.Format("Tracked spell tile %d", index), "button", "action")
     self.frame._tiles[index] = tile
     return tile
 end
@@ -1482,7 +1482,7 @@ function SpellTileGrid:Refresh()
         self:Position(tile, i, specKey, trackable)
         tile._auraName, tile._info, tile._isAddTile = info.name, info, false
         RegisterControl(tile, self.ctx, "spell.tile.slot." .. tostring(i),
-            "Tracked spell " .. tostring(info.display or info.name or i), "button", "action")
+            M.Format("Tracked spell %s", tostring(info.display or info.name or i)), "button", "action")
         local auraCfg = SpellConfigFor(kind, specKey, info.name, false)
         tile._customBuff = IsCustomBuffEntry(info.name, auraCfg) or info.custom == true
         local tileEnabled = indicatorsOn and not (auraCfg and auraCfg.enabled == false)

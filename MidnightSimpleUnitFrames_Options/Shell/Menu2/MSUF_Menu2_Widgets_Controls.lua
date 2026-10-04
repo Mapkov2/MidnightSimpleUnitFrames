@@ -138,7 +138,9 @@ local function UseControlTexture(tex, texture)
     return tex
 end
 local function ControlTexture(parent, key, layer, subLevel, texture)
-    local tex = UseControlTexture(PixelLayoutRegion(parent:CreateTexture(nil, layer, nil, subLevel)), texture)
+    -- Excluded art from creation on: the plain wrapper would switch native
+    -- rounding on only for UseControlTexture to switch it off again.
+    local tex = UseControlTexture(PixelLayoutRegion(parent:CreateTexture(nil, layer, nil, subLevel), true), texture)
     if key then parent[key] = tex end
     return tex
 end
@@ -290,6 +292,7 @@ local function RefreshSwitchVisual(button, hover)
         local tx = enabled and (hover and T.colors.title or T.colors.text) or (T.colors.disabled or T.colors.dim)
         button._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
     end
+    button._msuf2SwitchPaintedChecked = checked and true or false
 end
 local function SetSwitchChecked(button, value)
     local checked = value and true or false
@@ -554,8 +557,12 @@ function W.SectionSwitch(section, label, displayLabel)
     state:SetPoint("RIGHT", button, "LEFT", -8, 0)
     local setChecked = button.SetChecked
     button.SetChecked = function(self, checked)
-        -- Scope refreshes need no repaint when the master value is unchanged.
-        if self:GetChecked() ~= checked then setChecked(self, checked) end
+        checked = checked and true or false
+        -- Native clicks can change GetChecked before the binding repaints.
+        -- Skip settled scope refreshes only when the visual also agrees.
+        if (self:GetChecked() and true or false) ~= checked or self._msuf2SwitchPaintedChecked ~= checked then
+            setChecked(self, checked)
+        end
     end
     button:SetChecked(false)
     entry.featureSwitch = button

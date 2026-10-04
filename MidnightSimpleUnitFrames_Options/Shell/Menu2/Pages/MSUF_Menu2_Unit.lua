@@ -280,7 +280,7 @@ local SEPARATORS = VTR [[
 ~=~
 :=:
 ]]
-local PORTRAIT_RENDER = VTP "2D=2D portrait|3D=3D portrait|CLASS=Class portrait"
+local PORTRAIT_RENDER = VTP "2D=2D portrait|CLASS=Class portrait"
 local PORTRAIT_SHAPES = VTP "SQUARE=Square|CIRCLE=Circle|ROUNDED=Rounded|DIAMOND=Diamond|BLIZZARD=Blizzard ring"
 local PORTRAIT_BORDERS = VTP "NONE=No border|SOLID=Solid|CLASS_COLOR=Class color|REACTION=Reaction color|CUSTOM=Custom color"
 local function GetConf(unit)
@@ -302,7 +302,7 @@ local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarInto
 --- intentionally absent: those live in MSUF_DB.general and are shared by all units.
 --- unit_copy_semantics_smoke extracts the bound keys from the Visuals page source and
 --- fails when a new portrait control is missing here.
-local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitClickable portraitBlizzardElite portraitBlizzardCorner portraitBlizzardStandaloneRing portraitShape portraitSizeMode portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitEdgeSoftness portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride portraitFlip portraitInnerShadow portraitDragonScale portraitDragonX portraitDragonY portraitDragonFlip portraitDragonClassColor portraitDragonInInstances portraitDragonLayer portraitDragonLevel]]
+local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitCastSpellIcon portraitClickable portraitBlizzardElite portraitBlizzardCorner portraitBlizzardDirection portraitBlizzardStandaloneRing portraitShape portraitSizeMode portraitSizeOverride portraitWidth portraitHeight portraitOffsetX portraitOffsetY portraitZoom portraitPanX portraitPanY portraitPlacement portraitDetachedPoint portraitDetachedTo portraitOverlayAlign portraitLevelOffset portraitAlpha portraitBorderStyle portraitEdgeSoftness portraitBorderArt portraitBorderDirection portraitBorderThickness portraitBgEnabled portraitFillBorder portraitDecoOverride portraitFlip portraitInnerShadow portraitDragonScale portraitDragonX portraitDragonY portraitDragonFlip portraitDragonClassColor portraitDragonInInstances portraitDragonLayer portraitDragonLevel]]
 local COPY_TEXT_FIELDS = WL [[
     nameTextMouseover hpTextMouseover powerTextMouseover
     nameTextMouseoverFadeIn nameTextMouseoverFadeOut hpTextMouseoverFadeIn hpTextMouseoverFadeOut powerTextMouseoverFadeIn powerTextMouseoverFadeOut

@@ -1077,6 +1077,9 @@ local function BuildGFRangeFadeSection(ctx, b)
     local rangeToggle = PrepareRangeSwitch(ctx, range)
     local function BindRangeAlphaSlider(key, label, default, y)
         local control = W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth)
+        -- The live label names the slider on screen; search needs it as the label.
+        local meta = ControlMeta(ctx, "field." .. tostring(key))
+        meta.label = label
         M.BindNumberWidget(ctx, control,
             function() return Num(CurrentScope(), key, default) end,
             function(v)
@@ -1087,7 +1090,7 @@ local function BuildGFRangeFadeSection(ctx, b)
                 QueueGF(CurrentScope(), "visual")
             end,
             default,
-            ControlMeta(ctx, "field." .. tostring(key)))
+            meta)
         if key == "rangeFadeAlpha" and M.BindSliderDragPreview and M.SetRangeFadePreviewState then
             M.BindSliderDragPreview(control, function(active, value)
                 M.SetRangeFadePreviewState("group", active, value,

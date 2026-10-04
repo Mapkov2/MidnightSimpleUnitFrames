@@ -389,11 +389,11 @@ local function BuildCustomDotsTool(C)
                     row.rank:SetText("#" .. tostring(entry.priority or i))
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                     row.text:SetText(entry.text or tostring(entry.spellID))
-                    RegisterAuraControl(ctx, row.remove, "Remove " .. (entry.text or tostring(entry.spellID)), "button",
+                    RegisterAuraControl(ctx, row.remove, M.Format("Remove %s", entry.text or tostring(entry.spellID)), "button",
                         customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
-                    RegisterAuraControl(ctx, row.up, "Raise " .. (entry.text or tostring(entry.spellID)), "button",
+                    RegisterAuraControl(ctx, row.up, M.Format("Raise %s", entry.text or tostring(entry.spellID)), "button",
                         customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".up", "action")
-                    RegisterAuraControl(ctx, row.down, "Lower " .. (entry.text or tostring(entry.spellID)), "button",
+                    RegisterAuraControl(ctx, row.down, M.Format("Lower %s", entry.text or tostring(entry.spellID)), "button",
                         customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".down", "action")
                     if type(W.SetControlsEnabled) == "function" then
                         W.SetControlsEnabled({ row.up }, customPriority and query == "" and (entry.priority or i) > 1)
@@ -542,7 +542,7 @@ local function BuildCustomWhitelistTool(C)
             end
             return changed and true or false
         end)
-        RegisterAuraTextAction(ctx, add, input, "Add " .. auraNoun, customActionPath .. ".whitelist.add", {
+        RegisterAuraTextAction(ctx, add, input, addLabel, customActionPath .. ".whitelist.add", {
             actionKey = "aura_custom_whitelist_add_spell", actionFixedArgs = { scope = unit, index = index }, actionInputArg = "value",
         })
         AddTooltip(input, "Exact aura tracking",
@@ -669,7 +669,7 @@ local function BuildCustomWhitelistTool(C)
                     elseif filtering and not entry.clickAction then
                         stateNote = " \194\183 " .. Tr("hidden on this character")
                     end
-                    row.id:SetText(tostring("Spell ID ") .. tostring(entry.spellID)
+                    row.id:SetText(M.Format("Spell ID %s", tostring(entry.spellID))
                         .. " \194\183 " .. clickNote .. stateNote)
                     -- Only offered where it changes anything: with the filter off,
                     -- or on a row a bound item already protects, it is noise.
@@ -683,7 +683,7 @@ local function BuildCustomWhitelistTool(C)
                         row.name:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
                         row.id:SetPoint("RIGHT", row.remove, "LEFT", -8, 0)
                     end
-                    RegisterAuraControl(ctx, row.remove, "Remove " .. name, "button",
+                    RegisterAuraControl(ctx, row.remove, M.Format("Remove %s", name), "button",
                         customActionPath .. ".whitelist.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
                     row._entryCount = #entries
                     row._displayIndex = i
@@ -1102,7 +1102,7 @@ local function BuildCustomAppearanceTool(C)
             if W.SetCollapsibleBadges then
                 W.SetCollapsibleBadges(durationBar, {{
                     text = reminder and Tr("Unavailable")
-                        or (enabled and (tostring(Round(tonumber(placed.durationBarHeight) or 2)) .. "px / " .. ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only") .. " / " .. ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom")) or "Off"),
+                        or (enabled and (M.Format("%d px / %s / %s", Round(tonumber(placed.durationBarHeight) or 2), ChoiceLabel(DURATION_BAR_DISPLAY_VALUES, placed.durationBarDisplay or "BAR_ONLY", "Bar Only"), ChoiceLabel(DURATION_BAR_POSITION_VALUES, placed.durationBarPosition or "BOTTOM", "Bottom"))) or "Off"),
                     kind = enabled and "accent" or "muted", showWhenClosed = true,
                 }})
             end
@@ -1159,7 +1159,7 @@ local function BuildCustomAppearanceTool(C)
                 if harmfulContainer then
                     local borderMode = tostring(placed.debuffTypeBorderMode or "OFF"):upper()
                     frameBasicsBadges[#frameBasicsBadges + 1] = {
-                        text = "Border " .. ChoiceLabel(DEBUFF_TYPE_BORDER_MODE_VALUES, borderMode, borderMode),
+                        text = M.Format("Border %s", ChoiceLabel(DEBUFF_TYPE_BORDER_MODE_VALUES, borderMode, borderMode)),
                         kind = borderMode == "OFF" and "muted" or "accent", showWhenClosed = true,
                     }
                 end
@@ -1167,14 +1167,14 @@ local function BuildCustomAppearanceTool(C)
 
                 local stackEnabled = placed.showStacks ~= false
                 W.SetCollapsibleBadges(stack, {{
-                    text = stackEnabled and (tostring(Round(tonumber(placed.stackSize) or 14)) .. "px / " .. AnchorLabel(placed.stackAnchor or "BOTTOMRIGHT")) or "Off",
+                    text = stackEnabled and (M.Format("%d px / %s", Round(tonumber(placed.stackSize) or 14), AnchorLabel(placed.stackAnchor or "BOTTOMRIGHT"))) or "Off",
                     kind = stackEnabled and "accent" or "muted", showWhenClosed = true,
                 }})
 
                 local cooldownEnabled = placed.showCooldown ~= false
                 local decimal = Round(tonumber(placed.cooldownDecimalSeconds) or 3)
                 W.SetCollapsibleBadges(cooldown, {
-                    { text = cooldownEnabled and (tostring(Round(tonumber(placed.cooldownSize) or 14)) .. "px / " .. AnchorLabel(placed.cooldownAnchor or "CENTER") .. " / " .. ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal")) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
+                    { text = cooldownEnabled and (M.Format("%d px / %s / %s", Round(tonumber(placed.cooldownSize) or 14), AnchorLabel(placed.cooldownAnchor or "CENTER"), ChoiceLabel(COOLDOWN_SWIPE_DIRECTION_VALUES, placed.cooldownSwipeReverse == true and "REVERSE" or "NORMAL", "Normal"))) or "Off", kind = cooldownEnabled and "accent" or "muted", showWhenClosed = true },
                     { text = decimal > 0 and M.Format("Decimals below %ds", decimal) or Tr("Whole seconds"), kind = "info", showWhenClosed = true },
                 })
 

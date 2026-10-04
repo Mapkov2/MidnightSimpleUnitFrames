@@ -244,7 +244,7 @@ local function RefreshHandleSelectionVisuals(box)
             }
         end
         RegisterUnitPreviewControl(gear, "handle." .. tostring(selected._key) .. ".open_settings",
-            "Open " .. tostring(selected._label or selected._key or "preview element") .. " settings",
+            M2.Format("Open %s settings", TR(tostring(selected._label or selected._key or "preview element"))),
             "button", "action", {
                 historyMode = "none",
                 help = "Click the highlighted preview button to jump directly to this element's settings below.",

@@ -205,11 +205,14 @@ local registered, widgetOf = {}, {}
 local RegisterRuntimeControl = Check(M.RegisterRuntimeControl, "M.RegisterRuntimeControl is missing")
 M.RegisterRuntimeControl = function(widget, payload, ...)
     if type(payload) == "table" and payload.pageKey then
-        local page = registered[payload.pageKey] or {}
-        registered[payload.pageKey] = page
-        if payload.settingKey then page[payload.settingKey] = payload end
-        if payload.controlId then page[payload.controlId] = payload end
-        widgetOf[payload] = widget
+        -- Search registration borrows a reusable payload; retain a snapshot.
+        local captured = {}
+        for field, value in pairs(payload) do captured[field] = value end
+        local page = registered[captured.pageKey] or {}
+        registered[captured.pageKey] = page
+        if captured.settingKey then page[captured.settingKey] = captured end
+        if captured.controlId then page[captured.controlId] = captured end
+        widgetOf[captured] = widget
     end
     return RegisterRuntimeControl(widget, payload, ...)
 end

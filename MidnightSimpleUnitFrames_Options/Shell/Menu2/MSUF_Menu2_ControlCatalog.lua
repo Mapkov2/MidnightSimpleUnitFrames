@@ -67,6 +67,10 @@ if type(STATE) ~= "table" then
         byPage = {},
         byWidget = setmetatable({}, { __mode = "k" }),
         components = setmetatable({}, { __mode = "k" }),
+        -- Page key -> components marked for it since that page was last
+        -- cleared: an upper bound (a collected widget only overcounts), so a
+        -- page without an entry has no component to clear.
+        componentPages = {},
         revision = 0,
     }
     Catalog._state = STATE
@@ -75,6 +79,13 @@ else
     STATE.byPage = type(STATE.byPage) == "table" and STATE.byPage or {}
     STATE.byWidget = type(STATE.byWidget) == "table" and STATE.byWidget or setmetatable({}, { __mode = "k" })
     STATE.components = type(STATE.components) == "table" and STATE.components or setmetatable({}, { __mode = "k" })
+    STATE.componentPages = {}
+    for _, component in pairs(STATE.components) do
+        local componentPageKey = component.pageKey
+        if componentPageKey ~= nil then
+            STATE.componentPages[componentPageKey] = (STATE.componentPages[componentPageKey] or 0) + 1
+        end
+    end
     STATE.revision = tonumber(STATE.revision) or 0
 end
 
@@ -83,6 +94,10 @@ local CLEAN_TEXT_CACHE_MAX_SOURCE_LEN = 256
 local cleanTextCache, cleanTextCacheCount = {}, 0
 local function CleanText(value)
     if value == nil then return "" end
+    -- The cache is keyed by source strings, so a repeated string returns here
+    -- before any type or length work; every other value takes the full path.
+    local hit = cleanTextCache[value]
+    if hit ~= nil then return hit end
     local kind = type(value)
     if kind ~= "string" and kind ~= "number" then return "" end
     local text = kind == "string" and value or tostring(value)
@@ -228,10 +243,21 @@ local function StableHash(text)
     return string.format("%08x", hash)
 end
 
+-- Both registrations of a control (binding and search) check the same ID, and
+-- the shared unit/group pages repeat theirs, so answers are memoized.
+local EXPLICIT_ID_CACHE_LIMIT = 4096
+local explicitIdCache, explicitIdCacheCount = {}, 0
 local function IsValidExplicitId(value)
     if type(value) ~= "string" or #value < 3 or #value > 160 then return false end
-    if value:find("^%s") or value:find("%s$") then return false end
-    return value:match("^[%w_%.:/%-]+$") ~= nil
+    local known = explicitIdCache[value]
+    if known ~= nil then return known end
+    local valid = not (value:find("^%s") or value:find("%s$")) and value:match("^[%w_%.:/%-]+$") ~= nil
+    if explicitIdCacheCount >= EXPLICIT_ID_CACHE_LIMIT then
+        explicitIdCache, explicitIdCacheCount = {}, 0
+    end
+    explicitIdCache[value] = valid
+    explicitIdCacheCount = explicitIdCacheCount + 1
+    return valid
 end
 
 local function IsValidRuntimeId(value)
@@ -351,9 +377,12 @@ local function InferClassification(meta, command, kind)
 end
 
 local REVISION_KEY_PARTS = {}
+local REVISION_NO_KEYS = {}
 local function RevisionKey(record)
     if type(record) ~= "table" then return nil end
     local parts = REVISION_KEY_PARTS
+    local settingKeys = record.searchSettingKeys or REVISION_NO_KEYS
+    local settingKeyPatterns = record.searchSettingKeyPatterns or REVISION_NO_KEYS
     parts[1] = tostring(record.controlId or "")
     parts[2] = tostring(record.pageKey or "")
     parts[3] = tostring(record.kind or "")
@@ -366,7 +395,12 @@ local function RevisionKey(record)
     parts[10] = tostring(record.help or "")
     parts[11] = tostring(record.classification or "")
     parts[12] = tostring(record.command or "")
-    parts[13] = table.concat(record.searchSettingKeys or {}, "\030") .. "\029" .. table.concat(record.searchSettingKeyPatterns or {}, "\030")
+    -- Two empty lists join to the bare separator; skip both concats for them.
+    if #settingKeys == 0 and #settingKeyPatterns == 0 then
+        parts[13] = "\029"
+    else
+        parts[13] = table.concat(settingKeys, "\030") .. "\029" .. table.concat(settingKeyPatterns, "\030")
+    end
     parts[14] = record.searchIndexed and "1" or "0"
     return table.concat(parts, "\031", 1, 14)
 end
@@ -500,6 +534,14 @@ function Catalog.Register(widget, meta, registrationSource)
             collision = collision and true or false,
             virtual = meta.virtual == true,
             widget = widget,
+            -- Size the record for the fields every registration assigns below,
+            -- so it is allocated once instead of growing through a rehash. Each
+            -- false is overwritten before anything reads it (the code below
+            -- treats false like the nil it replaces).
+            searchIndexed = false, identityKey = false, controlPath = false, settingKey = false,
+            searchSettingKeys = false, searchSettingKeyPatterns = false, actionKey = false,
+            navigationKey = false, help = false, classification = false, classificationSource = false,
+            _revisionKey = false,
         }
         if collision then
             occupied.collisionGroup = requestedId
@@ -582,11 +624,16 @@ end
 function Catalog.ClearPage(pageKey)
     pageKey = CleanText(pageKey)
     if pageKey == "" then return 0 end
-    for widget, component in pairs(STATE.components) do
-        if component.pageKey == pageKey then
-            STATE.components[widget] = nil
-            widget._msuf2RuntimeControlComponent = nil
+    -- Every page build clears first; only a page that marked components pays
+    -- the walk over the components of all pages.
+    if STATE.componentPages[pageKey] then
+        for widget, component in pairs(STATE.components) do
+            if component.pageKey == pageKey then
+                STATE.components[widget] = nil
+                widget._msuf2RuntimeControlComponent = nil
+            end
         end
+        STATE.componentPages[pageKey] = nil
     end
     local page = STATE.byPage[pageKey]
     if not page then return 0 end
@@ -788,10 +835,12 @@ function M.MarkRuntimeControlComponent(widget, owner)
         RemoveRecord(record)
         STATE.revision = STATE.revision + 1
     end
+    local componentPageKey = CleanText(M.PageKeyForWidget(widget) or M.activeKey or "unknown")
     STATE.components[widget] = {
         owner = owner,
-        pageKey = CleanText(M.PageKeyForWidget(widget) or M.activeKey or "unknown"),
+        pageKey = componentPageKey,
     }
+    STATE.componentPages[componentPageKey] = (STATE.componentPages[componentPageKey] or 0) + 1
     widget._msuf2RuntimeControlComponent = true
     if type(M.UnregisterSearchWidget) == "function" then M.UnregisterSearchWidget(widget) end
     return true
@@ -858,18 +907,29 @@ end
 
 
 -- Stable identity and registration contract shared by all page families.
+-- Every control of a page normalizes the same page key and domain again (and
+-- the unit pages share their paths), so string results are memoized.
+local CONTROL_PATH_CACHE_LIMIT = 4096
+local CONTROL_PATH_CACHE_MAX_SOURCE_LEN = 256
+local controlPathCache, controlPathCacheCount = {}, 0
 local function NormalizeControlPath(value)
-    local path = tostring(value or "")
-    path = path:gsub("([%l%d])([%u])", "%1_%2"):lower()
+    local cached = controlPathCache[value]
+    if cached ~= nil then return cached end
+    local source = tostring(value or "")
+    local path = source:gsub("([%l%d])([%u])", "%1_%2"):lower()
     path = path:gsub("[^%w]+", "."):gsub("^%.*", ""):gsub("%.*$", ""):gsub("%.+", ".")
+    if source == value and #source <= CONTROL_PATH_CACHE_MAX_SOURCE_LEN then
+        if controlPathCacheCount >= CONTROL_PATH_CACHE_LIMIT then
+            controlPathCache, controlPathCacheCount = {}, 0
+        end
+        controlPathCache[source] = path
+        controlPathCacheCount = controlPathCacheCount + 1
+    end
     return path
 end
 local function ControlMeta(pageKey, domain, semanticPath, classification, exact)
-    local identity = table.concat({
-        NormalizeControlPath(pageKey),
-        NormalizeControlPath(domain),
-        NormalizeControlPath(semanticPath),
-    }, ".")
+    local identity = NormalizeControlPath(pageKey) .. "." .. NormalizeControlPath(domain)
+        .. "." .. NormalizeControlPath(semanticPath)
     local meta = {
         controlId = "menu2." .. identity,
         identityKey = identity,

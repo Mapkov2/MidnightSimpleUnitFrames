@@ -1794,7 +1794,7 @@ function H.InstallZoomPan(ZoomPan, opts)
         local readout = box[opts.readoutField or "zoomReadout"]
         if readout then
             local pct = floor(scale * 100 + 0.5)
-            readout:SetText(zoom and string.format("%d%%", pct) or string.format(opts.translateFitText and TR("Fit %d%%") or "Fit %d%%", pct))
+            deps.T.SetTranslatedText(readout, zoom and string.format("%d%%", pct) or string.format(TR("Fit %d%%"), pct))
         end
         local fitText = PathValue(box, opts.fitButtonTextPath or { "zoomFitButton", "fs" })
         if fitText then fitText:SetTextColor(zoom and 0.72 or 0.25, zoom and 0.78 or 0.95, zoom and 0.90 or 1.00, 1) end

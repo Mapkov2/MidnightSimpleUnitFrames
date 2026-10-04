@@ -408,9 +408,9 @@ function TextSection.BuildHeaderBadges(state, unit)
             })
         elseif tab == "advanced" then
             W.SetCollapsibleBadges(sec, {
-                { text = "Name " .. BadgeNumber(ReadNumber(unit, "nameTextLayer", 5)), kind = nameOn and "info" or "muted" },
-                { text = "HP " .. BadgeNumber(ReadNumber(unit, "hpTextLayer", 5)), kind = hpOn and "info" or "muted" },
-                { text = "Power " .. BadgeNumber(ReadNumber(unit, "powerTextLayer", 2)), kind = powerOn and "info" or "muted" },
+                { text = M.Format("Name %s", BadgeNumber(ReadNumber(unit, "nameTextLayer", 5))), kind = nameOn and "info" or "muted" },
+                { text = M.Format("HP %s", BadgeNumber(ReadNumber(unit, "hpTextLayer", 5))), kind = hpOn and "info" or "muted" },
+                { text = M.Format("Power %s", BadgeNumber(ReadNumber(unit, "powerTextLayer", 2))), kind = powerOn and "info" or "muted" },
             })
         else
             local anchor = BadgeValue(OptionText(TEXT_ANCHORS, ReadText(unit, "nameTextAnchor", "TOPLEFT")))
@@ -777,7 +777,7 @@ function TextSection.BuildValueTextTab(state, ctx, unit, kind, tab, cfg)
         M.AddTooltip(controls.hidePercent, "Hide % sign", "Shows the percent as a bare number (63 instead of 63%) in the selected slot only. Available when that slot's value includes a percent.", toggleTip)
         M.AddTooltip(controls.separator, "Delimiter", "Symbol placed between values that share one slot, like Current and Percent. Used by all slots of this text.", tip)
         M.AddTooltip(controls.reverse, "Reverse order", "Mirrors the HP text: left and right slots swap sides and multi-value choices flip, so Current / Percent becomes Percent / Current.", toggleTip)
-        M.AddTooltip(controls.decimals, "Decimal percent", "Shows HP percent with one decimal (63.4% instead of 63%) in every HP slot that shows a percent.", toggleTip)
+        M.AddTooltip(controls.decimals, "Decimal percent", "Shows HP percent with one decimal (for example, 63.4 instead of 63) in every HP slot that shows a percent.", toggleTip)
         M.AddTooltip(controls.fullValueShort, "Short numbers", "Abbreviates large HP numbers, absorb included, instead of printing the full value. Available while a slot shows a number.", toggleTip)
         M.AddTooltip(controls.moveTogether, "Move text as one group", "On: dragging this text in Preview moves all its slots together. Off: each visible slot gets its own handle so you can place it separately.", toggleTip)
         M.AddTooltip(controls.slotSize, "Selected slot size", "Font size of the slot picked in Text slots only. Slots you never resize keep the normal text size.", tip)

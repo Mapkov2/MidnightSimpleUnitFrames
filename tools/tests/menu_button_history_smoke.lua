@@ -61,6 +61,11 @@ local function Descendants(frame, out)
 end
 local function FindButton(key, label, nth)
     mw:Select(key)
+    if key == "classpower" and (label == "Add resource mark" or label == "Remove resource mark") then
+        M.ClassPowerWorkspace.Select("extras")
+        M.Widgets.FocusCollapsibleSection(M.cache[key].sections.classpower_resource_marks, { scroll = false, flash = false })
+        mw:RunTimers()
+    end
     local entry = Check(M.cache[key], key .. " was not built")
     local seen = 0
     for _, frame in ipairs(Descendants(entry.wrapper)) do
@@ -102,7 +107,18 @@ local function ExpectUndoable(key, label, nth)
     local before, count = (F.CopySnapshot(M.EnsureDB())), Undos()
     -- The checkpoint runs inside the click; the unit-frame applies the
     -- handlers queue read client APIs the harness only stubs.
+    local prompt, originalPrompt
+    if key == "classpower" and label == "Quick Setup: Class Bar" then
+        originalPrompt = M.ShowPrompt
+        M.ShowPrompt = function(_, spec) prompt = spec end
+    end
     button:Click()
+    if originalPrompt then
+        M.ShowPrompt = originalPrompt
+        Check(prompt and prompt.onAccept, "Quick Setup did not ask for confirmation")
+        Check(F.Equal(before, M.EnsureDB()), "Quick Setup changed settings before confirmation")
+        prompt.onAccept()
+    end
     mw.world.widgets:ClearTimers()
     local changed = ChangedPaths(before, (F.CopySnapshot(M.EnsureDB())))
     Check(#changed > 0, key .. " '" .. label .. "' changed no setting")

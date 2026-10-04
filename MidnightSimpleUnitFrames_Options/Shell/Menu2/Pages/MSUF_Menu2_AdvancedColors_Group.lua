@@ -121,11 +121,14 @@ local function PercentLabel(label, value)
 end
 local function GroupAlphaSlider(ctx, parent, label, x, y, width, key, defaultValue)
     local slider = W.Slider(parent, "", 0, 1, 0.05, width or 260)
+    -- The live label names the slider on screen; search needs it as the label.
+    local meta = Meta("group_frame.alpha." .. tostring(key))
+    meta.label = label
     M.BindNumberWidget(ctx, slider,
         function() return GroupNum(key, defaultValue) end,
         function(value) SetGroupValue(key, Clamp01(value, defaultValue), "MSUF2_GROUP_COLORS", "visual") end,
         defaultValue,
-        Meta("group_frame.alpha." .. tostring(key)))
+        meta)
     MoveWidget(slider, parent, x, y)
     if M.BindSliderLiveLabel then
         M.BindSliderLiveLabel(ctx, slider, function() return GroupNum(key, defaultValue) end,

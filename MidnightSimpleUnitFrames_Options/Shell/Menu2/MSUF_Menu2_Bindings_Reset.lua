@@ -55,7 +55,9 @@ local UNIT_CASTBAR_GENERAL_KEYS = {
 local function ResetInfo(label, kind, summary)
     return { label = label, kind = kind, summary = summary }
 end
-local GROUP_RESET_INFO = ResetInfo("Group Frames", "group", "Party, Raid, Mythic Raid, and Priority Frame layout, bars, auras, indicators, scope overrides and positions; character-specific Priority pins are retained")
+local GROUP_RESET_INFO = ResetInfo("Group Frames", "group",
+    "Party, Raid, Mythic Raid, and Priority Frame layout, bars, auras, indicators, scope overrides and positions; character-specific Priority pins are retained"
+)
 local PAGE_RESET_INFO = {
     gf_layout = GROUP_RESET_INFO,
     gf_bars = GROUP_RESET_INFO,
@@ -335,11 +337,11 @@ local function ResolvePageResetInfo(pageKey)
     for key, value in pairs(base) do info[key] = value end
     info.appearanceKind = ActiveAuraAppearanceKind(info)
     info.label = AURA_APPEARANCE_LABELS[info.appearanceKind] or info.label
-    local blizzardAuraScope = (info.appearanceKind == "buff" or info.appearanceKind == "debuff")
-        and ", plus the shared Blizzard Buff/Debuff visibility settings" or ""
-    info.summary = "only the global " .. tostring(info.label)
-        .. " icon shape, border and shadow settings" .. blizzardAuraScope
-        .. "; other Aura types and all Unit/Group lane settings stay unchanged"
+    local blizzardAuraScope = info.appearanceKind == "buff" or info.appearanceKind == "debuff"
+    local summary = blizzardAuraScope
+        and "only the global %s icon shape, border and shadow settings, plus the shared Blizzard Buff/Debuff visibility settings; other Aura types and all Unit/Group lane settings stay unchanged"
+        or "only the global %s icon shape, border and shadow settings; other Aura types and all Unit/Group lane settings stay unchanged"
+    info.summary = M.Format(summary, M.Tr(info.label))
     return info
 end
 local function ResetAuraAppearancePage(db, defaults, info)
@@ -707,7 +709,7 @@ function M.BuildPageResetWarning(pageKey)
     return string.format(
         M.Tr("Reset %s to defaults?\n\nThis resets %s for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
         tostring(title),
-        tostring(info.summaryFormat and Fmt(info.summaryFormat, tostring(info.label or title))
+        tostring(info.summaryFormat and Fmt(info.summaryFormat, M.Tr(info.label or title))
             or (M.Tr and M.Tr(info.summary or title)) or info.summary or title)
     )
 end

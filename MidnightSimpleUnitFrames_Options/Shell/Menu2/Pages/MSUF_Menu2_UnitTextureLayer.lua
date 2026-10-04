@@ -716,7 +716,10 @@ local function TextureLayerAdvancedCard(ctx, s)
             RefreshGradientControls()
         end)
         if UP.RegisterControl then
-            UP.RegisterControl(btn, ctx, "texture_layer.gradient_direction." .. value, "Gradient direction", "button", "ephemeral")
+            -- It writes the layer's gradient edges, like the Bars page pad: an action,
+            -- found once by its first arrow (the others would be identical rows).
+            UP.RegisterControl(btn, ctx, "texture_layer.gradient_direction." .. value, "Gradient direction", "button",
+                value == "UP" and "action" or "ephemeral")
         end
         padButtons[value] = btn
         return btn

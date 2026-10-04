@@ -145,7 +145,7 @@ local function RefreshFrameBasicsProviderHeader(section)
         local offlineFaded = not offlineHidden and Bool(CurrentScope(), "offlineFadeEnabled", false)
         local offlineText
         if offlineHidden then
-            offlineText = "Offline " .. BadgeNumber(Num(CurrentScope(), "hideOfflineDelay", 0)) .. "s"
+            offlineText = M.Format("Offline %s s", BadgeNumber(Num(CurrentScope(), "hideOfflineDelay", 0)))
         elseif offlineFaded then
             offlineText = "Offline faded"
         else
@@ -467,8 +467,8 @@ local function BuildGFGeometrySection(ctx, b)
         SetOptionEnabled(organization.smallRaidAsParty, scope == "party")
         SetSectionBadgesAndStatus(section, {
             { text = OptionText(GROWTH_VALUES, Val(CurrentScope(), "growth", "DOWN"), "Down"), kind = "accent" },
-            { text = "Grid " .. BadgeNumber(Num(CurrentScope(), "unitsPerColumn", 5)) .. "/"
-                .. BadgeNumber(Num(CurrentScope(), "maxColumns", 8)), kind = "info" },
+            { text = M.Format("Grid %s/%s", BadgeNumber(Num(CurrentScope(), "unitsPerColumn", 5)),
+                BadgeNumber(Num(CurrentScope(), "maxColumns", 8))), kind = "info" },
         })
     end)
 end

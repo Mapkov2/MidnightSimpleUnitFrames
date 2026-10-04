@@ -73,7 +73,7 @@ end
 local function RegisterAction(widget, ctx, path, label, extra)
     if type(RegisterControl) ~= "function" then return widget end
     local directAction = type(extra) == "table" and extra.actionKey and extra.actionKey ~= "open_page"
-    local actionLabel = directAction and label or ("Open Priority Frames for " .. tostring(label))
+    local actionLabel = directAction and label or M.Format("Open Priority Frames for %s", M.TranslateText(tostring(label)))
     extra = M.Assign({
         -- Character pins, row indices, and key capture depend on live page
         -- context. From Search chat these controls therefore navigate to

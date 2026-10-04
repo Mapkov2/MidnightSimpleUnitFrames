@@ -13,6 +13,7 @@ M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua", {
 -- Builds controls for portrait, castbar detail, detached power, border/shape, and related
 -- frame visuals. It writes through UnitPage helpers and delegates live refresh to runtimes.
 local W = M.Widgets or {}
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Shell/Menu2/Pages/MSUF_Menu2_UnitFrameVisuals.lua")
 local UP = M.UnitPage or {}
 local floor = math.floor
 local max = math.max
@@ -119,7 +120,7 @@ end
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
 -- Card heights. BuildPortrait and PortraitLayoutForWidth must agree on these, so
 -- both read them from here instead of repeating literals.
-local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 584, style = 330, dragon = 540 }
+local PORTRAIT_CARD_H = { main = 224, geometry = 440, placement = 382, border = 704, style = 330, dragon = 540 }
 local PORTRAIT_TAB_HEIGHTS = {
     general = PORTRAIT_CARD_H.main + 116,
     geometry = PORTRAIT_CARD_H.geometry + 116,
@@ -189,6 +190,86 @@ local function PreparePortraitSwitch(ctx, sec, unit)
     portraitEnable:SetChecked(NormalizePortrait(unit) ~= "OFF")
     return portraitEnable
 end
+local function PreparePortraitTabTarget(sec, widget, tab, settingKey)
+    if not widget then return end
+    widget._msuf2ExactTargetKinds = { unitPortraitTab = true }
+    widget._msuf2ExactTargetContracts = {
+        unitPortraitTab = { [tab] = tostring(settingKey or "") },
+    }
+    widget._msuf2PrepareExactSearchTarget = function(_, exactTarget)
+        if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitPortraitTab"
+            or tostring(exactTarget.prepareValue or "") ~= tab
+        then
+            return false
+        end
+        return sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab(tab) == true
+    end
+end
+
+local function BuildPortraitDirection(ctx, card, unit, width, metadata)
+    local values = VT("TOPLEFT", "Top left", "TOPRIGHT", "Top right", "BOTTOMLEFT", "Bottom left", "BOTTOMRIGHT", "Bottom right", "AUTO", "Auto")
+    local pad = W.Segment(card, "Blizzard frame direction", values, 340)
+    W.MoveWidget(pad, card, 16, -202, 104)
+    pad._msuf2Title:SetWidth(width - 32)
+    pad._msuf2SearchText = "Blizzard portrait ring frame direction mirror corner top bottom left right automatic"
+    local theme = M.Theme
+    local surface = theme.Panel(card, nil, theme.colors.panel2 or { 0.014, 0.038, 0.072, 0.55 }, theme.colors.borderSoft)
+    surface:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -226)
+    surface:SetSize(104, 78)
+    pad:SetParent(surface)
+    pad:ClearAllPoints()
+    pad:SetPoint("TOPLEFT", surface, "TOPLEFT", 0, 0)
+    pad:SetSize(104, 78)
+    local center = PixelLayoutRegion(surface:CreateTexture(nil, "ARTWORK"))
+    center:SetPoint("CENTER", surface, "CENTER", 0, 0)
+    center:SetSize(10, 10)
+    local color = theme.colors.coreRim or { 0.043, 0.096, 0.150 }
+    center:SetColorTexture(color[1], color[2], color[3], 0.95)
+    local positions = {
+        { 41, -7, "^", "Up" }, { 18, -30, "<", "Left" },
+        { 64, -30, ">", "Right" }, { 41, -53, "v", "Down" }, { 118, 0, values[5].text, "Auto" },
+    }
+    for i, button in ipairs(pad.buttons) do
+        local position = positions[i]
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", pad, "TOPLEFT", position[1], position[2])
+        button:SetSize(i == 5 and 80 or 22, i == 5 and 22 or 18)
+        button:SetText(position[3])
+        theme.CenterButtonLabel(button)
+        if M.AddTooltip then
+            M.AddTooltip(button, position[4], "Move the Blizzard frame corner toward this arrow. Auto follows portrait mirroring.", { hook = true })
+        end
+    end
+    local selection = {}
+    function pad:SetValue(value)
+        self.value = value
+        selection.blizzardDirection, selection.flip = value, GetConf(unit).portraitFlip == true
+        local _, coords = MSUF.PortraitDetails.GetBlizzardDirection(selection)
+        local top, left = coords.y == 1, coords.x == -1
+        self.buttons[1]._msuf2Value = left and "TOPLEFT" or "TOPRIGHT"
+        self.buttons[2]._msuf2Value = top and "TOPLEFT" or "BOTTOMLEFT"
+        self.buttons[3]._msuf2Value = top and "TOPRIGHT" or "BOTTOMRIGHT"
+        self.buttons[4]._msuf2Value = left and "BOTTOMLEFT" or "BOTTOMRIGHT"
+        self.buttons[1]:SetActive(top)
+        self.buttons[2]:SetActive(left)
+        self.buttons[3]:SetActive(not left)
+        self.buttons[4]:SetActive(not top)
+        self.buttons[5]:SetActive(value == "AUTO")
+    end
+    pad:SetValue(MSUF.PortraitDetails.NormalizeBlizzardDirection(GetConf(unit).portraitBlizzardDirection))
+    local note = MSUF.Client.IsVanilla and "Classic Era uses a round Blizzard portrait frame." or "Auto follows portrait mirroring."
+    W.Text(card, note, 134, -260, width - 150)
+    if MSUF.Client.IsVanilla then
+        W.SetControlGateEnabled(pad, "classic-round", false)
+        W.SetControlDisabledReason(pad, note)
+    end
+    M.BindSegment(ctx, pad,
+        function() return MSUF.PortraitDetails.NormalizeBlizzardDirection(GetConf(unit).portraitBlizzardDirection) end,
+        function(value) SetPortraitValue(unit, "portraitBlizzardDirection", value, "MSUF2_PORTRAIT_BLIZZARD_DIRECTION") end,
+        metadata)
+    return pad
+end
+
 local function BuildPortrait(ctx, builder, unit)
     local layout = PortraitLayoutForWidth((ctx and ctx.width) or 720, CurrentPortraitTab(unit))
     local sec = builder:CollapsibleSection("portrait", "Portrait", layout.height, false)
@@ -310,19 +391,7 @@ local function BuildPortrait(ctx, builder, unit)
         return type(ReadPortraitTab) ~= "function" or ReadPortraitTab() == tab
     end
     local function BindExactPortraitTabTarget(widget, tab, settingKey)
-        if not widget then return end
-        widget._msuf2ExactTargetKinds = { unitPortraitTab = true }
-        widget._msuf2ExactTargetContracts = {
-            unitPortraitTab = { [tab] = tostring(settingKey or "") },
-        }
-        widget._msuf2PrepareExactSearchTarget = function(_, exactTarget)
-            if type(exactTarget) ~= "table" or exactTarget.prepareKind ~= "unitPortraitTab"
-                or tostring(exactTarget.prepareValue or "") ~= tab
-            then
-                return false
-            end
-            return sec._msuf2GuidedSelectTab and sec._msuf2GuidedSelectTab(tab) == true
-        end
+        PreparePortraitTabTarget(sec, widget, tab, settingKey)
     end
     local portraitEnable = PreparePortraitSwitch(ctx, sec, unit)
     portraitEnable.refreshDetails = function() RefreshPortraitControls() end
@@ -347,11 +416,14 @@ local function BuildPortrait(ctx, builder, unit)
     local eliteDragon = BindPortraitToggle(borderCard, "Elite and rare dragon", 16, -112, leftW - 32, "portraitBlizzardElite", false, "MSUF2_PORTRAIT_BLIZZARD_ELITE", RefreshPortraitControls)
     eliteDragon._msuf2SearchText = "Blizzard portrait ring elite rare rareelite boss gold silver dragon classification"
     BindExactPortraitTabTarget(eliteDragon, "border", tostring(unit) .. ".portraitBlizzardElite")
-    local blizzardCorner = BindPortraitToggle(borderCard, "Bottom-right gold connector", 16, -148, leftW - 32, "portraitBlizzardCorner", false, "MSUF2_PORTRAIT_BLIZZARD_CORNER", RefreshPortraitControls)
+    local blizzardCorner = BindPortraitToggle(borderCard, "Gold corner connector", 16, -148, leftW - 32, "portraitBlizzardCorner", false, "MSUF2_PORTRAIT_BLIZZARD_CORNER", RefreshPortraitControls)
     blizzardCorner._msuf2SearchText = "Blizzard portrait frame gold corner triangle connector embellishment Forever"
     BindExactPortraitTabTarget(blizzardCorner, "border", tostring(unit) .. ".portraitBlizzardCorner")
+    local blizzardDirection = BuildPortraitDirection(ctx, borderCard, unit, leftW,
+        PortraitControlMeta("portrait.portraitBlizzardDirection", tostring(unit) .. ".portraitBlizzardDirection"))
+    BindExactPortraitTabTarget(blizzardDirection, "border", tostring(unit) .. ".portraitBlizzardDirection")
     local dragonPreview = W.Dropdown(borderCard, "Runtime Preview", PORTRAIT_PLACEMENT.classificationPreview, 220)
-    W.MoveWidget(dragonPreview, borderCard, 16, -202, min(280, leftW - 32))
+    W.MoveWidget(dragonPreview, borderCard, 16, -322, min(280, leftW - 32))
     local portraitElement = MSUF.UF and MSUF.UF.elements and MSUF.UF.elements.Portrait
     M.BindDropdownWidget(ctx, dragonPreview,
         function() return portraitElement and portraitElement.GetClassificationPreview(unit) or "OFF" end,
@@ -407,16 +479,16 @@ local function BuildPortrait(ctx, builder, unit)
     local portraitAlpha = BindPortraitSlider(placementCard, "Portrait opacity", 16, -328, leftW - 58, 0, 100, 1, "portraitAlpha", 100, "MSUF2_PORTRAIT_ALPHA")
     local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle", "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
-    local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -256, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
-    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -310, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0, "MSUF2_PORTRAIT_EDGE_SOFTNESS")
+    local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -376, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitControls)
+    local edgeSoftness = BindPortraitSlider(borderCard, "Portrait edge softness", 16, -430, leftW - 58, 0, 30, 2, "portraitEdgeSoftness", 0, "MSUF2_PORTRAIT_EDGE_SOFTNESS")
     BindExactPortraitTabTarget(edgeSoftness, "border", tostring(unit) .. ".portraitEdgeSoftness")
     edgeSoftness._msuf2SearchText = "Portrait edge softness feather fade borderless percent"
-    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -364, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
+    local borderArt = BindPortraitDropdown(borderCard, "Border art", PORTRAIT_PLACEMENT.borderArt, 16, -484, min(220, leftW - 32), "portraitBorderArt", "FLAT", "MSUF2_PORTRAIT_BORDER_ART", nil, RefreshPortraitControls)
     borderArt._msuf2SearchText = "Portrait border art flat relief beveled ring blizzard style"
-    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -418, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
+    local borderDirection = BindPortraitDropdown(borderCard, "Border direction", PORTRAIT_PLACEMENT.borderDirection, 16, -538, min(220, leftW - 32), "portraitBorderDirection", "UP", "MSUF2_PORTRAIT_BORDER_DIRECTION")
     borderDirection._msuf2SearchText = "Portrait border direction rotate light up right down left"
-    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -472, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
-    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -540, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
+    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -592, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
+    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -660, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
     -- The Castbar section's Icon tab hosts a second toggle for this same key on
     -- every unit that has a castbar. Re-run the page refreshers so the twin
@@ -456,8 +528,7 @@ local function BuildPortrait(ctx, builder, unit)
     BindExactPortraitTabTarget(flip, "advanced", tostring(unit) .. ".portraitFlip")
     BindExactPortraitTabTarget(shadow, "advanced", tostring(unit) .. ".portraitInnerShadow")
     if M.AddTooltip then
-        M.AddTooltip(render, "Render", "3D shows the unit's live model in a rectangle. While the game keeps a unit's identity private, the regular 2D portrait stands in.", { hook = true })
-        M.AddTooltip(shadow, "Inset shadow strength", "Darkens the inner edges of square portraits, 3D models included.", { hook = true })
+        M.AddTooltip(shadow, "Inset shadow strength", "Darkens the inner edges of square portraits.", { hook = true })
         M.AddTooltip(dragonControls[4], "Dragon draw order", "Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring.", { hook = true })
     end
     local portraitActiveControls = {
@@ -474,7 +545,7 @@ local function BuildPortrait(ctx, builder, unit)
     -- The Blizzard ring shape brings the stock gold ring with it, so every MSUF
     -- border control is inert while it is selected.
     local function PortraitShapeIsBlizzard(conf)
-        return conf.portraitRender ~= "3D" and (conf.portraitShape or "SQUARE") == "BLIZZARD"
+        return (conf.portraitShape or "SQUARE") == "BLIZZARD"
     end
     local function PortraitFillsBar(conf)
         return (conf.portraitPlacement or "ATTACHED") == "OVERLAY"
@@ -508,11 +579,10 @@ local function BuildPortrait(ctx, builder, unit)
         end },
         { controls = { panX, panY }, on = PortraitIs2D },
         { controls = zoom, on = function(conf) return PortraitActive() and conf.portraitRender ~= "CLASS" end },
-        { controls = shape, on = function(conf) return PortraitActive() and conf.portraitRender ~= "3D" end },
-        { controls = flip, on = function(conf) return PortraitActive() and conf.portraitRender ~= "3D" end },
-        { controls = shadow, on = function(conf) return PortraitActive() and ((conf.portraitShape or "SQUARE") == "SQUARE" or conf.portraitRender == "3D") end },
+        { controls = flip, on = PortraitActive },
+        { controls = shadow, on = function(conf) return PortraitActive() and (conf.portraitShape or "SQUARE") == "SQUARE" end },
         { controls = dragonControls, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true end },
-        { controls = { eliteDragon, blizzardCorner }, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) end },
+        { controls = { eliteDragon, blizzardCorner, blizzardDirection }, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) end },
         { controls = { dragonPreview, dragonPreviewExtra }, on = function(conf)
             local enabled = PortraitActive() and PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true
             if not enabled then StopDragonPreview() end

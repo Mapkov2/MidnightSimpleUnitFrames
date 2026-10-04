@@ -889,7 +889,7 @@ local function ScopeSection(ctx, builder, opts)
             popup:Hide()
         end,
     })
-    RegisterGroupControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral")
+    RegisterGroupControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral", { searchIndexed = true }) -- searchable opener
     copy:SetScript("OnClick", function(self) if copyPopup then copyPopup.Show(self) end end)
     if type(M.RegisterGuidedCopyPopup) == "function" then
         M.RegisterGuidedCopyPopup("group", ctx.key, M.CreateGuidedCopyOpener(copyPopup, copy))

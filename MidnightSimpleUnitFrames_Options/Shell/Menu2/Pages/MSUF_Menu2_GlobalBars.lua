@@ -1037,7 +1037,10 @@ local function BuildTextureSection(ctx, b)
                 ApplyGradientRuntime(kind == "power" and "MSUF2_POWER_GRADIENT_DIRECTION" or "MSUF2_HP_GRADIENT_DIRECTION", kind)
                 SyncGradientControls()
             end)
-            RegisterControl(btn, Meta("gradient." .. kind .. ".direction." .. tostring(value), "action"), text, "button")
+            -- The arrow glyphs are no searchable names. The pad is found once, by its
+            -- name on the first arrow; the other arrows keep their glyph.
+            RegisterControl(btn, Meta("gradient." .. kind .. ".direction." .. tostring(value), "action"),
+                value == "UP" and "Gradient direction" or text, "button")
             if M.AddTooltip then
                 M.AddTooltip(btn, nil, "Adds or removes a fade direction; the shade darkens toward this arrow. Directions can be combined, and one always stays on.", { hook = true })
             end

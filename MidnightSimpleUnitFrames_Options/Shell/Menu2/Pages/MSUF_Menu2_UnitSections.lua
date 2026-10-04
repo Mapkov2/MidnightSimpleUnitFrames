@@ -784,7 +784,8 @@ local function BuildTopActions(ctx, builder, unit, label)
             end
         end,
     })
-    RegisterControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral")
+    -- Opening the popup changes nothing, but search should still find where copying lives.
+    RegisterControl(copy, ctx, "copy.open", "Copy To", "button", "ephemeral", { searchIndexed = true })
     copy:SetScript("OnClick", function(self)
         if copyPopup then copyPopup.Show(self) end
     end)
@@ -1109,7 +1110,7 @@ local function BuildLayout(ctx, builder, unit)
         if custom ~= "" then
             local text = custom
             if #text > 24 then text = text:sub(1, 21) .. "..." end
-            values[#values + 1] = { value = "__CUSTOM", text = "Custom: " .. text }
+            values[#values + 1] = { value = "__CUSTOM", text = M.Format("Custom: %s", text) }
         end
         for i = 1, #anchorChoices do
             local item = anchorChoices[i]
@@ -1444,7 +1445,7 @@ local function BuildLoadConditions(ctx, builder, unit)
             SettingMeta(ctx, "load_condition." .. key, unit, key))
         if M.AddTooltip then
             M.AddTooltip(toggle, label,
-                "Show this frame only when its unit is below full health. At 100% health it is transparent, even in combat or with a target. Replaces the Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible for editing. The transparent frame can still receive mouse clicks.",
+                "Show this frame only when its unit is below full health. At full health it is transparent, even in combat or with a target. Replaces the Out of combat, No target, and Out of combat and no target rules; other hide conditions still apply. Edit Mode keeps the frame visible for editing. The transparent frame can still receive mouse clicks.",
                 { hook = true, owner = "ANCHOR_RIGHT" })
         end
     end
@@ -1472,6 +1473,8 @@ local function BuildBossLayoutTiles(parent, x, y, tileW, tileH, gap, titleText)
     local title = T.Font(control, "GameFontNormalSmall", titleText or "Boss frame layout", T.colors.accent)
     title:SetPoint("TOPLEFT", control, "TOPLEFT", 0, 0)
     control._msuf2Title = title
+    -- The title is the picker's name, on screen and in search.
+    control._msuf2SearchText = titleText or "Boss frame layout"
 
     local SetTileVisual = W.SetTileVisual
 

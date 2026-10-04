@@ -543,7 +543,7 @@ function W.PaintTileDirectionArrow(btn, info, labelH)
 end
 
 local function ToggleBadge(label, enabled)
-    return { text = label .. (enabled and " On" or " Off"), kind = enabled and "accent" or "muted", showWhenClosed = true }
+    return { text = M.Format(enabled and "%s On" or "%s Off", M.TranslateText(label)), kind = enabled and "accent" or "muted", showWhenClosed = true }
 end
 W.ToggleBadge = ToggleBadge
 

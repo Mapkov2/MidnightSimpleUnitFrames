@@ -153,6 +153,9 @@ local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local function SetColor(tex, c)
     if tex and c then tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
 end
+-- Registers tex as excluded pixel-layout art. Create it with
+-- PixelLayoutRegion(tex, true): the plain wrapper would switch native rounding
+-- on just so this can switch it off again.
 local function SmoothTexture(tex)
     if not tex then return end
     PixelLayoutRegion(tex, true)
@@ -523,15 +526,18 @@ local function CreateSuperellipseParts(frame, layer, subLevel)
     -- The pill/superellipse skin is three textures, not a nine-slice frame. This keeps
     -- allocation cheap for dense option rows while still allowing gradient fills.
     subLevel = subLevel or 0
-    local left = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel))
+    -- Parts are excluded art from creation on. The plain wrapper would switch
+    -- native rounding on only for SmoothTexture to switch it off again (two
+    -- protected calls per part, ~12k parts per full menu build).
+    local left = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel), true)
     left:SetTexture(T.media.superellipse)
     left:SetTexCoord(0.00, 0.25, 0, 1)
     SmoothTexture(left)
-    local middle = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel))
+    local middle = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel), true)
     middle:SetTexture(T.media.superellipse)
     middle:SetTexCoord(0.25, 0.75, 0, 1)
     SmoothTexture(middle)
-    local right = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel))
+    local right = PixelLayoutRegion(frame:CreateTexture(nil, layer, nil, subLevel), true)
     right:SetTexture(T.media.superellipse)
     right:SetTexCoord(0.75, 1.00, 0, 1)
     SmoothTexture(right)
@@ -1100,8 +1106,8 @@ local function EnsurePanelAsset(frame)
         art.C:SetPoint("TOPLEFT", art.TL, "BOTTOMRIGHT", 0, 0)
         art.C:SetPoint("BOTTOMRIGHT", art.BR, "TOPLEFT", 0, 0)
     end
+    -- ApplyPanelAsset, the only caller, lays the slices out right after this.
     art.Layout = Layout
-    Layout()
     if frame.HookScript and not frame._msuf2PanelAssetLayoutHooked then
         frame._msuf2PanelAssetLayoutHooked = true
         frame:HookScript("OnSizeChanged", Layout)
@@ -1463,7 +1469,7 @@ function T.ApplyPlasticDepth(frame, variant)
     local bottomH = strong and 22 or 16
     local top = frame._msuf2PlasticTop
     if not top then
-        top = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, -2))
+        top = PixelLayoutRegion(frame:CreateTexture(nil, "ARTWORK", nil, -2), true)
         frame._msuf2PlasticTop = top
         SmoothTexture(top)
     end
@@ -1480,7 +1486,7 @@ function T.ApplyPlasticDepth(frame, variant)
     top:Show()
     local bottom = frame._msuf2PlasticBottom
     if not bottom then
-        bottom = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, 5))
+        bottom = PixelLayoutRegion(frame:CreateTexture(nil, "BORDER", nil, 5), true)
         frame._msuf2PlasticBottom = bottom
         SmoothTexture(bottom)
     end
@@ -1529,7 +1535,7 @@ function T.ApplyGradient(frame, token, opts)
     local key = opts.key or spec.key or "_msuf2MaterialGradient"
     local tex = frame[key]
     if not tex then
-        tex = PixelLayoutRegion(frame:CreateTexture(nil, opts.layer or spec.layer or "BACKGROUND", nil, opts.subLevel or spec.subLevel or 1))
+        tex = PixelLayoutRegion(frame:CreateTexture(nil, opts.layer or spec.layer or "BACKGROUND", nil, opts.subLevel or spec.subLevel or 1), true)
         frame[key] = tex
         SmoothTexture(tex)
     end
@@ -1668,7 +1674,7 @@ function T.AttachNavIcon(btn, navKey, isChild, visible)
     end
     local icon = btn._msuf2NavIcon
     if not icon then
-        icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 3))
+        icon = PixelLayoutRegion(btn:CreateTexture(nil, "ARTWORK", nil, 3), true)
         SmoothTexture(icon)
         icon:SetTexture(T.media.navIcons)
         btn._msuf2NavIcon = icon
@@ -1732,6 +1738,9 @@ end
 local function SetSliderTextureColor(texture, r, g, b, a)
     SetTextureColorCached(texture, r, g, b, a)
 end
+-- Scratch colors for StyleSlider's gradients. ApplyTextureGradient copies the
+-- components into the texture's cache fields and keeps no reference.
+local SLIDER_TRACK_BASE, SLIDER_GRADIENT_FROM, SLIDER_GRADIENT_TO = { 0, 0, 0, 1 }, { 0, 0, 0, 1 }, { 0, 0, 0, 1 }
 local function SliderTexture(slider, key, layer, subLevel, height)
     local tex = PixelLayoutRegion(slider:CreateTexture(nil, layer, nil, subLevel))
     tex:SetHeight(height)
@@ -1844,14 +1853,16 @@ function T.StyleSlider(slider)
     slider._msuf2SliderVisualThumbMedia = thumbMedia
     if slider._msufTrack then
         local surface = T.colors.coreSurface or { 0.014, 0.038, 0.072, 1 }
-        local trackBase = {
-            surface[1] * (active and 1.45 or hovered and 1.30 or 1.18),
-            surface[2] * (active and 1.42 or hovered and 1.28 or 1.16),
-            surface[3] * (active and 1.36 or hovered and 1.22 or 1.12),
-            0.98 * alpha,
-        }
-        SetSliderTextureColor(slider._msufTrack, trackBase[1], trackBase[2], trackBase[3], trackBase[4])
-        ApplyTextureGradient(slider._msufTrack, "VERTICAL", ShadeColor(trackBase, 0.10, 1), ShadeColor(trackBase, -0.18, 1), false)
+        local trackBase = SLIDER_TRACK_BASE
+        trackBase[1] = surface[1] * (active and 1.45 or hovered and 1.30 or 1.18)
+        trackBase[2] = surface[2] * (active and 1.42 or hovered and 1.28 or 1.16)
+        trackBase[3] = surface[3] * (active and 1.36 or hovered and 1.22 or 1.12)
+        trackBase[4] = 0.98 * alpha
+        -- The gradient replaces the whole texture, so no flat color goes first:
+        -- it would also flip the texture cache between flat and gradient and
+        -- repaint both on every hover change.
+        ApplyTextureGradient(slider._msufTrack, "VERTICAL", ShadeColorInto(SLIDER_GRADIENT_FROM, trackBase, 0.10, 1),
+            ShadeColorInto(SLIDER_GRADIENT_TO, trackBase, -0.18, 1), false)
         if slider._msufTrack.Show then slider._msufTrack:Show() end
     end
     if slider._msufTrackTop then
@@ -1864,11 +1875,11 @@ function T.StyleSlider(slider)
     end
     if slider._msufFill then
         local fillAlpha = (active and 1.00 or hovered and 0.96 or 0.86) * alpha
-        SetSliderTextureColor(slider._msufFill, accent[1], accent[2], accent[3], fillAlpha)
-        ApplyTextureGradient(slider._msufFill, "HORIZONTAL",
-            { math.min(accent[1] * 1.24, 1), math.min(accent[2] * 1.14, 1), math.min(accent[3] * 1.10, 1), fillAlpha },
-            { accent[1] * 0.72, accent[2] * 0.82, accent[3] * 0.90, fillAlpha * 0.88 },
-            false)
+        local from, to = SLIDER_GRADIENT_FROM, SLIDER_GRADIENT_TO
+        from[1], from[2], from[3], from[4] = math.min(accent[1] * 1.24, 1), math.min(accent[2] * 1.14, 1),
+            math.min(accent[3] * 1.10, 1), fillAlpha
+        to[1], to[2], to[3], to[4] = accent[1] * 0.72, accent[2] * 0.82, accent[3] * 0.90, fillAlpha * 0.88
+        ApplyTextureGradient(slider._msufFill, "HORIZONTAL", from, to, false)
         if slider._msufFill.Show then slider._msufFill:Show() end
     end
     if slider._msufFillGlow then

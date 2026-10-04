@@ -1064,7 +1064,7 @@ function Stage.BindHandleFactory(st)
                     set = function() return OpenHandleSettings(handle) end,
                 }
                 RegisterPreviewControl(gear, "handle." .. tostring(key) .. ".open_settings",
-                    "Open " .. tostring(label or key) .. " settings", "button", "action", {
+                    M.Format("Open %s settings", M.Tr(label or key)), "button", "action", {
                         historyMode = "none",
                         help = "Opens the exact Group Frames settings section for this preview element.",
                         command = gear._msuf2GroupPreviewOpenCommand,
