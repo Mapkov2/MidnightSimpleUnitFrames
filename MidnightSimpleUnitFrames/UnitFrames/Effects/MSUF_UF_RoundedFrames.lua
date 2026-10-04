@@ -762,12 +762,31 @@ local function ApplySpellIndicatorRoundedEdge(button, frame, target, shown, thic
   return true
 end
 
+--- Spell Indicator edges, rounded and square, are textures on the effect root,
+--- a child of the native AuraButton. Blizzard restricts that button and all of
+--- its descendants while auras are secret (DenyTaintedAccessWhenAurasAreSecret,
+--- Blizzard_AuraContainerShared.lua). IsForbidden does not report it, and Show
+--- or Hide on a restricted edge throws (issue #160). Ask the root, as the Spell
+--- Indicator effects do (CanWriteEffectSurface in
+--- MSUF_Auras3_SpellIndicators_Effects.lua); a secret or false answer fails
+--- closed. Clients without the query (Classic) never restrict these buttons.
+local function CanWriteSpellIndicatorEdges(button)
+  local root = button and button._msufA3SpellIndicatorEffectRoot
+  if not (root and root.CanBeAccessedInContext) then return true end
+  local allowed = root:CanBeAccessedInContext()
+  if issecretvalue(allowed) == true then return false end
+  return allowed == true
+end
+
 local function RefreshSpellIndicatorRoundedEdges(frame, enabled)
   local buttons = frame and frame._msufA3SpellIndicatorEffectButtons
   if type(buttons) ~= "table" then return end
   for button in pairs(buttons) do
     local state = button and button._msufRUFSpellIndicator
-    if state and state.shown == true then
+    -- A restricted button takes neither the rounded stack nor the square
+    -- fallback. It keeps its current edges until a later refresh finds it
+    -- writable again.
+    if state and state.shown == true and CanWriteSpellIndicatorEdges(button) then
       if enabled and ApplySpellIndicatorRoundedEdge(button, frame, state.target, true, state.thickness,
           state.r, state.g, state.b, state.a, state.blendMode) then
         SetSpellIndicatorSquareEdgesShown(button._msufA3SpellIndicatorEdges, false)
