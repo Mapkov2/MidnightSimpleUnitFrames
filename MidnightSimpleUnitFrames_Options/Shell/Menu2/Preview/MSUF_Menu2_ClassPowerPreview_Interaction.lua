@@ -23,14 +23,18 @@ end
 
 local function ClassPowerRouteForHandle(handle)
     local kind = handle and (handle._applyKind or handle._layerKey or handle._key) or "class"
-    local section, state, tab = "classpower_display"
-    if kind == "classText" then section, state, tab = "classpower_visuals", "classPowerStyleTab", "text"
-    elseif kind == "power" or kind == "powerText" then section, state, tab = "classpower_detached_power", "classPowerDetachedPowerTab", kind == "power"
-        and "layout" or "text"
-    elseif kind == "hp" or kind == "hpText" then section, state, tab = "classpower_player_hp", "classPowerPlayerHPTab", kind == "hp" and "layout" or "text" end
-    if state then
-        M.SetMenuStateValue(state, tab)
+    local section, workspace = "classpower_display", "class"
+    if kind == "classText" then
+        section = "classpower_visuals"
+        M.SetMenuStateValue("classPowerStyleTab", "text")
+    elseif kind == "power" or kind == "powerText" then
+        section, workspace = kind == "power" and "classpower_detached_power" or "classpower_detached_power_text", "power"
+    elseif kind == "hp" or kind == "hpText" then
+        section, workspace = kind == "hp" and "classpower_player_hp" or "classpower_player_hp_text", "hp"
+    elseif kind == "mana" then
+        section, workspace = "classpower_alt_mana", "mana"
     end
+    M.ClassPowerWorkspace.Select(workspace)
     return section
 end
 local function OpenClassPowerHandleSettings(handle)

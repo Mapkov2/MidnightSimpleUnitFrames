@@ -73,11 +73,12 @@ end
 local function SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
     if not (box and box.summary and box.summary.SetText) then return end
     local parts = {}
-    if classFrame then parts[#parts + 1] = "Class Resource" end
-    if powerFrame then parts[#parts + 1] = "Player Power" end
-    if hpFrame then parts[#parts + 1] = "Second HP" end
+    if classFrame then parts[#parts + 1] = TR("Class Resource") end
+    if powerFrame then parts[#parts + 1] = TR("Player Power") end
+    if hpFrame then parts[#parts + 1] = TR("Extra Health Bar") end
+    if box.altMana and box.altMana:IsShown() then parts[#parts + 1] = TR("Alternative Mana") end
     if #parts == 0 then
-        T.SetTranslatedText(box.summary, TR("Shown here: Player frame reference only"))
+        T.SetTranslatedText(box.summary, TR("Enable a resource bar to preview it."))
     else
         T.SetTranslatedText(box.summary, TR("Shown here: ") .. table.concat(parts, " + "))
     end
@@ -85,12 +86,12 @@ end
 local CP_PREVIEW_LAYERS = {
     { key = "guides", label = "Guides", color = { 0.42, 0.72, 1.00 }, tooltip = "Click to open settings. Move resources in Edit Mode." },
     { key = "border", label = "Border", color = PREVIEW_BORDER_COLOR, tooltip = "Actual HP, Power and Class Resource outlines." },
-    { key = "reference", label = "Reference", color = { 0.60, 0.66, 0.78 }, tooltip = "Player frame reference used for relative layout." },
     { key = "class", label = "Resource", color = { 0.30, 0.78, 0.55 }, tooltip = "Class resource bar or pips." },
     { key = "classText", label = "Res Text", color = { 0.30, 0.78, 0.55 }, tooltip = "Class resource numeric text." },
     { key = "power", label = "Power Bar", color = { 0.95, 0.72, 0.18 }, tooltip = "Detached player power bar bound to Class Resources." },
     { key = "powerText", label = "Power Txt", color = { 0.95, 0.72, 0.18 }, tooltip = "Detached player power text." },
     { key = "hp", label = "HP Bar", color = { 0.25, 0.90, 0.42 }, tooltip = "Extra player HP bar in Class Resources." },
+    { key = "mana", label = "Alternative Mana", color = { 0.45, 0.70, 1.00 }, tooltip = "Additional mana bar for dual-resource specializations." },
     { key = "hpText", label = "HP Text", color = { 0.25, 0.90, 0.42 }, tooltip = "Extra player HP text." },
     { key = "bounds", label = "Bounds", color = { 1.00, 0.22, 0.12 }, tooltip = "Preview-only bounds around visible elements." },
 }
@@ -520,12 +521,12 @@ local function RefreshHandleVisuals(preview)
         if h and h._msufPlaced ~= true then
             h:Hide()
         elseif h then
-            SetShownSafe(h, guidesOn and LayerOn(preview, h._layerKey or h._key))
+            SetShownSafe(h, LayerOn(preview, h._layerKey or h._key))
         end
         local active = h == preview.selectedHandle or h._hovering == true
         local c = h._color or { 1, 1, 1 }
-        if h.SetBackdropColor then h:SetBackdropColor(c[1], c[2], c[3], active and 0.16 or 0.035) end
-        if h.SetBackdropBorderColor then h:SetBackdropBorderColor(c[1], c[2], c[3], active and 0.95 or 0.44) end
+        if h.SetBackdropColor then h:SetBackdropColor(c[1], c[2], c[3], active and 0.16 or (guidesOn and 0.035 or 0)) end
+        if h.SetBackdropBorderColor then h:SetBackdropBorderColor(c[1], c[2], c[3], active and 0.95 or (guidesOn and 0.44 or 0)) end
         if h._msuf2SettingsGear then h._msuf2SettingsGear:SetShown(guidesOn and h == preview.selectedHandle and h._msufPlaced == true) end
     end
     local selected = preview.selectedHandle
@@ -543,7 +544,7 @@ local function RefreshHandleVisuals(preview)
             preview.hint:SetText(string.format("%s   x: %d   y: %d",
                 TR(selected._label or selected._key or "Element"), Round(x or 0), Round(y or 0)))
         else
-            preview.hint:SetText("Click to open settings. Move resources in Edit Mode.")
+            T.SetTranslatedText(preview.hint, TR("Click to open settings. Move resources in Edit Mode."))
         end
     end
 end
@@ -629,7 +630,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
             if h._msufPlaced ~= true then return false end
             if h.IsShown and not h:IsShown() then return false end
             SelectHandle(h)
-            return preview.selectedHandle == h
+            return OpenClassPowerHandleSettings(h)
         end,
     }
     RegisterPreviewControl(preview._catalogCtx, h, "handle." .. tostring(key), label or key, "button", "ephemeral", {
@@ -649,7 +650,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
             set = function() return OpenClassPowerHandleSettings(h) end,
         }
         RegisterPreviewControl(preview._catalogCtx, gear, "handle." .. tostring(key) .. ".open_settings",
-            "Open " .. tostring(label or key) .. " settings", "button", "action", {
+            M.Format("Open %s settings", M.Tr(label or key)), "button", "action", {
                 historyMode = "none",
                 help = "Opens the settings section for this preview element.",
                 command = gear._msuf2ClassPowerOpenCommand,
@@ -1633,43 +1634,45 @@ local function RefreshClassPowerAnimation(preview)
         and not UpdateSecondaryClassTimerAnimation(preview, state.ebonFrame) then return false end
     if state.powerFrame and not UpdateDetachedPowerAnimation(preview, state.powerFrame, state.bars, state.player) then return false end
     if state.hpFrame and not UpdatePlayerHPAnimation(preview, state.hpFrame, state.bars, state.player) then return false end
+    if preview.altMana and preview.altMana:IsShown() then
+        UpdateMeterFill(preview.altMana, AnimatedMeterFraction(preview, .68, .36, .15, .96))
+    end
     if Preview.UpdateSampleThresholds then Preview.UpdateSampleThresholds(preview) end
     return true
 end
-local function PaintPlayerReference(preview, spec, bars, playerDB)
+local function PaintPlayerReference(preview)
     local player = preview.playerRef
-    local parent = PreviewParent(preview)
-    local pr, pg, pb = PowerColor(playerDB)
-    local hr, hg, hb = ClassColor(0.20, 0.78, 0.26, spec)
     player:SetSize(preview.playerW, preview.playerH)
     player:ClearAllPoints()
-    player:SetPoint("CENTER", parent, "CENTER", 0, -34)
-    player.health:ClearAllPoints()
-    player.health:SetPoint("TOPLEFT", player, "TOPLEFT", 0, 0)
-    player.health:SetPoint("BOTTOMRIGHT", player, "BOTTOMRIGHT", 0, 6)
-    player.health:SetColorTexture(hr, hg, hb, 0.16)
-    player.power:SetColorTexture(pr, pg, pb, 0.16)
-    player.power:SetShown(true)
-    player.outline:SetBackdropBorderColor(0.55, 0.62, 0.78, 0.34)
+    player:SetPoint("CENTER", PreviewParent(preview), "CENTER", 0, -34)
 end
 local function CreatePlayerReference(preview)
-    local player = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview)))
-    player.health = PixelLayoutRegion(player:CreateTexture(nil, "BACKGROUND"))
-    player.health:SetPoint("TOPLEFT", player, "TOPLEFT", 0, 0)
-    player.health:SetPoint("BOTTOMRIGHT", player, "BOTTOMRIGHT", 0, 6)
-    player.power = PixelLayoutRegion(player:CreateTexture(nil, "BACKGROUND"))
-    player.power:SetPoint("TOPLEFT", player.health, "BOTTOMLEFT", 0, 0)
-    player.power:SetPoint("BOTTOMRIGHT", player, "BOTTOMRIGHT", 0, 0)
-    player.outline = PixelLayoutRegion(CreateFrame("Frame", nil, player, "BackdropTemplate"))
-    player.outline:SetAllPoints()
-    PixelLayoutRegion(player.outline, "SetBackdrop", { bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
-    player.outline:SetBackdropColor(0, 0, 0, 0)
-    player.name = MakeText(player, "OVERLAY", "LEFT")
-    ApplyFont(player.name, 11)
-    player.name:SetPoint("LEFT", player, "LEFT", 6, 0)
-    player.name:SetText(TR("Player frame reference"))
-    player.name:SetTextColor(0.60, 0.66, 0.78, 0.62)
-    preview.playerRef = player
+    preview.playerRef = PixelLayoutRegion(CreateFrame("Frame", nil, PreviewParent(preview)))
+    preview.playerRef:EnableMouse(false)
+end
+function Preview.RenderAlternativeMana(preview, bars)
+    if bars.showAltMana ~= true then
+        SetShownSafe(preview.altMana, false)
+        return
+    end
+    local frame = EnsureMeter(preview, "altMana")
+    local width = bars.altManaWidthMode == "custom" and tonumber(bars.altManaWidth) or nil
+    if not width or width < 20 then width = preview.playerW - 4 end
+    local r, g, blue = CPColor("MANA", bars.altManaColorR or 0, bars.altManaColorG or 0, bars.altManaColorB or .8)
+    RenderMeter(frame, nil, { width = min(1200, width), height = Clamp(bars.altManaHeight, 4, 2, 30),
+        fraction = AnimatedMeterFraction(preview, .68, .36, .15, .96), texture = ResolveTexture(nil),
+        r = r, g = g, b = blue, bgR = 0, bgG = 0, bgB = 0, bgA = .4, outline = PreviewOutline(preview, 1, 1) })
+    frame:ClearAllPoints()
+    frame:SetPoint("TOP", preview.playerRef, "BOTTOM", Clamp(bars.altManaOffsetX, 0, -1000, 1000), tonumber(bars.altManaOffsetY) or -2)
+    SetShownSafe(frame.left, false)
+    SetShownSafe(frame.center, false)
+    SetShownSafe(frame.right, false)
+    frame:Show()
+    if not preview.handleMana then
+        preview.handleMana = MakeHandle(preview, "alternativeMana", "bars", "altManaOffsetX", "altManaOffsetY",
+            0, -2, "Alternative Mana", { .45, .7, 1 }, "mana", "mana", 0)
+    end
+    PlaceHandle(preview.handleMana, frame, 5)
 end
 local function EnsureBound(preview, key, label, color)
     preview.bounds = preview.bounds or {}
@@ -1966,11 +1969,11 @@ function Preview.UpdateSampleThresholds(preview)
 end
 
 local function RefreshBounds(preview, classFrame, ebonFrame, powerFrame, hpFrame)
-    PlaceBound(preview, "reference", preview.playerRef, "Reference", { 0.60, 0.66, 0.78 }, 1)
     PlaceBound(preview, "class", classFrame, "Class", { 0.30, 0.78, 0.55 }, 1)
     PlaceBound(preview, "ebon", ebonFrame, "Ebon Might", { 0.40, 0.80, 0.60 }, 1, "class")
     PlaceBound(preview, "power", powerFrame, "Power", { 0.95, 0.72, 0.18 }, 1)
     PlaceBound(preview, "hp", hpFrame, "HP", { 0.25, 0.90, 0.42 }, 1)
+    PlaceBound(preview, "mana", preview.altMana, "Alternative Mana", { .45, .7, 1 }, 1)
 end
 local function AddPreviewRegionBounds(preview, region, bounds)
     if not (preview and preview.stage and region and region.IsShown and region:IsShown()) then return end
@@ -1996,11 +1999,11 @@ local function ResolvePreviewFit(preview, classFrame, ebonFrame, powerFrame, hpF
     local function Wanted(key) return not (visibility and visibility[key] == false) end
     -- layerAvailable still describes the preceding refresh at this point.  Fit
     -- the frames produced by this refresh and apply availability afterwards.
-    if Wanted("reference") then AddPreviewRegionBounds(preview, preview.playerRef, bounds) end
     if Wanted("class") then AddPreviewRegionBounds(preview, classFrame, bounds) end
     if Wanted("class") then AddPreviewRegionBounds(preview, ebonFrame, bounds) end
     if Wanted("power") then AddPreviewRegionBounds(preview, powerFrame, bounds) end
     if Wanted("hp") then AddPreviewRegionBounds(preview, hpFrame, bounds) end
+    if Wanted("mana") then AddPreviewRegionBounds(preview, preview.altMana, bounds) end
     for _, frame in pairs(preview.resourceSamples or {}) do
         if Wanted(frame._sampleLayer) then AddPreviewRegionBounds(preview, frame, bounds) end
     end
@@ -2063,7 +2066,7 @@ local function ApplyLayerVisibility(preview)
     for _, frame in pairs(preview.resourceSamples or {}) do
         SetShownSafe(frame, frame._sampleActive == true and LayerOn(preview, frame._sampleLayer))
     end
-    SetShownSafe(preview.playerRef, LayerOn(preview, "reference"))
+    SetShownSafe(preview.altMana, LayerOn(preview, "mana") and Bars().showAltMana == true)
     SetShownSafe(preview.classPower, classOn)
     if not classOn then HideBarOutline(preview.classPower) end
     local classTextActive = preview.classPower and preview.classPower._msufCPPreviewAnim
@@ -2094,7 +2097,7 @@ local function ApplyLayerVisibility(preview)
     end
     for i = 1, #(preview.handles or {}) do
         local handle = preview.handles[i]
-        SetShownSafe(handle, guidesOn and handle._msufPlaced == true and LayerOn(preview, handle._layerKey or handle._key))
+        SetShownSafe(handle, handle._msufPlaced == true and LayerOn(preview, handle._layerKey or handle._key))
     end
     if preview.selectedHandle and not preview.selectedHandle:IsShown() then
         preview.selectedHandle = nil
@@ -2421,7 +2424,8 @@ function Preview.Create(ctx, builder)
         local bars = Bars()
         local player = Player()
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
-        PaintPlayerReference(box, spec, bars, player)
+        PaintPlayerReference(box)
+        Preview.RenderAlternativeMana(box, bars)
         local classFrame, classDisabledReason = RenderClassPower(box, bars, player, spec)
         local ebonFrame = RenderSecondaryClassTimer(box)
         if classFrame and classFrame.IsShown and classFrame:IsShown() then
@@ -2444,11 +2448,12 @@ function Preview.Create(ctx, builder)
             powerFrame = powerFrame,
             hpFrame = hpFrame,
         }
+        if box._selectedWorkspaceKey and box._selectedWorkspaceKey ~= "class" then box.noResource:Hide() end
         SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
         box.layerAvailable = {
             guides = true,
             border = true,
-            reference = true,
+            mana = bars.showAltMana == true,
             class = classFrame ~= nil,
             classText = classFrame ~= nil and (bars.classPowerShowText == true
                 or (spec and spec.secondaryTimer and spec.secondaryTimer.nativeDurationText == true)),

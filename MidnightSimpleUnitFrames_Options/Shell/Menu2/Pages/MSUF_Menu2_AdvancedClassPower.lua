@@ -24,6 +24,11 @@ local RefreshClassPowerInlinePreview = M.RefreshProxy()
 local Bars, BoolValue, NumValue, SetValue = AP.Bars, AP.BoolValue, AP.NumValue, AP.SetValue
 local DeepCopyTable, BuildTableControlSpecs, SwitchAt = AP.DeepCopyTable, AP.BuildTableControlSpecs, AP.SwitchAt
 local SetControlEnabled, ControlMeta, RegisterControl = AP.SetControlEnabled, AP.ControlMeta, AP.RegisterControl
+SwitchAt = function(ctx, parent, label, x, y, width, source, key, default, apply, meta)
+    local control = AP.SwitchAt(ctx, parent, label, x, y, width, source, key, default, apply, meta)
+    AP.RegisterControl(control, meta, label, "toggle")
+    return control
+end
 local CLASSPOWER_SETTING_KEY_BY_PATH = {
     ["alternative_mana.enabled"] = "bars.showAltMana",
     ["alternative_mana.layout.height"] = "bars.altManaHeight",
@@ -150,7 +155,7 @@ local function Meta(path, classification, exact)
     if exact.settingKey == nil and exact.actionKey == nil and CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH[path] then
         exact.searchSettingKeys = CLASSPOWER_DYNAMIC_SETTING_KEYS_BY_PATH[path]
     end
-    return ControlMeta("classpower", "advanced", path, classification, exact)
+    return ControlMeta("classpower", "advanced", path, classification, M.ClassPowerWorkspace.Decorate(exact, path))
 end
 local function RegisterSegment(segment, path, values, classification)
     classification = classification or "ephemeral"
@@ -334,7 +339,7 @@ local function BindBarsAlphaPercent(ctx, section, label, key, default, apply, st
     local opts = {}
     if type(metadata) == "table" then for metaKey, value in pairs(metadata) do opts[metaKey] = value end end
     opts.step, opts.roundStep = step or 5, true
-    M.BindNumberWidget(ctx, slider,
+    M.ClassPowerWorkspace.BindNumberWidget(ctx, slider,
         function()
             local value = NumValue(Bars(), key, default or 0)
             if value <= 1 then value = value * 100 end
@@ -718,7 +723,7 @@ local function ShowQuickSetupOffer()
         onCancel = function() QuickOffered(true) end,
     })
 end
-local function ExecuteQuickSetup()
+local function ApplyQuickSetup()
     QuickOffered(true)
     local ecv = QuickGetVisibleCDM()
     local retail = not (MSUF.Client and MSUF.Client.IsClassic)
@@ -740,6 +745,9 @@ local function ExecuteQuickSetup()
     end
     QuickRefreshAll("ClassPowerQuickSetup")
     ShowQuickSetupResult(popupText)
+end
+local function ExecuteQuickSetup()
+    return M.RunWithHistory("Quick Setup: Class Bar", "classpower:quick_setup", ApplyQuickSetup)
 end
 _G.MSUF2_ClassPowerQuickSetup = ExecuteQuickSetup
 ExportPublic("MSUF_QuickSetup_ResetFirstRun", function()
@@ -814,6 +822,13 @@ function Page.New(ctx)
         "hpManual", "hpOrb", "hpTexture", "altMana" }) do groups[key] = {} end
     local self = setmetatable({ ctx = ctx, b = W.PageBuilder(ctx), width = ctx.width or 900, groups = groups, refresh = M.RefreshProxy() }, Page)
     self.kinds = self:CreateControlKinds()
+    self.workspace = M.ClassPowerWorkspace.Attach(self, CLASSPOWER_SETTING_KEY_BY_PATH)
+    self.applyWorkspace = function()
+        ApplyClassPower()
+        ApplyDetachedPowerBar()
+        ApplyPlayerHPBar()
+        self.refresh()
+    end
     return self
 end
 function Page:Add(group, ...) M.AppendValues(self.groups[group], ...) end
@@ -836,6 +851,7 @@ function Page:Controls(parent, source, apply, prefix, specs)
     local controls = BuildTableControlSpecs(self.ctx, parent, source, apply, specs, self.kinds)
     for i = 1, #specs do
         local spec, control = specs[i], controls[specs[i][1]]
+        M.ClassPowerWorkspace.RegisterSpec(control, spec)
         if spec.help then AddTooltip(control, spec.helpTitle or spec[3], spec.help) end
         for group in tostring(spec.group or ""):gmatch("%S+") do self:Add(group, control) end
     end
@@ -843,7 +859,7 @@ function Page:Controls(parent, source, apply, prefix, specs)
 end
 function Page:SourceToggle(parent, label, source, key, apply, prefix)
     local control = W.Toggle(parent, label)
-    M.BindBoolWidget(self.ctx, control, function() return HidePercentValue(source(), key) end,
+    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, control, function() return HidePercentValue(source(), key) end,
         function(value)
             value = value and true or false
             if source == Player then SetPlayerTextValue(key, value, apply) else SetValue(source(), key, value, apply) end
@@ -855,7 +871,7 @@ function Page:CreateControlKinds()
     return {
         playerPowerOutline = function(_, parent, _, apply, spec)
             local control = W.Slider(parent, spec[3], spec[4], spec[5], spec[6], spec[7])
-            M.BindNumberWidget(self.ctx, control, PlayerPowerOutline,
+            M.ClassPowerWorkspace.BindNumberWidget(self.ctx, control, PlayerPowerOutline,
                 function(value) SetPlayerPowerOutline(value, spec[10] or apply) end,
                 spec[9], spec.meta)
             return control
@@ -874,7 +890,7 @@ function Page:CreateControlKinds()
                 for metaKey, metaValue in pairs(spec.meta) do opts[metaKey] = metaValue end
             end
             opts.step, opts.roundStep = spec[6], true
-            M.BindNumberWidget(self.ctx, control,
+            M.ClassPowerWorkspace.BindNumberWidget(self.ctx, control,
                 function()
                     local player = source()
                     return tonumber(player[key]) or PlayerFrameWidth()
@@ -893,14 +909,14 @@ function Page:CreateControlKinds()
         nilDefaultDropdown = function(_, parent, source, apply, spec)
             local control, key, default = W.Dropdown(parent, spec[3], spec[4], spec[5]), spec[6], spec[7]
             apply = spec[8] or apply
-            M.BindDropdownWidget(self.ctx, control, function() return source()[key] or default end,
+            M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, control, function() return source()[key] or default end,
                 function(value) source()[key] = value ~= default and value or nil; apply() end, spec.meta)
             return control
         end,
         detachedTextOnBar = function(_, parent, source, apply, spec)
             local control, key, default = W.Toggle(parent, spec[3]), spec[4], spec[5]
             apply = spec[6] or apply
-            M.BindBoolWidget(self.ctx, control, function() return BoolValue(source(), key, default) end,
+            M.ClassPowerWorkspace.BindBoolWidget(self.ctx, control, function() return BoolValue(source(), key, default) end,
                 function(value)
                     local function Write()
                         local player, changed = source(), false
@@ -917,7 +933,7 @@ function Page:CreateControlKinds()
         detachedTextPreset = function(_, parent, _, apply, spec)
             local control = W.Dropdown(parent, spec[3], spec[4], spec[5])
             apply = spec[6] or apply
-            M.BindDropdownWidget(self.ctx, control, function() return NormalizeDetachedPowerTextPreset(Player()) end,
+            M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, control, function() return NormalizeDetachedPowerTextPreset(Player()) end,
                 function(value) SetDetachedPowerTextPreset(value); apply(); self.refresh() end, spec.meta)
             return control
         end,
@@ -929,25 +945,36 @@ function Page:BuildHeader()
     local head = T.Panel(b.parent, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
     T.ApplySurface(head, "status")
     head:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
-    head:SetSize(b.width, 54)
+    head._msuf2Width = b.width
+    local selectorH = M.ClassPowerWorkspace.BuildSelector(self.workspace, head, b.width)
+    local headerH = selectorH + 82
+    head:SetSize(b.width, headerH)
     if W.RegisterGuidedRegion then W.RegisterGuidedRegion(ctx, head, "Class resource preview and quick setup") end
-    head._msuf2Width, b.y = b.width, b.y - 62
+    b.y = b.y - headerH - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(b.y) + 28) end
     local desiredPreviewW = min(330, max(180, self.width - 438))
-    local previewW = min(desiredPreviewW, max(120, self.width - 316))
+    local previewW = min(desiredPreviewW, max(120, b.width - 264))
     local preview = W.Dropdown(head, "Preview resource", CLASS_POWER_PREVIEW_VALUES, previewW)
+    preview._msuf2StableSearchLabel = "Preview resource"
     RegisterControl(preview, Meta("preview.resource", "setting", {
         settingKey = "menu.classPowerPreviewResource",
     }), "Preview resource", "dropdown", CLASS_POWER_PREVIEW_VALUES)
-    MoveWidget(preview, head, 14, -15, previewW)
+    MoveWidget(preview, head, 14, -selectorH - 16, previewW)
     preview:SetOnValueChanged(function(value) M.SetClassPowerPreviewSpecKey(value); preview:SetValue(M.GetClassPowerPreviewSpecKey()) end)
     preview:SetValue(M.GetClassPowerPreviewSpecKey())
     AddTooltip(preview, "Class Resource Preview", "Shows the selected class/spec resource below without changing your character, spec or saved settings.")
     M.TrackRefresh(ctx, function() preview:SetValue(M.GetClassPowerPreviewSpecKey()) end)
     local quick = T.Button(head, "Quick Setup: Class Bar", 158, 24, { history = true })
     if W.StyleTopSuccessButton then W.StyleTopSuccessButton(quick) elseif W.StyleTopActionButton then W.StyleTopActionButton(quick) end
-    quick:SetPoint("TOPRIGHT", head, "TOPRIGHT", -16, -16)
-    quick:SetScript("OnClick", ExecuteQuickSetup)
+    quick:SetPoint("TOPRIGHT", head, "TOPRIGHT", -16, -selectorH - 16)
+    quick:SetScript("OnClick", function()
+        M.ShowPrompt("MSUF2_CLASSPOWER_QUICK_CONFIRM", {
+            text = M.Format(
+                "Set up Class Resources and Player Power?\n\nChanges visibility, anchors, sizes and positions.\nPlacement: %s.\n\nUndo is available.",
+                M.Tr("Essential Cooldowns or screen center")),
+            accept = M.Tr("Setup Now"), cancel = CANCEL, onAccept = ExecuteQuickSetup,
+        })
+    end)
     quick:SetScript("OnEnter", ShowQuickSetupTooltip)
     quick:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     RegisterControl(quick, Meta("quick_setup.class_bar", "action", { confirmRequired = true }), "Quick Setup: Class Bar", "button")
@@ -971,7 +998,9 @@ function Page:BuildClassLayout()
     local section = self.b:CollapsibleSection("classpower_display", "Layout", compact and 760 or 440, true)
     local applyRefresh = self:WithRefresh(ApplyClassPower)
     local applySourceRefresh = self:WithRefresh(ApplyClassPowerSource)
-    self.cpEnable = SwitchAt(self.ctx, section, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, applySourceRefresh, Meta("layout.enabled"))
+    self.cpEnable = W.SectionSwitch(section, "Class Resource")
+    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, self.cpEnable, function() return BoolValue(Bars(), "showClassPower", true) end,
+        function(value) SetValue(Bars(), "showClassPower", value, applySourceRefresh) end, Meta("layout.enabled"))
     self.cp = self:Controls(section, Bars, ApplyClassPower, "layout", {
         { "shape", "dropdown", "Class Resource shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260,
             "classPowerShape", "BAR", applyRefresh },
@@ -990,30 +1019,15 @@ function Page:BuildClassLayout()
         function(value) Bars().classPowerShapeAlign = NormalizeClassPowerShapeAlign(value); ApplyClassPower() end, Meta("layout.shape_alignment"))
     RegisterSegment(self.cpAlign, "layout.shape_alignment", alignValues, "setting")
     self:Add("cp", self.cp.shape, self.cp.height, self.cp.widthMode, self.cpAlign, self.cp.x, self.cp.y, self.cp.level)
-    self.cpPowerShape = W.Dropdown(section, "Powerbar shape (independent)", VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb"), 300)
-    M.BindDropdownWidget(self.ctx, self.cpPowerShape,
-        function() return NormalizeDetachedPowerShape(Player().detachedPowerBarShape) end,
-        function(value)
-            local player = Player()
-            player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
-            if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
-            ApplyDetachedPowerSource()
-            self.refresh()
-        end,
-        Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }))
-    AddTooltip(self.cpPowerShape, "Independent Powerbar Shape",
-        "Changes only the detached Player Powerbar. Class Resource shape on the left changes only Class Resources.")
     AddTooltip(self.cp.level, "Class Resource Layer", "Orders the Class Resource bar and pips. Its numeric, Rune and Ebon duration text uses the separate Class Resource text layer under Appearance > Text.")
-    self:Add("detachedPlayer", self.cpPowerShape)
     local rightX = compact and 32 or min(max(430, floor(width * .52)), max(360, width - 360))
     local leftW = compact and max(250, width - 64) or max(250, rightX - 74)
     local rightW = compact and leftW or max(250, width - rightX - 32)
     local controlW = compact and max(250, min(320, width - 74)) or 300
     W.ControlCard(section, "Shape & Size", nil, 18, -38, leftW + 28, 370)
-    W.ControlCard(section, "Powerbar & Position", nil, rightX - 14, compact and -430 or -38, rightW + 28, 286)
-    MoveWidget(self.cpEnable, section, 32, -78)
+    W.ControlCard(section, "Position", nil, rightX - 14, compact and -430 or -38, rightW + 28, 286)
     PlaceColumn(section, 32, -116, 54, controlW, nil, self.cp.shape, self.cp.height, self.cp.widthMode, self.cp.width, self.cpAlign)
-    PlaceColumn(section, rightX, compact and -484 or -92, 54, controlW, nil, self.cpPowerShape, self.cp.x, self.cp.y, self.cp.level)
+    PlaceColumn(section, rightX, compact and -484 or -92, 54, controlW, nil, self.cp.x, self.cp.y, self.cp.level)
 end
 
 function Page:BuildClassBehavior()
@@ -1177,20 +1191,19 @@ local function DetachedPowerSectionHeight(width)
     return width < 680 and 1060 or 834
 end
 
+function Page:BarArea(id, title, height, open)
+    local section = self.b:CollapsibleSection(id, title, height, open)
+    local cardW = min(650, (section._msuf2Width or self.width) - 28)
+    local controlW = min(300, max(240, cardW - 64))
+    local twoColumns = self.width >= 680 and cardW >= 620
+    return section, controlW, twoColumns and 60 + controlW or 32, twoColumns, cardW
+end
+
 function Page:BuildDetachedPower()
-    local compact = self.width < 680
-    local section = self.b:CollapsibleSection("classpower_detached_power", "Player Power", DetachedPowerSectionHeight(self.width), false)
-    local width = section._msuf2Width or self.width
-    local cardW, controlW = min(650, width - 28), min(300, max(240, min(650, width - 28) - 64))
-    local twoColumns, frames = not compact and cardW >= 620, {}
-    local rightX = twoColumns and 60 + controlW or 32
-    local layout, textures, text = M.UnitSectionsShared.MakeTabFrames(section, -88, width, frames, "layout", "textures", "text")
-    local values = VT("layout", "Layout", "textures", "Textures", "text", "Text")
-    RegisterSegment(W.SegmentTabs(self.ctx, section, { stateKey = "classPowerDetachedPowerTab", label = "Power area", values = values,
-        width = min(520, max(320, width - 64)), frames = frames, defaultTab = "layout", x = 32, y = -44 }), "detached_power.workspace_tab", values)
-    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources. In Automatic mode, Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 536 or 814)
-    self.dpbUse = W.SwitchAt(layout, "Detached player power", 32, -104, controlW)
-    M.BindBoolWidget(self.ctx, self.dpbUse, function() return Player().powerBarDetached == true end,
+    local layout, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_detached_power", "Layout", self.width < 680 and 932 or 600)
+    W.ControlCard(layout, "Detached Player Power", "When anchored here, Player power settings are managed by Class Resources. In Automatic mode, Augmentation Evoker shows Ebon Might on this bar.", 14, -38, cardW, twoColumns and 536 or 880)
+    self.dpbUse = W.SectionSwitch(layout, "Detached player power")
+    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, self.dpbUse, function() return Player().powerBarDetached == true end,
         function(value)
             local player = Player()
             player.powerBarDetached = value and true or false
@@ -1213,7 +1226,7 @@ function Page:BuildDetachedPower()
         label = M.PlayerPowerSourceSearchLabel,
         historySource = "classpower:playerPowerSource",
     })
-    M.BindDropdownWidget(self.ctx, self.dpbSource,
+    M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, self.dpbSource,
         function() return NormalizePlayerPowerSource(Player().playerPowerSource) end,
         function(value)
             local player = Player()
@@ -1246,6 +1259,28 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpb.width, "Power Width", "Manual width for the detached Player power bar. Available while Width mode is Manual; dragging it releases Sync width to Class Resource, because that sync would otherwise win. Unset, the bar inherits the Player frame width.")
     AddTooltip(self.dpb.sync, "Sync Width", "Uses the Class Resource width for detached Player power without making Class Resources own the Player power controls.")
     AddTooltip(self.dpb.layer, "Player Power Layer", "Orders only the normal Player Power bar. It does not control Class Resource pips or their text.")
+    self.cpPowerShape = W.Dropdown(layout, "Powerbar shape (independent)", VT("BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb"), 300)
+    M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, self.cpPowerShape,
+        function() return NormalizeDetachedPowerShape(Player().detachedPowerBarShape) end,
+        function(value)
+            local player = Player()
+            player.detachedPowerBarShape = NormalizeDetachedPowerShape(value)
+            if player.detachedPowerBarShape == "ORB" and player.detachedPowerOrbSize == nil then player.detachedPowerOrbSize = 54 end
+            ApplyDetachedPowerSource()
+            self.refresh()
+        end,
+        Meta("layout.independent_powerbar_shape", "setting", { settingKey = "player.detachedPowerBarShape" }))
+    AddTooltip(self.cpPowerShape, "Independent Powerbar Shape",
+        "Changes only the detached Player Powerbar. Class Resource shape on the left changes only Class Resources.")
+    self:Add("detachedPlayer", self.cpPowerShape)
+    MoveWidget(self.cpPowerShape, layout, twoColumns and rightX or 32, twoColumns and -154 or -254, controlW, "LEFT")
+    PlaceColumn(layout, 32, twoColumns and -220 or -308, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.width, self.dpb.orbSize, self.dpb.height)
+    PlaceColumn(layout, rightX, twoColumns and -220 or -694, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
+    self:Add("detachedPlayer", smooth)
+end
+
+function Page:BuildDetachedPowerText()
+    local text, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_detached_power_text", "Text", self.width < 680 and 950 or 700)
     local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 620 or 850)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(powerTextCard, {
@@ -1302,7 +1337,7 @@ function Page:BuildDetachedPower()
     local offsets = {}
     for index, axis in ipairs({ "X", "Y" }) do
         local slider = W.Slider(text, "Slot " .. axis, -300, 300, 1, 300)
-        M.BindNumberWidget(self.ctx, slider, function()
+        M.ClassPowerWorkspace.BindNumberWidget(self.ctx, slider, function()
             local x, y = DetachedTextOffsetKeys()
             return tonumber(Player()[index == 1 and x or y]) or 0
         end, function(value)
@@ -1316,6 +1351,17 @@ function Page:BuildDetachedPower()
     AddTooltip(self.dpbText.x, "Text X", "Moves all detached Player power text slots together. Slot X/Y controls below add per-slot offsets.")
     AddTooltip(self.dpbText.layer, "Player Power Text Layer", "Orders only the normal Player Power text. The visible Essence count and Ebon Might time belong to Class Resource text.")
     AddTooltip(fontOutline, "Player Text Outline", "Sets the Player font scope used by detached Power text. Player Name and HP text share this outline setting.")
+    PlaceColumn(text, 32, -104, 54, controlW, "LEFT", self.dpbText.onBar, self.dpbText.preset, self.dpbText.right)
+    for i, control in ipairs({ self.dpbHide[1], self.dpbText.left, self.dpbHide[2], self.dpbText.center, self.dpbHide[3], self.dpbText.sep }) do
+        MoveWidget(control, text, 32, ({ -264, -298, -350, -384, -436, -470 })[i], controlW, "LEFT")
+    end
+    PlaceColumn(text, rightX, twoColumns and -154 or -446, 54, controlW, "LEFT", self.dpbText.size, fontOutline, self.dpbText.x, self.dpbText.y, self.dpbText.layer, slot, offsets[1], offsets[2])
+    self:Add("detachedText", fontOutline, unpack(self.dpbHide))
+    self:Add("detachedSlot", slot, offsets[1], offsets[2])
+end
+
+function Page:BuildDetachedPowerTextures()
+    local textures, controlW, _, _, cardW = self:BarArea("classpower_detached_power_textures", "Appearance", 240)
     -- Power art is owned by the Bars page and the Player unit page (detached or
     -- not); this tab keeps only the shape edge that Class Resources still owns.
     local powerTexturesCard = W.ControlCard(textures, "Shape Outline", "Power textures live on the Bars page.", 14, -38, cardW, 160)
@@ -1341,34 +1387,16 @@ function Page:BuildDetachedPower()
     })
     self.dpbTextures = texture
     AddTooltip(texture.outline, "Power Bar Outline", "Edge strength of every detached Player power shape, including Bar, Round, Crystal and Orb. 0 disables only that edge.")
-    PlaceColumn(layout, 32, twoColumns and -220 or -254, 54, controlW, "LEFT", self.dpb.anchor, self.dpb.sync, mode.mode, self.dpb.width, self.dpb.orbSize, self.dpb.height)
-    PlaceColumn(layout, rightX, twoColumns and -220 or -640, 54, controlW, "LEFT", self.dpb.x, self.dpb.y, self.dpb.layer)
     PlaceColumn(textures, 32, -104, 54, controlW, "LEFT", texture.outline)
-    PlaceColumn(text, 32, -104, 54, controlW, "LEFT", self.dpbText.onBar, self.dpbText.preset, self.dpbText.right)
-    for i, control in ipairs({ self.dpbHide[1], self.dpbText.left, self.dpbHide[2], self.dpbText.center, self.dpbHide[3], self.dpbText.sep }) do
-        MoveWidget(control, text, 32, ({ -264, -298, -350, -384, -436, -470 })[i], controlW, "LEFT")
-    end
-    PlaceColumn(text, rightX, twoColumns and -154 or -446, 54, controlW, "LEFT", self.dpbText.size, fontOutline, self.dpbText.x, self.dpbText.y, self.dpbText.layer, slot, offsets[1], offsets[2])
-    self:Add("detachedPlayer", smooth)
-    self:Add("detachedText", fontOutline, unpack(self.dpbHide))
-    self:Add("detachedSlot", slot, offsets[1], offsets[2])
 end
 
 function Page:BuildPlayerHP()
-    local compact = self.width < 680
-    local section = self.b:CollapsibleSection("classpower_player_hp", "Extra Health Bar", compact and 980 or 700, false)
-    local width = section._msuf2Width or self.width
-    local cardW, controlW = min(650, width - 28), min(300, max(240, min(650, width - 28) - 64))
-    local twoColumns, frames = not compact and cardW >= 620, {}
-    local rightX = twoColumns and 60 + controlW or 32
-    local layout, textures, text = M.UnitSectionsShared.MakeTabFrames(section, -88, width, frames, "layout", "textures", "text")
-    local values = VT("layout", "Layout", "textures", "Textures", "text", "Text")
-    RegisterSegment(W.SegmentTabs(self.ctx, section, { stateKey = "classPowerPlayerHPTab", label = "HP area", values = values,
-        width = min(520, max(320, width - 64)), frames = frames, defaultTab = "layout", x = 32, y = -44 }), "player_hp.workspace_tab", values)
+    local layout, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_player_hp", "Layout", self.width < 680 and 840 or 600)
     W.ControlCard(layout, "Visibility & Position", nil, 14, -38, cardW, twoColumns and 500 or 760)
     local applyRefresh = self:WithRefresh(ApplyPlayerHPBar)
-    self.hpUse = SwitchAt(self.ctx, layout, "Second Player HP bar", 32, -104, controlW, Bars, "playerHPBarEnabled", false, applyRefresh,
-        Meta("player_hp.enabled"))
+    self.hpUse = W.SectionSwitch(layout, "Extra Health Bar")
+    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, self.hpUse, function() return BoolValue(Bars(), "playerHPBarEnabled", false) end,
+        function(value) SetValue(Bars(), "playerHPBarEnabled", value, applyRefresh) end, Meta("player_hp.enabled"))
     self.hp = self:Controls(layout, Bars, ApplyPlayerHPBar, "player_hp.layout", {
         { "anchor", "dropdown", "Anchor", PLAYER_HP_ANCHOR_VALUES, 300, "playerHPBarAnchor", "CLASS_TOP" },
         { "widthMode", "dropdown", "Width mode", PLAYER_HP_WIDTH_VALUES, 300, "playerHPBarWidthMode", "class", applyRefresh },
@@ -1399,6 +1427,10 @@ function Page:BuildPlayerHP()
     AddTooltip(self.hp.orbSize, "Orb Size",
         "Used only when this HP bar is explicitly set to Orb. Follow Player Power inherits the Player power orb size instead.")
     AddTooltip(self.hp.smooth, "Smooth Fill", "Optional interpolation for this second HP bar. Off keeps direct native SetValue updates.")
+end
+
+function Page:BuildPlayerHPTextures()
+    local textures, controlW, _, _, cardW = self:BarArea("classpower_player_hp_textures", "Appearance", 440)
     local hpTexturesCard = W.ControlCard(textures, "HP Textures", nil, 14, -38, cardW, 346)
     if W.AttachContextColorReferences then
         local function PlayerHPColorMode()
@@ -1438,6 +1470,10 @@ function Page:BuildPlayerHP()
         "Visible behind the filled HP amount. At 100% HP the fill covers the background; Outline 0 does not disable this texture.")
     AddTooltip(texture.outline, "HP Outline",
         "Controls only the second HP bar outline. Bar uses four outside border edges; shapes use their fixed edge texture. 0 disables only the outline.")
+end
+
+function Page:BuildPlayerHPText()
+    local text, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_player_hp_text", "Text", self.width < 680 and 800 or 620)
     local hpTextCard = W.ControlCard(text, "HP Text", nil, 14, -38, cardW, twoColumns and 520 or 690)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(hpTextCard, {
@@ -1506,10 +1542,10 @@ function Page:BuildPlayerHP()
 end
 
 function Page:BuildAlternativeMana()
-    local section = self.b:CollapsibleSection("classpower_alt_mana", "Alternative Mana", 476, false)
+    local section = self.b:CollapsibleSection("classpower_alt_mana", "Layout", 400, false)
     local cardW = min(620, (section._msuf2Width or self.width) - 28)
     local controlW = min(360, cardW - 64)
-    local manaCard = W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 404)
+    local manaCard = W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 330)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(manaCard, { "class_power.alt_mana" }, {
             title = "Alternative Mana Color",
@@ -1517,10 +1553,9 @@ function Page:BuildAlternativeMana()
         })
     end
     local applyRefresh = self:WithRefresh(ApplyClassPower)
-    self.altToggle = SwitchAt(self.ctx, section, "Show mana bar (dual resource)", 32, -98, controlW, Bars, "showAltMana", false, applyRefresh,
-        Meta("alternative_mana.enabled"))
-    local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -132, controlW, Bars, "altManaSmoothFill", false, ApplyClassPowerSmoothing,
-        Meta("alternative_mana.smooth_fill"))
+    self.altToggle = W.SectionSwitch(section, "Show mana bar (dual resource)")
+    M.ClassPowerWorkspace.BindBoolWidget(self.ctx, self.altToggle, function() return BoolValue(Bars(), "showAltMana", false) end,
+        function(value) SetValue(Bars(), "showAltMana", value, applyRefresh) end, Meta("alternative_mana.enabled"))
     local fields = self:Controls(section, Bars, ApplyClassPower, "alternative_mana.layout", {
         { "widthMode", "dropdown", "Width mode", ALT_MANA_WIDTH_VALUES, 300, "altManaWidthMode", "player", applyRefresh },
         { "width", "slider", "Custom width", 20, 1200, 1, 300, "altManaWidth", 0 },
@@ -1528,9 +1563,14 @@ function Page:BuildAlternativeMana()
         { "x", "slider", "X offset", -1000, 1000, 1, 300, "altManaOffsetX", 0 },
         { "y", "slider", "Y offset", -50, 50, 1, 300, "altManaOffsetY", -2 },
     })
-    PlaceColumn(section, 32, -174, 54, controlW, "LEFT", fields.widthMode, fields.width, fields.height, fields.x, fields.y)
+    PlaceColumn(section, 32, -104, 54, controlW, "LEFT", fields.widthMode, fields.width, fields.height, fields.x, fields.y)
     self.altManaWidth = fields.width
     self:AddNamed("altMana", fields, "widthMode width height x y")
+end
+function Page:BuildAlternativeManaBehavior()
+    local section = self.b:CollapsibleSection("classpower_alt_mana_behavior", "Behavior", 96, false)
+    local smooth = SwitchAt(self.ctx, section, "Smooth fill", 32, -40, 280, Bars, "altManaSmoothFill", false,
+        ApplyClassPowerSmoothing, Meta("alternative_mana.smooth_fill"))
     self:Add("altMana", smooth)
 end
 
@@ -1621,7 +1661,7 @@ function Page:RefreshControlState()
             local oocReason = W.TurnOnReason("Hide out of combat", function() return BoolValue(Bars(), "classPowerHideOOC", false) end)
             reasons = {
                 cp = cpReason,
-                hp = W.TurnOnReason("Second Player HP bar", function() return BoolValue(Bars(), "playerHPBarEnabled", false) end),
+                hp = W.TurnOnReason("Extra Health Bar", function() return BoolValue(Bars(), "playerHPBarEnabled", false) end),
                 altMana = W.TurnOnReason("Show mana bar (dual resource)", function() return BoolValue(Bars(), "showAltMana", false) end),
                 syncPower = function(control) return cpReason(control) or oocReason(control) end,
             }
@@ -1673,17 +1713,28 @@ function Page:Build()
     self:LazySection("classpower_behavior", "Behavior", 282, Page.BuildClassBehavior)
     self:LazySection("classpower_visuals", "Appearance", 430, Page.BuildClassStyle)
     self:LazySection("classpower_visibility", "Auto-Hide", 248, Page.BuildClassVisibility)
-    self:LazySection("classpower_detached_power", "Player Power", function() return DetachedPowerSectionHeight(self.width) end, Page.BuildDetachedPower)
-    self:LazySection("classpower_player_hp", "Extra Health Bar", function() return self.width < 680 and 980 or 700 end, Page.BuildPlayerHP)
-    self:LazySection("classpower_alt_mana", "Alternative Mana", 476, Page.BuildAlternativeMana)
-    if M.ResourceExtrasPage then M.ResourceExtrasPage.Build(self,Bars,ApplyClassPower) end
+    self:LazySection("classpower_detached_power", "Layout", function() return self.width < 680 and 932 or 600 end, Page.BuildDetachedPower)
+    self:LazySection("classpower_detached_power_textures", "Appearance", 240, Page.BuildDetachedPowerTextures)
+    self:LazySection("classpower_detached_power_text", "Text", function() return self.width < 680 and 950 or 700 end, Page.BuildDetachedPowerText)
+    self:LazySection("classpower_player_hp", "Layout", function() return self.width < 680 and 840 or 600 end, Page.BuildPlayerHP)
+    self:LazySection("classpower_player_hp_textures", "Appearance", 440, Page.BuildPlayerHPTextures)
+    self:LazySection("classpower_player_hp_text", "Text", function() return self.width < 680 and 800 or 620 end, Page.BuildPlayerHPText)
+    self:LazySection("classpower_alt_mana", "Layout", 400, Page.BuildAlternativeMana)
+    self:LazySection("classpower_alt_mana_behavior", "Behavior", 96, Page.BuildAlternativeManaBehavior)
+    if M.ResourceExtrasPage then
+        self:LazySection("classpower_resource_extras", "Additional resources", M.ResourceExtrasPage.Height,
+            function(page) M.ResourceExtrasPage.Build(page, Bars, ApplyClassPower) end)
+        self:LazySection("classpower_resource_marks", "Resource marks and thresholds", 690,
+            function(page) M.ResourceExtrasPage.BuildMarks(page, Bars, ApplyClassPower) end)
+    end
     -- All callbacks share one late-bound state refresh instead of capturing every control.
     self.refresh = self.refresh(function() self:RefreshControlState() end)
     M.RefreshClassPowerDetachedState = self.refresh
     M.TrackRefresh(self.ctx, self.refresh)
+    self.workspace:Select(self.workspace.selected, false, true)
     MaybeOfferQuickSetup()
     self.ctx:SetContentHeight(math.abs(self.b.y) + 42)
 end
 
 local function BuildClassPower(ctx) Page.New(ctx):Build() end
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 21 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 22 })

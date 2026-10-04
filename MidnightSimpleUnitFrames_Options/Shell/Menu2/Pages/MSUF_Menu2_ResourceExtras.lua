@@ -5,7 +5,8 @@ local ResourceExtras={}
 M.ResourceExtrasPage=ResourceExtras
 local function Meta(path,key,kind)
     return M.ControlMeta("classpower","advanced","resource_extras."..path,kind or "setting",
-        key and {settingKey="bars."..key} or {searchSettingKeys={"bars.resourceMarks"}})
+        M.ClassPowerWorkspace.Decorate(key and {settingKey="bars."..key} or {searchSettingKeys={"bars.resourceMarks"}},
+            "resource_extras."..path))
 end
 -- Client gates for the extras: the native duration bars (Ignore Pain, the Arcane
 -- Surge window) and their size sliders run on Midnight only (MSUF_CP_ExtraAuras.lua);
@@ -65,8 +66,7 @@ function ResourceExtras.ClientOnlySettings()
     end
     return all,built
 end
-function ResourceExtras.Build(page,Bars,Apply)
-    local ctx=page.ctx
+function ResourceExtras.Specs()
     local specs={
         {"manaUpcomingCost","toggle","Mana spend preview","manaUpcomingCost",false},
         {"resourceExtraWidth","slider","Resource bar width",40,1000,1,280,"resourceExtraWidth",220},
@@ -86,11 +86,15 @@ function ResourceExtras.Build(page,Bars,Apply)
     if not EXTRA_AURAS then
         for i=#specs,1,-1 do if specs[i][1]:find("^resourceExtra") then table.remove(specs,i) end end
     end
+    return specs
+end
+function ResourceExtras.Height() return 120+#ResourceExtras.Specs()*54 end
+function ResourceExtras.Build(page,Bars,Apply)
+    local specs=ResourceExtras.Specs()
     local section=page.b:CollapsibleSection("classpower_resource_extras","Additional resources",120+#specs*54,false)
     for _,spec in ipairs(specs) do spec.meta=Meta(spec[1],spec[1]) end
     local controls=page:Controls(section,Bars,Apply,"resource_extras",specs)
     for i,spec in ipairs(specs) do W.MoveWidget(controls[spec[1]],section,24,-40-(i-1)*54,280) end
-    ResourceExtras.BuildMarks(page,Bars,Apply)
 end
 function ResourceExtras.BuildMarks(page,Bars,Apply)
     local ctx=page.ctx
@@ -115,7 +119,8 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     end
     local selector=W.Dropdown(section,"Resource mark",Values,280)
     W.MoveWidget(selector,section,24,-40,280)
-    M.BindDropdownWidget(ctx,selector,function() return selected end,function(value) selected=value;Refresh() end,Meta("marks.select",nil,"ephemeral"))
+    M.ClassPowerWorkspace.BindDropdownWidget(ctx,selector,function() return selected end,function(value) selected=value;Refresh() end,
+            Meta("marks.select",nil,"ephemeral"))
     local function Button(label,x,path,callback)
         local button=M.Theme.Button(section,label,130,26,{history=true})
         button:SetPoint("TOPLEFT",section,"TOPLEFT",x,-98)
@@ -146,7 +151,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         local widget=W.Dropdown(section,label,values,280)
         W.MoveWidget(widget,section,24,y,280)
         y=y-54
-        M.BindDropdownWidget(ctx,widget,function() local rule=Rule();return rule and rule[key] or default end,
+        M.ClassPowerWorkspace.BindDropdownWidget(ctx,widget,function() local rule=Rule();return rule and rule[key] or default end,
             function(value) Write(key,value) end,Meta("marks."..key))
     end
     Drop("target","Resource bar",{{value="PLAYER",text="Player power"},{value="CLASS",text="Class resource"},
@@ -158,7 +163,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         local widget=W.Slider(section,spec[2],spec[3],spec[4],spec[5],280)
         W.MoveWidget(widget,section,24,y,280)
         y=y-54
-        M.BindNumberWidget(ctx,widget,function() local rule=Rule();return rule and rule[key] or spec[6] end,
+        M.ClassPowerWorkspace.BindNumberWidget(ctx,widget,function() local rule=Rule();return rule and rule[key] or spec[6] end,
             function(value) Write(key,value) end,spec[6],Meta("marks."..key))
     end
     for _,spec in ipairs({{"mark","Show resource mark",true},{"threshold","Change color at threshold",false}}) do
@@ -166,13 +171,16 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         local widget=W.Toggle(section,spec[2])
         W.MoveWidget(widget,section,24,y,280)
         y=y-38
-        M.BindBoolWidget(ctx,widget,function() local rule=Rule();return rule and rule[key]~=false and (key=="mark" or rule[key]==true) or false end,
+        M.ClassPowerWorkspace.BindBoolWidget(ctx,widget,function()
+            local rule=Rule()
+            return rule and rule[key]~=false and (key=="mark" or rule[key]==true) or false
+        end,
             function(value) Write(key,value) end,Meta("marks."..key))
     end
     Drop("direction","Threshold direction",{{value="ABOVE",text="At or above"},{value="BELOW",text="Below"}},"ABOVE")
     local color=W.Color(section,"Mark and threshold color")
     W.MoveWidget(color,section,24,y,280)
-    M.BindColor(ctx,color,function() local rule=Rule();local c=rule and rule.color or {1,1,1};return c[1],c[2],c[3] end,
+    M.ClassPowerWorkspace.BindColor(ctx,color,function() local rule=Rule();local c=rule and rule.color or {1,1,1};return c[1],c[2],c[3] end,
         function(r,g,b) Write("color",{r,g,b}) end,Meta("marks.color"))
 end
 function ResourceExtras.BuildColors(ctx,b,Bars,ColorValueAt,Apply)
