@@ -14,7 +14,7 @@ for _, name in ipairs({
     "SetMovable", "SetClampedToScreen", "RegisterForDrag", "SetAllPoints",
     "SetJustifyH", "SetBackdropBorderColor", "ClearAllPoints", "SetTextColor", "SetWidth",
     "StopMovingOrSizing", "StartMoving", "SetUpdateInterval", "SetExpiredText", "SetZeroDurationText",
-    "SetTexCoord", "SetHeight",
+    "SetTexCoord", "SetHeight", "SetClipsChildren",
 }) do methods[name] = noop end
 function methods:SetMinMaxValues(a,b) self.minimum,self.maximum=a,b end
 function methods:GetFrameLevel() return self.level or 1 end
@@ -41,6 +41,7 @@ function methods:SetBlendMode(v) self.blendMode = v end
 function methods:SetVertexColor(...) self.vertexColor = {...} end
 function methods:SetReverseFill(v) self.reverse = v end
 function methods:SetText(v) self.text = v end
+function methods:GetStringWidth() return #(self.text or "") * 7 end
 function methods:SetValue(v) self.value = v end
 function methods:EnableMouse(v) self.mouse = v end
 function methods:SetScript(k,v)
@@ -321,22 +322,36 @@ local function bind(_,widget,get,set,meta)
 end
 local W={}
 function W.PageBuilder()
-    return { width=800,y=-100,CollapsibleSection=function(_,id)
-        local section=object(); sections[id]=section; return section
+    return { width=800,y=-100, RequestRelayoutCollapsibles=noop, CollapsibleSection=function(_,id)
+        local section=object(); sections[id]=section
+        section._msuf2CollapsibleEntry={outer=object(),body=section}
+        return section
     end }
 end
 function W.Toggle() return object() end
+W.SectionSwitch=W.Toggle
+function W.Segment() local widget=object();widget._msuf2Title=object();return widget end
+function W.FixedPreviewSection() return object() end
 function W.Slider() return object() end
 function W.Dropdown(_,_,values) local widget=object(); widget.values=values; return widget end
 function W.Color() error("inline swing color widgets must not be allocated") end
 function W.AttachContextColorShortcut(section,options) shortcuts[section]=options end
 local page
+ns.Require=function(name) assert(name=="MSUF_PixelLayoutRegion");return function(region) return region end end
 ns.MSUF2={
-    Widgets=W, AdvancedPage={MoveWidget=noop, ControlMeta=function(_,_,path) return {path=path} end},
+    Widgets=W, Theme={Button=function() return object() end},
+    UnitSectionsShared={MakeScopeCopyPopup=function() return {Show=noop,Hide=noop} end},
+    AdvancedPage={MoveWidget=noop, RegisterControl=noop, ControlMeta=function(_,_,path) return {path=path} end},
     StatusBarTextureItems=ns.UI.StatusBarTextureItems,
     GlobalPage={FontValues=function() return {} end},
     ValueTextList=function(...) local list={}; local args={...}; for i=1,#args,2 do list[#list+1]={value=args[i],text=args[i+1]} end; return list end,
-    BindBoolWidget=bind,BindDropdownWidget=bind,
+    BindBoolWidget=bind,BindDropdownWidget=bind,BindSegment=bind,
+    BindDropdownAt=function(ctx,parent,label,x,y,values,width,get,set,meta)
+        local widget=W.Dropdown(parent,label,values,width)
+        bind(ctx,widget,get,set,meta)
+        return widget
+    end,
+    TrackRefresh=function(_,refresh) refresh() end,
     BindTextInputAt=function(ctx,parent,label,x,y,width,get,set,commitOnBlur,meta)
         local widget=object(nil,parent);widget.label,widget.commitOnBlur=label,commitOnBlur
         widget:SetPoint("TOPLEFT",parent,"TOPLEFT",x,y);widget:SetWidth(width)
@@ -347,11 +362,14 @@ ns.MSUF2={
     RegisterPage=function(key,spec) assert(key=="swingtimers"); page=spec end,
     Refresh=noop,
 }
+assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimersPreview.lua"))("MSUF",ns)
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimers.lua"))("MSUF",ns)
 page.build({SetContentHeight=noop})
 for _,hand in ipairs({"main","off","ranged"}) do
-    local targets=shortcuts[sections["swing_"..hand]].getTargets()
-    assert(#targets==6, "exactly one context menu with all six colors per hand")
+    local targets=shortcuts[sections["swing_"..hand.."_appearance"]].getTargets()
+    assert(#targets==3, "appearance context owns bar, background and border colors")
+    assert(#shortcuts[sections["swing_"..hand.."_text"]].getTargets()==1, "text context owns text color")
+    assert(#shortcuts[sections["swing_"..hand.."_reach"]].getTargets()==1, "reach context owns warning color")
     targets[1].setRGB(.2,.4,.6)
     assert(swing.Get(hand,"color")[2]==.4)
     assert(targets[1].getRGB()==.2, "context color roundtrip")
@@ -387,7 +405,8 @@ for id,name in pairs({[78]="Heroic Strike",[845]="Cleave",[6807]="Maul",[2973]="
     input.set("Go");assert(input.get()=="Go" and swing.Get("main","nextSwingLabel"..id)=="Go", "cue text roundtrip "..id)
     input.set("");assert(swing.Get("main","nextSwingLabel"..id)=="", "clearing a cue text "..id)
 end
-print("PASS Swing menu: one context menu with six colors per hand, real shared media paths, number-only/direction, off-hand lane, reach, next-swing and per-attack cue text controls")
+assert(#shortcuts[sections.swing_next].getTargets()==1, "main-hand cue context owns its color")
+print("PASS Swing menu: scoped appearance, text, reach and main-hand cue color menus, real shared media paths, number-only/direction, off-hand lane, reach, next-swing and per-attack cue text controls")
 
 -- A fresh login with the feature disabled must leave no subscriber behind.
 assert(swing.SetEnabled(false))

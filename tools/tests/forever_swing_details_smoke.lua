@@ -279,4 +279,70 @@ queued = "Raptor Strike"
 Fire(hunterDriver, "CURRENT_SPELL_CAST_CHANGED")
 Check(named.MSUF_SwingTimer_main.Cue.shown and named.MSUF_SwingTimer_main.Cue.textureFile == "icon:2973", "Raptor Strike has no cue")
 module.Disable()
+
+---------------------------------------------------------------------------
+-- Embedded samples share styles, but never own native timers or runtime state.
+---------------------------------------------------------------------------
+local function Clone(value)
+    if type(value) ~= "table" then return value end
+    local out = {}
+    for key, item in pairs(value) do out[key] = Clone(item) end
+    return out
+end
+local function Equal(a, b)
+    if type(a) ~= "table" then return a == b end
+    if type(b) ~= "table" then return false end
+    for key, item in pairs(a) do if not Equal(item, b[key]) then return false end end
+    for key in pairs(b) do if a[key] == nil then return false end end
+    return true
+end
+local function Forbidden() error("sample called native gameplay API", 2) end
+swing, driver = Load("WARRIOR")
+main, off = named.MSUF_SwingTimer_main, named.MSUF_SwingTimer_off
+swing.Set("main", "offhandLane", true)
+swing.Set("main", "nextSwingText", true)
+queued = "Heroic Strike"
+Fire(driver, "CURRENT_SPELL_CAST_CHANGED")
+local realTitle, realLane, realPoint = main.Title.text, off.Lane, main.point
+local profile, listeners = Clone(MSUF_DB), Clone(driver.events)
+local durationAPI, cvarGet, cvarSet, swingAPI = C_DurationUtil, GetCVarBool, SetCVar, C_SwingTimer
+C_DurationUtil = { CreateDuration = Forbidden, CreateDurationTextBinding = Forbidden }
+GetCVarBool, SetCVar, C_SwingTimer = Forbidden, Forbidden, nil
+local canvas = Widget(UIParent)
+local samples = {}
+for _, hand in ipairs({ "main", "off", "ranged" }) do
+    samples[hand] = swing.CreateMenuPreview(canvas, hand)
+    samples[hand]:SetPoint("CENTER", canvas, "CENTER", 0, 0)
+end
+swing.PaintMenuPreview(samples)
+Check(samples.main.parent == canvas and samples.main.point[2] == canvas, "sample lost its menu parent or anchor")
+Check(not samples.main.duration and not samples.main.binding and not samples.main.scripts.OnDragStop,
+    "sample became a gameplay timer or draggable frame")
+Check(named.MSUF_SwingTimer_main == main and named.MSUF_SwingTimer_off == off,
+    "sample collided with a globally named runtime frame")
+Check(main.Title.text == realTitle and main.Cue.shown and off.Lane == realLane and main.point == realPoint,
+    "sample paint changed a runtime bar, cue, lane or anchor")
+Check(Equal(profile, MSUF_DB) and Equal(listeners, driver.events), "sample paint changed saved state or listeners")
+Check(samples.off.Lane.parent == samples.main and samples.off.Lane ~= realLane, "sample uses the runtime lane")
+Check(samples.main.texture == main.texture and Equal(samples.main.Bar.color, main.Bar.color)
+    and Equal(samples.main.Bar.Background.vertex, main.Bar.Background.vertex)
+    and samples.main.Bar.Background.alpha == main.Bar.Background.alpha,
+    "sample and runtime surface styles differ")
+C_DurationUtil, GetCVarBool, SetCVar, C_SwingTimer = durationAPI, cvarGet, cvarSet, swingAPI
+writes, counting = 0, true
+Fire(driver, "CURRENT_SPELL_CAST_CHANGED")
+counting = false
+Check(writes == 0, "sample paint invalidated the cached queued-attack state")
+module.Disable()
+MSUF_DB = { swingTimers = { enabled = false, main = { width = 600, direction = "UP", display = "text", time = false } } }
+profile = Clone(MSUF_DB)
+GetCVarBool, SetCVar, C_DurationUtil = Forbidden, Forbidden, nil
+swing.PaintMenuPreview(samples)
+Check(samples.main.width == 600 and not samples.main.Bar.shown and samples.main.Time.shown,
+    "module-off, partial profile or text-only sample failed")
+Check(samples.ranged.Time.text == "1.2" and Equal(profile, MSUF_DB), "preview migrated or filled a partial profile")
+GetCVarBool, SetCVar, C_DurationUtil = cvarGet, cvarSet, durationAPI
+module.Enable()
+Check(named.MSUF_SwingTimer_main == main and main ~= samples.main, "later enable reused an embedded sample")
+module.Disable()
 print("forever_swing_details_smoke: OK")

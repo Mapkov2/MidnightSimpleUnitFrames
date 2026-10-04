@@ -285,6 +285,7 @@ clients+Forever	lua	tools/tests/portrait_details_smoke.lua	{root} {flavor}	Portr
 clients+Forever	lua	tools/tests/alpha_text_layer_smoke.lua	{root} {flavor}	Alpha text layer smoke failed: {flavor}
 clients+Forever	lua	tools/tests/status_atlas_memo_smoke.lua	{root} {flavor}	Status atlas memo smoke failed: {flavor}
 -	lua	tools/tests/forever_swing_details_smoke.lua	{root}	Forever swing range, latency and background details
+-	lua	tools/tests/forever_swing_menu_preview_smoke.lua	{root}	Forever embedded Swing Timer menu preview
 -	lua	tools/tests/forever_swing_native_ownership_smoke.lua	{root}	Forever swing timer leaves Blizzard bar layout to the CVar path
 -	lua	tools/tests/profile_fields_smoke.lua	{root}	Sparse profile fields and import bounds
 -	lua	tools/tests/profile_fields_roots_smoke.lua	{root}	Variants or sync miss a profile root

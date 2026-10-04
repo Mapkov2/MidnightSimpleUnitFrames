@@ -25,6 +25,7 @@
     <Script file="Preview\MSUF_Menu2_ClassPowerPreview_Interaction.lua"/>
     <Script file="Preview\MSUF_Menu2_ClassPowerPreview.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedClassPower.lua"/>
+    <Script file="Pages\MSUF_Menu2_SwingTimersPreview.lua"/>
     <Script file="Pages\MSUF_Menu2_SwingTimers.lua"/>
     <Script file="Pages\MSUF_Menu2_ProfileSearch.lua"/>
     <Script file="Pages\MSUF_Menu2_ProfileVariants.lua"/>

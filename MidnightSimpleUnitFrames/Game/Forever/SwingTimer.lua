@@ -72,8 +72,11 @@ local function Copy(value)
     return { value[1], value[2], value[3] }
 end
 
+local function ProfileDB()
+    return _G.MSUF_DB
+end
 local function DB()
-    local db = _G.MSUF_DB
+    local db = ProfileDB()
     if type(db) ~= "table" then return nil end
     if type(db.swingTimers) ~= "table" then
         -- Migrate the previous native master switch once.
@@ -205,14 +208,18 @@ local function StyleSurface(bar, cfg, inset, texture)
     bar.Background:SetAlpha(cfg.backgroundOpacity / 100)
 end
 
-local function CreateBar(hand)
-    local frame = PixelLayoutRegion(_G.CreateFrame("Frame", "MSUF_SwingTimer_" .. hand, _G.UIParent, "BackdropTemplate"))
+local function CreateBar(hand, parent)
+    local sample = parent ~= nil
+    local frame = PixelLayoutRegion(_G.CreateFrame("Frame", not sample and "MSUF_SwingTimer_" .. hand or nil,
+        parent or _G.UIParent, "BackdropTemplate"))
     frame.hand = hand
-    frame:SetMovable(true)
-    frame:SetClampedToScreen(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", OnDragStart)
-    frame:SetScript("OnDragStop", OnDragStop)
+    if not sample then
+        frame:SetMovable(true)
+        frame:SetClampedToScreen(true)
+        frame:RegisterForDrag("LeftButton")
+        frame:SetScript("OnDragStart", OnDragStart)
+        frame:SetScript("OnDragStop", OnDragStop)
+    end
     frame.Bar = CreateSurface(frame)
     frame.Text = PixelLayoutRegion(_G.CreateFrame("Frame", nil, frame))
     frame.Text:SetAllPoints()
@@ -221,6 +228,16 @@ local function CreateBar(hand)
     frame.Title:SetPoint("LEFT", 5, 0)
     frame.Title:SetJustifyH("LEFT")
     frame.Time = PixelLayoutRegion(frame.Text:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+    -- Menu samples share the surfaces, but never bind native timers or register
+    -- as gameplay bars. Missing profile values resolve without migrating the DB.
+    if sample then
+        frame.previewConfig = setmetatable({}, { __index = function(_, key)
+            local value = frame.previewSource and frame.previewSource[key]
+            if value ~= nil then return value end
+            return DEFAULTS[key]
+        end })
+        return frame
+    end
     frame.duration = _G.C_DurationUtil.CreateDuration()
     frame.binding = _G.C_DurationUtil.CreateDurationTextBinding()
     frame.binding:SetFontString(frame.Time)
@@ -446,8 +463,7 @@ local function SyncCueEvents()
 end
 -- The off-hand lane: a strip along the main-hand bar's far edge (its right
 -- side when vertical) in the off-hand bar's own colour.
-local function StyleLane()
-    local main, off = frames.main, frames.off
+local function StyleLane(main, off)
     local cfg = main.config
     if not (cfg.offhandLane and cfg.display == "bar") then
         if off.Lane then off.Lane:Hide() end
@@ -494,13 +510,15 @@ function Swing.ApplyFonts()
     end
 end
 
-local function Style(frame, cfg)
+local function Style(frame, cfg, sample)
     frame.config = cfg
     frame:SetSize(cfg.width, cfg.height)
     frame:SetScale(cfg.scale / 100)
     frame:SetAlpha(cfg.opacity / 100)
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", _G.UIParent, "CENTER", cfg.x / frame:GetScale(), cfg.y / frame:GetScale())
+    if not sample then
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", _G.UIParent, "CENTER", cfg.x / frame:GetScale(), cfg.y / frame:GetScale())
+    end
     local inset = math.min(cfg.borderSize, (cfg.height - 1) / 2, (cfg.width - 1) / 2)
     PixelLayoutRegion(frame, "SetBackdrop", cfg.display == "bar" and cfg.borderSize > 0 and {
         edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = inset,
@@ -531,7 +549,33 @@ local function Style(frame, cfg)
         frame.Cue:ClearAllPoints()
         frame.Cue:SetPoint("RIGHT", frame, "LEFT", -2, 0)
         frame.Cue:Hide()
-        cueSpell, cueTitled = nil, false
+        if not sample then cueSpell, cueTitled = nil, false end
+    end
+end
+
+function Swing.CreateMenuPreview(parent, hand)
+    if not parent or not LABELS[hand] then return end
+    return CreateBar(hand, parent)
+end
+
+function Swing.PaintMenuPreview(samples)
+    local db = ProfileDB()
+    local cfg = db and db.swingTimers
+    for i = 1, #HANDS do
+        local hand = HANDS[i]
+        local frame = samples[hand]
+        frame.previewSource = cfg and cfg[hand]
+        local values = frame.previewConfig
+        Style(frame, values, true)
+        frame.Bar:SetShown(values.display == "bar")
+        frame.Bar:SetValue(values.fill == "remaining" and 0.35 or 0.65)
+        frame.Time:SetText("1.2")
+    end
+    local main, off = samples.main, samples.off
+    StyleLane(main, off)
+    if off.Lane then
+        off.Lane:SetShown(main.config.offhandLane and main.config.display == "bar" and off.config.enabled)
+        off.Lane:SetValue(main.config.fill == "remaining" and 0.35 or 0.65)
     end
 end
 
@@ -590,7 +634,7 @@ function Swing.Apply()
         local hand = HANDS[i]
         Style(frames[hand] or CreateBar(hand), cfg[hand])
     end
-    StyleLane()
+    StyleLane(frames.main, frames.off)
     SuppressNative()
     ResolveCue()
     SyncCueEvents()
