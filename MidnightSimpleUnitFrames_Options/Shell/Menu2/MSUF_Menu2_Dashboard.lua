@@ -678,6 +678,79 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop)
     AddTooltip(wago, "Wago Profiles", "Browse Wago profiles")
     return launcherH
 end
+--- The Dashboard's own search field: typed into directly, the way the Assistant
+--- card took a question. Matches show under it while typing (the navigation
+--- search palette and index), Enter opens the selected one and falls back to
+--- the full results page, which the navigation search then shows the query for.
+--- Returns the field and its submit function.
+function Dashboard.BuildSearchInput(hero, x, y, w, h)
+    local bridge = M.SearchBridge
+    local input = PixelLayoutRegion(CreateFrame("EditBox", nil, hero, "InputBoxScriptTemplate"))
+    input:SetFontObject("ChatFontNormal")
+    input:SetPoint("TOPLEFT", hero, "TOPLEFT", x, y)
+    input:SetSize(w, h)
+    input:EnableMouse(true)
+    input:SetAutoFocus(false)
+    input:SetMaxLetters(60)
+    input:SetTextInsets(10, 10, 0, 0)
+    T.SkinEditBox(input)
+    T.StyleFontString(input, T.colors.text, 2)
+    input._msuf2RoundedEditFill, input._msuf2RoundedEditEdge =
+        T.CreateSuperellipseLayers(input, "_msuf2DashboardSearchEdit", 2, "BACKGROUND", "BORDER")
+    input:_msuf2PaintEditBox(false)
+    local hint = PixelLayoutRegion(input:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
+    hint:SetPoint("LEFT", input, "LEFT", 11, 0)
+    hint:SetPoint("RIGHT", input, "RIGHT", -10, 0)
+    hint:SetJustifyH("LEFT")
+    hint:SetWordWrap(false)
+    T.StyleFontString(hint, T.colors.searchPlaceholder or T.colors.muted, 2)
+    input._msuf2SearchPlaceholder = hint
+    bridge.UpdateSearchPlaceholder(input)
+    local palette = M.CreateNavSearchPalette(hero, input, true)
+    local function ShowMatches()
+        local query = M.TrimText(input:GetText() or "")
+        bridge.ScheduleSearchInputQuery(input, query, false, function(latest) palette:Refresh(latest, false) end)
+        palette:Refresh(query, M.searchResultsPending == true)
+    end
+    local function Submit()
+        local query = M.TrimText(input:GetText() or "")
+        if query == "" then
+            input:SetFocus()
+            return
+        end
+        bridge.BumpSearchInputSerial()
+        bridge.RunSearchInputQuery(query, false)
+        palette:Refresh(query, false)
+        if palette:OpenSelected(query) then return end
+        palette:Hide()
+        input:ClearFocus()
+        bridge.RunSearchQuery(query)
+    end
+    input:SetScript("OnTextChanged", function(self, userInput)
+        bridge.UpdateSearchPlaceholder(self)
+        if userInput then ShowMatches() end
+    end)
+    input:HookScript("OnEditFocusGained", function(self)
+        bridge.UpdateSearchPlaceholder(self)
+        if M.TrimText(self:GetText() or "") ~= "" then ShowMatches() end
+    end)
+    input:HookScript("OnEditFocusLost", bridge.UpdateSearchPlaceholder)
+    input:SetScript("OnArrowPressed", function(_, key)
+        if key == "UP" or key == "DOWN" then palette:MoveSelection(key == "UP" and -1 or 1) end
+    end)
+    input:SetScript("OnEnterPressed", Submit)
+    input:SetScript("OnEscapePressed", function(self)
+        self:SetText("")
+        palette:Hide()
+        self:ClearFocus()
+    end)
+    -- The start page opens empty again, like the Assistant input after a send.
+    hero:HookScript("OnHide", function()
+        if palette:IsShown() then palette:Hide() end
+        input:SetText("")
+    end)
+    return input, Submit
+end
 function Dashboard.BuildSearchHero(state, mainTop)
     local mainW = state.mainW
     local heroH = mainW < 390 and 174 or 156
@@ -687,11 +760,14 @@ function Dashboard.BuildSearchHero(state, mainTop)
     local title = T.Font(hero, "GameFontNormalLarge", "Find settings and help", T.colors.text)
     title:SetPoint("TOPLEFT", hero, "TOPLEFT", 22, -42)
     title:SetWidth(mainW - 44)
+    title:SetJustifyH("LEFT")
     W.Text(hero, "Search enabled features in your own words.", 22, -72, mainW - 44, T.colors.muted)
-    state.Button(hero, "Search", 22, -heroH + 44, math.min(220, mainW - 44), 28, function()
+    local submitW = 96
+    local inputY = -heroH + 52
+    local _, submit = Dashboard.BuildSearchInput(hero, 22, inputY, max(120, mainW - 54 - submitW), 30)
+    state.Button(hero, "Search", mainW - 22 - submitW, inputY, submitW, 30, function()
         if DirectCombatLocked() then return end
-        local box = M.nav and M.nav.searchBox
-        if box and box.SetFocus then box:SetFocus() end
+        submit()
     end, "primary", "search.open", "navigation", { navigationKey = "search" })
     return heroH
 end

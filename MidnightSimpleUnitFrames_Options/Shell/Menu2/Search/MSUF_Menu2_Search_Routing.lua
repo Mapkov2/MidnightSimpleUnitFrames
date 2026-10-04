@@ -64,6 +64,8 @@ local function ResolveExactSearchAnchor(pageKey, exactTarget)
         end
         entry = M.cache and M.cache[pageKey]
         declaredSection = (entry and entry.sections and entry.sections[sectionId]) or declaredSection
+        -- A lazy accordion section builds its content before the catalog lookup.
+        if declaredSection and M.Widgets and M.Widgets.EnsureSectionContent then M.Widgets.EnsureSectionContent(declaredSection) end
     end
     local controlId = tostring(exactTarget.controlId or "")
     local catalog = M.RuntimeControlCatalog
@@ -385,7 +387,7 @@ local function SearchTermRows(text)
 end
 
 local GROUP_SCOPE_TERMS = SearchTermRows [[
-party=mythic plus|myhtic plus|keystone|schluesselstein|schlüsselstein|dungeon
+party=mythic plus|myhtic plus|keystone|schluesselstein|schlÃ¼sselstein|dungeon
 mythicraid=mythic raid|mythicraid|mythic
 raid=raid|raids
 party=party|group|groups
@@ -602,7 +604,7 @@ anchoring=anchoring|anchor|position|x offset|y offset|custom anchor|global ancho
 text=text|name text|hp text|health text|power text|font size|text anchor|text position|text layer
 inline_text=inline text|inline color|target of target text|tot text|tot color|npc color|npc type color
 transparency=transparency|transparent|alpha|opacity|fade|in combat alpha|out of combat alpha
-portrait=portrait|class icon|2d portrait|3d portrait|avatar|face
+portrait=portrait|class icon|2d portrait|avatar|face
 power_bar=power bar|mana bar|energy bar|rage bar|power height|power smooth fill
 castbar=castbar|cast bar|spell name|cast icon|cast time
 status_icons=status icons|status icon|indicator|level|level text|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez|pet happiness|happiness|advanced status|advanced x offset|advanced y offset|extended x offset|extended y offset
@@ -1126,6 +1128,22 @@ end
 -- control mid-resolution and orphan the anchor widget.
 local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     if type(exactTarget) ~= "table" then return route end
+    local workspaceKind = exactTarget.prepareKind == "classPowerWorkspace" and exactTarget.prepareValue
+        or ("|" .. tostring(exactTarget.prepareContracts or "") .. "|"):match("|classPowerWorkspace=([^=|]+)=%*|")
+    if pageKey == "classpower" and workspaceKind then
+        local kind = workspaceKind
+        if kind == "class" or kind == "power" or kind == "hp" or kind == "mana" or kind == "extras" then
+            -- This page relayouts one graph in place; query-derived routes must
+            -- not invalidate it when the ephemeral resource selection changes.
+            route = {}
+            M.ClassPowerWorkspace.Select(kind)
+            local entry = M.cache and M.cache[pageKey]
+            local section = entry and entry.sections and entry.sections[exactTarget.sectionId]
+            if section then M.Widgets.FocusCollapsibleSection(section, { scroll = false, flash = false })
+            elseif exactTarget.sectionId then SearchRouteOpenAccordion(route, pageKey, exactTarget.sectionId) end
+        end
+        return route
+    end
     if exactTarget.prepareKind == "groupSizingTab" then
         local tab = exactTarget.prepareValue
         if pageKey == "gf_layout" and exactTarget.sectionId == "scaling"

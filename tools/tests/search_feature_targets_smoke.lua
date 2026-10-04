@@ -72,7 +72,7 @@ local function Navigate(row)
  return record,widget
 end
 local snapshot=F.Copy(e.MSUF_DB)
-local portrait=FirstControl("3D portrait",function(row) return row.exactTarget and Ends(row.exactTarget.settingKey,".portraitRender") end)
+local portrait=FirstControl("2D portrait",function(row) return row.exactTarget and Ends(row.exactTarget.settingKey,".portraitRender") end)
 assert(F.Equal(snapshot,e.MSUF_DB),"cold search wrote saved configuration")
 assert(portrait.exactTarget.controlId,"cold static search lost its declared ID")
 Navigate(portrait)

@@ -348,7 +348,7 @@ stufe|stufen=level|level indicator|level text|show level|status icons
 stufentext=level text|level indicator|show level|status icons|anchor|position
 levelanzeige=level indicator|level text|show level|status icons|anchor|position
 statusanzeige=status indicator|status icons|indicator|level indicator
-portrait=portraits|portrait mode|class icon|2d portrait|3d portrait
+portrait=portraits|portrait mode|class icon|2d portrait
 portraits=portrait|portrait mode|class icon
 avatar|portraet=portrait|portraits|class icon
 portraitdeko=portrait decoration|modules|style
@@ -464,9 +464,9 @@ Data.CONTROL_QUERY_TARGETS = {
     ["ridden mount"] = { settingSuffix = "tooltipDetails.unitMount" },
     ["mount"] = { settingSuffix = "tooltipDetails.unitMount" },
     ["nebenhand"] = { settingKey = "swingTimers.main.offhandLane" },
-    ["3d portrait"] = { settingSuffix = ".portraitRender" },
-    ["3d portraet"] = { settingSuffix = ".portraitRender" },
-    ["3d porträt"] = { settingSuffix = ".portraitRender" },
+    ["2d portrait"] = { settingSuffix = ".portraitRender" },
+    ["2d portraet"] = { settingSuffix = ".portraitRender" },
+    ["2d porträt"] = { settingSuffix = ".portraitRender" },
     ["drachen spiegeln"] = { settingSuffix = ".portraitDragonFlip" },
     ["drachenspiegeln"] = { settingSuffix = ".portraitDragonFlip" },
     ["dragon flip"] = { settingSuffix = ".portraitDragonFlip" },

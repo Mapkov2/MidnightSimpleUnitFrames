@@ -109,7 +109,7 @@ local function ResultRowText(rec)
 end
 local function RegisterResultRow(row, index)
     local noOpen = row.noOpen
-    local label = (noOpen and "Select search result " or "Open search result ") .. tostring(row.rec.label or index)
+    local label = M.Format(noOpen and "Select search result %s" or "Open search result %s", tostring(row.rec.label or index))
     if row.chromeLabel == label then return end
     row.chromeLabel = label
     M.RegisterMenuChromeControl(row.button, "search.result." .. tostring(index), label, "action", {
@@ -226,7 +226,7 @@ local function CreateExampleButton(view, shortcut, slot, width)
     button:SetScript("OnClick", function() RunExampleQuery(searchQuery) end)
     local shortcutToken = tostring(shortcut[1] or slot):lower():gsub("[^%w_]+", "."):gsub("^%.*", ""):gsub("%.*$", "")
     M.RegisterMenuChromeControl(button, "search.shortcut." .. (shortcutToken ~= "" and shortcutToken or tostring(slot)),
-        "Search for " .. tostring(shortcut[1] or searchQuery), "action", {
+        M.Format("Search for %s", M.Tr(shortcut[1] or searchQuery)), "action", {
             actionKey = "menu_search_query",
             actionFixedArgs = { query = searchQuery },
             historyMode = "none",

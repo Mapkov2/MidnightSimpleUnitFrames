@@ -59,6 +59,11 @@ local SEARCH_STATE = {
     registry = {},
     registryByPage = {},
     registryRecords = {},
+    -- Page-list index of the last id a page move removed (a lookup hint).
+    registryMoveAt = nil,
+    -- IsSearchableDisplayText answers by source string (bounded).
+    searchableText = {},
+    searchableTextCount = 0,
     localeKey = nil,
     -- Runtime search providers (M.RegisterSearchProvider) by name, and their
     -- records, built on first use and dropped with the locale caches.
@@ -81,6 +86,9 @@ local function ClearSearchLocaleCaches()
 end
 
 local function EnsureSearchLocaleFresh()
+    -- SearchEffectiveLocale returns MSUF.LOCALE whenever it is a non-empty
+    -- string, and a stored key is always one, so a match needs no call.
+    if SEARCH_STATE.localeKey ~= nil and MSUF.LOCALE == SEARCH_STATE.localeKey then return end
     local localeKey = SearchEffectiveLocale()
     if SEARCH_STATE.localeKey == localeKey then return end
     SEARCH_STATE.localeKey = localeKey
@@ -266,12 +274,13 @@ local DASHBOARD_ROUTE_CHANGELOG = { state = { dashboardChangelogOpen = true } }
 --- allowSoftStop keeps words like "enable"/"visible"/"off" usable as search terms.
 --- They are normally dropped because they are filler in a sentence, but they are
 --- also real control labels, and a query made only of them must not collapse.
+--- "all" keeps the hard stop words too, for labels made only of them ("To", "Aus").
 local function AddSearchTermUnique(list, seen, term, allowSoftStop)
     if #list >= SEARCH_MAX_TERMS_PER_CLAUSE then return end
     term = NormalizeSearchText(term)
     if term == "" or seen[term] then return end
     if allowSoftStop then
-        if SEARCH_STOP_WORDS[term] then return end
+        if allowSoftStop ~= "all" and SEARCH_STOP_WORDS[term] then return end
     elseif SearchIgnoreQueryWord(term) then
         return
     end
@@ -348,7 +357,7 @@ local function SearchRawWords(normalized, allowSoftStop)
     local raw = {}
     local function Add(word)
         local ignored
-        if allowSoftStop then ignored = SEARCH_STOP_WORDS[word] else ignored = SearchIgnoreQueryWord(word) end
+        if allowSoftStop then ignored = allowSoftStop ~= "all" and SEARCH_STOP_WORDS[word] else ignored = SearchIgnoreQueryWord(word) end
         if not ignored and word ~= "" and #raw < SEARCH_MAX_RAW_WORDS then raw[#raw + 1] = word end
     end
     local words = {}
@@ -551,8 +560,10 @@ healthtext|health|text;powertext|power|text;nametext|name|text;classcolor|class|
 playerframe|player|frame;targetframe|target|frame;focusframe|focus|frame;petframe|pet|frame;bossframes|boss|frame frames;arenaframes|arena|frame frames;partyframes|party|frame frames;raidframes|raid|frame frames
 ]])
 
+--- Also returns, by word position, the typed pair a canonical word replaced:
+--- labels that spell it out ("global cooldown", "Ko-fi") must still match.
 local function SearchCanonicalWords(raw)
-    local words = {}
+    local words, phrases = {}, nil
     local i = 1
     while i <= #raw do
         local word = raw[i]
@@ -560,6 +571,8 @@ local function SearchCanonicalWords(raw)
         local canonical = nextWord and SEARCH_CANONICAL_PAIRS[word] and SEARCH_CANONICAL_PAIRS[word][nextWord]
         if canonical then
             words[#words + 1] = canonical
+            phrases = phrases or {}
+            phrases[#words] = word .. " " .. nextWord
             i = i + 2
         elseif (word == "плавное" or word == "плавная") and (nextWord == "заполнение" or nextWord == "заливка") then
             words[#words + 1] = "smoothfill"
@@ -581,7 +594,7 @@ local function SearchCanonicalWords(raw)
             i = i + 1
         end
     end
-    return words
+    return words, phrases
 end
 
 local function BuildSearchQueryClauses(query)
@@ -593,13 +606,14 @@ local function BuildSearchQueryClauses(query)
 
     local function Collect(allowSoftStop)
         local raw = SearchRawWords(normalized, allowSoftStop)
-        local words = SearchCanonicalWords(raw)
+        local words, phrases = SearchCanonicalWords(raw)
         local clauses = {}
         for i = 1, #words do
             if #clauses >= SEARCH_MAX_QUERY_CLAUSES then break end
             local word = words[i]
             local terms, seen = {}, {}
             AddSearchTermUnique(terms, seen, word, allowSoftStop)
+            if phrases and phrases[i] then AddSearchTermUnique(terms, seen, phrases[i], allowSoftStop) end
             local aliases = SEARCH_QUERY_ALIASES[word]
             if not aliases then
                 local aliasKey = SearchAliasKeyForTypo(word)
@@ -623,6 +637,8 @@ local function BuildSearchQueryClauses(query)
     -- query consisting only of them produced no clauses at all and search returned
     -- nothing. Those are real control labels; retry keeping them as terms.
     if #clauses == 0 and normalized ~= "" then clauses = Collect(true) end
+    -- A label made only of hard stop words ("To", "Not now", "Zu", "Aus") is still a label.
+    if #clauses == 0 and normalized ~= "" then clauses = Collect("all") end
 
     SEARCH_STATE.queryClauseCacheNorm = normalized
     SEARCH_STATE.queryClauseCacheClauses = clauses
@@ -981,13 +997,26 @@ local function SearchResultSpecificityBoost(rec, clauses)
     return boost
 end
 
+-- Pure in its text (both text caches and the noise list are static), and
+-- labels repeat across the shared unit/group pages and every re-registration,
+-- so string answers are memoized.
 local function IsSearchableDisplayText(text)
-    text = DisplaySearchText(text)
-    if text == "" or #text > SEARCH_TEXT_MAX_LEN then return false end
-    local normalized = NormalizeSearchText(text)
-    if normalized == "" or SEARCH_NOISE_TEXT[normalized] then return false end
-    if #normalized < 2 then return false end
-    return true
+    local known = SEARCH_STATE.searchableText[text]
+    if known ~= nil then return known end
+    local display = DisplaySearchText(text)
+    local searchable = false
+    if display ~= "" and #display <= SEARCH_TEXT_MAX_LEN then
+        local normalized = NormalizeSearchText(display)
+        searchable = normalized ~= "" and not SEARCH_NOISE_TEXT[normalized] and #normalized >= 2
+    end
+    if type(text) == "string" and #text <= 256 then
+        if SEARCH_STATE.searchableTextCount >= 4096 then
+            SEARCH_STATE.searchableText, SEARCH_STATE.searchableTextCount = {}, 0
+        end
+        SEARCH_STATE.searchableText[text] = searchable
+        SEARCH_STATE.searchableTextCount = SEARCH_STATE.searchableTextCount + 1
+    end
+    return searchable
 end
 
 local function FontStringText(region)
@@ -1326,13 +1355,29 @@ function M.RegisterSearchWidget(widget, meta)
 
     local id = widget._msuf2SearchRegistryId
     local previousPageKey = widget._msuf2SearchRegistryPage
+    local movedEntry
     if id and previousPageKey and previousPageKey ~= pageKey then
+        movedEntry = SEARCH_STATE.registry[id]
         SEARCH_STATE.registry[id] = nil
         SEARCH_STATE.registryRecords[id] = nil
         local previousPageIds = SEARCH_STATE.registryByPage[previousPageKey]
         if previousPageIds then
-            for i = #previousPageIds, 1, -1 do
-                if previousPageIds[i] == id then table.remove(previousPageIds, i) end
+            -- An id is listed once (each new id gets a fresh serial and joins
+            -- one page list). A shared unit/group page moves its widgets as one
+            -- run of that list, so the last removal's index finds the next id.
+            local at = SEARCH_STATE.registryMoveAt
+            if not at or previousPageIds[at] ~= id then
+                at = nil
+                for i = 1, #previousPageIds do
+                    if previousPageIds[i] == id then
+                        at = i
+                        break
+                    end
+                end
+            end
+            if at then
+                table.remove(previousPageIds, at)
+                SEARCH_STATE.registryMoveAt = at
             end
             if #previousPageIds == 0 then SEARCH_STATE.registryByPage[previousPageKey] = nil end
         end
@@ -1378,32 +1423,36 @@ function M.RegisterSearchWidget(widget, meta)
     end
 
     widget._msuf2SearchMeta = meta
-    local entry = {
-        id = id,
-        widget = widget,
-        pageKey = pageKey,
-        label = label,
-        kind = kind,
-        anchor = anchor,
-        values = CopyStaticSearchValues(rawValues),
-        controlId = catalogId,
-        identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel,
-        identityKey = meta.identityKey,
-        controlPath = meta.controlPath,
-        sectionId = meta.sectionId,
-        classification = meta.classification or meta.controlType,
-        searchPrepareKind = meta.searchPrepareKind, searchPrepareValue = meta.searchPrepareValue,
-        ephemeral = meta.ephemeral,
-        settingKey = meta.settingKey,
-        actionKey = meta.actionKey,
-        actionFixedArgs = meta.actionFixedArgs,
-        actionInputArg = meta.actionInputArg,
-        navigationKey = meta.navigationKey,
-        confirmRequired = meta.confirmRequired,
-        keywords = keywords,
-        help = help,
-        _rawValues = rawValues,
-    }
+    local values = CopyStaticSearchValues(rawValues)
+    -- A changed registration refills the entry it replaces, or the one a page
+    -- move dropped above (only the registry holds entries), instead of
+    -- building a new table. Both branches set the same 25 fields: keep them in step.
+    local entry = previous or movedEntry
+    if entry then
+        entry.id, entry.widget, entry.pageKey, entry.label, entry.kind, entry.anchor = id, widget, pageKey, label, kind, anchor
+        entry.values, entry.controlId, entry._rawValues = values, catalogId, rawValues
+        entry.identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel
+        entry.identityKey, entry.controlPath, entry.sectionId = meta.identityKey, meta.controlPath, meta.sectionId
+        entry.classification = meta.classification or meta.controlType
+        entry.searchPrepareKind, entry.searchPrepareValue = meta.searchPrepareKind, meta.searchPrepareValue
+        entry.ephemeral, entry.settingKey, entry.actionKey = meta.ephemeral, meta.settingKey, meta.actionKey
+        entry.actionFixedArgs, entry.actionInputArg = meta.actionFixedArgs, meta.actionInputArg
+        entry.navigationKey, entry.confirmRequired = meta.navigationKey, meta.confirmRequired
+        entry.keywords, entry.help = keywords, help
+    else
+        entry = {
+            id = id, widget = widget, pageKey = pageKey, label = label, kind = kind, anchor = anchor,
+            values = values, controlId = catalogId, _rawValues = rawValues,
+            identityLabel = meta.identityLabel or widget._msuf2SearchText or rawLabel,
+            identityKey = meta.identityKey, controlPath = meta.controlPath, sectionId = meta.sectionId,
+            classification = meta.classification or meta.controlType,
+            searchPrepareKind = meta.searchPrepareKind, searchPrepareValue = meta.searchPrepareValue,
+            ephemeral = meta.ephemeral, settingKey = meta.settingKey, actionKey = meta.actionKey,
+            actionFixedArgs = meta.actionFixedArgs, actionInputArg = meta.actionInputArg,
+            navigationKey = meta.navigationKey, confirmRequired = meta.confirmRequired,
+            keywords = keywords, help = help,
+        }
+    end
     SEARCH_STATE.registry[id] = entry
     SEARCH_STATE.registryRecords[id] = nil
     MarkSearchIndexDirty()
@@ -2020,8 +2069,85 @@ local SEARCH_FAQ = SearchData.BuildFAQ and SearchData.BuildFAQ({
 
 local SEARCH_EASTER_EGGS = SearchData.EASTER_EGGS or {}
 
+--- What a query names beyond its clause words: a page whose name other page names
+--- contain, or a control's whole label in context. (One table: the chunk's locals
+--- are budgeted.)
+local SearchNaming = {}
+
+--- The short, translated page names that overlap ("Target" in "Focus Target",
+--- "Pet Target", "Target of Target"), space-padded for whole-word matching and
+--- longest first, so the page a query names is the longest name in it. Names no
+--- other page shares stay out: "Castbar" in "castbar color" names no page choice.
+--- Built with the records, so it follows the language.
+function SearchNaming.BuildPageNames(pageInfos)
+    local names = {}
+    for i = 1, #pageInfos do
+        local key = pageInfos[i].key
+        local spec = M.pages[key]
+        local sources = { M.navSubpageLabels[key], spec and spec.title }
+        for k = 1, 2 do
+            local source = sources[k]
+            local short = source and NormalizeSearchText((M.Tr(source):gsub("^MSUF[%s%-]+", ""))) or ""
+            if short ~= "" then names[#names + 1] = { key = key, padded = " " .. short .. " " } end
+        end
+    end
+    local overlapping = {}
+    for i = 1, #names do
+        for k = 1, #names do
+            local inner, outer = names[i], names[k]
+            if inner.key ~= outer.key and #outer.padded > #inner.padded and outer.padded:find(inner.padded, 1, true) then
+                overlapping[inner], overlapping[outer] = true, true
+            end
+        end
+    end
+    local kept = {}
+    for i = 1, #names do
+        if overlapping[names[i]] then kept[#kept + 1] = names[i] end
+    end
+    table.sort(kept, function(a, b)
+        if #a.padded ~= #b.padded then return #a.padded > #b.padded end
+        return a.key < b.key
+    end)
+    return kept
+end
+
+--- The page whose short name is the longest phrase in the query, so "Target Size"
+--- prefers the Target page over Focus Target, Pet Target and Target of Target.
+function SearchNaming.Page(normalized)
+    local names = SEARCH_STATE.pageNames
+    if not names then return nil end
+    local padded = " " .. normalized .. " "
+    for i = 1, #names do
+        if padded:find(names[i].padded, 1, true) then return names[i].key end
+    end
+    return nil
+end
+
+--- "<page or section> <whole label>" ("Player Enable", "Target In group"): the
+--- record's entire label is whole words of the query and every other query word
+--- names its page, breadcrumb or nav group. Labels made of stop words ("Enable",
+--- "Visible") leave no clause that prefers the control, so this is what does.
+--- Allocates only for a record whose label occurs in the query.
+function SearchNaming.Label(rec, normalized)
+    local label = rec.labelNorm
+    if label == "" or label == normalized then return false end
+    local first, last = normalized:find(label, 1, true)
+    if not first or (first > 1 and byte(normalized, first - 1) ~= 32)
+        or (last < #normalized and byte(normalized, last + 1) ~= 32) then return false end
+    local contextWords = 0
+    for word in (normalized:sub(1, first - 1) .. " " .. normalized:sub(last + 1)):gmatch("%S+") do
+        if not SearchIgnoreQueryWord(word) then
+            if not (rec.titleNorm:find(word, 1, true) or (rec.hintNorm or ""):find(word, 1, true)
+                or rec.groupNorm:find(word, 1, true)) then return false end
+            contextWords = contextWords + 1
+        end
+    end
+    return contextWords > 0
+end
+
 local function BuildSearchRecords()
     local pageInfos, pageInfoByKey = BuildSearchPageInfos()
+    SEARCH_STATE.pageNames = SearchNaming.BuildPageNames(pageInfos)
 
     local records, seenRecords = {}, {}
     local provided = next(SEARCH_STATE.providers) ~= nil and SearchProviders.Collect(pageInfoByKey) or nil
@@ -2078,7 +2204,9 @@ local function BuildSearchRecords()
     for i = 1, #SEARCH_EASTER_EGGS do
         local egg = SEARCH_EASTER_EGGS[i]
         local info = { key = "search", label = "", title = "", group = "" }
-        local rec = AddSearchRecord(records, seenRecords, info, egg.name, nil, "easteregg", { egg.result, egg.name })
+        -- Found by its name only: its answer text holds ordinary words ("spells", "bind"),
+        -- and with its priority it would push every real result below the curation floor.
+        local rec = AddSearchRecord(records, seenRecords, info, egg.name, nil, "easteregg", { egg.name })
         if rec then
             rec.answer = egg.result
             rec.noOpen = true
@@ -2231,6 +2359,7 @@ function SearchPages(query)
     end
     local results = {}
     local records = GetSearchRecords()
+    local namedPageKey = SearchNaming.Page(normalized)
     local fuzzyDistanceCache = {}
     -- The page the user searched from ranks first. While results show, the
     -- active page is the search page itself and that page is searchReturnKey.
@@ -2259,6 +2388,10 @@ function SearchPages(query)
         if exactQueryHit then
             matched, matchedClauses, missedClauses = true, #clauses, 0
             score = score + 5000
+        elseif not matched and rec.labelNorm == normalized then
+            -- Typing a record's exact shown name always finds it, whatever the
+            -- clause parser made of its words ("interrupt is ready", "Where are ...?").
+            matched, matchedClauses, missedClauses = true, #clauses, 0
         end
         if matched and matchedClauses >= requiredMatches then
             if rec.labelNorm == normalized or rec.titleNorm == normalized then
@@ -2270,6 +2403,8 @@ function SearchPages(query)
                 score = score + 260 + 220 * #clauses
             end
             if rec.labelNorm:find(normalized, 1, true) == 1 then score = score + 130 end
+            local labelNamed = rec.labelNorm == normalized or SearchNaming.Label(rec, normalized)
+            if labelNamed and rec.labelNorm ~= normalized then score = score + 260 + 120 * #clauses end
             if rec.haystack and rec.haystack:find(normalized, 1, true) then score = score + 80 end
             if rec.kind == "section" then score = score + 70 end
             if rec.kind == "faq" then score = score + 55 end
@@ -2279,11 +2414,14 @@ function SearchPages(query)
             if missedClauses > 0 then score = score - (missedClauses * 60) end
             if rec.kind ~= "page" then score = score + 45 end
             if currentPageKey and rec.key == currentPageKey then score = score + 120 end
+            if namedPageKey and rec.key == namedPageKey then score = score + 150 end
             if rec.kind == "slider" or rec.kind == "dropdown" or rec.kind == "toggle" then score = score + 25 end
-            if controlQuestion
-                and (rec.kind == "toggle" or rec.kind == "dropdown" or rec.kind == "slider" or rec.kind == "segment"
-                    or rec.kind == "textinput" or rec.kind == "color")
-                and #clauses >= 2 and missedClauses == 0 and matchedClauses == #clauses then
+            -- A record whose exact name was typed (a section, an FAQ question) keeps up with
+            -- the controls this boost lifts, however few clauses its words left.
+            if controlQuestion and (rec.labelNorm == normalized
+                or ((rec.kind == "toggle" or rec.kind == "dropdown" or rec.kind == "slider" or rec.kind == "segment"
+                    or rec.kind == "textinput" or rec.kind == "color" or (rec.kind == "button" and labelNamed))
+                and #clauses >= 2 and missedClauses == 0 and matchedClauses == #clauses)) then
                 score = score + 1300
             end
             if rec.priority then score = score + rec.priority end

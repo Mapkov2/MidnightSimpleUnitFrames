@@ -382,6 +382,14 @@ local function InstallClientFacts(target)
         namespace.MSUF_RegisterModule = namespace.MSUF_RegisterModule or function() end
         _G.GetCVarBool = _G.GetCVarBool or function() return false end
         assert(loadfile("MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua"))("MidnightSimpleUnitFrames", namespace)
+        -- The catalog fixture supplies methods for unknown frame fields. Native
+        -- optional surfaces are absent until the runtime creates them.
+        local createPreview = namespace.SwingTimer.CreateMenuPreview
+        namespace.SwingTimer.CreateMenuPreview = function(parent, hand)
+            local frame = createPreview(parent, hand)
+            frame.PreviewBar, frame.Lane, frame.Cue = false, false, false
+            return frame
+        end
     end
     _G.C_Timer.NewTimer = _G.C_Timer.NewTimer or _G.C_Timer.After
     return client
@@ -518,11 +526,15 @@ end
 -- the global Appearance products and their two compatibility landings). A Custom
 -- container is also visited as a Debuff container where its Filters and Ordering tools
 -- branch on the aura type.
+-- Every unit page with an Aura workspace (UnitSections lists player pet target focus boss
+-- arena); a client without the page (Classic Era has no focus or arena) skips it.
 local WORKSPACE_UNIT_PAGES = {
     { unit = "player", page = "uf_player" },
+    { unit = "pet", page = "uf_pet" },
     { unit = "target", page = "uf_target" },
     { unit = "focus", page = "uf_focus" },
     { unit = "boss", page = "uf_boss" },
+    { unit = "arena", page = "uf_arena" },
 }
 local WORKSPACE_LANE_TOOLS = { "layout", "behavior", "filters", "blacklist", "style" }
 local WORKSPACE_CUSTOM_TOOLS = { "setup", "layout", "behavior", "filters", "whitelist", "style" }
@@ -570,7 +582,13 @@ local function RebuildPage(M, pageKey)
         if type(spec) == "table" then specLazy[index] = spec.lazy; spec.lazy = false end
     end
     M.InvalidatePage(pageKey)
+    -- In game the page being built is the active one. Descriptions that register
+    -- under the active page would otherwise stay under "home", outlive every
+    -- rebuild with their frames and exhaust memory over the many views.
+    local activeKey = M.activeKey
+    M.activeKey = pageKey
     local ok, result = pcall(M.BuildPageEntry, pageKey, true)
+    M.activeKey = activeKey
     for index = 1, #registry do
         local spec = registry[index]
         if type(spec) == "table" then spec.lazy = specLazy[index] end
@@ -655,6 +673,14 @@ local function VisitWorkspaceStates(M, capture)
         for _, page in ipairs(WORKSPACE_COMPAT_PAGES) do
             if pages[page] and (product == "buff" or product == "debuff") then Visit(page) end
         end
+    end
+    -- The Dashboard's Display & recovery and Scaling cards build their controls only
+    -- while open, and both start closed. Search routes their rows open by control path.
+    if pages.home then
+        local recoveryOpen, scalingOpen = M.dashboardRecoveryOpen, M.dashboardScalingOpen
+        M.dashboardRecoveryOpen, M.dashboardScalingOpen = true, true
+        Visit("home")
+        M.dashboardRecoveryOpen, M.dashboardScalingOpen = recoveryOpen, scalingOpen
     end
     return visited
 end
@@ -867,6 +893,8 @@ local function BuildFlavor(target)
         local path = "MidnightSimpleUnitFrames/State/MSUF_" .. name .. ".lua"
         profileBootstrap = profileBootstrap .. 'assert(loadfile("' .. path .. '"))("MidnightSimpleUnitFrames", MSUF)\n'
     end
+    profileBootstrap = profileBootstrap
+        .. 'assert(loadfile("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua"))("MidnightSimpleUnitFrames", MSUF)\n'
     harness = harness:sub(1, profileAt + #profileHook - 1) .. profileBootstrap .. harness:sub(profileAt + #profileHook)
     -- The appearance hook is a direct TOC Lua entry before the XML manifests.
     -- Load it into the same namespace before tokens, just as Options does in game.

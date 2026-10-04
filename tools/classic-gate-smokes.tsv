@@ -266,6 +266,7 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua	.github/scripts/menu2_skinned_selection_smoke.lua	{root}	Menu2 skinned selection smoke failed
 -	lua	.github/quality/menu_search_skin_lifecycle_smoke.lua	{root}	Modern search skin lifecycle regression failed
 -	lua	tools/tests/suite_first_run_handoff_smoke.lua	{root}	Suite first-run hand-off and Dashboard card smoke failed
+-	lua	tools/tests/dashboard_search_field_smoke.lua	{root}	Dashboard search field smoke failed
 -	lua	tools/tests/menu2_wayfinding_paths_smoke.lua	{root}	Menu2 wayfinding paths smoke failed
 -	lua	tools/tests/search_provider_hook_smoke.lua	{root}	Search provider hook smoke failed
 clients	lua	tools/tests/menu2_explains_itself_smoke.lua	{root} {flavor}	Menu2 explains-itself smoke failed: {flavor}
@@ -329,6 +330,8 @@ clients+Forever	lua	tools/tests/search_locale_queries_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/search_keystroke_cost_smoke.lua	{root}	Menu search keystroke cost budget failed
 -	lua	tools/tests/menu_page_build_budget_smoke.lua	{root}	Menu page build, refresh and relayout budget failed
 -	lua	tools/tests/search_unicode_query_smoke.lua	{root}	Menu search Unicode query smoke failed
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline enUS	Menu search finds options by their name: Mainline enUS
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla deDE	Menu search finds options by their name: Vanilla deDE
 -	lua	tools/tests/unit_preview_pet_lifecycle_smoke.lua	{root}	Pet and Pet Target preview lifecycle failed
 -	lua	tools/tests/group_menu_additional_preview_smoke.lua	{root}	Group menu additional preview lifecycle failed
 -	lua	tools/tests/unit_preview_castbar_features_smoke.lua	{root}	Castbar feature preview lifecycle failed

@@ -76,7 +76,9 @@ local function SetRowBackground(row, selected, hovered)
     end
 end
 
-local function CreatePaletteController(parent, searchBox)
+-- The window hides the navigation palette when it closes. A standalone palette
+-- (the Dashboard search field) hides with its own owner and leaves that hook alone.
+local function CreatePaletteController(parent, searchBox, standalone)
     if not (parent and searchBox and T) then return nil end
 
     local controller = {
@@ -302,7 +304,7 @@ local function CreatePaletteController(parent, searchBox)
         return true
     end
 
-    M.HideNavSearchPalette = function() controller:Hide() end
+    if not standalone then M.HideNavSearchPalette = function() controller:Hide() end end
     return controller
 end
 

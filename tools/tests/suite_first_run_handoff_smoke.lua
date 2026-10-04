@@ -316,7 +316,12 @@ local M = {
     BuildFirstLoadDashboardScene = function() return false end,
     HideSlashMenuAndMinibar = function() hidden = hidden + 1 end,
     ShowStatusFeedback = function(text) feedback[#feedback + 1] = text end,
+    -- The Dashboard search field reaches the menu search through these.
+    TrimText = function(text) return (tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")) end,
+    SearchBridge = Permissive({}),
+    CreateNavSearchPalette = function() return Permissive({}) end,
 }
+function T.SkinEditBox(editBox) editBox._msuf2PaintEditBox = function() end end
 M.RegisterPage = function(key, spec) M.pages[key] = spec end
 _G.CreateFrame = function(kind) return Fake(kind) end
 assert(loadfile(MENU .. "MSUF_Menu2_Dashboard.lua"))("MidnightSimpleUnitFrames_Options", { MSUF2 = M })

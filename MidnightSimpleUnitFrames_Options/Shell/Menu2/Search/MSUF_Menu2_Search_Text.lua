@@ -130,6 +130,9 @@ local NORMALIZED_TEXT_CACHE_LIMIT = 4096
 local NORMALIZED_TEXT_CACHE_MAX_SOURCE_LEN = 256
 local normalizedTextCache, normalizedTextCacheCount = {}, 0
 local function NormalizeSearchText(text)
+    -- Cache keys are source strings: a repeated string returns before tostring.
+    local hit = normalizedTextCache[text]
+    if hit ~= nil then return hit end
     text = tostring(text or "")
     local source = text
     local cacheable = #source <= NORMALIZED_TEXT_CACHE_MAX_SOURCE_LEN
@@ -178,6 +181,8 @@ local DISPLAY_TEXT_CACHE_LIMIT = 4096
 local DISPLAY_TEXT_CACHE_MAX_SOURCE_LEN = 256
 local displayTextCache, displayTextCacheCount = {}, 0
 local function DisplaySearchText(text)
+    local hit = displayTextCache[text]
+    if hit ~= nil then return hit end
     text = tostring(text or "")
     local source = text
     local cacheable = #source <= DISPLAY_TEXT_CACHE_MAX_SOURCE_LEN

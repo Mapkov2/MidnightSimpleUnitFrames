@@ -86,6 +86,25 @@ local function BuildPageInfo()
     return info, Ensure
 end
 
+--- The baked breadcrumb is English. Each segment the locale knows is shown
+--- translated, and since the hint joins the haystack, a section is then found by
+--- its translated name too (the baked haystack keeps the English one). These are
+--- path segments, not locale keys, so the lookup skips M.Tr's key tracking.
+local function TranslateHint(hint, cache)
+    local cached = cache[hint]
+    if cached then return cached end
+    local parts, changed = {}, false
+    for segment in hint:gmatch("[^>]+") do
+        local text = segment:match("^%s*(.-)%s*$")
+        local localized = MSUF.Translate(text)
+        if localized ~= "" and localized ~= text then changed = true else localized = text end
+        parts[#parts + 1] = localized
+    end
+    cached = changed and table.concat(parts, " > ") or hint
+    cache[hint] = cached
+    return cached
+end
+
 local function DecodeIdentityPart(value)
     return value and value:gsub("%%(%x%x)", function(byte) return string.char(tonumber(byte, 16)) end)
 end
@@ -95,7 +114,7 @@ local function Decode()
     if type(blob) ~= "string" or blob == "" then return {} end
 
     local _, EnsurePage = BuildPageInfo()
-    local records, count = {}, 0
+    local records, count, hintCache = {}, 0, {}
 
     for line in blob:gmatch("[^\n]+") do
         local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity,
@@ -117,13 +136,16 @@ local function Decode()
                     haystack = haystack .. " " .. localizedNorm
                 end
             end
-            local displayHint = hint
+            local displayHint, localizedHint = hint, hint
             if displayHint ~= "" then
-                displayHint = page.title .. " > " .. displayHint
+                localizedHint = TranslateHint(hint, hintCache)
+                displayHint = page.title .. " > " .. localizedHint
             else
                 displayHint = page.title
             end
             local hintNorm = Normalize(displayHint)
+            -- A translated breadcrumb keeps its English words for scoring as well.
+            if localizedHint ~= hint then hintNorm = hintNorm .. " " .. Normalize(hint) end
             -- The clause scorer gates on the haystack before it inspects the page
             -- title, so page/group words have to be present here too.
             haystack = haystack .. " " .. hintNorm
