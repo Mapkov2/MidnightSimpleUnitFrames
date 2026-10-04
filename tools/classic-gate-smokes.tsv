@@ -28,6 +28,7 @@ tokenclients	lua+driver	tools/tests/classic_client_bootstrap_smoke.lua	TagOnly{f
 -	lua	tools/tests/group_spell_selection_smoke.lua	{root}	Group spell selection smoke failed
 -	lua	tools/tests/main_bugfix_backports_smoke.lua	{root}	Main bugfix backports smoke failed
 -	lua	tools/tests/forever_group_header_snippet_smoke.lua	{root}	Forever group header secure snippet smoke failed
+-	lua	tools/tests/forever_pad_navigation_smoke.lua	{root}	Forever pad navigation smoke failed
 clients+Forever	lua	tools/tests/group_header_combat_child_smoke.lua	{root} {flavor}	Group header child born in combat smoke failed: {flavor}
 clients+Forever	lua	tools/tests/group_raid_combat_join_smoke.lua	{root} {flavor}	Group raid member joining in combat smoke failed: {flavor}
 -	lua	tools/tests/group_raid_header_blizzard_smoke.lua	{root}	Group raid header on Blizzard SecureGroupHeaders smoke failed

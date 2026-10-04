@@ -46,6 +46,10 @@ MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_zhTW
 MidnightSimpleUnitFrames/Game/Forever/Auras/MSUF_Auras3_ForeverData.lua
 MidnightSimpleUnitFrames/Game/Forever/ClassPower.lua
 MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua
+MidnightSimpleUnitFrames/Game/Forever/PadEditMode.lua
+MidnightSimpleUnitFrames/Game/Forever/PadKeyboard.lua
+MidnightSimpleUnitFrames/Game/Forever/PadNavigation.lua
+MidnightSimpleUnitFrames/Game/Forever/PadPrompts.lua
 MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua
 MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua
 MidnightSimpleUnitFrames/Game/Mists/Auras.xml

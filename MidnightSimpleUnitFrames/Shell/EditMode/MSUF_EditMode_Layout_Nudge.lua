@@ -235,10 +235,108 @@ local function NudgeResource(cfg, ndx, ndy)
     return true
 end
 
+-- Saved variables while Edit Mode may nudge (active, not combat locked).
+local function NudgeDB()
+    if not EM2.State or not EM2.State.IsActive() then return nil end
+    if BlockConfigCombatLocked() then return nil end
+    return _G.MSUF_DB
+end
+
+-- One aura group of unitKey (buff, debuff, private, custom1-4) by ndx/ndy:
+-- boss and arena scopes edited together move as one, like their drag.
+local function NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
+    local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
+    if unitKey then
+        local a2 = db.auras3
+        if a2 then
+            a2.perUnit = a2.perUnit or {}
+            if _G.MSUF_EM_UndoBeforeChange then
+                _G.MSUF_EM_UndoBeforeChange("aura", unitKey, true)
+            end
+            local isBoss = type(unitKey) == "string" and unitKey:match("^boss%d+$")
+            local isArena = type(unitKey) == "string" and unitKey:match("^arena%d+$")
+            local applyKeys
+            if isBoss and a2.shared and a2.shared.bossEditTogether ~= false then
+                applyKeys = { "boss1","boss2","boss3","boss4","boss5" }
+            elseif isArena and a2.shared and a2.shared.arenaEditTogether ~= false then
+                applyKeys = {}
+                for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
+                    applyKeys[i] = "arena" .. i
+                end
+            else
+                applyKeys = { unitKey }
+            end
+            local GROUP_KEYS = {
+                buff    = { "buffGroupOffsetX",   "buffGroupOffsetY"   },
+                debuff  = { "debuffGroupOffsetX", "debuffGroupOffsetY" },
+                private = { "privateOffsetX",     "privateOffsetY"     },
+            }
+            local CUSTOM_GROUP_INDEX = { custom1 = 1, custom2 = 2, custom3 = 3, custom4 = 4 }
+            local pair = GROUP_KEYS[auraGroup]
+            local customIndex = CUSTOM_GROUP_INDEX[auraGroup]
+            if pair then
+                local kx, ky = pair[1], pair[2]
+                local shared = a2.shared or {}
+                for _, k in ipairs(applyKeys) do
+                    a2.perUnit[k] = a2.perUnit[k] or {}
+                    local uc = a2.perUnit[k]
+                    --- Match Aura Menu/drag ownership: a Shared-layout
+                    --- scope's local table is dormant and must not revive
+                    --- stale fields on the first keyboard nudge.
+                    if uc.overrideLayout ~= true then uc.layout = {} end
+                    uc.layout = uc.layout or {}
+                    uc.overrideLayout = true
+                    local lay = uc.layout
+                    local cx = (lay[kx] ~= nil) and lay[kx] or (shared[kx] or 0)
+                    local cy = (lay[ky] ~= nil) and lay[ky] or (shared[ky] or 0)
+                    lay[kx] = floor(((tonumber(cx) or 0) + ndx) + 0.5)
+                    lay[ky] = floor(((tonumber(cy) or 0) + ndy) + 0.5)
+                end
+            elseif customIndex then
+                --- Custom containers persist position as placed.x/y on the
+                --- menu-model item, and the model collapses boss1-5 into a
+                --- single "boss" record - dedupe by item so a together-edit
+                --- does not add the delta once per boss key.
+                local model = MSUF and MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
+                if model and type(model.CustomContainer) == "function" then
+                    local seen = {}
+                    for _, k in ipairs(applyKeys) do
+                        local item = model.CustomContainer(k, customIndex, true)
+                        if item and not seen[item] then
+                            seen[item] = true
+                            if type(item.placed) ~= "table" then item.placed = {} end
+                            local placed = item.placed
+                            placed.x = floor(((tonumber(placed.x) or 0) + ndx) + 0.5)
+                            placed.y = floor(((tonumber(placed.y) or 0) + ndy) + 0.5)
+                        end
+                    end
+                end
+            end
+            local a3 = MSUF and MSUF.MSUF_Auras3
+            if a3 and type(a3.RequestScope) == "function" then
+                for _, k in ipairs(applyKeys) do a3.RequestScope(k, "AURAS3_EDITMODE_NUDGE") end
+            elseif a3 and type(a3.RefreshUnit) == "function" then
+                for _, k in ipairs(applyKeys) do a3.RefreshUnit(k) end
+            elseif a3 and type(a3.RefreshAll) == "function" then
+                a3.RefreshAll()
+            end
+            if a3 and type(a3.RefreshEditPreview) == "function" then
+                a3.RefreshEditPreview(unitKey)
+            end
+            if auraPopupOpen and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
+            local syncFn = _G.MSUF_SyncAuras3PositionPopup
+            if type(syncFn) == "function" then syncFn(unitKey) end
+            -- The unit preview belongs to the load-on-demand menu.
+            local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
+            if refreshPreview then refreshPreview("AURAS3_EDITMODE_NUDGE") end
+        end
+    end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    return unitKey ~= nil
+end
+
 local function NudgeTarget(dx, dy, exactDelta)
-    if not EM2.State or not EM2.State.IsActive() then return false end
-    if BlockConfigCombatLocked() then return false end
-    local db = _G.MSUF_DB
+    local db = NudgeDB()
     if not db then return false end
     local s = exactDelta and 1 or GetStep()
     local ndx, ndy = dx * s, dy * s
@@ -278,93 +376,7 @@ local function NudgeTarget(dx, dy, exactDelta)
             local auraPF = _G.MSUF_EM2_AuraPopup
             unitKey = auraPF and auraPF.unit
         end
-        if unitKey then
-            local a2 = db.auras3
-            if a2 then
-                a2.perUnit = a2.perUnit or {}
-                if _G.MSUF_EM_UndoBeforeChange then
-                    _G.MSUF_EM_UndoBeforeChange("aura", unitKey, true)
-                end
-                local isBoss = type(unitKey) == "string" and unitKey:match("^boss%d+$")
-                local isArena = type(unitKey) == "string" and unitKey:match("^arena%d+$")
-                local applyKeys
-                if isBoss and a2.shared and a2.shared.bossEditTogether ~= false then
-                    applyKeys = { "boss1","boss2","boss3","boss4","boss5" }
-                elseif isArena and a2.shared and a2.shared.arenaEditTogether ~= false then
-                    applyKeys = {}
-                    for i = 1, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
-                        applyKeys[i] = "arena" .. i
-                    end
-                else
-                    applyKeys = { unitKey }
-                end
-                local GROUP_KEYS = {
-                    buff    = { "buffGroupOffsetX",   "buffGroupOffsetY"   },
-                    debuff  = { "debuffGroupOffsetX", "debuffGroupOffsetY" },
-                    private = { "privateOffsetX",     "privateOffsetY"     },
-                }
-                local CUSTOM_GROUP_INDEX = { custom1 = 1, custom2 = 2, custom3 = 3, custom4 = 4 }
-                local pair = GROUP_KEYS[auraGroup]
-                local customIndex = CUSTOM_GROUP_INDEX[auraGroup]
-                if pair then
-                    local kx, ky = pair[1], pair[2]
-                    local shared = a2.shared or {}
-                    for _, k in ipairs(applyKeys) do
-                        a2.perUnit[k] = a2.perUnit[k] or {}
-                        local uc = a2.perUnit[k]
-                        --- Match Aura Menu/drag ownership: a Shared-layout
-                        --- scope's local table is dormant and must not revive
-                        --- stale fields on the first keyboard nudge.
-                        if uc.overrideLayout ~= true then uc.layout = {} end
-                        uc.layout = uc.layout or {}
-                        uc.overrideLayout = true
-                        local lay = uc.layout
-                        local cx = (lay[kx] ~= nil) and lay[kx] or (shared[kx] or 0)
-                        local cy = (lay[ky] ~= nil) and lay[ky] or (shared[ky] or 0)
-                        lay[kx] = floor(((tonumber(cx) or 0) + ndx) + 0.5)
-                        lay[ky] = floor(((tonumber(cy) or 0) + ndy) + 0.5)
-                    end
-                elseif customIndex then
-                    --- Custom containers persist position as placed.x/y on the
-                    --- menu-model item, and the model collapses boss1-5 into a
-                    --- single "boss" record - dedupe by item so a together-edit
-                    --- does not add the delta once per boss key.
-                    local model = MSUF and MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.MenuModel
-                    if model and type(model.CustomContainer) == "function" then
-                        local seen = {}
-                        for _, k in ipairs(applyKeys) do
-                            local item = model.CustomContainer(k, customIndex, true)
-                            if item and not seen[item] then
-                                seen[item] = true
-                                if type(item.placed) ~= "table" then item.placed = {} end
-                                local placed = item.placed
-                                placed.x = floor(((tonumber(placed.x) or 0) + ndx) + 0.5)
-                                placed.y = floor(((tonumber(placed.y) or 0) + ndy) + 0.5)
-                            end
-                        end
-                    end
-                end
-                local a3 = MSUF and MSUF.MSUF_Auras3
-                if a3 and type(a3.RequestScope) == "function" then
-                    for _, k in ipairs(applyKeys) do a3.RequestScope(k, "AURAS3_EDITMODE_NUDGE") end
-                elseif a3 and type(a3.RefreshUnit) == "function" then
-                    for _, k in ipairs(applyKeys) do a3.RefreshUnit(k) end
-                elseif a3 and type(a3.RefreshAll) == "function" then
-                    a3.RefreshAll()
-                end
-                if a3 and type(a3.RefreshEditPreview) == "function" then
-                    a3.RefreshEditPreview(unitKey)
-                end
-                if auraPopupOpen and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
-                local syncFn = _G.MSUF_SyncAuras3PositionPopup
-                if type(syncFn) == "function" then syncFn(unitKey) end
-                -- The unit preview belongs to the load-on-demand menu.
-                local refreshPreview = MSUF.Optional("MSUF_UFPreview_RequestRefresh")
-                if refreshPreview then refreshPreview("AURAS3_EDITMODE_NUDGE") end
-            end
-        end
-        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-        return unitKey ~= nil
+        return NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
     end
 
     if EM2.Focus and EM2.Focus.NudgeSelection and EM2.Focus.NudgeSelection(ndx, ndy) then
@@ -399,6 +411,20 @@ end
 local NUDGE_DIRS = { { "UP", 0, 1 }, { "DOWN", 0, -1 }, { "LEFT", -1, 0 }, { "RIGHT", 1, 0 } }
 local function NudgeButtonClick(self)
     NudgeTarget(self._msufDx or 0, self._msufDy or 0)
+end
+
+-- Exact pixel nudge of the current selection, for the gamepad's right stick
+-- (Game/Forever/PadNavigation.lua). Unlike the arrow keys it ignores modifiers.
+function Nudge.By(dx, dy)
+    return NudgeTarget(dx, dy, true)
+end
+
+-- Exact pixel nudge of one aura group, which the gamepad moves without its
+-- popup open (Game/Forever/PadEditMode.lua).
+function Nudge.AuraBy(unitKey, auraGroup, dx, dy)
+    local db = NudgeDB()
+    if not (db and unitKey and auraGroup) then return false end
+    return NudgeAuraGroup(db, auraGroup, unitKey, dx, dy)
 end
 
 function Nudge.Enable()

@@ -6588,6 +6588,28 @@ L["Below CDM"] = "CDM 下方"
 L["Selected position: %s."] = "所選位置：%s。"
 L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "選擇單位框架在 CDM 上方、中央或下方的錨定位置。保持獨立會讓框架不進行錨定。"
 
+-- Gamepad button hints (WoW Forever Gamepad UI).
+L["Select"] = "選擇"
+L["Type text"] = "輸入文字"
+L["Adjust"] = "調整"
+L["Done moving"] = "結束移動"
+L["Move 1 px"] = "移動 1 像素"
+L["Previous / next element"] = "上一個 / 下一個元素"
+L["Switch window"] = "切換視窗"
+L["Scroll"] = "捲動"
+L["Tooltips"] = "滑鼠提示"
+L["Previous / next page"] = "上一頁 / 下一頁"
+L["Navigation / content"] = "導覽 / 內容"
+L["Leave Edit Mode"] = "離開編輯模式"
+L["Type key"] = "輸入按鍵"
+L["Space"] = "空格"
+L["Move cursor"] = "移動游標"
+L["Confirm"] = "確認"
+L["Pick a frame with the D-pad, then press A to anchor it. B cancels."] = "用方向鍵選擇一個框架，然後按 A 進行錨定。按 B 取消。"
+L["Toolbar / elements"] = "工具列 / 元素"
+L["Type a value"] = "輸入數值"
+L["Undo / redo"] = "復原 / 重做"
+L["Find a setting"] = "尋找設定"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

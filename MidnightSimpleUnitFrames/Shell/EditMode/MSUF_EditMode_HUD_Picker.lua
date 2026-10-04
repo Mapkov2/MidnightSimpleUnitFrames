@@ -110,11 +110,12 @@ local function EnsureFramePicker()
     picker:Hide()
     picker._rows = {}
     --- Close once the pointer has left both the button and the list, the same
-    --- forgiving behaviour the quick popups use for their small menus.
+    --- forgiving behaviour the quick popups use for their small menus. The
+    --- Forever gamepad navigation (Game/Forever/PadNavigation.lua) holds it open.
     picker:SetScript("OnUpdate", function(self)
         if not self:IsShown() then return end
         local owner = self._owner
-        if (owner and owner:IsMouseOver()) or self:IsMouseOver() then
+        if self._msufPadHeld or (owner and owner:IsMouseOver()) or self:IsMouseOver() then
             self._closeAt = nil
         elseif not self._closeAt then
             self._closeAt = GetTime() + 0.4

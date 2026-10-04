@@ -18,42 +18,14 @@ local C_Timer = M.MenuTimer
 local MenuRuntime = M.MenuRuntime
 local IS_FOREVER = MSUF.Client and MSUF.Client.IsForever == true
 
--- Forever's Gamepad style navigates named windows through Blizzard's frame
--- controls manager. Register only after a page has finished creating its
--- controls: SmartNavigation rescans an active window on every child CreateFrame.
+-- Forever's Gamepad style drives this window with MSUF's own pad navigation
+-- (Game/Forever/PadNavigation.lua). Blizzard's frame controls manager is never
+-- called: registering an addon window there leaves the gamepad input state
+-- tainted, and SmartNavigation rescans the window on every child CreateFrame.
 local function ForeverPadUI()
     if not IS_FOREVER then return false end
     local input = _G.InputUtil
     return input and type(input.IsGamepadUIEnabled) == "function" and input.IsGamepadUIEnabled() == true
-end
-
-local function ForeverPadManager()
-    if not ForeverPadUI() then return nil end
-    local mode = _G.GamepadMode
-    return mode and mode.FrameControlsManager or nil
-end
-
-local padNavigationHold = 0
-local function RemoveForeverPadNavigation(frame)
-    if not (frame and frame._msuf2ForeverPadRegistered) then return end
-    frame._msuf2ForeverPadRegistered = nil
-    local mode = _G.GamepadMode
-    local manager = mode and mode.FrameControlsManager
-    if manager then manager:FrameHidden(frame) end
-end
-
-local function SuspendForeverPadNavigation(frame)
-    padNavigationHold = padNavigationHold + 1
-    RemoveForeverPadNavigation(frame)
-end
-
-local function ResumeForeverPadNavigation(frame)
-    if padNavigationHold > 0 then padNavigationHold = padNavigationHold - 1 end
-    if padNavigationHold > 0 then return end
-    if not (frame and frame:IsShown()) or frame._msuf2ForeverPadRegistered then return end
-    local manager = ForeverPadManager()
-    if not manager then return end
-    frame._msuf2ForeverPadRegistered = manager:FrameShown(frame) == true
 end
 
 local function RaiseForeverPadCursor()
@@ -1797,7 +1769,6 @@ local function InstallWindowLifecycle(state)
         M.UpdateMenuCombatListener()
     end)
     f:SetScript("OnHide", function()
-        RemoveForeverPadNavigation(f)
         M.ClearPendingFixedPreviewExpansion()
         M.SetActivePageHeader(nil)
         M.HideLayerOverview()
@@ -2195,25 +2166,66 @@ function M.Toggle(pageKey)
 end
 
 if IS_FOREVER then
-    M.SuspendForeverPadNavigation = function() SuspendForeverPadNavigation(M.frame) end
-    M.ResumeForeverPadNavigation = function() ResumeForeverPadNavigation(M.frame) end
+    -- LB/RB press the status strip's Back/Forward page buttons, so the pad
+    -- walks the same page history as the mouse.
+    local function PressHistoryButton(button)
+        if button and button:IsVisible() and button:IsEnabled() then button:Click() end
+    end
+    -- View jumps between the navigation rail and the page; each page keeps the
+    -- spot the pad last left in it.
+    local pageSpots = {}
+    local function RememberPageSpot(navigation)
+        local content = M.scrollFrame
+        if M.activeKey and content and navigation.IsSelectionIn(content) then
+            pageSpots[M.activeKey] = navigation.GetSelection()
+        end
+    end
+    local function JumpNavigationContent()
+        local navigation = MSUF.PadNavigation
+        local content = M.scrollFrame
+        if not (navigation and content) then return end
+        if navigation.IsSelectionIn(content) then
+            RememberPageSpot(navigation)
+            local button = M.navButtons and M.activeKey and M.navButtons[M.activeKey]
+            if not (button and navigation.SelectControl(button)) and M.navButtons then
+                for _, other in pairs(M.navButtons) do
+                    if navigation.SelectControl(other) then return end
+                end
+            end
+        else
+            navigation.SelectFirstIn(content, M.activeKey and pageSpots[M.activeKey])
+        end
+    end
+    local padActions = {
+        PADLSHOULDER = function() PressHistoryButton(M.pageHistoryBackButton) end,
+        PADRSHOULDER = function() PressHistoryButton(M.pageHistoryForwardButton) end,
+        PADBACK = JumpNavigationContent,
+    }
+    -- Y where nothing moves opens the navigation search with the keyboard; LT
+    -- held with LB/RB undoes/redoes through the menu's history.
+    local padOptions = {
+        hints = { "PADLSHOULDER/PADRSHOULDER", "Previous / next page", "PADBACK", "Navigation / content" },
+        searchField = function() return M.nav and M.nav.searchBox end,
+        undo = function() return M.Undo() == true end,
+        redo = function() return M.Redo() == true end,
+    }
+    -- The window takes the pad again after every page change, so a press that
+    -- rebuilt the page keeps a visible selection. B and Start close the menu.
+    local function ShowForeverPadNavigation()
+        local navigation = MSUF.PadNavigation
+        local frame = M.frame
+        if not (navigation and frame and frame:IsShown()) then return end
+        navigation.Attach(frame, HideSlashMenuAndMinibar, padActions, padOptions)
+        navigation.Activate(frame)
+    end
+    -- The Suite's embedded Skinning pages call this after building a page.
+    M.ResumeForeverPadNavigation = ShowForeverPadNavigation
     local SelectPage = M.SelectPage
     function M.SelectPage(...)
-        local frame = M.frame
-        SuspendForeverPadNavigation(frame)
+        local navigation = MSUF.PadNavigation
+        if navigation then RememberPageSpot(navigation) end
         local selected = SelectPage(...)
-        ResumeForeverPadNavigation(frame)
+        ShowForeverPadNavigation()
         return selected
-    end
-
-    -- Search and external page readers may build a hidden page directly.
-    -- They also need a single rescan after construction, not one per widget.
-    local BuildPageEntry = M.BuildPageEntry
-    function M.BuildPageEntry(...)
-        local frame = M.frame
-        SuspendForeverPadNavigation(frame)
-        local entry = BuildPageEntry(...)
-        ResumeForeverPadNavigation(frame)
-        return entry
     end
 end

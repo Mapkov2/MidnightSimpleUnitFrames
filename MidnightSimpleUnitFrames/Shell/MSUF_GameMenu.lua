@@ -135,9 +135,19 @@ local function SetButtonLabel(button, styleSource)
     end
 end
 
+-- WoW Forever's Gamepad UI routes HideUIPanel into Blizzard's frame controls
+-- manager; called from this click it would leave MSUF's taint in the gamepad
+-- input state (blocked spellbook casts and interact targets). There the game
+-- menu stays open over the MSUF window, and B closes it the Blizzard way.
+-- MSUF.PadNavigation exists only on WoW Forever (Game/Forever/PadNavigation.lua).
+local function ForeverGamepadUI()
+    local navigation = MSUF.PadNavigation
+    return navigation ~= nil and navigation.IsGamepadUI()
+end
+
 local function OpenMSUFOptions()
     local gameMenu = _G.GameMenuFrame
-    if gameMenu then
+    if gameMenu and not ForeverGamepadUI() then
         if type(_G.HideUIPanel) == "function" then
             _G.HideUIPanel(gameMenu)
         else

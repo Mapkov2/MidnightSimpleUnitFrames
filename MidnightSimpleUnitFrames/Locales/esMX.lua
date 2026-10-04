@@ -6650,6 +6650,28 @@ L["Below CDM"] = "Debajo del CDM"
 L["Selected position: %s."] = "Posición seleccionada: %s."
 L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "Elige dónde anclar los marcos de unidad al CDM: arriba, en el centro o abajo. Mantener independiente los deja sin anclar."
 
+-- Gamepad button hints (WoW Forever Gamepad UI).
+L["Select"] = "Seleccionar"
+L["Type text"] = "Escribir texto"
+L["Adjust"] = "Ajustar"
+L["Done moving"] = "Terminar de mover"
+L["Move 1 px"] = "Mover 1 px"
+L["Previous / next element"] = "Elemento anterior / siguiente"
+L["Switch window"] = "Cambiar de ventana"
+L["Scroll"] = "Desplazar"
+L["Tooltips"] = "Descripciones emergentes"
+L["Previous / next page"] = "Página anterior / siguiente"
+L["Navigation / content"] = "Navegación / contenido"
+L["Leave Edit Mode"] = "Salir del modo de edición"
+L["Type key"] = "Escribir tecla"
+L["Space"] = "Espacio"
+L["Move cursor"] = "Mover cursor"
+L["Confirm"] = "Confirmar"
+L["Pick a frame with the D-pad, then press A to anchor it. B cancels."] = "Elige un marco con la cruceta y pulsa A para anclarlo. B cancela."
+L["Toolbar / elements"] = "Barra de herramientas / elementos"
+L["Type a value"] = "Escribir un valor"
+L["Undo / redo"] = "Deshacer / Rehacer"
+L["Find a setting"] = "Buscar un ajuste"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

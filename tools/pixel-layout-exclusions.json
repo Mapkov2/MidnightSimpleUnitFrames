@@ -562,5 +562,11 @@
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented ADDON_LOADED driver that settles the SavedVariables"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/Game/Forever/PadNavigation.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented combat event driver for the Forever pad navigation"
   }
 ]

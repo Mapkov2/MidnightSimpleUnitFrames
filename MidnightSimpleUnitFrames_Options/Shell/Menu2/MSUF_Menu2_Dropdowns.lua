@@ -31,19 +31,14 @@ end
 local dropdownFrame, dropdownScroll, dropdownChild, dropdownOwner, dropdownSlider
 local dropdownClosing, dropdownClosingOwner
 local dropdownRows = {}
-local function ForeverDropdownManager()
-    if not IS_FOREVER then return nil end
-    local input = _G.InputUtil
-    if not (input and type(input.IsGamepadUIEnabled) == "function" and input.IsGamepadUIEnabled()) then return nil end
-    local mode = _G.GamepadMode
-    return mode and mode.FrameControlsManager or nil
-end
-
-local function ReleaseForeverDropdown()
-    if not (dropdownFrame and dropdownFrame._msuf2ForeverPadRegistered) then return end
-    dropdownFrame._msuf2ForeverPadRegistered = nil
-    local mode = _G.GamepadMode
-    if mode and mode.FrameControlsManager then mode.FrameControlsManager:FrameHidden(dropdownFrame) end
+-- Forever's Gamepad UI: the open list takes the pad from the menu window
+-- (Game/Forever/PadNavigation.lua) and starts on the chosen row; B closes it
+-- through SmartNavigationCloseHandler and the window gets its selection back.
+local function ShowForeverDropdown(selectedRow)
+    local navigation = IS_FOREVER and MSUF.PadNavigation
+    if not (navigation and dropdownFrame) then return end
+    navigation.Attach(dropdownFrame)
+    navigation.Activate(dropdownFrame, selectedRow)
 end
 -- One popup instance is reused for all dropdowns. This keeps strata/focus behavior predictable
 -- and avoids leaking row frames as pages are rebuilt.
@@ -406,6 +401,8 @@ local function EnsureDropdownFrame()
     dropdownScroll:SetPoint("BOTTOMRIGHT", dropdownFrame, "BOTTOMRIGHT", -20, 2)
     dropdownScroll:EnableMouseWheel(true)
     dropdownScroll:SetScript("OnMouseWheel", function(_, delta) DropdownWheel(delta) end)
+    -- The Forever gamepad navigation glides the list with this, like the wheel.
+    dropdownScroll._msuf2ScrollTo = SmoothDropdownScrollTo
     dropdownChild = PixelLayoutRegion(CreateFrame("Frame", nil, dropdownScroll))
     dropdownScroll:SetScrollChild(dropdownChild)
     dropdownSlider = PixelLayoutRegion(CreateFrame("Slider", nil, dropdownFrame))
@@ -457,7 +454,6 @@ local function EnsureDropdownFrame()
     dropdownFrame:EnableMouseWheel(true)
     dropdownFrame:SetScript("OnMouseWheel", function(_, delta) DropdownWheel(delta) end)
     dropdownFrame:SetScript("OnHide", function()
-        ReleaseForeverDropdown()
         StopDropdownSmoothScroll()
         HideDropdownFocus(true)
         SetDropdownOwnerMouseWheel(dropdownOwner or dropdownClosingOwner, false)
@@ -1129,10 +1125,7 @@ local function OpenDropdown(owner, valuesTable)
     SetDropdownScroll((selectedIndex > visible) and ((selectedIndex - visible) * rowHeight) or 0)
     FocusDropdownRow(selectedIndex)
     PlayMotion(dropdownFrame, "dropdownIn", { fromAlpha = 0 })
-    local manager = ForeverDropdownManager()
-    if manager and not dropdownFrame._msuf2ForeverPadRegistered then
-        dropdownFrame._msuf2ForeverPadRegistered = manager:FrameShown(dropdownFrame) == true
-    end
+    ShowForeverDropdown(dropdownRows[selectedIndex])
 end
 function W.OpenDropdown(owner, values, currentValue, onSelect)
     if not owner then return false end

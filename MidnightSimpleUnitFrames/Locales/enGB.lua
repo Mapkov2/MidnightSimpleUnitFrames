@@ -4506,6 +4506,28 @@ L["Below CDM"] = "Below CDM"
 L["Selected position: %s."] = "Selected position: %s."
 L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."
 
+-- Gamepad button hints (WoW Forever Gamepad UI).
+L["Select"] = "Select"
+L["Type text"] = "Type text"
+L["Adjust"] = "Adjust"
+L["Done moving"] = "Done moving"
+L["Move 1 px"] = "Move 1 px"
+L["Previous / next element"] = "Previous / next element"
+L["Switch window"] = "Switch window"
+L["Scroll"] = "Scroll"
+L["Tooltips"] = "Tooltips"
+L["Previous / next page"] = "Previous / next page"
+L["Navigation / content"] = "Navigation / content"
+L["Leave Edit Mode"] = "Leave Edit Mode"
+L["Type key"] = "Type key"
+L["Space"] = "Space"
+L["Move cursor"] = "Move cursor"
+L["Confirm"] = "Confirm"
+L["Pick a frame with the D-pad, then press A to anchor it. B cancels."] = "Pick a frame with the D-pad, then press A to anchor it. B cancels."
+L["Toolbar / elements"] = "Toolbar / elements"
+L["Type a value"] = "Type a value"
+L["Undo / redo"] = "Undo / redo"
+L["Find a setting"] = "Find a setting"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

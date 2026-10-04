@@ -859,7 +859,9 @@ function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
     end)
     menu:SetScript("OnUpdate", function(self)
         if not self:IsShown() then return end
-        if btn:IsMouseOver() or self:IsMouseOver() then
+        -- _msufPadHeld: the gamepad navigation (Game/Forever/PadNavigation.lua)
+        -- is using the list, so the pointer is not on it.
+        if btn:IsMouseOver() or self:IsMouseOver() or self._msufPadHeld then
             self._closeTimer = nil
         else
             if not self._closeTimer then self._closeTimer = GetTime() + (opts.closeDelay or 0.35)

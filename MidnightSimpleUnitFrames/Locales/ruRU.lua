@@ -6599,6 +6599,28 @@ L["Below CDM"] = "Под CDM"
 L["Selected position: %s."] = "Выбранное положение: %s."
 L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "Выберите положение привязки рамок юнитов к CDM: сверху, по центру или снизу. Сохранить независимость оставляет рамки без привязки."
 
+-- Gamepad button hints (WoW Forever Gamepad UI).
+L["Select"] = "Выбрать"
+L["Type text"] = "Ввести текст"
+L["Adjust"] = "Настроить"
+L["Done moving"] = "Завершить перемещение"
+L["Move 1 px"] = "Сдвинуть на 1 пикс."
+L["Previous / next element"] = "Предыдущий / следующий элемент"
+L["Switch window"] = "Сменить окно"
+L["Scroll"] = "Прокрутка"
+L["Tooltips"] = "Подсказки"
+L["Previous / next page"] = "Предыдущая / следующая страница"
+L["Navigation / content"] = "Навигация / содержимое"
+L["Leave Edit Mode"] = "Выйти из режима редактирования"
+L["Type key"] = "Ввести символ"
+L["Space"] = "Пробел"
+L["Move cursor"] = "Переместить курсор"
+L["Confirm"] = "Подтвердить"
+L["Pick a frame with the D-pad, then press A to anchor it. B cancels."] = "Выберите рамку крестовиной и нажмите A, чтобы привязать её. B — отмена."
+L["Toolbar / elements"] = "Панель / элементы"
+L["Type a value"] = "Ввести значение"
+L["Undo / redo"] = "Отменить / Повторить"
+L["Find a setting"] = "Найти настройку"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

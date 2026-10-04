@@ -1164,6 +1164,10 @@ function M.ApplyPopupFramePriority(frame)
         if frame.SetFrameStrata then frame:SetFrameStrata("FULLSCREEN_DIALOG") end
         if frame.SetFrameLevel then frame:SetFrameLevel(M.MENU_POPUP_FRAME_LEVEL or 400) end
     end
+    -- WoW Forever's Gamepad UI: a menu popup on UIParent takes the gamepad
+    -- whenever it shows (Game/Forever/PadNavigation.lua, Forever only).
+    local navigation = MSUF.PadNavigation
+    if navigation and frame.GetParent and frame:GetParent() == UIParent then navigation.Track(frame) end
 end
 function M.CreateMenuPopupPanel(parent, opts)
     opts = opts or {}

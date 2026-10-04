@@ -6591,6 +6591,28 @@ L["Below CDM"] = "CDM 아래"
 L["Selected position: %s."] = "선택한 위치: %s."
 L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "유닛 프레임을 CDM의 위, 중앙 또는 아래에 고정할 위치를 선택하세요. 독립적으로 유지하면 고정되지 않습니다."
 
+-- Gamepad button hints (WoW Forever Gamepad UI).
+L["Select"] = "선택"
+L["Type text"] = "텍스트 입력"
+L["Adjust"] = "조정"
+L["Done moving"] = "이동 완료"
+L["Move 1 px"] = "1픽셀 이동"
+L["Previous / next element"] = "이전 / 다음 요소"
+L["Switch window"] = "창 전환"
+L["Scroll"] = "스크롤"
+L["Tooltips"] = "툴팁"
+L["Previous / next page"] = "이전 / 다음 페이지"
+L["Navigation / content"] = "탐색 / 내용"
+L["Leave Edit Mode"] = "편집 모드 종료"
+L["Type key"] = "키 입력"
+L["Space"] = "띄어쓰기"
+L["Move cursor"] = "커서 이동"
+L["Confirm"] = "확인"
+L["Pick a frame with the D-pad, then press A to anchor it. B cancels."] = "방향 패드로 프레임을 고른 뒤 A를 눌러 고정하세요. B는 취소합니다."
+L["Toolbar / elements"] = "도구 모음 / 요소"
+L["Type a value"] = "값 입력"
+L["Undo / redo"] = "실행 취소 / 다시 실행"
+L["Find a setting"] = "설정 찾기"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

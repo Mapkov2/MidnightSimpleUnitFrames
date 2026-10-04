@@ -6950,6 +6950,28 @@ L["Below CDM"] = "Unterhalb des CDM"
 L["Selected position: %s."] = "Gewählte Position: %s."
 L["Choose where the Unit Frame layout attaches to CDM: above, centered or below. Keep independent leaves it unattached."] = "Die Unit Frames am CDM oberhalb, mittig oder unterhalb verankern. Unabhängig beibehalten lässt sie unverankert."
 
+-- Gamepad button hints (WoW Forever Gamepad UI).
+L["Select"] = "Auswählen"
+L["Type text"] = "Text eingeben"
+L["Adjust"] = "Anpassen"
+L["Done moving"] = "Verschieben beenden"
+L["Move 1 px"] = "1 px verschieben"
+L["Previous / next element"] = "Vorheriges / nächstes Element"
+L["Switch window"] = "Fenster wechseln"
+L["Scroll"] = "Scrollen"
+L["Tooltips"] = "Tooltips ein/aus"
+L["Previous / next page"] = "Vorherige / nächste Seite"
+L["Navigation / content"] = "Navigation / Inhalt"
+L["Leave Edit Mode"] = "Bearbeitungsmodus verlassen"
+L["Type key"] = "Taste eingeben"
+L["Space"] = "Leerzeichen"
+L["Move cursor"] = "Cursor bewegen"
+L["Confirm"] = "Bestätigen"
+L["Pick a frame with the D-pad, then press A to anchor it. B cancels."] = "Wähle mit dem Steuerkreuz einen Frame und drücke A, um ihn zu verankern. B bricht ab."
+L["Toolbar / elements"] = "Leiste / Elemente"
+L["Type a value"] = "Wert eingeben"
+L["Undo / redo"] = "Rückgängig / Wiederholen"
+L["Find a setting"] = "Einstellung suchen"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

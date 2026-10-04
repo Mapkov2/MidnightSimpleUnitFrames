@@ -68,7 +68,8 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             assert(pack == "Common" or pack == expected, client .. ": wrong locale partition")
         end
 
-        -- Only inactive alias files may disappear; every other script retains
+        -- Only inactive alias files and, outside WoW Forever, its gamepad files
+        -- ([AllowLoadGameType camelot]) may disappear; every other script retains
         -- the exact union order, including the final RuntimeContracts chunk.
         local at = 1
         for _, path in ipairs(all) do
@@ -76,7 +77,9 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
                 assert(selected[at] == path, "startup order changed for " .. path)
                 at = at + 1
             else
-                assert(path:find("/AliasData/", 1, true), "lost non-alias startup file: " .. path)
+                assert(path:find("/AliasData/", 1, true)
+                    or (GAME_TYPES[client] ~= "camelot" and path:find("/Game/Forever/Pad", 1, true)),
+                    "lost non-alias startup file: " .. path)
             end
         end
         assert(at == #selected + 1)
