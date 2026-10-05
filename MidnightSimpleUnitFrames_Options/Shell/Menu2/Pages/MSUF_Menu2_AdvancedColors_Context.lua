@@ -72,7 +72,7 @@ local function ContextStoredState(getTable, keys, apply)
             local target = getTable()
             for i = 1, #(state or {}) do
                 local item = state[i]
-                target[item[1]] = item[2] and ContextCopy(item[3]) or nil
+                if item[2] then target[item[1]] = ContextCopy(item[3]) else target[item[1]] = nil end
             end
             if apply ~= false then
                 if type(apply) == "function" then apply() else ApplyColors() end
@@ -89,7 +89,7 @@ local function ContextDBRowsState(rowKeys, keys, apply)
                 state[i] = { rowKey, type(row) == "table", {} }
                 for j = 1, #keys do
                     local key = keys[j]
-                    state[i][3][j] = { key, type(row) == "table" and rawget(row, key) ~= nil, type(row) == "table" and ContextCopy(row[key]) or nil }
+                    state[i][3][j] = { key, type(row) == "table" and rawget(row, key) ~= nil, type(row) == "table" and ContextCopy(row[key]) }
                 end
             end
             return state
@@ -105,7 +105,7 @@ local function ContextDBRowsState(rowKeys, keys, apply)
                 end
                 for j = 1, #(rowState[3] or {}) do
                     local item = rowState[3][j]
-                    row[item[1]] = item[2] and ContextCopy(item[3]) or nil
+                    if item[2] then row[item[1]] = ContextCopy(item[3]) else row[item[1]] = nil end
                 end
                 if rowState[2] ~= true and next(row) == nil then db[rowState[1]] = nil end
             end

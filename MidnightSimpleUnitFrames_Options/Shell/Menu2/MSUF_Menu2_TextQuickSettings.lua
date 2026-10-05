@@ -394,7 +394,7 @@ local function CaptureScopeFields(scope, fields)
         local saved = { key = entryKey, hadEntry = type(entry) == "table", fields = {} }
         for j = 1, #fields do
             local field = fields[j]
-            saved.fields[field] = { had = type(entry) == "table" and entry[field] ~= nil, value = type(entry) == "table" and entry[field] or nil }
+            saved.fields[field] = { had = type(entry) == "table" and entry[field] ~= nil, value = type(entry) == "table" and entry[field] }
         end
         state[#state + 1] = saved
     end
@@ -412,7 +412,9 @@ local function RestoreScopeFields(scope, state)
             entry = {}
             db[saved.key] = entry
         end
-        for field, value in pairs(saved.fields or {}) do entry[field] = value.had and value.value or nil end
+        for field, value in pairs(saved.fields or {}) do
+            if value.had then entry[field] = value.value else entry[field] = nil end
+        end
         if not saved.hadEntry and next(entry) == nil then db[saved.key] = nil end
     end
     if type(GP.ApplyFontsFor) == "function" then
