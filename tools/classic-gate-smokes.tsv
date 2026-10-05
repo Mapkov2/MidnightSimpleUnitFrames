@@ -424,3 +424,4 @@ classics	lua	tools/tests/classic_aura_arena_custom_containers_smoke.lua	{root} {
 clients+Forever	lua	tools/tests/classpower_workspace_smoke.lua	{root} {flavor}	Class Resources selection, exact search, preview navigation or scoped copy/reset drifted: {flavor}
 -	lua	tools/tests/power_loss_trail_pool_range_smoke.lua	{root}	Chunked Player power loss-trail pool range smoke failed
 -	lua	tools/tests/arena_castbar_range_fade_smoke.lua	{root}	Arena castbar range fade smoke failed
+-	lua	tools/tests/temp_max_health_orientation_smoke.lua	{root}	Temporary max health orientation smoke failed
