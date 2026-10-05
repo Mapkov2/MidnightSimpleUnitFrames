@@ -235,11 +235,31 @@ function Harness.New(root, flavor, options)
         return true
     end
 
+    -- SecureGroupHeader_Update: with no groupFilter and no roleFilter, a nameList
+    -- is the membership filter (GetGroupRosterInfo's name: GetRaidRosterInfo in a
+    -- raid, UnitName in a party). A member whose name is not listed, such as one
+    -- who joined after the list was written, gets no child.
+    local function NameListFilter(attributes)
+        local nameList = attributes.nameList
+        if not nameList or attributes.groupFilter or attributes.roleFilter then return nil end
+        local listed = {}
+        for name in tostring(nameList):gmatch("[^,]+") do listed[name:match("^%s*(.-)%s*$")] = true end
+        return listed
+    end
+    local function PartyRosterName(unit)
+        local name, server = env.UnitName(unit)
+        if name and server and server ~= "" then name = name .. "-" .. server end
+        return name or ""
+    end
+
     local function HeaderUnits(header)
         local attributes, out = header.attributes, {}
+        local listed = NameListFilter(attributes)
         if h.raid then
             if not attributes.showRaid then return out end
-            for index = 1, #h.units do out[#out + 1] = h.units[index] end
+            for index = 1, #h.units do
+                if not listed or listed[env.GetRaidRosterInfo(index) or ""] then out[#out + 1] = h.units[index] end
+            end
             return out
         end
         local grouped = #h.units > 1
@@ -247,7 +267,9 @@ function Harness.New(root, flavor, options)
         if not grouped and not attributes.showSolo then return out end
         for index = 1, #h.units do
             local unit = h.units[index]
-            if unit ~= "player" or attributes.showPlayer or attributes.showSolo then out[#out + 1] = unit end
+            if (unit ~= "player" or attributes.showPlayer or attributes.showSolo) and (not listed or listed[PartyRosterName(unit)]) then
+                out[#out + 1] = unit
+            end
         end
         return out
     end

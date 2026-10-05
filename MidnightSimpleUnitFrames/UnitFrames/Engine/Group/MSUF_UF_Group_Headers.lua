@@ -523,7 +523,17 @@ local function RaidGroupingOrder(conf)
 end
 
 local function RequiredHeaderColumns(kind, conf, count)
-  if kind == "party" then return ClampInt(conf and conf.maxColumns, 1, 1, 8) end
+  if kind == "party" then
+    local columns = ClampInt(conf and conf.maxColumns, 1, 1, 8)
+    -- Party layout for a raid of up to five: a member who joins in combat stays
+    -- on this header (SetupHeader defers, so the raid header cannot take over
+    -- until combat ends), so it keeps raid capacity like the raid header below.
+    if GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext() == true then
+      local upc = ClampInt(conf and conf.unitsPerColumn, 5, 1, 40)
+      return math.max(columns, math.ceil(40 / upc))
+    end
+    return columns
+  end
   count = floor((tonumber(count) or 0) + 0.5)
   if count < 1 then return 1 end
   if conf and conf.preserveRaidGroups == true then
@@ -672,7 +682,9 @@ local function UnitRole(unit)
   if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
     return role
   end
-  return "DAMAGER"
+  -- Unassigned stays its own role, as SecureGroupHeader's ASSIGNEDROLE
+  -- grouping and role filter read it (RoleOrder ranks NONE last).
+  return "NONE"
 end
 
 local function UnitClassFile(unit)
@@ -1052,7 +1064,11 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
   if conf.collapseEmptyGroups == true and nameLists then
     layoutGroupCount = 0
     for i = 1, groupCount do
-      if nameLists[i] ~= "" and RaidGroupAllowed(conf, i) then layoutGroupCount = layoutGroupCount + 1 end
+      -- Raid-wide role blocks are slices of the roster, not subgroups, so the
+      -- subgroup filter does not hide them (PreservedBlockAllowed).
+      if nameLists[i] ~= "" and (mode == "ROLE" or RaidGroupAllowed(conf, i)) then
+        layoutGroupCount = layoutGroupCount + 1
+      end
     end
     layoutGroupCount = math.max(1, layoutGroupCount)
   end
@@ -1349,6 +1365,9 @@ end
 
 local function GroupBorderScopeActive(anchorKind, conf)
   if type(conf) ~= "table" or conf.enabled ~= true then return false end
+  -- Hide in Housing retires the block (MSUF_UF_Group_Runtime.lua); its border goes with it.
+  local hiddenInHousing = GF.HiddenInHousing
+  if hiddenInHousing and hiddenInHousing(anchorKind) then return false end
   local liveKind = LiveGroupKind()
   if anchorKind == "party" then
     if liveKind == "party" then return true end

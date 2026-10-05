@@ -430,3 +430,13 @@ clients+Forever	lua	tools/tests/profile_unit_selection_shared_color_smoke.lua	{r
 clients+Forever	lua	tools/tests/profile_unitframe_import_roots_smoke.lua	{root} {flavor}	A Unitframes import replaced Gameplay or colour roots its export never carries: {flavor}
 -	lua	tools/tests/unit_tooltip_ownership_smoke.lua	{root}	A unit or group frame OnLeave hid a tooltip MSUF does not own
 -	lua	tools/tests/classic_toc_notes_smoke.lua	{root}	A shipped TOC note is missing or still calls the release a prototype
+-	lua	tools/tests/power_loss_trail_pool_range_smoke.lua	{root}	Chunked Player power loss-trail pool range smoke failed
+-	lua	tools/tests/arena_castbar_range_fade_smoke.lua	{root}	Arena castbar range fade smoke failed
+-	lua	tools/tests/temp_max_health_orientation_smoke.lua	{root}	Temporary max health orientation smoke failed
+-	lua	tools/tests/uf_custom_anchor_non_frame_smoke.lua	{root}	Unit-frame custom anchor non-frame smoke failed
+-	lua	tools/tests/group_element_masks_smoke.lua	{root}	Group element apply-mask smoke failed
+-	lua	tools/tests/group_preserved_role_block_count_smoke.lua	{root}	Preserved raid role block count smoke failed
+-	lua	tools/tests/group_unassigned_role_order_smoke.lua	{root}	Group unassigned role order smoke failed
+-	lua	tools/tests/group_additional_display_name_smoke.lua	{root}	Group extra blocks display-name smoke failed
+-	lua	tools/tests/group_small_raid_combat_join_smoke.lua	{root}	Small raid on the Party layout combat-join smoke failed
+-	lua	tools/tests/group_housing_hide_smoke.lua	{root}	Group Hide in Housing smoke failed

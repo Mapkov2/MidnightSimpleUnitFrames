@@ -16,8 +16,12 @@
 --   * protected (secret) health: one UnitIsDeadOrGhost read per tick and no
 --     UnitIsDead, death and resurrection still reach the background;
 --   * a dead unit's background is repainted after every health-gradient
---     repaint of the same tick;
---   * ghost through UNIT_FLAGS, offline and back through UNIT_CONNECTION.
+--     repaint of the same tick, UNIT_MAXHEALTH's included;
+--   * ghost through UNIT_FLAGS, offline and back through UNIT_CONNECTION;
+--   * an offline member who keeps health: UNIT_HEALTH and UNIT_MAXHEALTH
+--     decide death only, so the offline background holds (repainted over the
+--     gradient, UNIT_MAXHEALTH's included) until UNIT_CONNECTION resolves the
+--     unit again.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -73,6 +77,9 @@ local function Scenario(secret)
     -- The gradient background repaints every tick; the dead colour follows it.
     calls = Tick(secret and 0.3 or 0, true)
     Check(Gone() and DeadPainted(), label .. ": a later tick left the gradient over the dead background")
+    -- UNIT_MAXHEALTH repaints the health colours too.
+    w:Fire(frame, UNIT, "UNIT_MAXHEALTH")
+    Check(Gone() and DeadPainted(), label .. ": UNIT_MAXHEALTH left the gradient over the dead background")
     -- Resurrection.
     Tick(0.4, false)
     Check(not Gone() and not DeadPainted(), label .. ": a resurrection kept the dead background")
@@ -98,6 +105,34 @@ Check(Gone(), "UNIT_CONNECTION: an offline unit does not show the dead backgroun
 S.connected = true
 w:Fire(frame, UNIT, "UNIT_CONNECTION", true)
 Check(not Gone(), "UNIT_CONNECTION: the dead background stays after the unit reconnected")
+
+-- Offline with health left (the character stays in the world and takes damage).
+local function OfflineTicks(secret)
+    local label = secret and "protected" or "plain"
+    S.secret, S.dead, S.pct = secret, false, 0.8
+    S.connected = false
+    w:Fire(frame, UNIT, "UNIT_CONNECTION", false)
+    Check(Gone() and DeadPainted(), label .. ": UNIT_CONNECTION did not tint the offline unit")
+    Tick(0.6, false)
+    Check(Gone() and DeadPainted(), label .. ": a UNIT_HEALTH tick cleared the offline background")
+    Tick(0.5, false)
+    Check(Gone() and DeadPainted(), label .. ": a second UNIT_HEALTH tick cleared the offline background")
+    -- UNIT_MAXHEALTH with a new percentage: the gradient is repainted, and
+    -- the offline background goes back over it.
+    S.pct = 0.45
+    w:Fire(frame, UNIT, "UNIT_MAXHEALTH")
+    Check(Gone(), label .. ": UNIT_MAXHEALTH cleared the offline background")
+    Check(DeadPainted(), label .. ": UNIT_MAXHEALTH left the gradient over the offline background")
+    Tick(0.5, false)
+    Check(Gone() and DeadPainted(), label .. ": a tick after UNIT_MAXHEALTH cleared the offline background")
+    S.connected = true
+    w:Fire(frame, UNIT, "UNIT_CONNECTION", true)
+    Check(not Gone() and not DeadPainted(), label .. ": the offline background stays after the unit reconnected")
+    Tick(0.4, false)
+    Check(not Gone(), label .. ": a tick after reconnecting brought the offline background back")
+end
+if flavor == "Mainline" then OfflineTicks(true) end
+OfflineTicks(false)
 
 if #failures > 0 then
     for index = 1, #failures do print("FAIL " .. failures[index]) end

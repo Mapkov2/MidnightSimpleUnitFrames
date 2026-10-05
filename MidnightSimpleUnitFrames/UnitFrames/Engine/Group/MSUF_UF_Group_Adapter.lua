@@ -59,6 +59,7 @@ local BASIC_GROUP_MASK = {
   InlineToT = true,
   StatusIndicators = true,
   Prediction = true,
+  TempMaxHealth = true,
   Alpha = true,
   Borders = true,
   Auras = true,

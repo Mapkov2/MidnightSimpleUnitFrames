@@ -1015,6 +1015,9 @@ end
 local function ResolveGone(frame, cfg, unit, seedHP, event)
   local healthEvent = event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH"
   if healthEvent then
+    -- A health event decides death only: an offline tint holds until a
+    -- connection or lifecycle event resolves the unit again.
+    if frame._msufGFDeadBgOffline == true then return true end
     if issecretvalue(seedHP) ~= true and type(seedHP) == "number" then
       -- Health/Prediction calculator values are the authoritative transition
       -- signal. UnitIsDeadOrGhost can lag behind a positive AI health snapshot.
@@ -1024,6 +1027,7 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
     return known == true and dead == true
   end
 
+  frame._msufGFDeadBgOffline = nil
   local state = frame and frame._msufUnitState
   local stateReady = state and state.ready == true
     and state.unit == unit
@@ -1036,11 +1040,13 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
   if checkOffline and UnitIsConnected then
     if stateFresh and state.connectedKnown == true then
       if state.connected == false then
+        frame._msufGFDeadBgOffline = true
         return true
       end
     else
       local connected, known = ReadConnectedCached(frame, unit)
       if known == true and connected == false then
+        frame._msufGFDeadBgOffline = true
         return true
       end
     end
@@ -1101,7 +1107,8 @@ local function UpdateDeadBg(frame, cfg, seedHP, event)
 end
 
 -- Health's gone-state sink (NotifyHealthState, UpdateGroupPercentLean). A
--- UNIT_HEALTH tick can flip only death, and ResolveGone's health rule decides
+-- UNIT_HEALTH tick can flip only death (an offline tint holds until UNIT_CONNECTION
+-- resolves the unit again), and ResolveGone's health rule decides
 -- it: a plain seed by itself, a protected one through the never-secret
 -- UnitIsDeadOrGhost read (Blizzard reads it on every UNIT_HEALTH too,
 -- Blizzard_UnitFrame/Shared/CompactUnitFrame.lua:112, 1103). A tick that leaves the
@@ -1129,6 +1136,7 @@ local function UpdateGoneStateFromHealth(frame, event, unit, seedHP)
       or (frame._msufHealthBgDynamic ~= true and frame._msufPowerBgDynamic ~= true)) then
     return
   end
+  if gone ~= true and frame._msufGFDeadBgOffline == true then gone = true end
   return ApplyDeadBgState(frame, cfg, gone)
 end
 
@@ -1364,6 +1372,7 @@ end
 function GroupVisuals.Apply(frame)
   if frame then
     frame._msufGFDeadBgState = nil
+    frame._msufGFDeadBgOffline = nil
     ClearHealthFadeState(frame)
   end
   CompileVisualRuntime(frame and frame.MSUFSpec)
@@ -1400,6 +1409,7 @@ function GroupVisuals.Disable(frame)
     RestoreHealthBackground(frame)
   end
   frame._msufGFDeadBgState = nil
+  frame._msufGFDeadBgOffline = nil
   ClearHealthFadeState(frame)
   frame._msufGFVisualRuntimeGroup = nil
   frame._msufGFVisualRuntimeGone = nil

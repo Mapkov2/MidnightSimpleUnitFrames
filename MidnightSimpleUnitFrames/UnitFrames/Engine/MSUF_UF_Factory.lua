@@ -178,7 +178,12 @@ local function ResolveNamedAnchor(name)
     return nil, name, true
   end
   if UF.frames and UF.frames[name] then return UF.frames[name], nil end
-  if _G[name] then return _G[name], nil end
+  -- The name is free text (Custom Anchor Frame), so it can hit any global:
+  -- only a region (a UI object with SetPoint: frames, textures, font strings)
+  -- can be an anchor. Fonts and animation groups are UI objects without it;
+  -- anything else counts as missing.
+  local global = _G[name]
+  if type(global) == "table" and global.GetObjectType ~= nil and global.SetPoint ~= nil then return global, nil end
   return nil, name
 end
 

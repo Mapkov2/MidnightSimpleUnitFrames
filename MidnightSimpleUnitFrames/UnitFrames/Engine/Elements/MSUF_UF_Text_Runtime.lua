@@ -255,6 +255,12 @@ function Text.SetDisplayNameResolver(resolver)
   end
 end
 
+-- The name the engine frames show (character-name and nickname resolvers
+-- included), for name surfaces outside the engine such as the extra group blocks.
+function Text.ReadDisplayName(unit)
+  return ReadDisplayName(unit)
+end
+
 if type(Text._pendingDisplayNameResolver) == "function" then
   Text.SetDisplayNameResolver(Text._pendingDisplayNameResolver)
   Text._pendingDisplayNameResolver = nil

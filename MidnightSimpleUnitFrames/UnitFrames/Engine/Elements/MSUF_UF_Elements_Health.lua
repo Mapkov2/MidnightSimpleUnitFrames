@@ -600,6 +600,15 @@ local function NotifyHealthState(frame, event, unit, hp, hpSecret)
     -- doing secret/type work on the steady-state route.
     if event ~= "UNIT_HEALTH" or not frame._msufUpdateStatusTextIndicator then return end
   elseif event ~= "UNIT_HEALTH" and event ~= "UNIT_CONNECTION" then
+    -- UNIT_MAXHEALTH repainted the health colours, the gradient background
+    -- included: a gone (dead or offline) background goes back over them.
+    if event == "UNIT_MAXHEALTH" and frame._msufGFDeadBgState == true then
+      local updateGoneState = frame._msufUpdateGroupVisualsGoneState
+      if updateGoneState then
+        if hpSecret == nil then hpSecret = issecretvalue(hp) == true end
+        updateGoneState(frame, event, unit, hpSecret ~= true and type(hp) == "number" and hp or nil)
+      end
+    end
     return
   end
   if hpSecret == nil then hpSecret = issecretvalue(hp) == true end

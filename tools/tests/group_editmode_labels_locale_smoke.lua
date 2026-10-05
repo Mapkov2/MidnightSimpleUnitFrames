@@ -8,7 +8,9 @@
 --     concatenated with a translated piece, through the public Edit Mode API,
 --     which shows labels as given;
 --   * the Priority pin view answered "Unknown" for a pin without a name, which
---     shadowed the Priority page's translated "Unknown player".
+--     shadowed the Priority page's translated "Unknown player";
+--   * the Edit Mode HUD's Groups button painted its fallback label and its
+--     tooltip ("Toggle Group Frames preview") as English literals.
 -- Contract: every such key is translated in every non-English pack, painted
 -- through Translate, composed from translated pieces with a translated format,
 -- and the pin view leaves an unknown name to the page.
@@ -39,7 +41,9 @@ for key in blocks:gmatch('=%s*"([^"]+)"') do Add(key) end
 Add("%s: %s")
 Add("Group frame")
 Add("Unknown player")
-Check(#keys >= 13, "expected the Edit Mode label keys, found " .. #keys)
+Add("Groups")
+Add("Toggle Group Frames preview")
+Check(#keys >= 15, "expected the Edit Mode label keys, found " .. #keys)
 
 for _, locale in ipairs({ "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }) do
     local world = World.New(root, "Mainline", { locale = locale }):Boot()
@@ -62,6 +66,13 @@ Check(not movers:find('LABELS[kind] .. ', 1, true), "an extra-block label concat
 Check(movers:find('string.format(Translate("%s: %s"), Translate(LABELS[kind])', 1, true)
     and movers:find('group = Translate(LABELS[kind])', 1, true),
     "extra-block labels are not composed from translated pieces with a translated format")
+
+-- The file paints no English literal: every SetText goes through Translate.
+for literal in em2:gmatch(':SetText%(%s*"([^"]*)"') do
+    Check(false, "MSUF_UF_Group_EM2.lua paints the English literal '" .. literal .. "'")
+end
+Check(em2:find('GameTooltip:SetText(Translate("Toggle Group Frames preview")', 1, true),
+    "the Groups button tooltip is not translated")
 
 -- The Priority pin view leaves an unknown name to the page.
 local priority = Slice.Read(PRIORITY_PATH)

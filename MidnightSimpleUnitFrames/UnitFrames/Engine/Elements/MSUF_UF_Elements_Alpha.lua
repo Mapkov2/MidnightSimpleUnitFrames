@@ -41,6 +41,7 @@ if type(GetBossIndexFromToken) ~= "function" then
     return nil
   end
 end
+local GetArenaIndexFromToken = MSUF.Require("MSUF_GetArenaIndexFromToken", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Alpha.lua")
 
 -- Retail live SimpleFrame/CurveUtil APIs accept protected booleans and alpha
 -- components. Select both conditions natively, retaining the ordinary spell
@@ -153,8 +154,8 @@ end
 --     pool, and nothing ever clears _msufCastbarDriver -- so no invalidation
 --     point exists or is needed for a positive hit.
 --   * `false` marks a unit that structurally cannot own a castbar (anything
---     that is not target/focus/bossN). That verdict is pure, so it is cached.
---   * A *missing* target/focus/boss castbar is never cached: those frames are
+--     that is not target/focus/bossN/arenaN). That verdict is pure, so it is cached.
+--   * A *missing* target/focus/boss/arena castbar is never cached: those frames are
 --     built lazily when the feature is switched on, so that leg stays
 --     late-bound and re-resolves until the driver has published its global.
 local castbarCache = {}
@@ -188,8 +189,20 @@ local function CastbarForUnit(unit)
 
   local index = GetBossIndexFromToken(unit)
   if not index then
-    castbarCache[unit] = false
-    return nil
+    local arenaIndex = GetArenaIndexFromToken(unit)
+    if not arenaIndex then
+      castbarCache[unit] = false
+      return nil
+    end
+    -- Castbars/MSUF_ArenaCastbars.lua loads after the elements; its pool
+    -- builds the arenaN bars when the feature is on (UIParent children).
+    local pools = MSUF.Castbars and MSUF.Castbars.Pools
+    local arenaPool = pools and pools.kinds and pools.kinds.arena
+    local castbar = arenaPool and arenaPool.Bar(arenaIndex)
+    if castbar then
+      castbarCache[unit] = castbar
+    end
+    return castbar
   end
 
   local bossCastbars = _G.MSUF_BossCastbars

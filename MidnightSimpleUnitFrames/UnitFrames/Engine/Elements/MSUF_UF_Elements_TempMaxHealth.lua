@@ -66,6 +66,14 @@ local function Layout(frame, bar, spec)
 
   local hpReverse = spec and spec.health and spec.health.reverse == true
   local reverse = not hpReverse
+  -- Same fill axis as the health bar (Health.Apply); reverse then picks the
+  -- far end within that axis, so a vertical bar loses its top band.
+  local orientation = spec and spec.health and spec.health.vertical == true and "VERTICAL" or "HORIZONTAL"
+  if bar.SetOrientation and bar._msufTempMaxOrientation ~= orientation then
+    bar:SetOrientation(orientation)
+    bar._msufTempMaxOrientation = orientation
+    bar._msufTempMaxReverse = nil
+  end
   if bar.SetReverseFill and bar._msufTempMaxReverse ~= reverse then
     bar:SetReverseFill(reverse)
     bar._msufTempMaxReverse = reverse
