@@ -243,6 +243,7 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua+driver	tools/tests/classic_aura_render_smoke.lua	{root/} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua} {p/:MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua}	Classic aura live-render smoke failed
 -	lua	tools/tests/startup_locale_manifest_smoke.lua	{root/}	Startup client-language manifest parity failed
 -	lua	tools/tests/locale_key_coverage_smoke.lua	{root/}	Locale key coverage smoke failed
+-	lua	tools/tests/castbar_preview_sample_locale_smoke.lua	{root}	A castbar preview sample text stays English in a translated pack
 -	lua	tools/tests/menu_i18n_composed_labels_smoke.lua	{root}	Composed menu and Edit Mode labels are back or lost a translation
 -	lua	tools/tests/locale_english_overwrite_smoke.lua	{root}	Translated packs turned translations back into English
 -	lua	tools/tests/keybind_labels_locale_smoke.lua	{root}	Key binding labels ignore the menu language
