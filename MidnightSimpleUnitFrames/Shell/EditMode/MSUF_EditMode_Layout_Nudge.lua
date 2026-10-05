@@ -466,7 +466,10 @@ end
 function Nudge.Disable()
     MSUF_EM2_SetPreviewNudgeTarget(nil)
     if not owner then return end
-    if IsConfigCombatLocked() then
+    -- Edit Mode exits at PLAYER_REGEN_DISABLED, where the configuration lock
+    -- already refuses but the binding write is still allowed: only a real
+    -- lockdown defers it, or the arrows stay bound for the whole fight.
+    if InCombatLockdown() then
         owner.__msufPendingClear = true
         owner:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
