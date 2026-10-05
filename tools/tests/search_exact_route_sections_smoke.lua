@@ -90,7 +90,55 @@ do
     end
 end
 
+---------------------------------------------------------------------------
+-- A route that opens a closed section of the cached page (provider rows,
+-- changelog links, query routes) opens it in place: the page is not
+-- invalidated, its entry and wrapper stay, the section builds and the exact
+-- control resolves. A route-only hop (no exact target) opens its section too.
+---------------------------------------------------------------------------
+do
+    local mw = Open()
+    local M = mw.M
+    local label = "Hide profession casts"
+    local rec = StaticRow(M, label)
+    Check(mw:Select("opt_castbar") ~= false, "the castbar page did not open")
+    local entry = M.cache.opt_castbar
+    local invalidated = 0
+    local invalidate = M.InvalidatePage
+    M.InvalidatePage = function(key, ...)
+        if key == "opt_castbar" then invalidated = invalidated + 1 end
+        return invalidate(key, ...)
+    end
+    if Check(rec ~= nil and entry ~= nil, "no static result for '" .. label .. "' or no castbar page") then
+        local sectionId = rec.exactTarget.sectionId
+        local shell = entry.sections[sectionId]
+        Check(shell and shell._msuf2CollapsibleEntry and shell._msuf2CollapsibleEntry.open ~= true,
+            "section " .. tostring(sectionId) .. " is not a closed accordion on the fresh page")
+        local wrapper = entry.wrapper
+        local result = OpenRow(mw, { key = rec.key, label = rec.label, exactTarget = rec.exactTarget,
+            route = { accordion = { [rec.key .. ":" .. sectionId] = true } } }, label)
+        Check(invalidated == 0, "the routed hop invalidated the cached page " .. invalidated .. " time(s)")
+        Check(M.cache.opt_castbar == entry and entry.wrapper == wrapper and wrapper:GetParent() ~= nil,
+            "the routed hop replaced the cached page tree")
+        Check(Reached(result), "routed hop: the control was not reached (" .. Describe(result) .. ")")
+    end
+    local textures = entry and entry.sections.castbar_textures
+    local collapsible = textures and textures._msuf2CollapsibleEntry
+    if Check(collapsible and collapsible.open ~= true, "Textures & Outline is not a closed section") then
+        M.Search.OpenTarget("opt_castbar", "outline", "outline", nil, { accordion = { ["opt_castbar:castbar_textures"] = true } })
+        mw:RunTimers()
+        Check(M.cache.opt_castbar == entry and collapsible.open == true and invalidated == 0,
+            "a route-only hop did not open its section in place")
+        local _, widget = M.RuntimeControlCatalog.ResolveExactTarget("opt_castbar",
+            { pageKey = "opt_castbar", sectionId = "castbar_textures", settingKey = "general.castbarTexture",
+                controlId = "menu2.opt.castbar.global.textures.castbar.texture" })
+        Check(widget ~= nil, "the section a route opened in place did not build its controls")
+    end
+    M.InvalidatePage = invalidate
+end
+
 if #failures > 0 then
     error("search_exact_route_sections_smoke failed:\n  " .. table.concat(failures, "\n  "))
 end
-print("search_exact_route_sections_smoke: ok (" .. flavor .. "; static rows reach controls in closed lazy sections)")
+print("search_exact_route_sections_smoke: ok (" .. flavor .. "; static rows reach controls in closed lazy sections,"
+    .. " routes open sections of the cached page in place)")
