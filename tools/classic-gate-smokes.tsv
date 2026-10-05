@@ -430,3 +430,4 @@ clients+Forever	lua	tools/tests/classpower_workspace_smoke.lua	{root} {flavor}	C
 -	lua	tools/tests/group_preserved_role_block_count_smoke.lua	{root}	Preserved raid role block count smoke failed
 -	lua	tools/tests/group_unassigned_role_order_smoke.lua	{root}	Group unassigned role order smoke failed
 -	lua	tools/tests/group_additional_display_name_smoke.lua	{root}	Group extra blocks display-name smoke failed
+-	lua	tools/tests/group_small_raid_combat_join_smoke.lua	{root}	Small raid on the Party layout combat-join smoke failed

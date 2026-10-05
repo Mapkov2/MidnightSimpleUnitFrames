@@ -523,7 +523,17 @@ local function RaidGroupingOrder(conf)
 end
 
 local function RequiredHeaderColumns(kind, conf, count)
-  if kind == "party" then return ClampInt(conf and conf.maxColumns, 1, 1, 8) end
+  if kind == "party" then
+    local columns = ClampInt(conf and conf.maxColumns, 1, 1, 8)
+    -- Party layout for a raid of up to five: a member who joins in combat stays
+    -- on this header (SetupHeader defers, so the raid header cannot take over
+    -- until combat ends), so it keeps raid capacity like the raid header below.
+    if GF.IsSmallRaidPartyContext and GF.IsSmallRaidPartyContext() == true then
+      local upc = ClampInt(conf and conf.unitsPerColumn, 5, 1, 40)
+      return math.max(columns, math.ceil(40 / upc))
+    end
+    return columns
+  end
   count = floor((tonumber(count) or 0) + 0.5)
   if count < 1 then return 1 end
   if conf and conf.preserveRaidGroups == true then
