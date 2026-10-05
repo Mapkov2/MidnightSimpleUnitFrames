@@ -191,6 +191,14 @@ Check(swing.Set("main", "nextSwingText", true), "the cue text switch was refused
 Check(swing.Set("main", "nextSwingLabel845", "CLEAVE NOW"), "a cue text was refused")
 Check(not swing.Set("main", "nextSwingLabel845", string.rep("x", 41)), "an overlong cue text was stored")
 Check(swing.Get("main", "nextSwingLabel845") == "CLEAVE NOW", "a refused cue text replaced the stored one")
+-- The limit counts characters, not UTF-8 bytes: 22 Cyrillic letters (42
+-- bytes) and 40 Hangul syllables (120 bytes) fit, 41 Cyrillic letters do not.
+local cyrillic = "\208\147\208\181\209\128\208\190\208\184\209\135\208\181\209\129\208\186\208\184\208\185 \209\131\208\180\208\176\209\128 \208\179\208\190\209\130\208\190\208\178"
+Check(swing.Set("main", "nextSwingLabel78", cyrillic) and swing.Get("main", "nextSwingLabel78") == cyrillic,
+    "a 22-character Cyrillic cue text was refused for its 42 bytes")
+Check(swing.Set("main", "nextSwingLabel78", string.rep("\236\152\129", 40)), "a 40-character Hangul cue text was refused")
+Check(not swing.Set("main", "nextSwingLabel78", string.rep("\208\147", 41)), "a 41-character Cyrillic cue text was stored")
+Check(swing.Set("main", "nextSwingLabel78", ""), "clearing a cue text was refused")
 queued = "Heroic Strike"
 Fire(driver, "CURRENT_SPELL_CAST_CHANGED")
 Check(main.Title.text == "Heroic Strike" and main.Title.shown, "the cue text does not name the queued attack")

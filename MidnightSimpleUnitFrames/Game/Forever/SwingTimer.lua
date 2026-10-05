@@ -703,7 +703,8 @@ function Swing.Set(hand, key, value)
         end
         value = Copy(value)
     elseif type(value) ~= "string" then return false end
-    if key:find("^nextSwingLabel") and #value > CUE_LABEL_LIMIT then return false end
+    -- The limit counts characters: a UTF-8 continuation byte starts none.
+    if key:find("^nextSwingLabel") and #value:gsub("[\128-\191]", "") > CUE_LABEL_LIMIT then return false end
     if key == "visibility" and value ~= "always" and value ~= "combat" then return false end
     if key == "fill" and value ~= "elapsed" and value ~= "remaining" then return false end
     if key == "display" and value ~= "bar" and value ~= "text" then return false end
