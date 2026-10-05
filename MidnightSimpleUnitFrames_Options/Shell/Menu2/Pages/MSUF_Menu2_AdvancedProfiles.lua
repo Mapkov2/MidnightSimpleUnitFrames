@@ -120,7 +120,8 @@ local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = NO_PROFILE, text = "None" } end
     local list = _G.MSUF_GetAllProfiles() or { "Default" }
-    for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i] } end
+    -- Names are typed by the user and shown as typed, never translated.
+    for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i], translate = false } end
     return values
 end
 -- WoW Forever binds profiles to Blizzard's two talent groups, keyed 1 and 2 by

@@ -10,7 +10,7 @@ local function Entry(groups)
 end
 local function GroupValues()
     local out={{value="",text="Choose a sync group"}}
-    for _,group in ipairs(Sync.GetGroups() or {}) do out[#out+1]={value=group.name,text=group.name} end
+    for _,group in ipairs(Sync.GetGroups() or {}) do out[#out+1]={value=group.name,text=group.name,translate=false} end
     return out
 end
 -- The exclusion catalog walks every leaf of the profile's base snapshot. It is
@@ -123,6 +123,7 @@ function M.ProfileSyncPageBuild(state)
     W.Text(section,"Member profiles",20,-234,state.contentW-40,T.colors.text)
     for i,name in ipairs(names) do
         local toggle=W.SwitchAt(section,name,20+((i-1)%2)*(width+10),-266-math.floor((i-1)/2)*32,width)
+        T.SetTranslatedText(toggle._msuf2Label,name) -- a profile name, shown as typed
         VariantPage.BindBool(ctx,toggle,function() return group.members[name]==true end,
             function(value) group.members[name]=value and true or nil end,VariantPage.Meta("profiles_sync","sync.member."..i))
     end
