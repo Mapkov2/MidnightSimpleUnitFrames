@@ -66,7 +66,8 @@ end
 -- Delete stay symbols, as on a phone in every language.
 -- koKR, zhCN and zhTW type on the Latin page: Hangul syllables and Chinese
 -- characters need composition (an IME) that a key grid does not give. itIT
--- is the Latin QWERTY page with its accents on the symbols page.
+-- types on the Latin QWERTY page; the symbols page has à, è, é, ò and ù but
+-- not ì (its eleven-key rows are full).
 local LAYOUT_CAPTIONS = { ruRU = { letters = "АБВ", shift = "Аа" } }
 local DEFAULT_CAPTIONS = { done = "Done", letters = "ABC", shift = "Aa" }
 
