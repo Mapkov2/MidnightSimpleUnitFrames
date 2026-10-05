@@ -1054,6 +1054,8 @@ local function SetCapturing(enabled)
         input:EnableGamePadButton(true)
     else
         StopRepeat()
+        -- A trigger released while the pad is away never reaches OnButtonUp.
+        heldTrigger, triggerUsed = nil, false
         input:EnableGamePadButton(false)
         input:Hide()
         moveMode = false

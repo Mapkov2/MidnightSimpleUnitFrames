@@ -341,6 +341,22 @@ local function NudgeTarget(dx, dy, exactDelta)
     local s = exactDelta and 1 or GetStep()
     local ndx, ndy = dx * s, dy * s
 
+    -- An open aura popup is the selection the toolbar shows. Opening it from
+    -- an aura group changes neither the unit key nor a preview target, so it
+    -- comes before the routes those choose.
+    local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
+    local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
+    local a2PopupOpen = false
+    do local ap = _G.MSUF_EM2_AuraPopup; a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false end
+    if auraGroup and (auraPopupOpen or a2PopupOpen) then
+        local unitKey = _G.MSUF_EM2_ActiveAuraUnit
+        if not unitKey then
+            local auraPF = _G.MSUF_EM2_AuraPopup
+            unitKey = auraPF and auraPF.unit
+        end
+        return NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
+    end
+
     local selectedKey = EM2.State.GetUnitKey and EM2.State.GetUnitKey() or nil
     local selectedCfg = selectedKey and EM2.Registry and EM2.Registry.Get(selectedKey) or nil
     if selectedCfg and selectedCfg.externalPublicElement == true then
@@ -366,21 +382,14 @@ local function NudgeTarget(dx, dy, exactDelta)
         return NudgeCastbar(unit, ndx, ndy)
     end
 
-    local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
-    local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
-    local a2PopupOpen = false
-    do local ap = _G.MSUF_EM2_AuraPopup; a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false end
-    if auraGroup and (auraPopupOpen or a2PopupOpen) then
-        local unitKey = _G.MSUF_EM2_ActiveAuraUnit
-        if not unitKey then
-            local auraPF = _G.MSUF_EM2_AuraPopup
-            unitKey = auraPF and auraPF.unit
-        end
-        return NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
-    end
-
     if EM2.Focus and EM2.Focus.NudgeSelection and EM2.Focus.NudgeSelection(ndx, ndy) then
         return true
+    end
+
+    -- A castbar mover selected with its popup closed (Done, or the gamepad's
+    -- move mode): its offsets live in db.general, not in db[key].
+    if selectedCfg and selectedCfg.popupType == "castbar" then
+        return NudgeCastbar(selectedCfg.castbarUnit, ndx, ndy)
     end
 
     local key = EM2.State.GetUnitKey() or "player"
@@ -466,7 +475,10 @@ end
 function Nudge.Disable()
     MSUF_EM2_SetPreviewNudgeTarget(nil)
     if not owner then return end
-    if IsConfigCombatLocked() then
+    -- Edit Mode exits at PLAYER_REGEN_DISABLED, where the configuration lock
+    -- already refuses but the binding write is still allowed: only a real
+    -- lockdown defers it, or the arrows stay bound for the whole fight.
+    if InCombatLockdown() then
         owner.__msufPendingClear = true
         owner:RegisterEvent("PLAYER_REGEN_ENABLED")
         return

@@ -296,6 +296,25 @@ local function MoverLabelText(key, cfg)
     return Tr(cfg and cfg.label or key)
 end
 
+--- A drag selects like a click (whose OnClick a real drag suppresses): the
+--- arrow keys and the toolbar's Reset act on the unit key. The click also
+--- replaces the open popup, and the arrows prefer an open aura or castbar
+--- popup over the unit key, so another element's aura or castbar popup closes
+--- here too. The dragged castbar's own popup stays open.
+local function SelectDraggedMover(key, cfg)
+    if EM2.State then EM2.State.SetUnitKey(key) end
+    if EM2.HUD then EM2.HUD.RefreshUnitSelector() end
+    if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "drag" }) end
+    local auraPopup, castPopup = EM2.AuraPopup, EM2.CastPopup
+    if ((auraPopup and auraPopup.IsOpen())
+        or (castPopup and castPopup.IsOpen()
+            and not (cfg.popupType == "castbar" and castPopup.GetUnit() == cfg.castbarUnit)))
+        and EM2.Popups and EM2.Popups.CloseAll
+    then
+        EM2.Popups.CloseAll()
+    end
+end
+
 local function CreateMover(key, cfg)
     local th = T()
 
@@ -416,7 +435,7 @@ local function CreateMover(key, cfg)
             self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
         end
 
-        if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "drag" }) end
+        SelectDraggedMover(key, cfg)
         return true
     end
 

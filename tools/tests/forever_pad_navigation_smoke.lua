@@ -282,7 +282,11 @@ C_Texture = { GetAtlasInfo = function(atlas)
     return atlas == "atlas-PAD1" and { width = 76, height = 75 } or { width = 64, height = 64 }
 end }
 
-local MSUF = { Client = { IsForever = true }, GetEffectiveLocale = function() return "deDE" end }
+-- The German menu language with the German pack's translation of the keyboard's Done.
+local germanDone = assert(Read("MidnightSimpleUnitFrames/Locales/deDE.lua"):match("\nL%[\"Done\"%] = \"([^\"]+)\""),
+    "the German pack lacks Done")
+local MSUF = { Client = { IsForever = true }, GetEffectiveLocale = function() return "deDE" end,
+    L = { ["Done"] = germanDone } }
 for index = 1, #MODULES do
     assert(loadfile(root .. "/" .. FOREVER .. MODULES[index]))("MidnightSimpleUnitFrames", MSUF)
 end
@@ -484,9 +488,14 @@ local captions = {}
 for _, key in ipairs(keyboard.children) do
     if key.padAction and key.label then captions[key.padAction .. ":" .. key.padLayout] = key.label.text end
 end
-assert(captions["done:number"] == "Fertig" and captions["done:text"] == "Fertig" and captions["layout:text:number"] == "ABC"
-    and captions["shift:text"] == "Aa" and captions["layout:number:text"] == "123",
+assert(captions["done:number"] == germanDone and captions["done:text"] == germanDone
+    and captions["layout:text:number"] == "ABC" and captions["shift:text"] == "Aa" and captions["layout:number:text"] == "123",
     "the keyboard's word keys were not in the menu language")
+-- Done is translated by the locale packs, never by a table in the keyboard.
+local keyboardCode = Code(Read(FOREVER .. "PadKeyboard.lua"))
+local _, inlineDone = keyboardCode:gsub('done = "', "")
+assert(inlineDone == 1 and keyboardCode:find('L["Done"]', 1, true),
+    "the keyboard's Done caption must come from MSUF.L, not from captions translated inside PadKeyboard.lua")
 Press("PAD1")
 assert(edit:GetText() == "127" and typed[#typed][2] == true, "the key was not typed as user input")
 Press("PAD3")
@@ -893,6 +902,21 @@ Press("PADRSHOULDER")
 input.scripts.OnGamePadButtonUp(input, "PADLTRIGGER")
 assert(undos == 1 and redos == 1 and Nav.GetSelection() == beforeUndo and rumbles[#rumbles] == "High:0.25",
     "LT + LB/RB did not undo and redo in place")
+-- LT released while a Blizzard panel holds the pad never reaches the pad's
+-- button-up; back in Edit Mode a plain LB/RB steps instead of undo/redo.
+input.scripts.OnGamePadButtonDown(input, "PADLTRIGGER")
+blizzardPanelFocused = true
+tickers[1].callback()
+assert(not Nav.IsCapturing(), "a Blizzard panel did not take the pad from Edit Mode")
+blizzardPanelFocused = false
+tickers[1].callback()
+assert(Nav.IsCapturing() and Nav.GetSelection() == beforeUndo, "the pad did not come back to Edit Mode")
+Press("PADLSHOULDER")
+assert(undos == 1 and Nav.GetSelection() == playerMover,
+    "a trigger released while the pad was away stayed held: plain LB ran undo instead of stepping")
+Press("PADRSHOULDER")
+assert(redos == 1 and Nav.GetSelection() == targetMover,
+    "a trigger released while the pad was away stayed held: plain RB ran redo instead of stepping")
 -- An aura group (Auras3 Edit Mode preview) moves through Edit Mode's aura
 -- nudge without its popup; the unit frame under it stays put.
 local auraGroup = Child("Frame", UIParent, 640, 660, 120, 30)
