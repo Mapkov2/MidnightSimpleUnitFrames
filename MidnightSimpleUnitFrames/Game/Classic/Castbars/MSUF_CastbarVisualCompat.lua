@@ -1,7 +1,7 @@
 local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 --- Classic-only castbar geometry compatibility.
 ---
---- Keep the canonical Castbars/ files byte-identical with Retail. Classic uses
+--- Keep Classic geometry here, not in the Retail-named Castbars/ files. Classic uses
 --- a static casting-bar spark and permits very small custom bars; constrain the
 --- outline inset to a drawable inner surface and size the spark from that
 --- surface instead of the outer frame.
