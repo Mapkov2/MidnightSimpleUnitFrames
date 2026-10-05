@@ -10,6 +10,8 @@
 --   * Temporary max health (compiled into every group spec) reaches group
 --     frames after login/reload and for members who join later, not only
 --     after the Bars toggle (UF.RefreshTempMaxHealth).
+--   * Corner Indicator changes (mode "visual") reach live frames: the aggro
+--     corner follows its new slot and hides when the feature is turned off.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -84,8 +86,66 @@ local function TempMaxHealth(flavor)
     end
 end
 
+-- Every Corner Indicator control writes with mode "visual" (Options
+-- MSUF_Menu2_GroupIndicators.lua -> ApplyService -> GF.RefreshVisuals(kind,
+-- GF.DIRTY_VISUAL)). The aggro corner must follow that refresh: move to the
+-- new slot, and hide when Corner Indicators is turned off.
+local function CornerIndicators(flavor)
+    local threat = {}
+    local h = Harness.New(root, flavor, { beforeBoot = function(hh)
+        hh.env.UnitThreatSituation = function(unit) return threat[unit] and 3 or 0 end
+        hh.env.UnitAffectingCombat = function(unit) return threat[unit] == true end
+    end })
+    local GF = h.GF
+    GF.EnsureDB()
+    local party = GF.GetConf("party")
+    party.enabled = true
+    party.showPlayer = true
+    party.ciEnabled = true
+    party.ciSlotTR = "aggro"
+    party.ciSlotTL = "none"
+    GF.InvalidateCompiledSpecs()
+    GF.RefreshHeaderLayout()
+    h:SetRoster({ "player", "party1", "party2" })
+    h:Event("GROUP_ROSTER_UPDATE")
+    h:RunTimers()
+    local frame = assert(PartyFrames(h, GF).party1, flavor .. ": no party1 frame")
+
+    local function Shown(key)
+        local corners = frame.MSUFGFCornerIndicators or {}
+        local tex = corners[key]
+        return tex ~= nil and tex.shown == true
+    end
+    local function Aggro(on)
+        threat.party1 = on
+        h:Event("UNIT_THREAT_SITUATION_UPDATE", "party1")
+    end
+    local function Expect(label, tr, tl)
+        Check(Shown("TR") == tr and Shown("TL") == tl, ("%s %s: shown TR=%s TL=%s, expected TR=%s TL=%s")
+            :format(flavor, label, tostring(Shown("TR")), tostring(Shown("TL")), tostring(tr), tostring(tl)))
+    end
+
+    Aggro(true)
+    Expect("startup, aggro on Top Right", true, false)
+    Aggro(false)
+
+    party.ciSlotTR = "none"
+    party.ciSlotTL = "aggro"
+    GF.RefreshVisuals("party", GF.DIRTY_VISUAL)
+    Aggro(true)
+    Expect("aggro moved to Top Left", false, true)
+    Aggro(false)
+
+    party.ciEnabled = false
+    GF.RefreshVisuals("party", GF.DIRTY_VISUAL)
+    Aggro(true)
+    Expect("Corner Indicators turned off", false, false)
+    Aggro(false)
+end
+
 for _, flavor in ipairs({ "Mainline", "Vanilla" }) do
     TempMaxHealth(flavor)
+    CornerIndicators(flavor)
 end
 
 if failures > 0 then error(("group element masks smoke: %d failure(s)"):format(failures)) end
