@@ -426,3 +426,4 @@ clients+Forever	lua	tools/tests/classpower_workspace_smoke.lua	{root} {flavor}	C
 -	lua	tools/tests/profile_switch_runtime_refresh_smoke.lua	{root}	A profile switch kept the previous profile's gameplay overlays or tooltip state
 clients+Forever	lua	tools/tests/profile_unit_selection_shared_color_smoke.lua	{root} {flavor}	A Selected unitframes string carried or replaced the shared Cast Target Name Color: {flavor}
 -	lua	tools/tests/combat_mirror_latch_smoke.lua	{root}	An out-of-combat check read the latched MSUF_InCombat mirror at combat end
+clients+Forever	lua	tools/tests/profile_unitframe_import_roots_smoke.lua	{root} {flavor}	A Unitframes import replaced Gameplay or colour roots its export never carries: {flavor}

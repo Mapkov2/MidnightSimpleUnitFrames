@@ -2350,9 +2350,11 @@ function ImportTx.Merge(kind, payload, db)
             MSUF_ApplyGeneralSubset(payload.general, db, owned)
         end
         --- Older Unitframes strings still carry the swing timers, which belong
-        --- to Gameplay now: they never overwrite the local ones.
+        --- to Gameplay now: they never overwrite the local ones. Nor do the
+        --- other roots the export leaves to Gameplay and Colors.
         for k, v in pairs(payload) do
-            if k ~= "general" and k ~= "swingTimers" then
+            if k ~= "general" and k ~= "swingTimers" and k ~= "gameplay"
+                and k ~= "classColors" and k ~= "npcColors" then
                 if type(v) == "table" then
                     if type(db[k]) ~= "table" then
                         db[k] = {}
