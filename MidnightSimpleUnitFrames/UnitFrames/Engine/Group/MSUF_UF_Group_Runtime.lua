@@ -206,9 +206,38 @@ local RUNTIME_EVENTS = {
   "PLAYER_REGEN_DISABLED",
   "PLAYER_REGEN_ENABLED",
 }
+-- Walking onto or off a plot changes C_Housing.IsInsideHouseOrPlot without a
+-- zone change; Blizzard_HousingControls follows these two events for it.
+-- Registered only while a scope has Hide in Housing on, where the API exists
+-- and the client knows the event.
+local HOUSING_EVENTS = { "HOUSE_PLOT_ENTERED", "HOUSE_PLOT_EXITED" }
+local housingHidden = { party = false, raid = false }
+local housingEventsOn = false
+
+--- Group Layout "Hide in Housing" (per scope, off by default): the block is
+--- retired while the player is inside a house or on a plot. Only the
+--- Mainline-family clients have C_Housing (Blizzard_Game/Mainline/
+--- EventImplementation.lua reads IsInsideHouseOrPlot); elsewhere nothing hides.
+local function HiddenInHousing(kind)
+  local conf = Conf(kind)
+  if not (conf and conf.hideInHousing == true) then return false end
+  local housing = C_Housing
+  local inside = housing and housing.IsInsideHouseOrPlot
+  return inside ~= nil and inside() == true
+end
+GF.HiddenInHousing = HiddenInHousing
+
+local function HousingEventsWanted()
+  local housing = C_Housing
+  if not (housing and housing.IsInsideHouseOrPlot and AnyGroupFrameEnabled()) then return false end
+  local party, raid, mythic = Conf("party"), Conf("raid"), Conf("mythicraid")
+  return (party and party.hideInHousing == true) or (raid and raid.hideInHousing == true)
+    or (mythic and mythic.hideInHousing == true) or false
+end
 
 local function SetRuntimeEventsEnabled(enabled, regenOnly)
   if not eventFrame then return end
+  housingEventsOn = false
   if eventFrame.UnregisterAllEvents then
     eventFrame:UnregisterAllEvents()
   elseif eventFrame.UnregisterEvent then
@@ -229,6 +258,13 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
   end
   if PriorityNameRefreshActive() or ArenaPartyNameListActive() then
     eventFrame:RegisterEvent("UNIT_NAME_UPDATE")
+  end
+  local client = MSUF.Client
+  if client and client.SupportsEvent and HousingEventsWanted() then
+    housingEventsOn = true
+    for i = 1, #HOUSING_EVENTS do
+      if client.SupportsEvent(HOUSING_EVENTS[i]) then eventFrame:RegisterEvent(HOUSING_EVENTS[i]) end
+    end
   end
 end
 
@@ -334,6 +370,12 @@ end
 
 local function SetupWantedHeaders(kind)
   local scope = HeaderScope(kind)
+  local raidKind = LiveRaidKind()
+  -- "Hide in Housing" retires a block the way a preview does. Remember what this
+  -- pass decided per block: a plot boundary, or the option changing inside
+  -- (RefreshVisuals), runs the visibility pass only when that changes.
+  if scope ~= "raid" and scope ~= "priority" then housingHidden.party = HiddenInHousing("party") end
+  if scope ~= "party" and scope ~= "priority" then housingHidden.raid = HiddenInHousing(raidKind) end
   if not AnyGroupFrameEnabled() then
     if not scope or scope == "party" then RetireHeader("party") end
     if not scope or scope == "raid" then RetireHeader("raid") end
@@ -341,9 +383,8 @@ local function SetupWantedHeaders(kind)
     return FinishOwnershipHandoff()
   end
 
-  local wantParty = WantParty() and not PreviewSuppressesHeader("party")
-  local wantRaid = WantRaid() and not PreviewSuppressesHeader("raid")
-  local raidKind = LiveRaidKind()
+  local wantParty = WantParty() and not PreviewSuppressesHeader("party") and not housingHidden.party
+  local wantRaid = WantRaid() and not PreviewSuppressesHeader("raid") and not housingHidden.raid
 
   if scope ~= "raid" and scope ~= "priority" and wantParty then
     local header, scanHandled
@@ -527,6 +568,13 @@ function GF.UpdateGroupVisibility()
   return SetupWantedHeaders()
 end
 
+--- True when Hide in Housing would now retire or restore a block that the last
+--- header pass left as it was (a plot boundary, or the option changing inside).
+local function HousingVisibilityStale()
+  return HiddenInHousing("party") ~= housingHidden.party
+    or HiddenInHousing(LiveRaidKind()) ~= housingHidden.raid
+end
+
 function GF.RefreshHeaderLayout(kind)
   if GF.InvalidateLayoutRoster then GF.InvalidateLayoutRoster() end
   local inCombat = InCombat()
@@ -703,6 +751,11 @@ end
 function GF.RefreshVisuals(kind, mask)
   if InCombat() then return GF.DeferGroupRuntime("refresh", kind, mask) end
   local result = RefreshVisualsNow(kind, mask)
+  -- The Hide in Housing toggle applies as a visual change: the header pass
+  -- retires or restores the block and (un)registers the plot events.
+  if HousingVisibilityStale() or HousingEventsWanted() ~= housingEventsOn then
+    result = GF.RefreshHeaderLayout() or result
+  end
   return NotifyRuntimeObservers("refreshVisuals", kind, mask, result)
 end
 
@@ -955,6 +1008,10 @@ local function RuntimeOnEvent(self, event, unit)
     -- button twice inside the post-loading-screen frame is what tripped the
     -- script watchdog; the queued pass alone repaints one frame later.
     ScheduleHeaderLayoutSettle()
+  elseif event == "HOUSE_PLOT_ENTERED" or event == "HOUSE_PLOT_EXITED" then
+    -- Only a scope with Hide in Housing on changes; the visibility pass waits
+    -- for the end of combat by itself.
+    if HousingVisibilityStale() then GF.UpdateGroupVisibility() end
   end
 end
 

@@ -1365,6 +1365,9 @@ end
 
 local function GroupBorderScopeActive(anchorKind, conf)
   if type(conf) ~= "table" or conf.enabled ~= true then return false end
+  -- Hide in Housing retires the block (MSUF_UF_Group_Runtime.lua); its border goes with it.
+  local hiddenInHousing = GF.HiddenInHousing
+  if hiddenInHousing and hiddenInHousing(anchorKind) then return false end
   local liveKind = LiveGroupKind()
   if anchorKind == "party" then
     if liveKind == "party" then return true end
