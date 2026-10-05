@@ -123,9 +123,9 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     -- The value slider's range. The runtime places an absolute mark at value /
     -- UnitPowerMax of the power it sits on and shows it only up to that maximum,
     -- so the slider spans this character's maximum of that power: the named one,
-    -- else what the chosen bar shows (the Player bar's power, mana, the largest
-    -- class resource). 0-100 when it cannot be read. A saved value above the
-    -- maximum widens the range and is never cut.
+    -- else what the chosen bar shows (the Player bar's power, mana, the class
+    -- resource the runtime resolves). 0-100 when it cannot be read. A saved
+    -- value above the maximum widens the range and is never cut.
     local function SliderMax(rule)
         if not (rule and rule.mode=="ABSOLUTE") then return 100 end
         local maximum=0
@@ -134,8 +134,13 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         elseif rule.target=="ALTMANA" then
             maximum=PowerMax("MANA")
         elseif rule.target=="CLASS" then
-            for _,item in ipairs(POWER_TYPES) do
-                if item[3] then maximum=math.max(maximum,PowerMax(item[1])) end
+            -- The class resource bar's own resolver (MSUF_CP_Controller.lua):
+            -- a Death Knight's bar shows runes, not Runic Power. Marks never sit
+            -- on an aura-driven resource (MSUF_CP_ResourceMarks Target).
+            local resolve=MSUF.CPBuilders and MSUF.CPBuilders.ClassPowerType
+            if resolve then
+                local power,_,aura=resolve()
+                if not aura and type(power)=="number" then maximum=PowerMax(power) end
             end
         else
             -- What the Player bar shows (MSUF_CP_ResourceMarks DisplayedPower).
