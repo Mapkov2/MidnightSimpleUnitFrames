@@ -123,14 +123,6 @@ local function QueueHiddenSectionBuild(job)
     hiddenSectionQueue[#hiddenSectionQueue + 1] = job
     PumpHiddenSectionQueue()
 end
--- Closed sections of visited pages also enqueue their content so search
--- coverage never depends on the user opening every section — but without an
--- immediate pump: the cold page frame must stay shell-only (asserted by
--- group_layout_cold_path_smoke), so these jobs only start draining once the
--- search surface actually pumps the queue.
-local function QueueDeferredSectionBuild(job)
-    hiddenSectionQueue[#hiddenSectionQueue + 1] = job
-end
 UnitPage.PumpBackgroundSections = function() PumpHiddenSectionQueue() end
 local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
     local hidden = ctx and ctx.entry and ctx.entry.hiddenBuild and true or false
@@ -252,16 +244,11 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
             BuildContent()
         end
     else
+        -- A closed section builds on its first open (LazyRefresh) or when
+        -- exact search resolves a control in it (_msuf2EnsureContent). Search
+        -- never builds UI in the background (search_navigation_only_smoke),
+        -- so nothing is queued that no one would run.
         shellEntry._msuf2RefreshState = LazyRefresh
-        -- Search must find controls in sections the user never opens: the
-        -- content fills in from search-driven background slices. LazyRefresh
-        -- stays the fast path — a user expand before the slice builds
-        -- immediately, and the queued job then no-ops on the built check.
-        local queuedEntry = ctx and ctx.entry
-        QueueDeferredSectionBuild(function()
-            if queuedEntry and M.cache and M.cache[ctx.key] ~= queuedEntry then return end
-            BuildContent()
-        end)
     end
     return true
 end

@@ -137,8 +137,41 @@ do
     M.InvalidatePage = invalidate
 end
 
+---------------------------------------------------------------------------
+-- Visible page builds park no closed-section job for a background pump:
+-- search never pumps (search_navigation_only_smoke), so each parked job only
+-- pinned its replaced page entry for the session. Rebuilds and searches leave
+-- the queue empty, and a pump builds nothing.
+---------------------------------------------------------------------------
+do
+    local mw = Open()
+    local M = mw.M
+    local function Upvalue(fn, name)
+        for i = 1, 255 do
+            local upName, value = debug.getupvalue(fn, i)
+            if upName == nil then return nil end
+            if upName == name then return value end
+        end
+    end
+    local pump = Upvalue(M.UnitPage.PumpBackgroundSections, "PumpHiddenSectionQueue")
+    local queue = pump and Upvalue(pump, "hiddenSectionQueue")
+    if Check(type(queue) == "table", "the lazy section queue was not found") then
+        for _ = 1, 3 do
+            M.InvalidatePage("uf_player")
+            mw:Select("uf_player")
+            M.Search._CoreAPI.SearchPages("health")
+            mw:RunTimers()
+        end
+        Check(#queue == 0, "three visible builds of uf_player parked " .. #queue .. " section jobs")
+        local frames = mw:Frames()
+        M.UnitPage.PumpBackgroundSections()
+        mw:RunTimers()
+        Check(mw:Frames() == frames, "a background pump built " .. (mw:Frames() - frames) .. " frames of closed sections")
+    end
+end
+
 if #failures > 0 then
     error("search_exact_route_sections_smoke failed:\n  " .. table.concat(failures, "\n  "))
 end
 print("search_exact_route_sections_smoke: ok (" .. flavor .. "; static rows reach controls in closed lazy sections,"
-    .. " routes open sections of the cached page in place)")
+    .. " routes open sections of the cached page in place, visible builds park no section jobs)")

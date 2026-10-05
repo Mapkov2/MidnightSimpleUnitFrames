@@ -44,11 +44,17 @@ Check(FRESH.showNavigationIcons == true, "the defaults pass no longer seeds navi
 local function Select(key)
     Check(M.SelectPage(key) ~= false, "could not open " .. key)
     mw:RunTimers()
-    -- Closed unit sections build their controls in background slices.
-    for _ = 1, 40 do
-        if M.UnitPage and M.UnitPage.PumpBackgroundSections then M.UnitPage.PumpBackgroundSections() end
+    -- Closed lazy sections build their controls on demand, through the hook
+    -- exact search uses; sections they add are built in the next pass.
+    local entry, done = M.cache[key], {}
+    repeat
+        local pending = {}
+        for id, section in pairs(entry and entry.sections or {}) do
+            if not done[id] then done[id], pending[#pending + 1] = true, section end
+        end
+        for i = 1, #pending do M.Widgets.EnsureSectionContent(pending[i]) end
         mw:RunTimers()
-    end
+    until #pending == 0
     return Check(M.cache[key], key .. " was not built")
 end
 local function FindControl(entry, kind, settingKey)
