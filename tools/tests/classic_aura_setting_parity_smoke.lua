@@ -3,6 +3,7 @@
 -- of one Classic flavor in its TOC order with counting stubs.
 --   * a corner Custom Spell slot scans with its Filter (buff or debuff, any
 --     caster or cast by me), as Retail scans customFilter
+--   * a custom container keeps its Cooldown swipe with Cooldown text off
 -- Arguments: repository root, flavor (Vanilla, TBC or Mists).
 local root = assert(arg[1], "repository root argument missing")
 root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
@@ -193,5 +194,41 @@ assert(ShownIDs(CornerLane("HARMFUL|PLAYER", "589", { otherPain })) == "",
     "Debuff (cast by me): another caster's debuff lit the corner")
 assert(ShownIDs(CornerLane("HARMFUL|PLAYER", "589", { otherPain, ownPain })) == "504",
     "Debuff (cast by me): the player's own debuff did not light the corner")
+
+-- 2. Custom container: Cooldown text and Cooldown swipe are independent switches ----------
+-- (MSUF_Menu2_Auras_CustomWorkspace.lua writes placed.showCooldown and
+-- placed.showCooldownSwipe; Retail compiles each on its own, CustomConfig.)
+_G.MSUF_DB.auras3.showTarget = true
+_G.MSUF_DB.auras3.perUnit.target = { layout = {}, filters = {}, layoutShared = { showBuffs = false, showDebuffs = false } }
+local containerPlaced = { size = 20, max = 4, perRow = 4, showCooldown = false, showCooldownSwipe = true }
+_G.MSUF_DB.auras3.customContainers = { perUnit = { target = { items = {
+    [1] = { enabled = true, auraType = "BUFF", spellIDs = "777001", placed = containerPlaced, filters = {} },
+} } } }
+SetAuras("target", { { auraInstanceID = 601, spellId = 777001, name = "Spell777001", icon = 3, duration = 30,
+    expirationTime = 65, isHelpful = true, isHarmful = false, mine = false } })
+local function UnitFrame(unit)
+    local frame = setmetatable({ _shown = true, MSUFUnitKey = unit, _msufActiveElements = { Auras = true },
+        MSUFSpec = {} }, Widget)
+    registered.Create(frame)
+    assert(registered.Enable(frame) == true, "the aura element did not enable for " .. unit)
+    return frame
+end
+local function ContainerCooldown()
+    A3.BumpRuntimeConfig()
+    local lane = assert(UnitFrame("target")._msufA3State.lanes.custom1, "the custom container lane did not compile")
+    assert(ShownIDs(lane) == "601", "precondition: the custom container does not show its aura")
+    return lane[1].Cooldown
+end
+local cooldown = ContainerCooldown()
+assert(cooldown._shown == true and cooldown._drawSwipe == true and cooldown._start == 35,
+    "Cooldown text off hid the custom container's Cooldown swipe")
+assert(cooldown._hideNumbers == true, "Cooldown text off still showed the countdown numbers")
+containerPlaced.showCooldownSwipe = false
+cooldown = ContainerCooldown()
+assert(cooldown._shown == false, "a custom container with text and swipe off still showed its Cooldown")
+containerPlaced.showCooldown, containerPlaced.showCooldownSwipe = true, false
+cooldown = ContainerCooldown()
+assert(cooldown._shown == true and cooldown._drawSwipe == false and cooldown._hideNumbers == false,
+    "Cooldown swipe off hid the custom container's countdown text")
 
 print("classic aura setting parity smoke passed: " .. flavor)

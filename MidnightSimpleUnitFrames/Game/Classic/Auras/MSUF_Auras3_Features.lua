@@ -428,7 +428,8 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         showTooltip = placed.showTooltip ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         showCooldownText = placed.showCooldown ~= false,
-        showCooldown = placed.showCooldown ~= false,
+        -- The Cooldown frame carries both: text off keeps a requested swipe.
+        showCooldown = placed.showCooldown ~= false or placed.showCooldownSwipe ~= false,
         cooldownSwipeDarken = false,
         cooldownDecimalSeconds = Number(placed.cooldownDecimalSeconds, 3, 0, 30),
         showStacks = placed.showStacks ~= false,
