@@ -3933,7 +3933,7 @@ L["trackedBuff"] = "suiviBuff"
 -- MSUF FULL CORE MENU ENGLISH RETRY
 -- Generated missing non-Assistant core keys for frFR.
 L["Buffs"] = "Buffs"
-L["Build the Party debuff stripe"] = "Construisez la bande de debuff Party"
+L["Build the Party debuff stripe"] = "Construisez la bande de debuffs du groupe"
 L["CHECKPOINT - Press Enter section to explore every setting in %s."] = "POINT DE CONTRÔLE - Appuyez sur la section Entrée pour explorer chaque paramètre dans %s."
 L["Guides"] = "Guides"
 L["MISSION %d/%d - %d XP"] = "MISSION %d/%d - %d XP"
