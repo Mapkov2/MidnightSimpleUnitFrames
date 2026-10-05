@@ -1435,6 +1435,24 @@ do
     A3.RequestApply("focus", "render-smoke-stale-queue")
     assert(A3._deferredAuraRuntime == nil and A3._deferredAuraRuntimeScopes == nil and not Armed(),
         "Classic scoped RequestApply did not consume a stale aura queue")
+
+    -- The MSUF_InCombat latch is cleared by the group runtime's own
+    -- PLAYER_REGEN_ENABLED handler. When this driver runs first, a combat end
+    -- that only the stale latch blocks must still flush the queue once the
+    -- latch is gone, not wait for the next combat end.
+    QueueInCombat("target")
+    _G.MSUF_InCombat = true
+    local pending = {}
+    _G.C_Timer.After = function(_, callback) pending[#pending + 1] = callback end
+    driver._scripts.OnEvent(driver, "PLAYER_REGEN_ENABLED")
+    assert(A3._deferredAuraRuntimeScopes.target == true and Armed(),
+        "Classic combat-end flush ran while the combat latch was still set")
+    _G.MSUF_InCombat = false
+    for i = 1, #pending do pending[i]() end
+    _G.C_Timer.After = nil
+    assert(A3._deferredAuraRuntime == nil and A3._deferredAuraRuntimeScopes == nil and not Armed(),
+        "Classic combat-end flush waited for the next combat because the combat latch cleared after it ran")
+    _G.MSUF_InCombat = nil
 end
 
 print("classic aura render smoke passed: " .. backendPath)
