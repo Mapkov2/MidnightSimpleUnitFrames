@@ -1035,13 +1035,15 @@ function M.Clamp01(value, fallback)
     if value > 1 then return 1 end
     return value
 end
+-- Live slider titles: one translated "%s: %s" over the translated label, set
+-- through the raw setter (BindSliderLiveLabel), never a concatenation.
 function M.AlphaLabel(label, value)
-    return tostring(label or "") .. ": " .. M.PercentValue(value)
+    return M.Format("%s: %s", M.Tr(tostring(label or "")), M.PercentValue(value))
 end
 function M.BindSliderLiveLabel(ctx, widget, readValue, labelFn, percentInput)
     if percentInput then M.UsePercentInput(widget) end
     local function SetLabel(value)
-        if widget and widget._msuf2Title then widget._msuf2Title:SetText(labelFn(value)) end
+        if widget and widget._msuf2Title then M.Theme.SetTranslatedText(widget._msuf2Title, labelFn(value)) end
     end
     widget:HookScript("OnValueChanged", function(_, value) SetLabel(value) end)
     local function RefreshLabel() SetLabel(readValue()) end

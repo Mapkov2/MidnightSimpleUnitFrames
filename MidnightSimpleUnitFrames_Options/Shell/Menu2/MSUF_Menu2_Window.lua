@@ -923,9 +923,9 @@ local function InstallMenuScaleControl(f)
     end
     local function UpdateVisual(value)
         local pct = Percent(value or slider:GetValue())
-        -- Composed from translated text: the raw setter keeps every percentage
-        -- out of the locale-key tracking (Theme FontSetText).
-        T.SetTranslatedText(label, string.format("%s %d%%", M.Tr("Menu"), pct))
+        -- One translated format; the raw setter keeps every percentage out of
+        -- the locale-key tracking (Theme FontSetText).
+        T.SetTranslatedText(label, M.Format("Menu %d%%", pct))
         local fill = slider._msufFill
         if fill then
             local span = MENU_SCALE_MAX_PERCENT - MENU_SCALE_MIN_PERCENT

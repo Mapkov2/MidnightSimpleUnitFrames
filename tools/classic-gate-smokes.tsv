@@ -224,6 +224,7 @@ clients+Forever	lua	tools/tests/menu_page_reset_catalog_smoke.lua	{root} {flavor
 -	lua	tools/tests/menu_editmode_foreign_globals_smoke.lua	{root}	The menu Edit Mode helpers read another addon global
 clients+Forever	lua	tools/tests/menu_locale_key_tracking_smoke.lua	{root} {flavor}	Composed menu text became a tracked locale key: {flavor}
 -	lua	tools/tests/menu_color_picker_class_names_smoke.lua	{root}	The colour picker class swatches show raw class tokens
+clients+Forever	lua	tools/tests/menu_composed_labels_locale_smoke.lua	{root} {flavor}	A composed menu label is glued from translated fragments: {flavor}
 clients+Forever	lua	tools/tests/menu_page_reset_scope_smoke.lua	{root} {flavor}	Page resets restore only what the page owns: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}	Menu combat quiescence: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_edge_refusal_smoke.lua	{root} {flavor}	The menu flushed an apply or committed history on the combat-start frame: {flavor}
