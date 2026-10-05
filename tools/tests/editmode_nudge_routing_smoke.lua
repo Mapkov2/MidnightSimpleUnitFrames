@@ -330,6 +330,46 @@ assert(EM2.HUDSelection.CurrentSelectionKey() == "target", "the toolbar's Reset 
 EM2.HUD.ResetCurrentPosition()
 assert(MSUF_DB.target.offsetX == 260 and MSUF_DB.player.offsetX == 0,
     "the toolbar's Reset after dragging the Target frame reset the Player frame instead")
+-- A click replaces another element's open popup (Popups.Open starts with
+-- Popups.CloseAll); the arrows prefer an open castbar or aura popup over the
+-- unit key, so a drag must close those too.
+local popupsSource = Read(EM_DIR .. "MSUF_EditMode_Popups.lua")
+local closeAll = assert(popupsSource:match("\nfunction Popups%.CloseAll%(%)\n(.-)\nend\n"), "Popups.CloseAll is missing")
+assert(closeAll:find("if EM2.CastPopup then EM2.CastPopup.Close() end", 1, true)
+    and closeAll:find("if EM2.AuraPopup then EM2.AuraPopup.Close() end", 1, true)
+    and popupsSource:find("    Popups.CloseAll()\n\n    if pType == \"external\" then", 1, true),
+    "Popups.Open must close every popup, the castbar and aura popups among them, before it opens one")
+EM2.CastPopup.Close = function() castPopupOpen = false end
+EM2.AuraPopup.Close = function() auraPopupOpen = false end
+EM2.Popups = { CloseAll = function() EM2.CastPopup.Close(); EM2.AuraPopup.Close() end }
+local function Drag(mover)
+    mover.scripts.OnMouseDown(mover, "LeftButton")
+    cursorX = cursorX + 60
+    mover.scripts.OnMouseUp(mover, "LeftButton")
+    mover.scripts.OnClick(mover, "LeftButton")
+end
+local castbarX = general.castbarPlayerOffsetX
+EM2.State.SetUnitKey("castbar_player")          -- the Player Castbar mover click opened its popup
+castPopupOpen = true
+Drag(targetMover)
+Arrow("RIGHT")
+assert(not castPopupOpen and MSUF_DB.target.offsetX == 261 and general.castbarPlayerOffsetX == castbarX,
+    "after dragging the Target frame with the Player Castbar popup open the arrows moved the castbar")
+-- Dragging the castbar whose popup is open keeps that popup and its arrows.
+local castbarDragMover = assert(EM2.Movers.Get("castbar_player"), "no Player Castbar mover")
+EM2.State.SetUnitKey("castbar_player")
+castPopupOpen = true
+Drag(castbarDragMover)
+Arrow("RIGHT")
+assert(castPopupOpen and general.castbarPlayerOffsetX == castbarX + 1 and MSUF_DB.target.offsetX == 261,
+    "dragging the Player Castbar closed its own popup")
+castPopupOpen = false
+OpenAuraPopup("player", "buff")                 -- an aura group click; the unit key stays
+local buffX = BuffX()
+Drag(targetMover)
+Arrow("RIGHT")
+assert(not auraPopupOpen and MSUF_DB.target.offsetX == 262 and BuffX() == buffX,
+    "after dragging the Target frame with the player's Buffs popup open the arrows moved the Buffs")
 -- A plain click (no drag) still selects through OnClick as before.
 local playerMover = assert(EM2.Movers.Get("player"), "no Player mover")
 playerMover.scripts.OnMouseDown(playerMover, "LeftButton")
