@@ -428,3 +428,4 @@ clients+Forever	lua	tools/tests/classpower_workspace_smoke.lua	{root} {flavor}	C
 -	lua	tools/tests/uf_custom_anchor_non_frame_smoke.lua	{root}	Unit-frame custom anchor non-frame smoke failed
 -	lua	tools/tests/group_element_masks_smoke.lua	{root}	Group element apply-mask smoke failed
 -	lua	tools/tests/group_preserved_role_block_count_smoke.lua	{root}	Preserved raid role block count smoke failed
+-	lua	tools/tests/group_unassigned_role_order_smoke.lua	{root}	Group unassigned role order smoke failed

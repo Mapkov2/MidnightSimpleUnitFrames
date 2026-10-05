@@ -672,7 +672,9 @@ local function UnitRole(unit)
   if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
     return role
   end
-  return "DAMAGER"
+  -- Unassigned stays its own role, as SecureGroupHeader's ASSIGNEDROLE
+  -- grouping and role filter read it (RoleOrder ranks NONE last).
+  return "NONE"
 end
 
 local function UnitClassFile(unit)
