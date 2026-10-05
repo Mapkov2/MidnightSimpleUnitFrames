@@ -256,8 +256,11 @@ for index = 1, 3 do
         "Classic Arena Aura config missing for " .. unit)
     assert(arenaConfig.unit == unit and arenaConfig.enabled == true,
         "Classic Arena Aura config did not retain its concrete runtime unit: " .. unit)
-    assert(HasEvent(registered.GetUnitlessEvents(arenaFrame), "ARENA_OPPONENT_UPDATE"),
-        "Classic Arena Aura identity event missing for " .. unit)
+    -- The unit route hands the event's slot through; the unitless one would
+    -- replace it with this frame's unit (MSUF_UF_Core BuildSingleRoute).
+    assert(HasEvent(registered.GetEvents(arenaFrame), "ARENA_OPPONENT_UPDATE")
+            and not HasEvent(registered.GetUnitlessEvents(arenaFrame), "ARENA_OPPONENT_UPDATE"),
+        "Classic Arena Aura identity event missing from the unit route for " .. unit)
 end
 assert(namespace.MSUF_Auras3._LooksLikeApplyScope("arena") == true
         and namespace.MSUF_Auras3._LooksLikeApplyScope("arena2") == true,

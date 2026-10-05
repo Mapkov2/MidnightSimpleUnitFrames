@@ -665,4 +665,30 @@ assert(movedButton.auraInstanceID == third.auraInstanceID and movedButton.Cooldo
 assert(tostring(movedButton.Count._text) == "4",
     "a refresh of the aura a removal moved down kept its old stack count: " .. tostring(movedButton.Count._text))
 
+-- 7. ARENA_OPPONENT_UPDATE rescans only the arena frame it names ----------------------------
+-- Every arena frame hears every slot's seen/unseen flap. The event rides the
+-- unit route, which hands its slot through (MSUF_UF_Core BuildSingleRoute);
+-- the unitless route would replace it with the frame's own unit.
+_G.MSUF_DB.auras3.showArena = true
+for _, unit in ipairs({ "arena1", "arena2" }) do
+    _G.MSUF_DB.auras3.perUnit[unit] = { layout = {}, filters = {}, layoutShared = { showBuffs = true, showDebuffs = true } }
+    local list = UnitList(unit)
+    list[1], list[2] = Aura(true), Aura(false)
+end
+A3.BumpRuntimeConfig()
+local function HasEvent(events, wanted)
+    for i = 1, #(events or {}) do if events[i] == wanted then return true end end
+    return false
+end
+local arenaOne = NewFrame("arena1")
+assert(registered.Enable(arenaOne) == true, "arena1 aura element did not enable")
+assert(HasEvent(registered.GetEvents(arenaOne), "ARENA_OPPONENT_UPDATE")
+    and not HasEvent(registered.GetUnitlessEvents(arenaOne), "ARENA_OPPONENT_UPDATE"),
+    "the arena identity event is not on the unit route, so its slot never reaches Update")
+scans = api.slots
+registered.Update(arenaOne, "ARENA_OPPONENT_UPDATE", "arena2", "seen")
+assert(api.slots == scans, "another opponent's ARENA_OPPONENT_UPDATE rescanned arena1")
+registered.Update(arenaOne, "ARENA_OPPONENT_UPDATE", "arena1", "seen")
+assert(api.slots > scans, "arena1's own ARENA_OPPONENT_UPDATE did not rescan it")
+
 print("classic aura update path smoke passed")

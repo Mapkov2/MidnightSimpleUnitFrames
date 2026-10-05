@@ -378,24 +378,27 @@ Check(unitFrames:find("local EVENTS = BuildAuraEvents(tonumber(_G.MSUF_MAX_ARENA
 local buildEvents = assert(loadstring(Slice.Function(unitFrames, "local function BuildAuraEvents",
     "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua") .. "\nreturn BuildAuraEvents"))()
 
+-- ARENA_OPPONENT_UPDATE names its slot, so arena frames take it on the unit
+-- route next to UNIT_AURA (GetEvents) and never on the unitless one, which
+-- replaces that token with the frame's own unit.
 local events = buildEvents(5)
-local arenaEvents, arenaCombat = events.identityByUnit.arena1, events.identityCombatByUnit.arena1
-Check(arenaEvents and arenaEvents[1] == "ARENA_OPPONENT_UPDATE" and #arenaEvents == 1,
-    "arena1 lacks the arena identity events")
-Check(events.identityByUnit.arena4 == arenaEvents and events.identityByUnit.arena5 == arenaEvents,
-    "arena5 lacks the arena identity events")
-Check(events.identityCombatByUnit.arena4 == arenaCombat and events.identityCombatByUnit.arena5 == arenaCombat
-    and arenaCombat[3] == "ARENA_OPPONENT_UPDATE",
-    "arena4/5 lack the arena combat identity events")
-Check(events.identityByUnit.arena6 == nil, "identity events reached arena6")
+Check(events.arena[1] == "UNIT_AURA" and events.arena[2] == "ARENA_OPPONENT_UPDATE" and #events.arena == 2,
+    "arena frames lack the arena identity event on the unit route")
+Check(events.arenaFaction[3] == "ARENA_OPPONENT_UPDATE" and #events.arenaFaction == 3,
+    "faction-tracking arena frames lack the arena identity event on the unit route")
+Check(events.arenaUnits.arena1 == true and events.arenaUnits.arena4 == true and events.arenaUnits.arena5 == true,
+    "arena4/5 lack the arena identity events")
+Check(events.identityByUnit.arena1 == nil and events.identityCombatByUnit.arena5 == nil,
+    "an arena frame still takes its identity event on the unitless route")
+Check(events.arenaUnits.arena6 == nil, "identity events reached arena6")
 Check(events.identity.ARENA_OPPONENT_UPDATE == true and events.identity.PLAYER_TARGET_CHANGED == true,
     "the identity reset events are incomplete")
 
 events = buildEvents(3)
-Check(events.identityByUnit.arena3 ~= nil and events.identityByUnit.arena4 == nil,
+Check(events.arenaUnits.arena3 == true and events.arenaUnits.arena4 == nil,
     "identity events reached arena4 at three slots")
 events = buildEvents(0)
-Check(events.identityByUnit.arena3 ~= nil and events.identityByUnit.arena1 ~= nil,
+Check(events.arenaUnits.arena3 == true and events.arenaUnits.arena1 == true,
     "arena1..3 lost their identity events on a client without arena")
 
 print("PASS Classic arena five-slot Auras: seeded arena4/5 owners, idempotent and count-gated; compile, menu and identity fan-out")
