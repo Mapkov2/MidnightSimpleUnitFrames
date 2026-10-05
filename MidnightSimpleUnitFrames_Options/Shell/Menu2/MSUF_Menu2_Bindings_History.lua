@@ -680,6 +680,28 @@ local function FlushApplyServiceNow()
     return false
 end
 
+-- Snapshots hold the variant-free base profile. Put it back under the live
+-- variant overlays: strip them without capturing (the live values are about to
+-- be discarded), restore the add-on roots, replace, then re-resolve. Without
+-- the re-resolve the next capture writes the base values into the variants.
+local function RestoreHistoryProfile(activeDB, profileDB, reason)
+    if MSUF.ProfileVariants then MSUF.ProfileVariants.Restore(false) end
+    if MSUF.ProfileFields and MSUF.ProfileFields.RestoreExternal then
+        local restored=MSUF.ProfileFields.RestoreExternal(activeDB,profileDB)
+        -- A refused restore must not leave the live profile without its active
+        -- variant overlays, which Restore(false) stripped above.
+        if not restored then
+            if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
+            return false
+        end
+        profileDB=MSUF.ProfileFields.StripExternal(DeepCopy(profileDB))
+    end
+    DeepReplace(activeDB, profileDB)
+    if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
+    if MSUF.ProfileFields and MSUF.ProfileFields.ApplyExternal then MSUF.ProfileFields.ApplyExternal(reason) end
+    return true
+end
+
 local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     if type(snapshot) ~= "table" then return false end
     if trustProfile ~= true and IsForeignProfileSnapshot(snapshot) then return false, "profile_mismatch" end
@@ -695,21 +717,10 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     local willEnable = type(restoredUi) == "table" and restoredUi.Enabled == true
     local scaleChanged = wasEnabled ~= willEnable
         or (willEnable and tonumber(activeUi.Scale) ~= tonumber(restoredUi.Scale))
-    if MSUF.ProfileVariants then MSUF.ProfileVariants.Restore(false) end
-    if MSUF.ProfileFields and MSUF.ProfileFields.RestoreExternal then
-        local restored=MSUF.ProfileFields.RestoreExternal(activeDB,profileDB)
-        -- A refused restore must not leave the live profile without its active
-        -- variant overlays, which Restore(false) stripped above.
-        if not restored then
-            historyRestoring=false
-            if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
-            return false
-        end
-        profileDB=MSUF.ProfileFields.StripExternal(DeepCopy(profileDB))
+    if not RestoreHistoryProfile(activeDB, profileDB, reason or "MSUF2_HISTORY") then
+        historyRestoring = false
+        return false
     end
-    DeepReplace(activeDB, profileDB)
-    if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
-    if MSUF.ProfileFields and MSUF.ProfileFields.ApplyExternal then MSUF.ProfileFields.ApplyExternal(reason or "MSUF2_HISTORY") end
     RestoreProfileRouting(snapshot)
     local externalAPI = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
     if type(externalAPI) == "table" and type(externalAPI._RestoreHistorySnapshot) == "function"
@@ -937,7 +948,10 @@ function M.CancelHistorySurface(surface, restoreState)
         local profileDB = HistoryProfileDB(marker.snapshot)
         if type(profileDB) ~= "table" then return false end
         historyRestoring = true
-        DeepReplace(M.EnsureDB(), profileDB)
+        if not RestoreHistoryProfile(M.EnsureDB(), profileDB, "MSUF2_HISTORY_CANCEL_SURFACE") then
+            historyRestoring = false
+            return false
+        end
         RestoreProfileRouting(marker.snapshot)
         RestoreHistoryProviders(marker.snapshot, "MSUF2_HISTORY_CANCEL_SURFACE", surface)
         historyRestoring = false
