@@ -615,11 +615,8 @@ end
 local function GridShape(maxCount, perRow, vertical)
     local count = math_max(Round(maxCount), 1)
     local per = math_max(Round(perRow), 1)
-    if vertical == true then
-        local rows = math_min(count, per)
-        local cols = math_ceil(count / per)
-        return cols, rows
-    end
+    -- Up/Down (Single Column) is one column of every icon (PositionButton).
+    if vertical == true then return 1, count end
     local cols = math_min(count, per)
     local rows = math_ceil(count / per)
     return cols, rows

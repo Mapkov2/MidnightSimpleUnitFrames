@@ -4,6 +4,7 @@
 --   * a corner Custom Spell slot scans with its Filter (buff or debuff, any
 --     caster or cast by me), as Retail scans customFilter
 --   * a custom container keeps its Cooldown swipe with Cooldown text off
+--   * Up/Down (Single Column) growth keeps one column on unit and container lanes
 -- Arguments: repository root, flavor (Vanilla, TBC or Mists).
 local root = assert(arg[1], "repository root argument missing")
 root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
@@ -230,5 +231,46 @@ containerPlaced.showCooldown, containerPlaced.showCooldownSwipe = true, false
 cooldown = ContainerCooldown()
 assert(cooldown._shown == true and cooldown._drawSwipe == false and cooldown._hideNumbers == false,
     "Cooldown swipe off hid the custom container's countdown text")
+
+-- 3. Up/Down (Single Column) growth lays out one column -----------------------------------
+-- The menus label it "Single Column" and grey out Per row for it; the hidden
+-- Per row value must not wrap the icons into more columns.
+local function Column(lane, label)
+    local x
+    for i = 1, lane.visible do
+        local point = assert(lane[i]._point, label .. ": icon " .. i .. " was never placed")
+        x = x or point.x
+        assert(point.x == x, label .. ": icon " .. i .. " left the column (x " .. tostring(point.x) .. ")")
+        assert(math.abs(point.y) == (i - 1) * lane.config.stepY,
+            label .. ": icon " .. i .. " is not one step below the previous (y " .. tostring(point.y) .. ")")
+    end
+end
+local column = {}
+for i = 1, 8 do
+    column[i] = { auraInstanceID = 700 + i, spellId = 777001, name = "Spell777001", icon = 3, duration = 30,
+        expirationTime = 60 + i, isHelpful = true, isHarmful = false, mine = false }
+end
+SetAuras("target", column)
+containerPlaced.showCooldown, containerPlaced.showCooldownSwipe = true, true
+containerPlaced.size, containerPlaced.spacing, containerPlaced.max, containerPlaced.perRow = 24, 2, 8, 4
+for _, growth in ipairs({ "UP", "DOWN" }) do
+    containerPlaced.growth = growth
+    A3.BumpRuntimeConfig()
+    local lane = UnitFrame("target")._msufA3State.lanes.custom1
+    assert(lane.visible == 8, "precondition: the custom container does not show eight auras")
+    assert(lane.config.cols == 1 and lane.config.rows == 8 and lane.config.width == 24 and lane.config.height == 206,
+        "custom container " .. growth .. ": the lane is " .. lane.config.cols .. " columns by " .. lane.config.rows .. " rows")
+    Column(lane, "custom container " .. growth)
+end
+_G.MSUF_DB.auras3.customContainers = nil
+_G.MSUF_DB.auras3.perUnit.target.layoutShared = {
+    showBuffs = true, showDebuffs = false, maxBuffs = 8, buffPerRow = 4, buffGrowthX = "DOWN",
+}
+A3.BumpRuntimeConfig()
+local buffLane = UnitFrame("target")._msufA3State.lanes.buff
+assert(buffLane.visible == 8 and buffLane.config.cols == 1 and buffLane.config.rows == 8,
+    "target buffs Down: the lane is " .. buffLane.config.cols .. " columns by " .. buffLane.config.rows .. " rows")
+Column(buffLane, "target buffs Down")
+_G.MSUF_DB.auras3.perUnit.target.layoutShared = { showBuffs = false, showDebuffs = false }
 
 print("classic aura setting parity smoke passed: " .. flavor)

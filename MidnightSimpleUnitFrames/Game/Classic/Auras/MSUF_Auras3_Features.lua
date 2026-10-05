@@ -339,9 +339,10 @@ end
 
 local function Grid(maxCount, perRow, vertical)
     if maxCount <= 0 then return 0, 0 end
+    -- Up/Down (Single Column) is one column of every icon (PositionButton).
+    if vertical then return 1, maxCount end
     local primary = math_min(maxCount, perRow)
     local secondary = math_floor((maxCount + perRow - 1) / perRow)
-    if vertical then return secondary, primary end
     return primary, secondary
 end
 

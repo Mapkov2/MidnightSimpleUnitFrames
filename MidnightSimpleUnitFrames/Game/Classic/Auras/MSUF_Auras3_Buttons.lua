@@ -159,8 +159,9 @@ local function PositionButton(lane, button, index)
     local idx = index - 1
     local col, row
     if cfg.verticalGrowth == true then
-        row = idx % perRow
-        col = (idx - row) / perRow
+        -- Up/Down (Single Column): the menu greys out Per row for them, and
+        -- Retail and the Edit Mode preview (IconGridCoord) keep one column.
+        col, row = 0, idx
     else
         col = idx % perRow
         row = (idx - col) / perRow
