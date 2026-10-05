@@ -2,13 +2,15 @@
 --
 -- Custom Anchor Frame is free text (MSUF_Menu2_UnitSections stores it raw), so
 -- the name can hit any global: a function (CreateFrame, print), an addon
--- namespace table, a string. Only a UI object can be an anchor. The position
--- pass used to hand any truthy global to the anchor cycle check and SetPoint:
--- a function raised "attempt to index local 'region'", which aborted the unit
--- loop so the frames after it were never positioned.
+-- namespace table, a string, or a UI object that is not a region (a Font, an
+-- AnimationGroup such as AnimateMouse). Only a region can be an anchor. The
+-- position pass used to hand any truthy global to the anchor cycle check and
+-- SetPoint: a function raised "attempt to index local 'region'", which aborted
+-- the unit loop so the frames after it were never positioned, and a non-region
+-- UI object made SetPoint raise the same way.
 --
 -- Boots the real client graph and drives the real factory position pass.
--- Pins: a non-UI-object global is recorded as a missing anchor, the pass runs
+-- Pins: a non-region global is recorded as a missing anchor, the pass runs
 -- through every unit without raising, and a real frame of the same kind of
 -- name still anchors.
 --
@@ -50,7 +52,33 @@ local function Run(flavor)
 
     env.MSUFTestNamespace = { name = "an addon namespace, not a frame" }
     env.MSUFTestString = "not a frame either"
-    local NON_FRAMES = { "CreateFrame", "MSUFTestNamespace", "MSUFTestString" }
+    -- UI objects that are not regions. The shared widget stub gives every
+    -- object one method table (SetPoint included), which is more lenient
+    -- than the client, so these carry only the surface their client type
+    -- has: SetPoint and its relativeTo exist only on ScriptRegion
+    -- (SimpleScriptRegionResizingAPIDocumentation, every mirror branch).
+    -- AnimateMouse is a real AnimationGroup global (TutorialFrame.xml), and
+    -- GameFontNormal-style globals are Font objects.
+    local function NonRegion(objectType)
+        local object = {}
+        function object:GetObjectType() return objectType end
+        function object:IsObjectType(kind) return kind == objectType end
+        function object:IsForbidden() return false end
+        function object:GetParent() return env.UIParent end
+        function object:GetName() return nil end
+        return object
+    end
+    env.MSUFTestAnimationGroup = NonRegion("AnimationGroup")
+    env.MSUFTestFontObject = NonRegion("Font")
+    local nativeSetPoint = world.widgets.Methods.SetPoint
+    world.widgets.Methods.SetPoint = function(self, point, relativeTo, ...)
+        if type(relativeTo) == "table" and relativeTo.SetPoint == nil then
+            error("SetPoint: relativeTo must be a ScriptRegion, got " .. tostring(relativeTo:GetObjectType()), 2)
+        end
+        return nativeSetPoint(self, point, relativeTo, ...)
+    end
+    local NON_FRAMES = { "CreateFrame", "MSUFTestNamespace", "MSUFTestString",
+        "MSUFTestAnimationGroup", "MSUFTestFontObject" }
     for _, name in ipairs(NON_FRAMES) do
         db.target.anchorFrameName = name
         Config.Refresh()
