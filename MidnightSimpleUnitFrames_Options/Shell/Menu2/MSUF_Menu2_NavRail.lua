@@ -465,7 +465,10 @@ local function BuildNavRail(parent)
     parent._msuf2BrandIconFrame = brandIconFrame
     parent._msuf2BrandIcon = brandIcon
     parent._msuf2BrandTitle = brand
-    local search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    -- The visual template supplies a bright native search atlas that covers the
+    -- dark MSUF input surface. Keep its keyboard scripts without its artwork.
+    local search = CreateFrame("EditBox", nil, parent, "InputBoxScriptTemplate")
+    search:SetFontObject(_G.ChatFontNormal or _G.GameFontHighlightSmall)
     search:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -40)
     search:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -12, -40)
     search:SetHeight(20)

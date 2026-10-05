@@ -59,7 +59,10 @@ local function RestoreHidden(hidden)
     end
 end
 local function Suppress(target, record, keys)
-    if record.suppressed then return end
+    -- Search adds its rounded layers after the first skin pass. Include their
+    -- identity in the cache so newly created, untinted artwork is hidden too.
+    if record.suppressed and record.roundedFill == target._msuf2RoundedEditFill
+        and record.roundedEdge == target._msuf2RoundedEditEdge then return end
     record.hidden = record.hidden or {}
     for i = 1, #keys do HidePart(target[keys[i]], record.hidden, 0) end
     if target.GetBackdropColor and target.SetBackdropColor then
@@ -68,6 +71,7 @@ local function Suppress(target, record, keys)
         target:SetBackdropColor(0, 0, 0, 0)
         if target.SetBackdropBorderColor then target:SetBackdropBorderColor(0, 0, 0, 0) end
     end
+    record.roundedFill, record.roundedEdge = target._msuf2RoundedEditFill, target._msuf2RoundedEditEdge
     record.suppressed = true
 end
 local function Restore(target, record)
@@ -75,7 +79,7 @@ local function Restore(target, record)
     if record.bg and record.bg[1] and target.SetBackdropColor then target:SetBackdropColor(unpack(record.bg)) end
     if record.edge and record.edge[1] and target.SetBackdropBorderColor then target:SetBackdropBorderColor(unpack(record.edge)) end
     record.bg, record.edge, record.suppressed, record.skinned = nil, nil, nil, nil
-    record.focused = nil
+    record.focused, record.roundedFill, record.roundedEdge = nil, nil, nil
     -- Native painters cache previous writes; restoring a provider is a paint boundary.
     target._msuf2BackdropInfoApplied, target._msuf2BackdropR, target._msuf2BackdropBorderR = nil, nil, nil
     target._msuf2GlassApplied, target._msuf2SliderVisualReady = nil, nil

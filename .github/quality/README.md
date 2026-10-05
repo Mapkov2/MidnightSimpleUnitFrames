@@ -28,6 +28,8 @@ export providers, then executes the behavior contracts through the versioned
 - shared render stages with separate per-preview dependencies and unchanged order;
 - media burst coalescing, group refresh masks, combat catch-up and timer fallback;
 - plain/secret text cache transitions and current visible priority-row ownership;
+- Modern search input layers created after skinning, focus changes, cached paints,
+  and native visibility restoration when switching the skin off and on;
 - startup manifest language filtering, exact client-language aura data, unchanged
   menu-language availability and a 15 MB core Lua source budget for every locale.
 
