@@ -107,6 +107,45 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     -- A percent mark is placed at value / 100, so it spans 0-100; an absolute mark
     -- keeps the wide range of raw power values (MSUF_CP_ResourceMarks.lua).
     local function ValueMax(rule) return rule and rule.mode=="ABSOLUTE" and 10000000 or 100 end
+    -- The player's maximum of a power (a token such as COMBO_POINTS, or its
+    -- Enum.PowerType value), or 0 when it cannot be read.
+    local function PowerMax(power)
+        if type(power)=="string" then power=Enum.PowerType[(power:lower():gsub("^%l",string.upper):gsub("_(%l)",string.upper))] end
+        local maximum=type(power)=="number" and UnitPowerMax("player",power)
+        if (issecretvalue and issecretvalue(maximum)) or type(maximum)~="number" then return 0 end
+        return maximum
+    end
+    -- The value slider's range. The runtime places an absolute mark at value /
+    -- UnitPowerMax of the power it sits on and shows it only up to that maximum,
+    -- so the slider spans this character's maximum of that power: the named one,
+    -- else what the chosen bar shows (the Player bar's power, mana, the largest
+    -- class resource). 0-100 when it cannot be read. A saved value above the
+    -- maximum widens the range and is never cut.
+    local function SliderMax(rule)
+        if not (rule and rule.mode=="ABSOLUTE") then return 100 end
+        local maximum=0
+        if rule.resource and rule.resource~="ALL" then
+            maximum=PowerMax(rule.resource)
+        elseif rule.target=="ALTMANA" then
+            maximum=PowerMax("MANA")
+        elseif rule.target=="CLASS" then
+            for _,item in ipairs(POWER_TYPES) do
+                if item[3] then maximum=math.max(maximum,PowerMax(item[1])) end
+            end
+        else
+            -- What the Player bar shows (MSUF_CP_ResourceMarks DisplayedPower).
+            local helpers,power=M.PreviewHelpers,UnitPowerType("player")
+            if helpers and helpers.PlayerManaSourceActive and helpers.PlayerManaSourceActive(M.EnsureDB().player) then
+                power="MANA"
+            elseif issecretvalue and issecretvalue(power) then
+                power=nil
+            end
+            maximum=PowerMax(power)
+        end
+        if maximum<=0 then maximum=100 end
+        local stored=tonumber(rule.value)
+        return stored and stored>maximum and math.min(ValueMax(rule),stored) or maximum
+    end
     local function Write(key,value)
         local rule=Rule()
         if rule then
@@ -114,8 +153,9 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
             local stored=tonumber(rule.value)
             if stored and (key=="value" or key=="mode") then rule.value=math.max(0,math.min(ValueMax(rule),stored)) end
             Apply()
-            -- A new mode changes the value range and may have clamped the value.
-            if key=="mode" then Refresh() end
+            -- A new mode, bar or power changes the value range; a new mode may
+            -- also have clamped the value.
+            if key=="mode" or key=="target" or key=="resource" then Refresh() end
         end
     end
     local function Values()
@@ -174,7 +214,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
             -- Registered before the value binding, so the range is set before the value.
             M.TrackRefresh(ctx,function()
                 widget._msuf2Refreshing=true
-                widget:SetMinMaxValues(0,ValueMax(Rule()))
+                widget:SetMinMaxValues(0,SliderMax(Rule()))
                 widget._msuf2Refreshing=nil
             end)
         end
