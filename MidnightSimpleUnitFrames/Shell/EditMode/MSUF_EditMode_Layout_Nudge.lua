@@ -341,6 +341,22 @@ local function NudgeTarget(dx, dy, exactDelta)
     local s = exactDelta and 1 or GetStep()
     local ndx, ndy = dx * s, dy * s
 
+    -- An open aura popup is the selection the toolbar shows. Opening it from
+    -- an aura group changes neither the unit key nor a preview target, so it
+    -- comes before the routes those choose.
+    local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
+    local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
+    local a2PopupOpen = false
+    do local ap = _G.MSUF_EM2_AuraPopup; a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false end
+    if auraGroup and (auraPopupOpen or a2PopupOpen) then
+        local unitKey = _G.MSUF_EM2_ActiveAuraUnit
+        if not unitKey then
+            local auraPF = _G.MSUF_EM2_AuraPopup
+            unitKey = auraPF and auraPF.unit
+        end
+        return NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
+    end
+
     local selectedKey = EM2.State.GetUnitKey and EM2.State.GetUnitKey() or nil
     local selectedCfg = selectedKey and EM2.Registry and EM2.Registry.Get(selectedKey) or nil
     if selectedCfg and selectedCfg.externalPublicElement == true then
@@ -364,19 +380,6 @@ local function NudgeTarget(dx, dy, exactDelta)
         local castPF = _G.MSUF_EM2_CastPopup
         local unit = (EM2.CastPopup.GetUnit and EM2.CastPopup.GetUnit()) or (castPF and castPF.unit)
         return NudgeCastbar(unit, ndx, ndy)
-    end
-
-    local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
-    local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
-    local a2PopupOpen = false
-    do local ap = _G.MSUF_EM2_AuraPopup; a2PopupOpen = ap and ap.IsShown and ap:IsShown() or false end
-    if auraGroup and (auraPopupOpen or a2PopupOpen) then
-        local unitKey = _G.MSUF_EM2_ActiveAuraUnit
-        if not unitKey then
-            local auraPF = _G.MSUF_EM2_AuraPopup
-            unitKey = auraPF and auraPF.unit
-        end
-        return NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
     end
 
     if EM2.Focus and EM2.Focus.NudgeSelection and EM2.Focus.NudgeSelection(ndx, ndy) then

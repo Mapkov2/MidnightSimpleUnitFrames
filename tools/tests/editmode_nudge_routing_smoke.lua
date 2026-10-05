@@ -11,6 +11,11 @@
 --    the WoW Forever gamepad's move mode, which selects without opening it)
 --    fell through to db["castbar_player"], which does not exist: castbar
 --    offsets live in db.general. The arrows and the pad moved nothing.
+-- 3. An aura group's popup (the toolbar then reads "<Unit> / Auras") opens
+--    without changing the unit key or the preview nudge target, and the router
+--    checked the external, resource and preview routes first: the arrows and
+--    the pad moved a previously clicked resource bar, external frame or the
+--    tooltip preview instead of the aura group.
 --
 -- Loads the real MSUF_EditMode_State.lua, MSUF_EditMode_Layout_Nudge.lua and
 -- Game/Forever/PadEditMode.lua, with the Kernel's InCombat taken verbatim from
@@ -79,7 +84,7 @@ local ns = { ExportPublic = function(name, value) _G[name] = value; return value
 local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua"))()
 RequireFixture.Install(root, ns)
 
-MSUF_DB = { player = { offsetX = 0, offsetY = 0 }, general = {} }
+MSUF_DB = { player = { offsetX = 0, offsetY = 0 }, general = {}, bars = {}, auras3 = { perUnit = {}, shared = {} } }
 MSUF_GetCastbarPrefix = function(unit) return "castbar" .. unit:sub(1, 1):upper() .. unit:sub(2) end
 MSUF_GetCastbarDefaultOffsets = function(unit) if unit == "player" then return 0, 5 end return 65, -15 end
 local castbarSyncs = 0
@@ -113,7 +118,19 @@ local registry = {
     player = { key = "player", popupType = "unit", canNudge = true },
     target = { key = "target", popupType = "unit", canNudge = true },
     castbar_player = { key = "castbar_player", popupType = "castbar", castbarUnit = "player", canNudge = true },
+    -- RegisterResourceMovers' Class Resources row.
+    classpower = {
+        key = "classpower", popupType = "resource", resourceKind = "classpower", canNudge = true,
+        historyCategory = "classpower", historyKey = "bars",
+        subframeOffsetXKey = "classPowerOffsetX", subframeOffsetYKey = "classPowerOffsetY",
+        getFrame = function() return UIParent end,
+        getConf = function() return MSUF_DB.bars end,
+        commitSubframePosition = function() return true end,
+    },
+    ["external:msuf.blizzard:minimap"] = { key = "external:msuf.blizzard:minimap", externalPublicElement = true },
 }
+local externalNudges = 0
+EM2.ExternalElements = { Nudge = function() externalNudges = externalNudges + 1; return true end }
 EM2.Registry = { Get = function(key) return registry[key] end, All = function() return registry end }
 local focusKey
 EM2.Focus = {
@@ -124,7 +141,8 @@ EM2.Focus = {
 }
 local castPopupOpen = false
 EM2.CastPopup = { IsOpen = function() return castPopupOpen end, GetUnit = function() return "player" end }
-EM2.AuraPopup = { IsOpen = function() return false end }
+local auraPopupOpen = false
+EM2.AuraPopup = { IsOpen = function() return auraPopupOpen end }
 local undoEntries = {}
 EM2.Undo = {
     PrepareChange = function(category, key) return { category = category, key = key } end,
@@ -209,4 +227,47 @@ castPopupOpen = false
 assert(general.castbarPlayerOffsetX == 3, "the castbar popup's arrow nudge regressed")
 EM2.State.Exit("test")
 
-print("Edit Mode nudge routing: arrows released at the combat edge, castbar selected without its popup passed")
+-- 3. The open aura popup wins over an earlier resource, external or preview selection.
+local bars = MSUF_DB.bars
+local function BuffX()
+    local layout = MSUF_DB.auras3.perUnit.player and MSUF_DB.auras3.perUnit.player.layout
+    return layout and layout.buffGroupOffsetX or 0
+end
+-- Auras3/MSUF_Auras3_EditMode_Drag.lua OpenAuraGroupPopup: the aura globals, then the popup.
+local function OpenAuraPopup(unit, kind)
+    MSUF_EM2_ActiveAuraGroup, MSUF_EM2_ActiveAuraUnit = kind, unit
+    auraPopupOpen = true
+end
+assert(EM2.State.Enter("player") == true, "Edit Mode did not open")
+EM2.State.SetUnitKey("classpower")              -- the Class Resources mover click
+Arrow("RIGHT")
+assert(bars.classPowerOffsetX == 1 and BuffX() == 0, "the arrows no longer move the selected Class Resources")
+OpenAuraPopup("player", "buff")
+Arrow("RIGHT")
+assert(BuffX() == 1 and bars.classPowerOffsetX == 1,
+    "with the player's Buffs popup open the arrows moved the earlier Class Resources selection")
+watched.MSUF_EM2_AuraPopup.nudge(nil, nil, 1, 0) -- the pad's move mode in the aura popup
+assert(BuffX() == 2 and bars.classPowerOffsetX == 1, "the pad in the Buffs popup moved Class Resources")
+auraPopupOpen = false
+EM2.State.SetUnitKey("external:msuf.blizzard:minimap")
+Arrow("RIGHT")
+assert(externalNudges == 1, "the arrows no longer move the selected external element")
+OpenAuraPopup("player", "buff")
+Arrow("RIGHT")
+assert(BuffX() == 3 and externalNudges == 1,
+    "with the player's Buffs popup open the arrows moved the earlier external selection")
+auraPopupOpen = false
+EM2.State.SetUnitKey("player")
+local previewNudges = 0
+MSUF_EM2_SetPreviewNudgeTarget({ frame = UIParent, Nudge = function() previewNudges = previewNudges + 1 end })
+Arrow("RIGHT")
+assert(previewNudges == 1, "the arrows no longer move the targeted preview")
+OpenAuraPopup("player", "buff")
+Arrow("RIGHT")
+assert(BuffX() == 4 and previewNudges == 1,
+    "with the player's Buffs popup open the arrows moved the earlier tooltip preview target")
+auraPopupOpen = false
+EM2.State.Exit("test")
+
+print("Edit Mode nudge routing: arrows released at the combat edge, castbar selected without its popup, "
+    .. "open aura popup over earlier selections passed")
