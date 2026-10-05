@@ -872,8 +872,11 @@ local function HideTrailingButtons(lane, visibleByID, visible)
     for i = visible + 1, oldVisible do
         local button = lane[i]
         if button then
-            if button.auraInstanceID ~= nil then
-                visibleByID[button.auraInstanceID] = nil
+            -- The trailing button keeps the ID of an aura this render may have
+            -- moved to a lower slot; only a mapping to this slot is stale.
+            local auraInstanceID = button.auraInstanceID
+            if auraInstanceID ~= nil and visibleByID[auraInstanceID] == i then
+                visibleByID[auraInstanceID] = nil
             end
             button.auraInstanceID = nil
             HideButton(button)
