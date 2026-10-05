@@ -16,8 +16,13 @@
 --    checked the external, resource and preview routes first: the arrows and
 --    the pad moved a previously clicked resource bar, external frame or the
 --    tooltip preview instead of the aura group.
+-- 4. A mover drag selected the element for the toolbar (Focus) but never set
+--    the unit key: only the mover's OnClick does, and a real drag suppresses
+--    that click. The arrows and the toolbar's Reset then acted on the element
+--    clicked before (on a fresh session, the Player frame).
 --
--- Loads the real MSUF_EditMode_State.lua, MSUF_EditMode_Layout_Nudge.lua and
+-- Loads the real MSUF_EditMode_State.lua, MSUF_EditMode_Layout_Nudge.lua,
+-- MSUF_EditMode_Movers.lua, MSUF_EditMode_HUD_Selection.lua and
 -- Game/Forever/PadEditMode.lua, with the Kernel's InCombat taken verbatim from
 -- Kernel/MSUF_Util.lua.
 -- Usage: lua tools/tests/editmode_nudge_routing_smoke.lua <repoRoot>
@@ -269,5 +274,69 @@ assert(BuffX() == 4 and previewNudges == 1,
 auraPopupOpen = false
 EM2.State.Exit("test")
 
+-- 4. A mover drag selects its element for the arrows and the toolbar's Reset too.
+-- Movers build textures, labels and backdrops; those cosmetic calls are no-ops here.
+local function Lenient(frame)
+    return setmetatable(frame, { __index = function(_, method)
+        if Frame[method] then return Frame[method] end
+        if not method:find("^%u") then return nil end -- fields, not widget methods
+        if method == "CreateTexture" or method == "CreateFontString" then
+            return function() return Lenient({ scripts = {}, events = {}, shown = true }) end
+        end
+        if method == "GetFrameLevel" then return function() return 10 end end
+        if method == "IsMouseOver" then return function() return false end end
+        return function() end
+    end })
+end
+local plainCreateFrame = CreateFrame
+CreateFrame = function(...) return Lenient(plainCreateFrame(...)) end
+local cursorX, cursorY = 500, 400
+GetCursorPosition = function() return cursorX, cursorY end
+MSUF_UF_FrameRectToUI = function() return 0, 100, 100, 0 end
+Lenient(UIParent)
+UIParent.GetWidth = function() return 1366 end
+UIParent.GetHeight = function() return 768 end
+UIParent.GetEffectiveScale = function() return 1 end
+MSUF_EM_UndoBeginChange = function() return true end
+MSUF_EM_UndoCommitChange = function() return true end
+MSUF_BlockConfigCombatLocked = function() return MSUF_IsConfigCombatLocked() end
+MSUF_GetDefaultUnitOffsets = function(key) if key == "player" then return -260, -200 end return 260, -200 end
+MSUF_ApplyPowerBarEmbedLayout_ForUnitKey = function() end
+EM2.Util.Tr = function(text) return text end
+EM2.Util.ThemeColor = function(_, fallback) return fallback end
+EM2.Ticker = { BeginDrag = function() return true end, EndDrag = function() return true end,
+    IsDragging = function() return false end }
+EM2.HUD = { RefreshUnitSelector = function() end, SetStatus = function() end, RefreshControls = function() end }
+EM2.HUDKit = { HelpText = function(text) return text end }
+for _, file in ipairs({ "MSUF_EditMode_Movers.lua", "MSUF_EditMode_HUD_Selection.lua" }) do
+    assert(loadfile(root .. "/" .. EM_DIR .. file))("MidnightSimpleUnitFrames", ns)
+end
+MSUF_DB.player.offsetX, MSUF_DB.player.offsetY = 0, 0
+MSUF_DB.target = { offsetX = 300, offsetY = 0 }
+assert(EM2.State.Enter() == true and EM2.State.GetUnitKey() == "player", "a fresh session must start on the player")
+EM2.Movers.Show()
+local targetMover = assert(EM2.Movers.Get("target"), "no Target mover")
+-- Press on the Target mover, move the cursor 60 px, release: the click that follows is suppressed.
+targetMover.scripts.OnMouseDown(targetMover, "LeftButton")
+cursorX = cursorX + 60
+targetMover.scripts.OnMouseUp(targetMover, "LeftButton")
+targetMover.scripts.OnClick(targetMover, "LeftButton")
+assert(focusKey == "target", "the drag did not select the Target frame for the toolbar")
+assert(EM2.State.GetUnitKey() == "target", "the drag selected the Target frame for the toolbar but not for the arrows")
+Arrow("RIGHT")
+assert(MSUF_DB.target.offsetX == 301 and MSUF_DB.player.offsetX == 0,
+    "the right arrow after dragging the Target frame moved the Player frame instead")
+assert(EM2.HUDSelection.CurrentSelectionKey() == "target", "the toolbar's Reset would act on another frame")
+EM2.HUD.ResetCurrentPosition()
+assert(MSUF_DB.target.offsetX == 260 and MSUF_DB.player.offsetX == 0,
+    "the toolbar's Reset after dragging the Target frame reset the Player frame instead")
+-- A plain click (no drag) still selects through OnClick as before.
+local playerMover = assert(EM2.Movers.Get("player"), "no Player mover")
+playerMover.scripts.OnMouseDown(playerMover, "LeftButton")
+playerMover.scripts.OnMouseUp(playerMover, "LeftButton")
+playerMover.scripts.OnClick(playerMover, "LeftButton")
+assert(EM2.State.GetUnitKey() == "player" and focusKey == "player", "a mover click no longer selects its element")
+EM2.State.Exit("test")
+
 print("Edit Mode nudge routing: arrows released at the combat edge, castbar selected without its popup, "
-    .. "open aura popup over earlier selections passed")
+    .. "open aura popup over earlier selections, drag selects for arrows and Reset passed")

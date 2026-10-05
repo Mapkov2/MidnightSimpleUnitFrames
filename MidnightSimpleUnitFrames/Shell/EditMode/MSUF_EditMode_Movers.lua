@@ -296,6 +296,14 @@ local function MoverLabelText(key, cfg)
     return Tr(cfg and cfg.label or key)
 end
 
+--- A drag selects like a click (whose OnClick a real drag suppresses): the
+--- arrow keys and the toolbar's Reset act on the unit key.
+local function SelectDraggedMover(key)
+    if EM2.State then EM2.State.SetUnitKey(key) end
+    if EM2.HUD then EM2.HUD.RefreshUnitSelector() end
+    if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "drag" }) end
+end
+
 local function CreateMover(key, cfg)
     local th = T()
 
@@ -416,7 +424,7 @@ local function CreateMover(key, cfg)
             self._msufHistoryDrag = _G.MSUF_EM_UndoBeginChange(historyCategory, historyKey, "Move") == true
         end
 
-        if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "drag" }) end
+        SelectDraggedMover(key)
         return true
     end
 
