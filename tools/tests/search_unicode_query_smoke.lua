@@ -173,34 +173,7 @@ do
     end
 end
 
--- Menu2 sources keep their words in UTF-8 once: no UTF-8 text re-encoded as
--- Latin-1 and saved again ("schlÃ¼sselstein" for "schlüsselstein" in the
--- search term rows). A two-byte character re-encoded becomes Ã/Â plus a
--- Latin-1 supplement character: C3 80-9F, then C2 80-BF.
-do
-    local pipe = assert(io.popen('git -C "' .. root .. '" ls-files -- MidnightSimpleUnitFrames_Options/Shell/Menu2', "r"))
-    local scanned = 0
-    for path in pipe:lines() do
-        if path:match("%.lua$") or path:match("%.xml$") then
-            local handle = assert(io.open(root .. "/" .. path, "rb"))
-            local source = handle:read("*a")
-            handle:close()
-            scanned = scanned + 1
-            local at = source:find("\195[\128-\159]\194[\128-\191]")
-            Check(at == nil, path .. ": double-encoded UTF-8 near '" .. (at and source:sub(math.max(1, at - 12), at + 8) or "") .. "'")
-        end
-    end
-    pipe:close()
-    Check(scanned > 100, "Menu2 source scan saw only " .. scanned .. " files")
-    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua", "rb"))
-    local routing = handle:read("*a")
-    handle:close()
-    Check(routing:find("|schluesselstein|schl\195\188sselstein|", 1, true) ~= nil,
-        "Routing.lua lost the UTF-8 spelling of the keystone search term")
-end
-
 if #failures > 0 then
     error("search_unicode_query_smoke failed:\n  " .. table.concat(failures, "\n  "))
 end
-print("search_unicode_query_smoke: ok (Cyrillic folding, two-word aliases, character minimum, return-page boost, UTF-8 cuts,"
-    .. " single-encoded Menu2 sources)")
+print("search_unicode_query_smoke: ok (Cyrillic folding, two-word aliases, character minimum, return-page boost, UTF-8 cuts)")

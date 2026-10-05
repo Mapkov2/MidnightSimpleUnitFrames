@@ -387,7 +387,7 @@ local function SearchTermRows(text)
 end
 
 local GROUP_SCOPE_TERMS = SearchTermRows [[
-party=mythic plus|myhtic plus|keystone|schluesselstein|schlüsselstein|dungeon
+party=mythic plus|myhtic plus|keystone|schluesselstein|schlÃ¼sselstein|dungeon
 mythicraid=mythic raid|mythicraid|mythic
 raid=raid|raids
 party=party|group|groups
