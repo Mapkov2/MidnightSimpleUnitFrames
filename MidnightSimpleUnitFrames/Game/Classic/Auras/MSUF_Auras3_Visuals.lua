@@ -115,11 +115,14 @@ function V.SharedIconStyle(shared, scope, appearanceKind)
     }
 end
 
-local function Enrich(lane, layout, shared, prefix, portraitShape, scope)
+--- prefix names the lane's own layout keys; appearanceKind (default prefix)
+--- names its Appearance shape and icon style.
+local function Enrich(lane, layout, shared, prefix, portraitShape, scope, appearanceKind)
     if not lane then return nil end
+    appearanceKind = appearanceKind or prefix
     local shapes = type(shared) == "table" and type(shared.appearanceIconShapes) == "table"
         and shared.appearanceIconShapes or nil
-    local shapeValue = shapes and shapes[prefix]
+    local shapeValue = shapes and shapes[appearanceKind]
         or Read(shared, nil, prefix .. "IconShape", Read(shared, nil, "iconShape", "RECTANGLE"))
     lane.iconShape = Shape.Resolve(shapeValue, portraitShape)
     lane.iconZoom = Clamp(Read(layout, nil, prefix .. "IconZoom", 100), 100, 100, 200)
@@ -130,7 +133,7 @@ local function Enrich(lane, layout, shared, prefix, portraitShape, scope)
     lane.durationBarHeight = Clamp(Read(layout, nil, prefix .. "DurationBarHeight", 2), 2, 1, 16)
     lane.durationBarPosition = tostring(Read(layout, nil, prefix .. "DurationBarPosition", "BOTTOM")):upper()
     lane.durationBarDirection = tostring(Read(layout, nil, prefix .. "DurationBarDirection", "REMAINING")):upper()
-    lane.iconStyle = V.SharedIconStyle(shared, scope or lane.unit, prefix)
+    lane.iconStyle = V.SharedIconStyle(shared, scope or lane.unit, appearanceKind)
     lane.classicVisualStyle = true
     lane.buttonWidth = lane.buttonWidth or lane.size
     lane.buttonHeight = lane.buttonHeight or lane.size
@@ -147,12 +150,15 @@ function V.EnrichUnitLane(lane, layout, sharedLayout, shared, kind, frameSpec)
     return Enrich(lane, merged, shared, prefix, frameSpec and frameSpec.portrait and frameSpec.portrait.shape, lane.unit)
 end
 
+--- Tracked buffs and externals wear the Buff appearance, as on Retail
+--- (Runtime_LaneConfig sharedLane); only their layout keys are their own.
 function V.EnrichGroupLane(lane, source, kind, frameSpec, scope)
     local prefix = kind
     local db = _G.MSUF_DB
     local root = db and db.auras3
     local shared = root and root.shared or {}
-    return Enrich(lane, source, shared, prefix, frameSpec and frameSpec.portrait and frameSpec.portrait.shape, scope)
+    return Enrich(lane, source, shared, prefix, frameSpec and frameSpec.portrait and frameSpec.portrait.shape, scope,
+        kind == "debuff" and "debuff" or "buff")
 end
 
 function V.EnrichCustomLane(lane, entry, frameSpec)

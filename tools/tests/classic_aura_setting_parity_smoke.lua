@@ -6,6 +6,7 @@
 --   * a custom container keeps its Cooldown swipe with Cooldown text off
 --   * Up/Down (Single Column) growth keeps one column on unit and container lanes
 --   * portrait icons past the first grow in the lane's Growth direction
+--   * group Tracked and External lanes wear the Buff appearance (shape, border, shadow)
 -- Arguments: repository root, flavor (Vanilla, TBC or Mists).
 local root = assert(arg[1], "repository root argument missing")
 root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
@@ -311,5 +312,30 @@ assert(second.x == 0 and second.y == 42 and lane.config.cols == 1 and lane.confi
     and lane.config.height == 124, ("portrait Up: icon 2 sits at x %s y %s, lane %sx%s"):format(
     tostring(second.x), tostring(second.y), tostring(lane.config.cols), tostring(lane.config.rows)))
 _G.MSUF_DB.auras3.customContainers = nil
+
+-- 5. Group Tracked and External lanes wear the Buff appearance ---------------------------
+-- Auras > Appearance offers Buff, Debuff, Player Defensives and Dots on Target
+-- (appearanceIconShapes / appearanceIconStyles); Retail gives every group lane
+-- but the debuff lane the Buff look (Runtime_LaneConfig sharedLane).
+local shared = _G.MSUF_DB.auras3.shared
+shared.appearanceIconShapes = { buff = "CIRCLE", debuff = "RECTANGLE" }
+shared.appearanceIconStyles = { buff = { styleBorderEnabled = true, styleShadowEnabled = true }, debuff = {} }
+A3.BumpRuntimeConfig()
+local groupConfig = A3._ClassicCompile.ResolveGroupFrameConfig({ MSUFUnitKey = "party1", _msufIsGroupFrame = true,
+    _msufGFKind = "party", MSUFSpec = { scope = "group", auras = {
+        enabled = true, showBuffs = true, showTrackedBuffs = true, showDebuffs = true, showExternals = true,
+        maxBuffs = 4, maxTrackedBuffs = 2, maxDebuffs = 4, maxExternals = 2,
+    } } }, "party1")
+for _, kind in ipairs({ "buff", "trackedBuff", "external" }) do
+    local laneConfig = assert(groupConfig.lanes[kind], "precondition: the group " .. kind .. " lane did not compile")
+    assert(laneConfig.iconShape == "CIRCLE" and laneConfig.iconStyle.borderEnabled == true
+        and laneConfig.iconStyle.shadowEnabled == true,
+        ("group %s lane: shape %s, border %s, shadow %s; expected the Buff appearance"):format(kind,
+        tostring(laneConfig.iconShape), tostring(laneConfig.iconStyle.borderEnabled),
+        tostring(laneConfig.iconStyle.shadowEnabled)))
+end
+assert(groupConfig.lanes.debuff.iconShape == "RECTANGLE" and groupConfig.lanes.debuff.iconStyle.borderEnabled == false,
+    "the group debuff lane did not keep the Debuff appearance")
+shared.appearanceIconShapes, shared.appearanceIconStyles = nil, nil
 
 print("classic aura setting parity smoke passed: " .. flavor)
