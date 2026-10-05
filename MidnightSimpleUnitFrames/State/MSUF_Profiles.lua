@@ -572,6 +572,10 @@ function MSUF_RenameProfile(sourceName, destName)
             ProfileChat("error", "Profile '%s' already exists.", destName)
         elseif InCombatLockdown() then
             print(Translate("|cffff0000MSUF:|r Cannot change profiles while in combat."))
+        elseif refusal == "invalid-profile-name" then
+            --- Too long was refused above; the Suite's rule also wants a
+            --- visible character and no control characters.
+            ProfileChat("error", "Profile names need a visible character and cannot contain control characters.")
         else
             ProfileChat("error", "Profile names can be at most %d bytes long.", 80)
         end

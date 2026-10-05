@@ -121,6 +121,15 @@ Check(env.MSUF_RenameProfile(source, "Odd") == false and Said("Profile names can
     "a refusal without a reason was not reported")
 Unchanged("refused without a reason")
 
+-- 3b. A Suite that cannot store a name of the right length (blank, or with a
+--     control character) says so; MSUF names that rule, not the length.
+asked, w.prints = {}, {}
+refusals["BadName"] = "invalid-profile-name"
+Check(env.MSUF_RenameProfile(source, "BadName") == false
+    and Said("Profile names need a visible character and cannot contain control characters.")
+    and not Said("bytes long"), "a refused 8-byte name was reported as too long")
+Unchanged("refused as an invalid name")
+
 -- 4. A Suite that accepts gets the rename first, then MSUF renames and switches.
 --    The Suite lends its store to sync and variants and creates a profile it
 --    is asked for by a name it does not hold (MSUF_Suite Core/ProfileVariants.lua),
