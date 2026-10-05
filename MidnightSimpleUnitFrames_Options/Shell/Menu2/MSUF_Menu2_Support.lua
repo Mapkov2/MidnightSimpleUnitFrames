@@ -1239,22 +1239,24 @@ function M.NormalizePortraitClassStyle(value)
     if value == "RONDO_COLOR" or value == "RONDO_WOW" or value == "BLIZZARD" then return value end
     return "BLIZZARD"
 end
--- MSUF Edit Mode only. Blizzard's Edit Mode publishes no global state or
--- combat lock (EditModeManagerFrameMixin:IsEditModeActive is a method), and a
--- global of that name would belong to another addon.
-function M.IsMSUFEditModeActive()
+function M.IsMSUFEditModeActive(includeBlizzard)
     local st = rawget(_G, "MSUF_EditState")
     if type(st) == "table" and st.active ~= nil then return st.active == true end
     local em2 = rawget(_G, "MSUF_EM2")
     local state = em2 and em2.State
     if state and type(state.IsActive) == "function" then return state.IsActive() and true or false end
     local fn = rawget(_G, "MSUF_IsInEditMode")
+        or (includeBlizzard and rawget(_G, "IsEditModeActive") or nil)
     if type(fn) == "function" then
         return fn() and true or false
     end
     return rawget(_G, "MSUF_UnitEditModeActive") == true
 end
-function M.IsEditModeCombatLocked()
+function M.IsEditModeCombatLocked(includeBlizzard)
+    local fn = includeBlizzard and rawget(_G, "IsEditModeCombatLocked") or nil
+    if type(fn) == "function" then
+        return fn() and true or false
+    end
     return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
 end
 local function EditModeState()
@@ -1267,14 +1269,14 @@ local function RefreshEditModeSurfaces()
     if type(M.RefreshDashboardEditModeButton) == "function" then M.RefreshDashboardEditModeButton() end
     if M.frame and type(M.frame.RefreshStatus) == "function" then M.frame:RefreshStatus() end
 end
-function M.EditModeLifecycleStatus()
+function M.EditModeLifecycleStatus(includeBlizzard)
     local state = EditModeState()
     local setFn = rawget(_G, "MSUF_SetMSUFEditModeDirect")
     local unitKey = rawget(_G, "MSUF_CurrentEditUnitKey")
     if state and type(state.GetUnitKey) == "function" then unitKey = state.GetUnitKey() or unitKey end
     return {
-        active = M.IsMSUFEditModeActive() and true or false,
-        combatLocked = M.IsEditModeCombatLocked() and true or false,
+        active = M.IsMSUFEditModeActive(includeBlizzard) and true or false,
+        combatLocked = M.IsEditModeCombatLocked(includeBlizzard) and true or false,
         unitKey = unitKey,
         hasDirectHelper = type(setFn) == "function",
         hasStateEnter = state and type(state.Enter) == "function" or false,
@@ -1285,7 +1287,7 @@ end
 function M.SetMSUFEditModeActive(active, unitKey, opts)
     opts = opts or {}
     active = active and true or false
-    local before = M.EditModeLifecycleStatus()
+    local before = M.EditModeLifecycleStatus(opts.includeBlizzard)
     if before.active == active then return true, active and "already_enabled" or "already_disabled", before end
     if active and before.combatLocked then
         if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
@@ -1300,7 +1302,7 @@ function M.SetMSUFEditModeActive(active, unitKey, opts)
         local result = fn(active, unitKey)
         if result == false then return false, "helper_failed", before end
         RefreshEditModeSurfaces()
-        local after = M.EditModeLifecycleStatus()
+        local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
         if after.active == active then return true, active and "enabled" or "disabled", after end
         return false, "helper_failed", after
     end
@@ -1313,13 +1315,13 @@ function M.SetMSUFEditModeActive(active, unitKey, opts)
         return false, active and "missing_enter_helper" or "missing_exit_helper", before
     end
     RefreshEditModeSurfaces()
-    local after = M.EditModeLifecycleStatus()
+    local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
     if after.active == active then return true, active and "enabled" or "disabled", after end
     return false, "helper_failed", after
 end
 function M.ToggleMSUFEditMode(unitKey, opts)
     opts = opts or {}
-    local status = M.EditModeLifecycleStatus()
+    local status = M.EditModeLifecycleStatus(opts.includeBlizzard)
     return M.SetMSUFEditModeActive(not status.active, unitKey, opts)
 end
 function M.TrackRefresh(ctx, refresh)
