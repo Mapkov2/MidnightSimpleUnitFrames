@@ -220,7 +220,7 @@ local function BuildCustomDefensivesTool(C)
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                    row.text:SetText(entry.text or tostring(entry.spellID))
+                    T.SetTranslatedText(row.text, entry.text or tostring(entry.spellID))
                     RegisterAuraControl(ctx, row, entry.text or tostring(entry.spellID), "button",
                         customActionPath .. ".defensives.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
                     row:Show()
@@ -391,9 +391,9 @@ local function BuildCustomDotsTool(C)
                 if entry then
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
-                    row.rank:SetText("#" .. tostring(entry.priority or i))
+                    T.SetTranslatedText(row.rank, "#" .. tostring(entry.priority or i))
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
-                    row.text:SetText(entry.text or tostring(entry.spellID))
+                    T.SetTranslatedText(row.text, entry.text or tostring(entry.spellID))
                     RegisterAuraControl(ctx, row.remove, M.Format("Remove %s", entry.text or tostring(entry.spellID)), "button",
                         customActionPath .. ".dots.entry." .. AuraCatalogToken(entry.spellID) .. ".remove", "action")
                     RegisterAuraControl(ctx, row.up, M.Format("Raise %s", entry.text or tostring(entry.spellID)), "button",
@@ -520,13 +520,14 @@ local function BuildCustomWhitelistTool(C)
         -- Whole sentences per lane: inserting the noun with %s breaks declension in
         -- German and Russian. `auraNoun` itself stays raw - it feeds Search action ids.
         local isDebuff = auraType == "DEBUFF"
-        local addLabel = isDebuff and Tr("Add debuff") or Tr("Add buff")
-        local trackHint = isDebuff and Tr("Add a debuff - Spell ID, spell link or item link")
-            or Tr("Add a buff - Spell ID, spell link or item link")
-        local addBody = isDebuff and Tr("Adds this exact debuff to the custom container.")
-            or Tr("Adds this exact buff to the custom container.")
-        local removeBody = isDebuff and Tr("Stops tracking this debuff in the custom container.")
-            or Tr("Stops tracking this buff in the custom container.")
+        -- Raw keys: the button, input, search action and tooltips translate them.
+        local addLabel = isDebuff and "Add debuff" or "Add buff"
+        local trackHint = isDebuff and "Add a debuff - Spell ID, spell link or item link"
+            or "Add a buff - Spell ID, spell link or item link"
+        local addBody = isDebuff and "Adds this exact debuff to the custom container."
+            or "Adds this exact buff to the custom container."
+        local removeBody = isDebuff and "Stops tracking this debuff in the custom container."
+            or "Stops tracking this buff in the custom container."
         W.Text(section, auraType, 24, -36, 58, T.colors.accent)
         W.Text(section, NATIVE_EXACT_AURA_FILTERS_TEXT, 88, -36, inner - 64, T.colors.muted)
         local inputValue = ""
@@ -652,10 +653,10 @@ local function BuildCustomWhitelistTool(C)
                 if entry then
                     row = EnsureRow(i)
                     row._spellID = entry.spellID
-                    row.rank:SetText("#" .. tostring(entry.priority or i))
+                    T.SetTranslatedText(row.rank, "#" .. tostring(entry.priority or i))
                     row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
                     local name = tostring(entry.text or entry.spellID or "Spell"):gsub("%s*%(#%d+%)$", "")
-                    row.name:SetText(name)
+                    T.SetTranslatedText(row.name, name)
                     -- Say plainly what a click on this row will do. A tracked
                     -- aura the player cannot apply has no click action, and a
                     -- silently dead button is worse than a visible hint.
@@ -674,7 +675,7 @@ local function BuildCustomWhitelistTool(C)
                     elseif filtering and not entry.clickAction then
                         stateNote = " \194\183 " .. Tr("hidden on this character")
                     end
-                    row.id:SetText(M.Format("Spell ID %s", tostring(entry.spellID))
+                    T.SetTranslatedText(row.id, M.Format("Spell ID %s", tostring(entry.spellID))
                         .. " \194\183 " .. clickNote .. stateNote)
                     -- Only offered where it changes anything: with the filter off,
                     -- or on a row a bound item already protects, it is noise.
@@ -1400,8 +1401,8 @@ local function BuildCustomDefensivesSetup(C)
         -- was attempted exhaustively and reverted (2026-07-31). Keep users
         -- informed instead of letting them hunt for a shape option.
         W.Text(section, "Aura Style > Defensive Buffs can follow the frame portrait shape.", 24, -312, inner, T.colors.muted)
-        local source = W.Text(section, SourceText(), 24, -344, inner, T.colors.muted)
-        M.TrackRefresh(ctx, function() source:SetText(SourceText()) end)
+        local source = W.Text(section, "", 24, -344, inner, T.colors.muted)
+        M.TrackRefresh(ctx, function() T.SetTranslatedText(source, SourceText()) end)
         return true
     end
 end
@@ -1478,10 +1479,10 @@ local function BuildCustomDotsSetup(C)
         local function DisplayText()
             return item.portraitIcon == true and "Display: portrait position" or "Display: normal DoT lane"
         end
-        local source = W.Text(section, SourceText(), 24, -324, inner, T.colors.muted)
+        local source = W.Text(section, "", 24, -324, inner, T.colors.muted)
         local display = W.Text(section, DisplayText(), 24, -356, inner, T.colors.muted)
         M.TrackRefresh(ctx, function()
-            source:SetText(SourceText())
+            T.SetTranslatedText(source, SourceText())
             display:SetText(DisplayText())
         end)
         return true
@@ -1560,15 +1561,15 @@ local function BuildCustomContainerSetup(C)
     -- The Whitelist tool changes the count while this view stays cached.
     local function CountText()
         local count = #Model.CustomContainerSpellEntries(unit, index)
-        return count == 1 and "1 whitelisted spell · style remains live in Menu Preview and Edit Mode."
+        return count == 1 and Tr("1 whitelisted spell · style remains live in Menu Preview and Edit Mode.")
             or M.Format("%d whitelisted spells · style remains live in Menu Preview and Edit Mode.", count)
     end
-    local countNote = W.Text(section, CountText(), 24, modeY - 66, inner, T.colors.muted)
+    local countNote = W.Text(section, "", 24, modeY - 66, inner, T.colors.muted)
     M.TrackRefresh(ctx, function()
         modeNote:SetText(item.placed.reminderEnabled == true
             and "Every whitelisted entry keeps its own place. A dimmed icon means that entry is missing."
             or "Only auras that are currently active are shown, packed together.")
-        countNote:SetText(CountText())
+        T.SetTranslatedText(countNote, CountText())
     end)
 
     -- Buff Reminder. Exact Spell ID whitelists are the only aura source that
@@ -1698,11 +1699,11 @@ local function BuildCustomContainerSetup(C)
         end
         if W.SetCollapsibleBadges then
             local badges = {{
-                text = on and Tr("Reminder on") or Tr("Reminder off"),
+                text = on and "Reminder on" or "Reminder off", -- the badge translates it
                 kind = on and "accent" or "muted", showWhenClosed = true,
             }}
             if on and item.placed.reminderClickCast ~= false then
-                badges[#badges + 1] = { text = Tr("Click-cast"), kind = "info", showWhenClosed = true }
+                badges[#badges + 1] = { text = "Click-cast", kind = "info", showWhenClosed = true }
             end
             W.SetCollapsibleBadges(reminderSection, badges)
         end
