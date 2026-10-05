@@ -555,6 +555,15 @@ local function ChunkedSetMinMaxValues(bar, minValue, maxValue)
   end
 end
 
+-- The Player power trail is a snapshot pool (Power.Create): every snapshot
+-- draws against the bar's range, not only the root. A single trail keeps the
+-- writer above, so health ticks pay nothing for the pool.
+local function ChunkedSetPooledMinMaxValues(bar, minValue, maxValue)
+  bar._msufNativeSetMinMaxValues(bar, minValue, maxValue)
+  local pool = bar._msufLossTrail._msufLossTrailPool
+  for i = 1, #pool do pool[i]:SetMinMaxValues(minValue, maxValue) end
+end
+
 local function RestoreNativeBarMethods(bar)
   if bar._msufNativeSetValue then
     bar.SetValue = bar._msufNativeSetValue
@@ -585,12 +594,16 @@ local function SetBarSmoothing(bar, enabled, chunked, lossTrail)
     bar._msufChunkedLoss = useChunked
     bar._msufSmoothInterp = interp
     if useChunked then
-      lossTrail:SetMinMaxValues(bar:GetMinMaxValues())
+      local pool = lossTrail._msufLossTrailPool
+      for i = 1, pool and #pool or 1 do
+        local snapshot = pool and pool[i] or lossTrail
+        snapshot:SetMinMaxValues(bar:GetMinMaxValues())
+      end
       SetLossTrailValue(lossTrail, bar:GetValue())
       bar._msufNativeSetValue = bar.SetValue
       bar._msufNativeSetMinMaxValues = bar.SetMinMaxValues
       bar.SetValue = ChunkedSetValue
-      bar.SetMinMaxValues = ChunkedSetMinMaxValues
+      bar.SetMinMaxValues = pool and ChunkedSetPooledMinMaxValues or ChunkedSetMinMaxValues
     end
   end
   if lossTrail and not useChunked then StopLossTrailAnimation(lossTrail) end
