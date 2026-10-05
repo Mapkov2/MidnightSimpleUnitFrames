@@ -476,7 +476,8 @@ end
 function W.ToggleAt(section, label, x, y, labelWidth)
     return CreateToggle(section, label, x or 16, y or -40, labelWidth)
 end
-function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
+-- literal: the label is a name the user typed and is shown as given, never looked up.
+function W.SwitchAt(section, label, x, y, labelWidth, labelSide, literal)
     local switchW, switchH = 36, 20
     local knobSize = 16
     local knobPad = 2
@@ -508,7 +509,8 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn._msuf2ProxyBaseWidth = switchW + 12
     btn._msuf2UpdateToggleProxyBounds = UpdateToggleProxyBounds
     local side = labelSide or "RIGHT"
-    local labelFS = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text, "control")
+    local labelFS = T.Font(section, "GameFontHighlightSmall", not literal and label or "", T.colors.text, "control")
+    if literal then T.SetTranslatedText(labelFS, label or "") end
     SetSearchText(labelFS, label)
     labelFS:SetJustifyH(side == "LEFT" and "RIGHT" or "LEFT")
     if not labelWidth and section and section._msuf2Width then labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - switchW - 30) end

@@ -255,11 +255,21 @@ local function IsCastbarKey(key)
     if lower:find("spellnamefontsize", 1, true) or lower:find("timefontsize", 1, true) then return true end
     return false
 end
+-- Further bars settings the Class Resources page writes: the Ironfur hash lines,
+-- the resource marks and the client-only Additional resources. Their colours
+-- belong to the Colors page.
+local CLASSPOWER_EXTRA_BARS_KEYS = KSW [[
+    guardianIronfurShowHashLines resourceMarks showIgnorePain ignorePainTimeMarker showArcaneWindow
+    arcaneWindowText arcaneWindowTextFrom arcaneWindowWarnSeconds arcaneWindowWarnLastGCD manaRegenPause manaGainPulse
+]]
 local function IsClassPowerBarsKey(key)
     if type(key) ~= "string" then return false end
     return StartsWith(key, "classPower")
         or StartsWith(key, "detachedPowerBar")
         or StartsWith(key, "altMana")
+        or StartsWith(key, "playerHPBar")
+        or StartsWith(key, "resourceExtra")
+        or CLASSPOWER_EXTRA_BARS_KEYS[key] == true
         or key == "showClassPower"
         or key == "showChargedComboPoints"
         or key == "runeShowTime"

@@ -454,3 +454,13 @@ clients+Forever	lua	tools/tests/profile_unitframe_import_roots_smoke.lua	{root} 
 -	lua	tools/tests/group_additional_display_name_smoke.lua	{root}	Group extra blocks display-name smoke failed
 -	lua	tools/tests/group_small_raid_combat_join_smoke.lua	{root}	Small raid on the Party layout combat-join smoke failed
 -	lua	tools/tests/group_housing_hide_smoke.lua	{root}	Group Hide in Housing smoke failed
+clients+Forever	lua	tools/tests/classpower_page_reset_coverage_smoke.lua	{root} {flavor}	Class Resources page reset leaves a setting the page writes at the user value, or replaces a Player setting: {flavor}
+-	lua	tools/tests/profile_names_untranslated_smoke.lua	{root} Vanilla	Profile, sync-group or variant names are translated on the Profiles page or in its search results (Vanilla)
+-	lua	tools/tests/profile_names_untranslated_smoke.lua	{root} Mainline	Profile, sync-group or variant names are translated on the Profiles page or in its search results (Mainline)
+clients+Forever	lua	tools/tests/menu_client_capability_text_smoke.lua	{root} {flavor}	A menu control or help text names a capability the client does not have: {flavor}
+-	lua	tools/tests/profile_suite_export_rows_locale_smoke.lua	{root} Vanilla	Suite export rows of the Profiles page are composed before translation or miss a locale key
+-	lua	tools/tests/aura_custom_workspace_translate_once_smoke.lua	{root} Vanilla	Custom Aura workspace translates composed text, spell names or ranks a second time (Vanilla)
+-	lua	tools/tests/aura_custom_workspace_translate_once_smoke.lua	{root} Mainline	Custom Aura workspace translates composed text, spell names or ranks a second time (Mainline)
+-	lua	tools/tests/resource_mark_value_range_smoke.lua	{root} Vanilla	Resource mark value slider ignores the value mode or the power maximum, or cuts a stored value
+-	lua	tools/tests/copy_to_section_completeness_smoke.lua	{root} Vanilla	A Copy To category leaves settings of its section behind (Vanilla)
+-	lua	tools/tests/copy_to_section_completeness_smoke.lua	{root} Mainline	A Copy To category leaves settings of its section behind (Mainline)

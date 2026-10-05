@@ -1676,6 +1676,10 @@ local STATIC_ROW_CLIENT_CAPABILITY = {
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragex"] = "IsForever",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragey"] = "IsForever",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragelayer"] = "IsForever",
+    -- Miscellaneous > Blizzard Frames: native Player resource pings need the ping
+    -- system, which only the Mainline family (Midnight and WoW Forever) has; the
+    -- page builds the switch there only (MSUF_Menu2_GlobalMisc.lua).
+    ["id\031opt_misc\031menu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Eplayer%2Eresource%2Eping%2Eenabled"] = "IsRetail",
 }
 -- Rows of controls a client builds only where it has the unit or group scope
 -- (M.SupportsFrameScope): Group Frames > Layout > Friendly bosses needs boss

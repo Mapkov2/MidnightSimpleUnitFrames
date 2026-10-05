@@ -1091,7 +1091,8 @@ local function OpenDropdown(owner, valuesTable)
         row._msuf2Selected:SetShown((not isHeader) and value == selectedValue)
         if (not isHeader) and value == selectedValue then selectedIndex = i end
         RestoreDropdownDefaultFont(row._msuf2Text)
-        row._msuf2Text:SetText(DropdownItemText(item))
+        -- DropdownItemText already translated the entry (or kept it raw).
+        T.SetTranslatedText(row._msuf2Text, DropdownItemText(item))
         if row._msuf2Text.SetTextColor then
             local c = isHeader and (T.colors.accent2 or T.colors.accent or T.colors.text) or (disabled and (T.colors.dim or T.colors.muted) or T.colors.text)
             row._msuf2Text:SetTextColor(c[1], c[2], c[3], c[4] or 1)

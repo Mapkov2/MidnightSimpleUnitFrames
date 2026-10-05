@@ -90,12 +90,16 @@ local function ProfileExportValues()
         values[#values + 1] = { value = "suite_all", text = "Full profile (MSUF + Suite)" }
         local skinReady = suite.Client and suite.Client.AddOnEnabled
             and suite.Client.AddOnEnabled("MSUF_Suite_Skin") == true
-        values[#values + 1] = { value = "suite_module:skin", text = "Suite module: Skinning",
-            disabled = not skinReady }
+        -- Suite rows are translated here (one format key), so the picker shows them as is.
+        values[#values + 1] = { value = "suite_module:skin", text = M.Format("Suite module: %s", Tr("Skinning")),
+            translate = false, disabled = not skinReady }
         values[#values + 1] = { value = "all", text = "MSUF only - full profile" }
         for _, id in ipairs(suite.SuiteOrder or {}) do
             local spec = suite.SuiteCatalog and suite.SuiteCatalog[id]
-            if spec then values[#values + 1] = { value = "suite_module:" .. id, text = "Suite module: " .. spec.title } end
+            if spec then
+                values[#values + 1] = { value = "suite_module:" .. id,
+                    text = M.Format("Suite module: %s", Tr(spec.title)), translate = false }
+            end
         end
     else
         values[#values + 1] = { value = "all", text = "Full profile" }
@@ -120,7 +124,8 @@ local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = NO_PROFILE, text = "None" } end
     local list = _G.MSUF_GetAllProfiles() or { "Default" }
-    for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i] } end
+    -- Names are typed by the user and shown as typed, never translated.
+    for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i], translate = false } end
     return values
 end
 -- WoW Forever binds profiles to Blizzard's two talent groups, keyed 1 and 2 by
@@ -612,6 +617,8 @@ function ProfilesPage.ManagementControls(state)
 
     local fieldW = max(180, currentCardW - 40)
     local profileDrop = W.Dropdown(currentCard, "Active profile", {}, fieldW)
+    -- The selected value is a profile name; search keeps the control name.
+    profileDrop._msuf2StableSearchLabel = "Active profile"
     RegisterControl(profileDrop, ProfilesMeta("active_profile.select", "action", { historyMode = "none" }), "Active profile", "dropdown", ProfileValues)
     if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(heroSwitch, profileDrop) end
     local function RefreshProfileValues()
@@ -751,6 +758,7 @@ end
     -- back to "Default" if the profile was deleted, so "None" is always safe.
     local newCharW = max(180, newCharCardW - 40)
     local newCharDrop = W.Dropdown(newCharCard, "Default profile", function() return ProfileValues(true) end, newCharW)
+    newCharDrop._msuf2StableSearchLabel = "Default profile"
     MoveWidget(newCharDrop, newCharCard, 20, -78, newCharW)
     M.BindDropdownWidget(ctx, newCharDrop,
         function()
@@ -773,7 +781,7 @@ end
         local profileCountText = profileCount == 1 and M.Tr("1 profile") or M.Format("%d profiles", profileCount)
         local specAuto = _G.MSUF_IsSpecAutoSwitchEnabled() or false
         local locked = ConfigLocked()
-        activeName:SetText(active)
+        T.SetTranslatedText(activeName, active) -- a profile name, shown as typed
         if currentStatus then
             T.SetTranslatedText(currentStatus, M.Format("Currently loaded and applied: %s", active))
         end
@@ -850,6 +858,7 @@ function ProfilesPage.Specializations(state)
             local assignmentCard = W.ControlCard(spec, s.name, "Assigned profile", x, y, specCardW, specCardH)
             local dropW = max(160, specCardW - 36)
             local drop = W.Dropdown(assignmentCard, "Profile", function() return ProfileValues(true) end, dropW)
+            drop._msuf2StableSearchLabel = "Profile"
             MoveWidget(drop, assignmentCard, 18, -58, dropW)
             M.BindDropdownWidget(ctx, drop,
                 function()
