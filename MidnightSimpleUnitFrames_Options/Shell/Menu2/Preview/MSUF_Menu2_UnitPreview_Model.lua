@@ -307,6 +307,8 @@ local function LiveRaidSubgroup()
             local name, _, subgroup = _G.GetRaidRosterInfo(candidate)
             if name ~= nil and not IsSecretValue(subgroup) then
                 local mine = _G.UnitIsUnit and _G.UnitIsUnit("player", "raid" .. candidate)
+                -- Secret on addon-restricted maps (SecretWhenUnitComparisonRestricted).
+                if IsSecretValue(mine) == true then return nil end
                 if mine == true or _G.UnitIsUnit == nil then return tonumber(subgroup) end
             end
         end

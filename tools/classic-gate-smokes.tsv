@@ -345,6 +345,7 @@ clients+Forever	lua	tools/tests/search_locale_queries_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/mana_extra_editmode_smoke.lua	{root}	Mana resource Edit Mode lifecycle failed
 clients+Forever	lua	tools/tests/menu_preview_live_parity_smoke.lua	{root} {flavor}	Menu preview live parity smoke failed: {flavor}
 clients+Forever	lua	tools/tests/menu_preview_repaint_budget_smoke.lua	{root} {flavor}	Menu preview repaint budget smoke failed: {flavor}
+clients+Forever	lua	tools/tests/menu_preview_guards_smoke.lua	{root} {flavor}	Menu2 preview secret and combat guards: {flavor}
 -	lua	tools/tests/options_manifest_duplicates_smoke.lua	{root}	Options manifest duplicate smoke failed
 clients+Forever	lua	tools/tests/auras3_normalize_stamp_smoke.lua	{root} {flavor}	Auras3 normalize stamp smoke failed: {flavor}
 clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}	Auras3 normalize trust smoke failed: {flavor}
