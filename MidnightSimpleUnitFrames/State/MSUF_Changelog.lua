@@ -8,12 +8,50 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "356443D6CCA6704946511F1974E2E003D5079C2430C2832551AA0133B615D035",
-    currentVersion = "6.5-beta15",
-    historyFromVersion = "6.5-beta11",
-    previousVersion = "6.5-beta14",
-    rangeLabel = "6.5-beta14 -> 6.5-beta15",
+    sourceSha256 = "542F17B5E462803BC09EE41A5A24C08B8C3128765763FE345286597C0238FD83",
+    currentVersion = "6.5-beta16",
+    historyFromVersion = "6.5-beta12",
+    previousVersion = "6.5-beta15",
+    rangeLabel = "6.5-beta15 -> 6.5-beta16",
     entries = {
+        {
+            version = "6.5-beta16",
+            date = "2026-10-06",
+            sections = {
+                {
+                    title = "WoW Forever controller support",
+                    bullets = {
+                        "Expanded controller support for MSUF and compatible Suite windows. Use the D-pad to navigate controls, confirm or cancel actions, open dropdowns, choose anchors, search settings and switch windows through Forever's Gamepad UI.",
+                        "Enter text and exact numeric values with the on-screen keyboard, adjust sliders, nudge previews and Edit Mode elements, and undo or redo supported changes. Localized button hints, a focus highlight and haptic feedback guide supported actions.",
+                        "Controller navigation releases input during combat and while Blizzard panels own navigation.",
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Class Resources use a shared workspace with direct resource selection, scoped settings, Copy To, Quick Setup and reset actions. Controls remain inside their cards on narrow windows.",
+                        "Forever Swing Timers include an embedded menu preview, separate Main Hand, Off Hand and Ranged settings, and category-based Copy To.",
+                        "Improved Blizzard-style portrait masks, corner direction and per-unit preview alignment.",
+                    },
+                },
+                {
+                    title = "Performance",
+                    bullets = {
+                        "Closed menu sections defer their controls and decoration until needed. Repeated header layout and owned-button skin work reuse existing state.",
+                        "Cold search indexes build in short menu-task slices while exact searches retain synchronous results and prepare the required lazy sections.",
+                        "Group aura previews share their compatible configuration instead of compiling it once per row. Color previews avoid duplicate render requests and preserve staged construction.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Group layouts retain space and role ordering for members joining during combat. Housing visibility, extra-block names and dead/offline backgrounds refresh consistently.",
+                        "Resource marks use the range of their displayed resource. Profile names remain as typed, and Copy To retains supported font, texture, gradient and status settings.",
+                        "Corrected exact-search targets, preview lifecycle behavior, menu spacing and translations across all supported locales.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta15",
             date = "2026-10-03",
@@ -340,55 +378,6 @@ local data = {
                         "Party target frames refresh when their compound unit tokens receive no native unit event. Healer mana text receives its font before its first update, and group sorting, previews and Edit Mode use consistent layout settings.",
                         "Page resets work across supported clients and retain Undo. Edit Mode Cancel and Undo cannot write an earlier profile's edits into a newly selected profile.",
                         "Menu text fields retain edits, resource movement stays inside Edit Mode, and Class Resource previews fit the available space. Preview animation, factory-profile decoding and search avoid repeated work.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta11",
-            date = "2026-09-29",
-            sections = {
-                {
-                    title = "Highlights",
-                    bullets = {
-                        {
-                            text = "Choose Slanted bar shapes across your frames. Enable Slanted bars under Global > Slanted, then choose where they appear on unit frames, group frames, power bars, castbars, class resources, and mouseover.",
-                            link = {
-                                pageKey = "opt_bars",
-                                query = "enable slanted bars",
-                                label = "Enable slanted bars",
-                                sectionId = "bars_slanted",
-                                controlId = "menu2.opt.bars.global.slanted.enabled",
-                                settingKey = "bars.slantedBarsEnabled",
-                            },
-                        },
-                        {
-                            text = "Switch between Slanted and Rounded while keeping saved frame styles. The Rounded master switch restores Rounded when Slanted is off, including after profile imports and in previews.",
-                            link = {
-                                pageKey = "opt_bars",
-                                query = "rounded frame texture",
-                                label = "Rounded frame texture",
-                                sectionId = "bars_rounded",
-                                controlId = "menu2.opt.bars.global.rounded.rounded.frames.enabled",
-                                settingKey = "bars.roundedFramesEnabled",
-                            },
-                        },
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Slanted shape controls cover frame scopes, power bars, castbars, class resources, and mouseover, with matching menu previews.",
-                        "Hidden unit frames suspend their event routes until shown again.",
-                        "When installed, MSUF Suite text follows full global font changes.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Imported Slanted frame styles follow the active Rounded fallback when Slanted is disabled.",
-                        "Status badges and level numbers stay within native overlay sublevel limits for imported high layer values.",
-                        "Menu section switch labels toggle their feature.",
                     },
                 },
             },

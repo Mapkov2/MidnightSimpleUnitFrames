@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta16 - 2026-10-06
+
+### WoW Forever controller support
+
+- **Expanded controller support for MSUF and compatible Suite windows.** Use the D-pad to navigate controls, confirm or cancel actions, open dropdowns, choose anchors, search settings and switch windows through Forever's Gamepad UI.
+- Enter text and exact numeric values with the on-screen keyboard, adjust sliders, nudge previews and Edit Mode elements, and undo or redo supported changes. Localized button hints, a focus highlight and haptic feedback guide supported actions.
+- Controller navigation releases input during combat and while Blizzard panels own navigation.
+
+### Changes
+
+- Class Resources use a shared workspace with direct resource selection, scoped settings, Copy To, Quick Setup and reset actions. Controls remain inside their cards on narrow windows.
+- Forever Swing Timers include an embedded menu preview, separate Main Hand, Off Hand and Ranged settings, and category-based Copy To.
+- Improved Blizzard-style portrait masks, corner direction and per-unit preview alignment.
+
+### Performance
+
+- Closed menu sections defer their controls and decoration until needed. Repeated header layout and owned-button skin work reuse existing state.
+- Cold search indexes build in short menu-task slices while exact searches retain synchronous results and prepare the required lazy sections.
+- Group aura previews share their compatible configuration instead of compiling it once per row. Color previews avoid duplicate render requests and preserve staged construction.
+
+### Fixes
+
+- Group layouts retain space and role ordering for members joining during combat. Housing visibility, extra-block names and dead/offline backgrounds refresh consistently.
+- Resource marks use the range of their displayed resource. Profile names remain as typed, and Copy To retains supported font, texture, gradient and status settings.
+- Corrected exact-search targets, preview lifecycle behavior, menu spacing and translations across all supported locales.
+
 ## 6.5-beta15 - 2026-10-03
 
 ### Fixes
