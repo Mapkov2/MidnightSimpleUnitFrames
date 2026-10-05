@@ -48,12 +48,12 @@ Metadata.MASK_AGGRO = BuildNameSet({ "Borders", "GroupCornerIndicators" })
 Metadata.MASK_AURAS = BuildNameSet({ "Auras" })
 Metadata.MASK_VISUAL = BuildNameSet({
   "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-  "StatusIndicators", "Prediction", "Alpha", "GroupStatusRuntime", "GroupRangeFade",
+  "StatusIndicators", "Prediction", "TempMaxHealth", "Alpha", "GroupStatusRuntime", "GroupRangeFade",
   "GroupVisuals", "Borders", "Portrait", "Auras",
 })
 Metadata.MASK_RUNTIME = BuildNameSet({
   "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-  "StatusIndicators", "Prediction", "Alpha", "Borders", "GroupStatusRuntime",
+  "StatusIndicators", "Prediction", "TempMaxHealth", "Alpha", "Borders", "GroupStatusRuntime",
   "GroupRangeFade", "GroupVisuals", "GroupCornerIndicators", "Portrait",
 })
 
