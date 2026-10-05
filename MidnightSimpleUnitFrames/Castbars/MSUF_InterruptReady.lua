@@ -77,7 +77,7 @@ do
         INTERRUPT_SPELLS = {
             DEATHKNIGHT = { DEFAULT = 47528 },                 -- Mind Freeze
             DRUID = { DEFAULT = 106839, BALANCE = 78675 },     -- Skull Bash / Solar Beam
-            HUNTER = { MARKSMANSHIP = 34490 },                 -- Silencing Shot (Marksmanship only)
+            HUNTER = { DEFAULT = 147362 },                     -- Counter Shot (5.4 baseline, every spec)
             MAGE = { DEFAULT = 2139 },                         -- Counterspell
             MONK = { DEFAULT = 116705 },                       -- Spear Hand Strike
             PALADIN = { DEFAULT = 96231 },                     -- Rebuke
@@ -87,6 +87,9 @@ do
             WARLOCK = { DEFAULT = 19647 },                     -- Spell Lock (Felhunter)
             WARRIOR = { DEFAULT = 6552 },                      -- Pummel
         }
+        -- Silencing Shot is a talent any Mists hunter can take; it joins
+        -- Counter Shot only while the spell book has it.
+        SECONDARY_INTERRUPT_SPELLS.HUNTER = 34490
     end
 end
 

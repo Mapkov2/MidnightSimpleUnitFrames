@@ -361,6 +361,7 @@ clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}
 -	lua	tools/tests/castbar_pool_residue_smoke.lua	{root}	Castbar boss/arena pool walkers changed the recorded trace
 clients+Forever,MistsDuration	lua	tools/tests/interrupt_ready_classic_cooldown_smoke.lua	{root} {flavor}	Interrupt-ready cooldown source: {flavor}
 clients+Forever	lua	tools/tests/interrupt_ready_rank_cooldown_smoke.lua	{root} {flavor}	Interrupt-ready cooldown of other ranks and shared shocks: {flavor}
+-	lua	tools/tests/interrupt_ready_mists_hunter_smoke.lua	{root}	Mists hunters track Counter Shot and a talented Silencing Shot
 -	lua	tools/tests/resource_marks_smoke.lua	{root}	Resource marks: restricted colours, overlay, fill axis, combat shapeshift
 clients+Forever	lua	tools/tests/resource_extras_lifecycle_smoke.lua	{root} {flavor}	Resource helper lifecycle: {flavor}
 clients	lua	tools/tests/defaults_pass_trust_smoke.lua	{root} {flavor}	Defaults pass trust smoke failed: {flavor}
