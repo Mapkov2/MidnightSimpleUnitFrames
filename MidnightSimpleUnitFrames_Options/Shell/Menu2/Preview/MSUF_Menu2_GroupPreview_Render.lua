@@ -2297,7 +2297,8 @@ function Render.Install(box, ctx, deps)
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
     box:SetScript("OnKeyDown", function(self, key)
         if _G.InCombatLockdown and _G.InCombatLockdown() then
-            -- No restricted SetPropagateKeyboardInput here: the keys went back at PLAYER_REGEN_DISABLED.
+            -- SetPropagateKeyboardInput is restricted in lockdown; the keys
+            -- were handed back at PLAYER_REGEN_DISABLED (GroupPreview_Native).
             self._selectedHandle = nil
             RefreshHandleSelection(self)
             return
