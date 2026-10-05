@@ -29,9 +29,10 @@ local HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
     and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
 local classicMatchEngaged = false
 
+-- Guards protected Show/Hide only, so the lockdown itself answers; the group
+-- runtime's MSUF_InCombat mirror still reads true in other REGEN_ENABLED handlers.
 local function InCombat()
-    return _G.MSUF_InCombat == true
-        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
+    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
 end
 
 local function ArenaConf()

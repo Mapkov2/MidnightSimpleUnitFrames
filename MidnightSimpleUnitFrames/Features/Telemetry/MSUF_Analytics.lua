@@ -87,7 +87,6 @@ end
 Analytics.IsEnabled = IsEnabled
 
 local function IsInCombat()
-    if _G.MSUF_InCombat == true then return true end
     return (InCombatLockdown and InCombatLockdown()) and true or false
 end
 

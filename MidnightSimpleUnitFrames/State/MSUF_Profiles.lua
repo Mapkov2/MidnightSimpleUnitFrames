@@ -344,8 +344,7 @@ MSUF_ProfileIO_NotifySuiteProfileChanged = (function()
         Notify(reason, name)
     end
     Notify = function(reason, name)
-        if rawget(_G, "MSUF_InCombat") == true
-            or (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true)
+        if (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true)
             or (type(_G.UnitAffectingCombat) == "function" and _G.UnitAffectingCombat("player") == true)
         then
             pendingReason, pendingName = reason, name
