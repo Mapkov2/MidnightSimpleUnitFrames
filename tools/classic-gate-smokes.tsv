@@ -114,6 +114,7 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	tools/tests/classic_transition_regression_smoke.lua	{root}	Classic transition regression failed
 -	lua+driver	tools/tests/classic_group_runtime_event_gate_smoke.lua	{root/}	Classic group runtime event gate smoke failed
 -	lua+driver	tools/tests/classic_castbar_visual_compat_smoke.lua	{root/}	Classic castbar visual compatibility smoke failed
+classics	lua	tools/tests/classic_castbar_spark_sync_smoke.lua	{root} {flavor}	Classic castbar spark left at the outer frame height after a settings refresh or Edit Mode apply: {flavor}
 -	lua+driver	tools/tests/classic_castbar_lua_fill_smoke.lua	{root/}	Classic castbar Lua fill smoke failed
 -	lua+driver	.github/scripts/ptr_12_1_5_runtime_smoke.lua	{root/}	PTR 12.1.5 runtime smoke failed
 -	lua+driver	.github/scripts/retail_12_1_0_fallback_smoke.lua	{root/}	Retail 12.1.0 fallback smoke failed

@@ -290,7 +290,10 @@ end
 -- Recorded from the boss/arena twins before the fold (commit 5498ae81) and
 -- re-recorded once, unchanged code, when the world gained the Runtime colour
 -- providers and the real InterruptReady (the only difference: each castbar
--- refresh now paints its background colour).
+-- refresh now paints its background colour). The classic spark sections were
+-- re-recorded 2026-10-05: the Core cold pass calls the public spark entry, so
+-- Classic no longer runs Retail's spark pass first (one GetHeight less per
+-- live pool bar; the rest of each trace is unchanged).
 local EXPECTED = {
     { "3 slots: effective size boss", "12541:1457924746" },
     { "3 slots: effective size arena", "7574:1991236288" },
@@ -300,8 +303,8 @@ local EXPECTED = {
     { "3 slots: cast target colours", "1060:1272740194" },
     { "3 slots: rounded on", "2662:803476627" },
     { "3 slots: rounded off", "5258:566203803" },
-    { "3 slots: classic spark boss", "15015:1625056145" },
-    { "3 slots: classic spark arena", "8553:567403717" },
+    { "3 slots: classic spark boss", "14960:1330975890" },
+    { "3 slots: classic spark arena", "8520:380609528" },
     { "3 slots: frame layer", "5368:1345619038" },
     { "5 slots: effective size boss", "12541:1457924746" },
     { "5 slots: effective size arena", "12624:1972685996" },
@@ -311,8 +314,8 @@ local EXPECTED = {
     { "5 slots: cast target colours", "1328:949083875" },
     { "5 slots: rounded on", "3336:1957103341" },
     { "5 slots: rounded off", "6584:207953388" },
-    { "5 slots: classic spark boss", "15015:1625056145" },
-    { "5 slots: classic spark arena", "14249:1166163312" },
+    { "5 slots: classic spark boss", "14960:1330975890" },
+    { "5 slots: classic spark arena", "14194:559599094" },
     { "5 slots: frame layer", "6698:1013118119" },
     { "0 slots: effective size boss", "12541:1457924746" },
     { "0 slots: effective size arena", "0:0" },
@@ -322,7 +325,7 @@ local EXPECTED = {
     { "0 slots: cast target colours", "658:295835695" },
     { "0 slots: rounded on", "1651:205973700" },
     { "0 slots: rounded off", "3269:646221331" },
-    { "0 slots: classic spark boss", "15015:1625056145" },
+    { "0 slots: classic spark boss", "14960:1330975890" },
     { "0 slots: classic spark arena", "0:0" },
     { "0 slots: frame layer", "3373:913452340" },
 }
