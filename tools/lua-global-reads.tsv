@@ -11,6 +11,7 @@
 # deliberately not fixed here; vestigial marks a read of a global this tree
 # stopped defining, kept because every read of it is guarded.
 ACCEPT	constant	Blizzard UI constant, enum or shared string
+AuraUtil	namespace	Blizzard aura helper table; the Classic sort reads AuraUtil.IsPriorityDebuff, defined on every Classic branch in Blizzard_FrameXMLUtil/Classic/AuraUtil.lua, and probes it before use
 BackdropTemplateMixin	constant	Blizzard UI constant, enum or shared string
 CANCEL	constant	Blizzard UI constant, enum or shared string
 CLOSE	constant	Blizzard UI constant, enum or shared string
