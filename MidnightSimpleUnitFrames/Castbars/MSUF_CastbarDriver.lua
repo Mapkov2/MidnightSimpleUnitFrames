@@ -312,10 +312,15 @@ end
 --- is NeverSecret) but fills like a cast in Blizzard's HandleCastStart
 --- (reverseChanneling), so it must not take the channel drain. The player's
 --- own empower stages are the player runtime's and never pass through here.
+--- UnitChannelDuration ends at the last stage; Blizzard's bar also runs
+--- through the hold at max rank (CastingBarFrame: endTime +
+--- GetUnitEmpowerHoldAtMaxTime), which UnitEmpoweredChannelDuration includes.
 local function FillEmpoweredLikeCast(state)
     if state.castType == "CHANNEL" and state.unit ~= "player"
         and ToKnownPlainBool(state.isEmpowered) == true then
         state.castType = "EMPOWER"
+        local withHold = UnitEmpoweredChannelDuration and UnitEmpoweredChannelDuration(state.unit)
+        if withHold ~= nil then state.durationObj = withHold end
     end
 end
 

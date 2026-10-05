@@ -268,9 +268,20 @@ main.centerX,main.centerY=400,300
 main.scripts.OnDragStop(main)
 assert(swing.Get("main","x")==100 and swing.Get("main","y")==50, "drag persists screen offsets at custom scale")
 
+-- A drag still running when combat starts: the drop is not saved, so the bar
+-- stops moving and goes back to its saved place instead of staying dropped.
+main.StartMoving = function(self) self.moving = true; self.point = { "DRAGGED" } end
+main.StopMovingOrSizing = function(self) self.moving = false end
+main.scripts.OnDragStart(main)
+assert(main.moving, "a preview drag did not start")
 combat=true
 event("PLAYER_REGEN_DISABLED")
 assert(not swing.GetPreview() and not main.mouse, "combat ends interactive preview")
+main.scripts.OnDragStop(main)
+assert(not main.moving, "combat start left the bar following the cursor")
+assert(swing.Get("main","x")==100 and swing.Get("main","y")==50, "a drop after combat started was saved")
+assert(main.point[1]=="CENTER" and math.abs(main.point[2]-100/1.5)<1e-9 and math.abs(main.point[3]-50/1.5)<1e-9,
+    "a bar dropped after combat started stays where it was dropped instead of its saved place")
 combat=false
 -- All three disabled: no PLAYER_SWING subscriber, while ownership remains active.
 for _,hand in ipairs({"main","off","ranged"}) do assert(swing.Set(hand,"enabled",false)) end

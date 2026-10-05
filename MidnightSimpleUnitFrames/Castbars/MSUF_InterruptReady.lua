@@ -53,6 +53,10 @@ local SECONDARY_INTERRUPT_SPELLS = { PALADIN = 31935, WARRIOR = 386071 }
 --- exists on Forever in the same skill line or talent as on Era, and
 --- the ranks of Kick, Pummel, Earth Shock and Spell Lock share one cooldown
 --- category.
+--- SHARED_COOLDOWN_SPELLS is set only on these ranked clients: the rank-1
+--- IDs of other spells in a tracked spell's cooldown category (the Shaman
+--- shocks). Its presence turns on the name match in SharesInterruptCooldown.
+local SHARED_COOLDOWN_SPELLS
 do
     local client = MSUF and MSUF.Client
     if client and (client.IsVanilla == true or client.IsTBC == true or IS_FOREVER) then
@@ -62,15 +66,18 @@ do
             MAGE = { DEFAULT = 2139 },     -- Counterspell
             PRIEST = { DEFAULT = 15487 },  -- Silence (Shadow talent)
             ROGUE = { DEFAULT = 1766 },    -- Kick
-            SHAMAN = { DEFAULT = 8042 },   -- Earth Shock (rank 1; the alias catalog covers ranks)
+            SHAMAN = { DEFAULT = 8042 },   -- Earth Shock (rank 1; other ranks match by name)
             WARLOCK = { DEFAULT = 19647 }, -- Spell Lock (Felhunter)
             WARRIOR = { DEFAULT = 6552 },  -- Pummel
+        }
+        SHARED_COOLDOWN_SPELLS = {
+            SHAMAN = { 8050, 8056 },       -- Flame Shock, Frost Shock (rank 1)
         }
     elseif client and client.IsMists == true then
         INTERRUPT_SPELLS = {
             DEATHKNIGHT = { DEFAULT = 47528 },                 -- Mind Freeze
             DRUID = { DEFAULT = 106839, BALANCE = 78675 },     -- Skull Bash / Solar Beam
-            HUNTER = { MARKSMANSHIP = 34490 },                 -- Silencing Shot (Marksmanship only)
+            HUNTER = { DEFAULT = 147362, MARKSMANSHIP = 34490 }, -- Counter Shot / Silencing Shot (replaces it for Marksmanship in 5.4)
             MAGE = { DEFAULT = 2139 },                         -- Counterspell
             MONK = { DEFAULT = 116705 },                       -- Spear Hand Strike
             PALADIN = { DEFAULT = 96231 },                     -- Rebuke
@@ -294,6 +301,46 @@ local function NeedsInterruptCooldownUpdate(spellID, baseSpellID)
     local previousSecondarySpellID = state.previousSecondarySpellID
     return previousSecondarySpellID ~= nil
         and (spellID == previousSecondarySpellID or baseSpellID == previousSecondarySpellID)
+end
+
+-- Ranked clients: SPELL_UPDATE_COOLDOWN names the rank or shock that was cast,
+-- not the tracked rank-1 ID whose shared category cooldown it started. A spell
+-- whose name matches a tracked spell (or one of its class's shared-cooldown
+-- spells) counts too. Each spell ID is named once per spell set, so a repeated
+-- event costs one table read. Mainline and Mists keep the exact-ID filter.
+if SHARED_COOLDOWN_SPELLS then
+    local NeedsExactCooldownUpdate = NeedsInterruptCooldownUpdate
+    local sharesBySpellID, sharesGeneration = {}, nil
+
+    local function SharesInterruptCooldown(spellID)
+        if sharesGeneration ~= spellSetGeneration then
+            sharesBySpellID, sharesGeneration = {}, spellSetGeneration
+        end
+        local shares = sharesBySpellID[spellID]
+        if shares ~= nil then return shares end
+
+        -- C_Spell.GetSpellName is lazy-load backed: a spell the client has not
+        -- cached yet answers nil, so only a complete answer is remembered.
+        local GetSpellName = SpellAPI and SpellAPI.GetSpellName
+        local name = GetSpellName and GetSpellName(spellID)
+        if name == nil then return false end
+        local family = SHARED_COOLDOWN_SPELLS[state.classToken]
+        local slotTotal, complete = slotCount, true
+        for index = 1, slotTotal + (family and #family or 0) do
+            local candidate = GetSpellName(index <= slotTotal and slots[index].spellID or family[index - slotTotal])
+            if candidate == name then
+                sharesBySpellID[spellID] = true
+                return true
+            end
+            if candidate == nil then complete = false end
+        end
+        if complete then sharesBySpellID[spellID] = false end
+        return false
+    end
+
+    NeedsInterruptCooldownUpdate = function(spellID, baseSpellID)
+        return NeedsExactCooldownUpdate(spellID, baseSpellID) or SharesInterruptCooldown(spellID)
+    end
 end
 
 -- A client build without the Duration API reads the plain cooldown table:

@@ -610,7 +610,17 @@ local function OnEvent(_, event, a, b, c)
             SyncRanges()
         end
     else
-        if event == "PLAYER_REGEN_DISABLED" then preview = false end
+        if event == "PLAYER_REGEN_DISABLED" and preview then
+            -- Combat ends the preview, also mid-drag: the drop is not saved,
+            -- so a dragged bar stops and goes back to its saved place.
+            preview = false
+            for i = 1, #HANDS do
+                local frame = frames[HANDS[i]]
+                frame:StopMovingOrSizing()
+                frame:ClearAllPoints()
+                frame:SetPoint("CENTER", frame.config.x / frame:GetScale(), frame.config.y / frame:GetScale())
+            end
+        end
         RefreshVisibility()
         SyncRanges()
         if event == "PLAYER_REGEN_DISABLED" then UpdateCue() end
@@ -703,7 +713,8 @@ function Swing.Set(hand, key, value)
         end
         value = Copy(value)
     elseif type(value) ~= "string" then return false end
-    if key:find("^nextSwingLabel") and #value > CUE_LABEL_LIMIT then return false end
+    -- The limit counts characters: a UTF-8 continuation byte starts none.
+    if key:find("^nextSwingLabel") and #value:gsub("[\128-\191]", "") > CUE_LABEL_LIMIT then return false end
     if key == "visibility" and value ~= "always" and value ~= "combat" then return false end
     if key == "fill" and value ~= "elapsed" and value ~= "remaining" then return false end
     if key == "display" and value ~= "bar" and value ~= "text" then return false end

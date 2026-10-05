@@ -139,6 +139,7 @@ UnitClass	api	Blizzard client API
 UnitClassification	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
 UnitCreatureType	api	Blizzard client API
 UnitEffectiveLevel	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit
+UnitEmpoweredChannelDuration	api	Blizzard empowered-channel duration API, Mainline only; upstream/live:Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:1111-1121 (includeHoldAtMaxTime); the castbar driver tests it before the call
 UnitExists	api	Blizzard client API
 UnitFactionGroup	api	Blizzard client API
 UnitFullName	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit

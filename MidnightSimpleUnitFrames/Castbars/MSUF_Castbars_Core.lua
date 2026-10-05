@@ -833,7 +833,9 @@ local function ApplyCastbarVisualFrameCold(frame, general, forcedUnit)
         return true
     end
     Later("MSUF_RefreshCastbarFrame")(frame, forcedUnit, general)
-    ApplyCastbarSparkVisual(frame, general)
+    -- The public entry, like the anchor and pool paths: Classic replaces it
+    -- with the inner-surface spark (Game/Classic/Castbars/MSUF_CastbarVisualCompat.lua).
+    Later("MSUF_ApplyCastbarSparkVisual")(frame, general)
     frame._msufCastbarStyleRev = globalRevision
     frame._msufCastbarColdGlobalRev = globalRevision
     frame._msufCastbarColdTextureRev = textureRevision

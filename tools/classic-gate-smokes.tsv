@@ -114,6 +114,7 @@ classics	lua	tools/tests/classic_fresh_profile_smoke.lua	{root} {flavor}	Classic
 -	lua+driver	tools/tests/classic_transition_regression_smoke.lua	{root}	Classic transition regression failed
 -	lua+driver	tools/tests/classic_group_runtime_event_gate_smoke.lua	{root/}	Classic group runtime event gate smoke failed
 -	lua+driver	tools/tests/classic_castbar_visual_compat_smoke.lua	{root/}	Classic castbar visual compatibility smoke failed
+classics	lua	tools/tests/classic_castbar_spark_sync_smoke.lua	{root} {flavor}	Classic castbar spark left at the outer frame height after a settings refresh or Edit Mode apply: {flavor}
 -	lua+driver	tools/tests/classic_castbar_lua_fill_smoke.lua	{root/}	Classic castbar Lua fill smoke failed
 -	lua+driver	.github/scripts/ptr_12_1_5_runtime_smoke.lua	{root/}	PTR 12.1.5 runtime smoke failed
 -	lua+driver	.github/scripts/retail_12_1_0_fallback_smoke.lua	{root/}	Retail 12.1.0 fallback smoke failed
@@ -245,6 +246,7 @@ clients+Forever	lua	tools/tests/unit_status_threat_controls_smoke.lua	{root/} {f
 -	lua+driver	tools/tests/classic_aura_render_smoke.lua	{root/} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Features.lua} {p/:MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_Core.lua} {p/:MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Visuals.lua}	Classic aura live-render smoke failed
 -	lua	tools/tests/startup_locale_manifest_smoke.lua	{root/}	Startup client-language manifest parity failed
 -	lua	tools/tests/locale_key_coverage_smoke.lua	{root/}	Locale key coverage smoke failed
+-	lua	tools/tests/castbar_preview_sample_locale_smoke.lua	{root}	A castbar preview sample text stays English in a translated pack
 -	lua	tools/tests/menu_i18n_composed_labels_smoke.lua	{root}	Composed menu and Edit Mode labels are back or lost a translation
 -	lua	tools/tests/locale_english_overwrite_smoke.lua	{root}	Translated packs turned translations back into English
 -	lua	tools/tests/keybind_labels_locale_smoke.lua	{root}	Key binding labels ignore the menu language
@@ -362,6 +364,8 @@ clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}
 -	lua	tools/tests/castbar_correctness_smoke.lua	{root}	Castbar correctness smoke failed
 -	lua	tools/tests/castbar_pool_residue_smoke.lua	{root}	Castbar boss/arena pool walkers changed the recorded trace
 clients+Forever,MistsDuration	lua	tools/tests/interrupt_ready_classic_cooldown_smoke.lua	{root} {flavor}	Interrupt-ready cooldown source: {flavor}
+clients+Forever	lua	tools/tests/interrupt_ready_rank_cooldown_smoke.lua	{root} {flavor}	Interrupt-ready cooldown of other ranks and shared shocks: {flavor}
+-	lua	tools/tests/interrupt_ready_mists_hunter_smoke.lua	{root}	Mists hunters track Counter Shot, or Silencing Shot alone for Marksmanship
 -	lua	tools/tests/resource_marks_smoke.lua	{root}	Resource marks: restricted colours, overlay, fill axis, combat shapeshift
 clients+Forever	lua	tools/tests/resource_extras_lifecycle_smoke.lua	{root} {flavor}	Resource helper lifecycle: {flavor}
 clients	lua	tools/tests/defaults_pass_trust_smoke.lua	{root} {flavor}	Defaults pass trust smoke failed: {flavor}
@@ -409,6 +413,7 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 clients+Forever	lua	tools/tests/host_api_client_boot_smoke.lua	{root/} {flavor}	Host API v1 real-boot smoke failed: {flavor}
 -	lua	tools/tests/uf_sibling_called_exports_smoke.lua	{root}	An engine export a sibling addon tree still calls was removed
 -	lua	tools/tests/castbar_secret_paths_smoke.lua	{root}	Castbar runtime paths on a strict-secret Midnight and Forever client
+-	lua	tools/tests/castbar_empower_hold_smoke.lua	{root}	Another unit's empowered cast ends at the last stage instead of after the hold at max rank
 -	lua	tools/tests/castbar_cast_path_budget_smoke.lua	{root}	Castbar cast paths over their instruction, byte, native-object or field-churn budget
 -	lua	tools/tests/castbar_login_profile_smoke.lua	{root}	Castbar lifecycles read no profile at file load and follow the saved one at login
 -	lua	tools/tests/prediction_anchor_mode_smoke.lua	{root}	Prediction overlay anchor modes drifted from the numbers profiles saved

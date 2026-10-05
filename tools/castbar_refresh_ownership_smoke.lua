@@ -117,7 +117,9 @@ assert(contains(coldBody, "ApplyCastbarBaseGeometry(frame, general, forcedUnit)"
 assert(contains(coldBody, "frame._msufCastbarColdGlobalRev == globalRevision"),
     "cold visual pass must skip an already-applied revision and geometry")
 assert(contains(coldBody, 'Later("MSUF_RefreshCastbarFrame")(frame, forcedUnit, general)'))
-assert(contains(coldBody, "ApplyCastbarSparkVisual(frame, general)"))
+-- The public spark entry, so a client that replaces it (Classic) owns the result.
+assert(contains(coldBody, 'Later("MSUF_ApplyCastbarSparkVisual")(frame, general)'),
+    "the cold visual pass must lay the spark out through the public spark entry")
 assert(contains(core, "spark:SetShown(enabled)"),
     "cold castbar style pass must own spark visibility")
 assert(not contains(previewAnimation, "restore.sparkShown")
