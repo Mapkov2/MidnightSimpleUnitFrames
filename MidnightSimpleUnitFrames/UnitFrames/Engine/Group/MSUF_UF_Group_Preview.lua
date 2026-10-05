@@ -585,6 +585,28 @@ function GF.HideFrameAuras(frame)
   return pool ~= nil or hosts ~= nil
 end
 
+--- Each preview row carries its own PatchFrameSpec copy of one compiled base
+--- spec, so resolving the aura config against the row missed the runtime's
+--- per-spec shared cache and recompiled every lane and slot once per row (a
+--- 20-row raid build: 20 configs, 80 lane compiles). The lanes and slots the
+--- painters below read reach the spec only through these shared references.
+--- While the row still mirrors its base, resolve against the base, the path
+--- RefreshPreviewAuras and RefreshPreviewSpellIndicators already take. Classic
+--- flavors compile group lanes from the whole spec and share no cache, so they
+--- keep resolving per row.
+local SHARE_PREVIEW_AURA_CONFIG = not (MSUF.Client and MSUF.Client.IsClassic)
+local function PreviewAuraConfigSpec(frame, compiledSpec)
+  if compiledSpec ~= nil or not SHARE_PREVIEW_AURA_CONFIG then return compiledSpec end
+  local spec = frame and frame.MSUFSpec
+  local base = frame and frame._msufGFSpecBase
+  if not (spec and base) or base == spec or base.auras ~= spec.auras
+    or base.spellIndicators ~= spec.spellIndicators or base.cornerIndicators ~= spec.cornerIndicators
+    or base.portrait ~= spec.portrait or base.dispelSymbol ~= spec.dispelSymbol then
+    return nil
+  end
+  return base
+end
+
 function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiledSpec)
   if InCombat() then return false end
   local spec = frame and frame.MSUFSpec
@@ -596,7 +618,7 @@ function GF.PreviewFrameAuras(frame, kind, previewIndex, compiledAuras, compiled
 
   local A3 = MSUF and MSUF.MSUF_Auras3
   local runtimeConfig = A3 and type(A3.ResolveAuraPreviewConfig) == "function"
-    and A3.ResolveAuraPreviewConfig(frame, frame.MSUFUnitKey, compiledSpec) or nil
+    and A3.ResolveAuraPreviewConfig(frame, frame.MSUFUnitKey, PreviewAuraConfigSpec(frame, compiledSpec)) or nil
   local lanes = runtimeConfig and runtimeConfig.lanes
   if not lanes then
     GF.HideFrameAuras(frame)
@@ -905,7 +927,7 @@ function GF.PreviewSpellIndicators(frame, kind, compiledSpec)
   if InCombat() then return false end
   local A3 = MSUF and MSUF.MSUF_Auras3
   local runtimeConfig = A3 and type(A3.ResolveAuraPreviewConfig) == "function"
-    and A3.ResolveAuraPreviewConfig(frame, frame and frame.MSUFUnitKey, compiledSpec) or nil
+    and A3.ResolveAuraPreviewConfig(frame, frame and frame.MSUFUnitKey, PreviewAuraConfigSpec(frame, compiledSpec)) or nil
   local root = runtimeConfig and runtimeConfig.spellIndicators
   local slots = root and root.slots
   if not (root and root.enabled == true and type(slots) == "table") or not PreviewLayerOn("si") then
