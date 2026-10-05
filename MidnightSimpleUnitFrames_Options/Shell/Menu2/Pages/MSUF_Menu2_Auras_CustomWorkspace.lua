@@ -261,7 +261,12 @@ local function BuildCustomDotsTool(C)
             actionFixedArgs = { scope = unit, index = index },
             actionInputArg = "value",
         })
-        AddTooltip(dropdown, "Target DoT", "Curated Retail 12.0+ and 12.1 DoT auras. Tracking is restricted to this UnitFrame's unit and your own aura source; Boss settings bind separately to boss1 through boss5.")
+        -- Only Midnight lists the curated Retail 12.x DoTs; Classic Era, TBC, Mists and
+        -- WoW Forever load their own client's DoT data (Game/<client>/Auras).
+        local client = MSUF.Client
+        AddTooltip(dropdown, "Target DoT", (not client or (client.IsRetail == true and not client.IsForever))
+            and "Curated Retail 12.0+ and 12.1 DoT auras. Tracking is restricted to this UnitFrame's unit and your own aura source; Boss settings bind separately to boss1 through boss5."
+            or "Curated DoT auras for this game version. Tracking is restricted to this UnitFrame's unit and your own aura source; Boss settings bind separately to boss1 through boss5.")
         local customInputValue = ""
         local customInput = BindTextInput(ctx, section, "Custom Spell ID", 24, -94, max(140, inner - 132),
             function() return customInputValue end,

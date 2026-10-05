@@ -10,6 +10,11 @@
 --      PingableUnitFrameTemplate as an empty stub (Blizzard_SharedXML/Classic/
 --      Stubs.xml), so UF.ConfigurePlayerResourcePing never enables it there.
 --      The switch is built on Midnight and WoW Forever and nowhere else.
+--   2. Auras > Dots on target: the DoT picker's help named the list "Curated
+--      Retail 12.0+ and 12.1 DoT auras" on every client, while Classic Era,
+--      TBC, Mists and WoW Forever load their own client's DoT catalogue. Only
+--      Midnight keeps that sentence; the others say the list is curated for
+--      this game version, and every pack translates the sentence shown.
 --
 -- Boots the real core and Options graph of one client (menu_core_world.lua).
 -- Plain Lua 5.1, repo root and client flavor.
@@ -26,6 +31,11 @@ end
 -- Clients whose mirror branch ships Blizzard_PingUI.
 local PING_CLIENTS = { Mainline = true, Forever = true }
 
+local RETAIL_DOT_HELP = "Curated Retail 12.0+ and 12.1 DoT auras. Tracking is restricted to this UnitFrame's unit"
+    .. " and your own aura source; Boss settings bind separately to boss1 through boss5."
+local CLIENT_DOT_HELP = "Curated DoT auras for this game version. Tracking is restricted to this UnitFrame's unit"
+    .. " and your own aura source; Boss settings bind separately to boss1 through boss5."
+
 local mw = MenuWorld.Open(root, flavor, { page = "home" })
 local M = mw.M
 local frames = mw.world.widgets.frames
@@ -33,7 +43,16 @@ local frames = mw.world.widgets.frames
 ---------------------------------------------------------------------------
 -- 1. Resource ping switch
 ---------------------------------------------------------------------------
+-- The page context is borrowed for the aura tool built in part 2.
+local pageCtx
+local miscSpec = M.pages.opt_misc
+local miscBuild = miscSpec.build
+miscSpec.build = function(ctx, ...)
+    pageCtx = pageCtx or ctx
+    return miscBuild(ctx, ...)
+end
 Check(mw:Select("opt_misc"), "Miscellaneous page did not open")
+miscSpec.build = miscBuild
 local pingSwitch, minimapSwitch
 for _, widget in ipairs(frames) do
     local action = widget._msuf2CommandAction
@@ -47,5 +66,31 @@ else
     Check(not pingSwitch, "the resource ping switch is built on a client without Blizzard's ping system")
 end
 
+---------------------------------------------------------------------------
+-- 2. Dots on target help
+---------------------------------------------------------------------------
+Check(pageCtx, "precondition: no page context was captured")
+local tooltips = {}
+local addTooltip = M.AddTooltip
+M.AddTooltip = function(widget, title, body, opts)
+    tooltips[title] = body
+    return addTooltip(widget, title, body, opts)
+end
+M.BuildAuras3CompactCustomWorkspace(pageCtx, M.Widgets.PageBuilder(pageCtx), "target", 4, "dots")
+mw:RunTimers()
+M.AddTooltip = addTooltip
+local help = Check(tooltips["Target DoT"], "the Dots on target picker has no help")
+local midnight = flavor == "Mainline"
+Check(help == (midnight and RETAIL_DOT_HELP or CLIENT_DOT_HELP),
+    "the DoT picker help does not describe this client's DoT list: " .. tostring(help))
+-- The sentence is a whole key in every pack (enUS and enGB included).
+local packs = { "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
+for _, locale in ipairs(packs) do
+    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/Locales/" .. locale .. ".lua", "rb"))
+    local text = handle:read("*a")
+    handle:close()
+    Check(text:find('["' .. help .. '"]', 1, true), locale .. " has no translation of the DoT picker help")
+end
+
 print("menu_client_capability_text_smoke " .. flavor .. ": OK (resource ping switch "
-    .. (pingSwitch and "built" or "absent") .. ")")
+    .. (pingSwitch and "built" or "absent") .. ", " .. (midnight and "Retail" or "client") .. " DoT help)")
