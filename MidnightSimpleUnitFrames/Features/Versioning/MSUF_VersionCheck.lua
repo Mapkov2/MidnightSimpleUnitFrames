@@ -145,7 +145,7 @@ end
 local VALID_VERSION_CHANNELS = { GUILD = true, PARTY = true, RAID = true, INSTANCE_CHAT = true }
 local MAX_EPOCH = 2 ^ 53
 local function OnAddonMessage(_, prefix, payload, channel)
-    if prefix ~= MSG_PREFIX then return end
+    if prefix ~= MSG_PREFIX or not IsEnabled() then return end
     if type(payload) ~= "string" or #payload > 64 or not VALID_VERSION_CHANNELS[channel] then return end
 
     local num, normalized
@@ -226,6 +226,13 @@ MSUF.MSUF_RegisterModule("VersionCheck", {
     Disable = Disable,
     Shutdown = Disable,
 })
+
+--- The registry switches modules only on a profile apply, and the login bind
+--- runs none, so the check starts itself once at PLAYER_LOGIN (SavedVariables
+--- are bound, the broadcast PEW is still ahead). Enable is idempotent; until a
+--- registry pass records the module, IsEnabled gates notice and broadcast.
+local loginBus = MSUF.MSUF_EventBus
+if loginBus then loginBus:Register("PLAYER_LOGIN", KEY .. "_LOGIN", Enable, nil, true) end
 
 --- Public API (slash commands, options, debug)
 MSUF.VersionCheck = {

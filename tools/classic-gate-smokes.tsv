@@ -422,3 +422,4 @@ classics	lua	tools/tests/classic_aura_arena_custom_containers_smoke.lua	{root} {
 -	lua+driver	tools/tests/aura_native_container_growth_smoke.lua	{root/}	Native AuraContainers grow with menu edits instead of being parked and reused
 -	lua	tools/tests/secret_guard_order_smoke.lua	{root}	A secret-capable value is compared before issecretvalue (texture layer, name clip, identity follow-up, legacy name truncation)
 clients+Forever	lua	tools/tests/classpower_workspace_smoke.lua	{root} {flavor}	Class Resources selection, exact search, preview navigation or scoped copy/reset drifted: {flavor}
+-	lua	tools/tests/version_check_login_smoke.lua	{root}	Version check does not start at login or ignores its off switch
