@@ -1052,7 +1052,11 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
   if conf.collapseEmptyGroups == true and nameLists then
     layoutGroupCount = 0
     for i = 1, groupCount do
-      if nameLists[i] ~= "" and RaidGroupAllowed(conf, i) then layoutGroupCount = layoutGroupCount + 1 end
+      -- Raid-wide role blocks are slices of the roster, not subgroups, so the
+      -- subgroup filter does not hide them (PreservedBlockAllowed).
+      if nameLists[i] ~= "" and (mode == "ROLE" or RaidGroupAllowed(conf, i)) then
+        layoutGroupCount = layoutGroupCount + 1
+      end
     end
     layoutGroupCount = math.max(1, layoutGroupCount)
   end
