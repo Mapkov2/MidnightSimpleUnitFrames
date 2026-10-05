@@ -7,12 +7,19 @@
 -- read "Überfall".
 --
 -- Boots the real core and Options graph under deDE (menu_core_world.lua),
--- creates the profiles "None" and "Raid" and the sync group "Raid", builds
--- the Profiles page and checks:
+-- creates the profiles "None", "Raid" and "Smoke Typed Name", the sync group
+-- "Raid" and the variant "Raid", builds the Profiles page and checks:
 --   1. the Active profile and new-character pickers: the selected label and
 --      every row of the opened list show the raw names, while the unassigned
 --      row is still translated;
---   2. the sync-group picker and the member switches show the raw names.
+--   2. the sync-group picker and the member switches show the raw names;
+--   3. the active-profile heading and the variant picker show the raw names;
+--   4. building the page (also while a variant is being edited) and opening
+--      its pickers never hands a name to the translator, so the missing-key
+--      diagnostics do not collect the names either;
+--   5. search: the member rows carry the raw names, and no Profiles result
+--      shows a translated name (a picker's search label is its control name,
+--      not the name it currently shows).
 --
 -- Plain Lua 5.1, repo root and client flavor.
 
@@ -37,9 +44,30 @@ core.MSUF_CreateFactoryDefaultProfile = function() return (F.CopySnapshot(factor
 -- Preconditions: these names are keys the deDE pack translates.
 Check(M.Tr("None") ~= "None" and M.Tr("Raid") ~= "Raid" and M.Tr("Default") ~= "Default",
     "precondition: deDE no longer translates None, Raid and Default")
-Check(env.MSUF_CreateProfile("None") and env.MSUF_CreateProfile("Raid"), "profiles were not created")
+Check(env.MSUF_CreateProfile("None") and env.MSUF_CreateProfile("Raid") and env.MSUF_CreateProfile("Smoke Typed Name"),
+    "profiles were not created")
 Check(core.ProfileSync.Replace({ { name = "Raid", members = { Default = true, Raid = true },
     modules = { unitframes = true }, exclude = {} } }), "sync group was not created")
+-- Saving a variant re-applies the profile; the harness frames cannot, and the
+-- page under test only reads the saved schema.
+local applyProfile = core.ProfileRuntime.Apply
+core.ProfileRuntime.Apply = function() end
+Check(core.ProfileVariants.Replace(env.MSUF_DB, { version = 1, entries = { { name = "Raid", conditions = {}, patch = {} },
+    { name = "Smoke Typed Name", conditions = {}, patch = {} } } }), "variants were not created")
+core.ProfileRuntime.Apply = applyProfile
+
+-- Every translator request that carries a name, also inside composed text.
+-- "None", "Raid" and "Default" are locale keys the page also uses for its own
+-- labels and setting names, so the unique name stands in for them here.
+local UNIQUE = "Smoke Typed Name"
+local lookups = {}
+local translate = core.Translate
+core.Translate = function(value, ...)
+    if type(value) == "string" and value:find(UNIQUE, 1, true) then
+        lookups[#lookups + 1] = value .. " <- " .. debug.traceback("", 2):sub(1, 400)
+    end
+    return translate(value, ...)
+end
 Check(mw:Select("profiles"), "Profiles page did not open")
 
 local frames = mw.world.widgets.frames
@@ -90,8 +118,58 @@ for _, widget in ipairs(frames) do
         members[widget._msuf2Label:GetText()] = true
     end
 end
-for _, name in ipairs({ "None", "Raid", "Default" }) do
+for _, name in ipairs({ "None", "Raid", "Default", "Smoke Typed Name" }) do
     Check(members[name], "no member switch reads the profile name " .. name)
+end
+
+-- 3. Active-profile heading (the profile "Default" is active) and variant picker.
+local heading
+for _, frame in ipairs(frames) do
+    for _, region in ipairs(frame.regions or {}) do
+        if region._msuf2FontRole == "section" and region.GetText then
+            local text = region:GetText()
+            Check(text ~= M.Tr("Default"), "the active-profile heading reads " .. tostring(text) .. " for the profile Default")
+            if text == "Default" then heading = region end
+        end
+    end
+end
+Check(heading, "no heading reads the active profile name Default")
+local variant = Check(DropdownTitled("Variant"), "variant picker missing")
+Check(variant._msuf2Label:GetText() == "Raid", "variant picker shows " .. tostring(variant._msuf2Label:GetText()))
+rows = OpenRows(variant)
+Check(rows["Raid"] == "Raid", "variant list shows " .. tostring(rows["Raid"]))
+for _, button in ipairs({ active, newChar, group }) do OpenRows(button) end
+
+-- 4. The page while a variant is being edited, then no name reached the translator.
+core.ProfileRuntime.Apply = function() end
+Check(core.ProfileVariants.BeginRecording(UNIQUE), "variant editing did not start")
+M.InvalidatePage("profiles")
+Check(mw:Select("home") and mw:Select("profiles"), "Profiles page did not reopen while editing")
+core.ProfileRuntime.Apply = applyProfile
+Check(#lookups == 0, "a name was handed to the translator:\n" .. table.concat(lookups, "\n"))
+for key in pairs(M.missingLocaleKeys or {}) do
+    Check(not key:find(UNIQUE, 1, true), "the missing-key diagnostics list a name: " .. key)
+end
+core.Translate = translate
+
+-- 5. Search rows and results.
+local providerMembers = {}
+for _, row in ipairs(M.ProfileSearch.Collect()) do
+    if type(row.controlId) == "string" and row.controlId:find("sync.member.", 1, true) then providerMembers[row.label] = true end
+end
+for _, name in ipairs({ "None", "Raid", "Default", "Smoke Typed Name" }) do
+    Check(providerMembers[name], "no member search row reads the profile name " .. name)
+end
+local api = Check(M.Search and M.Search._CoreAPI, "search API missing")
+local translated = { [M.Tr("None")] = "None", [M.Tr("Raid")] = "Raid", [M.Tr("Default")] = "Default" }
+for _, query in ipairs({ "Raid", "Default", M.Tr("Raid"), M.Tr("Default"), M.Tr("None") }) do
+    api.MarkSearchIndexDirty()
+    for _, rec in ipairs(api.SearchPages(query)) do
+        if rec.key == "profiles" then
+            Check(not translated[rec.label], "search for " .. query .. " shows the name " .. tostring(translated[rec.label])
+                .. " translated as " .. tostring(rec.label))
+        end
+    end
 end
 
 print("profile_names_untranslated_smoke " .. flavor .. ": OK")

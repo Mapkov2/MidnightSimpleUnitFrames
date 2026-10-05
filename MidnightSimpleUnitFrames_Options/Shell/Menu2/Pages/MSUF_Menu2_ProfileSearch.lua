@@ -146,10 +146,11 @@ function H.Collect()
     end
     local editing = MSUF.ProfileVariants.IsRecording()
     local specRows, profileNames = M.GetProfileSpecializations(), _G.MSUF_GetAllProfiles()
-    local function Add(scope, entry, token, path, label, kind)
+    -- literal: the label is a profile name, shown as typed and never looked up.
+    local function Add(scope, entry, token, path, label, kind, literal)
         local section = scope == "variant" and "profiles_variants" or "profiles_sync"
         if #out >= 4000 then return false end -- Existing search-provider row contract.
-        out[#out + 1] = { pageKey = "profiles", label = M.Tr(label), kind = kind == "editbox" and "textinput" or kind,
+        out[#out + 1] = { pageKey = "profiles", label = literal and label or M.Tr(label), kind = kind == "editbox" and "textinput" or kind,
             controlId = ID(path, token), sectionId = section,
             prepareKind = "profileEditor", prepareValue = token,
             keywords = { entry.name, scope == "variant" and "profile variants profilvariante profilvariante variante" or
@@ -172,7 +173,7 @@ function H.Collect()
                 end
             else
                 for i, name in ipairs(profileNames) do
-                    if not Add(scope, entry, token, "sync.member." .. i, name, "toggle") then return out end
+                    if not Add(scope, entry, token, "sync.member." .. i, name, "toggle", true) then return out end
                 end
                 for _, module in ipairs(MSUF.ProfileSync.Modules) do
                     if not Add(scope, entry, token, "sync.module." .. module,

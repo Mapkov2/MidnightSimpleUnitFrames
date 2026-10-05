@@ -423,8 +423,8 @@ classics	lua	tools/tests/classic_aura_arena_custom_containers_smoke.lua	{root} {
 -	lua	tools/tests/secret_guard_order_smoke.lua	{root}	A secret-capable value is compared before issecretvalue (texture layer, name clip, identity follow-up, legacy name truncation)
 clients+Forever	lua	tools/tests/classpower_workspace_smoke.lua	{root} {flavor}	Class Resources selection, exact search, preview navigation or scoped copy/reset drifted: {flavor}
 clients+Forever	lua	tools/tests/classpower_page_reset_coverage_smoke.lua	{root} {flavor}	Class Resources page reset leaves a setting the page writes at the user value, or replaces a Player setting: {flavor}
--	lua	tools/tests/profile_names_untranslated_smoke.lua	{root} Vanilla	Profile or sync-group names are translated in the Profiles page pickers or switches (Vanilla)
--	lua	tools/tests/profile_names_untranslated_smoke.lua	{root} Mainline	Profile or sync-group names are translated in the Profiles page pickers or switches (Mainline)
+-	lua	tools/tests/profile_names_untranslated_smoke.lua	{root} Vanilla	Profile, sync-group or variant names are translated on the Profiles page or in its search results (Vanilla)
+-	lua	tools/tests/profile_names_untranslated_smoke.lua	{root} Mainline	Profile, sync-group or variant names are translated on the Profiles page or in its search results (Mainline)
 clients+Forever	lua	tools/tests/menu_client_capability_text_smoke.lua	{root} {flavor}	A menu control or help text names a capability the client does not have: {flavor}
 -	lua	tools/tests/profile_suite_export_rows_locale_smoke.lua	{root} Vanilla	Suite export rows of the Profiles page are composed before translation or miss a locale key
 -	lua	tools/tests/aura_custom_workspace_translate_once_smoke.lua	{root} Vanilla	Custom Aura workspace translates composed text, spell names or ranks a second time (Vanilla)

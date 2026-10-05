@@ -617,6 +617,8 @@ function ProfilesPage.ManagementControls(state)
 
     local fieldW = max(180, currentCardW - 40)
     local profileDrop = W.Dropdown(currentCard, "Active profile", {}, fieldW)
+    -- The selected value is a profile name; search keeps the control name.
+    profileDrop._msuf2StableSearchLabel = "Active profile"
     RegisterControl(profileDrop, ProfilesMeta("active_profile.select", "action", { historyMode = "none" }), "Active profile", "dropdown", ProfileValues)
     if M.MarkRuntimeControlComponent then M.MarkRuntimeControlComponent(heroSwitch, profileDrop) end
     local function RefreshProfileValues()
@@ -756,6 +758,7 @@ end
     -- back to "Default" if the profile was deleted, so "None" is always safe.
     local newCharW = max(180, newCharCardW - 40)
     local newCharDrop = W.Dropdown(newCharCard, "Default profile", function() return ProfileValues(true) end, newCharW)
+    newCharDrop._msuf2StableSearchLabel = "Default profile"
     MoveWidget(newCharDrop, newCharCard, 20, -78, newCharW)
     M.BindDropdownWidget(ctx, newCharDrop,
         function()
@@ -778,7 +781,7 @@ end
         local profileCountText = profileCount == 1 and M.Tr("1 profile") or M.Format("%d profiles", profileCount)
         local specAuto = _G.MSUF_IsSpecAutoSwitchEnabled() or false
         local locked = ConfigLocked()
-        activeName:SetText(active)
+        T.SetTranslatedText(activeName, active) -- a profile name, shown as typed
         if currentStatus then
             T.SetTranslatedText(currentStatus, M.Format("Currently loaded and applied: %s", active))
         end
@@ -855,6 +858,7 @@ function ProfilesPage.Specializations(state)
             local assignmentCard = W.ControlCard(spec, s.name, "Assigned profile", x, y, specCardW, specCardH)
             local dropW = max(160, specCardW - 36)
             local drop = W.Dropdown(assignmentCard, "Profile", function() return ProfileValues(true) end, dropW)
+            drop._msuf2StableSearchLabel = "Profile"
             MoveWidget(drop, assignmentCard, 18, -58, dropW)
             M.BindDropdownWidget(ctx, drop,
                 function()

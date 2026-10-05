@@ -83,8 +83,11 @@ function P.Button(state,section,label,path,x,y,fn,width)
     AP.RegisterControl(button,P.Meta(sectionKey,path),label,"button")
     return button
 end
+-- Pickers whose selected value is a name the user typed: search keeps the control name.
+local NAME_PICKERS={["variant.select"]=true,["sync.group.select"]=true}
 function P.Drop(state,section,label,path,values,get,set,x,y,width)
     local drop=W.Dropdown(section,label,values,width or 250)
+    if NAME_PICKERS[path] then drop._msuf2StableSearchLabel=label end
     W.MoveWidget(drop,section,x,y,width or 250)
     local sectionKey=path:match("^sync%.") and "profiles_sync" or "profiles_variants"
     local meta=P.Meta(sectionKey,path)
@@ -99,7 +102,7 @@ function P.BindBool(ctx,widget,get,set,meta)
 end
 local function VariantValues()
     local out,schema={{value="",text="Choose a variant"}},Schema()
-    for _,entry in ipairs(schema and schema.entries or {}) do out[#out+1]={value=entry.name,text=entry.name} end
+    for _,entry in ipairs(schema and schema.entries or {}) do out[#out+1]={value=entry.name,text=entry.name,translate=false} end
     return out
 end
 local function Conditions(state,section,entry,schema,width,specs)
@@ -188,9 +191,14 @@ function P.Build(state,specs)
     end,width)
     y=y-64
     local editing=Variants.IsRecording()
-    W.Text(section,editing and M.Format("Editing %s: use the normal settings pages or Edit Mode, then return here to save or cancel.",Variants.RecordingName())
-        or "Edit values records only changed settings. Removing an overridden value returns that setting to the base profile.",
-        20,y,state.contentW-40,T.colors.muted)
+    local note=W.Text(section,not editing
+        and "Edit values records only changed settings. Removing an overridden value returns that setting to the base profile."
+        or "",20,y,state.contentW-40,T.colors.muted)
+    -- The line names the variant as typed, so the composed text is not looked up again.
+    if editing then
+        T.SetTranslatedText(note,M.Format("Editing %s: use the normal settings pages or Edit Mode, then return here to save or cancel.",
+            Variants.RecordingName()))
+    end
     y=y-64
     if editing then
         P.Button(state,section,"Save variant values","variant.values.save",20,y,function() return P.Result(ctx,Variants.SaveRecording()) end,width)
