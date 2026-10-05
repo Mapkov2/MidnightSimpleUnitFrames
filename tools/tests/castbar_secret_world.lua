@@ -539,6 +539,16 @@ local function InstallClient(world, env)
     end
     env.UnitCastingDuration = function(unit) return UnitDuration(world.casting[unit]) end
     env.UnitChannelDuration = function(unit) return UnitDuration(world.channeling[unit]) end
+    -- An empowered channel's duration including the hold at max rank
+    -- (includeHoldAtMaxTime defaults to true; UnitChannelInfo's end excludes
+    -- the hold, which GetUnitEmpowerHoldAtMaxTime below answers as 1000 ms).
+    env.UnitEmpoweredChannelDuration = function(unit, includeHold)
+        local cast = world.channeling[unit]
+        if not (cast and cast.empowered) then return nil end
+        local duration = UnitDuration(cast)
+        if includeHold ~= false then duration.total = duration.total + 1 end
+        return duration
+    end
     env.GetUnitEmpowerStageCount = function(unit)
         local cast = world.channeling[unit] or world.casting[unit]
         if not (cast and cast.empowered) then return 0 end
