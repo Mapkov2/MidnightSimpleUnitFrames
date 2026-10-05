@@ -220,6 +220,7 @@ clients+Forever	lua	tools/tests/menu_history_cancel_variant_smoke.lua	{root} {fl
 -	lua	tools/tests/menu_color_cancel_false_smoke.lua	{root}	Cancelling the colour picker turned a stored false into nil
 clients+Forever	lua	tools/tests/menu_color_picker_profile_switch_smoke.lua	{root} {flavor}	A colour picker left open across a profile switch wrote into the next profile: {flavor}
 clients+Forever	lua	tools/tests/menu_history_setter_only_smoke.lua	{root} {flavor}	Undo or a page reset left a setter-only setting (frame scale, minimap icon, ...) at its old runtime state: {flavor}
+clients+Forever	lua	tools/tests/menu_page_reset_catalog_smoke.lua	{root} {flavor}	A page reset leaves a setting its page shows at the user value: {flavor}
 clients+Forever	lua	tools/tests/menu_page_reset_scope_smoke.lua	{root} {flavor}	Page resets restore only what the page owns: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}	Menu combat quiescence: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_edge_refusal_smoke.lua	{root} {flavor}	The menu flushed an apply or committed history on the combat-start frame: {flavor}
