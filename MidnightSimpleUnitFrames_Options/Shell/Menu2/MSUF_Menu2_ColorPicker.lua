@@ -110,6 +110,14 @@ local function PickerPlusSwatch(parent, size, onClick)
     btn:SetScript("OnClick", onClick)
     return btn
 end
+-- The client's own class name; a class the client does not have keeps the
+-- English one (LOCALIZED_CLASS_NAMES_MALE lists only the client's classes).
+local function ClassDisplayName(token)
+    local names = LOCALIZED_CLASS_NAMES_MALE
+    local name = names and names[token]
+    if name then return name end
+    return (token:gsub("DEATHKNIGHT", "Death Knight"):gsub("DEMONHUNTER", "Demon Hunter"))
+end
 local function EnsureColorPickerPlus()
     if colorPickerPlus or not _G.ColorPickerFrame then return colorPickerPlus end
     local picker = _G.ColorPickerFrame
@@ -242,7 +250,7 @@ local function EnsureColorPickerPlus()
         end)
         btn._msuf2Token = token
         btn:SetPoint("TOPLEFT", 16 + col * 44, -374 - row * 34)
-        if M.AddTooltip then M.AddTooltip(btn, token:gsub("DEATHKNIGHT", "Death Knight"):gsub("DEMONHUNTER", "Demon Hunter"), Tr("Apply this class color.")) end
+        if M.AddTooltip then M.AddTooltip(btn, ClassDisplayName(token), Tr("Apply this class color.")) end
         panel._msuf2ClassButtons[i] = btn
     end
     local note = T.Font(panel, "GameFontDisableSmall", "Opacity remains beside the setting when that element supports it.", T.colors.dim)
