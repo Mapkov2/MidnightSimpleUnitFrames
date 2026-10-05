@@ -429,3 +429,4 @@ clients+Forever	lua	tools/tests/menu_client_capability_text_smoke.lua	{root} {fl
 -	lua	tools/tests/profile_suite_export_rows_locale_smoke.lua	{root} Vanilla	Suite export rows of the Profiles page are composed before translation or miss a locale key
 -	lua	tools/tests/aura_custom_workspace_translate_once_smoke.lua	{root} Vanilla	Custom Aura workspace translates composed text, spell names or ranks a second time (Vanilla)
 -	lua	tools/tests/aura_custom_workspace_translate_once_smoke.lua	{root} Mainline	Custom Aura workspace translates composed text, spell names or ranks a second time (Mainline)
+-	lua	tools/tests/resource_mark_value_range_smoke.lua	{root} Vanilla	Resource mark value slider ignores the value mode or stores a value outside it

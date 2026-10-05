@@ -104,11 +104,18 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     local function Rules() return Bars().resourceMarks or empty end
     local function Rule() return Rules()[selected] end
     local function Refresh() if M.RequestRefresh then M.RequestRefresh(ctx,"resource-marks") end end
+    -- A percent mark is placed at value / 100, so it spans 0-100; an absolute mark
+    -- keeps the wide range of raw power values (MSUF_CP_ResourceMarks.lua).
+    local function ValueMax(rule) return rule and rule.mode=="ABSOLUTE" and 10000000 or 100 end
     local function Write(key,value)
         local rule=Rule()
         if rule then
             rule[key]=value
+            local stored=tonumber(rule.value)
+            if stored and (key=="value" or key=="mode") then rule.value=math.max(0,math.min(ValueMax(rule),stored)) end
             Apply()
+            -- A new mode changes the value range and may have clamped the value.
+            if key=="mode" then Refresh() end
         end
     end
     local function Values()
@@ -163,6 +170,14 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         local widget=W.Slider(section,spec[2],spec[3],spec[4],spec[5],280)
         W.MoveWidget(widget,section,24,y,280)
         y=y-54
+        if key=="value" then
+            -- Registered before the value binding, so the range is set before the value.
+            M.TrackRefresh(ctx,function()
+                widget._msuf2Refreshing=true
+                widget:SetMinMaxValues(0,ValueMax(Rule()))
+                widget._msuf2Refreshing=nil
+            end)
+        end
         M.ClassPowerWorkspace.BindNumberWidget(ctx,widget,function() local rule=Rule();return rule and rule[key] or spec[6] end,
             function(value) Write(key,value) end,spec[6],Meta("marks."..key))
     end
