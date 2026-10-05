@@ -2044,9 +2044,6 @@ function NativeBuild.Lifecycle(state)
     box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
             KillPreviewAnimationForCombat(self)
-            -- Last moment the restricted SetPropagateKeyboardInput is allowed:
-            -- an arrow-key nudge must not keep the keys from the bindings.
-            if PreviewHelpers.ReleaseKeyboardCapture then PreviewHelpers.ReleaseKeyboardCapture(self) end
             if self.SuspendSpellPreviewEffects then self:SuspendSpellPreviewEffects() end
             self._msufGFRefreshAfterCombat = self._msufGFRefreshReason or self._msufGFRefreshAfterCombat or true
             if self.CancelPendingRefresh then self:CancelPendingRefresh() end
