@@ -622,6 +622,26 @@ local function ApplySpellIconStyle(lane, style, iconZoom)
     lane.iconZoom = Number(iconZoom, 100, 100, 200)
 end
 
+--- A placed Bar is the aura duration itself, not a static colour block
+--- (Retail SpellIndicators_Config CompileSlot): it fills the indicator in the
+--- spell colour from its Growth side and runs in the style's Direction;
+--- Smooth fill eases it and Show Timer Text puts the countdown on it.
+local function ApplySpellIndicatorBar(lane, placed)
+    local showTimer = placed.barShowTimer == true
+    lane.spellIndicatorBar = true
+    lane.showDurationBar = true
+    lane.durationBarSmooth = placed.barSmoothFill == true
+    lane.durationBarReverseFill = tostring(placed.growth or ""):upper():sub(1, 4) == "LEFT"
+    lane.showCooldownText = showTimer
+    lane.showCooldownSwipe = false
+    lane.showCooldown = showTimer
+    if showTimer then
+        lane.cooldownAnchor = Anchor(placed.barTimerAnchor, "CENTER")
+        lane.cooldownX = Number(placed.barTimerX, 0, -2000, 2000)
+        lane.cooldownY = Number(placed.barTimerY, 0, -2000, 2000)
+    end
+end
+
 local function AddIndicatorLane(lanes, order, unit, item, index, prefix, style, iconZoom)
     if type(item) ~= "table" or item.enabled == false then return end
     local spellIDs = item.includeSpellIDs or SpellIDHash(item.spellIDs)
@@ -651,6 +671,7 @@ local function AddIndicatorLane(lanes, order, unit, item, index, prefix, style, 
     lane.width, lane.height = lane.buttonWidth, lane.buttonHeight
     Visuals.EnrichCustomLane(lane, entry, nil)
     if style then ApplySpellIconStyle(lane, style, iconZoom) end
+    if style and lane.visual == "bar" then ApplySpellIndicatorBar(lane, item.placed) end
     lanes[kind] = lane
     order[#order + 1] = kind
 end

@@ -225,8 +225,9 @@ function V.ApplyButtonLayout(lane, button)
     elseif button.Icon then if barOnly then button.Icon:Hide() else button.Icon:Show() end end
     -- UpdateCooldown owns whether this particular aura has a live timer. Do
     -- not resurrect the Cooldown merely because the lane allows cooldowns:
-    -- permanent auras intentionally leave _msufA3CooldownShown unset.
-    local showCooldown = not barOnly and cfg.showCooldown == true
+    -- permanent auras intentionally leave _msufA3CooldownShown unset. A placed
+    -- spell-indicator Bar keeps it: its Cooldown carries only the timer text.
+    local showCooldown = (not barOnly or cfg.spellIndicatorBar == true) and cfg.showCooldown == true
         and button._msufA3CooldownShown == true
     if button.Cooldown and button.Cooldown.SetShown then button.Cooldown:SetShown(showCooldown)
     elseif button.Cooldown then if showCooldown then button.Cooldown:Show() else button.Cooldown:Hide() end end
@@ -255,6 +256,16 @@ local function DurationBarPaint(bar, now)
     bar:SetValue(bar._msufA3ClassicBarElapsed == true and (duration - remaining) or remaining)
 end
 
+--- Smooth fill: the same value, which the client eases the bar toward
+--- (StatusBar:SetValue interpolation, documented on every Classic branch).
+local SMOOTH_INTERP = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut or nil
+local function DurationBarPaintSmooth(bar, now)
+    local duration, expiration = bar._msufA3ClassicBarDuration, bar._msufA3ClassicBarExpiration
+    if not (duration and expiration) then return end
+    local remaining = math_max(0, expiration - now)
+    bar:SetValue(bar._msufA3ClassicBarElapsed == true and (duration - remaining) or remaining, SMOOTH_INTERP)
+end
+
 --- One shared driver animates every shown duration bar (20 Hz) and re-checks
 --- the cooldown-text colour buckets (4 Hz) that time alone moves, so a raid of
 --- timed auras costs one OnUpdate instead of one per bar. It runs only while
@@ -262,7 +273,7 @@ end
 --- its countdown is visible and its aura can still cross a threshold. Their
 --- OnShow/OnHide follow a hidden parent; a show catches each up once.
 local BAR_TICK, BUCKET_TICK = 0.05, 0.25
-local tickBars, tickBuckets = {}, {}
+local tickBars, tickSmoothBars, tickBuckets = {}, {}, {}
 local tickDriver
 local barElapsed, bucketElapsed = 0, 0
 
@@ -274,6 +285,7 @@ local function TickDriverOnUpdate(_, elapsed)
         barElapsed = 0
         now = _G.GetTime()
         for bar in next, tickBars do DurationBarPaint(bar, now) end
+        for bar in next, tickSmoothBars do DurationBarPaintSmooth(bar, now) end
     end
     if bucketElapsed >= BUCKET_TICK then
         bucketElapsed = 0
@@ -286,7 +298,7 @@ local function TickDriverOnUpdate(_, elapsed)
 end
 
 local function TickDriverSync()
-    if next(tickBars) == nil and next(tickBuckets) == nil then
+    if next(tickBars) == nil and next(tickSmoothBars) == nil and next(tickBuckets) == nil then
         if tickDriver and tickDriver._msufA3Running == true then
             tickDriver:Hide()
             tickDriver._msufA3Running = nil
@@ -303,10 +315,14 @@ local function TickDriverSync()
     end
 end
 
+--- A Smooth fill bar is tracked in its own set, so a plain bar's tick paints
+--- exactly as before. The flag changes only in DurationBar, which untracks
+--- the bar first.
 function V.TrackDurationBar(bar, track)
     track = track == true or nil
-    if tickBars[bar] == track then return end
-    tickBars[bar] = track
+    local set = bar._msufA3ClassicBarSmooth and tickSmoothBars or tickBars
+    if set[bar] == track then return end
+    set[bar] = track
     TickDriverSync()
 end
 
@@ -347,7 +363,7 @@ end
 
 --- What the shared driver currently animates (smokes read it).
 function V.TimerTracked(object)
-    return tickBars[object] == true or tickBuckets[object] == true
+    return tickBars[object] == true or tickSmoothBars[object] == true or tickBuckets[object] == true
 end
 
 --- A bar under a hidden parent is not tracked (V.UpdateButtonVisual
@@ -379,6 +395,32 @@ local function DurationBar(button, cfg)
     -- for every config generation), so an unchanged refresh writes none.
     if bar._msufA3LayoutConfig == cfg then return bar end
     bar._msufA3LayoutConfig = cfg
+    local smooth = cfg.durationBarSmooth == true and SMOOTH_INTERP ~= nil or nil
+    if bar._msufA3ClassicBarSmooth ~= smooth then
+        -- Leave the driver set of the old flag; the caller tracks it again.
+        V.TrackDurationBar(bar, false)
+        bar._msufA3ClassicBarSmooth = smooth
+    end
+    local full = cfg.spellIndicatorBar == true
+    local reverse = full and cfg.durationBarReverseFill == true
+    if (bar._msufA3ClassicBarReverse == true) ~= reverse then
+        bar:SetReverseFill(reverse)
+        bar._msufA3ClassicBarReverse = reverse
+    end
+    if full then
+        -- A placed spell-indicator Bar fills the whole indicator in its spell
+        -- colour (Retail PrepareDurationBar), one level under the Cooldown
+        -- that carries its timer text.
+        bar:ClearAllPoints()
+        bar:SetAllPoints(button)
+        bar:SetFrameLevel(button:GetFrameLevel())
+        bar._msufA3ClassicBarLowered = true
+        bar:SetStatusBarColor(Color(cfg.color, 0.69, 0.50, 0.88, 1))
+        return bar
+    elseif bar._msufA3ClassicBarLowered then
+        bar:SetFrameLevel(button:GetFrameLevel() + 1)
+        bar._msufA3ClassicBarLowered = nil
+    end
     local height = Clamp(cfg.durationBarHeight, 2, 1, math_max(1, cfg.buttonHeight or cfg.size))
     local inset = math_max(1, math_floor(((cfg.buttonHeight or cfg.size or 24) / 32) + 0.5))
     bar:ClearAllPoints()
@@ -613,7 +655,11 @@ local function ApplyIndicatorVisual(button, cfg)
         and visual ~= "number" and visual ~= "none" then
         visual = "icon"
     end
-    if visual ~= "icon" and button.Cooldown then button.Cooldown:Hide() end
+    -- A placed spell-indicator Bar is its duration bar (DurationBar); its
+    -- Cooldown carries only the timer text and follows the lane's switches.
+    if visual ~= "icon" and button.Cooldown and not (visual == "bar" and cfg.spellIndicatorBar == true) then
+        button.Cooldown:Hide()
+    end
     if visual == "none" and button.Count then button.Count:Hide() end
     -- Swatch, icon and glow follow the compiled lane config alone. The layout
     -- pass clears this stamp, as it re-shows the icon this pass may hide.
@@ -621,7 +667,7 @@ local function ApplyIndicatorVisual(button, cfg)
     local color = type(cfg.color) == "table" and cfg.color or NO_INDICATOR_COLOR
     local r, g, b, a = Color(color, 0.69, 0.50, 0.88, 1)
     local swatch = button._msufA3ClassicIndicatorSwatch
-    if visual == "square" or visual == "bar" then
+    if visual == "square" or (visual == "bar" and cfg.spellIndicatorBar ~= true) then
         if not swatch then
             swatch = PixelLayoutRegion(button:CreateTexture(nil, "OVERLAY"))
             swatch:SetTexture("Interface\\Buttons\\WHITE8X8")
@@ -745,7 +791,8 @@ function V.UpdateButtonVisual(lane, button, unit, data)
         if timed then
             local elapsedMode = cfg.durationBarDirection == "ELAPSED"
             -- A refresh of the same application leaves the bar to the driver.
-            local same = bar._msufA3ClassicBarExpiration == expiration
+            local running = bar._msufA3ClassicBarExpiration
+            local same = running == expiration
                 and bar._msufA3ClassicBarDuration == rawDuration
                 and bar._msufA3ClassicBarElapsed == elapsedMode
             bar._msufA3ClassicBarDuration = rawDuration
@@ -756,7 +803,15 @@ function V.UpdateButtonVisual(lane, button, unit, data)
                 bar._msufA3ClassicBarMax = rawDuration
             end
             if not (same and bar:IsShown()) then
-                DurationBarPaint(bar, _G.GetTime())
+                -- Smooth fill eases a shown running bar to its refreshed
+                -- timer, as Blizzard's aura Update does; a bar that appears
+                -- starts at its value.
+                local now = _G.GetTime()
+                if running and bar._msufA3ClassicBarSmooth and bar:IsShown() then
+                    DurationBarPaintSmooth(bar, now)
+                else
+                    DurationBarPaint(bar, now)
+                end
                 bar:Show()
             end
             -- Only a bar on screen is animated: under a hidden frame or lane
@@ -771,8 +826,15 @@ function V.UpdateButtonVisual(lane, button, unit, data)
                 bar:SetMinMaxValues(0, 1)
                 bar._msufA3ClassicBarMax = 1
             end
-            bar:SetValue(0)
-            bar:Hide()
+            if cfg.spellIndicatorBar == true then
+                -- A permanent aura keeps its spell-indicator Bar full, as the
+                -- colour block this Bar replaced showed it.
+                bar:SetValue(1)
+                bar:Show()
+            else
+                bar:SetValue(0)
+                bar:Hide()
+            end
             V.TrackDurationBar(bar, false)
         end
     elseif button._msufA3DurationBar then

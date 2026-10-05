@@ -10,6 +10,8 @@
 --   * Sort By Other Defensives First, Important First and Debuff Type First
 --     follow the Blizzard comparators instead of the Default order
 --   * group Spell Icons take the scope's Spell Icon Style and Icon Zoom
+--   * a placed spell-indicator Bar is the aura duration, with Smooth fill and
+--     Show Timer Text
 -- Arguments: repository root, flavor (Vanilla, TBC or Mists).
 local root = assert(arg[1], "repository root argument missing")
 root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
@@ -63,8 +65,24 @@ function Widget:SetAlpha(alpha) self._alpha = alpha end
 function Widget:SetHideCountdownNumbers(hide) self._hideNumbers = hide end
 function Widget:SetCooldown(start, duration) self._start, self._duration = start, duration end
 function Widget:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "OUTLINE" end
-function Widget:GetNumRegions() return 0 end
-function Widget:GetRegions() return nil end
+-- A Cooldown's countdown numbers are its FontString region, as in the client.
+function Widget:GetNumRegions() return self._textRegion and 1 or 0 end
+function Widget:GetRegions() return self._textRegion end
+function Widget:SetAllPoints(target) self._allPoints = target or self._parent end
+-- StatusBar: SetValue takes a StatusBarInterpolation or no second argument
+-- (SimpleStatusBarAPIDocumentation: Nilable = false, Default = Immediate).
+function Widget:SetValue(...)
+    local value, interpolation = ...
+    assert(type(value) == "number", "StatusBar:SetValue needs a number")
+    assert(select("#", ...) < 2 or type(interpolation) == "number", "StatusBar:SetValue got a non-enum interpolation")
+    self._value, self._interp = value, interpolation
+end
+function Widget:SetMinMaxValues(minValue, maxValue) self._min, self._max = minValue, maxValue end
+function Widget:SetReverseFill(reverse)
+    assert(type(reverse) == "boolean", "StatusBar:SetReverseFill needs a boolean")
+    self._reverse = reverse
+end
+function Widget:SetStatusBarColor(r, g, b, a) self._color = { r, g, b, a } end
 function Widget:CreateTexture() return setmetatable({ _shown = true, _parent = self, _objectType = "Texture" }, Widget) end
 Widget.CreateMaskTexture = Widget.CreateTexture
 function Widget:CreateFontString() return setmetatable({ _shown = true, _parent = self, _objectType = "FontString" }, Widget) end
@@ -78,9 +96,16 @@ for _, name in ipairs({
 }) do
     Widget[name] = Widget[name] or function() end
 end
+-- A child frame starts one level above its parent, as in the client.
+local createdFrames = {}
 _G.CreateFrame = function(frameType, _, parent)
-    return setmetatable({ _shown = true, _parent = parent, _objectType = frameType }, Widget)
+    local frame = setmetatable({ _shown = true, _parent = parent, _objectType = frameType,
+        _frameLevel = parent and parent:GetFrameLevel() + 1 or 1 }, Widget)
+    if frameType == "Cooldown" then frame._textRegion = frame:CreateFontString() end
+    createdFrames[#createdFrames + 1] = frame
+    return frame
 end
+_G.Enum = { StatusBarInterpolation = { Immediate = 0, ExponentialEaseOut = 1 } }
 
 -- Aura API stub: Classic filter semantics, |PLAYER keeps the player's own casts ------------
 local world = {}
@@ -418,5 +443,106 @@ local plain = GroupFrame("party1", { spellIndicators = { enabled = true, items =
 c = plain._msufA3State.lanes.spellIndicator1.config
 assert(c.cooldownSize == 8 and c.stackSize == 10 and c.alpha == 1 and c.showCooldownText == true
     and c.iconZoom == 100, "an untouched Spell Icon Style did not give the menu's defaults")
+
+-- 8. A placed spell-indicator Bar is the aura duration ------------------------------------
+-- Display as Bar offers Smooth fill, Show Timer Text and the Timer anchor on
+-- every client. Retail binds a StatusBar over the whole indicator, in the spell
+-- colour and filling from the Growth side, to the aura duration; Smooth fill
+-- eases it and Show Timer Text puts the countdown at the Timer anchor
+-- (SpellIndicators_Config CompileSlot, Runtime_ButtonVisuals PrepareDurationBar).
+local SMOOTH = _G.Enum.StatusBarInterpolation.ExponentialEaseOut
+local barPlaced = { type = "bar", anchor = "TOPLEFT", x = 0, y = 0, size = 18, barWidth = 54, growth = "LEFTDOWN",
+    barSmoothFill = true, barShowTimer = true, barTimerAnchor = "TOP", barTimerX = 3, barTimerY = 4,
+    iconEffect = "none", missing = false, showCooldownSwipe = true, showCooldown = true, cooldownSize = 8,
+    showStacks = true }
+local barItem = {}
+for key, value in pairs(renewItem) do barItem[key] = value end
+barItem.placed = barPlaced
+-- Renew on party1: 15 s, 6 s left at GetTime() 50.
+local barRenew = { auraInstanceID = 900, spellId = 139, name = "Spell139", icon = 1, duration = 15,
+    expirationTime = 56, isHelpful = true, isHarmful = false, mine = true, sourceUnit = "player",
+    isFromPlayerOrPlayerPet = true }
+local function TimerDriver()
+    for i = 1, #createdFrames do
+        local frame = createdFrames[i]
+        if frame._scripts and frame._scripts.OnUpdate and frame._objectType == "Frame" then return frame end
+    end
+end
+local function BarIndicator(style)
+    _G.GetTime = function() return 50 end
+    barRenew.expirationTime = 56
+    SetAuras("party1", { barRenew })
+    local frame = GroupFrame("party1", { spellIndicators = { enabled = true, items = { barItem }, style = style } })
+    local barLane = assert(frame._msufA3State.lanes.spellIndicator1, "the Bar spell indicator did not compile")
+    assert(ShownIDs(barLane) == "900", "precondition: the Bar spell indicator does not show Renew")
+    return frame, barLane[1]
+end
+local barFrame, barButton = BarIndicator({})
+local bar = barButton._msufA3DurationBar
+local swatch = barButton._msufA3ClassicIndicatorSwatch
+assert(not (swatch and swatch._shown == true), "a placed Bar is still a static colour block")
+assert(bar and bar._shown == true and bar._allPoints == barButton,
+    "a placed Bar shows no duration bar over the indicator")
+assert(bar._min == 0 and bar._max == 15 and bar._value == 6 and bar._interp == nil,
+    ("a placed Bar does not fill with the aura duration: %s of %s-%s, interpolation %s; expected 6 of 0-15 at once")
+    :format(tostring(bar._value), tostring(bar._min), tostring(bar._max), tostring(bar._interp)))
+assert(bar._reverse == true, "Growth Left did not fill the Bar from the right")
+assert(bar._color and bar._color[1] == 0.2 and bar._color[2] == 1 and bar._color[3] == 0.2 and bar._color[4] == 1,
+    "the Bar does not take the selected spell colour")
+local timer = barButton.Cooldown
+assert(timer._shown == true and timer._drawSwipe == false and timer._hideNumbers == false
+    and timer._start == 41 and timer._duration == 15, "Show Timer Text put no countdown on the Bar")
+local timerText = timer._textRegion._point
+assert(timerText and timerText.point == "TOP" and timerText.relativeTo == barButton and timerText.x == 3
+    and timerText.y == 4, "the Bar's timer text is not at its Timer anchor and offsets")
+assert(bar:GetFrameLevel() < timer:GetFrameLevel(), "the Bar draws over its own timer text")
+assert(barButton.Count._shown == false, "a placed Bar shows a stack count")
+-- Smooth fill: the shared driver eases the running bar, and a refresh of the
+-- same aura eases it back up (Blizzard's Update interpolation).
+local driver = assert(TimerDriver(), "no shared timer driver animates the Bar")
+_G.GetTime = function() return 52 end
+driver._scripts.OnUpdate(driver, 0.06)
+assert(bar._value == 4 and bar._interp == SMOOTH, ("Smooth fill: the running Bar is at %s, interpolation %s")
+    :format(tostring(bar._value), tostring(bar._interp)))
+barRenew.expirationTime = 67
+registered.Update(barFrame, "UNIT_AURA", "party1", { updatedAuraInstanceIDs = { 900 } })
+assert(bar._value == 15 and bar._interp == SMOOTH, ("Smooth fill: the refreshed Bar is at %s, interpolation %s")
+    :format(tostring(bar._value), tostring(bar._interp)))
+-- Smooth fill turned off on the shown Bar: the driver paints it once a tick, at once.
+barPlaced.barSmoothFill = false
+A3.BumpRuntimeConfig()
+registered.Update(barFrame, "UNIT_AURA", "party1", { isFullUpdate = true })
+assert(barButton._msufA3DurationBar == bar and A3.ClassicVisuals.TimerTracked(bar) == true,
+    "precondition: the Bar left the shared driver after Smooth fill was turned off")
+local paints, setValue = 0, bar.SetValue
+function bar:SetValue(...) paints = paints + 1; return setValue(self, ...) end
+_G.GetTime = function() return 53 end
+driver._scripts.OnUpdate(driver, 0.06)
+bar.SetValue = nil
+assert(paints == 1 and bar._value == 14 and bar._interp == nil, ("Smooth fill off: one tick painted the Bar %d times,"
+    .. " interpolation %s"):format(paints, tostring(bar._interp)))
+-- Smooth fill off, the style's Direction Elapsed: the bar fills as time passes.
+barPlaced.barSmoothFill, barPlaced.barShowTimer = false, false
+barFrame, barButton = BarIndicator({ durationBarDirection = "ELAPSED" })
+bar = barButton._msufA3DurationBar
+assert(bar._value == 9 and bar._interp == nil, "Direction Elapsed: the Bar is at " .. tostring(bar._value))
+assert(barButton.Cooldown._shown == false, "Show Timer Text off still showed the Bar's countdown")
+driver = TimerDriver()
+_G.GetTime = function() return 52 end
+driver._scripts.OnUpdate(driver, 0.06)
+assert(bar._value == 11 and bar._interp == nil, "Smooth fill off: the driver eased the Bar")
+-- A permanent aura keeps the Bar full, as the colour block showed it.
+barRenew.duration, barRenew.expirationTime = 0, 0
+registered.Update(barFrame, "UNIT_AURA", "party1", { updatedAuraInstanceIDs = { 900 } })
+assert(bar._shown == true and bar._max == 1 and bar._value == 1, "a permanent aura emptied or hid its Bar")
+barRenew.duration = 15
+barPlaced.barSmoothFill, barPlaced.barShowTimer = true, true
+-- A Square keeps its colour block.
+barPlaced.type = "square"
+local _, squareButton = BarIndicator({})
+assert(squareButton._msufA3ClassicIndicatorSwatch and squareButton._msufA3ClassicIndicatorSwatch._shown == true
+    and not (squareButton._msufA3DurationBar and squareButton._msufA3DurationBar._shown == true),
+    "a placed Square lost its colour block")
+barPlaced.type = "bar"
 
 print("classic aura setting parity smoke passed: " .. flavor)
