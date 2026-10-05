@@ -58,12 +58,18 @@ for kind, keys in pairs(ui.keys) do
     end
 end
 owned["bars.resourceMarks"] = "extras"
-local clientOnly = M.ResourceExtrasPage and M.ResourceExtrasPage.ClientOnlySettings and M.ResourceExtrasPage.ClientOnlySettings()
-for path in pairs(clientOnly or {}) do owned[path] = "extras" end
 -- Colors-page keys beside the extras: the Class Resources reset must keep them.
 local foreign = { "bars.ignorePainColor", "bars.arcaneWindowColor", "bars.arcaneWindowSoulColor",
     "bars.arcaneWindowWarnColor", "bars.manaRegenPauseColor", "bars.manaGainPulseColor", "bars.manaCostColor",
     "bars.barOutlineThickness", "bars.powerBarTexture" }
+local isForeign = {}
+for _, path in ipairs(foreign) do isForeign[path] = true end
+-- ClientOnlySettings also names each extra's colour (search gates those rows by
+-- client); the colours stay owned by the Colors page.
+local clientOnly = M.ResourceExtrasPage and M.ResourceExtrasPage.ClientOnlySettings and M.ResourceExtrasPage.ClientOnlySettings()
+for path in pairs(clientOnly or {}) do
+    if not isForeign[path] then owned[path] = "extras" end
+end
 
 local function Split(path) return path:match("^(%w+)%.(.+)$") end
 local db = M.EnsureDB()

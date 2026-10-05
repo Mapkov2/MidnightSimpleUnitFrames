@@ -72,9 +72,12 @@ for _, contract in ipairs({
 end
 assert(not search:find("status%2Eselected%2Etext_color", 1, true),
     "Classic search index still lists the removed placement status text-color swatch")
--- Settings the Classic menu no longer builds must not stay searchable.
+-- Settings the Classic menu no longer builds must not stay searchable. The GCD
+-- Bar is not one of them: every Classic mirror branch documents
+-- C_Spell.GetSpellCooldownDuration and StatusBar:SetTimerDuration, the Castbar
+-- page builds the section wherever its own probe passes, and search drops the
+-- rows where it fails (M.CastbarGCDBarSupported, search_client_dead_rows_smoke).
 for _, key in ipairs({
-    "showGCDBar", "showGCDBarTime", "showGCDBarSpell",
     "empowerColorStages", "empowerStageBlink", "empowerStageBlinkTime",
     "tooltipShowAuraSpellIDs", "tooltipShowAuraCasterNames",
 }) do

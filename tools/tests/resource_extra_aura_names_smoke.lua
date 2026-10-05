@@ -19,7 +19,7 @@ end
 
 local CASES = {
     { class = "WARRIOR", spec = 3, spell = 190456, key = "showIgnorePain", label = "Zähne zusammenbeißen" },
-    { class = "MAGE", spec = 1, spell = 365362, key = "showArcaneWindow", label = "Arkane Welle" },
+    { class = "MAGE", spec = 1, spell = 365362, key = "showArcaneWindow", label = "Arkane Woge" }, -- the deDE client name (Wowhead de spell=365362)
 }
 
 for _, case in ipairs(CASES) do

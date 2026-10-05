@@ -27,8 +27,13 @@ local mw = MenuWorld.Open(root, flavor, { locale = "frFR", page = "home" })
 local M, W = mw.M, mw.M.Widgets
 local f = Check(M.frame, "the menu window was not built")
 Check(mw.core.FinalizeLocale() == "frFR", "the world did not select frFR")
-Check(M.Tr("Menu") == "Menus" and M.Tr("Out of range") == "Hors de portée" and M.Tr("%s: %s") == "%s : %s",
+Check(M.Tr("Out of range") == "Hors de portée" and M.Tr("%s: %s") == "%s : %s",
     "the French locale pack changed the keys this smoke relies on")
+-- French now spells the lone word and the format alike ("Menu", "Menu %d%%"),
+-- so give the format a stand-in text: a label glued from Tr("Menu") would
+-- still read "Menu 120%", the format key reads "Échelle 120%".
+local localeTable = Check((mw.env.MSUF_NS or mw.env.MSUF).L, "the world has no locale table")
+rawset(localeTable, "Menu %d%%", "Échelle %d%%")
 
 -- 1. Menu scale label.
 local label
@@ -43,7 +48,7 @@ for _, frame in ipairs(mw.world.widgets.frames) do
         end
     end
 end
-Check(label == "Menu 120%", "the menu scale label reads " .. tostring(label) .. ", not the translated \"Menu %d%%\"")
+Check(label == "Échelle 120%", "the menu scale label reads " .. tostring(label) .. ", not the translated \"Menu %d%%\"")
 
 -- 2. Live opacity slider title.
 Check(M.AlphaLabel("Out of range", 0.4) == "Hors de portée : 40%",
