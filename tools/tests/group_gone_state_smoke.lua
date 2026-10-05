@@ -17,7 +17,10 @@
 --     UnitIsDead, death and resurrection still reach the background;
 --   * a dead unit's background is repainted after every health-gradient
 --     repaint of the same tick;
---   * ghost through UNIT_FLAGS, offline and back through UNIT_CONNECTION.
+--   * ghost through UNIT_FLAGS, offline and back through UNIT_CONNECTION;
+--   * an offline member who keeps health: UNIT_HEALTH and UNIT_MAXHEALTH
+--     decide death only, so the offline background holds (repainted over the
+--     gradient) until UNIT_CONNECTION resolves the unit again.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -98,6 +101,32 @@ Check(Gone(), "UNIT_CONNECTION: an offline unit does not show the dead backgroun
 S.connected = true
 w:Fire(frame, UNIT, "UNIT_CONNECTION", true)
 Check(not Gone(), "UNIT_CONNECTION: the dead background stays after the unit reconnected")
+
+-- Offline with health left (the character stays in the world and takes damage).
+local function OfflineTicks(secret)
+    local label = secret and "protected" or "plain"
+    S.secret, S.dead, S.pct = secret, false, 0.8
+    S.connected = false
+    w:Fire(frame, UNIT, "UNIT_CONNECTION", false)
+    Check(Gone() and DeadPainted(), label .. ": UNIT_CONNECTION did not tint the offline unit")
+    Tick(0.6, false)
+    Check(Gone() and DeadPainted(), label .. ": a UNIT_HEALTH tick cleared the offline background")
+    Tick(0.5, false)
+    Check(Gone() and DeadPainted(), label .. ": a second UNIT_HEALTH tick cleared the offline background")
+    -- UNIT_MAXHEALTH: the state only (its gradient repaint order is the same
+    -- for a dead unit); the next tick repaints the background.
+    w:Fire(frame, UNIT, "UNIT_MAXHEALTH")
+    Check(Gone(), label .. ": UNIT_MAXHEALTH cleared the offline background")
+    Tick(0.5, false)
+    Check(Gone() and DeadPainted(), label .. ": a tick after UNIT_MAXHEALTH cleared the offline background")
+    S.connected = true
+    w:Fire(frame, UNIT, "UNIT_CONNECTION", true)
+    Check(not Gone() and not DeadPainted(), label .. ": the offline background stays after the unit reconnected")
+    Tick(0.4, false)
+    Check(not Gone(), label .. ": a tick after reconnecting brought the offline background back")
+end
+if flavor == "Mainline" then OfflineTicks(true) end
+OfflineTicks(false)
 
 if #failures > 0 then
     for index = 1, #failures do print("FAIL " .. failures[index]) end
