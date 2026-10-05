@@ -339,9 +339,10 @@ end
 
 local function Grid(maxCount, perRow, vertical)
     if maxCount <= 0 then return 0, 0 end
+    -- Up/Down (Single Column) is one column of every icon (PositionButton).
+    if vertical then return 1, maxCount end
     local primary = math_min(maxCount, perRow)
     local secondary = math_floor((maxCount + perRow - 1) / perRow)
-    if vertical then return secondary, primary end
     return primary, secondary
 end
 
@@ -428,7 +429,8 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         showTooltip = placed.showTooltip ~= false,
         showCooldownSwipe = placed.showCooldownSwipe ~= false,
         showCooldownText = placed.showCooldown ~= false,
-        showCooldown = placed.showCooldown ~= false,
+        -- The Cooldown frame carries both: text off keeps a requested swipe.
+        showCooldown = placed.showCooldown ~= false or placed.showCooldownSwipe ~= false,
         cooldownSwipeDarken = false,
         cooldownDecimalSeconds = Number(placed.cooldownDecimalSeconds, 3, 0, 30),
         showStacks = placed.showStacks ~= false,
@@ -498,15 +500,22 @@ local function PortraitLane(lane, frameSpec, entry, kind, rootKey)
     out.step = out.size + out.spacing
     out.stepX = width + out.spacing
     out.stepY = height + out.spacing
+    -- Icon 1 covers the portrait; further icons grow outward in the lane's
+    -- own Growth direction (xSign, ySign and verticalGrowth stay the lane's).
     out.perRow = maxCount
-    out.cols, out.rows = maxCount, 1
     out.padding = 0
-    out.width = maxCount * width + math_max(maxCount - 1, 0) * out.spacing
-    out.height = height
+    if out.verticalGrowth == true then
+        out.cols, out.rows = 1, maxCount
+        out.width = width
+        out.height = maxCount * height + math_max(maxCount - 1, 0) * out.spacing
+    else
+        out.cols, out.rows = maxCount, 1
+        out.width = maxCount * width + math_max(maxCount - 1, 0) * out.spacing
+        out.height = height
+    end
     out.anchor = "CENTER"
     out.initialAnchor = "CENTER"
     out.x, out.y = 0, 0
-    out.xSign, out.ySign, out.verticalGrowth = 1, -1, false
     out.showCooldownText = lane.showCooldownText == true and entry.portraitCooldownText ~= false
     return out
 end
@@ -582,27 +591,87 @@ function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
     return next(lanes) and lanes or nil, order, nil
 end
 
-local function AddIndicatorLane(lanes, order, unit, item, index, prefix)
+--- Group > Spell Icons > Spell Icon Style: one look for every spell icon of a
+--- group scope, with the menu's defaults, as Retail compiles it
+--- (Runtime_GroupConfig CompileGroupSpellIndicatorStyle, SpellIndicators_Config
+--- CompileSlot). Text, swipe and the duration bar belong to icons; a stack
+--- count to icons and numbers. Shape, border and shadow are the Buff appearance.
+local function ApplySpellIconStyle(lane, style, iconZoom)
+    local icon = lane.visual == "icon"
+    lane.alpha = Number(style.alpha, 1, 0, 1)
+    lane.showTooltip = style.showTooltip ~= false
+    lane.showCooldownText = icon and style.showCooldownText ~= false
+    lane.showCooldownSwipe = icon and style.showCooldownSwipe ~= false
+    lane.showCooldown = lane.showCooldownText or lane.showCooldownSwipe
+    lane.cooldownSwipeReverse = style.cooldownSwipeReverse == true
+    lane.cooldownSize = Number(style.cooldownSize, 8, 6, 40)
+    lane.cooldownAnchor = Anchor(style.cooldownAnchor, "CENTER")
+    lane.cooldownX = Number(style.cooldownX, 0, -2000, 2000)
+    lane.cooldownY = Number(style.cooldownY, 0, -2000, 2000)
+    lane.cooldownDecimalSeconds = Number(style.cooldownDecimalSeconds, 3, 0, 30)
+    lane.showStacks = style.showStacks ~= false and (icon or lane.visual == "number")
+    lane.stackSize = Number(style.stackSize, 10, 6, 40)
+    lane.stackAnchor = Anchor(style.stackAnchor, "BOTTOMRIGHT")
+    lane.stackX = Number(style.stackX, 0, -2000, 2000)
+    lane.stackY = Number(style.stackY, 0, -2000, 2000)
+    lane.showDurationBar = icon and style.showDurationBar == true
+    lane.durationBarHeight = Number(style.durationBarHeight, 2, 1, 16)
+    lane.durationBarDisplay = tostring(style.durationBarDisplay or ""):upper() == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
+    lane.durationBarPosition = tostring(style.durationBarPosition or ""):upper() == "TOP" and "TOP" or "BOTTOM"
+    lane.durationBarDirection = tostring(style.durationBarDirection or ""):upper() == "ELAPSED" and "ELAPSED" or "REMAINING"
+    lane.iconZoom = Number(iconZoom, 100, 100, 200)
+end
+
+--- A placed Bar is the aura duration itself, not a static colour block
+--- (Retail SpellIndicators_Config CompileSlot): it fills the indicator in the
+--- spell colour from its Growth side and runs in the style's Direction;
+--- Smooth fill eases it and Show Timer Text puts the countdown on it.
+local function ApplySpellIndicatorBar(lane, placed)
+    local showTimer = placed.barShowTimer == true
+    lane.spellIndicatorBar = true
+    lane.showDurationBar = true
+    lane.durationBarSmooth = placed.barSmoothFill == true
+    lane.durationBarReverseFill = tostring(placed.growth or ""):upper():sub(1, 4) == "LEFT"
+    lane.showCooldownText = showTimer
+    lane.showCooldownSwipe = false
+    lane.showCooldown = showTimer
+    if showTimer then
+        lane.cooldownAnchor = Anchor(placed.barTimerAnchor, "CENTER")
+        lane.cooldownX = Number(placed.barTimerX, 0, -2000, 2000)
+        lane.cooldownY = Number(placed.barTimerY, 0, -2000, 2000)
+    end
+end
+
+local function AddIndicatorLane(lanes, order, unit, item, index, prefix, style, iconZoom)
     if type(item) ~= "table" or item.enabled == false then return end
     local spellIDs = item.includeSpellIDs or SpellIDHash(item.spellIDs)
     if not spellIDs then return end
+    -- A corner Custom Spell slot carries its Filter dropdown as customFilter
+    -- (HELPFUL|PLAYER, HELPFUL, HARMFUL|PLAYER or HARMFUL), which Retail
+    -- scans with as given (SpellIndicators_Config CompileSlot).
+    local customFilter = type(item.customFilter) == "string" and item.customFilter or nil
+    local helpful = not (customFilter and customFilter:find("HARMFUL", 1, true))
+    local onlyOwn = item.onlyOwn == true
+    if customFilter then onlyOwn = customFilter:find("PLAYER", 1, true) ~= nil end
     local entry = {
         name = item.display or item.auraName,
-        auraType = "BUFF",
-        onlyOwn = item.onlyOwn == true,
+        auraType = helpful and "BUFF" or "DEBUFF",
+        onlyOwn = onlyOwn,
         placed = item.placed,
         frame = item.frame,
         layer = item.layer,
         color = item.color,
         icon = item.icon,
-        filters = { onlyMine = item.onlyOwn == true },
+        filters = { onlyMine = onlyOwn },
     }
     local kind = prefix .. tostring(index)
-    local lane = BaseLane(unit, kind, entry, index, spellIDs, true, "ClassicIndicator" .. tostring(prefix) .. tostring(index))
+    local lane = BaseLane(unit, kind, entry, index, spellIDs, helpful, "ClassicIndicator" .. tostring(prefix) .. tostring(index))
     lane.max = 1
     lane.cols, lane.rows = 1, 1
     lane.width, lane.height = lane.buttonWidth, lane.buttonHeight
     Visuals.EnrichCustomLane(lane, entry, nil)
+    if style then ApplySpellIconStyle(lane, style, iconZoom) end
+    if style and lane.visual == "bar" then ApplySpellIndicatorBar(lane, item.placed) end
     lanes[kind] = lane
     order[#order + 1] = kind
 end
@@ -612,8 +681,10 @@ function Features.CompileGroupIndicatorLanes(frame, unit)
     local lanes, order = {}, {}
     local spellRoot = spec and spec.spellIndicators
     local items = spellRoot and spellRoot.enabled == true and spellRoot.items
+    -- Corner slots keep their own no-text look; only Spell Icons take the style.
+    local style = type(items) == "table" and (type(spellRoot.style) == "table" and spellRoot.style or {}) or nil
     for i = 1, type(items) == "table" and #items or 0 do
-        AddIndicatorLane(lanes, order, unit, items[i], i, "spellIndicator")
+        AddIndicatorLane(lanes, order, unit, items[i], i, "spellIndicator", style, spellRoot.iconZoom)
     end
     local corners = spec and spec.cornerIndicators
     local customSlots = corners and corners.enabled == true and corners.customSlots

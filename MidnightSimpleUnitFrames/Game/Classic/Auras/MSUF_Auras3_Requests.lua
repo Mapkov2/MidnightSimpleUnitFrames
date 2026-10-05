@@ -32,8 +32,17 @@ local CombatBlocked = Compile.AuraRuntimeCombatBlocked
 function A3._EnsureDeferredAuraRuntimeDriver()
     if A3._deferredAuraRuntimeFrame then return A3._deferredAuraRuntimeFrame end
     local frame = CreateFrame("Frame")
+    local function FlushAfterCombatLatch() A3._FlushDeferredAuraRuntime() end
     frame:SetScript("OnEvent", function(self, event)
-        if event ~= "PLAYER_REGEN_ENABLED" or CombatBlocked() then return end
+        if event ~= "PLAYER_REGEN_ENABLED" then return end
+        if CombatBlocked() then
+            -- The lockdown has ended, so only the MSUF_InCombat latch blocks.
+            -- The group runtime clears it in its own PLAYER_REGEN_ENABLED
+            -- handler, which can run after this one: flush on the next frame.
+            -- A flush that combat blocks again keeps its queue and this event.
+            if C_Timer and C_Timer.After then C_Timer.After(0, FlushAfterCombatLatch) end
+            return
+        end
         -- The flush unregisters this event only after its queue is consumed,
         -- so an error while applying one scope keeps the retry armed.
         A3._FlushDeferredAuraRuntime()

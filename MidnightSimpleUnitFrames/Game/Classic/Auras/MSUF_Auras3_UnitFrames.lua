@@ -481,6 +481,10 @@ end
 --- changes (GroupRosterAuras), the player's buff lane follows its weapon
 --- enchants, and a stable token resets on its identity event. The combat
 --- variants add the two combat edges for lanes that refresh on them.
+--- ARENA_OPPONENT_UPDATE names the opponent slot it is about, and every arena
+--- frame hears every slot's seen/unseen flap. Arena frames take it with
+--- UNIT_AURA on the unit route (GetEvents), which hands that token through,
+--- so Update rescans only the frame it names, as Blizzard's ArenaUI does.
 --- maxArena: the client's arena slot count (TBC and Mists field five
 --- opponents); arena1..3 always map.
 local function BuildAuraEvents(maxArena)
@@ -493,6 +497,9 @@ local function BuildAuraEvents(maxArena)
         identityByUnit = {},
         identityCombatByUnit = {},
         identity = {},
+        arena = { "UNIT_AURA", "ARENA_OPPONENT_UPDATE" },
+        arenaFaction = { "UNIT_AURA", "UNIT_FACTION", "ARENA_OPPONENT_UPDATE" },
+        arenaUnits = {},
     }
     local function Identity(event, units)
         local plain = { event }
@@ -507,9 +514,8 @@ local function BuildAuraEvents(maxArena)
     Identity("PLAYER_TARGET_CHANGED", { "target" })
     Identity("PLAYER_FOCUS_CHANGED", { "focus" })
     Identity("INSTANCE_ENCOUNTER_ENGAGE_UNIT", { "boss1", "boss2", "boss3", "boss4", "boss5" })
-    local arena = {}
-    for i = 1, math.max(3, maxArena) do arena[i] = "arena" .. i end
-    Identity("ARENA_OPPONENT_UPDATE", arena)
+    events.identity.ARENA_OPPONENT_UPDATE = true
+    for i = 1, math.max(3, maxArena) do events.arenaUnits["arena" .. i] = true end
     return events
 end
 local EVENTS = BuildAuraEvents(tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3)
@@ -545,6 +551,9 @@ function AurasElement.GetEvents(frame)
     -- Every such frame but the player's own also hears the player's side, which
     -- flips the observer half of UnitCanAssist (FactionPlayerFanOut).
     TrackFactionPlayerFrame(frame, faction and unit ~= "player")
+    if unit and EVENTS.arenaUnits[unit] then
+        return faction and EVENTS.arenaFaction or EVENTS.arena
+    end
     return faction and EVENTS.faction or AurasElement.events
 end
 
@@ -623,6 +632,10 @@ function AurasElement.Update(frame, event, unit, updateInfo)
         return A3.HandleUnitAura(frame, event, unit, updateInfo)
     end
     if EVENTS.identity[event] == true then
+        -- The unit route hands ARENA_OPPONENT_UPDATE its slot (BuildAuraEvents).
+        if event == "ARENA_OPPONENT_UPDATE" and not IsSecret(unit) and unit ~= frame.MSUFUnitKey then
+            return false
+        end
         -- Classic does not guarantee a UNIT_AURA payload when a stable token
         -- (target/focus/bossN) changes GUID. Blizzard's own TargetFrame performs
         -- a full UpdateAuras from PLAYER_TARGET_CHANGED for the same reason.

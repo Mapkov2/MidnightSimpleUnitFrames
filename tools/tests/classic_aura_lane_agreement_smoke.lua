@@ -513,12 +513,15 @@ focusList[1], focusList[2], focusList[3], focusList[4] = theirs, mine, alpha, zu
 local focus = NewFrame("focus")
 local focusShared = _G.MSUF_DB.auras3.perUnit.focus.layoutShared
 local focusPlaced = _G.MSUF_DB.auras3.customContainers.perUnit.focus.items[1].placed
+-- Important First, Other Defensives First and Debuff Type First follow the
+-- Blizzard comparators (AuraUtil.ImportantOnlyAuraCompare, BigDefensiveAuraCompare,
+-- UnitFrameDebuffComparator); no aura here is important or a boss aura.
 local EXPECTED = {
     DEFAULT = IDs(mine, zulu, theirs, alpha),
-    IMPORTANT_FIRST = IDs(mine, zulu, theirs, alpha),
+    IMPORTANT_FIRST = IDs(theirs, mine, alpha, zulu),
     UNIT_FRAME_DEBUFF = IDs(mine, zulu, theirs, alpha),
     SOMETHING_NEW = IDs(mine, zulu, theirs, alpha),
-    BIG_DEFENSIVE = IDs(alpha, zulu, mine, theirs),
+    BIG_DEFENSIVE = IDs(alpha, theirs, zulu, mine),
     EXPIRATION = IDs(zulu, alpha, mine, theirs),
     TIME_REMAINING = IDs(zulu, alpha, mine, theirs),
     EXPIRATION_ONLY = IDs(zulu, alpha, theirs, mine),

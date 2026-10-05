@@ -1,0 +1,548 @@
+-- Classic aura backend: settings the shared menu offers on every client reach
+-- the Classic lanes the way Retail compiles them. Runs the real backend chain
+-- of one Classic flavor in its TOC order with counting stubs.
+--   * a corner Custom Spell slot scans with its Filter (buff or debuff, any
+--     caster or cast by me), as Retail scans customFilter
+--   * a custom container keeps its Cooldown swipe with Cooldown text off
+--   * Up/Down (Single Column) growth keeps one column on unit and container lanes
+--   * portrait icons past the first grow in the lane's Growth direction
+--   * group Tracked and External lanes wear the Buff appearance (shape, border, shadow)
+--   * Sort By Other Defensives First, Important First and Debuff Type First
+--     follow the Blizzard comparators instead of the Default order
+--   * group Spell Icons take the scope's Spell Icon Style and Icon Zoom
+--   * a placed spell-indicator Bar is the aura duration, with Smooth fill and
+--     Show Timer Text
+-- Arguments: repository root, flavor (Vanilla, TBC or Mists).
+local root = assert(arg[1], "repository root argument missing")
+root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
+local flavor = assert(arg[2], "flavor argument missing")
+local PROJECT_IDS = { Vanilla = 2, TBC = 5, Mists = 19 }
+assert(PROJECT_IDS[flavor], "unknown Classic flavor: " .. tostring(flavor))
+_G.WOW_PROJECT_MAINLINE, _G.WOW_PROJECT_CLASSIC = 1, 2
+_G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC, _G.WOW_PROJECT_MISTS_CLASSIC = 5, 19
+_G.WOW_PROJECT_ID = PROJECT_IDS[flavor]
+_G.C_AddOns = { GetAddOnMetadata = function(_, field)
+    if field == "X-MSUF-Client" then return flavor end
+    return nil
+end }
+_G.C_EventUtils = { IsEventValid = function() return true end }
+
+local registered
+local namespace = {
+    MSUF_Auras3 = {},
+    UF = { RegisterElement = function(_, element) registered = element end },
+    ExportPublic = function(name, value) _G[name] = value; return value end,
+    MSUF_GetGlobalFontSettings = function() return "Fonts\\FRIZQT__.TTF", "OUTLINE", 1, 1, 1, nil, false end,
+}
+_G.MSUF_NS, _G.MSUF = namespace, namespace
+_G.issecretvalue = function() return false end
+-- Read by the group indicator compiler.
+_G.MSUF_GetGeneralDB = function() return {} end
+_G.MSUF_NormalizeFrameStrata = function(value, fallback) return value or fallback end
+
+-- Widget stub: frames remember their anchors -----------------------------------------------
+local Widget = {}
+Widget.__index = Widget
+function Widget:Show() self._shown = true end
+function Widget:Hide() self._shown = false end
+function Widget:SetShown(shown) self._shown = shown == true end
+function Widget:IsShown() return self._shown == true end
+function Widget:IsVisible() return self._shown == true end
+function Widget:IsForbidden() return false end
+function Widget:SetParent(parent) self._parent = parent end
+function Widget:GetParent() return self._parent end
+function Widget:SetFrameLevel(level) self._frameLevel = level end
+function Widget:GetFrameLevel() return self._frameLevel or 1 end
+function Widget:SetScript(name, handler) self._scripts = self._scripts or {}; self._scripts[name] = handler end
+function Widget:HookScript(name, handler) self:SetScript(name, handler) end
+function Widget:GetObjectType() return self._objectType or "Frame" end
+function Widget:ClearAllPoints() self._point = nil end
+function Widget:SetPoint(point, relativeTo, relativePoint, x, y)
+    self._point = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, x = x, y = y }
+end
+function Widget:SetDrawSwipe(draw) self._drawSwipe = draw end
+function Widget:SetAlpha(alpha) self._alpha = alpha end
+function Widget:SetHideCountdownNumbers(hide) self._hideNumbers = hide end
+function Widget:SetCooldown(start, duration) self._start, self._duration = start, duration end
+function Widget:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "OUTLINE" end
+-- A Cooldown's countdown numbers are its FontString region, as in the client.
+function Widget:GetNumRegions() return self._textRegion and 1 or 0 end
+function Widget:GetRegions() return self._textRegion end
+function Widget:SetAllPoints(target) self._allPoints = target or self._parent end
+-- StatusBar: SetValue takes a StatusBarInterpolation or no second argument
+-- (SimpleStatusBarAPIDocumentation: Nilable = false, Default = Immediate).
+function Widget:SetValue(...)
+    local value, interpolation = ...
+    assert(type(value) == "number", "StatusBar:SetValue needs a number")
+    assert(select("#", ...) < 2 or type(interpolation) == "number", "StatusBar:SetValue got a non-enum interpolation")
+    self._value, self._interp = value, interpolation
+end
+function Widget:SetMinMaxValues(minValue, maxValue) self._min, self._max = minValue, maxValue end
+function Widget:SetReverseFill(reverse)
+    assert(type(reverse) == "boolean", "StatusBar:SetReverseFill needs a boolean")
+    self._reverse = reverse
+end
+function Widget:SetStatusBarColor(r, g, b, a) self._color = { r, g, b, a } end
+function Widget:CreateTexture() return setmetatable({ _shown = true, _parent = self, _objectType = "Texture" }, Widget) end
+Widget.CreateMaskTexture = Widget.CreateTexture
+function Widget:CreateFontString() return setmetatable({ _shown = true, _parent = self, _objectType = "FontString" }, Widget) end
+for _, name in ipairs({
+    "RegisterEvent", "UnregisterEvent", "RegisterUnitEvent", "SetAllPoints", "EnableMouse", "SetSize",
+    "SetWidth", "SetHeight", "SetSwipeColor", "SetDrawEdge", "SetTexCoord", "SetJustifyH", "SetJustifyV",
+    "SetFont", "SetTextColor", "SetShadowOffset", "SetDesaturated", "SetBlendMode", "SetMinMaxValues", "SetValue",
+    "SetStatusBarTexture", "SetStatusBarColor", "SetColorTexture", "SetReverse", "SetMouseClickEnabled",
+    "SetMouseMotionEnabled", "SetCountdownMillisecondsThreshold", "SetSwipeTexture", "SetFrameStrata", "SetOwner",
+    "Clear", "SetAtlas", "AddMaskTexture", "RemoveMaskTexture", "SetTexture", "SetText", "SetVertexColor",
+}) do
+    Widget[name] = Widget[name] or function() end
+end
+-- A child frame starts one level above its parent, as in the client.
+local createdFrames = {}
+_G.CreateFrame = function(frameType, _, parent)
+    local frame = setmetatable({ _shown = true, _parent = parent, _objectType = frameType,
+        _frameLevel = parent and parent:GetFrameLevel() + 1 or 1 }, Widget)
+    if frameType == "Cooldown" then frame._textRegion = frame:CreateFontString() end
+    createdFrames[#createdFrames + 1] = frame
+    return frame
+end
+_G.Enum = { StatusBarInterpolation = { Immediate = 0, ExponentialEaseOut = 1 } }
+
+-- Aura API stub: Classic filter semantics, |PLAYER keeps the player's own casts ------------
+local world = {}
+local function UnitList(unit) world[unit] = world[unit] or {}; return world[unit] end
+local function Matches(aura, filter)
+    if filter:find("HARMFUL", 1, true) then
+        if aura.isHarmful ~= true then return false end
+    elseif aura.isHelpful ~= true then
+        return false
+    end
+    if filter:find("|PLAYER", 1, true) and aura.mine ~= true then return false end
+    return true
+end
+_G.UnitExists = function() return true end
+_G.UnitIsUnit = function(a, b) return a == b end
+_G.UnitInRange = function() return true, true end
+_G.UnitCanAssist = function() return true end
+_G.UnitGUID = function(unit) return "GUID-" .. unit end
+_G.GetTime = function() return 50 end
+_G.InCombatLockdown = function() return false end
+_G.STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
+_G.GameTooltip = setmetatable({}, Widget)
+_G.C_Timer = {}
+_G.GetSpellInfo = function(spellID) return "Spell" .. tostring(spellID) end
+_G.C_UnitAuras = {
+    GetAuraSlots = function(unit, filter)
+        local list, out = UnitList(unit), {}
+        for i = 1, #list do if Matches(list[i], filter) then out[#out + 1] = i end end
+        return nil, unpack(out)
+    end,
+    GetAuraDataBySlot = function(unit, slot) return UnitList(unit)[slot] end,
+    GetAuraDataByAuraInstanceID = function(unit, id)
+        for _, aura in ipairs(UnitList(unit)) do if aura.auraInstanceID == id then return aura end end
+        return nil
+    end,
+    GetAuraDataByIndex = function(unit, index, filter)
+        local n = 0
+        for _, aura in ipairs(UnitList(unit)) do
+            if Matches(aura, filter) then n = n + 1; if n == index then return aura end end
+        end
+        return nil
+    end,
+}
+-- Static spell flags the sort modes read: C_Spell.IsSpellImportant, and the
+-- class list behind Classic's AuraUtil.IsPriorityDebuff.
+local IMPORTANT_SPELLS, PRIORITY_SPELLS = { [99001] = true }, { [6788] = true }
+_G.C_Spell = { IsSpellImportant = function(spellID) return IMPORTANT_SPELLS[spellID] == true end }
+_G.AuraUtil = { IsPriorityDebuff = function(spellID) return PRIORITY_SPELLS[spellID] == true end }
+_G.MSUF_DB = { general = {}, auras3 = { enabled = true, shared = {}, perUnit = {} } }
+
+local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
+manifest.LoadSelected(root, flavor, namespace, {
+    "Game/Shared/Initialize.lua",
+    "State/MSUF_AuraDefaults.lua",
+    "Auras3/MSUF_Auras3_Core.lua", "Auras3/MSUF_Auras3_IconShape.lua", "Game/Classic/Auras/MSUF_Auras3_DataShared.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Visuals.lua", "Game/Classic/Auras/MSUF_Auras3_Features.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Compile.lua",
+    "Game/Classic/Auras/MSUF_Auras3_Buttons.lua", "Game/Classic/Auras/MSUF_Auras3_Filters.lua",
+    "Game/Classic/Auras/MSUF_Auras3_FrameVisuals.lua", "Game/Classic/Auras/MSUF_Auras3_Lanes.lua",
+    "Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua", "Game/Classic/Auras/MSUF_Auras3_Requests.lua",
+    "UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua",
+})
+assert(registered, "the Classic aura element did not register")
+local A3 = namespace.MSUF_Auras3
+local GF = assert(namespace.GF and namespace.GF.CompileCornerIndicators, "group corner compiler missing") and namespace.GF
+
+local function SetAuras(unit, auras)
+    local list = UnitList(unit)
+    for i = #list, 1, -1 do list[i] = nil end
+    for i = 1, #auras do list[i] = auras[i] end
+end
+local function GroupFrame(unit, spec)
+    spec.scope = "group"
+    local frame = setmetatable({ _shown = true, MSUFUnitKey = unit, _msufIsGroupFrame = true,
+        _msufGFKind = "party", MSUFSpec = spec }, Widget)
+    registered.Create(frame)
+    registered.Apply(frame)
+    assert(registered.Enable(frame) == true, "the group aura element did not enable for " .. unit)
+    return frame
+end
+local function ShownIDs(lane)
+    local ids = {}
+    for i = 1, lane and lane.visible or 0 do
+        local button = lane[i]
+        if button and button._msufA3Shown == true then ids[#ids + 1] = tostring(button.auraInstanceID) end
+    end
+    return table.concat(ids, ",")
+end
+
+-- 1. Corner Custom Spell slot: its Filter decides buff or debuff and the caster ----------
+-- The menu stores conf.ciCustom<slot>.filter (GF.CI_CUSTOM_FILTERS); the group
+-- compiler hands it on as customFilter.
+local function CornerLane(filter, spells, auras)
+    SetAuras("party1", auras)
+    local corners = GF.CompileCornerIndicators({
+        ciEnabled = true, ciSlotTL = "custom", ciSlotTR = "none", ciSlotBL = "none", ciSlotBR = "none", ciSlotC = "none",
+        ciCustomTL = { spells = spells, mode = "present", filter = filter, r = 0.4, g = 1, b = 0.4 },
+    }, "party")
+    assert(corners.customSlots[1].customFilter == filter, "precondition: the corner slot lost its Filter")
+    local frame = GroupFrame("party1", { cornerIndicators = corners })
+    return assert(frame._msufA3State.lanes.cornerIndicator1, "the corner Custom Spell lane did not compile")
+end
+local otherRenew = { auraInstanceID = 501, spellId = 139, name = "Spell139", icon = 1, duration = 15,
+    expirationTime = 60, isHelpful = true, isHarmful = false, mine = false, sourceUnit = "party2" }
+local ownRenew = { auraInstanceID = 502, spellId = 139, name = "Spell139", icon = 1, duration = 15,
+    expirationTime = 60, isHelpful = true, isHarmful = false, mine = true, sourceUnit = "player",
+    isFromPlayerOrPlayerPet = true }
+local otherPain = { auraInstanceID = 503, spellId = 589, name = "Spell589", icon = 2, duration = 18,
+    expirationTime = 60, isHelpful = false, isHarmful = true, mine = false, sourceUnit = "target" }
+local ownPain = { auraInstanceID = 504, spellId = 589, name = "Spell589", icon = 2, duration = 18,
+    expirationTime = 60, isHelpful = false, isHarmful = true, mine = true, sourceUnit = "player",
+    isFromPlayerOrPlayerPet = true }
+assert(ShownIDs(CornerLane("HELPFUL|PLAYER", "139", { otherRenew })) == "",
+    "Buff (cast by me): another priest's Renew lit the corner")
+assert(ShownIDs(CornerLane("HELPFUL|PLAYER", "139", { otherRenew, ownRenew })) == "502",
+    "Buff (cast by me): the player's own Renew did not light the corner")
+assert(ShownIDs(CornerLane("HELPFUL", "139", { otherRenew })) == "501",
+    "Buff (any caster): another priest's Renew did not light the corner")
+assert(ShownIDs(CornerLane("HARMFUL", "589", { otherPain })) == "503",
+    "Debuff (any caster): the debuff did not light the corner")
+assert(ShownIDs(CornerLane("HARMFUL|PLAYER", "589", { otherPain })) == "",
+    "Debuff (cast by me): another caster's debuff lit the corner")
+assert(ShownIDs(CornerLane("HARMFUL|PLAYER", "589", { otherPain, ownPain })) == "504",
+    "Debuff (cast by me): the player's own debuff did not light the corner")
+
+-- 2. Custom container: Cooldown text and Cooldown swipe are independent switches ----------
+-- (MSUF_Menu2_Auras_CustomWorkspace.lua writes placed.showCooldown and
+-- placed.showCooldownSwipe; Retail compiles each on its own, CustomConfig.)
+_G.MSUF_DB.auras3.showTarget = true
+_G.MSUF_DB.auras3.perUnit.target = { layout = {}, filters = {}, layoutShared = { showBuffs = false, showDebuffs = false } }
+local containerPlaced = { size = 20, max = 4, perRow = 4, showCooldown = false, showCooldownSwipe = true }
+_G.MSUF_DB.auras3.customContainers = { perUnit = { target = { items = {
+    [1] = { enabled = true, auraType = "BUFF", spellIDs = "777001", placed = containerPlaced, filters = {} },
+} } } }
+SetAuras("target", { { auraInstanceID = 601, spellId = 777001, name = "Spell777001", icon = 3, duration = 30,
+    expirationTime = 65, isHelpful = true, isHarmful = false, mine = false } })
+local function UnitFrame(unit)
+    local frame = setmetatable({ _shown = true, MSUFUnitKey = unit, _msufActiveElements = { Auras = true },
+        MSUFSpec = {} }, Widget)
+    registered.Create(frame)
+    assert(registered.Enable(frame) == true, "the aura element did not enable for " .. unit)
+    return frame
+end
+local function ContainerCooldown()
+    A3.BumpRuntimeConfig()
+    local lane = assert(UnitFrame("target")._msufA3State.lanes.custom1, "the custom container lane did not compile")
+    assert(ShownIDs(lane) == "601", "precondition: the custom container does not show its aura")
+    return lane[1].Cooldown
+end
+local cooldown = ContainerCooldown()
+assert(cooldown._shown == true and cooldown._drawSwipe == true and cooldown._start == 35,
+    "Cooldown text off hid the custom container's Cooldown swipe")
+assert(cooldown._hideNumbers == true, "Cooldown text off still showed the countdown numbers")
+containerPlaced.showCooldownSwipe = false
+cooldown = ContainerCooldown()
+assert(cooldown._shown == false, "a custom container with text and swipe off still showed its Cooldown")
+containerPlaced.showCooldown, containerPlaced.showCooldownSwipe = true, false
+cooldown = ContainerCooldown()
+assert(cooldown._shown == true and cooldown._drawSwipe == false and cooldown._hideNumbers == false,
+    "Cooldown swipe off hid the custom container's countdown text")
+
+-- 3. Up/Down (Single Column) growth lays out one column -----------------------------------
+-- The menus label it "Single Column" and grey out Per row for it; the hidden
+-- Per row value must not wrap the icons into more columns.
+local function Column(lane, label)
+    local x
+    for i = 1, lane.visible do
+        local point = assert(lane[i]._point, label .. ": icon " .. i .. " was never placed")
+        x = x or point.x
+        assert(point.x == x, label .. ": icon " .. i .. " left the column (x " .. tostring(point.x) .. ")")
+        assert(math.abs(point.y) == (i - 1) * lane.config.stepY,
+            label .. ": icon " .. i .. " is not one step below the previous (y " .. tostring(point.y) .. ")")
+    end
+end
+local column = {}
+for i = 1, 8 do
+    column[i] = { auraInstanceID = 700 + i, spellId = 777001, name = "Spell777001", icon = 3, duration = 30,
+        expirationTime = 60 + i, isHelpful = true, isHarmful = false, mine = false }
+end
+SetAuras("target", column)
+containerPlaced.showCooldown, containerPlaced.showCooldownSwipe = true, true
+containerPlaced.size, containerPlaced.spacing, containerPlaced.max, containerPlaced.perRow = 24, 2, 8, 4
+for _, growth in ipairs({ "UP", "DOWN" }) do
+    containerPlaced.growth = growth
+    A3.BumpRuntimeConfig()
+    local lane = UnitFrame("target")._msufA3State.lanes.custom1
+    assert(lane.visible == 8, "precondition: the custom container does not show eight auras")
+    assert(lane.config.cols == 1 and lane.config.rows == 8 and lane.config.width == 24 and lane.config.height == 206,
+        "custom container " .. growth .. ": the lane is " .. lane.config.cols .. " columns by " .. lane.config.rows .. " rows")
+    Column(lane, "custom container " .. growth)
+end
+_G.MSUF_DB.auras3.customContainers = nil
+_G.MSUF_DB.auras3.perUnit.target.layoutShared = {
+    showBuffs = true, showDebuffs = false, maxBuffs = 8, buffPerRow = 4, buffGrowthX = "DOWN",
+}
+A3.BumpRuntimeConfig()
+local buffLane = UnitFrame("target")._msufA3State.lanes.buff
+assert(buffLane.visible == 8 and buffLane.config.cols == 1 and buffLane.config.rows == 8,
+    "target buffs Down: the lane is " .. buffLane.config.cols .. " columns by " .. buffLane.config.rows .. " rows")
+Column(buffLane, "target buffs Down")
+_G.MSUF_DB.auras3.perUnit.target.layoutShared = { showBuffs = false, showDebuffs = false }
+
+-- 4. Portrait icons grow in the lane's Growth direction ------------------------------------
+-- Icon 1 covers the portrait; the menu promises that further icons grow
+-- outward in the lane's configured Growth (CustomWorkspace portrait tooltip).
+_G.MSUF_DB.auras3.showPlayer = true
+_G.MSUF_DB.auras3.perUnit.player = { layout = {}, filters = {}, layoutShared = { showBuffs = false, showDebuffs = false } }
+local portraitPlaced = { size = 24, spacing = 2, max = 8, perRow = 4 }
+_G.MSUF_DB.auras3.customContainers = { perUnit = { player = { items = {
+    [A3.PRESET_CUSTOM_CONTAINER_INDEX] = { enabled = true, playerDefensives = true, portraitIcon = true,
+        portraitMaxIcons = 3, spellIDs = "871 33206", placed = portraitPlaced, filters = {} },
+} } } }
+SetAuras("player", {
+    { auraInstanceID = 801, spellId = 871, name = "Spell871", icon = 4, duration = 12, expirationTime = 60,
+        isHelpful = true, isHarmful = false, mine = true, isFromPlayerOrPlayerPet = true, sourceUnit = "player" },
+    { auraInstanceID = 802, spellId = 33206, name = "Spell33206", icon = 5, duration = 8, expirationTime = 58,
+        isHelpful = true, isHarmful = false, mine = false, sourceUnit = "party1" },
+})
+local function PortraitLane(growth)
+    portraitPlaced.growth = growth
+    A3.BumpRuntimeConfig()
+    local frame = setmetatable({ _shown = true, MSUFUnitKey = "player", _msufActiveElements = { Auras = true },
+        MSUFSpec = { portrait = { enabled = true, width = 40, height = 40 } } }, Widget)
+    registered.Create(frame)
+    assert(registered.Enable(frame) == true, "the player aura element did not enable")
+    local lane = assert(frame._msufA3State.lanes.defensivePortrait, "the portrait defensive lane did not compile")
+    assert(lane.visible == 2, "precondition: the portrait lane does not show both defensives")
+    return lane, lane[2]._point
+end
+local lane, second = PortraitLane("LEFTDOWN")
+assert(second.x == -42 and second.y == 0, ("portrait Left: icon 2 sits at x %s y %s, expected -42, 0"):format(
+    tostring(second.x), tostring(second.y)))
+lane, second = PortraitLane("RIGHTDOWN")
+assert(second.x == 42 and second.y == 0, "portrait Right: icon 2 sits at x " .. tostring(second.x))
+lane, second = PortraitLane("UP")
+assert(second.x == 0 and second.y == 42 and lane.config.cols == 1 and lane.config.rows == 3
+    and lane.config.height == 124, ("portrait Up: icon 2 sits at x %s y %s, lane %sx%s"):format(
+    tostring(second.x), tostring(second.y), tostring(lane.config.cols), tostring(lane.config.rows)))
+_G.MSUF_DB.auras3.customContainers = nil
+
+-- 5. Group Tracked and External lanes wear the Buff appearance ---------------------------
+-- Auras > Appearance offers Buff, Debuff, Player Defensives and Dots on Target
+-- (appearanceIconShapes / appearanceIconStyles); Retail gives every group lane
+-- but the debuff lane the Buff look (Runtime_LaneConfig sharedLane).
+local shared = _G.MSUF_DB.auras3.shared
+shared.appearanceIconShapes = { buff = "CIRCLE", debuff = "RECTANGLE" }
+shared.appearanceIconStyles = { buff = { styleBorderEnabled = true, styleShadowEnabled = true }, debuff = {} }
+A3.BumpRuntimeConfig()
+local groupConfig = A3._ClassicCompile.ResolveGroupFrameConfig({ MSUFUnitKey = "party1", _msufIsGroupFrame = true,
+    _msufGFKind = "party", MSUFSpec = { scope = "group", auras = {
+        enabled = true, showBuffs = true, showTrackedBuffs = true, showDebuffs = true, showExternals = true,
+        maxBuffs = 4, maxTrackedBuffs = 2, maxDebuffs = 4, maxExternals = 2,
+    } } }, "party1")
+for _, kind in ipairs({ "buff", "trackedBuff", "external" }) do
+    local laneConfig = assert(groupConfig.lanes[kind], "precondition: the group " .. kind .. " lane did not compile")
+    assert(laneConfig.iconShape == "CIRCLE" and laneConfig.iconStyle.borderEnabled == true
+        and laneConfig.iconStyle.shadowEnabled == true,
+        ("group %s lane: shape %s, border %s, shadow %s; expected the Buff appearance"):format(kind,
+        tostring(laneConfig.iconShape), tostring(laneConfig.iconStyle.borderEnabled),
+        tostring(laneConfig.iconStyle.shadowEnabled)))
+end
+assert(groupConfig.lanes.debuff.iconShape == "RECTANGLE" and groupConfig.lanes.debuff.iconStyle.borderEnabled == false,
+    "the group debuff lane did not keep the Debuff appearance")
+shared.appearanceIconShapes, shared.appearanceIconStyles = nil, nil
+
+-- 6. Sort By: Other Defensives First, Important First, Debuff Type First ------------------
+-- The shared menu offers them on every client; each follows the Blizzard
+-- comparator Retail's native containers use (Blizzard_AuraContainerUtil).
+local function LaneOrder(unit, kind, layoutShared, auras)
+    SetAuras(unit, auras)
+    _G.MSUF_DB.auras3.perUnit[unit] = { layout = {}, filters = {}, layoutShared = layoutShared }
+    A3.BumpRuntimeConfig()
+    return ShownIDs(UnitFrame(unit)._msufA3State.lanes[kind])
+end
+local function SortAura(id, spellID, helpful, mine, fields)
+    local aura = { auraInstanceID = id, spellId = spellID, name = "Spell" .. spellID, icon = id, duration = 30,
+        expirationTime = 70, isHelpful = helpful, isHarmful = not helpful, mine = mine,
+        sourceUnit = mine and "player" or "party2", isFromPlayerOrPlayerPet = mine }
+    for key, value in pairs(fields or {}) do aura[key] = value end
+    return aura
+end
+-- AuraUtil.BigDefensiveAuraCompare: others' auras first, then the latest expiry.
+local defensives = {
+    SortAura(21, 871, true, true, { expirationTime = 62 }),
+    SortAura(22, 33206, true, false, { expirationTime = 58 }),
+    SortAura(23, 1022, true, false, { expirationTime = 66 }),
+}
+local order = LaneOrder("player", "buff", { showBuffs = true, showDebuffs = false, buffSortMethod = "BIG_DEFENSIVE" },
+    defensives)
+assert(order == "23,22,21", "Other Defensives First ordered the player's buffs " .. order .. ", expected 23,22,21")
+assert(LaneOrder("player", "buff", { showBuffs = true, showDebuffs = false }, defensives) == "21,22,23",
+    "precondition: the Default order no longer puts the player's own aura first")
+-- AuraUtil.ImportantOnlyAuraCompare: important spells first, then ID.
+local debuffs = {
+    SortAura(11, 589, false, true),
+    SortAura(12, 99001, false, false, { isBossAura = true }),
+    SortAura(13, 6788, false, false),
+    SortAura(14, 8122, false, false, { isRaid = true }),
+}
+order = LaneOrder("target", "debuff", { showBuffs = false, showDebuffs = true, debuffSortMethod = "IMPORTANT_FIRST" },
+    debuffs)
+assert(order == "12,11,13,14", "Important First ordered the target's debuffs " .. order .. ", expected 12,11,13,14")
+-- AuraUtil.UnitFrameDebuffComparator: boss, priority, raid, then the rest in
+-- the Default order (the player's own first).
+order = LaneOrder("target", "debuff", { showBuffs = false, showDebuffs = true, debuffSortMethod = "UNIT_FRAME_DEBUFF" },
+    debuffs)
+assert(order == "12,13,14,11", "Debuff Type First ordered the target's debuffs " .. order .. ", expected 12,13,14,11")
+_G.MSUF_DB.auras3.perUnit.target.layoutShared = { showBuffs = false, showDebuffs = false }
+
+-- 7. Group Spell Icons take the scope's Spell Icon Style ----------------------------------
+-- GF.CompileSpellIndicators copies the section into spellIndicators.style and
+-- .iconZoom; Retail lays every Spell Icon out from them, with the menu's
+-- defaults (cooldown font 8, stack font 10) when a key was never set.
+local renewItem = { key = "PRIEST:Renew", specKey = "PRIEST", auraName = "Renew", display = "Renew", enabled = true,
+    order = 1, layer = 9, onlyOwn = true, spellIDs = { 139 }, includeSpellIDs = { [139] = true },
+    placed = { type = "icon", anchor = "TOPLEFT", x = 0, y = 0, size = 18, growth = "RIGHTDOWN", iconEffect = "none",
+        missing = false, showCooldownSwipe = true, showCooldown = true, cooldownSize = 12, showStacks = true },
+    color = { 0.2, 1, 0.2, 1 } }
+SetAuras("party1", { ownRenew })
+local styled = GroupFrame("party1", { spellIndicators = { enabled = true, items = { renewItem }, iconZoom = 150,
+    style = { alpha = 0.3, showTooltip = false, showCooldownText = false, showCooldownSwipe = false, stackSize = 20,
+        cooldownSize = 16, showDurationBar = true, durationBarPosition = "TOP" } } })
+local spellLane = styled._msufA3State.lanes.spellIndicator1
+local c = spellLane.config
+assert(c.alpha == 0.3 and c.showTooltip == false and c.showCooldownText == false and c.showCooldownSwipe == false
+    and c.stackSize == 20 and c.cooldownSize == 16 and c.showDurationBar == true and c.durationBarPosition == "TOP"
+    and c.iconZoom == 150, ("Spell Icon Style did not reach the spell icon: alpha %s tooltip %s text %s swipe %s"
+    .. " stack %s cooldown %s bar %s zoom %s"):format(tostring(c.alpha), tostring(c.showTooltip),
+    tostring(c.showCooldownText), tostring(c.showCooldownSwipe), tostring(c.stackSize), tostring(c.cooldownSize),
+    tostring(c.showDurationBar), tostring(c.iconZoom)))
+assert(ShownIDs(spellLane) == "502" and spellLane.frame._alpha == 0.3 and spellLane[1].Cooldown._shown == false
+    and spellLane[1]._msufA3DurationBar and spellLane[1]._msufA3DurationBar._shown == true,
+    "the styled spell icon did not render with the Spell Icon Style")
+local plain = GroupFrame("party1", { spellIndicators = { enabled = true, items = { renewItem } } })
+c = plain._msufA3State.lanes.spellIndicator1.config
+assert(c.cooldownSize == 8 and c.stackSize == 10 and c.alpha == 1 and c.showCooldownText == true
+    and c.iconZoom == 100, "an untouched Spell Icon Style did not give the menu's defaults")
+
+-- 8. A placed spell-indicator Bar is the aura duration ------------------------------------
+-- Display as Bar offers Smooth fill, Show Timer Text and the Timer anchor on
+-- every client. Retail binds a StatusBar over the whole indicator, in the spell
+-- colour and filling from the Growth side, to the aura duration; Smooth fill
+-- eases it and Show Timer Text puts the countdown at the Timer anchor
+-- (SpellIndicators_Config CompileSlot, Runtime_ButtonVisuals PrepareDurationBar).
+local SMOOTH = _G.Enum.StatusBarInterpolation.ExponentialEaseOut
+local barPlaced = { type = "bar", anchor = "TOPLEFT", x = 0, y = 0, size = 18, barWidth = 54, growth = "LEFTDOWN",
+    barSmoothFill = true, barShowTimer = true, barTimerAnchor = "TOP", barTimerX = 3, barTimerY = 4,
+    iconEffect = "none", missing = false, showCooldownSwipe = true, showCooldown = true, cooldownSize = 8,
+    showStacks = true }
+local barItem = {}
+for key, value in pairs(renewItem) do barItem[key] = value end
+barItem.placed = barPlaced
+-- Renew on party1: 15 s, 6 s left at GetTime() 50.
+local barRenew = { auraInstanceID = 900, spellId = 139, name = "Spell139", icon = 1, duration = 15,
+    expirationTime = 56, isHelpful = true, isHarmful = false, mine = true, sourceUnit = "player",
+    isFromPlayerOrPlayerPet = true }
+local function TimerDriver()
+    for i = 1, #createdFrames do
+        local frame = createdFrames[i]
+        if frame._scripts and frame._scripts.OnUpdate and frame._objectType == "Frame" then return frame end
+    end
+end
+local function BarIndicator(style)
+    _G.GetTime = function() return 50 end
+    barRenew.expirationTime = 56
+    SetAuras("party1", { barRenew })
+    local frame = GroupFrame("party1", { spellIndicators = { enabled = true, items = { barItem }, style = style } })
+    local barLane = assert(frame._msufA3State.lanes.spellIndicator1, "the Bar spell indicator did not compile")
+    assert(ShownIDs(barLane) == "900", "precondition: the Bar spell indicator does not show Renew")
+    return frame, barLane[1]
+end
+local barFrame, barButton = BarIndicator({})
+local bar = barButton._msufA3DurationBar
+local swatch = barButton._msufA3ClassicIndicatorSwatch
+assert(not (swatch and swatch._shown == true), "a placed Bar is still a static colour block")
+assert(bar and bar._shown == true and bar._allPoints == barButton,
+    "a placed Bar shows no duration bar over the indicator")
+assert(bar._min == 0 and bar._max == 15 and bar._value == 6 and bar._interp == nil,
+    ("a placed Bar does not fill with the aura duration: %s of %s-%s, interpolation %s; expected 6 of 0-15 at once")
+    :format(tostring(bar._value), tostring(bar._min), tostring(bar._max), tostring(bar._interp)))
+assert(bar._reverse == true, "Growth Left did not fill the Bar from the right")
+assert(bar._color and bar._color[1] == 0.2 and bar._color[2] == 1 and bar._color[3] == 0.2 and bar._color[4] == 1,
+    "the Bar does not take the selected spell colour")
+local timer = barButton.Cooldown
+assert(timer._shown == true and timer._drawSwipe == false and timer._hideNumbers == false
+    and timer._start == 41 and timer._duration == 15, "Show Timer Text put no countdown on the Bar")
+local timerText = timer._textRegion._point
+assert(timerText and timerText.point == "TOP" and timerText.relativeTo == barButton and timerText.x == 3
+    and timerText.y == 4, "the Bar's timer text is not at its Timer anchor and offsets")
+assert(bar:GetFrameLevel() < timer:GetFrameLevel(), "the Bar draws over its own timer text")
+assert(barButton.Count._shown == false, "a placed Bar shows a stack count")
+-- Smooth fill: the shared driver eases the running bar, and a refresh of the
+-- same aura eases it back up (Blizzard's Update interpolation).
+local driver = assert(TimerDriver(), "no shared timer driver animates the Bar")
+_G.GetTime = function() return 52 end
+driver._scripts.OnUpdate(driver, 0.06)
+assert(bar._value == 4 and bar._interp == SMOOTH, ("Smooth fill: the running Bar is at %s, interpolation %s")
+    :format(tostring(bar._value), tostring(bar._interp)))
+barRenew.expirationTime = 67
+registered.Update(barFrame, "UNIT_AURA", "party1", { updatedAuraInstanceIDs = { 900 } })
+assert(bar._value == 15 and bar._interp == SMOOTH, ("Smooth fill: the refreshed Bar is at %s, interpolation %s")
+    :format(tostring(bar._value), tostring(bar._interp)))
+-- Smooth fill turned off on the shown Bar: the driver paints it once a tick, at once.
+barPlaced.barSmoothFill = false
+A3.BumpRuntimeConfig()
+registered.Update(barFrame, "UNIT_AURA", "party1", { isFullUpdate = true })
+assert(barButton._msufA3DurationBar == bar and A3.ClassicVisuals.TimerTracked(bar) == true,
+    "precondition: the Bar left the shared driver after Smooth fill was turned off")
+local paints, setValue = 0, bar.SetValue
+function bar:SetValue(...) paints = paints + 1; return setValue(self, ...) end
+_G.GetTime = function() return 53 end
+driver._scripts.OnUpdate(driver, 0.06)
+bar.SetValue = nil
+assert(paints == 1 and bar._value == 14 and bar._interp == nil, ("Smooth fill off: one tick painted the Bar %d times,"
+    .. " interpolation %s"):format(paints, tostring(bar._interp)))
+-- Smooth fill off, the style's Direction Elapsed: the bar fills as time passes.
+barPlaced.barSmoothFill, barPlaced.barShowTimer = false, false
+barFrame, barButton = BarIndicator({ durationBarDirection = "ELAPSED" })
+bar = barButton._msufA3DurationBar
+assert(bar._value == 9 and bar._interp == nil, "Direction Elapsed: the Bar is at " .. tostring(bar._value))
+assert(barButton.Cooldown._shown == false, "Show Timer Text off still showed the Bar's countdown")
+driver = TimerDriver()
+_G.GetTime = function() return 52 end
+driver._scripts.OnUpdate(driver, 0.06)
+assert(bar._value == 11 and bar._interp == nil, "Smooth fill off: the driver eased the Bar")
+-- A permanent aura keeps the Bar full, as the colour block showed it.
+barRenew.duration, barRenew.expirationTime = 0, 0
+registered.Update(barFrame, "UNIT_AURA", "party1", { updatedAuraInstanceIDs = { 900 } })
+assert(bar._shown == true and bar._max == 1 and bar._value == 1, "a permanent aura emptied or hid its Bar")
+barRenew.duration = 15
+barPlaced.barSmoothFill, barPlaced.barShowTimer = true, true
+-- A Square keeps its colour block.
+barPlaced.type = "square"
+local _, squareButton = BarIndicator({})
+assert(squareButton._msufA3ClassicIndicatorSwatch and squareButton._msufA3ClassicIndicatorSwatch._shown == true
+    and not (squareButton._msufA3DurationBar and squareButton._msufA3DurationBar._shown == true),
+    "a placed Square lost its colour block")
+barPlaced.type = "bar"
+
+print("classic aura setting parity smoke passed: " .. flavor)

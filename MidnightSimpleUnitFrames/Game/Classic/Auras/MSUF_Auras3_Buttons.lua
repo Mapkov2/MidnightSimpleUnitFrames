@@ -159,8 +159,9 @@ local function PositionButton(lane, button, index)
     local idx = index - 1
     local col, row
     if cfg.verticalGrowth == true then
-        row = idx % perRow
-        col = (idx - row) / perRow
+        -- Up/Down (Single Column): the menu greys out Per row for them, and
+        -- Retail and the Edit Mode preview (IconGridCoord) keep one column.
+        col, row = 0, idx
     else
         col = idx % perRow
         row = (idx - col) / perRow
@@ -872,8 +873,11 @@ local function HideTrailingButtons(lane, visibleByID, visible)
     for i = visible + 1, oldVisible do
         local button = lane[i]
         if button then
-            if button.auraInstanceID ~= nil then
-                visibleByID[button.auraInstanceID] = nil
+            -- The trailing button keeps the ID of an aura this render may have
+            -- moved to a lower slot; only a mapping to this slot is stale.
+            local auraInstanceID = button.auraInstanceID
+            if auraInstanceID ~= nil and visibleByID[auraInstanceID] == i then
+                visibleByID[auraInstanceID] = nil
             end
             button.auraInstanceID = nil
             HideButton(button)

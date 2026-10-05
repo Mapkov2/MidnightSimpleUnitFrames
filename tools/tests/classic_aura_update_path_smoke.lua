@@ -638,4 +638,57 @@ for id, own in pairs(targetLanes.buff.mine) do
 end
 for i = 1, #targetList do targetList[i].sourceUnit, targetList[i].isFromPlayerOrPlayerPet = nil, false end
 
+-- 6. An aura a render moved down keeps its slot for in-place refreshes --------------------
+-- The button a removal leaves trailing still carries the ID of the aura that
+-- moved into a lower slot; hiding it must not clear that aura's new mapping,
+-- or its next refresh (a re-applied DoT, a stack change) finds no button.
+for i = #targetList, 1, -1 do targetList[i] = nil end
+local first = Aura(false, { expirationTime = 70 })
+local second = Aura(false, { expirationTime = 75 })
+local third = Aura(false, { expirationTime = 80, applications = 3 })
+targetList[1], targetList[2], targetList[3] = first, second, third
+Update(target, { isFullUpdate = true })
+local targetDebuff = target._msufA3State.lanes.debuff
+assert(targetDebuff.config.naturalOrder == false and VisibleIDs(targetDebuff) == IDs(first, second, third),
+    "precondition: the target debuff lane does not show the three debuffs in order: " .. VisibleIDs(targetDebuff))
+table.remove(targetList, 1)
+Update(target, { removedAuraInstanceIDs = { first.auraInstanceID } })
+assert(VisibleIDs(targetDebuff) == IDs(second, third) and targetDebuff.visibleByID[third.auraInstanceID] == 2,
+    "a removal erased the slot of the aura it moved down: " .. tostring(targetDebuff.visibleByID[third.auraInstanceID]))
+third.expirationTime, third.applications = 110, 4
+Update(target, { updatedAuraInstanceIDs = { third.auraInstanceID } })
+local movedButton = targetDebuff[2]
+assert(movedButton.auraInstanceID == third.auraInstanceID and movedButton.Cooldown._start == 80
+    and movedButton.Cooldown._duration == 30,
+    "a refresh of the aura a removal moved down kept its old timer: start "
+    .. tostring(movedButton.Cooldown._start))
+assert(tostring(movedButton.Count._text) == "4",
+    "a refresh of the aura a removal moved down kept its old stack count: " .. tostring(movedButton.Count._text))
+
+-- 7. ARENA_OPPONENT_UPDATE rescans only the arena frame it names ----------------------------
+-- Every arena frame hears every slot's seen/unseen flap. The event rides the
+-- unit route, which hands its slot through (MSUF_UF_Core BuildSingleRoute);
+-- the unitless route would replace it with the frame's own unit.
+_G.MSUF_DB.auras3.showArena = true
+for _, unit in ipairs({ "arena1", "arena2" }) do
+    _G.MSUF_DB.auras3.perUnit[unit] = { layout = {}, filters = {}, layoutShared = { showBuffs = true, showDebuffs = true } }
+    local list = UnitList(unit)
+    list[1], list[2] = Aura(true), Aura(false)
+end
+A3.BumpRuntimeConfig()
+local function HasEvent(events, wanted)
+    for i = 1, #(events or {}) do if events[i] == wanted then return true end end
+    return false
+end
+local arenaOne = NewFrame("arena1")
+assert(registered.Enable(arenaOne) == true, "arena1 aura element did not enable")
+assert(HasEvent(registered.GetEvents(arenaOne), "ARENA_OPPONENT_UPDATE")
+    and not HasEvent(registered.GetUnitlessEvents(arenaOne), "ARENA_OPPONENT_UPDATE"),
+    "the arena identity event is not on the unit route, so its slot never reaches Update")
+scans = api.slots
+registered.Update(arenaOne, "ARENA_OPPONENT_UPDATE", "arena2", "seen")
+assert(api.slots == scans, "another opponent's ARENA_OPPONENT_UPDATE rescanned arena1")
+registered.Update(arenaOne, "ARENA_OPPONENT_UPDATE", "arena1", "seen")
+assert(api.slots > scans, "arena1's own ARENA_OPPONENT_UPDATE did not rescan it")
+
 print("classic aura update path smoke passed")
