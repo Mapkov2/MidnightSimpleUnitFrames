@@ -500,15 +500,22 @@ local function PortraitLane(lane, frameSpec, entry, kind, rootKey)
     out.step = out.size + out.spacing
     out.stepX = width + out.spacing
     out.stepY = height + out.spacing
+    -- Icon 1 covers the portrait; further icons grow outward in the lane's
+    -- own Growth direction (xSign, ySign and verticalGrowth stay the lane's).
     out.perRow = maxCount
-    out.cols, out.rows = maxCount, 1
     out.padding = 0
-    out.width = maxCount * width + math_max(maxCount - 1, 0) * out.spacing
-    out.height = height
+    if out.verticalGrowth == true then
+        out.cols, out.rows = 1, maxCount
+        out.width = width
+        out.height = maxCount * height + math_max(maxCount - 1, 0) * out.spacing
+    else
+        out.cols, out.rows = maxCount, 1
+        out.width = maxCount * width + math_max(maxCount - 1, 0) * out.spacing
+        out.height = height
+    end
     out.anchor = "CENTER"
     out.initialAnchor = "CENTER"
     out.x, out.y = 0, 0
-    out.xSign, out.ySign, out.verticalGrowth = 1, -1, false
     out.showCooldownText = lane.showCooldownText == true and entry.portraitCooldownText ~= false
     return out
 end

@@ -5,6 +5,7 @@
 --     caster or cast by me), as Retail scans customFilter
 --   * a custom container keeps its Cooldown swipe with Cooldown text off
 --   * Up/Down (Single Column) growth keeps one column on unit and container lanes
+--   * portrait icons past the first grow in the lane's Growth direction
 -- Arguments: repository root, flavor (Vanilla, TBC or Mists).
 local root = assert(arg[1], "repository root argument missing")
 root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
@@ -272,5 +273,43 @@ assert(buffLane.visible == 8 and buffLane.config.cols == 1 and buffLane.config.r
     "target buffs Down: the lane is " .. buffLane.config.cols .. " columns by " .. buffLane.config.rows .. " rows")
 Column(buffLane, "target buffs Down")
 _G.MSUF_DB.auras3.perUnit.target.layoutShared = { showBuffs = false, showDebuffs = false }
+
+-- 4. Portrait icons grow in the lane's Growth direction ------------------------------------
+-- Icon 1 covers the portrait; the menu promises that further icons grow
+-- outward in the lane's configured Growth (CustomWorkspace portrait tooltip).
+_G.MSUF_DB.auras3.showPlayer = true
+_G.MSUF_DB.auras3.perUnit.player = { layout = {}, filters = {}, layoutShared = { showBuffs = false, showDebuffs = false } }
+local portraitPlaced = { size = 24, spacing = 2, max = 8, perRow = 4 }
+_G.MSUF_DB.auras3.customContainers = { perUnit = { player = { items = {
+    [A3.PRESET_CUSTOM_CONTAINER_INDEX] = { enabled = true, playerDefensives = true, portraitIcon = true,
+        portraitMaxIcons = 3, spellIDs = "871 33206", placed = portraitPlaced, filters = {} },
+} } } }
+SetAuras("player", {
+    { auraInstanceID = 801, spellId = 871, name = "Spell871", icon = 4, duration = 12, expirationTime = 60,
+        isHelpful = true, isHarmful = false, mine = true, isFromPlayerOrPlayerPet = true, sourceUnit = "player" },
+    { auraInstanceID = 802, spellId = 33206, name = "Spell33206", icon = 5, duration = 8, expirationTime = 58,
+        isHelpful = true, isHarmful = false, mine = false, sourceUnit = "party1" },
+})
+local function PortraitLane(growth)
+    portraitPlaced.growth = growth
+    A3.BumpRuntimeConfig()
+    local frame = setmetatable({ _shown = true, MSUFUnitKey = "player", _msufActiveElements = { Auras = true },
+        MSUFSpec = { portrait = { enabled = true, width = 40, height = 40 } } }, Widget)
+    registered.Create(frame)
+    assert(registered.Enable(frame) == true, "the player aura element did not enable")
+    local lane = assert(frame._msufA3State.lanes.defensivePortrait, "the portrait defensive lane did not compile")
+    assert(lane.visible == 2, "precondition: the portrait lane does not show both defensives")
+    return lane, lane[2]._point
+end
+local lane, second = PortraitLane("LEFTDOWN")
+assert(second.x == -42 and second.y == 0, ("portrait Left: icon 2 sits at x %s y %s, expected -42, 0"):format(
+    tostring(second.x), tostring(second.y)))
+lane, second = PortraitLane("RIGHTDOWN")
+assert(second.x == 42 and second.y == 0, "portrait Right: icon 2 sits at x " .. tostring(second.x))
+lane, second = PortraitLane("UP")
+assert(second.x == 0 and second.y == 42 and lane.config.cols == 1 and lane.config.rows == 3
+    and lane.config.height == 124, ("portrait Up: icon 2 sits at x %s y %s, lane %sx%s"):format(
+    tostring(second.x), tostring(second.y), tostring(lane.config.cols), tostring(lane.config.rows)))
+_G.MSUF_DB.auras3.customContainers = nil
 
 print("classic aura setting parity smoke passed: " .. flavor)
