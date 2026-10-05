@@ -9,6 +9,10 @@
 --     records any comparison or boolean test of the secret answer; the
 --     preview keeps its stylized fallback then, and a plain answer still
 --     gives the live subgroup;
+--   * SetPropagateKeyboardInput is HasRestrictions (SimpleFrameAPIDocumentation,
+--     every branch). The group preview takes the keyboard for arrow-key
+--     nudges: PLAYER_REGEN_DISABLED (InCombatLockdown() still false) hands
+--     the keys back, and a key pressed in lockdown calls no restricted API.
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
@@ -59,7 +63,42 @@ do
     end
 end
 
+---------------------------------------------------------------------------
+-- Group preview keyboard capture at the combat edge.
+---------------------------------------------------------------------------
+do
+    local mw = MenuWorld.Open(root, flavor, { locale = "enUS", page = "gf_auras" })
+    local env = mw.env
+    local lockdown = false
+    env.InCombatLockdown = function() return lockdown end
+    local box
+    for _, frame in ipairs(mw.world.widgets.frames) do
+        if rawget(frame, "_msufGFRenderState") then box = frame end
+    end
+    if Check(box ~= nil, "the Auras page built no group preview") then
+        local propagate, restricted = nil, 0
+        box.SetPropagateKeyboardInput = function(_, value)
+            if lockdown then restricted = restricted + 1 end
+            propagate = value
+        end
+        -- An arrow-key nudge just before the pull leaves the keys captured.
+        box:SetPropagateKeyboardInput(false)
+        local onEvent, onKeyDown = box:GetScript("OnEvent"), box:GetScript("OnKeyDown")
+        if Check(onEvent and onKeyDown, "the group preview has no OnEvent or OnKeyDown script") then
+            onEvent(box, "PLAYER_REGEN_DISABLED")
+            Check(propagate == true, "PLAYER_REGEN_DISABLED left the keyboard captured; keys are swallowed in combat")
+            lockdown = true
+            onKeyDown(box, "LEFT")
+            onKeyDown(box, "A")
+            Check(restricted == 0, "a key pressed in combat lockdown called SetPropagateKeyboardInput "
+                .. restricted .. " time(s)")
+            lockdown = false
+        end
+    end
+end
+
 if #failures > 0 then
     error("menu_preview_guards_smoke failed:\n  " .. table.concat(failures, "\n  "))
 end
-print("menu_preview_guards_smoke: ok (" .. flavor .. "; secret UnitIsUnit never compared)")
+print("menu_preview_guards_smoke: ok (" .. flavor .. "; secret UnitIsUnit never compared, group preview keyboard"
+    .. " released at the combat edge and untouched in lockdown)")
