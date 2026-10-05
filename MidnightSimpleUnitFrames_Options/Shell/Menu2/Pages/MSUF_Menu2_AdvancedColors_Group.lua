@@ -117,7 +117,7 @@ local function Clamp01(value, fallback)
     return value
 end
 local function PercentLabel(label, value)
-    return tostring(label or "") .. ": " .. tostring(floor(Clamp01(value, 0) * 100 + 0.5)) .. "%"
+    return M.Format("%s: %s", M.Tr(tostring(label or "")), tostring(floor(Clamp01(value, 0) * 100 + 0.5)) .. "%")
 end
 local function GroupAlphaSlider(ctx, parent, label, x, y, width, key, defaultValue)
     local slider = W.Slider(parent, "", 0, 1, 0.05, width or 260)

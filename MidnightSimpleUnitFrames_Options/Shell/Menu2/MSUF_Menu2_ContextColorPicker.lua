@@ -777,6 +777,8 @@ function Picker.BuildAdvancedCard(panel)
 
     panel.classes = {}
     local tokens = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER" }
+    -- Tooltips show the client's class name; the swatch keeps the token.
+    local classNames = LOCALIZED_CLASS_NAMES_MALE or {}
     for i = 1, #tokens do
         local swatch = Swatch(advancedCard, 24, function(self)
             local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[self.token]
@@ -784,7 +786,7 @@ function Picker.BuildAdvancedCard(panel)
         end)
         swatch.token = tokens[i]
         panel.classes[i] = swatch
-        if M.AddTooltip then M.AddTooltip(swatch, tokens[i], Tr("Apply this class color.")) end
+        if M.AddTooltip then M.AddTooltip(swatch, classNames[tokens[i]] or tokens[i], Tr("Apply this class color.")) end
     end
 
     local emptyHint = Font(advancedCard, "GameFontDisableSmall", "No colors here yet.", T.colors.dim)
@@ -1323,3 +1325,11 @@ function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwne
     return panel
 end
 M.OpenColorContextPicker = W.OpenColorContextPicker
+
+-- Profile boundary (MSUF.ProfileRuntime.BeforeMutation): the picker's
+-- originals belong to the profile it opened on, so it finishes there, the way
+-- closing the menu finishes it. A Cancel after the switch wrote them into the
+-- next profile.
+function M.FinishColorPickerForProfileChange()
+    if picker and picker:IsShown() then picker:Finish(false) end
+end

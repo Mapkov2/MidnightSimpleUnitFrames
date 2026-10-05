@@ -17,6 +17,11 @@
 --    arenaCast*) at the user's values while resetting every boss twin.
 -- 3. Named settings (C7-3): the Fonts, Castbar, Bars and Class Resources
 --    resets skipped settings their own page writes and their summary names.
+--    Reset Miscellaneous (R-C7-M1) skipped the number abbreviation, the menu
+--    font, the game menu button, the resource ping, the group target
+--    highlight switches and the External Edit Mode switches beside the
+--    language, menu behavior, Blizzard Frames and Frame Highlights siblings
+--    it already reset.
 --
 -- Plain Lua 5.1, repo root as arg 1 and the client flavor as arg 2.
 
@@ -295,6 +300,10 @@ local PAGE_OWNED = {
         general.tempMaxHealthBackgroundOpacity general.tempMaxHealthColorR general.tempMaxHealthColorG
         general.tempMaxHealthColorB player.tempMaxHealthEnabled gf_party.tempMaxHealthOpacity]] },
     { "classpower", Words [[bars.showGuardianIronfur bars.showSweepingStrikes bars.manaUpcomingCost]] },
+    { "opt_misc", Words [[general.numberAbbrevStyle general.menuFontKey general.showGameMenuButton
+        general.playerResourcePingEnabled gf_party.targetIndicator gf_raid.targetIndicator gf_mythicraid.targetIndicator
+        general.grid2EditModeIntegration general.detailsEditModeIntegration general.dominosEditModeIntegration
+        general.dandersEditModeIntegration general.blizzardEditModeIntegration]] },
 }
 -- "Enable slanted bars" on the Bars page writes the frame shape of every unit
 -- and group scope; the Bars reset owns those per-scope bar shapes too.
@@ -322,7 +331,19 @@ for _, row in ipairs(PAGE_OWNED) do
         covered = covered + 1
     end
 end
-summary[#summary + 1] = string.format("%d named settings restored by the Fonts, Castbar, Bars and Class Resources resets",
+summary[#summary + 1] = string.format("%d named settings restored by the Fonts, Castbar, Bars, Class Resources and Miscellaneous resets",
     covered)
+-- Reset Miscellaneous now resets the group target highlight switches (and the
+-- number format group texts use), so it must repaint the group frames too.
+do
+    local service, groupRequests = M.ApplyService, 0
+    local dirty, group = service.RequestGroupDirtyMask, service.RequestGroup
+    service.RequestGroupDirtyMask = function(...) groupRequests = groupRequests + 1 return dirty(...) end
+    service.RequestGroup = function(...) groupRequests = groupRequests + 1 return group(...) end
+    Restore().gf_party.targetIndicator = false
+    Reset("opt_misc")
+    service.RequestGroupDirtyMask, service.RequestGroup = dirty, group
+    Check(groupRequests > 0, "Reset Miscellaneous did not repaint the group frames whose target highlight it resets")
+end
 
 print("menu_page_reset_scope_smoke: " .. flavor .. " ok (" .. table.concat(summary, "; ") .. ")")

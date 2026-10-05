@@ -680,6 +680,89 @@ local function FlushApplyServiceNow()
     return false
 end
 
+-- General settings that act only through their setter: no apply owner reads
+-- them again, so a history restore or a page reset calls the setter when the
+-- value changed (GlobalMisc and Dashboard controls run the same calls). An
+-- entry names the published setter and its argument ("enabled": the switch
+-- state, "scale": the MSUF frame scale) or carries its own apply.
+local SETTER_ONLY_SETTINGS = {
+    msufUiScale = { "MSUF_ApplyMsufScale", "scale" },
+    showMinimapIcon = { "MSUF_SetMinimapIconEnabled", "enabled" },
+    showGameMenuButton = { "MSUF_SetGameMenuButtonEnabled", "enabled" },
+    playTargetSelectLostSounds = { "MSUF_TargetSoundDriver_ApplySetting" },
+    playerResourcePingEnabled = { "MSUF_RefreshPlayerResourcePing" },
+    versionCheckEnabled = { "MSUF_ApplyModules" },
+    nsrtNicknameIntegration = { "MSUF_NSRTNicknames_ApplySetting" },
+    grid2EditModeIntegration = { "MSUF_Grid2EditMode_SetEnabled", "enabled" },
+    detailsEditModeIntegration = { "MSUF_DetailsEditMode_SetEnabled", "enabled" },
+    dominosEditModeIntegration = { "MSUF_DominosEditMode_SetEnabled", "enabled" },
+    dandersEditModeIntegration = { "MSUF_DandersEditMode_SetEnabled", "enabled" },
+    numberAbbrevStyle = { apply = function() MSUF.NumberFormat.Refresh() end },
+    menuFontKey = { apply = function()
+        M.Theme.ClearMenuFontCache()
+        M.Theme.RefreshMenuFonts()
+    end },
+    mapkoSkinMenus = { apply = function() if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end end },
+    menuBackgroundOpacity = { apply = function()
+        if M.Theme.RefreshMenuBackgroundOpacity then M.Theme.RefreshMenuBackgroundOpacity() end
+    end },
+}
+-- Kernel/MSUF_RuntimeContracts.lua requires these two adapters only where the
+-- client supports them; Classic flavors load neither.
+if MSUF.Client and MSUF.Client.SupportsEllesmereEditMode then
+    SETTER_ONLY_SETTINGS.ellesmereEditModeIntegration = { "MSUF_EllesmereEditMode_SetEnabled", "enabled" }
+end
+if MSUF.Client and MSUF.Client.SupportsBlizzardEditMode then
+    SETTER_ONLY_SETTINGS.blizzardEditModeIntegration = { "MSUF_BlizzardEditMode_SetEnabled", "enabled" }
+end
+local function CaptureSetterOnlySettings()
+    local db, values = M.EnsureDB(), {}
+    local g = db and db.general
+    if type(g) ~= "table" then return values end
+    for key in pairs(SETTER_ONLY_SETTINGS) do values[key] = g[key] end
+    return values
+end
+local function ResyncSetterOnlySettings(before)
+    local db = M.EnsureDB()
+    local g = db and db.general
+    if type(g) ~= "table" or type(before) ~= "table" then return end
+    for key, entry in pairs(SETTER_ONLY_SETTINGS) do
+        local value = g[key]
+        if value ~= before[key] then
+            local setter = entry.apply or MSUF.Require(entry[1], "Shell/Menu2/MSUF_Menu2_Bindings_History.lua")
+            if entry[2] == "scale" then
+                setter(tonumber(value) or 1)
+            elseif entry[2] == "enabled" then
+                setter(value ~= false)
+            else
+                setter()
+            end
+        end
+    end
+end
+
+-- Snapshots hold the variant-free base profile. Put it back under the live
+-- variant overlays: strip them without capturing (the live values are about to
+-- be discarded), restore the add-on roots, replace, then re-resolve. Without
+-- the re-resolve the next capture writes the base values into the variants.
+local function RestoreHistoryProfile(activeDB, profileDB, reason)
+    if MSUF.ProfileVariants then MSUF.ProfileVariants.Restore(false) end
+    if MSUF.ProfileFields and MSUF.ProfileFields.RestoreExternal then
+        local restored=MSUF.ProfileFields.RestoreExternal(activeDB,profileDB)
+        -- A refused restore must not leave the live profile without its active
+        -- variant overlays, which Restore(false) stripped above.
+        if not restored then
+            if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
+            return false
+        end
+        profileDB=MSUF.ProfileFields.StripExternal(DeepCopy(profileDB))
+    end
+    DeepReplace(activeDB, profileDB)
+    if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
+    if MSUF.ProfileFields and MSUF.ProfileFields.ApplyExternal then MSUF.ProfileFields.ApplyExternal(reason) end
+    return true
+end
+
 local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     if type(snapshot) ~= "table" then return false end
     if trustProfile ~= true and IsForeignProfileSnapshot(snapshot) then return false, "profile_mismatch" end
@@ -695,21 +778,11 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     local willEnable = type(restoredUi) == "table" and restoredUi.Enabled == true
     local scaleChanged = wasEnabled ~= willEnable
         or (willEnable and tonumber(activeUi.Scale) ~= tonumber(restoredUi.Scale))
-    if MSUF.ProfileVariants then MSUF.ProfileVariants.Restore(false) end
-    if MSUF.ProfileFields and MSUF.ProfileFields.RestoreExternal then
-        local restored=MSUF.ProfileFields.RestoreExternal(activeDB,profileDB)
-        -- A refused restore must not leave the live profile without its active
-        -- variant overlays, which Restore(false) stripped above.
-        if not restored then
-            historyRestoring=false
-            if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
-            return false
-        end
-        profileDB=MSUF.ProfileFields.StripExternal(DeepCopy(profileDB))
+    local setterOnly = CaptureSetterOnlySettings()
+    if not RestoreHistoryProfile(activeDB, profileDB, reason or "MSUF2_HISTORY") then
+        historyRestoring = false
+        return false
     end
-    DeepReplace(activeDB, profileDB)
-    if MSUF.ProfileVariants then MSUF.ProfileVariants.ResolveCurrent() end
-    if MSUF.ProfileFields and MSUF.ProfileFields.ApplyExternal then MSUF.ProfileFields.ApplyExternal(reason or "MSUF2_HISTORY") end
     RestoreProfileRouting(snapshot)
     local externalAPI = (type(MSUF) == "table" and MSUF.EditModeAPI) or _G.MSUF_EditModeAPI
     if type(externalAPI) == "table" and type(externalAPI._RestoreHistorySnapshot) == "function"
@@ -724,6 +797,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     if scaleChanged and type(_G.MSUF_ApplyCurrentProfileGlobalUiScale) == "function" then
         _G.MSUF_ApplyCurrentProfileGlobalUiScale()
     end
+    ResyncSetterOnlySettings(setterOnly)
     if ApplyScopedHistoryRestore(reason, source) then
         FlushApplyServiceNow()
         M.MarkMenuDataDirty(reason or "history")
@@ -937,7 +1011,10 @@ function M.CancelHistorySurface(surface, restoreState)
         local profileDB = HistoryProfileDB(marker.snapshot)
         if type(profileDB) ~= "table" then return false end
         historyRestoring = true
-        DeepReplace(M.EnsureDB(), profileDB)
+        if not RestoreHistoryProfile(M.EnsureDB(), profileDB, "MSUF2_HISTORY_CANCEL_SURFACE") then
+            historyRestoring = false
+            return false
+        end
         RestoreProfileRouting(marker.snapshot)
         RestoreHistoryProviders(marker.snapshot, "MSUF2_HISTORY_CANCEL_SURFACE", surface)
         historyRestoring = false
@@ -1163,4 +1240,5 @@ end
 -- instead of re-declaring them.
 M.ApplyScopedFeatureRuntime = ApplyScopedFeatureRuntime
 M.FlushApplyServiceNow = FlushApplyServiceNow
+M.CaptureSetterOnlySettings, M.ResyncSetterOnlySettings = CaptureSetterOnlySettings, ResyncSetterOnlySettings
 M.COLOR_CLASSPOWER_RUNTIME = COLOR_CLASSPOWER_RUNTIME

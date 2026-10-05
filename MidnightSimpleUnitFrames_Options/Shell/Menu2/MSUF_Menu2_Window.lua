@@ -923,7 +923,9 @@ local function InstallMenuScaleControl(f)
     end
     local function UpdateVisual(value)
         local pct = Percent(value or slider:GetValue())
-        label:SetText(string.format("%s %d%%", M.Tr("Menu"), pct))
+        -- One translated format; the raw setter keeps every percentage out of
+        -- the locale-key tracking (Theme FontSetText).
+        T.SetTranslatedText(label, M.Format("Menu %d%%", pct))
         local fill = slider._msufFill
         if fill then
             local span = MENU_SCALE_MAX_PERCENT - MENU_SCALE_MIN_PERCENT
@@ -1143,7 +1145,7 @@ local function InstallWindowInteractions(state)
         proxy:ClearAllPoints()
         proxy:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
         proxy:SetSize(layout.visualW or ((layout.w or WINDOW_W) * scale), layout.visualH or ((layout.h or WINDOW_H) * scale))
-        if proxy.sizeLabel then proxy.sizeLabel:SetText(string.format("%d x %d", layout.w or WINDOW_W, layout.h or WINDOW_H)) end
+        if proxy.sizeLabel then T.SetTranslatedText(proxy.sizeLabel, string.format("%d x %d", layout.w or WINDOW_W, layout.h or WINDOW_H)) end
         proxy:Show()
         return proxy
     end
