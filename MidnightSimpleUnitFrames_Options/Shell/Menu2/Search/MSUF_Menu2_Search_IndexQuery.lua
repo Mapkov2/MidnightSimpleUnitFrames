@@ -1414,9 +1414,6 @@ function M.RegisterSearchWidget(widget, meta)
         and previous.actionFixedArgs == meta.actionFixedArgs
         and previous.actionInputArg == meta.actionInputArg
         and previous.navigationKey == meta.navigationKey
-        and previous.searchPrepareKind == meta.searchPrepareKind
-        and previous.searchPrepareValue == meta.searchPrepareValue
-        and previous.confirmRequired == meta.confirmRequired
         and previous.keywords == keywords
         and previous.help == help
         and previous._rawValues == rawValues

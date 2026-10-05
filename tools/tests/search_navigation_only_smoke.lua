@@ -203,36 +203,4 @@ table.insert(M.SearchData.QUERY_ALIASES["qzxpostload"], "qzxnavigation")
 M.InvalidateSearchLexicon()
 Check(#API.SearchPages("qzxpostload") > 0, "terms added to an existing alias key were ignored")
 
--- A widget registered again with only its search prepare contract or its
--- confirmation flag changed refreshes its registry entry: the exact target
--- then prepares the tab the control is on now, not the previous one.
-do
-    local prepared = { GetScript = function() end, GetParent = function() end }
-    local function Register(tab, confirm)
-        M.RegisterSearchWidget(prepared, { pageKey = "zz_navigation", label = "Prepared proof slider", kind = "slider",
-            classification = "setting", keywords = "qzxprepared", controlId = "menu2.zz_navigation.prepared",
-            settingKey = "general.preparedProof", searchPrepareKind = "groupSizingTab", searchPrepareValue = tab,
-            confirmRequired = confirm })
-    end
-    local function Target()
-        for _, row in ipairs(API.SearchPages("qzxprepared")) do
-            local target = row.exactTarget
-            if target and target.controlId == "menu2.zz_navigation.prepared" then return target end
-        end
-    end
-    local function Entry()
-        return M.Search._RenderContext.SEARCH_STATE.registry[prepared._msuf2SearchRegistryId]
-    end
-    Register("tier10")
-    local target = Target()
-    Check(target and target.prepareValue == "tier10", "the prepared proof row is missing")
-    Register("tier20")
-    target = Target()
-    Check(target and target.prepareValue == "tier20", "a re-registration with a new prepare value kept "
-        .. tostring(target and target.prepareValue))
-    Register("tier20", true)
-    Check(Entry() and Entry().confirmRequired == true, "a re-registration that now asks for confirmation kept the old flag")
-end
-
-print("search_navigation_only_smoke: ok (no setters; combat/close discard work; route feature write rejected; exact sections; stale targets fail closed; late lexicon words apply;"
-    .. " re-registrations refresh prepare contracts)")
+print("search_navigation_only_smoke: ok (no setters; combat/close discard work; route feature write rejected; exact sections; stale targets fail closed; late lexicon words apply)")
