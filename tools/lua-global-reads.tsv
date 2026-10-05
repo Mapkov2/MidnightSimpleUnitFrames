@@ -18,6 +18,7 @@ C_AddOns	namespace	Blizzard C_* namespace
 C_ChatInfo	namespace	Blizzard C_* namespace
 C_CurveUtil	namespace	Blizzard native curve namespace; upstream/live:Blizzard_APIDocumentationGenerated/CurveUtilDocumentation.lua:5,11 (CreateColorCurve); ResourceMarks probes namespace/method and falls back to public values
 C_DurationUtil	namespace	Blizzard native duration namespace; upstream/live and upstream/forever:Blizzard_APIDocumentationGenerated/DurationUtilDocumentation.lua:5,11 (CreateDuration); ManaExtras probes namespace/method before use
+C_Housing	namespace	Blizzard housing namespace; upstream/live and upstream/forever:Blizzard_Game/Mainline/EventImplementation.lua reads C_Housing.IsInsideHouseOrPlot; the group runtime probes namespace/method before use (absent on clients without housing)
 C_IncomingSummon	namespace	Blizzard C_* namespace
 C_Secrets	namespace	Blizzard C_* namespace
 C_SpecializationInfo	namespace	Blizzard C_* namespace
