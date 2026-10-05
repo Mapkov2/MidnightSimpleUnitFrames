@@ -90,12 +90,16 @@ local function ProfileExportValues()
         values[#values + 1] = { value = "suite_all", text = "Full profile (MSUF + Suite)" }
         local skinReady = suite.Client and suite.Client.AddOnEnabled
             and suite.Client.AddOnEnabled("MSUF_Suite_Skin") == true
-        values[#values + 1] = { value = "suite_module:skin", text = "Suite module: Skinning",
-            disabled = not skinReady }
+        -- Suite rows are translated here (one format key), so the picker shows them as is.
+        values[#values + 1] = { value = "suite_module:skin", text = M.Format("Suite module: %s", Tr("Skinning")),
+            translate = false, disabled = not skinReady }
         values[#values + 1] = { value = "all", text = "MSUF only - full profile" }
         for _, id in ipairs(suite.SuiteOrder or {}) do
             local spec = suite.SuiteCatalog and suite.SuiteCatalog[id]
-            if spec then values[#values + 1] = { value = "suite_module:" .. id, text = "Suite module: " .. spec.title } end
+            if spec then
+                values[#values + 1] = { value = "suite_module:" .. id,
+                    text = M.Format("Suite module: %s", Tr(spec.title)), translate = false }
+            end
         end
     else
         values[#values + 1] = { value = "all", text = "Full profile" }
