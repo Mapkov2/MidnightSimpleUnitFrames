@@ -9,6 +9,7 @@
 --   * group Tracked and External lanes wear the Buff appearance (shape, border, shadow)
 --   * Sort By Other Defensives First, Important First and Debuff Type First
 --     follow the Blizzard comparators instead of the Default order
+--   * group Spell Icons take the scope's Spell Icon Style and Icon Zoom
 -- Arguments: repository root, flavor (Vanilla, TBC or Mists).
 local root = assert(arg[1], "repository root argument missing")
 root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
@@ -58,6 +59,7 @@ function Widget:SetPoint(point, relativeTo, relativePoint, x, y)
     self._point = { point = point, relativeTo = relativeTo, relativePoint = relativePoint, x = x, y = y }
 end
 function Widget:SetDrawSwipe(draw) self._drawSwipe = draw end
+function Widget:SetAlpha(alpha) self._alpha = alpha end
 function Widget:SetHideCountdownNumbers(hide) self._hideNumbers = hide end
 function Widget:SetCooldown(start, duration) self._start, self._duration = start, duration end
 function Widget:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "OUTLINE" end
@@ -67,7 +69,7 @@ function Widget:CreateTexture() return setmetatable({ _shown = true, _parent = s
 Widget.CreateMaskTexture = Widget.CreateTexture
 function Widget:CreateFontString() return setmetatable({ _shown = true, _parent = self, _objectType = "FontString" }, Widget) end
 for _, name in ipairs({
-    "RegisterEvent", "UnregisterEvent", "RegisterUnitEvent", "SetAllPoints", "SetAlpha", "EnableMouse", "SetSize",
+    "RegisterEvent", "UnregisterEvent", "RegisterUnitEvent", "SetAllPoints", "EnableMouse", "SetSize",
     "SetWidth", "SetHeight", "SetSwipeColor", "SetDrawEdge", "SetTexCoord", "SetJustifyH", "SetJustifyV",
     "SetFont", "SetTextColor", "SetShadowOffset", "SetDesaturated", "SetBlendMode", "SetMinMaxValues", "SetValue",
     "SetStatusBarTexture", "SetStatusBarColor", "SetColorTexture", "SetReverse", "SetMouseClickEnabled",
@@ -387,5 +389,34 @@ order = LaneOrder("target", "debuff", { showBuffs = false, showDebuffs = true, d
     debuffs)
 assert(order == "12,13,14,11", "Debuff Type First ordered the target's debuffs " .. order .. ", expected 12,13,14,11")
 _G.MSUF_DB.auras3.perUnit.target.layoutShared = { showBuffs = false, showDebuffs = false }
+
+-- 7. Group Spell Icons take the scope's Spell Icon Style ----------------------------------
+-- GF.CompileSpellIndicators copies the section into spellIndicators.style and
+-- .iconZoom; Retail lays every Spell Icon out from them, with the menu's
+-- defaults (cooldown font 8, stack font 10) when a key was never set.
+local renewItem = { key = "PRIEST:Renew", specKey = "PRIEST", auraName = "Renew", display = "Renew", enabled = true,
+    order = 1, layer = 9, onlyOwn = true, spellIDs = { 139 }, includeSpellIDs = { [139] = true },
+    placed = { type = "icon", anchor = "TOPLEFT", x = 0, y = 0, size = 18, growth = "RIGHTDOWN", iconEffect = "none",
+        missing = false, showCooldownSwipe = true, showCooldown = true, cooldownSize = 12, showStacks = true },
+    color = { 0.2, 1, 0.2, 1 } }
+SetAuras("party1", { ownRenew })
+local styled = GroupFrame("party1", { spellIndicators = { enabled = true, items = { renewItem }, iconZoom = 150,
+    style = { alpha = 0.3, showTooltip = false, showCooldownText = false, showCooldownSwipe = false, stackSize = 20,
+        cooldownSize = 16, showDurationBar = true, durationBarPosition = "TOP" } } })
+local spellLane = styled._msufA3State.lanes.spellIndicator1
+local c = spellLane.config
+assert(c.alpha == 0.3 and c.showTooltip == false and c.showCooldownText == false and c.showCooldownSwipe == false
+    and c.stackSize == 20 and c.cooldownSize == 16 and c.showDurationBar == true and c.durationBarPosition == "TOP"
+    and c.iconZoom == 150, ("Spell Icon Style did not reach the spell icon: alpha %s tooltip %s text %s swipe %s"
+    .. " stack %s cooldown %s bar %s zoom %s"):format(tostring(c.alpha), tostring(c.showTooltip),
+    tostring(c.showCooldownText), tostring(c.showCooldownSwipe), tostring(c.stackSize), tostring(c.cooldownSize),
+    tostring(c.showDurationBar), tostring(c.iconZoom)))
+assert(ShownIDs(spellLane) == "502" and spellLane.frame._alpha == 0.3 and spellLane[1].Cooldown._shown == false
+    and spellLane[1]._msufA3DurationBar and spellLane[1]._msufA3DurationBar._shown == true,
+    "the styled spell icon did not render with the Spell Icon Style")
+local plain = GroupFrame("party1", { spellIndicators = { enabled = true, items = { renewItem } } })
+c = plain._msufA3State.lanes.spellIndicator1.config
+assert(c.cooldownSize == 8 and c.stackSize == 10 and c.alpha == 1 and c.showCooldownText == true
+    and c.iconZoom == 100, "an untouched Spell Icon Style did not give the menu's defaults")
 
 print("classic aura setting parity smoke passed: " .. flavor)

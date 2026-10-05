@@ -591,7 +591,38 @@ function Features.CompileUnitLanes(auras, unit, frameSpec, lanePadding)
     return next(lanes) and lanes or nil, order, nil
 end
 
-local function AddIndicatorLane(lanes, order, unit, item, index, prefix)
+--- Group > Spell Icons > Spell Icon Style: one look for every spell icon of a
+--- group scope, with the menu's defaults, as Retail compiles it
+--- (Runtime_GroupConfig CompileGroupSpellIndicatorStyle, SpellIndicators_Config
+--- CompileSlot). Text, swipe and the duration bar belong to icons; a stack
+--- count to icons and numbers. Shape, border and shadow are the Buff appearance.
+local function ApplySpellIconStyle(lane, style, iconZoom)
+    local icon = lane.visual == "icon"
+    lane.alpha = Number(style.alpha, 1, 0, 1)
+    lane.showTooltip = style.showTooltip ~= false
+    lane.showCooldownText = icon and style.showCooldownText ~= false
+    lane.showCooldownSwipe = icon and style.showCooldownSwipe ~= false
+    lane.showCooldown = lane.showCooldownText or lane.showCooldownSwipe
+    lane.cooldownSwipeReverse = style.cooldownSwipeReverse == true
+    lane.cooldownSize = Number(style.cooldownSize, 8, 6, 40)
+    lane.cooldownAnchor = Anchor(style.cooldownAnchor, "CENTER")
+    lane.cooldownX = Number(style.cooldownX, 0, -2000, 2000)
+    lane.cooldownY = Number(style.cooldownY, 0, -2000, 2000)
+    lane.cooldownDecimalSeconds = Number(style.cooldownDecimalSeconds, 3, 0, 30)
+    lane.showStacks = style.showStacks ~= false and (icon or lane.visual == "number")
+    lane.stackSize = Number(style.stackSize, 10, 6, 40)
+    lane.stackAnchor = Anchor(style.stackAnchor, "BOTTOMRIGHT")
+    lane.stackX = Number(style.stackX, 0, -2000, 2000)
+    lane.stackY = Number(style.stackY, 0, -2000, 2000)
+    lane.showDurationBar = icon and style.showDurationBar == true
+    lane.durationBarHeight = Number(style.durationBarHeight, 2, 1, 16)
+    lane.durationBarDisplay = tostring(style.durationBarDisplay or ""):upper() == "OVERLAY" and "OVERLAY" or "BAR_ONLY"
+    lane.durationBarPosition = tostring(style.durationBarPosition or ""):upper() == "TOP" and "TOP" or "BOTTOM"
+    lane.durationBarDirection = tostring(style.durationBarDirection or ""):upper() == "ELAPSED" and "ELAPSED" or "REMAINING"
+    lane.iconZoom = Number(iconZoom, 100, 100, 200)
+end
+
+local function AddIndicatorLane(lanes, order, unit, item, index, prefix, style, iconZoom)
     if type(item) ~= "table" or item.enabled == false then return end
     local spellIDs = item.includeSpellIDs or SpellIDHash(item.spellIDs)
     if not spellIDs then return end
@@ -619,6 +650,7 @@ local function AddIndicatorLane(lanes, order, unit, item, index, prefix)
     lane.cols, lane.rows = 1, 1
     lane.width, lane.height = lane.buttonWidth, lane.buttonHeight
     Visuals.EnrichCustomLane(lane, entry, nil)
+    if style then ApplySpellIconStyle(lane, style, iconZoom) end
     lanes[kind] = lane
     order[#order + 1] = kind
 end
@@ -628,8 +660,10 @@ function Features.CompileGroupIndicatorLanes(frame, unit)
     local lanes, order = {}, {}
     local spellRoot = spec and spec.spellIndicators
     local items = spellRoot and spellRoot.enabled == true and spellRoot.items
+    -- Corner slots keep their own no-text look; only Spell Icons take the style.
+    local style = type(items) == "table" and (type(spellRoot.style) == "table" and spellRoot.style or {}) or nil
     for i = 1, type(items) == "table" and #items or 0 do
-        AddIndicatorLane(lanes, order, unit, items[i], i, "spellIndicator")
+        AddIndicatorLane(lanes, order, unit, items[i], i, "spellIndicator", style, spellRoot.iconZoom)
     end
     local corners = spec and spec.cornerIndicators
     local customSlots = corners and corners.enabled == true and corners.customSlots
