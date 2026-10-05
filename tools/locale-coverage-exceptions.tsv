@@ -4,7 +4,6 @@
 Path	Key	Reason
 MidnightSimpleUnitFrames/Locales/enUS.lua	*	English base pack. MSUF_Localization.lua falls back to the key itself, so this file carries only deliberate special-case wording (see its own file header); an absent key renders as the correct English text.
 MidnightSimpleUnitFrames/Locales/enGB.lua	*	English (UK) base pack. Same identity fallback as enUS.lua: it carries only the entries that differ from the key, chiefly -our spellings.
-*	Selected: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames or _Options. Kept, not deleted, so no dynamic lookup can regress.
 *	Current: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames or _Options. Kept, not deleted, so no dynamic lookup can regress.
 *	HP: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames or _Options. Kept, not deleted, so no dynamic lookup can regress.
 *	Name: 	Legacy label fragment; no reference in MidnightSimpleUnitFrames or _Options. Kept, not deleted, so no dynamic lookup can regress.
