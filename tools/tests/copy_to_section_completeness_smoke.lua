@@ -9,6 +9,13 @@
 --      shadow switch and metrics of the target as they were. After copying
 --      Party's font override to Raid, every group font resolver
 --      (GroupFrames/MSUF_GroupFrames_DB_Text.lua) answers Raid like Party.
+--   2. Unit frames, "Texture Layer" (MSUF_Menu2_Unit.lua COPY_TEXLAYER_FIELDS):
+--      the suffix list left out the visibility rules ("Current target only",
+--      the health condition and threshold, the low-health opacity and the
+--      above-threshold colour), so a copied layer showed under the target's
+--      old rules. Every per-slot key the runtime reads (BuildSlotKeys in
+--      UnitFrames/Effects/MSUF_UF_TextureLayer.lua) now arrives on the target
+--      for all three layers.
 --
 -- Boots the real core and Options graph (menu_core_world.lua) and calls the
 -- real copy functions. Plain Lua 5.1, repo root and client flavor.
@@ -72,4 +79,46 @@ for field, value in pairs(want) do
 end
 Check(raid.width == raidWidth, "the Font Override copy changed the Raid width")
 
-print("copy_to_section_completeness_smoke " .. flavor .. ": OK (group font override)")
+---------------------------------------------------------------------------
+-- 2. Unit Texture Layer
+---------------------------------------------------------------------------
+local copyUnit = Check(M.UnitPage and M.UnitPage.CopyUnitSettings, "unit Copy To missing")
+-- The runtime's per-slot key universe, read from its key builder.
+local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua", "rb"))
+local runtime = handle:read("*a"):gsub("\r\n", "\n")
+handle:close()
+local builder = Check(runtime:match("local function BuildSlotKeys%(prefix%)(.-)\nend"), "BuildSlotKeys not found")
+local suffixes = {}
+for name, suffix in builder:gmatch('(%w+) = prefix %.%. "(%w+)"') do
+    Check(name == suffix, "slot key " .. name .. " is stored as " .. suffix)
+    suffixes[#suffixes + 1] = suffix
+end
+Check(#suffixes >= 40, "only " .. #suffixes .. " texture layer keys parsed")
+-- Rule values that differ from the target's; every other key gets a marker.
+local RULES = { TargetOnly = true, HealthCondition = "BELOW", HealthThreshold = 0.8,
+    HealthLowAlphaEnabled = true, HealthLowAlpha = 0.4, HealthAboveMode = "CLASS" }
+local player, target = db.player, db.target
+for slot, prefix in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
+    for _, suffix in ipairs(suffixes) do
+        local value = RULES[suffix]
+        if value == nil then value = "copy-marker-" .. slot .. "-" .. suffix end
+        player[prefix .. suffix] = value
+        target[prefix .. suffix] = nil
+    end
+end
+local applied = copyUnit("player", "target", { texlayer = true }, nil, true)
+Check(applied, "the Texture Layer copy did not run")
+-- The copy writes synchronously; the queued unit-frame apply it requests is
+-- outside this contract (the offline runtime cannot draw the target frame).
+local missing = {}
+for _, prefix in ipairs({ "texLayer", "texLayer2", "texLayer3" }) do
+    for _, suffix in ipairs(suffixes) do
+        local key = prefix .. suffix
+        if target[key] ~= player[key] then missing[#missing + 1] = key end
+    end
+end
+table.sort(missing)
+Check(#missing == 0, "Copy To left texture layer settings of Target behind: " .. table.concat(missing, ", "))
+
+print("copy_to_section_completeness_smoke " .. flavor .. ": OK (group font override, "
+    .. #suffixes .. " texture layer keys x3)")
