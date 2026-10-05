@@ -1,6 +1,6 @@
 ## Interface: 50504
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r |cff9b9b9b- Mists Classic|r
-## Notes: Classic prototype for Mists of Pandaria Classic.
+## Notes: Mists Classic client support.
 ## Author: Mapko
 ## Category: Combat
 ## Version: 6.5-beta15

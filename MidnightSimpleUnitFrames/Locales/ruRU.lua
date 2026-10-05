@@ -6486,6 +6486,7 @@ L["Copied '%s' -> '%s'."] = "Скопировано: «%s» -> «%s»."
 L["Profile is already named '%s'."] = "Профиль уже называется «%s»."
 L["You cannot rename the 'Default' profile. Copy it instead."] = "Профиль «Default» нельзя переименовать. Скопируйте его."
 L["Profile names can be at most %d bytes long."] = "Имя профиля может занимать не более %d байт."
+L["Profile names need a visible character and cannot contain control characters."] = "Имя профиля должно содержать видимый символ и не может содержать управляющие символы."
 L["Renamed '%s' -> '%s'."] = "Переименовано: «%s» -> «%s»."
 L["Import warning: missing font '%s' in %s. Using fallback font."] = "Предупреждение импорта: шрифт «%s» отсутствует в %s. Используется запасной шрифт."
 L["Import warning: missing texture '%s' in %s. Using fallback texture."] = "Предупреждение импорта: текстура «%s» отсутствует в %s. Используется запасная текстура."
@@ -6966,6 +6967,7 @@ L["Toolbar / elements"] = "Панель / элементы"
 L["Type a value"] = "Ввести значение"
 L["Undo / redo"] = "Отменить / Повторить"
 L["Find a setting"] = "Найти настройку"
+L["A newer version (%s) is available! You have %s — please update."] = "Доступна новая версия (%s)! У вас %s — пожалуйста, обновитесь."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

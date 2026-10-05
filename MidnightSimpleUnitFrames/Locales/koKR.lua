@@ -6478,6 +6478,7 @@ L["Copied '%s' -> '%s'."] = "'%s' -> '%s' 복사했습니다."
 L["Profile is already named '%s'."] = "프로필 이름이 이미 '%s'입니다."
 L["You cannot rename the 'Default' profile. Copy it instead."] = "'Default' 프로필은 이름을 바꿀 수 없습니다. 대신 복사하세요."
 L["Profile names can be at most %d bytes long."] = "프로필 이름은 최대 %d바이트까지 사용할 수 있습니다."
+L["Profile names need a visible character and cannot contain control characters."] = "프로필 이름에는 보이는 문자가 하나 이상 있어야 하며 제어 문자를 포함할 수 없습니다."
 L["Renamed '%s' -> '%s'."] = "'%s' -> '%s' 이름을 바꿨습니다."
 L["Import warning: missing font '%s' in %s. Using fallback font."] = "가져오기 경고: 글꼴 '%s'이(가) 없습니다(%s). 대체 글꼴을 사용합니다."
 L["Import warning: missing texture '%s' in %s. Using fallback texture."] = "가져오기 경고: 텍스처 '%s'이(가) 없습니다(%s). 대체 텍스처를 사용합니다."
@@ -6960,6 +6961,7 @@ L["Toolbar / elements"] = "도구 모음 / 요소"
 L["Type a value"] = "값 입력"
 L["Undo / redo"] = "실행 취소 / 다시 실행"
 L["Find a setting"] = "설정 찾기"
+L["A newer version (%s) is available! You have %s — please update."] = "새 버전(%s)을 사용할 수 있습니다! 현재 버전은 %s입니다. 업데이트하세요."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

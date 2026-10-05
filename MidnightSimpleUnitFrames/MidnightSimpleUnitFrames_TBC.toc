@@ -1,6 +1,6 @@
 ## Interface: 20506
 ## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r |cff9b9b9b- TBC Classic|r
-## Notes: Classic prototype for The Burning Crusade Classic.
+## Notes: TBC Classic client support.
 ## Author: Mapko
 ## Category: Combat
 ## Version: 6.5-beta15

@@ -6537,6 +6537,7 @@ L["Copied '%s' -> '%s'."] = "Se copió «%s» -> «%s»."
 L["Profile is already named '%s'."] = "El perfil ya se llama «%s»."
 L["You cannot rename the 'Default' profile. Copy it instead."] = "No puedes cambiar el nombre del perfil «Default». Cópialo en su lugar."
 L["Profile names can be at most %d bytes long."] = "Los nombres de perfil pueden tener como máximo %d bytes."
+L["Profile names need a visible character and cannot contain control characters."] = "Los nombres de perfil necesitan un carácter visible y no pueden contener caracteres de control."
 L["Renamed '%s' -> '%s'."] = "Se cambió el nombre de «%s» -> «%s»."
 L["Import warning: missing font '%s' in %s. Using fallback font."] = "Aviso de importación: falta la fuente «%s» en %s. Se usa la fuente de reserva."
 L["Import warning: missing texture '%s' in %s. Using fallback texture."] = "Aviso de importación: falta la textura «%s» en %s. Se usa la textura de reserva."
@@ -7018,6 +7019,7 @@ L["Toolbar / elements"] = "Barra de herramientas / elementos"
 L["Type a value"] = "Escribir un valor"
 L["Undo / redo"] = "Deshacer / Rehacer"
 L["Find a setting"] = "Buscar un ajuste"
+L["A newer version (%s) is available! You have %s — please update."] = "¡Hay una versión más reciente (%s) disponible! Tienes %s; actualiza, por favor."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

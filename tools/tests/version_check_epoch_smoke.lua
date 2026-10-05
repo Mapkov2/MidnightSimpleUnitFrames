@@ -24,6 +24,7 @@ local function Boot(myVersion)
     env.MSUF_DB = { general = {} }
     local ns = {
         ExportPublic = function() end,
+        Translate = function(text) return text end,
         GetAddonVersion = function() return myVersion end,
         MSUF_RegisterModule = function(_, spec) world.module = spec end,
         MSUF_EventBus = { Register = function(_, event, _, fn) world.handlers[event] = fn end, Unregister = function() end },

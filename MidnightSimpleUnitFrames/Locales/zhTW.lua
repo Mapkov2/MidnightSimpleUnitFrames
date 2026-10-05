@@ -6475,6 +6475,7 @@ L["Copied '%s' -> '%s'."] = "已複製「%s」->「%s」。"
 L["Profile is already named '%s'."] = "設定檔已命名為「%s」。"
 L["You cannot rename the 'Default' profile. Copy it instead."] = "無法重新命名「Default」設定檔。請改為複製。"
 L["Profile names can be at most %d bytes long."] = "設定檔名稱最多只能有 %d 個位元組。"
+L["Profile names need a visible character and cannot contain control characters."] = "設定檔名稱必須包含可見字元，且不能包含控制字元。"
 L["Renamed '%s' -> '%s'."] = "已重新命名「%s」->「%s」。"
 L["Import warning: missing font '%s' in %s. Using fallback font."] = "匯入警告：缺少字型「%s」（%s）。改用備用字型。"
 L["Import warning: missing texture '%s' in %s. Using fallback texture."] = "匯入警告：缺少材質「%s」（%s）。改用備用材質。"
@@ -6957,6 +6958,7 @@ L["Toolbar / elements"] = "工具列 / 元素"
 L["Type a value"] = "輸入數值"
 L["Undo / redo"] = "復原 / 重做"
 L["Find a setting"] = "尋找設定"
+L["A newer version (%s) is available! You have %s — please update."] = "有更新的版本（%s）可用！你目前的版本是 %s，請更新。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end
