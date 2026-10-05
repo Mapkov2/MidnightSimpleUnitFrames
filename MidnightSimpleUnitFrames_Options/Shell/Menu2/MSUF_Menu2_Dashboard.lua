@@ -508,10 +508,10 @@ function Dashboard.PrepareSurfaceHelpers(state, root)
 end
 function Dashboard.PrepareActionHelpers(state)
     local function IsDashboardEditModeActive()
-        return M.IsMSUFEditModeActive(true)
+        return M.IsMSUFEditModeActive()
     end
     local function IsDashboardEditModeCombatLocked()
-        return M.IsEditModeCombatLocked(true)
+        return M.IsEditModeCombatLocked()
     end
     local function RefreshDashboardEditModeButtonSafe() M.RefreshDashboardEditModeButton() end
     local function RefreshMenuFramePrioritySafe() M.RefreshMenuFramePriority() end
