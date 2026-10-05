@@ -60,13 +60,14 @@ do
     end
 end
 
--- Captions of the word keys per MSUF menu language ("@name" in ACTIONS).
--- Numbers, symbols and Delete stay symbols, as on a phone in every language.
-local CAPTIONS = {
-    deDE = { done = "Fertig" }, frFR = { done = "Valider" }, esES = { done = "Listo" }, esMX = { done = "Listo" },
-    itIT = { done = "Fatto" }, ptBR = { done = "Pronto" }, koKR = { done = "완료" }, zhCN = { done = "完成" },
-    zhTW = { done = "完成" }, ruRU = { done = "Готово", letters = "АБВ", shift = "Аа" },
-}
+-- Captions of the word keys ("@name" in ACTIONS). Done comes from the locale
+-- packs (MSUF.L "Done"). The letter-page and shift captions name the alphabet
+-- of the layout, so they live with it, like LETTERS. Numbers, symbols and
+-- Delete stay symbols, as on a phone in every language.
+-- koKR, zhCN and zhTW type on the Latin page: Hangul syllables and Chinese
+-- characters need composition (an IME) that a key grid does not give. itIT
+-- is the Latin QWERTY page with its accents on the symbols page.
+local LAYOUT_CAPTIONS = { ruRU = { letters = "АБВ", shift = "Аа" } }
 local DEFAULT_CAPTIONS = { done = "Done", letters = "ABC", shift = "Aa" }
 
 -- Bottom rows: { action, label, width in keys }. "layout:<name>" switches pages.
@@ -248,10 +249,14 @@ local function CreateKey(layout, column, row, width, value, action, label)
     return key
 end
 
--- "@name" captions come from the menu language's CAPTIONS.
+-- "@name" captions: Done in the menu language, the others from the layout.
 local function Caption(label, captions)
     local name = label:match("^@(%a+)$")
     if not name then return label end
+    if name == "done" then
+        local L = MSUF.L
+        return (L and L["Done"]) or DEFAULT_CAPTIONS.done
+    end
     return captions[name] or DEFAULT_CAPTIONS[name]
 end
 
@@ -328,7 +333,7 @@ local function EnsureKeyboard()
     -- Locales/MSUF_Localization.lua loads first and resolves the menu language.
     local locale = MSUF.GetEffectiveLocale()
     local letters = LETTERS[locale] or LETTERS.latin
-    local captions = CAPTIONS[locale] or DEFAULT_CAPTIONS
+    local captions = LAYOUT_CAPTIONS[locale] or DEFAULT_CAPTIONS
     local nonLatin = locale == "ruRU"
     BuildLayout("text", letters, nonLatin and ACTIONS.textWithLatin or ACTIONS.text, captions)
     if nonLatin then BuildLayout("latin", LETTERS.latin, ACTIONS.latin, captions) end

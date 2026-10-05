@@ -282,7 +282,11 @@ C_Texture = { GetAtlasInfo = function(atlas)
     return atlas == "atlas-PAD1" and { width = 76, height = 75 } or { width = 64, height = 64 }
 end }
 
-local MSUF = { Client = { IsForever = true }, GetEffectiveLocale = function() return "deDE" end }
+-- The German menu language with the German pack's translation of the keyboard's Done.
+local germanDone = assert(Read("MidnightSimpleUnitFrames/Locales/deDE.lua"):match("\nL%[\"Done\"%] = \"([^\"]+)\""),
+    "the German pack lacks Done")
+local MSUF = { Client = { IsForever = true }, GetEffectiveLocale = function() return "deDE" end,
+    L = { ["Done"] = germanDone } }
 for index = 1, #MODULES do
     assert(loadfile(root .. "/" .. FOREVER .. MODULES[index]))("MidnightSimpleUnitFrames", MSUF)
 end
@@ -484,9 +488,14 @@ local captions = {}
 for _, key in ipairs(keyboard.children) do
     if key.padAction and key.label then captions[key.padAction .. ":" .. key.padLayout] = key.label.text end
 end
-assert(captions["done:number"] == "Fertig" and captions["done:text"] == "Fertig" and captions["layout:text:number"] == "ABC"
-    and captions["shift:text"] == "Aa" and captions["layout:number:text"] == "123",
+assert(captions["done:number"] == germanDone and captions["done:text"] == germanDone
+    and captions["layout:text:number"] == "ABC" and captions["shift:text"] == "Aa" and captions["layout:number:text"] == "123",
     "the keyboard's word keys were not in the menu language")
+-- Done is translated by the locale packs, never by a table in the keyboard.
+local keyboardCode = Code(Read(FOREVER .. "PadKeyboard.lua"))
+local _, inlineDone = keyboardCode:gsub('done = "', "")
+assert(inlineDone == 1 and keyboardCode:find('L["Done"]', 1, true),
+    "the keyboard's Done caption must come from MSUF.L, not from captions translated inside PadKeyboard.lua")
 Press("PAD1")
 assert(edit:GetText() == "127" and typed[#typed][2] == true, "the key was not typed as user input")
 Press("PAD3")
