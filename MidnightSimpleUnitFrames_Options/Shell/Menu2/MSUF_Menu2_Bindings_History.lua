@@ -702,6 +702,10 @@ local SETTER_ONLY_SETTINGS = {
         M.Theme.ClearMenuFontCache()
         M.Theme.RefreshMenuFonts()
     end },
+    mapkoSkinMenus = { apply = function() if MSUF.MenuSkin then MSUF.MenuSkin.Refresh() end end },
+    menuBackgroundOpacity = { apply = function()
+        if M.Theme.RefreshMenuBackgroundOpacity then M.Theme.RefreshMenuBackgroundOpacity() end
+    end },
 }
 -- Kernel/MSUF_RuntimeContracts.lua requires these two adapters only where the
 -- client supports them; Classic flavors load neither.

@@ -25,17 +25,10 @@ local function Check(condition, message)
 end
 
 -- Settings a page shows that its reset does not restore, and why.
+-- Miscellaneous has no entry: its reset owns every setting the page shows,
+-- the menu motion, accent, appearance and MapkoSkin switches included.
 local OWNER_DECISION = "open owner decision whether the page reset owns it"
 local KNOWN = {
-    opt_misc = {
-        ["general.mapkoSkinMenus"] = OWNER_DECISION .. " (menu skin)",
-        ["general.menuAccent"] = OWNER_DECISION .. " (menu appearance)",
-        ["general.menuAccentColor"] = OWNER_DECISION .. " (menu appearance)",
-        ["general.menuAccentTintSurfaces"] = OWNER_DECISION .. " (menu appearance)",
-        ["general.menuAppearancePreset"] = OWNER_DECISION .. " (menu appearance)",
-        ["general.menuBackgroundOpacity"] = OWNER_DECISION .. " (menu appearance)",
-        ["general.reduceMotion"] = OWNER_DECISION .. " (menu appearance)",
-    },
     classpower = {
         ["general.classPowerPreviewGuidesEnabled"] = "menu preview preference (ProfileFields: menu preferences)",
         ["menu.classPowerPreviewResource"] = "menu preview state",
@@ -73,6 +66,24 @@ local function Restore()
 end
 local Catalog = Check(M.RuntimeControlCatalog, "the runtime control catalog is missing")
 M.EagerSections = true -- Build closed lazy sections too, as a hidden search build does.
+-- The two Miscellaneous settings the menu applies live, not at the next
+-- build: a reset that changes them must repaint the menu skin and the
+-- background opacity, as their controls do. Only the MSUF Forever look
+-- installs the opacity refresher; elsewhere its slider stays disabled.
+local liveApplied = {}
+local skin = Check(core.MenuSkin, "MSUF.MenuSkin did not load")
+local SkinRefresh = skin.Refresh
+skin.Refresh = function(...)
+    liveApplied["general.mapkoSkinMenus"] = true
+    return SkinRefresh(...)
+end
+local OpacityRefresh = M.Theme.RefreshMenuBackgroundOpacity
+if OpacityRefresh then
+    M.Theme.RefreshMenuBackgroundOpacity = function(...)
+        liveApplied["general.menuBackgroundOpacity"] = true
+        return OpacityRefresh(...)
+    end
+end
 
 local SENTINEL = "__menu_page_reset_catalog_smoke__"
 local checked, pages = 0, 0
@@ -102,6 +113,7 @@ for _, pageKey in ipairs(PAGES) do
             live[path[1]] = type(live[path[1]]) == "table" and live[path[1]] or {}
             live[path[1]][path[2]] = SENTINEL
         end
+        for key in pairs(liveApplied) do liveApplied[key] = nil end
         local ok, result = pcall(M.ResetPageToDefaults, pageKey)
         Check(ok and result == true, "resetting " .. pageKey .. " failed: " .. tostring(result))
         live = M.EnsureDB()
@@ -116,6 +128,13 @@ for _, pageKey in ipairs(PAGES) do
             .. table.concat(kept, ", ") .. " (add them to its reset keys, or to KNOWN with the reason)")
         Check(#stale == 0, "Reset " .. pageKey .. " now restores " .. table.concat(stale, ", ")
             .. "; remove them from KNOWN")
+        if pageKey == "opt_misc" then
+            for key, refresher in pairs({ ["general.mapkoSkinMenus"] = SkinRefresh,
+                ["general.menuBackgroundOpacity"] = OpacityRefresh }) do
+                Check(not (paths[key] and refresher) or liveApplied[key], "Reset opt_misc restored " .. key
+                    .. " but left the open menu showing the old value")
+            end
+        end
         checked, pages = checked + #order, pages + 1
     end
 end

@@ -126,6 +126,8 @@ local FONT_ROOT_KEYS = KS("shortenNames", "shortenNameClipSide", "shortenNameMax
 local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget focus pet pettarget boss arena gf_party gf_raid gf_mythicraid]]
 local MISC_GENERAL_KEYS = KSW [[
     menuLocale numberAbbrevStyle slashMenuSnapEnabled hideAdvancedMenu showGameMenuButton menuFontKey
+    reduceMotion menuAccent menuAccentColor menuAccentTintSurfaces menuAppearancePreset menuBackgroundOpacity
+    mapkoSkinMenus
     showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier tooltipShowAuraSpellIDs
     tooltipShowAuraCasterNames
