@@ -383,6 +383,12 @@ local function NudgeTarget(dx, dy, exactDelta)
         return true
     end
 
+    -- A castbar mover selected with its popup closed (Done, or the gamepad's
+    -- move mode): its offsets live in db.general, not in db[key].
+    if selectedCfg and selectedCfg.popupType == "castbar" then
+        return NudgeCastbar(selectedCfg.castbarUnit, ndx, ndy)
+    end
+
     local key = EM2.State.GetUnitKey() or "player"
     if (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" or key == "gf_priority")
         and MSUF.Require("MSUF_GF_EM2_NudgePreview", CALLER)(key, ndx, ndy)

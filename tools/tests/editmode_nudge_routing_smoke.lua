@@ -7,9 +7,14 @@
 --    is still allowed. Deferring the clear to PLAYER_REGEN_ENABLED left the
 --    arrow keys (default movement and turning) bound to the hidden buttons for
 --    the whole fight.
+-- 2. A castbar mover selected with its popup closed (Done after a click, or
+--    the WoW Forever gamepad's move mode, which selects without opening it)
+--    fell through to db["castbar_player"], which does not exist: castbar
+--    offsets live in db.general. The arrows and the pad moved nothing.
 --
--- Loads the real MSUF_EditMode_State.lua and MSUF_EditMode_Layout_Nudge.lua,
--- with the Kernel's InCombat taken verbatim from Kernel/MSUF_Util.lua.
+-- Loads the real MSUF_EditMode_State.lua, MSUF_EditMode_Layout_Nudge.lua and
+-- Game/Forever/PadEditMode.lua, with the Kernel's InCombat taken verbatim from
+-- Kernel/MSUF_Util.lua.
 -- Usage: lua tools/tests/editmode_nudge_routing_smoke.lua <repoRoot>
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 local EM_DIR = "MidnightSimpleUnitFrames/Shell/EditMode/"
@@ -75,6 +80,11 @@ local RequireFixture = assert(loadfile(root .. "/tools/tests/require_fixture.lua
 RequireFixture.Install(root, ns)
 
 MSUF_DB = { player = { offsetX = 0, offsetY = 0 }, general = {} }
+MSUF_GetCastbarPrefix = function(unit) return "castbar" .. unit:sub(1, 1):upper() .. unit:sub(2) end
+MSUF_GetCastbarDefaultOffsets = function(unit) if unit == "player" then return 0, 5 end return 65, -15 end
+local castbarSyncs = 0
+MSUF_SyncCastbarPositionPopup = function() castbarSyncs = castbarSyncs + 1 end
+MSUF_EM_UndoBeforeChange = function() end
 MSUF_EM2 = {
     Util = {
         Round = function(v) return v >= 0 and math.floor(v + 0.5) or -math.floor(-v + 0.5) end,
@@ -93,8 +103,50 @@ MSUF_EM2 = {
     },
 }
 local EM2 = MSUF_EM2
+-- Registry rows as MSUF_EditMode_Elements.lua registers them.
+local elements = Read(EM_DIR .. "MSUF_EditMode_Elements.lua")
+assert(elements:find('key         = "castbar_" .. unit,', 1, true)
+    and elements:find('popupType   = "castbar",', 1, true) and elements:find("castbarUnit = unit,", 1, true)
+    and elements:find('RegisterCastbarMover("player", "Player Castbar", 110)', 1, true),
+    "castbar movers must stay registered as castbar_<unit> with popupType castbar and castbarUnit")
+local registry = {
+    player = { key = "player", popupType = "unit", canNudge = true },
+    target = { key = "target", popupType = "unit", canNudge = true },
+    castbar_player = { key = "castbar_player", popupType = "castbar", castbarUnit = "player", canNudge = true },
+}
+EM2.Registry = { Get = function(key) return registry[key] end, All = function() return registry end }
+local focusKey
+EM2.Focus = {
+    SetSelection = function(key) focusKey = key; return key ~= nil end,
+    GetSelection = function() return focusKey end,
+    NudgeSelection = function() return false end,
+    NotifyPositionChanged = function() end,
+}
+local castPopupOpen = false
+EM2.CastPopup = { IsOpen = function() return castPopupOpen end, GetUnit = function() return "player" end }
+EM2.AuraPopup = { IsOpen = function() return false end }
+local undoEntries = {}
+EM2.Undo = {
+    PrepareChange = function(category, key) return { category = category, key = key } end,
+    CommitPrepared = function(snapshot) undoEntries[#undoEntries + 1] = snapshot.category .. ":" .. snapshot.key; return true end,
+}
 for _, file in ipairs({ "MSUF_EditMode_State.lua", "MSUF_EditMode_Layout_Nudge.lua" }) do
     assert(loadfile(root .. "/" .. EM_DIR .. file))("MidnightSimpleUnitFrames", ns)
+end
+-- WoW Forever's pad: the mover layer's own nudge option, as PadNavigation calls it.
+local watched = {}
+ns.Client = { IsForever = true }
+ns.PadNavigation = {
+    Kit = { Haptic = function() end },
+    Watch = function(name, _, _, options) watched[name] = options end,
+}
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Game/Forever/PadEditMode.lua"))("MidnightSimpleUnitFrames", ns)
+local moverLayer = assert(watched.MSUF_EM2_MoverParent, "PadEditMode did not watch the mover layer")
+
+local function Arrow(dir)
+    local binding = assert(bindings[dir], dir .. " is not bound")
+    local button = assert(_G[binding.button], "missing nudge button " .. binding.button)
+    button.scripts.OnClick(button, "LeftButton", true)
 end
 
 -- 1. Combat edge: Edit Mode's exit at PLAYER_REGEN_DISABLED releases the arrows.
@@ -128,4 +180,33 @@ owner.scripts.OnEvent(owner, "PLAYER_REGEN_ENABLED")
 assert(next(bindings) == nil and not owner.__msufPendingClear, "the deferred clear did not run after combat")
 EM2.State.Exit("test")
 
-print("Edit Mode nudge routing: arrows released at the combat edge passed")
+-- 2. Castbar mover selected, popup closed: the arrows and the pad move it.
+local general = MSUF_DB.general
+assert(EM2.State.Enter("player") == true, "Edit Mode did not open")
+EM2.State.SetUnitKey("castbar_player")          -- the mover click (Movers.lua OnClick)
+Arrow("RIGHT")
+assert(general.castbarPlayerOffsetX == 1 and general.castbarPlayerOffsetY == 5 and castbarSyncs > 0,
+    "the right arrow did not move the selected Player Castbar with its popup closed")
+assert(MSUF_DB.player.offsetX == 0 and MSUF_DB.castbar_player == nil,
+    "a castbar nudge must not write the Player frame or a castbar_player profile table")
+assert(undoEntries[#undoEntries] == "castbar:player", "the castbar nudge did not record its undo entry")
+Arrow("UP")
+assert(general.castbarPlayerOffsetX == 1 and general.castbarPlayerOffsetY == 6, "the up arrow did not move the castbar")
+-- The pad's move mode selects the mover without opening its popup.
+EM2.State.SetUnitKey("player")
+local castbarMover, playerMover = { _barKey = "castbar_player" }, { _barKey = "player" }
+assert(moverLayer.movable(castbarMover), "the pad must offer Move on a castbar mover")
+for _ = 1, 3 do moverLayer.nudge(nil, castbarMover, 1, 0) end
+assert(EM2.State.GetUnitKey() == "castbar_player" and general.castbarPlayerOffsetX == 4,
+    "the pad's move mode on the Player Castbar mover moved nothing")
+moverLayer.nudge(nil, playerMover, 0, -1)
+assert(MSUF_DB.player.offsetY == -1 and general.castbarPlayerOffsetY == 6, "the pad's unit mover nudge regressed")
+-- With the popup open the popup's castbar still moves (the existing route).
+EM2.State.SetUnitKey("castbar_player")
+castPopupOpen = true
+Arrow("LEFT")
+castPopupOpen = false
+assert(general.castbarPlayerOffsetX == 3, "the castbar popup's arrow nudge regressed")
+EM2.State.Exit("test")
+
+print("Edit Mode nudge routing: arrows released at the combat edge, castbar selected without its popup passed")
