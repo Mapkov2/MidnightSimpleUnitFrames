@@ -610,7 +610,17 @@ local function OnEvent(_, event, a, b, c)
             SyncRanges()
         end
     else
-        if event == "PLAYER_REGEN_DISABLED" then preview = false end
+        if event == "PLAYER_REGEN_DISABLED" and preview then
+            -- Combat ends the preview, also mid-drag: the drop is not saved,
+            -- so a dragged bar stops and goes back to its saved place.
+            preview = false
+            for i = 1, #HANDS do
+                local frame = frames[HANDS[i]]
+                frame:StopMovingOrSizing()
+                frame:ClearAllPoints()
+                frame:SetPoint("CENTER", frame.config.x / frame:GetScale(), frame.config.y / frame:GetScale())
+            end
+        end
         RefreshVisibility()
         SyncRanges()
         if event == "PLAYER_REGEN_DISABLED" then UpdateCue() end
