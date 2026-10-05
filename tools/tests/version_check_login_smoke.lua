@@ -11,7 +11,9 @@
 --      update notice once;
 --   2. turning the option off afterwards (the menu toggle runs
 --      MSUF_ApplyModules) silences it, although the registry never switched
---      the module on itself.
+--      the module on itself;
+--   3. the notice is one translated sentence: a German client prints the
+--      German line (it was an English literal in every language).
 -- Events reach each frame on their own (test-side pcall), so an unrelated
 -- harness gap in another module's login handler cannot hide this one.
 --
@@ -39,8 +41,8 @@ local function Notices(world, from)
     return count
 end
 
-local function Login(flavor)
-    local world = World.New(root, flavor)
+local function Login(flavor, locale)
+    local world = World.New(root, flavor, { locale = locale })
     rawset(world.env, "MAX_BOSS_FRAMES", 5)
     world:Boot()
     local failure = world:FirstFailure()
@@ -81,5 +83,12 @@ for _, flavor in ipairs(flavors) do
     Fire(quiet, "CHAT_MSG_ADDON", "MSUF", "V:99.0", "GUILD", "Mate-Realm")
     assert(Notices(quiet, mark) == 0, flavor .. ": the update notice printed after the version check was turned off")
 end
+
+local german = Login("Vanilla", "deDE")
+local mark = #german.prints
+Fire(german, "CHAT_MSG_ADDON", "MSUF", "V:99.0", "GUILD", "Mate-Realm")
+local line = german.prints[mark + 1] or ""
+assert(line:find("Eine neuere Version (|cffffd10099.0|r) ist verfügbar!", 1, true),
+    "deDE: the update notice is not translated: " .. line)
 
 print("version_check_login_smoke: ok (" .. table.concat(flavors, ", ") .. ")")

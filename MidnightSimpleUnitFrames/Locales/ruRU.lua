@@ -6967,6 +6967,7 @@ L["Toolbar / elements"] = "Панель / элементы"
 L["Type a value"] = "Ввести значение"
 L["Undo / redo"] = "Отменить / Повторить"
 L["Find a setting"] = "Найти настройку"
+L["A newer version (%s) is available! You have %s — please update."] = "Доступна новая версия (%s)! У вас %s — пожалуйста, обновитесь."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

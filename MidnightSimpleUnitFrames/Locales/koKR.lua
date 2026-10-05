@@ -6961,6 +6961,7 @@ L["Toolbar / elements"] = "도구 모음 / 요소"
 L["Type a value"] = "값 입력"
 L["Undo / redo"] = "실행 취소 / 다시 실행"
 L["Find a setting"] = "설정 찾기"
+L["A newer version (%s) is available! You have %s — please update."] = "새 버전(%s)을 사용할 수 있습니다! 현재 버전은 %s입니다. 업데이트하세요."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

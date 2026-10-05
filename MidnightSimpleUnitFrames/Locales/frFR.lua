@@ -7059,6 +7059,7 @@ L["Toolbar / elements"] = "Barre d'outils / éléments"
 L["Type a value"] = "Saisir une valeur"
 L["Undo / redo"] = "Annuler / Rétablir"
 L["Find a setting"] = "Chercher un réglage"
+L["A newer version (%s) is available! You have %s — please update."] = "Une version plus récente (%s) est disponible ! Vous avez %s — veuillez mettre à jour."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

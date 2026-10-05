@@ -7157,6 +7157,7 @@ L["Toolbar / elements"] = "工具栏 / 元素"
 L["Type a value"] = "输入数值"
 L["Undo / redo"] = "撤销 / 重做"
 L["Find a setting"] = "查找设置"
+L["A newer version (%s) is available! You have %s — please update."] = "有更新的版本（%s）可用！你当前的版本是 %s，请更新。"
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

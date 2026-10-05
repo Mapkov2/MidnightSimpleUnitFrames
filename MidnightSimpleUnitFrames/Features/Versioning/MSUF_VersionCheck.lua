@@ -14,6 +14,7 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+local Tr = MSUF.Translate
 
 --- Constants
 local MSG_PREFIX = "MSUF" --- 4 chars, well within 16-char limit
@@ -95,11 +96,8 @@ local function ReadMyVersion()
 end
 
 local function PrintUpdateMessage(newVer)
-    print(string_format(
-        "|cff7aa2f7MSUF|r: A newer version (%s%s|r) is available! You have %s%s|r — please update.",
-        "|cffffd100", tostring(newVer),
-        "|cffffd100", tostring(myVersionStr or "?")
-    ))
+    print("|cff7aa2f7MSUF|r: " .. string_format(Tr("A newer version (%s) is available! You have %s — please update."),
+        "|cffffd100" .. tostring(newVer) .. "|r", "|cffffd100" .. tostring(myVersionStr or "?") .. "|r"))
 end
 
 local function NotifyOnce()

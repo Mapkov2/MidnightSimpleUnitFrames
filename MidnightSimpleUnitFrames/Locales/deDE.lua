@@ -7267,6 +7267,7 @@ L["Toolbar / elements"] = "Leiste / Elemente"
 L["Type a value"] = "Wert eingeben"
 L["Undo / redo"] = "Rückgängig / Wiederholen"
 L["Find a setting"] = "Einstellung suchen"
+L["A newer version (%s) is available! You have %s — please update."] = "Eine neuere Version (%s) ist verfügbar! Du hast %s – bitte aktualisieren."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

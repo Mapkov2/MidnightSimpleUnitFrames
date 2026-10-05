@@ -7019,6 +7019,7 @@ L["Toolbar / elements"] = "Barra de herramientas / elementos"
 L["Type a value"] = "Escribir un valor"
 L["Undo / redo"] = "Deshacer / Rehacer"
 L["Find a setting"] = "Buscar un ajuste"
+L["A newer version (%s) is available! You have %s — please update."] = "¡Hay una versión más reciente (%s) disponible! Tienes %s; actualiza, por favor."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

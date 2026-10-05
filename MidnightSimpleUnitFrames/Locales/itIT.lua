@@ -7034,6 +7034,7 @@ L["Toolbar / elements"] = "Barra degli strumenti / elementi"
 L["Type a value"] = "Inserisci un valore"
 L["Undo / redo"] = "Annulla / Ripeti"
 L["Find a setting"] = "Cerca un'impostazione"
+L["A newer version (%s) is available! You have %s — please update."] = "È disponibile una versione più recente (%s)! Hai la %s: aggiorna."
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end
