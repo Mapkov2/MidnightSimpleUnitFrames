@@ -993,9 +993,9 @@ local function ApplySearchRoute(pageKey, route)
         end
         local normalizedAccordion = {}
         for key, value in pairs(accordion) do normalizedAccordion[key] = value and true or false end
-        if ApplyRouteValues(target, normalizedAccordion) then
-            changed, rebuild = true, true
-        end
+        -- No rebuild: a page built by the selection reads this state, and a
+        -- cached one applies it in place (ApplyRouteSectionsInPlace).
+        if ApplyRouteValues(target, normalizedAccordion) then changed = true end
     end
     local tables = route.tables
     if type(tables) == "table" then
@@ -1073,6 +1073,27 @@ local function ApplySearchRoute(pageKey, route)
         M.InvalidatePage(pageKey)
     end
     return changed
+end
+--- The route's sections on the page now shown open or close in place, as a
+--- header click does. A page this selection built read them already; a cached
+--- one is never rebuilt for them: WoW never frees a frame.
+local function ApplyRouteSectionsInPlace(pageKey, route)
+    local accordion = type(route) == "table" and route.accordion
+    local entry = M.cache and M.cache[pageKey]
+    if type(accordion) ~= "table" or not (entry and entry.sections) then return end
+    local prefix = tostring(pageKey) .. ":"
+    local pending = M._msuf2SearchRouteOpenSections
+    for key, value in pairs(accordion) do
+        if type(key) == "string" and key:sub(1, #prefix) == prefix then
+            if pending then pending[key] = nil end
+            local section = entry.sections[key:sub(#prefix + 1)]
+            local collapsible = section and section._msuf2CollapsibleEntry
+            local wanted = value and true or false
+            if collapsible and collapsible.SetOpenImmediate and (collapsible.open == true) ~= wanted then
+                collapsible.SetOpenImmediate(wanted)
+            end
+        end
+    end
 end
 local function ScrollToSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)
     if SearchCombatLocked() then return end
@@ -1193,6 +1214,7 @@ local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route
     local selected = M.SelectPage(pageKey)
     local region, exactMatched
     if selected ~= false and M.activeKey == pageKey then
+        ApplyRouteSectionsInPlace(pageKey, route)
         local entry = M.cache and M.cache[pageKey]
         if entry and entry.wrapper then
             region, exactMatched = FindCurrentSearchAnchor(pageKey, query, fallback, preferredAnchor, exactTarget)

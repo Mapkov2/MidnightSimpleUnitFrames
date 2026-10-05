@@ -42,6 +42,8 @@ local function GCDBarSupported()
     end
     return gcdBarSupported
 end
+-- Search drops the GCD Bar rows where this page never builds the section.
+M.CastbarGCDBarSupported = GCDBarSupported
 -- Section builders take the page state table built by CreateCastbarPageState
 -- (preview handle, refresh requests and the shared cast-control binders) and
 -- re-establish the binder names they use before their unchanged bodies.

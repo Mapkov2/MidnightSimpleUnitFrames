@@ -93,6 +93,7 @@ clients+Forever*codecs	lua+driver	tools/tests/classic_profile_import_transaction
 -	lua+driver	tools/tests/classic_class_resources_smoke.lua	{root/}	Classic class-resource ownership smoke failed
 -	lua	tools/tests/classic_texture_layer_contract_smoke.lua	{root}	Texture Layer menu contract failed
 -	lua	tools/tests/search_client_row_filter_smoke.lua	{root}	Search client row filter smoke failed
+clients+Forever	lua	tools/tests/search_client_dead_rows_smoke.lua	{root} {flavor}	Search offers only Castbar and Colors rows their page builds: {flavor}
 -	lua	tools/tests/classic_font_return_smoke.lua	{root}	Classic font return contract failed
 -	lua	tools/tests/font_checked_family_smoke.lua	{root}	Mainline SetFont fallback contract failed
 -	lua	tools/tests/defaults_powerbarcolor_smoke.lua	{root}	The defaults wrote into Blizzard PowerBarColor or published a generic global
@@ -336,6 +337,7 @@ clients+Forever	lua	tools/tests/profile_gameplay_swing_timers_smoke.lua	{root} {
 -	lua	tools/tests/profile_name_length_smoke.lua	{root}	A profile name the Suite cannot follow was accepted
 clients+Forever	lua	tools/tests/profile_rename_suite_order_smoke.lua	{root} {flavor}	Profile rename did not ask the Suite first: {flavor}
 clients+Forever	lua	tools/tests/search_feature_targets_smoke.lua	{root} {flavor}	Exact feature search targets and profile navigation: {flavor}
+clients+Forever	lua	tools/tests/search_exact_route_sections_smoke.lua	{root} {flavor}	Exact search reaches controls in closed lazy sections: {flavor}
 clients+Forever	lua	tools/tests/options_loader_readiness_smoke.lua	{root} {flavor}	Cold Options keybind readiness and menu navigation: {flavor}
 clients+Forever	lua	tools/tests/search_locale_queries_smoke.lua	{root} {flavor}	Localized menu search queries and FAQ coverage: {flavor}
 -	lua	tools/tests/search_examples_render_smoke.lua	{root}	Rendered search examples honor Core/Suite availability gates

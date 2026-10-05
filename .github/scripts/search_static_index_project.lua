@@ -324,15 +324,12 @@ local function InstallClientFacts(target)
     -- offered only when the client can drive the bar C-side, which
     -- MSUF_Menu2_GlobalCastbars.lua probes as C_Spell.GetSpellCooldownDuration plus
     -- StatusBar:SetTimerDuration; the permissive region stub already answers the
-    -- widget half. Both arrived with the 12.1 Mainline client, which is why the
-    -- shipped Classic index carries no GCD rows.
-    if row.IsClassic ~= "true" then
-        local spellAPI = _G.C_Spell or {}
-        _G.C_Spell = spellAPI
-        spellAPI.GetSpellCooldownDuration = spellAPI.GetSpellCooldownDuration or function() return 0 end
-    else
-        _G.C_Spell = nil
-    end
+    -- widget half. Every index carries the GCD rows: search drops them on a client
+    -- whose own probe fails (M.CastbarGCDBarSupported in the static row filter), so
+    -- no client family is assumed to have or to lack the Duration API.
+    local spellAPI = _G.C_Spell or {}
+    _G.C_Spell = spellAPI
+    spellAPI.GetSpellCooldownDuration = spellAPI.GetSpellCooldownDuration or function() return 0 end
 
     local namespace = _G.MSUF_NS
     if type(namespace) ~= "table" then Fail("WoW stubs did not create MSUF_NS") end

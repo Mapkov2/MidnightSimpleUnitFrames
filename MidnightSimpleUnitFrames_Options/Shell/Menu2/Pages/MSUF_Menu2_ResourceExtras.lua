@@ -48,13 +48,14 @@ local CLIENT_EXTRAS={
         {"arcaneWindowTextFrom","slider","Show the time from (seconds left, 0 = always)",0,15,1,280,"arcaneWindowTextFrom",0},
         {"arcaneWindowWarnSeconds","slider","Arcane window warning (seconds)",0,10,1,280,"arcaneWindowWarnSeconds",3},
         {"arcaneWindowWarnLastGCD","toggle","Warn during the last global cooldown","arcaneWindowWarnLastGCD",false},
-    } end},
+    } end,colors={"ignorePainColor","arcaneWindowColor","arcaneWindowSoulColor","arcaneWindowWarnColor"}},
     {wanted=RegenTimers,specs=function() return {
         {"manaRegenPause","toggle","Regeneration pause after spending","manaRegenPause",false},
         {"manaGainPulse","toggle","Mana return pulse","manaGainPulse",false},
-    } end},
+    } end,colors={"manaRegenPauseColor","manaGainPulseColor"}},
 }
--- Setting keys of every client-only extra, and those this client builds.
+-- Setting keys of every client-only extra and of its color (Colors page,
+-- BuildColors), and those this client builds.
 function ResourceExtras.ClientOnlySettings()
     local all,built={},{}
     for _,group in ipairs(CLIENT_EXTRAS) do
@@ -62,6 +63,10 @@ function ResourceExtras.ClientOnlySettings()
         for _,spec in ipairs(group.specs()) do
             all["bars."..spec[1]]=true
             if wanted then built["bars."..spec[1]]=true end
+        end
+        for _,key in ipairs(group.colors) do
+            all["bars."..key]=true
+            if wanted then built["bars."..key]=true end
         end
     end
     return all,built
