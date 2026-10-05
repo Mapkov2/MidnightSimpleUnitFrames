@@ -175,6 +175,7 @@ clients+Forever	lua	tools/tests/classic_aura_page_client_gates_smoke.lua	{root} 
 classics	lua+driver	tools/tests/classic_aura_faction_smoke.lua	{root/} {flavor}	Classic aura faction smoke failed: {flavor}
 classics	lua	tools/tests/classic_aura_dispel_type_direct_smoke.lua	{root} {flavor}	Classic aura Any dispel type border misses debuffs the player cannot dispel: {flavor}
 classics	lua	tools/tests/classic_aura_group_text_offsets_smoke.lua	{root} {flavor}	Classic group aura stack and cooldown text ignore their lane settings: {flavor}
+classics	lua	tools/tests/classic_aura_setting_parity_smoke.lua	{root} {flavor}	Classic aura settings the shared menu offers do not reach the Classic lanes: {flavor}
 -	lua+driver	tools/tests/classic_aura_rank_name_match_smoke.lua	{root/}	Classic aura rank name-match smoke failed
 -	lua+driver	tools/tests/classic_group_indicator_data_smoke.lua	{root/}	Classic group indicator data smoke failed
 -	lua+driver	tools/tests/classic_raid_manager_mode_smoke.lua	{root/}	Classic Raid Manager mode smoke failed

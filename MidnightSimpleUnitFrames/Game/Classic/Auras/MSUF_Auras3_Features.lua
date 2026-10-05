@@ -586,19 +586,26 @@ local function AddIndicatorLane(lanes, order, unit, item, index, prefix)
     if type(item) ~= "table" or item.enabled == false then return end
     local spellIDs = item.includeSpellIDs or SpellIDHash(item.spellIDs)
     if not spellIDs then return end
+    -- A corner Custom Spell slot carries its Filter dropdown as customFilter
+    -- (HELPFUL|PLAYER, HELPFUL, HARMFUL|PLAYER or HARMFUL), which Retail
+    -- scans with as given (SpellIndicators_Config CompileSlot).
+    local customFilter = type(item.customFilter) == "string" and item.customFilter or nil
+    local helpful = not (customFilter and customFilter:find("HARMFUL", 1, true))
+    local onlyOwn = item.onlyOwn == true
+    if customFilter then onlyOwn = customFilter:find("PLAYER", 1, true) ~= nil end
     local entry = {
         name = item.display or item.auraName,
-        auraType = "BUFF",
-        onlyOwn = item.onlyOwn == true,
+        auraType = helpful and "BUFF" or "DEBUFF",
+        onlyOwn = onlyOwn,
         placed = item.placed,
         frame = item.frame,
         layer = item.layer,
         color = item.color,
         icon = item.icon,
-        filters = { onlyMine = item.onlyOwn == true },
+        filters = { onlyMine = onlyOwn },
     }
     local kind = prefix .. tostring(index)
-    local lane = BaseLane(unit, kind, entry, index, spellIDs, true, "ClassicIndicator" .. tostring(prefix) .. tostring(index))
+    local lane = BaseLane(unit, kind, entry, index, spellIDs, helpful, "ClassicIndicator" .. tostring(prefix) .. tostring(index))
     lane.max = 1
     lane.cols, lane.rows = 1, 1
     lane.width, lane.height = lane.buttonWidth, lane.buttonHeight
