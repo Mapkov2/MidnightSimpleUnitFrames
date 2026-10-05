@@ -30,6 +30,7 @@ local math_floor, math_ceil, math_min, math_max = math.floor, math.ceil, math.mi
 local wipe = table.wipe or wipe
 local IsSecret = _G.issecretvalue or function() return false end
 local InCombatLockdown = _G.InCombatLockdown
+local AuraUtil = AuraUtil
 -- Debuffs this player can dispel, in the filter this client honours
 -- (Game/Shared/Initialize.lua; Classic Era needs HARMFUL|RAID).
 local DISPELLABLE_DEBUFF_FILTER = MSUF.Client.DispellableDebuffFilter or "HARMFUL|RAID_PLAYER_DISPELLABLE"
@@ -83,15 +84,20 @@ local SORT_MODE = {
     EXPIRATION_ONLY = 4, -- soonest expiry first, then ID
     NAME = 5,            -- by name, own auras first on ties
     NAME_ONLY = 6,       -- by name, then ID
+    BIG_DEFENSIVE = 7,   -- others' auras first, then latest expiry, then ID
+    IMPORTANT = 8,       -- important spells first, then ID
+    DEBUFF_TYPE = 9,     -- boss, priority, raid, other debuffs; then as Default
 }
 --- The modes whose comparators read the lane's "cast by the player" answers.
 local SORT_READS_OWNERSHIP = {
     [SORT_MODE.PLAYER_FIRST] = true, [SORT_MODE.DURATION] = true,
     [SORT_MODE.EXPIRATION] = true, [SORT_MODE.NAME] = true,
+    [SORT_MODE.BIG_DEFENSIVE] = true, [SORT_MODE.DEBUFF_TYPE] = true,
 }
 --- The time-keyed modes, the only ones an in-place refresh can reorder.
 local SORT_REORDERS_ON_UPDATE = {
     [SORT_MODE.DURATION] = true, [SORT_MODE.EXPIRATION] = true, [SORT_MODE.EXPIRATION_ONLY] = true,
+    [SORT_MODE.BIG_DEFENSIVE] = true,
 }
 
 local DEFAULT_SHARED = {
@@ -390,7 +396,10 @@ end
 local function SortMode(value, fallback)
     value = tostring(value or ""):upper():gsub("[%s%-]+", "_")
     if value == "DEFAULT" or value == "PLAYER" then return SORT_MODE.PLAYER_FIRST end
-    if value == "DURATION" or value == "DURATION_ONLY" or value == "BIG_DEFENSIVE" then return SORT_MODE.DURATION end
+    if value == "DURATION" or value == "DURATION_ONLY" then return SORT_MODE.DURATION end
+    if value == "BIG_DEFENSIVE" then return SORT_MODE.BIG_DEFENSIVE end
+    if value == "IMPORTANT_FIRST" then return SORT_MODE.IMPORTANT end
+    if value == "UNIT_FRAME_DEBUFF" then return SORT_MODE.DEBUFF_TYPE end
     if value == "EXPIRATION" or value == "TIME_REMAINING" or value == "TIME" then return SORT_MODE.EXPIRATION end
     if value == "EXPIRATION_ONLY" then return SORT_MODE.EXPIRATION_ONLY end
     if value == "NAME" then return SORT_MODE.NAME end
@@ -817,6 +826,70 @@ local function SortAurasNameOnly(a, b)
     return AuraID(a) < AuraID(b)
 end
 
+--- Other Defensives First, as AuraUtil.BigDefensiveAuraCompare: auras the
+--- player did not cast first, then the latest expiry (permanent last).
+local function SortAurasBigDefensive(a, b)
+    local am, bm = sortOwnership[a.auraInstanceID] == true, sortOwnership[b.auraInstanceID] == true
+    if am ~= bm then return bm end
+    local ea = PlainNumber(a.expirationTime) or 0
+    local eb = PlainNumber(b.expirationTime) or 0
+    if ea ~= eb then return ea > eb end
+    return AuraID(a) < AuraID(b)
+end
+
+-- Spell flags are static spell data: each spell ID is asked once.
+local importantBySpellID, priorityBySpellID = {}, {}
+
+--- Important First, as AuraUtil.ImportantOnlyAuraCompare.
+local function ImportantValue(data)
+    local spellID = PlainNumber(data.spellId)
+    if not spellID then return false end
+    local important = importantBySpellID[spellID]
+    if important == nil then
+        important = Features.IsImportantAura(data) == true
+        importantBySpellID[spellID] = important
+    end
+    return important
+end
+
+local function SortAurasImportant(a, b)
+    local ia, ib = ImportantValue(a), ImportantValue(b)
+    if ia ~= ib then return ia end
+    return AuraID(a) < AuraID(b)
+end
+
+local function PriorityDebuff(data)
+    local spellID = PlainNumber(data.spellId)
+    local isPriority = AuraUtil and AuraUtil.IsPriorityDebuff
+    if not (spellID and isPriority) then return false end
+    local priority = priorityBySpellID[spellID]
+    if priority == nil then
+        priority = PlainBool(isPriority(spellID)) == true
+        priorityBySpellID[spellID] = priority
+    end
+    return priority
+end
+
+--- Debuff Type First, as AuraUtil.UnitFrameDebuffComparator: the debuff type
+--- AuraUtil.ProcessAura assigns (BossDebuff, BossBuff, PriorityDebuff,
+--- NonBossRaidDebuff, then every other aura), then the Default order.
+local function DebuffTypeRank(data)
+    local boss = PlainBool(data.isBossAura) == true or PlainBool(data.isTankRoleAura) == true
+        or PlainBool(data.isHealerRoleAura) == true or PlainBool(data.isDPSRoleAura) == true
+    local harmful = PlainBool(data.isHarmful) == true
+    local raid = PlainBool(data.isRaid) == true
+    if boss and not raid then return harmful and 1 or 2 end
+    if not harmful then return 5 end
+    if raid then return boss and 1 or 4 end
+    return PriorityDebuff(data) and 3 or 5
+end
+
+local function SortAurasDebuffType(a, b)
+    local ra, rb = DebuffTypeRank(a), DebuffTypeRank(b)
+    if ra ~= rb then return ra < rb end
+    return SortAurasDefault(a, b)
+end
+
 SortComparator = function(mode)
     if mode == SORT_MODE.PLAYER_FIRST then return SortAurasDefault end
     if mode == SORT_MODE.DURATION then return SortAurasDurationDesc end
@@ -824,6 +897,9 @@ SortComparator = function(mode)
     if mode == SORT_MODE.EXPIRATION_ONLY then return SortAurasExpirationOnly end
     if mode == SORT_MODE.NAME then return SortAurasName end
     if mode == SORT_MODE.NAME_ONLY then return SortAurasNameOnly end
+    if mode == SORT_MODE.BIG_DEFENSIVE then return SortAurasBigDefensive end
+    if mode == SORT_MODE.IMPORTANT then return SortAurasImportant end
+    if mode == SORT_MODE.DEBUFF_TYPE then return SortAurasDebuffType end
     -- Arrival order (instance ID); what Reverse turns into newest first.
     if mode == SORT_MODE.ARRIVAL then return SortAurasID end
     return SortAuras

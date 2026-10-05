@@ -7,6 +7,8 @@
 --   * Up/Down (Single Column) growth keeps one column on unit and container lanes
 --   * portrait icons past the first grow in the lane's Growth direction
 --   * group Tracked and External lanes wear the Buff appearance (shape, border, shadow)
+--   * Sort By Other Defensives First, Important First and Debuff Type First
+--     follow the Blizzard comparators instead of the Default order
 -- Arguments: repository root, flavor (Vanilla, TBC or Mists).
 local root = assert(arg[1], "repository root argument missing")
 root = (tostring(root):gsub("\\", "/"):gsub("/+$", ""))
@@ -120,7 +122,11 @@ _G.C_UnitAuras = {
         return nil
     end,
 }
-_G.AuraUtil = {}
+-- Static spell flags the sort modes read: C_Spell.IsSpellImportant, and the
+-- class list behind Classic's AuraUtil.IsPriorityDebuff.
+local IMPORTANT_SPELLS, PRIORITY_SPELLS = { [99001] = true }, { [6788] = true }
+_G.C_Spell = { IsSpellImportant = function(spellID) return IMPORTANT_SPELLS[spellID] == true end }
+_G.AuraUtil = { IsPriorityDebuff = function(spellID) return PRIORITY_SPELLS[spellID] == true end }
 _G.MSUF_DB = { general = {}, auras3 = { enabled = true, shared = {}, perUnit = {} } }
 
 local manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
@@ -337,5 +343,49 @@ end
 assert(groupConfig.lanes.debuff.iconShape == "RECTANGLE" and groupConfig.lanes.debuff.iconStyle.borderEnabled == false,
     "the group debuff lane did not keep the Debuff appearance")
 shared.appearanceIconShapes, shared.appearanceIconStyles = nil, nil
+
+-- 6. Sort By: Other Defensives First, Important First, Debuff Type First ------------------
+-- The shared menu offers them on every client; each follows the Blizzard
+-- comparator Retail's native containers use (Blizzard_AuraContainerUtil).
+local function LaneOrder(unit, kind, layoutShared, auras)
+    SetAuras(unit, auras)
+    _G.MSUF_DB.auras3.perUnit[unit] = { layout = {}, filters = {}, layoutShared = layoutShared }
+    A3.BumpRuntimeConfig()
+    return ShownIDs(UnitFrame(unit)._msufA3State.lanes[kind])
+end
+local function SortAura(id, spellID, helpful, mine, fields)
+    local aura = { auraInstanceID = id, spellId = spellID, name = "Spell" .. spellID, icon = id, duration = 30,
+        expirationTime = 70, isHelpful = helpful, isHarmful = not helpful, mine = mine,
+        sourceUnit = mine and "player" or "party2", isFromPlayerOrPlayerPet = mine }
+    for key, value in pairs(fields or {}) do aura[key] = value end
+    return aura
+end
+-- AuraUtil.BigDefensiveAuraCompare: others' auras first, then the latest expiry.
+local defensives = {
+    SortAura(21, 871, true, true, { expirationTime = 62 }),
+    SortAura(22, 33206, true, false, { expirationTime = 58 }),
+    SortAura(23, 1022, true, false, { expirationTime = 66 }),
+}
+local order = LaneOrder("player", "buff", { showBuffs = true, showDebuffs = false, buffSortMethod = "BIG_DEFENSIVE" },
+    defensives)
+assert(order == "23,22,21", "Other Defensives First ordered the player's buffs " .. order .. ", expected 23,22,21")
+assert(LaneOrder("player", "buff", { showBuffs = true, showDebuffs = false }, defensives) == "21,22,23",
+    "precondition: the Default order no longer puts the player's own aura first")
+-- AuraUtil.ImportantOnlyAuraCompare: important spells first, then ID.
+local debuffs = {
+    SortAura(11, 589, false, true),
+    SortAura(12, 99001, false, false, { isBossAura = true }),
+    SortAura(13, 6788, false, false),
+    SortAura(14, 8122, false, false, { isRaid = true }),
+}
+order = LaneOrder("target", "debuff", { showBuffs = false, showDebuffs = true, debuffSortMethod = "IMPORTANT_FIRST" },
+    debuffs)
+assert(order == "12,11,13,14", "Important First ordered the target's debuffs " .. order .. ", expected 12,11,13,14")
+-- AuraUtil.UnitFrameDebuffComparator: boss, priority, raid, then the rest in
+-- the Default order (the player's own first).
+order = LaneOrder("target", "debuff", { showBuffs = false, showDebuffs = true, debuffSortMethod = "UNIT_FRAME_DEBUFF" },
+    debuffs)
+assert(order == "12,13,14,11", "Debuff Type First ordered the target's debuffs " .. order .. ", expected 12,13,14,11")
+_G.MSUF_DB.auras3.perUnit.target.layoutShared = { showBuffs = false, showDebuffs = false }
 
 print("classic aura setting parity smoke passed: " .. flavor)
