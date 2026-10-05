@@ -25,7 +25,7 @@ local Bars, BoolValue, NumValue, SetValue = AP.Bars, AP.BoolValue, AP.NumValue, 
 local DeepCopyTable, BuildTableControlSpecs, SwitchAt = AP.DeepCopyTable, AP.BuildTableControlSpecs, AP.SwitchAt
 local SetControlEnabled, ControlMeta, RegisterControl = AP.SetControlEnabled, AP.ControlMeta, AP.RegisterControl
 SwitchAt = function(ctx, parent, label, x, y, width, source, key, default, apply, meta)
-    local control = AP.SwitchAt(ctx, parent, label, x, y, width, source, key, default, apply, meta)
+    local control = AP.SwitchAt(ctx, parent, label, x, y, width and width - 22, source, key, default, apply, meta)
     AP.RegisterControl(control, meta, label, "toggle")
     return control
 end
@@ -170,7 +170,11 @@ local function RegisterSegment(segment, path, values, classification)
     end
     return segment
 end
-local MoveWidget = W.MoveWidget or AP.MoveWidget
+local function MoveWidget(widget, parent, x, y, width, titleJustify)
+    -- This page's column widths include the checkbox and its label gap.
+    if width and widget and widget._msuf2ControlKind == "toggle" then width = max(20, width - 36) end
+    return W.MoveWidget(widget, parent, x, y, width, titleJustify)
+end
 local SetControlsEnabled = W.SetControlsEnabled
 local CPPreview = M.ClassPowerPreview or {}
 local function AddTooltip(control, title, body) if M.AddTooltip then M.AddTooltip(control, title, body, { hook = true, owner = "ANCHOR_RIGHT" }) end end
@@ -779,7 +783,7 @@ local Page = {}
 Page.__index = Page
 
 local function PlaceColumn(parent, x, y, step, width, titleJustify, ...)
-    for i = 1, select("#", ...) do MoveWidget(select(i, ...), parent, x, y - (i - 1) * step, width, titleJustify) end
+    for i = 1, select("#", ...) do MoveWidget(select(i, ...), parent, x, y - (i - 1) * step, width, titleJustify or "LEFT") end
 end
 local function HasPercent(mode) return tostring(mode or ""):find("PERCENT", 1, true) ~= nil end
 local function HidePercentValue(source, key)
@@ -994,7 +998,7 @@ function Page:BuildHeader()
 end
 
 function Page:BuildClassLayout()
-    local compact, width = self.width < 620, self.width
+    local compact, width = self.width < 680, self.width
     local section = self.b:CollapsibleSection("classpower_display", "Layout", compact and 760 or 440, true)
     local applyRefresh = self:WithRefresh(ApplyClassPower)
     local applySourceRefresh = self:WithRefresh(ApplyClassPowerSource)
@@ -1023,10 +1027,10 @@ function Page:BuildClassLayout()
     local rightX = compact and 32 or min(max(430, floor(width * .52)), max(360, width - 360))
     local leftW = compact and max(250, width - 64) or max(250, rightX - 74)
     local rightW = compact and leftW or max(250, width - rightX - 32)
-    local controlW = compact and max(250, min(320, width - 74)) or 300
+    local controlW = min(300, leftW, rightW)
     W.ControlCard(section, "Shape & Size", nil, 18, -38, leftW + 28, 370)
     W.ControlCard(section, "Position", nil, rightX - 14, compact and -430 or -38, rightW + 28, 286)
-    PlaceColumn(section, 32, -116, 54, controlW, nil, self.cp.shape, self.cp.height, self.cp.widthMode, self.cp.width, self.cpAlign)
+    PlaceColumn(section, 32, -116, 54, controlW, "LEFT", self.cp.shape, self.cp.height, self.cp.widthMode, self.cp.width, self.cpAlign)
     PlaceColumn(section, rightX, compact and -484 or -92, 54, controlW, nil, self.cp.x, self.cp.y, self.cp.level)
 end
 
@@ -1054,28 +1058,37 @@ function Page:BuildClassBehavior()
         { "smooth", "toggle", "Smooth fill", "classPowerSmoothFill", false, ApplyClassPowerSmoothing, group = "cp",
             helpTitle = "Class Resource Smooth Fill", help = "Smooths resource changes. Runes, Essence recharge, and timers keep their own animation." },
     })
-    local rightX = min(max(380, floor(self.width * .45)), max(320, self.width - 420))
-    W.ControlCardBackdrop(section, 14, -38, max(280, rightX - 42), 230)
-    W.ControlCardBackdrop(section, rightX - 14, -38, max(280, (section._msuf2Width or self.width) - rightX - 28) + 14, 230)
-    local function PlaceSupported(x, keys)
-        local y = -38
+    local twoColumns = self.width >= 680
+    local cardW = twoColumns and floor((self.width - 56) / 2) or self.width - 36
+    local rightX = 52 + cardW
+    local function PlaceSupported(x, y, keys)
+        local count = 0
         for key in keys:gmatch("%S+") do
             if fields[key] then
-                MoveWidget(fields[key], section, x, y)
-                y = y - 32
+                MoveWidget(fields[key], section, x, y - count * 32, cardW - 28)
+                count = count + 1
             end
         end
+        return count
     end
-    PlaceSupported(14, "anchor charged text rune reverse sweeping")
-    PlaceSupported(rightX, "ele ebon shadow ironfur ironfurHashes prediction smooth")
+    local leftRows = PlaceSupported(32, -52, "anchor charged text rune reverse sweeping")
+    local rightRows = PlaceSupported(twoColumns and rightX or 32, twoColumns and -52 or -52 - leftRows * 32,
+        "ele ebon shadow ironfur ironfurHashes prediction smooth")
+    local rows = twoColumns and max(leftRows, rightRows) or leftRows + rightRows
+    local cardH = 22 + rows * 32
+    W.ControlCardBackdrop(section, 18, -38, cardW, cardH)
+    if twoColumns then W.ControlCardBackdrop(section, rightX - 14, -38, cardW, cardH) end
+    section._msuf2CursorY = -38 - cardH
+    self.b:FinishSection(section, 18)
     self.ironfurHashes = fields.ironfurHashes
 end
 
 function Page:BuildClassStyle()
-    local section = self.b:CollapsibleSection("classpower_visuals", "Appearance", 430, false)
+    local section = self.b:CollapsibleSection("classpower_visuals", "Appearance", 482, false)
     local width, inner = section._msuf2Width or self.width, max(320, (section._msuf2Width or self.width) - 64)
-    local cardW, controlW, frames = min(540, inner), min(360, min(540, inner) - 32), {}
-    local resources, text, opacity, pips = M.UnitSectionsShared.MakeTabFrames(section, -88, width, frames, "resources", "text", "opacity", "pips")
+    local cardW, frames = min(540, width - 36), {}
+    local controlW = cardW - 32
+    local resources, text, opacity, pips = M.UnitSectionsShared.MakeTabFrames(section, -108, width, frames, "resources", "text", "opacity", "pips")
     local values = VT("resources", "Textures", "text", "Text", "opacity", "Opacity", "pips", "Pips")
     RegisterSegment(W.SegmentTabs(self.ctx, section, { stateKey = "classPowerStyleTab", label = "Style area", values = values,
         width = min(620, inner), frames = frames, defaultTab = "resources", x = 32, y = -44 }), "style.workspace_tab", values)
@@ -1109,8 +1122,8 @@ function Page:BuildClassStyle()
         { "gap", "slider", "Pip gap", 0, 8, 1, 300, "classPowerGap", 0, group = "cp" },
     }))
     local resourcesCard, textCard, pipsCard
-    for _, card in ipairs({ { resources, "Resource & Textures", 248 }, { text, "Text", 318 }, { opacity, "Opacity", 204 }, { pips, "Pips & Border", 230 } }) do
-        local controlCard = W.ControlCard(card[1], card[2], nil, 18, -38, cardW + 28, card[3])
+    for _, card in ipairs({ { resources, "Resource & Textures", 252 }, { text, "Text", 318 }, { opacity, "Opacity", 214 }, { pips, "Pips & Border", 230 } }) do
+        local controlCard = W.ControlCard(card[1], card[2], nil, 18, -38, cardW, card[3])
         if card[1] == resources then resourcesCard = controlCard end
         if card[1] == text then textCard = controlCard end
         if card[1] == pips then pipsCard = controlCard end
@@ -1156,9 +1169,9 @@ function Page:BuildClassStyle()
             },
         })
     end
-    MoveWidget(self.cp.color, resources, 32, -72)
-    MoveWidget(self.cp.comboColor, resources, 32, -104, controlW)
-    PlaceColumn(resources, 32, -192, 54, controlW, nil, self.cp.fgTex, self.cp.bgTex)
+    MoveWidget(self.cp.color, resources, 32, -76, controlW)
+    MoveWidget(self.cp.comboColor, resources, 32, -112, controlW, "LEFT")
+    PlaceColumn(resources, 32, -170, 58, controlW, nil, self.cp.fgTex, self.cp.bgTex)
     MoveWidget(self.cp.mode, text, 32, -84, controlW, "LEFT")
     PlaceColumn(text, 32, -136, 52, controlW, nil, self.cp.font, self.cp.layer, self.cp.textX, self.cp.textY)
     PlaceColumn(opacity, 32, -84, 52, controlW, nil, self.cp.bg, self.cp.filled, self.cp.empty)
@@ -1194,9 +1207,9 @@ end
 function Page:BarArea(id, title, height, open)
     local section = self.b:CollapsibleSection(id, title, height, open)
     local cardW = min(650, (section._msuf2Width or self.width) - 28)
-    local controlW = min(300, max(240, cardW - 64))
     local twoColumns = self.width >= 680 and cardW >= 620
-    return section, controlW, twoColumns and 60 + controlW or 32, twoColumns, cardW
+    local controlW = twoColumns and floor((cardW - 56) / 2) or min(360, cardW - 36)
+    return section, controlW, twoColumns and 52 + controlW or 32, twoColumns, cardW
 end
 
 function Page:BuildDetachedPower()
@@ -1280,8 +1293,8 @@ function Page:BuildDetachedPower()
 end
 
 function Page:BuildDetachedPowerText()
-    local text, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_detached_power_text", "Text", self.width < 680 and 950 or 700)
-    local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 620 or 850)
+    local text, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_detached_power_text", "Text", self.width < 680 and 1020 or 700)
+    local powerTextCard = W.ControlCard(text, "Power Text", nil, 14, -38, cardW, twoColumns and 620 or 962)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(powerTextCard, {
             title = "Player Power Text Settings",
@@ -1355,7 +1368,7 @@ function Page:BuildDetachedPowerText()
     for i, control in ipairs({ self.dpbHide[1], self.dpbText.left, self.dpbHide[2], self.dpbText.center, self.dpbHide[3], self.dpbText.sep }) do
         MoveWidget(control, text, 32, ({ -264, -298, -350, -384, -436, -470 })[i], controlW, "LEFT")
     end
-    PlaceColumn(text, rightX, twoColumns and -154 or -446, 54, controlW, "LEFT", self.dpbText.size, fontOutline, self.dpbText.x, self.dpbText.y, self.dpbText.layer, slot, offsets[1], offsets[2])
+    PlaceColumn(text, rightX, twoColumns and -154 or -558, 54, controlW, "LEFT", self.dpbText.size, fontOutline, self.dpbText.x, self.dpbText.y, self.dpbText.layer, slot, offsets[1], offsets[2])
     self:Add("detachedText", fontOutline, unpack(self.dpbHide))
     self:Add("detachedSlot", slot, offsets[1], offsets[2])
 end
@@ -1412,7 +1425,7 @@ function Page:BuildPlayerHP()
     })
     PlaceColumn(layout, 32, -154, 54, controlW, "LEFT", self.hp.anchor, self.hp.widthMode, self.hp.manualWidth, self.hp.shape, self.hp.orbSize,
         self.hp.height, self.hp.smooth)
-    PlaceColumn(layout, rightX, twoColumns and -154 or -580, 54, controlW, "LEFT", self.hp.gap, self.hp.x, self.hp.y, self.hp.layer)
+    PlaceColumn(layout, rightX, twoColumns and -154 or -540, 54, controlW, "LEFT", self.hp.gap, self.hp.x, self.hp.y, self.hp.layer)
     self:AddNamed("hp", self.hp, "anchor widthMode shape height smooth gap x y layer")
     self:AddNamed("hpManual", self.hp, "manualWidth")
     self:AddNamed("hpOrb", self.hp, "orbSize")
@@ -1474,7 +1487,7 @@ end
 
 function Page:BuildPlayerHPText()
     local text, controlW, rightX, twoColumns, cardW = self:BarArea("classpower_player_hp_text", "Text", self.width < 680 and 800 or 620)
-    local hpTextCard = W.ControlCard(text, "HP Text", nil, 14, -38, cardW, twoColumns and 520 or 690)
+    local hpTextCard = W.ControlCard(text, "HP Text", nil, 14, -38, cardW, twoColumns and 520 or 722)
     if W.AttachContextColorShortcut then
         W.AttachContextColorShortcut(hpTextCard, {
             title = "Extra Health Text Settings",
@@ -1531,7 +1544,7 @@ function Page:BuildPlayerHPText()
     for i, control in ipairs({ self.hpText.right, self.hpHide[1], self.hpText.left, self.hpHide[2], self.hpText.center, self.hpHide[3], self.hpText.sep }) do
         MoveWidget(control, text, 32, ({ -188, -240, -274, -326, -360, -412, -446 })[i], controlW, "LEFT")
     end
-    PlaceColumn(text, rightX, twoColumns and -188 or -440, 54, controlW, "LEFT", self.hpText.reverse, self.hpText.size, self.hpText.x, self.hpText.y)
+    PlaceColumn(text, rightX, twoColumns and -188 or -534, 54, controlW, "LEFT", self.hpText.reverse, self.hpText.size, self.hpText.x, self.hpText.y)
     self:Add("hp", self.hpTextEnable)
     self:Add("hpText", shared)
     self:AddNamed("hpCustomText", self.hpText, "right left center sep reverse size")
@@ -1542,10 +1555,10 @@ function Page:BuildPlayerHPText()
 end
 
 function Page:BuildAlternativeMana()
-    local section = self.b:CollapsibleSection("classpower_alt_mana", "Layout", 400, false)
+    local section = self.b:CollapsibleSection("classpower_alt_mana", "Layout", 402, false)
     local cardW = min(620, (section._msuf2Width or self.width) - 28)
     local controlW = min(360, cardW - 64)
-    local manaCard = W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 330)
+    local manaCard = W.ControlCard(section, "Visibility & Size", "For specializations that use mana alongside another resource.", 14, -38, cardW, 346)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(manaCard, { "class_power.alt_mana" }, {
             title = "Alternative Mana Color",
@@ -1711,15 +1724,15 @@ function Page:Build()
     BuildInlineClassPowerPreview(self.ctx, self.b)
     self:BuildClassLayout()
     self:LazySection("classpower_behavior", "Behavior", 282, Page.BuildClassBehavior)
-    self:LazySection("classpower_visuals", "Appearance", 430, Page.BuildClassStyle)
+    self:LazySection("classpower_visuals", "Appearance", 482, Page.BuildClassStyle)
     self:LazySection("classpower_visibility", "Auto-Hide", 248, Page.BuildClassVisibility)
     self:LazySection("classpower_detached_power", "Layout", function() return self.width < 680 and 932 or 600 end, Page.BuildDetachedPower)
     self:LazySection("classpower_detached_power_textures", "Appearance", 240, Page.BuildDetachedPowerTextures)
-    self:LazySection("classpower_detached_power_text", "Text", function() return self.width < 680 and 950 or 700 end, Page.BuildDetachedPowerText)
+    self:LazySection("classpower_detached_power_text", "Text", function() return self.width < 680 and 1020 or 700 end, Page.BuildDetachedPowerText)
     self:LazySection("classpower_player_hp", "Layout", function() return self.width < 680 and 840 or 600 end, Page.BuildPlayerHP)
     self:LazySection("classpower_player_hp_textures", "Appearance", 440, Page.BuildPlayerHPTextures)
     self:LazySection("classpower_player_hp_text", "Text", function() return self.width < 680 and 800 or 620 end, Page.BuildPlayerHPText)
-    self:LazySection("classpower_alt_mana", "Layout", 400, Page.BuildAlternativeMana)
+    self:LazySection("classpower_alt_mana", "Layout", 402, Page.BuildAlternativeMana)
     self:LazySection("classpower_alt_mana_behavior", "Behavior", 96, Page.BuildAlternativeManaBehavior)
     if M.ResourceExtrasPage then
         self:LazySection("classpower_resource_extras", "Additional resources", M.ResourceExtrasPage.Height,

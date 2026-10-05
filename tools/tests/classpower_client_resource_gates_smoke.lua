@@ -61,7 +61,13 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     setfenv(chunk, env)
     local Page = chunk("MidnightSimpleUnitFrames_Options", ns)
     local page = setmetatable({ width = 1000, kinds = {}, ctx = {}, groups = { cp = {} }, refresh = function() end,
-        b = { CollapsibleSection = function() return env.CreateFrame("Frame") end } }, { __index = Page })
+        b = {
+            CollapsibleSection = function() return env.CreateFrame("Frame") end,
+            FinishSection = function(_, section, bottomPad)
+                assert(section._msuf2CursorY < -38, "behavior height was not derived from its rows")
+                section:SetHeight(-section._msuf2CursorY + bottomPad)
+            end,
+        } }, { __index = Page })
     page:BuildClassBehavior()
     AP.BuildTableControlSpecs = originalBuilder
     local gated = { showChargedComboPoints = modern, runeShowTime = modern or mists,

@@ -99,7 +99,7 @@ function ResourceExtras.Build(page,Bars,Apply)
     local section=page.b:CollapsibleSection("classpower_resource_extras","Additional resources",120+#specs*54,false)
     for _,spec in ipairs(specs) do spec.meta=Meta(spec[1],spec[1]) end
     local controls=page:Controls(section,Bars,Apply,"resource_extras",specs)
-    for i,spec in ipairs(specs) do W.MoveWidget(controls[spec[1]],section,24,-40-(i-1)*54,280) end
+    for i,spec in ipairs(specs) do W.MoveWidget(controls[spec[1]],section,24,-40-(i-1)*54,280,"LEFT") end
 end
 function ResourceExtras.BuildMarks(page,Bars,Apply)
     local ctx=page.ctx
@@ -175,7 +175,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         return out
     end
     local selector=W.Dropdown(section,"Resource mark",Values,280)
-    W.MoveWidget(selector,section,24,-40,280)
+    W.MoveWidget(selector,section,24,-40,280,"LEFT")
     M.ClassPowerWorkspace.BindDropdownWidget(ctx,selector,function() return selected end,function(value) selected=value;Refresh() end,
             Meta("marks.select",nil,"ephemeral"))
     local function Button(label,x,path,callback)
@@ -206,7 +206,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     local y=-154
     local function Drop(key,label,values,default)
         local widget=W.Dropdown(section,label,values,280)
-        W.MoveWidget(widget,section,24,y,280)
+        W.MoveWidget(widget,section,24,y,280,"LEFT")
         y=y-54
         M.ClassPowerWorkspace.BindDropdownWidget(ctx,widget,function() local rule=Rule();return rule and rule[key] or default end,
             function(value) Write(key,value) end,Meta("marks."..key))
@@ -218,7 +218,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     for _,spec in ipairs({{"value","Resource value",0,10000000,1,50},{"width","Mark width",1,20,1,2}}) do
         local key=spec[1]
         local widget=W.Slider(section,spec[2],spec[3],spec[4],spec[5],280)
-        W.MoveWidget(widget,section,24,y,280)
+        W.MoveWidget(widget,section,24,y,280,"LEFT")
         y=y-54
         if key=="value" then
             -- Registered before the value binding, so the range is set before the value.
@@ -234,7 +234,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
     for _,spec in ipairs({{"mark","Show resource mark",true},{"threshold","Change color at threshold",false}}) do
         local key=spec[1]
         local widget=W.Toggle(section,spec[2])
-        W.MoveWidget(widget,section,24,y,280)
+        W.MoveWidget(widget,section,24,y,280,"LEFT")
         y=y-38
         M.ClassPowerWorkspace.BindBoolWidget(ctx,widget,function()
             local rule=Rule()
