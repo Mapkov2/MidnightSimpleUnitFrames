@@ -19,9 +19,13 @@
 -- filter written out of combat (MSUF_UF_Group_Headers.lua NeedsNameList: Show
 -- player off on this layout, player first in role, class priority under a role
 -- order). Blizzard's header lists only the names in it, so a member who joins
--- during a fight gets no frame until it ends, by design. For those paths this
--- pins the part of that contract that holds: no protected write in combat, and
--- the joiner gets a frame once combat ends.
+-- during a fight gets no frame until it ends, by design (SecureGroupHeaders.lua
+-- SecureGroupHeader_Update: with no group or role filter the name list is the
+-- membership filter; upstream/classic_era and upstream/classic :476,
+-- upstream/live and upstream/forever :479). For those paths this pins that
+-- contract: in combat the header keeps exactly the members it had and the
+-- joiner has no frame, nothing protected is written, and the joiner gets a
+-- frame once combat ends.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -112,20 +116,28 @@ local function RunNameList(flavor, label, settings)
     h:RunTimers()
     local where = flavor .. " (" .. label .. ")"
     Check(GF.headers.party.attributes.sortMethod == "NAMELIST", where .. ": the small raid does not use a name list")
+    local before = Shown(h, GF.headers.party)
+    Check(before ~= "" and not before:find("raid6", 1, true), where .. ": precondition: the party header shows [" .. before .. "]")
     h:EnterCombat()
     h:SetRaid(6)
     h:Event("GROUP_ROSTER_UPDATE")
     h:RunTimers()
     Check(#h.violations == 0, where .. ": " .. #h.violations .. " protected write(s) in combat")
+    -- The name list was written out of combat and cannot change in it.
+    Check(GF.headers.party.attributes.sortMethod == "NAMELIST" and not tostring(GF.headers.party.attributes.nameList):find("raid6", 1, true),
+        where .. ": the name list changed in combat")
+    Check(GF.FrameForUnit("raid6") == nil, where .. ": the member who joined in combat has a frame although the name list leaves them out")
+    Check(Shown(h, GF.headers.party) == before, where .. ": in combat the party header shows [" .. Shown(h, GF.headers.party)
+        .. "] instead of the listed [" .. before .. "]")
     h:LeaveCombat()
     h:RunTimers()
     Check(GF.FrameForUnit("raid6") ~= nil, where .. ": the member who joined in combat has no frame after combat")
 end
 
-for _, flavor in ipairs({ "Mainline", "Vanilla" }) do
+for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
     Run(flavor)
     for label, settings in pairs(NAME_LIST_PATHS) do RunNameList(flavor, label, settings) end
 end
 
 if failures > 0 then error(("group small raid combat join smoke: %d failure(s)"):format(failures)) end
-print("group small raid combat join smoke: ok (Mainline, Vanilla)")
+print("group small raid combat join smoke: ok (Mainline, Forever, Vanilla, TBC, Mists)")
