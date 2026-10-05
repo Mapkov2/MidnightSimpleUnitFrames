@@ -125,15 +125,20 @@ local FONT_SCOPE_KEYS = KSW [[
 local FONT_ROOT_KEYS = KS("shortenNames", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots")
 local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget focus pet pettarget boss arena gf_party gf_raid gf_mythicraid]]
 local MISC_GENERAL_KEYS = KSW [[
-    menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
+    menuLocale numberAbbrevStyle slashMenuSnapEnabled hideAdvancedMenu showGameMenuButton menuFontKey
+    showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier tooltipShowAuraSpellIDs
     tooltipShowAuraCasterNames
-    showMinimapIcon showNavigationIcons previewDragHintAnimationEnabled playTargetSelectLostSounds ellesmereEditModeIntegration
+    showMinimapIcon showNavigationIcons previewDragHintAnimationEnabled playTargetSelectLostSounds playerResourcePingEnabled
+    ellesmereEditModeIntegration grid2EditModeIntegration detailsEditModeIntegration dominosEditModeIntegration
+    dandersEditModeIntegration blizzardEditModeIntegration
     nsrtNicknameIntegration
     highlightEnabled highlightStyle highlightThickness
 ]]
 local MISC_UNIT_KEYS = {}
 local MISC_UNIT_RESET_KEYS = WL [[target focus boss]]
+-- Frame Highlights: the Group Target Highlight switches of each group scope.
+local MISC_GROUP_KEYS = KS("targetIndicator")
 local CASTBAR_GENERAL_KEYS = KSW [[
     empowerColorStages enableFocusKickIcon focusKickShowCastbar focusKickIconWidth focusKickIconHeight focusKickTextSize
     focusKickIconOffsetX focusKickIconOffsetY kickReadyShowTarget kickReadyShowFocus kickReadyShowBoss kickReadyShowArena
@@ -386,6 +391,9 @@ local function ResetMiscPage(db, defaults)
     for _, key in ipairs(MISC_UNIT_RESET_KEYS) do
         ResetUnitFiltered(db, defaults, key, function(unitKey) return MISC_UNIT_KEYS[unitKey] == true end)
     end
+    for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
+        ResetUnitFiltered(db, defaults, key, function(scopeKey) return MISC_GROUP_KEYS[scopeKey] == true end)
+    end
 end
 local function ResetClassPowerPage(db, defaults)
     ResetRootFiltered(db, defaults, "bars", IsClassPowerBarsKey)
@@ -544,7 +552,8 @@ local function ApplyAfterPageReset(pageKey, info)
     if info and (info.kind == "auras" or info.kind == "colors") then
         ApplyAurasPageResetRuntime(reason, info.kind == "colors")
     end
-    if info and (info.kind == "group" or info.kind == "bars" or info.kind == "fonts" or info.kind == "colors") then
+    if info and (info.kind == "group" or info.kind == "bars" or info.kind == "fonts" or info.kind == "colors"
+        or info.kind == "misc") then
         if info.kind == "group" then
             ApplyGroupPageResetRuntime(reason)
         elseif ApplyService.RequestGroupDirtyMask then
