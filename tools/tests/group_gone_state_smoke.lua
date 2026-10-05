@@ -16,11 +16,12 @@
 --   * protected (secret) health: one UnitIsDeadOrGhost read per tick and no
 --     UnitIsDead, death and resurrection still reach the background;
 --   * a dead unit's background is repainted after every health-gradient
---     repaint of the same tick;
+--     repaint of the same tick, UNIT_MAXHEALTH's included;
 --   * ghost through UNIT_FLAGS, offline and back through UNIT_CONNECTION;
 --   * an offline member who keeps health: UNIT_HEALTH and UNIT_MAXHEALTH
 --     decide death only, so the offline background holds (repainted over the
---     gradient) until UNIT_CONNECTION resolves the unit again.
+--     gradient, UNIT_MAXHEALTH's included) until UNIT_CONNECTION resolves the
+--     unit again.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -76,6 +77,9 @@ local function Scenario(secret)
     -- The gradient background repaints every tick; the dead colour follows it.
     calls = Tick(secret and 0.3 or 0, true)
     Check(Gone() and DeadPainted(), label .. ": a later tick left the gradient over the dead background")
+    -- UNIT_MAXHEALTH repaints the health colours too.
+    w:Fire(frame, UNIT, "UNIT_MAXHEALTH")
+    Check(Gone() and DeadPainted(), label .. ": UNIT_MAXHEALTH left the gradient over the dead background")
     -- Resurrection.
     Tick(0.4, false)
     Check(not Gone() and not DeadPainted(), label .. ": a resurrection kept the dead background")
@@ -113,10 +117,12 @@ local function OfflineTicks(secret)
     Check(Gone() and DeadPainted(), label .. ": a UNIT_HEALTH tick cleared the offline background")
     Tick(0.5, false)
     Check(Gone() and DeadPainted(), label .. ": a second UNIT_HEALTH tick cleared the offline background")
-    -- UNIT_MAXHEALTH: the state only (its gradient repaint order is the same
-    -- for a dead unit); the next tick repaints the background.
+    -- UNIT_MAXHEALTH with a new percentage: the gradient is repainted, and
+    -- the offline background goes back over it.
+    S.pct = 0.45
     w:Fire(frame, UNIT, "UNIT_MAXHEALTH")
     Check(Gone(), label .. ": UNIT_MAXHEALTH cleared the offline background")
+    Check(DeadPainted(), label .. ": UNIT_MAXHEALTH left the gradient over the offline background")
     Tick(0.5, false)
     Check(Gone() and DeadPainted(), label .. ": a tick after UNIT_MAXHEALTH cleared the offline background")
     S.connected = true
