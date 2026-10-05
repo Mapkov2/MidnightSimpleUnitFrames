@@ -9,10 +9,8 @@ local PACKS = { "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", 
 -- A later English line is right here: the word is the same in the language,
 -- the text is a credit, or the key is an internal identifier.
 local ALLOWED = {
-    deDE = { Performance = "German uses the English word" },
     esES = { General = "same word in Spanish" },
     esMX = { General = "same word in Spanish" },
-    frFR = { Pixel = "same word in French", Position = "same word in French" },
     zhCN = { ["by Mapko"] = "author credit stays English", gf_raid = "internal identifier",
         gf_mythicraid = "internal identifier", MSUF_UpdateAllFonts = "internal identifier" },
     zhTW = { ["by Mapko"] = "author credit stays English", gf_raid = "internal identifier",
