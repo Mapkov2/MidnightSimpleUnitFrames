@@ -20,7 +20,10 @@ local GF = MSUF.GF
 local Client = MSUF.Client
 local InCombat = MSUF.Util.InCombat
 local floor, min, max = math.floor, math.min, math.max
-local UnitHealth, UnitHealthMax, UnitName, UnitPower, UnitPowerMax = UnitHealth, UnitHealthMax, UnitName, UnitPower, UnitPowerMax
+local UnitHealth, UnitHealthMax, UnitPower, UnitPowerMax = UnitHealth, UnitHealthMax, UnitPower, UnitPowerMax
+-- Names read like the engine frames' (UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua):
+-- WoW Forever character names and nickname providers apply here too.
+local ReadDisplayName = MSUF.UFText.ReadDisplayName
 local issecretvalue = _G.issecretvalue or function() return false end
 local holders, targetButtons, bossButtons, manaRows = {}, {}, {}, {}
 local previewPools = setmetatable({}, {__mode = "k"})
@@ -140,7 +143,7 @@ local function PaintIdentity(button, event)
     button.Health:SetMinMaxValues(0, maxHP)
     button.Health:SetValue(hp)
     button._msufEmpty = not issecretvalue(hp) and hp == 0
-    button.Name:SetText(UnitName(unit))
+    button.Name:SetText(ReadDisplayName(unit))
     PaintColors(button, button._msufAdditionalKind or "party", button._msufAdditionalPrefix or "pets", nil, nil, unit, hp, maxHP, event or "UNIT_NAME_UPDATE")
 end
 local function OnUnitEvent(button, event)
@@ -644,7 +647,7 @@ local function UpdateManaValue(row)
 end
 local function UpdateMana(row, event, _, powerType)
     if event == "UNIT_NAME_UPDATE" then
-        if row.unit then row.name:SetText(UnitName(row.unit)) end
+        if row.unit then row.name:SetText(ReadDisplayName(row.unit)) end
         return
     end
     if powerType and powerType ~= "MANA" then return end
@@ -673,7 +676,7 @@ local RAID_UNITS = {}
 for i = 1, 40 do RAID_UNITS[i] = "raid" .. i end
 -- A row listens to its own unit; rebinding happens only when the unit changes.
 local function PaintManaIdentity(row)
-    row.name:SetText(UnitName(row.unit))
+    row.name:SetText(ReadDisplayName(row.unit))
     row.bar:SetMinMaxValues(0, UnitPowerMax(row.unit, 0))
     UpdateManaValue(row)
 end
