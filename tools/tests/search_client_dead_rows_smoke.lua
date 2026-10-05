@@ -63,8 +63,38 @@ for _, page in ipairs(PAGES) do
     end
 end
 
+---------------------------------------------------------------------------
+-- GCD Bar rows. The index generator builds the section for every client
+-- family, so each index carries its rows; search shows them exactly where the
+-- page's own probe (M.CastbarGCDBarSupported) builds the section.
+---------------------------------------------------------------------------
+do
+    local handle = assert(io.open(root .. "/.github/scripts/search_static_index_project.lua", "rb"))
+    local generator = handle:read("*a"):gsub("\r\n", "\n")
+    handle:close()
+    local facts = generator:match("\nlocal function InstallClientFacts%(target%)\n(.-)\nend\n")
+    if Check(facts ~= nil, "the index generator lost InstallClientFacts") then
+        Check(not facts:find("_G.C_Spell = nil", 1, true)
+            and facts:find("\n    spellAPI.GetSpellCooldownDuration = ", 1, true) ~= nil,
+            "the index generator hides the Duration API from a client family, so its index carries no GCD Bar rows")
+    end
+    local carried = 0
+    for _, rec in ipairs(M.Search.StaticIndex.GetRecords()) do
+        if rec.key == "opt_castbar" and rec.exactTarget and rec.exactTarget.sectionId == "castbar_gcd" then
+            carried = carried + 1
+        end
+    end
+    local shown = 0
+    for _, rec in ipairs(offered.opt_castbar) do
+        if rec.exactTarget.sectionId == "castbar_gcd" then shown = shown + 1 end
+    end
+    local supported = M.CastbarGCDBarSupported and M.CastbarGCDBarSupported() == true
+    Check(shown == (supported and carried or 0), ("search offers %d of %d GCD Bar rows although the page %s the section")
+        :format(shown, carried, supported and "builds" or "does not build"))
+end
+
 if #failures > 0 then
     error("search_client_dead_rows_smoke failed:\n  " .. table.concat(failures, "\n  "))
 end
 print("search_client_dead_rows_smoke: ok (" .. flavor .. "; " .. checked
-    .. " offered Castbar and Colors rows name controls their page builds)")
+    .. " offered Castbar and Colors rows name controls their page builds; GCD Bar rows follow the page probe)")
