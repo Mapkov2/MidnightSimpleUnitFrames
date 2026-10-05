@@ -461,3 +461,7 @@ clients+Forever	lua	tools/tests/resource_mark_value_range_smoke.lua	{root} {flav
 -	lua	tools/tests/copy_to_section_completeness_smoke.lua	{root} Vanilla	A Copy To category leaves settings of its section behind (Vanilla)
 -	lua	tools/tests/copy_to_section_completeness_smoke.lua	{root} Mainline	A Copy To category leaves settings of its section behind (Mainline)
 -	python	tools/tests/locale_pack_integrity_smoke.py	{root}	Locale packs carry conflicting translations, placeholder mismatches or '?' labels
+clients+Forever	lua	tools/tests/classpower_layout_smoke.lua	{root} {flavor} 520	Class Resources card containment and alignment at 520px: {flavor}
+clients+Forever	lua	tools/tests/classpower_layout_smoke.lua	{root} {flavor} 760	Class Resources card containment and alignment at 760px: {flavor}
+clients+Forever	lua	tools/tests/classpower_layout_smoke.lua	{root} {flavor} 520 hidden	Class Resources hidden build geometry at 520px: {flavor}
+clients+Forever	lua	tools/tests/classpower_layout_smoke.lua	{root} {flavor} 760 eager	Class Resources eager build geometry at 760px: {flavor}
