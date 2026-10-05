@@ -226,6 +226,9 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
         local refresh = spec.prepareShell(ctx, shellBody, unit, spec)
         if type(refresh) == "function" then shellRefresh = refresh end
     end
+    -- Exact search builds the declared section's content before it resolves
+    -- the control (W.EnsureSectionContent), as for b:LazyCollapsibleSection.
+    if shellEntry then shellEntry._msuf2EnsureContent = function() BuildContent() return built end end
     if not shellEntry then
         BuildContent()
     elseif shellEntry.open then

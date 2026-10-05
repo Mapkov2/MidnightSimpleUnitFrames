@@ -324,6 +324,7 @@ clients+Forever	lua	tools/tests/profile_gameplay_swing_timers_smoke.lua	{root} {
 -	lua	tools/tests/profile_name_length_smoke.lua	{root}	A profile name the Suite cannot follow was accepted
 clients+Forever	lua	tools/tests/profile_rename_suite_order_smoke.lua	{root} {flavor}	Profile rename did not ask the Suite first: {flavor}
 clients+Forever	lua	tools/tests/search_feature_targets_smoke.lua	{root} {flavor}	Exact feature search targets and profile navigation: {flavor}
+clients+Forever	lua	tools/tests/search_exact_route_sections_smoke.lua	{root} {flavor}	Exact search reaches controls in closed lazy sections: {flavor}
 clients+Forever	lua	tools/tests/options_loader_readiness_smoke.lua	{root} {flavor}	Cold Options keybind readiness and menu navigation: {flavor}
 clients+Forever	lua	tools/tests/search_locale_queries_smoke.lua	{root} {flavor}	Localized menu search queries and FAQ coverage: {flavor}
 -	lua	tools/tests/search_examples_render_smoke.lua	{root}	Rendered search examples honor Core/Suite availability gates
