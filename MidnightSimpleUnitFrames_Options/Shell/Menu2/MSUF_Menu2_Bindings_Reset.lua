@@ -15,16 +15,13 @@ local Fmt = M.Format
 local KS, KSW, WL = M.KeySet, M.KeySetFromWords, M.WordList
 local ApplyService = M.ApplyService or _G.MSUF_Menu2_ApplyService
 if type(ApplyService) ~= "table" then error("MSUF Menu2 ApplyService missing") end
--- Client capabilities, read once at load (Game/Shared/Initialize.lua).
-local Client = MSUF.Client or {}
-local SUPPORTS_ELLESMERE_EDIT_MODE = Client.SupportsEllesmereEditMode == true
-local SUPPORTS_BLIZZARD_EDIT_MODE = Client.SupportsBlizzardEditMode == true
 
 
 local DeepCopy = M.DeepCopy
 local QueueMenuRefresh = M.QueueMenuRefresh
 local COLOR_CLASSPOWER_RUNTIME, ApplyScopedFeatureRuntime, FlushApplyServiceNow =
     M.COLOR_CLASSPOWER_RUNTIME, M.ApplyScopedFeatureRuntime, M.FlushApplyServiceNow
+local CaptureSetterOnlySettings, ResyncSetterOnlySettings = M.CaptureSetterOnlySettings, M.ResyncSetterOnlySettings
 local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf_target = { unit = "target", label = "Target" },
     uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" },
     uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_arena = { unit = "arena", label = "Arena Frames" },
@@ -542,23 +539,6 @@ local function ApplyAfterPageReset(pageKey, info)
     end
     if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true, frames = true }) end
     if info and info.kind == "gameplay" then M.ApplyGameplay() end
-    if info and info.kind == "misc" then
-        local db = M.EnsureDB()
-        local general = db and db.general
-        _G.MSUF_NSRTNicknames_ApplySetting()
-        -- Kernel/MSUF_RuntimeContracts.lua requires these two adapters only
-        -- where the client supports them; Classic flavors load neither.
-        if SUPPORTS_ELLESMERE_EDIT_MODE then
-            _G.MSUF_EllesmereEditMode_SetEnabled(not (type(general) == "table" and general.ellesmereEditModeIntegration == false))
-        end
-        _G.MSUF_Grid2EditMode_SetEnabled(not (type(general) == "table" and general.grid2EditModeIntegration == false))
-        _G.MSUF_DetailsEditMode_SetEnabled(not (type(general) == "table" and general.detailsEditModeIntegration == false))
-        _G.MSUF_DominosEditMode_SetEnabled(not (type(general) == "table" and general.dominosEditModeIntegration == false))
-        _G.MSUF_DandersEditMode_SetEnabled(not (type(general) == "table" and general.dandersEditModeIntegration == false))
-        if SUPPORTS_BLIZZARD_EDIT_MODE then
-            _G.MSUF_BlizzardEditMode_SetEnabled(not (type(general) == "table" and general.blizzardEditModeIntegration == false))
-        end
-    end
     -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
     -- secure group headers or Auras3 lanes unnecessarily.
     if info and (info.kind == "auras" or info.kind == "colors") then
@@ -670,9 +650,13 @@ local function ResetPageImpl(pageKey)
     local db = M.EnsureDB()
     local handler = PAGE_RESET_HANDLERS[info.kind]
     if not handler then return false end
+    -- Setter-only settings (minimap icon, Edit Mode integrations, ...) follow
+    -- through their setters, ahead of the apply fanout that reads the rest.
+    local setterOnly = CaptureSetterOnlySettings()
     handler(db, defaults, info)
     RetireLegacyUnitAliases(db)
     PurgeRuntimeCachesForReset(info)
+    ResyncSetterOnlySettings(setterOnly)
     ApplyAfterPageReset(pageKey, info)
     if M.ShowStatusFeedback then
         M.ShowStatusFeedback(Fmt("%s reset", M.Tr(tostring(info.label or pageKey))), "ok", 1.4)

@@ -680,6 +680,63 @@ local function FlushApplyServiceNow()
     return false
 end
 
+-- General settings that act only through their setter: no apply owner reads
+-- them again, so a history restore or a page reset calls the setter when the
+-- value changed (GlobalMisc and Dashboard controls run the same calls). An
+-- entry names the published setter and its argument ("enabled": the switch
+-- state, "scale": the MSUF frame scale) or carries its own apply.
+local SETTER_ONLY_SETTINGS = {
+    msufUiScale = { "MSUF_ApplyMsufScale", "scale" },
+    showMinimapIcon = { "MSUF_SetMinimapIconEnabled", "enabled" },
+    showGameMenuButton = { "MSUF_SetGameMenuButtonEnabled", "enabled" },
+    playTargetSelectLostSounds = { "MSUF_TargetSoundDriver_ApplySetting" },
+    playerResourcePingEnabled = { "MSUF_RefreshPlayerResourcePing" },
+    versionCheckEnabled = { "MSUF_ApplyModules" },
+    nsrtNicknameIntegration = { "MSUF_NSRTNicknames_ApplySetting" },
+    grid2EditModeIntegration = { "MSUF_Grid2EditMode_SetEnabled", "enabled" },
+    detailsEditModeIntegration = { "MSUF_DetailsEditMode_SetEnabled", "enabled" },
+    dominosEditModeIntegration = { "MSUF_DominosEditMode_SetEnabled", "enabled" },
+    dandersEditModeIntegration = { "MSUF_DandersEditMode_SetEnabled", "enabled" },
+    numberAbbrevStyle = { apply = function() MSUF.NumberFormat.Refresh() end },
+    menuFontKey = { apply = function()
+        M.Theme.ClearMenuFontCache()
+        M.Theme.RefreshMenuFonts()
+    end },
+}
+-- Kernel/MSUF_RuntimeContracts.lua requires these two adapters only where the
+-- client supports them; Classic flavors load neither.
+if MSUF.Client and MSUF.Client.SupportsEllesmereEditMode then
+    SETTER_ONLY_SETTINGS.ellesmereEditModeIntegration = { "MSUF_EllesmereEditMode_SetEnabled", "enabled" }
+end
+if MSUF.Client and MSUF.Client.SupportsBlizzardEditMode then
+    SETTER_ONLY_SETTINGS.blizzardEditModeIntegration = { "MSUF_BlizzardEditMode_SetEnabled", "enabled" }
+end
+local function CaptureSetterOnlySettings()
+    local db, values = M.EnsureDB(), {}
+    local g = db and db.general
+    if type(g) ~= "table" then return values end
+    for key in pairs(SETTER_ONLY_SETTINGS) do values[key] = g[key] end
+    return values
+end
+local function ResyncSetterOnlySettings(before)
+    local db = M.EnsureDB()
+    local g = db and db.general
+    if type(g) ~= "table" or type(before) ~= "table" then return end
+    for key, entry in pairs(SETTER_ONLY_SETTINGS) do
+        local value = g[key]
+        if value ~= before[key] then
+            local setter = entry.apply or MSUF.Require(entry[1], "Shell/Menu2/MSUF_Menu2_Bindings_History.lua")
+            if entry[2] == "scale" then
+                setter(tonumber(value) or 1)
+            elseif entry[2] == "enabled" then
+                setter(value ~= false)
+            else
+                setter()
+            end
+        end
+    end
+end
+
 -- Snapshots hold the variant-free base profile. Put it back under the live
 -- variant overlays: strip them without capturing (the live values are about to
 -- be discarded), restore the add-on roots, replace, then re-resolve. Without
@@ -717,6 +774,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     local willEnable = type(restoredUi) == "table" and restoredUi.Enabled == true
     local scaleChanged = wasEnabled ~= willEnable
         or (willEnable and tonumber(activeUi.Scale) ~= tonumber(restoredUi.Scale))
+    local setterOnly = CaptureSetterOnlySettings()
     if not RestoreHistoryProfile(activeDB, profileDB, reason or "MSUF2_HISTORY") then
         historyRestoring = false
         return false
@@ -735,6 +793,7 @@ local function ApplyHistorySnapshot(snapshot, reason, source, trustProfile)
     if scaleChanged and type(_G.MSUF_ApplyCurrentProfileGlobalUiScale) == "function" then
         _G.MSUF_ApplyCurrentProfileGlobalUiScale()
     end
+    ResyncSetterOnlySettings(setterOnly)
     if ApplyScopedHistoryRestore(reason, source) then
         FlushApplyServiceNow()
         M.MarkMenuDataDirty(reason or "history")
@@ -1177,4 +1236,5 @@ end
 -- instead of re-declaring them.
 M.ApplyScopedFeatureRuntime = ApplyScopedFeatureRuntime
 M.FlushApplyServiceNow = FlushApplyServiceNow
+M.CaptureSetterOnlySettings, M.ResyncSetterOnlySettings = CaptureSetterOnlySettings, ResyncSetterOnlySettings
 M.COLOR_CLASSPOWER_RUNTIME = COLOR_CLASSPOWER_RUNTIME
