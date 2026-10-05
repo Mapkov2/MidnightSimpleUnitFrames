@@ -285,6 +285,13 @@ local function KillPreviewAnimationForCombat(box)
     box._msufGFMenuPreviewAuraStates = nil
     RefreshPreviewAnimationButton(box)
 end
+--- PLAYER_REGEN_DISABLED of the preview box, the last moment the restricted
+--- SetPropagateKeyboardInput is allowed: an arrow-key nudge must not keep the
+--- keys from the bindings for the whole fight.
+local function EnterCombatPreview(box)
+    KillPreviewAnimationForCombat(box)
+    if PreviewHelpers.ReleaseKeyboardCapture then PreviewHelpers.ReleaseKeyboardCapture(box) end
+end
 --- One animation frame: the light tick advances the last scene; only without
 --- one (first frame, scope switch, combat, text drag) the full refresh runs.
 local function RefreshPreviewAnimationFrame(box)
@@ -2043,10 +2050,7 @@ function NativeBuild.Lifecycle(state)
     end)
     box:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_REGEN_DISABLED" then
-            KillPreviewAnimationForCombat(self)
-            -- Last moment the restricted SetPropagateKeyboardInput is allowed:
-            -- an arrow-key nudge must not keep the keys from the bindings.
-            if PreviewHelpers.ReleaseKeyboardCapture then PreviewHelpers.ReleaseKeyboardCapture(self) end
+            EnterCombatPreview(self)
             if self.SuspendSpellPreviewEffects then self:SuspendSpellPreviewEffects() end
             self._msufGFRefreshAfterCombat = self._msufGFRefreshReason or self._msufGFRefreshAfterCombat or true
             if self.CancelPendingRefresh then self:CancelPendingRefresh() end
