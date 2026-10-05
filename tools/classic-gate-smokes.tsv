@@ -425,3 +425,4 @@ clients+Forever	lua	tools/tests/classpower_workspace_smoke.lua	{root} {flavor}	C
 clients+Forever	lua	tools/tests/classpower_page_reset_coverage_smoke.lua	{root} {flavor}	Class Resources page reset leaves a setting the page writes at the user value, or replaces a Player setting: {flavor}
 -	lua	tools/tests/profile_names_untranslated_smoke.lua	{root} Vanilla	Profile or sync-group names are translated in the Profiles page pickers or switches (Vanilla)
 -	lua	tools/tests/profile_names_untranslated_smoke.lua	{root} Mainline	Profile or sync-group names are translated in the Profiles page pickers or switches (Mainline)
+clients+Forever	lua	tools/tests/menu_client_capability_text_smoke.lua	{root} {flavor}	A menu control or help text names a capability the client does not have: {flavor}

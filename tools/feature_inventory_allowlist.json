@@ -243,6 +243,26 @@
    "evidence": "MSUF_Menu2_AdvancedClassPower.lua keeps the always-visible Extra Health Bar SectionSwitch with bars.playerHPBarEnabled and advanced.player.hp.enabled; classpower_workspace_smoke.lua checks header availability on all five clients.",
    "reason": "The same enable setting and identity remain in the selected Extra Health Bar workspace. Its caption uses the existing localized Extra Health Bar name instead of Second Player HP bar.",
    "date": "2026-10-04"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: opt_misc | Resource > Ping | Enable native Player resource pings (12.1) | toggle | general.playerResourcePingEnabled | id/opt_misc/menu2.opt.misc.global.setting.player.resource.ping.enabled"
+   ],
+   "basis": "dead",
+   "evidence": "Mirror: Blizzard_PingUI and the PingableType mixins exist on upstream/live and upstream/forever only; classic_era, classic_anniversary and classic define PingableUnitFrameTemplate as an empty stub (Blizzard_SharedXML/Classic/Stubs.xml), so UF.ConfigurePlayerResourcePing (MSUF_UF_Factory.lua, SupportsPlayerResourcePing) never enables pings there. MSUF_Menu2_GlobalMisc.lua builds the switch on the Mainline family only; menu_client_capability_text_smoke.lua pins it per client.",
+   "reason": "Classic Era, TBC and Mists (the Classic search index) no longer show a resource ping switch that wrote a setting and changed nothing; Midnight and WoW Forever keep it unchanged with the same key and identity.",
+   "date": "2026-10-05"
+  },
+  {
+   "category": "settings",
+   "items": [
+    "classic: general.playerResourcePingEnabled"
+   ],
+   "basis": "dead",
+   "evidence": "Mirror: Blizzard_PingUI and the PingableType mixins exist on upstream/live and upstream/forever only; classic_era, classic_anniversary and classic define PingableUnitFrameTemplate as an empty stub (Blizzard_SharedXML/Classic/Stubs.xml), so UF.ConfigurePlayerResourcePing (MSUF_UF_Factory.lua, SupportsPlayerResourcePing) never enables pings there. MSUF_Menu2_GlobalMisc.lua builds the switch on the Mainline family only; menu_client_capability_text_smoke.lua pins it per client.",
+   "reason": "Classic Era, TBC and Mists (the Classic search index) no longer show a resource ping switch that wrote a setting and changed nothing; Midnight and WoW Forever keep it unchanged with the same key and identity.",
+   "date": "2026-10-05"
   }
  ]
 }

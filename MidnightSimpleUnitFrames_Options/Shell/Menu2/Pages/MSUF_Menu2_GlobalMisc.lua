@@ -680,7 +680,7 @@ function MiscSection.BlizzardFrames(s)
     --- Blizzard frame ownership is per unit ("Force Blizzard frame on" in each
     --- unit's Basics), so this section only carries the remaining
     --- Blizzard-adjacent chrome toggles.
-    local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 170, false)
+    local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", IS_MAINLINE and 170 or 138, false)
     BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,
         function(v)
             _G.MSUF_SetMinimapIconEnabled(v)
@@ -690,6 +690,11 @@ function MiscSection.BlizzardFrames(s)
             _G.MSUF_TargetSoundDriver_ResetState()
             if v then _G.MSUF_TargetSoundDriver_Ensure() end
         end)
+    -- Resource pings need the ping system (Blizzard_PingUI and the PingableType
+    -- mixins), which ships on Midnight and WoW Forever only. Classic Era, TBC and
+    -- Mists define PingableUnitFrameTemplate as an empty stub, so there the switch
+    -- would write a setting that changes nothing.
+    if not IS_MAINLINE then return end
     local resourcePing = BindMiscToggle(blizzard, "Enable native Player resource pings (12.1)",
         "playerResourcePingEnabled", true, "MSUF2_PLAYER_RESOURCE_PING", nil, nil, nil, PREVIEW_FALSE,
         function()
