@@ -739,6 +739,35 @@ local function ApplyMana(kind, conf, enabled, refreshIdentity)
     end
     holder:SetShown(rows > 0)
 end
+-- A name refresh (WoW Forever character names, the nickname providers) repaints
+-- the group frames through GF.RefreshGroupNames, so the extra blocks repaint
+-- their names with it. Names only, out of combat: both callers refuse combat.
+local function RefreshButtonNames(list)
+    for i = 1, #list do
+        local button = list[i]
+        if button.unit then button.Name:SetText(ReadDisplayName(button.unit)) end
+    end
+end
+local function RefreshPetNames(header)
+    if not header then return end
+    for i = 1, 40 do
+        local child = header:GetAttribute(CHILD_KEYS[i])
+        if not child then break end
+        if child.unit then child.Name:SetText(ReadDisplayName(child.unit)) end
+    end
+end
+local RefreshEngineGroupNames = GF.RefreshGroupNames
+function GF.RefreshGroupNames(unit)
+    RefreshButtonNames(targetButtons)
+    RefreshButtonNames(bossButtons)
+    RefreshPetNames(holders.Pets)
+    RefreshPetNames(holders.PetsRest)
+    for i = 1, #manaRows do
+        local row = manaRows[i]
+        if row.unit then row.name:SetText(ReadDisplayName(row.unit)) end
+    end
+    return RefreshEngineGroupNames(unit)
+end
 function GF.RefreshAdditionalGroups(refreshIdentity)
     local combat = InCombat()
     if not combat then GF.EnsureDB() end

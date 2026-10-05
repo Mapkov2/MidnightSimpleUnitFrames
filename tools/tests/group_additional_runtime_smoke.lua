@@ -14,7 +14,9 @@
 --   * an excluded own-target slot and disabled allied bosses listen to nothing;
 --   * defaults put every block on its own spot; no boss units means no boss
 --     block; a nil scope enable is off;
---   * Edit Mode registers the extra movers in one batch with translated labels.
+--   * Edit Mode registers the extra movers in one batch with translated labels;
+--   * a name refresh (GF.RefreshGroupNames: nickname providers, WoW Forever
+--     character names) repaints the names of every block, and only the names.
 -- Plain Lua 5.1, repo root as arg 1.
 
 local root = assert(arg[1], "usage: group_additional_runtime_smoke.lua <root>"):gsub("\\", "/")
@@ -165,6 +167,9 @@ function GF.GetCompiledSpec() return spec end
 function GF.ResolveNameColor() return 1, 1, 1 end
 function GF.GetUnitGroupRole(unit) return roles[unit] or "DAMAGER" end
 function GF.RegisterRuntimeObserver(_, cb) GF.observer = cb end
+-- The group runtime's name refresh (MSUF_UF_Group_Runtime.lua), loaded first.
+local engineNameUnit
+function GF.RefreshGroupNames(unit) Count("EngineRefreshGroupNames"); engineNameUnit = unit; return "engine result" end
 MSUF.UFBarTextCommon = { ApplyHealthStatusColor = function(bar) Count("Paint"); bar:SetStatusBarColor(.1, .2, .3) end }
 
 dofile(root .. "/tools/tests/group_dependencies.lua")(MSUF)
@@ -444,6 +449,28 @@ GF.RefreshAdditionalGroups()
 assert(bossHolder.events.INSTANCE_ENCOUNTER_ENGAGE_UNIT and not bossHolder.events.UNIT_TARGETABLE_CHANGED,
     "the allied boss holder did not follow the client's events")
 supportedEvents.UNIT_TARGETABLE_CHANGED = true
+
+---------------------------------------------------------------------------
+-- A name refresh repaints every block's names (R-C3-F12)
+---------------------------------------------------------------------------
+-- SecureGroupHeaders.lua configureChildren keeps each pet button as "childN".
+pets.attrs.child1 = pet
+GF.RefreshAdditionalGroups()
+local healerRow
+for _, f in ipairs(frames) do if f.parent == mana and f.unit == "party1" then healerRow = f end end
+assert(healerRow and member.unit == "party1target" and bosses[1].unit == "boss1" and pet.unit == "partypet1",
+    "name refresh fixture lost a block")
+names.party1, names.party1target, names.boss1, names.partypet1 = "Nick healer", "Nick target", "Nick boss", "Nick pet"
+Reset()
+local refreshResult = GF.RefreshGroupNames("party1")
+assert(refreshResult == "engine result" and counters.EngineRefreshGroupNames == 1 and engineNameUnit == "party1",
+    "the name refresh no longer runs the group frames' own refresh once with its unit and result")
+assert(healerRow.name.text == "Nick healer", "a name refresh left the healer mana row on the old name")
+assert(member.Name.text == "Nick target", "a name refresh left the party target on the old name")
+assert(bosses[1].Name.text == "Nick boss", "a name refresh left the allied boss on the old name")
+assert(pet.Name.text == "Nick pet", "a name refresh left the pet on the old name")
+assert(not counters.Paint and not counters.UnitHealth and not counters.SetAttribute and not counters.RegisterUnitEvent,
+    "a name refresh did more than the names")
 
 ---------------------------------------------------------------------------
 -- A nil scope enable is off, like the group runtime (P3-7)
