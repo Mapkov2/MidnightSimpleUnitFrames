@@ -45,10 +45,13 @@ end
 local function ReadBranches()
     local names = {}
     for index, branch in ipairs(BRANCHES) do names[index] = "upstream/" .. branch .. ":" .. SGH_PATH end
-    local feed = package.config:sub(1, 1) == "\\"
+    local windows = package.config:sub(1, 1) == "\\"
+    local feed = windows
         and ('cmd /d /c "echo ' .. table.concat(names, "&echo ") .. '"')
         or ("printf '%s\\n' " .. table.concat(names, " "))
-    local pipe = assert(io.popen(feed .. '|git -C "' .. MIRROR .. '" cat-file --batch', "rb"))
+    -- Windows text pipes alter newlines and invalidate git's byte-counted blobs;
+    -- POSIX popen accepts only "r"/"w" and already preserves these bytes.
+    local pipe = assert(io.popen(feed .. '|git -C "' .. MIRROR .. '" cat-file --batch', windows and "rb" or "r"))
     local out = pipe:read("*a")
     pipe:close()
     local runs, position = {}, 1
