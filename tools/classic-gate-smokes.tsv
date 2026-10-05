@@ -222,6 +222,7 @@ clients+Forever	lua	tools/tests/menu_color_picker_profile_switch_smoke.lua	{root
 clients+Forever	lua	tools/tests/menu_history_setter_only_smoke.lua	{root} {flavor}	Undo or a page reset left a setter-only setting (frame scale, minimap icon, ...) at its old runtime state: {flavor}
 clients+Forever	lua	tools/tests/menu_page_reset_catalog_smoke.lua	{root} {flavor}	A page reset leaves a setting its page shows at the user value: {flavor}
 -	lua	tools/tests/menu_editmode_foreign_globals_smoke.lua	{root}	The menu Edit Mode helpers read another addon global
+clients+Forever	lua	tools/tests/menu_locale_key_tracking_smoke.lua	{root} {flavor}	Composed menu text became a tracked locale key: {flavor}
 clients+Forever	lua	tools/tests/menu_page_reset_scope_smoke.lua	{root} {flavor}	Page resets restore only what the page owns: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}	Menu combat quiescence: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_edge_refusal_smoke.lua	{root} {flavor}	The menu flushed an apply or committed history on the combat-start frame: {flavor}
