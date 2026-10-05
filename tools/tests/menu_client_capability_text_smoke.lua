@@ -9,7 +9,12 @@
 --      classic_era, classic_anniversary and classic define
 --      PingableUnitFrameTemplate as an empty stub (Blizzard_SharedXML/Classic/
 --      Stubs.xml), so UF.ConfigurePlayerResourcePing never enables it there.
---      The switch is built on Midnight and WoW Forever and nowhere else.
+--      The switch is built on Midnight and WoW Forever and nowhere else, and
+--      search offers its row there only, before and after the page is built.
+--      The Classic index still carries the row until it is regenerated, and a
+--      regenerated one would carry it again if the page built the switch on
+--      any Classic client, so the search contract ties the row to the client
+--      (STATIC_ROW_CLIENT_CAPABILITY in MSUF_Menu2_Search_IndexQuery.lua).
 --   2. Auras > Dots on target: the DoT picker's help named the list "Curated
 --      Retail 12.0+ and 12.1 DoT auras" on every client, while Classic Era,
 --      TBC, Mists and WoW Forever load their own client's DoT catalogue. Only
@@ -43,6 +48,31 @@ local frames = mw.world.widgets.frames
 ---------------------------------------------------------------------------
 -- 1. Resource ping switch
 ---------------------------------------------------------------------------
+local PING_LABEL = "Enable native Player resource pings (12.1)"
+local PING_KEY = "general.playerResourcePingEnabled"
+local PING_ID = "id\031opt_misc\031menu2%2Eopt%2Emisc%2Eglobal%2Esetting%2Eplayer%2Eresource%2Eping%2Eenabled"
+local api = Check(M.Search and M.Search._CoreAPI, "precondition: the search core API did not load")
+local function SearchOffersPing()
+    api.MarkSearchIndexDirty()
+    for _, rec in ipairs(api.SearchPages(PING_LABEL)) do
+        if rec.searchIdentity == PING_ID or (rec.exactTarget and rec.exactTarget.settingKey == PING_KEY) then return true end
+    end
+    return false
+end
+-- The tie itself, so it keeps holding once a regenerated Classic index has no row.
+local queryFile = assert(io.open(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua", "rb"))
+local querySource = queryFile:read("*a"):gsub("\r\n", "\n")
+queryFile:close()
+local tiedRows = assert(loadstring("return " .. Check(querySource:match("\nlocal STATIC_ROW_CLIENT_CAPABILITY = (%b{})\n"),
+    "MSUF_Menu2_Search_IndexQuery.lua lost STATIC_ROW_CLIENT_CAPABILITY")))()
+local capability = Check(tiedRows[PING_ID], "the resource ping search row is not tied to a client capability")
+Check((mw.core.Client[capability] == true) == (PING_CLIENTS[flavor] == true),
+    "the resource ping search row follows MSUF.Client." .. capability .. ", which does not match the ping system here")
+local blob = Check(M.Search.StaticIndexBlob, "precondition: the static index blob is gone before any search")
+local indexed = blob:find(PING_ID, 1, true) ~= nil
+if PING_CLIENTS[flavor] then Check(indexed, "the index this client loads has no resource ping row") end
+Check(SearchOffersPing() == (PING_CLIENTS[flavor] == true), "search " .. (PING_CLIENTS[flavor] and "misses" or "offers")
+    .. " the resource ping switch before the page is built (row " .. (indexed and "in" or "not in") .. " the index)")
 -- The page context is borrowed for the aura tool built in part 2.
 local pageCtx
 local miscSpec = M.pages.opt_misc
@@ -65,6 +95,8 @@ if PING_CLIENTS[flavor] then
 else
     Check(not pingSwitch, "the resource ping switch is built on a client without Blizzard's ping system")
 end
+Check(SearchOffersPing() == (PING_CLIENTS[flavor] == true), "search " .. (PING_CLIENTS[flavor] and "misses" or "offers")
+    .. " the resource ping switch after the page is built")
 
 ---------------------------------------------------------------------------
 -- 2. Dots on target help
