@@ -1804,6 +1804,11 @@ CP.IsRuntimeActive = function()
 end
 ExportPublic("MSUF_ClassPower_IsRuntimeActive", CP.IsRuntimeActive)
 
+--- The resolver FullRefresh picks the class resource with (powerType,
+--- renderMode, isAuraPower). Cold only: the resource mark menu sizes its value
+--- slider to the maximum of the resource this bar shows.
+if MSUF.CPBuilders then MSUF.CPBuilders.ClassPowerType = CPConfig.GetClassPowerType end
+
 --- Force full refresh (call after changing DB values)
 CP.RefreshPublic = function()
     CPColors.InvalidateCaches()
