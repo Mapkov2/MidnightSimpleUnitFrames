@@ -8,6 +8,12 @@
 --      practically every profile, so from the second switch of a session on
 --      the combat timer kept the old profile's visibility (red without the
 --      fix in State/MSUF_ProfileRuntime.lua).
+--   2. The unit-tooltip hover gate. Tooltips.hoverInert is recomputed only on
+--      combat edges, world entry and tooltip setting edits; the unit and group
+--      frame OnEnter hooks return on it before any mode check. Switching from
+--      a profile with tooltips set to Never to one set to Always left every
+--      MSUF tooltip off until the next combat or loading screen (red without
+--      the fix).
 --
 -- Real core + Options graph (tools/tests/client_world.lua) and the real
 -- MSUF_SwitchProfile -> ProfileRuntime.Apply path; only render steps the
@@ -103,9 +109,29 @@ local function CheckGameplay(flavor)
     end
 end
 
+local function TooltipProfile(mode)
+    return { _msufProfileSchema = 600, general = { unitTooltipMode = mode, unitTooltipProvider = "GAME", unitTooltipAnchor = "EXTERNAL" } }
+end
+
+local function CheckTooltips(flavor)
+    local world = Login(flavor, {
+        Default = TooltipProfile("ALWAYS"), Quiet = TooltipProfile("NEVER"), Raid = TooltipProfile("ALWAYS"),
+    }, "Quiet")
+    local tooltips = world.core.Tooltips
+    -- The client GameTooltip answers IsForbidden; the harness frame does not.
+    local gameTooltip = world.env.GameTooltip
+    gameTooltip.IsForbidden = gameTooltip.IsForbidden or function() return false end
+    assert(tooltips.hoverInert == true, flavor .. ": a profile with tooltips set to Never did not gate the hover hooks at login")
+    Switch(world, "Raid")
+    assert(tooltips.hoverInert == false, flavor .. ": after switching to a profile with tooltips set to Always the hover hooks still bail")
+    Switch(world, "Quiet")
+    assert(tooltips.hoverInert == true, flavor .. ": after switching back to Never the hover hooks no longer bail")
+end
+
 local flavors = World.Flavors(root)
 for _, flavor in ipairs(flavors) do
     CheckGameplay(flavor)
+    CheckTooltips(flavor)
 end
 
 print("profile_switch_runtime_refresh_smoke: ok (" .. table.concat(flavors, ", ") .. ")")

@@ -180,6 +180,8 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     --- The registry switches Gameplay only when its enabled state flips; an
     --- apply between two enabled profiles re-applies the overlays here.
     if MSUF.MSUF_RequestGameplayApply then MSUF.MSUF_RequestGameplayApply() end
+    --- The unit-tooltip hover gate follows combat edges and setting edits only.
+    if MSUF.Tooltips then MSUF.Tooltips.Refresh() end
     _G.MSUF_GF_RebuildAll()
     _G.MSUF_ClassPower_Apply({ full = true, cdm = true })
     _G.MSUF_ApplyPowerBarEmbedLayout_All()
