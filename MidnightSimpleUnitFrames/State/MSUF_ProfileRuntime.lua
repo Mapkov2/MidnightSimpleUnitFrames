@@ -22,8 +22,11 @@ local function MSUF_ProfileIO_IsCurrentIdentity(identity)
 end
 
 --- Runs before the active profile table or its contents are replaced: an open
---- MSUF Edit Mode session ends against the profile it edited.
+--- menu colour picker and an open MSUF Edit Mode session end against the
+--- profile they edited.
 local function MSUF_ProfileIO_BeforeActiveProfileMutation()
+    local menu = MSUF.MSUF2
+    if menu and menu.FinishColorPickerForProfileChange then menu.FinishColorPickerForProfileChange() end
     profileGeneration = profileGeneration + 1
     local em2 = _G.MSUF_EM2
     local state = type(em2) == "table" and em2.State or nil

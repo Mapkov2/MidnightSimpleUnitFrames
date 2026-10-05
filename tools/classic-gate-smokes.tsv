@@ -218,6 +218,7 @@ clients+Forever	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.l
 clients+Forever	lua	tools/tests/menu_page_reset_history_smoke.lua	{root} {flavor}	Page resets and undo history: {flavor}
 clients+Forever	lua	tools/tests/menu_history_cancel_variant_smoke.lua	{root} {flavor}	Edit Mode Cancel All dropped the active profile variant: {flavor}
 -	lua	tools/tests/menu_color_cancel_false_smoke.lua	{root}	Cancelling the colour picker turned a stored false into nil
+clients+Forever	lua	tools/tests/menu_color_picker_profile_switch_smoke.lua	{root} {flavor}	A colour picker left open across a profile switch wrote into the next profile: {flavor}
 clients+Forever	lua	tools/tests/menu_page_reset_scope_smoke.lua	{root} {flavor}	Page resets restore only what the page owns: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_quiescence_smoke.lua	{root} {flavor}	Menu combat quiescence: {flavor}
 clients+Forever	lua	tools/tests/menu_combat_edge_refusal_smoke.lua	{root} {flavor}	The menu flushed an apply or committed history on the combat-start frame: {flavor}
