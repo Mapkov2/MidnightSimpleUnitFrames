@@ -43,8 +43,8 @@ local searchPages = Check(source:match("\nfunction SearchPages%(query%)\n(.-)\ne
     "MSUF_Menu2_Search_IndexQuery.lua lost SearchPages")
 Check(not searchPages:find("SearchProviders", 1, true) and not searchPages:find("SEARCH_STATE.provider", 1, true),
     "SearchPages (runs per query) must not touch search providers")
-local build = Check(source:match("\nlocal function BuildSearchRecords%(%)\n(.-)\nend\n"),
-    "MSUF_Menu2_Search_IndexQuery.lua lost BuildSearchRecords")
+local build = Check(source:match("\nSearchIndexBuild%.PHASES = {\n(.-)\n}\n"),
+    "MSUF_Menu2_Search_IndexQuery.lua lost the index build phases (SearchIndexBuild.PHASES)")
 Check(build:find("next(SEARCH_STATE.providers) ~= nil and SearchProviders.Collect(", 1, true),
     "the index build must collect providers only while one is registered")
 Check(not source:find("pcall", 1, true), "no pcall/xpcall in addon code")

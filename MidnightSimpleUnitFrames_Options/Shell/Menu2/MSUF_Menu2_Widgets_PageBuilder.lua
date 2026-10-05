@@ -466,6 +466,9 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
                 end
                 if entry.body._msuf2ShownState ~= open then
                     entry.body._msuf2ShownState = open
+                    if open and not entry.bodySurface then
+                        entry.bodySurface = PageBuilderStages.CreateBodySurface(entry.outer, entry.headerHeight, false)
+                    end
                     entry.body:SetShown(open)
                     if entry.bodySurface then entry.bodySurface:SetShown(open) end
                     layoutChanged = true
@@ -536,6 +539,41 @@ function PageBuilderStages.InstallLayoutMethods(b, ctx, UpdateContentHeight)
         return section
     end
 end
+--- Closed-accordion decoration on demand. A section that builds closed gets
+--- neither its body card nor its open highlight until it first opens; both are
+--- hidden while closed and most sections never open in a session. A theme
+--- change rebuilds every cached page and the highlight is repainted from the
+--- live tokens on every tone refresh, so a late copy matches the eager one.
+function PageBuilderStages.CreateBodySurface(outer, headerH, shown)
+    local bodySurface = T.Panel(outer, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
+    T.ApplySurface(bodySurface, "card")
+    bodySurface:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -(headerH + ACCORDION_OPEN_CORNER_SIZE))
+    -- Match the header's scrollbar clearance. Extending the open surface to
+    -- the full wrapper width puts its right border underneath the viewport
+    -- edge, where it is visibly clipped while scrolling.
+    bodySurface:SetPoint("BOTTOMRIGHT", outer, "BOTTOMRIGHT", -ACCORDION_HEADER_RIGHT_INSET, 0)
+    bodySurface:SetShown(shown)
+    PlaceBackdropFrameBehindControls(bodySurface, outer)
+    return bodySurface
+end
+--- Repaints the open highlight from the live accent tokens (SavedVariables may
+--- apply the accent after Options loaded); create = true builds it first.
+function PageBuilderStages.PaintOpenHighlight(entry, create)
+    local highlight = entry.headerOpenHighlight
+    local from, to = entry._msuf2HeaderActiveFrom, entry._msuf2HeaderActiveTo
+    if not (from and to and (create or (highlight and highlight.SetColors))) then return highlight end
+    local activeBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
+    local activeDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
+    from[1], from[2], from[3] = activeBlue[1], activeBlue[2], activeBlue[3]
+    to[1], to[2], to[3] = activeDeep[1], activeDeep[2], activeDeep[3]
+    if highlight then
+        highlight:SetColors(from, to)
+    else
+        highlight = CreateAccordionOpenHighlight(entry.header, from, to)
+        entry.headerOpenHighlight = highlight
+    end
+    return highlight
+end
 --- The accordion builder; installed once per build.
 function PageBuilderStages.InstallCollapsibleSection(b, ctx)
     function b:CollapsibleSection(id, title, height, defaultOpen)
@@ -556,15 +594,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
         RegisterSearchObject(outer, title, "section")
         outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         outer:SetSize(self.width, headerH + (open and (height or 120) or 0))
-        local bodySurface = T.Panel(outer, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
-        T.ApplySurface(bodySurface, "card")
-        bodySurface:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, -(headerH + ACCORDION_OPEN_CORNER_SIZE))
-        -- Match the header's scrollbar clearance. Extending the open surface to
-        -- the full wrapper width puts its right border underneath the viewport
-        -- edge, where it is visibly clipped while scrolling.
-        bodySurface:SetPoint("BOTTOMRIGHT", outer, "BOTTOMRIGHT", -ACCORDION_HEADER_RIGHT_INSET, 0)
-        bodySurface:SetShown(open)
-        PlaceBackdropFrameBehindControls(bodySurface, outer)
+        local bodySurface = open and PageBuilderStages.CreateBodySurface(outer, headerH, true) or nil
         local header = PixelLayoutRegion(CreateFrame("Button", nil, outer))
         SetSearchTitle(header, title)
         header:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, 0)
@@ -580,7 +610,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
             local headerActiveDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
             headerActiveFrom = { headerActiveBlue[1], headerActiveBlue[2], headerActiveBlue[3], 0.62 }
             headerActiveTo = { headerActiveDeep[1], headerActiveDeep[2], headerActiveDeep[3], 0.56 }
-            headerOpenHighlight = CreateAccordionOpenHighlight(header, headerActiveFrom, headerActiveTo)
+            if open then headerOpenHighlight = CreateAccordionOpenHighlight(header, headerActiveFrom, headerActiveTo) end
         end
         local arrow = PixelLayoutRegion(header:CreateTexture(nil, "OVERLAY"))
         arrow:SetSize(10, 10)
@@ -608,6 +638,8 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
             header = header,
             headerBg = headerBg,
             headerOpenHighlight = headerOpenHighlight,
+            _msuf2HeaderActiveFrom = headerActiveFrom,
+            _msuf2HeaderActiveTo = headerActiveTo,
             body = body,
             bodySurface = bodySurface,
             arrow = arrow,
@@ -652,14 +684,8 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
             -- instead of repainting a header from a stale Midnight snapshot.
             local liveSurface = ThemeColor("coreSurface", T.colors.panel2)
             local liveRaised = ThemeColor("coreRaised", { 0.026, 0.070, 0.110, 1.00 })
-            if headerOpenHighlight and headerOpenHighlight.SetColors then
-                local activeBlue = ThemeColor("coreGlow", { 0.231, 0.510, 0.965, 1.00 })
-                local activeDeep = ThemeColor("coreBlue", { 0.141, 0.365, 0.741, 1.00 })
-                headerActiveFrom[1], headerActiveFrom[2], headerActiveFrom[3] = activeBlue[1], activeBlue[2], activeBlue[3]
-                headerActiveTo[1], headerActiveTo[2], headerActiveTo[3] = activeDeep[1], activeDeep[2], activeDeep[3]
-                headerOpenHighlight:SetColors(headerActiveFrom, headerActiveTo)
-            end
             local active = entry.open == true and entry.openHighlightEnabled == true
+            local headerOpenHighlight = PageBuilderStages.PaintOpenHighlight(entry, active)
             if entry._msuf2OpenHighlightShown ~= active then
                 entry._msuf2OpenHighlightShown = active
                 if headerOpenHighlight then headerOpenHighlight:SetShown(active) end

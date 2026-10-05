@@ -41,16 +41,23 @@ local buttonKeys = { "_msuf2Fill", "_msuf2Edge", "_msufUIFill", "_msufUIEdge", "
 local partKeys = { "TL", "T", "TR", "L", "C", "M", "R", "BL", "B", "BR", "texture", "hoverWash", "glow", "sheen",
     "top", "bottom", "left", "right", "fill", "edge", "leftGlint", "rightGlint", "cornerGlow" }
 
+-- Callers pass a present part; children past depth 3 are never visited.
 local function HidePart(part, hidden, depth)
-    if not part or depth > 3 then return end
     if part.Hide and part.IsShown then
         if hidden[part] == nil then hidden[part] = part:IsShown() end
         part:Hide()
     elseif type(part) == "table" then
         if part._neonPulse and part._neonPulse.Stop then part._neonPulse:Stop() end
         if part._neonPulse2 and part._neonPulse2.Stop then part._neonPulse2:Stop() end
-        for i = 1, #partKeys do HidePart(part[partKeys[i]], hidden, depth + 1) end
-        for i = 1, #part do HidePart(part[i], hidden, depth + 1) end
+        if depth >= 3 then return end
+        for i = 1, #partKeys do
+            local child = part[partKeys[i]]
+            if child then HidePart(child, hidden, depth + 1) end
+        end
+        for i = 1, #part do
+            local child = part[i]
+            if child then HidePart(child, hidden, depth + 1) end
+        end
     end
 end
 local function RestoreHidden(hidden)
@@ -65,7 +72,10 @@ local function Suppress(target, record, keys)
     if record.suppressed and record.roundedFill == target._msuf2RoundedEditFill
         and record.roundedEdge == target._msuf2RoundedEditEdge then return end
     record.hidden = record.hidden or {}
-    for i = 1, #keys do HidePart(target[keys[i]], record.hidden, 0) end
+    for i = 1, #keys do
+        local part = target[keys[i]]
+        if part then HidePart(part, record.hidden, 0) end
+    end
     if target.GetBackdropColor and target.SetBackdropColor then
         record.bg = record.bg or { target:GetBackdropColor() }
         record.edge = record.edge or (target.GetBackdropBorderColor and { target:GetBackdropBorderColor() } or nil)
@@ -135,8 +145,12 @@ function Skin.Button(button, selected, hover, paint)
         or (button._msuf2Primary or button._msufUIPrimary) and "buttonPrimary"
         or nav and "navigation" or "button"
     if not record.skinned or record.role ~= role or record.nav ~= nav then
+        -- Menu2 T.Button (the only setter of _msuf2RawSetScript) builds plain
+        -- Buttons: no template, native state textures, Icon/Checked fields,
+        -- dropdown mixin or Blizzard-gold text, and its pages never add them.
         local ok, reason = client:SkinButton(button, { role = role, activeRole = nav and "button" or role,
-            useControlShape = true, active = selected == true, listItem = nav })
+            useControlShape = true, active = selected == true, listItem = nav,
+            ownedArt = button._msuf2RawSetScript ~= nil })
         if not ok or reason ~= "applied" then return false end
         record.skinned, record.role, record.nav, record.selected = true, role, nav, selected == true
     elseif record.selected ~= (selected == true) then
@@ -171,8 +185,8 @@ function Skin.WindowAction(button, kind, paint, hover, down)
             hidden = {}
             groups[group] = hidden
         end
-        HidePart(group._msuf2ControlGroupBase, hidden, 0)
-        HidePart(group._msuf2ControlGroupHover, hidden, 0)
+        if group._msuf2ControlGroupBase then HidePart(group._msuf2ControlGroupBase, hidden, 0) end
+        if group._msuf2ControlGroupHover then HidePart(group._msuf2ControlGroupHover, hidden, 0) end
     end
     return true
 end

@@ -112,4 +112,33 @@ hides = HideCount()
 Paint(input)
 assert(HideCount() == hides, "reenabled unchanged paint repeats chrome suppression")
 assert(nativePaints == 1, "provider paint unexpectedly entered native painter")
+
+-- Menu2 T.Button (the only setter of _msuf2RawSetScript) declares its plain
+-- Buttons ownedArt, so the provider skips native-art and gold-text scans on
+-- them; any other button (core widget fallback) does not claim it.
+local buttonSpecs = {}
+function client:SkinButton(target, options)
+    buttonSpecs[target] = options
+    return true, "applied"
+end
+local function SkinnedButton(menu2)
+    local label = { SetTextColor = function(self, ...) self.color = { ... } end }
+    local button = { _msuf2Label = label, IsEnabled = function() return true end,
+        _msuf2Fill = { L = Region(), M = Region(), R = Region(), glow = { Region(), { fill = Region() } } } }
+    if menu2 then button._msuf2RawSetScript = function() end end
+    function api:GetColor() return 0.1, 0.2, 0.3, 1 end
+    assert(Skin.Button(button, false, false, function() end), "provider did not skin the button")
+    return button
+end
+local menuButton, coreButton = SkinnedButton(true), SkinnedButton(false)
+assert(buttonSpecs[menuButton].ownedArt == true, "Menu2 button was not declared ownedArt")
+assert(buttonSpecs[coreButton].ownedArt == false, "a core widget button claimed ownedArt")
+-- Suppression hides every part down to depth 3 and leaves deeper art alone.
+local fill = menuButton._msuf2Fill
+assert(not fill.L:IsShown() and not fill.M:IsShown() and not fill.R:IsShown(), "button fill parts stayed visible")
+assert(not fill.glow[1]:IsShown() and not fill.glow[2].fill:IsShown(), "depth-3 art stayed visible")
+local deep = { L = { L = { L = { L = Region() } } } }
+local deepButton = { _msuf2Edge = deep, IsEnabled = function() return true end }
+assert(Skin.Button(deepButton, false, false, function() end))
+assert(deep.L.L.L.L:IsShown(), "suppression reached past depth 3")
 print("menu_search_skin_lifecycle_smoke: PASS")

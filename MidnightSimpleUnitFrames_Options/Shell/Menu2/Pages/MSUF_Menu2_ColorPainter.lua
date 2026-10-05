@@ -278,7 +278,7 @@ local NAVIGATE_ONLY_SECTIONS = {
     colors_class_power = "Opens the Resources colors below - pick the Class Resource there, then set its colors.",
 }
 
-local function FocusUnitPreview(box, category)
+local function FocusUnitPreview(box, category, noRender)
     if not (box and type(box.layerVisibility) == "table") then return end
     SwitchColorPreviewCamera(box, category)
     -- A color sample must remain inspectable even when the corresponding live
@@ -296,7 +296,7 @@ local function FocusUnitPreview(box, category)
         local button = box.layerButtons[i]
         if button and type(button.refresh) == "function" then button:refresh() end
     end
-    RequestPreview(box, "MSUF2_COLOR_PAINTER_FOCUS")
+    if not noRender then RequestPreview(box, "MSUF2_COLOR_PAINTER_FOCUS") end
 end
 
 local function ResolveCategoryAnchors(unitBoxes, groupBox, categoryKey)
@@ -684,7 +684,10 @@ function PainterBuild.PreviewBoxes(state)
     -- EnsureUnitBoxes call finishes the pair synchronously.
     local targetBoxPending = false
     local unitBoxesBuilt = false
-    local function AddTargetBox()
+    -- inCategoryPass: ShowCategory finishes the pair and then shows, focuses
+    -- and requests the render of both boxes itself, so its own pass is not
+    -- repeated here.
+    local function AddTargetBox(inCategoryPass)
         targetBoxPending = false
         local targetBox = MakeUnitPreview(host, ctx, unitPreviewW, "target", "Target")
         if not targetBox then return end
@@ -692,14 +695,14 @@ function PainterBuild.PreviewBoxes(state)
         targetBox:SetPoint("TOPLEFT", host, "TOPLEFT", unitPreviewW + unitGap, 0)
         unitBoxes[#unitBoxes + 1] = targetBox
         WireUnitBox(targetBox)
-        if not (ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown()) then
+        if not inCategoryPass and not (ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown()) then
             state.ShowCategory(Current())
             RequestPreview(targetBox, "MSUF2_COLOR_PAINTER_TARGET_BOX")
         end
     end
-    state.EnsureUnitBoxes = function()
+    state.EnsureUnitBoxes = function(inCategoryPass)
         if unitBoxesBuilt then
-            if targetBoxPending then AddTargetBox() end
+            if targetBoxPending then AddTargetBox(inCategoryPass) end
             return
         end
         -- During the synchronous page-build frame a deferred visible refresh is
@@ -1138,8 +1141,16 @@ function PainterBuild.Category(state)
     local valid, categories, unitBoxes, categoryBar = state.valid, state.categories, state.unitBoxes, state.categoryBar
     local EnsureCastBox, EnsureGroupBox, EnsureResourcesStrip = state.EnsureCastBox, state.EnsureGroupBox, state.EnsureResourcesStrip
     local tabDescription, RebuildClickTargets, RaiseZoomBars = state.tabDescription, state.RebuildClickTargets, state.RaiseZoomBars
-    local function ShowCategory(key)
+    local function BoxCount()
+        return #unitBoxes + (state.castBox and 1 or 0) + (state.groupBox and 1 or 0)
+    end
+    state.BoxCount = BoxCount
+    -- reassertOnly: the visible refresh's next-frame pass, after a pass that
+    -- already requested the renders. It requests none again, unless it had to
+    -- create a box, which still needs its first render.
+    local function ShowCategory(key, reassertOnly)
         if not valid[key] then key = categories[1].key end
+        local boxes = BoxCount()
         if M.SetMenuStateValue then M.SetMenuStateValue("colorsPainterCategory", key) else M.colorsPainterCategory = key end
         local category
         for i = 1, #categories do
@@ -1148,7 +1159,7 @@ function PainterBuild.Category(state)
                 break
             end
         end
-        if key ~= "suite" then state.EnsureUnitBoxes() end
+        if key ~= "suite" then state.EnsureUnitBoxes(true) end
         if key == "suite" and not state.suiteColorNote then
             local note = PixelLayoutRegion(state.host:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
             note:SetPoint("CENTER", state.host, "CENTER", 0, 0)
@@ -1160,6 +1171,7 @@ function PainterBuild.Category(state)
         local strip = key == "resources" and EnsureResourcesStrip(category) or nil
         if key == "group" then EnsureGroupBox() end
         local castBox, resourcesStrip, groupBox = state.castBox, state.resourcesStrip, state.groupBox
+        local noRender = reassertOnly and BoxCount() == boxes
         for i = 1, #unitBoxes do unitBoxes[i]:SetShown(key ~= "group" and key ~= "suite" and not castPanel and not strip) end
         if castBox then castBox:SetShown(castPanel and true or false) end
         if resourcesStrip and resourcesStrip ~= false then resourcesStrip:SetShown(strip and true or false) end
@@ -1170,12 +1182,12 @@ function PainterBuild.Category(state)
                 local unitBox = boxes[i]
                 HidePreviewEditorChrome(unitBox, unitBox.canvas, unitBox.sidebar, unitBox.zoomBar, unitBox.animateCombatButton)
                 DisableUnitPreviewEditing(unitBox)
-                FocusUnitPreview(unitBox, key)
+                FocusUnitPreview(unitBox, key, noRender)
             end
         end
         if groupBox and key == "group" then
             HidePreviewEditorChrome(groupBox, groupBox._stage, groupBox._layers, groupBox._zoomBar, groupBox._previewAnimationButton)
-            RequestPreview(groupBox, "MSUF2_COLOR_PAINTER_GROUP")
+            if not noRender then RequestPreview(groupBox, "MSUF2_COLOR_PAINTER_GROUP") end
             HideGroupPreviewIcons(groupBox)
         end
         if categoryBar and categoryBar.Refresh then categoryBar:Refresh() end
@@ -1227,9 +1239,10 @@ function PainterBuild.Lifecycle(state)
         -- Showing only Player/Target here cannot make them visible below a
         -- released (hidden) host.
         if host.Show then host:Show() end
+        local boxes = state.BoxCount()
         state.EnsureUnitBoxes()
         EnsurePreviewAttachment()
-        ShowCategory(Current())
+        ShowCategory(Current(), skipRender and state.BoxCount() == boxes)
         if not skipRender then RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE") end
         return true
     end

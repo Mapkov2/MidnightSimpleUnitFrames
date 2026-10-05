@@ -1831,6 +1831,45 @@ local function ForwardMenuScrollWheel(delta)
 end
 M.ForwardMenuScrollWheel = ForwardMenuScrollWheel
 
+--- LayoutPageHeaderHost's native half. Every page switch lays the slot out,
+--- mostly with nothing changed, and re-anchoring the ScrollFrame invalidates
+--- the whole page tree. Only this function anchors the two frames, so the same
+--- geometry whose anchors still point where it left them writes nothing.
+local function AnchorPageHeaderHost(pageHeaderHost, scroll, topOwner, layoutHost, stackHeight, clipped)
+    if pageHeaderHost._msuf2LaidOwner == topOwner and pageHeaderHost._msuf2LaidHost == layoutHost
+        and pageHeaderHost._msuf2LaidHeight == stackHeight and pageHeaderHost._msuf2LaidClipped == clipped
+    then
+        local _, hostAnchor = pageHeaderHost:GetPoint(1)
+        local _, scrollAnchor = scroll:GetPoint(1)
+        if hostAnchor == topOwner and scrollAnchor == (stackHeight > 0 and pageHeaderHost or topOwner) then return end
+    end
+    pageHeaderHost._msuf2LaidOwner, pageHeaderHost._msuf2LaidHost = topOwner, layoutHost
+    pageHeaderHost._msuf2LaidHeight, pageHeaderHost._msuf2LaidClipped = stackHeight, clipped
+    pageHeaderHost:ClearAllPoints()
+    pageHeaderHost:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
+    -- The fixed panel keeps the PageBuilder width (content - 32) with
+    -- equal 12 px side insets.  The ScrollFrame remains 16 px narrower
+    -- on the right to reserve its scrollbar gutter.
+    pageHeaderHost:SetPoint("TOPRIGHT", topOwner, "BOTTOMRIGHT", -8, 0)
+    scroll:ClearAllPoints()
+    if stackHeight > 0 then
+        pageHeaderHost:SetHeight(stackHeight)
+        -- On a window too short for the full stack, clip its overflow rather
+        -- than painting over the settings body or outside the window.
+        if pageHeaderHost.SetClipsChildren then pageHeaderHost:SetClipsChildren(clipped and true or false) end
+        pageHeaderHost:Show()
+        scroll:SetPoint("TOPLEFT", pageHeaderHost, "BOTTOMLEFT", 0, 0)
+    else
+        pageHeaderHost:SetHeight(0)
+        pageHeaderHost:Hide()
+        -- Plain pages bypass the optional slot completely. A hidden
+        -- zero-height intermediary previously left several menus blank
+        -- until a later layout pass repaired their mixed anchors.
+        scroll:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
+    end
+    scroll:SetPoint("BOTTOMRIGHT", layoutHost, "BOTTOMRIGHT", -24, 0)
+end
+
 local function BuildWindowScrollHost(state)
     local f = state.frame
     local host, status = f.host, f.status
@@ -1913,30 +1952,8 @@ local function BuildWindowScrollHost(state)
         if layoutHost then activeLayoutHost = layoutHost end
         topOwner = activeTopOwner or status
         layoutHost = activeLayoutHost or host
-        pageHeaderHost:ClearAllPoints()
-        pageHeaderHost:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
-        -- The fixed panel keeps the PageBuilder width (content - 32) with
-        -- equal 12 px side insets.  The ScrollFrame remains 16 px narrower
-        -- on the right to reserve its scrollbar gutter.
-        pageHeaderHost:SetPoint("TOPRIGHT", topOwner, "BOTTOMRIGHT", -8, 0)
-        scroll:ClearAllPoints()
         local stackHeight, clipped = StickyHeaderStackHeight(topOwner, layoutHost)
-        if stackHeight > 0 then
-            pageHeaderHost:SetHeight(stackHeight)
-            -- On a window too short for the full stack, clip its overflow rather
-            -- than painting over the settings body or outside the window.
-            if pageHeaderHost.SetClipsChildren then pageHeaderHost:SetClipsChildren(clipped and true or false) end
-            pageHeaderHost:Show()
-            scroll:SetPoint("TOPLEFT", pageHeaderHost, "BOTTOMLEFT", 0, 0)
-        else
-            pageHeaderHost:SetHeight(0)
-            pageHeaderHost:Hide()
-            -- Plain pages bypass the optional slot completely. A hidden
-            -- zero-height intermediary previously left several menus blank
-            -- until a later layout pass repaired their mixed anchors.
-            scroll:SetPoint("TOPLEFT", topOwner, "BOTTOMLEFT", 0, 0)
-        end
-        scroll:SetPoint("BOTTOMRIGHT", layoutHost, "BOTTOMRIGHT", -24, 0)
+        AnchorPageHeaderHost(pageHeaderHost, scroll, topOwner, layoutHost, stackHeight, clipped)
         scroll._msuf2TourAnchorOwner = topOwner
         scroll._msuf2TourAnchorHost = layoutHost
         scroll._msuf2MaxScroll = nil

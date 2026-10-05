@@ -28,6 +28,8 @@ local CONTROL_TOKEN_LIMIT = 36
 local state = {
     records = nil,
     localeKey = nil,
+    -- A decode in progress (StaticIndex.Advance): line iterator and records so far.
+    decoder = nil,
 }
 
 local function Normalize(text)
@@ -105,96 +107,124 @@ local function TranslateHint(hint, cache)
     return cached
 end
 
-local function DecodeIdentityPart(value)
-    return value and value:gsub("%%(%x%x)", function(byte) return string.char(tonumber(byte, 16)) end)
-end
-
-local function Decode()
-    local blob = Search.StaticIndexBlob
-    if type(blob) ~= "string" or blob == "" then return {} end
-
-    local _, EnsurePage = BuildPageInfo()
-    local records, count, hintCache = {}, 0, {}
-
-    for line in blob:gmatch("[^\n]+") do
-        local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity,
-            exactSectionId, exactTargetKinds, exactTargetContracts, haystack =
-            line:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
-        if pageKey and pageKey ~= "" then
-            local encodedPage, encodedControl = searchIdentity:match("^id\031([^\031]+)\031([^\031]+)$")
-            local controlId = DecodeIdentityPart(encodedControl)
-            if DecodeIdentityPart(encodedPage) ~= pageKey or not controlId
-                or not controlId:match("^[%w_%.:/%-]+$") then controlId = nil end
-            local page = EnsurePage(pageKey)
-            local displayLabel = Translate(label)
-            -- The baked text is English. A localized label is added on top instead of
-            -- replacing it, so a player can find a setting by either wording.
-            if displayLabel ~= label then
-                local localizedNorm = Normalize(displayLabel)
-                if localizedNorm ~= "" and localizedNorm ~= labelNorm then
-                    labelNorm = localizedNorm
-                    haystack = haystack .. " " .. localizedNorm
-                end
-            end
-            local displayHint, localizedHint = hint, hint
-            if displayHint ~= "" then
-                localizedHint = TranslateHint(hint, hintCache)
-                displayHint = page.title .. " > " .. localizedHint
-            else
-                displayHint = page.title
-            end
-            local hintNorm = Normalize(displayHint)
-            -- A translated breadcrumb keeps its English words for scoring as well.
-            if localizedHint ~= hint then hintNorm = hintNorm .. " " .. Normalize(hint) end
-            -- The clause scorer gates on the haystack before it inspects the page
-            -- title, so page/group words have to be present here too.
-            haystack = haystack .. " " .. hintNorm
-            if page.groupNorm ~= "" then haystack = haystack .. " " .. page.groupNorm end
-
-            -- Each sizing control belongs to one immutable tab. Its generated
-            -- contract can prepare that exact view even before the page is built.
-            local sizingTab
-            if pageKey == "gf_layout" and exactSectionId == "scaling"
-                and ("," .. exactTargetKinds .. ","):find(",groupSizingTab,", 1, true) then
-                sizingTab = ("|" .. exactTargetContracts .. "|"):match("|groupSizingTab=([^=|]+)=%*|")
-                if sizingTab ~= "general" and sizingTab ~= "tier10" and sizingTab ~= "tier20"
-                    and sizingTab ~= "tier25" and sizingTab ~= "tier40" then sizingTab = nil end
-            end
-            count = count + 1
-            records[count] = {
-                key = pageKey,
-                label = displayLabel,
-                kind = kind ~= "" and kind or "control",
-                hint = displayHint,
-                title = page.title,
-                group = page.group,
-                labelNorm = labelNorm,
-                searchIdentity = searchIdentity,
-                titleNorm = page.titleNorm,
-                groupNorm = page.groupNorm,
-                hintNorm = hintNorm,
-                haystack = haystack,
-                tokenLimit = CONTROL_TOKEN_LIMIT,
-                static = true,
-                exactTarget = (controlId or settingKey ~= "" or actionKey ~= "") and {
-                    controlId = controlId,
-                    pageKey = pageKey,
-                    settingKey = settingKey ~= "" and settingKey or nil,
-                    actionKey = actionKey ~= "" and actionKey or nil,
-                    sectionId = exactSectionId ~= "" and exactSectionId or nil,
-                    prepareKind = sizingTab and "groupSizingTab" or nil,
-                    prepareValue = sizingTab,
-                    prepareKinds = exactTargetKinds ~= "" and exactTargetKinds or nil,
-                    prepareContracts = exactTargetContracts ~= "" and exactTargetContracts or nil,
-                    label = displayLabel,
-                } or nil,
-            }
+-- Every "%XX" escape (either hex case) to its byte: a lookup instead of a
+-- callback per escape.
+local HEX_ESCAPE_BYTES = {}
+do
+    local digits = "0123456789abcdefABCDEF"
+    for i = 1, #digits do
+        for j = 1, #digits do
+            local pair = digits:sub(i, i) .. digits:sub(j, j)
+            HEX_ESCAPE_BYTES[pair] = string.char(tonumber(pair, 16))
         end
     end
+end
 
+local function DecodeIdentityPart(value)
+    return value and value:gsub("%%(%x%x)", HEX_ESCAPE_BYTES)
+end
+
+local function DecodeLine(decoder, line)
+    local EnsurePage, records, hintCache = decoder.EnsurePage, decoder.records, decoder.hintCache
+    local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity,
+        exactSectionId, exactTargetKinds, exactTargetContracts, haystack =
+        line:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
+    if pageKey and pageKey ~= "" then
+        local encodedPage, encodedControl = searchIdentity:match("^id\031([^\031]+)\031([^\031]+)$")
+        local controlId = DecodeIdentityPart(encodedControl)
+        if DecodeIdentityPart(encodedPage) ~= pageKey or not controlId
+            or not controlId:match("^[%w_%.:/%-]+$") then controlId = nil end
+        local page = EnsurePage(pageKey)
+        local displayLabel = Translate(label)
+        -- The baked text is English. A localized label is added on top instead of
+        -- replacing it, so a player can find a setting by either wording.
+        if displayLabel ~= label then
+            local localizedNorm = Normalize(displayLabel)
+            if localizedNorm ~= "" and localizedNorm ~= labelNorm then
+                labelNorm = localizedNorm
+                haystack = haystack .. " " .. localizedNorm
+            end
+        end
+        local displayHint, localizedHint = hint, hint
+        if displayHint ~= "" then
+            localizedHint = TranslateHint(hint, hintCache)
+            displayHint = page.title .. " > " .. localizedHint
+        else
+            displayHint = page.title
+        end
+        local hintNorm = Normalize(displayHint)
+        -- A translated breadcrumb keeps its English words for scoring as well.
+        if localizedHint ~= hint then hintNorm = hintNorm .. " " .. Normalize(hint) end
+        -- The clause scorer gates on the haystack before it inspects the page
+        -- title, so page/group words have to be present here too.
+        if page.groupNorm ~= "" then
+            haystack = haystack .. " " .. hintNorm .. " " .. page.groupNorm
+        else
+            haystack = haystack .. " " .. hintNorm
+        end
+
+        -- Each sizing control belongs to one immutable tab. Its generated
+        -- contract can prepare that exact view even before the page is built.
+        local sizingTab
+        if pageKey == "gf_layout" and exactSectionId == "scaling"
+            and ("," .. exactTargetKinds .. ","):find(",groupSizingTab,", 1, true) then
+            sizingTab = ("|" .. exactTargetContracts .. "|"):match("|groupSizingTab=([^=|]+)=%*|")
+            if sizingTab ~= "general" and sizingTab ~= "tier10" and sizingTab ~= "tier20"
+                and sizingTab ~= "tier25" and sizingTab ~= "tier40" then sizingTab = nil end
+        end
+        local count = decoder.count + 1
+        decoder.count = count
+        records[count] = {
+            key = pageKey,
+            label = displayLabel,
+            kind = kind ~= "" and kind or "control",
+            hint = displayHint,
+            title = page.title,
+            group = page.group,
+            labelNorm = labelNorm,
+            searchIdentity = searchIdentity,
+            titleNorm = page.titleNorm,
+            groupNorm = page.groupNorm,
+            hintNorm = hintNorm,
+            haystack = haystack,
+            tokenLimit = CONTROL_TOKEN_LIMIT,
+            static = true,
+            exactTarget = (controlId or settingKey ~= "" or actionKey ~= "") and {
+                controlId = controlId,
+                pageKey = pageKey,
+                settingKey = settingKey ~= "" and settingKey or nil,
+                actionKey = actionKey ~= "" and actionKey or nil,
+                sectionId = exactSectionId ~= "" and exactSectionId or nil,
+                prepareKind = sizingTab and "groupSizingTab" or nil,
+                prepareValue = sizingTab,
+                prepareKinds = exactTargetKinds ~= "" and exactTargetKinds or nil,
+                prepareContracts = exactTargetContracts ~= "" and exactTargetContracts or nil,
+                label = displayLabel,
+            } or nil,
+        }
+    end
+end
+
+--- Decodes the blob, or with a deadline as much of it as fits: returns the
+--- records once every line is done, nil while lines remain (state.decoder keeps
+--- the place). Line order and record contents do not depend on the slicing.
+local function Decode(deadline)
+    local decoder = state.decoder
+    if not decoder then
+        local blob = Search.StaticIndexBlob
+        if type(blob) ~= "string" or blob == "" then return {} end
+        local _, EnsurePage = BuildPageInfo()
+        decoder = { lines = blob:gmatch("[^\n]+"), records = {}, count = 0, hintCache = {}, EnsurePage = EnsurePage }
+        state.decoder = decoder
+    end
+    for line in decoder.lines do
+        DecodeLine(decoder, line)
+        if deadline and debugprofilestop() >= deadline then return nil end
+    end
+    state.decoder = nil
     -- The decoded records own their own substrings now, so the source blob can go.
     Search.StaticIndexBlob = nil
-    return records
+    return decoder.records
 end
 
 local function LocaleKey()
@@ -229,12 +259,26 @@ function StaticIndex.GetRecords()
     return state.records
 end
 
+--- Decodes until the deadline (debugprofilestop milliseconds): true once
+--- GetRecords has its records without further work. The sliced search index
+--- build calls it; GetRecords finishes whatever a slice left.
+function StaticIndex.Advance(deadline)
+    if not state.records then
+        if CombatLocked() then return false end
+        local records = Decode(deadline)
+        if not records then return false end
+        state.records = records
+        state.localeKey = LocaleKey()
+    end
+    return true
+end
+
 --- True once the blob has been decoded, so callers can avoid forcing the cost.
 function StaticIndex.IsDecoded()
     return state.records ~= nil
 end
 
 function StaticIndex.ClearCache()
-    if type(Search.StaticIndexBlob) == "string" then state.records = nil end
+    if type(Search.StaticIndexBlob) == "string" then state.records, state.decoder = nil, nil end
     state.localeKey = nil
 end

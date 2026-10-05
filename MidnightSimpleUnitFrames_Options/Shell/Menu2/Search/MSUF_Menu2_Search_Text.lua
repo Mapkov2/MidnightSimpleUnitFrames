@@ -128,7 +128,18 @@ end
 
 local NORMALIZED_TEXT_CACHE_LIMIT = 4096
 local NORMALIZED_TEXT_CACHE_MAX_SOURCE_LEN = 256
-local normalizedTextCache, normalizedTextCacheCount = {}, 0
+-- Two generations: a full cache becomes the previous one instead of being
+-- dropped, so a long index build keeps its repeated strings (bounded at twice
+-- the limit). Answers are pure, so a hit in either generation is exact.
+local normalizedTextCache, normalizedTextCacheOld, normalizedTextCacheCount = {}, {}, 0
+local function RememberNormalized(source, text)
+    if normalizedTextCacheCount >= NORMALIZED_TEXT_CACHE_LIMIT then
+        normalizedTextCacheOld, normalizedTextCache, normalizedTextCacheCount = normalizedTextCache, {}, 0
+    end
+    normalizedTextCache[source] = text
+    normalizedTextCacheCount = normalizedTextCacheCount + 1
+    return text
+end
 local function NormalizeSearchText(text)
     -- Cache keys are source strings: a repeated string returns before tostring.
     local hit = normalizedTextCache[text]
@@ -139,6 +150,8 @@ local function NormalizeSearchText(text)
     if cacheable then
         local cached = normalizedTextCache[source]
         if cached ~= nil then return cached end
+        cached = normalizedTextCacheOld[source]
+        if cached ~= nil then return RememberNormalized(source, cached) end
     end
     if text:find("|", 1, true) then
         text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
@@ -166,20 +179,25 @@ local function NormalizeSearchText(text)
     --- Preserve non-ASCII letters so native localized FAQ keywords can match.
     text = text:gsub("[!\"#$%%&'%*%+<=>%?%@%[%]%^`{|}~]+", " ")
     text = text:gsub("%s+", " ")
-    text = TrimText(text)
-    if cacheable then
-        if normalizedTextCacheCount >= NORMALIZED_TEXT_CACHE_LIMIT then
-            normalizedTextCache, normalizedTextCacheCount = {}, 0
-        end
-        normalizedTextCache[source] = text
-        normalizedTextCacheCount = normalizedTextCacheCount + 1
-    end
+    -- Every whitespace run is one space now, so trimming drops at most one
+    -- space per end (TrimText's "%s$" probe scans the whole string).
+    if string.byte(text, 1) == 32 then text = text:sub(2) end
+    if string.byte(text, -1) == 32 then text = text:sub(1, -2) end
+    if cacheable then RememberNormalized(source, text) end
     return text
 end
 
 local DISPLAY_TEXT_CACHE_LIMIT = 4096
 local DISPLAY_TEXT_CACHE_MAX_SOURCE_LEN = 256
-local displayTextCache, displayTextCacheCount = {}, 0
+local displayTextCache, displayTextCacheOld, displayTextCacheCount = {}, {}, 0
+local function RememberDisplay(source, text)
+    if displayTextCacheCount >= DISPLAY_TEXT_CACHE_LIMIT then
+        displayTextCacheOld, displayTextCache, displayTextCacheCount = displayTextCache, {}, 0
+    end
+    displayTextCache[source] = text
+    displayTextCacheCount = displayTextCacheCount + 1
+    return text
+end
 local function DisplaySearchText(text)
     local hit = displayTextCache[text]
     if hit ~= nil then return hit end
@@ -189,19 +207,16 @@ local function DisplaySearchText(text)
     if cacheable then
         local cached = displayTextCache[source]
         if cached ~= nil then return cached end
+        cached = displayTextCacheOld[source]
+        if cached ~= nil then return RememberDisplay(source, cached) end
     end
     if text:find("|", 1, true) then
         text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     end
     text = text:gsub("%s+", " ")
-    text = TrimText(text)
-    if cacheable then
-        if displayTextCacheCount >= DISPLAY_TEXT_CACHE_LIMIT then
-            displayTextCache, displayTextCacheCount = {}, 0
-        end
-        displayTextCache[source] = text
-        displayTextCacheCount = displayTextCacheCount + 1
-    end
+    if string.byte(text, 1) == 32 then text = text:sub(2) end
+    if string.byte(text, -1) == 32 then text = text:sub(1, -2) end
+    if cacheable then RememberDisplay(source, text) end
     return text
 end
 
@@ -238,8 +253,10 @@ end
 local searchLocaleSeenScratch = {}
 local searchLocaleSeenScratchBusy = false
 local function SearchLocaleTranslations(text)
-    text = tostring(text or "")
-    local locale = SearchEffectiveLocale()
+    if type(text) ~= "string" then text = tostring(text or "") end
+    -- SearchEffectiveLocale's own first answer, without the call.
+    local locale = MSUF.LOCALE
+    if type(locale) ~= "string" or locale == "" then locale = SearchEffectiveLocale() end
     local localeCache = SEARCH_LOCALE_TEXT_CACHE[locale]
     if not localeCache then
         localeCache = {}
@@ -291,6 +308,19 @@ local function AddSearchText(parts, text)
     if text == nil then return end
     text = DisplaySearchText(text)
     if text == "" then return end
+    local translations = SearchLocaleTranslations(text)
+    -- No translation, or one (never ""): append without the duplicate guard,
+    -- which only a longer list needs. Same parts, same order.
+    -- text is a display string here, so the locale-key test is IsSearchLocaleKey's find.
+    if #translations == 0 then
+        if text:find(SEARCH_LOCALE_KEY_PREFIX, 1, true) ~= 1 then parts[#parts + 1] = text end
+        return
+    elseif #translations == 1 then
+        local translated = translations[1]
+        parts[#parts + 1] = translated
+        if translated ~= text and text:find(SEARCH_LOCALE_KEY_PREFIX, 1, true) ~= 1 then parts[#parts + 1] = text end
+        return
+    end
     local wasBusy = addSearchTextSeenScratchBusy
     local seen = wasBusy and {} or addSearchTextSeenScratch
     addSearchTextSeenScratchBusy = true

@@ -2162,15 +2162,26 @@ local function BuildColors(ctx)
         b:RequestRelayoutCollapsibles()
     end
     local ActivateCategory
-    local function EnsureCategoryBuilt(categoryKey)
+    -- A live stage timer finishes the build on its own tick, so an activation
+    -- (the page show in the entry frame, painter refreshes) leaves the later
+    -- stages to it. A cancelled or refused timer (menu hidden, combat) resumes
+    -- one stage, as before; callers that need the sections now (paint, focus,
+    -- hidden builds) pass now and run every remaining stage.
+    local function ResumeCategoryBuild(category, now)
+        local task = category.resumeTask
+        if not now and type(task) == "table" and task.active == true then return end
+        repeat
+            local resume = category.resumeStage
+            if not resume then return end
+            category.resumeStage = nil
+            resume()
+        until not now
+    end
+    local function EnsureCategoryBuilt(categoryKey, now)
         local category = categories[categoryKey]
         if not category or category.built then return category end
         if category.building then
-            local resume = category.resumeStage
-            if resume then
-                category.resumeStage = nil
-                resume()
-            end
+            ResumeCategoryBuild(category, now)
             return category
         end
         category.building = true
@@ -2232,7 +2243,7 @@ local function BuildColors(ctx)
                     -- resume hook lets the next EnsureCategoryBuilt call pick
                     -- the build back up instead of leaving it half-finished.
                     category.resumeStage = function() RunCategoryStage(nextStage) end
-                    C_Timer.After(0.02, function()
+                    category.resumeTask = C_Timer.After(0.02, function()
                         if categories[categoryKey] ~= category or category.resumeStage == nil then return end
                         category.resumeStage = nil
                         RunCategoryStage(nextStage)
@@ -2244,6 +2255,7 @@ local function BuildColors(ctx)
             FinishCategoryBuild()
         end
         RunCategoryStage(COLOR_CATEGORY_BUILDERS[categoryKey])
+        if now then ResumeCategoryBuild(category, true) end
         return category
     end
     ActivateCategory = function(categoryKey)
@@ -2262,7 +2274,7 @@ local function BuildColors(ctx)
     M.ColorsOnPainterCategory = ActivateCategory
     M.ColorsEnsureCategoryBuilt = function(sectionId)
         local categoryKey = COLOR_SECTION_CATEGORY[tostring(sectionId or "")]
-        if categoryKey then EnsureCategoryBuilt(categoryKey) end
+        if categoryKey then EnsureCategoryBuilt(categoryKey, true) end
     end
     if ctx.entry then
         ctx.entry._msuf2ResolveMissingSection = function(sectionId)
@@ -2273,22 +2285,25 @@ local function BuildColors(ctx)
             else
                 ActivateCategory(categoryKey)
             end
+            EnsureCategoryBuilt(categoryKey, true)
             local sections = ctx.entry.sections
             return sections and sections[tostring(sectionId)]
         end
     end
     if ctx.hiddenBuild then
-        for i = 1, #COLOR_CATEGORY_ORDER do EnsureCategoryBuilt(COLOR_CATEGORY_ORDER[i]) end
+        for i = 1, #COLOR_CATEGORY_ORDER do EnsureCategoryBuilt(COLOR_CATEGORY_ORDER[i], true) end
     end
     local initialKey = PendingColorFocusCategory(ctx)
     if not initialKey then
         local persisted = M.colorsPainterCategory
         initialKey = categories[persisted] and persisted or COLOR_CATEGORY_ORDER[1]
     end
+    -- The painter's ShowCategory ends in ActivateCategory itself.
     if type(M.ColorsSetPainterCategory) == "function" then
         M.ColorsSetPainterCategory(initialKey)
+    else
+        ActivateCategory(initialKey)
     end
-    ActivateCategory(initialKey)
     b:RelayoutCollapsibles()
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end

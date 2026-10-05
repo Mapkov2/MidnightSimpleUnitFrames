@@ -194,6 +194,7 @@ WagoAnalytics	thirdparty	Wago's analytics global, probed by the shipped shim
 WorldFrame	frame	Blizzard UI frame or object MSUF reads
 YES	constant	Blizzard UI constant, enum or shared string
 canaccesstable	luaenv	Blizzard secret-table access predicate; upstream/live:Blizzard_APIDocumentationGenerated/FrameScriptDocumentation.lua:48; ManaExtras probes availability and checks the cost table and entries before indexing
+debugprofilestop	api	Blizzard millisecond profiling clock (FrameScriptDocumentation on live, classic, classic_era and forever); the sliced Menu2 search index build probes it and runs unsliced without it
 floor	luaenv	math.floor, which WoW also publishes as a global
 geterrorhandler	luaenv	WoW's error-handler accessor, read by an embedded library
 hooksecurefunc	luaenv	WoW's secure post-hook global

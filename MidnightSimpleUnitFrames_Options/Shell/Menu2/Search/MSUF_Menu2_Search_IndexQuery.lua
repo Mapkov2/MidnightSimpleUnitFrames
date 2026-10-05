@@ -48,6 +48,9 @@ local EMPTY_SEARCH_RECORDS = {}
 local SEARCH_STATE = {
     records = nil,
     recordsDirty = true,
+    -- Bumped by every invalidation; a sliced index build resumes only while
+    -- nothing outside its own slices changed it.
+    dirtySerial = 0,
     indexing = false,
     indexQueue = nil,
     inputSerial = 0,
@@ -75,6 +78,7 @@ M.searchRegistry = SEARCH_STATE.registry
 
 local function MarkSearchIndexDirty()
     SEARCH_STATE.recordsDirty = true
+    SEARCH_STATE.dirtySerial = SEARCH_STATE.dirtySerial + 1
 end
 
 local function ClearSearchLocaleCaches()
@@ -83,6 +87,7 @@ local function ClearSearchLocaleCaches()
     SEARCH_STATE.queryClauseCacheClauses = nil
     SEARCH_STATE.registryRecords = {}
     SEARCH_STATE.providerCache = nil
+    SEARCH_STATE.dirtySerial = SEARCH_STATE.dirtySerial + 1
 end
 
 local function EnsureSearchLocaleFresh()
@@ -753,7 +758,8 @@ local function SearchFuzzyTokenMatch(rec, term, distanceCache)
         tokens = BuildSearchTokenList(rec.haystack or "", rec.tokenLimit)
         rec.tokens, rec.tokensLexicon = tokens, SEARCH_STATE.lexiconGeneration
     end
-    local counts = SearchTokenCharCounts(rec, tokens)
+    local counts = rec.tokenCharCounts
+    if not counts or rec.tokenCharCountsFor ~= tokens then counts = SearchTokenCharCounts(rec, tokens) end
     local termLength = termCache[2]
     for i = 1, #tokens do
         local lengthDelta = counts[i] - termLength
@@ -1068,6 +1074,12 @@ local function AddValuesSearchText(parts, values)
 end
 
 local function SearchHint(pageInfo, anchor)
+    local parent = anchor and anchor.GetParent and anchor:GetParent()
+    -- The breadcrumb depends on the page info and the parent chain only. A build
+    -- shares one page info across a page's controls (BuildRegistrySearchRecord),
+    -- and that info remembers the breadcrumb per parent frame for its siblings.
+    local memo = parent and pageInfo._msuf2SearchHintMemo
+    if memo and memo[parent] then return memo[parent] end
     local parts, seen = {}, {}
     local function Add(text)
         text = SearchDisplayText(text)
@@ -1080,7 +1092,7 @@ local function SearchHint(pageInfo, anchor)
     Add(pageInfo.group)
     Add(pageInfo.label or pageInfo.title)
     local sections, sectionSeen = {}, {}
-    local parent = anchor and anchor.GetParent and anchor:GetParent()
+    local chainStart = parent
     local pageNorm = NormalizeSearchText(pageInfo.title or pageInfo.label or "")
     while parent do
         local title
@@ -1104,7 +1116,9 @@ local function SearchHint(pageInfo, anchor)
         parent = parent.GetParent and parent:GetParent() or nil
     end
     for i = 1, #sections do Add(sections[i]) end
-    return table.concat(parts, " > ")
+    local hint = table.concat(parts, " > ")
+    if memo then memo[chainStart] = hint end
+    return hint
 end
 
 local function BuildSearchPageInfos()
@@ -1555,6 +1569,7 @@ end
 
 local function SearchIdentityComponent(value)
     local text = tostring(value or "")
+    if not text:find("[%%\031%.]") then return text end
     -- Search identities are baked into a Lua long-string. Escape the separator
     -- and dotted catalog IDs so code analyzers cannot mistake this derived
     -- routing key for a SavedVariables setting path.
@@ -1572,9 +1587,18 @@ local function CatalogSearchIdentity(kind, pageKey, ...)
     return table.concat(parts, "\031")
 end
 
-BuildRegistrySearchRecord = function(entry)
+BuildRegistrySearchRecord = function(entry, pageInfos)
     if type(entry) ~= "table" then return nil end
-    local info = BuildSearchPageInfoForKey(entry.pageKey)
+    -- One build shares a page's info (and the page text cache AddSearchRecord
+    -- keeps on it) across that page's controls.
+    local info = pageInfos and pageInfos[entry.pageKey]
+    if not info then
+        info = BuildSearchPageInfoForKey(entry.pageKey)
+        if pageInfos and entry.pageKey ~= nil then
+            info._msuf2SearchHintMemo = {}
+            pageInfos[entry.pageKey] = info
+        end
+    end
     local extra = {}
     AddValuesSearchText(extra, entry.values)
     if type(entry.keywords) == "string" then
@@ -1773,6 +1797,18 @@ local function AddStaticIndexSearchRecords(records, covered)
     end
 end
 
+--- The record set is built by a resumable job (SearchIndexBuild.PHASES). A
+--- synchronous reader runs it to the end at once. The debounced input path runs
+--- it in slices of SLICE_MS on the menu's own task registry
+--- (SearchIndexBuild.Advance), so a cold build never lands in one frame. The
+--- phases keep the order of the one-shot build, so the records, their order and
+--- the caches they fill are identical either way.
+local SearchIndexBuild = { SLICE_MS = 8 }
+
+function SearchIndexBuild.Due(deadline)
+    return deadline ~= nil and debugprofilestop() >= deadline
+end
+
 --- Runtime search providers. An optional companion addon owns pages this layer
 --- has no static rows for; it registers one function that returns plain rows
 --- (M.RegisterSearchProvider). The rows become records shaped like the static
@@ -1925,31 +1961,45 @@ end
 --- Calls every provider once and caches the result until a provider changes or
 --- the menu language does. A provider that raised on its last call is skipped
 --- until it registers again, so one broken provider cannot break search.
-function SearchProviders.Collect(pageInfoByKey)
+--- With a build job and a deadline it stops once the deadline passes and returns
+--- nil, keeping its place in job.collect; the next call continues there.
+function SearchProviders.Collect(pageInfoByKey, job, deadline)
     if SearchCombatLocked() or SearchMenuClosed() then return { pages = {}, records = {}, pageKeys = {} } end
     local cache = SEARCH_STATE.providerCache
     if cache then return cache end
-    cache = { pages = {}, records = {}, pageKeys = {}, rows = 0, skipped = 0 }
-    local names = {}
-    for name in pairs(SEARCH_STATE.providers) do names[#names + 1] = name end
-    table.sort(names)
-    for n = 1, #names do
-        local entry = SEARCH_STATE.providers[names[n]]
-        if not entry.failed then
-            entry.failed = true
-            local rows = entry.collect()
-            entry.failed = nil
-            if type(rows) == "table" then
-                for i = 1, math.min(#rows, SearchProviders.ROW_LIMIT) do
-                    if SearchProviders.AddRow(cache, rows[i], pageInfoByKey) then
-                        cache.rows = cache.rows + 1
-                    else
-                        cache.skipped = cache.skipped + 1
-                    end
-                end
-            end
-        end
+    local walk = job and job.collect
+    if not walk then
+        walk = { cache = { pages = {}, records = {}, pageKeys = {}, rows = 0, skipped = 0 }, names = {}, n = 1 }
+        for name in pairs(SEARCH_STATE.providers) do walk.names[#walk.names + 1] = name end
+        table.sort(walk.names)
+        if job then job.collect = walk end
     end
+    cache = walk.cache
+    while walk.n <= #walk.names do
+        if not walk.rows then
+            local entry = SEARCH_STATE.providers[walk.names[walk.n]]
+            local rows
+            if not entry.failed then
+                entry.failed = true
+                rows = entry.collect()
+                entry.failed = nil
+            end
+            walk.rows = type(rows) == "table" and rows or EMPTY_SEARCH_RECORDS
+            walk.i, walk.last = 1, math.min(#walk.rows, SearchProviders.ROW_LIMIT)
+            if deadline and SearchIndexBuild.Due(deadline) then return nil end
+        end
+        while walk.i <= walk.last do
+            if SearchProviders.AddRow(cache, walk.rows[walk.i], pageInfoByKey) then
+                cache.rows = cache.rows + 1
+            else
+                cache.skipped = cache.skipped + 1
+            end
+            walk.i = walk.i + 1
+            if deadline and SearchIndexBuild.Due(deadline) then return nil end
+        end
+        walk.rows, walk.n = nil, walk.n + 1
+    end
+    if job then job.collect = nil end
     SEARCH_STATE.providerCache = cache
     return cache
 end
@@ -2034,16 +2084,18 @@ function M.InvalidateSearchProvider(name)
     return true
 end
 
-function SearchProviders.FilterAvailable(records)
-    local write = 0
-    for read = 1, #records do
+function SearchProviders.FilterAvailable(records, job, deadline)
+    local write = job and job.filterWrite or 0
+    local predicates = {}
+    for _, isAvailable in pairs(SEARCH_STATE.availability) do predicates[#predicates + 1] = isAvailable end
+    for read = job and job.index or 1, #records do
         local rec = records[read]
         local available = rec.easterEgg or (M.pages and M.pages[rec.key]) ~= nil
         if available and not rec.easterEgg then
             local target = rec.exactTarget
             local settingKey = target and target.settingKey
-            for _, isAvailable in pairs(SEARCH_STATE.availability) do
-                if isAvailable(rec.key, settingKey, rec) == false then
+            for p = 1, #predicates do
+                if predicates[p](rec.key, settingKey, rec) == false then
                     available = false
                     break
                 end
@@ -2054,8 +2106,13 @@ function SearchProviders.FilterAvailable(records)
             rec.order = write
             records[write] = rec
         end
+        if deadline and SearchIndexBuild.Due(deadline) then
+            job.index, job.filterWrite = read + 1, write
+            return false
+        end
     end
     for i = #records, write + 1, -1 do records[i] = nil end
+    return true
 end
 
 --- Whether search would offer a page, without building the index: registered,
@@ -2169,78 +2226,145 @@ function SearchNaming.Label(rec, normalized)
     return contextWords > 0
 end
 
-local function BuildSearchRecords()
+function SearchIndexBuild.New()
     local pageInfos, pageInfoByKey = BuildSearchPageInfos()
     SEARCH_STATE.pageNames = SearchNaming.BuildPageNames(pageInfos)
+    return { phase = 1, index = 1, records = {}, seenRecords = {}, covered = {},
+        pageInfos = pageInfos, pageInfoByKey = pageInfoByKey, registryPageInfos = {} }
+end
 
-    local records, seenRecords = {}, {}
-    local provided = next(SEARCH_STATE.providers) ~= nil and SearchProviders.Collect(pageInfoByKey) or nil
-    for i = 1, #pageInfos do
-        local info = pageInfos[i]
-        local pageParts = {}
-        AddSearchText(pageParts, info.group)
-        AddSearchText(pageParts, info.title)
-        AddRawSearchText(pageParts, SEARCH_KEYWORDS[info.key])
-        AddPageLocalizedSearchKeywords(pageParts, info.key)
-        local extra = provided and provided.pages[info.key]
-        for k = 1, #(extra and extra.parts or EMPTY_SEARCH_RECORDS) do pageParts[#pageParts + 1] = extra.parts[k] end
-        local rec = AddSearchRecord(records, seenRecords, info, info.label or info.title or info.key, nil, "page", pageParts)
-        if rec and extra then
-            rec.answer = extra.answer
-            if extra.hint then rec.hint, rec.hintNorm = extra.hint, NormalizeSearchText(extra.hint) end
+--- Each phase returns true when it is complete; false keeps job.index for the
+--- next slice. Without a deadline every phase runs to its end.
+SearchIndexBuild.PHASES = {
+    -- Providers first: their page rows add to the page records.
+    function(job, deadline)
+        job.provided = next(SEARCH_STATE.providers) ~= nil and SearchProviders.Collect(job.pageInfoByKey, job, deadline) or nil
+        return job.collect == nil
+    end,
+    function(job, deadline)
+        local records, seenRecords, provided = job.records, job.seenRecords, job.provided
+        for i = job.index, #job.pageInfos do
+            local info = job.pageInfos[i]
+            local pageParts = {}
+            AddSearchText(pageParts, info.group)
+            AddSearchText(pageParts, info.title)
+            AddRawSearchText(pageParts, SEARCH_KEYWORDS[info.key])
+            AddPageLocalizedSearchKeywords(pageParts, info.key)
+            local extra = provided and provided.pages[info.key]
+            for k = 1, #(extra and extra.parts or EMPTY_SEARCH_RECORDS) do pageParts[#pageParts + 1] = extra.parts[k] end
+            local rec = AddSearchRecord(records, seenRecords, info, info.label or info.title or info.key, nil, "page", pageParts)
+            if rec and extra then
+                rec.answer = extra.answer
+                if extra.hint then rec.hint, rec.hintNorm = extra.hint, NormalizeSearchText(extra.hint) end
+            end
+            if deadline and SearchIndexBuild.Due(deadline) then
+                job.index = i + 1
+                return false
+            end
         end
+        return true
+    end,
+    -- Live widgets, in the registry's own iteration order.
+    function(job, deadline)
+        local entries = job.entries
+        if not entries then
+            entries = {}
+            for _, entry in pairs(SEARCH_STATE.registry) do entries[#entries + 1] = entry end
+            job.entries = entries
+        end
+        local records, covered = job.records, job.covered
+        for i = job.index, #entries do
+            local entry = entries[i]
+            local rec = SEARCH_STATE.registryRecords[entry.id]
+            if not rec and BuildRegistrySearchRecord then
+                rec = BuildRegistrySearchRecord(entry, job.registryPageInfos)
+                SEARCH_STATE.registryRecords[entry.id] = rec
+            end
+            if rec then
+                rec.order = #records + 1
+                records[#records + 1] = rec
+                covered[rec.searchIdentity] = true
+            end
+            if deadline and SearchIndexBuild.Due(deadline) then
+                job.index = i + 1
+                return false
+            end
+        end
+        job.registryPageInfos = nil
+        return true
+    end,
+    -- The static decode is sliced; the row loop is one short step.
+    function(job, deadline)
+        local staticIndex = Search.StaticIndex
+        if deadline and staticIndex and staticIndex.Advance and not staticIndex.Advance(deadline) then return false end
+        AddStaticIndexSearchRecords(job.records, job.covered)
+        return true
+    end,
+    function(job)
+        if job.provided then SearchProviders.Append(job.records, job.provided) end
+        return true
+    end,
+    function(job, deadline)
+        local records, seenRecords = job.records, job.seenRecords
+        for i = job.index, #SEARCH_FAQ do
+            local faq = SEARCH_FAQ[i]
+            local pageKey = faq.pageKey or "home"
+            local info = job.pageInfoByKey[pageKey] or { key = pageKey, label = "FAQ", title = "FAQ", group = "" }
+            local extra = { faq.answer, faq.target, faq.anchorText }
+            for k = 1, #(faq.keywords or {}) do extra[#extra + 1] = faq.keywords[k] end
+            local rec = AddSearchRecord(records, seenRecords, info, faq.label, nil, "faq", extra)
+            if rec then
+                rec.answer = faq.answer
+                rec.target = faq.target
+                rec.anchorFallback = faq.anchorText or faq.label
+                rec.route = faq.route
+                rec.priority = tonumber(faq.priority) or 0
+                rec.faq = true
+            end
+            if deadline and SearchIndexBuild.Due(deadline) then
+                job.index = i + 1
+                return false
+            end
+        end
+        return true
+    end,
+    function(job)
+        for i = 1, #SEARCH_EASTER_EGGS do
+            local egg = SEARCH_EASTER_EGGS[i]
+            local info = { key = "search", label = "", title = "", group = "" }
+            -- Found by its name only: its answer text holds ordinary words ("spells", "bind"),
+            -- and with its priority it would push every real result below the curation floor.
+            local rec = AddSearchRecord(job.records, job.seenRecords, info, egg.name, nil, "easteregg", { egg.name })
+            if rec then
+                rec.answer = egg.result
+                rec.noOpen = true
+                rec.priority = 1200
+                rec.easterEgg = true
+            end
+        end
+        return true
+    end,
+    function(job, deadline)
+        return SearchProviders.FilterAvailable(job.records, job, deadline)
+    end,
+}
+
+--- Runs phases until the job is done (true) or the deadline passes (false).
+function SearchIndexBuild.Step(job, deadline)
+    local phases = SearchIndexBuild.PHASES
+    while job.phase <= #phases do
+        if not phases[job.phase](job, deadline) then return false end
+        job.phase, job.index = job.phase + 1, 1
     end
+    return true
+end
 
-    local covered = {}
-    for _, entry in pairs(SEARCH_STATE.registry) do
-        local rec = SEARCH_STATE.registryRecords[entry.id]
-        if not rec and BuildRegistrySearchRecord then
-            rec = BuildRegistrySearchRecord(entry)
-            SEARCH_STATE.registryRecords[entry.id] = rec
-        end
-        if rec then
-            rec.order = #records + 1
-            records[#records + 1] = rec
-            covered[rec.searchIdentity] = true
-        end
-    end
-
-    AddStaticIndexSearchRecords(records, covered)
-    if provided then SearchProviders.Append(records, provided) end
-
-    for i = 1, #SEARCH_FAQ do
-        local faq = SEARCH_FAQ[i]
-        local pageKey = faq.pageKey or "home"
-        local info = pageInfoByKey[pageKey] or { key = pageKey, label = "FAQ", title = "FAQ", group = "" }
-        local extra = { faq.answer, faq.target, faq.anchorText }
-        for k = 1, #(faq.keywords or {}) do extra[#extra + 1] = faq.keywords[k] end
-        local rec = AddSearchRecord(records, seenRecords, info, faq.label, nil, "faq", extra)
-        if rec then
-            rec.answer = faq.answer
-            rec.target = faq.target
-            rec.anchorFallback = faq.anchorText or faq.label
-            rec.route = faq.route
-            rec.priority = tonumber(faq.priority) or 0
-            rec.faq = true
-        end
-    end
-
-    for i = 1, #SEARCH_EASTER_EGGS do
-        local egg = SEARCH_EASTER_EGGS[i]
-        local info = { key = "search", label = "", title = "", group = "" }
-        -- Found by its name only: its answer text holds ordinary words ("spells", "bind"),
-        -- and with its priority it would push every real result below the curation floor.
-        local rec = AddSearchRecord(records, seenRecords, info, egg.name, nil, "easteregg", { egg.name })
-        if rec then
-            rec.answer = egg.result
-            rec.noOpen = true
-            rec.priority = 1200
-            rec.easterEgg = true
-        end
-    end
-
-    SearchProviders.FilterAvailable(records)
-    return records
+--- The unfinished sliced build, while nothing invalidated the index since its
+--- last slice; a synchronous reader finishes it instead of starting over.
+function SearchIndexBuild.Pending()
+    local job = SEARCH_STATE.indexQueue
+    if job and job.serial == SEARCH_STATE.dirtySerial and job.phase <= #SearchIndexBuild.PHASES then return job end
+    return nil
 end
 
 local SearchPages, SetSearchResults
@@ -2279,10 +2403,77 @@ local function GetSearchRecords()
     EnsureSearchLocaleFresh()
     RefreshProviderContexts()
     if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then
-        SEARCH_STATE.records = BuildSearchRecords()
+        local job = SearchIndexBuild.Pending() or SearchIndexBuild.New()
+        SearchIndexBuild.Step(job, nil)
+        SEARCH_STATE.records = job.records
         SEARCH_STATE.recordsDirty = false
     end
     return SEARCH_STATE.records
+end
+
+--- Fuzzy matching tokenizes a record on its first fuzzy probe; the first query
+--- after a build probes nearly every record. The sliced path does that work
+--- ahead, exactly as SearchFuzzyTokenMatch would, so that query runs at
+--- keystroke cost.
+function SearchIndexBuild.WarmTokens(job, deadline)
+    local generation = SEARCH_STATE.lexiconGeneration
+    local records = job.records
+    for i = job.index, #records do
+        local rec = records[i]
+        if not rec.tokens or rec.tokensLexicon ~= generation then
+            rec.tokens, rec.tokensLexicon = BuildSearchTokenList(rec.haystack or "", rec.tokenLimit), generation
+        end
+        SearchTokenCharCounts(rec, rec.tokens)
+        if deadline and SearchIndexBuild.Due(deadline) then
+            job.index = i + 1
+            return false
+        end
+    end
+    job.warm = generation
+    return true
+end
+
+--- One slice for the debounced input path, from a menu task only (never in
+--- combat; quiescing the menu drops the job): true once the records are current
+--- and warm, false when the next frame has to continue.
+function SearchIndexBuild.Advance()
+    EnsureSearchLocaleFresh()
+    local job = SEARCH_STATE.indexQueue
+    if job and job.serial ~= SEARCH_STATE.dirtySerial then job = nil end
+    -- Provider contexts are asked when a job starts and again before its records
+    -- are installed; a change in between restarts the job (see below).
+    if not job then
+        RefreshProviderContexts()
+        job = SEARCH_STATE.indexQueue
+        if job and job.serial ~= SEARCH_STATE.dirtySerial then job = nil end
+    end
+    local deadline = debugprofilestop and (debugprofilestop() + SearchIndexBuild.SLICE_MS) or nil
+    if not SEARCH_STATE.records or SEARCH_STATE.recordsDirty then
+        if not (job and job.phase <= #SearchIndexBuild.PHASES) then job = SearchIndexBuild.New() end
+        SEARCH_STATE.indexQueue = job
+        if not SearchIndexBuild.Step(job, deadline) then
+            job.serial = SEARCH_STATE.dirtySerial
+            return false
+        end
+        local serial = SEARCH_STATE.dirtySerial
+        RefreshProviderContexts()
+        if SEARCH_STATE.dirtySerial ~= serial then
+            SEARCH_STATE.indexQueue = nil
+            return false
+        end
+        SEARCH_STATE.records, SEARCH_STATE.recordsDirty = job.records, false
+    elseif not job or job.records ~= SEARCH_STATE.records then
+        job = { records = SEARCH_STATE.records, index = 1, phase = #SearchIndexBuild.PHASES + 1 }
+        SEARCH_STATE.indexQueue = job
+    end
+    -- The query builds the lexicon first thing as well; tokens follow it.
+    EnsureSearchLexicon()
+    if job.warm ~= SEARCH_STATE.lexiconGeneration and not SearchIndexBuild.WarmTokens(job, deadline) then
+        job.serial = SEARCH_STATE.dirtySerial
+        return false
+    end
+    job.serial = SEARCH_STATE.dirtySerial
+    return true
 end
 
 local function CurateSearchResults(results, supportQuestion)
@@ -2541,7 +2732,12 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
         ShowSearchPageForQuery(query)
     end
 
+    -- A cold index builds one slice per frame from the next frame on, also while
+    -- the debounce waits; only the latest keystroke's chain runs. The query runs
+    -- once the debounce has passed and the index is complete.
+    local debounced, sliceQueued = false, true
     local function RunLatest()
+        sliceQueued = false
         if serial ~= SEARCH_STATE.inputSerial then return end
         -- Combat can start inside the debounce window. Drop the pending query
         -- instead of running it against a locked-down UI.
@@ -2550,11 +2746,21 @@ local function ScheduleSearchInputQuery(searchBox, query, openPage, onComplete)
             local latest = TrimText(searchBox:GetText() or "")
             if latest ~= query then return end
         end
+        if not SearchIndexBuild.Advance() then
+            sliceQueued = true
+            C_Timer.After(0, RunLatest)
+            return
+        end
+        if not debounced then return end
         RunSearchInputQuery(query, openPage)
         if type(onComplete) == "function" then onComplete(query) end
     end
 
-    C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, RunLatest)
+    C_Timer.After(0, RunLatest)
+    C_Timer.After(SEARCH_INPUT_DEBOUNCE_SEC, function()
+        debounced = true
+        if not sliceQueued then RunLatest() end
+    end)
 end
 
 local function OpenSearchResults(query)
