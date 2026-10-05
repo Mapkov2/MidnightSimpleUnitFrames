@@ -1239,7 +1239,7 @@ local function InstallHUDToggle()
         label:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF", FontSize("body"), "")
         label:SetShadowOffset(1, -1)
         label:SetPoint("CENTER")
-        label:SetText("Groups")
+        label:SetText(Translate("Groups"))
       end
       _gfButton._label = label
 
@@ -1257,7 +1257,7 @@ local function InstallHUDToggle()
       _gfButton:SetScript("OnEnter", function(self)
         if GameTooltip and not GameTooltip:IsForbidden() then
           GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -6)
-          GameTooltip:SetText("Toggle Group Frames preview", 1, 1, 1, 1, true)
+          GameTooltip:SetText(Translate("Toggle Group Frames preview"), 1, 1, 1, 1, true)
           GameTooltip:Show()
         end
       end)
