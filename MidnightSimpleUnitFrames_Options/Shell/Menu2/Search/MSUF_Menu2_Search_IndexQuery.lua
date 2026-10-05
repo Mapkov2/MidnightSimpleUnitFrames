@@ -1679,6 +1679,15 @@ local STATIC_ROW_CLIENT_CAPABILITY = {
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragex"] = "IsForever",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragey"] = "IsForever",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ebuffcoveragelayer"] = "IsForever",
+    -- Castbar > Empowered Casts, built on Midnight only (MSUF_Menu2_GlobalCastbars.lua);
+    -- WoW Forever shares the index file.
+    ["id\031opt_castbar\031menu2%2Eopt%2Ecastbar%2Eglobal%2Eempowered%2Eempower%2Ecolor%2Estages"] = "HasEmpoweredCasts",
+    ["id\031opt_castbar\031menu2%2Eopt%2Ecastbar%2Eglobal%2Eempowered%2Eempower%2Estage%2Eblink"] = "HasEmpoweredCasts",
+    ["id\031opt_castbar\031menu2%2Eopt%2Ecastbar%2Eglobal%2Eempowered%2Eempower%2Estage%2Eblink%2Etime"] = "HasEmpoweredCasts",
+    -- Colors > Unit colors: the tagged-mob color and its toggle, built where mobs
+    -- can be tagged (MSUF_Menu2_AdvancedColors.lua); Midnight shares the index file.
+    ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Enpc%2Ecolor%2Etapped"] = "SupportsTapDenied",
+    ["id\031opt_colors\031menu2%2Eopt%2Ecolors%2Eadvanced%2Enpc%2Etap%2Edenied%2Egray"] = "SupportsTapDenied",
 }
 -- Rows of controls a client builds only where it has the unit or group scope
 -- (M.SupportsFrameScope): Group Frames > Layout > Friendly bosses needs boss
@@ -1694,6 +1703,12 @@ local STATIC_ROW_FRAME_SCOPE = {
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosscolumns"] = "boss",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Efriendlybosstextsize"] = "boss",
     ["id\031gf_layout\031menu2%2Egf_layout%2Egroup%2Efield%2Ehidemythicgroupsfivetoeight"] = "mythicraid",
+    -- Castbar > Interrupt Ready: one toggle per castbar unit, and Focus Kick
+    -- (MSUF_Menu2_GlobalCastbars.lua).
+    ["id\031opt_castbar\031menu2%2Eopt%2Ecastbar%2Eglobal%2Einterrupt%2Eready%2Ekick%2Eready%2Eshow%2Efocus"] = "focus",
+    ["id\031opt_castbar\031menu2%2Eopt%2Ecastbar%2Eglobal%2Einterrupt%2Eready%2Ekick%2Eready%2Eshow%2Eboss"] = "boss",
+    ["id\031opt_castbar\031menu2%2Eopt%2Ecastbar%2Eglobal%2Einterrupt%2Eready%2Ekick%2Eready%2Eshow%2Earena"] = "arena",
+    ["id\031opt_castbar\031menu2%2Eopt%2Ecastbar%2Eglobal%2Efocus%2Ekick%2Ereset%2Eposition"] = "focus",
 }
 local staticRowsWithoutClientSupport
 
@@ -1720,11 +1735,16 @@ local function StaticRowsWithoutClientSupport()
     local extras = M.ResourceExtrasPage
     local clientOnly, built = {}, {}
     if extras and extras.ClientOnlySettings then clientOnly, built = extras.ClientOnlySettings() end
+    -- The Castbar page's GCD Bar section follows the page's own capability
+    -- probe (the Duration API, and the GCD spell on WoW Forever).
+    local gcdProbe = M.CastbarGCDBarSupported
+    local gcdHidden = gcdProbe ~= nil and not gcdProbe()
     local records = Search.StaticIndex.GetRecords()
     for i = 1, #records do
         local rec = records[i]
         local key = rec.exactTarget and rec.exactTarget.settingKey
         if (key and clientOnly[key] and not built[key])
+            or (gcdHidden and rec.key == "opt_castbar" and rec.exactTarget and rec.exactTarget.sectionId == "castbar_gcd")
             or (type(supportsSetting) == "function" and not supportsSetting(key)) then
             staticRowsWithoutClientSupport[rec.searchIdentity] = true
         end
