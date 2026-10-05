@@ -21,6 +21,13 @@
 --     combat ends;
 --   * logging in inside a house starts hidden; the raid scope follows its own
 --     option;
+--   * the option covers everything the scope's settings draw: the Priority
+--     Frames (no settings of their own here: GF.GetConf("priority") is the
+--     Party conf and the strip follows the live base scope's conf) and the
+--     scope's extra blocks (healer mana, party targets: keys of the same conf)
+--     hide and come back with the block, on plot events and on the toggle;
+--     in combat the unprotected mana rows hide at once, the protected
+--     Priority strip and target buttons wait for the end of combat;
 --   * a client without IsInsideHouseOrPlot hides nothing and registers no
 --     housing event (the harness answers every unknown C_* namespace with a
 --     callable stub, so the Vanilla run installs an empty C_Housing).
@@ -171,6 +178,102 @@ local function Run(flavor)
         flavor .. ": logging in inside a house showed the party block")
 end
 
+local function Named(h, name)
+    for _, frame in ipairs(h.widgets.frames) do
+        if frame.frameName == name then return frame end
+    end
+end
+
+-- Priority Frames and the extra blocks of the Party scope.
+local function RunInherited(flavor)
+    local housing = { inside = false }
+    local h = Harness.New(root, flavor, { beforeBoot = function(hh)
+        hh.env.C_Housing = { IsInsideHouseOrPlot = function() return housing.inside == true end }
+        hh.env.UnitGroupRolesAssigned = function(unit)
+            return unit == "party1" and "HEALER" or unit == "party2" and "TANK" or "DAMAGER"
+        end
+        -- MSUF_GroupFrames_Additional.xml: the extra-block button inherits
+        -- SecureUnitButtonTemplate (protected), carries a Health status bar with
+        -- Background and Name regions, and runs MSUF_GroupAdditionalUnitOnLoad.
+        local createFrame = hh.env.CreateFrame
+        hh.env.CreateFrame = function(frameType, name, parent, template)
+            local frame = createFrame(frameType, name, parent, template)
+            if template == "MSUF_GroupAdditionalUnitTemplate" then
+                hh.Protect(frame)
+                frame.Health = createFrame("StatusBar", nil, frame)
+                frame.Health.Background = frame.Health:CreateTexture()
+                frame.Health.Name = frame.Health:CreateFontString()
+                hh.env.MSUF_GroupAdditionalUnitOnLoad(frame)
+            end
+            return frame
+        end
+    end })
+    local GF = h.GF
+    GF.EnsureDB()
+    local party = GF.GetConf("party")
+    party.enabled, party.showPlayer, party.hideInHousing = true, true, true
+    party.healerManaEnabled, party.targetsEnabled = true, true
+    local priority = GF.GetPriorityConf()
+    priority.enabled, priority.autoTanks = true, true
+    h:SetRoster({ "player", "party1", "party2" })
+    GF.RefreshHeaderLayout()
+    h:Event("GROUP_ROSTER_UPDATE")
+    h:RunTimers()
+    local mana, targets = Named(h, "MSUF_GroupAdditional_HealerMana"), Named(h, "MSUF_GroupAdditional_Targets")
+    local function PriorityShown() return GF.headers.priority ~= nil and Visible(GF.headers.priority) end
+    local function ManaShown() return mana ~= nil and Visible(mana) end
+    local function TargetsShown() return targets ~= nil and Visible(targets) end
+    local function State() return ("priority=%s mana=%s targets=%s"):format(tostring(PriorityShown()),
+        tostring(ManaShown()), tostring(TargetsShown())) end
+    local function AllShown(label) Check(PriorityShown() and ManaShown() and TargetsShown(), flavor .. ": " .. label .. " (" .. State() .. ")") end
+    local function NoneShown(label) Check(not PriorityShown() and not ManaShown() and not TargetsShown(), flavor .. ": " .. label .. " (" .. State() .. ")") end
+    AllShown("precondition: the Priority strip, healer mana and party targets are not shown")
+
+    housing.inside = true
+    h:Event("HOUSE_PLOT_ENTERED")
+    h:RunTimers()
+    Check(not UnitShown(h, "party1"), flavor .. ": precondition: the party block did not hide on the plot")
+    NoneShown("Hide in Housing left Priority Frames or an extra block of the party scope shown on a plot")
+    housing.inside = false
+    h:Event("HOUSE_PLOT_EXITED")
+    h:RunTimers()
+    AllShown("Priority Frames and the extra blocks did not come back after leaving the plot")
+
+    -- The toggle inside a house.
+    party.hideInHousing = false
+    GF.RefreshVisuals("party", GF.DIRTY_VISUAL)
+    housing.inside = true
+    h:Event("HOUSE_PLOT_ENTERED")
+    h:RunTimers()
+    AllShown("Priority Frames or an extra block hid on a plot with Hide in Housing off")
+    party.hideInHousing = true
+    GF.RefreshVisuals("party", GF.DIRTY_VISUAL)
+    h:RunTimers()
+    NoneShown("switching Hide in Housing on inside a house left Priority Frames or an extra block shown")
+    party.hideInHousing = false
+    GF.RefreshVisuals("party", GF.DIRTY_VISUAL)
+    h:RunTimers()
+    AllShown("switching Hide in Housing off inside a house did not bring Priority Frames and the extra blocks back")
+
+    -- In combat: nothing protected; the mana rows hide at once, the rest after combat.
+    housing.inside = false
+    h:Event("HOUSE_PLOT_EXITED")
+    party.hideInHousing = true
+    GF.RefreshVisuals("party", GF.DIRTY_VISUAL)
+    h:RunTimers()
+    AllShown("precondition: Priority Frames and the extra blocks are not shown before the combat case")
+    h:EnterCombat()
+    housing.inside = true
+    h:Event("HOUSE_PLOT_ENTERED")
+    h:RunTimers()
+    Check(#h.violations == 0, flavor .. ": " .. #h.violations .. " protected write(s) in combat: " .. tostring(h.violations[1]))
+    Check(not ManaShown(), flavor .. ": the healer mana rows stayed shown on a plot in combat")
+    Check(PriorityShown() and TargetsShown(), flavor .. ": a protected block changed in combat (" .. State() .. ")")
+    h:LeaveCombat()
+    h:RunTimers()
+    NoneShown("entering the plot in combat left Priority Frames or an extra block shown after combat")
+end
+
 local function RunWithoutHousing(flavor)
     local h, party = Boot(flavor, nil)
     party.hideInHousing = true
@@ -179,7 +282,10 @@ local function RunWithoutHousing(flavor)
     Check(not HousingEventsRegistered(h), flavor .. ": a housing event was registered on a client without housing")
 end
 
-for _, flavor in ipairs({ "Mainline", "Forever" }) do Run(flavor) end
+for _, flavor in ipairs({ "Mainline", "Forever" }) do
+    Run(flavor)
+    RunInherited(flavor)
+end
 RunWithoutHousing("Vanilla")
 
 if failures > 0 then error(("group housing hide smoke: %d failure(s)"):format(failures)) end

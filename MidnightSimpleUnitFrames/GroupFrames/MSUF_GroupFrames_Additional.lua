@@ -773,8 +773,10 @@ function GF.RefreshAdditionalGroups(refreshIdentity)
     if not combat then GF.EnsureDB() end
     local kind = GF.GetLiveGroupKind() or "party"
     local conf = GF.GetConf(kind)
-    -- The same rule as the group runtime: a scope is on only when enabled is true.
+    -- The same rule as the group runtime: a scope is on only when enabled is true,
+    -- and its Hide in Housing retires these blocks with the group block.
     local enabled = conf.enabled == true and (IsInGroup() or conf.showSolo == true)
+        and not (GF.HiddenInHousing and GF.HiddenInHousing(kind))
     ApplyMana(kind, conf, enabled, refreshIdentity)
     if combat then
         pending = true

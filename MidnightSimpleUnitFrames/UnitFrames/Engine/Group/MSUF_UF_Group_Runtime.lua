@@ -214,10 +214,13 @@ local HOUSING_EVENTS = { "HOUSE_PLOT_ENTERED", "HOUSE_PLOT_EXITED" }
 local housingHidden = { party = false, raid = false }
 local housingEventsOn = false
 
---- Group Layout "Hide in Housing" (per scope, off by default): the block is
---- retired while the player is inside a house or on a plot. Only the
---- Mainline-family clients have C_Housing (Blizzard_Game/Mainline/
---- EventImplementation.lua reads IsInsideHouseOrPlot); elsewhere nothing hides.
+--- Group Layout "Hide in Housing" (per scope, off by default): while the player
+--- is inside a house or on a plot it retires everything that scope's settings
+--- draw: the block, its group border, the Priority Frames that take their
+--- settings from it, and its extra blocks (MSUF_GroupFrames_Additional.lua).
+--- Blizzard's UI reads IsInsideHouseOrPlot on the Mainline-family clients
+--- (Blizzard_Game/Mainline/EventImplementation.lua); the Classic API docs list
+--- it too, so the read is feature-detected and a client without it hides nothing.
 local function HiddenInHousing(kind)
   local conf = Conf(kind)
   if not (conf and conf.hideInHousing == true) then return false end
@@ -335,6 +338,7 @@ local function SetupWantedPriority()
   local priorityKind = LivePriorityKind()
   local wanted = WantPriorityBase(priorityKind)
     and not PreviewSuppressesHeader("priority")
+    and not HiddenInHousing(priorityKind)
     and type(GF.PriorityFramesConfigured) == "function"
     and GF.PriorityFramesConfigured() == true
   if not wanted then
@@ -1010,8 +1014,11 @@ local function RuntimeOnEvent(self, event, unit)
     ScheduleHeaderLayoutSettle()
   elseif event == "HOUSE_PLOT_ENTERED" or event == "HOUSE_PLOT_EXITED" then
     -- Only a scope with Hide in Housing on changes; the visibility pass waits
-    -- for the end of combat by itself.
-    if HousingVisibilityStale() then GF.UpdateGroupVisibility() end
+    -- for the end of combat by itself, and so do the protected extra blocks.
+    if HousingVisibilityStale() then
+      GF.UpdateGroupVisibility()
+      if GF.RequestAdditionalGroupsRefresh then GF.RequestAdditionalGroupsRefresh() end
+    end
   end
 end
 
