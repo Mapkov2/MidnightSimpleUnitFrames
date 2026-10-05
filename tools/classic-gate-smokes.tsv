@@ -466,3 +466,4 @@ clients+Forever	lua	tools/tests/menu_client_capability_text_smoke.lua	{root} {fl
 clients+Forever	lua	tools/tests/resource_mark_value_range_smoke.lua	{root} {flavor}	Resource mark value slider ignores the value mode or the maximum of the power its bar shows, or cuts a stored value: {flavor}
 -	lua	tools/tests/copy_to_section_completeness_smoke.lua	{root} Vanilla	A Copy To category leaves settings of its section behind (Vanilla)
 -	lua	tools/tests/copy_to_section_completeness_smoke.lua	{root} Mainline	A Copy To category leaves settings of its section behind (Mainline)
+-	python	tools/tests/locale_pack_integrity_smoke.py	{root}	Locale packs carry conflicting translations, placeholder mismatches or '?' labels

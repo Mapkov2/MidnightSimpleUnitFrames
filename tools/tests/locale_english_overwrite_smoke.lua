@@ -8,14 +8,8 @@ local repo = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$
 local PACKS = { "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
 -- A later English line is right here: the word is the same in the language,
 -- the text is a credit, or the key is an internal identifier.
-local ALLOWED = {
-    esES = { General = "same word in Spanish" },
-    esMX = { General = "same word in Spanish" },
-    zhCN = { ["by Mapko"] = "author credit stays English", gf_raid = "internal identifier",
-        gf_mythicraid = "internal identifier", MSUF_UpdateAllFonts = "internal identifier" },
-    zhTW = { ["by Mapko"] = "author credit stays English", gf_raid = "internal identifier",
-        gf_mythicraid = "internal identifier", MSUF_UpdateAllFonts = "internal identifier" },
-}
+-- (2026-10-05: the language passes left one assignment per key, so no pack needs an entry.)
+local ALLOWED = {}
 local failures, unused = {}, {}
 for _, pack in ipairs(PACKS) do
     for key in pairs(ALLOWED[pack] or {}) do unused[pack .. ":" .. key] = true end
