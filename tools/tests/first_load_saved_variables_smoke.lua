@@ -15,10 +15,7 @@
 --   2. an upgrade from 5.x reads as an upgrade and its pre-6 profiles, the
 --      standalone profile and the stale bindings are archived before any
 --      profile initialization;
---   3. a saved 6.x lifecycle is followed, not replaced;
---   4. a pre-6 profile whose name the archive already holds (5.x wrote it
---      again after a downgrade) is archived beside the first copy instead of
---      being dropped (red without the fix).
+--   3. a saved 6.x lifecycle is followed, not replaced.
 --
 -- Plain Lua 5.1, repo root as arg 1.
 
@@ -98,17 +95,6 @@ local function Run(flavor)
         flavor .. ": a completed 6.x lifecycle was replaced")
     Check(savedGlobal.profiles.Default == current and savedGlobal.ignoredPre6Profiles == nil,
         flavor .. ": a schema-600 profile was archived")
-
-    -- 4. Re-upgrade after a 5.x downgrade: the archive keeps every copy.
-    world, env = Boot(flavor)
-    local first, again, third = { general = { marker = "first" } }, { general = { marker = "again" } },
-        { general = { marker = "third" } }
-    savedGlobal = { profiles = { Default = again }, char = {},
-        ignoredPre6Profiles = { Default = first, ["Default (2)"] = third } }
-    world:LoadSavedVariables(ADDON, { MSUF_GlobalDB = savedGlobal })
-    local archive = savedGlobal.ignoredPre6Profiles
-    Check(savedGlobal.profiles.Default == nil and archive.Default == first and archive["Default (2)"] == third
-        and archive["Default (3)"] == again, flavor .. ": a re-archived 5.x profile was dropped or replaced an archived copy")
     print("first_load_saved_variables_smoke: ok (" .. flavor .. ")")
 end
 

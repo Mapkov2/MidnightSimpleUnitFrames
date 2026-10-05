@@ -1306,10 +1306,9 @@ end
 U.CooldownAnchorSupported = CooldownAnchorSupported
 ExportPublic("MSUF_CooldownAnchorSupported", CooldownAnchorSupported)
 
---- Never the group runtime's MSUF_InCombat mirror: it clears in its own
---- PLAYER_REGEN_ENABLED handler, after other handlers of that event ran.
 local function IsPlayerInCombat()
-    return InCombat()
+    return _G.MSUF_InCombat == true
+        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
         or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
 end
 U.IsPlayerInCombat = IsPlayerInCombat

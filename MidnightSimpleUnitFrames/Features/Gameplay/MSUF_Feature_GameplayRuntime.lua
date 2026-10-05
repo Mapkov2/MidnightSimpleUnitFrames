@@ -309,9 +309,7 @@ local function TickCombatTimer()
         return
     end
 
-    -- Not the group runtime's MSUF_InCombat mirror: it is still true while
-    -- the bus delivers PLAYER_REGEN_ENABLED here, which painted a stale 0:00.
-    local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or (InCombatLockdown and InCombatLockdown())
+    local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true)
 
     if not inCombat then
         SetCombatTimerShown(not gNow.lockCombatTimer)

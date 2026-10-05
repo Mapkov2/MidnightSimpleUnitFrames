@@ -22,11 +22,8 @@ local function MSUF_ProfileIO_IsCurrentIdentity(identity)
 end
 
 --- Runs before the active profile table or its contents are replaced: an open
---- menu colour picker and an open MSUF Edit Mode session end against the
---- profile they edited.
+--- MSUF Edit Mode session ends against the profile it edited.
 local function MSUF_ProfileIO_BeforeActiveProfileMutation()
-    local menu = MSUF.MSUF2
-    if menu and menu.FinishColorPickerForProfileChange then menu.FinishColorPickerForProfileChange() end
     profileGeneration = profileGeneration + 1
     local em2 = _G.MSUF_EM2
     local state = type(em2) == "table" and em2.State or nil
@@ -180,11 +177,6 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     _G.MSUF_UFCore_NotifyConfigChanged(nil, true, true, reason, coordinatedApplyMask)
     _G.MSUF_ApplyModules()
     if MSUF.SwingTimer then MSUF.SwingTimer.Apply() end
-    --- The registry switches Gameplay only when its enabled state flips; an
-    --- apply between two enabled profiles re-applies the overlays here.
-    if MSUF.MSUF_RequestGameplayApply then MSUF.MSUF_RequestGameplayApply() end
-    --- The unit-tooltip hover gate follows combat edges and setting edits only.
-    if MSUF.Tooltips then MSUF.Tooltips.Refresh() end
     _G.MSUF_GF_RebuildAll()
     _G.MSUF_ClassPower_Apply({ full = true, cdm = true })
     _G.MSUF_ApplyPowerBarEmbedLayout_All()

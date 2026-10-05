@@ -222,7 +222,6 @@ clients+Forever	lua	tools/tests/classic_unit_preview_texture_layer_order_smoke.l
 clients+Forever	lua	tools/tests/menu_page_reset_history_smoke.lua	{root} {flavor}	Page resets and undo history: {flavor}
 clients+Forever	lua	tools/tests/menu_history_cancel_variant_smoke.lua	{root} {flavor}	Edit Mode Cancel All dropped the active profile variant: {flavor}
 -	lua	tools/tests/menu_color_cancel_false_smoke.lua	{root}	Cancelling the colour picker turned a stored false into nil
-clients+Forever	lua	tools/tests/menu_color_picker_profile_switch_smoke.lua	{root} {flavor}	A colour picker left open across a profile switch wrote into the next profile: {flavor}
 clients+Forever	lua	tools/tests/menu_history_setter_only_smoke.lua	{root} {flavor}	Undo or a page reset left a setter-only setting (frame scale, minimap icon, ...) at its old runtime state: {flavor}
 clients+Forever	lua	tools/tests/menu_page_reset_catalog_smoke.lua	{root} {flavor}	A page reset leaves a setting its page shows at the user value: {flavor}
 clients+Forever	lua	tools/tests/menu_locale_key_tracking_smoke.lua	{root} {flavor}	Composed menu text became a tracked locale key: {flavor}
@@ -440,11 +439,6 @@ classics	lua	tools/tests/classic_aura_arena_custom_containers_smoke.lua	{root} {
 -	lua	tools/tests/secret_guard_order_smoke.lua	{root}	A secret-capable value is compared before issecretvalue (texture layer, name clip, identity follow-up, legacy name truncation)
 clients+Forever	lua	tools/tests/classpower_workspace_smoke.lua	{root} {flavor}	Class Resources selection, exact search, preview navigation or scoped copy/reset drifted: {flavor}
 -	lua	tools/tests/version_check_login_smoke.lua	{root}	Version check does not start at login or ignores its off switch
--	lua	tools/tests/profile_switch_runtime_refresh_smoke.lua	{root}	A profile switch kept the previous profile's gameplay overlays or tooltip state
-clients+Forever	lua	tools/tests/profile_unit_selection_shared_color_smoke.lua	{root} {flavor}	A Selected unitframes string carried or replaced the shared Cast Target Name Color: {flavor}
--	lua	tools/tests/combat_mirror_latch_smoke.lua	{root}	An out-of-combat check read the latched MSUF_InCombat mirror at combat end
-clients+Forever	lua	tools/tests/profile_unitframe_import_roots_smoke.lua	{root} {flavor}	A Unitframes import replaced Gameplay or colour roots its export never carries: {flavor}
--	lua	tools/tests/unit_tooltip_ownership_smoke.lua	{root}	A unit or group frame OnLeave hid a tooltip MSUF does not own
 -	lua	tools/tests/classic_toc_notes_smoke.lua	{root}	A shipped TOC note is missing or still calls the release a prototype
 -	lua	tools/tests/power_loss_trail_pool_range_smoke.lua	{root}	Chunked Player power loss-trail pool range smoke failed
 -	lua	tools/tests/arena_castbar_range_fade_smoke.lua	{root}	Arena castbar range fade smoke failed

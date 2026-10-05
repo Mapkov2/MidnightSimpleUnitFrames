@@ -344,7 +344,8 @@ MSUF_ProfileIO_NotifySuiteProfileChanged = (function()
         Notify(reason, name)
     end
     Notify = function(reason, name)
-        if (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true)
+        if rawget(_G, "MSUF_InCombat") == true
+            or (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true)
             or (type(_G.UnitAffectingCombat) == "function" and _G.UnitAffectingCombat("player") == true)
         then
             pendingReason, pendingName = reason, name
@@ -1720,16 +1721,13 @@ local UnitSelection = {
         showBoss = "boss", showArena = "arena" },
     barKeys = { showPlayerPowerBar = "player", showTargetPowerBar = "target",
         showFocusPowerBar = "focus", showBossPowerBar = "boss", showArenaPowerBar = "arena" },
-    -- The Colors page's Cast Target Name Color reads like a Target key but tints
-    -- every castbar: it stays local, and older strings that carry it still import.
-    sharedGeneral = { castbarTargetNameR = true, castbarTargetNameG = true, castbarTargetNameB = true },
 }
 function UnitSelection.Supported(unit)
     return UnitSelection.units[unit] == true
         and (not MSUF.Client or not MSUF.Client.SupportsUnit or MSUF.Client.SupportsUnit(unit))
 end
 function UnitSelection.GeneralOwner(key)
-    if type(key) ~= "string" or UnitSelection.sharedGeneral[key] then return nil end
+    if type(key) ~= "string" then return nil end
     for _, unit in ipairs({ "player", "target", "focus", "boss", "arena" }) do
         local title = unit:sub(1, 1):upper() .. unit:sub(2)
         if key:sub(1, #unit + 7) == "castbar" .. title
@@ -1810,7 +1808,7 @@ function UnitSelection.Validate(payload)
         { "bars", function(key) return UnitSelection.barKeys[key] end } }) do
         for key in pairs(payload[spec[1]] or {}) do
             local owner = spec[2](key)
-            if (not owner or not selected[owner]) and not UnitSelection.sharedGeneral[key] then
+            if not owner or not selected[owner] then
                 return UnitSelection.Reject("setting outside selected unitframes: %s", key)
             end
         end
@@ -2354,11 +2352,9 @@ function ImportTx.Merge(kind, payload, db)
             MSUF_ApplyGeneralSubset(payload.general, db, owned)
         end
         --- Older Unitframes strings still carry the swing timers, which belong
-        --- to Gameplay now: they never overwrite the local ones. Nor do the
-        --- other roots the export leaves to Gameplay and Colors.
+        --- to Gameplay now: they never overwrite the local ones.
         for k, v in pairs(payload) do
-            if k ~= "general" and k ~= "swingTimers" and k ~= "gameplay"
-                and k ~= "classColors" and k ~= "npcColors" then
+            if k ~= "general" and k ~= "swingTimers" then
                 if type(v) == "table" then
                     if type(db[k]) ~= "table" then
                         db[k] = {}

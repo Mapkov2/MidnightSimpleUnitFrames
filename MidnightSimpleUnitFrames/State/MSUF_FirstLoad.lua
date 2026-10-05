@@ -172,14 +172,7 @@ local function ArchivePre6Profiles()
         for name, profile in pairs(globalDB.profiles) do
             if not ProfilePolicy.AcceptsProfile(profile) then
                 local archive = EnsurePre6Archive()
-                -- A name archived before (a 5.x downgrade wrote it again)
-                -- keeps both copies: the later one gets a free suffix.
-                local key, copy = name, 1
-                while archive[key] ~= nil do
-                    copy = copy + 1
-                    key = ("%s (%d)"):format(tostring(name), copy)
-                end
-                archive[key] = profile
+                if archive[name] == nil then archive[name] = profile end
                 globalDB.profiles[name] = nil
                 retiredNames = retiredNames or {}
                 retiredNames[name] = true

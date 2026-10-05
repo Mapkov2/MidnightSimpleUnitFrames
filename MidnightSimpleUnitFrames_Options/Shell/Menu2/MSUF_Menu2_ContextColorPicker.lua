@@ -1325,11 +1325,3 @@ function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwne
     return panel
 end
 M.OpenColorContextPicker = W.OpenColorContextPicker
-
--- Profile boundary (MSUF.ProfileRuntime.BeforeMutation): the picker's
--- originals belong to the profile it opened on, so it finishes there, the way
--- closing the menu finishes it. A Cancel after the switch wrote them into the
--- next profile.
-function M.FinishColorPickerForProfileChange()
-    if picker and picker:IsShown() then picker:Finish(false) end
-end

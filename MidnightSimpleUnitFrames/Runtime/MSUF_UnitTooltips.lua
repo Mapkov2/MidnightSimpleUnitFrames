@@ -272,31 +272,30 @@ local function MSUF_AnchorGameTooltip(owner, g, anchor)
     return gt
 end
 
-local function MSUF_ClearGameTooltipTracking(tip)
-    tip._msufUnitTooltipOwner = nil
-    tip._msufUnitTooltipUnit = nil
-    tip._msufUnitTooltipAnchor = nil
-end
-
 local function MSUF_ClearTrackedGameTooltip(owner, force)
     local gt = _G.GameTooltip
     if not gt or gt:IsForbidden() then return end
-    if not force and (gt._msufUnitTooltipOwner == nil or gt._msufUnitTooltipOwner ~= owner) then return end
-    MSUF_ClearGameTooltipTracking(gt)
+    if (not force) and gt._msufUnitTooltipOwner and gt._msufUnitTooltipOwner ~= owner then return end
+    if (not force)
+        and gt._msufUnitTooltipOwner == nil
+        and gt._msufUnitTooltipUnit == nil
+        and gt.IsShown
+        and not gt:IsShown() then
+        return
+    end
+    gt._msufUnitTooltipOwner = nil
+    gt._msufUnitTooltipUnit = nil
+    gt._msufUnitTooltipAnchor = nil
     if gt.IsShown and not gt:IsShown() then return end
     gt:Hide()
 end
 
-do
-    local tip = _G.GameTooltip
-    if tip and (not tip._msufTooltipTrackingHooked) then
-        tip._msufTooltipTrackingHooked = true
-        tip:HookScript("OnHide", MSUF_ClearGameTooltipTracking)
-        -- Another UI may reuse the shared tooltip without hiding it first. Drop
-        -- ownership on takeover; ShowUnit claims it after setting its anchor.
-        -- Suite's visibility rules use the same marker to leave MSUF in control.
-        hooksecurefunc(tip, "SetOwner", MSUF_ClearGameTooltipTracking)
-    end
+if _G.GameTooltip and (not _G.GameTooltip._msufTooltipTrackingHooked) then
+    _G.GameTooltip._msufTooltipTrackingHooked = true
+    _G.GameTooltip:HookScript("OnHide", function(tip)
+        tip._msufUnitTooltipOwner = nil
+        tip._msufUnitTooltipUnit = nil
+    end)
 end
 
 local function MSUF_PositionPlayerInfoFrame(frame)
