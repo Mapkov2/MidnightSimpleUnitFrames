@@ -8,6 +8,7 @@ MSUF = MSUF or (_G.MSUF_NS) or {}
 local _G = _G
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
+local InCombatLockdown = InCombatLockdown
 
 local ExportPublic = MSUF.ExportPublic
 local UI = MSUF.UI or _G.MSUF_UI
@@ -29,6 +30,7 @@ local exitLabels = {}
 local runtimeEnabled = false
 local positionGeneration = 0
 local initFrame
+local pendingGameMenu
 local HookGameMenu
 local ellesmereSkin
 
@@ -317,9 +319,28 @@ local function RestoreButtonOffset(button)
     return true
 end
 
+-- Secure children (ConsolePort's menu trigger, for example) can protect the
+-- otherwise ordinary menu. Keep all geometry writes behind the live lockdown
+-- check, including callbacks queued before combat, and replay only once.
+local function DeferLockedGameMenuLayout(gameMenu)
+    if not InCombatLockdown() or not gameMenu:IsProtected() then
+        if pendingGameMenu then
+            pendingGameMenu = nil
+            initFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        end
+        return false
+    end
+
+    if not pendingGameMenu then initFrame:RegisterEvent("PLAYER_REGEN_ENABLED") end
+    pendingGameMenu = gameMenu
+    local button = gameMenu.MSUF
+    if button and not button:IsProtected() then button:Hide() end
+    return true
+end
+
 local function RestoreGameMenuLayout()
     local gameMenu = _G.GameMenuFrame
-    if not gameMenu then return end
+    if not gameMenu or DeferLockedGameMenuLayout(gameMenu) then return end
 
     local baseHeight = GetBaseGameMenuHeight(gameMenu)
     ForEachGameMenuButton(RestoreButtonOffset)
@@ -338,7 +359,7 @@ end
 
 local function PositionGameMenuButton()
     local gameMenu = _G.GameMenuFrame
-    if not gameMenu then return end
+    if not gameMenu or DeferLockedGameMenuLayout(gameMenu) then return end
 
     if not IsGameMenuButtonEnabled() then
         RestoreGameMenuLayout()
@@ -420,7 +441,10 @@ local function SetGameMenuButtonEnabled(enabled)
         if not HookGameMenu() and initFrame then initFrame:RegisterEvent("ADDON_LOADED") end
         QueuePositionGameMenuButton()
     else
-        if initFrame then initFrame:UnregisterAllEvents() end
+        if initFrame then
+            initFrame:UnregisterEvent("PLAYER_LOGIN")
+            initFrame:UnregisterEvent("ADDON_LOADED")
+        end
         RestoreGameMenuLayout()
     end
 end
@@ -431,7 +455,7 @@ HookGameMenu = function()
     if not gameMenu then return false end
     if gameMenu.MSUFGameMenuHooked then return true end
 
-    EnsureButton()
+    if not DeferLockedGameMenuLayout(gameMenu) then EnsureButton() end
     gameMenu:HookScript("OnShow", function()
         if runtimeEnabled then QueuePositionGameMenuButton() end
     end)
@@ -447,11 +471,23 @@ initFrame = CreateFrame("Frame")
 runtimeEnabled = true
 initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:RegisterEvent("ADDON_LOADED")
-initFrame:SetScript("OnEvent", function(self)
+initFrame:SetScript("OnEvent", function(self, event)
+    if event == "PLAYER_REGEN_ENABLED" then
+        local gameMenu = pendingGameMenu
+        pendingGameMenu = nil
+        self:UnregisterEvent(event)
+        if gameMenu then
+            if runtimeEnabled and IsGameMenuButtonEnabled() then
+                if gameMenu:IsShown() then PositionGameMenuButton() end
+            else
+                RestoreGameMenuLayout()
+            end
+        end
+        return
+    end
     if HookGameMenu() then
         self:UnregisterEvent("PLAYER_LOGIN")
         self:UnregisterEvent("ADDON_LOADED")
-        self:SetScript("OnEvent", nil)
     end
 end)
 
