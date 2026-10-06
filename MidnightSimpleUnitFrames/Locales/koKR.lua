@@ -11,6 +11,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("koKR")) or (MSUF.L or {})
+-- Additional resource example controls.
+L["Example state"] = "예시 상태"
+L["Warning phase"] = "경고 단계"
+L["Arcane Soul"] = "비전 영혼"
+L["Arcane Window"] = "비전 효과 시간"
+L["Preview - %s"] = "미리 보기 - %s"
+L["Example - enabled in profile"] = "예시 - 프로필에서 활성화됨"
+L["Example - disabled in profile"] = "예시 - 프로필에서 비활성화됨"
+
 
 -- Group layout and cast bar options.
 L["Center party frames while solo"] = "혼자일 때 파티 프레임 가운데 배치"

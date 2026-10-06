@@ -1203,6 +1203,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller_Ticker.lua",
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller_Events.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtras.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtrasPreview.lua",
     "MidnightSimpleUnitFrames/State/MSUF_ProfileFields.lua",
     "MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua",
     "MidnightSimpleUnitFrames/State/MSUF_ProfileExternal.lua",

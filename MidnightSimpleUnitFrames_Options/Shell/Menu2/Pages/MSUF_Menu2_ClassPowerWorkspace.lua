@@ -10,7 +10,8 @@ local ORDER = { "class", "power", "hp", "mana", "extras" }
 local SECTIONS = { classpower_detached_power = "power", classpower_detached_power_textures = "power",
     classpower_detached_power_text = "power", classpower_player_hp = "hp", classpower_player_hp_textures = "hp",
     classpower_player_hp_text = "hp", classpower_alt_mana = "mana", classpower_alt_mana_behavior = "mana",
-    classpower_resource_extras = "extras", classpower_resource_marks = "extras" }
+    classpower_resource_extras = "extras", classpower_resource_marks = "extras",
+    classpower_resource_pain = "extras", classpower_resource_arcane = "extras", classpower_resource_layout = "extras" }
 local COPY = {
     { key = "size", label = "Size", fields = { "width", "height", "orb" } },
     { key = "appearance", label = "Appearance", fields = { "texture", "background", "alpha", "outline" } },
@@ -54,7 +55,10 @@ end
 function Workspace.Decorate(exact, path)
     local kind = Workspace.KindForPath(path)
     exact.searchPrepareKind, exact.searchPrepareValue = "classPowerWorkspace", kind
-    exact.prepareExactSearchTarget = function() return Workspace.Select(kind) end
+    exact.prepareExactSearchTarget = function()
+        if kind == "extras" then M.ResourceExtrasPreview.FocusPath(path) end
+        return Workspace.Select(kind)
+    end
     local persisted = exact.settingKey and (exact.settingKey:find("^bars%.") or exact.settingKey:find("^player%."))
     if Workspace.current and persisted then Workspace.current.keys[kind][exact.settingKey] = true end
     return exact
@@ -90,6 +94,7 @@ function UI:Select(kind, fromFocus, building)
     self.page.b.layoutEntries = visible
     self.page.b:RequestRelayoutCollapsibles()
     if self.selector then self.selector:Refresh() end
+    M.ResourceExtrasPreview.UpdateHeader(self.page.ctx, kind)
     if self.copyButton then self.copyButton:SetShown(kind ~= "extras") end
     if not fromFocus and visible[1] and not visible[1].open then
         W.FocusCollapsibleSection(visible[1].body, { scroll = false, flash = false })

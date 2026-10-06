@@ -471,4 +471,6 @@ clients+Forever	lua	tools/tests/classpower_layout_smoke.lua	{root} {flavor} 760	
 clients+Forever	lua	tools/tests/classpower_layout_smoke.lua	{root} {flavor} 520 hidden	Class Resources hidden build geometry at 520px: {flavor}
 clients+Forever	lua	tools/tests/classpower_layout_smoke.lua	{root} {flavor} 760 eager	Class Resources eager build geometry at 760px: {flavor}
 clients+Forever	lua	tools/tests/game_menu_combat_layout_smoke.lua	{root} {flavor}	Protected game menu combat layout: {flavor}
+clients+Forever	lua	tools/tests/resource_extras_preview_smoke.lua	{root} {flavor}	Additional resource examples: {flavor}
+clients+Forever	lua	tools/tests/resource_extras_layout_colors_smoke.lua	{root} {flavor}	Additional resource accordions and color shortcuts: {flavor}
 -	lua	tools/tests/power_foreign_token_text_skip_smoke.lua	{root}	Power foreign-token text skip smoke failed

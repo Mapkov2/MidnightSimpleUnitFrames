@@ -317,6 +317,17 @@
    "evidence": "Owner request 2026-10-06: remove the Frame bar shape selection from individual Frame Basics in the Classic repository.",
    "reason": "Remove the individual unit Basics dropdown and its search routes; existing profile values, global Bars style controls and group Layout shape controls retain their runtime behavior.",
    "date": "2026-10-06"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: classpower | Extras > Marks | Mark and threshold color | color | no key | advanced.resource.extras.marks.color",
+    "main: classpower | Extras > Marks | Mark and threshold color | color | no key | advanced.resource.extras.marks.color"
+   ],
+   "basis": "moved",
+   "evidence": "MSUF_Menu2_ResourceExtras.lua: Colors > Resources > Resource marks and thresholds, colors_resource_marks; resource_extras_layout_colors_smoke.lua verifies shared selected-rule color storage, direct search routing and context-picker restoration.",
+   "reason": "The mark color control moved to the canonical Colors page; the resource-mark accordion retains the shared context color shortcut, and both edit the same bars.resourceMarks rule color without changing profile keys.",
+   "date": "2026-10-06"
   }
  ]
 }

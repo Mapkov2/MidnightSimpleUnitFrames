@@ -131,7 +131,9 @@ function Methods:GetRight() return (self.left or 0) + (self.width or 0) end
 function Methods:GetBottom() return self.bottom end
 function Methods:GetTop() return (self.bottom or 0) + (self.height or 0) end
 function Methods:GetCenter()
-    return (self.left or 0) + (self.width or 0) / 2, (self.bottom or 0) + (self.height or 0) / 2
+    -- Addon-owned text slots can use left; native coordinates are not Lua fields.
+    return (tonumber(self.left) or 0) + (tonumber(self.width) or 0) / 2,
+        (tonumber(self.bottom) or 0) + (tonumber(self.height) or 0) / 2
 end
 function Methods:GetRect()
     return self.left, self.bottom, self.width, self.height

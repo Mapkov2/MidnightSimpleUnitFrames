@@ -11,6 +11,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhTW")) or (MSUF.L or {})
+-- Additional resource example controls.
+L["Example state"] = "範例狀態"
+L["Warning phase"] = "警告階段"
+L["Arcane Soul"] = "秘法之魂"
+L["Arcane Window"] = "秘法效果持續時間"
+L["Preview - %s"] = "預覽 - %s"
+L["Example - enabled in profile"] = "範例 - 設定檔中已啟用"
+L["Example - disabled in profile"] = "範例 - 設定檔中已停用"
+
 
 -- Group layout and cast bar options.
 L["Center party frames while solo"] = "單人遊玩時置中顯示隊伍框架"

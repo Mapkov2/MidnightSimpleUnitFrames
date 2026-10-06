@@ -18,7 +18,9 @@ local CPPreview = M.ClassPowerPreview or {}
 local Layers = MSUF.UF and MSUF.UF.Layers or {}
 local PreviewCore = MSUF.UFPreviewCore or {}
 local Helpers = M.PreviewHelpers or {}
-local PlayerManaSourceActive = Helpers.PlayerManaSourceActive or M.Fallbacks.False
+local function PlayerManaSourceActive(player)
+    return player and player._msufResourceExtraMana == true or (Helpers.PlayerManaSourceActive or M.Fallbacks.False)(player)
+end
 -- SetOnUpdateMode takes an Enum.OnUpdateMode value, not a name; a string argument leaves the
 -- animation driver's OnUpdate disabled.
 local ONUPDATE_MODE_DISABLED = (_G.Enum and _G.Enum.OnUpdateMode and _G.Enum.OnUpdateMode.Disabled) or 0
@@ -261,7 +263,8 @@ end
 local function PowerColor(player)
     local pbc = _G.PowerBarColor
     local explicitMana = PlayerManaSourceActive(player)
-    local c = pbc and ((explicitMana and pbc.MANA) or pbc.ENERGY or pbc.MANA)
+    local sample = player and player._msufResourceExtraPower
+    local c = pbc and ((sample and pbc[sample]) or (explicitMana and pbc.MANA) or pbc.ENERGY or pbc.MANA)
     if c then return c.r or c[1] or 1, c.g or c[2] or 0.82, c.b or c[3] or 0.10 end
     return 1.00, 0.86, 0.12
 end
@@ -1712,16 +1715,16 @@ local function PlaceBound(preview, key, region, label, color, pad, layerKey)
 end
 -- These are deterministic menu samples, never attached to real resource frames.
 -- Reuse the menu meter painter and retain objects across configuration refreshes.
--- The extra resource meters follow the live builder (ClassPower/MSUF_CP_ExtraAuras):
--- they exist on Midnight only, for the player's real class and specialization
--- (C_SpecializationInfo first, like the ClassPower controller), and paint the
--- live bar and text colours. Client facts are read once here.
+-- Context samples follow the live class/spec gates. The Additional resources
+-- workspace selects a client-supported example independently of the character.
+-- Both paths reuse these painters with the configured bar and text colours.
 local SAMPLE = {
     LIVE_EXTRAS = MSUF.Client ~= nil and MSUF.Client.IsRetail == true and MSUF.Client.IsForever ~= true,
     FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true,
     BLUE = { .45, .7, 1 }, RED = { 1, .2, .15 }, WHITE = { 1, 1, 1 },
     FIVE = { 1, .65, .2 }, TICK = { .3, 1, .7 }, COST = { .7, .7, 1 },
     ARCANE = { .66, .42, 1 }, ARCANE_WARN = { 1, .78, .25 },
+    SOUL = { .92, .4, .86 },
     NO_MARKS = {}, METER_OPTS = {},
 }
 function SAMPLE.Color(bars, colorKey, fallback)
@@ -1735,11 +1738,10 @@ function SAMPLE.MeterOpts(width, height, fraction, texture, color)
     opts.bgR, opts.bgG, opts.bgB, opts.bgA, opts.bgTexture, opts.outline = nil, nil, nil, nil, nil, nil
     return opts
 end
---- One eligibility rule for every extra resource sample: the live rule
---- (Midnight, the real class and spec, the option) plus the previewed class.
---- The options and the previewed class come first: both samples are off by
---- default, and then the player's class and specialization are never read.
-local function ExtraSampleEligible(bars, class, spec)
+-- Explicit workspace examples already passed the client's choice gates.
+-- Context samples still match the live class, specialization and activation.
+local function ExtraSampleEligible(preview, bars, class, spec)
+    if preview._resourceExtraExample then return M.ResourceExtrasPreview.Eligibility(preview) end
     if not SAMPLE.LIVE_EXTRAS then return false, false end
     local pain = class == "WARRIOR" and bars.showIgnorePain == true
     local arcane = spec ~= nil and spec.key == "mage_arcane" and bars.showArcaneWindow == true
@@ -1765,7 +1767,7 @@ local function SampleMeter(preview, samples, bars, key, row, colorKey, fallback,
     frame.center:SetPoint("CENTER", frame, "CENTER")
     frame.center:SetAlpha(1)
     frame.center:Show()
-    frame._sampleLayer = "class"
+    frame._sampleLayer = preview._resourceExtraExample and "extras" or "class"
     frame._sampleActive=true
     frame:Show()
     return frame
@@ -1777,7 +1779,7 @@ local function SampleStrip(preview, samples, bars, powerFrame, key, height, anch
     frame:SetPoint(anchor, powerFrame, anchor == "BOTTOMLEFT" and "TOPLEFT" or "BOTTOMLEFT", 0, offset)
     RenderMeter(frame, nil, SAMPLE.MeterOpts(powerFrame:GetWidth(), height, fraction, WHITE8,
         SAMPLE.Color(bars, colorKey, fallback)))
-    frame._sampleLayer="power"
+    frame._sampleLayer = "power"
     frame._sampleActive=true
     frame:Show()
     return frame
@@ -1796,6 +1798,24 @@ local function SamplePowerTarget(mana)
     local maximum = type(UnitPowerMax) == "function" and UnitPowerMax("player", power) or nil
     if type(maximum) ~= "number" or (issecretvalue and issecretvalue(maximum)) then maximum = nil end
     return token, maximum
+end
+function SAMPLE.PaintArcane(preview, samples, bars)
+    -- Reuse the duration bar sample painter for both phases of the live window.
+    local warn = tonumber(bars.arcaneWindowWarnSeconds)
+    if not warn or warn ~= warn then warn = 3 end
+    warn = max(0, min(10, warn))
+    if bars.arcaneWindowWarnLastGCD == true then warn = 1.5 end
+    local seconds, soul = M.ResourceExtrasPreview.ArcaneSample(preview, warn)
+    local mode, from = bars.arcaneWindowText, tonumber(bars.arcaneWindowTextFrom) or 0
+    local casts = math.ceil(seconds / 1.5)
+    local secondsFormat = seconds >= 10 and "%d" or "%.1f"
+    local text = mode == "gcds" and string.format("x%d", casts)
+        or mode == "both" and string.format(secondsFormat .. " (x%d)", seconds, casts) or string.format(secondsFormat, seconds)
+    if from > 0 and seconds >= from then text = "" end
+    local fraction = preview._resourceExtraExample and seconds / (soul and 10 or 15) or .25
+    local colorKey = soul and "arcaneWindowSoulColor" or "arcaneWindowColor"
+    SampleMeter(preview, samples, bars, "ARCANE", 0, colorKey, soul and SAMPLE.SOUL or SAMPLE.ARCANE, fraction, text,
+        (warn > 0 and seconds < warn) and SAMPLE.Color(bars, "arcaneWindowWarnColor", SAMPLE.ARCANE_WARN) or SAMPLE.WHITE)
 end
 local function RenderExtraSamples(preview, bars, player, spec, classFrame, powerFrame)
     local samples = preview.resourceSamples or {}
@@ -1816,7 +1836,7 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
         preview.resourceSamplePowerBase = base
     end
     local class = PreviewClassToken(spec)
-    local pain, arcane = ExtraSampleEligible(bars, class, spec)
+    local pain, arcane = ExtraSampleEligible(preview, bars, class, spec)
     if pain then
         local frame = SampleMeter(preview, samples, bars, "PAIN", 0, "ignorePainColor", SAMPLE.BLUE, .65, "7.8 s", SAMPLE.WHITE)
         frame.marker = frame.marker or MakeTexture(frame, "OVERLAY")
@@ -1827,25 +1847,7 @@ local function RenderExtraSamples(preview, bars, player, spec, classFrame, power
         frame.marker:SetPoint("BOTTOM", frame.fill, "BOTTOMRIGHT")
         frame.marker:SetShown(bars.ignorePainTimeMarker ~= false)
     end
-    if arcane then
-        -- The Arcane Surge phase of the window (MSUF_CP_ExtraAuras): the window
-        -- colour, the chosen text, blank above the show-from seconds, and the
-        -- warning colour below the warning time or during the last global
-        -- cooldown (1.5 s here), exactly like the live rules (0 turns it off).
-        -- The sample sits below the warning time.
-        local warn = tonumber(bars.arcaneWindowWarnSeconds)
-        if not warn or warn ~= warn then warn = 3 end
-        warn = max(0, min(10, warn))
-        if bars.arcaneWindowWarnLastGCD == true then warn = 1.5 end
-        local seconds = max(.5, warn - .5)
-        local mode, from = bars.arcaneWindowText, tonumber(bars.arcaneWindowTextFrom) or 0
-        local casts = math.ceil(seconds / 1.5)
-        local text = mode == "gcds" and string.format("x%d", casts)
-            or mode == "both" and string.format("%.1f (x%d)", seconds, casts) or string.format("%.1f", seconds)
-        if from > 0 and seconds >= from then text = "" end
-        SampleMeter(preview, samples, bars, "ARCANE", 0, "arcaneWindowColor", SAMPLE.ARCANE, .25, text,
-            (warn > 0 and seconds < warn) and SAMPLE.Color(bars, "arcaneWindowWarnColor", SAMPLE.ARCANE_WARN) or SAMPLE.WHITE)
-    end
+    if arcane then SAMPLE.PaintArcane(preview, samples, bars) end
     -- The existing detached mock uses Energy unless its configured source is Mana.
     -- Alternate-mana has no mock host here and is therefore not misrepresented.
     local mana = powerFrame and PlayerManaSourceActive(player) and not PowerShowsEbonMight(bars, player, spec)
@@ -1974,6 +1976,12 @@ local function RefreshBounds(preview, classFrame, ebonFrame, powerFrame, hpFrame
     PlaceBound(preview, "power", powerFrame, "Power", { 0.95, 0.72, 0.18 }, 1)
     PlaceBound(preview, "hp", hpFrame, "HP", { 0.25, 0.90, 0.42 }, 1)
     PlaceBound(preview, "mana", preview.altMana, "Alternative Mana", { .45, .7, 1 }, 1)
+    local samples = preview.resourceSamples or SAMPLE.NO_MARKS
+    local pain, arcane = samples.PAIN, samples.ARCANE
+    PlaceBound(preview, "pain", pain and pain._sampleActive and pain, "Ignore Pain", SAMPLE.BLUE, 1,
+        pain and pain._sampleLayer)
+    PlaceBound(preview, "arcane", arcane and arcane._sampleActive and arcane, "Arcane Window", SAMPLE.ARCANE, 1,
+        arcane and arcane._sampleLayer)
 end
 local function AddPreviewRegionBounds(preview, region, bounds)
     if not (preview and preview.stage and region and region.IsShown and region:IsShown()) then return end
@@ -2424,6 +2432,8 @@ function Preview.Create(ctx, builder)
         local bars = Bars()
         local player = Player()
         local spec = M.GetClassPowerPreviewSpec and M.GetClassPowerPreviewSpec() or nil
+        local profileBars = bars
+        bars, player, spec = M.ResourceExtrasPreview.Config(box, bars, player, spec)
         PaintPlayerReference(box)
         Preview.RenderAlternativeMana(box, bars)
         local classFrame, classDisabledReason = RenderClassPower(box, bars, player, spec)
@@ -2468,6 +2478,7 @@ function Preview.Create(ctx, builder)
         ApplyLayerVisibility(box)
         RefreshLayerButtons(box)
         RefreshHandleVisuals(box)
+        M.ResourceExtrasPreview.PaintLabels(box, profileBars)
         RefreshAnimateButton(box)
         if box._animationEnabled == true then StartAnimationDriver(box) end
     end

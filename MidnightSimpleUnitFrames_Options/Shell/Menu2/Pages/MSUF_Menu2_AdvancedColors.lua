@@ -2056,7 +2056,7 @@ local COLOR_CATEGORY_SECTIONS = {
         "colors_group_frames_highlights", "colors_group_frames_healer_mana" },
     cast = { "colors_castbar", "colors_castbar_text" },
     auras = { "colors_auras" },
-    resources = { "colors_power", "colors_class_power" },
+    resources = { "colors_power", "colors_class_power", "colors_resource_extras", "colors_resource_marks" },
 }
 local COLOR_SECTION_CATEGORY = {}
 for categoryKey, sectionIds in pairs(COLOR_CATEGORY_SECTIONS) do
@@ -2106,9 +2106,8 @@ local function PendingColorFocusCategory(ctx)
 end
 
 local function BuildColors(ctx)
-    local suiteColors = _G.MSUFSuite and _G.MSUFSuite.Options
-    if suiteColors and type(suiteColors.BuildColorsCategory) == "function"
-        and not COLOR_CATEGORY_BUILDERS.suite then
+    local suiteLink = MSUF.SuiteLink
+    if suiteLink.HasColorsCategory() and not COLOR_CATEGORY_BUILDERS.suite then
         COLOR_PAINTER_CATEGORIES[#COLOR_PAINTER_CATEGORIES + 1] = {
             key = "suite", title = "UI Suite", shortTitle = "Suite",
             subtitle = "Minimap, action bars, damage meter and skin colors.",
@@ -2120,7 +2119,7 @@ local function BuildColors(ctx)
         }
         for _, sectionId in ipairs(COLOR_CATEGORY_SECTIONS.suite) do COLOR_SECTION_CATEGORY[sectionId] = "suite" end
         COLOR_CATEGORY_BUILDERS.suite = function(colorCtx, inner)
-            suiteColors.BuildColorsCategory(colorCtx, inner)
+            suiteLink.BuildColorsCategory(colorCtx, inner)
         end
     end
     if ctx and ctx.wrapper then ctx.wrapper._msuf2SuppressContextColorShortcuts = true end

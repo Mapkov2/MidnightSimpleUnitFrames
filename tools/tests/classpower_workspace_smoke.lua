@@ -55,7 +55,8 @@ for _, button in ipairs(ui.selector.buttons) do
     CheckSelectedStrip(ui.selected)
 end
 Check(F.Equal(selectionBefore, env.MSUF_DB), "top strip navigation wrote settings")
-local count = { class = 4, power = 3, hp = 3, mana = 2, extras = 2 }
+local _,extraSettings=M.ResourceExtrasPage.ClientOnlySettings()
+local count = { class = 4, power = 3, hp = 3, mana = 2, extras = extraSettings["bars.showIgnorePain"] and 5 or 2 }
 for kind, expected in pairs(count) do
     ui:Select(kind)
     mw:RunTimers()

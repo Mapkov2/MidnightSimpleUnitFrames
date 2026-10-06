@@ -11,6 +11,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("ruRU")) or (MSUF.L or {})
+-- Additional resource example controls.
+L["Example state"] = "Пример состояния"
+L["Warning phase"] = "Фаза предупреждения"
+L["Arcane Soul"] = "Чародейская душа"
+L["Arcane Window"] = "Чародейское окно"
+L["Preview - %s"] = "Предпросмотр - %s"
+L["Example - enabled in profile"] = "Пример - включено в профиле"
+L["Example - disabled in profile"] = "Пример - отключено в профиле"
+
 
 -- Group layout and cast bar options.
 L["Center party frames while solo"] = "Центрировать рамки группы при игре в одиночку"

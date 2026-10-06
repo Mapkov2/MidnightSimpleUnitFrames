@@ -19,6 +19,7 @@
     <Script file="Pages\MSUF_Menu2_AdvancedColors_Group.lua"/>
     <Script file="Pages\MSUF_Menu2_ClassPowerWorkspace.lua"/>
     <Script file="Pages\MSUF_Menu2_ResourceExtras.lua"/>
+    <Script file="Pages\MSUF_Menu2_ResourceExtrasPreview.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedColors_Resources.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedColors_Context.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedGameplay.lua"/>

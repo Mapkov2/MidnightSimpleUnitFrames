@@ -8,6 +8,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("enGB")) or (MSUF.L or {})
+-- Additional resource example controls.
+L["Example state"] = "Example state"
+L["Warning phase"] = "Warning phase"
+L["Arcane Soul"] = "Arcane Soul"
+L["Arcane Window"] = "Arcane Window"
+L["Preview - %s"] = "Preview - %s"
+L["Example - enabled in profile"] = "Example - enabled in profile"
+L["Example - disabled in profile"] = "Example - disabled in profile"
+
 
 -- Spell bar and group layout options.
 L["When Hide out of combat is enabled, hide the Player Power bar and its text with Class Resource. Player Power returns in combat. Edit Mode keeps them visible."] = "When Hide out of combat is enabled, hide the Player Power bar and its text with Class Resource. Player Power returns in combat. Edit Mode keeps them visible."

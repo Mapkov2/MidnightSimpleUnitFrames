@@ -982,6 +982,7 @@ function Page:BuildHeader()
     quick:SetScript("OnEnter", ShowQuickSetupTooltip)
     quick:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     RegisterControl(quick, Meta("quick_setup.class_bar", "action", { confirmRequired = true }), "Quick Setup: Class Bar", "button")
+    M.ResourceExtrasPreview.BuildHeader(self, head, selectorH, b.width, preview, quick)
     -- Dock the selector strip like the unit pages' Editing strip and the
     -- Colors category bar: both selector and preview occupy the fixed stack,
     -- in that order, before the settings ScrollFrame begins.
@@ -990,6 +991,8 @@ function Page:BuildHeader()
             pageKey = ctx and ctx.key,
             wrapper = ctx and ctx.wrapper,
             gap = 4,
+            dynamicHeight = true,
+            heightResolver = function() return selectorH + (self.workspace.selected == "extras" and 136 or 82) end,
             builder = b,
             ctx = ctx,
             flowGap = 8,
@@ -1694,7 +1697,7 @@ end
 -- search-index builds and persisted-open sections still build synchronously
 -- inside BuildSectionLazy, so search, Search coverage, and reopened
 -- sections keep seeing the full page.
-function Page:LazySection(id, title, height, method)
+function Page:LazySection(id, title, height, method, prepareShell)
     local UnitPage = M.UnitPage
     if UnitPage and type(UnitPage.BuildSectionLazy) == "function" then
         local page = self
@@ -1703,6 +1706,7 @@ function Page:LazySection(id, title, height, method)
             title = title,
             height = height,
             defaultOpen = false,
+            prepareShell = prepareShell,
             build = function(_, proxyBuilder)
                 local outerBuilder = page.b
                 page.b = proxyBuilder
@@ -1735,9 +1739,8 @@ function Page:Build()
     self:LazySection("classpower_alt_mana", "Layout", 402, Page.BuildAlternativeMana)
     self:LazySection("classpower_alt_mana_behavior", "Behavior", 96, Page.BuildAlternativeManaBehavior)
     if M.ResourceExtrasPage then
-        self:LazySection("classpower_resource_extras", "Additional resources", M.ResourceExtrasPage.Height,
-            function(page) M.ResourceExtrasPage.Build(page, Bars, ApplyClassPower) end)
-        self:LazySection("classpower_resource_marks", "Resource marks and thresholds", 690,
+        M.ResourceExtrasPage.BuildSections(self, Bars, ApplyClassPower)
+        self:LazySection("classpower_resource_marks", "Resource marks and thresholds", function() return M.ResourceExtrasPage.MarksHeight(self) end,
             function(page) M.ResourceExtrasPage.BuildMarks(page, Bars, ApplyClassPower) end)
     end
     -- All callbacks share one late-bound state refresh instead of capturing every control.

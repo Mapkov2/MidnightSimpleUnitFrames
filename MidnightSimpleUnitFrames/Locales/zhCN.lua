@@ -14,6 +14,15 @@ local MSUF = _G.MSUF_NS or _G.MSUF
 if not MSUF then return end
 local function LoadLocale()
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhCN")) or (MSUF.L or {})
+-- Additional resource example controls.
+L["Example state"] = "示例状态"
+L["Warning phase"] = "警告阶段"
+L["Arcane Soul"] = "奥术之魂"
+L["Arcane Window"] = "奥术效果持续时间"
+L["Preview - %s"] = "预览 - %s"
+L["Example - enabled in profile"] = "示例 - 配置中已启用"
+L["Example - disabled in profile"] = "示例 - 配置中已禁用"
+
 
 -- Group layout and cast bar options.
 L["Background color"] = "背景颜色"
