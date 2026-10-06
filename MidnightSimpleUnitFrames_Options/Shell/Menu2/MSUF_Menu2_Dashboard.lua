@@ -81,14 +81,12 @@ local function DirectRunSlash(message)
     return true
 end
 local function LoadedSuiteFactoryReset()
-    local suite = _G.MSUFSuite
-    return type(suite) == "table" and type(suite.Database) == "table"
-        and type(suite.Database.StageFactoryReset) == "function"
+    return MSUF.SuiteLink.CanStageFactoryReset()
 end
 
 local function RunSuiteFactoryReset()
     if DirectCombatLocked() or not LoadedSuiteFactoryReset() or type(_G.ReloadUI) ~= "function" then return false end
-    local ok = _G.MSUFSuite.Database.StageFactoryReset()
+    local ok = MSUF.SuiteLink.StageFactoryReset()
     if not ok then return false end
     _G.ReloadUI()
     return true
@@ -121,10 +119,7 @@ end
 --- predates GetOverview or answers with anything but a table. Callers treat nil
 --- as "not installed" and never promote the Suite then.
 function M.GetSuiteOverview()
-    local suite = _G.MSUFSuite
-    local getOverview = type(suite) == "table" and suite.GetOverview or nil
-    if type(getOverview) ~= "function" then return nil end
-    local overview = getOverview()
+    local overview = MSUF.SuiteLink.GetOverview()
     return type(overview) == "table" and overview or nil
 end
 
@@ -813,12 +808,9 @@ function Dashboard.BuildSuiteCard(state, ctx, top)
     if needsSetup then
         setup = Button(card, "Set up Suite", stacked and 16 or (mainW - 16 - rowW), buttonY, setupW, 28, function()
             if M.BlockCombatAction and M.BlockCombatAction() then return end
-            local suite = _G.MSUFSuite
-            local installer = type(suite) == "table" and suite.Installer or nil
-            local open = type(installer) == "table" and installer.Open or nil
             -- The setup window shares the menu's strata below its content, so
             -- the menu steps aside once the Suite confirms the window opened.
-            if type(open) == "function" and open() == true then
+            if MSUF.SuiteLink.OpenInstaller() == true then
                 M.HideSlashMenuAndMinibar(M.frame)
             elseif M.ShowStatusFeedback then
                 M.ShowStatusFeedback(M.Tr("Suite setup unavailable"), "danger", 1.4)

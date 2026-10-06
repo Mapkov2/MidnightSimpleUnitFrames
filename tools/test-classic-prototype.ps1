@@ -1179,6 +1179,8 @@ $mainlineOwnedLuaExtras = [Collections.Generic.HashSet[string]]::new([StringComp
 foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageResetProviders.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua",
+    "MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua",
     "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua",
     "MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua",
     "MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua",

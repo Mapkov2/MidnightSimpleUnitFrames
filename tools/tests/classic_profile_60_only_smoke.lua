@@ -112,7 +112,8 @@ end
 
 -- Load the actual split state providers; this test covers decoding policy,
 -- while runtime application is asserted in the separate profile apply suite.
-for _, relative in ipairs({ "Kernel/MSUF_Require.lua", "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua" }) do
+for _, relative in ipairs({ "Kernel/MSUF_Require.lua", "Kernel/MSUF_SuiteLink.lua", "State/MSUF_StateHelpers.lua",
+    "State/MSUF_ProfileCodec.lua" }) do
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/" .. relative))("MidnightSimpleUnitFrames", namespace)
 end
 function MSUF_TryDecodeCompactString(value) return decoded[value] end

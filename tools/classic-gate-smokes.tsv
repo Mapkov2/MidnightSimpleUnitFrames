@@ -421,7 +421,9 @@ clients+Forever	lua	tools/tests/options_launcher_smoke.lua	{root} {flavor}	Game 
 -	lua	tools/tests/defaults_aura_lane_schema_smoke.lua	{root}	The defaults' unit aura lane keys drifted from the aura schema's lane specs
 -	lua	tools/tests/host_api_smoke.lua	{root}	Host API v1 core setters smoke failed
 -	lua	tools/tests/host_page_reset_provider_smoke.lua	{root}	Host API v1 page-reset provider smoke failed
-clients+Forever	lua	tools/tests/host_api_client_boot_smoke.lua	{root/} {flavor}	Host API v1 real-boot smoke failed: {flavor}
+-	lua	tools/tests/host_menu_protocol_smoke.lua	{root}	Host API v2 Menu2 widget protocol smoke failed
+-	lua	tools/tests/host_suite_link_smoke.lua	{root}	Host API v2 Suite link smoke failed
+clients+Forever	lua	tools/tests/host_api_client_boot_smoke.lua	{root/} {flavor}	Host API real-boot smoke failed: {flavor}
 -	lua	tools/tests/uf_sibling_called_exports_smoke.lua	{root}	An engine export a sibling addon tree still calls was removed
 -	lua	tools/tests/castbar_secret_paths_smoke.lua	{root}	Castbar runtime paths on a strict-secret Midnight and Forever client
 -	lua	tools/tests/castbar_empower_hold_smoke.lua	{root}	Another unit's empowered cast ends at the last stage instead of after the hold at max rank

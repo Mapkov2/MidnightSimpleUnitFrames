@@ -29,8 +29,7 @@ end
 
 -- The optional Suite owns its release history and exposes it from its core addon.
 local function SuiteChangelogData()
-    local suite = _G.MSUFSuite
-    local data = type(suite) == "table" and suite.Changelog or nil
+    local data = MSUF.SuiteLink.GetChangelog()
     if type(data) == "table" and type(data.entries) == "table" and type(data.entries[1]) == "table" then
         return data
     end

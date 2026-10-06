@@ -353,6 +353,9 @@ local function InstallClientFacts(target)
     if not ok then Fail(CLIENT_INIT_PATH .. ": " .. tostring(result)) end
     local client = namespace.Client
     if type(client) ~= "table" then Fail(CLIENT_INIT_PATH .. ": published no MSUF.Client") end
+    -- MSUF's Suite link (Kernel/MSUF_SuiteLink.lua, early in every core TOC): the
+    -- home page and the profile and color pages ask it about the Suite, absent here.
+    assert(loadfile("MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", namespace)
     if client.Flavor ~= suffix or client.IsForever ~= isForever then
         Fail(target .. ": the client model placed this build as " .. tostring(client.Flavor)
             .. (client.IsForever and " (WoW Forever)" or ""))

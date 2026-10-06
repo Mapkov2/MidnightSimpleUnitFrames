@@ -167,6 +167,7 @@ local function LoadProvider(options)
     _G.MSUF_UI, _G.MSUF_SkinButton = nil, function() end
     ns.ExportPublic = function(name, value) _G[name] = value return value end
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", ns)
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", ns)
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Shell/UI/MSUF_Widgets.lua"))("MidnightSimpleUnitFrames", ns)
     ns.ExportPublic = nil
     local show, hide = ns.UI.ShowPrompt, ns.UI.HidePrompt

@@ -154,6 +154,7 @@ local function LoadAnchors(client, projectID, state)
     -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
     namespace.ExportPublic = function(name, value) _G[name] = value return value end
     assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
+    assert(loadfile(repo .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", namespace)
     namespace.ExportPublic = nil
     assert(loadfile(ANCHORS))("MidnightSimpleUnitFrames", namespace)
     return namespace, frames, timers, popups

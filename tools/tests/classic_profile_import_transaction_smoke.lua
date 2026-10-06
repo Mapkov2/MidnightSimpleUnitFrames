@@ -238,6 +238,7 @@ end
 manifest.LoadSelected(repo, manifestFlavor, namespace, {
     "State/MSUF_FirstLoad.lua",
     "Kernel/MSUF_Require.lua",
+    "Kernel/MSUF_SuiteLink.lua",
     "Kernel/MSUF_Boundary.lua",
     "State/MSUF_StateHelpers.lua",
     "State/MSUF_ProfileCodec.lua",
@@ -345,7 +346,8 @@ Check(pageSource:find("function ProfilesPage.ImportActions(state)", 1, true) ~= 
 local pageChunk = assert(loadstring(pageSource .. "\nreturn ProfilesPage", "@" .. pagePath))
 -- The page requires its core collaborators at load (M.RequireGlobals).
 local RequireFixture = assert(loadfile(repo .. "/tools/tests/require_fixture.lua"))()
-local pageNamespace = RequireFixture.Install(repo, { MSUF2 = M, Client = namespace.Client }, M)
+local pageNamespace = RequireFixture.Install(repo, { MSUF2 = M, Client = namespace.Client,
+    SuiteLink = namespace.SuiteLink }, M)
 -- The menu's reload prompt (MSUF_Menu2_Support.lua) only asks; it never reloads.
 MSUF_ShowReloadRecommendedPopup = function() end
 RequireFixture.StubRequirements(repo, { "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_AdvancedProfiles.lua" })

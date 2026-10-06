@@ -76,8 +76,7 @@ local function Trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 local function SuiteProfiles()
-    local suite = rawget(_G, "MSUFSuite")
-    return type(suite) == "table" and type(suite.SuiteProfiles) == "table" and suite.SuiteProfiles or nil
+    return MSUF.SuiteLink.Profiles()
 end
 local function SuiteExportAvailable()
     local profiles = SuiteProfiles()
@@ -86,20 +85,15 @@ end
 local function ProfileExportValues()
     local values = {}
     if SuiteExportAvailable() then
-        local suite = rawget(_G, "MSUFSuite")
         values[#values + 1] = { value = "suite_all", text = "Full profile (MSUF + Suite)" }
-        local skinReady = suite.Client and suite.Client.AddOnEnabled
-            and suite.Client.AddOnEnabled("MSUF_Suite_Skin") == true
+        local skinReady = MSUF.SuiteLink.SkinAddOnEnabled()
         -- Suite rows are translated here (one format key), so the picker shows them as is.
         values[#values + 1] = { value = "suite_module:skin", text = M.Format("Suite module: %s", Tr("Skinning")),
             translate = false, disabled = not skinReady }
         values[#values + 1] = { value = "all", text = "MSUF only - full profile" }
-        for _, id in ipairs(suite.SuiteOrder or {}) do
-            local spec = suite.SuiteCatalog and suite.SuiteCatalog[id]
-            if spec then
-                values[#values + 1] = { value = "suite_module:" .. id,
-                    text = M.Format("Suite module: %s", Tr(spec.title)), translate = false }
-            end
+        for _, module in ipairs(MSUF.SuiteLink.ProfileModules()) do
+            values[#values + 1] = { value = "suite_module:" .. module.id,
+                text = M.Format("Suite module: %s", Tr(module.title)), translate = false }
         end
     else
         values[#values + 1] = { value = "all", text = "Full profile" }
@@ -1198,9 +1192,7 @@ function ProfilesPage.ImportActions(state)
             local exportKindValue = M.profileExportKind or (SuiteExportAvailable() and "suite_all" or "all")
             local exportLabel = EXPORT_KIND_LABELS[exportKindValue]
             if not exportLabel and exportKindValue:match("^suite_module:") then
-                local suite = rawget(_G, "MSUFSuite")
-                local spec = suite and suite.SuiteCatalog and suite.SuiteCatalog[exportKindValue:sub(14)]
-                exportLabel = spec and spec.title
+                exportLabel = MSUF.SuiteLink.ModuleTitle(exportKindValue:sub(14))
             end
             W.SetCollapsibleBadges(io, {
                 { text = exportLabel or "Full profile", kind = "info", showWhenClosed = true },

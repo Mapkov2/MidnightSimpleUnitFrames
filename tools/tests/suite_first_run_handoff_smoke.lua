@@ -68,6 +68,7 @@ local function LoadLifecycle(client, savedVariables)
     _G.MSUF_DB, _G.MSUF_ActiveProfile = nil, nil
     _G.MSUF_GlobalDB = savedVariables
     local namespace = { Client = client }
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(CORE_FIRST_LOAD))("MidnightSimpleUnitFrames", namespace)
     maybeShowCalls, timers = 0, {}
     return namespace.FirstLoad6, namespace
@@ -324,7 +325,10 @@ local M = {
 function T.SkinEditBox(editBox) editBox._msuf2PaintEditBox = function() end end
 M.RegisterPage = function(key, spec) M.pages[key] = spec end
 _G.CreateFrame = function(kind) return Fake(kind) end
-assert(loadfile(MENU .. "MSUF_Menu2_Dashboard.lua"))("MidnightSimpleUnitFrames_Options", { MSUF2 = M })
+-- The core's Suite link (Kernel/MSUF_SuiteLink.lua), which the Suite card asks.
+local dashboardNamespace = { MSUF2 = M }
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", dashboardNamespace)
+assert(loadfile(MENU .. "MSUF_Menu2_Dashboard.lua"))("MidnightSimpleUnitFrames_Options", dashboardNamespace)
 local buildHome = Check(M.pages.home and M.pages.home.build, "the Dashboard must register the home page")
 
 local openCalls, openResult = 0, true

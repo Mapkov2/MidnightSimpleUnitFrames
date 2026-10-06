@@ -79,7 +79,8 @@ function ns.ExportPublic(name, value) _G[name] = value; ns[name] = value; return
 _G.MSUF_NS, _G.MSUF = ns, ns
 manifest.LoadSelected(repo, flavor, ns, {
     -- Kernel/MSUF_Util.lua publishes MSUF_PixelLayoutRegion, which the group DB files require.
-    "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "Kernel/MSUF_Util.lua", "Locales/MSUF_Localization.lua",
+    "State/MSUF_FirstLoad.lua", "Kernel/MSUF_Require.lua", "Kernel/MSUF_SuiteLink.lua", "Kernel/MSUF_Util.lua",
+    "Locales/MSUF_Localization.lua",
     "State/MSUF_StateHelpers.lua", "State/MSUF_ProfileCodec.lua",
     "State/MSUF_AuraDefaults.lua", "State/Defaults/MSUF_Defaults_Shell.lua", "State/Defaults/MSUF_Defaults_Bars.lua",
     "State/Defaults/MSUF_Defaults_Units.lua",

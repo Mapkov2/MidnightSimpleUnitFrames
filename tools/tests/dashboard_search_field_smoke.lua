@@ -142,7 +142,10 @@ _G.CreateFrame = function(kind, _, parent, template)
     return frame
 end
 _G.MSUFSuite = nil
-assert(loadfile(MENU .. "MSUF_Menu2_Dashboard.lua"))("MidnightSimpleUnitFrames_Options", { MSUF2 = M })
+-- The core's Suite link (Kernel/MSUF_SuiteLink.lua), which the Suite card asks.
+local dashboardNamespace = { MSUF2 = M }
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", dashboardNamespace)
+assert(loadfile(MENU .. "MSUF_Menu2_Dashboard.lua"))("MidnightSimpleUnitFrames_Options", dashboardNamespace)
 local buildHome = Check(M.pages.home and M.pages.home.build, "the Dashboard must register the home page")
 
 local function Build(width)

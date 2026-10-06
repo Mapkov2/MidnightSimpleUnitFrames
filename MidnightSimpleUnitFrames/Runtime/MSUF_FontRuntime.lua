@@ -242,9 +242,7 @@ UpdateAllFonts = function(onlyKey, skipUnitFrames, skipCastbars, skipClassPower,
         if MSUF and MSUF.MSUF_ApplyGameplayFontFromGlobal then MSUF.MSUF_ApplyGameplayFontFromGlobal() end
         if type(_G.MSCB_ApplyFontsFromMSUF) == "function" then _G.MSCB_ApplyFontsFromMSUF() end
         -- The optional Suite follows full font applies and cold-start recovery.
-        if type(_G.MSUFSuite_ApplyFontsFromMSUF) == "function" then
-            _G.MSUFSuite_ApplyFontsFromMSUF()
-        end
+        MSUF.SuiteLink.ApplyFonts()
     end
     if not onlyKey then
         -- Castbars/MSUF_FocusKickIcon.lua loads after this file, and a media

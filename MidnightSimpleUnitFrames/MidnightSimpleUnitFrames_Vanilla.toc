@@ -37,6 +37,7 @@ Game\Classic\BlizzardFrames.lua
 Kernel\MSUF_Bootstrap.lua
 Kernel\MSUF_Boundary.lua
 Kernel\MSUF_Require.lua
+Kernel\MSUF_SuiteLink.lua
 State\MSUF_FirstLoad.lua
 State\MSUF_UpgradeHighlights.lua
 State\MSUF_GuidedTour.lua

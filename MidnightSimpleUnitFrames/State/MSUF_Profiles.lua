@@ -298,11 +298,7 @@ function MSUF_InitProfiles()
     end
  end
 local function MSUF_ProfileIO_NotifySuiteLifecycle(kind, source, target)
-    local suite = rawget(_G, "MSUFSuite")
-    if type(suite) == "table" and type(suite.OnMSUFProfileLifecycle) == "function" then
-        return suite.OnMSUFProfileLifecycle(kind, source, target)
-    end
-    return true
+    return MSUF.SuiteLink.NotifyProfileLifecycle(kind, source, target)
 end
 function MSUF_CreateProfile(name)
     if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
@@ -352,10 +348,7 @@ MSUF_ProfileIO_NotifySuiteProfileChanged = (function()
             MSUF.EventBus:Register("PLAYER_REGEN_ENABLED", "MSUF_PROFILES_SUITE_NOTIFY", FlushPending, nil, true)
             return false
         end
-        local suite = rawget(_G, "MSUFSuite")
-        if type(suite) == "table" and type(suite.OnMSUFProfileChanged) == "function" then
-            suite.OnMSUFProfileChanged(name, reason)
-        end
+        MSUF.SuiteLink.NotifyProfileChanged(name, reason)
         return true
     end
     return Notify

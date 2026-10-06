@@ -58,6 +58,8 @@ local function HasLabel(label)
     for _, value in ipairs(labels) do if value == label then return true end end
 end
 
+-- The core's Suite link (Kernel/MSUF_SuiteLink.lua), which the page asks for the Suite changelog.
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", msuf)
 assert(loadfile(root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Changelog.lua"))("MidnightSimpleUnitFrames_Options", msuf)
 Build()
 assert(not HasButton("MSUF Suite"), "Suite tab appears without Suite")

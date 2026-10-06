@@ -4,7 +4,8 @@
 -- the whole core and Options TOC of the flavor, in TOC order.
 --
 --   * MSUF_HostAPI is published by the core at load, and Menu2 carries
---     HOST_API_VERSION 1 with an empty page-reset registry;
+--     HOST_API_VERSION 2 (the v1 page-reset registry, empty, and every v2
+--     widget protocol entry point) and the core its Suite link;
 --   * the first setter calls resolve the real owners of this flavor (the
 --     resource appliers through MSUF.Require) and run them: ApplyUIScaleProfile
 --     and SetResourceStack leave the same MSUF_DB and make the same applier
@@ -99,8 +100,20 @@ Check(type(api) == "table" and api.version == 1 and world.core.HostAPI == api,
 Check(world.core.ApplyUIScaleProfile == api.ApplyUIScaleProfile and world.core.SetResourceStack == api.SetResourceStack
     and world.core.GetResourceStack == api.GetResourceStack, "the addon namespace lacks the host API functions")
 local M = world.options.MSUF2
-Check(type(M) == "table" and M.HOST_API_VERSION == 1 and type(M.RegisterPageResetProvider) == "function",
+Check(type(M) == "table" and M.HOST_API_VERSION == 2 and type(M.RegisterPageResetProvider) == "function",
     "Menu2 did not publish the page-reset provider API")
+for _, name in ipairs({ "SkipHistoryCheckpoint", "AllowCombatClick", "SetSearchTargetPrepare",
+    "GetSearchTargetPrepare", "SetCommandAction", "GetControlTitle", "GetControlLabel", "GetControlSearchMeta",
+    "GetRawSetText", "ReleaseColorShortcut", "GetSectionEntry", "SetSectionEntry", "GetSectionWidth",
+    "SetSectionWidth", "GetSectionCursor", "SetSectionCursor", "MarkContextColorHost", "SetFixedPreviewHeight",
+    "SetBuilderInsets", "SetSectionEnsureVisible", "GetSectionEnsureVisible", "SetSectionRefreshState",
+    "GetSectionRefreshState", "SetMissingSectionResolver", "GetMissingSectionResolver", "ReserveSectionActions",
+    "RefreshSectionLayout", "SetSectionPopupGetter", "AddNavIcon" }) do
+    Check(type(M[name]) == "function", "Menu2 lacks the host API v2 entry point " .. name)
+end
+Check(type(world.core.SuiteLink) == "table" and world.core.SuiteLink.GetOverview() == nil
+    and world.core.SuiteLink.NotifyProfileLifecycle("delete", "A") == true,
+    "the core did not load its Suite link, or it answers for an absent Suite")
 Check(type(M.PageResetProviders) == "table" and next(M.PageResetProviders) == nil, "the page-reset registry is not empty")
 
 -- 2. The real owners, recorded and called through.

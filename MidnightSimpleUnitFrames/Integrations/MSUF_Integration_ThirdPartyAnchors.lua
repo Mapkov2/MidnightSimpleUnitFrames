@@ -13,7 +13,9 @@ local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 -- Foreign symbols this file depends on. Apart from the MSUF Suite entries, none
 -- is a documented public API; every read is type-checked and an absent symbol
 -- only leaves that provider unregistered, it never errors:
---   MSUFSuite.CooldownManager.GetAnchorFrame("EssentialCooldownViewer")
+--   MSUFSuite.API.GetCooldownAnchorFrame("EssentialCooldownViewer"), through
+--     MSUF.SuiteLink (Kernel/MSUF_SuiteLink.lua; an older Suite: MSUFSuite.
+--     CooldownManager.GetAnchorFrame)
 --     (MSUF_Suite_CooldownManager, LoadOnDemand, Mainline family only): a plain
 --     insecure frame covering the Suite's Essential bar, nil while the module is
 --     off. Absent: RegisterSuiteCooldownAnchor returns false unless the addon is
@@ -58,10 +60,6 @@ local issecretvalue = _G.issecretvalue
 --- ClassPower/MSUF_CP_Controller.lua). A provider that is already present
 --- (the Suite loading first) is acquired while this file loads, before they
 --- exist; their own first apply then covers that acquisition.
-local function GetSuite()
-    return _G.MSUFSuite
-end
-
 local function RunOptional(name, ...)
     local fn = MSUF.Optional(name)
     if fn then return fn(...) end
@@ -421,10 +419,7 @@ local function MaybeShowCooldownConsent()
     -- Consent offers the Cooldown Manager layout; a client that cannot host
     -- the anchor has nothing to ask about.
     if not cooldownAnchorSupported then return false end
-    local suite = GetSuite()
-    local installer = suite and suite.Installer
-    if installer and ((installer.IsFirstRunPending and installer.IsFirstRunPending())
-        or (installer.IsOpen and installer.IsOpen())) then return false end
+    if MSUF.SuiteLink.InstallerBusy() then return false end
     if not providerId or cooldownConsentPromptProviderId == providerId then return false end
     local db = _G.MSUF_DB
     local general = type(db) == "table" and db.general or nil
@@ -699,11 +694,7 @@ end
 --- inert there even if a table of that name exists.
 local function GetSuiteCooldownAnchorCandidate()
     if not cooldownAnchorClientSupported then return nil end
-    local suite = GetSuite()
-    local manager = type(suite) == "table" and suite.CooldownManager or nil
-    local getAnchorFrame = type(manager) == "table" and manager.GetAnchorFrame or nil
-    if type(getAnchorFrame) ~= "function" then return nil end
-    return getAnchorFrame("EssentialCooldownViewer")
+    return MSUF.SuiteLink.GetCooldownAnchorFrame("EssentialCooldownViewer")
 end
 
 local function OnSuiteCooldownSourceChanged()
@@ -1221,10 +1212,7 @@ end
 
 local function RegisterSuiteCooldownAnchor()
     if not cooldownAnchorClientSupported then return false end
-    local suite = GetSuite()
-    local manager = type(suite) == "table" and suite.CooldownManager or nil
-    if not (type(manager) == "table" and type(manager.GetAnchorFrame) == "function")
-        and not IsAddOnFullyLoaded(SUITE_COOLDOWN_ADDON) then
+    if not MSUF.SuiteLink.HasCooldownAnchor() and not IsAddOnFullyLoaded(SUITE_COOLDOWN_ADDON) then
         return false
     end
     -- The Suite's change notification is optional; the frame observers and the

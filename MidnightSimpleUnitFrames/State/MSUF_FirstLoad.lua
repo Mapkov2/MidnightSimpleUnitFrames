@@ -472,10 +472,7 @@ function FirstLoad:IsFirstRunPending()
 end
 
 local function ShowSuiteInstaller()
-    local suite = rawget(_G, "MSUFSuite")
-    local installer = type(suite) == "table" and suite.Installer or nil
-    local maybeShow = type(installer) == "table" and installer.MaybeShow or nil
-    if type(maybeShow) == "function" then maybeShow() end
+    MSUF.SuiteLink.MaybeShowInstaller()
 end
 
 -- Leaving the pending first run (completed, dismissed, later) hands off to the

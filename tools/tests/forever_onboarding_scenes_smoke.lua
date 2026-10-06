@@ -45,6 +45,7 @@ local function LoadLifecycles(client, savedVariables)
     _G.MSUF_DB, _G.MSUF_ActiveProfile = nil, nil
     _G.MSUF_GlobalDB = savedVariables
     local namespace = { Client = client }
+    assert(loadfile(core .. "Kernel/MSUF_SuiteLink.lua"))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(core .. "State/MSUF_FirstLoad.lua"))("MidnightSimpleUnitFrames", namespace)
     assert(loadfile(core .. "State/MSUF_UpgradeHighlights.lua"))("MidnightSimpleUnitFrames", namespace)
     return namespace.FirstLoad6, namespace.UpgradeHighlights
