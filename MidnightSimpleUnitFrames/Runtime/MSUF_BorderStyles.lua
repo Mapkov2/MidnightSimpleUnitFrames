@@ -34,7 +34,9 @@ local B = MSUF.BorderStyles
 local type, tonumber, tostring = type, tonumber, tostring
 local ipairs, pairs = ipairs, pairs
 local math_max, math_min, math_floor = math.max, math.min, math.floor
+local math_sqrt, math_atan2 = math.sqrt, math.atan2
 local table_sort = table.sort
+local issecretvalue = issecretvalue
 
 local MEDIA = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Borders\\"
 
@@ -306,6 +308,22 @@ function B.SetTexture(pieces, texture)
     end
 end
 
+-- Protected highlight channels go straight to the native color sink.
+local function NativeChannel(value)
+    if issecretvalue and issecretvalue(value) then return value end
+    return value or 1
+end
+
+--- The top and bottom strips span between their corner pieces.
+local function AnchorTopBottomStrips(pieces, edge)
+    pieces[5]:SetPoint("TOPLEFT", pieces[1], "TOPRIGHT")
+    pieces[5]:SetPoint("TOPRIGHT", pieces[2], "TOPLEFT")
+    pieces[5]:SetHeight(edge)
+    pieces[6]:SetPoint("BOTTOMLEFT", pieces[3], "BOTTOMRIGHT")
+    pieces[6]:SetPoint("BOTTOMRIGHT", pieces[4], "BOTTOMLEFT")
+    pieces[6]:SetHeight(edge)
+end
+
 --- Lay the border out around `target`, `edge` pixels wide, centred on the
 --- target rect edge -- the placement every edgeFile is authored for.
 ---
@@ -332,12 +350,7 @@ function B.Apply(pieces, target, edge, width, height, r, g, b, a, inset)
     for i = 1, 4 do pieces[i]:SetSize(edge, edge) end
 
     -- Edges span between the corners.
-    pieces[5]:SetPoint("TOPLEFT", pieces[1], "TOPRIGHT")
-    pieces[5]:SetPoint("TOPRIGHT", pieces[2], "TOPLEFT")
-    pieces[5]:SetHeight(edge)
-    pieces[6]:SetPoint("BOTTOMLEFT", pieces[3], "BOTTOMRIGHT")
-    pieces[6]:SetPoint("BOTTOMRIGHT", pieces[4], "BOTTOMLEFT")
-    pieces[6]:SetHeight(edge)
+    AnchorTopBottomStrips(pieces, edge)
     pieces[7]:SetPoint("TOPLEFT", pieces[1], "BOTTOMLEFT")
     pieces[7]:SetPoint("BOTTOMLEFT", pieces[3], "TOPLEFT")
     pieces[7]:SetWidth(edge)
@@ -369,14 +382,97 @@ function B.Apply(pieces, target, edge, width, height, r, g, b, a, inset)
     -- those four regions outright instead of keeping degenerate quads alive.
     -- Unknown target size (width/height 0) keeps the strips: the anchors are
     -- target-relative and stay correct either way.
+    r, g, b, a = NativeChannel(r), NativeChannel(g), NativeChannel(b), NativeChannel(a)
     local runX = width <= 0 or (width + out * 2) > (edge * 2)
     local runY = height <= 0 or (height + out * 2) > (edge * 2)
     for i = 1, 8 do
-        pieces[i]:SetVertexColor(r or 1, g or 1, b or 1, a or 1)
+        pieces[i]:SetVertexColor(r, g, b, a)
     end
     for i = 1, 4 do pieces[i]:Show() end
     if runX then pieces[5]:Show(); pieces[6]:Show() else pieces[5]:Hide(); pieces[6]:Hide() end
     if runY then pieces[7]:Show(); pieces[8]:Show() else pieces[7]:Hide(); pieces[8]:Hide() end
+end
+
+--- Blizzard's own border art (game files, not addon media) gets its look from
+--- carved corner and pattern pieces. Rounded and slanted frames keep those as
+--- eight pieces; every other style there is drawn as rings along the shape.
+--- Answers are kept per path, so a highlight swap in combat does no string work.
+local blizzardArt = {}
+function B.IsBlizzardArt(texture)
+    if type(texture) ~= "string" then return false end
+    local known = blizzardArt[texture]
+    if known ~= nil then return known end
+    local path = texture:lower():gsub("/", "\\")
+    known = path:find("^interface\\") ~= nil and path:find("^interface\\addons\\") == nil
+        and path ~= "interface\\buttons\\white8x8"
+    blizzardArt[texture] = known
+    return known
+end
+
+local function SetRepeatEdgeCoords(piece, index, run, edge)
+    local u = EDGE_U[index]
+    local repeats = math_max(0, (run / edge) - COORD_START)
+    if index <= 6 then
+        piece:SetTexCoord(u[1], repeats, u[2], repeats, u[1], COORD_START, u[2], COORD_START)
+    else
+        piece:SetTexCoord(u[1], COORD_START, u[1], repeats, u[2], COORD_START, u[2], repeats)
+    end
+end
+
+--- Apply for a frame whose left and right sides may slant. Each inset moves
+--- that corner inward along its horizontal edge (lt/lb: left top/bottom,
+--- rt/rb: right top/bottom, in pixels); the corner pieces centre on the moved
+--- corners and the side strips rotate to join them. With every inset zero
+--- this is Apply. Slanted points are offsets from the target's TOPLEFT, so a
+--- resize needs a new call; the caller re-lays the pieces out of combat.
+function B.ApplySlanted(pieces, target, edge, width, height, lt, lb, rt, rb, r, g, b, a)
+    if not (pieces and target) then return end
+    if pieces._msufSlanted then
+        for i = 1, 8 do pieces[i]:SetRotation(0) end
+        pieces._msufSlanted = nil
+    end
+    if lt == 0 and lb == 0 and rt == 0 and rb == 0 then
+        return B.Apply(pieces, target, edge, width, height, r, g, b, a)
+    end
+    width, height = tonumber(width) or 0, tonumber(height) or 0
+    edge = math_max(1, edge)
+    pieces._msufSlanted = true
+    for i = 1, 8 do pieces[i]:ClearAllPoints() end
+
+    -- Corners: piece order TL, TR, BL, BR, centred like Apply's straddle.
+    local cornerX = { lt, width - rt, lb, width - rb }
+    for i = 1, 4 do
+        pieces[i]:SetSize(edge, edge)
+        pieces[i]:SetPoint("CENTER", target, "TOPLEFT", cornerX[i], i <= 2 and 0 or -height)
+    end
+
+    -- Top and bottom stay horizontal between their corners.
+    AnchorTopBottomStrips(pieces, edge)
+    local topRun = (width - lt - rt) - edge
+    local bottomRun = (width - lb - rb) - edge
+    SetRepeatEdgeCoords(pieces[5], 5, topRun, edge)
+    SetRepeatEdgeCoords(pieces[6], 6, bottomRun, edge)
+
+    -- Sides run corner centre to corner centre, less half a corner at each
+    -- end; a positive rotation is counter-clockwise, which moves the strip's
+    -- bottom end to the right.
+    local runs = { [5] = topRun, [6] = bottomRun }
+    for i = 7, 8 do
+        local top, bottom = cornerX[i == 7 and 1 or 2], cornerX[i == 7 and 3 or 4]
+        local dx = bottom - top
+        local run = math_sqrt(height * height + dx * dx) - edge
+        runs[i] = run
+        pieces[i]:SetSize(edge, math_max(0, run))
+        pieces[i]:SetPoint("CENTER", target, "TOPLEFT", (top + bottom) * 0.5, -height * 0.5)
+        pieces[i]:SetRotation(math_atan2(dx, height))
+        SetRepeatEdgeCoords(pieces[i], i, run, edge)
+    end
+
+    r, g, b, a = NativeChannel(r), NativeChannel(g), NativeChannel(b), NativeChannel(a)
+    for i = 1, 8 do
+        pieces[i]:SetVertexColor(r, g, b, a)
+        if i <= 4 or runs[i] > 0 then pieces[i]:Show() else pieces[i]:Hide() end
+    end
 end
 
 function B.Hide(pieces)

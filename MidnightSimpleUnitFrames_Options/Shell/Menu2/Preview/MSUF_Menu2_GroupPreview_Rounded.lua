@@ -134,6 +134,9 @@ local GF_PREVIEW_ROUNDED_OPTS = {
     edgeSubLevel = 6,
     snapOff = SnapOff,
     baseEdgeColor = function(mock) return BaseEdgeColor(mock) end,
+    -- Stage.RenderChrome stores the compiled border spec; its outline style
+    -- follows the rounded or slanted shape like the live frame.
+    outlineStyle = function(mock) return mock and mock._msufPreviewOutlineStyle end,
 }
 local GF_PREVIEW_POWER_ROUNDED_OPTS = {
     bgKey = "_msufGFRoundedPreviewBg",

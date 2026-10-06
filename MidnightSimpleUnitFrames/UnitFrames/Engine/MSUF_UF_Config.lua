@@ -1707,7 +1707,7 @@ local function CompileUnitBorder(out, conf, general, bars)
   border.strata = Shared.NormalizeFrameOutlineStrata(conf.hlOverride == true and conf.barOutlineStrata ~= nil and conf.barOutlineStrata or bars.barOutlineStrata)
   -- Optional typed outline media. True borders use eight-piece edgeFile
   -- geometry; statusbar textures keep the historic four stretched edges.
-  -- Rounded Frames ignores both and keeps its tinted rounded edge.
+  -- Rounded and slanted frames draw both as masked rings along their shape.
   border.textureMode, border.textureKey, border.texture = nil, nil, nil
   local outlineTextureKey = conf.hlOverride == true and conf.barOutlineTexture ~= nil and conf.barOutlineTexture or bars.barOutlineTexture
   local styles = MSUF.BorderStyles or _G.MSUF_BorderStyles

@@ -18,6 +18,7 @@ local Kit = MSUF.RoundedSurfaceKit
 local ROUNDED_FILE = "UnitFrames/Effects/MSUF_UF_RoundedFrames.lua"
 local GetBarOutlineColor = MSUF.Require("MSUF_GetBarOutlineColor", ROUNDED_FILE)
 local RefreshSquareFrameBorderVisual = MSUF.Require("MSUF_RefreshSquareFrameBorderVisual", ROUNDED_FILE)
+local CurrentFrameBorderColor = MSUF.Require("MSUF_CurrentFrameBorderColor", ROUNDED_FILE)
 local ApplyRoundedClassPower = MSUF.Require("MSUF_ClassPower_ApplyRoundedSurface", ROUNDED_FILE)
 local EnsureProfileDB = MSUF.Require("MSUF_EnsureDB", ROUNDED_FILE)
 if type(Kit) ~= "table" then
@@ -42,6 +43,7 @@ local SetRoundedEdgeStackAlpha = Kit.SetRoundedEdgeStackAlpha
 local SetRoundedEdgeStackAlphaFromBoolean = Kit.SetRoundedEdgeStackAlphaFromBoolean
 local SetRoundedEdgeStackColor, EnsureRoundedHoverContainer = Kit.SetRoundedEdgeStackColor, Kit.EnsureRoundedHoverContainer
 local ApplyRoundedEdgeStack = Kit.ApplyRoundedEdgeStack
+local ApplyStyledEdgeRings, HideStyledEdgeRings = Kit.ApplyStyledEdgeRings, Kit.HideStyledEdgeRings
 
 local WHITE8 = "Interface\\Buttons\\WHITE8x8"
 
@@ -799,6 +801,11 @@ local function RefreshSpellIndicatorRoundedEdges(frame, enabled)
 end
 
 
+-- Rings for a True Outline or Texture outline style; the solid stack above
+-- stays the renderer for the plain outline color.
+local STYLED_BORDER_POOL_KEY = "_msufRoundedBorderStyledRings"
+local BORDER_HIGHLIGHT_SOURCES = { dispel = true, aggro = true, purge = true, bossTarget = true }
+
 local function SetModernBorderEdgesSuppressed(f, suppressed)
   if not f then return end
   if suppressed then
@@ -808,6 +815,7 @@ local function SetModernBorderEdgesSuppressed(f, suppressed)
     HideRoundedEdgeStack(f, f._msufRGF_Edge, "_msufRGF_EdgeStack")
   else
     HideRoundedEdgeStack(f, f._msufRoundedBorderEdge, "_msufRoundedBorderEdgeStack")
+    HideStyledEdgeRings(f, STYLED_BORDER_POOL_KEY)
   end
   local edges = f and f.MSUFBorderEdges
   if type(edges) ~= "table" then return end
@@ -821,7 +829,8 @@ local function SetModernBorderEdgesSuppressed(f, suppressed)
   RefreshSquareFrameBorderVisual(f)
 end
 
-local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
+-- `source` is the Borders source (normal, aggro, dispel, purge, bossTarget).
+local function ApplyModernRoundedBorderVisual(f, shown, thickness, source, r, g, b, a)
   if not f then return false end
   local group = FrameIsGroup(f)
   local rounded = RoundedFrameEnabled(f)
@@ -837,6 +846,7 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
   if shown ~= true then
     SetModernBorderEdgesSuppressed(f, true)
     HideRoundedEdgeStack(f, edge, stackKey)
+    HideStyledEdgeRings(f, STYLED_BORDER_POOL_KEY)
     return true
   end
 
@@ -844,6 +854,7 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
   if thickness <= 0 then
     SetModernBorderEdgesSuppressed(f, true)
     HideRoundedEdgeStack(f, edge, stackKey)
+    HideStyledEdgeRings(f, STYLED_BORDER_POOL_KEY)
     return true
   end
 
@@ -859,6 +870,24 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
   local anchor = group and (f.barGroup or f) or f
   local layer = "OVERLAY"
   local subLevel = 0
+  local secretColor = issecretvalue and issecretvalue(r)
+  if not secretColor and r == nil then
+    r, g, b, a = ResolveBaseEdgeColor(f)
+  end
+  -- Borders.Apply copied the compiled outline style onto the frame. A style
+  -- that cannot be drawn yet (combat, before its rings exist) keeps the solid
+  -- stack, and failing that the square renderer, instead of going blank.
+  -- A highlight tints a Texture style with its own colour, as the square
+  -- renderer does; the normal outline keeps the texture's colours.
+  local styleMode = f._msufBorderRuntimeTextureMode
+  local tint = BORDER_HIGHLIGHT_SOURCES[source] == true
+  if styleMode and ApplyStyledEdgeRings(f, parent, anchor, STYLED_BORDER_POOL_KEY, thickness, styleMode,
+      f._msufBorderRuntimeTexture, f._msufBorderRuntimeTextureKey, nil, layer, subLevel, r, g, b, a, tint) then
+    HideRoundedEdgeStack(f, edge, stackKey)
+    SetModernBorderEdgesSuppressed(f, true)
+    return true
+  end
+  HideStyledEdgeRings(f, STYLED_BORDER_POOL_KEY)
   if not edge then
     if not CanCreateRoundedRegion(edge) then
       SetModernBorderEdgesSuppressed(f, false)
@@ -873,9 +902,6 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, r, g, b, a)
     SetModernBorderEdgesSuppressed(f, false)
     return false
   end
-  if r == nil then
-    r, g, b, a = ResolveBaseEdgeColor(f)
-  end
   SetRoundedEdgeStackColor(f, edge, stackKey, r, g, b, a)
   SetModernBorderEdgesSuppressed(f, true)
   return true
@@ -886,8 +912,10 @@ local function ApplyCurrentModernBorderVisual(f)
     return false
   end
   local thickness = f._msufBorderVisualThickness or f._msufBorderThickness or 1
-  return ApplyModernRoundedBorderVisual(f, f._msufBorderShown, thickness,
-    f._msufBorderR, f._msufBorderG, f._msufBorderB, f._msufBorderA)
+  -- A secret dispel colour is only stored in its secret fields; reading the
+  -- plain ones here repainted the highlight in the frame outline colour.
+  return ApplyModernRoundedBorderVisual(f, f._msufBorderShown, thickness, f._msufBorderVisualSource,
+    CurrentFrameBorderColor(f))
 end
 
 local function PrewarmAndApplyModernBorderVisual(f)
@@ -897,8 +925,7 @@ local function PrewarmAndApplyModernBorderVisual(f)
     local highlight = tonumber(f._msufBorderRuntimeHighlightThickness) or 0
     local maximum = normal > highlight and normal or highlight
     if maximum > 0 then
-      ApplyModernRoundedBorderVisual(f, true, maximum,
-        f._msufBorderR, f._msufBorderG, f._msufBorderB, f._msufBorderA)
+      ApplyModernRoundedBorderVisual(f, true, maximum, f._msufBorderVisualSource, CurrentFrameBorderColor(f))
     end
   end
   return ApplyCurrentModernBorderVisual(f)
@@ -1623,7 +1650,7 @@ local function HookOnce()
     return HandleUnitHighlightChanged(frame, hlKey, r, g, b, cfg)
   end)
   ExportPublic("MSUF_RoundedUF_OnBorderVisualChanged", function(frame, shown, source, thickness, r, g, b, a)
-    return ApplyModernRoundedBorderVisual(frame, shown, thickness, r, g, b, a)
+    return ApplyModernRoundedBorderVisual(frame, shown, thickness, source, r, g, b, a)
   end)
   ExportPublic("MSUF_RoundedUF_OnPowerBorderChanged", function(frame)
     if not frame then return false end

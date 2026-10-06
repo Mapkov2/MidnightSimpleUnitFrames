@@ -3227,9 +3227,21 @@ function H.ForEachRoundedEdge(mock, opts, fn)
         if stack[i] then fn(stack[i], i) end
     end
 end
+-- A True Outline or Texture outline style replaces the solid stack with the
+-- core's styled rings (MSUF.RoundedSurface), drawn on the same mock so the
+-- preview follows its rounded or slanted shape like the live frame. Owners
+-- opt in with opts.outlineStyle(mock), returning the compiled border spec.
+local function PreviewStyledKey(opts)
+    return opts.styledKey or ((opts.stackKey or "_msufPreviewRoundedEdgeStack") .. "Styled")
+end
+local function ForEachPreviewStyledRing(mock, opts, fn)
+    local surface = MSUF.RoundedSurface
+    if surface and surface.ForEachStyledEdgeRing then surface.ForEachStyledEdgeRing(mock, PreviewStyledKey(opts), fn) end
+end
 function H.SetRoundedEdgeStackShown(mock, shown, opts)
     opts = opts or {}
-    local count = shown and H.ClampEdgeSize(mock and mock[opts.countKey or "_msufPreviewRoundedEdgeCount"], 1, opts.maxEdgeSize or 8) or 0
+    local styled = mock and mock[PreviewStyledKey(opts) .. "On"] == true
+    local count = shown and not styled and H.ClampEdgeSize(mock and mock[opts.countKey or "_msufPreviewRoundedEdgeCount"], 1, opts.maxEdgeSize or 8) or 0
     H.ForEachRoundedEdge(mock, opts, function(edge, i)
         if edge.SetShown then
             edge:SetShown(i <= count)
@@ -3239,6 +3251,10 @@ function H.SetRoundedEdgeStackShown(mock, shown, opts)
             edge:Hide()
         end
     end)
+    if styled then
+        shown = shown and true or false
+        ForEachPreviewStyledRing(mock, opts, function(ring) ring:SetShown(shown) end)
+    end
 end
 function H.SetRoundedEdgeStackAlpha(mock, alpha, opts)
     local clamp = opts and opts.clamp01
@@ -3246,6 +3262,21 @@ function H.SetRoundedEdgeStackAlpha(mock, alpha, opts)
     H.ForEachRoundedEdge(mock, opts, function(edge)
         if edge and edge.SetAlpha then edge:SetAlpha(alpha) end
     end)
+    ForEachPreviewStyledRing(mock, opts or {}, function(ring) ring:SetAlpha(alpha) end)
+end
+local function ApplyPreviewStyledRings(mock, count, opts, anchor, r, g, b, a)
+    local styledKey = PreviewStyledKey(opts)
+    local style = opts.outlineStyle and opts.outlineStyle(mock) or nil
+    local surface = MSUF.RoundedSurface
+    if count > 0 and type(style) == "table" and style.textureMode and surface and surface.ApplyStyledEdgeRings
+        and surface.ApplyStyledEdgeRings(mock, mock, anchor, styledKey, count, style.textureMode, style.texture,
+            style.textureKey, opts.edgeTexture, opts.edgeLayer or "OVERLAY", opts.edgeSubLevel, r, g, b, a) then
+        mock[styledKey .. "On"] = true
+        return true
+    end
+    mock[styledKey .. "On"] = nil
+    if surface and surface.HideStyledEdgeRings then surface.HideStyledEdgeRings(mock, styledKey) end
+    return false
 end
 function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
     if not mock then return false end
@@ -3255,6 +3286,17 @@ function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
     local countKey = opts.countKey or "_msufPreviewRoundedEdgeCount"
     local edgeKey = opts.edgeKey or "roundedEdge"
     mock[countKey] = count
+    local anchor = type(opts.anchor) == "function" and opts.anchor(mock) or opts.anchor or mock
+    local r, g, b, a
+    if type(opts.baseEdgeColor) == "function" then
+        r, g, b, a = opts.baseEdgeColor(mock)
+    else
+        r, g, b, a = H.BaseEdgeColor()
+    end
+    if ApplyPreviewStyledRings(mock, count, opts, anchor, r, g, b, a) then
+        H.SetRoundedEdgeStackShown(mock, true, opts)
+        return true
+    end
     if count <= 0 then
         H.SetRoundedEdgeStackShown(mock, false, opts)
         return false
@@ -3263,13 +3305,6 @@ function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
     mock[stackKey][1] = mock[edgeKey]
     local snap = opts.snapOff or H.SnapOff
     local edgeTexture = opts.edgeTexture
-    local anchor = type(opts.anchor) == "function" and opts.anchor(mock) or opts.anchor or mock
-    local r, g, b, a
-    if type(opts.baseEdgeColor) == "function" then
-        r, g, b, a = opts.baseEdgeColor(mock)
-    else
-        r, g, b, a = H.BaseEdgeColor()
-    end
     for i = 1, count do
         local edge = (i == 1) and mock[edgeKey] or mock[stackKey][i]
         if not edge then

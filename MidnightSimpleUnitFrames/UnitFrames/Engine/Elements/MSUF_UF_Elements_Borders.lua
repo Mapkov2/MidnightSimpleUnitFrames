@@ -126,6 +126,7 @@ end
 
 local EDGE_KEYS = { "top", "bottom", "left", "right" }
 local DEFAULT_HIGHLIGHT_PRIORITY = { "dispel", "aggro", "purge", "bossTarget" }
+local HIGHLIGHT_SOURCES = { dispel = true, aggro = true, purge = true, bossTarget = true }
 local BORDER_LEVEL_NORMAL = Layers.FRAME_BORDER_NORMAL_OFFSET or 35
 local BORDER_LEVEL_DEFAULT = Layers.FRAME_BORDER_DEFAULT_OFFSET or 40
 local BORDER_LEVEL_OVER_NATIVE_DISPEL = Layers.FRAME_BORDER_OVER_NATIVE_DISPEL_OFFSET or 50
@@ -560,7 +561,11 @@ local function SetBorder(frame, show, r, g, b, a)
       or frame._msufBorderTrueOutlineHeight ~= outlineHeight)
   local secretColor = IsSecretValue(r) or IsSecretValue(g) or IsSecretValue(b) or IsSecretValue(a)
   local showChanged = frame._msufBorderShown ~= show
+  -- ApplyResolvedBorder names the source before painting. A highlight tints a
+  -- statusbar texture with its own colour; the normal outline keeps the art.
+  local tintTexture = stretchedTexture and HIGHLIGHT_SOURCES[frame._msufBorderVisualSource] == true
   local colorChanged = secretColor == true or textureChanged or textureModeChanged
+    or frame._msufBorderTextureTint ~= tintTexture
   if not colorChanged then
     if frame._msufBorderSecretColor == true then
       colorChanged = true
@@ -578,11 +583,18 @@ local function SetBorder(frame, show, r, g, b, a)
   frame._msufBorderTexPath = texture
   frame._msufBorderTextureMode = textureMode
   frame._msufBorderTextureKey = textureKey
+  frame._msufBorderTextureTint = tintTexture
   if secretColor then
     frame._msufBorderSecretColor = true
     frame._msufBorderR, frame._msufBorderG, frame._msufBorderB, frame._msufBorderA = nil, nil, nil, nil
+    -- Never compared; only handed back to a renderer that repaints the
+    -- active border outside a Borders update (square refresh, Rounded Frames).
+    frame._msufBorderSecretR, frame._msufBorderSecretG = r, g
+    frame._msufBorderSecretB, frame._msufBorderSecretA = b, a
   else
     frame._msufBorderSecretColor = nil
+    frame._msufBorderSecretR, frame._msufBorderSecretG = nil, nil
+    frame._msufBorderSecretB, frame._msufBorderSecretA = nil, nil
     frame._msufBorderR, frame._msufBorderG, frame._msufBorderB, frame._msufBorderA = r, g, b, a
   end
   local visible = show and frame._msufRUFModernBorderSuppressed ~= true
@@ -616,8 +628,13 @@ local function SetBorder(frame, show, r, g, b, a)
             if textureChanged or textureModeChanged then edge:SetTexture(texture) end
             -- Statusbar media commonly stores its visible structure in RGB,
             -- so multiplying by a black outline color flattens it completely.
-            -- Preserve the source texture and only apply the configured alpha.
-            edge:SetVertexColor(1, 1, 1, a)
+            -- Preserve the source texture and only apply the configured alpha;
+            -- an aggro/dispel/purge/boss highlight still shows its colour.
+            if tintTexture then
+              edge:SetVertexColor(r, g, b, a)
+            else
+              edge:SetVertexColor(1, 1, 1, a)
+            end
           else
             edge:SetVertexColor(1, 1, 1, 1)
             edge:SetColorTexture(r, g, b, a)
@@ -631,6 +648,17 @@ local function SetBorder(frame, show, r, g, b, a)
   end
 end
 
+--- The colour the border shows now. A secret highlight colour comes back as
+--- its stored secret values, which a caller only passes on to a renderer.
+local function CurrentBorderColor(frame)
+  if frame._msufBorderSecretColor == true then
+    return frame._msufBorderSecretR, frame._msufBorderSecretG,
+      frame._msufBorderSecretB, frame._msufBorderSecretA
+  end
+  return frame._msufBorderR, frame._msufBorderG, frame._msufBorderB, frame._msufBorderA
+end
+ExportPublic("MSUF_CurrentFrameBorderColor", CurrentBorderColor)
+
 local function RefreshSquareBorderVisual(frame)
   if not frame then return end
   local shown = frame._msufBorderShown == true
@@ -638,8 +666,7 @@ local function RefreshSquareBorderVisual(frame)
   -- the selected texture/color itself remains unchanged.
   frame._msufBorderShown = nil
   frame._msufBorderTextureThickness = nil
-  SetBorder(frame, shown, frame._msufBorderR, frame._msufBorderG,
-    frame._msufBorderB, frame._msufBorderA)
+  SetBorder(frame, shown, CurrentBorderColor(frame))
 end
 ExportPublic("MSUF_RefreshSquareFrameBorderVisual", RefreshSquareBorderVisual)
 
@@ -915,7 +942,9 @@ function Borders.Apply(frame, spec)
   if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
     LayoutBorder(frame, 1)
     HideResolvedBorder(frame)
-  elseif cfg.aggro == true or cfg.dispel == true or (cfg.bossTarget == true and frame._msufBorderRuntimeBossUnit == true) then
+  elseif frame._msufBorderRuntimeHighlight == true then
+    -- Aggro, dispel, boss target, or a Bars test highlight that applies here
+    -- (purge has no live sensor), even when the frame's own highlights are off.
     LayoutBorder(frame, BorderHighlightThickness(cfg))
     Borders.Update(frame, "MSUF_BORDER_APPLY", frame.MSUFUnitKey)
   else

@@ -3032,6 +3032,7 @@ function Stage.RenderFrameChrome(st)
         highlight.r, highlight.g, highlight.b, highlight.a = previewBorder.bossTargetR, previewBorder.bossTargetG, previewBorder.bossTargetB, 1
         previewBorder = highlight
     end
+    mock._msufPreviewOutlineStyle = previewBorder
     RenderState.ApplyPreviewRounded(box, key, powerOn, bossBorder and max(1, floor(previewBorder.thickness * scale + .5))
         or RenderState.PreviewRoundedOutlineThickness(key, conf, scale),
         box._runtimePowerEmbedded == true, box._previewPowerOutline,

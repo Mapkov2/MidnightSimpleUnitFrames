@@ -1513,7 +1513,7 @@ local function BuildAbsorbSection(ctx, b)
 end
 
 local function BuildOutlineSection(ctx, b)
-    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 252, false)
+    local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 226, false)
     local outlineSlider = W.Slider(outline, "Bar outline thickness", 0, 8, 1, 300)
     M.BindNumberWidget(ctx, outlineSlider,
         function() return tonumber(BarScopeGetBars("barOutlineThickness", 1)) or 1 end,
@@ -1571,10 +1571,6 @@ local function BuildOutlineSection(ctx, b)
             RequestOutlineRuntime()
         end,
         Meta("outline.texture"))
-    local hintY = outline._msuf2CursorY or -184
-    outline._msuf2CursorY = hintY - 26
-    W.Text(outline, "Rounded frames ignore True Outline and Texture styles and keep the solid outline color.",
-        outline._msuf2ContentX or 16, hintY, 560)
     AttachBarsColorShortcut(outline,
         "Frame Outline Color",
         "Outline color for the selected Bars scope.",
@@ -1602,16 +1598,11 @@ local function BuildOutlineSection(ctx, b)
         M.AddTooltip(outlineLayer, "Frame outline layer (0-30)",
             "Draw order on the shared 0-30 layer scale. Raise it to draw the outline above text, icons or auras on a lower layer.", { hook = true })
     end
-    local turnOn, turnOff = W.TurnOnReason, W.TurnOffReason
+    local turnOn = W.TurnOnReason
     local scopeReason = turnOn and turnOn("Use custom settings for this scope", ScopedControls)
-    local roundedReason = turnOff and turnOff("Rounded frame texture", function() return ReadB("roundedFramesEnabled", false) ~= true end)
+    -- Rounded and slanted frames draw the selected style along their shape.
     M.BindGateGroup(ctx, nil, {
-        { controls = { outlineSlider, outlineLayer }, on = ScopedControls, reason = scopeReason },
-        -- Rounded frames replace the square edges with the tinted rounded edge
-        -- stack, so a texture pick would be a silent no-op there; disable it.
-        { controls = { outlineTexture }, on = function()
-            return ScopedControls() and ReadB("roundedFramesEnabled", false) ~= true
-        end, reason = scopeReason and function(control) return scopeReason(control) or roundedReason(control) end },
+        { controls = { outlineSlider, outlineLayer, outlineTexture }, on = ScopedControls, reason = scopeReason },
     })
 end
 
@@ -2412,7 +2403,7 @@ local GLOBAL_BARS_LAZY_SECTION_SPECS = {
         build = BuildTempMaxHealthSection,
     },
     { sectionId = "bars_absorb", title = "Absorb Display", height = 414, defaultOpen = true, build = BuildAbsorbSection },
-    { sectionId = "bars_outline", title = "Frame Outline", height = 252, build = BuildOutlineSection },
+    { sectionId = "bars_outline", title = "Frame Outline", height = 226, build = BuildOutlineSection },
     { sectionId = "bars_rounded", title = "Rounded Texture", height = ROUNDED_SECTION_HEIGHT, defaultOpen = true, build = BuildRoundedSection },
     { sectionId = "bars_slanted", title = "Slanted Bars", height = 480, defaultOpen = true, build = BuildSlantedSection },
     { sectionId = "bars_highlight", title = "Highlight Borders", height = 764, defaultOpen = true, build = BuildHighlightSection },

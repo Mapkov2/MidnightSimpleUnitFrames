@@ -315,6 +315,9 @@ local PREVIEW_ROUNDED_OPTS = {
         if border then return border.bossTargetR or 1, border.bossTargetG or .82, border.bossTargetB or 0, 1 end
         return Core.BaseEdgeColor()
     end,
+    -- The render stage stores the compiled border spec; its outline style
+    -- follows the rounded or slanted shape like the live frame.
+    outlineStyle = function(mock) return mock and mock._msufPreviewOutlineStyle end,
 }
 local function PreviewPowerEdgeColor(mock)
     if mock and mock._msufPreviewPowerBorderR ~= nil then

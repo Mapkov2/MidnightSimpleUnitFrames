@@ -3283,6 +3283,7 @@ function Stage.RenderChrome(st, env)
         local ApplyFrameBorder, ApplyRounded, ClampLayer, H = env.ApplyFrameBorder, env.ApplyRounded, env.ClampLayer, env.H
         scene.previewScale = previewScale
         PaintGroupPreviewDispelOverlay(scene)
+        mock._msufPreviewOutlineStyle = runtimeBorder
         if ApplyRounded(mock, conf, powerH > 0, outlineEdge,
             powerEmbed, powerDetached, powerOutlineEdge) then
             H.SetOutlineShown(mock, false)

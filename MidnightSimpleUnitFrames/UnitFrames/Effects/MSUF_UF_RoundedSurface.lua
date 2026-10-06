@@ -670,6 +670,310 @@ local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness,
   return true
 end
 
+-- Styled outline rings. The frame outline's True Outline (edgeFile) and
+-- Texture styles are drawn through the edge media the solid stack uses: one
+-- texture per 1px ring, clipped by that ring's own mask, so the selected art
+-- follows rounded corners and slanted sides instead of the frame rectangle.
+-- A ring is keyed by its pad (pixels outward from the anchor edge; zero and
+-- below sit inside it), so moving between the normal and the highlight band
+-- never lays a ring out again. Regions, masks and anchors are built out of
+-- combat only; a combat update recolours, retexcoords and shows or hides
+-- rings that already exist, and reports false when it would need more.
+local STYLED_MODE_BORDER = "border"
+local STYLED_MODE_TEXTURE = "texture"
+-- The left edge tile of a Backdrop edgeFile sheet (Blizzard_SharedXML
+-- Backdrop.lua textureUVs): u runs from the band's outer side to its inner
+-- side. Each ring samples the band profile at its own depth, at the middle of
+-- the tile's length, so every ring keeps one even colour all the way round.
+local EDGE_TILE_U_OUTER, EDGE_TILE_U_INNER, EDGE_TILE_V = 0.0078125, 0.1171875, 0.5
+
+--- The inclusive pad range a style covers at this thickness, then the band
+--- width and the outermost pad that each ring's tile depth is measured from.
+local function ResolveStyledBand(mode, textureKey, thickness)
+  thickness = ClampEdgeSize(thickness, 0, MAX_HIGHLIGHT_BORDER_THICKNESS)
+  if thickness <= 0 then return nil end
+  if mode == STYLED_MODE_TEXTURE then
+    -- The solid stack's rings: the band the square renderer draws outside.
+    return 1, thickness, thickness, thickness
+  end
+  -- Runtime/MSUF_BorderStyles.lua loads ahead of this file in every TOC.
+  local styles = MSUF.BorderStyles
+  local edge = styles and styles.EdgeSize(textureKey, thickness) or thickness
+  edge = ClampEdgeSize(edge, 1, MAX_HIGHLIGHT_BORDER_THICKNESS)
+  -- The square renderer centres an edgeFile band on the frame edge.
+  local outer = math.ceil(edge / 2)
+  return outer - edge + 1, outer, edge, outer
+end
+
+--- The innermost pad still worth a ring: further in, the ring rectangle would
+--- fold over itself on a short anchor. Unknown sizes impose no limit.
+local function StyledInnerLimit(anchor)
+  local width = anchor and anchor.GetWidth and anchor:GetWidth()
+  local height = anchor and anchor.GetHeight and anchor:GetHeight()
+  if issecretvalue and (issecretvalue(width) or issecretvalue(height)) then return nil end
+  if type(width) ~= "number" or type(height) ~= "number" or width <= 0 or height <= 0 then return nil end
+  return 1 - math.floor(math.min(width, height) / 2)
+end
+
+local function EnsureStyledRing(pool, parent, pad, layer, subLevel)
+  local ring = pool[pad]
+  if ring then return ring end
+  if not CanCreateRoundedRegion(ring) then return nil end
+  local host = parent._msufHealthVisualRoot or parent
+  ring = PixelLayoutRegion(host:CreateTexture(nil, layer, nil, subLevel or 0), true)
+  SE_SnapOff(ring)
+  local mask = host:CreateMaskTexture(nil, "ARTWORK")
+  SE_SnapOff(mask)
+  ring._msufStyledMask = mask
+  ring:Hide()
+  pool[pad] = ring
+  if not pool._msufMinPad or pad < pool._msufMinPad then pool._msufMinPad = pad end
+  if not pool._msufMaxPad or pad > pool._msufMaxPad then pool._msufMaxPad = pad end
+  return ring
+end
+
+local function LayoutStyledRing(ring, anchor, pad, edgePath)
+  local mask = ring._msufStyledMask
+  local moved = ring._msufStyledAnchor ~= anchor
+  local repath = mask._msufStyledPath ~= edgePath
+  if not moved and not repath and ring._msufStyledBound == true then return true end
+  if IsCombatLocked() then
+    DeferApply()
+    return false
+  end
+  if moved then
+    ring:ClearAllPoints()
+    ring:SetPoint("TOPLEFT", anchor, "TOPLEFT", -pad, pad)
+    ring:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", pad, -pad)
+    mask:ClearAllPoints()
+    mask:SetPoint("TOPLEFT", anchor, "TOPLEFT", -pad, pad)
+    mask:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", pad, -pad)
+    ring._msufStyledAnchor = anchor
+  end
+  if repath then
+    mask:SetTexture(edgePath, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask._msufStyledPath = edgePath
+    mask._msufRoundedMediaSliceKey = nil
+  end
+  ApplyRoundedMediaSlice(mask, edgePath)
+  -- Rebind after the mask's art or geometry changed, as MaskTextureWith does.
+  -- The ring only ever carries this one mask (two masks do not compose, #146).
+  if ring._msufStyledBound == true then ring:RemoveMaskTexture(mask) end
+  ring:AddMaskTexture(mask)
+  ring._msufStyledBound = true
+  return true
+end
+
+local function PaintStyledRing(ring, mode, texture, u, r, g, b, a, tint)
+  if ring._msufStyledTexture ~= texture then
+    ring:SetTexture(texture)
+    ring._msufStyledTexture = texture
+    ring._msufStyledU = nil
+  end
+  if mode == STYLED_MODE_BORDER then
+    if ring._msufStyledU ~= u then
+      ring:SetTexCoord(u, u, EDGE_TILE_V, EDGE_TILE_V)
+      ring._msufStyledU = u
+    end
+    ring:SetVertexColor(r, g, b, a)
+  else
+    if ring._msufStyledU ~= false then
+      ring:SetTexCoord(0, 1, 0, 1)
+      ring._msufStyledU = false
+    end
+    -- Statusbar media keeps its structure in RGB, so the normal outline
+    -- applies only the configured alpha; a highlight tints it with its colour.
+    if tint then
+      ring:SetVertexColor(r, g, b, a)
+    else
+      ring:SetVertexColor(1, 1, 1, a)
+    end
+  end
+end
+
+-- Blizzard's border art (BorderStyles.IsBlizzardArt) keeps its real eight
+-- pieces instead, since its look lives in carved corners and patterns a ring
+-- cannot carry: around the anchor on rounded frames, exactly as the square
+-- renderer draws it, and on slanted frames with the corners on the slanted
+-- corners and rotated side strips between them. One piece set per band width,
+-- so a normal/highlight swap in combat only shows the other prewarmed set.
+-- The slanted media cut 10 of their 256 texels off each slanted corner.
+local SLANTED_ART_CUT = 10 / 256
+local SLANTED_ART_CORNERS = { -- left top, left bottom, right top, right bottom
+  RIGHT_DOWN = { 0, 0, 0, 1 }, RIGHT_UP = { 0, 0, 1, 0 },
+  LEFT_DOWN = { 0, 1, 0, 0 }, LEFT_UP = { 1, 0, 0, 0 },
+  BOTH_DOWN = { 0, 1, 0, 1 }, BOTH_UP = { 1, 0, 1, 0 },
+}
+local RECTANGLE_ART_CORNERS = { 0, 0, 0, 0 }
+local SLANTED_EDGE_DIRECTION = {}
+for direction, path in pairs(SLANTED_EDGE_PATHS) do SLANTED_EDGE_DIRECTION[path] = direction end
+
+local function HideStyledRingBand(pool)
+  if pool._msufMinPad then
+    for pad = pool._msufMinPad, pool._msufMaxPad do
+      local ring = pool[pad]
+      if ring then ring:Hide() end
+    end
+  end
+  pool._msufShownLo, pool._msufShownHi = nil, nil
+end
+
+local function HideStyledArt(pool)
+  local sets = pool._msufArt
+  if sets then
+    for _, pieces in pairs(sets) do
+      for i = 1, 8 do pieces[i]:Hide() end
+    end
+  end
+  pool._msufArtShown = nil
+end
+
+local function ApplyStyledEdgeArt(pool, parent, anchor, thickness, texture, textureKey, edgePath,
+    layer, subLevel, r, g, b, a)
+  local styles = MSUF.BorderStyles
+  local edge = styles.EdgeSize(textureKey, thickness)
+  local sets = pool._msufArt
+  if not sets then
+    sets = {}
+    pool._msufArt = sets
+  end
+  local pieces = sets[edge]
+  if not pieces then
+    if not CanCreateRoundedRegion(pieces) then return false end
+    pieces = styles.Create(parent._msufHealthVisualRoot or parent, layer, subLevel, texture)
+    for i = 1, 8 do
+      SE_SnapOff(pieces[i])
+      pieces[i]:Hide()
+    end
+    pieces._msufArtTexture = texture
+    sets[edge] = pieces
+  end
+  local direction = SLANTED_EDGE_DIRECTION[edgePath]
+  if IsCombatLocked() then
+    if pieces._msufArtAnchor ~= anchor or pieces._msufArtTexture ~= texture
+      or pieces._msufArtDirection ~= direction then
+      DeferApply()
+      return false
+    end
+  else
+    local width, height = anchor:GetWidth(), anchor:GetHeight()
+    if issecretvalue and (issecretvalue(width) or issecretvalue(height)) then return false end
+    if pieces._msufArtTexture ~= texture then
+      styles.SetTexture(pieces, texture)
+      pieces._msufArtTexture = texture
+    end
+    if pieces._msufArtAnchor ~= anchor or pieces._msufArtWidth ~= width or pieces._msufArtHeight ~= height
+      or pieces._msufArtDirection ~= direction then
+      local corners = SLANTED_ART_CORNERS[direction] or RECTANGLE_ART_CORNERS
+      local cut = (tonumber(width) or 0) * SLANTED_ART_CUT
+      styles.ApplySlanted(pieces, anchor, edge, width, height,
+        corners[1] * cut, corners[2] * cut, corners[3] * cut, corners[4] * cut, r, g, b, a)
+      pieces._msufArtAnchor, pieces._msufArtDirection = anchor, direction
+      pieces._msufArtWidth, pieces._msufArtHeight = width, height
+      -- A strip too short to draw stays hidden; later swaps honour the layout.
+      for i = 1, 8 do pieces[i]._msufArtVisible = pieces[i]:IsShown() end
+    end
+  end
+  for i = 1, 8 do
+    local piece = pieces[i]
+    piece:SetVertexColor(r, g, b, a)
+    if piece._msufArtVisible then piece:Show() else piece:Hide() end
+  end
+  for _, other in pairs(sets) do
+    if other ~= pieces then
+      for i = 1, 8 do other[i]:Hide() end
+    end
+  end
+  pool._msufArtShown = pieces
+  return true
+end
+
+local function HideStyledEdgeRings(owner, poolKey)
+  local pool = owner and owner[poolKey]
+  if type(pool) ~= "table" then return end
+  HideStyledRingBand(pool)
+  HideStyledArt(pool)
+end
+
+--- Calls fn(region) for every ring of the band, or art piece, currently shown.
+local function ForEachStyledEdgeRing(owner, poolKey, fn)
+  local pool = owner and owner[poolKey]
+  if type(pool) ~= "table" then return end
+  if pool._msufShownLo then
+    for pad = pool._msufShownLo, pool._msufShownHi do
+      local ring = pool[pad]
+      if ring then fn(ring) end
+    end
+  end
+  local art = pool._msufArtShown
+  if art then
+    for i = 1, 8 do
+      if art[i]._msufArtVisible then fn(art[i]) end
+    end
+  end
+end
+
+--- Draws `texture` in `mode` (BorderStyles.FRAME_BORDER or FRAME_TEXTURE)
+--- along the shape around `anchor`: as rings clipped to the shape's edge
+--- media, or for Blizzard border art as its eight pieces. Returns false,
+--- leaving what was shown before, when a region is missing or would need
+--- laying out during combat; the caller then keeps its solid stack. `tint`
+--- colours a Texture style (an aggro or dispel highlight); True Outline styles
+--- always take the colour.
+local function ApplyStyledEdgeRings(owner, parent, anchor, poolKey, thickness, mode, texture, textureKey,
+    edgePath, layer, subLevel, r, g, b, a, tint)
+  if not (owner and parent and anchor) then return false end
+  if mode ~= STYLED_MODE_BORDER and mode ~= STYLED_MODE_TEXTURE then return false end
+  if type(texture) ~= "string" or texture == "" then return false end
+  local lo, hi, edge, outer = ResolveStyledBand(mode, textureKey, thickness)
+  if not lo then return false end
+  local pool = owner[poolKey]
+  if not pool then
+    pool = {}
+    owner[poolKey] = pool
+  end
+  -- The shape cannot change in combat; reuse its last cold read there.
+  if not edgePath and IsCombatLocked() then edgePath = pool._msufEdgePath end
+  edgePath = edgePath or SurfaceEdgePath(owner._msufRUFStyleOwner or owner)
+  pool._msufEdgePath = edgePath
+  local styles = MSUF.BorderStyles
+  if mode == STYLED_MODE_BORDER and styles and styles.IsBlizzardArt(texture) then
+    if not ApplyStyledEdgeArt(pool, parent, anchor, thickness, texture, textureKey, edgePath,
+        layer, subLevel, r, g, b, a) then
+      return false
+    end
+    HideStyledRingBand(pool)
+    return true
+  end
+  if lo < 1 then
+    -- Only a band reaching inside the anchor needs its size; combat reuses
+    -- the last cold read.
+    if not IsCombatLocked() then pool._msufInnerLimit = StyledInnerLimit(anchor) end
+    local limit = pool._msufInnerLimit
+    if limit and lo < limit then lo = limit end
+  end
+  if lo > hi then return false end
+  for pad = lo, hi do
+    local ring = EnsureStyledRing(pool, parent, pad, layer, subLevel)
+    if not ring or not LayoutStyledRing(ring, anchor, pad, edgePath) then return false end
+  end
+  local du = (EDGE_TILE_U_INNER - EDGE_TILE_U_OUTER) / edge
+  for pad = lo, hi do
+    local ring = pool[pad]
+    PaintStyledRing(ring, mode, texture, EDGE_TILE_U_OUTER + (outer - pad + 0.5) * du, r, g, b, a, tint)
+    ring:Show()
+  end
+  for pad = pool._msufMinPad, pool._msufMaxPad do
+    if pad < lo or pad > hi then
+      local ring = pool[pad]
+      if ring then ring:Hide() end
+    end
+  end
+  pool._msufShownLo, pool._msufShownHi = lo, hi
+  HideStyledArt(pool)
+  return true
+end
+
 
 local function SlantedBarsEnabled()
   return slantedBarsEnabled
@@ -738,6 +1042,13 @@ MSUF.RoundedSurfaceKit = {
   SetRoundedEdgeStackColor = SetRoundedEdgeStackColor,
   EnsureRoundedHoverContainer = EnsureRoundedHoverContainer,
   ApplyRoundedEdgeStack = ApplyRoundedEdgeStack,
+  ApplyStyledEdgeRings = ApplyStyledEdgeRings,
+  HideStyledEdgeRings = HideStyledEdgeRings,
 }
+
+-- The menu previews draw the same styled rings on their mock frames.
+RoundedSurface.ApplyStyledEdgeRings = ApplyStyledEdgeRings
+RoundedSurface.HideStyledEdgeRings = HideStyledEdgeRings
+RoundedSurface.ForEachStyledEdgeRing = ForEachStyledEdgeRing
 
 ExportPublic("MSUF_ClampRoundedEdgeSize", ClampEdgeSize)

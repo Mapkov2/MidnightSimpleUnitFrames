@@ -836,8 +836,8 @@ local function MSUF_Defaults_Stage_SeedBarsTableDefaults(profileDB)
         profileDB.bars.barOutlineLayer = 0
     end
     if profileDB.bars.barOutlineTexture == nil then
-        -- Optional square-frame edgeFile or stretched statusbar texture. Empty
-        -- keeps the classic solid-color outline; Rounded Frames ignores both.
+        -- Optional frame-outline edgeFile or statusbar texture. Empty keeps the
+        -- classic solid-color outline; rounded and slanted frames follow it.
         profileDB.bars.barOutlineTexture = ""
     end
     --- Bar background alpha (0..100). Independent from unit alpha in/out of combat.

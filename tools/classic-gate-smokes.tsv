@@ -125,6 +125,7 @@ classics	lua	tools/tests/classic_castbar_spark_sync_smoke.lua	{root} {flavor}	Cl
 -	lua	tools/tests/uf_elements_quality_contracts_smoke.lua	{root}	UF element quality contracts smoke failed
 -	lua+driver	.github/scripts/rounded_border_highlight_smoke.lua		Rounded border highlight startup smoke failed
 -	lua+driver	.github/scripts/rounded_border_highlight_smoke.lua	--startup-disabled	Rounded border highlight enable smoke failed
+-	lua+driver	.github/scripts/rounded_styled_outline_smoke.lua		Rounded styled outline smoke failed
 -	lua+driver	.github/scripts/rounded_forbidden_mask_owner_smoke.lua		Rounded native aura ownership smoke failed
 -	lua+driver	.github/scripts/slanted_bar_shape_smoke.lua		Slanted frame shape scope smoke failed
 -	lua+driver	tools/castbar_refresh_ownership_smoke.lua		Shared castbar refresh ownership smoke failed
