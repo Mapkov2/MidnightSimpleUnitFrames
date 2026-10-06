@@ -2015,16 +2015,20 @@ function T.Panel(parent, name, bg, border)
 end
 local EDIT_BOX_EDGE_SPECS = { { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 }, { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 }, { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 } }
 local EDIT_BOX_NATIVE_SUFFIXES = WL "Left Right Middle Mid"
+local function HideNativeEditBoxArt(editBox)
+    local name = editBox.GetName and editBox:GetName()
+    for _, suffix in ipairs(EDIT_BOX_NATIVE_SUFFIXES) do
+        local tex = editBox[suffix] or (name and _G[name .. suffix])
+        if tex then
+            if tex.SetAlpha then tex:SetAlpha(0) end
+            if tex.Hide then tex:Hide() end
+        end
+    end
+end
 function T.SkinEditBox(editBox)
     if not editBox or editBox._msuf2EditSkinned then return editBox end
     editBox._msuf2EditSkinned = true
-    local name = editBox.GetName and editBox:GetName() or nil
-    if name then
-        for _, suffix in ipairs(EDIT_BOX_NATIVE_SUFFIXES) do
-            local tex = _G[name .. suffix]
-            if tex and tex.SetAlpha then tex:SetAlpha(0) end
-        end
-    end
+    HideNativeEditBoxArt(editBox)
     local fontString = editBox.GetFontString and editBox:GetFontString() or nil
     if editBox.GetRegions then
         local regions = { editBox:GetRegions() }
@@ -2056,6 +2060,7 @@ function T.SkinEditBox(editBox)
         editBox._msuf2EditEdges = edges
     end
     local function PaintEditBox(self, focused)
+        HideNativeEditBoxArt(self)
         if MenuSkin and MenuSkin.Surface(self, "input", PaintEditBox, focused, nil, 7) then return end
         local enabled = not (self.IsEnabled and not self:IsEnabled())
         local alpha = enabled and 1 or 0.60

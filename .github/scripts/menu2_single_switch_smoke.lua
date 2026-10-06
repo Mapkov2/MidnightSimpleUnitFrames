@@ -31,6 +31,10 @@ local M = assert(loadstring(harness:sub(1, cut - 1) .. "\nreturn M"))()
 local createFrame = _G.CreateFrame
 _G.CreateFrame = function(kind, ...)
     local frame = createFrame(kind, ...)
+    -- Missing native texture fields are nil in WoW; the generic stub returns methods.
+    if kind == "EditBox" then
+        frame.Left, frame.Right, frame.Middle, frame.Mid = false, false, false, false
+    end
     function frame:SetParent(nextParent)
         local previous = self:GetParent()
         if previous and type(previous._children) == "table" then
