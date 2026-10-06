@@ -8,12 +8,56 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "542F17B5E462803BC09EE41A5A24C08B8C3128765763FE345286597C0238FD83",
-    currentVersion = "6.5-beta16",
+    sourceSha256 = "0A32727C35FD19D395C69911B8787A9A412BF2BA57E3562AC231F65F1687EB05",
+    currentVersion = "6.5-beta17",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-beta15",
-    rangeLabel = "6.5-beta15 -> 6.5-beta16",
+    previousVersion = "6.5-beta16",
+    rangeLabel = "6.5-beta16 -> 6.5-beta17",
     entries = {
+        {
+            version = "6.5-beta17",
+            date = "2026-10-06",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Textured borders now follow rounded corners and slanted frame edges. True Outline and Texture styles work with Rounded Frames and Slanted Bars, including unit and group frames. Choose your style under Bars > Frame Outline; menu previews show the selected border along the same frame shape.",
+                            link = {
+                                pageKey = "opt_bars",
+                                query = "rounded frame texture",
+                                label = "Rounded frame texture",
+                                sectionId = "bars_rounded",
+                                controlId = "menu2.opt.bars.global.rounded.rounded.frames.enabled",
+                                settingKey = "bars.roundedFramesEnabled",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Additional Resource settings use dedicated resource sections, nearby color shortcuts and previews built from the runtime's resource renderer.",
+                        "Frame shapes are configured through the Bars menu and Group Layout. Removed the duplicate shape picker from each unit's Frame Basics section.",
+                        "Improved integration with compatible Suite windows for profiles, fonts, anchors and menu controls.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "ConsolePort Game Menu layout changes wait until combat ends before moving or resizing protected controls.",
+                        "Border style, color and thickness remain consistent between shaped frames and their menu previews.",
+                    },
+                },
+                {
+                    title = "Performance",
+                    bullets = {
+                        "Unrelated power events skip unnecessary resource text work.",
+                        "Styled borders reuse their textures and layout; combat color updates avoid rebuilding border geometry.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta16",
             date = "2026-10-06",

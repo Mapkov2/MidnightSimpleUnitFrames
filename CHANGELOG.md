@@ -1,5 +1,28 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta17 - 2026-10-06
+
+### Highlights
+
+- **Textured borders now follow rounded corners and slanted frame edges.** True Outline and Texture styles work with Rounded Frames and Slanted Bars, including unit and group frames. Choose your style under Bars > Frame Outline; menu previews show the selected border along the same frame shape.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_rounded","controlId":"menu2.opt.bars.global.rounded.rounded.frames.enabled","settingKey":"bars.roundedFramesEnabled","query":"rounded frame texture","label":"Rounded frame texture"} -->
+
+### Changes
+
+- Additional Resource settings use dedicated resource sections, nearby color shortcuts and previews built from the runtime's resource renderer.
+- Frame shapes are configured through the Bars menu and Group Layout. Removed the duplicate shape picker from each unit's Frame Basics section.
+- Improved integration with compatible Suite windows for profiles, fonts, anchors and menu controls.
+
+### Fixes
+
+- ConsolePort Game Menu layout changes wait until combat ends before moving or resizing protected controls.
+- Border style, color and thickness remain consistent between shaped frames and their menu previews.
+
+### Performance
+
+- Unrelated power events skip unnecessary resource text work.
+- Styled borders reuse their textures and layout; combat color updates avoid rebuilding border geometry.
+
 ## 6.5-beta16 - 2026-10-06
 
 ### WoW Forever controller support
