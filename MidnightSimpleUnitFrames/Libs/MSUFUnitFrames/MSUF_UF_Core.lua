@@ -1222,19 +1222,26 @@ local function BuildHealthRoute(barFn, textFn, predictionFn, visualsFn, routeUni
   end
 end
 
+-- The bar flags a tick for a resource it does not display (COMBO_POINTS on an
+-- energy bar) in its sixth return. The text shows that same resource, so such
+-- a tick cannot change it: skip the text's own power read and native format.
 local function BuildPowerRoute(barFn, textFn, _unused, _unusedFollower, routeUnitless, target)
   if target then
     return function(self, ev, _unit, eventPowerToken)
-      local power, powerMax, powerType, powerToken, metaChanged
-      if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, target, eventPowerToken) end
-      if textFn then textFn(self, ev, target, power, powerMax, powerType, powerToken, metaChanged) end
+      local power, powerMax, powerType, powerToken, metaChanged, foreign
+      if barFn then
+        power, powerMax, powerType, powerToken, metaChanged, foreign = barFn(self, ev, target, eventPowerToken)
+      end
+      if textFn and foreign ~= true then
+        textFn(self, ev, target, power, powerMax, powerType, powerToken, metaChanged)
+      end
     end
   end
   return function(self, ev, unit, eventPowerToken)
     local u = routeUnitless == true and self.MSUFUnitKey or (unit or self.MSUFUnitKey)
-    local power, powerMax, powerType, powerToken, metaChanged
-    if barFn then power, powerMax, powerType, powerToken, metaChanged = barFn(self, ev, u, eventPowerToken) end
-    if textFn then textFn(self, ev, u, power, powerMax, powerType, powerToken, metaChanged) end
+    local power, powerMax, powerType, powerToken, metaChanged, foreign
+    if barFn then power, powerMax, powerType, powerToken, metaChanged, foreign = barFn(self, ev, u, eventPowerToken) end
+    if textFn and foreign ~= true then textFn(self, ev, u, power, powerMax, powerType, powerToken, metaChanged) end
   end
 end
 

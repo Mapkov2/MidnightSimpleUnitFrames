@@ -171,6 +171,8 @@ end
 -- mismatch rejection, but let one event through when Class Resources just
 -- changed Player's displayed identity and a protected layout refresh is still
 -- deferred. The helper is called only for an already-mismatched token.
+-- A rejected tick returns true in the sixth slot: the compiled Power ->
+-- PowerText route then skips the text, which shows this same resource.
 local function CachedDisplayPowerIdentityIsCurrent(bar, unit)
   if unit ~= "player" or not ResolveDisplayedPowerIdentity then return true end
   local _, _, displayMana = ResolveDisplayedPowerIdentity(unit)
@@ -1103,7 +1105,7 @@ local function UpdatePercentPath(frame, event, unit, eventPowerToken)
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
     and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1132,7 +1134,7 @@ local function UpdateAbsolutePath(frame, event, unit, eventPowerToken)
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
     and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1156,7 +1158,7 @@ local function UpdateCurrentPath(frame, event, unit, eventPowerToken)
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
     and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1186,7 +1188,7 @@ local function UpdateCurrentPercentPath(frame, event, unit, eventPowerToken)
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
     and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
   if not animate then
     if SnapBarInterpolation then SnapBarInterpolation(bar) end
   end
@@ -1216,7 +1218,7 @@ local function UpdateGroupPercentPathLean(frame, event, unit, eventPowerToken)
   if animate and type(eventPowerToken) == "string" and eventPowerToken ~= ""
     and bar._msufPowerTypeKnown == true and bar._msufPowerToken ~= nil
     and bar._msufPowerToken ~= eventPowerToken
-    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return end
+    and CachedDisplayPowerIdentityIsCurrent(bar, unit) then return nil, nil, nil, nil, nil, true end
   if not (UnitPowerPercent and UnitPowerType and SCALE_100) then
     return UpdatePercentPath(frame, event, unit, eventPowerToken)
   end
