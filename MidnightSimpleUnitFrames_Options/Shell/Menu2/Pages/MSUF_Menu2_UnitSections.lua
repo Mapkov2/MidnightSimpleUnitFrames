@@ -8,7 +8,6 @@ MSUF.MSUF2 = M
 M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua", {
     "MSUF_UFCore_NotifyConfigChanged",
     "MSUF_ShowReloadRecommendedPopup",
-    "MSUF_ApplyRoundedUnitframes",
 })
 local EnsureDB = M.EnsureDB
 local C_Timer = M.MenuTimer or _G.C_Timer
@@ -72,12 +71,6 @@ local HEALTH_COLOR_OPTIONS = {
     { value = "gradient", text = HEALTH_COLOR_LABELS.gradient },
     { value = "unified", text = HEALTH_COLOR_LABELS.unified },
     { value = "dark", text = HEALTH_COLOR_LABELS.dark },
-}
-local FRAME_BAR_SHAPE_OPTIONS = {
-    { value = "DEFAULT", text = "Use shared style" },
-    { value = "SQUARE", text = "Straight" },
-    { value = "ROUNDED", text = "Rounded" },
-    { value = "SLANTED", text = "Slanted" },
 }
 -- Fill Direction merges the fill axis (verticalFillBars) with the in-axis
 -- direction (reverseFillBars) into one control. Compiled by CompileUnitHealth/
@@ -589,7 +582,7 @@ end
 local function AttachUnitSectionUX(ctx, unit)
     local fields = UP.SectionFields or {}
     local sections = {
-        frame_basics = { fields = "smoothFill chunkedFill reverseFillBars verticalFillBars healthColorMode frameBarShape", summary = function(c)
+        frame_basics = { fields = "smoothFill chunkedFill reverseFillBars verticalFillBars healthColorMode", summary = function(c)
             return SectionNumber(c.width, 220) .. " x " .. SectionNumber(c.height, 40) .. " px"
         end },
         portrait = { fields = fields.portrait, copy = "portrait" },
@@ -840,7 +833,7 @@ local function BuildBasics(ctx, builder, unit, label)
     -- Leave a full footer gutter below the disabled-frame notice. The next
     -- accordion header is created later and can otherwise cover the notice's
     -- lower edge at some UI scales.
-    local sec = builder:CollapsibleSection("frame_basics", "Basics", 320, true)
+    local sec = builder:CollapsibleSection("frame_basics", "Basics", 272, true)
     if W.AttachContextColorReferences then
         local function EffectiveHealthMode()
             return NormalizeHealthColorMode(GetConf(unit).healthColorMode) or GlobalHealthColorMode()
@@ -992,23 +985,6 @@ local function BuildBasics(ctx, builder, unit, label)
     if M.AddTooltip then
         M.AddTooltip(fillDir, "Fill Direction", "Axis and direction the Health and Power bars fill. Vertical options fill bottom-to-top or top-to-bottom; combines with Smooth fill.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
-    local barShape = W.Dropdown(sec, "Frame bar shape", FRAME_BAR_SHAPE_OPTIONS, math.min(270, math.max(220, colW * 2)))
-    UnitSectionShared.PlaceDropdown(sec, barShape, x1, -164, math.min(270, math.max(220, colW * 2)))
-    M.BindDropdownWidget(ctx, barShape,
-        function() return GetConf(unit).frameBarShape or "DEFAULT" end,
-        function(value)
-            if value ~= "SQUARE" and value ~= "ROUNDED" and value ~= "SLANTED" then value = "DEFAULT" end
-            local conf = GetConf(unit)
-            if conf.frameBarShape == value then return end
-            conf.frameBarShape = value
-            M.RequestUnitApply(unit, "MSUF2_FRAME_BAR_SHAPE", { preview = true })
-            _G.MSUF_ApplyRoundedUnitframes()
-            if M.Refresh then M.Refresh(ctx) end
-        end,
-        SettingMeta(ctx, "basics.frame_bar_shape", unit, "frameBarShape"))
-    if M.AddTooltip then
-        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.", M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
-    end
     local petPlayerClassColor
     if unit == "pet" then
         petPlayerClassColor = W.ToggleAt(sec, "Player Class Color", x3, -116, labelW)
@@ -1026,7 +1002,7 @@ local function BuildBasics(ctx, builder, unit, label)
         end
     end
     if W.AttachUnitEditFocus then
-        for _, control in ipairs({ enable, smooth, chunked, blizzard, colorMode, fillDir, barShape, petPlayerClassColor }) do
+        for _, control in ipairs({ enable, smooth, chunked, blizzard, colorMode, fillDir, petPlayerClassColor }) do
             W.AttachUnitEditFocus(control, unit, "frame")
         end
     end
@@ -1034,7 +1010,7 @@ local function BuildBasics(ctx, builder, unit, label)
     local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit)
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
     local unitLabel = label or UnitTopLabel(unit)
-    local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -228, "Enable", 92)
+    local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -180, "Enable", 92)
     local enableShortcutMeta
     if unit ~= "focustarget" then
         enableShortcutMeta = {
@@ -1059,7 +1035,7 @@ local function BuildBasics(ctx, builder, unit, label)
         M.RequestOrRefresh(ctx, "frame-basics-enable-now")
     end)
     notice:Hide()
-    local basicsDependentControls = { smooth, chunked, colorMode, fillDir, barShape }
+    local basicsDependentControls = { smooth, chunked, colorMode, fillDir }
     if W.SetControlsDisabledReason then
         W.SetControlsDisabledReason(basicsDependentControls, function() return UP.FrameDisabledReason(unit) end)
     end

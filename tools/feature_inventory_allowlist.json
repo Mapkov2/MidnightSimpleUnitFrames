@@ -263,6 +263,60 @@
    "evidence": "Mirror: Blizzard_PingUI and the PingableType mixins exist on upstream/live and upstream/forever only; classic_era, classic_anniversary and classic define PingableUnitFrameTemplate as an empty stub (Blizzard_SharedXML/Classic/Stubs.xml), so UF.ConfigurePlayerResourcePing (MSUF_UF_Factory.lua, SupportsPlayerResourcePing) never enables pings there. MSUF_Menu2_GlobalMisc.lua builds the switch on the Mainline family only; menu_client_capability_text_smoke.lua pins it per client.",
    "reason": "Classic Era, TBC and Mists (the Classic search index) no longer show a resource ping switch that wrote a setting and changed nothing; Midnight and WoW Forever keep it unchanged with the same key and identity.",
    "date": "2026-10-05"
+  },
+  {
+   "category": "settings",
+   "items": [
+    "classic: arena.frameBarShape",
+    "classic: boss.frameBarShape",
+    "classic: focus.frameBarShape",
+    "classic: focustarget.frameBarShape",
+    "classic: pet.frameBarShape",
+    "classic: pettarget.frameBarShape",
+    "classic: player.frameBarShape",
+    "classic: target.frameBarShape",
+    "classic: targettarget.frameBarShape",
+    "main: arena.frameBarShape",
+    "main: boss.frameBarShape",
+    "main: focus.frameBarShape",
+    "main: focustarget.frameBarShape",
+    "main: pet.frameBarShape",
+    "main: pettarget.frameBarShape",
+    "main: player.frameBarShape",
+    "main: target.frameBarShape",
+    "main: targettarget.frameBarShape"
+   ],
+   "basis": "owner",
+   "evidence": "Owner request 2026-10-06: remove the Frame bar shape selection from individual Frame Basics in the Classic repository.",
+   "reason": "Remove the individual unit Basics dropdown and its search routes; existing profile values, global Bars style controls and group Layout shape controls retain their runtime behavior.",
+   "date": "2026-10-06"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: uf_arena | Unit > Basics | Frame bar shape | dropdown | arena.frameBarShape | unit.basics.frame_bar_shape",
+    "classic: uf_boss | Unit > Basics | Frame bar shape | dropdown | boss.frameBarShape | unit.basics.frame_bar_shape",
+    "classic: uf_focus | Unit > Basics | Frame bar shape | dropdown | focus.frameBarShape | unit.basics.frame_bar_shape",
+    "classic: uf_focustarget | Unit > Basics | Frame bar shape | dropdown | focustarget.frameBarShape | unit.basics.frame_bar_shape",
+    "classic: uf_pet | Unit > Basics | Frame bar shape | dropdown | pet.frameBarShape | unit.basics.frame_bar_shape",
+    "classic: uf_pettarget | Unit > Basics | Frame bar shape | dropdown | pettarget.frameBarShape | unit.basics.frame_bar_shape",
+    "classic: uf_player | Unit > Basics | Frame bar shape | dropdown | player.frameBarShape | unit.basics.frame_bar_shape",
+    "classic: uf_target | Unit > Basics | Frame bar shape | dropdown | target.frameBarShape | unit.basics.frame_bar_shape",
+    "classic: uf_targettarget | Unit > Basics | Frame bar shape | dropdown | targettarget.frameBarShape | unit.basics.frame_bar_shape",
+    "main: uf_arena | Unit > Basics | Frame bar shape | dropdown | arena.frameBarShape | unit.basics.frame_bar_shape",
+    "main: uf_boss | Unit > Basics | Frame bar shape | dropdown | boss.frameBarShape | unit.basics.frame_bar_shape",
+    "main: uf_focus | Unit > Basics | Frame bar shape | dropdown | focus.frameBarShape | unit.basics.frame_bar_shape",
+    "main: uf_focustarget | Unit > Basics | Frame bar shape | dropdown | focustarget.frameBarShape | unit.basics.frame_bar_shape",
+    "main: uf_pet | Unit > Basics | Frame bar shape | dropdown | pet.frameBarShape | unit.basics.frame_bar_shape",
+    "main: uf_pettarget | Unit > Basics | Frame bar shape | dropdown | pettarget.frameBarShape | unit.basics.frame_bar_shape",
+    "main: uf_player | Unit > Basics | Frame bar shape | dropdown | player.frameBarShape | unit.basics.frame_bar_shape",
+    "main: uf_target | Unit > Basics | Frame bar shape | dropdown | target.frameBarShape | unit.basics.frame_bar_shape",
+    "main: uf_targettarget | Unit > Basics | Frame bar shape | dropdown | targettarget.frameBarShape | unit.basics.frame_bar_shape"
+   ],
+   "basis": "owner",
+   "evidence": "Owner request 2026-10-06: remove the Frame bar shape selection from individual Frame Basics in the Classic repository.",
+   "reason": "Remove the individual unit Basics dropdown and its search routes; existing profile values, global Bars style controls and group Layout shape controls retain their runtime behavior.",
+   "date": "2026-10-06"
   }
  ]
 }
