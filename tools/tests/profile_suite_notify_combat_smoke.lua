@@ -22,7 +22,14 @@ end
 local function Run(flavor)
     local world = World.New(root, flavor)
     local env = world.env
+    -- Runtime helpers capture the client API during load; change its result,
+    -- not the function identity after the real core graph has loaded.
+    local inCombat = false
+    env.InCombatLockdown = function() return inCombat end
+    env.UnitAffectingCombat = function() return inCombat end
     env.MAX_BOSS_FRAMES = 5
+    -- Native frame layout methods return numbers, unlike unknown-API stubs.
+    world.env.TotemFrame = world.env.CreateFrame("Frame", nil, world.env.UIParent)
     world:Boot()
     local failure = world:FirstFailure()
     Check(failure == nil, flavor .. ": load failed in " .. tostring(failure and failure.file) .. ": "
@@ -36,9 +43,6 @@ local function Run(flavor)
     end
     local heard = {}
     env.MSUFSuite = { OnMSUFProfileChanged = function(name, reason) heard[#heard + 1] = { name = name, reason = reason } end }
-    local inCombat = false
-    env.InCombatLockdown = function() return inCombat end
-    env.UnitAffectingCombat = function() return inCombat end
     local print0 = env.print
     env.print = function() end
     env.MSUF_InitProfiles()

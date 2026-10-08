@@ -484,9 +484,9 @@ end
 --- Copies the source frame's size only. Position is deliberately excluded so a
 --- size copy cannot unexpectedly move another frame. The unit page copy dialog
 --- ("Frame Size") holds the same contract -- placement stays independently editable.
---- One undo entry per target: the source's pending edits are written once,
---- by the caller, before the first copy.
-local function CopySizeTo(targetKey)
+--- A single target has one undo entry; Copy All wraps the whole operation.
+--- The source's pending edits are written once before the first copy.
+local function CopySizeTo(targetKey, skipHistory)
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit or not targetKey then return end
     local db = DB()
@@ -494,7 +494,7 @@ local function CopySizeTo(targetKey)
     local srcKey = CK(pf.unit)
     local src = srcKey and db[srcKey]
     if not src or targetKey == srcKey then return end
-    _G.MSUF_EM_UndoBeforeChange("unit", targetKey)
+    if not skipHistory then _G.MSUF_EM_UndoBeforeChange("unit", targetKey) end
     local dst = db[targetKey]
     if not dst then
         db[targetKey] = {}
@@ -571,9 +571,11 @@ local function Build()
         ApplyPendingEdits()
         if entry.key == "__all__" then
             local srcKey = pf and pf.unit and CK(pf.unit)
+            if not srcKey or not EM2.Undo.BeginChange("units", "all", "Change") then return end
             for _, target in ipairs(UNIT_COPY_TARGETS) do
-                if target.key ~= srcKey then CopySizeTo(target.key) end
+                if target.key ~= srcKey then CopySizeTo(target.key, true) end
             end
+            EM2.Undo.CommitChange()
         else
             CopySizeTo(entry.key)
         end

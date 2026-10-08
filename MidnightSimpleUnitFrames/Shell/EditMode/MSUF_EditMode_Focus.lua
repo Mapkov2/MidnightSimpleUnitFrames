@@ -157,6 +157,11 @@ local function ApplyMenuSelection(key, component, slot, opts)
         sectionId = PrioritySection(component)
     elseif unitPage then
         pageKey = unitPage
+        local cfg = EM2.Registry and EM2.Registry.Get(key)
+        if component == nil or component == "frame" then
+            if cfg and cfg.castbarUnit then component = "castbar"
+            elseif cfg and cfg.resourceKind == "power" then component = "powerbar" end
+        end
         sectionId = UnitSectionForComponent(component)
     else
         local groupKind = GROUP_KIND_BY_KEY[key]

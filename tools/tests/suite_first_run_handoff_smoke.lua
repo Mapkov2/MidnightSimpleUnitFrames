@@ -341,8 +341,9 @@ end
 local function Build()
     fonts, buttons, registered, refreshers, selected, feedback = {}, {}, {}, {}, {}, {}
     hidden, openCalls = 0, 0
-    local ctx = { wrapper = Fake("wrapper"), width = 760 }
+    local ctx = { wrapper = Fake("wrapper"), width = 760, entry = {}, refreshers = refreshers }
     function ctx:SetContentHeight(height) self.height = height end
+    function ctx:AddRefresher(fn) self.refreshers[#self.refreshers + 1] = fn end
     buildHome(ctx)
     return ctx.height
 end
@@ -430,8 +431,9 @@ Check(FindFont("MSUF Suite") and FindFont("3 of 3 modules on"), "a Suite without
 -- Narrow menus move both buttons below the text and grow the card.
 Overview({ version = "1.4.0", total = 12, enabled = 5, pageKey = "suite_modules", needsSetup = true })
 fonts, buttons = {}, {}
-local narrow = { wrapper = Fake("wrapper"), width = 330 }
+local narrow = { wrapper = Fake("wrapper"), width = 330, entry = {}, refreshers = {} }
 function narrow:SetContentHeight(height) self.height = height end
+function narrow:AddRefresher(fn) self.refreshers[#self.refreshers + 1] = fn end
 buildHome(narrow)
 Check(FindFont("MSUF SUITE")._parent._height > 100, "a narrow Suite card must grow to hold its stacked buttons")
 

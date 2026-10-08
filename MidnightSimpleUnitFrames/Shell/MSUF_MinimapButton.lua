@@ -45,16 +45,19 @@ local function ToggleEditMode()
 end
 
 local function ToggleOptionsWindow()
-    if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
-        _G.MSUF_OpenStandaloneOptionsWindow()
+    local openStandalone = _G.MSUF_OpenStandaloneOptionsWindow
+    if type(openStandalone) == "function" then
+        openStandalone()
         return
     end
-    if type(_G.MSUF_ShowStandaloneOptionsWindow) == "function" then
-        _G.MSUF_ShowStandaloneOptionsWindow()
+    local showStandalone = _G.MSUF_ShowStandaloneOptionsWindow
+    if type(showStandalone) == "function" then
+        showStandalone()
         return
     end
-    if type(_G.MSUF_OpenOptionsMenu) == "function" then
-        _G.MSUF_OpenOptionsMenu()
+    local openOptions = _G.MSUF_OpenOptionsMenu
+    if type(openOptions) == "function" then
+        openOptions()
         return
     end
     if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
@@ -116,6 +119,7 @@ local DBIcon = LibStub and LibStub("LibDBIcon-1.0", true) or nil
 local DATA_NAME = "MidnightSimpleUnitFrames"
 local dataObj = nil
 local usingLDB = false
+local loginReady = false
 
 --- Fallback button path
 local fallbackBtn = nil
@@ -151,8 +155,12 @@ if button == "RightButton" then
 end
 
 local function EnsureInitialized()
+    if not loginReady then return false end
+    local root = _G.MSUF_GlobalDB
+    local profiles = root and root.profiles
+    if not profiles or profiles[_G.MSUF_ActiveProfile] ~= _G.MSUF_DB then return false end
     local g = EnsureGeneralDB()
-    if not g then return false end
+    if not g or (not g.showMinimapIcon and not usingLDB and not fallbackBtn) then return false end
 
     --- Prefer LibDBIcon if present
     if LDB and DBIcon then
@@ -178,6 +186,8 @@ local function EnsureInitialized()
             DBIcon:Register(DATA_NAME, dataObj, g.minimapIconDB)
         end
 
+        -- Refresh replaces LibDBIcon's stored DB reference after a bind.
+        DBIcon:Refresh(DATA_NAME, g.minimapIconDB)
         usingLDB = true
         ApplyShowHide(not g.minimapIconDB.hide)
         return true
@@ -255,6 +265,10 @@ local function EnsureInitialized()
     return true
 end
 
+function MSUF.MinimapButton.RefreshProfileBinding()
+    if EnsureInitialized() and fallbackRepos then fallbackRepos() end
+end
+
 --- Public API used by Options_Misc.lua
 local function MSUF_SetMinimapIconEnabled(enabled)
     local g = EnsureGeneralDB()
@@ -295,6 +309,7 @@ ExportPublic("MSUF_SetMinimapIconPosition", MSUF_SetMinimapIconPosition)
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("PLAYER_LOGIN")
 initFrame:SetScript("OnEvent", function(self)
+    loginReady = true
     self:UnregisterEvent("PLAYER_LOGIN")
     self:SetScript("OnEvent", nil)
     local g = EnsureGeneralDB()

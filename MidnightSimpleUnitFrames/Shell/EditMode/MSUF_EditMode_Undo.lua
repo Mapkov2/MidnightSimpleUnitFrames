@@ -31,9 +31,13 @@ local sharedDebounceTimer
 local pendingPreparedTimers = {}
 local activeFallbackPrepared
 local activeChangeUsesShared = false
+local preparedDebounce
+local preparedDebounceTimer
+local preparedDebounceDeadline = 0
 
 local HISTORY_CATEGORY_LABELS = {
     unit = "Unit frame",
+    units = "Unit frame",
     castbar = "Castbar",
     general = "General layout",
     classpower = "Class Resources",
@@ -69,7 +73,55 @@ local function HistoryChangeSource(category, key)
     return "edit_mode:" .. tostring(category or "change") .. ":" .. tostring(key or "")
 end
 
+local function DropPreparedDebounce()
+    local snap = preparedDebounce
+    preparedDebounce = nil
+    if preparedDebounceTimer and preparedDebounceTimer.Cancel then preparedDebounceTimer:Cancel() end
+    preparedDebounceTimer = nil
+    return snap
+end
+
+local function PreparedTransactionActive(snap, history)
+    return snap and snap.sharedToken and history and history.IsHistoryTransactionActive
+        and history.IsHistoryTransactionActive(snap.sharedToken) == true
+end
+
+local function CommitPreparedDebounce()
+    local snap = DropPreparedDebounce()
+    local history = SharedHistoryService()
+    if snap and IsCurrentProfile(snap.profile) and PreparedTransactionActive(snap, history) then
+        return history.CommitHistoryTransaction()
+    end
+    return false
+end
+
+local function SchedulePreparedDebounce()
+    if preparedDebounceTimer or not preparedDebounce then return end
+    local function OnDeadline()
+        preparedDebounceTimer = nil
+        if not preparedDebounce then return end
+        if (InCombatLockdown and InCombatLockdown()) then return end
+        if GetTime() < preparedDebounceDeadline then
+            SchedulePreparedDebounce()
+        else
+            CommitPreparedDebounce()
+        end
+    end
+    local delay = math.max(0, preparedDebounceDeadline - GetTime())
+    if C_Timer and C_Timer.NewTimer then
+        preparedDebounceTimer = C_Timer.NewTimer(delay, OnDeadline)
+    elseif C_Timer and C_Timer.After then
+        -- Older timer surfaces cannot cancel; the callback checks its token.
+        local token = {}
+        preparedDebounceTimer = token
+        C_Timer.After(delay, function()
+            if preparedDebounceTimer == token then OnDeadline() end
+        end)
+    end
+end
+
 local function CommitSharedDebounce()
+    CommitPreparedDebounce()
     if not sharedDebounceKey then return false end
     sharedDebounceKey = nil
     sharedDebounceGeneration = sharedDebounceGeneration + 1
@@ -181,7 +233,12 @@ local function CaptureState(category, key)
     local db = _G.MSUF_DB
     if not db then return nil end
     local snap = { category = category, key = key, profile = ProfileIdentity() }
-    if category == "unit" then
+    if category == "units" then
+        snap.data = {}
+        for unit in pairs(Util.UNIT_PAGE_KEYS) do
+            snap.data[unit] = type(db[unit]) == "table" and DeepCopy(db[unit]) or false
+        end
+    elseif category == "unit" then
         snap.data = DeepCopy(db[key] or {})
     elseif category == "castbar" then
         snap.data = DeepCopy(db.general or {})
@@ -225,7 +282,18 @@ local function RestoreState(snap)
         return
     end
 
-    if snap.category == "unit" then
+    if snap.category == "units" then
+        for unit, data in pairs(snap.data) do
+            if data == false then
+                db[unit] = nil
+            else
+                db[unit] = db[unit] or {}
+                DeepRestore(db[unit], data)
+            end
+            ApplySettingsForKeySafe(unit)
+            MSUF.Require("MSUF_ForceTextLayoutForUnitKey", CALLER)(unit)
+        end
+    elseif snap.category == "unit" then
         db[snap.key] = db[snap.key] or {}
         DeepRestore(db[snap.key], snap.data)
         ApplySettingsForKeySafe(snap.key)
@@ -278,8 +346,15 @@ end
 -- Two-phase snapshots are used by fail-closed callers which can only know
 -- whether an external apply succeeded after the DB write.  Failed applies do
 -- not consume undo capacity or destroy the redo stack.
-function Undo.PrepareChange(category, key)
+function Undo.PrepareChange(category, key, debounce)
     if _G.MSUF__UndoRestoring then return nil end
+    local pending = preparedDebounce
+    local history = SharedHistoryService()
+    if debounce and pending and pending.category == category and pending.key == key
+        and GetTime() < preparedDebounceDeadline and IsCurrentProfile(pending.profile)
+        and (not pending.shared or PreparedTransactionActive(pending, history)) then
+        return pending
+    end
     --- A debounced unit nudge keeps the shared transaction open for half a
     --- second. A castbar or resource nudge inside that window is a gesture of
     --- its own: close the unit entry first, or this change folds into it.
@@ -291,14 +366,40 @@ function Undo.PrepareChange(category, key)
             HistoryChangeSource(category, key)
         )
         if prepared then
-            return { category = category, key = key, shared = prepared }
+            return { category = category, key = key, shared = prepared,
+                profile = ProfileIdentity(), debounce = debounce == true }
         end
     end
-    return CaptureState(category, key)
+    local snap = CaptureState(category, key)
+    if snap then snap.debounce = debounce == true end
+    return snap
+end
+
+local function CommitNudgeSnapshot(snap)
+    if not IsCurrentProfile(snap.profile) then return false end
+    if preparedDebounce ~= snap then
+        local history = SharedHistoryService()
+        if snap.shared then
+            if not (history and history.BeginPreparedHistory) then return false end
+            snap.sharedToken = history.BeginPreparedHistory(snap.shared)
+            if not snap.sharedToken then return false end
+        else
+            undoStack[#undoStack + 1] = snap
+            if #undoStack > MAX_UNDO then table.remove(undoStack, 1) end
+            for i = 1, #redoStack do redoStack[i] = nil end
+        end
+        preparedDebounce = snap
+    elseif snap.shared and not PreparedTransactionActive(snap, SharedHistoryService()) then
+        return false
+    end
+    preparedDebounceDeadline = GetTime() + DEBOUNCE_SEC
+    SchedulePreparedDebounce()
+    return true
 end
 
 function Undo.CommitPrepared(snap)
     if _G.MSUF__UndoRestoring or type(snap) ~= "table" or type(snap.category) ~= "string" then return false end
+    if snap.debounce then return CommitNudgeSnapshot(snap) end
     if snap.shared then
         local history = SharedHistoryService()
         return history and type(history.CommitPreparedHistory) == "function"
@@ -312,6 +413,7 @@ end
 
 function Undo.BeforeChange(category, key, debounce)
     if _G.MSUF__UndoRestoring then return end
+    CommitPreparedDebounce()
     local history = SharedHistoryService()
     if history and type(history.BeginHistoryTransaction) == "function" then
         local dk = tostring(category or "") .. ":" .. tostring(key or "")
@@ -421,7 +523,9 @@ function Undo.CancelChange(combatStarting)
         end
         pendingPreparedTimers[pending] = nil
     end
+    local nudge = DropPreparedDebounce()
     local hadSharedChange = activeChangeUsesShared or sharedDebounceKey ~= nil
+        or PreparedTransactionActive(nudge, history)
     activeChangeUsesShared = false
     activeFallbackPrepared = nil
     sharedDebounceKey = nil

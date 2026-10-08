@@ -172,7 +172,7 @@ local function NudgeCastbar(unit, ndx, ndy)
     if type(ApplySettingsForKeySafe) ~= "function" then return false end
     if not (undo and type(undo.PrepareChange) == "function" and type(undo.CommitPrepared) == "function") then return false end
 
-    local snapshot = undo.PrepareChange("castbar", unit)
+    local snapshot = undo.PrepareChange("castbar", unit, true)
     if type(snapshot) ~= "table" then return false end
 
     local previousX, previousY = general[xKey], general[yKey]
@@ -212,7 +212,7 @@ local function NudgeResource(cfg, ndx, ndy)
     local undo = EM2.Undo
     if not (undo and type(undo.PrepareChange) == "function"
         and type(undo.CommitPrepared) == "function") then return false end
-    local snapshot = undo.PrepareChange(cfg.historyCategory, cfg.historyKey)
+    local snapshot = undo.PrepareChange(cfg.historyCategory, cfg.historyKey, true)
     if type(snapshot) ~= "table" then return false end
     local previousX, previousY = conf[xKey], conf[yKey]
     local previousTopAnchor = conf.classPowerCooldownTopAnchor
@@ -242,6 +242,13 @@ local function NudgeDB()
     return _G.MSUF_DB
 end
 
+local GROUP_KEYS = {
+    buff    = { "buffGroupOffsetX",   "buffGroupOffsetY"   },
+    debuff  = { "debuffGroupOffsetX", "debuffGroupOffsetY" },
+    private = { "privateOffsetX",     "privateOffsetY"     },
+}
+local CUSTOM_GROUP_INDEX = { custom1 = 1, custom2 = 2, custom3 = 3, custom4 = 4 }
+
 -- One aura group of unitKey (buff, debuff, private, custom1-4) by ndx/ndy:
 -- boss and arena scopes edited together move as one, like their drag.
 local function NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
@@ -266,12 +273,6 @@ local function NudgeAuraGroup(db, auraGroup, unitKey, ndx, ndy)
             else
                 applyKeys = { unitKey }
             end
-            local GROUP_KEYS = {
-                buff    = { "buffGroupOffsetX",   "buffGroupOffsetY"   },
-                debuff  = { "debuffGroupOffsetX", "debuffGroupOffsetY" },
-                private = { "privateOffsetX",     "privateOffsetY"     },
-            }
-            local CUSTOM_GROUP_INDEX = { custom1 = 1, custom2 = 2, custom3 = 3, custom4 = 4 }
             local pair = GROUP_KEYS[auraGroup]
             local customIndex = CUSTOM_GROUP_INDEX[auraGroup]
             if pair then

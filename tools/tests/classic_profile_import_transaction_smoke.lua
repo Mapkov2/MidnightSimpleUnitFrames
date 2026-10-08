@@ -237,7 +237,7 @@ end
 
 manifest.LoadSelected(repo, manifestFlavor, namespace, {
     "State/MSUF_FirstLoad.lua",
-    "Kernel/MSUF_Require.lua",
+    "Kernel/MSUF_Require.lua", "Runtime/MSUF_NumberFormat.lua", "Kernel/MSUF_Util.lua",
     "Kernel/MSUF_SuiteLink.lua",
     "Kernel/MSUF_Boundary.lua",
     "State/MSUF_StateHelpers.lua",

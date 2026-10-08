@@ -15,9 +15,8 @@
 --   * The Menu2 profiles page lists the two talent groups under Blizzard's labels,
 --     and falls back to its empty state without them.
 --   * The gameplay spec helper reads the C_SpecializationInfo pair.
--- Every other flavor keeps the global-only behaviour byte for byte: a spec ID
--- from the globals when they exist, nil otherwise, even with C_SpecializationInfo
--- present.
+-- Mainline and Mists use the shared native namespace, with legacy aliases as
+-- a compatibility fallback. Era/TBC have no specialization API.
 local repo = assert(arg[1], "repository root is required")
 local flavor = assert(arg[2], "flavor required (Mainline|Vanilla|TBC|Mists|Forever)")
 
@@ -78,8 +77,7 @@ CreateFrame = function() return NewFrame() end
 local inCombat = false
 InCombatLockdown = function() return inCombat end
 
--- Blizzard specialization API. C_SpecializationInfo exists on every client in
--- this smoke; the deprecated globals exist only where a test installs them.
+-- Model the client capability before the real Kernel specialization provider loads.
 local activeGroup = 1
 local cSpecIndex, cSpecID = 1, 1486 -- ChrSpecialization 1.60.1.69876: 1486 Paladin
 C_SpecializationInfo = {
@@ -104,6 +102,15 @@ local function RemoveDeprecatedGlobals()
     GetNumSpecializations, GetSpecialization, GetSpecializationInfo = nil, nil, nil
 end
 RemoveDeprecatedGlobals()
+local HAS_SPECS = flavor == "Mainline" or flavor == "Mists"
+if HAS_SPECS then
+    InstallDeprecatedGlobals()
+    C_SpecializationInfo = { GetNumSpecializations = GetNumSpecializations,
+        GetSpecialization = GetSpecialization, GetSpecializationInfo = GetSpecializationInfo }
+    RemoveDeprecatedGlobals()
+elseif not IS_FOREVER_RUN then
+    C_SpecializationInfo = nil
+end
 
 -- Load order: real client detection, then the State providers from the TOC.
 local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
@@ -122,7 +129,7 @@ function namespace.ExportPublic(name, value)
 end
 manifest.LoadSelected(repo, spec.toc, namespace, {
     "State/MSUF_FirstLoad.lua",
-    "Kernel/MSUF_Require.lua",
+    "Kernel/MSUF_Require.lua", "Kernel/MSUF_Util.lua",
     "State/MSUF_StateHelpers.lua",
     "State/MSUF_ProfileCodec.lua",
 })
@@ -199,15 +206,17 @@ if IS_FOREVER_RUN then
     Check(MSUF_GetPlayerSpecID() == nil, "talent group 0 produced a key")
     activeGroup = 1
     MSUF_SetSpecAutoSwitchEnabled(false)
-else
-    Check(MSUF_GetPlayerSpecID() == nil, "the C_SpecializationInfo group API leaked into a non-Forever client")
-    InstallDeprecatedGlobals()
-    Check(MSUF_GetPlayerSpecID() == 66, "the global spec ID path changed")
+elseif HAS_SPECS then
+    Check(MSUF_GetPlayerSpecID() == 66, "native namespace specialization was not resolved")
     MSUF_SetSpecProfile(66, "Raid")
     MSUF_SetSpecAutoSwitchEnabled(true)
-    Check(#switches == 1 and LastSwitch() == "Raid", "spec auto-switch changed on a non-Forever client")
+    Check(#switches == 1 and LastSwitch() == "Raid", "native spec auto-switch did not apply the binding")
     MSUF_SetSpecAutoSwitchEnabled(false)
-    RemoveDeprecatedGlobals()
+else
+    Check(MSUF_GetPlayerSpecID() == nil, "client without specializations produced a profile key")
+    MSUF_SetSpecAutoSwitchEnabled(true)
+    Check(#switches == 0, "client without specializations switched profiles")
+    MSUF_SetSpecAutoSwitchEnabled(false)
 end
 
 -- Gameplay spec helper -------------------------------------------------------------
@@ -227,11 +236,7 @@ if IS_FOREVER_RUN then
     Check(gameplaySpecID() == nil, "Forever gameplay spec helper accepted spec ID 0")
     cSpecIndex = 1
 else
-    Check(gameplaySpecID() == nil, "C_SpecializationInfo leaked into the non-Forever gameplay spec helper")
-    InstallDeprecatedGlobals()
-    gameplaySpecID = LoadGameplayHelpers()
-    Check(gameplaySpecID() == 66, "the global gameplay spec path changed")
-    RemoveDeprecatedGlobals()
+    Check(gameplaySpecID() == (HAS_SPECS and 66 or nil), "gameplay specialization ignored client capability")
 end
 
 -- Menu2 profiles page ----------------------------------------------------------------
@@ -317,15 +322,28 @@ if IS_FOREVER_RUN then
 else
     DUAL_SPEC_PRIMARY, DUAL_SPEC_SECONDARY = "Primary", "Secondary"
     BuildSpecializations()
-    Check(HasCard("No specialization data") and #dropdowns == 0, "non-Forever page without spec globals changed")
     Check(not HasCard("Primary"), "talent groups leaked into a non-Forever page")
-    InstallDeprecatedGlobals()
-    BuildSpecializations()
-    Check(HasCard("Holy") and HasCard("Protection") and HasCard("Retribution") and #dropdowns == 3,
-        "non-Forever page no longer lists specializations from the globals")
-    dropdowns[3].set("Solo")
-    Check(MSUF_GetSpecProfile(70) == "Solo", "non-Forever spec picker did not bind the spec ID")
-    RemoveDeprecatedGlobals()
+    if HAS_SPECS then
+        Check(HasCard("Holy") and HasCard("Protection") and HasCard("Retribution") and #dropdowns == 3,
+            "native specialization namespace did not populate profile pickers")
+        dropdowns[3].set("Solo")
+        Check(MSUF_GetSpecProfile(70) == "Solo", "spec picker did not bind the spec ID")
+
+        -- Reboot this isolated provider with the older alias-only API surface.
+        -- The real provider captures callable references once during loading.
+        C_SpecializationInfo = nil
+        InstallDeprecatedGlobals()
+        manifest.LoadSelected(repo, spec.toc, namespace, { "Kernel/MSUF_Util.lua" })
+        Check(MSUF_GetPlayerSpecID() == 66, "legacy specialization alias fallback changed")
+        Check(LoadGameplayHelpers()() == 66, "legacy gameplay specialization fallback changed")
+        BuildSpecializations()
+        Check(HasCard("Holy") and HasCard("Protection") and HasCard("Retribution") and #dropdowns == 3,
+            "legacy specialization aliases did not populate profile pickers")
+        RemoveDeprecatedGlobals()
+    else
+        Check(HasCard("No specialization data") and #dropdowns == 0,
+            "client without specialization APIs did not keep the empty state")
+    end
 end
 
 io.write("forever_spec_profile_smoke: ok (" .. flavor .. ")\n")

@@ -205,6 +205,16 @@ function Link.ModuleTitle(id)
     return nil
 end
 
+-- Whether the Suite's nameplates draw MSUF's interrupt-ready indicator
+-- (MSUF.KickReady consumers): Suites whose API has HasNameplateKickReady.
+-- Older Suites with nameplates cannot, so MSUF hides that switch for them.
+function Link.HasNameplateKickReady()
+    local current = API()
+    local has = current and current.HasNameplateKickReady
+    if has then return has() == true end
+    return false
+end
+
 function Link.SkinAddOnEnabled()
     local current = API()
     if current then return current.IsSkinAddOnEnabled() == true end

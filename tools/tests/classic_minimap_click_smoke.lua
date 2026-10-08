@@ -19,6 +19,10 @@ for _, flavor in ipairs({"Vanilla", "TBC", "Mists", "Mainline"}) do
     _G.CreateFrame=frame
     _G.Minimap=frame()
     _G.MSUF_DB={general={showMinimapIcon=true}}
+    -- Login has bound SavedVariables to the active profile before icon creation.
+    _G.MSUF_ActiveProfile="Default"
+    _G.MSUF_GlobalDB={profiles={Default=_G.MSUF_DB}}
+    _G.MSUF_MinimapButton=nil
     _G.MSUF_EditState={active=false}
     _G.MSUF_NS={Client={Flavor=flavor}}
     _G.IsShiftKeyDown=function() return shifted end
@@ -30,7 +34,7 @@ for _, flavor in ipairs({"Vanilla", "TBC", "Mists", "Mainline"}) do
     end
     _G.LibStub=broker and function(lib)
         if lib=="LibDataBroker-1.1" then return {NewDataObject=function(_,_,data) object=data; return data end} end
-        return {IsRegistered=function() return false end,Register=function() end,Show=function() end,Hide=function() end}
+        return {IsRegistered=function() return false end,Register=function() end,Refresh=function(_,_,db) assert(db==_G.MSUF_DB.general.minimapIconDB) end,Show=function() end,Hide=function() end}
     end or nil
     assert(loadfile(root.."/MidnightSimpleUnitFrames/Shell/MSUF_MinimapButton.lua"))("MidnightSimpleUnitFrames",_G.MSUF_NS)
     local init=frames[#frames]

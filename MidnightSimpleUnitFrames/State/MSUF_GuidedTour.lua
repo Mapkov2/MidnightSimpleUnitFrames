@@ -138,6 +138,13 @@ local function ResultCode(result)
     return VALID_RESULT[result] or (result == "r" or result == "k" or result == "s") and result or nil
 end
 
+function Tour:RenameProfile(sourceName, destName)
+    SyncLiveState()
+    if state.profileName ~= sourceName then return end
+    state.profileName = destName
+    Touch()
+end
+
 function Tour:GetState()
     return SyncLiveState()
 end

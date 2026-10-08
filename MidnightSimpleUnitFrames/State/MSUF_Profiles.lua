@@ -167,40 +167,6 @@ function MSUF_SetDefaultProfileForNewCharacters(name)
     meta.defaultProfileForNewChars = name
     return true
 end
---- A stale configured name must fall through to "Default" instead of being
---- honoured: the init path clones a donor into any missing profile name, so an
---- unvalidated value here would resurrect a deleted profile as a ghost copy.
---- Reads the stored field directly rather than through the public getter, so a
---- third party replacing that global cannot steer login profile selection.
-local function MSUF_ProfileIO_NewCharacterProfile(profiles)
-    local configured = MSUF_ProfileIO_EnsureGlobalMeta().defaultProfileForNewChars
-    if type(configured) ~= "string" or configured == "" then return nil end
-    if type(profiles) == "table" and type(profiles[configured]) == "table" then
-        return configured
-    end
-    return nil
-end
---- Pick the donor profile for a repair without depending on `pairs()` order.
---- Two characters hitting this same path must clone the same source, otherwise
---- an account silently grows divergent copies of an arbitrary profile. Only
---- string keys are eligible because `MSUF_GetAllProfiles` never lists any other
---- kind, so a numeric-keyed leftover must not become somebody's live settings.
-local function MSUF_ProfileIO_FallbackProfileTable(profiles)
-    if type(profiles) ~= "table" then return nil, nil end
-    if type(profiles["Default"]) == "table" then
-        return profiles["Default"], "Default"
-    end
-    local names
-    for name, tbl in pairs(profiles) do
-        if type(name) == "string" and name ~= "" and type(tbl) == "table" then
-            names = names or {}
-            names[#names + 1] = name
-        end
-    end
-    if not names then return nil, nil end
-    table.sort(names)
-    return profiles[names[1]], names[1]
-end
 --- One profile's shape is owned by State/MSUF_ProfileNormalize.lua (loaded
 --- right before this file): menu defaults, the bounded deep copy and the
 --- translator to the current schema.
@@ -259,16 +225,10 @@ function MSUF_InitProfiles()
     if meta.defaultProfileForNewChars == "None" and type(profiles.None) ~= "table" then
         meta.defaultProfileForNewChars = nil
     end
-    if not active then
-        --- A character that has never chosen a profile follows the account-wide
-        --- preference when it still names a live profile. Everything else keeps
-        --- landing on "Default" exactly as before, and a character that already
-        --- has `activeProfile` set never reaches this branch at all.
-        active = MSUF_ProfileIO_NewCharacterProfile(profiles) or "Default"
-    end
+    local startupName, startupSource = MSUF.ResolveStartupProfile(MSUF_GlobalDB, MSUF_DB, charKey)
+    active = startupName
     if type(profiles[active]) ~= "table" then
-        local fallback = MSUF_ProfileIO_FallbackProfileTable(profiles)
-        profiles[active] = CopyTable(fallback or {})
+        profiles[active] = CopyTable(startupSource or {})
     end
     if hadEstablishedOwner and (previousActive~=active or previousDB~=profiles[active]) then
         local ok,why=BeforeProfileSwitch()
@@ -290,6 +250,8 @@ function MSUF_InitProfiles()
     --- avoiding a second complete pass when this exact profile was already
     --- repaired earlier in the startup chain.
     MSUF_ProfileIO_RunEnsureDB(false, true)
+    MSUF.NumberFormat.Refresh()
+    if MSUF.MinimapButton then MSUF.MinimapButton.RefreshProfileBinding() end
     if Variants then Variants.ResolveCurrent() end
     if ProfileSync then ProfileSync.Activate(); ProfileSync.RefreshEvents() end
     if hadEstablishedOwner and (previousActive ~= active or previousDB ~= MSUF_DB) then
@@ -301,7 +263,9 @@ local function MSUF_ProfileIO_NotifySuiteLifecycle(kind, source, target)
     return MSUF.SuiteLink.NotifyProfileLifecycle(kind, source, target)
 end
 function MSUF_CreateProfile(name)
-    if type(name) ~= "string" or name == "" then return false, "invalid profile name" end
+    if type(name) ~= "string" or not name:find("%S") or name:find("[%z\1-\31]") then
+        return false, "invalid profile name"
+    end
     if ProfileNameTooLong(name) then return false, "profile name too long" end
     local profiles = MSUF_ProfileIO_EnsureProfileRoots()
     if profiles[name] then
@@ -323,7 +287,11 @@ function MSUF_CreateProfile(name)
         })
     end
     MSUF_ProfileIO_EnsureProfileMenuDefaults(profiles[name])
-    MSUF_ProfileIO_NotifySuiteLifecycle("create", name)
+    local accepted, refusal = MSUF_ProfileIO_NotifySuiteLifecycle("create", name)
+    if accepted == false then
+        profiles[name] = nil
+        return false, refusal
+    end
     ProfileChat("ok", "Created new profile '%s'.", name)
     return true
  end
@@ -340,10 +308,7 @@ MSUF_ProfileIO_NotifySuiteProfileChanged = (function()
         Notify(reason, name)
     end
     Notify = function(reason, name)
-        if rawget(_G, "MSUF_InCombat") == true
-            or (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true)
-            or (type(_G.UnitAffectingCombat) == "function" and _G.UnitAffectingCombat("player") == true)
-        then
+        if MSUF.Util.InCombat() then
             pendingReason, pendingName = reason, name
             MSUF.EventBus:Register("PLAYER_REGEN_ENABLED", "MSUF_PROFILES_SUITE_NOTIFY", FlushPending, nil, true)
             return false
@@ -488,7 +453,7 @@ function MSUF_CopyProfile(sourceName, destName)
         ProfileChat("error", "No source profile specified.")
         return false
     end
-    if not destName or destName == "" then
+    if type(destName) ~= "string" or not destName:find("%S") or destName:find("[%z\1-\31]") then
         ProfileChat("error", "No destination name specified.")
         return false
     end
@@ -527,9 +492,13 @@ function MSUF_RenameProfile(sourceName, destName)
         ProfileChat("error", "No source profile specified.")
         return false
     end
-    if not destName or destName == "" then
+    if type(destName) ~= "string" or not destName:find("%S") then
         ProfileChat("error", "No destination name specified.")
         return false
+    end
+    if destName:find("[%z\1-\31]") then
+        ProfileChat("error", "Profile names need a visible character and cannot contain control characters.")
+        return false, "invalid-profile-name"
     end
     if sourceName == destName then
         ProfileChat("note", "Profile is already named '%s'.", sourceName)
@@ -579,6 +548,7 @@ function MSUF_RenameProfile(sourceName, destName)
     if ProfileSync then ProfileSync.RenameOrDelete(sourceName,destName) end
     profiles[destName] = src
     profiles[sourceName] = nil
+    MSUF.GuidedTour6:RenameProfile(sourceName, destName)
     if chars then
         for _, char in pairs(chars) do
             if type(char) == "table" then
@@ -711,12 +681,11 @@ function MSUF_GetPlayerSpecID()
         if type(group) ~= "number" or group < 1 then  return nil end
         return group
     end
-    if type(_G.GetSpecialization) ~= "function" or type(_G.GetSpecializationInfo) ~= "function" then
-         return nil
-    end
-    local idx = _G.GetSpecialization()
-    if not idx then  return nil end
-    local specID = _G.GetSpecializationInfo(idx)
+    local api = MSUF.Specialization
+    if not api.GetSpecialization or not api.GetSpecializationInfo then return nil end
+    local idx = api.GetSpecialization()
+    if not idx then return nil end
+    local specID = api.GetSpecializationInfo(idx)
     if type(specID) ~= "number" then
          return nil
     end
@@ -787,7 +756,7 @@ do
             if event == "PLAYER_SPECIALIZATION_CHANGED" and arg1 and arg1 ~= "player" then
                  return
             end
-            if not MSUF_IsSpecAutoSwitchEnabled() then return end
+            if not MSUF_ActiveProfile or not MSUF_IsSpecAutoSwitchEnabled() then return end
             MSUF_ApplySpecProfileIfEnabled(event)
          end)
      end
@@ -2347,7 +2316,8 @@ function ImportTx.Merge(kind, payload, db)
         --- Older Unitframes strings still carry the swing timers, which belong
         --- to Gameplay now: they never overwrite the local ones.
         for k, v in pairs(payload) do
-            if k ~= "general" and k ~= "swingTimers" then
+            if k ~= "general" and k ~= "swingTimers" and k ~= "gameplay"
+                and k ~= "classColors" and k ~= "npcColors" then
                 if type(v) == "table" then
                     if type(db[k]) ~= "table" then
                         db[k] = {}

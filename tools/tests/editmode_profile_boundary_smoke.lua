@@ -92,6 +92,8 @@ end
 local function Boot(flavor)
     local world = World.New(root, flavor)
     InstallCodec(world.env)
+    -- Native frame layout methods return numbers, unlike unknown-API stubs.
+    world.env.TotemFrame = world.env.CreateFrame("Frame", nil, world.env.UIParent)
     world:Boot()
     local failure = world:FirstFailure()
     assert(not failure, flavor .. ": boot failed: " .. tostring(failure and failure.file) .. ": "

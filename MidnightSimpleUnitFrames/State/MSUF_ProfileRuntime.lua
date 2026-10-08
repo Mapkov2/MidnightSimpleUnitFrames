@@ -24,6 +24,8 @@ end
 --- Runs before the active profile table or its contents are replaced: an open
 --- MSUF Edit Mode session ends against the profile it edited.
 local function MSUF_ProfileIO_BeforeActiveProfileMutation()
+    local menu = MSUF.MSUF2
+    if menu and menu.CloseColorPickerForProfileChange then menu.CloseColorPickerForProfileChange() end
     profileGeneration = profileGeneration + 1
     local em2 = _G.MSUF_EM2
     local state = type(em2) == "table" and em2.State or nil
@@ -170,6 +172,14 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     --- consumer, so it must be re-resolved from the new profile before the
     --- rebuild below formats anything.
     MSUF.NumberFormat.Refresh()
+    if MSUF.MinimapButton then MSUF.MinimapButton.RefreshProfileBinding() end
+    MSUF.Tooltips.Refresh()
+    MSUF.Highlight.Refresh()
+    MSUF.MSUF_ApplyGameplayVisuals()
+    if MSUF.TooltipSpellIDs then
+        MSUF.TooltipSpellIDs.Apply()
+        MSUF.TooltipSpellIDs.ApplyCasterNames()
+    end
 
     local UF = MSUF and MSUF.UF
     local metadata = UF and UF.Metadata

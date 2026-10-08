@@ -122,8 +122,9 @@ local function Groups()
     local global=MSUF_GlobalDB and MSUF_GlobalDB.global
     if type(global)~="table" or global.profileSyncGroups==nil then return {} end
     local clean,changed=Sanitize(global.profileSyncGroups)
+    if not changed then return global.profileSyncGroups end
     global.profileSyncGroups=clean
-    if changed and not repairReported then
+    if not repairReported then
         repairReported=true
         Report("Saved profile sync groups had invalid entries; those entries were removed.")
     end

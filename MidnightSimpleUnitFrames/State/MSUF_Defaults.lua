@@ -1731,6 +1731,8 @@ local function MSUF_Defaults_CreateFactoryProfile()
         MSUF_Defaults_DeepCopy(out, native)
         out.general = out.general or {}
         out.general._msufFactoryProfileApplied = true
+        out.general.fontKey = MSUF_Defaults_GetGlobalFontDefault()
+        out.general.menuFontKey = MSUF_Defaults_GetMenuFontDefault()
         return out
     end
     local payload = MSUF_Defaults_GetProfilePayload(tbl)
@@ -2085,7 +2087,8 @@ local function MSUF_Defaults_MigrateUnitDispelOwnership(db)
             -- Snapshot the value the old Bars-scoped compiler actually used.
             -- This deliberately replaces stale unit values hidden behind a
             -- disabled Bars override, preserving appearance during the split.
-            local value = usedUnitBars and conf[key] or nil
+            local value
+            if usedUnitBars then value = conf[key] end
             if value == nil then value = general[key] end
             if value ~= nil then conf[key] = value end
         end

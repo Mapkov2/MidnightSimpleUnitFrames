@@ -16,10 +16,16 @@
 --       appliers ran (always when changed, and with force also when nothing
 --       changed). Unknown modes and a missing database change nothing.
 --   MSUF_HostAPI.GetResourceStack()           -> "cooldown" | nil
+--   MSUF_HostAPI.GetKickReady()               -> table | nil
+--       The interrupt-ready engine for consumers outside MSUF's castbars
+--       (MSUF.KickReady, documented in Castbars/MSUF_InterruptReady.lua);
+--       added 2026-10-07 without a version change, so callers test for the
+--       function. nil only on a build without that engine.
 --
 -- The same table is MSUF.HostAPI, and its functions are on the addon
 -- namespace too. Every owner below loads before this file; they are resolved
 -- once, at the first call (after the whole core has loaded), and kept here.
+-- The interrupt-ready engine loads after this file and is read at each call.
 local _, MSUF = ...
 local type = type
 local UtilInCombat = MSUF.Util.InCombat
@@ -223,11 +229,16 @@ local function SetResourceStack(mode, force)
     return changed, true
 end
 
+local function GetKickReady()
+    return MSUF.KickReady
+end
+
 local API = {
     version = 1,
     ApplyUIScaleProfile = ApplyUIScaleProfile,
     SetResourceStack = SetResourceStack,
     GetResourceStack = GetResourceStack,
+    GetKickReady = GetKickReady,
 }
 MSUF.HostAPI = API
 MSUF.HostAPIPlayerInCombat = PlayerInCombat

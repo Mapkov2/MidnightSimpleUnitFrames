@@ -85,7 +85,7 @@ DeclareGeneral("castbarColors", [[
 DeclareGeneral("castbars", [[
     showGCDBar showGCDBarSpell showGCDBarTime gcdBarCombatOnly gcdBarDetached gcdBarHeight gcdBarIdle
     gcdBarOpacity gcdBarWidth gcdBarX gcdBarY kickReadyAnchor kickReadyAutoSize kickReadyOffsetX
-    kickReadyOffsetY kickReadyShowArena kickReadyShowBoss kickReadyShowFocus kickReadyShowTarget
+    kickReadyOffsetY kickReadyShowArena kickReadyShowBoss kickReadyShowFocus kickReadyShowNameplates kickReadyShowTarget
     kickReadySize kickReadyStyle kickReadyTimeMarker kickReadyTimeSegment enableFocusKickIcon
     focusKickIconHeight focusKickIconOffsetX focusKickIconOffsetY focusKickIconWidth focusKickShowCastbar
     focusKickTextSize showPlayerCastTime showTargetCastTime showFocusCastTime

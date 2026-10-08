@@ -104,6 +104,11 @@ function State.GetProvider()   return provider end
 function State.IsExternalPreviewSuspended() return externalPreviewSuspended end
 
 function State.SetUnitKey(key)
+    if type(key) ~= "string" or key:sub(1, 5) ~= "aura_" then
+        if EM2.AuraPopup and EM2.AuraPopup.IsOpen() then EM2.AuraPopup.Close() end
+        ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
+        ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
+    end
     unitKey = key
     SyncLegacy()
     if EM2.Focus and EM2.Focus.SetSelection then

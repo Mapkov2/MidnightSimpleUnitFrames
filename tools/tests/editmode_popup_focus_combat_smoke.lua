@@ -301,6 +301,18 @@ local function RunUndoEntries(flavor)
         Check(db.target.width == 271, context .. ": Copy size did not copy the width")
         Check(UndoCount(history) - base == 1, context .. ": Copy size to one target added "
             .. (UndoCount(history) - base) .. " undo entries")
+        -- One Copy All gesture owns one history entry, including every target.
+        history.CaptureHistory("Set target sizes", "test:copy-all-setup", function()
+            db.target.width, db.pet.width = 199, 123
+        end)
+        base = UndoCount(history)
+        copy({ key = "__all__" }); world.widgets:RunTimers()
+        Check(db.target.width == 271 and db.pet.width == 271, context .. ": Copy All omitted targets")
+        Check(UndoCount(history) - base == 1, context .. ": Copy All added redundant history entries")
+        Check(history.Undo() == true and db.target.width == 199 and db.pet.width == 123,
+            context .. ": one Undo did not restore all target sizes")
+        Check(history.Redo() == true and db.target.width == 271 and db.pet.width == 271,
+            context .. ": one Redo did not restore all copied sizes")
         -- With the Menu2 history unavailable the fallback stack holds one per target as well.
         env.MSUF2, world.core.MSUF2 = nil, nil
         EM2.Undo.Clear()
@@ -310,6 +322,15 @@ local function RunUndoEntries(flavor)
         Check(EM2.Undo.CanUndo() == true, context .. ": the fallback copy left no undo entry")
         EM2.Undo.DoUndo()
         Check(EM2.Undo.CanUndo() ~= true, context .. ": the fallback copy pushed more than one undo entry")
+        db.target.width, db.pet.width = 199, 123
+        EM2.UnitPopup.Sync()
+        copy({ key = "__all__" }); world.widgets:RunTimers()
+        Check(EM2.Undo.CanUndo() == true, context .. ": fallback Copy All omitted history")
+        EM2.Undo.DoUndo()
+        Check(db.target.width == 199 and db.pet.width == 123 and EM2.Undo.CanUndo() ~= true,
+            context .. ": fallback Copy All must restore all targets in one Undo")
+        EM2.Undo.DoRedo()
+        Check(db.target.width == 271 and db.pet.width == 271, context .. ": fallback Copy All Redo failed")
         env.MSUF2, world.core.MSUF2 = menu, menu
     end
     EM2.State.Exit("test")

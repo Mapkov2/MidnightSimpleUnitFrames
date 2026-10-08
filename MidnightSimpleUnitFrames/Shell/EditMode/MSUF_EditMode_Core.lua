@@ -343,6 +343,8 @@ Util.UNIT_LABELS = Util.UNIT_LABELS or {
     arena = "Arena",
 }
 function Util.UnitPageKey(unit, fallback)
+    local cfg = EM2.Registry and EM2.Registry.Get and EM2.Registry.Get(unit)
+    unit = cfg and (cfg.castbarUnit or cfg.resourceUnit) or unit
     local key = Util.UNIT_PAGE_KEYS[unit]
     if key then return key end
     if fallback ~= nil then return fallback end

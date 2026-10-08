@@ -34,6 +34,7 @@ if flavor == "Forever" then
     e.DUAL_SPEC_PRIMARY, e.DUAL_SPEC_SECONDARY = "Primary", "Secondary"
     e.C_SpecializationInfo = { GetActiveSpecGroup = function() return 1 end }
 else
+    e.C_SpecializationInfo = {} -- This fixture exercises the supported legacy specialization API.
     e.GetNumSpecializations = function() return 2 end
     e.GetSpecialization = function() return 1 end
     e.GetSpecializationInfo = function(index)

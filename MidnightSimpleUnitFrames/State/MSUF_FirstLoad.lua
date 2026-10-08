@@ -165,14 +165,23 @@ local function EnsurePre6Archive()
     return globalDB.ignoredPre6Profiles
 end
 
+local function StoreArchivedProfile(name, profile)
+    local archive = EnsurePre6Archive()
+    local key, suffix = name, 1
+    while archive[key] ~= nil and archive[key] ~= profile do
+        suffix = suffix + 1
+        key = name .. " (" .. suffix .. ")"
+    end
+    archive[key] = profile
+end
+
 local function ArchivePre6Profiles()
     local retiredNames
     local archivedCount = 0
     if type(globalDB.profiles) == "table" then
         for name, profile in pairs(globalDB.profiles) do
             if not ProfilePolicy.AcceptsProfile(profile) then
-                local archive = EnsurePre6Archive()
-                if archive[name] == nil then archive[name] = profile end
+                StoreArchivedProfile(name, profile)
                 globalDB.profiles[name] = nil
                 retiredNames = retiredNames or {}
                 retiredNames[name] = true
@@ -181,8 +190,7 @@ local function ArchivePre6Profiles()
         end
     end
     if rawProfileDB ~= nil and not ProfilePolicy.AcceptsProfile(rawProfileDB) then
-        local archive = EnsurePre6Archive()
-        if archive.__standalone == nil then archive.__standalone = rawProfileDB end
+        StoreArchivedProfile("__standalone", rawProfileDB)
         _G.MSUF_DB = nil
         archivedCount = archivedCount + 1
     end

@@ -10,10 +10,52 @@ if not (API and API.RegisterElement) then return end
 local OWNER, SETTING = "MSUF.DandersFrames", "dandersEditModeIntegration"
 local registered = {}
 local active, unlockedScope = false, nil
+local sessionMover
+local positionIdentities, nextPositionIdentity = setmetatable({}, { __mode = "k" }), 0
+local function Identity(value)
+    if type(value) ~= "table" then return 0 end
+    local id = positionIdentities[value]
+    if not id then
+        nextPositionIdentity = nextPositionIdentity + 1
+        id = nextPositionIdentity
+        positionIdentities[value] = id
+    end
+    return id
+end
+local function PositionRoute(df, mode, db)
+    local ap = mode == "raid" and df.AutoProfilesUI
+    -- Native SetPositionRecord routes to this exact active/editing destination.
+    -- Numeric identities survive MSUF's copied undo snapshots without copying
+    -- another addon's profile table or confusing two equally named layouts.
+    local destination = ap and ((ap.IsEditing and ap:IsEditing()) and ap.editingProfile or ap.activeRuntimeProfile)
+    return Identity(db) .. ":" .. Identity(destination)
+end
+local function CopyAnchor(anchor)
+    if type(anchor) ~= "table" then return nil end
+    local copy = {}
+    for key, value in pairs(anchor) do copy[key] = value end
+    return copy
+end
+local function MoverLocked()
+    unlockedScope = nil
+end
+local function SessionMover()
+    local libStub = _G.LibStub
+    local lib = libStub and libStub("DandersMover-1.0", true)
+    -- LibStub's versioned library contract owns these method types.
+    if not (lib and lib.IsUnlocked and lib.Lock and lib.RegisterCallback) then return nil end
+    if sessionMover ~= lib then
+        if sessionMover and sessionMover.UnregisterCallback then sessionMover.UnregisterCallback(OWNER, "Locked") end
+        sessionMover = lib
+        lib.RegisterCallback(OWNER, "Locked", MoverLocked)
+    end
+    return lib
+end
 
 local Export = MSUF.ExportPublic
 
 local General = _G.MSUF_GetGeneralDB
+local InCombatLockdown = _G.InCombatLockdown
 
 local function Enabled()
     local general = General()
@@ -21,7 +63,7 @@ local function Enabled()
 end
 
 local function InCombat()
-    return type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() == true
+    return InCombatLockdown and InCombatLockdown() == true
 end
 
 local function Danders()
@@ -37,8 +79,8 @@ local function Visible(frame)
     return nil
 end
 
---- Party and raid containers share one shape: flat db fields holding
---- CENTER-relative screen pixels, applied through the addon's own updater.
+--- Native position records preserve point/anchor metadata and active-layout
+--- routing. Flat fields are only the compatibility path for older versions.
 local MODES = {
     party = {
         db = function(df) return df:GetDB() end,
@@ -67,12 +109,17 @@ local function ModeFrame(mode)
 end
 
 local function CaptureMode(mode)
-    local db = ModeDB(mode)
+    local db, df = ModeDB(mode)
     if not db then return nil end
+    local native = df.GetPositionRecord ~= nil and df.SetPositionRecord ~= nil
+    local record = native and df:GetPositionRecord(mode) or nil
     local spec = MODES[mode]
     local frame = ModeFrame(mode)
     return {
-        x = tonumber(db[spec.xField]) or 0, y = tonumber(db[spec.yField]) or 0,
+        x = tonumber(record and record.x or db[spec.xField]) or 0,
+        y = tonumber(record and record.y or db[spec.yField]) or 0,
+        point = record and record.point or "CENTER", anchor = record and CopyAnchor(record.anchor),
+        route = PositionRoute(df, mode, db), native = native,
         scale = tonumber(db.frameScale),
         width = frame and frame.GetWidth and frame:GetWidth() or nil,
         height = frame and frame.GetHeight and frame:GetHeight() or nil,
@@ -84,12 +131,21 @@ local function RestoreMode(mode, state)
     if InCombat() or not db or type(state) ~= "table" then return false end
     local x, y = tonumber(state.x), tonumber(state.y)
     if not x or not y then return false end
+    if state.route and state.route ~= PositionRoute(df, mode, db) then return false end
     local spec = MODES[mode]
     local scale = tonumber(state.scale)
     local scaleChanged = scale ~= nil and scale ~= tonumber(db.frameScale)
     if scale ~= nil then db.frameScale = scale end
-    db[spec.xField], db[spec.yField] = x, y
-    spec.apply(df)
+    local native = df.GetPositionRecord ~= nil and df.SetPositionRecord ~= nil
+    if native then
+        df:SetPositionRecord(mode, { point = state.point, x = x, y = y, anchor = CopyAnchor(state.anchor) }, "MSUF_EDIT_MODE")
+    else
+        db[spec.xField], db[spec.yField] = x, y
+    end
+    local ap = native and mode == "raid" and df.AutoProfilesUI
+    local routed = ap and ap.IsLayoutActive and ap:IsLayoutActive()
+        and not (ap.IsEditing and ap:IsEditing()) and ap.SetActiveLayoutRaidPosition
+    if not routed then spec.apply(df) end
     if scaleChanged and type(df.UpdateAllFrames) == "function" then df:UpdateAllFrames() end
     return true
 end
@@ -179,7 +235,7 @@ local function Move(restore, request)
     local state = request and request.state
     if type(state) ~= "table" then return false end
     return restore({
-        point = state.point,
+        point = state.point, anchor = state.anchor, route = state.route, native = state.native,
         x = (tonumber(state.x) or 0) + (tonumber(request.deltaX) or 0),
         y = (tonumber(state.y) or 0) + (tonumber(request.deltaY) or 0),
     })
@@ -206,6 +262,8 @@ end
 --- are NOT usable: a reload during an unlock session leaves `locked = false`
 --- in the SavedVariables forever, which would silently veto every unlock.
 local function ScopeUnlocked(df, scope)
+    local session = SessionMover()
+    if session then return session:IsUnlocked() == true end
     local mover = scope == "party" and df.moverFrame or df.raidMoverFrame
     return type(mover) == "table" and mover.IsShown and mover:IsShown() == true
 end
@@ -215,6 +273,11 @@ local function ReleaseUnlock()
     local scope = unlockedScope
     unlockedScope = nil
     if not df then return end
+    local session = SessionMover()
+    if session then
+        if session:IsUnlocked() then session:Lock() end
+        return
+    end
     if scope == "party" then
         if type(df.LockFrames) == "function" and ScopeUnlocked(df, "party") then df:LockFrames() end
     elseif type(df.LockRaidFrames) == "function" and ScopeUnlocked(df, "raid") then
@@ -248,7 +311,7 @@ local function UnlockScope(scope)
     ReleaseUnlock()
     if not scope or InCombat() then return end
     if ScopeUnlocked(df, scope) then
-        EnsurePreview(df, scope)
+        if not SessionMover() then EnsurePreview(df, scope) end
         return
     end
     local unlock = scope == "party" and df.UnlockFrames or df.UnlockRaidFrames
@@ -353,6 +416,7 @@ local function Activate()
     if active or not Enabled() then return false end
     if not Danders() then return false end
     active = true
+    SessionMover()
     if not Add(Element("party", "Danders Party Frames", 830,
         function() return ModeFrame("party") end,
         function() return ModeDB("party") ~= nil end,
