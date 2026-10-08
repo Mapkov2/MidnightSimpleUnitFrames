@@ -105,12 +105,15 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             flavor .. ": name bar opacity " .. percent .. " % saved " .. tostring(conf.nameBarAlpha))
     end
 
-    -- Static search rows: offered exactly where the control is built.
-    M.frame = { IsShown = function() return true end }
-    world.env.InCombatLockdown = function() return false end
-    world.env.UnitAffectingCombat = function() return false end
-    local api = assert(M.Search and M.Search._CoreAPI, flavor .. ": the search core API did not load")
-    local blob = assert(M.Search.StaticIndexBlob, flavor .. ": no static index blob")
+    -- A cold search must not inherit the isolated section probes above: those
+    -- deliberately build even sections the real page excludes on this client.
+    local searchWorld = Boot(flavor)
+    local searchMenu = searchWorld.core.MSUF2
+    searchMenu.frame = { IsShown = function() return true end }
+    searchWorld.env.InCombatLockdown = function() return false end
+    searchWorld.env.UnitAffectingCombat = function() return false end
+    local api = assert(searchMenu.Search and searchMenu.Search._CoreAPI, flavor .. ": the search core API did not load")
+    local blob = assert(searchMenu.Search.StaticIndexBlob, flavor .. ": no static index blob")
     local function Offered(identity)
         local label
         for line in blob:gmatch("[^\n]+") do
@@ -118,7 +121,7 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
             for field in (line .. "\t"):gmatch("([^\t]*)\t") do fields[#fields + 1] = field end
             if fields[8] == identity then label = fields[2] end
         end
-        assert(label, flavor .. ": the index it loads lost the row " .. identity:gsub("\031", "|"))
+        if not label then return false end -- Shared index omits rows unsupported by every included client.
         for _, rec in ipairs(api.SearchPages(label)) do
             if rec.searchIdentity == identity then return true end
         end

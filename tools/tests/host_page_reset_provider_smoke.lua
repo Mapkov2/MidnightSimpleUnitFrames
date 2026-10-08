@@ -31,9 +31,10 @@
 local root = ((arg and arg[1]) or "."):gsub("\\", "/"):gsub("/$", "")
 local MENU2 = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 -- The core files the provider path uses, loaded as the core does: the step
--- boundary (Kernel/MSUF_Boundary.lua) and the host API's combat question.
-local CORE = { root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua",
-    root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua",
+-- boundary, castbar backend policy used by history snapshots, and host API.
+local CORE = { root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Boundary.lua",
+    root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua",
+    root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Backend.lua",
     root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua" }
 local CHAIN = { "MSUF_Menu2_Bindings.lua", "MSUF_Menu2_Bindings_History.lua",
     "MSUF_Menu2_Bindings_Reset.lua", "MSUF_Menu2_PageResetProviders.lua" }

@@ -873,6 +873,13 @@ end
 
 function Page:CreateControlKinds()
     return {
+        comboColorMode = function(_, parent, _, _, spec)
+            local control = W.Dropdown(parent, spec[3], spec[4], spec[5])
+            M.ClassPowerWorkspace.BindDropdownWidget(self.ctx, control,
+                function() return M.ColorsPage.GetClassPowerSlotMode("COMBO_POINTS") end,
+                function(value) M.ColorsPage.SetClassPowerSlotMode("COMBO_POINTS", value) end, spec.meta)
+            return control
+        end,
         playerPowerOutline = function(_, parent, _, apply, spec)
             local control = W.Slider(parent, spec[3], spec[4], spec[5], spec[6], spec[7])
             M.ClassPowerWorkspace.BindNumberWidget(self.ctx, control, PlayerPowerOutline,
@@ -1031,8 +1038,8 @@ function Page:BuildClassLayout()
     local leftW = compact and max(250, width - 64) or max(250, rightX - 74)
     local rightW = compact and leftW or max(250, width - rightX - 32)
     local controlW = min(300, leftW, rightW)
-    W.ControlCard(section, "Shape & Size", nil, 18, -38, leftW + 28, 370)
-    W.ControlCard(section, "Position", nil, rightX - 14, compact and -430 or -38, rightW + 28, 286)
+    W.ControlCard(section, "Shape & Size", nil, 18, -38, leftW + 28, 370, "group")
+    W.ControlCard(section, "Position", nil, rightX - 14, compact and -430 or -38, rightW + 28, 286, "group")
     PlaceColumn(section, 32, -116, 54, controlW, "LEFT", self.cp.shape, self.cp.height, self.cp.widthMode, self.cp.width, self.cpAlign)
     PlaceColumn(section, rightX, compact and -484 or -92, 54, controlW, nil, self.cp.x, self.cp.y, self.cp.level)
 end
@@ -1097,7 +1104,7 @@ function Page:BuildClassStyle()
         width = min(620, inner), frames = frames, defaultTab = "resources", x = 32, y = -44 }), "style.workspace_tab", values)
     M.Assign(self.cp, self:Controls(resources, Bars, ApplyClassPowerVisuals, "style.resources", {
         { "color", "toggle", "Color by resource type", "classPowerColorByType", true, group = "cp" },
-        { "comboColor", "dropdown", "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260,
+        { "comboColor", "comboColorMode", "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260,
             "classPowerComboPointColorMode", "default", group = "cp" },
         { "fgTex", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300,
             "classPowerTexture", "", group = "cp" },
@@ -1126,7 +1133,7 @@ function Page:BuildClassStyle()
     }))
     local resourcesCard, textCard, pipsCard
     for _, card in ipairs({ { resources, "Resource & Textures", 252 }, { text, "Text", 318 }, { opacity, "Opacity", 214 }, { pips, "Pips & Border", 230 } }) do
-        local controlCard = W.ControlCard(card[1], card[2], nil, 18, -38, cardW, card[3])
+        local controlCard = W.ControlCard(card[1], card[2], nil, 18, -38, cardW, card[3], "group")
         if card[1] == resources then resourcesCard = controlCard end
         if card[1] == text then textCard = controlCard end
         if card[1] == pips then pipsCard = controlCard end

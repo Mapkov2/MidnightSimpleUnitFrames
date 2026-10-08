@@ -465,7 +465,7 @@ local function MaximizeSlashMenuWindow(frame)
     local visualW = localW * scale
     local x = max(SNAP_SCREEN_MARGIN, floor((screenW - visualW) * 0.5 + 0.5))
     local yTop = screenH - SNAP_SCREEN_MARGIN
-    local target = { x = x, yTop = yTop, w = localW, h = localH }
+    local target = { x = x / scale, yTop = yTop / scale, uiLeft = x, uiTop = yTop, w = localW, h = localH }
     RefreshWindowControls(frame)
     AnimateWindowLayout(frame, target, {
         duration = WINDOW_MAXIMIZE_ANIM_SECONDS,
@@ -615,8 +615,10 @@ local function GetSlashMenuSnapLayout(frame)
     end
     if yTop > screenH - SNAP_SCREEN_MARGIN then yTop = screenH - SNAP_SCREEN_MARGIN end
     return {
-        x = x,
-        yTop = yTop,
+        x = x / scale,
+        yTop = yTop / scale,
+        uiLeft = x,
+        uiTop = yTop,
         w = localW,
         h = localH,
         visualW = visualW,

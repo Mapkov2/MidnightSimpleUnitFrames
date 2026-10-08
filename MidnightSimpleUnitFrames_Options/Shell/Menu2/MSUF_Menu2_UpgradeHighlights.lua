@@ -561,7 +561,7 @@ local function BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, content
         Button(scene, T, releaseKey, "cancel_skip", "Show me the highlights", x, buttonsTop, w,
             function() Controller():CancelSkip(); RefreshHome() end, "primary")
         Button(scene, T, releaseKey, "confirm_skip", format(Tr("Skip all %d and continue"), count), x, buttonsTop - 36, w,
-            function() Controller():ConfirmSkip(); RefreshHome() end, "danger")
+            function() Controller():ConfirmSkip(); RefreshHome() end, "secondary")
         buttonsTop = buttonsTop - 36
     else
         local w, gapWidth = 212, 12
@@ -569,7 +569,7 @@ local function BuildSkipWarning(ctx, scene, T, releaseKey, spec, record, content
         Button(scene, T, releaseKey, "cancel_skip", "Show me the highlights", x, buttonsTop, w,
             function() Controller():CancelSkip(); RefreshHome() end, "primary")
         Button(scene, T, releaseKey, "confirm_skip", format(Tr("Skip all %d and continue"), count), x + w + gapWidth, buttonsTop, w,
-            function() Controller():ConfirmSkip(); RefreshHome() end, "danger")
+            function() Controller():ConfirmSkip(); RefreshHome() end, "secondary")
     end
 
     local noteTop = buttonsTop - 44

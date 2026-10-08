@@ -137,11 +137,12 @@ local function GetSpecMeta()
         end
         return { { id = 1, name = primary }, { id = 2, name = secondary } }
     end
-    local n = type(_G.GetNumSpecializations) == "function" and _G.GetNumSpecializations() or 0
+    local specialization = MSUF.Specialization
+    local n = specialization.GetNumSpecializations and specialization.GetNumSpecializations() or 0
     local out = {}
     for i = 1, n do
-        if type(_G.GetSpecializationInfo) == "function" then
-            local specID, specName = _G.GetSpecializationInfo(i)
+        if specialization.GetSpecializationInfo then
+            local specID, specName = specialization.GetSpecializationInfo(i)
             if type(specID) == "number" and type(specName) == "string" then out[#out + 1] = { id = specID, name = specName } end
         end
     end
@@ -834,6 +835,7 @@ function ProfilesPage.Specializations(state)
             RefreshAfterProfileChange(ctx)
         end,
         ProfilesMeta("specialization.auto_switch.enabled"))
+    W.SetControlEnabled(auto, #specs > 0)
     local assignHelpX = contentW >= 760 and min(430, floor(specInnerW * 0.47)) or 20
     local assignHelpY = contentW >= 760 and -73 or -112
     W.Text(autoCard, "Assign one existing profile to each specialization. None keeps the current profile.",

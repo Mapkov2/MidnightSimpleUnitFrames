@@ -8,7 +8,6 @@ local T = M.Theme or {}
 local VT = M.ValueTextList
 local floor = math.floor
 local max = math.max
-local PercentValue = M.PercentValue
 local SettingMeta = UP.SettingMeta
 local RANGE_FADE_UNITS = M.KeySetFromWords "target targettarget focus focustarget pet pettarget boss arena"
 local function RangeFadeSectionHeight(_, _, unit)
@@ -62,7 +61,7 @@ local function BuildRangeFade(ctx, builder, unit)
         end,
         SettingMeta(ctx, "range_fade.enabled", unit, "rangeFadeEnabled"))
     local slider = W.Slider(alphaCard, "", 0, 1, 0.05, rightW - 58)
-    if slider.SetValueFormatter then slider:SetValueFormatter(PercentValue) end
+    M.UsePercentInput(slider)
     -- The card title names the slider on screen; search needs it as the label.
     local alphaMeta = SettingMeta(ctx, "range_fade.alpha", unit, "rangeFadeAlpha")
     alphaMeta.label = "Out of range"

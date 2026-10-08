@@ -99,7 +99,7 @@ local BARS_GENERAL_KEYS = KSW [[
     barOutlineColorB barOutlineColorA healthLossColorR healthLossColorG healthLossColorB powerLossColorR powerLossColorG powerLossColorB
 ]]
 local BARS_SCOPE_KEYS = KSW [[
-    hlOverride hpPowerTextOverride barTexture barBackgroundTexture barBgTexture enableAbsorbBar absorbTextMode absorbAnchorMode
+    hlOverride hpPowerTextOverride barTextureOverride barTexture barBackgroundTexture barBgTexture enableAbsorbBar absorbTextMode absorbAnchorMode
     absorbBarHeight absorbBarOffsetY healAbsorbEnabled healAbsorbAnchorMode healAbsorbBarHeight healAbsorbBarOffsetY
     healPredEnabled healPredAllHealers healPredAnchorMode healPredictionBarHeight healPredictionBarOffsetY healPredictionBarOpacity healPredictionBarTexture
     overAbsorbOverlay fullHealthAbsorbStripe absorbBarOpacity healAbsorbBarOpacity barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture highlightBorderThickness hlAggroSize
@@ -144,6 +144,7 @@ local MISC_GROUP_KEYS = KS("targetIndicator")
 local CASTBAR_GENERAL_KEYS = KSW [[
     empowerColorStages enableFocusKickIcon focusKickShowCastbar focusKickIconWidth focusKickIconHeight focusKickTextSize
     focusKickIconOffsetX focusKickIconOffsetY kickReadyShowTarget kickReadyShowFocus kickReadyShowBoss kickReadyShowArena
+    kickReadyShowNameplates
     kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY kickReadyTimeMarker kickReadyTimeSegment
     showGCDBar showGCDBarTime showGCDBarSpell gcdBarDetached gcdBarIdle gcdBarCombatOnly gcdBarWidth gcdBarHeight gcdBarX gcdBarY gcdBarOpacity
 ]]
@@ -153,12 +154,12 @@ local COLOR_GAMEPLAY_KEYS = KS("combatStateColorSync")
 local COLOR_BARS_KEYS = KS("classPowerComboPointColorMode", "classPowerSlotColorModes", "classPowerFullColorEnabled")
 local GROUP_COLOR_KEYS = KSW [[
     gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB
-    gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
+    gfUnifiedR gfUnifiedG gfUnifiedB barTextureOverride barTexture barBackgroundTexture barBgTexture bgR bgG bgB hpBarAlpha hpBgAlpha
     tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
     alphaExcludeTextPortrait alphaExcludePredictionBars deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA
     debuffStripeAlpha debuffStripeColorR debuffStripeColorG debuffStripeColorB targetR targetG targetB
     hlFocusColorR hlFocusColorG hlFocusColorB groupBorderR groupBorderG groupBorderB groupBorderA
-    ciAggroColorR ciAggroColorG ciAggroColorB
+    ciAggroColorR ciAggroColorG ciAggroColorB healerManaTextR healerManaTextG healerManaTextB
 ]]
 local function StartsWith(value, prefix)
     return type(value) == "string" and type(prefix) == "string" and value:sub(1, #prefix) == prefix
@@ -389,11 +390,16 @@ local function ResetCastbarPage(db, defaults)
     end)
 end
 local function ResetColorsPage(db, defaults)
-    ResetRootFiltered(db, defaults, "general", IsColorKey)
+    ResetRootFiltered(db, defaults, "general", function(key)
+        return MSUF.ProfileFields.GeneralSyncOwner(key) == "colors" or IsColorKey(key)
+    end)
     ReplaceRootTable(db, defaults, "classColors")
     ReplaceRootTable(db, defaults, "npcColors")
     ResetRootFiltered(db, defaults, "gameplay", function(key) return COLOR_GAMEPLAY_KEYS[key] == true or IsColorKey(key) end)
-    ResetRootFiltered(db, defaults, "bars", function(key) return COLOR_BARS_KEYS[key] == true end)
+    local extraColors = M.ResourceExtrasPage.ColorKeys()
+    ResetRootFiltered(db, defaults, "bars", function(key)
+        return COLOR_BARS_KEYS[key] == true or extraColors[key] == true
+    end)
     for _, key in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
         ResetUnitFiltered(db, defaults, key, function(scopeKey) return GROUP_COLOR_KEYS[scopeKey] == true end)
     end

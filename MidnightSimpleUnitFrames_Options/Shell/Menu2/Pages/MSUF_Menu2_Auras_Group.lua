@@ -107,7 +107,7 @@ local function CanonicalGroupFilterValue(value, lane)
         local key = tostring(value or "ALL"):upper():gsub("[^A-Z0-9]", "")
         local canonical = GROUP_NATIVE_FILTER_CANONICAL[key] or "ALL"
         -- A Non-player token imported from Retail is not Only mine.
-        if canonical == "NonPlayer" then return "ALL" end
+        if canonical == "NonPlayer" then return lane == "debuff" and canonical or "ALL" end
         if canonical == "Player" or canonical:sub(-6) == "Player" then return "Player" end
         return "ALL"
     end
@@ -207,6 +207,7 @@ end
 local function AuraFilter() return GF_AURA_FILTER end
 local function GroupFilterValues(groupKey)
     if M.CLASSIC_AURA_FILTERS_REDUCED == true then
+        if groupKey == "debuff" then return VT("ALL", "All", "Player", "Only mine", "NonPlayer", "Non-Player Auras") end
         return VT("ALL", "All", "Player", "Only mine")
     end
     local af = AuraFilter()
@@ -781,13 +782,13 @@ local function BuildGroupFilters(ctx, b, scope, fixedLane, opts)
     addSpell:SetScript("OnClick", function()
         local values = PresetSpellValues()
         local spellID = M.auraBlacklistSpell or (values[1] and values[1].value)
-        if Model.AddGroupBlacklistSpell(scope, lane, spellID) then
+        if Model.AddGroupBlacklistSpell(scope, lane, spellID, true) then
             QueueGroupScope(scope, "visual")
             Repaint(ctx)
         end
     end)
     RegisterAuraControl(ctx, addSpell, "Add spell", "button", groupActionPath .. ".add-preset-spell", "action", {
-        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane, preset = true }, actionInputArg = "value",
     })
     local addSet = ActionButton(direct, "Add set", 88)
     addSet:SetPoint("LEFT", addSpell, "RIGHT", 8, 0)
@@ -865,8 +866,7 @@ end
 local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
     local filtersTitle = lane == "debuff" and "Debuff Filters" or "Buff Filters"
     if M.CLASSIC_AURA_FILTERS_REDUCED == true then
-        -- The Classic aura backends filter by Only mine and Hide permanent, so a
-        -- group lane gets the same two switches and layout as a UnitFrame lane.
+        -- Keep the supported ownership filters aligned with the unit lanes.
         local section = b:Section(filtersTitle, 118)
         local w = section._msuf2Width or b.width or 720
         local inner = w - 48
@@ -884,9 +884,19 @@ local function BuildCompactGroupAuraFilters(ctx, b, scope, lane)
                 searchSettingKeys = GroupSearchSettingKeys(scope,
                     ".auras." .. lane .. ".filterToken"),
             }))
-        AddTooltip(onlyMine, "Only mine", lane == "debuff"
-            and "Only Debuffs applied by the player."
-            or "Only auras applied by the player.")
+        M.AuraControls.AddCasterFilterTooltip(onlyMine, lane)
+        if lane == "debuff" then
+            BindSwitch(ctx, section, "Non-Player Auras", 24 + 2 * (colW + gap), -42, colW,
+                function()
+                    return CanonicalGroupFilterValue(GFReadGroup(scope, lane).filterToken, lane) == "NonPlayer"
+                end,
+                function(value)
+                    GFWriteGroupValue(scope, lane, "filterToken", value == true and "NonPlayer" or "ALL", "auras")
+                end,
+                AuraControlMeta(ctx, "group-workspace.lane.debuff.filters.non-player", nil, {
+                    searchSettingKeys = GroupSearchSettingKeys(scope, ".auras.debuff.filterToken"),
+                }))
+        end
         local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
             function()
                 return type(Model.ReadGroupBlacklistHidePermanent) == "function"
@@ -1045,7 +1055,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
     local addSpell = ActionButton(section, "Add spell", 96)
     addSpell:SetPoint("TOPLEFT", section, "TOPLEFT", 36 + spellW, -144 + curatedOffset)
     addSpell:SetScript("OnClick", function()
-        local changed = Model.AddGroupBlacklistSpell(scope, lane, CurrentSpell())
+        local changed = Model.AddGroupBlacklistSpell(scope, lane, CurrentSpell(), true)
         if changed then
             M.auraBlacklistSpell = nil
             QueueGroupScope(scope, blacklistApplyMode)
@@ -1054,7 +1064,7 @@ local function BuildCompactGroupAuraBlacklist(ctx, b, scope, lane)
         return changed and true or false
     end)
     RegisterAuraControl(ctx, addSpell, "Add spell", "button", groupActionPath .. ".add-preset-spell", "action", {
-        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane }, actionInputArg = "value",
+        actionKey = "aura_group_blacklist_add_spell", actionFixedArgs = { scope = scope, lane = lane, preset = true }, actionInputArg = "value",
     })
     AddTooltip(addSpell, "Add spell", "Blocks only the selected aura from the curated set.")
     local prepared = W.Text(section, "", 24, -186 + curatedOffset, inner, T.colors.accent)

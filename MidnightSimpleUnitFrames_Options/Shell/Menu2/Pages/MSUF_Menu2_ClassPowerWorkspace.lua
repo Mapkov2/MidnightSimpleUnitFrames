@@ -205,7 +205,7 @@ function Workspace.Attach(page, settingKeys)
         ui.keys.power["player.powerText" .. slot .. "OffsetX"] = true
         ui.keys.power["player.powerText" .. slot .. "OffsetY"] = true
     end
-    ui.keys.extras["bars.resourceMarks"] = true
+    for key in pairs(M.ResourceExtrasPage.SettingKeys()) do ui.keys.extras[key] = true end
     local create = page.b.CollapsibleSection
     page.b.CollapsibleSection = function(builder, id, ...)
         local section = create(builder, id, ...)
@@ -267,7 +267,7 @@ function Workspace.BindColor(ctx, widget, get, set, meta)
 end
 function Workspace.RegisterSpec(control, spec)
     local kinds = { alpha = "slider", playerPowerOutline = "slider", detachedPowerWidth = "slider",
-        nilDefaultDropdown = "dropdown", detachedTextOnBar = "toggle", detachedTextPreset = "dropdown" }
+        comboColorMode = "dropdown", nilDefaultDropdown = "dropdown", detachedTextOnBar = "toggle", detachedTextPreset = "dropdown" }
     local kind = kinds[spec[2]] or spec[2]
     if kind == "dropdown" then control._msuf2StableSearchLabel = control._msuf2StableSearchLabel or spec[3] end
     AP.RegisterControl(control, spec.meta, spec[3], kind, kind == "dropdown" and spec[4] or nil)

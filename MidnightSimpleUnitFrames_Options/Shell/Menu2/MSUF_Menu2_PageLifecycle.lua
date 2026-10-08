@@ -271,6 +271,7 @@ local function BuildPageEntry(key, hidden)
             cached._msuf2RefreshRevision = nil
             M.cache[key] = cached
             M.RestorePageEntryRegistrations(cached)
+            M.RehydratePageAccordion(cached)
         else
             cached = nil
         end

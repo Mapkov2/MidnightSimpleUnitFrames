@@ -65,7 +65,7 @@ local function AuraControlMeta(ctx, path, classification, routeContract)
         meta.searchSettingKeys = routeContract.searchSettingKeys
         meta.searchSettingKeyPatterns = routeContract.searchSettingKeyPatterns
     end
-    return meta
+    return M.AuraControls.AttachSearchView(ctx, meta)
 end
 local function RegisterAuraControl(ctx, widget, label, kind, path, classification, navigationKey)
     if not widget or type(M.RegisterSearchWidget) ~= "function" then return widget end
@@ -339,6 +339,13 @@ local function BindAuraLaneEnabled(ctx, widget, groupKey)
 end
 local CreateNestedGroupAuraBuilder = W.CreateNestedAuraBuilder
 
+local function PrepareWorkspaceSearch(ctx)
+    local scope = CurrentScope()
+    local lane = CurrentAuraWorkspaceLane(scope)
+    local tool = CurrentAuraWorkspaceTool(scope, lane)
+    M.AuraControls.ConfigureSearchView(ctx, "groupAuraWorkspace", scope .. "_" .. lane .. "_" .. tool)
+    return scope, lane, tool
+end
 local function BuildGFAuras(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
@@ -435,9 +442,7 @@ local function BuildGFAuras(ctx)
                 "group-workspace.lane." .. AuraCatalogToken(lane) .. ".layout." .. AuraCatalogToken(key)))
         return widget
     end
-    local scope = CurrentScope()
-    local lane = CurrentAuraWorkspaceLane(scope)
-    local tool = CurrentAuraWorkspaceTool(scope, lane)
+    local scope, lane, tool = PrepareWorkspaceSearch(ctx)
     local anchors = (#STATUS_ICON_ANCHORS > 0 and STATUS_ICON_ANCHORS) or AURA_ANCHORS
     local growthValues = VT("RIGHTDOWN", "Right then Down", "LEFTDOWN", "Left then Down",
         "RIGHTUP", "Right then Up", "LEFTUP", "Left then Up",

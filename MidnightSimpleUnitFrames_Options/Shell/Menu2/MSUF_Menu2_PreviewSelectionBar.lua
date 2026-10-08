@@ -303,17 +303,21 @@ local function BuildAxis(box, bar, axis, caption, anchor, gap)
     edit:SetScript("OnEditFocusGained", function(self) self._msuf2Focused = true end)
     edit:SetScript("OnEscapePressed", function(self)
         self._msuf2Focused = nil
+        self._msuf2SkipBlurCommit = true
         self:ClearFocus()
+        self._msuf2SkipBlurCommit = nil
         SB.Refresh(box)
     end)
     edit:SetScript("OnEnterPressed", function(self)
         self._msuf2Focused = nil
         CommitAxis(box, axis, self:GetText())
+        self._msuf2SkipBlurCommit = true
         self:ClearFocus()
+        self._msuf2SkipBlurCommit = nil
     end)
     edit:SetScript("OnEditFocusLost", function(self)
         self._msuf2Focused = nil
-        CommitAxis(box, axis, self:GetText())
+        if not self._msuf2SkipBlurCommit then CommitAxis(box, axis, self:GetText()) end
     end)
     local plus = StepButton(1, "+")
     plus:SetPoint("LEFT", edit, "RIGHT", 3, 0)

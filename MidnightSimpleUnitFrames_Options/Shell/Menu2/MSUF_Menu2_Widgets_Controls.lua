@@ -522,6 +522,7 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide, literal)
     end
     if side == "HIDDEN" then labelFS:Hide() end
     btn._msuf2Label = labelFS
+    btn._msuf2LiteralSearchLabel = literal or nil
     btn.text = labelFS
     btn._msuf2RefreshSwitchVisual = RefreshSwitchVisual
     btn._msuf2RawSetChecked = btn.SetChecked
@@ -793,6 +794,14 @@ end
 
 --- Slider wraps Blizzard's slider template but hides native art and stamps
 --- callbacks so profile writes only happen when the effective value changes.
+local function ParseSliderInput(slider, text)
+    if type(slider._msuf2ValueParser) == "function" then
+        local parsed = tonumber(slider._msuf2ValueParser(text, slider))
+        if parsed ~= nil then return parsed end
+    end
+    local normalized = text:match("^%s*([+-]?%d+,%d+)%s*$")
+    return tonumber(normalized and normalized:gsub(",", ".") or text)
+end
 function W.Slider(section, label, minVal, maxVal, step, width)
     local x, y = NextRow(section, 48)
     local valueGap = 8
@@ -952,11 +961,7 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         local text = self:GetText()
         if text == self._msuf2EditStartText or (slider.IsEnabled and not slider:IsEnabled()) then return end
         if self._msuf2EditStartValue ~= nil and slider:GetValue() ~= self._msuf2EditStartValue then return end
-        local v
-        if type(slider._msuf2ValueParser) == "function" then
-            v = tonumber(slider._msuf2ValueParser(text, slider))
-        end
-        if v == nil then v = tonumber(text) end
+        local v = ParseSliderInput(slider, text)
         if v ~= nil then slider:SetValue(v) end
         self._msuf2EditStartText = text
     end

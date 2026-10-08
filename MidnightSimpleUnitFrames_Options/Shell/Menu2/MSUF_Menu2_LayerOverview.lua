@@ -476,7 +476,7 @@ Overview.RegisterProvider("unit-auras", function(sink)
                 id = "auras3." .. scope.key .. ".custom." .. token .. ".frame.layer",
                 area = "Unit Auras", scope = scope.label, label = string.format(Tr("%s Full-Frame Effect"), Tr(label)),
                 value = frame and frame.layer, default = 0,
-                enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
+                enabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none",
                 settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. ".frame.layer",
                 edit = { kind = "aura-custom-frame", scope = scope.key, index = index },
             })
@@ -484,7 +484,7 @@ Overview.RegisterProvider("unit-auras", function(sink)
                 id = "auras3." .. scope.key .. ".custom." .. token .. ".frame.strata",
                 area = "Unit Auras", scope = scope.label, label = string.format(Tr("%s Full-Frame Effect"), Tr(label)),
                 value = frame and frame.strata, default = "AUTO",
-                enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
+                enabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none",
                 settingKey = "auras3.customContainers." .. scope.key .. "." .. index .. ".frame.strata",
                 edit = { kind = "aura-custom-frame", scope = scope.key, index = index },
             })
@@ -659,7 +659,7 @@ Overview.RegisterProvider("group-frames", function(sink)
                     sink:Layer({
                         id = "group." .. scope.key .. ".spellIndicators." .. token .. ".layer",
                         area = "Spell Indicators", scope = scope.label, label = label,
-                        value = item.layer, default = 9, enabled = enabled,
+                        value = item.layer, default = baseLayer, inherited = item.layer == nil, enabled = enabled,
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".layer",
                         edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "layer" } },
                     })
@@ -675,7 +675,7 @@ Overview.RegisterProvider("group-frames", function(sink)
                         id = "group." .. scope.key .. ".spellIndicators." .. token .. ".frame.layer",
                         area = "Spell Indicators", scope = scope.label, label = string.format(Tr("%s Frame Effect"), Tr(label)),
                         value = frame and frame.layer, default = 0,
-                        enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
+                        enabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none",
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.layer",
                         edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "frame", "layer" } },
                     })
@@ -683,7 +683,7 @@ Overview.RegisterProvider("group-frames", function(sink)
                         id = "group." .. scope.key .. ".spellIndicators." .. token .. ".frame.strata",
                         area = "Spell Indicators", scope = scope.label, label = string.format(Tr("%s Frame Effect"), Tr(label)),
                         value = frame and frame.strata, default = "AUTO",
-                        enabled = enabled and frame and frame.type ~= nil and frame.type ~= "none",
+                        enabled = enabled == true and frame ~= nil and frame.type ~= nil and frame.type ~= "none",
                         settingKey = scope.dbKey .. ".spellIndicators.specs." .. token .. ".frame.strata",
                         edit = { kind = "group", scope = scope.key, dbKey = scope.dbKey, path = { "spellIndicators", "specs", specKey, auraKey, "frame", "strata" } },
                     })
@@ -698,25 +698,27 @@ Overview.RegisterProvider("castbars", function(sink)
     local db = DB()
     local general = type(db.general) == "table" and db.general or {}
     local rows = {
-        { scope = "player", label = "Player", prefix = "castbarPlayer" },
-        { scope = "target", label = "Target", prefix = "castbarTarget" },
-        { scope = "focus", label = "Focus", prefix = "castbarFocus" },
-        { scope = "boss", label = "Boss", prefix = "bossCast" },
+        { key = "player", label = "Player", prefix = "castbarPlayer" },
+        { key = "target", label = "Target", prefix = "castbarTarget" },
+        { key = "focus", label = "Focus", prefix = "castbarFocus" },
+        { key = "boss", label = "Boss", prefix = "bossCast" },
+        { key = "arena", label = "Arena", prefix = "arenaCast" },
     }
+    if M.FilterSupportedUnitValues then M.FilterSupportedUnitValues(rows) end
     for i = 1, #rows do
         local row = rows[i]
         local rootKey = row.prefix .. "FrameLevelOffset"
         local iconKey = row.prefix .. "IconFrameLevelOffset"
         local rootLayer = Layer(general[rootKey], 6)
         sink:Layer({
-            id = "castbar." .. row.scope .. ".root",
+            id = "castbar." .. row.key .. ".root",
             area = "Castbars", scope = row.label, label = "Whole Castbar",
             value = rootLayer, default = 6, settingKey = "general." .. rootKey,
             edit = { kind = "general", key = rootKey, mode = "castbar" },
         })
         local iconValue = Number(general[iconKey], 0)
         sink:Layer({
-            id = "castbar." .. row.scope .. ".icon",
+            id = "castbar." .. row.key .. ".icon",
             area = "Castbars", scope = row.label, label = iconValue <= 0 and "Icon (follows castbar)" or "Icon",
             value = iconValue <= 0 and rootLayer or iconValue, default = rootLayer,
             inherited = iconValue <= 0, settingKey = "general." .. iconKey,
@@ -906,6 +908,7 @@ function Overview.SetLayerValue(row, value)
         return row.edit.set(row.edit, value) == true
     end
     value = Layer(value, row.layer)
+    if row.inherited and value == row.layer then return true end
     local edit = row.edit
     local reason = "MSUF2_LAYER_OVERVIEW_EDIT"
 

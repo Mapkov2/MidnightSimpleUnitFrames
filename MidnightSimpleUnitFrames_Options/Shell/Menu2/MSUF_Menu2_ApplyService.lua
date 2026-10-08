@@ -792,7 +792,7 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
             _G.MSUF_ApplyBarOutlineThickness_All(unitScope)
         end
         if not groupOnly then _G.MSUF_ApplyRoundedUnitframes() end
-        needsGroupBorderRefresh = true
+        needsGroupBorderRefresh = not (wantsTextureRuntime and globalScope)
         didOutlineRefresh = true
     end
     if opt and opt.highlightPriority == true then

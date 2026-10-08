@@ -486,6 +486,9 @@ local HISTORY_PAGE_RESET_UNITS = {
     uf_arena = "arena",
 }
 local HISTORY_PAGE_RESET_FEATURES = {
+    opt_bars = "bars",
+    opt_fonts = "fonts",
+    opt_colors = "colors",
     opt_castbar = "castbar",
     classpower = "classpower",
     gameplay = "gameplay",
@@ -697,6 +700,9 @@ local SETTER_ONLY_SETTINGS = {
     detailsEditModeIntegration = { "MSUF_DetailsEditMode_SetEnabled", "enabled" },
     dominosEditModeIntegration = { "MSUF_DominosEditMode_SetEnabled", "enabled" },
     dandersEditModeIntegration = { "MSUF_DandersEditMode_SetEnabled", "enabled" },
+    hideAdvancedMenu = { apply = function() M.RefreshAdvancedNavVisibility() end },
+    showNavigationIcons = { apply = function() M.RefreshNavIconVisibility() end },
+    unitTooltipMode = { apply = function() MSUF.Tooltips.Refresh() end },
     numberAbbrevStyle = { apply = function() MSUF.NumberFormat.Refresh() end },
     menuFontKey = { apply = function()
         M.Theme.ClearMenuFontCache()
@@ -715,17 +721,70 @@ end
 if MSUF.Client and MSUF.Client.SupportsBlizzardEditMode then
     SETTER_ONLY_SETTINGS.blizzardEditModeIntegration = { "MSUF_BlizzardEditMode_SetEnabled", "enabled" }
 end
+-- History and reset are cold paths. Capture only settings whose runtime owner
+-- cannot infer the changed state from the scoped texture/geometry apply.
+local CASTBAR_HISTORY_UNITS = { "player", "target", "focus", "boss", "arena" }
+local function BarHistoryFlag(key)
+    if type(key) ~= "string" then return end
+    local lower = key:lower()
+    if lower:find("baroutline", 1, true) then return "barOutline" end
+    if lower:find("rounded", 1, true) then return "roundedBars" end
+    if lower:find("gradient", 1, true) then return "barGradients" end
+    if lower:find("highlight", 1, true) or lower:match("^hl") then return "highlightBorders" end
+end
+local function CaptureRuntimeSettings(db, values)
+    values.castbarBackends, values.barSettings = {}, {}
+    for _, unit in ipairs(CASTBAR_HISTORY_UNITS) do
+        values.castbarBackends[unit] = MSUF.Castbars.Backend.Resolve(unit, db.general)
+    end
+    for scope, config in pairs(db) do
+        if type(config) == "table" then
+            local fields
+            for key, value in pairs(config) do
+                if BarHistoryFlag(key) then
+                    fields = fields or {}
+                    fields[key] = type(value) == "table" and DeepCopy(value) or value
+                end
+            end
+            if fields then values.barSettings[scope] = fields end
+        end
+    end
+end
+local function ResyncRuntimeSettings(db, before)
+    for _, unit in ipairs(CASTBAR_HISTORY_UNITS) do
+        if before.castbarBackends[unit] ~= MSUF.Castbars.Backend.Resolve(unit, db.general) then
+            ApplyService.RequestCastbarUnit(unit, "MSUF2_HISTORY_BACKEND", "history")
+        end
+    end
+    local flags = { preview = true, applyAll = false, notify = false }
+    local changed = false
+    local function Compare(fields, other)
+        for key, value in pairs(fields) do
+            local flag = BarHistoryFlag(key)
+            if flag and not DeepEqual(value, other and other[key]) then
+                flags[flag], changed = true, true
+            end
+        end
+    end
+    for scope, fields in pairs(before.barSettings) do Compare(fields, db[scope]) end
+    for scope, config in pairs(db) do
+        if type(config) == "table" then Compare(config, before.barSettings[scope]) end
+    end
+    if changed then ApplyService.RequestGeneral("MSUF2_HISTORY_BAR_SETTINGS", flags) end
+end
 local function CaptureSetterOnlySettings()
     local db, values = M.EnsureDB(), {}
     local g = db and db.general
     if type(g) ~= "table" then return values end
     for key in pairs(SETTER_ONLY_SETTINGS) do values[key] = g[key] end
+    CaptureRuntimeSettings(db, values)
     return values
 end
 local function ResyncSetterOnlySettings(before)
     local db = M.EnsureDB()
     local g = db and db.general
     if type(g) ~= "table" or type(before) ~= "table" then return end
+    if before.castbarBackends then ResyncRuntimeSettings(db, before) end
     for key, entry in pairs(SETTER_ONLY_SETTINGS) do
         local value = g[key]
         if value ~= before[key] then
@@ -864,6 +923,8 @@ end
 function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
     if M.BlockCombatAction() then return false end
+    if historyTransaction and historyTransaction.preparedNudge == true and historyDepth == 0
+        and historyTransaction.source ~= source then M.CommitHistoryTransaction() end
     if HistoryBusy() then
         local result = fn()
 
@@ -1010,6 +1071,7 @@ function M.CancelHistorySurface(surface, restoreState)
     if restoreState == true and type(marker.snapshot) == "table" then
         local profileDB = HistoryProfileDB(marker.snapshot)
         if type(profileDB) ~= "table" then return false end
+        local setterOnly = CaptureSetterOnlySettings()
         historyRestoring = true
         if not RestoreHistoryProfile(M.EnsureDB(), profileDB, "MSUF2_HISTORY_CANCEL_SURFACE") then
             historyRestoring = false
@@ -1018,6 +1080,7 @@ function M.CancelHistorySurface(surface, restoreState)
         RestoreProfileRouting(marker.snapshot)
         RestoreHistoryProviders(marker.snapshot, "MSUF2_HISTORY_CANCEL_SURFACE", surface)
         historyRestoring = false
+        ResyncSetterOnlySettings(setterOnly)
     end
     local undo, redo = EnsureHistoryStacks()
     RestoreStack(undo, marker.undo)
@@ -1065,6 +1128,24 @@ function M.PrepareHistoryChange(label, source)
         source = source or "external:change",
         before = before,
     }
+end
+-- Adopt the before-state only after a fail-closed caller applied its first
+-- step successfully. The token prevents a later debounce from committing a
+-- different control's transaction after that control has taken ownership.
+function M.BeginPreparedHistory(prepared)
+    if M.BlockCombatAction() or HistoryBusy() or not historySessionActive then return nil end
+    if type(prepared) ~= "table" or prepared._msuf2PreparedHistory ~= true
+        or IsForeignProfileSnapshot(prepared.before) then return nil end
+    historyTransaction = {
+        label = prepared.label,
+        source = prepared.source,
+        before = prepared.before,
+        preparedNudge = true,
+    }
+    return historyTransaction
+end
+function M.IsHistoryTransactionActive(token)
+    return token ~= nil and historyTransaction == token
 end
 function M.CommitPreparedHistory(prepared)
     if historyRestoring or type(prepared) ~= "table" or prepared._msuf2PreparedHistory ~= true then return false end
@@ -1124,9 +1205,10 @@ function M.GetHistoryState()
     local undoStack, redoStack = EnsureHistoryStacks()
     local undo = undoStack[#undoStack]
     local redo = redoStack[#redoStack]
+    local nudge = historyTransaction and historyTransaction.preparedNudge == true and historyTransaction or nil
     return {
-        canUndo = undo ~= nil,
-        canRedo = redo ~= nil,
+        canUndo = undo ~= nil or nudge ~= nil,
+        canRedo = redo ~= nil and not nudge,
         canResetAll = historySessionActive and type(historySessionBaseSnapshot) == "table" and historySessionDirty,
         undoLabel = undo and M.HistoryDisplayLabel(undo.label) or nil,
         redoLabel = redo and M.HistoryDisplayLabel(redo.label) or nil,
@@ -1137,6 +1219,7 @@ function M.GetHistoryState()
 end
 function M.Undo()
     if M.BlockCombatAction() then return false end
+    if historyTransaction and historyTransaction.preparedNudge == true then M.CommitHistoryTransaction() end
     M.FlushDeferredHistory()
     local undo, redo = EnsureHistoryStacks()
     local entry = table.remove(undo)
@@ -1158,6 +1241,7 @@ function M.Undo()
 end
 function M.Redo()
     if M.BlockCombatAction() then return false end
+    if historyTransaction and historyTransaction.preparedNudge == true then M.CommitHistoryTransaction() end
     M.FlushDeferredHistory()
     local undo, redo = EnsureHistoryStacks()
     local entry = table.remove(redo)

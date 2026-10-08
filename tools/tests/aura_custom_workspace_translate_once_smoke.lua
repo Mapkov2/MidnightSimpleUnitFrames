@@ -78,6 +78,15 @@ for _, scope in ipairs({ { "player", 4 }, { "target", 4 }, { "target", 1 } }) do
     Check(Model.AddCustomContainerSpell(scope[1], scope[2], "434343", true), "second custom ID was not added")
 end
 
+local preserved = Model.CustomContainer("target", 1, true)
+preserved.placed.reminderEnabled = true
+local reminderGates = {}
+local SetControlEnabled = M.Widgets.SetControlEnabled
+M.Widgets.SetControlEnabled = function(control, enabled)
+    local record = control and control._msuf2RuntimeControlRecord
+    if record and tostring(record.controlId):find("reminder", 1, true) then reminderGates[record.controlId] = enabled end
+    return SetControlEnabled(control, enabled)
+end
 local shown = {}
 local frames = mw.world.widgets.frames
 local before = #frames
@@ -88,6 +97,17 @@ for _, tool in ipairs({ { "player", 4, "defensives" }, { "player", 4, "setup" },
 end
 mw:RunTimers()
 recording = false
+local available = not core.Client.IsClassic
+local checked = 0
+for id, enabled in pairs(reminderGates) do
+    if id:find("reminder.enabled",1,true) or id:find("reminder.opacity",1,true)
+        or id:find("reminder.desaturate",1,true) or id:find("reminder.only",1,true) then
+        Check(enabled == available, "reminder capability gate incorrect: " .. id)
+        checked = checked + 1
+    end
+end
+Check(checked >= 3, "reminder controls lost their searchable catalog identities")
+Check(preserved.placed.reminderEnabled == true, "capability gate rewrote saved reminder mode")
 for i = before + 1, #frames do
     for _, region in ipairs(frames[i].regions or {}) do
         local text = region.GetText and region:GetText()

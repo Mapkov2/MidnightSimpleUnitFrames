@@ -177,8 +177,8 @@ local function BuildClassicLane(lane)
         { compact = true, tool = "filters" })
     assert(#sections == 1 and sections[1].height == 118,
         "Classic group filters no longer match the compact UnitFrame height")
-    assert(#controls == 2,
-        "Classic group filters must expose only Only mine and Hide permanent")
+    assert(#controls == (lane == "debuff" and 3 or 2),
+        "Classic group filters lost a supported ownership control")
     local byLabel = {}
     for i = 1, #controls do byLabel[controls[i].label] = controls[i] end
     local onlyMine = assert(byLabel["Only mine"], "Classic group Only mine switch missing")
@@ -284,7 +284,7 @@ for _, lane in ipairs({ "debuff", "buff" }) do
     assert(filterSection and filterSection.sectionTitle == (lane == "buff" and "Buff" or "Debuff") .. " Filters"
         and filterSection.height == 118,
         lane .. " unit workspace did not build the compact Filters section")
-    assert(#controls == 2, lane .. " unit filters must expose only Only mine and Hide permanent")
+    assert(#controls == (lane == "debuff" and 3 or 2), lane .. " unit filters lost a supported ownership control")
     local byLabel = {}
     for i = 1, #controls do byLabel[controls[i].label] = controls[i] end
     local onlyMine = assert(byLabel["Only mine"], lane .. " unit Only mine switch missing")
@@ -313,6 +313,53 @@ for _, lane in ipairs({ "debuff", "buff" }) do
     assert(unitFilters[laneKey].nonPlayer == true,
         lane .. " turning unit Only mine off must leave the nonPlayer filter untouched")
     assert(unitApplies == 2, lane .. " unit Only mine did not request the Aura runtime apply")
+    if lane == "debuff" then
+        local nonPlayer = assert(byLabel["Non-Player Auras"])
+        assert(nonPlayer.getValue(), "imported nonPlayer filter was hidden")
+        nonPlayer.setValue(false)
+        assert(not nonPlayer.getValue() and unitFilters.debuffs.nonPlayer == false)
+        onlyMine.setValue(true)
+        nonPlayer.setValue(true)
+        assert(not onlyMine.getValue() and nonPlayer.getValue(), "ownership filters intersected")
+    end
 end
+
+-- Imported NonPlayer is supported for debuffs only. Its Player suffix must
+-- never select Only mine on the buff lane or rewrite the imported value.
+for _, token in ipairs({ "NonPlayer", "NONPLAYER", "Non-Player" }) do
+    AuraGroup("raid", "buff").filterToken = token
+    local buffOnlyMine = BuildClassicLane("buff")
+    assert(not buffOnlyMine.getValue(), "NonPlayer buff import is mislabeled Only mine")
+    assert(AuraGroup("raid", "buff").filterToken == token, "reading a buff filter rewrote imported data")
+end
+local debuffOnlyMine = BuildClassicLane("debuff")
+local groupNonPlayer
+for _, control in ipairs(controls) do if control.label == "Non-Player Auras" then groupNonPlayer = control end end
+assert(groupNonPlayer, "group nonPlayer control missing")
+AuraGroup("raid", "debuff").filterToken = "NonPlayer"
+assert(groupNonPlayer.getValue(), "imported group nonPlayer filter was presented as ALL")
+assert(not debuffOnlyMine.getValue(), "NonPlayer debuff import was also labeled Only mine")
+groupNonPlayer.setValue(false)
+assert(AuraGroup("raid", "debuff").filterToken == "ALL")
+
+-- Modern classification selection replaces a legacy exclusive RAID filter.
+widgets.SetControlsEnabled=function(list,on) for _, control in ipairs(list) do widgets.SetControlEnabled(control,on) end end
+menu.CLASSIC_AURA_FILTERS_REDUCED=false
+controls,sections,refreshers={},{},{}
+unitFilters={buffs={enabled=true},debuffs={enabled=true,exclusive="raid"}}
+menu.unitAuraTabSelection={target="debuff"}
+menu.unitAuraToolSelection={target={debuff="filters"}}
+menu.BuildAuras3UnitSection({key="uf_target"},unitBuilder,"target")
+local important,onlyMine
+for _, control in ipairs(controls) do
+    if control.label=="Important" then important=control end
+    if control.label=="Only mine" then onlyMine=control end
+end
+assert(important and onlyMine,"modern aura classification controls missing")
+onlyMine.setValue(true)
+assert(unitFilters.debuffs.exclusive=="raid","caster modifier removed classification")
+important.setValue(true)
+assert(unitFilters.debuffs.exclusive=="none" and unitFilters.debuffs.onlyImportant==true,
+    "modern classification left legacy RAID restriction active")
 
 print("classic Aura menu filter smoke passed")

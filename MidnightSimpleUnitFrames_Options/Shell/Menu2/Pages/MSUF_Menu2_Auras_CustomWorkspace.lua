@@ -46,6 +46,8 @@ local CUSTOM_AURA_TYPES = VTP "BUFF=Buff|DEBUFF=Debuff"
 -- Reminder is the container's operating mode, not a styling detail: it turns
 -- a compacting list into one fixed slot per whitelisted entry. It belongs
 -- next to Aura type, where the other structural decision already lives.
+local REMINDERS_AVAILABLE = not (MSUF.Client and MSUF.Client.IsClassic)
+local CLASSIC_REMINDER_NOTICE = "Fixed slots and missing-aura reminders are unavailable on Classic. Saved settings are kept; active auras still work."
 local CUSTOM_DISPLAY_MODES = VTP "active=Only active auras|reminder=Fixed slots (reminder)"
 -- Section titles compose the translated container name into one translated
 -- format string, so they are shown as they are.
@@ -482,7 +484,7 @@ local function BuildCustomWhitelistEnchants(C)
             "Sets the swipe's full duration because Blizzard exposes only the remaining time. Oils normally use 60 minutes. Change this for stones or poisons with a different duration.")
         local enchantStatus = W.Text(ench, "", 24, -226, eInner, T.colors.muted)
         M.TrackRefresh(ctx, function()
-            local reminder = item.placed.reminderEnabled == true
+            local reminder = REMINDERS_AVAILABLE and item.placed.reminderEnabled == true
             local tracked = (item.reminderEnchantMainHand == true and 1 or 0)
                 + (item.reminderEnchantOffHand == true and 1 or 0)
             local itemID, itemName = Model.CustomContainerReminderEnchantItem(unit, index)
@@ -490,7 +492,9 @@ local function BuildCustomWhitelistEnchants(C)
                 W.SetControlsEnabled({ enchantMain, enchantOff }, reminder)
                 W.SetControlsEnabled({ enchantInput, enchantSet, enchantDuration }, reminder and tracked > 0)
             end
-            if not reminder then
+            if not REMINDERS_AVAILABLE then
+                enchantStatus:SetText("Custom enchant reminders are unavailable on Classic. The normal player buff lane still shows weapon enchants.")
+            elseif not reminder then
                 enchantStatus:SetText("Needs Display set to Fixed slots in Setup · enchants have no aura to show otherwise.")
             elseif tracked == 0 then
                 enchantStatus:SetText("No weapon slot tracked.")
@@ -660,13 +664,14 @@ local function BuildCustomWhitelistTool(C)
                     -- Say plainly what a click on this row will do. A tracked
                     -- aura the player cannot apply has no click action, and a
                     -- silently dead button is worse than a visible hint.
-                    local clickNote = entry.clickAction == "item" and Tr("Click uses this item")
+                    local clickNote = not REMINDERS_AVAILABLE and Tr("Reminder clicks are unavailable on Classic")
+                        or entry.clickAction == "item" and Tr("Click uses this item")
                         or entry.clickAction == "spell" and Tr("Click casts this")
                         or Tr("No click action \194\183 paste an item")
                     -- The self-cast filter is the only thing that can make a
                     -- whitelisted row disappear, so the row has to say so itself
                     -- rather than letting it vanish without explanation.
-                    local filtering = item.placed.reminderEnabled == true
+                    local filtering = REMINDERS_AVAILABLE and item.placed.reminderEnabled == true
                         and item.placed.reminderOnlyCastable == true
                     local exempt = entry.keep == true
                     local stateNote = ""
@@ -1099,7 +1104,7 @@ local function BuildCustomAppearanceTool(C)
             local placed = item.placed
             -- Fixed aura slots and Oil placeholders can show cooldown text/swipe,
             -- but neither owns the AuraButton duration-bar surface this group drives.
-            local reminder = placed.reminderEnabled == true
+            local reminder = REMINDERS_AVAILABLE and placed.reminderEnabled == true
             local enabled = placed.showDurationBar == true and not reminder
             if durationBarSwitch then W.SetControlEnabled(durationBarSwitch, not reminder) end
             if durationBarControls then W.SetControlsEnabled(durationBarControls, enabled) end
@@ -1301,7 +1306,7 @@ local function BuildCustomBehaviorTool(C)
         -- the page promise something the runtime ignores.
         local orderingNote = W.Text(section, "", 24, -156, w - 48, T.colors.muted)
         M.TrackRefresh(ctx, function()
-            local reminder = item.placed.reminderEnabled == true
+            local reminder = REMINDERS_AVAILABLE and item.placed.reminderEnabled == true
             if type(W.SetControlsEnabled) == "function" then
                 W.SetControlsEnabled({ sortMethod }, not reminder)
                 W.SetControlsEnabled({ sortDirection }, not reminder
@@ -1549,9 +1554,10 @@ local function BuildCustomContainerSetup(C)
         end,
         AuraControlMeta(ctx, "custom-container.setup.aura-type"))
     local modeY = (compactSetup and -82 or -34) - 70
-    BindDropdown(ctx, section, "Display", 24, modeY, CUSTOM_DISPLAY_MODES, max(200, min(320, floor(inner * 0.42))),
+    local displayMode = BindDropdown(ctx, section, "Display", 24, modeY, CUSTOM_DISPLAY_MODES, max(200, min(320, floor(inner * 0.42))),
         function() return item.placed.reminderEnabled == true and "reminder" or "active" end,
         function(value)
+            if not REMINDERS_AVAILABLE then return end
             item.placed.reminderEnabled = value == "reminder"
             Apply("AURAS3_CUSTOM_REMINDER", true)
             Repaint(ctx)
@@ -1566,7 +1572,9 @@ local function BuildCustomContainerSetup(C)
     end
     local countNote = W.Text(section, "", 24, modeY - 66, inner, T.colors.muted)
     M.TrackRefresh(ctx, function()
-        modeNote:SetText(item.placed.reminderEnabled == true
+        W.SetControlEnabled(displayMode, REMINDERS_AVAILABLE)
+        modeNote:SetText(not REMINDERS_AVAILABLE and CLASSIC_REMINDER_NOTICE
+            or item.placed.reminderEnabled == true
             and "Every whitelisted entry keeps its own place. A dimmed icon means that entry is missing."
             or "Only auras that are currently active are shown, packed together.")
         T.SetTranslatedText(countNote, CountText())
@@ -1641,7 +1649,7 @@ local function BuildCustomContainerSetup(C)
     local reminderStatus = W.Text(reminderSection, "", 24, -190, rInner, T.colors.muted)
     M.TrackRefresh(ctx, function()
         W.SetControlEnabled(enabled, true)
-        local on = item.placed.reminderEnabled == true
+        local on = REMINDERS_AVAILABLE and item.placed.reminderEnabled == true
         if type(W.SetControlsEnabled) == "function" then
             W.SetControlsEnabled({ reminderAlpha, reminderDesaturate, reminderClick, reminderSelfOnly }, on)
         end
@@ -1664,7 +1672,9 @@ local function BuildCustomContainerSetup(C)
         end
         -- One line, three facts: how many slots, how many of them react to a
         -- click, and where their order comes from.
-        if not on then
+        if not REMINDERS_AVAILABLE then
+            reminderStatus:SetText(CLASSIC_REMINDER_NOTICE)
+        elseif not on then
             reminderStatus:SetText("Off · switch Display to Fixed slots in Setup to use this.")
         else
             local clickable, counted = 0, 0

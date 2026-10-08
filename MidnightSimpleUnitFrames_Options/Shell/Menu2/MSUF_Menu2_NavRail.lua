@@ -164,10 +164,10 @@ function M.SetNavGroupOpen(id, open)
     ReflowNavRail()
     return true, M.navHeaderState[id]
 end
-function M.SetSearchIntroSeen(seen)
+function M.SetSearchIntroSeen(seen, keepVisible)
     seen = seen and true or false
     M.SetMenuStateValue("searchIntroSeen", seen)
-    if seen and type(M.HideNavSearchIntro) == "function" then M.HideNavSearchIntro() end
+    if seen and not keepVisible and type(M.HideNavSearchIntro) == "function" then M.HideNavSearchIntro() end
     return true
 end
 local function NavTooltipTitle(btn) return btn._msuf2RawLabel end
@@ -612,9 +612,6 @@ local function BuildNavRail(parent)
             },
         }, "menu-chrome-lazy")
     end
-    local function MarkSearchIntroSeen()
-        M.SetSearchIntroSeen(true)
-    end
     local function EnsureSearchIntro()
         local intro = parent._msuf2SearchIntro
         if intro then return intro end
@@ -666,7 +663,7 @@ local function BuildNavRail(parent)
         if M.searchIntroSeen == true then return end
         local intro = EnsureSearchIntro()
         intro:Show()
-        MarkSearchIntroSeen()
+        M.SetSearchIntroSeen(true, true)
         C_Timer.After(10, function()
             if intro and intro.Hide then intro:Hide() end
         end)

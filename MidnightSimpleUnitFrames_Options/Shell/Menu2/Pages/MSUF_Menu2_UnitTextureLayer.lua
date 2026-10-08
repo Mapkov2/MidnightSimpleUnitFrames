@@ -17,7 +17,6 @@ local max = math.max
 -- interpretation remains owned by UnitFrames/Effects/MSUF_UF_TextureLayer.lua.
 local SLOT_PREFIXES = { "texLayer", "texLayer2", "texLayer3" }
 local TEXLAYER_ANCHORS = VTP "TOPLEFT=Top Left|TOP=Top|TOPRIGHT=Top Right|LEFT=Left|CENTER=Center|RIGHT=Right|BOTTOMLEFT=Bottom Left|BOTTOM=Bottom|BOTTOMRIGHT=Bottom Right"
-local TEXLAYER_STRATA = VTP "AUTO=Frame default|BACKGROUND=Background|LOW=Low|MEDIUM=Medium|HIGH=High|DIALOG=Dialog|TOOLTIP=Tooltip"
 local TEXLAYER_ANCHOR_TARGETS = VTP "FRAME=Whole frame|HEALTH=Health bar|POWER=Power bar|PORTRAIT=Portrait"
 local TEXLAYER_COLOR_MODES = VTP "CUSTOM=Single color|CLASS=Class color|HEALTH=HP gradient"
 local TEXLAYER_ABOVE_THRESHOLD_MODES = VTP "HEALTH=Continue HP gradient|CLASS=Class color|CUSTOM=Single color (monochrome)"
@@ -663,7 +662,8 @@ local function TextureLayerAdvancedCard(ctx, s)
 
     -- Advanced: rendering and source-treatment details that are unnecessary
     -- for the common "texture behind text" path.
-    Track(BindLayerDropdown(advancedCard, "Frame strata", 16, -54, colW - 16, TEXLAYER_STRATA, "Strata", "AUTO"))
+    W.LabelAt(advancedCard, "Texture layers use the unit frame's strata. Use Layer (0-30) to set their order.",
+        16, -54, colW - 16, "GameFontNormalSmall", T.colors and T.colors.muted)
     Track(BindLayerSlider(advancedCard, "Layer (0-30)", 16, -138, colW, 0, 30, 1, "Level", 1))
     Track(BindLayerDropdown(advancedCard, "Texture region", 16, -222, colW - 16,
         TEXLAYER_CROP_MODES, "CropMode", "FULL"))

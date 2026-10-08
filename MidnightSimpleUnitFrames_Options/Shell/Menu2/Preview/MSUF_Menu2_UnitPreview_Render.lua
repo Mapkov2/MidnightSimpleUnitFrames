@@ -2364,10 +2364,28 @@ function Stage.RenderHealth(st)
     st.hb, st.hg, st.hr, st.powerEnabled, st.powerH, st.powerOn = hb, hg, hr, powerEnabled, powerH, powerOn
 end
 
+local function PlacePreviewPowerFill(fill, anchor, vertical, reverse)
+    fill:ClearAllPoints()
+    if vertical then
+        local side = reverse and "TOP" or "BOTTOM"
+        fill:SetPoint(side .. "LEFT", anchor, side .. "LEFT", 0, 0)
+        fill:SetPoint(side .. "RIGHT", anchor, side .. "RIGHT", 0, 0)
+    else
+        local side = reverse and "RIGHT" or "LEFT"
+        fill:SetPoint("TOP" .. side, anchor, "TOP" .. side, 0, 0)
+        fill:SetPoint("BOTTOM" .. side, anchor, "BOTTOM" .. side, 0, 0)
+    end
+end
+local function PaintPreviewPowerFill(fill, width, height, fraction, vertical)
+    if vertical then fill:SetHeight(math.max(1, height * fraction))
+    else fill:SetWidth(math.max(1, width * fraction)) end
+end
 --- Embedded or attached power bar, its background, gradient and colors.
 function Stage.RenderPowerBar(st)
     local RenderState, S, box, conf, data, displayPowerToken, hb, hg = st.R, st.S, st.box, st.conf, st.data, st.displayPowerToken, st.hb, st.hg
     local hr, max, mock, powerFrac, powerH, powerOn, runtimePower, sw = st.hr, st.max, st.mock, st.powerFrac, st.powerH, st.powerOn, st.runtimePower, st.sw
+    st.powerVertical = runtimePower and runtimePower.vertical == true or (not runtimePower and conf.verticalFillBars == true)
+    st.powerReverse = runtimePower and runtimePower.reverse == true or (not runtimePower and conf.reverseFillBars == true)
     if powerOn then
         mock.powerBG:Show()
         mock.power:Show()
@@ -2381,9 +2399,8 @@ function Stage.RenderPowerBar(st)
         mock.powerBG:SetHeight(powerH)
         local pr, pg, pb = ResolvePreviewPowerColor(RenderState, data, runtimePower, displayPowerToken)
         mock.powerBG:SetVertexColor(PreviewPowerBackgroundColor(RenderState, runtimePower, conf, pr, pg, pb, hr, hg, hb))
-        mock.power:ClearAllPoints()
-        SetLeftSpan(mock.power, mock.powerBG)
-        mock.power:SetWidth(max(1, sw * powerFrac))
+        PlacePreviewPowerFill(mock.power, mock.powerBG, st.powerVertical, st.powerReverse)
+        PaintPreviewPowerFill(mock.power, sw, powerH, powerFrac, st.powerVertical)
         mock.power:SetVertexColor(pr, pg, pb, 1)
     else
         mock.powerBG:Hide()
@@ -2863,14 +2880,14 @@ end
 --- this.
 function Stage.PaintPowerValues(st)
     local box, floor, max, mock, powerFrac, S = st.box, st.floor, st.max, st.mock, st.powerFrac, st.S
-    if st.powerOn then mock.power:SetWidth(max(1, st.sw * powerFrac)) end
+    if st.powerOn then PaintPreviewPowerFill(mock.power, st.sw, st.powerH, powerFrac, st.powerVertical) end
     if not (st.detachedPowerInUnitPreview and box._runtimeAugCompositePreview ~= true) then return end
     local fill = mock.detachedPower.fill
     local dW = box._runtimeDetachedPowerW
     if dW < 20 then dW = 20 elseif dW > 800 then dW = 800 end
     local shapeInfo = PREVIEW_POWER_SHAPES[box._runtimeDetachedPowerShape or "BAR"]
     if not shapeInfo then
-        fill:SetWidth(max(1, S(dW) * powerFrac))
+        PaintPreviewPowerFill(fill, S(dW), max(2, S(st.detachedH)), powerFrac, st.powerVertical)
         return
     end
     fill:SetVertexColor(st.pr, st.pg, st.pb, powerFrac > 0 and 1 or 0)
@@ -2921,11 +2938,11 @@ function Stage.RenderDetachedPower(st)
     -- separately: shaped edge textures use it as strength/alpha, not pixels.
     box._previewPowerOutline = ScalePreviewOutline(box._runtimePowerOutline, scale)
     mock._msufPreviewPowerBorderR = tonumber(runtimePower and runtimePower.borderR)
-        or tonumber(conf.barOutlineColorR) or tonumber(g.barBorderR) or 0
+        or tonumber(conf.powerBarBorderColorR) or tonumber(conf.barOutlineColorR) or tonumber(g.barBorderR) or 0
     mock._msufPreviewPowerBorderG = tonumber(runtimePower and runtimePower.borderG)
-        or tonumber(conf.barOutlineColorG) or tonumber(g.barBorderG) or 0
+        or tonumber(conf.powerBarBorderColorG) or tonumber(conf.barOutlineColorG) or tonumber(g.barBorderG) or 0
     mock._msufPreviewPowerBorderB = tonumber(runtimePower and runtimePower.borderB)
-        or tonumber(conf.barOutlineColorB) or tonumber(g.barBorderB) or 0
+        or tonumber(conf.powerBarBorderColorB) or tonumber(conf.barOutlineColorB) or tonumber(g.barBorderB) or 0
     mock._msufPreviewPowerBorderA = tonumber(runtimePower and runtimePower.borderA)
         or tonumber(conf.barOutlineColorA) or tonumber(g.barBorderA) or 1
     box._runtimeDetachedRoundedPower = nil
@@ -2950,13 +2967,14 @@ function Stage.RenderDetachedPower(st)
             if mock.detachedPower.SetBackdrop then PixelLayoutRegion(mock.detachedPower, "SetBackdrop",
                 DetachedPowerBackdrop(max(1, box._previewPowerOutline))) end
             mock.detachedPower:SetBackdropColor(0, 0, 0, 0)
-            mock.detachedPower:SetBackdropBorderColor(0, 0, 0, (not powerShapeInfo and box._runtimePowerOutline > 0) and 1 or 0)
+            mock.detachedPower:SetBackdropBorderColor(mock._msufPreviewPowerBorderR, mock._msufPreviewPowerBorderG,
+                mock._msufPreviewPowerBorderB, (not powerShapeInfo and box._runtimePowerOutline > 0) and mock._msufPreviewPowerBorderA or 0)
         end
         mock.detachedPower.fill:ClearAllPoints()
         if powerShapeInfo then
             if mock.detachedPower.bg then
                 mock.detachedPower.bg:SetTexture(powerShapeInfo.bg)
-                mock.detachedPower.bg:SetVertexColor(pr, pg, pb, 0.28)
+                mock.detachedPower.bg:SetVertexColor(PreviewPowerBackgroundColor(RenderState, runtimePower, conf, pr, pg, pb, hr, hg, hb))
                 mock.detachedPower.bg:ClearAllPoints()
                 mock.detachedPower.bg:SetAllPoints(mock.detachedPower)
                 mock.detachedPower.bg:Show()
@@ -2974,7 +2992,8 @@ function Stage.RenderDetachedPower(st)
                     mock.detachedPower.edge:ClearAllPoints()
                     mock.detachedPower.edge:SetAllPoints(mock.detachedPower)
                     mock.detachedPower.edge:SetTexture(powerShapeInfo.edge)
-                    mock.detachedPower.edge:SetVertexColor(0, 0, 0, PreviewShapeOutlineAlpha(box._runtimePowerOutline))
+                    mock.detachedPower.edge:SetVertexColor(mock._msufPreviewPowerBorderR, mock._msufPreviewPowerBorderG,
+                        mock._msufPreviewPowerBorderB, mock._msufPreviewPowerBorderA * PreviewShapeOutlineAlpha(box._runtimePowerOutline))
                     mock.detachedPower.edge:Show()
                 else
                     mock.detachedPower.edge:Hide()
@@ -2993,7 +3012,7 @@ function Stage.RenderDetachedPower(st)
             SetTex(mock.detachedPower.fill, detachedPowerTexture)
             mock.detachedPower.fill:SetTexCoord(0, 1, 0, 1)
             mock.detachedPower.fill:SetVertexColor(pr, pg, pb, 1)
-            SetLeftSpan(mock.detachedPower.fill, mock.detachedPower)
+            PlacePreviewPowerFill(mock.detachedPower.fill, mock.detachedPower, st.powerVertical, st.powerReverse)
             Stage.PaintPowerValues(st)
         end
         box.handleDetachedPower:SetSize(max(36, S(dW)), max(18, S(detachedH) + 8))
@@ -3175,7 +3194,8 @@ end
 function Stage.RenderTextContent(st)
     local Deps, RenderState, box, conf, data, detachedPowerManagedByClassPreview, floor, format = st.D, st.R, st.box, st.conf, st.data, st.detachedPowerManagedByClassPreview, st.floor, st.format
     local key, mock, powerFrac, runtimeSpec, runtimeStatus, runtimeText = st.key, st.mock, st.powerFrac, st.runtimeSpec, st.runtimeStatus, st.runtimeText
-    mock.nameText:SetText(RenderState.ShortenPreviewName(data.name, runtimeText, conf))
+    local name = data.live and data.name or st.TR(data.name)
+    mock.nameText:SetText(RenderState.ShortenPreviewName(name, runtimeText, conf))
     mock.raidGroupNameText:SetText(Deps.PreviewRaidGroupNameText(conf))
     -- Live snapshots carry the frame's exact values; the stylized pair only
     -- backs mock data. Animated refreshes strip hpCur/powerCur so texts follow
@@ -4372,7 +4392,7 @@ function Render.Install(Preview, deps)
     deps = deps or Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
     local renderState = PickFallbackTable(deps, UNIT_RENDER_FALLBACKS, [[
-        RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls
+        RuntimeSpecForPreviewKey RuntimeAppliedPortraitSizeForPreviewKey DetachedCastbarOffsetForPreviewKey RuntimeVisualScaleForPreviewKey RuntimeCastbarVisualScaleForPreviewKey ClampPreviewZoom ResolveDefaultPreviewZoomLock UpdatePreviewZoomControls
         ApplyPreviewRounded ApplyPreviewFrameBorder PreviewRoundedOutlineThickness ApplyPreviewBoundsGuide CastbarShowIcon CastbarShowText ReadCastbarNum FormatCastbarPreviewTime
         ClassColor GradientPreviewColor HealthColor DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor FontColor PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewHealPredictionEnabled PreviewAbsorbBarEnabled
         PreviewNameColor PreviewToTInlineColor NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet FormatMode ShortenPreviewName ToTInlineSeparator ResolveNameAnchor

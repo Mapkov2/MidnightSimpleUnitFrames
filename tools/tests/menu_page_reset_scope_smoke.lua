@@ -153,6 +153,12 @@ local function PreFixColourKey(rootKey, key)
     return false
 end
 
+-- Non-lexical settings exposed by Colors. These are deliberately explicit:
+-- the reset must not expand to similarly named font/layout settings.
+local _, NON_LEXICAL_COLORS = Words [[unifiedBarR unifiedBarG unifiedBarB darkBarR darkBarG darkBarB
+    darkBarGray barBgFillMode tapDeniedGray aurasCooldownTextUseBuckets aurasCooldownTextSafeSeconds
+    aurasCooldownTextWarningSeconds aurasCooldownTextUrgentSeconds]]
+
 -- Inventory: every default key of both roots, every Colors-page write, every
 -- NON_COLOUR key (some exist only once a control wrote them).
 local inventory = { general = {}, gameplay = {} }
@@ -176,7 +182,8 @@ for rootKey, keys in pairs(inventory) do
     for key in pairs(keys) do
         total = total + 1
         local touched = db[rootKey][key] ~= SENTINEL
-        local expected = PreFixColourKey(rootKey, key) and not (rootKey == "general" and NON_COLOUR[key])
+        local expected = (PreFixColourKey(rootKey, key) or (rootKey == "general" and NON_LEXICAL_COLORS[key] == true))
+            and not (rootKey == "general" and NON_COLOUR[key])
         if touched ~= expected then
             wrong[#wrong + 1] = rootKey .. "." .. key .. (touched and " (wiped)" or " (kept)")
         end

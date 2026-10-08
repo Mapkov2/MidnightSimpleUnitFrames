@@ -177,7 +177,7 @@ function H.Collect()
                 end
                 for _, module in ipairs(MSUF.ProfileSync.Modules) do
                     if not Add(scope, entry, token, "sync.module." .. module,
-                        (MSUF.ProfileSync.Labels and MSUF.ProfileSync.Labels[module]) or module, "toggle") then return out end
+                        M.ProfileSyncModuleLabel(module), "toggle") then return out end
                 end
             end
         end

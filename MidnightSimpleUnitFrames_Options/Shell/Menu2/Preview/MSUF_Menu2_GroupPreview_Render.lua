@@ -716,10 +716,11 @@ local function PaintGroupPreviewPortrait(scene)
             owner:SetPoint(portrait.point or "RIGHT", scene.mock, portrait.relPoint or "LEFT", x, y)
         elseif portrait.placement == "OVERLAY" then
             if portrait.overlayAlign == "FULL" then
-                owner:SetPoint("TOPLEFT", scene.mock, "TOPLEFT", x, -y)
-                owner:SetPoint("BOTTOMRIGHT", scene.mock, "BOTTOMRIGHT", -x, y)
-                holder._msufPreviewWidth = math.max(1, (tonumber(scene.mock:GetWidth()) or width) - x * 2)
-                holder._msufPreviewHeight = math.max(1, (tonumber(scene.mock:GetHeight()) or height) - y * 2)
+                local health = scene.mock._health or scene.mock
+                owner:SetPoint("TOPLEFT", health, "TOPLEFT", x, -y)
+                owner:SetPoint("BOTTOMRIGHT", health, "BOTTOMRIGHT", -x, y)
+                holder._msufPreviewWidth = math.max(1, (tonumber(health:GetWidth()) or width) - x * 2)
+                holder._msufPreviewHeight = math.max(1, (tonumber(health:GetHeight()) or height) - y * 2)
             else
                 owner:SetSize(width, height)
                 local align = portrait.overlayAlign or "LEFT"
@@ -1660,10 +1661,16 @@ local function GroupHealthBackgroundColor(RenderState, MSUF, ClassColor, mode, h
     end
     return hbr, hbg, hbb
 end
+-- Match the runtime prediction anchor contract without Lua's false-or fallback.
+local function PredictionReverse(mode, hpReverse)
+    if mode == 1 then return false end
+    if mode == 5 then return hpReverse ~= true end
+    return true
+end
 --- Value texts from the slot set the full refresh resolved (kept per box).
 local function GroupHealthSlotText(gf, htx, mode, hidePercentSymbol, absorbIcon, fakeHP)
     if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, htx.fakeMax, htx.delimiter, false, nil, hidePercentSymbol, htx.short,
-        htx.fakeAbsorb, absorbIcon == true) end
+        htx.fakeAbsorb, absorbIcon == true, htx.percentDecimals) end
     return mode == "PERCENT" and (hidePercentSymbol and "72" or "72%") or "720k"
 end
 local function GroupHealthTextColor(htx, fakeHP)
@@ -3080,7 +3087,7 @@ function Stage.RenderHealthBars(st, env)
             st.healPredFollows = true
         else
             mock._healPred:SetAllPoints(mock._health)
-            if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill((healPredMode == 1) and false or ((healPredMode == 5) and not hpReverse or true)) end
+            if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill(PredictionReverse(healPredMode, hpReverse)) end
             mock._healPred:SetValue(healPct)
         end
         mock._healPred:SetShown(healPredShown)
@@ -3122,7 +3129,7 @@ function Stage.RenderHealthBars(st, env)
             end
         else
             mock._absorb:SetAllPoints(mock._health)
-            if mock._absorb.SetReverseFill then mock._absorb:SetReverseFill((absorbMode == 1) and false or ((absorbMode == 5) and not hpReverse or true)) end
+            if mock._absorb.SetReverseFill then mock._absorb:SetReverseFill(PredictionReverse(absorbMode, hpReverse)) end
         end
         if absorbFollows then mock._absorb:SetWidth(max(1, mockW * absorbPct)) end
         mock._absorb:SetValue(absorbFollows and 1 or absorbPct)
@@ -3144,7 +3151,16 @@ function Stage.RenderHealthBars(st, env)
             runtimePrediction.healAbsorbB or (gen and gen.healAbsorbBarColorB) or 0,
             (runtimePrediction.healAbsorbA or (gen and gen.healAbsorbBarOpacity) or (gen and gen.healAbsorbBarColorA) or 1) * predictionFillAlpha
         )
-        if hpReverse then
+        local healAbsorbMode = tonumber(runtimePrediction.healAbsorbAnchorMode) or 3
+        if healAbsorbMode ~= 3 and healAbsorbMode ~= 4 then
+            mock._healAbsorb:SetAllPoints(mock._health)
+            mock._healAbsorb:SetReverseFill(PredictionReverse(healAbsorbMode, hpReverse))
+        elseif healAbsorbMode == 4 then
+            local side, opposite = hpReverse and "RIGHT" or "LEFT", hpReverse and "LEFT" or "RIGHT"
+            mock._healAbsorb:SetPoint("TOP" .. side, hpTex or mock._health, "TOP" .. opposite, 0, 0)
+            mock._healAbsorb:SetPoint("BOTTOM" .. side, hpTex or mock._health, "BOTTOM" .. opposite, 0, 0)
+            mock._healAbsorb:SetReverseFill(hpReverse == true)
+        elseif hpReverse then
             mock._healAbsorb:SetPoint("TOPLEFT", hpTex or mock._health, "TOPLEFT", 0, 0)
             mock._healAbsorb:SetPoint("BOTTOMLEFT", hpTex or mock._health, "BOTTOMLEFT", 0, 0)
             if mock._healAbsorb.SetReverseFill then mock._healAbsorb:SetReverseFill(false) end
@@ -3352,11 +3368,11 @@ local function BuildPreviewTextPainters(st)
             fs:SetJustifyH(justify or "LEFT")
             fs._msufPreviewJustifyH = justify or "LEFT"
         end
-        local function PaintPreviewText(fs, size, mode, point, relPoint, x, y, justify, r, g, b, a, shown, text)
+        local function PaintPreviewText(fs, size, mode, point, relPoint, x, y, justify, r, g, b, a, shown, text, relativeTo)
             if not fs then return end
             SetPreviewFont(fs, size)
             fs:SetTextColor(r, g, b, a)
-            LayoutPreviewText(fs, point, relPoint, x, y, justify, st.mock)
+            LayoutPreviewText(fs, point, relPoint, x, y, justify, relativeTo or st.mock)
             fs:SetText(text)
             fs:SetShown(shown and mode ~= "NONE")
         end
@@ -3519,6 +3535,7 @@ function Stage.RenderHealthText(st, env)
         htx.byHealth = healthTextByHealth and not healthTextByClass or false
         htx.r, htx.g, htx.b, htx.alpha = hpTextR, hpTextG, hpTextB, textAlpha
         hpTextR, hpTextG, hpTextB = GroupHealthTextColor(htx, fakeHP)
+        htx.percentDecimals = runtimeText.healthPercentDecimals or ((conf.healthTextDecimals == true or conf.hpTextDecimals == true) and 1 or 0)
         htx.delimiter = runtimeText.healthDelimiter or conf.textDelimiter or " - "
         htx.short = runtimeText.healthShortNumbers == true or (runtimeText.healthShortNumbers == nil and conf.hpFullValueShort ~= false)
         htx.leftMode, htx.centerMode, htx.rightMode = hpLeftMode, hpCenterMode, hpRightMode
@@ -3531,21 +3548,24 @@ function Stage.RenderHealthText(st, env)
             runtimeText.healthReverse == true and "healthLeftAbsorbIcon" or "healthRightAbsorbIcon",
             conf.hpTextReverse == true and "hpTextLeftAbsorbIcon" or "hpTextRightAbsorbIcon")
         PaintPreviewText(mock._hpLeftFS, hpLeftSize, hpLeftMode, "LEFT", "LEFT",
-            pad4 + ConfigToOffset(runtimeText[hpRev and "healthRightX" or "healthLeftX"] or ((conf.hpOffsetX
+            ScaleValue(3, previewScale) + ConfigToOffset(runtimeText[hpRev and "healthRightX" or "healthLeftX"] or ((conf.hpOffsetX
                 or 0) + (conf[hpRev and "hpTextRightOffsetX" or "hpTextLeftOffsetX"] or 0)), previewScale),
             ConfigToOffset(runtimeText[hpRev and "healthRightY" or "healthLeftY"] or ((conf.hpOffsetY
                 or 0) + (conf[hpRev and "hpTextRightOffsetY" or "hpTextLeftOffsetY"] or 0) + baselineOffset), previewScale),
-            "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpLeftMode, hpLeftHidePercent, htx.leftIcon, fakeHP))
+            "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpLeftMode, hpLeftHidePercent, htx.leftIcon, fakeHP),
+            mock._health)
         PaintPreviewText(mock._hpCenterFS, hpCenterSize, hpCenterMode, "CENTER", "CENTER",
             ConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0) + baselineOffset), previewScale),
-            "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpCenterMode, hpCenterHidePercent, htx.centerIcon, fakeHP))
+            "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpCenterMode, hpCenterHidePercent, htx.centerIcon, fakeHP),
+            mock._health)
         PaintPreviewText(mock._hpRightFS, hpRightSize, hpRightMode, "RIGHT", "RIGHT",
-            -pad4 + ConfigToOffset(runtimeText[hpRev and "healthLeftX" or "healthRightX"] or ((conf.hpOffsetX
+            -ScaleValue(3, previewScale) + ConfigToOffset(runtimeText[hpRev and "healthLeftX" or "healthRightX"] or ((conf.hpOffsetX
                 or 0) + (conf[hpRev and "hpTextLeftOffsetX" or "hpTextRightOffsetX"] or 0)), previewScale),
             ConfigToOffset(runtimeText[hpRev and "healthLeftY" or "healthRightY"] or ((conf.hpOffsetY
                 or 0) + (conf[hpRev and "hpTextLeftOffsetY" or "hpTextRightOffsetY"] or 0) + baselineOffset), previewScale),
-            "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpRightMode, hpRightHidePercent, htx.rightIcon, fakeHP))
+            "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, GroupHealthSlotText(gf, htx, hpRightMode, hpRightHidePercent, htx.rightIcon, fakeHP),
+            mock._health)
         st.SlotHidePercentSymbol, st.pad4 = SlotHidePercentSymbol, pad4
 end
 
@@ -3601,18 +3621,23 @@ function Stage.RenderPowerText(st, env)
         local powerRightHidePercent = SlotHidePercentSymbol("powerRightHidePercentSymbol", "powerTextRightHidePercentSymbol")
         ptx.leftMode, ptx.centerMode, ptx.rightMode = powerLeftMode, powerCenterMode, powerRightMode
         ptx.leftHide, ptx.centerHide, ptx.rightHide = powerLeftHidePercent, powerCenterHidePercent, powerRightHidePercent
-        PaintPreviewText(mock._powerLeftFS, pwrLeftSize, powerLeftMode, "BOTTOMLEFT", "BOTTOMLEFT",
-            pad4 + ConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale),
+        local powerAnchor = mock._power:IsShown() and mock._power or mock._health
+        local powerPad = ScaleValue(2, previewScale)
+        PaintPreviewText(mock._powerLeftFS, pwrLeftSize, powerLeftMode, "LEFT", "LEFT",
+            powerPad + ConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0) + baselineOffset), previewScale),
-            "LEFT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, GroupPowerSlotText(gf, ptx, powerLeftMode, powerLeftHidePercent, fakePow))
-        PaintPreviewText(mock._powerCenterFS, pwrCenterSize, powerCenterMode, "BOTTOM", "BOTTOM",
+            "LEFT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, GroupPowerSlotText(gf, ptx, powerLeftMode, powerLeftHidePercent, fakePow),
+            powerAnchor)
+        PaintPreviewText(mock._powerCenterFS, pwrCenterSize, powerCenterMode, "CENTER", "CENTER",
             ConfigToOffset(runtimeText.powerCenterX or ((conf.powerOffsetX or 0) + (conf.powerTextCenterOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0) + baselineOffset), previewScale),
-            "CENTER", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, GroupPowerSlotText(gf, ptx, powerCenterMode, powerCenterHidePercent, fakePow))
-        PaintPreviewText(mock._powerRightFS, pwrRightSize, powerRightMode, "BOTTOMRIGHT", "BOTTOMRIGHT",
-            -pad4 + ConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale),
+            "CENTER", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, GroupPowerSlotText(gf, ptx, powerCenterMode, powerCenterHidePercent, fakePow),
+            powerAnchor)
+        PaintPreviewText(mock._powerRightFS, pwrRightSize, powerRightMode, "RIGHT", "RIGHT",
+            -powerPad + ConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale),
             ConfigToOffset(runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset), previewScale),
-            "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, GroupPowerSlotText(gf, ptx, powerRightMode, powerRightHidePercent, fakePow))
+            "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, GroupPowerSlotText(gf, ptx, powerRightMode, powerRightHidePercent, fakePow),
+            powerAnchor)
 end
 
 --- Animation tick for the power texts: values at the animated power.

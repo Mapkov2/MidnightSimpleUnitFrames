@@ -195,6 +195,17 @@ local function PageEntryMatchesLayout(entry, slot)
         and entry.layoutWidth == CONTENT_W
         and entry.layoutHeight == CONTENT_H
 end
+local function RehydratePageAccordion(entry)
+    for _, section in pairs(entry.sections or {}) do
+        local collapsible = section._msuf2CollapsibleEntry
+        if collapsible then
+            local saved = M.accordionState[collapsible.stateKey]
+            local wanted = saved == nil and collapsible.defaultOpen or saved == true
+            collapsible._msuf2AutoOpened = nil
+            if collapsible.open ~= wanted then collapsible.SetOpenImmediate(wanted) end
+        end
+    end
+end
 local function RestorePageEntryRegistrations(entry)
     if type(entry) ~= "table" or type(entry.searchWidgets) ~= "table"
         or type(M.RegisterSearchWidget) ~= "function"
@@ -204,7 +215,10 @@ local function RestorePageEntryRegistrations(entry)
     for i = 1, #entry.searchWidgets do
         local widget = entry.searchWidgets[i]
         local meta = widget and widget._msuf2SearchMeta
-        if widget and type(meta) == "table" then M.RegisterSearchWidget(widget, meta) end
+        if widget and type(meta) == "table" then
+            M.RuntimeControlCatalog.RestoreWidget(widget)
+            M.RegisterSearchWidget(widget, meta)
+        end
     end
 end
 local function RememberPageLayoutVariant(key, entry)
@@ -227,6 +241,7 @@ M.Assign(M, {
     SetFrameHeightIfChanged = SetFrameHeightIfChanged, CreateContext = CreateContext,
     BuildSecondaryPageNav = BuildSecondaryPageNav, BuildPlaceholderPage = BuildPlaceholderPage,
     CurrentPageLayoutSlot = CurrentPageLayoutSlot, PageEntryMatchesLayout = PageEntryMatchesLayout,
+    RehydratePageAccordion = RehydratePageAccordion,
     RestorePageEntryRegistrations = RestorePageEntryRegistrations, RememberPageLayoutVariant = RememberPageLayoutVariant,
 })
 

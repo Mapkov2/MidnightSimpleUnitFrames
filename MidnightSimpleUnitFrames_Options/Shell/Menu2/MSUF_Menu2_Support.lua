@@ -992,10 +992,10 @@ end
 function M.SetGameplayMeleeSpellID(value)
     local spellID = M.ResolveGameplaySpellInput(value)
     local g = GameplayDB()
-    if g.meleeSpellPerSpec then
+    local specID = g.meleeSpellPerSpec and M.GetGameplayPlayerSpecID()
+    if specID then
         g.nameplateMeleeSpellIDBySpec = type(g.nameplateMeleeSpellIDBySpec) == "table" and g.nameplateMeleeSpellIDBySpec or {}
-        local specID = M.GetGameplayPlayerSpecID()
-        if specID then g.nameplateMeleeSpellIDBySpec[specID] = spellID end
+        g.nameplateMeleeSpellIDBySpec[specID] = spellID
     elseif g.meleeSpellPerClass and UnitClass then
         g.nameplateMeleeSpellIDByClass = type(g.nameplateMeleeSpellIDByClass) == "table" and g.nameplateMeleeSpellIDByClass or {}
         local _, class = UnitClass("player")

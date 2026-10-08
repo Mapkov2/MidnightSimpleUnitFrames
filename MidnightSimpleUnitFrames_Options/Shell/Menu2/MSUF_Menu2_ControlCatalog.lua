@@ -468,6 +468,13 @@ local function PromoteExplicitId(record, explicitId)
     return record.controlId
 end
 
+function M.DeclareExactSearchPreparation(widget, meta)
+    if not meta.prepareExactSearchTarget then return end
+    widget._msuf2ExactTargetKinds = { [meta.searchPrepareKind] = true }
+    widget._msuf2ExactTargetContracts = { [meta.searchPrepareKind] = { [meta.searchPrepareValue] = true } }
+    widget._msuf2PrepareExactSearchTarget = meta.prepareExactSearchTarget
+end
+
 function Catalog.Register(widget, meta, registrationSource)
     if not widget or type(meta) ~= "table" then return nil, "widget and metadata are required" end
     if widget._msuf2ControlPartOf ~= nil then return nil, "component controls are owned by their logical parent" end
@@ -603,9 +610,13 @@ function Catalog.Register(widget, meta, registrationSource)
     record.classificationSource = reason
 
     widget._msuf2RuntimeControlId = record.controlId
+    widget._msuf2RuntimeControlRecord = record
     local revisionAfter = RevisionKey(record)
     record._revisionKey = revisionAfter
-    if revisionBefore ~= revisionAfter then STATE.revision = STATE.revision + 1 end
+    if revisionBefore ~= revisionAfter then
+        STATE.revision = STATE.revision + 1
+        if M.RefreshSearchControlIdentity then M.RefreshSearchControlIdentity(widget, record) end
+    end
     return record.controlId, record
 end
 
@@ -615,6 +626,11 @@ M.RegisterRuntimeControl = Catalog.Register
 
 function Catalog.Get(controlId)
     return STATE.byId[controlId]
+end
+
+function Catalog.RestoreWidget(widget)
+    local record = widget and widget._msuf2RuntimeControlRecord
+    if record and not STATE.byWidget[widget] then return Catalog.Register(widget, record, "page-restore") end
 end
 
 function Catalog.GetForWidget(widget)

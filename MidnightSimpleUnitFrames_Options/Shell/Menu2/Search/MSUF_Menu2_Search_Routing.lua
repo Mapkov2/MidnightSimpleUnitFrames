@@ -830,7 +830,10 @@ end
 
 local function SearchRouteGroupPage(route, pageKey, normalized)
     local scope = pageKey ~= "gf_priority" and SearchGroupScopeForText(normalized) or nil
-    if scope then SearchRouteSetState(route, "gfScope", scope) end
+    if scope then
+        scope = M.NormalizeGroupScope(scope)
+        SearchRouteSetState(route, "gfScope", scope)
+    end
     if pageKey == "gf_layout" then
         if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
         SearchRouteTextState(route, "gfTextTabSelection", "gfTextSlotSelection", scope or M.gfScope or "party", normalized)
@@ -1165,6 +1168,14 @@ local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
         end
         return route
     end
+    if exactTarget.prepareKind == "groupScope" then
+        local scope = exactTarget.prepareValue
+        if scope == "party" or scope == "raid" or scope == "mythicraid" then
+            route = type(route) == "table" and route or {}
+            SearchRouteSetState(route, "gfScope", M.NormalizeGroupScope(scope))
+        end
+        return route
+    end
     if exactTarget.prepareKind == "groupSizingTab" then
         local tab = exactTarget.prepareValue
         if pageKey == "gf_layout" and exactTarget.sectionId == "scaling"
@@ -1199,6 +1210,9 @@ local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     return route
 end
 local function OpenSearchTarget(pageKey, query, fallback, preferredAnchor, route, exactTarget)
+    if exactTarget and not M.SupportsSearchTarget(pageKey, exactTarget.settingKey, exactTarget.prepareKind, exactTarget.prepareValue) then
+        return false, false, false
+    end
     if SearchCombatLocked() or (not (M.frame and M.frame.IsShown and M.frame:IsShown())) then return false, false, false end
     if M.nav and M.nav.searchBox then M.nav.searchBox:ClearFocus() end
     local routingFallback = fallback

@@ -1220,6 +1220,15 @@ local function CopyStaticSearchValues(values)
 end
 
 local BuildRegistrySearchRecord
+function M.RefreshSearchControlIdentity(widget, record)
+    local id = widget._msuf2SearchRegistryId
+    local entry = id and SEARCH_STATE.registry[id]
+    if not entry then return end
+    entry.controlId, entry.identityKey, entry.controlPath = record.controlId, record.identityKey, record.controlPath
+    entry.settingKey, entry.actionKey, entry.classification = record.settingKey, record.actionKey, record.classification
+    SEARCH_STATE.registryRecords[id] = nil
+    MarkSearchIndexDirty()
+end
 local runtimeControlMetaScratch = {}
 local runtimeControlMetaScratchBusy = false
 
@@ -1333,11 +1342,7 @@ function M.RegisterSearchWidget(widget, meta)
         return
     end
     EnsureSearchLocaleFresh()
-    if type(meta.prepareExactSearchTarget) == "function" then
-        widget._msuf2ExactTargetKinds = { [meta.searchPrepareKind] = true }
-        widget._msuf2ExactTargetContracts = { [meta.searchPrepareKind] = { [meta.searchPrepareValue] = true } }
-        widget._msuf2PrepareExactSearchTarget = meta.prepareExactSearchTarget
-    end
+    M.DeclareExactSearchPreparation(widget, meta)
     local pageKey = meta.pageKey or M.PageKeyForWidget(widget) or M.activeKey
     if type(pageKey) ~= "string" or pageKey == "" or pageKey == "search" then return end
 
@@ -1472,13 +1477,13 @@ function M.RegisterSearchWidget(widget, meta)
     MarkSearchIndexDirty()
 end
 
-local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, kind, extraParts)
+local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, kind, extraParts, literalLabel)
     if M.SupportsUnitPage and not M.SupportsUnitPage(pageInfo.key) then return end
     label = DisplaySearchText(label)
     if not IsSearchableDisplayText(label) then return end
 
     kind = kind or "text"
-    local displayLabel = SearchDisplayText(label)
+    local displayLabel = literalLabel and label or SearchDisplayText(label)
     if displayLabel == "" then displayLabel = label end
     local displayHint = SearchHint(pageInfo, anchor)
     local hint = (kind == "faq") and "" or displayHint
@@ -1589,6 +1594,17 @@ end
 
 BuildRegistrySearchRecord = function(entry, pageInfos)
     if type(entry) ~= "table" then return nil end
+    local widget = entry.widget
+    local catalog = M.RuntimeControlCatalog.GetForWidget(widget)
+    if catalog then
+        entry.controlId, entry.identityKey, entry.controlPath = catalog.controlId, catalog.identityKey, catalog.controlPath
+        entry.settingKey, entry.actionKey = catalog.settingKey, catalog.actionKey
+    end
+    local prepareKind, prepareValue = entry.searchPrepareKind, entry.searchPrepareValue
+    if not prepareKind and widget then
+        prepareKind, prepareValue = Search.ResolveExactPreparation(widget._msuf2ExactTargetContracts, entry.settingKey)
+    end
+    if not M.SupportsSearchTarget(entry.pageKey, entry.settingKey, prepareKind, prepareValue) then return nil end
     -- One build shares a page's info (and the page text cache AddSearchRecord
     -- keeps on it) across that page's controls.
     local info = pageInfos and pageInfos[entry.pageKey]
@@ -1608,7 +1624,8 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
     end
     AddControlQuestionSearchText(extra, entry.label, entry.kind, entry.values)
     AddSearchText(extra, entry.help)
-    local rec = AddSearchRecord(nil, nil, info, entry.label, entry.anchor, entry.kind or "control", extra)
+    local rec = AddSearchRecord(nil, nil, info, entry.label, entry.anchor, entry.kind or "control", extra,
+        widget and widget._msuf2LiteralSearchLabel)
     if rec then
         rec.controlId, rec.controlPath, rec.actionKey = entry.controlId, entry.controlPath, entry.actionKey
         rec.sectionId = entry.sectionId
@@ -1647,7 +1664,7 @@ BuildRegistrySearchRecord = function(entry, pageInfos)
                 identityKey = entry.identityKey,
                 controlPath = entry.controlPath,
                 label = entry.label,
-                prepareKind = entry.searchPrepareKind, prepareValue = entry.searchPrepareValue,
+                prepareKind = prepareKind, prepareValue = prepareValue,
             }
         end
 
@@ -1764,12 +1781,17 @@ local function StaticRowsWithoutClientSupport()
     -- probe (the Duration API, and the GCD spell on WoW Forever).
     local gcdProbe = M.CastbarGCDBarSupported
     local gcdHidden = gcdProbe ~= nil and not gcdProbe()
+    -- Its interrupt indicator's nameplate switch is shown only where the MSUF
+    -- Suite has nameplates (the same page's probe).
+    local nameplatesProbe = M.CastbarSuiteNameplatesSupported
+    local nameplatesHidden = nameplatesProbe ~= nil and not nameplatesProbe()
     local records = Search.StaticIndex.GetRecords()
     for i = 1, #records do
         local rec = records[i]
         local key = rec.exactTarget and rec.exactTarget.settingKey
         if (key and clientOnly[key] and not built[key])
             or (gcdHidden and rec.key == "opt_castbar" and rec.exactTarget and rec.exactTarget.sectionId == "castbar_gcd")
+            or (nameplatesHidden and key == "general.kickReadyShowNameplates")
             or (type(supportsSetting) == "function" and not supportsSetting(key)) then
             staticRowsWithoutClientSupport[rec.searchIdentity] = true
         end
@@ -1789,8 +1811,9 @@ local function AddStaticIndexSearchRecords(records, covered)
     for i = 1, #staticRecords do
         local rec = staticRecords[i]
         local identity = rec.searchIdentity
+        local target = rec.exactTarget
         if not covered[identity] and not unsupported[identity]
-            and (not M.SupportsUnitPage or M.SupportsUnitPage(rec.key, rec.exactTarget and rec.exactTarget.settingKey)) then
+            and M.SupportsSearchTarget(rec.key, target and target.settingKey, target and target.prepareKind, target and target.prepareValue) then
             rec.order = #records + 1
             records[#records + 1] = rec
         end

@@ -937,7 +937,36 @@ local function RegisterGroupContextFactories()
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)
-    FixedContextFactory("group.health", function()
+    ContextFactory("group.health", function(context)
+        local scope = ContextValue(context and context.scope, context)
+        if scope == "party" or scope == "raid" or scope == "mythicraid" then scope = "gf_" .. scope end
+        if scope == "gf_party" or scope == "gf_raid" or scope == "gf_mythicraid" then
+            local function Conf() return DB()[scope] or {} end
+            local function Prefix()
+                local mode = Conf().gfBarMode
+                if mode == "dark" then return "gfDark", 0, 0, 0 end
+                if mode == "unified" then return "gfUnified", .10, .60, .90 end
+                return "healthCustom", .20, .80, .20
+            end
+            local target = ContextTarget("group.health." .. scope, "Group health bar",
+                function()
+                    local conf = Conf()
+                    local prefix, r, g, b = Prefix()
+                    return tonumber(conf[prefix .. "R"]) or r, tonumber(conf[prefix .. "G"]) or g,
+                        tonumber(conf[prefix .. "B"]) or b
+                end,
+                function(r, g, b)
+                    local conf, prefix = Conf(), Prefix()
+                    conf[prefix .. "R"], conf[prefix .. "G"], conf[prefix .. "B"] = r, g, b
+                    ApplyColors()
+                end)
+            local state = ContextStoredState(Conf, {
+                "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB",
+                "healthCustomR", "healthCustomG", "healthCustomB",
+            }, ApplyColors)
+            target.captureState, target.restoreState = state.captureState, state.restoreState
+            return target
+        end
         local target = ContextTarget("group.health", "Group health bar", GroupHealthBarRGB, SetGroupHealthBarRGB)
         local state = ContextDBRowsState(GROUP_COLOR_DB_KEYS, {
             "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB",
@@ -1001,6 +1030,40 @@ local function RegisterPowerContextFactories()
         target.getColorByClass = M.PowerBarColorByClass.Get
         target.setColorByClass = M.PowerBarColorByClass.Set
         local state = ContextStoredState(G, { "powerColorOverrides", "powerColorMode", "powerBarColorMode" }, ApplyColors)
+        target.captureState, target.restoreState = state.captureState, state.restoreState
+        return target
+    end)
+    -- The unit's own power bar border colour. Unset, the border follows the frame
+    -- outline colour (CompileUnitPower), so the picker starts from that colour.
+    local POWER_BORDER_KEYS = { "powerBarBorderColorR", "powerBarBorderColorG", "powerBarBorderColorB" }
+    local POWER_BORDER_APPLY = { power = true, preview = true }
+    ContextFactory("power.border", function(context)
+        local unitKey = ContextUnitKey(context)
+        local function Conf()
+            local db = DB()
+            db[unitKey] = db[unitKey] or {}
+            return db[unitKey]
+        end
+        local function Apply() M.RequestUnitApply(unitKey, "MSUF2_POWER_BORDER_COLOR", POWER_BORDER_APPLY) end
+        local function Channel(conf, general, suffix)
+            local own = tonumber(conf["powerBarBorderColor" .. suffix])
+            if own then return own end
+            local outline = conf.hlOverride == true and conf["barOutlineColor" .. suffix]
+            if outline == nil or outline == false then outline = general["barOutlineColor" .. suffix] end
+            if outline == nil then outline = general["barBorder" .. suffix] end
+            return tonumber(outline) or 0
+        end
+        local target = ContextTarget("power.border." .. unitKey, "Power bar border",
+            function()
+                local conf, general = Conf(), G()
+                return Channel(conf, general, "R"), Channel(conf, general, "G"), Channel(conf, general, "B")
+            end,
+            function(r, g, b)
+                local conf = Conf()
+                conf.powerBarBorderColorR, conf.powerBarBorderColorG, conf.powerBarBorderColorB = r, g, b
+                Apply()
+            end)
+        local state = ContextDBRowsState({ unitKey }, POWER_BORDER_KEYS, Apply)
         target.captureState, target.restoreState = state.captureState, state.restoreState
         return target
     end)

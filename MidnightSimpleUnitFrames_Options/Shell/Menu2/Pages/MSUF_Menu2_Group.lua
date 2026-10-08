@@ -125,7 +125,7 @@ for i = 1, #GF_STATUS_ICON_SPECS do
     GF_STATUS_ICON_COPY_VALUES[i] = GF_STATUS_ICON_SPECS[i].value
 end
 local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, table.concat(GF_STATUS_ICON_COPY_VALUES, " "),
-    [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupNumberLayer groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconShowTank roleIconShowHealer roleIconShowDPS roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon levelTextDifficultyColor threatTextColorCurve threatTextBackground]], "enabled iconStyle customIcon size anchor x y layer")
+    [[showGroupNumber groupNumberStyle groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupNumberLayer groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconShowTank roleIconShowHealer roleIconShowDPS roleIconStyle leaderIconStyle assistIconStyle raidMarkerStyle readyCheckIconStyle summonIconStyle resurrectIconStyle pvpIconStyle phaseIconStyle roleIconCustomIcon leaderIconCustomIcon assistIconCustomIcon raidMarkerCustomIcon readyCheckIconCustomIcon summonIconCustomIcon resurrectIconCustomIcon pvpIconCustomIcon phaseIconCustomIcon levelTextDifficultyColor threatTextColorCurve threatTextBackground]], "enabled iconStyle customIcon size anchor x y layer")
 local function GF()
     return MSUF and MSUF.GF
 end
@@ -309,10 +309,11 @@ local function Set(kind, key, value, mode)
     local function Write()
         local conf = Conf(kind)
         local textureKey = key == "barTexture" or key == "barBackgroundTexture" or key == "barBgTexture"
-        local activatesTextureOverride = textureKey and type(value) == "string" and value ~= "" and conf.hlOverride ~= true
+        local activatesTextureOverride = textureKey and type(value) == "string" and value ~= "" and (conf.barTextureOverride ~= true or conf.hlOverride ~= true)
         if conf[key] == value and not activatesTextureOverride then return false end
         conf[key] = value
         if activatesTextureOverride then
+            conf.barTextureOverride = true
             conf.hlOverride = true
         end
         QueueGF(kind, mode or "visual")
@@ -456,7 +457,7 @@ local GF_SHARED_COLOR_KEYS = M.KeySetFromWords [[
 ]]
 local GF_COPY_CATEGORIES = {
     { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole sortRolesAcrossRaid sortAlphabeticalWithinRole sortClassPriority classOrder unitsPerColumn maxColumns maxFrames autoTanks preserveRaidGroups reverseFill smoothFill chunkedFill frameBarShape hideInClientScene hideInHousing hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleEnabled frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25 layoutTiersEnabled excludeHiddenGroups collapseEmptyGroups hideMythicGroupsFiveToEight centerSolo tier10Width tier10Height tier10Position tier10X tier10Y tier10Growth tier20Width tier20Height tier20Position tier20X tier20Y tier20Growth tier25Width tier25Height tier25Position tier25X tier25Y tier25Growth tier40Width tier40Height tier40Position tier40X tier40Y tier40Growth targetsEnabled targetsWidth targetsHeight targetsX targetsY targetsTextSize targetsColumns petsEnabled petsWidth petsHeight petsX petsY petsTextSize petsColumns petsMaxCount friendlyBossEnabled friendlyBossWidth friendlyBossHeight friendlyBossX friendlyBossY friendlyBossTextSize friendlyBossColumns healerManaEnabled healerManaWidth healerManaHeight healerManaX healerManaY healerManaTextSize targetsIncludePlayer friendlyBossHealerOnly healerManaShowValue healerManaTextR healerManaTextG healerManaTextB nameBarEnabled nameBarHeight nameBarR nameBarG nameBarB nameBarAlpha autoScaleIndicatorsOnResize autoScaleAurasOnResize autoScaleTrackedOnResize smallRaidAsParty buffCoverageEnabled buffCoverageWild buffCoverageThorns buffCoverageIntellect buffCoverageBlessings buffCoverageStamina buffCoverageSpirit buffCoverageThornsTankOnly buffCoverageGlow buffCoverageCombat buffCoverageSize buffCoverageAnchor buffCoverageX buffCoverageY buffCoverageLayer]] },
-    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
+    { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTextureOverride barTexture barBackgroundTexture barBgTexture hpBarAlpha hpBgAlpha alphaExcludeTextPortrait alphaExcludePredictionBars powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextLeftHidePercentSymbol powerTextCenterHidePercentSymbol powerTextRightHidePercentSymbol powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerChunkedFill powerShowTank powerShowHealer powerShowDamager powerBarDetached powerBarBorderEnabled powerBarBorderThickness embedPowerBarIntoHealth barOutlineTexture oocFadeEnabled oocFadeAlpha healthFadeEnabled healthFadeThreshold healthFadeAlpha deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA powerTextLeftFontSize powerTextCenterFontSize powerTextRightFontSize powerTextLeftOffsetX powerTextLeftOffsetY powerTextCenterOffsetX powerTextCenterOffsetY powerTextRightOffsetX powerTextRightOffsetY]], prefix = WL [[detachedPower]] },
     { key = "dispel", label = "Dispel Overlay", keys = WL [[dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger dispelOverlayLayer dispelOverlayStrata]], prefix = WL [[dispelSymbol]] },
     { key = "text", label = "Text & Name", keys = WL [[showName hideNameOnDeadOffline nameFontSize nameAnchor nameOffsetX nameOffsetY nameTextLayer nameColorMode nameColorR nameColorG nameColorB nameShortenEnabled nameClipSide nameMaxChars nameNoEllipsis showHPText hpFontSize textLeft textCenter textRight hpTextLeftHidePercentSymbol hpTextCenterHidePercentSymbol hpTextRightHidePercentSymbol hpTextLeftAbsorbIcon hpTextCenterAbsorbIcon hpTextRightAbsorbIcon textDelimiter hpTextReverse healthTextDecimals hpTextDecimals hpFullValueShort hpAbsorbIcon hpOffsetX hpOffsetY textLayer hpTextLeftFontSize hpTextCenterFontSize hpTextRightFontSize hpTextLeftOffsetX hpTextLeftOffsetY hpTextCenterOffsetX hpTextCenterOffsetY hpTextRightOffsetX hpTextRightOffsetY]] },
     -- Every key the group font override resolves (GroupFrames/MSUF_GroupFrames_DB_Text.lua).
@@ -624,6 +625,15 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
             if copy then dstConf[key] = DeepCopy(value) end
         end
     end
+    if scopes.health then
+        local override = srcConf.barTextureOverride
+        if override == nil then override = srcConf.hlOverride == true end
+        dstConf.barTextureOverride = override == true
+        -- Copy the effective texture choice without enabling unrelated highlight overrides.
+        dstConf.barTexture = override and DeepCopy(srcConf.barTexture) or nil
+        dstConf.barBackgroundTexture = override and DeepCopy(srcConf.barBackgroundTexture) or nil
+        dstConf.barBgTexture = override and DeepCopy(srcConf.barBgTexture) or nil
+    end
     if retainedSpellStyle and type(dstConf.spellIndicators) == "table" then
         dstConf.spellIndicators.iconZoom = retainedSpellStyle.iconZoom
         dstConf.spellIndicators.iconScale = retainedSpellStyle.iconScale
@@ -681,7 +691,7 @@ local function AttachGroupSectionUX(ctx)
         return M.Tr(text:sub(1, 1):upper() .. text:sub(2):lower())
     end
     local sections = {
-        general = { fields = "showPlayer showSolo clickCastEnabled reverseFill smoothFill chunkedFill frameBarShape",
+        general = { fields = "showPlayer showSolo clickCastEnabled reverseFill smoothFill chunkedFill frameBarShape hideInHousing hideInClientScene hideOfflineEnabled hideOfflineInCombat hideOfflineDelay",
             summary = function(c) return Number(c.width, 120) .. " x " .. Number(c.height, 40) .. " px" end },
         portrait = { prefixes = "portrait", noCopy = true },
         text = { },
@@ -726,7 +736,20 @@ local function AttachGroupSectionUX(ctx)
             end
             return defaults
         end,
-        apply = function(scope) QueueGF(scope, "rebuild"); RefreshGFPreview() end,
+        apply = function(scope, section)
+            local fields = section == "dstripe" and "debuffStripeColorR debuffStripeColorG debuffStripeColorB debuffStripeAlpha"
+                or section == "healer_mana" and "healerManaTextR healerManaTextG healerManaTextB"
+            if fields then
+                local current = Conf(scope)
+                for _, target in ipairs(SCOPE_VALUES) do
+                    local conf = Conf(target.value)
+                    for key in fields:gmatch("%S+") do conf[key] = current[key] end
+                    QueueGF(target.value, "visual")
+                end
+            end
+            QueueGF(scope, "rebuild")
+            RefreshGFPreview()
+        end,
     })
 end
 local function FinalizeScopePage(ctx, builder)
@@ -748,6 +771,13 @@ local GROUP_PAGE_TABS = {
 }
 
 
+local function RefreshScopeContext(ctx, previousScope)
+    if previousScope ~= M.gfScope and ctx.key == "gf_layout" then
+        M.RebuildPageKeepingScroll(ctx.key)
+    else
+        RefreshContext(ctx)
+    end
+end
 local function ScopeSection(ctx, builder, opts)
     opts = opts or {}
     local priorityMode = opts.priorityMode == true
@@ -816,7 +846,7 @@ local function ScopeSection(ctx, builder, opts)
         else
             RefreshGFPreview()
         end
-        RefreshContext(ctx)
+        RefreshScopeContext(ctx, previousScope)
     end
     sec._msuf2GuidedSelectScope = SelectScope
 

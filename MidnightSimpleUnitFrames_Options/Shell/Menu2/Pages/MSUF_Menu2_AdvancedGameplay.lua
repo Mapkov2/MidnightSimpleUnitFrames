@@ -1,4 +1,3 @@
-local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, ...) if type(policy) == "string" then return region[policy](region, ...) end return region end
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
@@ -7,6 +6,7 @@ MSUF.MSUF2 = M
 -- Advanced Gameplay page.
 -- Builds controls for optional gameplay helpers such as combat timer, crosshair, melee range,
 -- and totem/statue frames. Live frame work belongs to GameplayRuntime.
+local PixelLayoutRegion = MSUF.Require("MSUF_PixelLayoutRegion", "Menu2/Pages/AdvancedGameplay")
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
@@ -39,6 +39,20 @@ local function Meta(path, classification, exact)
 end
 local ApplyGameplay = M.ApplyGameplay
 local VT = M.ValueTextList
+local function PaintSpellInput(input, edgeAlpha, withFill, withBorder)
+    local accent = T.colors.accent
+    if withFill and input._msuf2SpellInputFill then input._msuf2SpellInputFill:SetVertexColor(0.025, 0.034, 0.070, 0.98) end
+    if input._msuf2SpellInputEdge then input._msuf2SpellInputEdge:SetVertexColor(accent[1], accent[2], accent[3], edgeAlpha) end
+    if withFill and input.SetBackdropColor then input:SetBackdropColor(0.025, 0.034, 0.070, 0.98) end
+    if withBorder and input.SetBackdropBorderColor then input:SetBackdropBorderColor(accent[1], accent[2], accent[3], edgeAlpha) end
+end
+local function TotemFrameAvailable() return _G.TotemFrame ~= nil end
+local function MeleeRangeEnabled(g)
+    return g.enableCombatCrosshair == true and g.enableCombatCrosshairMeleeRangeColor == true
+end
+local function MeleeSpecEnabled(g)
+    return MeleeRangeEnabled(g) and M.GetGameplayPlayerSpecID() ~= nil
+end
 local function BuildGameplay(ctx)
     local b = W.PageBuilder(ctx)
     local disabledRefresh
@@ -91,13 +105,6 @@ local function BuildGameplay(ctx)
     local function AddGameplayTextInput(list, input, key, fallback)
         return AddTextInput(list, input, function() return Gameplay()[key] or fallback end,
             function(v) Gameplay()[key] = tostring(v or "") end, Meta("setting." .. key))
-    end
-    local function PaintSpellInput(input, edgeAlpha, withFill, withBorder)
-        local accent = T.colors.accent
-        if withFill and input._msuf2SpellInputFill then input._msuf2SpellInputFill:SetVertexColor(0.025, 0.034, 0.070, 0.98) end
-        if input._msuf2SpellInputEdge then input._msuf2SpellInputEdge:SetVertexColor(accent[1], accent[2], accent[3], edgeAlpha) end
-        if withFill and input.SetBackdropColor then input:SetBackdropColor(0.025, 0.034, 0.070, 0.98) end
-        if withBorder and input.SetBackdropBorderColor then input:SetBackdropBorderColor(accent[1], accent[2], accent[3], edgeAlpha) end
     end
     local function GameplayContentWidth()
         return min(tonumber(M.formContentMaxWidth) or 980, tonumber(ctx.width) or 900)
@@ -240,13 +247,16 @@ local function BuildGameplay(ctx)
     local classCardW = SectionCardWidth(classSec, 700)
     local classControlW = SectionControlWidth(classSec, 300, 120)
     local classLeftX, classRightX, classColW = SectionColumns(classSec, 300)
+    local totemDescription = TotemFrameAvailable()
+        and "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat."
+        or "Blizzard TotemFrame is not available on this client."
     local totemEnable
     local previewBtn
     local resetTotemBtn
     if classStacked then
         AddBackdrops(classSec, { { -38, classCardW, 520 } })
         LabelAt(classSec, "Totem / Statue frame", 30, -38, min(360, classW - 60), "GameFontNormalSmall", T.colors.text)
-        LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", 30, -60, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
+        LabelAt(classSec, totemDescription, 30, -60, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", 30, -92, min(300, classControlW), Gameplay, "enablePlayerTotems", false, ApplyGameplayUI, Meta("totem_frame.enabled"))
         previewBtn = T.Button(classSec, "Preview", min(120, classControlW), 22)
         previewBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 32, -128)
@@ -265,7 +275,7 @@ local function BuildGameplay(ctx)
     else
         AddBackdrops(classSec, { { -38, classCardW, 276 } })
         LabelAt(classSec, "Totem / Statue frame", classLeftX, -38, min(360, classColW), "GameFontNormalSmall", T.colors.text)
-        LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", classLeftX, -60, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
+        LabelAt(classSec, totemDescription, classLeftX, -60, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", classLeftX, -92, classColW, Gameplay, "enablePlayerTotems", false, ApplyGameplayUI, Meta("totem_frame.enabled"))
         previewBtn = T.Button(classSec, "Preview", 120, 22)
         previewBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", classLeftX, -128)
@@ -440,7 +450,8 @@ local function BuildGameplay(ctx)
         local previewH = (preview and preview.GetHeight and preview:GetHeight()) or 120
         local centerX, centerY = previewW * 0.5, -(previewH * 0.5)
         local gap = math.max(6, floor(size * 0.20))
-        local r, gr, b = 0, 1, 0
+        local color = g.crosshairInRangeColor
+        local r, gr, b = (color and color[1]) or 0, (color and color[2]) or 1, (color and color[3]) or 0
         if g.enableCombatCrosshairMeleeRangeColor then
             local c = g.crosshairOutRangeColor
             r, gr, b = (c and c[1]) or 1, (c and c[2]) or 0, (c and c[3]) or 0
@@ -456,18 +467,18 @@ local function BuildGameplay(ctx)
         bars[4]:SetSize(thick, size * 0.42)
         for i = 1, 4 do bars[i]:SetVertexColor(r or 1, gr or 0, b or 0, g.enableCombatCrosshair and 1 or 0.35) end
     end
-    -- Each row gates a dependent control group by its master toggle. Blizzard's TotemFrame is
-    -- class-agnostic, so the totem rows carry no class gate: Preview and Reset stay live for
-    -- everyone, the offset controls follow the master toggle.
+    -- TotemFrame availability follows the same native frame as the runtime owner.
+    -- The remaining rows combine client availability and the user's master toggle.
     disabledRefresh = M.BindGateGroup(ctx, Gameplay, {
         { enable = timerEnable, controls = timerControls, on = function(g) return g.enableCombatTimer == true end },
         { enable = stateEnable, controls = stateControls, on = function(g) return g.enableCombatStateText == true end },
-        { enable = totemEnable, controls = totemActionControls, on = function() return true end },
-        { controls = totemControls, on = function(g) return g.enablePlayerTotems == true end },
+        { enable = totemEnable, controls = totemActionControls, enableOn = TotemFrameAvailable, on = TotemFrameAvailable,
+            reason = "Blizzard TotemFrame is not available on this client." },
+        { controls = totemControls, on = function(g) return TotemFrameAvailable() and g.enablePlayerTotems == true end },
         { enable = crossEnable, controls = crossControls, on = function(g) return g.enableCombatCrosshair == true end },
-        { controls = meleeControls, on = function(g)
-            return g.enableCombatCrosshair == true and g.enableCombatCrosshairMeleeRangeColor == true
-        end },
+        { controls = meleeControls, on = MeleeRangeEnabled },
+        { controls = specSpellToggle, on = MeleeSpecEnabled,
+            reason = "Specialization data is not available for this character yet." },
     }, { also = function()
         if previewRefresh then previewRefresh() end
         SyncTotemPreviewButton()

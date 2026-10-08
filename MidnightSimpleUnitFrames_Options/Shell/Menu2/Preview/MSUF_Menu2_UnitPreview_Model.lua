@@ -205,7 +205,7 @@ local function LiveUnitData(key, playerManaSourceActive)
     end
     d.live = true
     d.liveUnit = unit
-    d.name = LivePlain(_G.UnitName and _G.UnitName(unit)) or mock.name
+    d.name = LivePlain(_G.UnitName and _G.UnitName(unit)) or TR(mock.name)
     local className, classToken
     if _G.UnitClass then className, classToken = _G.UnitClass(unit) end
     d.class = LivePlain(classToken) or mock.class
@@ -307,7 +307,7 @@ local function LiveRaidSubgroup()
             local name, _, subgroup = _G.GetRaidRosterInfo(candidate)
             if name ~= nil and not IsSecretValue(subgroup) then
                 local mine = _G.UnitIsUnit and _G.UnitIsUnit("player", "raid" .. candidate)
-                if mine == true or _G.UnitIsUnit == nil then return tonumber(subgroup) end
+                if (not IsSecretValue(mine) and mine == true) or _G.UnitIsUnit == nil then return tonumber(subgroup) end
             end
         end
         candidate = index + 1

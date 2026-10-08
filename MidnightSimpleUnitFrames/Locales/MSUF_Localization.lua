@@ -61,27 +61,48 @@ local function LocaleFromDB(db)
     return nil
 end
 
-local function ActiveProfileLocale()
-    local globalDB = rawget(_G, "MSUF_GlobalDB")
+-- Pure startup choice shared with profile binding. Locale loading must use
+-- the same donor as a missing-profile repair without initializing runtime UI.
+function MSUF.ResolveStartupProfile(globalDB, legacyDB, charKey)
     local profiles = type(globalDB) == "table" and globalDB.profiles
     local characters = type(globalDB) == "table" and globalDB.char
-    if type(profiles) ~= "table" or type(characters) ~= "table" then return nil end
+    local character = type(characters) == "table" and characters[charKey]
+    local active = type(character) == "table" and character.activeProfile
+    if type(active) ~= "string" or active == "" then active = nil end
+    if type(profiles) ~= "table" or not next(profiles) then
+        return active or "Default", type(legacyDB) == "table" and legacyDB or nil
+    end
+    if not active then
+        local meta = globalDB.global
+        local configured = type(meta) == "table" and meta.defaultProfileForNewChars
+        active = type(configured) == "string" and type(profiles[configured]) == "table"
+            and configured or "Default"
+    end
+    if type(profiles[active]) == "table" then return active, profiles[active] end
+    if type(profiles.Default) == "table" then return active, profiles.Default end
+    local first
+    for name, profile in pairs(profiles) do
+        if type(name) == "string" and name ~= "" and type(profile) == "table"
+            and (not first or name < first) then first = name end
+    end
+    return active, first and profiles[first] or nil
+end
 
+local function ActiveProfileLocale()
+    local globalDB = rawget(_G, "MSUF_GlobalDB")
     local unitName = _G.UnitName
     local getRealmName = _G.GetRealmName
     if type(unitName) ~= "function" or type(getRealmName) ~= "function" then return nil end
     local name = unitName("player")
     local realm = getRealmName()
-    if type(name) ~= "string" or name == "" or type(realm) ~= "string" or realm == "" then return nil end
-
-    local character = characters[name .. "-" .. realm]
-    local activeProfile = type(character) == "table" and character.activeProfile
-    local profile = type(activeProfile) == "string" and profiles[activeProfile]
+    if type(name) ~= "string" or name == "" then return nil end
+    if type(realm) ~= "string" then realm = "" end
+    local _, profile = MSUF.ResolveStartupProfile(globalDB, rawget(_G, "MSUF_DB"), name .. "-" .. realm)
     return LocaleFromDB(profile)
 end
 
 local function SavedLocale()
-    local value = ActiveProfileLocale() or LocaleFromDB(rawget(_G, "MSUF_DB"))
+    local value = ActiveProfileLocale()
     if value then return value end
     return CLIENT_LOCALE
 end

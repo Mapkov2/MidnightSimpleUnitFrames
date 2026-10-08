@@ -460,7 +460,7 @@ local function SearchRouteIdentity(record, pageKey, labelNorm, kind, hint)
     return CatalogSearchIdentity("display", pageKey, kind, labelNorm, hint)
 end
 
-local function RuntimeExactContract(Catalog, record)
+local function RuntimeExactContract(M, Catalog, record)
     if not (Catalog and type(Catalog.Get) == "function" and type(record) == "table") then return "", "", "" end
     local raw = Catalog.Get(tostring(record.controlId or ""))
     local widget = raw and raw.widget
@@ -490,7 +490,8 @@ local function RuntimeExactContract(Catalog, record)
         if type(kind) == "string" and kind ~= "" and type(values) == "table" then
             for value, settingKey in pairs(values) do
                 value, settingKey = tostring(value or ""), settingKey == true and "*" or tostring(settingKey or "")
-                if value ~= "" and settingKey ~= "" then
+                if value ~= "" and settingKey ~= ""
+                    and M.SupportsSearchTarget(record.pageKey, settingKey ~= "*" and settingKey or record.settingKey, kind, value) then
                     if widget._msuf2ExactTargetKinds == nil
                         or widget._msuf2ExactTargetKinds[kind] ~= true
                         or type(widget._msuf2PrepareExactSearchTarget) ~= "function"
@@ -650,6 +651,7 @@ local function VisitWorkspaceStates(M, capture)
         end
     end
     for _, scope in ipairs(WORKSPACE_GROUP_SCOPES) do
+        if M.SupportsFrameScope(scope) then
         M.gfScope = scope
         if pages.gf_layout then Visit("gf_layout") end
         if pages.gf_auras then
@@ -663,6 +665,7 @@ local function VisitWorkspaceStates(M, capture)
             end
             for _, tool in ipairs(WORKSPACE_EXTERNALS_TOOLS) do GroupView("externals", tool) end
         end
+    end
     end
     for _, product in ipairs(WORKSPACE_APPEARANCE_PRODUCTS) do
         -- The Mainline Aura page keeps the selected product in auraAppearanceContainer,
@@ -700,7 +703,7 @@ local function Collect(M, Catalog, buildFailures)
         return tostring(record.pageKey or "") .. "\031" .. tostring(record.controlId or "")
     end
     for _, record in ipairs(Catalog.GetRecords()) do
-        record.exactSectionId, record.exactTargetKinds, record.exactTargetContracts = RuntimeExactContract(Catalog, record)
+        record.exactSectionId, record.exactTargetKinds, record.exactTargetContracts = RuntimeExactContract(M, Catalog, record)
         sources[#sources + 1] = record
         origin[record] = ORIGIN_RUNTIME
         built[BuiltKey(record)] = true
@@ -712,6 +715,7 @@ local function Collect(M, Catalog, buildFailures)
         for _, record in ipairs(Catalog.GetRecords()) do
             local key = BuiltKey(record)
             if not built[key] then
+                record.exactSectionId, record.exactTargetKinds, record.exactTargetContracts = RuntimeExactContract(M, Catalog, record)
                 built[key] = true
                 sources[#sources + 1] = record
                 origin[record] = ORIGIN_STATE
@@ -730,7 +734,8 @@ local function Collect(M, Catalog, buildFailures)
         if INDEXED_CLASSIFICATIONS[tostring(record.classification or "")] or record.searchIndexed == true or hasExactTarget then
             local pageKey = tostring(record.pageKey or "")
             local label = tostring(record.label or "")
-            if pageKey ~= "" and pageKey ~= "search" and label ~= "" then
+            if pageKey ~= "" and pageKey ~= "search" and label ~= ""
+                and M.SupportsSearchTarget(pageKey, record.settingKey, record.searchPrepareKind, record.searchPrepareValue) then
                 local controlPath = tostring(record.controlPath or "")
                 local settingKey = tostring(record.settingKey or "")
                 local actionKey = tostring(record.actionKey or "")

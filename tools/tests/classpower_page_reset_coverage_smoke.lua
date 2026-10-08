@@ -63,7 +63,12 @@ local foreign = { "bars.ignorePainColor", "bars.arcaneWindowColor", "bars.arcane
     "bars.arcaneWindowWarnColor", "bars.manaRegenPauseColor", "bars.manaGainPulseColor", "bars.manaCostColor",
     "bars.barOutlineThickness", "bars.powerBarTexture" }
 local isForeign = {}
-for _, path in ipairs(foreign) do isForeign[path] = true end
+for _, path in ipairs(foreign) do
+    isForeign[path] = true
+    -- Reset selected includes its contextual colors; the whole Class Resources
+    -- page keeps the separate Colors ownership asserted below.
+    owned[path] = nil
+end
 -- ClientOnlySettings also names each extra's colour (search gates those rows by
 -- client); the colours stay owned by the Colors page.
 local clientOnly = M.ResourceExtrasPage and M.ResourceExtrasPage.ClientOnlySettings and M.ResourceExtrasPage.ClientOnlySettings()

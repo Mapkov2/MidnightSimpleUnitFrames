@@ -625,21 +625,21 @@ local function StageCue(stage, position, touched)
     if section then
         if sectionId:find("preview", 1, true) then
             if stage.id == "opt_bars" then
-                return Tr("Sample = visual only · real changes = Unit/Group Preview · frame placement = MSUF Edit Mode")
+                return Tr("Sample = visual only Â· real changes = Unit/Group Preview Â· frame placement = MSUF Edit Mode")
             end
             if stage.id == "opt_castbar" then
-                return Tr("Normal/Channel/Empowered = simulation · Interrupt = feedback · handles = saved position")
+                return Tr("Normal/Channel/Empowered = simulation Â· Interrupt = feedback Â· handles = saved position")
             end
             if stage.id == "auras3_styling" or stage.id == "gf_auras" then
-                return Tr("Live/Dummy = display only · colored aura handles = saved positions")
+                return Tr("Live/Dummy = display only Â· colored aura handles = saved positions")
             end
             if stage.id:match("^gf_") then
-                return Tr("Scope = Party/Raid/Mythic · drag = inner position · Shift-layer = isolate · Ctrl-wheel/drag = zoom/pan · Edit Mode = container")
+                return Tr("Scope = Party/Raid/Mythic Â· drag = inner position Â· Shift-layer = isolate Â· Ctrl-wheel/drag = zoom/pan Â· Edit Mode = container")
             end
             if stage.id == "classpower" then
-                return Tr("Preview controls = inspect layouts and states · MSUF Edit Mode = whole-frame placement")
+                return Tr("Preview controls = inspect layouts and states Â· MSUF Edit Mode = whole-frame placement")
             end
-            return Tr("Preview controls = inspect layouts and states · MSUF Edit Mode = whole-frame placement")
+            return Tr("Preview controls = inspect layouts and states Â· MSUF Edit Mode = whole-frame placement")
         end
         return format(Tr("CHECKPOINT - Press Enter section to explore every setting in %s."), Tr(section.label))
     end
@@ -672,7 +672,11 @@ local function StageCue(stage, position, touched)
         if GroupEditModeMovementComplete() then return Tr("YOUR MOVE - Click the highlighted Party Frames mover to open Width, Height, and Spacing.") end
         return Tr("YOUR MOVE - Open Edit Mode, drag Party Frames once, then click the mover to see its Width, Height, and Spacing popup.")
     end
-    if stage.id == "class_intro" then return Tr("PART 3 - Shape Class Resources with its interactive preview and cooldown-aware anchoring.") end
+    if stage.id == "class_intro" then
+        return Tr(CooldownAnchorSupported()
+            and "PART 3 - Shape Class Resources with its interactive preview and cooldown-aware anchoring."
+            or "PART 3 - Shape Class Resources with its interactive preview and independent Edit Mode placement.")
+    end
     if stage.id == "uf_player" then return Tr("PLAYER IS THE MASTER - Change the highlighted frame basics; the Live Preview updates immediately.") end
     if stage.id == "uf_player_auras" then return Tr("AURA WORKSPACE - Choose Buffs, Debuffs, or a Custom lane, then choose Layout, Filters, or Blacklist.") end
     if stage.id:match("^uf_player_") then return Tr("PLAYER CORE - Change the new green setting and watch the same Player Preview update.") end
@@ -685,10 +689,10 @@ local function StageCue(stage, position, touched)
     if stage.id == "gf_party_corner_icons" then return Tr("MSUF POWER MOVE - Assign each corner or bind a custom spell to the selected slot.") end
     if stage.id:match("^gf_party_") then return Tr("PARTY CORE - Change the new green setting and watch the Party Preview update.") end
     if stage.id:match("^group_copy_") then return Tr("COPY FLOW - Open Copy To, select All categories, then press a destination to copy Party instantly.") end
-    if stage.id == "opt_bars" then return Tr("Sample = visual only · tests = temporary · scope = shared/unit/group") end
+    if stage.id == "opt_bars" then return Tr("Sample = visual only Â· tests = temporary Â· scope = shared/unit/group") end
     if stage.id == "opt_castbar" then return Tr("Simulate casts here; position castbar handles in Preview or MSUF Edit Mode.") end
     if stage.id == "opt_fonts" then return Tr("Use the scope selector for shared, unit and group text; compare readability in Preview.") end
-    if stage.id == "auras3_styling" then return Tr("Live/Dummy = display only · colored handles = saved positions · scope = shared/unit/group/custom") end
+    if stage.id == "auras3_styling" then return Tr("Live/Dummy = display only Â· colored handles = saved positions Â· scope = shared/unit/group/custom") end
     if stage.id == "classpower" then return Tr("Use the interactive preview for layouts and states; use Edit Mode for whole-frame placement.") end
     if stage.id == "profiles" then return Tr("Finish with a profile check and export a backup of your setup.") end
     if stage.id == "power_moves" then return Tr("MSUF POWER MOVES - Scan the highlights, then press Continue.") end
@@ -1752,8 +1756,12 @@ local function FocusCurrentSection(stage)
     EmphasizeControl(stage, section, controls, control)
 end
 
-local function InvalidateGuidedPage()
-    M.InvalidatePage("guided_setup")
+local function RefreshTourDashboard()
+    M.MarkMenuDataDirty("guided-tour")
+    local entry = M.cache.home
+    -- Onboarding/highlight scenes have a different structure. The normal
+    -- Dashboard launcher reads its live tour state through its refresher.
+    if entry and not entry.guidedSetupLauncher then M.InvalidatePage("home") end
 end
 
 local function SelectExpectedPage(stage)
@@ -1761,13 +1769,11 @@ local function SelectExpectedPage(stage)
     if EnsureGuidedTourChrome then EnsureGuidedTourChrome() end
     Runtime.manualAway = nil
     Runtime.warning = nil
-    if stage.special then InvalidateGuidedPage() end
+    M.MarkMenuDataDirty("guided-stage")
     if M.frame and type(M.frame.IsShown) == "function" and M.frame:IsShown() then
-        -- Consecutive special stages share the guided_setup page key, but each
-        -- stage builds different page content. Invalidation removes the cached
-        -- wrapper, so only use the same-page refresh path while that wrapper
-        -- still exists; otherwise SelectPage must rebuild it immediately.
-        if M.activeKey == pageKey and M.cache and M.cache[pageKey] then
+        -- Special stages share a page key, but declare separate bounded views.
+        -- SelectPage restores that view's controls and click-target ownership.
+        if not stage.special and M.activeKey == pageKey and M.cache and M.cache[pageKey] then
             if type(M.RefreshGuidedTourChrome) == "function" then M.RefreshGuidedTourChrome("SAME_PAGE_STAGE") end
             return true
         end
@@ -1795,7 +1801,7 @@ local function CompleteTour()
     Runtime.touchedSignature = nil
     Runtime.lastVisualSignature = nil
     M.RefreshGuidedTourChrome("COMPLETE")
-    M.InvalidatePage("home")
+    RefreshTourDashboard()
     M.SelectPage("home")
     return true
 end
@@ -2793,8 +2799,7 @@ function M.StartGuidedTour(opts)
     Runtime.lastVisualSignature = nil
     Invoke(Tour(), "SetStage", stage.id, stage.index)
     WriteCursor(stage, InitialCursor(stage))
-    M.InvalidatePage("home")
-    M.InvalidatePage("guided_setup")
+    RefreshTourDashboard()
     return SelectExpectedPage(stage)
 end
 
@@ -2947,7 +2952,7 @@ local function InfoCard(builder, T, title, body, iconKey, height)
     if type(T.PlayMotion) == "function" then
         T.PlayMotion(card, "controlFocusIn", { fromAlpha = 0.18, toAlpha = 1, duration = 0.20 })
     end
-    return card
+    return card, copy
 end
 
 -- InfoCard with a screenshot below the copy. Rounded corners are the one thing
@@ -3058,7 +3063,9 @@ local function BuildChapterPage(ctx, T, W, stage)
     else
         Header(b, all and "Part 3 of 3 - Class Resources" or "Class Resources", "Use the interactive preview to shape your class display.")
         InfoCard(b, T, "Class-aware preview", "Test the current class layout and change its size and arrangement live.", "classpower", 78)
-        InfoCard(b, T, "Cooldown-aware placement", "Anchor it to Essential Cooldowns or keep it independently placed in Edit Mode.", "classpower", 82)
+        InfoCard(b, T, CooldownAnchorSupported() and "Cooldown-aware placement" or "Independent placement",
+            CooldownAnchorSupported() and "Anchor it to Essential Cooldowns or keep it independently placed in Edit Mode."
+                or "Place Class Resources independently in Edit Mode.", "classpower", 82)
     end
     return math.abs(b.y) + 34
 end
@@ -3272,16 +3279,16 @@ local function BuildPowerMovesPage(ctx, T, W)
     InfoCard(b, T, "Spell Icons by spec",
         "Track presets or custom Spell IDs per spec, then choose icon or bar placement, cooldown behavior, and full-frame effects.", "gf_auras", 92)
     InfoCard(b, T, "Party combat intelligence", "Corner Indicators and External Defensives keep critical group information compact.", "gf_indicators", 92)
-    InfoCard(b, T, "Cooldown-aware layouts", "Anchor Unitframes and Class Resources to Essential Cooldowns, or keep every frame independently placed.",
+    InfoCard(b, T, CooldownAnchorSupported() and "Cooldown-aware layouts" or "Independent layouts",
+        CooldownAnchorSupported() and "Anchor Unitframes and Class Resources to Essential Cooldowns, or keep every frame independently placed."
+            or "Place Unitframes and Class Resources independently in Edit Mode.",
         "classpower", 86)
     InfoCard(b, T, "Find settings with Search", "Search Menu2 in everyday language to jump to the exact setting. Search only includes controls available in your active modules.", "home", 86)
     return math.abs(b.y) + 34
 end
 
 local function BuildFinalReviewPage(ctx, T, W)
-    local summary = M.GetGuidedTourSummary()
     local b = W.PageBuilder(ctx)
-    local handled = (tonumber(summary.reviewedControls) or 0) + (tonumber(summary.keptControls) or 0)
     local quick = SelectedSetupMode() == "quick"
     Header(b, format(Tr("%s, your setup is ready"), PlayerDisplayName()), quick
         and "Finish returns to the Dashboard. Smart Search stays ready for settings and questions."
@@ -3289,8 +3296,13 @@ local function BuildFinalReviewPage(ctx, T, W)
     InfoCard(b, T, quick and "You are ready to play" or "Anything else? Just ask", quick
         and "Use the Dashboard for common tasks, or type a setting or full question into Smart Search."
         or "Try searches such as 'Party frame width', 'Spell Icons', or 'Class Resources'. Search opens the matching setting in Menu2.", "home", 104)
-    InfoCard(b, T, "You trained on real settings",
-        format(Tr("%d guided settings were changed or deliberately kept. Nothing was copied into a separate wizard."), handled), "uf_player", 82)
+    local _, summaryCopy = InfoCard(b, T, "You trained on real settings", "", "uf_player", 82)
+    ctx:AddRefresher(function()
+        local summary = M.GetGuidedTourSummary()
+        local handled = (tonumber(summary.reviewedControls) or 0) + (tonumber(summary.keptControls) or 0)
+        T.SetTranslatedText(summaryCopy,
+            format(Tr("%d guided settings were changed or deliberately kept. Nothing was copied into a separate wizard."), handled))
+    end)
 
     local restorePoint = select(2, Invoke(Tour(), "GetRestorePoint"))
     if type(restorePoint) == "table" then
@@ -3313,27 +3325,46 @@ local function BuildFinalReviewPage(ctx, T, W)
         button:SetPoint("RIGHT", restore, "RIGHT", -16, 0)
         button._msuf2SkipHistoryCheckpoint = true
         if type(T.CenterButtonLabel) == "function" then T.CenterButtonLabel(button) end
-        local armed = false
-        SetButtonEnabled(button, not restoreAlreadyUsed and not restoreProfileMismatch)
+        local armedPoint
+        local function RefreshRestore()
+            restoreAlreadyUsed = TourState().restorePointUsedAt ~= nil
+            restoreProfileMismatch = ProfileMismatch()
+            local currentPoint = select(2, Invoke(Tour(), "GetRestorePoint"))
+            if currentPoint ~= armedPoint or restoreAlreadyUsed or restoreProfileMismatch then armedPoint = nil end
+            T.SetTranslatedText(title, Tr(restoreAlreadyUsed and "Starting setup restored" or "Starting setup saved"))
+            T.SetTranslatedText(copy, Tr(restoreAlreadyUsed
+                and "The starting profile values are active again. Finish when you are ready."
+                or (armedPoint and "This replaces the current profile values with the setup starting point. Click again to confirm."
+                    or "You can restore the profile state captured before this guided setup.")))
+            SetFontColor(copy, armedPoint and (T.colors.warning or T.colors.warn or T.colors.muted)
+                or (restoreAlreadyUsed and (T.colors.ok or T.colors.accent) or T.colors.muted))
+            SetButtonText(button, restoreAlreadyUsed and "Starting setup restored" or (armedPoint and "Confirm restore" or "Restore starting setup"))
+            SetButtonEnabled(button, type(currentPoint) == "table" and not restoreAlreadyUsed and not restoreProfileMismatch)
+        end
+        ctx:AddRefresher(RefreshRestore)
+        ctx.wrapper:HookScript("OnHide", function() armedPoint = nil end)
+        RefreshRestore()
         button:SetScript("OnClick", function()
-            if restoreAlreadyUsed or ProfileMismatch() or BlockedByCombat() then return end
-            if not armed then
-                armed = true
+            if TourState().restorePointUsedAt ~= nil or ProfileMismatch() or BlockedByCombat() then return end
+            local point = select(2, Invoke(Tour(), "GetRestorePoint"))
+            if type(point) ~= "table" then return end
+            if armedPoint ~= point then
+                armedPoint = point
                 SetButtonText(button, "Confirm restore")
                 M.Theme.SetTranslatedText(copy, Tr("This replaces the current profile values with the setup starting point. Click again to confirm."))
                 SetFontColor(copy, T.colors.warning or T.colors.warn or T.colors.muted)
                 return
             end
-            local point = select(2, Invoke(Tour(), "GetRestorePoint"))
-            if type(point) ~= "table" then return end
+            armedPoint = nil
             Invoke(Tour(), "MarkRestorePointUsed", true)
             local restored = M.RestoreGuidedTourRestorePoint(point)
             if restored ~= true then
                 Invoke(Tour(), "MarkRestorePointUsed", false)
-                armed = false
                 SetButtonText(button, "Restore starting setup")
                 M.Theme.SetTranslatedText(copy, Tr("The starting setup could not be restored. Your current values remain active."))
                 SetFontColor(copy, T.colors.warning or T.colors.warn or T.colors.muted)
+            else
+                RefreshRestore()
             end
         end)
         RegisterGuidedPageButton(button, "restore_start", "Restore starting setup",
@@ -3373,16 +3404,37 @@ function M.BuildGuidedSetupPage(ctx)
     local T, W = M.Theme, M.Widgets
     if not (ctx and ctx.wrapper and T and W) then return 240 end
     local stage = CurrentStage()
-    if stage.id == "unit_intro" or stage.id == "group_intro" or stage.id == "class_intro" then
-        return BuildChapterPage(ctx, T, W, stage)
-    end
-    if stage.id == "edit_mode" then return BuildEditModePage(ctx, T, W) end
-    if stage.id == "group_edit_mode" then return BuildGroupEditModePage(ctx, T, W) end
-    if stage.id == "power_moves" then return BuildPowerMovesPage(ctx, T, W) end
-    if stage.id == "final_review" then return BuildFinalReviewPage(ctx, T, W) end
-    return BuildMenuBasicsPage(ctx, T, W)
+    local builder = BuildMenuBasicsPage
+    if stage.id == "unit_intro" or stage.id == "group_intro" or stage.id == "class_intro" then builder = BuildChapterPage
+    elseif stage.id == "edit_mode" then builder = BuildEditModePage
+    elseif stage.id == "group_edit_mode" then builder = BuildGroupEditModePage
+    elseif stage.id == "power_moves" then builder = BuildPowerMovesPage
+    elseif stage.id == "final_review" then builder = BuildFinalReviewPage end
+    Runtime.specialClickTargets = { stageId = stage.id, groups = {} }
+    local height = builder(ctx, T, W, stage)
+    local targets = Runtime.specialClickTargets
+    ctx:AddRefresher(function()
+        Runtime.specialClickTargets = targets
+        if stage.id == "group_intro" then M.SetMenuStateValue("gfScope", "party") end
+    end)
+    return height
 end
 
 M.navPrimaryForKey = type(M.navPrimaryForKey) == "table" and M.navPrimaryForKey or {}
 M.navPrimaryForKey.guided_setup = "home"
-M.RegisterPage("guided_setup", { title = "Guided Setup", build = M.BuildGuidedSetupPage, version = 1 })
+M.RegisterPage("guided_setup", { title = "Guided Setup", build = M.BuildGuidedSetupPage, version = 1,
+    variantKey = function()
+        local stage = CurrentStage()
+        local key = stage.special and stage.id or "menu_basics"
+        if key == "unit_intro" or key == "group_intro" or key == "class_intro" then
+            key = key .. (SelectedSetupArea() == "all" and ":all" or ":single")
+        elseif key == "final_review" then
+            local point = select(2, Invoke(Tour(), "GetRestorePoint"))
+            local suite = M.GetSuiteOverview()
+            key = key .. (SelectedSetupMode() == "quick" and ":quick" or ":complete")
+                .. (type(point) == "table" and ":restore" or ":no-restore")
+                .. (suite and M.GetSuiteModulesPageKey(suite) and ":suite" or ":no-suite")
+        end
+        return key
+    end
+})

@@ -396,15 +396,32 @@ function W.SetCollapsibleSummary(section, text)
     summary:SetText(text or "")
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
 end
-function W.ControlCard(parent, title, subtitle, x, y, width, height)
+local function PaintControlGroupDivider(divider)
+    local color = T.colors.borderSoft
+    divider:SetColorTexture(color[1], color[2], color[3], 0.55)
+end
+-- A group keeps the same layout and control metadata without nesting another
+-- filled surface inside an accordion. Other cards retain their material.
+function W.ControlCard(parent, title, subtitle, x, y, width, height, style)
     if not parent then return nil end
     width = width or 360
     height = height or 120
-    local cardBase = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
-    local cardBg = { cardBase[1], cardBase[2], cardBase[3], 0.86 }
-    local cardBorder = T.colors.cardBorder or T.colors.borderSoft
-    local card = T.Panel(parent, nil, cardBg, cardBorder)
-    T.ApplySurface(card, { bg = cardBg, border = cardBorder, plastic = false })
+    local card
+    if style == "group" then
+        card = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
+        local divider = PixelLayoutRegion(card:CreateTexture(nil, "BORDER"))
+        divider:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -38)
+        divider:SetPoint("TOPRIGHT", card, "TOPRIGHT", -16, -38)
+        divider:SetHeight(1)
+        PaintControlGroupDivider(divider)
+        if MSUF.MenuSkin then MSUF.MenuSkin.TrackPaint(divider, PaintControlGroupDivider) end
+    else
+        local cardBase = ThemeColor("coreShadow", { 0.006, 0.016, 0.032, 1.00 })
+        local cardBg = { cardBase[1], cardBase[2], cardBase[3], 0.86 }
+        local cardBorder = T.colors.cardBorder or T.colors.borderSoft
+        card = T.Panel(parent, nil, cardBg, cardBorder)
+        T.ApplySurface(card, { bg = cardBg, border = cardBorder, plastic = false })
+    end
     SetSearchTitle(card, title)
     RegisterSearchObject(card, title, "section")
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
@@ -422,7 +439,7 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
     parent._msuf2ControlCards = parent._msuf2ControlCards or {}
     parent._msuf2ControlCards[#parent._msuf2ControlCards + 1] = card
     if card.EnableMouse then card:EnableMouse(false) end
-    local heading = T.Font(card, "GameFontNormal", title or "", T.colors.text, "card")
+    local heading = T.Font(card, "GameFontNormal", title or "", T.colors.text, "section")
     SetSearchText(heading, title)
     heading:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
     heading:SetWidth(max(24, width - 32))

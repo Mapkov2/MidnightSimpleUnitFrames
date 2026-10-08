@@ -376,9 +376,60 @@ function Preview.WriteSelectionCoordinates(box, handle, x, y, reason)
     dx, dy = Preview.ActiveHandleDelta(handle, dx, dy)
     return WriteHandleOffsets(handle, storedX + dx, storedY + dy, reason)
 end
-function Preview.ResetSelectionOffsets(_, handle, reason)
-    local fields = handle and handle._fields or {}
-    return WriteHandleOffsets(handle, tonumber(fields.defaultX) or 0, tonumber(fields.defaultY) or 0, reason)
+local selectionDefaults
+function Preview.DefaultSelectionOffsets(_, handle)
+    if not handle then return 0, 0 end
+    -- Client defaults are immutable. Resolve once on menu selection, never on
+    -- an animation or drag tick.
+    if not selectionDefaults then selectionDefaults = MSUF.MSUF_CreateFactoryDefaultProfile() or {} end
+    local fields, box = handle._fields or {}, handle._preview
+    local _, _, key = UnitDB(box and box.key)
+    local _, _, xKey, yKey = ReadHandleOffsets(handle)
+    local _, _, fallbackX, fallbackY = ResolveHandleFields(box, fields)
+    local general = selectionDefaults.general or {}
+    local source = selectionDefaults[key] or {}
+    if fields.auraPreviewKind then
+        local auras = selectionDefaults.auras3 or {}
+        local customIndex = tonumber(fields.auraPreviewKind:match("^custom(%d)$"))
+        if customIndex then
+            local containers = auras.customContainers
+            local record = containers and containers.perUnit and containers.perUnit[key]
+            local item = record and record.items and record.items[customIndex]
+            source = item and item.placed or {}
+        else
+            local unit = key == "boss" and "boss1" or key == "arena" and "arena1" or key
+            local record = auras.perUnit and auras.perUnit[unit]
+            source = record and record.layout or {}
+        end
+    elseif fields.global or fields.castbar or fields.suffixX then source = general
+    elseif fields.barsX then source = selectionDefaults.bars or {} end
+    local function Read(field, axis)
+        local value = field and source[field]
+        if value == nil and fields.text then
+            local alias = Preview.LegacyTextOffsetAlias(field)
+            value = alias and source[alias]
+            if value == nil then value = general[field] or (alias and general[alias]) end
+        end
+        if value == nil and fields.iconFallback then
+            local suffix = axis == "x" and fields.suffixX or fields.suffixY
+            value = suffix and general[suffix:gsub("^Icon", "castbarIcon")]
+        end
+        if value == nil then
+            local defaultKey = axis == "x" and fields.defaultXFromG or fields.defaultYFromG
+            value = defaultKey and general[defaultKey]
+        end
+        if value == nil then value = axis == "x" and fallbackX or fallbackY end
+        local base = axis == "x" and fields.bossBaseX or fields.bossBaseY
+        if fields.suffixX and (key == "boss" or key == "arena") and base ~= nil then
+            value = (tonumber(field and general[field]) or 0) + base
+        end
+        return tonumber(value) or 0
+    end
+    return Read(xKey, "x"), Read(yKey, "y")
+end
+function Preview.ResetSelectionOffsets(owner, handle, reason)
+    local x, y = Preview.DefaultSelectionOffsets(owner, handle)
+    return WriteHandleOffsets(handle, x, y, reason)
 end
 local function FocusPreviewKeyboardTarget(box, handle, defer)
     if PreviewHelpers.FocusKeyboardTarget then return PreviewHelpers.FocusKeyboardTarget(box, handle, defer, { selectedField = "_selectedHandle" }) end
@@ -1033,10 +1084,7 @@ function BoxBuild.Selection(box, s)
             WriteOffsets = Preview.WriteSelectionCoordinates,
             ResetOffsets = Preview.ResetSelectionOffsets,
             NudgeDelta = function(owner, dx, dy) return NudgeSelectedHandleDelta(owner, dx, dy) end,
-            DefaultOffsets = function(_, handle)
-                local fields = handle._fields or {}
-                return tonumber(fields.defaultX) or 0, tonumber(fields.defaultY) or 0
-            end,
+            DefaultOffsets = Preview.DefaultSelectionOffsets,
             OpenSettings = function(_, handle, source) return OpenPreviewHandleSettings(handle, source) end,
             SelectHandle = function(_, handle) return SelectPreviewHandle(handle, true) end,
             UpdateHint = function(owner, handle) return UpdateHandleHint(owner, handle) end,
@@ -1496,6 +1544,7 @@ do
         PreviewInCombat = PreviewInCombat, TR = TR, PortraitStyleGet = PortraitStyleGet,
         RuntimeSpecForPreviewKey = RuntimeSpecForPreviewKey,
         RuntimeAppliedPortraitSizeForPreviewKey = PreviewRuntime.AppliedPortraitSizeForPreviewKey or Fallbacks.Nil,
+        DetachedCastbarOffsetForPreviewKey = PreviewRuntime.DetachedCastbarOffsetForPreviewKey,
         RuntimeVisualScaleForPreviewKey = RuntimeVisualScaleForPreviewKey,
         RuntimeCastbarVisualScaleForPreviewKey = PreviewRuntime.CastbarVisualScaleForPreviewKey or RuntimeVisualScaleForPreviewKey,
         ClampPreviewZoom = ClampPreviewZoom,

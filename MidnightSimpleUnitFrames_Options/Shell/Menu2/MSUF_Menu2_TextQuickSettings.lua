@@ -729,7 +729,7 @@ local function EnsurePopup()
         end
 
         SetEnabled(self.colors, targetCount > 0)
-        self.colorNote:SetText(tostring(targetCount) .. (targetCount == 1 and Tr(" relevant color") or Tr(" relevant colors")))
+        self.colorNote:SetText(M.Format(targetCount == 1 and "%d relevant color" or "%d relevant colors", targetCount))
     end
 
     popup:SetScript("OnKeyDown", function(self, key)

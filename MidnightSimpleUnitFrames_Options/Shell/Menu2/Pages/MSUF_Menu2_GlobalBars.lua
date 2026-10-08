@@ -881,7 +881,11 @@ local function BuildScopeSection(ctx, b)
             local key = CurrentBarsScope()
             if key ~= "shared" then
                 ScopeSetOverride(key, "hlOverride", v)
-                ApplyBars("MSUF2_BARS_OVERRIDE")
+                -- Texture refresh alone leaves the unit outline's painted state stale.
+                M.RequestGeneralApply("MSUF2_BARS_OVERRIDE", {
+                    preview = true, applyAll = false, bars = true,
+                    barOutline = not IsGFScope(key), barsScope = key,
+                })
             end
             RefreshBarsPage("bars-scope-override")
         end,
@@ -890,7 +894,9 @@ local function BuildScopeSection(ctx, b)
                 local key = scopeValues[i].value
                 if key ~= "shared" then ScopeSetOverride(key, "hlOverride", false) end
             end
-            ApplyBars("MSUF2_BARS_RESET_OVERRIDES")
+            M.RequestGeneralApply("MSUF2_BARS_RESET_OVERRIDES", {
+                preview = true, applyAll = false, bars = true, barOutline = true, barsScope = "shared",
+            })
             RefreshBarsPage("bars-reset-overrides")
         end,
         hint = "Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.",

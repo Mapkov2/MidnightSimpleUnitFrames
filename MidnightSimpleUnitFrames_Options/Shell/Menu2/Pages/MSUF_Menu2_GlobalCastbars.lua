@@ -411,8 +411,40 @@ local function BuildFocusKickSection(PageState, secBuilder)
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
     M.TrackRefresh(ctx, syncFocusKick)
 end
+-- The MSUF Suite's enemy nameplates draw this indicator too (MSUF.KickReady,
+-- Castbars/MSUF_InterruptReady.lua). Their switch is always built, so the
+-- search index carries it, and shown where the Suite's nameplates can draw it
+-- (the index hides its row elsewhere through this probe, like the GCD Bar's).
+-- It works while that module runs, which registers it as the engine's
+-- consumer. The title names the module in the disabled reason.
+local function SuiteNameplatesTitle()
+    local link = MSUF.SuiteLink
+    if not link.HasNameplateKickReady() then return nil end
+    return link.ModuleTitle("nameplates") or "Nameplates"
+end
+M.CastbarSuiteNameplatesSupported = function() return SuiteNameplatesTitle() ~= nil end
+local function SuiteNameplatesRunning()
+    return MSUF.KickReady.HasConsumers()
+end
 local function BuildInterruptReadySection(PageState, secBuilder)
     local ctx, BuildCastControlSpecs, ApplyCastbarsIfNeeded, ApplyAndRefresh, RequestCastPreviewRefresh = PageState.ctx, PageState.BuildCastControlSpecs, PageState.ApplyCastbarsIfNeeded, PageState.ApplyAndRefresh, PageState.RequestCastPreviewRefresh
+    local nameplatesTitle = SuiteNameplatesTitle()
+    -- One toggle per castbar unit this client has (MSUF.Client.SupportsUnit):
+    -- Classic Era has no focus, boss or arena castbars, TBC no boss castbars and
+    -- WoW Forever no arena castbars. Kept toggles stack from the top.
+    local unitToggles = {}
+    for _, unitToggle in ipairs({
+        { "target", "Show on Target castbar", "kickReadyShowTarget" },
+        { "focus", "Show on Focus castbar", "kickReadyShowFocus" },
+        { "boss", "Show on Boss castbars", "kickReadyShowBoss" },
+        { "arena", "Show on Arena castbars", "kickReadyShowArena" },
+    }) do
+        if unitToggle[1] == "target" or not M.SupportsFrameScope or M.SupportsFrameScope(unitToggle[1]) then
+            unitToggles[#unitToggles + 1] = unitToggle
+        end
+    end
+    -- A shown nameplate switch under four castbar toggles moves the placement block down a row.
+    local placementShift = (nameplatesTitle and #unitToggles >= 4) and 26 or 0
     local kick = secBuilder:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 382, false)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(kick, function()
@@ -436,21 +468,13 @@ local function BuildInterruptReadySection(PageState, secBuilder)
         RequestCastPreviewRefresh()
         if syncKickReady then syncKickReady() end
     end
-    -- One toggle per castbar unit this client has (MSUF.Client.SupportsUnit):
-    -- Classic Era has no focus, boss or arena castbars, TBC no boss castbars and
-    -- WoW Forever no arena castbars. Kept toggles stack from the top.
     local kickSpecs = {}
-    for _, unitToggle in ipairs({
-        { "target", "Show on Target castbar", "kickReadyShowTarget" },
-        { "focus", "Show on Focus castbar", "kickReadyShowFocus" },
-        { "boss", "Show on Boss castbars", "kickReadyShowBoss" },
-        { "arena", "Show on Arena castbars", "kickReadyShowArena" },
-    }) do
-        if unitToggle[1] == "target" or not M.SupportsFrameScope or M.SupportsFrameScope(unitToggle[1]) then
-            kickSpecs[#kickSpecs + 1] = { "toggle", unitToggle[2], kickLeftX, -56 - #kickSpecs * 26, 300, unitToggle[3], false,
-                "MSUF2_KICK_READY_ENABLE", ApplyKickReady }
-        end
+    for _, unitToggle in ipairs(unitToggles) do
+        kickSpecs[#kickSpecs + 1] = { "toggle", unitToggle[2], kickLeftX, -56 - #kickSpecs * 26, 300, unitToggle[3], false,
+            "MSUF2_KICK_READY_ENABLE", ApplyKickReady }
     end
+    kickSpecs[#kickSpecs + 1] = { "toggle", "Show on enemy nameplates (MSUF Suite)", kickLeftX, -56 - #kickSpecs * 26, 300,
+        "kickReadyShowNameplates", false, "MSUF2_KICK_READY_ENABLE", ApplyKickReady }
     kickSpecs[#kickSpecs + 1] = { "dropdown", "Indicator style", kickRightX, -56, 300,
         VT("border", "Castbar border", "box", "Color box next to cast", "fill", "Unavailable cast fill"), "kickReadyStyle", "border",
         "MSUF2_KICK_READY_STYLE", ApplyKickReady }
@@ -459,16 +483,22 @@ local function BuildInterruptReadySection(PageState, secBuilder)
         "MSUF2_KICK_READY_AUTO", ApplyKickReady }
     local kickControls = BuildCastControlSpecs(kick, kickSpecs, "interrupt_ready")
     local colorHint = W.Text(kick, "Colors: Colors menu > Castbar Colors", kickRightX, -196, 370, T.colors.muted)
-    W.LabelAt(kick, "Placement", kickLeftX, -172, 160, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(kick, "Placement", kickLeftX, -172 - placementShift, 160, "GameFontNormalSmall", T.colors.accent)
     M.Assign(kickControls, BuildCastControlSpecs(kick, {
         { "toggle", "Show interrupt availability markers", kickRightX, -216, 370, "kickReadyTimeMarker", false, "MSUF2_KICK_TIME_MARKER", ApplyKickReady },
         { "toggle", "Shade cast time after interrupts recover", kickRightX, -244, 370, "kickReadyTimeSegment", false,
             "MSUF2_KICK_TIME_SEGMENT", ApplyKickReady },
-        { "dropdown", "Anchor", kickLeftX, -190, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"), "kickReadyAnchor", "RIGHT",
-            "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
-        { "slider", "X offset", kickLeftX, -244, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
-        { "slider", "Y offset", kickLeftX, -298, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
+        { "dropdown", "Anchor", kickLeftX, -190 - placementShift, 260, VT("RIGHT", "Right", "LEFT", "Left", "TOP", "Top", "BOTTOM", "Bottom"),
+            "kickReadyAnchor", "RIGHT", "MSUF2_KICK_READY_ANCHOR", ApplyCastbarsIfNeeded },
+        { "slider", "X offset", kickLeftX, -244 - placementShift, 320, -50, 50, 1, "kickReadyOffsetX", 4, "MSUF2_KICK_READY_X", ApplyCastbarsIfNeeded },
+        { "slider", "Y offset", kickLeftX, -298 - placementShift, 320, -50, 50, 1, "kickReadyOffsetY", 0, "MSUF2_KICK_READY_Y", ApplyCastbarsIfNeeded },
     }, "interrupt_ready.placement"))
+    local nameplateToggle = kickControls.kickReadyShowNameplates
+    if not nameplatesTitle then
+        nameplateToggle:Hide()
+    elseif W.SetControlDisabledReason and W.TurnOnReason then
+        W.SetControlDisabledReason(nameplateToggle, W.TurnOnReason(nameplatesTitle, SuiteNameplatesRunning))
+    end
     local style, size, auto = kickControls.kickReadyStyle, kickControls.kickReadySize, kickControls.kickReadyAutoSize
     local placementControls = { kickControls.kickReadyAnchor, kickControls.kickReadyOffsetX, kickControls.kickReadyOffsetY }
     -- The time markers draw on an indicator's castbar, so they follow the unit toggles too.
@@ -479,6 +509,8 @@ local function BuildInterruptReadySection(PageState, secBuilder)
             or (kickControls.kickReadyShowFocus ~= nil and ReadGBool("kickReadyShowFocus", false))
             or (kickControls.kickReadyShowBoss ~= nil and ReadGBool("kickReadyShowBoss", false))
             or (kickControls.kickReadyShowArena ~= nil and ReadGBool("kickReadyShowArena", false))
+            or (nameplatesTitle ~= nil and ReadGBool("kickReadyShowNameplates", false))
+        if nameplatesTitle then SetControlEnabled(nameplateToggle, SuiteNameplatesRunning()) end
         local autoOn = ReadGBool("kickReadyAutoSize", true)
         local isFill = ReadG("kickReadyStyle", "border") == "fill"
         SetControlEnabled(style, enabled)

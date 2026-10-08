@@ -151,8 +151,9 @@ local buildHome = Check(M.pages.home and M.pages.home.build, "the Dashboard must
 local function Build(width)
     fonts, buttons, editBoxes, registered, calls = {}, {}, {}, {}, {}
     palette.shown, palette.openResult, paletteArgs, scheduledBox = false, false, nil, nil
-    local ctx = { wrapper = Fake("wrapper"), width = width or 760 }
+    local ctx = { wrapper = Fake("wrapper"), width = width or 760, entry = {}, refreshers = {} }
     function ctx:SetContentHeight(height) self.height = height end
+    function ctx:AddRefresher(fn) self.refreshers[#self.refreshers + 1] = fn end
     buildHome(ctx)
 end
 local function FindFont(text)

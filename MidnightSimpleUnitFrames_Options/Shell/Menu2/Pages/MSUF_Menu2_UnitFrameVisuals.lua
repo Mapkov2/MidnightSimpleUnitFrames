@@ -343,12 +343,12 @@ local function BuildPortrait(ctx, builder, unit)
     local tabFrames = {}
     local generalTab, geometryTab, placementTab, borderTab, advancedTab, dragonTab =
         UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "geometry", "placement", "border", "advanced", "dragon")
-    local mainCard = W.ControlCard(generalTab, "Visibility & Mode", nil, leftX, -4, leftW, PORTRAIT_CARD_H.main)
-    local geometryCard = W.ControlCard(geometryTab, "Geometry", nil, rightX, -4, rightW, PORTRAIT_CARD_H.geometry)
-    local placementCard = W.ControlCard(placementTab, "Placement", nil, leftX, -4, leftW, PORTRAIT_CARD_H.placement)
-    local borderCard = W.ControlCard(borderTab, "Shape & Border", nil, leftX, -4, leftW, PORTRAIT_CARD_H.border)
-    local styleCard = W.ControlCard(advancedTab, "Class & Background", nil, rightX, -4, rightW, PORTRAIT_CARD_H.style)
-    local dragonCard = W.ControlCard(dragonTab, "Dragon decoration", nil, leftX, -4, leftW, PORTRAIT_CARD_H.dragon)
+    local mainCard = W.ControlCard(generalTab, "Visibility & Mode", nil, leftX, -4, leftW, PORTRAIT_CARD_H.main, "group")
+    local geometryCard = W.ControlCard(geometryTab, "Geometry", nil, rightX, -4, rightW, PORTRAIT_CARD_H.geometry, "group")
+    local placementCard = W.ControlCard(placementTab, "Placement", nil, leftX, -4, leftW, PORTRAIT_CARD_H.placement, "group")
+    local borderCard = W.ControlCard(borderTab, "Shape & Border", nil, leftX, -4, leftW, PORTRAIT_CARD_H.border, "group")
+    local styleCard = W.ControlCard(advancedTab, "Class & Background", nil, rightX, -4, rightW, PORTRAIT_CARD_H.style, "group")
+    local dragonCard = W.ControlCard(dragonTab, "Dragon decoration", nil, leftX, -4, leftW, PORTRAIT_CARD_H.dragon, "group")
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(borderCard, { "portrait.border" }, {
             title = "Portrait Border Color",
@@ -832,11 +832,11 @@ local function BuildPower(ctx, builder, unit)
     if W.AttachContextColorReferences then
         W.AttachContextColorReferences(borderCard, function()
             local refs = { "power.current" }
-            local general, bars = GetGeneral(), GetBars()
-            if not (general.powerBarBgMatchBarColor == true or bars.powerBarBgMatchBarColor == true) then
+            if not (GetGeneral().powerBarBgMatchBarColor == true or GetBars().powerBarBgMatchBarColor == true) then
                 refs[#refs + 1] = "bar.power_background"
             end
             refs[#refs + 1] = "bar.power_loss"
+            if ReadPowerBorderEnabled() then refs[#refs + 1] = "power.border" end
             return refs
         end, {
             title = "Power Bar Colors",
@@ -1274,16 +1274,16 @@ function CastbarSection.Cards(s)
     local generalTab, iconTab, spellTab, timeTab, advancedTab =
         UnitSectionShared.MakeTabFrames(sec, -64, sectionW, tabFrames, "general", "icon", "spell", "time", "advanced")
     local generalCard = W.ControlCard(generalTab, nil, nil, leftX, -4, leftW, 164)
-    local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 164)
-    local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -186, sectionW - 32, 166)
+    local providerCard = W.ControlCard(generalTab, "Provider & Surface", nil, rightX, -4, rightW, 164, "group")
+    local sizeCard = W.ControlCard(generalTab, "Size", "Width can use manual bounds or follow another frame.", leftX, -186, sectionW - 32, 166, "group")
     local iconCard = W.ControlCard(iconTab, nil, nil, leftX, -4, leftW, 424)
-    local portraitIconCard = W.ControlCard(iconTab, "Portrait Cast Icon", nil, rightX, -4, rightW, 156)
+    local portraitIconCard = W.ControlCard(iconTab, "Portrait Cast Icon", nil, rightX, -4, rightW, 156, "group")
     local spellCard = W.ControlCard(spellTab, nil, nil, leftX, -4, leftW, 270)
-    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 270) or nil
+    local targetNameCard = fields.targetName and W.ControlCard(spellTab, "Cast Target Text", nil, rightX, -4, rightW, 270, "group") or nil
     local timeCard = W.ControlCard(timeTab, nil, nil, leftX, -4, leftW, 270)
-    local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
-    local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 212)
-    local layerAdvancedCard = W.ControlCard(advancedTab, "Whole Castbar Layer", nil, rightX, -230, rightW, 164)
+    local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190, "group")
+    local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 212, "group")
+    local layerAdvancedCard = W.ControlCard(advancedTab, "Whole Castbar Layer", nil, rightX, -230, rightW, 164, "group")
     if W.AttachContextColorReferences then
         local function GeneralCastbarColorRefs()
             local refs = {}

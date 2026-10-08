@@ -124,6 +124,34 @@ local function DecodeIdentityPart(value)
     return value and value:gsub("%%(%x%x)", HEX_ESCAPE_BYTES)
 end
 
+-- Contracts carry exact view identities. A multi-view selector without one
+-- matching setting is deliberately ambiguous and must not guess a destination.
+local PREPARE_KINDS = { groupSizingTab = true, groupScope = true, groupAuraWorkspace = true,
+    unitAuraWorkspace = true, unitAlphaTab = true }
+local function ConsiderPreparation(kind, value, score, ambiguous, k, v, setting, settingKey)
+    if not PREPARE_KINDS[k] then return kind, value, score, ambiguous end
+    local rank = settingKey and settingKey ~= "" and setting == settingKey and 2
+        or (setting == "*" or setting == true) and 1 or 0
+    if rank > score then return k, v, rank, false end
+    if rank > 0 and rank == score and (kind ~= k or value ~= v) then ambiguous = true end
+    return kind, value, score, ambiguous
+end
+function Search.ResolveExactPreparation(contracts, settingKey)
+    local kind, value, score, ambiguous = nil, nil, 0, false
+    if type(contracts) == "string" then
+        for k, v, setting in contracts:gmatch("([^|=]+)=([^|=]+)=([^|]+)") do
+            kind, value, score, ambiguous = ConsiderPreparation(kind, value, score, ambiguous, k, v, setting, settingKey)
+        end
+    elseif type(contracts) == "table" then
+        for k, values in pairs(contracts) do
+            for v, setting in pairs(values) do
+                kind, value, score, ambiguous = ConsiderPreparation(kind, value, score, ambiguous, k, v, setting, settingKey)
+            end
+        end
+    end
+    if not ambiguous then return kind, value end
+end
+
 local function DecodeLine(decoder, line)
     local EnsurePage, records, hintCache = decoder.EnsurePage, decoder.records, decoder.hintCache
     local pageKey, label, kind, settingKey, actionKey, hint, labelNorm, searchIdentity,
@@ -163,15 +191,7 @@ local function DecodeLine(decoder, line)
             haystack = haystack .. " " .. hintNorm
         end
 
-        -- Each sizing control belongs to one immutable tab. Its generated
-        -- contract can prepare that exact view even before the page is built.
-        local sizingTab
-        if pageKey == "gf_layout" and exactSectionId == "scaling"
-            and ("," .. exactTargetKinds .. ","):find(",groupSizingTab,", 1, true) then
-            sizingTab = ("|" .. exactTargetContracts .. "|"):match("|groupSizingTab=([^=|]+)=%*|")
-            if sizingTab ~= "general" and sizingTab ~= "tier10" and sizingTab ~= "tier20"
-                and sizingTab ~= "tier25" and sizingTab ~= "tier40" then sizingTab = nil end
-        end
+        local prepareKind, prepareValue = Search.ResolveExactPreparation(exactTargetContracts, settingKey)
         local count = decoder.count + 1
         decoder.count = count
         records[count] = {
@@ -195,8 +215,8 @@ local function DecodeLine(decoder, line)
                 settingKey = settingKey ~= "" and settingKey or nil,
                 actionKey = actionKey ~= "" and actionKey or nil,
                 sectionId = exactSectionId ~= "" and exactSectionId or nil,
-                prepareKind = sizingTab and "groupSizingTab" or nil,
-                prepareValue = sizingTab,
+                prepareKind = prepareKind,
+                prepareValue = prepareValue,
                 prepareKinds = exactTargetKinds ~= "" and exactTargetKinds or nil,
                 prepareContracts = exactTargetContracts ~= "" and exactTargetContracts or nil,
                 label = displayLabel,

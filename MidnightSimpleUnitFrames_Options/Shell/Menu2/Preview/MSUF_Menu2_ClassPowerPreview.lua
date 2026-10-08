@@ -449,13 +449,15 @@ local CP_POWER_ROUNDED_OPTS = {
     edgeSubLevel = 6,
     snapOff = Helpers.SnapOff,
     baseEdgeColor = function()
-        local db = EnsureDB()
-        local player = db.units and db.units.player or {}
-        local general = db.general or {}
-        return tonumber(player.barOutlineColorR) or tonumber(general.barBorderR) or 0,
-            tonumber(player.barOutlineColorG) or tonumber(general.barBorderG) or 0,
-            tonumber(player.barOutlineColorB) or tonumber(general.barBorderB) or 0,
-            tonumber(player.barOutlineColorA) or tonumber(general.barBorderA) or 1
+        local spec = MSUF.UFPreviewRuntime.SpecForPreviewKey("player")
+        local power = spec and spec.power
+        if power then return power.borderR, power.borderG, power.borderB, power.borderA end
+        local player = EnsureDB().player or {}
+        local r, g, b, a = Helpers.BaseEdgeColor()
+        return tonumber(player.powerBarBorderColorR) or tonumber(player.barOutlineColorR) or r,
+            tonumber(player.powerBarBorderColorG) or tonumber(player.barOutlineColorG) or g,
+            tonumber(player.powerBarBorderColorB) or tonumber(player.barOutlineColorB) or b,
+            tonumber(player.powerBarBorderColorA) or a
     end,
 }
 local CP_CLASS_ROUNDED_OPTS = {
@@ -544,7 +546,7 @@ local function RefreshHandleVisuals(preview)
     if preview.hint then
         if selected and selected._msufPlaced == true then
             local x, y = ReadHandle(selected)
-            preview.hint:SetText(string.format("%s   x: %d   y: %d",
+            T.SetTranslatedText(preview.hint, string.format(TR("%s   x: %d   y: %d"),
                 TR(selected._label or selected._key or "Element"), Round(x or 0), Round(y or 0)))
         else
             T.SetTranslatedText(preview.hint, TR("Click to open settings. Move resources in Edit Mode."))
@@ -862,6 +864,7 @@ local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth, nativeB
         if not width then width = (tonumber(frameW) or 275) - 4 end
     elseif widthMode == "custom" then
         width = tonumber(bars.classPowerWidth)
+        if not width or width < 30 then width = (tonumber(frameW) or 275) - 4 end
     else
         width = (tonumber(frameW) or 275) - (widthMode == "player" and 0 or 4)
     end
@@ -1397,6 +1400,7 @@ local function HPWidth(preview, bars, classFrame, powerFrame)
     local width
     if mode == "custom" then
         width = tonumber(bars.playerHPBarWidth)
+        if not width or width < 20 then width = preview.playerW end
     elseif mode == "power" then
         width = powerFrame and powerFrame.GetWidth and powerFrame:GetWidth()
     elseif mode == "player" then

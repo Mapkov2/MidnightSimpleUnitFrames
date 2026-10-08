@@ -1596,18 +1596,30 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                 if value == true and Model.LaneFiltersEnabled(unit, lane) ~= true then
                     Model.SetLaneFiltersEnabled(unit, lane, true)
                 end
-                -- Only mine and Non-player auras are mutually exclusive. Classic has no
-                -- Non-player control, so clear a nonPlayer flag imported from Retail
-                -- instead of combining both filters into an always-empty Debuff lane.
+                -- The supported ownership filters are mutually exclusive on Classic too.
                 if value == true and lane == "debuff" then Model.WriteFilter(unit, lane, "nonPlayer", false) end
                 Model.WriteFilter(unit, lane, "onlyMine", value == true)
                 ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_onlyMine", true)
             end,
             AuraControlMeta(ctx, "unit-workspace.lane." .. AuraCatalogToken(lane) .. ".filters.only-mine", nil,
                 "auras3." .. unit .. "." .. lane .. ".filter.onlyMine"))
-        AddTooltip(onlyMine, "Only mine", lane == "debuff"
-            and "Only Debuffs applied by the player."
-            or "Only auras applied by the player.")
+        M.AuraControls.AddCasterFilterTooltip(onlyMine, lane)
+        if lane == "debuff" then
+            BindSwitch(ctx, section, "Non-Player Auras", 24 + 2 * (colW + gap), -42, colW,
+                function()
+                    return Model.LaneFiltersEnabled(unit, lane) and Model.ReadFilter(unit, lane, "nonPlayer", false) == true
+                end,
+                function(value)
+                    if value == true then
+                        Model.SetLaneFiltersEnabled(unit, lane, true)
+                        Model.WriteFilter(unit, lane, "onlyMine", false)
+                    end
+                    Model.WriteFilter(unit, lane, "nonPlayer", value == true)
+                    ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_nonPlayer", true)
+                end,
+                AuraControlMeta(ctx, "unit-workspace.lane.debuff.filters.non-player", nil,
+                    "auras3." .. unit .. ".debuff.filter.nonPlayer"))
+        end
         local hidePermanent = BindSwitch(ctx, section, "Hide permanent", 24 + colW + gap, -42, colW,
             function()
                 return type(Model.ReadBlacklistHidePermanent) == "function"
@@ -1715,7 +1727,9 @@ local function BuildCompactUnitAuraFilters(ctx, b, unit, lane)
                 -- Older profiles stored the same RAID token in a second
                 -- Exclusive dropdown. Fold it into the visible Raid switch so
                 -- the legacy restriction can also be turned off here.
-                if spec[2] == "raid" then Model.WriteFilter(unit, lane, "exclusive", "none") end
+                if key == "raid" or (value == true and not modifier) then
+                    Model.WriteFilter(unit, lane, "exclusive", "none")
+                end
                 Model.WriteFilter(unit, lane, spec[2], value)
                 ApplyUnit(ctx, unit, "AURAS3_FILTER_" .. lane .. "_" .. spec[2], true)
                 if not modifier or spec[4] then QueueAurasPageRefresh(ctx, "auras-filter-conflict") end
@@ -2325,6 +2339,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local currentTab = CurrentTab()
     local normalLane = currentTab == "buff" or currentTab == "debuff"
     local currentTool = CurrentUnitAuraTool(unit, currentTab)
+    M.AuraControls.ConfigureSearchView(ctx, "unitAuraWorkspace", currentTab .. "_" .. currentTool)
     local customContainerPatterns = {}
     for i = 1, #M._customContainerSearchSuffixes do
         local suffix = M._customContainerSearchSuffixes[i]

@@ -10,7 +10,20 @@ local SettingMeta = UP.SettingMeta
 -- Unified, simple transparency: separate health/resource opacity cards with
 -- foreground and background sliders, plus one toggle that keeps frame texts +
 -- portrait fully opaque while bars dim. Range fade multiplies HP at runtime.
+local function AlphaMeta(ctx, path, unit, key, state)
+    local meta = SettingMeta(ctx, path, unit, key)
+    local tab = (key == "oocFadeEnabled" or key == "oocFadeAlpha") and "ooc" or "combat"
+    meta.searchPrepareKind, meta.searchPrepareValue = "unitAlphaTab", tab
+    meta.prepareExactSearchTarget = function(_, target)
+        if target.prepareKind ~= "unitAlphaTab" or target.prepareValue ~= tab then return false end
+        state.value = tab
+        state.apply()
+        return true
+    end
+    return meta
+end
 local function BuildAlpha(ctx, builder, unit)
+    local tabState = { value = "combat" }
     local ReadBool = UP.ReadBool
     local SetBool = UP.SetBool
     local ReadNumber = UP.ReadNumber
@@ -106,7 +119,7 @@ local function BuildAlpha(ctx, builder, unit)
             function() return ReadNumber(unit, spec.key, spec.default) end,
             function(v) SetNumber(unit, spec.key, v, spec.reason, spec.flags) end,
             spec.default,
-            SettingMeta(ctx, "transparency." .. tostring(spec.key), unit, spec.key))
+            AlphaMeta(ctx, "transparency." .. tostring(spec.key), unit, spec.key, tabState))
         W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
     end
     AddAlphaSlider(healthCard, cardW, { label = "Foreground", key = "hpBarAlpha", default = 1, reason = "MSUF2_ALPHA_HP", flags = { alpha = true, preview = true }, y = -54 })
@@ -119,14 +132,14 @@ local function BuildAlpha(ctx, builder, unit)
         function(v)
             SetBool(unit, "alphaExcludeTextPortrait", v, "MSUF2_ALPHA_EXCLUDE", { alpha = true, preview = true })
         end,
-        SettingMeta(ctx, "transparency.alpha_exclude_text_portrait", unit, "alphaExcludeTextPortrait"))
+        AlphaMeta(ctx, "transparency.alpha_exclude_text_portrait", unit, "alphaExcludeTextPortrait", tabState))
     local excludePrediction = W.ToggleAt(optionsCard, "Keep Absorbs + Prediction Visible", 16, -112, optionsW - 32)
     M.BindBoolWidget(ctx, excludePrediction,
         function() return ReadBool(unit, "alphaExcludePredictionBars", false) end,
         function(v)
             SetBool(unit, "alphaExcludePredictionBars", v, "MSUF2_ALPHA_EXCLUDE_PREDICTION", { alpha = true, preview = true })
         end,
-        SettingMeta(ctx, "transparency.alpha_exclude_prediction_bars", unit, "alphaExcludePredictionBars"))
+        AlphaMeta(ctx, "transparency.alpha_exclude_prediction_bars", unit, "alphaExcludePredictionBars", tabState))
 
     -- Out of Combat tab: whole-frame fade while out of combat. The slider is
     -- greyed while the toggle is off; runtime min-composes with range fade.
@@ -144,20 +157,19 @@ local function BuildAlpha(ctx, builder, unit)
             SetBool(unit, "oocFadeEnabled", v, "MSUF2_ALPHA_OOC_FADE", { alpha = true })
             UpdateOocEnabledState()
         end,
-        SettingMeta(ctx, "transparency.ooc_fade_enabled", unit, "oocFadeEnabled"))
+        AlphaMeta(ctx, "transparency.ooc_fade_enabled", unit, "oocFadeEnabled", tabState))
     M.BindNumberWidget(ctx, oocSlider,
         function() return ReadNumber(unit, "oocFadeAlpha", 0.5) end,
         function(v) SetNumber(unit, "oocFadeAlpha", v, "MSUF2_ALPHA_OOC_ALPHA", { alpha = true }) end,
         0.5,
-        SettingMeta(ctx, "transparency.ooc_fade_alpha", unit, "oocFadeAlpha"))
+        AlphaMeta(ctx, "transparency.ooc_fade_alpha", unit, "oocFadeAlpha", tabState))
     W.MoveWidget(oocSlider, oocCard, 16, -112, cardW - 58, "LEFT")
     UpdateOocEnabledState()
 
     -- Tab switch: show either the base opacity cards or the OOC fade card.
-    local alphaTab = "combat"
     local combatCards = { healthCard, resourceCard, optionsCard }
-    local function ApplyAlphaTab()
-        local ooc = alphaTab == "ooc"
+    tabState.apply = function()
+        local ooc = tabState.value == "ooc"
         for i = 1, #combatCards do
             W.SetControlShown(combatCards[i], not ooc)
         end
@@ -173,16 +185,16 @@ local function BuildAlpha(ctx, builder, unit)
         labelX = leftX,
         labelWidth = 64,
         centerY = barY - 16,
-        getValue = function() return alphaTab end,
+        getValue = function() return tabState.value end,
         setValue = function(value)
-            alphaTab = value == "ooc" and "ooc" or "combat"
-            ApplyAlphaTab()
+            tabState.value = value == "ooc" and "ooc" or "combat"
+            tabState.apply()
         end,
     })
     if UP.RegisterControl then
         UP.RegisterControl(stateBar, ctx, "transparency.state_selector", "Editing", "segment", "ephemeral")
     end
-    ApplyAlphaTab()
+    tabState.apply()
     if builder.FinishSection then builder:FinishSection(sec, 48) end
 end
 if type(UP.RegisterSection) == "function" then

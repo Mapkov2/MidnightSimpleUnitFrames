@@ -59,10 +59,14 @@ end
 -- The effective locale is immutable for the session (MSUF.SetLocale requires a
 -- reload), so the English check is resolved once instead of per tracked key.
 local activeLocaleIsEnglish
+local localeKeyCount = 0
+local MAX_TRACKED_LOCALE_KEYS = 8192 -- Diagnostics must not retain unlimited user/composed text.
 local function TrackLocaleKey(key, translated)
     -- Locale coverage is collected while UI text is resolved. This gives diagnostics a cheap
     -- way to list missing translations without a separate scan of every page file.
     M.localeKeys = M.localeKeys or {}
+    if M.localeKeys[key] or localeKeyCount >= MAX_TRACKED_LOCALE_KEYS then return end
+    localeKeyCount = localeKeyCount + 1
     M.localeKeys[key] = true
     if activeLocaleIsEnglish == nil then
         activeLocaleIsEnglish = ENGLISH_LOCALES[ActiveLocale()] == true
@@ -800,10 +804,15 @@ function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleT
         frame._msuf2AlphaScale:SetScript("OnFinished", nil)
         frame._msuf2AlphaScale:Stop()
     end
-    local group = frame:CreateAnimationGroup()
-    T.TrackMenuAnimationGroup(group)
-    local alpha = group:CreateAnimation("Alpha")
-    local scale = group:CreateAnimation("Scale")
+    local group = frame._msuf2AlphaScale
+    local alpha, scale = frame._msuf2AlphaScaleAlpha, frame._msuf2AlphaScaleTransform
+    if not group then
+        group = frame:CreateAnimationGroup()
+        T.TrackMenuAnimationGroup(group)
+        alpha, scale = group:CreateAnimation("Alpha"), group:CreateAnimation("Scale")
+        frame._msuf2AlphaScale = group
+        frame._msuf2AlphaScaleAlpha, frame._msuf2AlphaScaleTransform = alpha, scale
+    end
     local dur = ClampMotionDuration(duration, T.motion.standard)
     local ok = alpha and scale
     if ok and alpha.SetFromAlpha then alpha:SetFromAlpha(fromAlpha or 0) end
@@ -3180,9 +3189,14 @@ end
 -- themed consumer (window shell, popups, edit-mode chrome) bakes the same
 -- accent family. BuildWindow keeps a guarded second call as a fallback.
 do
+    local applyMenuAccent = T.ApplyMenuAccent
+    function T.ApplyMenuAccent()
+        local applied = applyMenuAccent()
+        if applied and MenuSkin then MenuSkin.BindColors(T.colors) end
+        return applied
+    end
     local function ApplySavedAccent()
         T.ApplyMenuAccent()
-        if MenuSkin then MenuSkin.BindColors(T.colors) end
     end
     if type(_G.IsLoggedIn) == "function" and _G.IsLoggedIn() then
         ApplySavedAccent()

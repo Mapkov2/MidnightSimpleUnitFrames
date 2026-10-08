@@ -897,6 +897,10 @@ function Picker.DefineContextList(panel)
     panel.classColorMode._msuf2SkipHistoryCheckpoint = true
     panel.classColorMode:SetScript("OnClick", function()
         local owner = panel.owner
+        if not panel:IsCurrentProfile() then
+            panel:Finish(false)
+            return
+        end
         if not owner or type(owner._msuf2SetColorByClass) ~= "function" then return end
         if M.BlockCombatAction and M.BlockCombatAction() then return end
         if not panel.historyOwner then
@@ -1147,8 +1151,15 @@ function Picker.DefineReadout(panel)
     end
 end
 function Picker.DefineSession(panel)
+    function panel:IsCurrentProfile()
+        return MSUF.ProfileRuntime.IsCurrentIdentity(self.profileIdentity)
+    end
     function panel:Apply(r, g, b, fromColorSelect)
         if not self.owner then return end
+        if not self:IsCurrentProfile() then
+            self:Finish(false)
+            return
+        end
         r, g, b = Clamp01(r), Clamp01(g), Clamp01(b)
         local currentR, currentG, currentB = self.owner:GetRGB()
         if abs(r - currentR) < 0.000001 and abs(g - currentG) < 0.000001 and abs(b - currentB) < 0.000001 then return end
@@ -1162,6 +1173,10 @@ function Picker.DefineSession(panel)
         self:RefreshColorReadout(fromColorSelect ~= true, r, g, b)
     end
     function panel:ApplyOpacity(alpha)
+        if not self:IsCurrentProfile() then
+            self:Finish(false)
+            return
+        end
         if not self.owner or self.owner._msuf2ColorHasOpacity ~= true then return end
         alpha = Clamp01(alpha)
         local current = OwnerOpacity(self.owner)
@@ -1182,9 +1197,10 @@ function Picker.DefineSession(panel)
     function panel:Finish(cancelled)
         if self.finishing then return end
         self.finishing = true
-        local onFinish = self._msuf2OnFinish
+        local current = self:IsCurrentProfile()
+        local onFinish = current and self._msuf2OnFinish or nil
         self._msuf2OnFinish = nil
-        if cancelled then
+        if cancelled and current then
             for owner in pairs(self.touched or {}) do
                 local value = self.originals and self.originals[owner]
                 if value then
@@ -1193,14 +1209,16 @@ function Picker.DefineSession(panel)
                     self:NotifyLiveChange(owner)
                 end
             end
-        else
+        elseif current then
             for owner in pairs(self.touched or {}) do
                 local r, g, b = owner:GetRGB()
                 AddRecent(ToHex(r, g, b))
             end
             self._palettesDirty = true
         end
-        if self.historyOwner and type(self.historyOwner._msuf2CommitColorInteraction) == "function" then self.historyOwner:_msuf2CommitColorInteraction() end
+        if current and self.historyOwner and type(self.historyOwner._msuf2CommitColorInteraction) == "function" then
+            self.historyOwner:_msuf2CommitColorInteraction()
+        end
         self:SetContextListShown(false)
         HidePickerInfo(self.infoButton)
         self._ownerDropdownValues = nil
@@ -1215,6 +1233,7 @@ function Picker.DefineSession(panel)
             self._msuf2OnFinish = nil
             self:Finish(false)
         end
+        self.profileIdentity = MSUF.ProfileRuntime.Identity()
         self:SetScale(PickerMenuScale())
         self.owners, self.originals, self.touched = {}, {}, {}
         for i = 1, #(owners or {}) do
@@ -1325,3 +1344,7 @@ function W.OpenColorContextPicker(contextTitle, owners, contextNote, initialOwne
     return panel
 end
 M.OpenColorContextPicker = W.OpenColorContextPicker
+function M.CloseColorPickerForProfileChange()
+    if picker and picker:IsShown() then picker:Finish(true) end
+    if W.CloseMenuOwnedColorPicker then W.CloseMenuOwnedColorPicker() end
+end

@@ -55,6 +55,12 @@ local CLIENT_EXTRAS={
         {"manaRegenPause","toggle","Regeneration pause after spending","manaRegenPause",false},
         {"manaGainPulse","toggle","Mana return pulse","manaGainPulse",false},
     } end,colors={"manaRegenPauseColor","manaGainPulseColor"}},
+    {wanted=ExtraAuras,specs=function() return {
+        {"resourceExtraWidth","slider","Resource bar width",40,1000,1,280,"resourceExtraWidth",220},
+        {"resourceExtraHeight","slider","Resource bar height",2,30,1,280,"resourceExtraHeight",8},
+        {"resourceExtraOffsetX","slider","Resource bar X offset",-1000,1000,1,280,"resourceExtraOffsetX",0},
+        {"resourceExtraOffsetY","slider","Resource bar Y offset",-1000,1000,1,280,"resourceExtraOffsetY",-18},
+    } end,colors={}},
 }
 -- Setting keys of every client-only extra and of its color (Colors page,
 -- BuildColors), and those this client builds.
@@ -76,10 +82,6 @@ end
 function ResourceExtras.Specs()
     local specs={
         {"manaUpcomingCost","toggle","Mana spend preview","manaUpcomingCost",false},
-        {"resourceExtraWidth","slider","Resource bar width",40,1000,1,280,"resourceExtraWidth",220},
-        {"resourceExtraHeight","slider","Resource bar height",2,30,1,280,"resourceExtraHeight",8},
-        {"resourceExtraOffsetX","slider","Resource bar X offset",-1000,1000,1,280,"resourceExtraOffsetX",0},
-        {"resourceExtraOffsetY","slider","Resource bar Y offset",-1000,1000,1,280,"resourceExtraOffsetY",-18},
     }
     local own={}
     for _,group in ipairs(CLIENT_EXTRAS) do
@@ -89,9 +91,6 @@ function ResourceExtras.Specs()
     end
     for i,spec in ipairs(own) do
         table.insert(specs,i,spec)
-    end
-    if not EXTRA_AURAS then
-        for i=#specs,1,-1 do if specs[i][1]:find("^resourceExtra") then table.remove(specs,i) end end
     end
     return specs
 end
@@ -120,6 +119,20 @@ local function ColorSpecs(group)
     end
     return specs
 end
+-- Cold metadata shared by lazy-page resets and the Colors page. Reading these
+-- keys must never materialize controls or allocate preview frames.
+function ResourceExtras.ColorKeys()
+    local keys={}
+    for _,spec in ipairs(ColorSpecs()) do keys[spec[1]]=true end
+    return keys
+end
+function ResourceExtras.SettingKeys()
+    local keys={ ["bars.resourceMarks"]=true }
+    for _,spec in ipairs(ResourceExtras.Specs()) do keys["bars."..spec[1]]=true end
+    for key in pairs(ResourceExtras.ColorKeys()) do keys["bars."..key]=true end
+    return keys
+end
+
 local function ColorRGB(Bars,spec)
     local color=Bars()[spec[1]]
     if color then return color[1],color[2],color[3] end

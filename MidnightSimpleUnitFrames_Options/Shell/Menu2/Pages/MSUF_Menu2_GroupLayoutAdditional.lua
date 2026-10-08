@@ -7,6 +7,9 @@ local BindScopeToggle, ScopeSlider, ScopeDropdown, ScopeColor = GP.BindScopeTogg
 -- Release links select a declared scope and retain any existing tab hook.
 local EXACT_SCOPES = {
     centerSolo = { "party" }, smallRaidAsParty = { "party" },
+    targetsEnabled = { "party" }, targetsIncludePlayer = { "party" },
+    targetsWidth = { "party" }, targetsHeight = { "party" }, targetsX = { "party" },
+    targetsY = { "party" }, targetsColumns = { "party" }, targetsTextSize = { "party" },
     collapseEmptyGroups = { "raid", "mythicraid" },
     hideMythicGroupsFiveToEight = { "mythicraid" },
     layoutTiersEnabled = { "raid", "mythicraid" },

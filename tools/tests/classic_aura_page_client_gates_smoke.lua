@@ -377,8 +377,8 @@ assert(Has(sections, "Blizzard Buff & Debuff Frames") and switches["Hide Blizzar
 BuildGroup("raid", "debuff", "filters")
 if IS_CLASSIC then
     local onlyMine = assert(switches["Only mine"], flavor .. ": the Classic group Only mine switch is missing")
-    assert(switches["Hide permanent"] and not switches["All"] and not switches["Non-Player Auras"],
-        flavor .. ": the Classic group filters are not Only mine and Hide permanent")
+    assert(switches["Hide permanent"] and not switches["All"] and switches["Non-Player Auras"],
+        flavor .. ": the Classic group filters lost a supported ownership control")
     assert(onlyMine.get() == false, flavor .. ": a Non-player group token reads as Only mine")
     assert(tooltipBodies["Only mine"] == "Only Debuffs applied by the player."
         and tooltipBodies["Hide permanent auras"] == "Always excludes auras without a duration.",

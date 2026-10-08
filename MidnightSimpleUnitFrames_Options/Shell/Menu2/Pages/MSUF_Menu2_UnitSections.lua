@@ -918,14 +918,16 @@ local function BuildBasics(ctx, builder, unit, label)
     M.BindBoolWidget(ctx, blizzard,
         function() return ReadBool(unit, "useBlizzardFrame", false) end,
         function(v)
-            if ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
+            if unit == "pettarget" or ReadBool(unit, "useBlizzardFrame", false) == (v == true) then return end
             SetBool(unit, "useBlizzardFrame", v, "MSUF2_BLIZZARD_FRAME_OWNERSHIP", { preview = false })
             local reloadLabel = M.Format("%s Blizzard frame ownership", label or UnitTopLabel(unit))
             _G.MSUF_ShowReloadRecommendedPopup(reloadLabel)
         end,
         SettingMeta(ctx, "basics.force_blizzard_frame", unit, "useBlizzardFrame"))
     local blizzardHint = "Independent from MSUF Enable; /reload required."
-    if unit == "targettarget" then
+    if unit == "pettarget" then
+        blizzardHint = "Blizzard has no native Pet Target frame."
+    elseif unit == "targettarget" then
         blizzardHint = "Also keeps Blizzard Target visible; /reload required."
     elseif unit == "focustarget" then
         blizzardHint = "Also keeps Blizzard Focus visible; /reload required."
@@ -938,6 +940,7 @@ local function BuildBasics(ctx, builder, unit, label)
         elseif unit == "focustarget" then
             tooltip = tooltip .. " " .. M.Format("Blizzard Focus Target is a child of Blizzard Focus, so both native frames must remain active.")
         end
+        if unit == "pettarget" then tooltip = M.Format("Blizzard has no native Pet Target frame.") end
         M.AddTooltip(blizzard, "Force Blizzard frame on", tooltip, { hook = true, owner = "ANCHOR_RIGHT" })
     end
     local colorMode = W.Dropdown(sec, "Health Color Scheme", HealthColorModeOptions, math.min(270, math.max(220, colW * 2)))
@@ -1043,7 +1046,7 @@ local function BuildBasics(ctx, builder, unit, label)
         local ownOn = ReadBool(unit, "enabled", true)
         local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
         SetControlEnabled(enable, true)
-        SetControlEnabled(blizzard, true)
+        SetControlEnabled(blizzard, unit ~= "pettarget")
         SetControlsEnabled(basicsDependentControls, ownOn)
         if parentOff then
             notice:SetMessage(M.Tr("Focus Target follows the Focus frame. Enable Focus to show it."), "warning")
@@ -1088,8 +1091,9 @@ local function BuildLayout(ctx, builder, unit)
             if #text > 24 then text = text:sub(1, 21) .. "..." end
             values[#values + 1] = { value = "__CUSTOM", text = M.Format("Custom: %s", text) }
         end
-        for i = 1, #anchorChoices do
-            local item = anchorChoices[i]
+        local available = M.AnchorTargetValues(anchorChoices, conf.anchorToUnitframe, unit)
+        for i = 1, #available do
+            local item = available[i]
             if item.value == "GLOBAL" or item.value ~= unit then
                 if item.value == "GLOBAL" and automaticProviderLabel and cooldownAnchorEnabled then
                     values[#values + 1] = {

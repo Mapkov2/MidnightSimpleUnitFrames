@@ -357,6 +357,7 @@ end
 local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
     if not widget then return end
     opts = type(opts) == "table" and opts or {}
+    M.DeclareExactSearchPreparation(widget, opts)
     local command = {
         kind = kind,
         ctxKey = ctx and ctx.key,

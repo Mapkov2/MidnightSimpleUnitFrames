@@ -107,6 +107,7 @@ local function CurrentGroupHealthColorContext()
         unitKey = "player",
         healthMode = CurrentGroupHealthMode(),
         group = true,
+        scope = "gf_" .. CurrentScope(),
     }
 end
 local function CurrentGroupHealthColorShortcutRelevant()
@@ -619,19 +620,20 @@ local function BuildGFSortingSection(ctx, b)
         local conf = Conf(CurrentScope())
         local currentMode = conf.sortMode or (conf.sortByRole and "ROLE" or "INDEX")
         local enabled = currentMode == "ROLE"
+        local usesRoles = enabled or currentMode == "GROUP_ROLE"
         if sortMode.SetValue then sortMode:SetValue(currentMode) end
         if roleSort.SetChecked then roleSort:SetChecked(enabled) end
-        SetOptionEnabled(playerFirst, enabled)
-        local raidWideEligible = CurrentScope() ~= "party" and (enabled or currentMode == "GROUP_ROLE")
+        SetOptionEnabled(playerFirst, usesRoles)
+        local raidWideEligible = CurrentScope() ~= "party" and usesRoles
         SetOptionEnabled(raidWideRoles, raidWideEligible)
         SetOptionEnabled(alphabeticalInRole, raidWideEligible)
         if roleRows then
             if roleRows.Refresh then roleRows.Refresh() end
-            if roleRows.SetRowsEnabled then roleRows:SetRowsEnabled(enabled) end
+            if roleRows.SetRowsEnabled then roleRows:SetRowsEnabled(usesRoles) end
         end
         local badges = {
             { text = OptionText(SORT_MODES, currentMode, "Index"), kind = "info" },
-            { text = enabled and "Role order" or "Simple order", kind = enabled and "accent" or "muted" },
+            { text = usesRoles and "Role order" or "Simple order", kind = usesRoles and "accent" or "muted" },
         }
         if raidWideEligible and Bool(CurrentScope(), "sortRolesAcrossRaid", false) then
             badges[#badges + 1] = { text = "Raid-wide roles", kind = "accent" }
@@ -822,7 +824,9 @@ local function BuildGFAnchorSection(ctx, b)
     local anchorRightX = anchorLeftX + anchorColumnW + anchorGap
     local anchorControlW = min(300, max(180, anchorColumnW - 16))
     local customAnchorW = min(260, max(180, anchorColumnW - 128))
-    local anchorTo = W.Dropdown(anchor, "Anchor To", GF_ANCHOR_TO, anchorControlW)
+    local anchorTo = W.Dropdown(anchor, "Anchor To", function()
+        return M.AnchorTargetValues(GF_ANCHOR_TO, Conf(CurrentScope()).anchorToFrame)
+    end, anchorControlW)
     M.UnitSectionsShared.PlaceDropdown(anchor, anchorTo, anchorLeftX, -38, anchorControlW)
     M.BindDropdownWidget(ctx, anchorTo,
         function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
@@ -949,7 +953,7 @@ local GROUP_LAYOUT_SECTION_SPECS = {
         end,
     },
     {
-        sectionId = "party_targets", title = "Member targets", height = 456, build = AdditionalSections.Targets,
+        sectionId = "party_targets", title = "Member targets", height = 456, groupScope = "party", build = AdditionalSections.Targets,
         prepareShell = function(ctx, section)
             AdditionalSections.PrepareSwitch(ctx, section, "targetsEnabled", "Enable", "rebuild")
         end,
@@ -984,6 +988,7 @@ local function BuildGFLayout(ctx)
         local spec = GROUP_LAYOUT_SECTION_SPECS[i]
         local capability, frameScope = spec.clientCapability, spec.frameScope
         if type(spec.build) == "function" and (capability == nil or (client and client[capability] == true))
+            and (spec.groupScope == nil or spec.groupScope == CurrentScope())
             and (frameScope == nil or not M.SupportsFrameScope or M.SupportsFrameScope(frameScope)) then
         if type(buildLazy) == "function" then buildLazy(ctx, b, nil, spec)
         else spec.build(ctx, b) end
@@ -991,4 +996,5 @@ local function BuildGFLayout(ctx)
     end
     FinalizeScopePage(ctx, b)
 end
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 30 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 31,
+    variantKey = CurrentScope, viewStateKeys = { gfScope = true } })

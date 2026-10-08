@@ -32,6 +32,30 @@ function menu.SupportsFrameScope(scope)
     return not client.SupportsUnit or client.SupportsUnit(scope)
 end
 
+local COOLDOWN_ANCHORS = { EssentialCooldownViewer = true, UtilityCooldownViewer = true, BuffIconCooldownViewer = true }
+function menu.SupportsAnchorTarget(target)
+    if COOLDOWN_ANCHORS[target] then return main.Client.HostsCooldownManager == true end
+    return menu.SupportsFrameScope(target)
+end
+
+-- Build this cold dropdown list on demand. Imported unavailable targets remain
+-- visible and read-only so merely opening a portable profile never rewrites it.
+function menu.AnchorTargetValues(items, selected, excluded)
+    local values = {}
+    for i = 1, #items do
+        local item = items[i]
+        if item.value ~= excluded then
+            if menu.SupportsAnchorTarget(item.value) then
+                values[#values + 1] = item
+            elseif item.value == selected then
+                values[#values + 1] = { value = item.value, disabled = true,
+                    text = menu.Format("%s (unavailable on this client)", menu.Tr(item.text)), translate = false }
+            end
+        end
+    end
+    return values
+end
+
 function menu.NormalizeGroupScope(scope)
     return menu.SupportsFrameScope(scope) and scope or "raid"
 end
@@ -47,6 +71,21 @@ function menu.SupportsUnitPage(pageKey, settingKey)
     local settingScope = type(settingKey) == "string" and settingKey:match("^([^%.]+)%.")
     if settingScope and not menu.SupportsFrameScope(settingScope) then return false end
     return not unit or menu.SupportsFrameScope(unit)
+end
+
+function menu.SupportsSearchTarget(pageKey, settingKey, prepareKind, prepareValue)
+    if not menu.SupportsUnitPage(pageKey, settingKey) then return false end
+    if settingKey == "pettarget.useBlizzardFrame" then return false end
+    local targetScope = type(settingKey) == "string" and settingKey:match("^gf_(%w+)%.targets")
+    if targetScope and targetScope ~= "party" then return false end
+    if settingKey == "general.kickReadyShowNameplates"
+        and not (menu.CastbarSuiteNameplatesSupported and menu.CastbarSuiteNameplatesSupported()) then return false end
+    local scope
+    if prepareKind == "groupScope" then scope = prepareValue
+    elseif prepareKind == "groupAuraWorkspace" then
+        scope = type(prepareValue) == "string" and prepareValue:match("^(%w+)_")
+    end
+    return not scope or menu.SupportsFrameScope(scope)
 end
 
 function menu.FilterSupportedUnitValues(values)

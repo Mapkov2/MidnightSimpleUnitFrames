@@ -27,18 +27,12 @@ end
 -- Settings a page shows that its reset does not restore, and why.
 -- Miscellaneous has no entry: its reset owns every setting the page shows,
 -- the menu motion, accent, appearance and MapkoSkin switches included.
-local OWNER_DECISION = "open owner decision whether the page reset owns it"
 local KNOWN = {
     classpower = {
         ["general.classPowerPreviewGuidesEnabled"] = "menu preview preference (ProfileFields: menu preferences)",
         ["menu.classPowerPreviewResource"] = "menu preview state",
     },
     opt_colors = {
-        -- Reset Colors resets colour keys only; menu_page_reset_scope_smoke
-        -- freezes which keys that rule takes.
-        ["general.barBgFillMode"] = OWNER_DECISION .. " (not a colour key by name)",
-        ["general.darkBarGray"] = OWNER_DECISION .. " (not a colour key by name)",
-        ["general.tapDeniedGray"] = OWNER_DECISION .. " (not a colour key by name)",
         -- Control ids, not saved keys: the R/G/B channels they edit are reset.
         ["general.healthGradientHigh"] = "control id; its R/G/B channels are reset",
         ["general.healthGradientMid"] = "control id; its R/G/B channels are reset",

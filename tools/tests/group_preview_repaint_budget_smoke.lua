@@ -64,7 +64,16 @@ local arrayCohort = 5 * array4 + 5 * array3 + array2
 Check(arrayCohort == 944 or arrayCohort == 1296, "unexpected Lua 5.1 array representation")
 local arrayExcessKB = (arrayCohort - 944) / 1024
 
-local mw = MenuWorld.Open(root, flavor, { page = "gf_auras" })
+-- Keep the exact scene cohort behind the recorded native budget. The generic
+-- fixture has no selected player spec; it must not borrow an arbitrary healer
+-- spec just to obtain sample IDs. Disabled tracked lanes still show samples.
+local trackedSamples = { Mainline = 8, Forever = 8, Vanilla = 2, TBC = 3, Mists = 3 }
+local mw = MenuWorld.Open(root, flavor, { page = "gf_auras", beforeOptions = function(world)
+    world.env.MSUF_EnsureDB(true)
+    local party = world.core.GF.GetConf("party")
+    party.trackedBuffMax = assert(trackedSamples[flavor])
+    world.core.GF.InvalidateCompiledSpecs("party")
+end })
 local widgets = mw.world.widgets
 local box
 for _, frame in ipairs(widgets.frames) do

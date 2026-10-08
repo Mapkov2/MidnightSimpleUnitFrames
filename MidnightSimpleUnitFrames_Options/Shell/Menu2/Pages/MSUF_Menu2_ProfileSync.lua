@@ -5,6 +5,9 @@ local VariantPage,Fields,Sync= M.ProfileVariantPage,MSUF.ProfileFields,MSUF.Prof
 local selected,selectedField,excludedField
 local labels={unitframes="Unitframes",groupframes="Group frames",castbars="Castbars",colors="Colors",
     auras="Auras",resources="Class Resources",gameplay="Gameplay"}
+function M.ProfileSyncModuleLabel(id)
+    return labels[id] or (Sync.Labels and Sync.Labels[id]) or id
+end
 local function Entry(groups)
     for _,group in ipairs(groups) do if group.name==selected then return group end end
 end
@@ -130,7 +133,7 @@ function M.ProfileSyncPageBuild(state)
     W.Text(section,"Shared modules",20,y,state.contentW-40,T.colors.text)
     y=y-34
     for i,id in ipairs(Sync.Modules) do
-        local toggle=W.SwitchAt(section,labels[id] or (Sync.Labels and Sync.Labels[id]) or id,20+((i-1)%2)*(width+10),y-math.floor((i-1)/2)*32,width)
+        local toggle=W.SwitchAt(section,M.ProfileSyncModuleLabel(id),20+((i-1)%2)*(width+10),y-math.floor((i-1)/2)*32,width)
         VariantPage.BindBool(ctx,toggle,function() return group.modules[id]==true end,
             function(value) group.modules[id]=value and true or nil end,VariantPage.Meta("profiles_sync","sync.module."..id))
     end

@@ -602,7 +602,7 @@ function Dashboard.PrepareActionHelpers(state)
     state.SetSliderValueSafe, state.HideSliderValueBox, state.EnablePercentWheel, state.PixelScale, state.GlobalState, state.RunMSUFSlashCommand =
         SetSliderValueSafe, HideSliderValueBox, EnablePercentWheel, PixelScale, GlobalState, RunMSUFSlashCommand
 end
-function Dashboard.BuildGuidedSetupLauncher(state, mainTop)
+function Dashboard.BuildGuidedSetupLauncher(state, mainTop, ctx)
     local root, x0, mainW, Card, Kicker, Button, AddTooltip = state.root, state.x0, state.mainW, state.Card, state.Kicker, state.Button, state.AddTooltip
     local iconDir, CopyWagoLink = state.iconDir, state.CopyWagoLink
     -- Setup remains available after onboarding. Quick Setup is the default;
@@ -622,21 +622,15 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop)
     -- wide seats it left of the action, so both reserve room in the same card.
     local launcherH = launcherNarrow and 162 or 78
     local launcher = Card(root, "", x0, mainTop, mainW, launcherH, T.colors.panel2, T.colors.borderSoft)
-    Kicker(launcher, tourActive and "GUIDED SETUP IN PROGRESS" or (tourCompleted and "GUIDED SETUP COMPLETE" or "GUIDED SETUP"), 16, -14)
+    local kicker = Kicker(launcher, tourActive and "GUIDED SETUP IN PROGRESS" or (tourCompleted and "GUIDED SETUP COMPLETE" or "GUIDED SETUP"), 16, -14)
     local launcherTitle = tourActive and "Continue your MSUF setup"
         or (tourCompleted and "Review or run setup again" or "Get the essentials right in a few minutes")
     local title = T.Font(launcher, "GameFontNormal", launcherTitle, T.colors.text)
     title:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, -36)
     title:SetWidth(max(120, mainW - (launcherNarrow and 32 or 388)))
     title:SetJustifyH("LEFT")
-    if tourActive then
-        local current, total
-        if type(M.GetGuidedTourStageProgress) == "function" then current, total = M.GetGuidedTourStageProgress() end
-        total = max(1, tonumber(total) or tonumber(M.guidedTourStageCount) or 1)
-        current = min(total, max(1, tonumber(current) or 1))
-        local step = T.Font(launcher, "GameFontDisableSmall", M.Format("Step %d of %d", current, total), T.colors.muted)
-        step:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, launcherNarrow and -72 or -56)
-    end
+    local step = T.Font(launcher, "GameFontDisableSmall", "", T.colors.muted)
+    step:SetPoint("TOPLEFT", launcher, "TOPLEFT", 16, launcherNarrow and -72 or -56)
     local actionText = tourActive and "Resume setup" or (tourCompleted and "Run setup again" or "Start Quick Setup")
     local actionX = launcherNarrow and 16 or (mainW - 196)
     local actionY = launcherNarrow and -92 or -27
@@ -671,6 +665,28 @@ function Dashboard.BuildGuidedSetupLauncher(state, mainTop)
         wago._msuf2Label:SetJustifyH("CENTER")
     end
     AddTooltip(wago, "Wago Profiles", "Browse Wago profiles")
+    local function RefreshLauncher()
+        local currentState = tour and tour:GetState()
+        tourActive = currentState and currentState.status == "active"
+        tourCompleted = currentState and currentState.status == "completed"
+        T.SetTranslatedText(kicker, string.upper(M.Tr(tourActive and "GUIDED SETUP IN PROGRESS"
+            or (tourCompleted and "GUIDED SETUP COMPLETE" or "GUIDED SETUP"))))
+        T.SetTranslatedText(title, M.Tr(tourActive and "Continue your MSUF setup"
+            or (tourCompleted and "Review or run setup again" or "Get the essentials right in a few minutes")))
+        action:SetText(M.Tr(tourActive and "Resume setup" or (tourCompleted and "Run setup again" or "Start Quick Setup")), true)
+        local highlighted = firstLoad and firstLoad.ShouldHighlightGuidedSetup and firstLoad:ShouldHighlightGuidedSetup()
+        T.ApplyButtonRole(action, highlighted and "success" or "primary")
+        step:SetShown(tourActive == true)
+        if tourActive then
+            local current, total = M.GetGuidedTourStageProgress()
+            total = max(1, tonumber(total) or 1)
+            current = min(total, max(1, tonumber(current) or 1))
+            T.SetTranslatedText(step, M.Format("Step %d of %d", current, total))
+        end
+    end
+    ctx:AddRefresher(RefreshLauncher)
+    ctx.entry.guidedSetupLauncher = action
+    RefreshLauncher()
     return launcherH
 end
 --- The Dashboard's own search field: typed into directly, the way the Assistant
@@ -1280,7 +1296,7 @@ function Dashboard.Build(ctx)
     M.TrackRefresh(ctx, state.RefreshDashboardEditModeButtonSafe)
     local mainTop = y0
 
-    local launcherH = Dashboard.BuildGuidedSetupLauncher(state, mainTop)
+    local launcherH = Dashboard.BuildGuidedSetupLauncher(state, mainTop, ctx)
 
     mainTop = mainTop - launcherH - 10
     local heroH = Dashboard.BuildSearchHero(state, mainTop)

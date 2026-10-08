@@ -1125,6 +1125,28 @@ local function HandleOffsets(handle)
     end
     return nil
 end
+local function DefaultHandleOffsets(handle)
+    if not handle then return 0, 0 end
+    local gf, scope = MSUF.GF, CurrentScope()
+    local source, xKey, yKey
+    if handle._cfgGroup then
+        local auras = gf.GetDefault(scope, "auras") or {}
+        source = auras[handle._cfgGroup] or {}
+        xKey, yKey = "x", "y"
+        if handle._cfgTrackedBuff then xKey, yKey = "trackedX", "trackedY" end
+    elseif handle._cfgStatus then
+        local spec = handle._statusSpec or CurrentStatusSpec()
+        if spec then xKey, yKey = spec.x, spec.y end
+    elseif handle._cfgDispelSymbol then xKey, yKey = "dispelSymbolX", "dispelSymbolY"
+    elseif handle._cfgPortrait then xKey, yKey = "portraitOffsetX", "portraitOffsetY"
+    elseif handle._cfgPower then xKey, yKey = "detachedPowerBarOffsetX", "detachedPowerBarOffsetY"
+    elseif handle._cfgText then
+        xKey, yKey = TextOffsetKeys(handle._cfgTextKind or CurrentTextKind(), handle._cfgTextSlot)
+    end
+    if not xKey then return 0, 0 end
+    if source then return tonumber(source[xKey]) or 0, tonumber(source[yKey]) or 0 end
+    return tonumber(gf.GetDefault(scope, xKey)) or 0, tonumber(gf.GetDefault(scope, yKey)) or 0
+end
 --- The hint line is a message surface, nothing else. Selected element, offsets
 --- and actions live in the selection bar, the full control list behind the ?
 --- button, so the text no longer changes shape per selection.
@@ -1279,7 +1301,7 @@ local NativeDeps = {
     CurrentSpellConfig = CurrentSpellConfig,
     CurrentSpellPlaced = CurrentSpellPlaced,
     HandleText = HandleText,
-    HandleOffsets = HandleOffsets,
+    HandleOffsets = HandleOffsets, DefaultHandleOffsets = DefaultHandleOffsets,
     RefreshHandleSelection = RefreshHandleSelection,
     StatusLabel = StatusLabel,
     NAMES = GF_PREVIEW_NAMES,
@@ -1792,7 +1814,7 @@ function NativeBuild.Handles(state)
         return owner:NudgeHandleExact(handle._key, dx, dy) == true
     end
     local function ResetGroupSelectionOffsets(owner, handle)
-        local defaultX, defaultY = 0, handle and handle._cfgPower and -4 or 0
+        local defaultX, defaultY = Deps.DefaultHandleOffsets(handle)
         return WriteGroupStoredOffsets(owner, handle, defaultX, defaultY)
     end
     if M.PreviewSelectionBar then
@@ -1825,8 +1847,7 @@ function NativeBuild.Handles(state)
             -- Mirrors the fallbacks ReadHandlePositionExact already treats as
             -- each handle type's default.
             DefaultOffsets = function(_, handle)
-                if handle._cfgPower then return 0, -4 end
-                return 0, 0
+                return Deps.DefaultHandleOffsets(handle)
             end,
             OpenSettings = function(_, handle)
                 local open = M.GroupPreview and M.GroupPreview.OpenSection

@@ -25,6 +25,20 @@ local function AuraCatalogPageKey(value, fallback)
     return token ~= "" and token or (fallback or "auras")
 end
 
+local function ConfigureSearchView(ctx, kind, value)
+    ctx._auraSearchKind, ctx._auraSearchValue = kind, value
+    ctx._auraSearchPrepare = function(_, target)
+        return target.prepareKind == kind and target.prepareValue == value
+    end
+end
+local function AttachSearchView(ctx, meta)
+    if ctx and ctx._auraSearchKind then
+        meta.sectionId = "auras"
+        meta.searchPrepareKind, meta.searchPrepareValue = ctx._auraSearchKind, ctx._auraSearchValue
+        meta.prepareExactSearchTarget = ctx._auraSearchPrepare
+    end
+    return meta
+end
 local function AuraControlMeta(ctx, path, classification, routeContract)
     path = tostring(path or "control"):lower():gsub("[^%w%._/-]+", "-")
     path = path:gsub("/", "."):gsub("^%.+", ""):gsub("%.+$", "")
@@ -48,7 +62,7 @@ local function AuraControlMeta(ctx, path, classification, routeContract)
         meta.searchSettingKeys = routeContract.searchSettingKeys
         meta.searchSettingKeyPatterns = routeContract.searchSettingKeyPatterns
     end
-    return meta
+    return AttachSearchView(ctx, meta)
 end
 
 local function AuraControlMetaAtVisiblePath(ctx, identityPath, visiblePath, classification, routeContract)
@@ -98,6 +112,12 @@ local function AddTooltip(widget, title, body)
         labelHit = true,
         labelHitWhenDisabled = true,
     })
+end
+
+local function AddCasterFilterTooltip(widget, lane)
+    return AddTooltip(widget, "Only mine", lane == "debuff"
+        and "Only Debuffs applied by the player."
+        or "Only auras applied by the player.")
 end
 
 local function AddAuraTooltipHelp(widget)
@@ -479,10 +499,13 @@ end
 M.AuraControls = {
     ActionButton = ActionButton,
     AddAuraTooltipHelp = AddAuraTooltipHelp,
+    AddCasterFilterTooltip = AddCasterFilterTooltip,
     AddTooltip = AddTooltip,
     ApplyUnit = ApplyUnit,
     AuraCatalogToken = AuraCatalogToken,
     AuraControlMeta = AuraControlMeta,
+    ConfigureSearchView = ConfigureSearchView,
+    AttachSearchView = AttachSearchView,
     AuraControlMetaAtVisiblePath = AuraControlMetaAtVisiblePath,
     BlockedSet = BlockedSet,
     BlockedSpellList = BlockedSpellList,

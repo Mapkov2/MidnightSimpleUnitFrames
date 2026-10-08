@@ -652,6 +652,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
             headerHeight = headerH,
             contentHeight = height or 120,
             stateKey = stateKey,
+            defaultOpen = defaultOpen == true,
             openHighlightEnabled = openHighlightEnabled,
             guidedOrder = NextGuidedTourOrder(ctx),
             ancestorEntry = self.ancestorEntry,
@@ -733,6 +734,10 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
             return entry.open == wanted
         end
         entry.SetOpenImmediate = SetSectionOpenImmediate
+        entry.SetOpenByUser = function(value)
+            entry._msuf2AutoOpened = nil
+            return SetSectionOpenImmediate(value)
+        end
         header:SetScript("OnClick", function()
             local featureSwitch = entry.featureSwitch
             if featureSwitch
@@ -749,7 +754,7 @@ function PageBuilderStages.InstallCollapsibleSection(b, ctx)
             local threshold = tonumber(T.collapseHintClickHideThreshold) or 8
             collapseHintClickState.total = math.min((tonumber(collapseHintClickState.total) or 0) + 1, threshold)
             RefreshCollapseHintSuppression(entry)
-            SetSectionOpenImmediate(nextOpen)
+            entry.SetOpenByUser(nextOpen)
         end)
         header:HookScript("OnEnter", function() RefreshHeaderTone(true) end)
         header:HookScript("OnLeave", function() RefreshHeaderTone(false) end)
