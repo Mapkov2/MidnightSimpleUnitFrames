@@ -139,8 +139,10 @@ local function ChannelDurationSeconds(frame)
 end
 
 local function PlayerKnowsSpell(spellID)
-    if type(IsPlayerSpell) ~= "function" then return false end
-    local known = IsPlayerSpell(spellID)
+    local spellBook = C_SpellBook
+    local knows = spellBook and spellBook.IsSpellKnownOrInSpellBook or IsPlayerSpell
+    if type(knows) ~= "function" then return false end
+    local known = knows(spellID)
     return issecretvalue(known) ~= true and known == true
 end
 

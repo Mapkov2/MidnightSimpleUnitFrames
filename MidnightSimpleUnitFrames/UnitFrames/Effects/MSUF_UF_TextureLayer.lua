@@ -691,10 +691,6 @@ TextureLayer.ApplySoftEdgeMask = ApplySoftEdgeMask
 
 local function EnsureBaseTexture(holder, clipWanted)
   local tex = holder.tex
-  if tex and tex._msufTextureLayerRoundedClip == true and not clipWanted then
-    tex:Hide()
-    tex = nil
-  end
   if not tex then
     tex = NewLayerTexture(holder, 0)
     holder.tex = tex
@@ -710,10 +706,6 @@ local function EnsureOverlayTexture(holder, direction, clipWanted)
     holder.grads = grads
   end
   local tex = grads[direction]
-  if tex and tex._msufTextureLayerRoundedClip == true and not clipWanted then
-    tex:Hide()
-    tex = nil
-  end
   if not tex then
     tex = NewLayerTexture(holder, 1)
     tex:SetTexture(WHITE8)
@@ -724,9 +716,9 @@ local function EnsureOverlayTexture(holder, direction, clipWanted)
 end
 
 local function ApplyClip(frame, holder, tex, clipWanted)
-  if clipWanted then
-    _G.MSUF_RoundedUF_OnDispelOverlayChanged(frame, tex)
-    tex._msufTextureLayerRoundedClip = true
+  if clipWanted or tex._msufTextureLayerRoundedClip then
+    _G.MSUF_RoundedUF_OnDispelOverlayChanged(frame, tex, clipWanted == true)
+    tex._msufTextureLayerRoundedClip = clipWanted == true or nil
   end
 end
 

@@ -268,7 +268,7 @@ do
     local frameTime = 100
     GetTime = function() frameTime = frameTime + 0.016; return frameTime end
     C_Timer = { After = function() end, NewTimer = function() return { Cancel = function() end } end }
-    C_SpellBook = { IsSpellKnownOrInSpellBook = function() return false end }
+    C_SpellBook = { IsSpellKnownOrInSpellBook = function(spellID) return spellID == 6552 end }
     UnitClass = function() return "Warrior", "WARRIOR" end
     MSUF_ShouldUseMSUFCastbar = function() return true end
     local kickEnd = 103

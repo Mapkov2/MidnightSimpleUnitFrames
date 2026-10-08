@@ -5,6 +5,7 @@ local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
 local ExportPublic = MSUF.ExportPublic
+local IS_CLASSIC = MSUF.Client and MSUF.Client.IsClassic == true
 
 local Visuals = MSUF.UFVisuals or {}
 local UF = Visuals.UF or MSUF.UF
@@ -490,7 +491,7 @@ local function BorderHighlightEnabled(frame, cfg)
   if cfg and cfg.aggro == true then
     return true
   end
-  if cfg and cfg.dispel == true then
+  if cfg and (cfg.dispel == true or (IS_CLASSIC and cfg.purge == true)) then
     return true
   end
   local bossUnit = frame and frame._msufBorderRuntimeBossUnit
@@ -890,7 +891,8 @@ local function ApplyHighlightBorder(frame, cfg, key, testActive, threatKnown, th
         frame._msufBorderRuntimeHighlightThickness, AggroColor(cfg))
     end
   elseif key == "purge" then
-    if testActive and PurgeTestApplies(frame) then
+    if (testActive and PurgeTestApplies(frame))
+      or (IS_CLASSIC and cfg.purge == true and frame._msufA3PurgeActive == true) then
       return ApplyResolvedBorder(frame, cfg, key, RuntimeHighlightBorderLevel(frame, cfg, key),
         frame._msufBorderRuntimeHighlightThickness, PurgeColor(cfg))
     end
@@ -943,8 +945,8 @@ function Borders.Apply(frame, spec)
     LayoutBorder(frame, 1)
     HideResolvedBorder(frame)
   elseif frame._msufBorderRuntimeHighlight == true then
-    -- Aggro, dispel, boss target, or a Bars test highlight that applies here
-    -- (purge has no live sensor), even when the frame's own highlights are off.
+    -- Native/Classic aura state or a Bars test highlight that applies here,
+    -- even when the frame's own normal border is off.
     LayoutBorder(frame, BorderHighlightThickness(cfg))
     Borders.Update(frame, "MSUF_BORDER_APPLY", frame.MSUFUnitKey)
   else
@@ -975,7 +977,8 @@ function Borders.GetActiveVisual(frame)
         active = (testActive and AggroTestApplies(frame))
           or (cfg.aggro == true and IsAggroBorderUnit(frame) and ThreatState(frame))
       elseif key == "purge" then
-        active = testActive and PurgeTestApplies(frame)
+        active = (testActive and PurgeTestApplies(frame))
+          or (IS_CLASSIC and cfg.purge == true and frame._msufA3PurgeActive == true)
       elseif key == "bossTarget" then
         active = (not BossIndicator or BossIndicator.HasBorder(cfg))
           and ((testActive and BossTargetTestApplies(frame)) or BossTargetState(frame, cfg))

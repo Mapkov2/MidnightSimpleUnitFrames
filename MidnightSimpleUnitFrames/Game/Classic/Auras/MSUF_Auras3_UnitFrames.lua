@@ -169,6 +169,11 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
         state.rosterGUID = RosterGUID(unit)
     end
 
+    local purgeChanged = false
+    if cfg.purgeEnabled and (full or membershipBumped) then
+        purgeChanged = FrameVisuals.UpdatePurgeVisual(frame, cfg, unit) == true
+    end
+
     -- needFullUpdate and the scanning sentinel are cleared only where the lane
     -- state is known good again: the two lane-less exits here, and the end of
     -- the lane loop below.
@@ -178,7 +183,7 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
     if cfg.visualDirect == true and not ConfigHasEnabledAuraLane(cfg) then
         state.scanning, state.needFullUpdate = nil, false
         if not (full or membershipBumped) then return false end
-        return UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
+        return UpdateFrameAuraVisualState(frame, state, cfg, unit) == true or purgeChanged
     end
 
     if full and UnitExists then
@@ -243,7 +248,7 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
             visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
         end
     end
-    return changedCount > 0 or visualChanged == true
+    return changedCount > 0 or visualChanged == true or purgeChanged
 end
 
 local function ResetAurasForIdentity(frame)

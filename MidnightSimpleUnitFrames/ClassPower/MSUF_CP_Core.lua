@@ -1291,7 +1291,7 @@ do
     --- Ebon Might is native AuraContainer-owned in 12.1 and never enters this
     --- path; only segmented aura resources and Stagger update here.
     local function OnAuraUpdate(unit)
-        if CP.visible and CP.isAuraPower then
+        if CP.visible and (CP.isAuraPower or CP.renderMode == CPK.MODE.SIGNED_CONTINUOUS) then
             RunActiveUpdate(CP.powerType, CP.currentMax)
         end
         if CP.visible and CP.renderMode == CPK.MODE.STAGGER then

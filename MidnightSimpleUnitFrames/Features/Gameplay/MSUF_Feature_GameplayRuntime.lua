@@ -309,7 +309,7 @@ local function TickCombatTimer()
         return
     end
 
-    local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true)
+    local inCombat = MSUF.Util.InCombat()
 
     if not inCombat then
         SetCombatTimerShown(not gNow.lockCombatTimer)
@@ -416,7 +416,7 @@ local function CombatStateClearTimerFired()
     if stateText and g and g.enableCombatStateText then
         ClearCombatStateText()
         SetCombatStateClickThrough(false)
-        if not g.lockCombatState then
+        if not g.lockCombatState and not MSUF.Util.InCombat() then
             -- Unlocked text stays visible as the movable handle; without this the handle
             -- vanishes after every combat transition until the next menu apply.
             local er, eg, eb = MSUF_GetCombatStateColors(g)
@@ -625,7 +625,12 @@ local function ApplyCombatStatePosition(g)
     stateFrame._msufAppliedPositionY = y
 end
 
-local function MSUF_ShouldCrosshairFollowCamera()
+local function PlayerNamePlate()
+    local api = _G.C_NamePlate
+    return api and api.GetNamePlateForUnit and api.GetNamePlateForUnit("player") or nil
+end
+
+local function MSUF_ShouldCrosshairFollowCamera(personal)
     if not GetCVar then return false end
     if (tonumber(GetCVar("findYourselfMode") or "0") or 0) > 0 then return true end
 
@@ -638,7 +643,7 @@ local function MSUF_ShouldCrosshairFollowCamera()
         return true
     end
 
-    local personal = _G.NamePlatePersonalFrame
+    personal = personal or PlayerNamePlate()
     return personal and personal.IsShown and personal:IsShown() or false
 end
 
@@ -649,10 +654,10 @@ local function AnchorCombatCrosshair()
     local anchorTo = UIParent
     local offsetY  = -20
 
-    if MSUF_ShouldCrosshairFollowCamera() then
-        local personal = _G.NamePlatePersonalFrame
+    local personal = PlayerNamePlate()
+    if MSUF_ShouldCrosshairFollowCamera(personal) then
         if personal then
-            parent   = personal
+            parent   = UIParent
             anchorTo = personal.UnitFrame or personal
 
             local zoom = GetCameraZoom and GetCameraZoom() or 0
@@ -748,8 +753,8 @@ local function EnsureCombatCrosshair()
                     AnchorCombatCrosshair()
                     crosshairFrame:SetShown((UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true))
                     RequestCrosshairRangeRefresh()
-                elseif (event == "NAME_PLATE_UNIT_REMOVED" and arg1 == "player") or event == "DISPLAY_SIZE_CHANGED" then
-                    AnchorCombatCrosshair()
+                elseif event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" or event == "DISPLAY_SIZE_CHANGED" then
+                    ScheduleCombatCrosshairAnchor()
                 elseif event == "SPELL_RANGE_CHECK_UPDATE" then
                     RequestCrosshairRangeRefresh()
                 elseif event == "CVAR_UPDATE" and (arg1 == "nameplateShowSelf" or arg1 == "cameraDistanceMaxZoomFactor") then
@@ -846,7 +851,8 @@ local function ApplyCombatTimerAnchor(g)
     end
 
     local want = ValidateCombatTimerAnchor(g.combatTimerAnchor)
-    if want ~= "none" and anchor == UIParent then
+    if want ~= "none" and anchor == UIParent and g.enableCombatTimer
+        and MSUF.Client.SupportsUnit(want) then
         if not combatFrame._msufAnchorRetryPending then
             combatFrame._msufAnchorRetryPending = true
             C_Timer.After(0.2, function()
@@ -1107,6 +1113,8 @@ local function ApplyCombatCrosshair(g)
         end
         crosshairEventFrame:RegisterEvent("CVAR_UPDATE")
         crosshairEventFrame:RegisterEvent("DISPLAY_SIZE_CHANGED")
+        crosshairEventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+        crosshairEventFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 
         frame:SetShown((UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true))
         RequestCrosshairRangeRefresh()

@@ -5,6 +5,10 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
+local function ManagedAuraKey(config)
+    return "msuf_" .. tostring(config and config.kind or "auras")
+end
+
 MSUF.Auras3RuntimeFactories.Containers = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
 local math_max = math.max
@@ -36,10 +40,6 @@ local SyncFrameStrata = dependencies.Platform.SyncFrameStrata
 local ValidateNativeAuraContainerContract = dependencies.NativeContract.ValidateNativeAuraContainerContract
 
 local ConfigureContainer, SyncDispelSensorGeometry
-
-local function ManagedAuraKey(config)
-    return "msuf_" .. tostring(config and config.kind or "auras")
-end
 
 local function BuildManagedAuraGroupOptions(container, lane)
     local nextIndex = 0
@@ -192,6 +192,7 @@ local function CreateManagedPriorityNativeLane(container, lane, parentFrame)
             BuildManagedPriorityAuraGroupOptions(container, lane, i, priority[i]))
         container:SetAuraGroupLayout(groupKey, ManagedPriorityAuraGroupLayoutOptions(lane, i))
     end
+    container._msufA3FilterString = lane.nativeFilter
     container.createdButtons = groupCount
     container._msufA3MaxFrameCount = groupCount
     if not RegisterNativeContainer(container) then

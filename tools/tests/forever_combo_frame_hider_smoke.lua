@@ -3,12 +3,12 @@
 -- so Blizzard's ComboFrame (a UIParent child that Camelot re-anchors to
 -- TargetFrame) is its only combo point display. The Mainline Kernel hider in
 -- Kernel/MSUF_BlizzardFrames.lua must suppress it together with TargetFrame on
--- Forever only. This smoke pins:
+-- Forever and Classic. This smoke pins:
 --   Forever:  default ownership reparents ComboFrame into the MSUF hidden
 --             parent, hides it, unregisters its events and keeps it there
 --             when Blizzard code reparents it onto UIParent.
 --   Gate:     a kept Blizzard Target or Target-of-Target frame, a missing
---             ComboFrame, a missing MSUF.Client and a non-Forever client all
+--             ComboFrame, a missing MSUF.Client and Mainline clients all
 --             leave ComboFrame untouched.
 --   Combat:   a ComboFrame that reports protected in combat is neither hidden
 --             nor reparented until PLAYER_REGEN_ENABLED; an unprotected one is
@@ -145,11 +145,10 @@ do
     Check(_G.TargetFrame.parent == UIParentStub, "(c) TargetFrame must stay on UIParent")
 end
 
--- (d) Not Forever: Retail, Classic and a harness without MSUF.Client.
+-- (d) Native Mainline and a harness without MSUF.Client.
 do
     local clients = {
         { label = "(d) Retail", client = { IsForever = false, IsRetail = true, Flavor = "Mainline" } },
-        { label = "(d) Vanilla", client = { IsForever = false, IsClassic = true, Flavor = "Vanilla" } },
         { label = "(d) no Client", client = nil },
     }
     for _, case in ipairs(clients) do
@@ -158,6 +157,17 @@ do
         CheckUntouched(_G.ComboFrame, case.label)
         Check(_G.TargetFrame.parent ~= UIParentStub, case.label .. ": TargetFrame must still be suppressed")
     end
+end
+
+-- Classic clients also use target-owned ComboFrame; native Target ownership preserves it.
+for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
+    local client = { IsClassic = true, IsForever = false, Flavor = flavor }
+    local UF = Load(client, {})
+    UF.DisableBlizzardFrames()
+    CheckSuppressed(_G.ComboFrame, flavor .. " target ownership")
+    UF = Load(client, { target = { useBlizzardFrame = true } })
+    UF.DisableBlizzardFrames()
+    CheckUntouched(_G.ComboFrame, flavor .. " native target")
 end
 
 -- (e) Forever without ComboFrame: no error.
@@ -212,8 +222,8 @@ do
     Check(disable, "contract: DisableBlizzardFrames body not found")
     local targetBlock = disable:match("if hideTarget and hideTargetTarget then(.-)\n    end\n")
     Check(targetBlock, "contract: Target ownership block not found")
-    Check(targetBlock:find("if IS_FOREVER then%s+HandleFrame%(_G%.ComboFrame, nil, \"target\"%)"),
-        "contract: ComboFrame must be handled inside the Target block behind IS_FOREVER")
+    Check(targetBlock:find("if IS_FOREVER or %(MSUF%.Client and MSUF%.Client%.IsClassic == true%) then%s+HandleFrame%(_G%.ComboFrame, nil, \"target\"%)"),
+        "contract: ComboFrame must be handled inside the Target block behind the Forever/Classic gate")
     local _, comboCalls = kernel:gsub("_G%.ComboFrame", "")
     Check(comboCalls == 1, "contract: the Kernel must touch ComboFrame exactly once, found " .. comboCalls)
 end

@@ -1205,28 +1205,29 @@ local function UnitClipRequestAnchor(f)
   return shared or f.hpBar or f.bg or f
 end
 
-local function ApplyDispelOverlayMask(f, region)
+local function ApplyDispelOverlayMask(f, region, enabled)
   if not (f and region) then return false end
+  local requests = f._msufRUF_ClipRequests
+  if not requests then
+    requests = setmetatable({}, { __mode = "k" })
+    f._msufRUF_ClipRequests = requests
+  end
+  requests[region] = enabled ~= false
   if IsCombatLocked() then
     DeferApply()
     return false
   end
   local group = FrameIsGroup(f)
+  if enabled == false then
+    requests[region] = nil
+    ClearMaskForTexture(f, group and "_msufRGF_MaskedTextures" or "_msufRUF_MaskedTextures", region)
+    return true
+  end
+  if not RoundedFrameEnabled(f) then return false end
   if group then
-    if not RoundedFrameEnabled(f) then return false end
     local shared = RoundedPowerBarsEnabled(f) and PowerIsEmbedded(f) and (f.barGroup or f) or nil
     MaskGroupTexture(f, region, shared or f.health or f.barGroup or f)
   else
-    -- Remember the request: ApplyToUnitFrame's mask refresh drops every mask
-    -- its own pass does not repeat, and texture layer clips and live dispel
-    -- overlays are not part of that pass otherwise.
-    local requests = f._msufRUF_ClipRequests
-    if not requests then
-      requests = setmetatable({}, { __mode = "k" })
-      f._msufRUF_ClipRequests = requests
-    end
-    requests[region] = true
-    if not RoundedFrameEnabled(f) then return false end
     MaskTexture(f, region, UnitClipRequestAnchor(f))
   end
   return true
@@ -1395,7 +1396,9 @@ local function ApplyToUnitFrame(f)
   local clipRequests = f._msufRUF_ClipRequests
   if clipRequests then
     local clipAnchor = UnitClipRequestAnchor(f)
-    for region in pairs(clipRequests) do MaskTexture(f, region, clipAnchor) end
+    for region, enabled in pairs(clipRequests) do
+      if enabled then MaskTexture(f, region, clipAnchor) else clipRequests[region] = nil end
+    end
   end
   EndMaskRefresh(f, "_msufRUF_Mask", "_msufRUF_MaskedTextures")
 end
@@ -1491,6 +1494,13 @@ ApplyToGroupFrame = function(f, kind)
 
   MaskGFGradientTable(f, f.health, sharedFrameMaskAnchor)
   if roundPower then MaskGFGradientTable(f, f.power, sharedFrameMaskAnchor) end
+  local clipRequests = f._msufRUF_ClipRequests
+  if clipRequests then
+    local clipAnchor = sharedFrameMaskAnchor or f.health or f.barGroup or f
+    for region, enabled in pairs(clipRequests) do
+      if enabled then MaskGroupTexture(f, region, clipAnchor) else clipRequests[region] = nil end
+    end
+  end
   EndMaskRefresh(f, "_msufRGF_Mask", "_msufRGF_MaskedTextures")
 end
 
@@ -1670,8 +1680,8 @@ local function HookOnce()
   ExportPublic("MSUF_RoundedUF_PrepareDispelBorder", function(frame, owner, thickness)
     return PrepareFrozenDispelBorder(frame, owner, thickness)
   end)
-  ExportPublic("MSUF_RoundedUF_OnDispelOverlayChanged", function(frame, region)
-    return ApplyDispelOverlayMask(frame, region)
+  ExportPublic("MSUF_RoundedUF_OnDispelOverlayChanged", function(frame, region, enabled)
+    return ApplyDispelOverlayMask(frame, region, enabled)
   end)
   ExportPublic("MSUF_RoundedUF_OnGroupFrameApplied", function(frame, kind)
     if IsCombatLocked() then DeferApply(); return end

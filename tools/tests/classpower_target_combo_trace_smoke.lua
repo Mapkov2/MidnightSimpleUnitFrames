@@ -86,7 +86,8 @@ local EXPECTED = {
     ["Mists/MAGE"] = "56ee375fbf125b64",
     ["Mists/WARLOCK"] = "1e80070178ba2f70",
     ["Mists/MONK"] = "40d3a0ce1aa8ad94",
-    ["Mists/DRUID"] = "651421f8c8820c67",
+    -- Eclipse colors now consume player UNIT_AURA membership (C18-A1); all other traces unchanged.
+    ["Mists/DRUID"] = "482bd996654fa8f9",
 
     ["Mainline/WARRIOR"] = "6b1b61ffa4165e4d",
     ["Mainline/PALADIN"] = "a3a7c6713dabcb71",

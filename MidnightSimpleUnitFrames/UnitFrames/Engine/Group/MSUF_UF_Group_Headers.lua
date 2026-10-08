@@ -918,11 +918,10 @@ local function BuildRaidFreezeEntries(kind, conf, mode, descending, preservedBlo
   end
   -- The Party layout may hide the player; a raid header lists everyone, so the
   -- name list is what keeps that choice in a small raid.
-  if kind == "party" and conf.showPlayer == false then
+  if conf.showPlayer == false then
     for i = #entries, 1, -1 do
       if entries[i].player == true then table.remove(entries, i) end
     end
-    if #entries == 0 then return nil, groupCount end
   end
 
   local priority = (mode == "ROLE" or mode == "GROUP_ROLE") and RolePriority(conf) or nil
@@ -963,7 +962,7 @@ end
 local function BuildRaidFreezeNameList(kind, conf, mode, descending)
   local entries = BuildRaidFreezeEntries(kind, conf, mode, descending, false)
   if not entries then return nil end
-  return NameListFromEntries(entries)
+  return NameListFromEntries(entries) or ""
 end
 
 local function ResolveSortMode(key, conf)
@@ -996,7 +995,7 @@ local function ResolveSortMode(key, conf)
     mode = "ROLE"
   end
   if key == "party" and (mode == "GROUP" or mode == "GROUP_ROLE") then
-    mode = conf.sortByRole == true and "ROLE" or "INDEX"
+    mode = (mode == "GROUP_ROLE" or conf.sortByRole == true) and "ROLE" or "INDEX"
   end
   return mode
 end
@@ -1075,7 +1074,7 @@ local function BuildPreservedRaidSortSnapshot(kind, conf)
   local nameListBlocks
   if nameLists then
     nameListBlocks = {}
-    local all = mode == "ROLE" or (mode == "GROUP_ROLE" and conf.sortClassPriority == true)
+    local all = conf.showPlayer == false or mode == "ROLE" or (mode == "GROUP_ROLE" and conf.sortClassPriority == true)
     local playerBlock
     if not all and mode == "GROUP_ROLE" and conf.playerFirstInRole == true then
       for i = 1, #entries do
@@ -1121,7 +1120,7 @@ local function NeedsNameList(mode, conf, smallRaidParty)
   if conf.playerFirstInRole == true and (mode == "ROLE" or mode == "GROUP_ROLE") then return true end
   if mode == "GROUP_ROLE" then return true end
   if conf.sortClassPriority == true and (mode == "ROLE" or mode == "GROUP" or mode == "GROUP_ROLE") then return true end
-  return smallRaidParty == true and conf.showPlayer == false
+  return conf.showPlayer == false
 end
 
 local function NativeSortState(key, mode, conf)
@@ -1132,7 +1131,7 @@ local function NativeSortState(key, mode, conf)
     if mode == "NAME" then sortMethod = "NAME" end
   elseif mode == "NAME" then
     sortMethod = "NAME"
-  elseif mode == "ROLE" then
+  elseif mode == "ROLE" or (key == "party" and mode == "GROUP_ROLE") then
     groupBy, groupingOrder = "ASSIGNEDROLE", RoleOrder(conf)
     if key ~= "party" and conf.sortAlphabeticalWithinRole == true then sortMethod = "NAME" end
   elseif key ~= "party" and (mode == "GROUP" or mode == "GROUP_ROLE") then
@@ -1366,7 +1365,7 @@ end
 local function GroupBorderScopeActive(anchorKind, conf)
   if type(conf) ~= "table" or conf.enabled ~= true then return false end
   -- Hide in Housing retires the block (MSUF_UF_Group_Runtime.lua); its border goes with it.
-  local hiddenInHousing = GF.HiddenInHousing
+  local hiddenInHousing = GF.HiddenByEnvironment or GF.HiddenInHousing
   if hiddenInHousing and hiddenInHousing(anchorKind) then return false end
   local liveKind = LiveGroupKind()
   if anchorKind == "party" then
@@ -1374,7 +1373,7 @@ local function GroupBorderScopeActive(anchorKind, conf)
     return liveKind == nil and conf.showSolo == true
   end
   if anchorKind == "raid" or anchorKind == "mythicraid" then
-    return liveKind == anchorKind
+    return liveKind == anchorKind or (liveKind == nil and conf.showSolo == true)
   end
   return false
 end
@@ -1597,7 +1596,7 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
   local sortState = preservedGroupIndex and BuildPreservedSortState(conf, preservedGroupIndex, preservedSortSnapshot)
     or BuildSortState(key, kind, conf)
   local groupFilter
-  if sortState.sortMethod ~= "NAMELIST" then
+  if sortState.sortMethod ~= "NAMELIST" and LiveGroupKind() ~= nil then
     local selectedValue1
     if not (key == "party") then selectedValue1 = ResolveGroupFilter(conf) end
     groupFilter = preservedGroupIndex and tostring(preservedGroupIndex)
@@ -1970,7 +1969,7 @@ function GF.SetupHeader(key, kind)
   -- This snapshot exists only inside one out-of-combat protected-header setup.
   -- Reuse its roster-derived block count for layout as well as name sorting so
   -- no second GetRaidRosterInfo sweep is hidden in the geometry helpers.
-  local preservedSortSnapshot = key == "raid" and conf.preserveRaidGroups == true
+  local preservedSortSnapshot = key == "raid" and LiveGroupKind() ~= nil and conf.preserveRaidGroups == true
     and BuildPreservedRaidSortSnapshot(kind, conf) or nil
   local layoutCount = ConfiguredCount(kind, conf)
   if GF.EnsureStableGridPosition then
@@ -1987,7 +1986,7 @@ function GF.SetupHeader(key, kind)
   anchor._msufGFDragCenterToGridY = 0
   ApplyGroupBorderForKey(key)
 
-  if key == "raid" and conf.preserveRaidGroups == true then
+  if preservedSortSnapshot then
     return SetupPreservedRaidHeaders(kind, conf, anchor, w, h, spacing, layoutCount, totalW, totalH,
       preservedSortSnapshot)
   elseif key == "raid" and GF.headers.raid and GF.headers.raid._msufRaidGroupIndex then

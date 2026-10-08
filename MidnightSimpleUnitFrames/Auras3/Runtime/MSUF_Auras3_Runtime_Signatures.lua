@@ -55,6 +55,7 @@ LaneStructuralSignature = function(lane)
         .. "\030" .. tostring(lane.weaponEnchants)
         .. "\030" .. tostring(lane.customPriority)
         .. "\030" .. tostring(lane.customPrioritySignature)
+        .. "\030" .. tostring(lane.customPriority and lane.max or nil)
         .. "\030" .. tostring(lane.customPriority and lane.candidateFilterSignature or nil)
         .. "\030" .. tostring(standalone)
 end
@@ -111,7 +112,7 @@ LaneButtonSignature = function(lane)
         .. "\030" .. tostring(lane.portraitPositionWhenDisabled)
         .. "\030" .. tostring(lane.portraitLevelOffset)
         .. "\030" .. tostring(lane.iconStyle and lane.iconStyle.signature)
-        .. "\030" .. tostring(A3._nativeVisualGen or 0)
+        .. "\030" .. tostring(A3.GetNativeVisualSignature and A3.GetNativeVisualSignature() or (A3._nativeVisualGen or 0))
 end
 
 SensorStructuralSignature = function(sensor)
@@ -131,7 +132,7 @@ SensorLayoutSignature = function(sensor)
         .. "\030" .. tostring(sensor.mode) .. "\030" .. tostring(sensor.growth)
         .. "\030" .. tostring(sensor.spacing) .. "\030" .. tostring(sensor.anchor)
         .. "\030" .. tostring(sensor.x) .. "\030" .. tostring(sensor.y)
-        .. "\030" .. tostring(sensor.trigger) .. "\030" .. tostring(A3._nativeVisualGen or 0)
+        .. "\030" .. tostring(sensor.trigger) .. "\030" .. tostring(A3.GetNativeVisualSignature and A3.GetNativeVisualSignature() or (A3._nativeVisualGen or 0))
 end
 
 return {

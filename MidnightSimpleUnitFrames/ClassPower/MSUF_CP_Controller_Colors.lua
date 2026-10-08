@@ -11,10 +11,12 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 
-local builders = _G.MSUF_CP_CONST.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
+local CPConst = _G.MSUF_CP_CONST
+local builders = CPConst.BuilderRegistry("MSUF_CP_CORE_BUILDERS")
 
 local type, tonumber, tostring = type, tonumber, tostring
-local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
+local OverrideRGB = CPConst.OverrideRGB
+local CPK = CPConst.CPK
 
 --- Bound by CONTROLLER_COLORS: the shared cached config table and the
 --- power-type token map.
@@ -89,6 +91,14 @@ local function ResolveClassPowerColor(powerType)
         end
     end
 
+    --- Eclipse has no single PowerBarColor entry on Mists.
+    local eclipse = token == "ECLIPSE_SOLAR" and CPK.BAL.CLR_SOLAR
+        or token == "ECLIPSE_LUNAR" and CPK.BAL.CLR_LUNAR
+        or token == "ECLIPSE_CA" and CPK.BAL.CLR_CA
+    if eclipse then
+        _cachedColorR, _cachedColorG, _cachedColorB = eclipse[1], eclipse[2], eclipse[3]
+        return _cachedColorR, _cachedColorG, _cachedColorB
+    end
     --- Hard fallback
     if token == "IRONFUR" then
         _cachedColorR, _cachedColorG, _cachedColorB = 1.00, 0.49, 0.04

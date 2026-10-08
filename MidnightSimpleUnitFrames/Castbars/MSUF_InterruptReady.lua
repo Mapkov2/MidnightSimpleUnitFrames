@@ -5,7 +5,9 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- This module answers two questions: "is any of my interrupts ready?" and
 --- "how should the indicator look for the current cast's interruptibility?" It
 --- must not decide castbar ownership or spellcast state; it decorates frames
---- that the castbar drivers already own.
+--- that the castbar drivers already own. Consumers outside MSUF's castbars
+--- (the MSUF Suite's nameplates) share the same readiness through
+--- MSUF.KickReady, which MSUF_HostAPI.GetKickReady() hands out.
 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
@@ -13,6 +15,7 @@ local ExportPublic = MSUF.ExportPublic
 local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
 
 local SpellAPI = _G.C_Spell
+local GetTime = _G.GetTime
 local TimerAPI = _G.C_Timer
 -- Kernel/MSUF_Scheduler.lua loads first in every TOC.
 local Scheduler = MSUF.Scheduler
@@ -101,7 +104,6 @@ local state = {}
 local slots = { {}, {} }
 local slotCount = 0
 local spellSetGeneration = 0
-local spellBookEventRegistered = false
 local cooldownWakeUnsupported = false
 local cooldownTimerGeneration = 0
 local cooldownTimerArmedGeneration
@@ -112,6 +114,14 @@ local activeIndicatorFrames = {}
 local activeIndicatorFrameCount = 0
 local fillActiveFrames = {}
 local fillActiveFrameCount = 0
+-- Consumers outside MSUF's castbars (MSUF.KickReady below): owner -> onChange,
+-- and the owners that show readiness on a running cast right now. An active
+-- consumer keeps the cooldown event and wake frames armed like an active
+-- castbar indicator does.
+local consumers = {}
+local consumerCount = 0
+local activeConsumers = {}
+local activeConsumerCount = 0
 local refreshActiveFrames = {}
 local UpdateCooldownEventRegistration
 local UpdateLifecycleEventRegistration
@@ -140,11 +150,10 @@ local function InvalidateCooldownSnapshot()
 end
 
 local function GeneralDB()
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-    end
-
-    return (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local ensure = _G.MSUF_EnsureDB
+    if type(ensure) == "function" then ensure() end
+    local db = _G.MSUF_DB
+    return (db and db.general) or {}
 end
 
 local plainIsSecret = _G.issecretvalue
@@ -208,23 +217,45 @@ local function ActiveSpecID()
     return (select(1, getSpecializationInfo(specIndex)))
 end
 
-local function SecondaryInterruptSpellID(classToken)
-    local spellID = classToken and SECONDARY_INTERRUPT_SPELLS[classToken]
-    local spellBook = _G.C_SpellBook
-    local isKnown = spellBook and spellBook.IsSpellKnownOrInSpellBook
-    if spellID and type(isKnown) == "function" and isKnown(spellID) == true then
-        return spellID
+-- SpellBookDocumentation.lua (live/classic/forever): the Pet bank is the
+-- current pet's book; presence in a player's book alone does not mean learned.
+local function KnowsInterrupt(spellID, pet)
+    if not spellID then return false end
+    local book = _G.C_SpellBook
+    local known = book and (book.IsSpellKnown or book.IsSpellKnownOrInSpellBook)
+    if known then
+        local enums = _G.Enum
+        local banks = enums and enums.SpellBookSpellBank
+        if pet and not (banks and banks.Pet) then return false end
+        return known(spellID, pet and banks.Pet or nil) == true
     end
+    local legacy = _G.IsSpellKnown
+    if legacy then return legacy(spellID, pet == true) == true end
+    local playerSpell = _G.IsPlayerSpell
+    return not pet and playerSpell ~= nil and playerSpell(spellID) == true
 end
 
-local function ClassHasSecondaryCandidate()
-    local classToken = state.classToken
-    if classToken == nil and UnitClass then
-        local _, token = UnitClass("player")
-        classToken = token
+local function InterruptAvailable(spellID, classToken)
+    local pet = spellID == 19647
+    if not KnowsInterrupt(spellID, pet) then return false end
+    -- On ranked clients Feral Charge and Pummel require their combat form.
+    -- Keep resource starvation separate from availability, as Blizzard's
+    -- action buttons do with IsSpellUsable's insufficientPower result.
+    local formRestricted = spellID == 16979 or spellID == 106839
+        or (SHARED_COOLDOWN_SPELLS and classToken == "WARRIOR")
+    local usable = SpellAPI and SpellAPI.IsSpellUsable or _G.IsUsableSpell
+    if formRestricted and type(usable) == "function" then
+        local canUse, insufficientPower = usable(spellID)
+        if not plainIsSecret(canUse) and not plainIsSecret(insufficientPower) then
+            return canUse == true or insufficientPower == true
+        end
     end
+    return true
+end
 
-    return (classToken and SECONDARY_INTERRUPT_SPELLS[classToken]) ~= nil
+local function SecondaryInterruptSpellID(classToken)
+    local spellID = classToken and SECONDARY_INTERRUPT_SPELLS[classToken]
+    if KnowsInterrupt(spellID) then return spellID end
 end
 
 -- Resolve spells only on lifecycle/settings changes. Spell-book membership
@@ -251,7 +282,10 @@ local function ResolveInterruptSpellID()
         state.specID = specID
     end
 
-    local secondarySpellID = spellID and SecondaryInterruptSpellID(classToken)
+    if not InterruptAvailable(spellID, classToken) then spellID = nil end
+    local secondarySpellID = SecondaryInterruptSpellID(classToken)
+    if not spellID then spellID, secondarySpellID = secondarySpellID, nil end
+    state.spellsResolved = true
 
     if previousSpellID and previousSpellID ~= spellID then
         state.previousSpellID = previousSpellID
@@ -270,10 +304,6 @@ local function ResolveInterruptSpellID()
     state.secondarySpellID = secondarySpellID
     slots[1].spellID, slots[2].spellID = spellID, secondarySpellID
     slotCount = secondarySpellID and 2 or (spellID and 1 or 0)
-    if eventFrame and not spellBookEventRegistered and ClassHasSecondaryCandidate() then
-        eventFrame:RegisterEvent("SPELLS_CHANGED")
-        spellBookEventRegistered = true
-    end
 
     return spellID
 end
@@ -282,7 +312,7 @@ end
 local function NeedsInterruptCooldownUpdate(spellID, baseSpellID)
     if spellID == nil then return true end
 
-    if state.spellID == nil then ResolveInterruptSpellID() end
+    if not state.spellsResolved then ResolveInterruptSpellID() end
 
     for index = 1, slotCount do
         local slotSpellID = slots[index].spellID
@@ -390,7 +420,7 @@ local function SlotCooldown(slot)
     if not (spellID and SpellAPI and (SpellAPI.GetSpellCooldownDuration or SpellAPI.GetSpellCooldown)) then
         return nil
     end
-    local frameStamp = _G.GetTime and _G.GetTime()
+    local frameStamp = GetTime and GetTime()
     if frameStamp ~= nil
         and slot.snapshotKnown == true
         and slot.snapshotFrameStamp == frameStamp
@@ -412,7 +442,7 @@ local function SlotCooldown(slot)
 end
 
 local function InterruptCooldown()
-    if state.spellID == nil then ResolveInterruptSpellID() end
+    if not state.spellsResolved then ResolveInterruptSpellID() end
     if slotCount < 1 then return nil end
 
     return SlotCooldown(slots[1])
@@ -451,7 +481,7 @@ end
 -- A plain ready slot settles the union. If both booleans are restricted,
 -- return one here and compose both at the native color sink below.
 local function CombinedStatus(seedCooldown, seedResolved)
-    if state.spellID == nil then ResolveInterruptSpellID() end
+    if not state.spellsResolved then ResolveInterruptSpellID() end
 
     local plainReady = false
     local secretReady
@@ -501,7 +531,7 @@ end
 
 local function InterruptStatus(cooldown, cooldownResolved)
     local useSnapshot = cooldownResolved ~= true
-    local frameStamp = useSnapshot and _G.GetTime and _G.GetTime() or nil
+    local frameStamp = useSnapshot and GetTime and GetTime() or nil
     if frameStamp ~= nil
         and statusSnapshotKnown == true
         and statusSnapshotFrameStamp == frameStamp
@@ -1015,7 +1045,7 @@ local function RefreshTimeProjection(frame, castState, general, active)
     if not duration or not duration.GetStartTime or not duration.GetEndTime then
         HideTimeProjection(frame); return
     end
-    if state.spellID == nil then ResolveInterruptSpellID() end
+    if not state.spellsResolved then ResolveInterruptSpellID() end
     local list = frame._msufKickTimeProjections
     if not list then list = {}; frame._msufKickTimeProjections = list end
     local raw = ResolveRawNotInterruptible(frame, castState)
@@ -1126,7 +1156,9 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
         MarkInactiveIndicatorFrame(frame)
         HideIndicatorVisual(frame)
 
-        if not UnitSupportsFillStyle(general, frame.unit) or not active then
+        local paintsFill = UnitSupportsFillStyle(general, frame.unit)
+        local focusTracker = frame.unit == "focus" and general.enableFocusKickIcon == true
+        if not (paintsFill or focusTracker) or not active then
             MarkInactiveFillFrame(frame)
             return
         end
@@ -1140,7 +1172,7 @@ local function RefreshFrame(frame, castState, status, general, updateFillColor)
         end
 
         MarkActiveFillFrame(frame)
-        if updateFillColor == true and frame.UpdateColorForInterruptible then
+        if paintsFill and updateFillColor == true and frame.UpdateColorForInterruptible then
             frame:UpdateColorForInterruptible()
         end
         return
@@ -1244,8 +1276,10 @@ local function StatusCooldown(status)
     return status.cooldown
 end
 
+-- Fill frames and active consumers read readiness outside the castbar pass,
+-- so the pass resolves it for them (its result arms the next wake).
 local function ResolveFillStatus(status)
-    if status.resolved or fillActiveFrameCount <= 0 then
+    if status.resolved or (fillActiveFrameCount <= 0 and activeConsumerCount <= 0) then
         return
     end
 
@@ -1351,6 +1385,26 @@ local function RefreshExternalReadyConsumers()
     end
 end
 
+-- Runs last on every path, after the engine's own state (wakes, event
+-- registration, displayed readiness) is settled. reason:
+--   "readiness"   readiness may have changed (active consumers)
+--   "projection"  readiness is unchanged, a cooldown's end may have moved (active)
+--   "settings"    MSUF's indicator settings were applied (every consumer)
+-- An inactive consumer reads readiness fresh when its next cast starts.
+-- Each callback is another addon's code inside the engine's pass, so it runs
+-- through the host API boundary (Kernel/MSUF_Boundary.lua, resolved here at
+-- use): a raising one is reported, the others are still told, and the
+-- displayed readiness it never painted cannot dedupe the next event.
+local function NotifyConsumers(reason)
+    local runStep = MSUF.RunHostAPIStep
+    local everyone = reason == "settings"
+    for owner, onChange in pairs(consumers) do
+        if (everyone or activeConsumers[owner]) and not runStep("KickReady consumer", onChange, reason) then
+            state.cooldownDisplayReady = nil
+        end
+    end
+end
+
 -- One native completion callback per slot; no polling or Lua OnUpdate.
 local function EnsureCooldownWakeFrame(slot)
     if cooldownWakeUnsupported then
@@ -1411,10 +1465,11 @@ local function OnCooldownTimer()
     if resolved then
         ScheduleCooldownRefresh(remaining, true, nextCooldown, nextCooldownResolved)
     end
+    if activeConsumerCount > 0 then NotifyConsumers("readiness") end
 end
 
 ScheduleCooldownRefresh = function(remaining, remainingResolved, cooldown, cooldownResolved)
-    if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 then
+    if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 and activeConsumerCount <= 0 then
         ClearCooldownWake()
         return false
     end
@@ -1508,7 +1563,7 @@ HandleCooldownWakeDone = function(slot)
     end
     slot.wakeArmed = false
 
-    if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 then
+    if activeIndicatorFrameCount <= 0 and fillActiveFrameCount <= 0 and activeConsumerCount <= 0 then
         return
     end
 
@@ -1516,6 +1571,7 @@ HandleCooldownWakeDone = function(slot)
     local ready, remaining, cooldown = CombinedStatus()
     RefreshActive(true, ready, remaining, cooldown, true)
     RefreshExternalReadyConsumers()
+    if activeConsumerCount > 0 then NotifyConsumers("readiness") end
 end
 
 local function KickReady_Init()
@@ -1532,7 +1588,8 @@ end
 
 local function KickReady_GetSpellID()
     if not FeatureEnabled() then return nil end
-    return state.spellID or ResolveInterruptSpellID()
+    if not state.spellsResolved then ResolveInterruptSpellID() end
+    return state.spellID
 end
 
 local function KickReady_GetReadyBoolForTint()
@@ -1576,8 +1633,17 @@ local function KickReady_RefreshOutline(frame)
     state.cooldownDisplayReady = nil
 end
 
-local function KickReady_RefreshAll()
-    local enabled = FeatureEnabled()
+-- The nameplate consumer shows readiness only while MSUF's own switch
+-- (Castbars > Interrupt Ready Indicator > Show on enemy nameplates) is on;
+-- registering alone starts nothing.
+local function EngineEnabled()
+    local general = GeneralDB()
+    return (consumerCount > 0 and general.kickReadyShowNameplates == true) or FeatureEnabled(general)
+end
+
+local function RefreshEngine()
+    local enabled = EngineEnabled()
+    if enabled then ResolveInterruptSpellID() end
     if UpdateLifecycleEventRegistration then UpdateLifecycleEventRegistration(enabled) end
     if not enabled then
         ClearCooldownWake()
@@ -1586,7 +1652,6 @@ local function KickReady_RefreshAll()
         if UpdateCooldownEventRegistration then UpdateCooldownEventRegistration() end
         return remaining, resolved
     end
-    ResolveInterruptSpellID()
     local remaining, resolved, cooldown, cooldownResolved = RefreshAll(true)
     if resolved then
         ScheduleCooldownRefresh(remaining, true, cooldown, cooldownResolved)
@@ -1596,6 +1661,155 @@ local function KickReady_RefreshAll()
     end
     return remaining, resolved
 end
+
+-- MSUF's settings path (the castbar menu, the unit-frame spawn): every
+-- consumer re-reads the look, and an active one repaints, which also keeps
+-- the cooldown-event dedupe true for the readiness it shows.
+local function KickReady_RefreshAll()
+    local remaining, resolved = RefreshEngine()
+    if consumerCount > 0 then NotifyConsumers("settings") end
+    return remaining, resolved
+end
+
+-- MSUF's castbar appearance pass (MSUF_ApplyAllCastbarsAndSync: colors,
+-- outline, texture, box size and placement) changes the look consumers draw
+-- without touching the engine: they only redraw.
+local function KickReady_NotifySettings()
+    if consumerCount > 0 then NotifyConsumers("settings") end
+end
+
+------------------------------------------------------------------ consumers
+-- MSUF.KickReady: this engine and MSUF's indicator look for consumers that
+-- draw on castbars MSUF does not own (the MSUF Suite's nameplates), handed
+-- out by MSUF_HostAPI.GetKickReady() (Runtime/MSUF_HostAPI.lua). Version 1:
+--   Register(owner, onChange) -> true    onChange(reason): "readiness" and
+--       "projection" while the owner is active, "settings" always
+--       (NotifyConsumers above)
+--   Unregister(owner)
+--   HasConsumers() -> boolean   a consumer is registered (MSUF's menu gates the
+--       nameplate switch on it)
+--   SetActive(owner, active)    the owner shows readiness on a running cast
+--   Look() -> table             MSUF's indicator settings (ConsumerLook below)
+--   RGBA(rawNotInterruptible) -> r, g, b, a    MSUF's border and box color
+--   FillColors() -> interruptible, notInterruptible, unavailable (ColorMixin)
+--   SelectColor(readyColor, notReadyColor) -> ColorMixin   readyColor while any
+--       interrupt is ready; a restricted readiness is selected natively
+--   SlotCount() -> 0..2         tracked interrupts (0: the class has none)
+--   Cooldown(index) -> Duration | nil   that interrupt's cooldown, this frame
+local function ConsumerSetActive(owner, active)
+    active = active == true and consumers[owner] ~= nil
+    if (activeConsumers[owner] == true) == active then return end
+    activeConsumers[owner] = active or nil
+    activeConsumerCount = activeConsumerCount + (active and 1 or -1)
+    UpdateCooldownEventRegistration()
+    if not active then return end
+    -- The owner paints readiness itself, possibly after a stretch without the
+    -- cooldown event: like a one-frame paint, that cannot certify the shared
+    -- displayed readiness, so the next cooldown event must not dedupe on it.
+    state.cooldownDisplayReady = nil
+    -- A cast that starts while an interrupt recovers needs that recovery's wake.
+    ScheduleCooldownRefresh(nil, false)
+end
+
+local function ConsumerRegister(owner, onChange)
+    if owner == nil or onChange == nil then return false end
+    if consumers[owner] == nil then consumerCount = consumerCount + 1 end
+    consumers[owner] = onChange
+    RefreshEngine()
+    return true
+end
+
+local function ConsumerUnregister(owner)
+    if owner == nil or consumers[owner] == nil then return end
+    ConsumerSetActive(owner, false)
+    consumers[owner] = nil
+    consumerCount = consumerCount - 1
+    RefreshEngine()
+end
+
+-- MSUF's indicator settings for a consumer that draws the indicator the way
+-- MSUF's castbars do. One reused table, refreshed from the profile per call:
+--   show        the nameplate switch
+--   style       "border" | "box" | "fill" (IndicatorStyle)
+--   marker, segment             the time marker and shade
+--   readyR, readyG, readyB, readyA   their color
+--   outline     the castbar outline's width (MSUF_CastbarStyle.lua's clamp)
+--   boxSize     0 = the castbar's height (ApplyBoxLayout), then clamped 8..80
+--   boxAnchor, boxOffsetX, boxOffsetY
+--   texture     MSUF's castbar texture (the fill style)
+local look = {}
+local function ConsumerLook()
+    local general = GeneralDB()
+    look.show = general.kickReadyShowNameplates == true
+    look.style = IndicatorStyle(general)
+    look.marker, look.segment = general.kickReadyTimeMarker == true, general.kickReadyTimeSegment == true
+    look.readyR, look.readyG, look.readyB, look.readyA = RGBAForReady(true, general)
+    look.outline = math.max(0, math.min(math.floor((tonumber(general.castbarOutlineThickness) or 1) + 0.5), 12))
+    look.boxSize = general.kickReadyAutoSize == false and tonumber(general.kickReadySize) or 0
+    look.boxAnchor = general.kickReadyAnchor or "RIGHT"
+    look.boxOffsetX = tonumber(general.kickReadyOffsetX) or 4
+    look.boxOffsetY = tonumber(general.kickReadyOffsetY) or 0
+    -- Castbars/MSUF_Castbars_Core.lua, resolved at use.
+    local castbarTexture = MSUF.Public.GetCastbarTexture
+    look.texture = castbarTexture and castbarTexture() or "Interface\\TargetingFrame\\UI-StatusBar"
+    return look
+end
+
+-- MSUF's border and box color for a cast's interruptibility (plain,
+-- restricted or nil): ready or not ready, grey for a restricted
+-- uninterruptible cast; restricted values are composed natively.
+local function ConsumerRGBA(rawNotInterruptible)
+    local red, green, blue, alpha = EvaluateIndicatorRGBA(InterruptStatus(), rawNotInterruptible)
+    return red, green, blue, alpha
+end
+
+-- The castbar colors of MSUF's fill style (Castbars/MSUF_CastbarUtils.lua,
+-- resolved at use): interruptible, not interruptible and interrupt
+-- unavailable. One ColorMixin each, replaced only when its color changes.
+local fillColors = { {}, {}, {} }
+local function FillColor(cache, red, green, blue)
+    if cache.r ~= red or cache.g ~= green or cache.b ~= blue or not cache.color then
+        cache.r, cache.g, cache.b = red, green, blue
+        cache.color = CreateColor(red, green, blue, 1)
+    end
+    return cache.color
+end
+
+local function ConsumerFillColors()
+    local public = MSUF.Public
+    local castR, castG, castB, nonR, nonG, nonB = public.ResolveCastbarColors()
+    local unavailableR, unavailableG, unavailableB = public.ResolveInterruptUnavailableCastColor()
+    return FillColor(fillColors[1], castR, castG, castB), FillColor(fillColors[2], nonR, nonG, nonB),
+        FillColor(fillColors[3], unavailableR, unavailableG, unavailableB)
+end
+
+local function ConsumerSelectColor(readyColor, notReadyColor)
+    return SelectReadyColor(InterruptStatus(), readyColor, notReadyColor)
+end
+
+local function ConsumerSlotCount()
+    if not state.spellsResolved then ResolveInterruptSpellID() end
+    return slotCount
+end
+
+local function ConsumerCooldown(index)
+    if index < 1 or index > slotCount then return nil end
+    return SlotCooldown(slots[index])
+end
+
+MSUF.KickReady = {
+    version = 1,
+    Register = ConsumerRegister,
+    Unregister = ConsumerUnregister,
+    HasConsumers = function() return consumerCount > 0 end,
+    SetActive = ConsumerSetActive,
+    Look = ConsumerLook,
+    RGBA = ConsumerRGBA,
+    FillColors = ConsumerFillColors,
+    SelectColor = ConsumerSelectColor,
+    SlotCount = ConsumerSlotCount,
+    Cooldown = ConsumerCooldown,
+}
 
 local function CooldownEventAlreadyDisplayed()
     -- GetSpellCooldownDuration returns a fresh Duration object. Reuse this
@@ -1632,13 +1846,14 @@ ExportPublic("MSUF_KickReady_ApplyLayout", KickReady_ApplyLayout)
 ExportPublic("MSUF_KickReady_RefreshFrame", KickReady_RefreshFrame)
 ExportPublic("MSUF_KickReady_RefreshOutline", KickReady_RefreshOutline)
 ExportPublic("MSUF_KickReady_RefreshAll", KickReady_RefreshAll)
+ExportPublic("MSUF_KickReady_NotifySettings", KickReady_NotifySettings)
 
 UpdateCooldownEventRegistration = function()
     if not eventFrame then
         return
     end
 
-    local shouldRegister = activeIndicatorFrameCount > 0 or fillActiveFrameCount > 0
+    local shouldRegister = activeIndicatorFrameCount > 0 or fillActiveFrameCount > 0 or activeConsumerCount > 0
     if shouldRegister and not cooldownEventRegistered then
         eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
         cooldownEventRegistered = true
@@ -1654,6 +1869,7 @@ end
 eventFrame = PixelLayoutRegion(CreateFrame("Frame", "MSUF_InterruptReady_EventFrame"))
 eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID)
     if event ~= "SPELL_UPDATE_COOLDOWN" then
+        if (event == "UNIT_PET" or event == "PLAYER_SPECIALIZATION_CHANGED") and spellID ~= "player" then return end
         local previousGeneration = spellSetGeneration
         InvalidateCooldownSnapshot()
         ResolveInterruptSpellID()
@@ -1674,6 +1890,7 @@ eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID)
             RefreshActiveProjections()
             ScheduleCooldownRefresh(remaining, true, cooldown, cooldownResolved)
             UpdateCooldownEventRegistration()
+            if activeConsumerCount > 0 then NotifyConsumers("projection") end
             return
         end
 
@@ -1690,6 +1907,7 @@ eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID)
             ScheduleCooldownRefresh(remaining, true, nextCooldown, nextCooldownResolved)
         end
         UpdateCooldownEventRegistration()
+        if activeConsumerCount > 0 then NotifyConsumers("readiness") end
         return
     end
 
@@ -1699,6 +1917,7 @@ eventFrame:SetScript("OnEvent", function(_, event, spellID, baseSpellID)
         ScheduleCooldownRefresh(remaining, true, cooldown, cooldownResolved)
     end
     UpdateCooldownEventRegistration()
+    if activeConsumerCount > 0 then NotifyConsumers("readiness") end
 end)
 
 UpdateLifecycleEventRegistration = function(enabled)
@@ -1709,19 +1928,21 @@ UpdateLifecycleEventRegistration = function(enabled)
         eventFrame:UnregisterEvent("PLAYER_ENTERING_WORLD")
         eventFrame:UnregisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         eventFrame:UnregisterEvent("SPELLS_CHANGED")
+        eventFrame:UnregisterEvent("UNIT_PET")
+        eventFrame:UnregisterEvent("UPDATE_SHAPESHIFT_FORM")
         eventFrame:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
     end
     cooldownEventRegistered = false
-    spellBookEventRegistered = false
     if enabled ~= true then
         if ClearCooldownWake then ClearCooldownWake() end
         return false
     end
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-    if ClassHasSecondaryCandidate() then
-        eventFrame:RegisterEvent("SPELLS_CHANGED")
-        spellBookEventRegistered = true
+    eventFrame:RegisterEvent("SPELLS_CHANGED")
+    if state.classToken == "WARLOCK" then eventFrame:RegisterEvent("UNIT_PET") end
+    if state.classToken == "DRUID" or (SHARED_COOLDOWN_SPELLS and state.classToken == "WARRIOR") then
+        eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
     end
     UpdateCooldownEventRegistration()
     return true

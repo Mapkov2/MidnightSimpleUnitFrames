@@ -659,12 +659,16 @@ function GF.EnsureStableGridPosition(kind, count, conf, preservedGroupCount)
     -- (live header, Edit Mode, preview) otherwise supplies a different count
     -- than the migration did, and the difference is written to disk for good.
     local pinnedCount = tonumber(conf.positionMigrationCount)
-    local dx, dy = GF.GetGridMetrics(kind, pinnedCount or count, preservedGroupCount)
+    local dx, dy = conf.positionMigrationDX, conf.positionMigrationDY
+    if type(dx) ~= "number" or type(dy) ~= "number" then
+        dx, dy = GF.GetGridMetrics(kind, pinnedCount or count, preservedGroupCount)
+    end
     local fallbackX = IsRaidLikeKind(kind) and -500 or -400
     conf.offsetX = (tonumber(conf.offsetX) or fallbackX) - (tonumber(dx) or 0)
     conf.offsetY = (tonumber(conf.offsetY) or 0) - (tonumber(dy) or 0)
     conf.positionMode = STABLE_GRID_POSITION_MODE
     conf.positionMigrationCount = nil
+    conf.positionMigrationDX, conf.positionMigrationDY = nil, nil
     return true
 end
 
@@ -704,4 +708,5 @@ function GF.MigrateGroupPositionToGridCenter(conf, kind)
     -- Carry the count forward so EnsureStableGridPosition can subtract the very
     -- same delta instead of whatever roster the converting surface happens to see.
     conf.positionMigrationCount = migrationCount
+    conf.positionMigrationDX, conf.positionMigrationDY = dx, dy
 end

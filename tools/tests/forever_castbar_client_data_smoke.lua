@@ -190,13 +190,19 @@ do -- (d) A managed bar shown at the takeover (a Blizzard cast in flight) is
 end
 
 -- Interrupt Ready ---------------------------------------------------------------
-local function ResolveInterrupt(client, classToken)
+local function ResolveInterrupt(client, classToken, knownSpell)
     InstallCommonGlobals()
     _G.MSUF_KickReady_GetSpellID = nil
     _G.MSUF_DB = { general = { kickReadyShowTarget = true } }
     _G.MSUF_ShouldUseMSUFCastbar = function() return true end
     _G.UnitClass = function() return classToken, classToken end
-    _G.C_SpellBook = { IsSpellKnownOrInSpellBook = function() return false end }
+    -- This fixture tests client spell-table selection with its selected spell learned.
+    -- Availability rejection is covered independently by bh3_runtime_interrupt_eligibility_smoke.
+    _G.Enum = { SpellBookSpellBank = { Player = 0, Pet = 1 } }
+    _G.C_SpellBook = { IsSpellKnown = function(spellID, bank)
+        return spellID == knownSpell and (bank == 1) == (spellID == 19647)
+    end }
+    _G.IsUsableSpell = function() return true, false end
     _G.C_SpecializationInfo = nil
     local ns = Namespace(client)
     -- Castbars/MSUF_CastbarUtils.lua loads first in every TOC (the interrupt-ready unit rule).
@@ -218,7 +224,7 @@ for _, case in ipairs({
     { label = "(d) no MSUF.Client", client = nil, expected = RETAIL_INTERRUPTS },
 }) do
     for _, classToken in ipairs(CLASSES) do
-        local spellID = ResolveInterrupt(case.client, classToken)
+        local spellID = ResolveInterrupt(case.client, classToken, case.expected[classToken])
         Check(spellID == case.expected[classToken], string.format("%s %s: interrupt %s, expected %s",
             case.label, classToken, tostring(spellID), tostring(case.expected[classToken])))
     end

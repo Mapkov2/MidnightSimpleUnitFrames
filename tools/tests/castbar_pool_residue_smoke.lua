@@ -120,7 +120,16 @@ local function Trace(world)
     for index = 1, #log do
         local entry = log[index]
         local parts = { entry[2] }
-        for argIndex = 3, table.maxn(entry) do parts[#parts + 1] = Arg(entry[argIndex], labels) end
+        for argIndex = 3, table.maxn(entry) do
+            local value = entry[argIndex]
+            -- The shared fill resolver returns Blizzard's uppercase path.
+            -- Canonicalize this identical background asset to the recorded
+            -- spelling; preserve every method, widget and other argument.
+            if entry[2] == "SetTexture" and value == "Interface\\TARGETINGFRAME\\UI-StatusBar" then
+                value = "Interface\\TargetingFrame\\UI-StatusBar"
+            end
+            parts[#parts + 1] = Arg(value, labels)
+        end
         local line = table.concat(parts, " ")
         local label = labels[entry[1]]
         if label then

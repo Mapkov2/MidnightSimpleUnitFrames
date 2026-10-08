@@ -596,7 +596,7 @@ function dispatcher.Flush()
         if not restricted then
             for i = 1, #watched do
                 local unit = watched[i]
-                if not states[unit].known then ReadUnit(unit) end
+                if pendingUnits[unit] or not states[unit].known or not Reachable(unit) then ReadUnit(unit) end
             end
         end
         fullPending = false

@@ -291,6 +291,12 @@ local function UpdateUnitEdges(frame, cfg, enabled, unit, edgesKey, shownKey, sh
     show = false
     secretShow = false
   end
+  -- Connection only matters for an indicator that could be visible. Preserve
+  -- secret booleans for native setters; never compare one in the plain branch.
+  if secretShow or show == true then
+    local connected, connectedKnown = ReadConnectedCached(frame, frame.MSUFUnitKey)
+    if connectedKnown == true and connected == false then show, secretShow = false, false end
+  end
   local secretKey = SECRET_SHOWN_KEYS[shownKey]
   local rounded = _G.MSUF_RoundedUF_OnGroupIndicatorChanged
   if rounded and rounded(frame, indicatorKind, show) then

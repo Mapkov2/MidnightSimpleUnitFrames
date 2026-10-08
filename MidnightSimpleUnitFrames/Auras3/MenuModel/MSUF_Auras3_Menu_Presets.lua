@@ -298,7 +298,7 @@ function Factories.Presets(Model, Common)
         if type(set) ~= "table" then return values end
         for spellID in pairs(set) do
             local id, name, icon = SpellInfo(spellID)
-            if id then
+            if id and (not (MSUF.Client and MSUF.Client.IsClassic) or name) then
                 values[#values + 1] = {
                     value = tostring(id),
                     text = SpellIDText(name, id),
@@ -316,7 +316,7 @@ function Factories.Presets(Model, Common)
     end
 
     function Model.AddBlacklistPresetSpell(scope, spellID, kind)
-        return Model.AddBlacklistSpell(scope, spellID, kind)
+        return Model.AddBlacklistSpell(scope, spellID, kind, true)
     end
 
     function Model.AddBlacklistPresetGroup(scope, presetKey, kind)
@@ -324,7 +324,7 @@ function Factories.Presets(Model, Common)
         local count = 0
         for i = 1, #values do
             local item = values[i]
-            if item and item.value and Model.AddBlacklistSpell(scope, item.value, kind) then
+            if item and item.value and Model.AddBlacklistSpell(scope, item.value, kind, true) then
                 count = count + 1
             end
         end

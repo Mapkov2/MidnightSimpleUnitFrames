@@ -10,6 +10,12 @@ if not Factories then
     MSUF.Auras3MenuModelFactories = Factories
 end
 
+local function ClearBlacklistList(list)
+    if type(list) ~= "table" then return end
+    list.spells = {}
+    list.rankFamilySpellIDs = nil
+end
+
 function Factories.Filters(A3, Model, Schema, Common, Storage)
     local type = type
     local tonumber = tonumber
@@ -21,6 +27,7 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
     local DEFAULT_SHARED = Schema.DEFAULT_SHARED
     local ClampNumber = Common.ClampNumber
     local CountBlacklistSpells = Common.CountBlacklistSpells
+    local AddBlacklistSpellToList = Common.AddBlacklistSpellToList
     local DeepCopy = Common.DeepCopy
     local EachRuntimeUnit = Common.EachRuntimeUnit
     local NormalizeKind = Common.NormalizeKind
@@ -301,16 +308,13 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
         return values, unreadable, (#values == 0 and (tonumber(secretSkipped) or 0) > 0)
     end
 
-    function Model.AddBlacklistSpell(scope, value, kind)
+    function Model.AddBlacklistSpell(scope, value, kind, preset)
         local spellID = SpellIDFromInput(value)
         if not spellID then return false end
         value = tostring(spellID)
         local changed = false
         ForEachFrameBlacklist(scope, true, kind, function(list)
-            if type(list) == "table" and type(list.spells) == "table" then
-                if list.spells[value] ~= true then changed = true end
-                list.spells[value] = true
-            end
+            changed = AddBlacklistSpellToList(list, value, preset) or changed
         end)
         return changed
     end
@@ -357,6 +361,7 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
             if type(list) == "table" and type(list.spells) == "table" then
                 if spellID and list.spells[tostring(spellID)] ~= nil then
                     list.spells[tostring(spellID)] = nil
+                    if list.rankFamilySpellIDs then list.rankFamilySpellIDs[tostring(spellID)] = nil end
                     changed = true
                 end
                 if raw ~= "" and list.spells[raw] ~= nil then
@@ -401,7 +406,7 @@ function Factories.Filters(A3, Model, Schema, Common, Storage)
         local effective = EnsureBlacklist(scope, false, kind)
         local count = CountBlacklistSpells(type(effective) == "table" and effective.spells or nil)
         ForEachFrameBlacklist(scope, true, kind, function(list)
-            if type(list) == "table" then list.spells = {} end
+            ClearBlacklistList(list)
         end)
         return count
     end

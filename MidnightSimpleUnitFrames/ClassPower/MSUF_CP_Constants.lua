@@ -280,7 +280,7 @@ if (MSUF.Client and MSUF.Client.IsClassic) == true then
     tokens[PT.ShadowOrbs]    = "SHADOW_ORBS"
     tokens.MISTS_ARCANE_CHARGES = "ARCANE_CHARGES"
     _G.MSUF_CP_MODE_EVENT_PROFILE[MODE.SIGNED_CONTINUOUS] = {
-        power = true, maxPower = false, aura = false, rune = false, health = false,
+        power = true, maxPower = false, aura = true, rune = false, health = false,
         pointCharge = false, warlockPred = false,
     }
     --- WL_SHARD_DELTAS lists Midnight's shard generators only; Mists

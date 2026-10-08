@@ -215,7 +215,7 @@ A3._UpdateGroupAuraPresenceConnectionState = function(
     local connected = connectedPayload
     if issecretvalue(connected) == true or type(connected) ~= "boolean" then
         local unitIsConnected = _G.UnitIsConnected
-        connected = type(unitIsConnected) == "function" and unitIsConnected(unit) or nil
+        if type(unitIsConnected) == "function" then connected = unitIsConnected(unit) end
     end
     if issecretvalue(connected) ~= true and type(connected) == "boolean" then
         state.offline = connected == false or nil

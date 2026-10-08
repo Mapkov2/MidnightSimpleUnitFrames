@@ -72,7 +72,7 @@ local start,finish,kickEnd=hidden(),hidden(),hidden()
 local duration={GetStartTime=function() return start end,GetEndTime=function() return finish end}
 local cooldown={GetEndTime=function() return kickEnd end,GetRemainingDuration=function() return 5 end}
 C_Spell={GetSpellCooldownDuration=function() return cooldown end}
-C_SpellBook={IsSpellKnownOrInSpellBook=function() return false end}
+C_SpellBook={IsSpellKnownOrInSpellBook=function(spellID) return spellID == 6552 end}
 UnitClass=function() return "Warrior","WARRIOR" end
 MSUF_ShouldUseMSUFCastbar=function() return true end
 MSUF_DB={general={kickReadyShowTarget=true,kickReadyStyle="border",kickReadyTimeMarker=true,kickReadyTimeSegment=true}}

@@ -539,13 +539,13 @@ local function CompileUnitStatus(out, conf, general, key)
   statusText.showAFK, statusText.showDND = afkText.enabled, dndText.enabled
   statusText.dead, statusText.ghost, statusText.afk, statusText.dnd = deadText, ghostText, afkText, dndText
 
-  -- AFK timer companion region: independent placement, but it only renders
-  -- while the AFK state text is active, so it needs no own show-state keys.
+  -- AFK duration has independent visibility and placement.
   local afkTimer = statusText.afkTimer or {}
   statusText.afkTimer = afkTimer
   local afkTimerShow = conf and conf.statusAFKTimerEnabled
   if afkTimerShow == nil then afkTimerShow = general and general.statusAFKTimerEnabled end
   afkTimer.enabled = afkTimerShow == true
+  statusText.enabled = statusText.enabled or afkTimer.enabled
   afkTimer.size = StatusNumber(conf, general, "statusAFKTimerSize", 12)
   afkTimer.anchor = StatusString(conf, general, "statusAFKTimerAnchor", "CENTER")
   afkTimer.x = StatusNumber(conf, general, "statusAFKTimerOffsetX", 0)

@@ -4,6 +4,25 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
+local function TakeDeferredRuntime(A3)
+    local all = A3._deferredAuraRuntimeAll == true
+    local scopes = A3._deferredAuraRuntimeScopes
+    local visuals = A3._deferredAuraRuntimeVisuals == true
+    local fonts = A3._deferredAuraRuntimeFonts == true
+    local reason = A3._deferredAuraRuntimeReason or "AURAS3_DEFERRED"
+    A3._deferredAuraRuntime = nil
+    A3._deferredAuraRuntimeAll = nil
+    A3._deferredAuraRuntimeScopes = nil
+    A3._deferredAuraRuntimeVisuals = nil
+    A3._deferredAuraRuntimeFonts = nil
+    A3._deferredAuraRuntimeReason = nil
+    if visuals or fonts then
+        A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1
+        if fonts and not visuals then A3._nativeFontVisualGen = (A3._nativeFontVisualGen or 0) + 1 end
+    end
+    return all, scopes, reason
+end
+
 MSUF.Auras3RuntimeFactories.Facade = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local pairs = pairs
 local tostring = tostring
@@ -316,16 +335,7 @@ end
 
 function A3._FlushDeferredAuraRuntime()
     if InCombat() or A3._deferredAuraRuntime ~= true then return false end
-    local all = A3._deferredAuraRuntimeAll == true
-    local scopes = A3._deferredAuraRuntimeScopes
-    local visuals = A3._deferredAuraRuntimeVisuals == true
-    local reason = A3._deferredAuraRuntimeReason or "AURAS3_DEFERRED"
-    A3._deferredAuraRuntime = nil
-    A3._deferredAuraRuntimeAll = nil
-    A3._deferredAuraRuntimeScopes = nil
-    A3._deferredAuraRuntimeVisuals = nil
-    A3._deferredAuraRuntimeReason = nil
-    if visuals then A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1 end
+    local all, scopes, reason = TakeDeferredRuntime(A3)
     local previewScope = all and "shared" or nil
     if all or not scopes then
         A3.RefreshAll()
@@ -411,8 +421,12 @@ function A3.RefreshUnit(unit)
 end
 
 function A3.ApplyFontsFromGlobal(scope, reason)
-    if AuraRuntimeCombatBlocked() then return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_FONT_VISUALS", true) end
+    if AuraRuntimeCombatBlocked() then
+        A3._deferredAuraRuntimeFonts = true
+        return A3._QueueDeferredAuraRuntime(scope or "shared", reason or "AURAS3_FONT_VISUALS")
+    end
     A3._nativeVisualGen = (A3._nativeVisualGen or 0) + 1
+    A3._nativeFontVisualGen = (A3._nativeFontVisualGen or 0) + 1
     if scope ~= nil then
         return A3.RequestScope(scope, reason or "AURAS3_FONT_VISUALS")
     end

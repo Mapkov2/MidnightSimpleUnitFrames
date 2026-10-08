@@ -1032,6 +1032,8 @@ local function RefreshTargetFocusChanged(frame)
     if not frame then return false end
     local wasIdle = CastbarAlreadyIdle(frame)
     InvalidateTargetFocusState(frame)
+    frame.isNotInterruptible = false
+    frame.MSUF_kickInterruptibleConfirmed = nil
 
     -- Blizzard's live TargetSpellBarMixin resolves UnitCastingInfo and
     -- UnitChannelInfo synchronously on PLAYER_TARGET_CHANGED. Do the same:
@@ -1317,7 +1319,7 @@ local CAST_EVENT_HANDLERS = {
     UNIT_SPELLCAST_INTERRUPTED = OnCastInterrupted,
 }
 
-local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, interruptedBy, castBarID)
+local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, interruptedBy, castBarID, empowerCastBarID)
     if frame._msufDriverBackendEnabled ~= true then
         if frame.unit == "target" or frame.unit == "focus" then
             SetDriverEventsRegistered(frame, frame.unit, false)
@@ -1337,6 +1339,14 @@ local function HandleDriverEvent(frame, event, eventUnit, _castID, _spellID, int
         return
     end
 
+    if event == "UNIT_SPELLCAST_EMPOWER_STOP" then
+        local complete = interruptedBy
+        interruptedBy, castBarID = castBarID, empowerCastBarID
+        if not toPlainIsSecret(complete) and complete == false then
+            OnCastInterrupted(frame, event, eventUnit, interruptedBy, castBarID)
+            return
+        end
+    end
     event = NormalizeEventForUnit(frame, event)
     local handler = CAST_EVENT_HANDLERS[event]
     if handler then handler(frame, event, eventUnit, interruptedBy, castBarID) end

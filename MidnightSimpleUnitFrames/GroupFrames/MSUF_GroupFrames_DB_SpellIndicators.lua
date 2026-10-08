@@ -158,9 +158,7 @@ function GF.SeedSpellIndicatorDefaultsForSpec(specKey)
 
                 local stamps = si._autoSeededSpecs
                 if not stamps[specKey] then
-                    if si.enabled ~= true then
-                        si.enabled = true
-                    end
+                    if si.enabled == nil then si.enabled = true end
                     if si.spec == nil or si.spec == "" then
                         si.spec = "auto"
                     elseif si.spec == "multi" then

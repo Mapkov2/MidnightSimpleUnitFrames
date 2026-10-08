@@ -87,6 +87,7 @@ local SORT_MODE = {
     BIG_DEFENSIVE = 7,   -- others' auras first, then latest expiry, then ID
     IMPORTANT = 8,       -- important spells first, then ID
     DEBUFF_TYPE = 9,     -- boss, priority, raid, other debuffs; then as Default
+    CUSTOM_PRIORITY = 10, -- configured spell rank, then stable arrival ID
 }
 --- The modes whose comparators read the lane's "cast by the player" answers.
 local SORT_READS_OWNERSHIP = {
@@ -391,8 +392,8 @@ end
 
 --- The one sort-name parser for unit, group and custom container lanes
 --- (Features.lua calls it when it compiles a container), so a sort name the
---- shared menu writes sorts the same way on every lane. Classic has no priority
---- slots: a Custom Priority container keeps arrival order, like INSTANCE_ID.
+--- shared menu writes sorts the same way on every lane. Custom containers
+--- compile their priority lookup once alongside the ordinary lane settings.
 local function SortMode(value, fallback)
     value = tostring(value or ""):upper():gsub("[%s%-]+", "_")
     if value == "DEFAULT" or value == "PLAYER" then return SORT_MODE.PLAYER_FIRST end
@@ -404,7 +405,8 @@ local function SortMode(value, fallback)
     if value == "EXPIRATION_ONLY" then return SORT_MODE.EXPIRATION_ONLY end
     if value == "NAME" then return SORT_MODE.NAME end
     if value == "NAME_ONLY" then return SORT_MODE.NAME_ONLY end
-    if value == "INSTANCE_ID" or value == "CUSTOM_PRIORITY" then return SORT_MODE.ARRIVAL end
+    if value == "INSTANCE_ID" then return SORT_MODE.ARRIVAL end
+    if value == "CUSTOM_PRIORITY" then return SORT_MODE.CUSTOM_PRIORITY end
     return fallback
 end
 
@@ -1095,7 +1097,7 @@ local function CompileFrameAuraVisual(spec)
         end
     end
 
-    return {
+    local visual = {
         enabled = true,
         borderEnabled = borderEnabled == true,
         overlayEnabled = overlayEnabled == true,
@@ -1115,6 +1117,8 @@ local function CompileFrameAuraVisual(spec)
         overlayStyle = overlayStyle,
         overlayAlpha = overlayAlpha,
         overlayOnHealth = overlayOnHealth == true,
+        overlayLayer = ClampNumber(group and group.dispelOverlayLayer or unitOverlay and unitOverlay.layer, 0, 0, 30),
+        overlayStrata = group and group.dispelOverlayStrata or unitOverlay and unitOverlay.strata or "AUTO",
         stripeEdge = stripeEdge,
         stripeHeight = stripeHeight,
         stripeAlpha = stripeAlpha,
@@ -1139,6 +1143,10 @@ local function CompileFrameAuraVisual(spec)
             tintKey = symbolTintKey,
         } or nil,
     }
+    if visual.symbol then
+        visual.symbol.appearanceKey = Visuals.DispelSymbolAppearanceKey(visual.symbol)
+    end
+    return visual
 end
 
 local function OwnHighlightColor(kind)
@@ -1263,6 +1271,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         showCooldown = renderEnabled == true and (showCooldownSwipe ~= false or showCooldownText ~= false),
         cooldownSwipeDarken = cooldownSwipeDarken == true,
         blacklist = black,
+        blacklistNames = Features.ActiveRankFamilyNames(laneBlacklist),
         filterPlan = filterPlan,
         filterRequirements = filterPlan and filterPlan.requirements or nil,
         nativePlayerFilter = nativePlayerFilter,
@@ -1384,7 +1393,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         and type(includeSpellIDs) ~= "table"
         and not (filterPlan and filterPlan.hasRequirements == true)
     local showCooldown = source[spec.showCooldownKey] ~= false
-    local showCooldownSwipe = showCooldown and source[spec.showSwipeKey] ~= false
+    local showCooldownSwipe = source[spec.showSwipeKey] ~= false
     local lanePadding = Round(ClampNumber(source.stylePadding, 0, 0, 16))
     local sortOrder = SortMode(source[kind .. "SortMethod"] or source.sortMethod,
         source.sortByDuration == true and 2 or 1)
@@ -1418,10 +1427,10 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         verticalGrowth = verticalGrowth == true,
         initialAnchor = ButtonAnchor(xSign, ySign),
         cappedFilterScan = cappedFilterScan == true,
-        showTooltip = source[kind .. "ShowTooltip"] ~= false and source.showTooltip ~= false,
+        showTooltip = ReadBool(source, nil, kind .. "ShowTooltip", source.showTooltip ~= false),
         showCooldownSwipe = renderEnabled == true and showCooldownSwipe == true,
         showCooldownText = renderEnabled == true and showCooldown == true,
-        showCooldown = renderEnabled == true and showCooldown == true,
+        showCooldown = renderEnabled == true and (showCooldown == true or showCooldownSwipe == true),
         cooldownSwipeDarken = source.cooldownSwipeDarkenOnLoss == true,
         cooldownSize = ClampNumber(source[spec.cooldownSizeKey] or source.cooldownSize, DEFAULT_SHARED.cooldownTextSize, 6, 40),
         cooldownDecimalSeconds = ClampNumber(source[kind .. "CooldownDecimalSeconds"] or source.cooldownDecimalSeconds, 3, 0, 30),
@@ -1436,6 +1445,8 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         stackX = ClampNumber(source[kind .. "StackX"], 0, -2000, 2000),
         stackY = ClampNumber(source[kind .. "StackY"], 0, -2000, 2000),
         blacklist = black,
+        blacklistNames = source[kind .. "BlacklistNames"],
+        autoBlacklistNames = source[kind .. "AutoBlacklistNames"],
         includeSpellIDs = includeSpellIDs,
         includeSpellNames = includeSpellNames,
         filterPlan = filterPlan,
@@ -1564,7 +1575,8 @@ local function BuildUnitFrameConfig(unit, frameSpec)
     local auras, shared = EnsureRootDB()
     local flag = UNIT_FLAG[unit]
     local visual = CompileFrameAuraVisual(frameSpec)
-    local cfg = { unit = unit, enabled = false, lanes = {}, laneOrder = {}, visual = visual }
+    local cfg = { unit = unit, enabled = false, lanes = {}, laneOrder = {}, visual = visual,
+        purgeEnabled = frameSpec and frameSpec.border and frameSpec.border.purge == true }
     local auraIconsEnabled = auras.enabled == true and flag
         and (auras[flag] == true or (flag == "showPet" and auras[flag] == nil))
     local needDebuffScan = visual and visual.enabled == true
@@ -1596,6 +1608,7 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         end
     end
 
+    cfg.enabled = cfg.enabled == true or cfg.purgeEnabled == true
     return cfg
 end
 

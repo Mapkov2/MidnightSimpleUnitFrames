@@ -10,6 +10,18 @@ if not Factories then
     MSUF.Auras3MenuModelFactories = Factories
 end
 
+local function EnsureBlacklistSpells(group, create)
+    if type(group.blacklist) ~= "table" then
+        if not create then return nil end
+        group.blacklist = {}
+    end
+    if type(group.blacklist.spells) ~= "table" then
+        if not create then return nil end
+        group.blacklist.spells = {}
+    end
+    return group.blacklist.spells
+end
+
 function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     local type = type
     local tonumber = tonumber
@@ -21,6 +33,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     local ClampNumber = Common.ClampNumber
     local CompactKey = Common.CompactKey
     local CountBlacklistSpells = Common.CountBlacklistSpells
+    local AddBlacklistSpellToList = Common.AddBlacklistSpellToList
     local GroupScopeKinds = Common.GroupScopeKinds
     local NormalizeGroupScope = Common.NormalizeGroupScope
     local NormalizeKind = Common.NormalizeKind
@@ -298,19 +311,10 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
     end
 
     local function EnsureGroupBlacklistSpells(kind, groupKey, create)
-        local group = GroupAuraGroup(kind, groupKey)
-        if type(group.blacklist) ~= "table" then
-            if not create then return nil end
-            group.blacklist = {}
-        end
-        if type(group.blacklist.spells) ~= "table" then
-            if not create then return nil end
-            group.blacklist.spells = {}
-        end
-        return group.blacklist.spells
+        return EnsureBlacklistSpells(GroupAuraGroup(kind, groupKey), create)
     end
 
-    function Model.AddGroupBlacklistSpell(scope, groupKey, value)
+    function Model.AddGroupBlacklistSpell(scope, groupKey, value, preset)
         local spellID = SpellIDFromInput(value)
         if not spellID then return false end
         local key = tostring(spellID)
@@ -320,9 +324,8 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         local a, b = GroupScopeKinds(scope)
         local function write(kind)
             local spells = EnsureGroupBlacklistSpells(kind, groupKey, true)
-            if spells and spells[key] ~= true then
-                spells[key] = true
-                changed = true
+            if spells then
+                changed = AddBlacklistSpellToList(GroupAuraGroup(kind, groupKey).blacklist, key, preset) or changed
             end
         end
         write(a)
@@ -343,6 +346,8 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
             if type(spells) ~= "table" then return end
             if spellID and spells[tostring(spellID)] ~= nil then
                 spells[tostring(spellID)] = nil
+                local list = GroupAuraGroup(kind, groupKey).blacklist
+                if list and list.rankFamilySpellIDs then list.rankFamilySpellIDs[tostring(spellID)] = nil end
                 changed = true
             end
             if raw ~= "" and spells[raw] ~= nil then
@@ -369,6 +374,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
                 local group = GroupAuraGroup(kind, groupKey)
                 if type(group.blacklist) ~= "table" then group.blacklist = {} end
                 group.blacklist.spells = {}
+                group.blacklist.rankFamilySpellIDs = nil
                 changed = true
             end
         end
@@ -473,7 +479,7 @@ function Factories.GroupFilters(A3, Model, Common, Presets, ExportPublic)
         local count = 0
         for i = 1, #values do
             local item = values[i]
-            if item and item.value and Model.AddGroupBlacklistSpell(scope, groupKey, item.value) then
+            if item and item.value and Model.AddGroupBlacklistSpell(scope, groupKey, item.value, true) then
                 count = count + 1
             end
         end

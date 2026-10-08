@@ -220,6 +220,11 @@ local function ProcessData(lane, unit, data, fromLaneScan)
 end
 
 local function Blacklisted(cfg, data)
+    if cfg.autoBlacklistNames or cfg.blacklistNames then
+        local name = data and data.name
+        if not IsSecret(name) and type(name) == "string" and ((cfg.autoBlacklistNames and cfg.autoBlacklistNames[name])
+            or (cfg.blacklistNames and cfg.blacklistNames[name])) then return true end
+    end
     local blacklist = cfg.blacklist
     if not blacklist then return false end
     local spellID = data and data.spellId
@@ -317,9 +322,9 @@ end
 
 local function ShouldShowAura(lane, unit, data)
     local cfg = lane.config
-    if IsAutoExcluded(cfg, data) then return false end
     if Blacklisted(cfg, data) then return false end
     local mine = lane.mine[data.auraInstanceID] == true
+    if cfg.classicExcludeLanes and IsAutoExcluded(cfg, data, unit, MatchFilter, TimedAura, mine) then return false end
     if cfg.classicFeatureMatch == true then
         return MatchAura(cfg, unit, data, MatchFilter, TimedAura, mine)
     end

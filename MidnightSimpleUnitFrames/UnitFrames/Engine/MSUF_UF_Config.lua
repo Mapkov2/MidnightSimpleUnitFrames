@@ -1579,9 +1579,10 @@ local function CompileUnitPower(out, unit, key, conf, general, bars, health)
       power.detachedOutline = 8
     end
   end
-  power.borderR = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
-  power.borderG = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)
-  power.borderB = Number(ScopedValue(conf, general, "barOutlineColorB", general.barBorderB), 0)
+  -- The unit's own power border colour wins; unset, it follows the frame outline colour.
+  power.borderR = Number(conf.powerBarBorderColorR, Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0))
+  power.borderG = Number(conf.powerBarBorderColorG, Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0))
+  power.borderB = Number(conf.powerBarBorderColorB, Number(ScopedValue(conf, general, "barOutlineColorB", general.barBorderB), 0))
   power.borderA = Number(ScopedValue(conf, general, "barOutlineColorA", general.barBorderA), 1)
   if power.mode == "unified" then
     CopyColor(power, general.unifiedBarR or 0.1, general.unifiedBarG or 0.6, general.unifiedBarB or 0.9, 1)

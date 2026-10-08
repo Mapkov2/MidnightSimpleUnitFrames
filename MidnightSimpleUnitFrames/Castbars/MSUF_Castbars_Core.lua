@@ -384,9 +384,9 @@ local function GetCastbarBackgroundTexture()
     local cached = cache[cacheKey]
     if cached then return cached end
 
-    local texture = ResolveStatusbarTextureKey(key)
+    local texture, cacheable = ResolveTextureCandidate(key)
     if not texture or texture == "" then texture = "Interface\\TARGETINGFRAME\\UI-StatusBar" end
-    cache[cacheKey] = texture
+    if cacheable then cache[cacheKey] = texture end
     return texture
 end
 ExportPublic("MSUF_GetCastbarBackgroundTexture", GetCastbarBackgroundTexture)
@@ -992,6 +992,9 @@ local function ApplyAllCastbarsAndSync()
         if type(updateEditInfo) == "function" then updateEditInfo(unitKey) end
         if type(syncPopup) == "function" then syncPopup(unitKey) end
     end
+    -- Castbars/MSUF_InterruptReady.lua: consumers of the interrupt indicator's
+    -- look (the MSUF Suite's nameplates) redraw from the settings just applied.
+    Later("MSUF_KickReady_NotifySettings")()
 end
 ExportPublic("MSUF_ApplyAllCastbarsAndSync", ApplyAllCastbarsAndSync)
 

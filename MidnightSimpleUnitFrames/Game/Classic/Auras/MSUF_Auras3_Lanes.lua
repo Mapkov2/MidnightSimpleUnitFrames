@@ -19,6 +19,7 @@ if Backend.Lanes then return end
 local Compile = A3._ClassicCompile
 local Buttons, Filters, FrameVisuals = Backend.Buttons, Backend.Filters, Backend.FrameVisuals
 local Lanes = {}
+local CompactLaneOrder
 
 local type, tonumber, pairs, next = type, tonumber, pairs, next
 local math_ceil, math_min = math.ceil, math.min
@@ -196,7 +197,7 @@ local function ApplyConfigLane(root, state, cfg, kind)
     if lane.config and lane.config.rootKey then root[lane.config.rootKey] = lane.frame end
     if lane.config and lane.config.enabled then
         if lane.config.sortReverse == true then
-            local comparator = SortComparator(lane.config.sortOrder)
+            local comparator = lane.config.priorityComparator or SortComparator(lane.config.sortOrder)
             lane.config.sortComparator = function(a, b) return comparator(b, a) end
         elseif not lane.config.sortComparator then
             lane.config.sortComparator = SortComparator(lane.config.sortOrder)
@@ -218,6 +219,7 @@ end
 
 local function ApplyConfig(frame, cfg)
     local state = EnsureState(frame)
+    if frame._msufA3PurgeActive == true and cfg.purgeEnabled ~= true then Backend.FrameVisuals.UpdatePurgeVisual(frame) end
     local root = state.root
     root:SetAllPoints(frame)
     root:Show()
@@ -608,6 +610,8 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
                 if lane.active[auraInstanceID] then
                     lane.active[auraInstanceID] = nil
                     needsRender = true
+                elseif lane.orderDirty and lane.orderedCount > 96 then
+                    CompactLaneOrder(lane)
                 end
             end
         end
@@ -695,7 +699,7 @@ end
 --- Drops only the ids that left lane.all. An aura that is tracked but filtered
 --- out keeps its slot: AddAuraToLane appends an id once, when it enters
 --- lane.all, so an update that makes it visible again could never put it back.
-local function CompactLaneOrder(lane)
+CompactLaneOrder = function(lane)
     local ordered = lane.ordered
     local all = lane.all
     local write = 0

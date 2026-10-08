@@ -113,6 +113,48 @@ local function NameHash(spellIDs)
     return out
 end
 
+-- Only preset actions opt into rank-family matching. Manually entered IDs
+-- retain exact-ID semantics, and deleted entries cannot leave active aliases.
+function Features.ActiveRankFamilyNames(list)
+    if type(list) ~= "table" or type(list.spells) ~= "table" or type(list.rankFamilySpellIDs) ~= "table" then return nil end
+    local ids = {}
+    for id, enabled in pairs(list.rankFamilySpellIDs) do
+        if enabled == true and (list.spells[id] == true or list.spells[tostring(id)] == true) then ids[id] = true end
+    end
+    return NameHash(ids)
+end
+
+-- Saved order is cold configuration. Runtime comparisons read these maps only.
+local function PriorityComparator(value, allowed)
+    local ranks, names, count = {}, {}, 0
+    local function Add(raw)
+        local id = tonumber(raw)
+        if not id or not allowed[id] or ranks[id] then return end
+        count = count + 1
+        ranks[id] = count
+        local name = SpellName(id)
+        if name and not names[name] then names[name] = count end
+    end
+    if type(value) == "string" then
+        for id in value:gmatch("%d+") do Add(id) end
+    elseif type(value) == "table" then
+        for i = 1, #value do Add(value[i]) end
+    end
+    local missing = {}
+    for id in pairs(allowed) do if not ranks[id] then missing[#missing + 1] = id end end
+    table.sort(missing)
+    for i = 1, #missing do Add(missing[i]) end
+    local PlainNumber, PlainString = Visuals.PlainNumber, Visuals.PlainString
+    local function Rank(data)
+        return ranks[PlainNumber(data.spellId)] or names[PlainString(data.name)] or math.huge
+    end
+    return function(a, b)
+        local ar, br = Rank(a), Rank(b)
+        if ar ~= br then return ar < br end
+        return (PlainNumber(a.auraInstanceID) or 0) < (PlainNumber(b.auraInstanceID) or 0)
+    end
+end
+
 --- Compile Retail's aura-filter model into a Classic-safe scan filter plus
 --- post-scan requirements.  Mists/TBC expose most modern AuraData fields, but
 --- their AuraUtil whitelist does not accept every Retail token (notably
@@ -476,6 +518,10 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
     local Schema = A3._ClassicCompile.LaneSchema
     Schema.FilterTokens(cfg, filter, filterPlan.nativePlayerFilter == true, "HARMFUL|BOSS")
     Schema.Ordering(cfg, sortOrder, placed.sortReverse == true)
+    if sortOrder == Compile.SORT_MODE.CUSTOM_PRIORITY then
+        cfg.priorityComparator = PriorityComparator(entry.prioritySpellIDs, spellIDs or {})
+        cfg.sortComparator = cfg.priorityComparator
+    end
     Schema.GlobalTextColors(cfg)
     return cfg
 end
@@ -756,10 +802,11 @@ function Features.ApplyAutoExclusions(buff, debuff, customLanes, source, unit)
             allow = true
         end
         if allow and target then
-            target.classicExcludeSpellIDs = target.classicExcludeSpellIDs or {}
-            target.classicExcludeSpellNames = target.classicExcludeSpellNames or {}
-            for spellID in pairs(lane.includeSpellIDs or {}) do target.classicExcludeSpellIDs[spellID] = true end
-            for name in pairs(lane.includeSpellNames or {}) do target.classicExcludeSpellNames[name] = true end
+            local exclusions = target.classicExcludeLanes or {}
+            target.classicExcludeLanes = exclusions
+            exclusions[#exclusions + 1] = lane
+            target.needsPlayerFlag = target.needsPlayerFlag or lane.needsPlayerFlag
+            target.needsCombatRefresh = target.needsCombatRefresh or lane.needsCombatRefresh
             target.hasFilterWork = true
             -- An exclusion is decided per aura, like the blacklist, so a lane
             -- without an inclusive filter keeps its capped visible-only scan.
@@ -768,13 +815,13 @@ function Features.ApplyAutoExclusions(buff, debuff, customLanes, source, unit)
     end
 end
 
-function Features.IsAutoExcluded(cfg, data)
-    if not (cfg and data) then return false end
-    local spellID = PublicNumber(data.spellId)
-    if spellID and cfg.classicExcludeSpellIDs and cfg.classicExcludeSpellIDs[spellID] == true then return true end
-    local name = not IsSecret(data.name) and data.name or nil
-    return type(name) == "string" and cfg.classicExcludeSpellNames
-        and cfg.classicExcludeSpellNames[name] == true or false
+function Features.IsAutoExcluded(cfg, data, unit, matchFilter, timedAura, mine)
+    local exclusions = cfg and cfg.classicExcludeLanes
+    if not (exclusions and data) then return false end
+    for i = 1, #exclusions do
+        if Features.MatchAura(exclusions[i], unit, data, matchFilter, timedAura, mine) then return true end
+    end
+    return false
 end
 
 Features.SpellIDHash = SpellIDHash

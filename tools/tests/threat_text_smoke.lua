@@ -1018,7 +1018,7 @@ do
     Check(compile({ Client = { SupportsThreatText = false } }, party) == nil, "Midnight and Mists must compile no group threat entry")
     for _, contract in ipairs({
         "\n    threat = threat,\n  }\nend",
-        "\n  local threatText = base.status and base.status.threat\n  if threatText then threatText.size = Num(conf.threatTextSize, 9) end\n",
+        "\n  local threatText = base.status and base.status.threat\n  if threatText then threatText.size = math.max(1, floor(Num(conf.threatTextSize, 9) * resize + .5)) end\n",
     }) do
         Check(config:find(contract, 1, true), "Group_Config lost a threat contract: " .. contract:gsub("\n", " "))
     end

@@ -261,6 +261,27 @@ local function NotifyFrameAuraVisuals(frame)
     end
 end
 
+-- Purge is independent of icon filters, like the native isStealable sensor.
+-- Membership/full events are the only readers; border paints consume the cache.
+local function UpdatePurgeVisual(frame, cfg, unit)
+    local active = false
+    if cfg and cfg.purgeEnabled == true and GetAuraDataByIndex and IsUnitToken(unit) then
+        -- Like AuraUtil.FindAura, a missing unit ends on its first nil aura.
+        for index = 1, 1000 do
+            local data = GetAuraDataByIndex(unit, index, "HELPFUL")
+            if not data then break end
+            if not IsSecret(data.isStealable) and data.isStealable == true then
+                active = true
+                break
+            end
+        end
+    end
+    if frame._msufA3PurgeActive == active then return false end
+    frame._msufA3PurgeActive = active
+    NotifyFrameAuraVisuals(frame)
+    return true
+end
+
 local function SetFrameAuraVisualState(frame,
     borderActive, br, bg, bb, ba, borderSecret, borderToken,
     overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, stripeActive, visual)
@@ -338,7 +359,8 @@ end
 
 local function ClearFrameAuraVisualState(frame)
     if not frame then return false end
-    local symbolChanged = renderer.HideDispelSymbols(frame) or false
+    local purgeChanged = frame._msufA3PurgeActive == true and UpdatePurgeVisual(frame) or false
+    local symbolChanged = renderer.HideDispelSymbols(frame) or purgeChanged
     if not FrameHasAuraVisualState(frame) then
         return symbolChanged
     end
@@ -453,6 +475,7 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit, stripeOnly)
         or symbolChanged
 end
 
+FrameVisuals.UpdatePurgeVisual = UpdatePurgeVisual
 FrameVisuals.ResetLaneVisualCache = ResetLaneVisualCache
 FrameVisuals.ConsiderLaneAuraVisual = ConsiderLaneAuraVisual
 FrameVisuals.ClearFrameAuraVisualState = ClearFrameAuraVisualState

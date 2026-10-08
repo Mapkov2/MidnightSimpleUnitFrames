@@ -2274,10 +2274,9 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
     return UpdateOverAbsorbGlow(frame, cfg, unit, seedHP, seedMaxHP, absorb, true, nil, true)
   end
   -- Steady-tick dedupe (pure overlay, plain absorb). The overshield verdict is
-  -- a function of the integer health-percent bucket and the absorb amount; it
-  -- cannot change while both are unchanged. Skip the redundant render on
-  -- health ticks that stay inside one display bucket -- the common case for a
-  -- shielded member whose health jitters -- WITHOUT reimplementing the show
+  -- a function of the exact health percentage and absorb amount. Fractional
+  -- health changes can cross the spill threshold inside a display bucket.
+  -- Skip only an identical input, without reimplementing the show
   -- test: a cache miss falls through to the authoritative UpdateOverAbsorbGlow,
   -- which owns the full-health / partial-spill decision. Every prediction data
   -- event clears this key (ApplyPredictionValues) so the next tick re-syncs.
@@ -2286,7 +2285,7 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
   local pct = bar and bar._msufHealthPercentValue
   if type(pct) == "number"
     and bar._msufHealthPercentUnit == unit then
-    local bucket = pct - (pct % 1)
+    local bucket = pct
     if frame._msufGlowTickBucket == bucket
       and frame._msufGlowTickAbsorb == absorb
       and frame._msufGlowTickUnit == unit then

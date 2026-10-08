@@ -339,6 +339,7 @@ assert(registered, "Classic aura element did not register")
 
 local frame = setmetatable({
     _shown = true,
+    hpBar = setmetatable({ _shown = true }, Widget),
     MSUFUnitKey = "target",
     _msufActiveElements = { Auras = true },
     MSUFSpec = {

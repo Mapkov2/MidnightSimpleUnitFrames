@@ -524,7 +524,7 @@ local function CompileStatus(kind, conf)
   local phaseEnabled = conf.phaseIcon == true
   local statusDeadGhostTextEnabled = conf.statusText == true or conf.statusGhostText == true
   local statusConnectionTextEnabled = conf.statusText == true
-  local statusPlayerFlagTextEnabled = conf.statusAFKText == true or conf.statusDNDText == true
+  local statusPlayerFlagTextEnabled = conf.statusAFKText == true or conf.statusAFKTimerText == true or conf.statusDNDText == true
   local statusFlagTextEnabled = statusDeadGhostTextEnabled or statusPlayerFlagTextEnabled
   local statusTextEnabled = statusConnectionTextEnabled or statusFlagTextEnabled
   local raidGroupEnabled = conf.showGroupNumber == true
@@ -1046,6 +1046,9 @@ local function ApplyAuraLane(out, prefix, groupKey, group, defaults, maxCount, i
   out[prefix .. "StackY"] = scale(group.stackY, 0)
   if defaults[8] ~= false then
     out[prefix .. "BlacklistHash"] = AuraBlacklistHash(kind, groupKey, group)
+    local classicFeatures = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.ClassicFeatures
+    out[prefix .. "BlacklistNames"] = classicFeatures and classicFeatures.ActiveRankFamilyNames
+      and classicFeatures.ActiveRankFamilyNames(blacklist) or nil
   end
 end
 
@@ -1086,12 +1089,6 @@ local function CollectSpellIndicatorSpecs(siCfg, si)
   end
   if #out == 0 and si and type(si.GetPlayerSpec) == "function" then
     Add(si.GetPlayerSpec())
-  end
-  if #out == 0 and si and type(si.SpecInfo) == "table" then
-    for specKey in pairs(si.SpecInfo) do
-      Add(specKey)
-      break
-    end
   end
   return out
 end
@@ -1244,6 +1241,9 @@ local function CompileCoreAuras(kind, conf)
     out.buffFilter = ExcludeAuraFilterToken(out.buffFilter, "EXTERNAL_DEFENSIVE")
   end
   out.buffBlacklistHash = MergeSpellIDHashes(out.buffBlacklistHash, spellIndicatorAutoBlacklistHash)
+  local classicFeatures = MSUF.MSUF_Auras3 and MSUF.MSUF_Auras3.ClassicFeatures
+  out.buffAutoBlacklistNames = classicFeatures and classicFeatures.NameHash
+    and classicFeatures.NameHash(spellIndicatorAutoBlacklistHash) or nil
   local trackedBuff = {
     max = trackedBuffMax,
     size = Num(buff.trackedSize, Num(buff.size, defaultTrackedBuffSize)),
@@ -1806,12 +1806,13 @@ local function RefreshFontDomain(kind, base, conf)
   -- below status instead of the regular text domain. Keep the shared compiled
   -- table in place so existing frame specs and the menu preview see the new
   -- value without invalidating/recompiling the full group spec on slider drag.
+  local resize = conf.autoScaleIndicatorsOnResize == true and GF.GetResizeScale(conf, kind) or 1
   local raidGroup = base.status and base.status.raidGroup
-  if raidGroup then raidGroup.size = Num(conf.groupNumberSize, 10) end
+  if raidGroup then raidGroup.size = math.max(1, floor(Num(conf.groupNumberSize, 10) * resize + .5)) end
   local levelText = base.status and base.status.level
-  if levelText then levelText.size = Num(conf.levelTextSize, 10) end
+  if levelText then levelText.size = math.max(1, floor(Num(conf.levelTextSize, 10) * resize + .5)) end
   local threatText = base.status and base.status.threat
-  if threatText then threatText.size = Num(conf.threatTextSize, 9) end
+  if threatText then threatText.size = math.max(1, floor(Num(conf.threatTextSize, 9) * resize + .5)) end
   BumpSpecDomain(base, "_msufTextLayoutRevision")
   BumpSpecDomain(base, "_msufTextColorRevision")
 end

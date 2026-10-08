@@ -9,6 +9,13 @@ if type(A3) ~= "table" then
     MSUF.MSUF_Auras3 = A3
 end
 A3.EditModeModules = A3.EditModeModules or {}
+local function RestoreCombatAuraAlpha(element, unit, hidden, queueMouseRestore)
+    if not hidden and element._msufA3EditModeAlpha ~= nil then
+        element:SetAlpha(element._msufA3EditModeAlpha)
+        queueMouseRestore(unit)
+    end
+end
+
 A3.EditModeModules.Drag = function(config, layout, IsEditModeActive, IsConfigBlocked, RequestUnitFrameMenuPreview)
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_max, math_abs = math.max, math.abs
@@ -636,7 +643,7 @@ local function SetRuntimeAuraHidden(unit, hidden)
         return
     end
     if InCombatLockdown and InCombatLockdown() then
-        if not hidden and element._msufA3EditModeAlpha ~= nil then QueueAuraMouseRestore(unit) end
+        RestoreCombatAuraAlpha(element, unit, hidden, QueueAuraMouseRestore)
         return
     end
     if hidden then

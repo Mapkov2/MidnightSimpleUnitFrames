@@ -55,7 +55,7 @@ local FONT_LIST = {
     {
         key  = "ARIALN",
         name = "Arial (default)",
-        path = "Fonts\\ARHei.TTF",
+        path = "Fonts\\ARIALN.TTF",
     },
     {
         key  = "MORPHEUS",

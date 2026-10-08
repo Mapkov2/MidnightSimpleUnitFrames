@@ -723,27 +723,9 @@ local function IsCastbarGlowEnabled()
 end
 
 local function ResetCastbarGlowFade(frame)
-    if not frame or not frame.statusBar then return end
-
-    local statusBar = frame.statusBar
-    if not statusBar._msufGlowApplied then return end
-
-    local red, green, blue, alpha =
-        statusBar._msufGlowBaseR,
-        statusBar._msufGlowBaseG,
-        statusBar._msufGlowBaseB,
-        statusBar._msufGlowBaseA
-
-    if type(red) ~= "number" or type(green) ~= "number" or type(blue) ~= "number" then
-        statusBar._msufGlowApplied = nil
-        statusBar._msufGlowLastP = nil
-        return
-    end
-
-    if alpha == nil then alpha = 1 end
-    statusBar._msufGlowSkipBase = true
-    SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, alpha)
-    statusBar._msufGlowSkipBase = nil
+    local statusBar = frame and frame.statusBar
+    if not statusBar then return end
+    if statusBar._msufGlowOverlay then statusBar._msufGlowOverlay:Hide() end
     statusBar._msufGlowApplied = nil
     statusBar._msufGlowLastP = nil
 end
@@ -779,30 +761,25 @@ local function ApplyCastbarGlowFade(frame, remainingSeconds, totalSeconds)
     if type(lastProgress) == "number" and math_abs(progress - lastProgress) < 0.02 then return end
     statusBar._msufGlowLastP = progress
 
-    local baseR, baseG, baseB, baseA =
-        statusBar._msufGlowBaseR,
-        statusBar._msufGlowBaseG,
-        statusBar._msufGlowBaseB,
-        statusBar._msufGlowBaseA
-    if type(baseR) ~= "number" or type(baseG) ~= "number" or type(baseB) ~= "number" then
-        if statusBar.GetStatusBarColor then
-            baseR, baseG, baseB, baseA = statusBar:GetStatusBarColor()
-            statusBar._msufGlowBaseR = baseR
-            statusBar._msufGlowBaseG = baseG
-            statusBar._msufGlowBaseB = baseB
-            statusBar._msufGlowBaseA = baseA
-        end
+    -- Blend white over the native fill geometry. This is the same linear
+    -- brightening as the old RGB interpolation, without overwriting native
+    -- boolean-selected interruptibility/unavailable colors or reading them.
+    local texture = statusBar.GetStatusBarTexture and statusBar:GetStatusBarTexture()
+    if not texture then return end
+    local overlay = statusBar._msufGlowOverlay
+    if not overlay then
+        overlay = PixelLayoutRegion(statusBar:CreateTexture(nil, "ARTWORK", nil, 1))
+        overlay:SetColorTexture(1, 1, 1, 1)
+        overlay:SetBlendMode("BLEND")
+        statusBar._msufGlowOverlay = overlay
     end
-    if type(baseR) ~= "number" or type(baseG) ~= "number" or type(baseB) ~= "number" then return end
-    if baseA == nil then baseA = 1 end
-
-    local red = baseR + (1 - baseR) * progress
-    local green = baseG + (1 - baseG) * progress
-    local blue = baseB + (1 - baseB) * progress
-
-    statusBar._msufGlowSkipBase = true
-    SetStatusBarColorIfChangedImpl(statusBar, red, green, blue, baseA)
-    statusBar._msufGlowSkipBase = nil
+    if statusBar._msufGlowTexture ~= texture then
+        overlay:ClearAllPoints()
+        overlay:SetAllPoints(texture)
+        statusBar._msufGlowTexture = texture
+    end
+    overlay:SetAlpha(progress)
+    overlay:Show()
     statusBar._msufGlowApplied = true
 end
 ExportPublic("MSUF_ApplyCastbarGlowFade", ApplyCastbarGlowFade)

@@ -1009,6 +1009,8 @@ local function TextApplySignature(spec, text)
   n = n + 1; parts[n] = tostring(spec and spec.showName ~= false)
   n = n + 1; parts[n] = tostring(spec and spec.showHealthText ~= false)
   n = n + 1; parts[n] = tostring(spec and spec.showPowerText ~= false)
+  n = n + 1
+  parts[n] = tostring(NameRightReservation(nil, spec))
   n = SigAddKeys(parts, n, power, SIG_POWER_KEYS)
   n = SigAddKeys(parts, n, text, SIG_TEXT_KEYS)
   n = SigAddKeys(parts, n, inline, SIG_INLINE_KEYS)

@@ -74,6 +74,8 @@ local function MSUF_GetPlayerInfoFrame()
 end
 MSUF.Tooltips = MSUF.Tooltips or {}
 local Tooltips = MSUF.Tooltips
+local GetSpecialization = MSUF.Specialization.GetSpecialization
+local GetSpecializationInfo = MSUF.Specialization.GetSpecializationInfo
 
 local TOOLTIP_PROVIDER_GAME = "GAME"
 local TOOLTIP_PROVIDER_MSUF = "MSUF"
@@ -275,7 +277,8 @@ end
 local function MSUF_ClearTrackedGameTooltip(owner, force)
     local gt = _G.GameTooltip
     if not gt or gt:IsForbidden() then return end
-    if (not force) and gt._msufUnitTooltipOwner and gt._msufUnitTooltipOwner ~= owner then return end
+    if gt._msufUnitTooltipOwner == nil then return end
+    if (not force) and gt._msufUnitTooltipOwner ~= owner then return end
     if (not force)
         and gt._msufUnitTooltipOwner == nil
         and gt._msufUnitTooltipUnit == nil
@@ -464,7 +467,8 @@ local function ShowUnitInfoTooltip(unit, fallbackName)
     if isPlayer then
         race = MSUF_UnitInfo_PlainString(UnitRace(unit))
         classLoc = MSUF_UnitInfo_PlainString(UnitClass(unit))
-        faction = MSUF_UnitInfo_PlainString(UnitFactionGroup(unit))
+        local _, localizedFaction = UnitFactionGroup(unit)
+        faction = MSUF_UnitInfo_PlainString(localizedFaction)
         isPVP = MSUF_UnitInfo_PlainBoolean(UnitIsPVP(unit)) == true
     end
 

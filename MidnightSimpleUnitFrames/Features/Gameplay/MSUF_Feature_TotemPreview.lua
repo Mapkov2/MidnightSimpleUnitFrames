@@ -219,8 +219,8 @@ do
         -- once after Blizzard finished rebuilding, for every reason Blizzard rebuilds
         -- (PLAYER_TOTEM_UPDATE, shapeshift, talents, spec). That replaces guessing with timers
         -- off UNIT_SPELLCAST_SUCCEEDED.
-        if type(frame.Update) == "function" and _G.hooksecurefunc then
-            _G.hooksecurefunc(frame, "Update", _OnBlizzardTotemFrameTouched)
+        if type(frame.Update) == "function" and hooksecurefunc then
+            hooksecurefunc(frame, "Update", _OnBlizzardTotemFrameTouched)
         end
         -- Kept as a net for third parties that Show() the frame without going through Update.
         frame:HookScript("OnShow", _OnBlizzardTotemFrameTouched)
@@ -300,6 +300,9 @@ do
         end
 
         local playerFrame = _G.MSUF_player
+        local db = _G.MSUF_DB
+        local playerConf = db and db.player
+        if playerConf and playerConf.enabled == false then return _RestoreBlizzardTotemFrame() end
         _StoreOriginalLayout(frame)
         _HookBlizzardTotemFrame(frame)
 

@@ -974,6 +974,15 @@ function V.OnDispelPreviewDragStop(host)
     A3.RefreshDispelSymbolPreview()
 end
 
+-- Compiled on configuration changes; live aura updates compare this key and
+-- the six-bit selection mask without constructing strings.
+function V.DispelSymbolAppearanceKey(cfg)
+    return tostring(cfg.style) .. ":" .. tostring(cfg.size) .. ":" .. tostring(cfg.spacing)
+        .. ":" .. tostring(cfg.growth) .. ":" .. tostring(cfg.anchor) .. ":" .. tostring(cfg.x)
+        .. ":" .. tostring(cfg.y) .. ":" .. tostring(cfg.alpha) .. ":" .. tostring(cfg.layer)
+        .. ":" .. tostring(cfg.tintKey or "")
+end
+
 function V.UpdateDispelSymbols(frame, visual, present, preview)
     local hostKey = preview == true and "_msufA3ClassicDispelSymbolPreviewHost" or "_msufA3ClassicDispelSymbolHost"
     local activeKey = preview == true and "_msufA3ClassicDispelSymbolPreviewActive" or "_msufA3ClassicDispelSymbolsActive"
@@ -992,9 +1001,11 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
         selected = {}
         frame[selectedKey] = selected
     end
+    local selectedMask = 0
     for i = 1, #V.DispelTypes do
         local dispelType = V.DispelTypes[i]
         if present[dispelType] == true then
+            selectedMask = selectedMask + 2 ^ (i - 1)
             selected[#selected + 1] = dispelType
             if cfg.mode ~= "ALL" then break end
         end
@@ -1006,13 +1017,7 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
     --- change of the frame's own strata never reached the host.
     local strata = cfg.strata
     if strata == nil or strata == "AUTO" then strata = A3.ReadParentFrameStrata(frame) end
-    local signature = table.concat(selected, ",") .. ":" .. tostring(cfg.style) .. ":"
-        .. tostring(cfg.size) .. ":" .. tostring(cfg.spacing) .. ":" .. tostring(cfg.growth)
-        .. ":" .. tostring(cfg.anchor) .. ":" .. tostring(cfg.x) .. ":" .. tostring(cfg.y)
-        .. ":" .. tostring(cfg.alpha) .. ":" .. tostring(cfg.layer) .. ":" .. tostring(strata)
-        -- Stamped by the compile, never rebuilt here: a colour override has to
-        -- invalidate the cached signature or the tiles never repaint.
-        .. ":" .. tostring(cfg.tintKey or "")
+    local signature = cfg.appearanceKey or V.DispelSymbolAppearanceKey(cfg)
     local host = frame[hostKey]
     if not host then
         host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
@@ -1032,7 +1037,8 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
         host._msufA3ClassicDispelPreviewParent = frame
         host._msufA3ClassicDispelPreviewVisual = visual
     end
-    if frame[signatureKey] == signature and host:IsShown() then return false end
+    if frame[signatureKey] == signature and host._selectionMask == selectedMask
+        and host._resolvedStrata == strata and host:IsShown() then return false end
     local size = Clamp(cfg.size, 14, 4, 64)
     local spacing = Clamp(cfg.spacing, 2, 0, 32)
     local growth = tostring(cfg.growth or "RIGHT"):upper()
@@ -1076,6 +1082,7 @@ function V.UpdateDispelSymbols(frame, visual, present, preview)
     for i = #selected + 1, #host.tiles do host.tiles[i]:Hide() end
     frame[activeKey] = true
     frame[signatureKey] = signature
+    host._selectionMask, host._resolvedStrata = selectedMask, strata
     host:Show()
     return true
 end
@@ -1123,10 +1130,16 @@ function V.UpdateDispelOverlay(frame, visual, active, r, g, b, a, preview)
     local style = tostring(visual.overlayStyle or "FULL"):upper()
     local alpha = Clamp01(visual.overlayAlpha, 0.35) * Clamp01(a, 1)
     r, g, b = Clamp01(r, 0.25), Clamp01(g, 0.75), Clamp01(b, 1)
-    local target = visual.overlayOnHealth == true and (frame.hpBar or frame.Health) or frame
+    local target = visual.overlayOnHealth == true and FrameEffectHealthFill(frame) or FrameEffectHealthBar(frame)
     if not target then return V.HideDispelOverlay(frame, preview) end
+    local layers = MSUF.UF and MSUF.UF.Layers
+    local level = layers and layers.ElementLevel and layers.ElementLevel(visual.overlayLayer, 0, 12)
+        or (frame:GetFrameLevel() or 0) + 12 + (visual.overlayLayer or 0)
+    local strata = visual.overlayStrata
+    if not strata or strata == "AUTO" then strata = A3.ReadParentFrameStrata(frame) end
     local signature = style .. ":" .. tostring(alpha) .. ":" .. tostring(r) .. ":"
         .. tostring(g) .. ":" .. tostring(b) .. ":" .. tostring(target)
+        .. ":" .. tostring(level) .. ":" .. tostring(strata)
     local host = frame[hostKey]
     if not host then
         host = PixelLayoutRegion(CreateFrame("Frame", nil, frame))
@@ -1141,7 +1154,8 @@ function V.UpdateDispelOverlay(frame, visual, active, r, g, b, a, preview)
     MSUF.BorderStyles.LayoutEdgeStrip(region, target, style, 3)
     region:SetColorTexture(r, g, b, 1)
     region:SetAlpha(alpha)
-    if host.SetFrameLevel and frame.GetFrameLevel then host:SetFrameLevel((frame:GetFrameLevel() or 0) + 8) end
+    if host.SetFrameLevel then host:SetFrameLevel(level) end
+    if host.SetFrameStrata and strata then host:SetFrameStrata(strata) end
     region:Show()
     frame[activeKey] = true
     frame[signatureKey] = signature

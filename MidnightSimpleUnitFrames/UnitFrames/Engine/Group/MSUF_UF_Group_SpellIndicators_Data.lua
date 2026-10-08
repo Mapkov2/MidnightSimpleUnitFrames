@@ -633,7 +633,8 @@ local _cachedClassToken, _cachedSpecIdx, _cachedSpecKey
 function SI.GetPlayerSpec()
   local _, classToken = UnitClass("player")
   if not classToken then return nil end
-  local specIdx = GetSpecialization and GetSpecialization()
+  local getSpec = ns.Specialization.GetSpecialization
+  local specIdx = getSpec and getSpec()
   if not specIdx then return nil end
   if classToken == _cachedClassToken and specIdx == _cachedSpecIdx then
     return _cachedSpecKey

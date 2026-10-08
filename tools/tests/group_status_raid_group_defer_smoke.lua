@@ -99,3 +99,20 @@ OnEvent(driver, "GROUP_ROSTER_UPDATE")
 Check(defers == before and paints.raidGroup == painted + 1, "an out-of-combat roster change must repaint at once")
 
 print("group_status_raid_group_defer_smoke: ok (3 fights, one deferral each)")
+
+-- A full raid and a noisy combat roster still enqueue only one cold replay.
+for i=2,40 do
+ local extra={_msufActiveElements={GroupStatusRuntime=true},MSUFSpec=frame.MSUFSpec}
+ GF.frames[extra]=true
+ element.Apply(extra)
+end
+OnEvent(driver,"PLAYER_REGEN_DISABLED")
+inCombat=true
+before,painted=defers,paints.raidGroup
+local leaderBefore=paints.leader
+for i=1,100 do OnEvent(driver,"GROUP_ROSTER_UPDATE") end
+Check(defers==before+1,"40-frame roster storm queued multiple replays")
+Check(paints.raidGroup==painted,"roster storm repainted subgroup labels in combat")
+Check(paints.leader==leaderBefore+4000,"leader event cohort changed")
+RegenFlush()
+print("group_status_raid_group_defer_smoke: 40 frames / 100 events -> one deferred replay")

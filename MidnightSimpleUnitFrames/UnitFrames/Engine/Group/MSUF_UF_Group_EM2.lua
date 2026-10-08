@@ -237,7 +237,9 @@ local function GetRuntimePreviewCount(kind)
     return n > 0 and n or nil
   end
 
-  local n = GetNumGroupMembers and (GetNumGroupMembers() or 0) or 0
+  local gf = GF()
+  local n = gf and gf.GetLayoutGroupCount and gf.GetLayoutGroupCount(kind)
+    or (GetNumGroupMembers and (GetNumGroupMembers() or 0) or 0)
   return n > 0 and n or nil
 end
 
@@ -980,6 +982,7 @@ local function NudgePreviewKind(kind, dx, dy)
   if kind == "priority" then
     RequestPriorityApply(gf, "edit-mode-nudge")
   elseif gf then
+    if RuntimeAnchor(kind) then gf.RefreshGeometry(kind) end
     gf.RefreshPreviewLayout(kind)
   end
   if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end

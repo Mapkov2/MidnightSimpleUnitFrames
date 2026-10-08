@@ -34,6 +34,7 @@ _G.MSUF_DB = {
 }
 _G.MSUF_EnsureDB = function() end
 _G.UnitClass = function() return "Mage", "MAGE" end
+_G.IsPlayerSpell = function(spellID) return spellID == 2139 end
 _G.issecretvalue = function() return false end
 _G.CreateColor = function(red, green, blue, alpha)
     return { GetRGBA = function() return red, green, blue, alpha end }

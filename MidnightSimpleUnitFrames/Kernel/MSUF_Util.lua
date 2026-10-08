@@ -9,6 +9,15 @@ MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF = _G.MSUF or MSUF
 local ExportPublic = MSUF.ExportPublic
 
+-- Native specialization APIs are shared by Mainline, Forever and Mists.
+-- Era/TBC retain the absent capability; no invented specialization fallback.
+local nativeSpecs = _G.C_SpecializationInfo
+MSUF.Specialization = {
+    GetSpecialization = nativeSpecs and nativeSpecs.GetSpecialization or _G.GetSpecialization,
+    GetSpecializationInfo = nativeSpecs and nativeSpecs.GetSpecializationInfo or _G.GetSpecializationInfo,
+    GetNumSpecializations = nativeSpecs and nativeSpecs.GetNumSpecializations or _G.GetNumSpecializations,
+}
+
 --- PERF LOCALS (core runtime)
 --- - Reduce global table lookups in high-frequency event/render paths.
 --- - Secret-safe: localizing function references only (no value comparisons).
@@ -1306,10 +1315,8 @@ end
 U.CooldownAnchorSupported = CooldownAnchorSupported
 ExportPublic("MSUF_CooldownAnchorSupported", CooldownAnchorSupported)
 
-local function IsPlayerInCombat()
-    return _G.MSUF_InCombat == true
-        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
-        or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
+local function IsPlayerInCombat(event)
+    return InCombat(event)
 end
 U.IsPlayerInCombat = IsPlayerInCombat
 ExportPublic("MSUF_IsPlayerInCombat", IsPlayerInCombat)

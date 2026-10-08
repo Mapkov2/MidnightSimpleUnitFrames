@@ -212,7 +212,8 @@ local RUNTIME_EVENTS = {
 -- and the client knows the event.
 local HOUSING_EVENTS = { "HOUSE_PLOT_ENTERED", "HOUSE_PLOT_EXITED" }
 local housingHidden = { party = false, raid = false }
-local housingEventsOn = false
+local housingEventsOn, sceneEventsOn = false, false
+local runtimeEventState = {}
 
 --- Group Layout "Hide in Housing" (per scope, off by default): while the player
 --- is inside a house or on a plot it retires everything that scope's settings
@@ -230,6 +231,26 @@ local function HiddenInHousing(kind)
 end
 GF.HiddenInHousing = HiddenInHousing
 
+local function HiddenByEnvironment(kind)
+  if HiddenInHousing(kind) then return true end
+  local conf = Conf(kind)
+  local scene, types = C_ClientScene, Enum and Enum.ClientSceneType
+  if not (conf and conf.hideInClientScene ~= false and scene and scene.IsSceneTypeActive and types and types.MinigameSceneType) then
+    return false
+  end
+  -- Same state as Blizzard_ClientSceneVisManager on upstream/live.
+  return scene.IsSceneTypeActive(types.MinigameSceneType) == true
+end
+GF.HiddenByEnvironment = HiddenByEnvironment
+
+local function SceneEventsWanted()
+  local scene, types = C_ClientScene, Enum and Enum.ClientSceneType
+  if not (scene and scene.IsSceneTypeActive and types and types.MinigameSceneType and AnyGroupFrameEnabled()) then return false end
+  local party, raid, mythic = Conf("party"), Conf("raid"), Conf("mythicraid")
+  return (party and party.hideInClientScene ~= false) or (raid and raid.hideInClientScene ~= false)
+    or (mythic and mythic.hideInClientScene ~= false) or false
+end
+
 local function HousingEventsWanted()
   local housing = C_Housing
   if not (housing and housing.IsInsideHouseOrPlot and AnyGroupFrameEnabled()) then return false end
@@ -240,7 +261,20 @@ end
 
 local function SetRuntimeEventsEnabled(enabled, regenOnly)
   if not eventFrame then return end
-  housingEventsOn = false
+  enabled, regenOnly = enabled == true, regenOnly == true
+  local active = enabled and not regenOnly
+  local matchEvents = active and ArenaPartyHeaderActive() and MatchStateEventSupported() or false
+  local nameEvents = active and (PriorityNameRefreshActive() or ArenaPartyNameListActive()) or false
+  local client = MSUF.Client
+  local sceneEvents = active and client and client.SupportsEvent and SceneEventsWanted() or false
+  local housingEvents = active and client and client.SupportsEvent and HousingEventsWanted() or false
+  local state = runtimeEventState
+  if state.enabled == enabled and state.regenOnly == regenOnly
+    and state.matchEvents == matchEvents and state.nameEvents == nameEvents
+    and sceneEventsOn == sceneEvents and housingEventsOn == housingEvents then return end
+  state.enabled, state.regenOnly = enabled, regenOnly
+  state.matchEvents, state.nameEvents = matchEvents, nameEvents
+  sceneEventsOn, housingEventsOn = sceneEvents, housingEvents
   if eventFrame.UnregisterAllEvents then
     eventFrame:UnregisterAllEvents()
   elseif eventFrame.UnregisterEvent then
@@ -256,15 +290,17 @@ local function SetRuntimeEventsEnabled(enabled, regenOnly)
   end
   -- Match-state transitions are the authoritative extra boundary for Arena
   -- round/team swaps. Never subscribe in PvE or on clients that lack the event.
-  if ArenaPartyHeaderActive() and MatchStateEventSupported() then
+  if matchEvents then
     eventFrame:RegisterEvent("PVP_MATCH_STATE_CHANGED")
   end
-  if PriorityNameRefreshActive() or ArenaPartyNameListActive() then
+  if nameEvents then
     eventFrame:RegisterEvent("UNIT_NAME_UPDATE")
   end
-  local client = MSUF.Client
-  if client and client.SupportsEvent and HousingEventsWanted() then
-    housingEventsOn = true
+  if sceneEvents then
+    if client.SupportsEvent("CLIENT_SCENE_OPENED") then eventFrame:RegisterEvent("CLIENT_SCENE_OPENED") end
+    if client.SupportsEvent("CLIENT_SCENE_CLOSED") then eventFrame:RegisterEvent("CLIENT_SCENE_CLOSED") end
+  end
+  if housingEvents then
     for i = 1, #HOUSING_EVENTS do
       if client.SupportsEvent(HOUSING_EVENTS[i]) then eventFrame:RegisterEvent(HOUSING_EVENTS[i]) end
     end
@@ -274,6 +310,12 @@ end
 local function LiveRaidKind()
   local kind = GF.GetLiveRaidKind and GF.GetLiveRaidKind() or nil
   if kind == "mythicraid" then return "mythicraid" end
+  if LiveGroupKind() == nil then
+    local raid, mythic = Conf("raid"), Conf("mythicraid")
+    if not (raid and raid.enabled and raid.showSolo) and mythic and mythic.enabled and mythic.showSolo then
+      return "mythicraid"
+    end
+  end
   return "raid"
 end
 
@@ -289,6 +331,10 @@ end
 
 local function WantRaid()
   local kind = LiveGroupKind()
+  if kind == nil then
+    local conf = Conf(LiveRaidKind())
+    return conf and conf.enabled == true and conf.showSolo == true and conf.showPlayer ~= false
+  end
   if kind ~= "raid" and kind ~= "mythicraid" then return false end
   return ConfEnabled(kind)
 end
@@ -338,7 +384,7 @@ local function SetupWantedPriority()
   local priorityKind = LivePriorityKind()
   local wanted = WantPriorityBase(priorityKind)
     and not PreviewSuppressesHeader("priority")
-    and not HiddenInHousing(priorityKind)
+    and not HiddenByEnvironment(priorityKind)
     and type(GF.PriorityFramesConfigured) == "function"
     and GF.PriorityFramesConfigured() == true
   if not wanted then
@@ -378,8 +424,8 @@ local function SetupWantedHeaders(kind)
   -- "Hide in Housing" retires a block the way a preview does. Remember what this
   -- pass decided per block: a plot boundary, or the option changing inside
   -- (RefreshVisuals), runs the visibility pass only when that changes.
-  if scope ~= "raid" and scope ~= "priority" then housingHidden.party = HiddenInHousing("party") end
-  if scope ~= "party" and scope ~= "priority" then housingHidden.raid = HiddenInHousing(raidKind) end
+  if scope ~= "raid" and scope ~= "priority" then housingHidden.party = HiddenByEnvironment("party") end
+  if scope ~= "party" and scope ~= "priority" then housingHidden.raid = HiddenByEnvironment(raidKind) end
   if not AnyGroupFrameEnabled() then
     if not scope or scope == "party" then RetireHeader("party") end
     if not scope or scope == "raid" then RetireHeader("raid") end
@@ -575,8 +621,8 @@ end
 --- True when Hide in Housing would now retire or restore a block that the last
 --- header pass left as it was (a plot boundary, or the option changing inside).
 local function HousingVisibilityStale()
-  return HiddenInHousing("party") ~= housingHidden.party
-    or HiddenInHousing(LiveRaidKind()) ~= housingHidden.raid
+  return HiddenByEnvironment("party") ~= housingHidden.party
+    or HiddenByEnvironment(LiveRaidKind()) ~= housingHidden.raid
 end
 
 function GF.RefreshHeaderLayout(kind)
@@ -757,7 +803,7 @@ function GF.RefreshVisuals(kind, mask)
   local result = RefreshVisualsNow(kind, mask)
   -- The Hide in Housing toggle applies as a visual change: the header pass
   -- retires or restores the block and (un)registers the plot events.
-  if HousingVisibilityStale() or HousingEventsWanted() ~= housingEventsOn then
+  if HousingVisibilityStale() or HousingEventsWanted() ~= housingEventsOn or SceneEventsWanted() ~= sceneEventsOn then
     result = GF.RefreshHeaderLayout() or result
   end
   return NotifyRuntimeObservers("refreshVisuals", kind, mask, result)
@@ -1012,7 +1058,8 @@ local function RuntimeOnEvent(self, event, unit)
     -- button twice inside the post-loading-screen frame is what tripped the
     -- script watchdog; the queued pass alone repaints one frame later.
     ScheduleHeaderLayoutSettle()
-  elseif event == "HOUSE_PLOT_ENTERED" or event == "HOUSE_PLOT_EXITED" then
+  elseif event == "HOUSE_PLOT_ENTERED" or event == "HOUSE_PLOT_EXITED"
+    or event == "CLIENT_SCENE_OPENED" or event == "CLIENT_SCENE_CLOSED" then
     -- Only a scope with Hide in Housing on changes; the visibility pass waits
     -- for the end of combat by itself, and so do the protected extra blocks.
     if HousingVisibilityStale() then

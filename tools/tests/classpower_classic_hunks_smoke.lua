@@ -308,7 +308,7 @@ local function Run(client)
             Check(where, K.POWER_TYPE_TOKENS[key] == token, "power token " .. tostring(key) .. " is " .. tostring(K.POWER_TYPE_TOKENS[key]))
         end
         local profile = t.profiles[SIGNED_CONTINUOUS]
-        Check(where, profile and profile.power == true and profile.maxPower == false and profile.aura == false,
+        Check(where, profile and profile.power == true and profile.maxPower == false and profile.aura == true,
             "signed Eclipse mode lost its event profile")
         Check(where, type(signedUpdate) == "function", "the continuous mode builder has no signed updater")
         Check(where, type(t.modeUpdate[SIGNED_CONTINUOUS]) == "function", "the dispatch table has no signed updater")

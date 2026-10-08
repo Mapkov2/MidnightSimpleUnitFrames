@@ -38,6 +38,7 @@ local attachedCount = 0
 local suspended = {}       -- frames hidden by combat entry, re-poked on combat end
 local combatActive = false
 local ticker = nil
+local listener, ledgerEventsOn
 
 local TICK_SECONDS = 10
 local SAMPLE_TEXT = "5m"
@@ -153,6 +154,16 @@ end
 
 MSUF.UFAFKTimer = AFKTimer
 
+local function UpdateLedgerEvents()
+  local enabled = not combatActive and next(afkSince) ~= nil
+  if not listener or enabled == ledgerEventsOn then return end
+  ledgerEventsOn = enabled
+  local method = enabled and listener.RegisterEvent or listener.UnregisterEvent
+  method(listener, "GROUP_ROSTER_UPDATE")
+  method(listener, "PLAYER_TARGET_CHANGED")
+  method(listener, "PLAYER_FOCUS_CHANGED")
+end
+
 local function StampUnit(unit)
   local guid = PlainGUID(unit)
   if not guid then return end
@@ -164,30 +175,39 @@ local function StampUnit(unit)
   elseif afk == false then
     afkSince[guid] = nil
   end
+  UpdateLedgerEvents()
 end
 
 --- Post-combat resync: AFK edges during combat were deliberately not observed.
 --- Drop stamps for every observable unit that is no longer AFK; a unit still
 --- AFK keeps its pre-combat stamp (a mid-combat off/on double toggle is not
 --- detectable and accepted as stale-but-rare).
+local observedGUIDs = {}
+local function CheckObservedUnit(unit)
+  if UnitExists(unit) ~= true then return end
+  local guid = PlainGUID(unit)
+  if guid and afkSince[guid] then
+    if PlainAFK(unit) == false then afkSince[guid] = nil
+    else observedGUIDs[guid] = true end
+  end
+end
+
 local function PruneLedger()
   if next(afkSince) == nil then return end
   if type(UnitExists) ~= "function" then return end
-  local function Check(unit)
-    if UnitExists(unit) ~= true then return end
-    local guid = PlainGUID(unit)
-    if guid and afkSince[guid] and PlainAFK(unit) == false then
-      afkSince[guid] = nil
-    end
-  end
-  Check("player")
-  Check("target")
-  Check("focus")
+  CheckObservedUnit("player")
+  CheckObservedUnit("target")
+  CheckObservedUnit("focus")
   if type(IsInRaid) == "function" and IsInRaid() == true then
-    for i = 1, 40 do Check("raid" .. i) end
+    for i = 1, 40 do CheckObservedUnit("raid" .. i) end
   else
-    for i = 1, 4 do Check("party" .. i) end
+    for i = 1, 4 do CheckObservedUnit("party" .. i) end
   end
+  for guid in pairs(afkSince) do
+    if not observedGUIDs[guid] then afkSince[guid] = nil end
+  end
+  for guid in pairs(observedGUIDs) do observedGUIDs[guid] = nil end
+  UpdateLedgerEvents()
 end
 
 local function HideTimerRegion(frame)
@@ -200,10 +220,9 @@ local function HideTimerRegion(frame)
   end
 end
 
-local listener = nil
-
 local function OnCombatStart()
   combatActive = true
+  UpdateLedgerEvents()
   StopTicker()
   if listener and listener.UnregisterEvent then
     listener:UnregisterEvent("PLAYER_FLAGS_CHANGED")
@@ -241,6 +260,10 @@ local function OnListenerEvent(_, event, unit)
   -- observable unit whose AFK/DND flags toggle. Rare by nature, so this
   -- handler is the entire out-of-combat cost of the ledger.
   if combatActive then return end
+  if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_FOCUS_CHANGED" then
+    PruneLedger()
+    return
+  end
   if type(unit) ~= "string" or issecretvalue(unit) == true then return end
   StampUnit(unit)
 end

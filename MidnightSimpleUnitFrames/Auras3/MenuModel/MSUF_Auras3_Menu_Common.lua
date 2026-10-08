@@ -10,6 +10,27 @@ if not Factories then
     MSUF.Auras3MenuModelFactories = Factories
 end
 
+-- Cold menu mutation shared by unit and group blacklist editors.
+local function AddBlacklistSpellToList(list, key, preset)
+    if type(list) ~= "table" or type(list.spells) ~= "table" then return false end
+    local changed = list.spells[key] ~= true
+    list.spells[key] = true
+    if preset == true and MSUF.Client and MSUF.Client.IsClassic then
+        list.rankFamilySpellIDs = list.rankFamilySpellIDs or {}
+        changed = list.rankFamilySpellIDs[key] ~= true or changed
+        list.rankFamilySpellIDs[key] = true
+    end
+    return changed
+end
+
+local function CountBlacklistSpells(spells)
+    if type(spells) ~= "table" then return 0 end
+    local count = 0
+    for _, enabled in pairs(spells) do
+        if enabled == true then count = count + 1 end
+    end
+    return count
+end
 function Factories.Common(Schema)
     local type = type
     local tonumber = tonumber
@@ -211,18 +232,11 @@ function Factories.Common(Schema)
         return SpellIDText(name, id or tonumber(spellID) or 0)
     end
 
-    local function CountBlacklistSpells(spells)
-        if type(spells) ~= "table" then return 0 end
-        local count = 0
-        for _, enabled in pairs(spells) do
-            if enabled == true then count = count + 1 end
-        end
-        return count
-    end
 
 
     -- Private dependency API; public menu methods remain on A3.MenuModel.
     return {
+        AddBlacklistSpellToList = AddBlacklistSpellToList,
         AuraFilter = AuraFilter,
         Clamp01 = Clamp01,
         ClampNumber = ClampNumber,

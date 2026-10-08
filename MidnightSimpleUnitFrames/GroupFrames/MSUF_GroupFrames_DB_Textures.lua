@@ -103,10 +103,18 @@ local function TextureExports()
     return ResolveTextureKey, GetBarTexture, GetBarBackgroundTexture
 end
 
+--- Texture ownership can be selected independently when copying Health & Bars.
+--- Absent flags preserve the existing profile-wide highlight override contract.
+local function HasTextureOverride(conf)
+    if not conf then return false end
+    if conf.barTextureOverride ~= nil then return conf.barTextureOverride == true end
+    return conf.hlOverride == true
+end
+
 --- Resolve bar texture path (falls through to global MSUF bar texture)
 function GF.ResolveBarTexture(kind)
     local conf = GF.GetConf(kind)
-    local key = conf and conf.hlOverride == true and conf.barTexture or nil
+    local key = HasTextureOverride(conf) and conf.barTexture or nil
     local resolve, barTexture = TextureExports()
     if key and key ~= "" then return resolve(key) end
     return barTexture()
@@ -116,7 +124,7 @@ end
 function GF.ResolveBarBgTexture(kind)
     local conf = GF.GetConf(kind)
     local key
-    if conf and conf.hlOverride == true then
+    if HasTextureOverride(conf) then
         key = conf.barBackgroundTexture
         if key == nil then key = conf.barBgTexture end
     end

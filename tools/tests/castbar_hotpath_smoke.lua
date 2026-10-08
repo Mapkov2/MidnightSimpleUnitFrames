@@ -290,6 +290,7 @@ do
     _G.GetTime = function() return now end
     _G.GetTimePreciseSec = nil
     _G.UnitClass = function() return "Mage", "MAGE" end
+    _G.IsPlayerSpell = function(spellID) return spellID == 2139 end
     _G.GetSpecialization = function() return 1 end
     _G.GetSpecializationInfo = function() return 62 end
     _G.Constants = { SpellCooldownConsts = { GLOBAL_RECOVERY_CATEGORY = 77 } }

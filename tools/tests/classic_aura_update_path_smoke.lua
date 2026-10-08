@@ -243,7 +243,7 @@ _G.MSUF_DB = {
             [1] = {
                 enabled = true, auraType = "BUFF", spellIDs = "777001 777002",
                 filters = { enabled = true, hidePermanent = true },
-                placed = { size = 20, max = 8, perRow = 8, sortMethod = "CUSTOM_PRIORITY" },
+                placed = { size = 20, max = 8, perRow = 8, sortMethod = "INSTANCE_ID" },
             },
         } } } },
     },
@@ -429,7 +429,7 @@ local focus = NewFrame("focus")
 assert(registered.Enable(focus) == true, "focus aura element did not enable")
 local custom = assert(focus._msufA3State.lanes.custom1, "custom container lane missing")
 assert(custom.config.naturalOrder == true and custom.config.sortOrder == 0 and custom.config.hidePermanent == true,
-    "precondition: an unknown custom sort name no longer falls back to natural order")
+    "precondition: the explicit instance sort no longer preserves natural order")
 assert(custom.all[sleeper.auraInstanceID] ~= nil and custom.active[sleeper.auraInstanceID] == nil
     and custom.visible == 0, "precondition: the permanent aura is not tracked-but-hidden")
 for _ = 1, 100 do
@@ -554,7 +554,7 @@ for name, expected in pairs(CUSTOM_SORTS) do
             "custom container " .. name .. (reverse and " reversed" or ""))
     end
 end
-placed.sortMethod, placed.sortReverse = "CUSTOM_PRIORITY", nil
+placed.sortMethod, placed.sortReverse = "INSTANCE_ID", nil
 
 -- 5. An unchanged refreshed aura writes no layout and allocates nothing -------------------
 -- The first update also applies the config generations the matrix above bumped.

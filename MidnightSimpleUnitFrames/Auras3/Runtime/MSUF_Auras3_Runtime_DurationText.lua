@@ -4,6 +4,60 @@
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
+local function GeneralSettings()
+    local db = _G.MSUF_DB
+    return db and db.general
+end
+
+local function ResolveAuraFontSettings(A3)
+    local readFont = _G.MSUF_GetGlobalFontSettings
+    local gen = A3._nativeVisualGen or 0
+    if A3._auraFontCacheGen ~= gen or A3._auraFontCacheReader ~= readFont then
+        A3._auraFontCacheGen, A3._auraFontCacheReader = gen, readFont
+        A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow = nil, nil, nil, nil, nil, nil
+        if type(readFont) == "function" then
+            local unusedSize
+            A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, unusedSize, A3._auraFontShadow = readFont()
+        end
+    end
+end
+
+-- Native children are immutable. A font edit invalidates compiled views, but
+-- returning to identical resolved font settings must revive the same parked
+-- container. Other visual revisions remain conservative invalidation signals.
+local function NativeVisualSignature(A3, locale)
+    ResolveAuraFontSettings(A3)
+    local gen = A3._nativeVisualGen or 0
+    local general = GeneralSettings()
+    local key = general and general.fontKey
+    if A3._nativeVisualSignatureGen ~= gen or A3._nativeVisualSignatureLocale ~= locale
+        or A3._nativeVisualSignatureKey ~= key or A3._nativeVisualSignatureReader ~= A3._auraFontCacheReader then
+        A3._nativeVisualSignatureGen = gen
+        A3._nativeVisualSignatureReader = A3._auraFontCacheReader
+        A3._nativeVisualSignatureLocale = locale
+        A3._nativeVisualSignatureKey = key
+        local style = tostring(A3._auraFontPath) .. "\030" .. tostring(A3._auraFontFlags)
+            .. "\030" .. tostring(A3._auraFontR) .. "\030" .. tostring(A3._auraFontG)
+            .. "\030" .. tostring(A3._auraFontB) .. "\030" .. tostring(A3._auraFontShadow)
+            .. "\030" .. tostring(key) .. "\030" .. tostring(locale)
+        -- Intern only resolved font styles, not every visual revision. A short
+        -- token avoids copying the full font path into each lane signature,
+        -- while returning to a previous style still revives its parked frame.
+        local styles = A3._nativeFontStyleIDs
+        if not styles then
+            styles = {}
+            A3._nativeFontStyleIDs = styles
+        end
+        local token = styles[style]
+        if not token then
+            token = (A3._nativeFontStyleCount or 0) + 1
+            A3._nativeFontStyleCount, styles[style] = token, token
+        end
+        A3._nativeVisualSignature = tostring(gen - (A3._nativeFontVisualGen or 0)) .. ":" .. token
+    end
+    return A3._nativeVisualSignature
+end
+
 MSUF.Auras3RuntimeFactories.DurationText = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local table_concat = table.concat
 local table_sort = table.sort
@@ -16,24 +70,19 @@ local FrameLayers = dependencies.Platform.FrameLayers
 local Round = dependencies.Platform.Round
 local STANDARD_TEXT_FONT = dependencies.Platform.STANDARD_TEXT_FONT
 
+function A3.GetNativeVisualSignature()
+    return NativeVisualSignature(A3, MSUF.LOCALE)
+end
+
 local function ApplyFont(fs, size)
     if not fs then return end
-    local readFont = _G.MSUF_GetGlobalFontSettings
-    local gen = A3._nativeVisualGen or 0
-    if A3._auraFontCacheGen ~= gen or A3._auraFontCacheReader ~= readFont then
-        A3._auraFontCacheGen, A3._auraFontCacheReader = gen, readFont
-        A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow = nil, nil, nil, nil, nil, nil
-        if type(readFont) == "function" then
-            local unusedSize
-            A3._auraFontPath, A3._auraFontFlags, A3._auraFontR, A3._auraFontG, A3._auraFontB, unusedSize, A3._auraFontShadow = readFont()
-        end
-    end
+    ResolveAuraFontSettings(A3)
     local fontPath, fontFlags = A3._auraFontPath, A3._auraFontFlags
     local r, g, b, useShadow = A3._auraFontR, A3._auraFontG, A3._auraFontB, A3._auraFontShadow
     fontPath = fontPath or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
     fontFlags = fontFlags or "OUTLINE"
     size = ClampNumber(size, 12, 6, 40)
-    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local general = GeneralSettings()
     local applyResolved = _G.MSUF_ApplyResolvedFont
     if type(applyResolved) == "function" then
         applyResolved(fs, fontPath, size, fontFlags, general and general.fontKey)
@@ -126,7 +175,7 @@ local function BuildAuraDurationStyle(lane)
         return cached
     end
 
-    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
+    local general = GeneralSettings()
     if not general then return nil end
     local buckets = general.aurasCooldownTextUseBuckets == true
     local decimalSec = ClampNumber(lane and lane.cooldownDecimalSeconds, DEFAULT_SHARED.cooldownDecimalSeconds, 0, 30)

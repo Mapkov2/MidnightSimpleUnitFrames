@@ -444,5 +444,101 @@ ApplyTarget({ x = 100, size = sizes[#sizes] })
 Built(start, "the forced recreate's own size again", 2)
 assert(targetRoot.Buffs == fresh, "the forced recreate's fresh container was not parked for its size")
 
+-- Priority groups retain their per-spell contract when filters or max change.
+do
+    local function Priority(maximum, filter)
+        local lane=Lane({kind="buff",rootKey="Priority",unit="target",max=maximum,filter=filter})
+        lane.customPriority=true;lane.customPrioritySpellIDs={101,102,103}
+        lane._msufA3StructuralSignature=Signatures.LaneStructuralSignature(lane)
+        return lane
+    end
+    local first=NativeApply.ApplyLane(targetRoot,Priority(2,"HELPFUL"),targetFrame)
+    assert(first and #first._msufA3PriorityGroupKeys==2)
+    local writes=0
+    first.SetAuraGroupFilterString=function(_,_,filter) assert(filter=="HELPFUL|PLAYER");writes=writes+1 end
+    local changed=NativeApply.ApplyLane(targetRoot,Priority(2,"HELPFUL|PLAYER"),targetFrame)
+    assert(changed==first and writes==2,"priority filter change did not update both existing groups")
+    NativeApply.ApplyLane(targetRoot,Priority(2,"HELPFUL|PLAYER"),targetFrame)
+    assert(writes==2,"unchanged priority filter repeated native writes")
+    local grown=NativeApply.ApplyLane(targetRoot,Priority(3,"HELPFUL|PLAYER"),targetFrame)
+    assert(grown~=first and #grown._msufA3PriorityGroupKeys==3,"priority max change kept stale group count")
+end
+
+-- Leaving an owned reminder never hides another UI's reused shared tooltip.
+do
+    local slotRoot=SpellIndicators.CompileSlots("target",{enabled=true,items={{enabled=true,key="click",includeSpellIDs={[139]=true},
+        showWhenMissing=true,castSpellID=139,castUnit="target",placed={type="icon",size=14}}}})
+    SpellIndicators.SyncReminderCastButtons(targetFrame,slotRoot)
+    local store=targetFrame._msufA3ReminderCastButtons
+    local button=store and select(2,next(store))
+    assert(button and button:GetScript("OnLeave"),"reminder cast button not created")
+    local owner,hides=nil,0
+    _G.GameTooltip={IsOwned=function(_,candidate) return owner==candidate end,Hide=function() hides=hides+1 end}
+    button:GetScript("OnLeave")(button);assert(hides==0,"reminder hid another owner's tooltip")
+    owner=button;button:GetScript("OnLeave")(button);assert(hides==1,"reminder did not hide its own tooltip")
+end
+
+
+-- CX3-04: resolved font A/B/A revives every immutable native owner. Visual
+-- invalidation stays monotonic so compiled caches still see every apply.
+do
+    local combat=false
+    dependencies.Platform.InCombat=function()return combat end
+    dependencies.Platform.AuraRuntimeCombatBlocked=function()return combat end
+    dependencies.Platform.Round=function(n)return math.floor(n+0.5)end
+    dependencies.IdentityEvents={}
+    dependencies.UnitConfig={}
+    MSUF.UF.RegisterElement=Noop
+    for _,name in ipairs({"DurationText","Facade"})do
+        assert(loadfile(ADDON.."Auras3/Runtime/MSUF_Auras3_Runtime_"..name..".lua"))("MSUF",MSUF)
+        Build(name)
+    end
+    local path="FontA";local red=1
+    _G.MSUF_GetGlobalFontSettings=function()return path,"OUTLINE",red,1,1,14,true end
+    local function ApplyOwners()
+        ApplyTarget({size=20,spell=1})
+        ApplyParty({flowSize=20,spell=1})
+    end
+    A3._runtimeFrames={target=targetFrame}
+    A3.RenderFrame=function(frame)assert(frame==targetFrame);ApplyOwners();return true end
+    A3._NotifyAuraColdpathPreview=Noop
+    A3.RefreshAll=ApplyOwners
+    A3.RefreshEditPreview=nil
+    -- Real queue implementation; the registration itself is already modelled.
+    local file=assert(io.open(ADDON.."Auras3/MSUF_Auras3_Core.lua","rb"))
+    local code=file:read("*a"):gsub("\r\n","\n");file:close()
+    local first=assert(code:find("function A3._QueueDeferredAuraRuntime",1,true))
+    local last=assert(code:find("function A3.RefreshAll",first,true))
+    local chunk=assert(loadstring("local A3=...\n"..code:sub(first,last-1)))
+    A3._EnsureDeferredAuraRuntimeDriver=function()return nil end
+    chunk(A3)
+    A3.ApplyFontsFromGlobal();local fontA=targetFrame.Auras.Buffs
+    path="FontB";A3.ApplyFontsFromGlobal();local fontB=targetFrame.Auras.Buffs
+    assert(fontA~=fontB,"different resolved fonts reused immutable buttons")
+    local warm=counts.containers
+    local version=A3._nativeVisualGen
+    for step=1,20 do
+        path=step%2==1 and "FontA" or "FontB"
+        A3.ApplyFontsFromGlobal()
+        assert(targetFrame.Auras.Buffs==(path=="FontA" and fontA or fontB),"font A/B/A did not revive matching native lane")
+    end
+    Built(warm,"font A/B/A repeated after warmup",0)
+    assert(A3._nativeVisualGen==version+20,"font apply lost cache invalidation")
+    red=0.2;A3.ApplyFontsFromGlobal();assert(counts.containers>warm,"font color change reused stale native buttons")
+    red=1;A3.ApplyFontsFromGlobal();assert(targetFrame.Auras.Buffs==fontB,"font color restore did not revive previous style")
+    combat=true;path="FontA";A3.ApplyFontsFromGlobal();path="FontB";A3.ApplyFontsFromGlobal()
+    local before=counts.containers;combat=false;A3._FlushDeferredAuraRuntime()
+    Built(before,"coalesced combat font changes ending on current style",0)
+    combat=true;path="FontA";A3.ApplyFontsFromGlobal();A3.RefreshRoundedDispelOverlayMasks()
+    combat=false;A3._FlushDeferredAuraRuntime()
+    assert(targetFrame.Auras.Buffs~=fontA,"mixed deferred rounded change revived stale sealed regions")
+    local newer=targetFrame.Auras.Buffs
+    path="FontB";A3.ApplyFontsFromGlobal();path="FontA";A3.ApplyFontsFromGlobal()
+    assert(targetFrame.Auras.Buffs==newer,"font restore lost new non-font visual revision")
+    A3._nativeVisualGen=A3._nativeVisualGen+1 -- Options color/style invalidation
+    ApplyOwners();assert(targetFrame.Auras.Buffs~=newer,"external native visual invalidation ignored")
+    assert(counts.sealedWrites==0,"font edit wrote a sealed native child")
+end
+
 print(string.format("aura native container growth smoke passed (%d containers, %d AuraButtons built)",
     counts.containers, counts.buttons))

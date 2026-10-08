@@ -156,7 +156,7 @@ end
 -- TBC keeps its table: Silencing Shot alone.
 mode = "TBC"
 InstallSpellAPI(false)
-specID, known, cooldowns = nil, {}, {}
+specID, known, cooldowns = nil, { [SILENCING_SHOT] = true }, {}
 Check(Load("TBC") == SILENCING_SHOT, "TBC hunters no longer track Silencing Shot")
 
 print("interrupt_ready_mists_hunter_smoke: OK")

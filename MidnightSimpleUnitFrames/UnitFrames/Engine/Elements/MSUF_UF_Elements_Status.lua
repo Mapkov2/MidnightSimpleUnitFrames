@@ -1192,6 +1192,10 @@ function Runtime.UpdateLeaderPair(frame, status)
   if frame
     and frame._msufLeaderPairState == state
     and frame._msufLeaderPairSerial == serial
+    and frame._msufLeaderStyle == (leaderCfg and leaderCfg.style)
+    and frame._msufLeaderCustom == (leaderCfg and leaderCfg.customIcon)
+    and frame._msufAssistStyle == (assistCfg and assistCfg.style)
+    and frame._msufAssistCustom == (assistCfg and assistCfg.customIcon)
     and (not leaderTex or leaderTex._msufStatusShown == (showLeader and true or false))
     and (not assistTex or assistTex._msufStatusShown == (showAssist and true or false)) then
     return
@@ -1199,6 +1203,10 @@ function Runtime.UpdateLeaderPair(frame, status)
   if frame then
     frame._msufLeaderPairState = state
     frame._msufLeaderPairSerial = serial
+    frame._msufLeaderStyle = leaderCfg and leaderCfg.style
+    frame._msufLeaderCustom = leaderCfg and leaderCfg.customIcon
+    frame._msufAssistStyle = assistCfg and assistCfg.style
+    frame._msufAssistCustom = assistCfg and assistCfg.customIcon
   end
 
   if showLeader then
@@ -1695,11 +1703,13 @@ function Runtime.UpdateRaidGroup(frame, status)
     or 0
   if frame._msufRaidGroupSubgroup == subgroup
     and frame._msufRaidGroupSerial == serial
+    and frame._msufRaidGroupStyle == cfg.style
     and fs._msufStatusShown == (subgroup ~= nil) then
     return
   end
   frame._msufRaidGroupSubgroup = subgroup
   frame._msufRaidGroupSerial = serial
+  frame._msufRaidGroupStyle = cfg.style
   if subgroup then
     SetText(fs, RaidGroupText(cfg.style, subgroup))
     SetShown(fs, true)
@@ -1811,7 +1821,7 @@ local function StatusText(frame, cfg, unitState, seedHP)
       return "DEAD", "dead"
     end
   end
-  if cfg and cfg.showAFK and UnitIsAFK then
+  if cfg and (cfg.showAFK or (cfg.afkTimer and cfg.afkTimer.enabled)) and UnitIsAFK then
     local afk = UnitIsAFK(unit)
     if BoolTrue(afk) then
       return "AFK", "afk"
@@ -1918,8 +1928,8 @@ local function UpdateAFKTimerText(frame, status, cfg, state)
   end
 end
 
-local function ClearStatusText(frame, fs)
-  HideAFKTimerText(frame)
+local function ClearStatusText(frame, fs, keepAFKTimer)
+  if not keepAFKTimer then HideAFKTimerText(frame) end
   if frame._msufStatusTextValue == nil
     and frame._msufStatusTextLayout == nil
     and fs and fs._msufStatusShown == false then
@@ -1971,7 +1981,7 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
       text, state = "DEAD", "dead"
     elseif cfg.showGhost then
       text, state = "GHOST", "ghost"
-    elseif cfg.showAFK then
+    elseif cfg.showAFK or (cfg.afkTimer and cfg.afkTimer.enabled) then
       text, state = "AFK", "afk"
     elseif cfg.showDND then
       text, state = "DND", "dnd"
@@ -1992,7 +2002,8 @@ function Runtime.UpdateStatusText(frame, status, event, seedHP)
       layout = cfg.dead
     end
     if layout and layout.enabled == false then
-      ClearStatusText(frame, fs)
+      ClearStatusText(frame, fs, state == "afk")
+      UpdateAFKTimerText(frame, status, cfg, state)
       return
     end
     -- Before the unchanged early-out: the ledger ticker re-enters this
@@ -2287,9 +2298,11 @@ function Runtime.StatusTextEvents(spec, frame)
   local player = frame and frame.MSUFUnitKey == "player"
   local needsConnection = cfg.showDead == true and player ~= true
   local needsFlags = cfg.showDead == true or cfg.showGhost == true or cfg.showAFK == true or cfg.showDND == true
+    or (cfg.afkTimer and cfg.afkTimer.enabled == true)
   -- The player frame already receives PLAYER_FLAGS_CHANGED through its
   -- unitless route below; every other frame needs it unit-filtered.
-  local needsPlayerFlags = player ~= true and (cfg.showAFK == true or cfg.showDND == true)
+  local needsPlayerFlags = player ~= true and (cfg.showAFK == true or cfg.showDND == true
+    or (cfg.afkTimer and cfg.afkTimer.enabled == true))
   if needsConnection then
     if needsPlayerFlags then
       return Runtime.STATUS_TEXT_AFK_EVENTS
@@ -2310,7 +2323,7 @@ function Runtime.StatusTextUnitlessEvents(spec, frame)
     return EMPTY_EVENTS
   end
   local cfg = spec.status.statusText
-  local needsFlags = cfg.showAFK == true or cfg.showDND == true
+  local needsFlags = cfg.showAFK == true or cfg.showDND == true or (cfg.afkTimer and cfg.afkTimer.enabled == true)
   local needsLifecycle = cfg.showDead == true or cfg.showGhost == true
   if needsFlags and needsLifecycle then
     return Runtime.STATUS_TEXT_PLAYER_UNITLESS_EVENTS

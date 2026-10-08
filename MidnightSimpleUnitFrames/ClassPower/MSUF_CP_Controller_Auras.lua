@@ -339,20 +339,34 @@ builders.CONTROLLER_AURAS = function(E)
     CPAuras.AddSpell(CPK.SPELL.VOID_METAMORPHOSIS)
     CPAuras.AddSpell(CPK.SPELL.SILENCE_THE_WHISPERS)
     CPAuras.AddSpell(CPK.SPELL.DARK_HEART)
-    --- Classic: Mists Arcane Charges is the only aura resource a Classic provider
-    --- routes, so it is the whole watched set there, and its incremental and
-    --- fallback aura updates are answered before the Retail resources are asked.
+    --- Classic tracks Mists Arcane Charges and the two Eclipse states. Its
+    --- incremental and fallback updates resolve this bounded set before the
+    --- Retail resource handlers are asked.
     if E.IS_CLASSIC then
         CPAuras.watched = {}
         CPAuras.AddSpell(CPK.SPELL.MISTS_ARCANE_CHARGE)
+        -- Blizzard_UnitFrame/Cata/EclipseBarFrame.lua on upstream/classic.
+        if MSUF.Client and MSUF.Client.IsMists then
+            CPAuras.AddSpell(48517)
+            CPAuras.AddSpell(48518)
+        end
         local RetailActiveSpellKind, RetailRefreshActive = CPAuras.ActiveSpellKind, CPAuras.RefreshActive
         function CPAuras.ActiveSpellKind(powerType, renderMode, spellID)
+            if renderMode == CPK.MODE.SIGNED_CONTINUOUS then
+                spellID = CPAuras.NormalizeID(spellID)
+                return (spellID == 48517 or spellID == 48518) and "stacks" or nil
+            end
             if powerType == "MISTS_ARCANE_CHARGES" then
                 return CPAuras.NormalizeID(spellID) == CPK.SPELL.MISTS_ARCANE_CHARGE and "stacks" or nil
             end
             return RetailActiveSpellKind(powerType, renderMode, spellID)
         end
         function CPAuras.RefreshActive(powerType, renderMode)
+            if renderMode == CPK.MODE.SIGNED_CONTINUOUS then
+                local solar = CPAuras.RefreshSpell(48517, "stacks")
+                local lunar = CPAuras.RefreshSpell(48518, "stacks")
+                return solar or lunar
+            end
             if powerType == "MISTS_ARCANE_CHARGES" then
                 return CPAuras.RefreshSpell(CPK.SPELL.MISTS_ARCANE_CHARGE, "stacks") == true
             end

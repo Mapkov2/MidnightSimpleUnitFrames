@@ -349,15 +349,26 @@ local function EnsureIconFrame()
     return iconFrame
 end
 
+local feedbackGeneration = 0
+local feedbackActive = false
 local function PlayInterruptFeedback()
     if not iconFrame then return end
+    feedbackGeneration = feedbackGeneration + 1
+    local generation = feedbackGeneration
+    feedbackActive = true
+    iconFrame:Show()
 
     SetBorderColor(1, 0.2, 0.2, 1)
     if iconFrame.bg then iconFrame.bg:SetColorTexture(0, 0, 0, 0.9) end
 
     if After then
         After(0.18, function()
-            if not iconFrame then return end
+            if not iconFrame or generation ~= feedbackGeneration then return end
+            feedbackActive = false
+            if not IsFocusKickEnabled() or not iconFrame._msufFocusCastActive then
+                iconFrame:Hide()
+                return
+            end
             local source = _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
                 or ((_G.FocusCastBar and _G.FocusCastBar._msufCastbarDriver == true) and _G.FocusCastBar)
             ApplyInterruptibilityColor(
@@ -373,7 +384,7 @@ local function PlayInterruptFeedback()
     local shakeSteps = 6
 
     local function shake()
-        if not (iconFrame and iconFrame:IsShown()) then return end
+        if generation ~= feedbackGeneration or not (iconFrame and iconFrame:IsShown()) then return end
 
         shakeStep = shakeStep + 1
         local direction = (shakeStep % 2 == 0) and -1 or 1
@@ -655,7 +666,10 @@ local function ApplyCastState(state)
     local general = EnsureOptions()
 
     if not IsFocusKickEnabled() then
+        feedbackGeneration = feedbackGeneration + 1
+        feedbackActive = false
         if iconFrame then
+            iconFrame._msufFocusCastActive = nil
             if iconFrame.timeText then
                 iconFrame.timeText:SetText("")
                 iconFrame.timeText:SetAlpha(0)
@@ -667,13 +681,17 @@ local function ApplyCastState(state)
 
     EnsureIconFrame()
     if not (state and state.active == true) then
+        iconFrame._msufFocusCastActive = nil
         if iconFrame.timeText then
             iconFrame.timeText:SetText("")
             iconFrame.timeText:SetAlpha(0)
         end
-        iconFrame:Hide()
+        if not feedbackActive then iconFrame:Hide() end
         return
     end
+    iconFrame._msufFocusCastActive = true
+    feedbackGeneration = feedbackGeneration + 1
+    feedbackActive = false
 
     if iconFrame.icon and state.icon then
         _G.MSUF_SetIconTexture(iconFrame.icon, state.icon, "")
@@ -700,7 +718,7 @@ end
 --- only updates the visible border after the player's interrupt cooldown
 --- starts, changes, or completes.
 local function RefreshReadyColor()
-    if not (iconFrame and iconFrame.IsShown and iconFrame:IsShown()) then
+    if feedbackActive or not (iconFrame and iconFrame.IsShown and iconFrame:IsShown()) then
         return
     end
 

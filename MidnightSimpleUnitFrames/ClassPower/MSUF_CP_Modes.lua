@@ -23,6 +23,16 @@ local string_format = string.format
 local _issecretvalue = _G.issecretvalue
 local OverrideRGB = _G.MSUF_CP_CONST.OverrideRGB
 
+local function SignedPowerColor(visual, auras, value)
+    if not (visual and visual.solarR) then
+        return visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1
+    end
+    local solar, lunar = auras and auras[48517], auras and auras[48518]
+    if solar and lunar then return visual.eclipseR, visual.eclipseG, visual.eclipseB end
+    if lunar or (not solar and value and value < 0) then return visual.lunarR, visual.lunarG, visual.lunarB end
+    return visual.solarR, visual.solarG, visual.solarB
+end
+
 local function CP_GetVisual(E)
     local getVisual = E and E.GetVisual
     return getVisual and getVisual() or nil
@@ -1814,11 +1824,7 @@ modeBuilders.CONTINUOUS = function(E)
             local mx = mxSafe and (tonumber(rawMx) or 100) or nil
             if mx and mx <= 0 then mx = 100 end
 
-            if mx then
-                CP_StampMinMax(bar, -mx, mx)
-            else
-                CP_StampMinMax(bar, -100, 100)
-            end
+            CP_StampMinMax(bar, -(mx or 100), mx or 100)
 
             local visual = CP_GetVisual(E)
             local smoothInterp = visual and visual.smoothInterp
@@ -1826,9 +1832,10 @@ modeBuilders.CONTINUOUS = function(E)
             CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
             CP_StampShown(bar, true)
 
+            local red, green, blue = SignedPowerColor(visual, E.TrackedPlayerAuras, cur)
+            CP_StampStatusBarColor(bar, red, green, blue, 1)
             local visualVersion = visual and visual.version or 0
             if CP._singleVisualVersion ~= visualVersion or CP._singleVisualMode ~= CP.renderMode then
-                CP_StampStatusBarColor(bar, visual and visual.baseR or 1, visual and visual.baseG or 1, visual and visual.baseB or 1, 1)
                 CP_StampVertexColor(bar._bg, visual and visual.bgR or 0, visual and visual.bgG or 0,
                     visual and visual.bgB or 0, visual and visual.bgAlpha or 0.3)
                 for i = 2, CP.maxBars do

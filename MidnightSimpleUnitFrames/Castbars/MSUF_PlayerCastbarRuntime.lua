@@ -969,11 +969,15 @@ local function HandleEmpowerEvent(frame, event, ...)
     return false
 end
 
+local function ShowPlayerInterruptFeedback(frame, interruptedBy)
+    ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(interruptedBy, "player", INTERRUPTED))
+end
+
 local function HandleActiveEmpowerEvent(frame, event, ...)
     if not frame.isEmpower then return false end
 
     if event == "UNIT_SPELLCAST_INTERRUPTED" then
-        ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", INTERRUPTED))
+        ShowPlayerInterruptFeedback(frame, select(4, ...))
         return true
     elseif event == "UNIT_SPELLCAST_STOP"
         or event == "UNIT_SPELLCAST_FAILED"
@@ -1051,7 +1055,7 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
         if IsDifferentActiveCast(frame, castGUID, spellID, castBarID) then return end
 
         ClearActiveCastIdentity(frame)
-        ShowInterruptFeedback(frame, _G.MSUF_Castbar_ResolveInterruptLabel(select(4, ...), "player", INTERRUPTED))
+        ShowPlayerInterruptFeedback(frame, select(4, ...))
         return
     end
 
@@ -1083,6 +1087,12 @@ local function PlayerCastbarOnEventImpl(frame, event, ...)
             if not ActiveUnitMatches(frame, eventUnit) then return end
             local castBarID = select(5, ...)
             if not ActiveCastBarIDMatches(frame, castBarID) then return end
+            local interruptedBy = select(4, ...)
+            if issecretvalue(interruptedBy) or interruptedBy ~= nil then
+                ClearActiveCastIdentity(frame)
+                ShowPlayerInterruptFeedback(frame, interruptedBy)
+                return
+            end
             ScheduleSoftResync(frame)
             return
         elseif event == "UNIT_SPELLCAST_FAILED" then

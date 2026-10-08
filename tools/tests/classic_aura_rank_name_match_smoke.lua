@@ -188,10 +188,10 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
     local buff, debuff = {}, {}
     features.ApplyAutoExclusions(buff, debuff, targetLanes, targetSource, "target")
     for _, liveID in ipairs(dot[3]) do
-        assert(features.IsAutoExcluded(debuff, { spellId = liveID, name = dot[2] }) == true,
+        assert(features.IsAutoExcluded(debuff, { spellId = liveID, name = dot[2], auraInstanceID=1, duration=10, isPlayerAura=true }, "target", NoFilter, Timed, true) == true,
             string.format("%s Debuff lane must auto-exclude same-name aura %d", flavor, liveID))
     end
-    assert(features.IsAutoExcluded(debuff, UNRELATED) == false, flavor .. " auto-excluded an unrelated aura")
+    assert(features.IsAutoExcluded(debuff, UNRELATED, "target", NoFilter, Timed, true) == false, flavor .. " auto-excluded an unrelated aura")
     print(string.format("classic_aura_rank_name_match_smoke: %s ok", flavor))
 end
 

@@ -10,6 +10,13 @@ if not Factories then
     MSUF.Auras3MenuModelFactories = Factories
 end
 
+local function CustomContainerReminderItems(item, create)
+    local map = type(item) == "table" and item.reminderItems or nil
+    if map or create ~= true or type(item) ~= "table" then return map end
+    map = {}
+    item.reminderItems = map
+    return map
+end
 function Factories.CustomSpells(A3, Model, Schema, Common)
     local type = type
     local tonumber = tonumber
@@ -114,13 +121,6 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
         return true
     end
 
-    local function CustomContainerReminderItems(item, create)
-        local map = type(item) == "table" and item.reminderItems or nil
-        if map or create ~= true or type(item) ~= "table" then return map end
-        map = {}
-        item.reminderItems = map
-        return map
-    end
     Model.CustomContainerReminderItems = CustomContainerReminderItems
 
     local function CustomContainerSpellSet(item)
@@ -253,7 +253,12 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
             -- gives nothing to track, so refuse instead of adding a dead row.
             return false, itemID and not itemSpellID and "item-no-aura" or "invalid"
         end
-        if itemID then CustomContainerReminderItems(item, true)[spellID] = itemID end
+        local itemChanged = false
+        if itemID then
+            local items = CustomContainerReminderItems(item, true)
+            itemChanged = items[spellID] ~= itemID
+            items[spellID] = itemID
+        end
         if unit == "player" and index == PLAYER_DEFENSIVE_CONTAINER_INDEX
             and Model.IsPlayerDefensiveSpell(spellID)
             and type(Model.SetPlayerDefensiveSpellEnabled) == "function"
@@ -272,6 +277,7 @@ function Factories.CustomSpells(A3, Model, Schema, Common)
                     return true
                 end
             end
+            if itemChanged then return true end
             return false, "unchanged"
         end
         local count = 0

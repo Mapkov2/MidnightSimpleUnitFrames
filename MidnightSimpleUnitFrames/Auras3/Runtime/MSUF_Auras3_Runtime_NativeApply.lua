@@ -5,6 +5,23 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 MSUF.Auras3RuntimeFactories = MSUF.Auras3RuntimeFactories or {}
+local function UpdatePriorityGroupFilters(container, nativeFilter)
+    if container._msufA3FilterString == nativeFilter then return end
+    for _, groupKey in ipairs(container._msufA3PriorityGroupKeys) do
+        container:SetAuraGroupFilterString(groupKey, nativeFilter)
+    end
+    container._msufA3FilterString = nativeFilter
+end
+
+local function UpdateNativeUnit(container, unit)
+    local changed = container.unit ~= unit or (type(container.GetUnit) == "function" and container:GetUnit() ~= unit)
+    container.unit = unit
+    if changed and type(container.SetUnit) == "function" then
+        container:SetUnit(unit)
+    end
+    return changed
+end
+
 MSUF.Auras3RuntimeFactories.NativeApply = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
 local SpellIndicatorsRuntime = A3.SpellIndicators
 
@@ -113,11 +130,7 @@ end
 
 A3._RebindNativeContainerUnit = function(container, unit)
     if not (container and type(unit) == "string" and unit ~= "") then return false end
-    local changed = container.unit ~= unit or (type(container.GetUnit) == "function" and container:GetUnit() ~= unit)
-    container.unit = unit
-    if changed and type(container.SetUnit) == "function" then
-        container:SetUnit(unit)
-    end
+    local changed = UpdateNativeUnit(container, unit)
     A3._RegisterDirectIdentityRefreshContainer(container)
     return changed
 end
@@ -292,6 +305,7 @@ ApplyLane = function(root, lane, parentFrame, forceRecreate)
             return current
         end
         if current._msufA3PriorityAuraGroups == true then
+            UpdatePriorityGroupFilters(current, lane.nativeFilter)
             SyncContainerGeometry(current, lane, parentFrame)
             current:Show()
             if not RegisterNativeContainer(current) then return nil end

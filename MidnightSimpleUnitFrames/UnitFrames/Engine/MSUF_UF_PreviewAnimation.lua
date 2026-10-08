@@ -33,21 +33,22 @@ local ARENA_UNITS = { "arena1", "arena2", "arena3" }
 for i = 4, tonumber(_G.MSUF_MAX_ARENA_FRAMES) or 3 do
   ARENA_UNITS[#ARENA_UNITS + 1] = "arena" .. i
 end
+local Translate = MSUF.Translate
 local PREVIEW_NAME_LABELS = {
-  player = "Player Name Position",
-  target = "Target Name Position",
-  focus = "Focus Name Position",
-  targettarget = "Target of Target Name Position",
-  focustarget = "Focus Target Name Position",
-  pet = "Pet Name Position",
-  pettarget = "Pet Target Name Position",
+  player = Translate("Player Name Position"),
+  target = Translate("Target Name Position"),
+  focus = Translate("Focus Name Position"),
+  targettarget = Translate("Target of Target Name Position"),
+  focustarget = Translate("Focus Target Name Position"),
+  pet = Translate("Pet Name Position"),
+  pettarget = Translate("Pet Target Name Position"),
 }
 
 local CoreFrame = MSUF.UF.GetFrame
 local CASTBAR_PREVIEWS = {
-  { name = "MSUF_PlayerCastbarPreview", unit = "player", label = "Test Cast" },
-  { name = "MSUF_TargetCastbarPreview", unit = "target", label = "Test Cast" },
-  { name = "MSUF_FocusCastbarPreview", unit = "focus", label = "Test Cast" },
+  { name = "MSUF_PlayerCastbarPreview", unit = "player", label = Translate("Test Cast") },
+  { name = "MSUF_TargetCastbarPreview", unit = "target", label = Translate("Test Cast") },
+  { name = "MSUF_FocusCastbarPreview", unit = "focus", label = Translate("Test Cast") },
 }
 
 local driver
@@ -786,7 +787,7 @@ local function RestoreCastbarFrame(frame)
 end
 
 local function ApplyCastbarPreviewLabel(frame, label)
-  label = label or "Test Cast"
+  label = label or Translate("Test Cast")
   local revision = _G.MSUF_CastbarStyleRevision or 1
   local applyTexts = _G.MSUF_CB_ApplyTexts
   if type(applyTexts) ~= "function" then

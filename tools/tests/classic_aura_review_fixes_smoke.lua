@@ -209,6 +209,7 @@ _G.C_UnitAuras = {
     end,
 }
 _G.AuraUtil = {}
+_G.GetSpellInfo = function(id) if tonumber(id) == 730001 then return "Ranked Buff", nil, 134400 end end
 
 local nextID = 5000
 local function Aura(helpful, fields)
@@ -617,7 +618,7 @@ do
     world.target = { excluded, Aura(true), Aura(true), Aura(true), Aura(true) }
     local target = NewFrame("target", {})
     local lane = Lane(target, "buff")
-    assert(lane.config.classicExcludeSpellIDs and lane.config.classicExcludeSpellIDs[640001] == true,
+    assert(lane.config.classicExcludeLanes and lane.config.classicExcludeLanes[1].includeSpellIDs[640001] == true,
         "F22: precondition: the container did not auto-exclude its spell from the Buff lane")
     assert(lane.config.cappedFilterScan == true and lane._msufA3CappedFullScan == true,
         "F22: an auto-exclusion turned the Buff lane's capped scan into a full walk")
@@ -1828,6 +1829,169 @@ do
     assert(refreshed == 1, "F1: a global font refresh rebuilt the Edit Mode aura preview " .. refreshed .. " times")
     _G.MSUF2_BossPageAuraPreviewActive, _G.MSUF2_ArenaPageAuraPreviewActive = nil, nil
     _G.C_Timer.After = nil
+end
+
+-- Priority sorting compiles once and uses a stable arrival tie-breaker.
+do
+    LoadProfile(Profile({ target = { layout = {}, layoutShared = { showBuffs = true, showDebuffs = false }, filters = {} } }))
+    local entry = { enabled = true, auraType = "BUFF", spellIDs = "710001 710002", prioritySpellIDs = {710002, 710001},
+        autoBlacklistDebuffs = false, placed = { max = 2, size = 20, perRow = 2, sortMethod = "CUSTOM_PRIORITY" } }
+    _G.MSUF_DB.auras3.customContainers = { perUnit = { target = { items = { entry } } } }
+    A3.BumpRuntimeConfig()
+    local first, second = Aura(true, {spellId=710001}), Aura(true, {spellId=710002})
+    world.target = {first, second}
+    local frame = NewFrame("target", {})
+    assert(VisibleIDs(Lane(frame, "custom1")) == IDs(second, first), "custom priority ignored saved order")
+    entry.prioritySpellIDs = {710001, 710002}
+    A3.BumpRuntimeConfig(); Update(frame, {isFullUpdate=true})
+    assert(VisibleIDs(Lane(frame, "custom1")) == IDs(first, second), "priority edit did not rebuild the cold rank map")
+    entry.placed.sortReverse = true
+    A3.BumpRuntimeConfig(); Update(frame, {isFullUpdate=true})
+    assert(VisibleIDs(Lane(frame, "custom1")) == IDs(second, first), "reverse priority used generic arrival comparator")
+end
+
+-- Filtered foreign auras may leave without any visible aura changing.
+do
+    LoadProfile(Profile({ target = { layout = {}, layoutShared = {showBuffs=true,showDebuffs=false,buffSortMethod="INSTANCE_ID"},
+        filters = {buffs={enabled=true,onlyMine=true}} } }))
+    A3.BumpRuntimeConfig()
+    local own = Aura(true,{mine=true})
+    world.target = {own}
+    local frame = NewFrame("target", {})
+    for i=1,1000 do
+        local foreign = Aura(true,{mine=false})
+        world.target[2] = foreign
+        Update(frame,{addedAuras={Snapshot(foreign)}})
+        world.target[2] = nil
+        Update(frame,{removedAuraInstanceIDs={foreign.auraInstanceID}})
+    end
+    assert(Lane(frame,"buff").orderedCount <= 96 and VisibleIDs(Lane(frame,"buff")) == IDs(own),
+        "filtered aura churn left an unbounded arrival queue")
+end
+
+-- Deduplicate only the aura instance actually accepted by a custom container.
+do
+    LoadProfile(Profile({ target = {layout={},layoutShared={showBuffs=true,showDebuffs=false},filters={}} }))
+    local entry = {enabled=true,auraType="BUFF",spellIDs="720001",placed={max=4,size=20,perRow=4},filters={onlyMine=true}}
+    _G.MSUF_DB.auras3.customContainers = {perUnit={target={items={entry}}}}
+    A3.BumpRuntimeConfig()
+    local mine, foreign = Aura(true,{spellId=720001,mine=true}), Aura(true,{spellId=720001,mine=false})
+    world.target={mine,foreign}
+    local frame=NewFrame("target",{})
+    assert(VisibleIDs(Lane(frame,"buff"))==IDs(foreign) and VisibleIDs(Lane(frame,"custom1"))==IDs(mine),
+        "Only mine custom container removed another caster's base-lane aura")
+    entry.autoBlacklistDebuffs=false
+    A3.BumpRuntimeConfig();Update(frame,{isFullUpdate=true})
+    assert(Visible(frame,"buff")==2,"auto-blacklist opt-out did not restore both instances")
+end
+
+-- Explicit lane tooltip values win over the legacy root, including false.
+do
+    for _, rootChoice in ipairs({"nil",false,true}) do
+        for _, laneChoice in ipairs({"nil",false,true}) do
+            local source={enabled=true,showBuffs=true,maxBuffs=2}
+            if rootChoice~="nil" then source.showTooltip=rootChoice end
+            if laneChoice~="nil" then source.buffShowTooltip=laneChoice end
+            local frame={MSUFUnitKey="party1",_msufIsGroupFrame=true,_msufGFKind="party",MSUFSpec={scope="group",auras=source}}
+            local config=A3._ClassicCompile.ResolveGroupFrameConfig(frame,"party1")
+            local expected=laneChoice=="nil" and rootChoice~=false or laneChoice==true
+            assert(config.lanes.buff.showTooltip==expected,"lane/root tooltip precedence mismatch")
+        end
+    end
+end
+
+-- Overlay geometry follows fill/bar C objects and the canonical frame-layer map.
+do
+    local V=A3.ClassicVisuals
+    local frame=NewFrame("target",{})
+    local fill=frame.hpBar:CreateTexture()
+    function frame.hpBar:GetStatusBarTexture() return fill end
+    local savedBorderStyles=namespace.BorderStyles
+    namespace.BorderStyles=namespace.BorderStyles or {}
+    local savedLayout=namespace.BorderStyles.LayoutEdgeStrip
+    local target
+    namespace.BorderStyles.LayoutEdgeStrip=function(_,selected) target=selected end
+    assert(loadfile(ADDON.."Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames",namespace)
+    local visual={overlayEnabled=true,overlayOnHealth=true,overlayStyle="FULL",overlayAlpha=.4,overlayLayer=0,overlayStrata="HIGH"}
+    V.UpdateDispelOverlay(frame,visual,true,1,0,0,1)
+    assert(target==fill,"current-health overlay did not follow the fill texture")
+    local host=frame._msufA3ClassicDispelOverlayHost
+    assert(host:GetFrameLevel()==namespace.UF.Layers.ElementLevel(0,0,12),"overlay bypassed shared layer resolver")
+    visual.overlayOnHealth=false;visual.overlayLayer=30
+    V.UpdateDispelOverlay(frame,visual,true,1,0,0,1)
+    assert(target==frame.hpBar and host:GetFrameLevel()==namespace.UF.Layers.ElementLevel(30,0,12),
+        "full-health overlay included the power surface or ignored layer changes")
+    local writes=0
+    host.SetFrameLevel=function() writes=writes+1 end
+    V.UpdateDispelOverlay(frame,visual,true,1,0,0,1)
+    assert(writes==0,"unchanged overlay repeated layer writes")
+    namespace.BorderStyles.LayoutEdgeStrip=savedLayout
+    namespace.BorderStyles=savedBorderStyles
+end
+
+-- Preset provenance broadens ranked buffs, while manual Spell IDs stay exact.
+do
+    LoadProfile(Profile({target={layout={},layoutShared={showBuffs=true,showDebuffs=false},filters={}}}))
+    local model=A3.MenuModel
+    assert(model.AddBlacklistPresetSpell("target",730001,"buff"),"preset add failed")
+    A3.BumpRuntimeConfig()
+    local rank=Aura(true,{spellId=730002,name="Ranked Buff"})
+    world.target={rank}
+    local frame=NewFrame("target",{})
+    assert(Visible(frame,"buff")==0,"preset rank family was not blacklisted")
+    assert(model.RemoveBlacklistSpell("target",730001,"buff"))
+    assert(model.AddBlacklistSpell("target",730001,"buff"))
+    A3.BumpRuntimeConfig();Update(frame,{isFullUpdate=true})
+    assert(Visible(frame,"buff")==1,"manual exact ID inherited removed preset family metadata")
+    local source={enabled=true,showBuffs=true,maxBuffs=4,buffBlacklistHash={[730001]=true},
+        buffAutoBlacklistNames={["Ranked Buff"]=true}}
+    local group=NewFrame("party1",{scope="group",auras=source},GroupFields("party"))
+    world.party1={rank};Update(group,{isFullUpdate=true})
+    assert(Visible(group,"buff")==0,"automatic spell-indicator family alias did not reach lane predicate")
+end
+
+-- Purge tracks helpful stealable auras independently of visible icon filters.
+do
+    LoadProfile(Profile({target={layout={},layoutShared={showBuffs=false,showDebuffs=false},filters={}}}))
+    local stealable=Aura(true,{isStealable=true})
+    world.target={stealable}
+    local frame=NewFrame("target",{border={purge=true}})
+    assert(frame._msufA3PurgeActive==true,"Classic purge did not activate with aura icons disabled")
+    local reads=api.index
+    for i=1,100 do Update(frame,{updatedAuraInstanceIDs={stealable.auraInstanceID}}) end
+    assert(api.index==reads,"update-only payload rescanned purge auras")
+    world.target={};Update(frame,{removedAuraInstanceIDs={stealable.auraInstanceID}})
+    assert(frame._msufA3PurgeActive==false,"removed purge aura left the border active")
+    world.target={stealable};Update(frame,{addedAuras={Snapshot(stealable)}})
+    assert(frame._msufA3PurgeActive==true)
+    frame.MSUFSpec.border.purge=false;A3.BumpRuntimeConfig();Update(frame,{isFullUpdate=true})
+    assert(frame._msufA3PurgeActive==false,"disabling purge left its cached border active")
+end
+
+-- Compiled symbol refreshes reuse their appearance key without concatenation.
+do
+    LoadProfile(Profile({target={layout={},layoutShared={showBuffs=true,showDebuffs=true},filters={}}}))
+    local V=A3.ClassicVisuals
+    local visual=A3._ClassicCompile.CompileFrameAuraVisual({dispelSymbol={enabled=true,mode="ALL"}})
+    assert(visual.symbol.appearanceKey,"symbol appearance key was not compiled")
+    local frame=NewFrame("target",{})
+    local present={Magic=true,Curse=true}
+    V.UpdateDispelSymbols(frame,visual,present)
+    local keyFn=V.DispelSymbolAppearanceKey
+    V.DispelSymbolAppearanceKey=function() error("hot symbol refresh rebuilt appearance") end
+    local instructions=0
+    writes.n=0;writes.counting=true
+    debug.sethook(function() instructions=instructions+1 end,"",1)
+    for i=1,100 do assert(V.UpdateDispelSymbols(frame,visual,present)==false) end
+    debug.sethook()
+    writes.counting=false
+    local bytes=BytesPerCall(function() V.UpdateDispelSymbols(frame,visual,present) end,1000)
+    assert(writes.n==0,"unchanged dispel symbols repeated native writes")
+    assert(instructions/100 <= 160,"compiled dispel-symbol refresh exceeded its instruction budget")
+    print(string.format("BH3 dispel symbols: %.1f instructions/call, %.3f B/call, %d native writes/100 calls",instructions/100,bytes,writes.n))
+    present.Curse=nil
+    assert(V.UpdateDispelSymbols(frame,visual,present)==true,"selection mask missed removed type")
+    V.DispelSymbolAppearanceKey=keyFn
 end
 
 print("classic aura review fixes smoke passed")

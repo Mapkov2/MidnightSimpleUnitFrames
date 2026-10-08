@@ -852,8 +852,9 @@ end
 function GF.IsSmallRaidPartyContext()
     if not _G.IsInRaid() then return false end
     local conf = GF.GetConf("party")
+    if not (conf.enabled == true and conf.smallRaidAsParty == true) then return false end
     local count = _G.GetNumGroupMembers()
-    return conf.enabled == true and conf.smallRaidAsParty == true and count > 0 and count <= 5
+    return count > 0 and count <= 5
 end
 
 function GF.GetLiveGroupKind()

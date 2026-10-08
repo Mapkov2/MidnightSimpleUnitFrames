@@ -318,6 +318,11 @@ local function CP_CompileVisual(powerType, renderMode, maxP)
     visual.emptyAlpha = _emptyAlpha
     visual.bgAlpha = _cpDB.bgAlpha or 0.3
     visual.baseR, visual.baseG, visual.baseB = baseR, baseG, baseB
+    if IS_CLASSIC and renderMode == CPK.MODE.SIGNED_CONTINUOUS and colorByType then
+        visual.solarR, visual.solarG, visual.solarB = CPColors.ResolveClassPowerColor("ECLIPSE_SOLAR")
+        visual.lunarR, visual.lunarG, visual.lunarB = CPColors.ResolveClassPowerColor("ECLIPSE_LUNAR")
+        visual.eclipseR, visual.eclipseG, visual.eclipseB = CPColors.ResolveClassPowerColor("ECLIPSE_CA")
+    end
     visual.bgR, visual.bgG, visual.bgB = bgR, bgG, bgB
     visual.chargedR, visual.chargedG, visual.chargedB = chargedR, chargedG, chargedB
     visual.runeShowTime = b.runeShowTime ~= false
@@ -529,6 +534,7 @@ do
 
     commonEnv.UnitPower = UnitPower
     commonEnv.UnitPowerMax = UnitPowerMax
+    commonEnv.TrackedPlayerAuras = CPAuras.bySpell
     local continuous = CP_CallBuilder(CPModeBuilders.CONTINUOUS, commonEnv)
     if continuous and type(continuous.Update) == "function" then CP_UpdateValues_Continuous = continuous.Update end
     if IS_CLASSIC then CP.UpdateSignedContinuous = continuous and continuous.UpdateSigned end
@@ -1670,7 +1676,7 @@ local function ClassPowerOnEvent(_, event, arg1, arg2, arg3)
             --- Stagger uses UNIT_AURA only as a lightweight change signal and
             --- never reads aura payloads. Avoid rebuilding the aura cache for it.
             local resourceChanged = false
-            if CP.isAuraPower then
+            if CP.isAuraPower or (IS_CLASSIC and CP.renderMode == CPK.MODE.SIGNED_CONTINUOUS) then
                 resourceChanged = CPAuras.ProcessUnitAuraUpdate(arg2, CP.powerType, CP.renderMode)
             end
             if resourceChanged or CP.renderMode == CPK.MODE.STAGGER then

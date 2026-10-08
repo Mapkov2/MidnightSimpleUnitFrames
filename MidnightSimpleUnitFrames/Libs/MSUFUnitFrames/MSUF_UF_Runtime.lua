@@ -208,7 +208,7 @@ local function GetUnitFrameScreenCacheKey(key, unit)
   local k = tostring(key or "")
   local u = tostring(unit or "")
   if k == "" then return u ~= "" and u or nil end
-  if k == "boss" and u ~= "" then return k .. ":" .. u end
+  if (k == "boss" or k == "arena") and u ~= "" then return k .. ":" .. u end
   return k
 end
 
@@ -287,8 +287,14 @@ local function ApplyCachedUnitFrameScreenPosition(frame, key, unit)
     frame:SetScale(tonumber(cached.scale))
   end
   local point = type(cached.point) == "string" and cached.point ~= "" and cached.point or "CENTER"
+  -- Both cache versions store UIParent-space offsets. SetPoint consumes
+  -- offsets in the restored frame's coordinate space, after SetScale above.
+  local frameScale = frame:GetEffectiveScale()
+  local parentScale = uiParent:GetEffectiveScale()
+  if frameScale <= 0 or parentScale <= 0 then return false end
+  local ratio = parentScale / frameScale
   frame:ClearAllPoints()
-  frame:SetPoint(point, uiParent, "CENTER", math_floor(x + 0.5), math_floor(y + 0.5))
+  frame:SetPoint(point, uiParent, "CENTER", x * ratio, y * ratio)
   frame._msufPositionInitialized = true
   frame._msufHardLockedToUIParent = true
   frame._msufHardLockPoint = point

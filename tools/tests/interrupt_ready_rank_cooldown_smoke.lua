@@ -127,6 +127,8 @@ local client = {
 local target, eventFrame
 local function Load(classToken)
     UnitClass = function() return classToken, classToken end
+    local learned = ({ ROGUE = 1766, WARRIOR = 6552, SHAMAN = 8042 })[classToken]
+    C_SpellBook.IsSpellKnownOrInSpellBook = function(spellID) return spellID == learned end
     categoryCD = {}
     named = {}
     local ns = { Client = client, ExportPublic = function(name, value) _G[name] = value end,

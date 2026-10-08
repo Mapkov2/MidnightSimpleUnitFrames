@@ -123,8 +123,8 @@ function World.New(root, backend, options)
         function widget:GetPoint() return nil end
         function widget:CreateAnimationGroup() return NewWidget("AnimationGroup") end
         function widget:CreateAnimation() return NewWidget("Animation") end
+        function widget:CreateTexture() return NewWidget("Texture") end
         if options.richWidgets then
-            function widget:CreateTexture() return NewWidget("Texture") end
             function widget:CreateMaskTexture() return NewWidget("MaskTexture") end
             function widget:CreateFontString() return NewWidget("FontString") end
             function widget:CreateLine() return NewWidget("Line") end

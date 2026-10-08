@@ -545,4 +545,14 @@ assert(squareButton._msufA3ClassicIndicatorSwatch and squareButton._msufA3Classi
     "a placed Square lost its colour block")
 barPlaced.type = "bar"
 
+-- CX3-01 / C15-A3: a group lane's swipe and text are independent controls.
+SetAuras("party1", {ownRenew})
+local textOffFrame=GroupFrame("party1",{auras={enabled=true,showBuffs=true,maxBuffs=1,
+    showDebuffs=false,showExternals=false,buffShowCooldown=false,buffShowCooldownSwipe=true}})
+local textOffLane=assert(textOffFrame._msufA3State.lanes.buff)
+assert(textOffLane.visible==1,"group cooldown sample did not render")
+local textOffTimer=textOffLane[1].Cooldown
+assert(textOffTimer._shown==true and textOffTimer._drawSwipe==true and textOffTimer._hideNumbers==true,
+    "group text toggle also disabled cooldown swipe")
+
 print("classic aura setting parity smoke passed: " .. flavor)

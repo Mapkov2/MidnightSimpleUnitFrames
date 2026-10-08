@@ -635,12 +635,12 @@ Commands.Register({
         end
         local active = tostring(_G.MSUF_ActiveProfile or "")
         if rest:lower() ~= "confirm" then
-            MSUF_ProfileResetPending = true
+            MSUF_ProfileResetPending = MSUF.ProfileRuntime.Identity()
             print(string.format(Tr("|cffffcc00MSUF:|r This resets every setting in profile '%s', not just positions."), active))
             print(Tr("|cffffcc00MSUF:|r Type |cffffff00/msuf default confirm|r to go ahead."))
             return
         end
-        if not MSUF_ProfileResetPending then
+        if not MSUF.ProfileRuntime.IsCurrentIdentity(MSUF_ProfileResetPending) then
             print(Tr("|cffffcc00MSUF:|r Type |cffffff00/msuf default|r first, then confirm it."))
             return
         end

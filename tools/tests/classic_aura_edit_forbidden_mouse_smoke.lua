@@ -149,11 +149,11 @@ container.access = true
 listener.callback(listener, "PLAYER_ALIVE")
 assert(container.click == false and element._msufA3EditModeAlpha == nil, "the queued restore did not run")
 
--- Lockdown: nothing is written until combat ends.
+-- Lockdown: alpha restores immediately; mouse-state restoration waits for regen.
 drag.SetRuntimeAuraHidden("boss1", true)
 locked = true
 drag.SetRuntimeAuraHidden("boss1", false)
-assert(element.alpha == 0 and element._msufA3EditModeAlpha == 1)
+assert(element.alpha == 1 and element._msufA3EditModeAlpha == 1)
 locked = false
 listener.callback(listener, "PLAYER_REGEN_ENABLED")
 assert(element.alpha == 1 and element._msufA3EditModeAlpha == nil)

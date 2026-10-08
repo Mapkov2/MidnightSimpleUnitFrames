@@ -592,7 +592,12 @@ local function SetButtonBasics(shell, visual, unit, spec)
     GF.UnregisterClickCastFrame(shell)
   else
     ConfigureSecureClicks(shell)
-    GF.RegisterClickCastFrame(shell)
+    if spec and spec.groupLayout and spec.groupLayout.clickCastEnabled == false then
+      GF.UnregisterClickCastFrame(shell)
+      RegisterDefaultClicks(shell)
+    else
+      GF.RegisterClickCastFrame(shell)
+    end
   end
   if shell.SetSize and not InCombat() then
     local w = spec and spec.width

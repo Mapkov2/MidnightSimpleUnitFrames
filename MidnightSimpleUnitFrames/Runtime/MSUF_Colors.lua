@@ -324,6 +324,8 @@ local function GetGlobalFontColor()
     if g.useCustomFontColor and g.fontColorCustomR and g.fontColorCustomG and g.fontColorCustomB then
         return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
     end
+    local color = MSUF_FONT_COLORS and MSUF_FONT_COLORS[(g.fontColor or "white"):lower()]
+    if color then return color[1], color[2], color[3] end
     return 1, 1, 1
 end
 local function SetGlobalFontColor(r, g, b)

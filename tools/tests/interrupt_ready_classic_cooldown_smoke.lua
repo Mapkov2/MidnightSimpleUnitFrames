@@ -70,7 +70,7 @@ CreateFrame = function(kind, name)
 end
 UIParent = CreateFrame("Frame")
 UnitClass = function() return "Warrior", "WARRIOR" end
-C_SpellBook = { IsSpellKnownOrInSpellBook = function() return false end }
+C_SpellBook = { IsSpellKnownOrInSpellBook = function(spellID) return spellID == 6552 end }
 MSUF_ShouldUseMSUFCastbar = function() return true end
 MSUF_DB = { general = { kickReadyShowTarget = true, kickReadyStyle = "box" } }
 

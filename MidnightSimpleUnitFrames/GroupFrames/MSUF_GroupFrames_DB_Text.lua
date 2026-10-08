@@ -455,7 +455,7 @@ end
 --- Handles secret percent (rare) via C_StringUtil.RoundToNearestString. The
 --- second result is a plain boolean "has a percent": a secret text may be
 --- concatenated but never truth-tested.
-local function _GF_FormatPct(pctVal, pctSuffix)
+local function _GF_FormatPct(pctVal, pctSuffix, percentDecimals)
     local iss = _GF_issecretvalue
     if iss and iss(pctVal) then
         if _GF_CSU_Round then
@@ -465,6 +465,9 @@ local function _GF_FormatPct(pctVal, pctSuffix)
     end
     local p = tonumber(pctVal)
     if not p then return nil, false end
+    if percentDecimals == 1 then
+        return string.format("%.1f", math_floor(p * 10 + 0.5) / 10) .. pctSuffix, true
+    end
     return math_floor(p + 0.5) .. pctSuffix, true
 end
 
@@ -541,7 +544,7 @@ end
 --- reverse : swap mode before formatting
 --- unit : unitId for secret-safe percent (optional, nil in preview)
 ---
-function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers, totalAbsorb, absorbIcon)
+function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePercentSymbol, shortNumbers, totalAbsorb, absorbIcon, percentDecimals)
     if not mode or mode == "NONE" then return "" end
     if reverse then mode = REVERSE_HP_MAP[mode] or mode end
 
@@ -570,7 +573,7 @@ function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit, hidePerc
     local pctStr, hasPct = nil, false
     if mode ~= "CURRENT" and mode ~= "FULLVALUE" and mode ~= "MAX" and mode ~= "CURMAX" and mode ~= "MAXCUR" and mode ~= "DEFICIT" then
         local pctVal = _GF_HealthPercent(unit, hp, hpMax)
-        pctStr, hasPct = _GF_FormatPct(pctVal, pctSuffix)
+        pctStr, hasPct = _GF_FormatPct(pctVal, pctSuffix, percentDecimals)
     end
 
     --- Deficit: try UnitHealthMissing API (secret-safe), else compute if non-secret

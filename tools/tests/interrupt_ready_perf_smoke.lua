@@ -21,6 +21,7 @@ local timerAfterCalls = 0
 local focusReadyRefreshes = 0
 local lastIgnoreGCD
 local frameStamp = 100
+_G.GetTime = function() return frameStamp end
 
 local secretReady = { secret = true, value = true }
 local secretRemaining = { secret = true }
@@ -35,6 +36,7 @@ _G.MSUF_DB = {
 }
 _G.MSUF_EnsureDB = function() end
 _G.UnitClass = function() return "Mage", "MAGE" end
+_G.IsPlayerSpell = function(spellID) return spellID == 2139 end
 _G.issecretvalue = function(value) return type(value) == "table" and value.secret == true end
 _G.CreateColor = function(red, green, blue, alpha)
     return { GetRGBA = function() return red, green, blue, alpha end }

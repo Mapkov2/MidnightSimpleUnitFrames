@@ -100,7 +100,6 @@ end
 local function IsConfigBlocked()
     if InCombatLockdown and InCombatLockdown() then return true end
     if _G.UnitAffectingCombat and _G.UnitAffectingCombat("player") then return true end
-    if _G.MSUF_InCombat == true then return true end
     return false
 end
 
@@ -222,11 +221,11 @@ function A3.UpdateUnitAnchor(unit)
 end
 
 function A3.RefreshEditPreview(unit)
-    if IsConfigBlocked() then return false end
     if not UnitPreviewActive(unit) then
         if unit then return EM.HideUnit(unit) end
         return EM.HideAll()
     end
+    if IsConfigBlocked() then return false end
     if unit then return EM.RefreshUnit(unit) end
     return EM.RefreshAll()
 end

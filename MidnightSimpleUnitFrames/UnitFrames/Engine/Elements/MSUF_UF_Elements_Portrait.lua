@@ -69,6 +69,17 @@ local function WithPortraitClassificationEvent(events)
   end
   return combined
 end
+local PORTRAIT_REACTION_EVENTS = {}
+local function WithPortraitReactionEvent(events)
+  local combined = PORTRAIT_REACTION_EVENTS[events]
+  if not combined then
+    combined = {}
+    for i = 1, #events do combined[i] = events[i] end
+    combined[#combined + 1] = "UNIT_FACTION"
+    PORTRAIT_REACTION_EVENTS[events] = combined
+  end
+  return combined
+end
 local WHITE = Visuals.WHITE or "Interface\\Buttons\\WHITE8x8"
 local BOSS_PREVIEW_PORTRAIT = Visuals.BOSS_PREVIEW_PORTRAIT or "Interface\\ICONS\\Achievement_Boss_LichKing"
 local BOSS_PREVIEW_CLASS = Visuals.BOSS_PREVIEW_CLASS or "DEATHKNIGHT"
@@ -579,8 +590,26 @@ local function PortraitMouseLeave(button)
   if callback then callback(button._msufUnitFrameOwner) end
 end
 
+local pendingPortraitClicks = setmetatable({}, { __mode = "k" })
+local portraitClickReplay
 local function ApplyPortraitClickTarget(frame, p)
-  if InCombatLockdown and InCombatLockdown() then return end
+  if InCombatLockdown and InCombatLockdown() then
+    pendingPortraitClicks[frame] = true
+    if not portraitClickReplay then
+      portraitClickReplay = CreateFrame("Frame")
+      portraitClickReplay:SetScript("OnEvent", function(self)
+        if InCombatLockdown and InCombatLockdown() then return end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        for pending in pairs(pendingPortraitClicks) do
+          pendingPortraitClicks[pending] = nil
+          ApplyPortraitClickTarget(pending, pending._msufPortraitRuntimeCfg)
+        end
+      end)
+    end
+    portraitClickReplay:RegisterEvent("PLAYER_REGEN_ENABLED")
+    return
+  end
+  pendingPortraitClicks[frame] = nil
   local button = frame.MSUFPortraitClickTarget
   local enabled = p and p.enabled == true and p.clickable == true
     and frame._msufGFIsPreviewFrame ~= true
@@ -603,7 +632,13 @@ local function ApplyPortraitClickTarget(frame, p)
     button:HookScript("OnLeave", PortraitMouseLeave)
     button:HookScript("OnHide", PortraitMouseLeave)
     frame.MSUFPortraitClickTarget = button
-    if UF.RegisterClickCastFrame then UF.RegisterClickCastFrame(button) end
+  end
+  local clickOwner = frame._msufIsGroupFrame and MSUF.GF or UF
+  local groupLayout = frame.MSUFSpec and frame.MSUFSpec.groupLayout
+  if frame._msufIsGroupFrame and groupLayout and groupLayout.clickCastEnabled == false then
+    if clickOwner and clickOwner.UnregisterClickCastFrame then clickOwner.UnregisterClickCastFrame(button) end
+  elseif clickOwner and clickOwner.RegisterClickCastFrame then
+    clickOwner.RegisterClickCastFrame(button)
   end
   button:SetFrameLevel(frame.MSUFPortraitHolder:GetFrameLevel() + 1)
   button:Show()
@@ -1595,6 +1630,7 @@ function Portrait.GetEvents(frame, spec)
     if p.shape == "BLIZZARD" and p.blizzardElite == true then
       return WithPortraitClassificationEvent(events)
     end
+    if p.border and p.border.style == "REACTION" then return WithPortraitReactionEvent(events) end
     return events
   end
   return EMPTY_EVENTS
@@ -1817,6 +1853,10 @@ function Portrait.Update(frame, event, unit)
     UpdatePortraitClassification(frame, p)
   end
   if event == "UNIT_CLASSIFICATION_CHANGED" then return end
+  if event == "UNIT_FACTION" then
+    LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
+    return
+  end
 
   local showingCast = p.castSpellIcon == true and UpdateCastPortrait(frame, p, event) or false
   if showingCast then

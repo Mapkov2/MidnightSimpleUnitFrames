@@ -231,6 +231,7 @@ local classResourceSettings = {
 }
 function Client.SupportsClassResourceSetting(settingKey)
     if settingKey == "bars.classPowerAnchorToCooldown" then return Client.HostsCooldownManager == true end
+    if settingKey == "bars.showResourcePrediction" then return Client.IsMists == true or (Client.IsRetail == true and Client.IsForever ~= true) end
     local resource = classResourceSettings[settingKey]
     return resource == nil or Client.SupportsClassResource(resource)
 end
@@ -369,7 +370,7 @@ end
 -- Only the no-argument mode predicates are called; every other C_GameRules Is*
 -- function is listed by name, so a new game mode shows up without guessing its
 -- API.
-local PROJECT_GLOBALS = { "WOW_PROJECT_MAINLINE", "WOW_PROJECT_CLASSIC",
+local PROJECT_GLOBALS = { "WOW_PROJECT_MAINLINE", "WOW_PROJECT_CAMELOT", "WOW_PROJECT_CLASSIC",
     "WOW_PROJECT_BURNING_CRUSADE_CLASSIC", "WOW_PROJECT_MISTS_CLASSIC" }
 local MODE_PREDICATES = { "IsStandard", "IsPlunderstorm", "IsWoWHack" }
 local REPORTED_GAME_RULES = { "EditModeDisabled", "PlayerFrameDisabled", "TargetFrameDisabled",

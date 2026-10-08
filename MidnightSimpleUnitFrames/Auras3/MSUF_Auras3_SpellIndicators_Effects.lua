@@ -479,9 +479,9 @@ local function ReminderCastButtonOnEnter(self)
     tooltip:Show()
 end
 
-local function ReminderCastButtonOnLeave()
+local function ReminderCastButtonOnLeave(self)
     local tooltip = _G.GameTooltip
-    if tooltip and tooltip.Hide then tooltip:Hide() end
+    if tooltip and tooltip:IsOwned(self) then tooltip:Hide() end
 end
 
 local function EnsureReminderCastButton(store, parentFrame, slot)
