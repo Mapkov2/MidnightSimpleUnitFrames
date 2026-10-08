@@ -48,6 +48,7 @@ local function LoadSpellIndicators(client, classToken, specIndex)
         ExportPublic = function(name, value) _G[name] = value; return value end,
     }
     for _, path in ipairs({
+        "Kernel/MSUF_Util.lua",
         "UnitFrames/Engine/Group/MSUF_UF_Group_SpellIndicators_Data.lua",
         "UnitFrames/Engine/Group/MSUF_UF_Group_SpellRegistry.lua",
         "UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua",

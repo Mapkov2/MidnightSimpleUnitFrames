@@ -173,6 +173,10 @@ local utilChunk, utilError = loadfile(UTIL_PATH)
 assert(utilChunk, utilError)
 utilChunk("MidnightSimpleUnitFrames", MSUF)
 
+--- Profile reset confirmation uses the real identity/generation owner; loading
+--- it is inert, and the storage backend above remains a dispatch recorder.
+assert(loadfile(ResolvePath("State/MSUF_ProfileRuntime.lua")))("MidnightSimpleUnitFrames", MSUF)
+
 local chunk, err = loadfile(CHAT_PATH)
 assert(chunk, err)
 chunk("MidnightSimpleUnitFrames", MSUF)

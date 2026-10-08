@@ -376,6 +376,19 @@ function World.New(root, flavor, options)
     -- Frames start shown and timers queue: a boot test must not run deferred
     -- work as a side effect of scheduling it.
     local widgets = options.stubs or Stubs.New({ shown = true, timer = "queue", time = 100 })
+    local nativeWidgetMethods = getmetatable(widgets.UIParent).__index
+    for _, state in ipairs({ "Normal", "Highlight", "Pushed" }) do
+        if not nativeWidgetMethods["Set" .. state .. "Texture"] then
+            nativeWidgetMethods["Set" .. state .. "Texture"] = function(self, value)
+                local key = "nativeButtonTexture" .. state
+                if type(value) == "string" or type(value) == "number" then
+                    self[key] = self[key] or self:CreateTexture()
+                    self[key]:SetTexture(value)
+                else self[key] = value end
+            end
+            nativeWidgetMethods["Get" .. state .. "Texture"] = function(self) return self["nativeButtonTexture" .. state] end
+        end
+    end
 
     local world = setmetatable({
         root = root,
@@ -506,6 +519,15 @@ function World.New(root, flavor, options)
     env.seterrorhandler = function() end
     env.debugprofilestop = function() return 0 end
     env.debugstack = function() return "" end
+    -- An unlearned specialization has no selection, but the native count is
+    -- numeric. Unknown callable-table stubs cannot stand in for this API.
+    env.C_SpecializationInfo = client.isForever and {
+        GetActiveSpecGroup = function() return 1 end,
+    } or {
+        GetNumSpecializations = function() return 0 end,
+        GetSpecialization = function() return nil end,
+        GetSpecializationInfo = function() return nil end,
+    }
     env.C_Timer = widgets:BuildTimerLibrary()
     env.C_Timer.NewTicker = env.C_Timer.NewTicker
 

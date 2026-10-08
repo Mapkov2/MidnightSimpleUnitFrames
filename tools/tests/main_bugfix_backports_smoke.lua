@@ -84,7 +84,14 @@ for _, flavor in ipairs({ "Mainline", "Vanilla", "TBC", "Mists", "Forever" }) do
         assert(route and route.state and route.state.gfScope == "party", query .. ": routed outside Party scope")
     end
     local raid = search._RoutingAPI.SearchRouteForTarget("gf_layout", "mythic raid frames", "")
-    assert(raid and raid.state and raid.state.gfScope == "mythicraid", "Mythic Raid routing changed")
+    -- Only Mainline has a Mythic Raid scope. Other clients route to Raid and
+    -- must persist that supported scope when the search result is applied.
+    local raidScope = flavor == "Mainline" and "mythicraid" or "raid"
+    assert(raid and raid.state and raid.state.gfScope == raidScope, flavor .. ": Mythic Raid route ignored client support")
+    M.SetMenuStateValue("gfScope", "party")
+    search._RoutingAPI.ApplySearchRoute("gf_layout", raid)
+    assert(M.gfScope == raidScope and M.EnsurePersistentMenuState().gfScope == raidScope,
+        flavor .. ": Mythic Raid route did not persist the supported scope")
     assert(search.Text.NormalizeSearchText("m plus") == "m plus", "ordinary words were rewritten")
 end
 print("PASS main bugfix backports: factory codec rejection, native decode order, dungeon query results and exact group scope")

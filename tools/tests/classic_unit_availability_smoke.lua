@@ -125,8 +125,8 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists", "Mainline" }) do
     -- Every client loads the shared page keywords, arena page included. The page
     -- record builder has to drop an unsupported unit page before it reads them:
     -- compiled on its own, the body past that gate stops at its first file local.
-    local recordBody = assert(s:match("local function AddSearchRecord%(records, seenRecords, pageInfo, label, anchor, kind, extraParts%)(.-)\nend"))
-    local addRecord = assert(loadstring("local M = ...; return function(records, seenRecords, pageInfo, label, anchor, kind, extraParts) "
+    local recordBody = assert(s:match("local function AddSearchRecord%(records, seenRecords, pageInfo, label, anchor, kind, extraParts, literalLabel%)(.-)\nend"))
+    local addRecord = assert(loadstring("local M = ...; return function(records, seenRecords, pageInfo, label, anchor, kind, extraParts, literalLabel) "
         .. recordBody .. " end"))(menu)
     for _, page in ipairs({ { "uf_arena", arena }, { "uf_boss", boss }, { "uf_player", true } }) do
         local pageRecords = {}

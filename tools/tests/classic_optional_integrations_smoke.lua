@@ -28,15 +28,23 @@ end
 toc:close()
 assert(initialized and ns.Client, "TOC must initialize Client before bootstrap")
 ns.ExportPublic = function(name, value) _G[name] = value end
--- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
-load("Kernel/MSUF_Require.lua")
+InCombatLockdown = function() return false end
+local manifest = assert(loadfile(repo .. "/tools/tests/client_manifest.lua"))()
+manifest.LoadSelected(repo, flavor, ns, {
+    "Kernel/MSUF_Require.lua", "Locales/MSUF_Localization.lua", "Kernel/MSUF_Util.lua",
+})
 MSUF_DB = { general = {} }
+MSUF_ActiveProfile = "Default"
+MSUF_EnsureDB = function() end
 MSUF_GetGeneralDB = function() return MSUF_DB.general end
 MSUF_EM2 = {}
 MSUF_EditModeAPI = { RegisterElement = function() error("external mover registered without addon") end }
-InCombatLockdown = function() return false end
+-- Preserve deferred startup; this contract applies the profile explicitly.
+local timers = {}
+C_Timer = { After = function(_, callback) timers[#timers + 1] = callback end }
 CreateFrame = function()
-    return { RegisterEvent = function() end, SetScript = function() end }
+    return { RegisterEvent = function() end, UnregisterEvent = function() end,
+        UnregisterAllEvents = function() end, SetScript = function() end }
 end
 load("Shell/EditMode/MSUF_EditMode_ExternalProvider.lua")
 for _, name in ipairs({ "Grid2", "Details", "Dominos", "Danders", "Blizzard" }) do
@@ -68,8 +76,12 @@ MSUF_ApplyCastbarVisualsForUnit MSUF_ApplyCurrentProfileGlobalUiScale]]):gmatch(
 end
 ns.UF = { DisableBlizzardFrames = function() end, RefreshElements = function() end }
 ns.GF = { RefreshFonts = function() end, RefreshColors = function() end, RefreshVisuals = function() end }
-ns.NumberFormat = { Refresh = function() end }
-load("State/MSUF_ProfileRuntime.lua")
+-- Required core providers precede the integration apply in the real graph.
+manifest.LoadSelected(repo, flavor, ns, {
+    "Runtime/MSUF_NumberFormat.lua", "State/MSUF_ProfileRuntime.lua", "Runtime/MSUF_UnitTooltips.lua",
+    "UnitFrames/Engine/Elements/MSUF_UF_Highlight.lua", "Features/Gameplay/MSUF_Feature_GameplayHelpers.lua",
+    "Features/Gameplay/MSUF_Feature_GameplayConfig.lua", "Features/Gameplay/MSUF_Feature_GameplayRuntime.lua",
+})
 load("Kernel/MSUF_RuntimeContracts.lua")
 ns.ProfileRuntime.Apply("NO_EXTERNAL_ADDONS", false)
 assert(calls.MSUF_UpdateAllFonts_Immediate, "profile apply aborted before final font pass")

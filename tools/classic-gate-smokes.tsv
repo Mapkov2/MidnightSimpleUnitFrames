@@ -369,6 +369,7 @@ clients+Forever	lua	tools/tests/auras3_normalize_trust_smoke.lua	{root} {flavor}
 -	lua	tools/tests/castbar_pool_preview_smoke.lua	{root}	Castbar pool preview smoke failed
 -	lua	tools/tests/interrupt_ready_perf_smoke.lua	{root}	Interrupt-ready perf smoke failed
 -	lua	tools/tests/interrupt_ready_visual_cache_smoke.lua	{root}	Interrupt-ready visual cache smoke failed
+-	lua	tools/tests/interrupt_ready_consumer_smoke.lua	{root}	Interrupt-ready consumer API (MSUF_HostAPI.GetKickReady) failed
 -	lua	tools/tests/focus_kick_cast_state_budget_smoke.lua	{root}	Focus interrupt tracker cast-state budget or layout ownership failed
 -	lua	tools/tests/empower_tick_blink_smoke.lua	{root}	Empower stage tick blink or its budget failed
 -	lua	tools/tests/castbar_hotpath_budget_smoke.lua	{root}	Castbar hotpath budget smoke failed
@@ -474,3 +475,70 @@ clients+Forever	lua	tools/tests/game_menu_combat_layout_smoke.lua	{root} {flavor
 clients+Forever	lua	tools/tests/resource_extras_preview_smoke.lua	{root} {flavor}	Additional resource examples: {flavor}
 clients+Forever	lua	tools/tests/resource_extras_layout_colors_smoke.lua	{root} {flavor}	Additional resource accordions and color shortcuts: {flavor}
 -	lua	tools/tests/power_foreign_token_text_skip_smoke.lua	{root}	Power foreign-token text skip smoke failed
+-	lua	tools/tests/power_border_color_smoke.lua	{root}	Power bar border color: compiler fallback, picker target, Copy To or preview drifted
+clients+Forever	lua	tools/tests/menu_group_design_smoke.lua	{root} {flavor}	Menu group hierarchy, portrait geometry and actions: {flavor}
+-	lua	tools/tests/release_skip_neutral_smoke.lua	{root}	Release tour neutral skip styling and action semantics
+
+-	lua	tools/tests/bh3_adapter_layout_smoke.lua	{root} danders	BH3 bh3_adapter_layout_smoke danders failed
+-	lua	tools/tests/bh3_adapter_layout_smoke.lua	{root} window	BH3 bh3_adapter_layout_smoke window failed
+-	lua	tools/tests/bh3_adapter_layout_smoke.lua	{root} tour	BH3 bh3_adapter_layout_smoke tour failed
+-	lua	tools/tests/bh3_arenacache_smoke.lua	{root}	BH3 bh3_arenacache_smoke  failed
+clients+Forever	lua	tools/tests/bh3_editmode_selection_smoke.lua	{root} {flavor} routes	BH3 bh3_editmode_selection_smoke routes failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_editmode_selection_smoke.lua	{root} {flavor} selection	BH3 bh3_editmode_selection_smoke selection failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_editmode_selection_smoke.lua	{root} {flavor} picker	BH3 bh3_editmode_selection_smoke picker failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_editmode_selection_smoke.lua	{root} {flavor} raid	BH3 bh3_editmode_selection_smoke raid failed: {flavor}
+-	lua	tools/tests/bh3_menu_accent_smoke.lua	{root}	BH3 bh3_menu_accent_smoke  failed
+-	lua	tools/tests/bh3_menu_animation_smoke.lua	{root}	BH3 bh3_menu_animation_smoke  failed
+clients+Forever	lua	tools/tests/bh3_menu_capabilities_smoke.lua	{root} {flavor} anchors	BH3 bh3_menu_capabilities_smoke anchors failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_capabilities_smoke.lua	{root} {flavor} gates	BH3 bh3_menu_capabilities_smoke gates failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_capabilities_smoke.lua	{root} {flavor} spec	BH3 bh3_menu_capabilities_smoke spec failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_capabilities_smoke.lua	{root} {flavor} spell	BH3 bh3_menu_capabilities_smoke spell failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_capabilities_smoke.lua	{root} {flavor} sorting	BH3 bh3_menu_capabilities_smoke sorting failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_group_sections_smoke.lua	{root} {flavor}	BH3 bh3_menu_group_sections_smoke  failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_history_smoke.lua	{root} {flavor}	BH3 bh3_menu_history_smoke  failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_input_smoke.lua	{root} {flavor}	BH3 bh3_menu_input_smoke  failed: {flavor}
+-	lua	tools/tests/bh3_menu_layer_overview_smoke.lua	{root}	BH3 bh3_menu_layer_overview_smoke  failed
+clients+Forever	lua	tools/tests/bh3_menu_lifecycle_state_smoke.lua	{root} {flavor} variants	BH3 bh3_menu_lifecycle_state_smoke variants failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_lifecycle_state_smoke.lua	{root} {flavor} focus	BH3 bh3_menu_lifecycle_state_smoke focus failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_lifecycle_state_smoke.lua	{root} {flavor} history	BH3 bh3_menu_lifecycle_state_smoke history failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_lifecycle_state_smoke.lua	{root} {flavor} native	BH3 bh3_menu_lifecycle_state_smoke native failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_lifecycle_state_smoke.lua	{root} {flavor} targets	BH3 bh3_menu_lifecycle_state_smoke targets failed: {flavor}
+-	lua	tools/tests/bh3_menu_locale_tracking_smoke.lua	{root}	BH3 bh3_menu_locale_tracking_smoke  failed
+clients+Forever	lua	tools/tests/bh3_menu_picker_profile_smoke.lua	{root} {flavor}	BH3 bh3_menu_picker_profile_smoke  failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_search_smoke.lua	{root} {flavor} identity	BH3 bh3_menu_search_smoke identity failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_search_smoke.lua	{root} {flavor} scope	BH3 bh3_menu_search_smoke scope failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_search_smoke.lua	{root} {flavor} alpha	BH3 bh3_menu_search_smoke alpha failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_menu_search_smoke.lua	{root} {flavor} profile	BH3 bh3_menu_search_smoke profile failed: {flavor}
+-	lua	tools/tests/bh3_menu_selection_edit_smoke.lua	{root}	BH3 bh3_menu_selection_edit_smoke  failed
+clients+Forever	lua	tools/tests/bh3_preview_state_smoke.lua	{root} {flavor}	BH3 bh3_preview_state_smoke  failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_profile_startup_smoke.lua	{root} {flavor} minimap	BH3 bh3_profile_startup_smoke minimap failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_profile_startup_smoke.lua	{root} {flavor} locale	BH3 bh3_profile_startup_smoke locale failed: {flavor}
+-	lua	tools/tests/bh3_runtime_afk_independent_smoke.lua	{root}	BH3 bh3_runtime_afk_independent_smoke  failed
+clients	lua	tools/tests/bh3_runtime_castbar_smoke.lua	{root} {flavor}	BH3 bh3_runtime_castbar_smoke  failed
+-	lua	tools/tests/bh3_runtime_clickcast_smoke.lua	{root}	BH3 bh3_runtime_clickcast_smoke  failed
+-	lua	tools/tests/bh3_runtime_clip_smoke.lua	{root}	BH3 bh3_runtime_clip_smoke  failed
+-	lua	tools/tests/bh3_runtime_cold_smoke.lua	{root}	BH3 bh3_runtime_cold_smoke  failed
+-	lua	tools/tests/bh3_runtime_combo_smoke.lua	{root}	BH3 bh3_runtime_combo_smoke  failed
+-	lua	tools/tests/bh3_runtime_compat_smoke.lua	{root}	BH3 bh3_runtime_compat_smoke  failed
+-	lua	tools/tests/bh3_runtime_eclipse_smoke.lua	{root}	BH3 bh3_runtime_eclipse_smoke  failed
+-	lua	tools/tests/bh3_runtime_focus_feedback_smoke.lua	{root}	BH3 bh3_runtime_focus_feedback_smoke  failed
+-	lua	tools/tests/bh3_runtime_focus_fill_smoke.lua	{root}	BH3 bh3_runtime_focus_fill_smoke  failed
+-	lua	tools/tests/bh3_runtime_followers_smoke.lua	{root}	BH3 bh3_runtime_followers_smoke  failed
+-	lua	tools/tests/bh3_runtime_geometry_smoke.lua	{root}	BH3 bh3_runtime_geometry_smoke  failed
+-	lua	tools/tests/bh3_runtime_group_visibility_smoke.lua	{root}	BH3 bh3_runtime_group_visibility_smoke  failed
+-	lua	tools/tests/bh3_runtime_integration_smoke.lua	{root}	BH3 bh3_runtime_integration_smoke  failed
+clients+Forever	lua	tools/tests/bh3_runtime_interrupt_eligibility_smoke.lua	{root} {flavor}	BH3 bh3_runtime_interrupt_eligibility_smoke  failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_runtime_nudge_history_smoke.lua	{root} {flavor} shared	BH3 bh3_runtime_nudge_history_smoke shared failed: {flavor}
+clients+Forever	lua	tools/tests/bh3_runtime_nudge_history_smoke.lua	{root} {flavor} fallback	BH3 bh3_runtime_nudge_history_smoke fallback failed: {flavor}
+-	lua	tools/tests/bh3_runtime_portrait_click_smoke.lua	{root}	BH3 bh3_runtime_portrait_click_smoke  failed
+-	lua	tools/tests/bh3_runtime_prediction_capability_smoke.lua	{root}	BH3 bh3_runtime_prediction_capability_smoke  failed
+clients+Forever	lua	tools/tests/bh3_runtime_profile_names_smoke.lua	{root} {flavor}	BH3 bh3_runtime_profile_names_smoke  failed: {flavor}
+-	lua	tools/tests/bh3_runtime_scene_smoke.lua	{root}	BH3 bh3_runtime_scene_smoke  failed
+-	lua	tools/tests/bh3_runtime_state_smoke.lua	{root}	BH3 bh3_runtime_state_smoke  failed
+-	lua	tools/tests/bh3_screencache_smoke.lua	{root}	BH3 bh3_screencache_smoke  failed
+clients+Forever	lua	tools/tests/bh3_texture_strata_smoke.lua	{root} {flavor}	BH3 bh3_texture_strata_smoke  failed: {flavor}
+-	lua	tools/tests/bh3_menu_search_smoke.lua	{root} Mainline aura	BH3 exact aura search failed: Mainline
+-	lua	tools/tests/bh3_menu_search_smoke.lua	{root} Forever aura	BH3 exact aura search failed: Forever
+clients+Forever	lua	tools/tests/bh3_guided_page_reuse_smoke.lua	{root} {flavor}	BH3 bh3_guided_page_reuse_smoke failed: {flavor}
+-	lua	tools/tests/bh3_locale_completion_smoke.lua	{root}	BH3 locale completion failed
+clients+Forever	lua	tools/tests/bars_outline_override_smoke.lua	{root} {flavor}	Bars outline Override inheritance and repaint regression: {flavor}

@@ -328,6 +328,90 @@
    "evidence": "MSUF_Menu2_ResourceExtras.lua: Colors > Resources > Resource marks and thresholds, colors_resource_marks; resource_extras_layout_colors_smoke.lua verifies shared selected-rule color storage, direct search routing and context-picker restoration.",
    "reason": "The mark color control moved to the canonical Colors page; the resource-mark accordion retains the shared context color shortcut, and both edit the same bars.resourceMarks rule color without changing profile keys.",
    "date": "2026-10-06"
+  },
+  {
+   "category": "settings",
+   "items": [
+    "classic: gf_mythicraid.targetIndicator"
+   ],
+   "basis": "dead",
+   "evidence": "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua: Client.SupportsGroupKind already restricts mythicraid to Midnight, including in the task baseline. MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua and MSUF_Menu2_GroupLayout.lua use SupportsFrameScope to gate the two native Mythic-only controls. tools/tests/menu_pages_client_gates_smoke.lua checks the client contract. The identical main-index rows and setting remain.",
+   "reason": "Remove only Classic-index entries for a group scope unsupported by Classic clients; preserve Midnight Mythic Raid controls and all stored configuration.",
+   "date": "2026-10-08"
+  },
+  {
+   "category": "settings",
+   "items": [
+    "classic: pettarget.useBlizzardFrame",
+    "main: pettarget.useBlizzardFrame"
+   ],
+   "basis": "dead",
+   "evidence": "MidnightSimpleUnitFrames/Kernel/MSUF_BlizzardFrames.lua: DisableBlizzardFrames has native player/pet/target/targettarget/focus/focustarget/boss/arena owners and no Pet Target owner. MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua keeps the Pet Target switch disabled with the no-native-frame explanation and blocks its setter; MSUF_OptionsLOD_Bootstrap.lua: SupportsSearchTarget excludes only pettarget.useBlizzardFrame.",
+   "reason": "Hide the search setting and row for the unavailable native Blizzard Pet Target frame. The MSUF Pet Target page, frame and portable saved field remain unchanged.",
+   "date": "2026-10-08"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: gf_auras | Buff > Blacklist | Add custom buff | button | action aura_group_blacklist_add_spell | auras.group-workspace.scope.mythicraid.lane.buff.blacklist.add",
+    "classic: gf_auras | Buff > Blacklist | Add entire set | button | action aura_group_blacklist_add_preset | auras.group-workspace.scope.mythicraid.lane.buff.blacklist.add-preset-set",
+    "classic: gf_auras | Buff > Blacklist | Add spell | button | action aura_group_blacklist_add_spell | auras.group-workspace.scope.mythicraid.lane.buff.blacklist.add-preset-spell",
+    "classic: gf_auras | Debuff > Blacklist | Add entire set | button | action aura_group_blacklist_add_preset | auras.group-workspace.scope.mythicraid.lane.debuff.blacklist.add-preset-set",
+    "classic: gf_auras | Debuff > Blacklist | Add spell | button | action aura_group_blacklist_add_spell | auras.group-workspace.scope.mythicraid.lane.debuff.blacklist.add-preset-spell"
+   ],
+   "basis": "moved",
+   "evidence": "MidnightSimpleUnitFrames_Options/MSUF_OptionsLOD_Bootstrap.lua: NormalizeGroupScope and SupportsSearchTarget normalize/filter unsupported mythicraid routes on Classic. MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_Auras_Group.lua: BuildCompactGroupAuraBlacklist retains Add custom buff, Add entire set and Add spell with the same action keys under group-workspace.scope.raid; each of the five exact corresponding Classic Raid rows is present in the final index.",
+   "reason": "Classic clients use the canonical Raid blacklist actions instead of duplicate routes through the unsupported Mythic Raid scope; the actions and backing blacklist functionality remain.",
+   "date": "2026-10-08"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: gf_layout | Layout > Field | Hide groups 5–8 in Mythic raids | toggle | no key | group.field.hidemythicgroupsfivetoeight",
+    "classic: opt_misc | Group > Target | Mythic Raid frames | toggle | gf_mythicraid.targetIndicator | id/opt_misc/menu2.opt.misc.global.group.target.mythicraid"
+   ],
+   "basis": "dead",
+   "evidence": "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua: Client.SupportsGroupKind already restricts mythicraid to Midnight, including in the task baseline. MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GlobalMisc.lua and MSUF_Menu2_GroupLayout.lua use SupportsFrameScope to gate the two native Mythic-only controls. tools/tests/menu_pages_client_gates_smoke.lua checks the client contract. The identical main-index rows and setting remain.",
+   "reason": "Remove only Classic-index entries for a group scope unsupported by Classic clients; preserve Midnight Mythic Raid controls and all stored configuration.",
+   "date": "2026-10-08"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: uf_arena | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "classic: uf_boss | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "classic: uf_focus | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "classic: uf_focustarget | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "classic: uf_pet | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "classic: uf_pettarget | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "classic: uf_player | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "classic: uf_target | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "classic: uf_targettarget | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "main: uf_arena | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "main: uf_boss | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "main: uf_focus | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "main: uf_focustarget | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "main: uf_pet | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "main: uf_pettarget | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "main: uf_player | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "main: uf_target | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata",
+    "main: uf_targettarget | Unit > Texture Layer | Frame strata | dropdown | no key | unit.texture_layer.strata"
+   ],
+   "basis": "dead",
+   "evidence": "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_TextureLayer.lua: ApplyLayerStrata already inherits the owning frame strata and ignores the legacy per-texture value. MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitTextureLayer.lua replaces the inert dropdown with an explanation and retains the Layer (0-30) control. tools/tests/bh3_texture_strata_smoke.lua checks the working layer setter and unchanged saved strata on all five clients.",
+   "reason": "Remove only search routes for a setting the texture runtime cannot apply. Existing saved strata fields remain intact; the supported relative layer control stays searchable.",
+   "date": "2026-10-08"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: uf_pettarget | Unit > Basics | Force Blizzard frame on | toggle | pettarget.useBlizzardFrame | unit.basics.force_blizzard_frame",
+    "main: uf_pettarget | Unit > Basics | Force Blizzard frame on | toggle | pettarget.useBlizzardFrame | unit.basics.force_blizzard_frame"
+   ],
+   "basis": "dead",
+   "evidence": "MidnightSimpleUnitFrames/Kernel/MSUF_BlizzardFrames.lua: DisableBlizzardFrames has native player/pet/target/targettarget/focus/focustarget/boss/arena owners and no Pet Target owner. MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua keeps the Pet Target switch disabled with the no-native-frame explanation and blocks its setter; MSUF_OptionsLOD_Bootstrap.lua: SupportsSearchTarget excludes only pettarget.useBlizzardFrame.",
+   "reason": "Hide the search setting and row for the unavailable native Blizzard Pet Target frame. The MSUF Pet Target page, frame and portable saved field remain unchanged.",
+   "date": "2026-10-08"
   }
  ]
 }

@@ -17,6 +17,7 @@ CANCEL	constant	Blizzard UI constant, enum or shared string
 CLOSE	constant	Blizzard UI constant, enum or shared string
 C_AddOns	namespace	Blizzard C_* namespace
 C_ChatInfo	namespace	Blizzard C_* namespace
+C_ClientScene	namespace	Blizzard client scene namespace; upstream/live:Blizzard_ClientSceneVisManager/Blizzard_ClientSceneVisManager.lua:21 calls IsSceneTypeActive; group runtime probes namespace, method and enum before use
 C_CurveUtil	namespace	Blizzard native curve namespace; upstream/live:Blizzard_APIDocumentationGenerated/CurveUtilDocumentation.lua:5,11 (CreateColorCurve); ResourceMarks probes namespace/method and falls back to public values
 C_DurationUtil	namespace	Blizzard native duration namespace; upstream/live and upstream/forever:Blizzard_APIDocumentationGenerated/DurationUtilDocumentation.lua:5,11 (CreateDuration); ManaExtras probes namespace/method before use
 C_Housing	namespace	Blizzard housing namespace; upstream/live and upstream/forever:Blizzard_Game/Mainline/EventImplementation.lua reads C_Housing.IsInsideHouseOrPlot; the group runtime probes namespace/method before use (absent on clients without housing)

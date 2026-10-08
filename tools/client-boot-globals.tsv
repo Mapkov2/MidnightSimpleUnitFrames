@@ -27,7 +27,6 @@ C_IncomingSummon	*	namespace	Blizzard C_* namespace the harness does not model
 C_NamePlate	*	namespace	Blizzard C_* namespace the harness does not model
 C_PetInfo	Vanilla,TBC,Forever	namespace	Blizzard C_* namespace the harness does not model
 C_PlayerInteractionManager	*	namespace	Blizzard C_* namespace the harness does not model
-C_SpecializationInfo	*	namespace	Blizzard C_* namespace the harness does not model
 C_Spell	*	namespace	Blizzard C_* namespace the harness does not model
 C_SpellBook	*	namespace	Blizzard C_* namespace the harness does not model
 C_StringUtil	*	namespace	Blizzard C_* namespace the harness does not model
@@ -67,8 +66,9 @@ GetRuneCooldown	*	api	Blizzard client API the harness does not model
 GetShapeshiftForm	*	api	Blizzard client API the harness does not model
 GetShapeshiftFormID	*	api	Blizzard client API the harness does not model
 GetShapeshiftFormInfo	*	api	Blizzard client API the harness does not model
-GetSpecialization	*	api	Blizzard client API the harness does not model
-GetSpecializationInfo	*	api	Blizzard client API the harness does not model
+GetNumSpecializations	Forever	api	Optional deprecated specialization alias probed by Kernel/MSUF_Util.lua; absent on Forever, whose profiles use talent groups
+GetSpecialization	Forever	api	Blizzard client API the harness does not model
+GetSpecializationInfo	Forever	api	Blizzard client API the harness does not model
 GetSpellInfo	*	api	Blizzard client API the harness does not model
 GetTimePreciseSec	*	api	Blizzard client API the harness does not model
 GetUnitChargedPowerPoints	*	unit	Blizzard unit-state API; the harness answers it with a stub instead of a live unit

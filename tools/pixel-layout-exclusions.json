@@ -568,5 +568,11 @@
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented combat event driver for the Forever pad navigation"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented event-only driver replays protected portrait click setup after combat; no visual geometry"
   }
 ]

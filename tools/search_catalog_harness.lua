@@ -66,6 +66,8 @@ local M = assert(MSUF.MSUF2, "WoW stubs did not create MSUF2")
 if not MSUF.Require then
     assert(loadfile(Join(CORE, "Kernel/MSUF_Require.lua")))("MidnightSimpleUnitFrames", MSUF)
 end
+-- Load the shared specialization provider before pages query it.
+assert(loadfile(Join(CORE, "Kernel/MSUF_Util.lua")))("MidnightSimpleUnitFrames", MSUF)
 -- The synchronization selector reads actual named profile storage. Reuse the
 -- pure shipped accessor rather than introducing a generator-only replacement.
 local ProfileSlice = require("msuf_source_slice")
@@ -88,6 +90,8 @@ do
     local absentDataMember = {
         Instructions = true, Left = true, Middle = true, Mid = true, Right = true,
         Text = true, Low = true, High = true,
+        TopLeftCorner = true, TopRightCorner = true, BottomLeftCorner = true, BottomRightCorner = true,
+        TopEdge = true, BottomEdge = true, LeftEdge = true, RightEdge = true, Center = true,
     }
     local function PatchRegion(region)
         local mt = region and getmetatable(region)
@@ -217,6 +221,9 @@ do
     widgetsChunk("MidnightSimpleUnitFrames", MSUF)
     assert(MSUF.UI and type(MSUF.UI.ShowPrompt) == "function", "the core prompt layer did not load")
 end
+
+-- The Options TOC loads this namespace/capability bridge before its XML files.
+assert(loadfile(Join(OPTIONS, "MSUF_OptionsLOD_Bootstrap.lua")))("MidnightSimpleUnitFrames_Options", MSUF)
 
 -- Load the real Menu2 product modules in their shipped XML order.  No catalog
 -- records are invented by this audit.  A caller that audits a non-Mainline client
