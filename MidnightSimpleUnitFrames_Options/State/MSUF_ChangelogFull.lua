@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "31C2DF742EAB21A5672FD3A5BF0E7D06DD5427B40F2D1AAF88710A811F71188F",
+    sourceSha256 = "72FD742EC42A157F239B288C55685035100939C67D0B53DBFB9F49C727A22FBB",
     currentVersion = "6.50",
     historyFromVersion = "6.02",
     previousVersion = "6.02",
@@ -78,7 +78,16 @@ local data = {
                         },
                         {
                             text = "Cosmetic Texture Layering: decorate each Unit Frame with up to three independent texture layers. Choose textures or supported Blizzard artwork and adjust placement, size, opacity, colors, crop and mirroring, with matching previews.",
-                            linkless = true,
+                            link = {
+                                pageKey = "uf_player",
+                                query = "enable texture layer",
+                                label = "Enable Texture Layer",
+                                sectionId = "texture_layer",
+                                controlId = "menu2.uf_player.unit.texture_layer.enabled",
+                                settingKey = "player.texLayerEnabled",
+                                prepareKind = "unitTextureLayer",
+                                prepareValue = "1_setup",
+                            },
                         },
                         {
                             text = "Unified client support: one source for Midnight, Classic Era, TBC, Mists and WoW Forever, with client-appropriate settings and runtime behavior.",
@@ -234,7 +243,14 @@ local data = {
                         },
                         {
                             text = "Healer mana colors: text color lives under Colors > Group > Healer mana bars and remains available through the section's three-dot shortcut. Existing values are retained, and edits follow the shared Party, Raid and Mythic Raid color behavior.",
-                            linkless = true,
+                            link = {
+                                pageKey = "opt_colors",
+                                query = "healer mana text color",
+                                label = "Healer mana text color",
+                                sectionId = "colors_group_frames_healer_mana",
+                                controlId = "menu2.opt.colors.advanced.group.frame.healer.mana.text.color",
+                                settingKey = "gf_party.healerManaTextR",
+                            },
                         },
                         {
                             text = "Threat percentage: Classic Era, TBC and Forever can show Threat % on supported Target, Focus, Boss, Party and Raid frames; 100% means you have aggro. Group values use your current target. Placement, size, background and low/medium/high colors are adjustable. Party starts enabled in the supplied defaults; Raid is opt-in.",
@@ -251,7 +267,16 @@ local data = {
                         },
                         {
                             text = "Group level text: Party and Raid can show optional level text with difficulty coloring; it starts disabled.",
-                            linkless = true,
+                            link = {
+                                pageKey = "gf_indicators",
+                                query = "group level text",
+                                label = "Level Text",
+                                sectionId = "sicons",
+                                controlId = "menu2.gf_indicators.group.status.selected.enabled",
+                                settingKey = "gf_party.levelText",
+                                prepareKind = "groupStatus",
+                                prepareValue = "party_levelText",
+                            },
                         },
                     },
                 },
@@ -341,7 +366,16 @@ local data = {
                         },
                         {
                             text = "Incoming-heal prediction: supported Classic clients can opt into prediction from all healers; player-only prediction remains the default.",
-                            linkless = true,
+                            link = {
+                                pageKey = "opt_bars",
+                                query = "include healing from others",
+                                label = "Include healing from others",
+                                sectionId = "bars_absorb",
+                                controlId = "menu2.opt.bars.global.absorb.heal.prediction.all.healers",
+                                settingKey = "general.healPredAllHealers",
+                                prepareKind = "barsScope",
+                                prepareValue = "shared",
+                            },
                         },
                         {
                             text = "Health and prediction appearance: the unified line includes independent Full bar or Missing health only backgrounds, configurable color sources and Keep Absorbs + Prediction Visible.",
@@ -394,11 +428,29 @@ local data = {
                         },
                         {
                             text = "Styled shaped borders: True Outline and Texture borders follow rounded corners and slanted edges on Unit and Group Frames, with matching style, color and thickness in previews. Configure them under Bars > Frame Outline.",
-                            linkless = true,
+                            link = {
+                                pageKey = "opt_bars",
+                                query = "frame outline style",
+                                label = "Outline style",
+                                sectionId = "bars_outline",
+                                controlId = "menu2.opt.bars.global.outline.texture",
+                                settingKey = "bars.barOutlineTexture",
+                                prepareKind = "barsScope",
+                                prepareValue = "shared",
+                            },
                         },
                         {
                             text = "Frame-shape controls: configure shapes through Bars and Group Layout. The duplicate shape picker in each unit's Frame Basics section has been removed.",
-                            linkless = true,
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "group frame bar shape",
+                                label = "Frame bar shape",
+                                sectionId = "general",
+                                controlId = "menu2.gf_layout.group.basics.frame_bar_shape",
+                                settingKey = "gf_party.frameBarShape",
+                                prepareKind = "groupScope",
+                                prepareValue = "party",
+                            },
                         },
                         {
                             text = "Per-frame cut direction: Slanted Unit, Group and castbar scopes can follow the shared cut direction or use their own. Bars, castbar and group previews show the chosen cut.",
@@ -424,11 +476,29 @@ local data = {
                         },
                         {
                             text = "Texture Layer strata: layers always draw at their Unit Frame's strata. The ineffective strata choice was replaced by an explanation in the layer settings.",
-                            linkless = true,
+                            link = {
+                                pageKey = "uf_player",
+                                query = "texture layer layer",
+                                label = "Layer (0-30)",
+                                sectionId = "texture_layer",
+                                controlId = "menu2.uf_player.unit.texture_layer.level",
+                                settingKey = "player.texLayerLevel",
+                                prepareKind = "unitTextureLayer",
+                                prepareValue = "1_advanced",
+                            },
                         },
                         {
                             text = "Cosmetic Texture Layers: up to three decoration slots per Unit Frame, with independent textures, geometry, opacity and layering. Crop, mirror, class-color and health-gradient options support decorative accents, with optional target/combat conditions and matching previews.",
-                            linkless = true,
+                            link = {
+                                pageKey = "uf_player",
+                                query = "enable texture layer",
+                                label = "Enable Texture Layer",
+                                sectionId = "texture_layer",
+                                controlId = "menu2.uf_player.unit.texture_layer.enabled",
+                                settingKey = "player.texLayerEnabled",
+                                prepareKind = "unitTextureLayer",
+                                prepareValue = "1_setup",
+                            },
                         },
                         {
                             text = "Portrait dragons: Blizzard-style portraits offer elite, rare and boss decorations, with additional placement, size and layering choices.",
@@ -547,7 +617,14 @@ local data = {
                         },
                         {
                             text = "Marks and thresholds: place absolute or percentage marks on Player Power, Class Resource or Alternative Mana; restrict by power type, choose width and color, and change color above or below a threshold.",
-                            linkless = true,
+                            link = {
+                                pageKey = "classpower",
+                                query = "add resource mark",
+                                label = "Add resource mark",
+                                sectionId = "classpower_resource_marks",
+                                controlId = "menu2.classpower.advanced.resource.extras.marks.add",
+                                settingKey = "bars.resourceMarks",
+                            },
                         },
                         {
                             text = "Mana spend preview: show upcoming mana costs. Supported clients also provide regeneration-pause and mana-return helpers.",
@@ -731,7 +808,16 @@ local data = {
                         },
                         {
                             text = "Corner Show when missing: corner indicators set to Show when missing light up while the aura is missing on Classic clients. Retail and WoW Forever explain why the choice is unavailable there and keep the saved setting.",
-                            linkless = true,
+                            link = {
+                                pageKey = "gf_indicators",
+                                query = "corner indicator show when missing",
+                                label = "When",
+                                sectionId = "ci",
+                                controlId = "menu2.gf_indicators.group.corner.editor.mode",
+                                settingKey = "gf_party.ciCustomTL.mode",
+                                prepareKind = "groupCornerSlot",
+                                prepareValue = "party_TL",
+                            },
                         },
                     },
                 },
@@ -786,11 +872,29 @@ local data = {
                         },
                         {
                             text = "Buff reminder rules: optional glow, tank-only Thorns and mana-user rules for Intellect and Spirit.",
-                            linkless = true,
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "buff coverage glow missing icons",
+                                label = "Glow missing icons",
+                                sectionId = "buff_coverage",
+                                controlId = "menu2.gf_layout.group.field.buffcoverageglow",
+                                settingKey = "gf_party.buffCoverageGlow",
+                                prepareKind = "groupScope",
+                                prepareValue = "party",
+                            },
                         },
                         {
                             text = "Restricted-state visibility: coverage icons hide in restricted states by default. The optional combat-display mode retains known coverage where fresh aura data is unavailable.",
-                            linkless = true,
+                            link = {
+                                pageKey = "gf_layout",
+                                query = "buff coverage keep showing during combat",
+                                label = "Keep showing during combat",
+                                sectionId = "buff_coverage",
+                                controlId = "menu2.gf_layout.group.field.buffcoveragecombat",
+                                settingKey = "gf_party.buffCoverageCombat",
+                                prepareKind = "groupScope",
+                                prepareValue = "party",
+                            },
                         },
                     },
                 },

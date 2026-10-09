@@ -1150,6 +1150,38 @@ end
 -- linked view and the widget's prepare hook only confirms the selection;
 -- rebuilding from inside the prepare hook instead would re-register the
 -- control mid-resolution and orphan the anchor widget.
+-- Release-link views (M.DeclareExactViewContract and the Bars scope): the
+-- route selects the view before the page builds; the control's hook confirms
+-- it. Returns nil for every other kind.
+local function SearchRouteExactView(route, pageKey, exactTarget)
+    local kind, value = exactTarget.prepareKind, tostring(exactTarget.prepareValue or "")
+    if kind == "barsScope" then
+        route = type(route) == "table" and route or {}
+        if pageKey == "opt_bars" and value == "shared" then SearchRouteSetGeneral(route, "hpPowerTextSelectedKey", value) end
+        return route
+    elseif kind == "unitTextureLayer" then
+        route = type(route) == "table" and route or {}
+        local unit, slot, tab = SEARCH_UNIT_BY_PAGE[pageKey], value:match("^([123])_(%a+)$")
+        if unit and slot then
+            SearchRouteSetTable(route, "unitTexLayerSlot", unit, tonumber(slot))
+            SearchRouteSetTable(route, "unitTexLayerTab", unit, tab)
+        end
+        return route
+    elseif kind == "groupStatus" or kind == "groupCornerSlot" then
+        route = type(route) == "table" and route or {}
+        local scope, view = value:match("^(%a+)_(%w+)$")
+        if pageKey == "gf_indicators" and scope then
+            SearchRouteSetState(route, "gfScope", M.NormalizeGroupScope(scope))
+            if kind == "groupStatus" then
+                SearchRouteSetState(route, "gfStatusIconSelection", view)
+                SearchRouteSetTable(route, "gfStatusIconTabSelection", M.NormalizeGroupScope(scope), "basic")
+            else
+                SearchRouteSetState(route, "gfCornerSlotSelection", view)
+            end
+        end
+        return route
+    end
+end
 local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
     if type(exactTarget) ~= "table" then return route end
     local workspaceKind = exactTarget.prepareKind == "classPowerWorkspace" and exactTarget.prepareValue
@@ -1200,6 +1232,8 @@ local function SearchRouteApplyExactPrepare(route, pageKey, exactTarget)
         SearchRouteSetNestedTable(route, "gfAuraToolSelection", scope, lane, tool)
         return route
     end
+    local viewRoute = SearchRouteExactView(route, pageKey, exactTarget)
+    if viewRoute then return viewRoute end
     if exactTarget.prepareKind ~= "unitAuraWorkspace" then return route end
     local unit = SEARCH_UNIT_BY_PAGE[pageKey]
     local tab, tool = tostring(exactTarget.prepareValue or ""):match("^(%w+)_(%w+)$")

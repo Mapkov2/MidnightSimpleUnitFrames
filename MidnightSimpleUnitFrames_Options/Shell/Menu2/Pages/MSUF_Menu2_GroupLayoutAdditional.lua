@@ -156,8 +156,10 @@ local function BuildBuffCoverage(ctx, b)
         BindScopeToggle(ctx, W.ToggleAt(section, BuffLabel(entry), x, y, width), entry.key, entry.default, "visual")
     end
     BindScopeToggle(ctx, W.ToggleAt(section, "Thorns only on tanks", 32, -194, width), "buffCoverageThornsTankOnly", true, "visual")
-    BindScopeToggle(ctx, W.ToggleAt(section, "Glow missing icons", width + 64, -194, width), "buffCoverageGlow", false, "visual")
-    BindScopeToggle(ctx, W.ToggleAt(section, "Keep showing during combat", 32, -230, width * 2), "buffCoverageCombat", false, "visual")
+    WithExactGroupScope(BindScopeToggle(ctx, W.ToggleAt(section, "Glow missing icons", width + 64, -194, width),
+        "buffCoverageGlow", false, "visual"), "buffCoverageGlow")
+    WithExactGroupScope(BindScopeToggle(ctx, W.ToggleAt(section, "Keep showing during combat", 32, -230, width * 2),
+        "buffCoverageCombat", false, "visual"), "buffCoverageCombat")
     ScopeSlider(ctx, section, "Icon size", 8, 48, 1, width, "buffCoverageSize", 14, "visual", 32, -316, width, "LEFT")
     ScopeDropdown(ctx, section, "Icon anchor", ICON_ANCHORS, width, "buffCoverageAnchor", "BOTTOM", "visual", width + 64, -316, width, "LEFT")
     ScopeSlider(ctx, section, "Horizontal offset", -200, 200, 1, width, "buffCoverageX", 0, "visual", 32, -406, width, "LEFT")

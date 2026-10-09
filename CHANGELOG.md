@@ -15,7 +15,7 @@
 - **Slanted Frames:** angular shapes for supported Unit and Group Frames, Power bars, castbars and Class Resources. True Outline and Texture borders now follow both Slanted and Rounded edges, keep the selected outline color, and each frame scope can use its own cut direction.
 <!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_slanted","controlId":"menu2.opt.bars.global.slanted.enabled","settingKey":"bars.slantedBarsEnabled","prepareKind":"","prepareValue":"","query":"enable slanted bars","label":"Enable slanted bars"} -->
 - **Cosmetic Texture Layering:** decorate each Unit Frame with up to three independent texture layers. Choose textures or supported Blizzard artwork and adjust placement, size, opacity, colors, crop and mirroring, with matching previews.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"texture_layer","controlId":"menu2.uf_player.unit.texture_layer.enabled","settingKey":"player.texLayerEnabled","prepareKind":"unitTextureLayer","prepareValue":"1_setup","query":"enable texture layer","label":"Enable Texture Layer"} -->
 - **Unified client support:** one source for Midnight, Classic Era, TBC, Mists and WoW Forever, with client-appropriate settings and runtime behavior.
 <!-- msuf-menu-link: none -->
 
@@ -44,11 +44,11 @@
 - **Header switches:** Name strip, Member targets, Pet frames, Allied boss frames, Healer mana bars and Forever Buff coverage can be toggled while their accordion is closed.
 <!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"healer_mana","controlId":"menu2.gf_layout.group.field.healermanaenabled","settingKey":"gf_raid.healerManaEnabled","prepareKind":"groupScope","prepareValue":"raid","query":"healer mana bars","label":"Healer mana bars"} -->
 - **Healer mana colors:** text color lives under Colors > Group > Healer mana bars and remains available through the section's three-dot shortcut. Existing values are retained, and edits follow the shared Party, Raid and Mythic Raid color behavior.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_group_frames_healer_mana","controlId":"menu2.opt.colors.advanced.group.frame.healer.mana.text.color","settingKey":"gf_party.healerManaTextR","prepareKind":"","prepareValue":"","query":"healer mana text color","label":"Healer mana text color"} -->
 - **Threat percentage:** Classic Era, TBC and Forever can show Threat % on supported Target, Focus, Boss, Party and Raid frames; 100% means you have aggro. Group values use your current target. Placement, size, background and low/medium/high colors are adjustable. Party starts enabled in the supplied defaults; Raid is opt-in.
 <!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"status_icons","controlId":"menu2.uf_target.unit.status.selected.enabled","settingKey":"target.showThreatIndicator","prepareKind":"unitStatus","prepareValue":"statusThreat","query":"target threat percent","label":"Threat %"} -->
 - **Group level text:** Party and Raid can show optional level text with difficulty coloring; it starts disabled.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"gf_indicators","sectionId":"sicons","controlId":"menu2.gf_indicators.group.status.selected.enabled","settingKey":"gf_party.levelText","prepareKind":"groupStatus","prepareValue":"party_levelText","query":"group level text","label":"Level Text"} -->
 
 ### Unit frames and status information
 
@@ -67,7 +67,7 @@
 - **Forever names:** choose full character name, first name or surname through the Fonts page where the name is readable.
 <!-- msuf-menu-link: {"pageKey":"opt_fonts","sectionId":"fonts_name_shortening","controlId":"menu2.opt.fonts.global.name.shortening.character.name.parts","settingKey":"general.characterNameParts","prepareKind":"","prepareValue":"","query":"character names first name surname","label":"Character names (all frames)"} -->
 - **Incoming-heal prediction:** supported Classic clients can opt into prediction from all healers; player-only prediction remains the default.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_absorb","controlId":"menu2.opt.bars.global.absorb.heal.prediction.all.healers","settingKey":"general.healPredAllHealers","prepareKind":"barsScope","prepareValue":"shared","query":"include healing from others","label":"Include healing from others"} -->
 - **Health and prediction appearance:** the unified line includes independent Full bar or Missing health only backgrounds, configurable color sources and Keep Absorbs + Prediction Visible.
 <!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_background","controlId":"menu2.opt.colors.advanced.background.fill.mode","settingKey":"general.barBgFillMode","prepareKind":"","prepareValue":"","query":"background fill missing health only","label":"Background Fill"} -->
 - **Text visibility:** the unified line retains independent Name, Health and Power mouseover visibility with fade timing, and injured-only Unit Frame visibility.
@@ -80,17 +80,17 @@
 - **Rounded fallback:** turning off Slanted restores the active Rounded fallback without discarding saved frame styles, including imported profiles.
 <!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_rounded","controlId":"menu2.opt.bars.global.rounded.rounded.frames.enabled","settingKey":"bars.roundedFramesEnabled","prepareKind":"","prepareValue":"","query":"rounded frame texture","label":"Rounded frame texture"} -->
 - **Styled shaped borders:** True Outline and Texture borders follow rounded corners and slanted edges on Unit and Group Frames, with matching style, color and thickness in previews. Configure them under Bars > Frame Outline.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_outline","controlId":"menu2.opt.bars.global.outline.texture","settingKey":"bars.barOutlineTexture","prepareKind":"barsScope","prepareValue":"shared","query":"frame outline style","label":"Outline style"} -->
 - **Frame-shape controls:** configure shapes through Bars and Group Layout. The duplicate shape picker in each unit's Frame Basics section has been removed.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"general","controlId":"menu2.gf_layout.group.basics.frame_bar_shape","settingKey":"gf_party.frameBarShape","prepareKind":"groupScope","prepareValue":"party","query":"group frame bar shape","label":"Frame bar shape"} -->
 - **Per-frame cut direction:** Slanted Unit, Group and castbar scopes can follow the shared cut direction or use their own. Bars, castbar and group previews show the chosen cut.
 <!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_slanted","controlId":"menu2.opt.bars.global.slanted.direction","settingKey":"bars.slantedBarDirection","prepareKind":"","prepareValue":"","query":"cut direction","label":"Cut direction"} -->
 - **Outline colors across shapes:** Texture and True Outline borders use the selected outline color on square, rounded and slanted frames, while active highlights keep their own colors. Set the shared color under Colors > Bar & Prediction Colors > Bar Outline Color.
 <!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_bar_colors","controlId":"menu2.opt.colors.advanced.bar.outline.color","settingKey":"general.barOutlineColor","prepareKind":"","prepareValue":"","query":"bar outline color","label":"Bar Outline Color"} -->
 - **Texture Layer strata:** layers always draw at their Unit Frame's strata. The ineffective strata choice was replaced by an explanation in the layer settings.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"texture_layer","controlId":"menu2.uf_player.unit.texture_layer.level","settingKey":"player.texLayerLevel","prepareKind":"unitTextureLayer","prepareValue":"1_advanced","query":"texture layer layer","label":"Layer (0-30)"} -->
 - **Cosmetic Texture Layers:** up to three decoration slots per Unit Frame, with independent textures, geometry, opacity and layering. Crop, mirror, class-color and health-gradient options support decorative accents, with optional target/combat conditions and matching previews.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"texture_layer","controlId":"menu2.uf_player.unit.texture_layer.enabled","settingKey":"player.texLayerEnabled","prepareKind":"unitTextureLayer","prepareValue":"1_setup","query":"enable texture layer","label":"Enable Texture Layer"} -->
 - **Portrait dragons:** Blizzard-style portraits offer elite, rare and boss decorations, with additional placement, size and layering choices.
 <!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"portrait","controlId":"menu2.uf_target.unit.portrait.portraitblizzardelite","settingKey":"target.portraitBlizzardElite","prepareKind":"unitPortraitTab","prepareValue":"border","query":"elite rare dragon portrait","label":"Elite and rare dragon"} -->
 - **Portrait connector and rim:** add the bottom-right gold connector and suppress a duplicate standalone rim when complete Blizzard frame artwork already includes one.
@@ -119,7 +119,7 @@
 - **Dedicated helper controls:** Additional Resources have their own sections, color shortcuts and runtime-rendered previews.
 <!-- msuf-menu-link: none -->
 - **Marks and thresholds:** place absolute or percentage marks on Player Power, Class Resource or Alternative Mana; restrict by power type, choose width and color, and change color above or below a threshold.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_marks","controlId":"menu2.classpower.advanced.resource.extras.marks.add","settingKey":"bars.resourceMarks","prepareKind":"","prepareValue":"","query":"add resource mark","label":"Add resource mark"} -->
 - **Mana spend preview:** show upcoming mana costs. Supported clients also provide regeneration-pause and mana-return helpers.
 <!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_extras","controlId":"menu2.classpower.advanced.resource.extras.mana.upcoming.cost","settingKey":"bars.manaUpcomingCost","prepareKind":"","prepareValue":"","query":"mana spend preview","label":"Mana spend preview"} -->
 - **Midnight resource helpers:** Ignore Pain duration and Arcane window timing, with shared geometry and separate colors.
@@ -158,7 +158,7 @@
 - **Interrupt readiness:** tracks only interrupts the character has learned, including Demonology's Axe Toss through Command Demon. Spells of another specialization and missing pets no longer count as a ready interrupt.
 <!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_interrupt_ready","controlId":"menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target","settingKey":"general.kickReadyShowTarget","prepareKind":"","prepareValue":"","query":"show on target castbar","label":"Show on Target castbar"} -->
 - **Corner Show when missing:** corner indicators set to Show when missing light up while the aura is missing on Classic clients. Retail and WoW Forever explain why the choice is unavailable there and keep the saved setting.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"gf_indicators","sectionId":"ci","controlId":"menu2.gf_indicators.group.corner.editor.mode","settingKey":"gf_party.ciCustomTL.mode","prepareKind":"groupCornerSlot","prepareValue":"party_TL","query":"corner indicator show when missing","label":"When"} -->
 
 ### WoW Forever Swing Timers and buff coverage
 
@@ -171,9 +171,9 @@
 - **Group buff coverage:** check selected Mark of the Wild, Thorns, Arcane Intellect, Paladin blessings, Fortitude and Divine Spirit buffs against available group providers.
 <!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"buff_coverage","controlId":"menu2.gf_layout.group.field.buffcoverageenabled","settingKey":"gf_party.buffCoverageEnabled","prepareKind":"groupScope","prepareValue":"party","query":"buff coverage icons","label":"Show buff coverage icons"} -->
 - **Buff reminder rules:** optional glow, tank-only Thorns and mana-user rules for Intellect and Spirit.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"buff_coverage","controlId":"menu2.gf_layout.group.field.buffcoverageglow","settingKey":"gf_party.buffCoverageGlow","prepareKind":"groupScope","prepareValue":"party","query":"buff coverage glow missing icons","label":"Glow missing icons"} -->
 - **Restricted-state visibility:** coverage icons hide in restricted states by default. The optional combat-display mode retains known coverage where fresh aura data is unavailable.
-<!-- msuf-menu-link: none -->
+<!-- msuf-menu-link: {"pageKey":"gf_layout","sectionId":"buff_coverage","controlId":"menu2.gf_layout.group.field.buffcoveragecombat","settingKey":"gf_party.buffCoverageCombat","prepareKind":"groupScope","prepareValue":"party","query":"buff coverage keep showing during combat","label":"Keep showing during combat"} -->
 
 ### Profiles and transfer
 

@@ -471,8 +471,34 @@ end
 function M.DeclareExactSearchPreparation(widget, meta)
     if not meta.prepareExactSearchTarget then return end
     widget._msuf2ExactTargetKinds = { [meta.searchPrepareKind] = true }
-    widget._msuf2ExactTargetContracts = { [meta.searchPrepareKind] = { [meta.searchPrepareValue] = true } }
+    -- searchPrepareSettingKey names the one setting the prepared view edits;
+    -- without it the contract covers any setting of the control (true).
+    widget._msuf2ExactTargetContracts = { [meta.searchPrepareKind] = {
+        [meta.searchPrepareValue] = meta.searchPrepareSettingKey or true } }
     widget._msuf2PrepareExactSearchTarget = meta.prepareExactSearchTarget
+end
+
+--- Exact links into a control that edits one setting per selectable view (a
+--- slot, an indicator, a scope): values maps each prepareValue to the setting
+--- that view edits, and select(value) shows that view in place and answers
+--- whether it is shown. Another kind's hook on the same control is kept.
+function M.DeclareExactViewContract(widget, kind, values, select)
+    if not (widget and kind and select and type(values) == "table" and next(values) ~= nil) then return widget end
+    local previous = widget._msuf2PrepareExactSearchTarget
+    widget._msuf2ExactTargetKinds = widget._msuf2ExactTargetKinds or {}
+    widget._msuf2ExactTargetKinds[kind] = true
+    widget._msuf2ExactTargetContracts = widget._msuf2ExactTargetContracts or {}
+    widget._msuf2ExactTargetContracts[kind] = values
+    widget._msuf2PrepareExactSearchTarget = function(self, target)
+        if type(target) ~= "table" or target.prepareKind ~= kind then
+            return previous ~= nil and previous(self, target) or false
+        end
+        local value = tostring(target.prepareValue or "")
+        local settingKey = values[value]
+        if not settingKey or tostring(target.settingKey or "") ~= settingKey then return false end
+        return select(value) == true
+    end
+    return widget
 end
 
 function Catalog.Register(widget, meta, registrationSource)

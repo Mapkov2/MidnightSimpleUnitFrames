@@ -267,7 +267,7 @@ local function BuildGFGeneralSection(ctx, b)
             RefreshContext(ctx)
         end,
         ControlMeta(ctx, "basics.frame_bar_shape"))
-    msufControls[#msufControls + 1] = barShape
+    msufControls[#msufControls + 1] = M.GroupFrameAdditionalSections.ExactScope(barShape, "frameBarShape")
     if M.AddTooltip then
         M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.",
             M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })

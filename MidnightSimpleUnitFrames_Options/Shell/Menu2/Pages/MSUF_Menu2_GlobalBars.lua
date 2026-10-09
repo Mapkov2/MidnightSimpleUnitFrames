@@ -253,6 +253,16 @@ local function Meta(path, classification, exact)
     end
     resolved.settingKey = resolved.settingKey or BAR_SETTING_BY_PATH[path]
     resolved.actionKey = resolved.actionKey or BAR_ACTION_BY_PATH[path]
+    -- Release links open these scope-dependent controls in the shared scope (the
+    -- route selects it, the hook confirms it); there they edit exactly this key.
+    local linkKey = path == "absorb.heal_prediction.all_healers" and "general.healPredAllHealers"
+        or path == "outline.texture" and "bars.barOutlineTexture" or nil
+    if linkKey then
+        resolved.searchPrepareKind, resolved.searchPrepareValue, resolved.searchPrepareSettingKey = "barsScope", "shared", linkKey
+        resolved.prepareExactSearchTarget = function(_, target)
+            return target.prepareValue == "shared" and CurrentBarsScope() == "shared"
+        end
+    end
     if path == "slanted.direction" then
         resolved.searchSettingKeys = BAR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
     end

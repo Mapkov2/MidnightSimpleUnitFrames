@@ -180,7 +180,7 @@ local function BuildGroupFrameColors(ctx, b)
     local highlights = b:CollapsibleSection("colors_group_frames_highlights", "Group Highlights", 220, false)
     local healerMana = b:CollapsibleSection("colors_group_frames_healer_mana", "Healer mana bars", 80, false)
     ColorValueAt(ctx, healerMana, "Text color", 12, -10, HealerManaTextRGB, SetHealerManaTextRGB,
-        nil, nil, Meta("group_frame.healer_mana.text_color", nil, { searchSettingKeys = {
+        nil, nil, Meta("group_frame.healer_mana.text_color", nil, { settingKey = "gf_party.healerManaTextR", searchSettingKeys = {
             "gf_party.healerManaTextR", "gf_party.healerManaTextG", "gf_party.healerManaTextB",
             "gf_raid.healerManaTextR", "gf_raid.healerManaTextG", "gf_raid.healerManaTextB",
             "gf_mythicraid.healerManaTextR", "gf_mythicraid.healerManaTextG", "gf_mythicraid.healerManaTextB",

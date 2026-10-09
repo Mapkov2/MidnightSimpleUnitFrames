@@ -17,6 +17,9 @@
 --     (.github/scripts/assert-classic-changelog-links.ps1) against the search
 --     index this client loads: the row exists, the section matches, the setting
 --     key matches the row or one of its published prepare contracts.
+--   * a link into a selectable view (Bars scope, Texture Layer slot and card,
+--     group status indicator, corner slot) also opens from another view: the
+--     route selects the view the link names;
 --   * both renderers draw every linked bullet as a link, not only Highlights:
 --     See New Features shows one link button per linked bullet of the release,
 --     the dashboard card one per linked bullet of its compact entries, and
@@ -47,6 +50,10 @@ local ABSENT = {
     ["swingtimers menu2.swingtimers.swing.enabled"] = { Mainline = true, Vanilla = true, TBC = true, Mists = true },
     ["swingtimers menu2.swingtimers.swing.main.offhand.lane"] = { Mainline = true, Vanilla = true, TBC = true, Mists = true },
     ["gf_layout menu2.gf_layout.group.field.buffcoverageenabled party"] =
+        { Mainline = true, Vanilla = true, TBC = true, Mists = true },
+    ["gf_layout menu2.gf_layout.group.field.buffcoverageglow party"] =
+        { Mainline = true, Vanilla = true, TBC = true, Mists = true },
+    ["gf_layout menu2.gf_layout.group.field.buffcoveragecombat party"] =
         { Mainline = true, Vanilla = true, TBC = true, Mists = true },
     -- Midnight resource helpers (the Resource Extras page's client lists).
     ["classpower menu2.classpower.advanced.resource.extras.show.ignore.pain"] =
@@ -179,6 +186,33 @@ if Check(type(entry) == "table" and type(entry.sections) == "table", "MSUF_FullC
     end
     Check(linked > 0, "the current release has no linked bullet; the check would prove nothing")
 
+    -- From another view: each view link must select the view it names.
+    local OTHER_VIEW = {
+        barsScope = function() env.MSUF_DB.general.hpPowerTextSelectedKey = "gf_party" end,
+        unitTextureLayer = function(unit) M.unitTexLayerSlot[unit], M.unitTexLayerTab[unit] = 2, "rules" end,
+        groupStatus = function()
+            M.SetMenuStateValue("gfScope", "raid")
+            M.SetMenuStateValue("gfStatusIconSelection", "roleIcon")
+        end,
+        groupCornerSlot = function()
+            M.SetMenuStateValue("gfScope", "raid")
+            M.SetMenuStateValue("gfCornerSlotSelection", "BR")
+        end,
+    }
+    local switched = 0
+    for _, item in ipairs(order) do
+        local perturb = OTHER_VIEW[item.link.prepareKind or ""]
+        if perturb and not item.missing then
+            M.unitTexLayerSlot, M.unitTexLayerTab = M.unitTexLayerSlot or {}, M.unitTexLayerTab or {}
+            perturb((item.link.pageKey:gsub("^uf_", "")))
+            local ok = M.OpenChangelogMenuLink(item.link) == true
+            mw:RunTimers()
+            switched = switched + 1
+            Check(ok, ("%s: the %s link did not open from another view: %s"):format(item.title,
+                item.link.prepareKind, item.link.controlId))
+        end
+    end
+
     -- See New Features: one link button per linked bullet, in bullet order.
     local pageButtons = LinkButtons("changelog", function() return M.OpenSeeNewFeatures() end)
     Check(#pageButtons == linked, ("See New Features draws %d link buttons for %d linked bullets of %s")
@@ -217,8 +251,8 @@ if Check(type(entry) == "table" and type(entry.sections) == "table", "MSUF_FullC
         :format(#homeButtons, expected))
     if #failures == 0 then
         print(("changelog_release_links_smoke: ok (%s, %s: %d links, %d opened, %d absent on this client, %d without a menu control;"
-            .. " %d page and %d dashboard link buttons)")
-            :format(flavor, tostring(entry.version), linked, opened, absent, linkless, #pageButtons, #homeButtons))
+            .. " %d from another view; %d page and %d dashboard link buttons)")
+            :format(flavor, tostring(entry.version), linked, opened, absent, linkless, switched, #pageButtons, #homeButtons))
     end
 end
 

@@ -370,7 +370,7 @@ function ResourceExtras.BuildMarks(page,Bars,Apply)
         local button=M.Theme.Button(section,label,130,26,{history=true})
         button:SetPoint("TOPLEFT",section,"TOPLEFT",x,-146)
         button:SetScript("OnClick",callback)
-        AP.RegisterControl(button,Meta(path,nil,"action"),label,"button")
+        AP.RegisterControl(button,Meta(path,"resourceMarks","action"),label,"button")
     end
     Button("Add resource mark",32,"marks.add",function()
         local b=Bars()

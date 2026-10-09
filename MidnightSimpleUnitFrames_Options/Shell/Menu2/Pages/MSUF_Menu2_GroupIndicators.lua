@@ -656,6 +656,22 @@ function StatusIcons.PrepareBinders(state, ctx)
         })
     end
 end
+--- Release links into the selected indicator's switch: Level Text in each
+--- group scope. The hook selects the scope, the indicator and the Basic tab.
+function StatusIcons.DeclareExactLevelText(state, control)
+    local values = {}
+    for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
+        if MSUF.Client.SupportsGroupKind(scope) then values[scope .. "_levelText"] = "gf_" .. scope .. ".levelText" end
+    end
+    M.DeclareExactViewContract(control, "groupStatus", values, function(value)
+        local scope = value:match("^(%a+)_")
+        M.SetMenuStateValue("gfScope", scope)
+        M.SetMenuStateValue("gfStatusIconSelection", "levelText")
+        if state.sicons._msuf2GuidedSelectTab then state.sicons._msuf2GuidedSelectTab("basic") end
+        state.RefreshStatusIconMenu()
+        return CurrentScope() == scope and CurrentGFStatusSpec().value == "levelText"
+    end)
+end
 --- Selected Indicator: the indicator, its switch, its style and icon, the
 --- Level Text and Threat % options and the role filter.
 function StatusIcons.BuildSelectedCard(state, ctx)
@@ -690,6 +706,7 @@ function StatusIcons.BuildSelectedCard(state, ctx)
             RefreshStatusIconMenu()
         end,
         ControlMeta(ctx, "status.selected.enabled"))
+    StatusIcons.DeclareExactLevelText(state, statusEnabled)
     local iconPack = W.Dropdown(selectedCard, "Indicator style", StatusIcons.IconPackValues, siconLeftW)
     M.BindDropdownWidget(ctx, iconPack, StatusIcons.CurrentIconStyle,
         function(value)
@@ -2397,6 +2414,25 @@ end
 
 GP.BuildSpellIndicatorsSection = SpellSection.Build
 
+--- Release links into a corner slot's Custom Spell "When" (present or missing):
+--- one view per group scope and slot. The hook selects both in place.
+local function DeclareExactCornerMode(control)
+    local values = {}
+    for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
+        if MSUF.Client.SupportsGroupKind(scope) then
+            for i = 1, #CI_SLOT_VALUES do
+                local slot = CI_SLOT_VALUES[i].value
+                values[scope .. "_" .. slot] = "gf_" .. scope .. ".ciCustom" .. slot .. ".mode"
+            end
+        end
+    end
+    return M.DeclareExactViewContract(control, "groupCornerSlot", values, function(value)
+        local scope, slot = value:match("^(%a+)_(%w+)$")
+        M.SetMenuStateValue("gfScope", scope)
+        M.SetMenuStateValue("gfCornerSlotSelection", slot)
+        return CurrentScope() == scope and CurrentCISlot() == slot
+    end)
+end
 local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     local corners = b:CollapsibleSection("ci", "Corner Indicators", 674, false)
     local cornerW = corners._msuf2Width or ctx.width or 720
@@ -2511,7 +2547,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
         W.MoveWidget(control, corners, rightX, y, rightW, "LEFT")
         return control
     end
-    local customMode = BindCICustomDropdown("When", CornerModeValues, "mode", "present", -350)
+    local customMode = DeclareExactCornerMode(BindCICustomDropdown("When", CornerModeValues, "mode", "present", -350))
     if not CORNER_MISSING_AVAILABLE then
         local missingNote = W.Text(corners, "", rightX, -398, rightW, T.colors.muted)
         if missingNote.SetWordWrap then missingNote:SetWordWrap(true) end

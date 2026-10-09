@@ -493,6 +493,19 @@ local function TextureLayerBinders(ctx, s)
         if step and meta then meta.step, meta.roundStep = step, true end
         return meta
     end
+    -- Release links: this build's controls edit the bound slot; the hook shows
+    -- the control's card (the route selects slot and card before the build).
+    local function ExactSlot(control, parent, base)
+        local tab = parent == s.setupCard and "setup" or parent == s.advancedCard and "advanced"
+            or parent == s.rulesCard and "rules" or nil
+        if not tab then return control end
+        return M.DeclareExactViewContract(control, "unitTextureLayer",
+            { [s.boundSlot .. "_" .. tab] = tostring(unit) .. "." .. SLOT_PREFIXES[s.boundSlot] .. base }, function()
+                M.unitTexLayerTab[unit] = tab
+                if s.ApplyTab then s.ApplyTab() end
+                return true
+            end)
+    end
     local function BindLayerToggle(parent, label, x, y, width, base, default, after)
         local control = W.ToggleAt(parent, label, x, y, width)
         M.BindBoolWidget(ctx, control,
@@ -503,7 +516,7 @@ local function TextureLayerBinders(ctx, s)
                 if after then after() end
             end,
             LayerMeta(base))
-        return control
+        return ExactSlot(control, parent, base)
     end
     local function BindLayerSlider(parent, label, x, y, width, minV, maxV, step, base, default, percent, after)
         local control = W.Slider(parent, label, minV, maxV, step, width - 58)
@@ -524,7 +537,7 @@ local function TextureLayerBinders(ctx, s)
             default,
             LayerMeta(base, nil, selectedValue1))
         W.MoveWidget(control, parent, x, y, width - 58, "LEFT")
-        return control
+        return ExactSlot(control, parent, base)
     end
     local function BindLayerDropdown(parent, label, x, y, width, values, base, default, after)
         local control = W.Dropdown(parent, label, values, width)
@@ -541,7 +554,7 @@ local function TextureLayerBinders(ctx, s)
             end,
             LayerMeta(base))
         W.MoveWidget(control, parent, x, y, width, "LEFT")
-        return control
+        return ExactSlot(control, parent, base)
     end
     s.dependentControls, s.Track, s.LayerMeta = dependentControls, Track, LayerMeta
     s.BindLayerToggle, s.BindLayerSlider, s.BindLayerDropdown = BindLayerToggle, BindLayerSlider, BindLayerDropdown
@@ -950,6 +963,7 @@ local function TextureLayerSelectors(ctx, s)
     if UP.RegisterControl then
         UP.RegisterControl(tabBar, ctx, "texture_layer.category_selector", "Options", "segment", "ephemeral")
     end
+    s.ApplyTab = ApplyTab
     ApplyTab()
 end
 local function TextureLayerRefresh(ctx, s)
