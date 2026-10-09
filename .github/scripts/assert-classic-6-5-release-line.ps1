@@ -22,8 +22,10 @@ $normalizedVersion = $ReleaseVersion.Trim() -replace '^refs/tags/', '' -replace 
 # reporting "skipped": a mistyped version would otherwise pass every TOC,
 # contract and changelog check below without reading a single file. When the
 # Classic release line moves past 6.5, retarget this script deliberately.
-if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)') {
-    throw "Classic release-line contract covers 6.5 alpha/beta only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
+# 6.50 is the stable release of the 6.5 line (two-digit minor, so it never
+# collides with 6.05 and ranks above 6.20).
+if ($normalizedVersion -notmatch '(?i)^6\.5[-.]?(?:alpha|beta)\d*(?:[-.]|$)' -and $normalizedVersion -cne '6.50') {
+    throw "Classic release-line contract covers 6.5 alpha/beta and 6.50 only and cannot verify '$ReleaseVersion'. Fix the release version, or retarget this script when the Classic release line moves."
 }
 
 $sourceVersion = [IO.File]::ReadAllText((Join-Path $RepositoryRoot "VERSION")).Trim()
@@ -51,8 +53,12 @@ foreach ($addon in $addons) {
             throw "Classic 6.5 has the wrong $flavor interface set (expected $($client.Interfaces)): $tocPath"
         }
         if ($client.IsClassic -cne "true") {
-            # Mainline keeps Retail's "## Version"; WoW Forever reads the same TOC and
-            # takes this release's version from the core TOC's Forever field.
+            # Since 6.50 Midnight runs this release's version as well (owner decision
+            # 2026-10-09); WoW Forever reads the same TOC and takes the version from
+            # the core TOC's Forever field.
+            if ($toc -notmatch "(?m)^## Version: $([regex]::Escape($normalizedVersion)) \[AllowLoadGameType standard\]\s*$") {
+                throw "Classic 6.5 has a stale standard game type version: $tocPath"
+            }
             if ($addon -ceq "MidnightSimpleUnitFrames" -and
                 $toc -notmatch "(?m)^## X-MSUF-Version-Forever: $([regex]::Escape($normalizedVersion))\s*$") {
                 throw "Classic 6.5 has a stale WoW Forever version (X-MSUF-Version-Forever): $tocPath"

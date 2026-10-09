@@ -6,8 +6,12 @@
 --- Preview builds keep the compatibility part visible on clients older than
 --- 12.1, even when the optional welcome content is disabled.
 ---
+--- On WoW 12.1.5 and newer the 6.50 greeting adds one line that sums up the
+--- 6.5 line from CHANGELOG_6.5_DRAFT.md (entries under Features & Changes, Bug
+--- Fixes and Performance), shown only while this build carries that release.
+---
 --- Cost profile: one PLAYER_LOGIN handler that drops both its event and its
---- script after the first dispatch, one 2s timer, up to four chat lines. Nothing
+--- script after the first dispatch, one 2s timer, up to five chat lines. Nothing
 --- polls, nothing survives login, and no protected or layout write is involved.
 
 local addonName, MSUF = ...
@@ -31,6 +35,16 @@ local PREVIEW_AURAS_KEY = "|cffffd700Auras|r use Blizzard's native 12.1 system."
 local PREVIEW_THANKS_KEY = "|cff40ff40Thanks for testing!|r Report bugs on Discord or GitHub."
 
 local Tr = MSUF.Translate
+
+--- The release this summary describes and its changelog totals. A later
+--- version shows no summary until it records its own totals here.
+local RELEASE_SUMMARY = {
+    version = "6.50",
+    features = 102,
+    fixes = 103,
+    performance = 20,
+    minInterface = 120105,
+}
 
 --- One shared accessor, MSUF.GetAddonVersion from Game/Shared/Initialize.lua:
 --- the version is resolved once from the TOC this client loaded, so no consumer
@@ -93,6 +107,16 @@ local function IsClientAtLeast(requiredMajor, requiredMinor)
     return interface >= requiredMajor * 10000 + requiredMinor * 100
 end
 
+local function ReleaseSummaryLine(version)
+    if version ~= RELEASE_SUMMARY.version then return nil end
+    local interface = ClientInterface()
+    if interface == nil or interface < RELEASE_SUMMARY.minInterface then return nil end
+    return ACCENT .. "MSUF " .. version .. STOP .. " " .. MUTED
+        .. format(Tr("New features & changes: %d"), RELEASE_SUMMARY.features) .. " " .. DOT .. " "
+        .. format(Tr("Bug fixes: %d"), RELEASE_SUMMARY.fixes) .. " " .. DOT .. " "
+        .. format(Tr("Performance improvements: %d"), RELEASE_SUMMARY.performance) .. STOP
+end
+
 local function PreviewWarningRequired()
     return IsMSUF60PreviewBuild(AddonVersion()) and not IsClientAtLeast(12, 1)
 end
@@ -119,6 +143,8 @@ local function WelcomeLines(warningOnly)
         lines[#lines + 1] = BRAND_SOFT .. format(Tr("Welcome to Patch %s"), ClientPatch()) .. STOP
             .. " " .. MUTED .. DOT .. STOP
             .. " " .. BRAND .. Tr("Thank you for using MSUF.") .. STOP
+        local summary = not warningOnly and ReleaseSummaryLine(version) or nil
+        if summary then lines[#lines + 1] = summary end
     end
     if not warningOnly then
         lines[#lines + 1] = MUTED .. format(Tr("Type %s to open the menu."), slash) .. STOP
@@ -167,6 +193,7 @@ end
 
 MSUF.WelcomeMessage = {
     GetLines = WelcomeLines,
+    GetReleaseSummaryLine = ReleaseSummaryLine,
     IsEnabled = WelcomeEnabled,
     IsPreviewWarningRequired = PreviewWarningRequired,
     Show = ShowWelcomeMessage,

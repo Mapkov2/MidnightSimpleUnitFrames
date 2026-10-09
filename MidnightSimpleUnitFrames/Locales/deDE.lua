@@ -4829,6 +4829,9 @@ L["Whole Castbar"] = "Gesamte Zauberleiste"
 
 --- Login welcome message
 L["Welcome to Patch %s"] = "Willkommen bei Patch %s"
+L["New features & changes: %d"] = "Neue Features & Änderungen: %d"
+L["Bug fixes: %d"] = "Bugfixes: %d"
+L["Performance improvements: %d"] = "Performance-Verbesserungen: %d"
 L["Type %s to open the menu."] = "Gib %s ein, um das Menü zu öffnen."
 
 --- Blizzard Raid Manager visibility (Group Frames > Layout > Frame Basics)

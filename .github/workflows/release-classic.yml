@@ -314,7 +314,7 @@ jobs:
 
           $metadata = [ordered]@{
             label = $env:CLASSIC_RELEASE_NAME
-            stability = $env:CLASSIC_RELEASE_TYPE
+            stability = $(if ($env:CLASSIC_RELEASE_TYPE -ceq "release") { "stable" } else { $env:CLASSIC_RELEASE_TYPE })
             changelog = Get-Content -LiteralPath $changelogPath -Raw
           }
           $assigned = @()

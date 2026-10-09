@@ -4737,6 +4737,9 @@ L["Whole Castbar"] = "Toda la barra de lanzamiento"
 
 --- Login welcome message
 L["Welcome to Patch %s"] = "Bienvenido al parche %s"
+L["New features & changes: %d"] = "Novedades y cambios: %d"
+L["Bug fixes: %d"] = "Correcciones de errores: %d"
+L["Performance improvements: %d"] = "Mejoras de rendimiento: %d"
 L["Type %s to open the menu."] = "Escribe %s para abrir el menú."
 
 --- Blizzard Raid Manager visibility (Group Frames > Layout > Frame Basics)

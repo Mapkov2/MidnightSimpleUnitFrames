@@ -480,9 +480,11 @@ foreach ($target in $targets) {
         }
 
         # A Mainline TOC is read by Midnight and by WoW Forever, so it carries two
-        # conditioned Version lines: Retail's for the standard game type and this
-        # release's for every other one. Only the "standard" token is used; it
-        # exists on every client. Classic TOCs carry one plain line.
+        # conditioned Version lines: one for the standard game type and one for
+        # every other. Since 6.50 both carry this release's VERSION; the pair stays
+        # so a client line can diverge again without changing the TOC shape. Only
+        # the "standard" token is used; it exists on every client. Classic TOCs
+        # carry one plain line.
         $versionLines = @($content | Where-Object { $_ -match '^## Version:' })
         if ($client.Suffix -eq "Mainline") {
             $standardLines = @($versionLines | Where-Object { $_ -match '^## Version:\s*(\S+)\s+\[AllowLoadGameType standard\]\s*$' })
@@ -502,17 +504,13 @@ foreach ($target in $targets) {
             $versionLine = $versionLines[0]
         }
         $versions[$client.Suffix] = ($versionLine -replace '^## Version:\s*', '').Trim()
-        $expectedClientVersion = $expectedVersion
         if ($client.Suffix -eq "Mainline" -and $retailReferenceRootFull) {
             $referenceToc = Join-Path $retailReferenceRootFull ($target.Folder + "/" + $target.Base + ".toc")
-            $referenceVersionLine = Get-Content -LiteralPath $referenceToc |
-                Where-Object { $_ -match '^## Version:' } |
-                Select-Object -First 1
-            $expectedClientVersion = ($referenceVersionLine -replace '^## Version:\s*', '').Trim()
         }
-        # Mainline carries the Retail version, which only a Retail reference can supply.
-        if (($client.IsClassic -ceq "true" -or $retailReferenceRootFull) -and $versions[$client.Suffix] -ne $expectedClientVersion) {
-            throw "$tocName has version '$($versions[$client.Suffix])', expected '$expectedClientVersion'"
+        # Owner decision 2026-10-09: every client, Midnight included, runs this
+        # release's version, so the standard-game-type line follows VERSION too.
+        if ($versions[$client.Suffix] -ne $expectedVersion) {
+            throw "$tocName has version '$($versions[$client.Suffix])', expected VERSION '$expectedVersion'"
         }
         # WoW Forever shares the Mainline TOCs but follows the Classic release line:
         # the core TOC names its version in X-MSUF-Version-Forever (Client.AddonVersion).
@@ -527,17 +525,18 @@ foreach ($target in $targets) {
             throw "$tocName must not declare X-MSUF-Version-Forever; only the core Mainline TOC does"
         }
         if ($client.Suffix -eq "Mainline" -and $retailReferenceRootFull) {
-            $referenceMetadata = @(Get-Content -LiteralPath $referenceToc | Where-Object { $_ -match '^## ' } |
+            $referenceMetadata = @(Get-Content -LiteralPath $referenceToc |
+                Where-Object { $_ -match '^## ' -and $_ -notmatch '^## Version:' } |
                 ForEach-Object {
                     if ($_ -match '^## Interface:') { $interfaceLine } else { $_ }
                 })
-            # X-MSUF-Version-Forever and the non-standard Version line are this repo's
-            # own; Retail has no Forever client. The standard Version line compares
-            # without its condition.
+            # X-MSUF-Version-Forever and both Version lines are this repo's own:
+            # Retail has no Forever client, and every client runs VERSION (checked
+            # above), so only the remaining metadata must match the Retail source.
             $currentMetadata = @($content | Where-Object {
                 $_ -match '^## ' -and $_ -notmatch '^## X-MSUF-Version-Forever:' -and
-                $_ -notmatch '^## Version:.*\[ExcludeLoadGameType standard\]\s*$'
-            } | ForEach-Object { $_ -replace '^(## Version:\s*\S+)\s+\[AllowLoadGameType standard\]\s*$', '$1' })
+                $_ -notmatch '^## Version:'
+            })
             # These two reviewed TOC overrides group the Classic-built Mainline
             # core and Options under MSUF while the Retail 6.x source still uses
             # Combat. Normalize only that exact field; every other metadata line

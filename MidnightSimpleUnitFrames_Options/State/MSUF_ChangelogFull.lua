@@ -8,12 +8,40 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "F446171AAD9806773ED97BAB1C997507F9C8B9C95725E332794FF834F60B803C",
-    currentVersion = "6.5-beta19",
+    sourceSha256 = "E2F7771811A7DC1ACF0E70BA3AD7E581106A1D34CCC9B582A37590BB58466676",
+    currentVersion = "6.50",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-beta18",
-    rangeLabel = "6.5-beta18 -> 6.5-beta19",
+    previousVersion = "6.02",
+    rangeLabel = "6.02 -> 6.50",
     entries = {
+        {
+            version = "6.50",
+            date = "2026-10-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "MSUF 6.50 completes the 6.5 line. It brings 102 new features and changes, 103 bug fixes and 20 performance improvements, including Arena Frames, Pet Target, Slanted Frames and Cosmetic Texture Layers. On WoW 12.1.5 the login greeting sums this up; turn it off under Global > Misc > Show welcome message.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "show welcome message",
+                                label = "Show welcome message",
+                                sectionId = "misc_startup",
+                                controlId = "menu2.opt.misc.global.setting.show.welcome.message",
+                                settingKey = "general.showWelcomeMessage",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Every client runs version 6.50: Midnight, WoW Forever, Classic Era, TBC and Mists.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta19",
             date = "2026-10-09",

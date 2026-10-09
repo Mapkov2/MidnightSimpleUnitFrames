@@ -8,12 +8,40 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "F446171AAD9806773ED97BAB1C997507F9C8B9C95725E332794FF834F60B803C",
-    currentVersion = "6.5-beta19",
-    historyFromVersion = "6.5-beta16",
-    previousVersion = "6.5-beta18",
-    rangeLabel = "6.5-beta18 -> 6.5-beta19",
+    sourceSha256 = "E2F7771811A7DC1ACF0E70BA3AD7E581106A1D34CCC9B582A37590BB58466676",
+    currentVersion = "6.50",
+    historyFromVersion = "6.5-beta17",
+    previousVersion = "6.5-beta17",
+    rangeLabel = "6.5-beta17 -> 6.50",
     entries = {
+        {
+            version = "6.50",
+            date = "2026-10-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "MSUF 6.50 completes the 6.5 line. It brings 102 new features and changes, 103 bug fixes and 20 performance improvements, including Arena Frames, Pet Target, Slanted Frames and Cosmetic Texture Layers. On WoW 12.1.5 the login greeting sums this up; turn it off under Global > Misc > Show welcome message.",
+                            link = {
+                                pageKey = "opt_misc",
+                                query = "show welcome message",
+                                label = "Show welcome message",
+                                sectionId = "misc_startup",
+                                controlId = "menu2.opt.misc.global.setting.show.welcome.message",
+                                settingKey = "general.showWelcomeMessage",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Every client runs version 6.50: Midnight, WoW Forever, Classic Era, TBC and Mists.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta19",
             date = "2026-10-09",
@@ -155,44 +183,6 @@ local data = {
                     bullets = {
                         "Unrelated power events skip unnecessary resource text work.",
                         "Styled borders reuse their textures and layout; combat color updates avoid rebuilding border geometry.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta16",
-            date = "2026-10-06",
-            sections = {
-                {
-                    title = "WoW Forever controller support",
-                    bullets = {
-                        "Expanded controller support for MSUF and compatible Suite windows. Use the D-pad to navigate controls, confirm or cancel actions, open dropdowns, choose anchors, search settings and switch windows through Forever's Gamepad UI.",
-                        "Enter text and exact numeric values with the on-screen keyboard, adjust sliders, nudge previews and Edit Mode elements, and undo or redo supported changes. Localized button hints, a focus highlight and haptic feedback guide supported actions.",
-                        "Controller navigation releases input during combat and while Blizzard panels own navigation.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Class Resources use a shared workspace with direct resource selection, scoped settings, Copy To, Quick Setup and reset actions. Controls remain inside their cards on narrow windows.",
-                        "Forever Swing Timers include an embedded menu preview, separate Main Hand, Off Hand and Ranged settings, and category-based Copy To.",
-                        "Improved Blizzard-style portrait masks, corner direction and per-unit preview alignment.",
-                    },
-                },
-                {
-                    title = "Performance",
-                    bullets = {
-                        "Closed menu sections defer their controls and decoration until needed. Repeated header layout and owned-button skin work reuse existing state.",
-                        "Cold search indexes build in short menu-task slices while exact searches retain synchronous results and prepare the required lazy sections.",
-                        "Group aura previews share their compatible configuration instead of compiling it once per row. Color previews avoid duplicate render requests and preserve staged construction.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Group layouts retain space and role ordering for members joining during combat. Housing visibility, extra-block names and dead/offline backgrounds refresh consistently.",
-                        "Resource marks use the range of their displayed resource. Profile names remain as typed, and Copy To retains supported font, texture, gradient and status settings.",
-                        "Corrected exact-search targets, preview lifecycle behavior, menu spacing and translations across all supported locales.",
                     },
                 },
             },

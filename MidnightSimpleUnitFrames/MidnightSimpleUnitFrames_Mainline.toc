@@ -3,9 +3,9 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: MSUF
-## Version: 6.20 [AllowLoadGameType standard]
-## Version: 6.5-beta19 [ExcludeLoadGameType standard]
-## X-MSUF-Version-Forever: 6.5-beta19
+## Version: 6.50 [AllowLoadGameType standard]
+## Version: 6.50 [ExcludeLoadGameType standard]
+## X-MSUF-Version-Forever: 6.50
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, Blizzard_AuraContainer, Blizzard_PingUI, EllesmereUI, Grid2, Details, MapkoSkin

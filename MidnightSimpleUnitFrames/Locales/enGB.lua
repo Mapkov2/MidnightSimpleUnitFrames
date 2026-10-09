@@ -3325,6 +3325,9 @@ L["Whole Castbar"] = "Whole Castbar"
 
 --- Login welcome message
 L["Welcome to Patch %s"] = "Welcome to Patch %s"
+L["New features & changes: %d"] = "New features & changes: %d"
+L["Bug fixes: %d"] = "Bug fixes: %d"
+L["Performance improvements: %d"] = "Performance improvements: %d"
 L["Thank you for using MSUF."] = "Thank you for using MSUF."
 L["Type %s to open the menu."] = "Type %s to open the menu."
 

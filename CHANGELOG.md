@@ -1,5 +1,16 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.50 - 2026-10-09
+
+### Highlights
+
+- **MSUF 6.50 completes the 6.5 line.** It brings 102 new features and changes, 103 bug fixes and 20 performance improvements, including Arena Frames, Pet Target, Slanted Frames and Cosmetic Texture Layers. On WoW 12.1.5 the login greeting sums this up; turn it off under Global > Misc > Show welcome message.
+<!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_startup","controlId":"menu2.opt.misc.global.setting.show.welcome.message","settingKey":"general.showWelcomeMessage","prepareKind":"","prepareValue":"","query":"show welcome message","label":"Show welcome message"} -->
+
+### Changes
+
+- Every client runs version 6.50: Midnight, WoW Forever, Classic Era, TBC and Mists.
+
 ## 6.5-beta19 - 2026-10-09
 
 ### Highlights

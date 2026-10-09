@@ -12,6 +12,7 @@ param(
 # Accepted forms, both naming the same release:
 #   classic-v<base>-alpha<number>  classic-v<base>-beta<number>   (release tag)
 #   <base>-alpha<number>           <base>-beta<number>            (VERSION line)
+#   classic-v<base>                <base>                         (stable release)
 #
 # The authored base is never int-cast: 6.05 and 6.5 are different releases.
 
@@ -19,8 +20,21 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $candidate = $Tag.Trim() -replace '^refs/tags/', ''
+# A stable release (6.50) names only its version; its two-digit minor may end
+# in zero, so the base keeps every authored digit.
+if ($candidate -match '^(?:classic-v)?(?<base>(?:0|[1-9][0-9]*)\.[0-9]+)$') {
+    $base = $Matches["base"]
+    return [pscustomobject][ordered]@{
+        Base        = $base
+        Channel     = "release"
+        Number      = 0
+        Version     = $base
+        DisplayName = "MSUF_$base"
+        ReleaseType = "release"
+    }
+}
 if ($candidate -notmatch '^(?:classic-v)?(?<base>(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))*)-(?<channel>alpha|beta)(?<number>0|[1-9][0-9]*)$') {
-    throw "Classic release must use 'classic-v<version>-alpha<number>' or 'classic-v<version>-beta<number>' without leading zeros. Got: $Tag"
+    throw "Classic release must use 'classic-v<version>', 'classic-v<version>-alpha<number>' or 'classic-v<version>-beta<number>' without leading zeros. Got: $Tag"
 }
 
 $base = $Matches["base"]

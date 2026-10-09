@@ -5140,6 +5140,9 @@ L["Whole Castbar"] = "整个施法条"
 
 --- Login welcome message
 L["Welcome to Patch %s"] = "欢迎来到 %s 版本"
+L["New features & changes: %d"] = "新功能与改动：%d"
+L["Bug fixes: %d"] = "错误修复：%d"
+L["Performance improvements: %d"] = "性能优化：%d"
 L["Thank you for using MSUF."] = "感谢您使用 MSUF。"
 L["Type %s to open the menu."] = "输入 %s 打开菜单。"
 
