@@ -36,10 +36,8 @@ local RETIRED_PAGE_LABELS = { "Aura Style" }
 local SEPARATORS = { ">", "->", "\226\134\146" }
 -- path = { hits, reason }. A count that no longer matches fails, so a fixed
 -- file forces its row out instead of hiding a new hit.
-local ALLOWED = {
-    ["MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua"] = { 2,
-        "generated from CHANGELOG.md; the 6.5-beta4 and 6.5-beta11 notes still point at Appearance > Colors. Fix CHANGELOG.md, regenerate with tools/update-addon-changelog.ps1 and drop this row." },
-}
+-- (6.50 dropped the 6.5 beta notes that pointed at Appearance > Colors; empty since.)
+local ALLOWED = {}
 
 --- Loads the navigation module into a fresh namespace. M.Lines is the only
 --- helper it needs from Support at load time.
