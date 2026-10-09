@@ -762,16 +762,55 @@ function Dashboard.BuildSearchInput(hero, x, y, w, h)
     end)
     return input, Submit
 end
-function Dashboard.BuildSearchHero(state, mainTop)
+--- The search card greets by the player's local time of day: morning from 5,
+--- midday from 12, afternoon from 14, evening from 18 and night from 22 until 5.
+--- Each greeting is one translated sentence with the character name in it.
+local SEARCH_GREETINGS = {
+    { from = 22, key = "Up late, %s?" },
+    { from = 18, key = "Good evening, %s" },
+    { from = 14, key = "Good afternoon, %s" },
+    { from = 12, key = "Good day, %s" },
+    { from = 5, key = "Good morning, %s" },
+}
+
+function Dashboard.SearchGreetingKey(hour)
+    hour = tonumber(hour)
+    if not hour then return nil end
+    hour = floor(hour) % 24
+    for index = 1, #SEARCH_GREETINGS do
+        local greeting = SEARCH_GREETINGS[index]
+        if hour >= greeting.from then return greeting.key end
+    end
+    return SEARCH_GREETINGS[1].key
+end
+
+local function LocalHour()
+    local date = _G.date
+    return type(date) == "function" and tonumber(date("%H")) or nil
+end
+
+function Dashboard.SearchGreeting(hour)
+    local key = Dashboard.SearchGreetingKey(hour or LocalHour())
+    local playerName = M.PlayerDisplayName
+    local name = type(playerName) == "function" and playerName() or nil
+    if not key or type(name) ~= "string" or name == "" then return M.Tr("Find settings and help") end
+    return M.Format(key, name)
+end
+
+function Dashboard.BuildSearchHero(state, mainTop, ctx)
     local mainW = state.mainW
     local heroH = mainW < 390 and 174 or 156
     local hero = state.Card(state.root, "", state.x0, mainTop, mainW, heroH, T.colors.glassHost, T.colors.cardBorder)
     state.ApplyDashboardHeroGradient(hero, mainW, heroH)
     state.Kicker(hero, "MSUF", 22, -20)
-    local title = T.Font(hero, "GameFontNormalLarge", "Find settings and help", T.colors.text)
+    local title = T.Font(hero, "GameFontNormalLarge", "", T.colors.text)
     title:SetPoint("TOPLEFT", hero, "TOPLEFT", 22, -42)
     title:SetWidth(mainW - 44)
     title:SetJustifyH("LEFT")
+    hero._msuf2SearchGreeting = title
+    local function RefreshGreeting() T.SetTranslatedText(title, Dashboard.SearchGreeting()) end
+    RefreshGreeting()
+    if ctx and ctx.AddRefresher then ctx:AddRefresher(RefreshGreeting) end
     W.Text(hero, "Search enabled features in your own words.", 22, -72, mainW - 44, T.colors.muted)
     local submitW = 96
     local inputY = -heroH + 52
@@ -1299,7 +1338,7 @@ function Dashboard.Build(ctx)
     local launcherH = Dashboard.BuildGuidedSetupLauncher(state, mainTop, ctx)
 
     mainTop = mainTop - launcherH - 10
-    local heroH = Dashboard.BuildSearchHero(state, mainTop)
+    local heroH = Dashboard.BuildSearchHero(state, mainTop, ctx)
     local featureBlockBottom = mainTop - heroH
     local suiteH = Dashboard.BuildSuiteCard(state, ctx, featureBlockBottom - 10)
     if suiteH > 0 then featureBlockBottom = featureBlockBottom - 10 - suiteH end
