@@ -393,6 +393,98 @@ else
     Check(Holder(2):IsShown() and Holder(2).cooldown.cooldownDuration ~= 120,
         "the live trinket did not return without the preview sample")
     Check(not Holder(1):IsShown(), "a released preview slot kept its trinket")
+
+    ---------------------------------------------------------------- 6. Edit Mode arena popup
+    -- The real unit popup of MSUF Edit Mode over recorded quick-popup widgets:
+    -- the arena popup carries a PvP Trinket card whose edits write the same
+    -- keys, open one undo entry each and apply the arena scope.
+    local applied, history, shells = {}, {}, {}
+    local function Box(callback)
+        local box = env.CreateFrame("EditBox")
+        box.commit = callback
+        return box
+    end
+    local function Toggle(parent, onClick)
+        local toggle = env.CreateFrame("Button", nil, parent)
+        toggle.click = onClick
+        function toggle:SetCheckedVisual(checked) self._checked = checked and true or false end
+        toggle:SetCheckedVisual(false)
+        return toggle
+    end
+    env.MSUF_EM_UndoBeforeChange = function(kind, key) history[#history + 1] = kind .. ":" .. key end
+    env.MSUF_EM2_Menu2Style = { Card = function() end }
+    env.MSUF_EM2 = {
+        Util = {
+            NormalizeUnitKey = function(key) return key end,
+            UnitLabel = function(key) return key end,
+            UnitPageKey = function() return "uf_arena" end,
+            ApplySettingsForKeySafe = function(key) applied[#applied + 1] = key return true end,
+            ApplyAllSettingsSafe = function() applied[#applied + 1] = "*" end,
+            SyncMovers = function() end,
+            NotifyPositionChanged = function() end,
+        },
+        PopupFactory = {
+            Colors = { cardBg = { 0, 0, 0 }, cardEdge = { 0, 0, 0 }, white = { 1, 1, 1 } },
+            FontString = function(parent) return env.CreateFrame("Frame", nil, parent) end,
+            Tr = function(text) return text end,
+            RefreshPalette = function() end,
+            BlockConfigCombatLocked = function() return false end,
+            RefreshUFPreview = function() end,
+        },
+        QuickPopup = {
+            San = function(value, fallback) return tonumber(value) or fallback end,
+            CreateShell = function(name)
+                local shell = env.CreateFrame("Frame", name, env.UIParent)
+                shell._titleFS = env.CreateFrame("Frame", nil, shell)
+                shells[name] = shell
+                return shell
+            end,
+            ValueCard = function(owner, parent, _, _, _, _, rows)
+                for _, row in ipairs(rows) do owner[row.key] = Box(row.onChanged) end
+                return env.CreateFrame("Frame", nil, parent)
+            end,
+            ValuePairAt = function(owner, parent, _, _, _, key1, cb1, _, key2, cb2)
+                owner[key1], owner[key2] = Box(cb1), Box(cb2)
+                return env.CreateFrame("Frame", nil, parent)
+            end,
+            SingleValueAt = function(owner, parent, _, _, _, key, cb)
+                owner[key] = Box(cb)
+                return env.CreateFrame("Frame", nil, parent)
+            end,
+            ToggleAt = function(parent, _, _, _, _, _, onClick) return Toggle(parent, onClick) end,
+            ButtonAt = function(parent) return env.CreateFrame("Button", nil, parent) end,
+            MenuButtonAt = function(parent) return env.CreateFrame("Button", nil, parent) end,
+            SetBoxText = function(box, value) box:SetText(tostring(value)) end,
+            AddFooterControls = function() end,
+        },
+    }
+    Load(CORE .. "Shell/EditMode/MSUF_EditMode_Popups.lua")
+    local UnitPopup = env.MSUF_EM2.UnitPopup
+    Check(UnitPopup.Open("arena", frames.arena1) == true, "the Edit Mode arena popup did not open")
+    local popup = shells.MSUF_EM2_UnitPopup
+    local card = popup and popup.trinketPanel
+    Check(card and card:IsShown(), "the Edit Mode arena popup has no PvP Trinket card")
+    if card then
+        Check(popup:GetHeight() == 370 + 136, "the arena popup did not grow by the trinket card")
+        Check(popup.trinketShowBtn._checked == true and popup.trinketSizeBox:GetText() == "26"
+            and popup.trinketLayerBox:GetText() == "14" and popup.trinketXBox:GetText() == "-6"
+            and popup.trinketYBox:GetText() == "3", "the trinket card does not show the profile values")
+        popup.trinketSizeBox:SetText("40")
+        popup.trinketSizeBox.commit()
+        popup.trinketLayerBox:SetText("45")
+        popup.trinketLayerBox.commit()
+        Check(arena.trinketSize == 40 and arena.trinketLayer == 30, "the trinket card did not write a clamped size and layer")
+        Check(#history == 2 and history[1] == "unit:arena" and applied[#applied] == "arena",
+            "a trinket card edit did not open its undo entry and apply the arena scope")
+        env.MSUF_ArenaTrinkets_RefreshLayout("arena")
+        CheckPlacement(Holder(2), frames.arena2, "RIGHT", "LEFT", -6, 3, 40, 30, "Edit Mode card edit")
+        popup.trinketShowBtn:SetCheckedVisual(false)
+        popup.trinketShowBtn.click(false)
+        Check(arena.showTrinket == false, "the Edit Mode switch did not write arena.showTrinket")
+        Check(UnitPopup.Open("player", frames.arena1) == true and not card:IsShown() and popup:GetHeight() == 370,
+            "a non-arena popup shows the PvP Trinket card")
+    end
+    arena.showTrinket = true
 end
 
 -- The Arena page loads the section on every client, and the unit sections
