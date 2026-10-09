@@ -5014,6 +5014,11 @@ L["Big Defensive by Me"] = "Big Defensive by Me"
 L["External Defensive by Me"] = "External Defensive by Me"
 L["Applicable and Cast by Me"] = "Applicable and Cast by Me"
 L["Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible."] = "Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible."
+-- Arena page: PvP Trinket section.
+L["PvP Trinket"] = "PvP Trinket"
+L["Trinket"] = "Trinket"
+L["Show PvP trinket"] = "Show PvP trinket"
+L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)

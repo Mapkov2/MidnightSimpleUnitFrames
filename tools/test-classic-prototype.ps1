@@ -1231,6 +1231,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimers.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ClassPowerWorkspace.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimersPreview.lua",
+    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitArenaTrinket.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Buttons.lua",

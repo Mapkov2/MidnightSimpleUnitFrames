@@ -6940,6 +6940,11 @@ L["Big Defensive by Me"] = "Мощная защита (моя)"
 L["External Defensive by Me"] = "Внешняя защита (моя)"
 L["Applicable and Cast by Me"] = "Накладываемые и наложенные мной"
 L["Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible."] = "Скрывает ауры без длительности. «Подборка MSUF» намеренно использует свой точный список, чтобы временная групповая незаметность разбойника оставалась видимой."
+-- Arena page: PvP Trinket section.
+L["PvP Trinket"] = "PvP-аксессуар"
+L["Trinket"] = "Аксессуар"
+L["Show PvP trinket"] = "Показывать PvP-аксессуар"
+L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "Показывает PvP-аксессуар каждого противника и его восстановление рядом с фреймом арены. Предпросмотр фреймов арены на этой странице и режим редактирования тоже его показывают."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)

@@ -55,7 +55,10 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- carries the full 6.5 notes with their menu links as the 6.50 entry,
         -- about 82 KB more (largest selections Mainline 16,807,225, TBC 14,690,089);
         -- no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16860000 or 14710000),
+        -- 2026-10-10 (6.50 arena PvP trinket): 16,860,000 -> 16,880,000 and
+        -- 14,710,000 -> 14,730,000 for the trinket placement runtime, its preview and
+        -- four menu strings in the twelve packs (about 12 KB); no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16880000 or 14730000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

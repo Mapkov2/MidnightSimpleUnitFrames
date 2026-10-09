@@ -1227,6 +1227,9 @@ function Factory.Apply(unit, applyMask)
   -- copy-to, profile swaps and size changes land without their own plumbing.
   local refreshTexLayer = _G.MSUF_RefreshUnitTextureLayers
   if type(refreshTexLayer) == "function" then refreshTexLayer(unit) end
+  -- The arena PvP trinket holders sit outside the element system as well; the
+  -- same applies carry their size, side, offset and layer to them.
+  Dep("MSUF_ArenaTrinkets_RefreshLayout")(unit)
   return true
 end
 

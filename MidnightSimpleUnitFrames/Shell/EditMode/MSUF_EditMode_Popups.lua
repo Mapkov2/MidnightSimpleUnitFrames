@@ -221,6 +221,59 @@ local function ApplyPowerLayoutForUnitKey(key, detached)
     return MSUF.Require("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", CALLER)(key, true)
 end
 
+--- Arena frames: the PvP trinket icon's switch, size, layer and offset, the
+--- keys the Arena page's PvP Trinket section writes. The trinket runtime
+--- (MSUF.ArenaTrinkets) owns the factory values and limits; the unit-frame
+--- apply re-places the live icons and their Edit Mode preview.
+local TRINKET_PANEL_HEIGHT = 128
+local function TrinketPanelHeight(key)
+    return (key == "arena" and pf and pf.trinketPanel) and (TRINKET_PANEL_HEIGHT + 8) or 0
+end
+
+local function BoxWhole(box, low, high, current)
+    local value = tonumber(box and box:GetText())
+    if not value then return current end
+    return floor(max(low, min(high, value)) + 0.5)
+end
+
+local function ApplyTrinket()
+    if BlockConfigCombatLocked() then return end
+    local key = pf and pf.unit and CK(pf.unit)
+    local conf = key == "arena" and Conf(key) or nil
+    if not conf then return end
+    MSUF.Require("MSUF_EM_UndoBeforeChange", CALLER)("unit", key)
+    local limits = MSUF.ArenaTrinkets.LIMITS
+    conf.showTrinket = pf.trinketShowBtn._checked == true
+    conf.trinketSize = BoxWhole(pf.trinketSizeBox, limits.sizeMin, limits.sizeMax, conf.trinketSize)
+    conf.trinketLayer = BoxWhole(pf.trinketLayerBox, 0, 30, conf.trinketLayer)
+    conf.trinketOffsetX = BoxWhole(pf.trinketXBox, -limits.offset, limits.offset, conf.trinketOffsetX)
+    conf.trinketOffsetY = BoxWhole(pf.trinketYBox, -limits.offset, limits.offset, conf.trinketOffsetY)
+    if not ApplySettingsForKeySafe(key) then ApplyAllSettingsSafe() end
+    RefreshUFPreview("EM2_UNIT_POPUP_TRINKET", key)
+    if pf:IsShown() then Sync() end
+end
+
+--- Shows the card for the arena popup only, below the detached power bar card
+--- when that one is open, and fills it from the profile.
+local function SyncTrinketPanel(key, conf)
+    local panel = pf.trinketPanel
+    if not panel then return end
+    panel:SetShown(key == "arena")
+    if key ~= "arena" then return end
+    panel:ClearAllPoints()
+    if pf.dpbPanel and pf.dpbPanel:IsShown() then
+        panel:SetPoint("TOPLEFT", pf.dpbPanel, "BOTTOMLEFT", 0, -8)
+    else
+        panel:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -340)
+    end
+    local defaults = MSUF.ArenaTrinkets.DEFAULTS
+    pf.trinketShowBtn:SetCheckedVisual(conf.showTrinket ~= false)
+    Quick.SetBoxText(pf.trinketSizeBox, conf.trinketSize or defaults.size)
+    Quick.SetBoxText(pf.trinketLayerBox, conf.trinketLayer or defaults.layer)
+    Quick.SetBoxText(pf.trinketXBox, conf.trinketOffsetX or defaults.x)
+    Quick.SetBoxText(pf.trinketYBox, conf.trinketOffsetY or defaults.y)
+end
+
 local function Apply()
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit then return end
@@ -345,7 +398,8 @@ function Sync()
         if pf.dpbPanel then
             pf.dpbPanel:SetShown(detachedOn)
             --- Keep the detail panel between the quiet detach action and the pinned footer.
-            pf:SetHeight(detachedOn and (key == "player" and 620 or 584) or (canDetach and 410 or 370))
+            pf:SetHeight((detachedOn and (key == "player" and 620 or 584) or (canDetach and 410 or 370))
+                + TrinketPanelHeight(key))
             if detachedOn then pf.dpbPanel:SetHeight(key == "player" and 220 or 184) end
         end
         if detachedOn then
@@ -383,6 +437,7 @@ function Sync()
             end
         end
     end
+    SyncTrinketPanel(key, conf)
 end
 
 local function SetHUDStatus(text, kind)
@@ -421,6 +476,9 @@ end
 --- one holds an edit: Apply always opens an undo entry.
 local function ApplyPendingEdits()
     if not pf then return end
+    if Quick.HasEditedBox and Quick.HasEditedBox(pf.trinketSizeBox, pf.trinketLayerBox, pf.trinketXBox, pf.trinketYBox) then
+        ApplyTrinket()
+    end
     if Quick.HasEditedBox and not Quick.HasEditedBox(pf.xBox, pf.yBox, pf.wBox, pf.hBox,
         pf.dpbXBox, pf.dpbYBox, pf.dpbWBox, pf.dpbHBox, pf.dpbLevelBox) then return end
     Apply()
@@ -534,6 +592,25 @@ local function ToggleSizeRatio(checked)
     if not pf then return end
     pf._lockRatio = checked and true or false
     if pf._lockRatio then Quick.CaptureSizeRatio(pf) end
+end
+
+--- The arena-only PvP Trinket card; SyncTrinketPanel places and fills it.
+local function BuildTrinketPanel(toggleOpts)
+    local panel = PixelLayoutRegion(CreateFrame("Frame", nil, pf, "BackdropTemplate"))
+    panel:SetSize(520, TRINKET_PANEL_HEIGHT)
+    PixelLayoutRegion(panel, "SetBackdrop", { bgFile = W8, edgeFile = W8, edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    panel:SetBackdropColor(C.cardBg[1], C.cardBg[2], C.cardBg[3], 0.58)
+    panel:SetBackdropBorderColor(C.cardEdge[1], C.cardEdge[2], C.cardEdge[3], 0.72)
+    Menu2Style.Card(panel)
+    local title = FS(panel, "body", C.white)
+    title:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -12)
+    title:SetText(Tr("PvP Trinket"))
+    pf.trinketShowBtn = Quick.ToggleAt(panel, "Show PvP trinket", 292, -6, 212, 30, ApplyTrinket, toggleOpts)
+    Quick.ValuePairAt(pf, panel, 16, -44, "Size", "trinketSizeBox", ApplyTrinket, "Layer", "trinketLayerBox", ApplyTrinket)
+    Quick.ValuePairAt(pf, panel, 16, -80, "X offset", "trinketXBox", ApplyTrinket, "Y offset", "trinketYBox", ApplyTrinket)
+    panel:Hide()
+    pf.trinketPanel = panel
 end
 
 local function Build()
@@ -661,6 +738,7 @@ local function Build()
         end
     end
     pf.dpbPanel:Hide()
+    BuildTrinketPanel(toggleOpts)
 
     if Quick.AddFooterControls then
         Quick.AddFooterControls(pf, { anchor = "BOTTOM", bottomGap = 12, onResetPosition = ResetPosition })

@@ -7015,6 +7015,11 @@ L["Big Defensive by Me"] = "Grande difensiva (mia)"
 L["External Defensive by Me"] = "Difensiva esterna (mia)"
 L["Applicable and Cast by Me"] = "Applicabile e lanciato da me"
 L["Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible."] = "Esclude le aure senza durata. Selezione MSUF usa di proposito il suo elenco esatto, così la furtività di gruppo temporanea del ladro resta visibile."
+-- Arena page: PvP Trinket section.
+L["PvP Trinket"] = "Monile PvP"
+L["Trinket"] = "Monile"
+L["Show PvP trinket"] = "Mostra monile PvP"
+L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "Mostra il monile PvP di ogni avversario e il suo tempo di recupero accanto al riquadro arena. Lo mostrano anche l'anteprima dei riquadri arena di questa pagina e la modalità modifica."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)

@@ -10,6 +10,12 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 --- spell because ARENA_COOLDOWNS_UPDATE is not reliable on that client. The
 --- combat log is subscribed only while the player is inside an arena instance.
 ---
+--- Size, side, offset and layer come from MSUF_DB.arena (trinket* keys). One
+--- resolver (TrinketLayout) serves the live holders, the arena frame preview of
+--- the menu and Edit Mode (which shows these same holders) and the menu's unit
+--- preview. Settings reach the holders on the cold path only: a unit-frame apply
+--- bumps the layout serial and the next position pass re-applies it.
+---
 --- All work is event-driven. There is no OnUpdate, ticker, or polling loop.
 
 local _, MSUF = ...
@@ -38,16 +44,59 @@ local ExportPublic = MSUF.ExportPublic or function(name, value)
     return value
 end
 
+-- The factory look: a 20 px icon 4 px right of the arena frame, on a layer
+-- above every default layer of the arena frame (custom aura containers sit on
+-- 9), so the icon still draws over the frame like the old MEDIUM-strata holder.
+local TRINKET_DEFAULTS = { size = 20, anchor = "RIGHT", x = 4, y = 0, layer = 10 }
+local TRINKET_LIMITS = { sizeMin = 10, sizeMax = 64, offset = 200 }
+-- Frame side -> holder point, arena frame point.
+local TRINKET_SIDES = {
+    RIGHT = { "LEFT", "RIGHT" },
+    LEFT = { "RIGHT", "LEFT" },
+    TOP = { "BOTTOM", "TOP" },
+    BOTTOM = { "TOP", "BOTTOM" },
+}
+-- The preview sample: a trinket used 42 seconds ago on its 2 minute cooldown.
+local PREVIEW_COOLDOWN, PREVIEW_ELAPSED = 120, 42
+
 local holders = {}
 local requested = {}
 local relaySources = {}
 local mistsFallback = {}
 local RefreshCooldown
 local SyncMistsCombatLog
+-- Bumped by every settings apply; a holder re-applies its layout when its
+-- stamp differs, so the per-event position pass stays a comparison.
+local layoutSerial = 1
+-- Arena frames the menu or Edit Mode preview forced at its last sync.
+local previewSlots = 0
 
 local function ArenaConf()
     local db = _G.MSUF_DB
     return db and db.arena or nil
+end
+
+local function WholeNumber(value, fallback, low, high)
+    value = tonumber(value)
+    if value == nil or value ~= value then return fallback end
+    value = math.floor(value + 0.5)
+    if value < low then return low end
+    if value > high then return high end
+    return value
+end
+
+--- The trinket layout from the profile: size, holder point, arena frame point,
+--- x, y and the 0-30 layer. The runtime and every preview read this.
+local NO_CONF = {}
+local function TrinketLayout()
+    local conf = ArenaConf() or NO_CONF
+    local side = TRINKET_SIDES[conf.trinketAnchor] or TRINKET_SIDES[TRINKET_DEFAULTS.anchor]
+    local limit = TRINKET_LIMITS.offset
+    return WholeNumber(conf.trinketSize, TRINKET_DEFAULTS.size, TRINKET_LIMITS.sizeMin, TRINKET_LIMITS.sizeMax),
+        side[1], side[2],
+        WholeNumber(conf.trinketOffsetX, TRINKET_DEFAULTS.x, -limit, limit),
+        WholeNumber(conf.trinketOffsetY, TRINKET_DEFAULTS.y, -limit, limit),
+        WholeNumber(conf.trinketLayer, TRINKET_DEFAULTS.layer, 0, 30)
 end
 
 local function ArenaEnabled()
@@ -128,17 +177,55 @@ local function EnsureHolder(index)
     return holder
 end
 
+--- Cold path: size, anchor, strata and level of one holder. The holder takes
+--- the arena frame's strata, so its 0-30 layer orders it against the frame's
+--- own elements on the shared MSUF scale (as the castbar does).
+local function ApplyHolderLayout(holder, frame)
+    local size, point, relativePoint, x, y, layer = TrinketLayout()
+    holder:ClearAllPoints()
+    holder:SetPoint(point, frame, relativePoint, x, y)
+    holder:SetSize(size, size)
+    local layers = MSUF.UF.Layers
+    holder:SetFrameStrata(layers.ParentStrata(frame) or "MEDIUM")
+    local level = layers.ElementLevel(layer, TRINKET_DEFAULTS.layer, 0)
+    holder:SetFrameLevel(level)
+    holder.cooldown:SetFrameLevel(level + 1)
+    holder._msufTrinketAnchor = frame
+    holder._msufTrinketSerial = layoutSerial
+end
+
 local function PositionHolder(holder, index)
     local frame = ArenaFrame(index)
     if not frame then return false end
     -- The anchor is relative to the arena frame, so it follows the frame by
-    -- itself; only a different frame object needs a new anchor.
-    if holder._msufTrinketAnchor ~= frame then
-        holder:ClearAllPoints()
-        holder:SetPoint("LEFT", frame, "RIGHT", 4, 0)
-        holder._msufTrinketAnchor = frame
+    -- itself; only a different frame object or a settings apply re-anchors.
+    if holder._msufTrinketAnchor ~= frame or holder._msufTrinketSerial ~= layoutSerial then
+        ApplyHolderLayout(holder, frame)
     end
     return true
+end
+
+local function PreviewForced(index)
+    local frame = ArenaFrame(index)
+    return frame ~= nil and frame._msufArenaPreviewForced == true
+end
+
+-- A preview holder shows the stock trinket icon with a sample swipe; the
+-- native Cooldown animates it, so the preview adds no update loop either.
+local function ShowPreviewHolder(holder)
+    if holder._msufTrinketPreview ~= true then
+        holder._msufTrinketPreview = true
+        holder.spellID = nil
+        holder.icon:SetTexture(FALLBACK_TEXTURE)
+        holder.cooldown:SetCooldown(GetTime() - PREVIEW_ELAPSED, PREVIEW_COOLDOWN)
+    end
+    holder:Show()
+end
+
+local function EndPreview(holder)
+    if holder._msufTrinketPreview ~= true then return end
+    holder._msufTrinketPreview = nil
+    holder.cooldown:Clear()
 end
 
 local function ApplyTexture(holder, texture)
@@ -307,6 +394,8 @@ local function SyncTrinketIcons(allowRequest)
     else
         active = ArenaEnabled() and ShowTrinketEnabled() and InArenaMatch()
     end
+    -- Outside a menu or Edit Mode preview this stays one number comparison.
+    local preview = previewSlots > 0 and ArenaEnabled() and ShowTrinketEnabled()
     for index = 1, MAX_ARENA do
         local unit = "arena" .. index
         local holder = EnsureHolder(index)
@@ -314,6 +403,7 @@ local function SyncTrinketIcons(allowRequest)
 
         local wanted = active and LiveUnitExists(unit)
         if wanted and PositionHolder(holder, index) then
+            EndPreview(holder)
             holder:Show()
             if allowRequest and not requested[index] then
                 local request = _G.C_PvP and _G.C_PvP.RequestCrowdControlSpell
@@ -323,11 +413,38 @@ local function SyncTrinketIcons(allowRequest)
                 end
             end
             RefreshCooldown(holder, index)
+        elseif preview and PreviewForced(index) and PositionHolder(holder, index) then
+            requested[index] = nil
+            ShowPreviewHolder(holder)
         else
             requested[index] = nil
+            EndPreview(holder)
             holder:Hide()
         end
     end
+end
+
+--- Called by the arena frame preview owner (LoadConditions) after it forced or
+--- released the arena frames: the menu's Arena page and MSUF Edit Mode. The
+--- preview shows these same holders, so it is the runtime geometry 1:1.
+local function SyncTrinketPreview()
+    local count = 0
+    for index = 1, MAX_ARENA do
+        if PreviewForced(index) then count = count + 1 end
+    end
+    if count == 0 and previewSlots == 0 then return end
+    previewSlots = count
+    SyncTrinketIcons(false)
+end
+
+--- Cold path for settings changes: unit-frame applies of the arena scope (menu
+--- edits, section reset, undo, profile switch and import) land here. The serial
+--- re-applies layout on the next position pass; the sync shows it at once and
+--- follows the show switch.
+local function RefreshTrinketLayout(configKey)
+    if configKey ~= nil and tostring(configKey):sub(1, 5) ~= "arena" then return end
+    layoutSerial = layoutSerial + 1
+    SyncTrinketIcons(false)
 end
 
 local function ResetSlot(index)
@@ -336,6 +453,7 @@ local function ResetSlot(index)
     local holder = holders[index]
     if not holder then return end
     holder.spellID = nil
+    holder._msufTrinketPreview = nil
     holder.cooldown:Clear()
     ApplyTexture(holder, nil)
     holder:Hide()
@@ -501,3 +619,15 @@ end
 ExportPublic("MSUF_ArenaMatch_SyncTrinketIcons", function()
     SyncTrinketIcons(true)
 end)
+ExportPublic("MSUF_ArenaTrinkets_SyncPreview", SyncTrinketPreview)
+ExportPublic("MSUF_ArenaTrinkets_RefreshLayout", RefreshTrinketLayout)
+
+--- Read-only surface for the menu (unit preview, PvP Trinket section, Layer
+--- Overview): the resolver and the factory values the runtime itself uses.
+MSUF.ArenaTrinkets = {
+    Layout = TrinketLayout,
+    Shown = function() return ArenaEnabled() and ShowTrinketEnabled() end,
+    DEFAULTS = TRINKET_DEFAULTS,
+    LIMITS = TRINKET_LIMITS,
+    FallbackTexture = FALLBACK_TEXTURE,
+}
