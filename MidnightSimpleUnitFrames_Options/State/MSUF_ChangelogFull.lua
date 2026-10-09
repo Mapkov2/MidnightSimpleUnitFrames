@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "E31573BD88A506983F51D4A8560B26958425A983E87BACD28AD19B010CB66DFA",
+    sourceSha256 = "FEDE00B37E18B292BB88A6FBC00F034BD1C997CABE91D5C08435BC1229A19442",
     currentVersion = "6.50",
     historyFromVersion = "6.02",
     previousVersion = "6.02",
@@ -440,16 +440,14 @@ local data = {
                             },
                         },
                         {
-                            text = "Frame-shape controls: configure shapes through Bars and Group Layout. The duplicate shape picker in each unit's Frame Basics section has been removed.",
+                            text = "Frame-shape controls: configure shapes through Bars. The duplicate shape picker in each unit's Frame Basics section has been removed.",
                             link = {
-                                pageKey = "gf_layout",
-                                query = "group frame bar shape",
-                                label = "Frame bar shape",
-                                sectionId = "general",
-                                controlId = "menu2.gf_layout.group.basics.frame_bar_shape",
-                                settingKey = "gf_party.frameBarShape",
-                                prepareKind = "groupScope",
-                                prepareValue = "party",
+                                pageKey = "opt_bars",
+                                query = "rounded frame texture",
+                                label = "Rounded frame texture",
+                                sectionId = "bars_rounded",
+                                controlId = "menu2.opt.bars.global.rounded.rounded.frames.enabled",
+                                settingKey = "bars.roundedFramesEnabled",
                             },
                         },
                         {
