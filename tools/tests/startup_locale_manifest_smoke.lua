@@ -50,7 +50,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 14,620,000 for about 54 KB of aura filter labels and tooltips in the
         -- twelve packs (largest selections Mainline 16,709,048, TBC 14,592,928);
         -- no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16770000 or 14620000),
+        -- 2026-10-09 (6.50 changelog): 16,770,000 -> 16,860,000 and 14,620,000 ->
+        -- 14,710,000: the core's compact changelog (State/MSUF_Changelog.lua) now
+        -- carries the full 6.5 notes with their menu links as the 6.50 entry,
+        -- about 82 KB more (largest selections Mainline 16,807,225, TBC 14,690,089);
+        -- no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16860000 or 14710000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
