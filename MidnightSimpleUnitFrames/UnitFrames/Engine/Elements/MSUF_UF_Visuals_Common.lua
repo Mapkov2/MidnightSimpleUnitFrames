@@ -88,7 +88,7 @@ local function SetFrameAlpha(frame, alpha)
   alpha = Clamp01(alpha, 1)
   if frame._msufLastAlpha == alpha then
     local current = frame.GetAlpha and frame:GetAlpha()
-    if current == nil or not NotSecretValue(current) or not AlphaDiffers(current, alpha) then
+    if not NotSecretValue(current) or current == nil or not AlphaDiffers(current, alpha) then
       return
     end
   end

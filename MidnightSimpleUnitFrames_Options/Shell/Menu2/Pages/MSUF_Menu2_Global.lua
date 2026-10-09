@@ -230,6 +230,59 @@ local function BarsFlagForKey(scope, key)
     if IsTextScopeKey(key) and not IsGFScope(scope) then return "hpPowerTextOverride" end
     return "hlOverride"
 end
+-- Group texture ownership, read the way GF.ResolveBarTexture does
+-- (GroupFrames/MSUF_GroupFrames_DB_Textures.lua): an explicit barTextureOverride
+-- wins (Group Copy To keeps it apart from the other bar overrides), an absent one
+-- follows the scope's Custom settings switch (hlOverride).
+local GROUP_TEXTURE_KEYS = M.KeySetFromWords "barTexture barBackgroundTexture barBgTexture"
+-- ScopeDBKeys of the group scopes, kept static: page refreshes ask per scope value,
+-- and the selector and current-scope values are already canonical.
+local GROUP_TEXTURE_SCOPES = { gf_party = { "gf_party" }, gf_raid = { "gf_raid", "gf_mythicraid" } }
+local function GroupTextureScopeKeys(scope)
+    local keys = GROUP_TEXTURE_SCOPES[scope]
+    if keys or scope == "shared" or UNIT_SCOPE_KEYS[scope] then return keys end
+    return GROUP_TEXTURE_SCOPES[NormalizeScopeKey(scope)]
+end
+local function GroupEntryOwnsTextures(entry)
+    if not entry then return false end
+    if entry.barTextureOverride ~= nil then return entry.barTextureOverride == true end
+    return entry.hlOverride == true
+end
+local function GroupTexturesOwned(scope)
+    local keys = GroupTextureScopeKeys(scope)
+    if not keys then return false end
+    local db = DB()
+    for i = 1, #keys do
+        if GroupEntryOwnsTextures(db[keys[i]]) then return true end
+    end
+    return false
+end
+-- The texture key a group scope's frames draw; nil when they draw the shared one.
+local function GroupTextureRead(scope, key)
+    local keys = GroupTextureScopeKeys(scope)
+    if not keys then return nil end
+    local db = DB()
+    for i = 1, #keys do
+        local entry = db[keys[i]]
+        if GroupEntryOwnsTextures(entry) and entry[key] ~= nil then return entry[key] end
+    end
+    return nil
+end
+-- A Bars page texture pick owns the group textures (true); Custom settings on, off
+-- or Reset hands them back to that switch (nil).
+local function SetGroupTextureOwner(scope, owned)
+    local keys = GroupTextureScopeKeys(scope)
+    if not keys then return end
+    local db = DB()
+    for i = 1, #keys do
+        local entry = db[keys[i]]
+        if owned and not entry then
+            entry = {}
+            db[keys[i]] = entry
+        end
+        if entry then entry.barTextureOverride = owned and true or nil end
+    end
+end
 local function ApplyFontsFor(scope, reason)
     scope = NormalizeScopeKey(scope)
     M.RequestGeneralApply(reason or "MSUF2_FONTS", {
@@ -416,6 +469,7 @@ local function BarScopeGet(key, default)
 end
 local function BarScopeSet(key, value, reason, suppressApply)
     local scope = CurrentBarsScope()
+    if GROUP_TEXTURE_KEYS[key] then SetGroupTextureOwner(scope, true) end
     ScopeWrite(scope, BarsFlagForKey(scope, key), G(), key, value)
     if suppressApply ~= true then
         M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false, bars = true, barsScope = scope })
@@ -854,6 +908,8 @@ M.Assign(GlobalPage, {
     GradientKeyActive = GradientKeyActive, MarkGradientKey = MarkGradientKey,
     GradientScopeGet = GradientScopeGet, GradientScopeSet = GradientScopeSet, GradientScopeHasExplicit = GradientScopeHasExplicit,
     CurrentFontScope = CurrentFontScope, CurrentBarsScope = CurrentBarsScope, IsGFScope = IsGFScope, BarsFlagForKey = BarsFlagForKey,
+    GroupEntryOwnsTextures = GroupEntryOwnsTextures, GroupTexturesOwned = GroupTexturesOwned, GroupTextureRead = GroupTextureRead,
+    SetGroupTextureOwner = SetGroupTextureOwner,
     ApplyFontsFor = ApplyFontsFor, FontScopeGetFor = FontScopeGetFor, FontScopeSetFor = FontScopeSetFor,
     FontOverrideGetFor = FontOverrideGetFor, FontOverrideSetFor = FontOverrideSetFor,
     FontOutlineGetFor = FontOutlineGetFor, FontOutlineSetFor = FontOutlineSetFor,

@@ -85,6 +85,19 @@ local function SetBlizzardPlayerCastbarAllowed(allowed)
     ns.UF.blizzardCastbarOwner = allowed and "Blizzard" or GetBackend("player")
 end
 
+--- The cast events CastingBarMixin:SetUnit registers for its unit, the same
+--- thirteen unit events plus PLAYER_ENTERING_WORLD on every client
+--- (Blizzard_UIPanels_Game/Shared/CastingBarFrame.lua on ptr2, live, forever,
+--- classic, classic_anniversary and classic_era). The release hands exactly
+--- these back.
+local NATIVE_CAST_EVENTS = {
+    "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_DELAYED",
+    "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_CHANNEL_STOP",
+    "UNIT_SPELLCAST_EMPOWER_START", "UNIT_SPELLCAST_EMPOWER_UPDATE", "UNIT_SPELLCAST_EMPOWER_STOP",
+    "UNIT_SPELLCAST_INTERRUPTIBLE", "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED",
+}
+
 --- WoW Forever defines a second player castbar, GamepadPlayerCastingBarFrame,
 --- that handles cast events only while the Gamepad UI style is active (and
 --- PlayerCastingBarFrame then ignores them). It is owned like the main bar; no
@@ -175,8 +188,6 @@ local function SetNativeFrameSuppressed(frame, suppressed)
         record = record or {}
         nativeRecords[frame] = record
         record.unit = frame.unit or unit
-        record.showTradeSkills = frame.showTradeSkills
-        record.showShield = frame.showShield
         record.suppressed = true
 
         EnsureNativeHideGuard(frame, record)
@@ -194,13 +205,22 @@ local function SetNativeFrameSuppressed(frame, suppressed)
         return false
     end
 
-    -- Disable the show guard before SetUnit performs its synchronous world
-    -- refresh. SetUnit(nil) and SetUnit(unit) execute in the same Lua call, so
-    -- Blizzard never observes a nil unit from a subsequent event dispatch.
+    -- The release registers the bar's cast events again through its own widget
+    -- API, exactly as SetUnit would, and never calls SetUnit: that mixin method
+    -- writes unit, spellID, casting and the other cast fields from MSUF code,
+    -- every later cast reads them tainted (CastingBarMixin:OnEvent) and its
+    -- OnShow lays out the bottom managed container, where ExtraActionButton1
+    -- is protected. The bar's unit never changed, so Blizzard takes over from
+    -- the next cast; a cast already running at the release stays unshown
+    -- (SetUnit's PLAYER_ENTERING_WORLD resync is Blizzard code). Only a
+    -- CastingBarMixin bar (it has SetUnit) is known to want exactly these.
     record.suppressed = nil
     if record.detached and type(frame.SetUnit) == "function" then
-        frame:SetUnit(nil)
-        frame:SetUnit(record.unit or unit, record.showTradeSkills, record.showShield)
+        local castUnit = record.unit or unit
+        for index = 1, #NATIVE_CAST_EVENTS do
+            frame:RegisterUnitEvent(NATIVE_CAST_EVENTS[index], castUnit)
+        end
+        frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     end
     record.detached = nil
     return true

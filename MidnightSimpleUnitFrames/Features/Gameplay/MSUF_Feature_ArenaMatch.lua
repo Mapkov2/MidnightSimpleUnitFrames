@@ -29,9 +29,10 @@ local HAS_PVP_MATCH_STATE_CHANGED = _G.C_EventUtils
     and _G.C_EventUtils.IsEventValid("PVP_MATCH_STATE_CHANGED") == true
 local classicMatchEngaged = false
 
-local function InCombat()
-    return _G.MSUF_InCombat == true
-        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
+-- Event-derived combat state (Kernel/MSUF_Util.lua), not the latched MSUF_InCombat
+-- mirror: only the group runtime's own PLAYER_REGEN_ENABLED handler clears that.
+local function InCombat(event)
+    return MSUF.Util.InCombat(event) == true
 end
 
 local function ArenaConf()
@@ -296,10 +297,10 @@ local function AnyLiveArenaUnit()
     return false
 end
 
-local function SyncPrepDisplay()
+local function SyncPrepDisplay(event)
     -- The prep room is out of combat by definition; never touch protected
     -- frame visibility once combat lockdown is up.
-    if InCombat() then return end
+    if InCombat(event) then return end
 
     local numSpecs = tonumber(_G.GetNumArenaOpponentSpecs and _G.GetNumArenaOpponentSpecs()) or 0
     numSpecs = math.max(0, math.min(MAX_ARENA, math.floor(numSpecs)))
@@ -451,7 +452,7 @@ local function HandleArenaMatchEvent(event, arg1, arg2)
     end
     if event == "PLAYER_REGEN_ENABLED" then
         -- Combat blocked a pending prep hand-off (round transition edge).
-        SyncPrepDisplay()
+        SyncPrepDisplay(event)
         return
     end
 end

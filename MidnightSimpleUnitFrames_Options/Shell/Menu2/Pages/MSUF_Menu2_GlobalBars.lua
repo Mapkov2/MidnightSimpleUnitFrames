@@ -817,8 +817,8 @@ local function GeneralBarBackgroundTextureKey()
     return general.barBackgroundTexture == nil and (general.barBgTexture or "") or general.barBackgroundTexture
 end
 local function BarTextureForScope()
-    return not SharedScope() and not GroupScope() and ReadG("barTexture", "Blizzard")
-        or BarScopeGet("barTexture", ReadG("barTexture", "Blizzard"))
+    -- Unit scopes use the shared texture; a group scope shows what its frames draw.
+    return GroupScope() and GP.GroupTextureRead(CurrentBarsScope(), "barTexture") or ReadG("barTexture", "Blizzard")
 end
 local function SetBarTextureForScope(value)
     value = value or "Blizzard"
@@ -829,12 +829,15 @@ end
 local function BarBackgroundTextureForScope()
     local scope = CurrentBarsScope()
     if scope ~= "shared" and not GroupScope() then return GeneralBarBackgroundTextureKey() end
-    if scope ~= "shared" and ScopeHasOverride(scope, "hlOverride") then
+    if scope ~= "shared" then
+        -- Show what the group frames draw (GF.ResolveBarBgTexture's ownership rule).
         local db, keys = DB(), ScopeDBKeys(scope)
         for i = 1, #(keys or {}) do
             local entry = db[keys[i]]
-            if entry and entry.barBackgroundTexture ~= nil then return entry.barBackgroundTexture end
-            if entry and entry.barBgTexture ~= nil then return entry.barBgTexture end
+            if GP.GroupEntryOwnsTextures(entry) then
+                if entry.barBackgroundTexture ~= nil then return entry.barBackgroundTexture end
+                if entry.barBgTexture ~= nil then return entry.barBgTexture end
+            end
         end
     end
     return GeneralBarBackgroundTextureKey()
@@ -855,8 +858,10 @@ local function SetBarBackgroundTextureForScope(value)
         general.barBackgroundTexture = value
         return true
     end
+    -- Taking ownership alone changes what the frames draw (an explicit false wins).
+    local db, changed = DB(), not GP.GroupTexturesOwned(scope)
+    GP.SetGroupTextureOwner(scope, true)
     ScopeSetOverride(scope, "hlOverride", true)
-    local db, changed = DB(), false
     for i = 1, #keys do
         db[keys[i]] = db[keys[i]] or {}
         changed = db[keys[i]].barBackgroundTexture ~= value or db[keys[i]].barBgTexture ~= value or changed
@@ -899,6 +904,8 @@ local function BuildScopeSection(ctx, b)
             local key = CurrentBarsScope()
             if key ~= "shared" then
                 ScopeSetOverride(key, "hlOverride", v)
+                -- Group textures follow this switch again, also after a Copy To flag.
+                GP.SetGroupTextureOwner(key, nil)
                 -- Texture refresh alone leaves the unit outline's painted state stale.
                 M.RequestGeneralApply("MSUF2_BARS_OVERRIDE", {
                     preview = true, applyAll = false, bars = true,
@@ -913,6 +920,7 @@ local function BuildScopeSection(ctx, b)
                 local key = scopeValues[i].value
                 if key ~= "shared" then
                     ScopeSetOverride(key, "hlOverride", false)
+                    GP.SetGroupTextureOwner(key, nil)
                     local keys, db = ScopeDBKeys(key), DB()
                     for j = 1, #(keys or {}) do
                         local entry = db[keys[j]]

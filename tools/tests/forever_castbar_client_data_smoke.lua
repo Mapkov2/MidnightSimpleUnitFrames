@@ -6,6 +6,8 @@
 --               client) still owns PlayerCastingBarFrame alone. As in the
 --               client, PlayerCastingBarFrame is a managed frame (concealed,
 --               never hidden by MSUF) and the gamepad bar is not (hidden).
+--               The restore registers SetUnit's cast events for the player
+--               and never calls CastingBarMixin:SetUnit (rc1 LB-1).
 --   Interrupt:  Forever resolves the Vanilla interrupt table (no Paladin or
 --               Hunter entry); Retail, Vanilla and a harness without
 --               MSUF.Client keep their own tables.
@@ -44,7 +46,10 @@ local MISTS = { IsForever = false, IsRetail = false, IsClassic = true, IsMists =
 local function NewFrame(name)
     local frame = { name = name, events = {}, unitEvents = {} }
     function frame:RegisterEvent(event) self.events[event] = true end
-    function frame:RegisterUnitEvent(event) self.events[event] = true end
+    function frame:RegisterUnitEvent(event, unit)
+        self.events[event] = true
+        self.unitEvents[event] = unit
+    end
     function frame:UnregisterEvent(event) self.events[event] = nil end
     function frame:UnregisterAllEvents() for event in pairs(self.events) do self.events[event] = nil end end
     function frame:SetScript(script, fn) if script == "OnEvent" then self.onEvent = fn end end
@@ -135,10 +140,11 @@ local function CheckSuppressed(bar, label)
 end
 
 local function CheckRestored(bar, label)
-    local calls = bar.setUnitCalls
-    Check(#calls == 2 and calls[1].unit == nil and calls[2].unit == "player"
-        and calls[2].showTradeSkills == true and calls[2].showShield == false,
-        label .. ": " .. bar.name .. " must be restored through SetUnit(nil) then SetUnit(\"player\", true, false)")
+    Check(#bar.setUnitCalls == 0,
+        label .. ": " .. bar.name .. " was restored through CastingBarMixin:SetUnit from MSUF code")
+    Check(bar.events.UNIT_SPELLCAST_START == true and bar.unitEvents.UNIT_SPELLCAST_START == "player"
+        and bar.unitEvents.UNIT_SPELLCAST_FAILED == "player" and bar.events.PLAYER_ENTERING_WORLD == true,
+        label .. ": " .. bar.name .. " must get SetUnit's cast events back for the player")
     bar:Show()
     Check(bar.shown == true and bar.alpha == 1, label .. ": " .. bar.name .. " OnShow guard must stand down once Blizzard owns it")
 end

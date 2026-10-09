@@ -646,6 +646,13 @@ local function NewWorld(flavor, roster)
     _G.MSUF_NS = MSUF
     -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
     assert(loadfile(Path("MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua")))("MidnightSimpleUnitFrames", MSUF)
+    -- The real event-edge combat state (Kernel/MSUF_Util.lua), as in every core TOC,
+    -- in its own namespace so the stubs here stay in place.
+    local utilityNS = { ExportPublic = function(_, value) return value end }
+    local previousMSUF = _G.MSUF
+    assert(loadfile(Path("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua")))("MidnightSimpleUnitFrames", utilityNS)
+    _G.MSUF = previousMSUF
+    MSUF.Util = utilityNS.Util
 
     local function Load(relative)
         local chunk = assert(loadfile(Path(relative)))

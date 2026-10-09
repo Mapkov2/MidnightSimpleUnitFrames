@@ -1435,13 +1435,13 @@ RebuildPopupRows = function(popup, preserveScroll)
         local foundLayers = {}
         for i = 1, #layers do if SearchMatches(layers[i], query) then foundLayers[#foundLayers + 1] = layers[i] end end
         if #foundLayers > 0 then
-            Section(Tr("Search results - MSUF Layers 0-30") .. " (" .. tostring(#foundLayers) .. ") | " .. layerEditHint)
+            Section(M.Format("Search results - MSUF Layers 0-30 (%d) | %s", #foundLayers, layerEditHint))
             DataRows(foundLayers)
         end
         if #foundLayers == 0 then Section(Tr("No layers match this search.")) end
     else
         if #relevantLayers > 0 then
-            Section(Tr(context.label) .. " - " .. Tr("MSUF Layers 0-30") .. " (" .. tostring(#relevantLayers) .. ") | " .. layerEditHint)
+            Section(M.Format("%s - MSUF Layers 0-30 (%d) | %s", Tr(context.label), #relevantLayers, layerEditHint))
             DataRows(relevantLayers)
         end
         local moreCount = #moreLayers
@@ -1449,12 +1449,12 @@ RebuildPopupRows = function(popup, preserveScroll)
             y = y + 7
             rowIndex = rowIndex + 1
             ConfigureMoreRow(AcquireVisualRow(popup, rowIndex),
-                (popup._showMore and Tr("Less") or Tr("More")) .. " (" .. tostring(moreCount) .. ")",
+                M.Format(popup._showMore and "Less (%d)" or "More (%d)", moreCount),
                 y, width, popup)
             y = y + 32
             if popup._showMore then
                 if #moreLayers > 0 then
-                    Section(Tr("All other MSUF Layers 0-30") .. " (" .. tostring(#moreLayers) .. ") | " .. layerEditHint)
+                    Section(M.Format("All other MSUF Layers 0-30 (%d) | %s", #moreLayers, layerEditHint))
                     DataRows(moreLayers)
                 end
             end

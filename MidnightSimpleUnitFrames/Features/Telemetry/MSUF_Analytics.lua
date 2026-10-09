@@ -11,7 +11,6 @@ local ExportPublic = MSUF.ExportPublic
 local LibStub = _G.LibStub
 local CreateFrame = _G.CreateFrame
 local C_Timer = _G.C_Timer
-local InCombatLockdown = _G.InCombatLockdown
 local GetAddOnMetadata = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata or _G.GetAddOnMetadata
 
 local type = type
@@ -86,9 +85,10 @@ local function IsEnabled()
 end
 Analytics.IsEnabled = IsEnabled
 
-local function IsInCombat()
-    if _G.MSUF_InCombat == true then return true end
-    return (InCombatLockdown and InCombatLockdown()) and true or false
+-- Event-derived combat state (Kernel/MSUF_Util.lua), not the latched MSUF_InCombat
+-- mirror: only the group runtime's own PLAYER_REGEN_ENABLED handler clears that.
+local function IsInCombat(event)
+    return MSUF.Util.InCombat(event) == true
 end
 
 local FlushSession
@@ -113,7 +113,7 @@ local function EnsureEventFrame()
         elseif event == "PLAYER_REGEN_ENABLED" then
             self:UnregisterEvent("PLAYER_REGEN_ENABLED")
             pendingAfterCombat = false
-            FlushSession("regen")
+            FlushSession("regen", event)
         end
     end)
 
@@ -126,11 +126,11 @@ QueueAfterCombat = function()
     EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 
-local function GetAnalyticsSession()
+local function GetAnalyticsSession(event)
     if session then return session end
     if registerAttempted then return nil end
     if not IsEnabled() then return nil end
-    if IsInCombat() then
+    if IsInCombat(event) then
         QueueAfterCombat()
         return nil
     end
@@ -320,15 +320,15 @@ local function CollectSessionSnapshot(target)
     ApplyCounter(target, "MSUF_UiScalePct", Round((tonumber(general.msufUiScale) or 1) * 100))
 end
 
-FlushSession = function(reason)
+FlushSession = function(reason, event)
     if sessionSent then return end
     if not IsEnabled() then return end
-    if IsInCombat() then
+    if IsInCombat(event) then
         QueueAfterCombat()
         return
     end
 
-    local target = GetAnalyticsSession()
+    local target = GetAnalyticsSession(event)
     if not target then return end
 
     CollectSessionSnapshot(target)

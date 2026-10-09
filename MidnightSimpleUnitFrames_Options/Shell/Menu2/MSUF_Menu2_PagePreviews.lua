@@ -127,7 +127,7 @@ local function SyncArenaPagePreviewForKey(key, force)
     if BossPagePreviewInCombat() then
         ClearArenaPagePreviewForCombat()
         _G.MSUF2_ArenaUnitframePreviewActive = nil
-        _G.MSUF2_ArenaPageAuraPreviewActive = nil
+        SyncArenaPageAuraPreviewFlag(false)
         lastArenaPreviewActive = nil
         return
     end
@@ -161,7 +161,7 @@ local function SyncBossPagePreviewForKey(key, force)
     if BossPagePreviewInCombat() then
         ClearBossPagePreviewForCombat()
         _G.MSUF2_BossUnitframePreviewActive = nil
-        _G.MSUF2_BossPageAuraPreviewActive = nil
+        SyncBossPageAuraPreviewFlag(false)
         lastBossPreviewActive = nil
         SyncCastbarPagePreviewForKey(key, false)
         return

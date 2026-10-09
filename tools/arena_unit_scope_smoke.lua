@@ -338,7 +338,7 @@ for _, marker in ipairs({
         "arena match feature lost its contract: " .. marker)
 end
 -- Prep display must never touch protected visibility in combat.
-Check(match:find("if InCombat() then return end", 1, true),
+Check(match:find("if InCombat(event) then return end", 1, true),
     "arena prep display lost its combat guard")
 local loadConditions = Read("MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")
 Check(loadConditions:find("local function ArenaPrepForcesUnit", 1, true)

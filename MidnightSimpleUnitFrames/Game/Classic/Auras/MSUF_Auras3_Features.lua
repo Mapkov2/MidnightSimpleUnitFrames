@@ -511,7 +511,6 @@ local function BaseLane(unit, kind, entry, index, spellIDs, helpful, rootKey, fo
         color = type(entry.color) == "table" and entry.color or { 0.69, 0.50, 0.88, 1 },
         display = entry.name or ("Custom " .. tostring(index)),
         icon = entry.icon,
-        missing = placed.missing == true,
     }
     -- The shared lane schema (MSUF_Auras3_Compile.lua): filter tokens, sort
     -- flags and the global countdown and stack colours, as every lane has them.
@@ -715,6 +714,11 @@ local function AddIndicatorLane(lanes, order, unit, item, index, prefix, style, 
     lane.max = 1
     lane.cols, lane.rows = 1, 1
     lane.width, lane.height = lane.buttonWidth, lane.buttonHeight
+    -- A corner slot's When (GF.CI_CUSTOM_MODES, compiled as item.mode). Show
+    -- when missing lights the slot while no aura passes this lane's filters
+    -- and darkens it while one does (Lanes.RenderLane). A corner slot has no
+    -- Sort By, so it sorts Player first and never renders inline from a scan.
+    lane.showWhenMissing = item.mode == "missing"
     Visuals.EnrichCustomLane(lane, entry, nil)
     if style then ApplySpellIconStyle(lane, style, iconZoom) end
     if style and lane.visual == "bar" then ApplySpellIndicatorBar(lane, item.placed) end

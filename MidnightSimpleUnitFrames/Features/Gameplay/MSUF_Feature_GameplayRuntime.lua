@@ -298,7 +298,7 @@ local function SetCombatTimerShown(shown)
     if combatFrame then combatFrame:SetShown(shown) end
 end
 
-local function TickCombatTimer()
+local function TickCombatTimer(event)
     if not timerText then return end
 
     local gNow = GetGameplayDB()
@@ -309,7 +309,9 @@ local function TickCombatTimer()
         return
     end
 
-    local inCombat = MSUF.Util.InCombat()
+    -- The regen handlers pass their event: at PLAYER_REGEN_DISABLED the lockdown has
+    -- not started yet. The ticker passes its handle, which reads as no event.
+    local inCombat = MSUF.Util.InCombat(event)
 
     if not inCombat then
         SetCombatTimerShown(not gNow.lockCombatTimer)
@@ -656,7 +658,10 @@ local function AnchorCombatCrosshair()
 
     local personal = PlayerNamePlate()
     if MSUF_ShouldCrosshairFollowCamera(personal) then
-        if personal then
+        -- GetHeight is SecretWhenAnchoringSecret (12.1.5, Forever): a secret height
+        -- keeps the centered anchor, so the offset below stays a plain number.
+        local height = personal and personal:GetHeight()
+        if personal and not MSUF.Util.IsSecret(height) then
             parent   = UIParent
             anchorTo = personal.UnitFrame or personal
 
@@ -665,7 +670,7 @@ local function AnchorCombatCrosshair()
             local maxDist = 15 * maxFactor
 
             local close = maxDist > 0 and (1 - math_min(zoom / maxDist, 1)) or 0
-            local base = (personal:GetHeight() or 0) * 0.6
+            local base = (height or 0) * 0.6
             offsetY = -(base + base * 0.6 * close)
         end
     end
@@ -1146,24 +1151,24 @@ local function ApplyCombatTimer(g)
     end
 end
 
-local function MSUF_CombatTimer_OnRegenDisabled()
+local function MSUF_CombatTimer_OnRegenDisabled(event)
     local gd = GetGameplayDB()
     if not gd or not gd.enableCombatTimer then return end
     ReleaseGameplayKeyboardNudge(combatFrame)
     combatStartTime = GetTime()
     lastTimerText = ""
-    TickCombatTimer()
+    TickCombatTimer(event)
     ApplyLockState()
     _StartCombatTimerTick()
 end
 
-local function MSUF_CombatTimer_OnRegenEnabled()
+local function MSUF_CombatTimer_OnRegenEnabled(event)
     local gd = GetGameplayDB()
     if not gd or not gd.enableCombatTimer then return end
     _StopCombatTimerTick()
     combatStartTime = nil
     lastTimerText = ""
-    TickCombatTimer()
+    TickCombatTimer(event)
 end
 
 local function MSUF_CombatTimer_OnEnteringWorld()

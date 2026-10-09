@@ -46,7 +46,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- the LF tree measured Mainline 15,979,430 and Vanilla 13,830,064.
         -- 2026-10-04: complete menu translations add about 503 KB across twelve
         -- packs; raise only this source-size tripwire by that translation budget.
-        assert(bytes < (suffix == "Mainline" and 16710000 or 14560000),
+        -- 2026-10-09 (rc1 E): 16,710,000 -> 16,770,000 and 14,560,000 ->
+        -- 14,620,000 for about 54 KB of aura filter labels and tooltips in the
+        -- twelve packs (largest selections Mainline 16,709,048, TBC 14,592,928);
+        -- no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16770000 or 14620000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

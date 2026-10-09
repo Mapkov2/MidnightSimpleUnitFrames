@@ -9,6 +9,65 @@ if type(A3) ~= "table" then
     MSUF.MSUF_Auras3 = A3
 end
 A3.SpellIndicatorModules = A3.SpellIndicatorModules or {}
+
+--- PTR 7 seals a native AuraButton and everything below it right after
+--- initializeFrame returns. Writing to such a descendant is refused outright,
+--- so ask before touching one. The return itself can be secret on a restricted
+--- object; anything but a plain true fails closed.
+local function CanWriteEffectSurface(root)
+    local canAccess = root and root.CanBeAccessedInContext
+    if type(canAccess) ~= "function" then return true end
+    local allowed = canAccess(root)
+    if issecretvalue(allowed) == true then return false end
+    return allowed == true
+end
+
+--- Name Overlay text. The native slot builds its button once and reuses it
+--- for every later aura, so a target, focus or roster change keeps the
+--- overlay's copy of the old name. The unit frame's name writer calls this
+--- after each write (MSUF_UF_Text_Runtime.lua SetNameTextCached). The text is
+--- passed through opaquely (it can be secret). A sealed button refuses the
+--- write while auras are secret; that frame waits for the restriction to end.
+local nameRetryFrames, nameRetryFrame = {}, nil
+local MirrorNameOverlays
+
+local function RetryNameOverlays()
+    for parentFrame in pairs(nameRetryFrames) do MirrorNameOverlays(parentFrame) end
+    if next(nameRetryFrames) == nil then nameRetryFrame:UnregisterAllEvents() end
+end
+
+function MirrorNameOverlays(parentFrame)
+    local buttons = parentFrame._msufA3SpellIndicatorEffectButtons
+    -- A released effect list returns on a relist; keep the mirror until then.
+    local listed, refused = buttons == nil, false
+    if buttons then
+        for button in pairs(buttons) do
+            local overlay = button._msufA3SpellIndicatorNameOverlay
+            local source = overlay and overlay._msufA3NameSource
+            if source then
+                listed = true
+                if CanWriteEffectSurface(button._msufA3SpellIndicatorEffectRoot) then
+                    overlay:SetText(source:GetText())
+                else
+                    refused = true
+                end
+            end
+        end
+    end
+    if not listed then parentFrame._msufNameTextMirror = nil end
+    if not refused then
+        nameRetryFrames[parentFrame] = nil
+    elseif not nameRetryFrames[parentFrame] then
+        nameRetryFrames[parentFrame] = true
+        if not nameRetryFrame then
+            nameRetryFrame = CreateFrame("Frame")
+            nameRetryFrame:SetScript("OnEvent", RetryNameOverlays)
+        end
+        local client = MSUF.Client
+        local restriction = client and client.SupportsEvent and client.SupportsEvent("ADDON_RESTRICTION_STATE_CHANGED")
+        nameRetryFrame:RegisterEvent(restriction and "ADDON_RESTRICTION_STATE_CHANGED" or "PLAYER_REGEN_ENABLED")
+    end
+end
 A3.SpellIndicatorModules.Effects = function(config)
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 local math_min, math_max = math.min, math.max
@@ -310,6 +369,7 @@ local function RegisterNameOverlay(button, parentFrame, root)
         UnregisterNameOverlay(button)
         overlay._msufA3NameSource = source
     end
+    parentFrame._msufNameTextMirror = MirrorNameOverlays
     -- PTR 5 applies AuraButton access restrictions immediately after this
     -- initializer returns. Do not retain a SetText hook that would later write
     -- to this descendant while aura data is secret.
@@ -962,18 +1022,6 @@ function Runtime.ApplyGroupPresenceGate(parentFrame, present)
         end
     end
     return any
-end
-
---- PTR 7 seals a native AuraButton and everything below it right after
---- initializeFrame returns. Writing to such a descendant is refused outright,
---- so ask before touching one. The return itself can be secret on a restricted
---- object; anything but a plain true fails closed.
-local function CanWriteEffectSurface(root)
-    local canAccess = root and root.CanBeAccessedInContext
-    if type(canAccess) ~= "function" then return true end
-    local allowed = canAccess(root)
-    if issecretvalue(allowed) == true then return false end
-    return allowed == true
 end
 
 --- Re-stamps the absolute frame level of every reachable full-frame effect

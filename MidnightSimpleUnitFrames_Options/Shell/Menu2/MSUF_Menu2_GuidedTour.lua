@@ -625,21 +625,21 @@ local function StageCue(stage, position, touched)
     if section then
         if sectionId:find("preview", 1, true) then
             if stage.id == "opt_bars" then
-                return Tr("Sample = visual only Â· real changes = Unit/Group Preview Â· frame placement = MSUF Edit Mode")
+                return Tr("Sample = visual only · real changes = Unit/Group Preview · frame placement = MSUF Edit Mode")
             end
             if stage.id == "opt_castbar" then
-                return Tr("Normal/Channel/Empowered = simulation Â· Interrupt = feedback Â· handles = saved position")
+                return Tr("Normal/Channel/Empowered = simulation · Interrupt = feedback · handles = saved position")
             end
             if stage.id == "auras3_styling" or stage.id == "gf_auras" then
-                return Tr("Live/Dummy = display only Â· colored aura handles = saved positions")
+                return Tr("Live/Dummy = display only · colored aura handles = saved positions")
             end
             if stage.id:match("^gf_") then
-                return Tr("Scope = Party/Raid/Mythic Â· drag = inner position Â· Shift-layer = isolate Â· Ctrl-wheel/drag = zoom/pan Â· Edit Mode = container")
+                return Tr("Scope = Party/Raid/Mythic · drag = inner position · Shift-layer = isolate · Ctrl-wheel/drag = zoom/pan · Edit Mode = container")
             end
             if stage.id == "classpower" then
-                return Tr("Preview controls = inspect layouts and states Â· MSUF Edit Mode = whole-frame placement")
+                return Tr("Preview controls = inspect layouts and states · MSUF Edit Mode = whole-frame placement")
             end
-            return Tr("Preview controls = inspect layouts and states Â· MSUF Edit Mode = whole-frame placement")
+            return Tr("Preview controls = inspect layouts and states · MSUF Edit Mode = whole-frame placement")
         end
         return format(Tr("CHECKPOINT - Press Enter section to explore every setting in %s."), Tr(section.label))
     end
@@ -689,10 +689,10 @@ local function StageCue(stage, position, touched)
     if stage.id == "gf_party_corner_icons" then return Tr("MSUF POWER MOVE - Assign each corner or bind a custom spell to the selected slot.") end
     if stage.id:match("^gf_party_") then return Tr("PARTY CORE - Change the new green setting and watch the Party Preview update.") end
     if stage.id:match("^group_copy_") then return Tr("COPY FLOW - Open Copy To, select All categories, then press a destination to copy Party instantly.") end
-    if stage.id == "opt_bars" then return Tr("Sample = visual only Â· tests = temporary Â· scope = shared/unit/group") end
+    if stage.id == "opt_bars" then return Tr("Sample = visual only · tests = temporary · scope = shared/unit/group") end
     if stage.id == "opt_castbar" then return Tr("Simulate casts here; position castbar handles in Preview or MSUF Edit Mode.") end
     if stage.id == "opt_fonts" then return Tr("Use the scope selector for shared, unit and group text; compare readability in Preview.") end
-    if stage.id == "auras3_styling" then return Tr("Live/Dummy = display only Â· colored handles = saved positions Â· scope = shared/unit/group/custom") end
+    if stage.id == "auras3_styling" then return Tr("Live/Dummy = display only · colored handles = saved positions · scope = shared/unit/group/custom") end
     if stage.id == "classpower" then return Tr("Use the interactive preview for layouts and states; use Edit Mode for whole-frame placement.") end
     if stage.id == "profiles" then return Tr("Finish with a profile check and export a backup of your setup.") end
     if stage.id == "power_moves" then return Tr("MSUF POWER MOVES - Scan the highlights, then press Continue.") end

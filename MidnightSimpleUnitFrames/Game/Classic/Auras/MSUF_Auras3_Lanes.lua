@@ -43,6 +43,7 @@ local EnsureButton = Buttons.EnsureButton
 local PrewarmLaneButtons = Buttons.PrewarmLaneButtons
 local HideButton = Buttons.HideButton
 local HideTrailingButtons = Buttons.HideTrailingButtons
+local ShowMissingIndicator = Buttons.ShowMissingIndicator
 local UpdateButton = Buttons.UpdateButton
 local BuildButtonUpdater = Buttons.BuildButtonUpdater
 local ProcessData = Filters.ProcessData
@@ -745,6 +746,24 @@ local function RenderLaneNatural(lane, unit, cfg)
     return true
 end
 
+--- Show when missing (a corner slot's When, Features.AddIndicatorLane): the
+--- one button stands while no aura passes the lane's filters. lane.active is
+--- that answer, kept by every scan and delta merge, so the spell IDs and the
+--- caster rule decide presence exactly as in Show when present.
+local function RenderMissingLane(lane, unit)
+    local all = lane.all
+    local visible = 1
+    for auraInstanceID in next, lane.active do
+        if all[auraInstanceID] then
+            visible = 0
+            break
+        end
+    end
+    if visible == 1 then ShowMissingIndicator(lane, EnsureButton(lane, 1), unit) end
+    HideTrailingButtons(lane, WipeTable(lane.visibleByID), visible)
+    return true
+end
+
 local function RenderLane(lane, unit)
     local cfg = lane.config
     if not (cfg and cfg.enabled) then
@@ -763,6 +782,7 @@ local function RenderLane(lane, unit)
         lane.visible = 0
         return true
     end
+    if cfg.showWhenMissing == true then return RenderMissingLane(lane, unit) end
     if cfg.naturalOrder == true then
         return RenderLaneNatural(lane, unit, cfg)
     end

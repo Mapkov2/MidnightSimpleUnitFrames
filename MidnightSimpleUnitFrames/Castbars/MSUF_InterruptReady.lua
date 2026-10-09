@@ -13,6 +13,7 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 local ExportPublic = MSUF.ExportPublic
 local IS_FOREVER = MSUF.Client ~= nil and MSUF.Client.IsForever == true
+local IS_CLASSIC = MSUF.Client ~= nil and MSUF.Client.IsClassic == true
 
 local SpellAPI = _G.C_Spell
 local GetTime = _G.GetTime
@@ -219,7 +220,11 @@ end
 
 -- SpellBookDocumentation.lua (live/classic/forever): the Pet bank is the
 -- current pet's book; presence in a player's book alone does not mean learned.
-local function KnowsInterrupt(spellID, pet)
+-- overrides: only a spec-keyed primary on Mainline clients also accepts an
+-- active override (Demonology's Axe Toss on Command Demon), because
+-- Blizzard_CooldownBroadcaster.lua:124-133 asks IsSpellKnownOrInSpellBook only
+-- for its spec-filtered interrupt list; the book also holds off-spec spells.
+local function KnowsInterrupt(spellID, pet, overrides)
     if not spellID then return false end
     local book = _G.C_SpellBook
     local known = book and (book.IsSpellKnown or book.IsSpellKnownOrInSpellBook)
@@ -227,7 +232,12 @@ local function KnowsInterrupt(spellID, pet)
         local enums = _G.Enum
         local banks = enums and enums.SpellBookSpellBank
         if pet and not (banks and banks.Pet) then return false end
-        return known(spellID, pet and banks.Pet or nil) == true
+        if known(spellID, pet and banks.Pet or nil) == true then return true end
+        if overrides and not pet then
+            local inBook = book.IsSpellKnownOrInSpellBook
+            if inBook and inBook ~= known then return inBook(spellID) == true end
+        end
+        return false
     end
     local legacy = _G.IsSpellKnown
     if legacy then return legacy(spellID, pet == true) == true end
@@ -235,9 +245,9 @@ local function KnowsInterrupt(spellID, pet)
     return not pet and playerSpell ~= nil and playerSpell(spellID) == true
 end
 
-local function InterruptAvailable(spellID, classToken)
+local function InterruptAvailable(spellID, classToken, specKeyed)
     local pet = spellID == 19647
-    if not KnowsInterrupt(spellID, pet) then return false end
+    if not KnowsInterrupt(spellID, pet, specKeyed and not IS_CLASSIC) then return false end
     -- On ranked clients Feral Charge and Pummel require their combat form.
     -- Keep resource starvation separate from availability, as Blizzard's
     -- action buttons do with IsSpellUsable's insufficientPower result.
@@ -274,15 +284,17 @@ local function ResolveInterruptSpellID()
     local spellID = classSpells and classSpells.DEFAULT
 
     local specID = ActiveSpecID()
+    local specKeyed = false
     if specID ~= nil then
         local specKey = SPECIALIZATION_KEYS[specID]
         if classSpells and specKey and classSpells[specKey] then
             spellID = classSpells[specKey]
+            specKeyed = true
         end
         state.specID = specID
     end
 
-    if not InterruptAvailable(spellID, classToken) then spellID = nil end
+    if not InterruptAvailable(spellID, classToken, specKeyed) then spellID = nil end
     local secondarySpellID = SecondaryInterruptSpellID(classToken)
     if not spellID then spellID, secondarySpellID = secondarySpellID, nil end
     state.spellsResolved = true

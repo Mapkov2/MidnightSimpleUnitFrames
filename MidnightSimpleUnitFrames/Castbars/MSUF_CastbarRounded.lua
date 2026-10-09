@@ -23,8 +23,12 @@ local MaskSurfaceTexture = RoundedSurface.MaskTextureWith
 
 local roundedRuntimeActive = false
 
+local function SavedDB()
+    return _G.MSUF_DB
+end
+
 local function BarsDB()
-    local db = _G.MSUF_DB
+    local db = SavedDB()
     return db and db.bars or nil
 end
 
@@ -86,6 +90,7 @@ local function ApplySurfaceMasks(frame)
     MaskSurfaceTexture(frame, fill, MASK_KEY, MASKED_KEY, statusBar, maskPath)
     MaskSurfaceTexture(frame, frame.backgroundBar, MASK_KEY, MASKED_KEY, statusBar, maskPath)
     MaskSurfaceTexture(frame, frame.latencyBar, MASK_KEY, MASKED_KEY, statusBar, maskPath)
+    MaskSurfaceTexture(frame, statusBar._msufGlowOverlay, MASK_KEY, MASKED_KEY, statusBar, maskPath)
     if type(frame.empowerSegments) == "table" then
         for index = 1, #frame.empowerSegments do
             MaskSurfaceTexture(frame, frame.empowerSegments[index], MASK_KEY, MASKED_KEY, statusBar, maskPath)
@@ -258,6 +263,10 @@ local function ApplyFrame(frame)
         if frame._msufRoundedCastbarActive == true then ClearFrame(frame, true) end
         return false
     end
+    -- Build the glow overlay here, out of combat, so its mask is in place
+    -- before the first glowing cast (Castbars/MSUF_CastbarUtils.lua).
+    local ensureGlow = MSUF.Castbars and MSUF.Castbars.EnsureGlowOverlay
+    if ensureGlow then ensureGlow(frame.statusBar) end
     ApplySurfaceMasks(frame)
     frame._msufRoundedCastbarActive = true
     local applyOutline = _G.MSUF_ApplyCastbarOutline
@@ -299,6 +308,34 @@ local function ApplyAll(masterActive)
     end)
 end
 
+-- A glow overlay built on a cast after this bar was masked joins its mask.
+local function MaskGlowOverlay(frame)
+    if not (frame and frame._msufRoundedCastbarActive == true and frame.statusBar) then return false end
+    local statusBar = frame.statusBar
+    return MaskSurfaceTexture(frame, statusBar._msufGlowOverlay, MASK_KEY, MASKED_KEY, statusBar, (ResolveMedia(frame)))
+end
+
+-- The glow toggle and other style changes run the castbar texture pass
+-- (Castbars/MSUF_Castbars_Core.lua): build and mask the glow overlay there,
+-- out of combat, so a first glowing cast never shows it unmasked.
+local function RefreshGlowOverlays()
+    if not roundedRuntimeActive then return end
+    local db = SavedDB()
+    local general = db and db.general
+    if general and general.castbarShowGlow == false then return end
+    local ensureGlow = MSUF.Castbars and MSUF.Castbars.EnsureGlowOverlay
+    if not ensureGlow then return end
+    ForEachCastbar(function(frame)
+        if frame._msufRoundedCastbarActive == true and frame.statusBar then
+            ensureGlow(frame.statusBar, true)
+            MaskGlowOverlay(frame)
+        end
+    end)
+end
+
+MSUF.Castbars = MSUF.Castbars or {}
+MSUF.Castbars.MaskGlowOverlay = MaskGlowOverlay
+MSUF.Castbars.RefreshRoundedGlow = RefreshGlowOverlays
 MSUF.RoundedCastbarsApplyAll = ApplyAll
 ExportPublic("MSUF_RoundedCastbar_RefreshFrame", ApplyFrame)
 ExportPublic("MSUF_RoundedCastbar_ApplyOutline", ApplyRoundedOutline)

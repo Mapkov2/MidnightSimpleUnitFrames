@@ -9,7 +9,8 @@
 -- as 6, a 6 was saved as 4, 9 and 10 were out of reach, and 2 or 3 saved 0 or
 -- 1, below Blizzard's minimum, which MSUF then painted as the bag padding.
 -- Every other stepper keeps its ConvertValueDefault / ConvertValueDiffFromMin
--- conversion (identical at step 1).
+-- conversion (identical at step 1). The Damage Meter padding is saved only:
+-- MSUF never calls DamageMeterMixin:SetBarSpacing (rc1 LB-4).
 -- Real ExternalProvider.lua and MSUF_EditMode_Blizzard.lua. arg 1 = repo root.
 local root = assert(arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
 
@@ -52,6 +53,7 @@ local function Frame(systemId)
     function frame:SetPoint() end
     function frame:Layout() self.layoutCount = (self.layoutCount or 0) + 1 end
     function frame:SetBarSpacing(value) self.barSpacing = value end
+    function frame:SetSize() end
     return frame
 end
 CreateFrame = function()
@@ -102,6 +104,8 @@ MSUF_EditModeAPI = {
 local general
 MSUF_GetGeneralDB = function() return general end
 MSUF_EM2 = { Registry = {} }
+-- The Edit Mode HUD's status line (a Damage Meter setting asks for a reload).
+MSUF_EM2_SetHUDStatus = function() end
 
 local ns = {
     ExportPublic = function(name, value) _G[name] = value; return value end,
@@ -170,7 +174,8 @@ local meterPadding = Control("damagemeter", "padding")
 Check(meterPadding.get() == 5, "Damage Meter padding raw 3 shows " .. tostring(meterPadding.get()) .. ", expected 5")
 meterPadding.set(8)
 Check(Stored(meterEntry, 5) == 6, "Damage Meter padding 8 saved raw " .. tostring(Stored(meterEntry, 5)) .. ", expected 6")
-Check(meter.barSpacing == 8, "Damage Meter padding 8 painted bar spacing " .. tostring(meter.barSpacing))
+Check(meter.barSpacing == nil, "Damage Meter padding 8 called DamageMeterMixin:SetBarSpacing from MSUF code ("
+    .. tostring(meter.barSpacing) .. ")")
 Check(saves > 0, "no setting was saved")
 
 if #failures > 0 then

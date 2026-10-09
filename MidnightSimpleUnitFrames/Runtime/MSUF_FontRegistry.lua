@@ -464,7 +464,9 @@ local function MSUF_GetFontPreviewObject(key)
         obj = G.CreateFont("MSUF_FontPreview_" .. tostring(MSUF_FontPreviewObjectCount))
         MSUF_FontPreviewObjects[key] = obj
     end
-    local path = assert(G.MSUF_ResolveFontKeyPath(key), "MSUF unknown font key: " .. tostring(key))
+    -- An unknown or not yet registered key previews the default face, like
+    -- every other font consumer; the stored selection is left untouched.
+    local path = MSUF_ResolveSafeFontPath(nil, 14, "", key)
     G.MSUF_SetFontChecked(obj, path, 14, "")
     return obj
 end

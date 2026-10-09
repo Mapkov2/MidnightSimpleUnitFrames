@@ -64,7 +64,9 @@ local function BuildGameplay(ctx)
         ApplyGameplay()
         if disabledRefresh then disabledRefresh() end
     end
-    local anchorValues = VT("none", "None", "player", "Player", "target", "Target", "focus", "Focus")
+    -- Only frames this client has (Classic Era has no Focus); a stored one stays listed, read-only.
+    local anchorItems = VT("none", "None", "player", "Player", "target", "Target", "focus", "Focus")
+    local function anchorValues() return M.AnchorTargetValues(anchorItems, Gameplay().combatTimerAnchor) end
     local frameAnchors = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
     local function CurrentMeleeSpellID()
         if type(M.GetGameplayMeleeSpellID) == "function" then return M.GetGameplayMeleeSpellID(Gameplay()) end

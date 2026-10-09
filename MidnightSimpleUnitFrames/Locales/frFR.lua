@@ -31,6 +31,7 @@ L["Blizzard has no native Pet Target frame."] = "Blizzard ne propose pas de cadr
 L["%d relevant color"] = "%d couleur pertinente"
 L["%d relevant colors"] = "%d couleurs pertinentes"
 L["Fixed slots and missing-aura reminders are unavailable on Classic. Saved settings are kept; active auras still work."] = "Les emplacements fixes et les rappels d’auras manquantes sont indisponibles sur Classic. Les réglages enregistrés sont conservés ; les auras actives fonctionnent toujours."
+L["Show when missing is unavailable on this client. Saved settings are kept; the slot shows when present."] = "« Afficher en cas d'absence » est indisponible sur ce client. Les réglages enregistrés sont conservés ; l’emplacement s’affiche quand l’aura est présente."
 L["Reminder clicks are unavailable on Classic"] = "Les clics sur les rappels sont indisponibles sur Classic"
 L["Custom enchant reminders are unavailable on Classic. The normal player buff lane still shows weapon enchants."] = "Les rappels d’enchantements personnalisés sont indisponibles sur Classic. La rangée normale des améliorations du joueur affiche toujours les enchantements d’arme."
 L["PART 3 - Shape Class Resources with its interactive preview and independent Edit Mode placement."] = "PARTIE 3 - Personnalisez les ressources de classe avec l’aperçu interactif et leur placement indépendant en mode Édition."
@@ -1737,7 +1738,7 @@ local MSUF2_HELPER_frFR = {
     ["Raid marker"] = "Marqueur de raid",
     ["Re-anchor Blizzard TotemFrame"] = "Réancrer Blizzard TotemFrame",
     ["Reaction color"] = "Couleur de réaction",
-    ["Ready Check"] = "Vérification de disponibilité",
+    ["Ready Check"] = "Appel",
     ["Regular"] = "Régulier",
     ["remove realm names"] = "supprimer les noms de royaume",
     ["Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile."] = "Réinitialiser tous les paramètres de cadre de groupe aux valeurs par défaut ?\n\nCela réinitialise les cadres de groupe, de raid et de raid mythique pour le profil actif.",
@@ -5107,7 +5108,7 @@ L["Controls only this second HP bar. The normal Player unitframe HP text remains
 L["Controls this aura lane independently. Always / Out of Combat / Modifier / Never under Global Style > Miscellaneous affect only unit and group frames. Auras only reuse the selected Blizzard/MSUF look and cursor placement."] = "Contrôle cette rangée d'auras indépendamment. Toujours / Hors combat / Modificateur / Jamais, sous Style global > Divers, n'affectent que les cadres d'unité et de groupe. Les auras ne reprennent que l'aspect Blizzard/MSUF choisi et le placement du curseur."
 L["Cooldown swipe direction"] = "Sens du balayage de temps de recharge"
 L["Core feature enabled by default for new profiles and once for existing profiles. It works as a normal defensive buff bar without an enabled portrait. Turn this off to disable both bar and portrait-position display."] = "Fonction principale activée par défaut pour les nouveaux profils et une seule fois pour les profils existants. Elle fonctionne comme une barre de buffs défensifs normale même sans portrait activé. Désactivez-la pour supprimer à la fois la barre et l'affichage à la position du portrait."
-L["Crowd Control"] = "Contrôle des foules"
+L["Crowd Control"] = "Contrôle de foule"
 L["Curated DoT auras for this game version. Tracking is restricted to this UnitFrame's unit and your own aura source; Boss settings bind separately to boss1 through boss5."] = "Auras de DoT sélectionnées pour cette version du jeu. Le suivi est limité à l'unité de ce UnitFrame et à vos propres auras ; les réglages Boss se lient séparément à boss1 jusqu'à boss5."
 L["Curated Retail 12.0+ and 12.1 DoT auras. Tracking is restricted to this UnitFrame's unit and your own aura source; Boss settings bind separately to boss1 through boss5."] = "Auras de DoT sélectionnées pour Retail 12.0+ et 12.1. Le suivi est limité à l'unité de ce cadre d'unité et à vos propres auras ; les réglages Boss se lient séparément à boss1 jusqu'à boss5."
 L["Custom Spell ID"] = "ID de sort personnalisé"
@@ -6942,6 +6943,66 @@ L["Resets all scoped slanted directions to Shared and turns off custom bar setti
 L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "Les couleurs de Suite se trouvent dans les sections ci-dessous.\nOuvrez l’aperçu de la minicarte pour positionner ses éléments."
 
 L["Arena Preview"] = "Aperçu d’arène"
+
+-- Aura filter switch labels.
+L["Non-Player Auras"] = "Auras hors joueurs"
+L["Non-player auras"] = "Auras hors joueurs"
+L["Only mine"] = "Uniquement les miens"
+L["Hide permanent"] = "Masquer les permanentes"
+L["Crowd control"] = "Contrôle de foule"
+
+-- Whole-phrase counts for Priority Frames and the Layer overview.
+L["%s visible"] = "%s visibles"
+L["%s pinned"] = "%s épinglés"
+L["%s slots"] = "%s emplacements"
+L["%s saved"] = "%s enregistrés"
+L["%d saved players"] = "%d joueurs enregistrés"
+L["Search results - MSUF Layers 0-30 (%d) | %s"] = "Résultats de la recherche - Calques MSUF 0-30 (%d) | %s"
+L["%s - MSUF Layers 0-30 (%d) | %s"] = "%s - Calques MSUF 0-30 (%d) | %s"
+L["All other MSUF Layers 0-30 (%d) | %s"] = "Tous les autres calques MSUF 0-30 (%d) | %s"
+L["More (%d)"] = "Plus (%d)"
+L["Less (%d)"] = "Moins (%d)"
+
+-- Aura filter labels and tooltips of the Unit and Group filter blocks.
+L["Turns aura classification filters on or off for this exact lane. Big Defensive uses MSUF's curated list on friendly frames."] = "Active ou désactive les filtres de classification des auras pour cette voie uniquement. Grande défensive utilise la liste sélectionnée par MSUF sur les cadres alliés."
+L["Maximum duration"] = "Durée maximale"
+L["Off shows auras of any duration. Otherwise, auras whose total duration exceeds this number of seconds are hidden."] = "Désactivé affiche les auras de toute durée. Sinon, les auras dont la durée totale dépasse ce nombre de secondes sont masquées."
+L["Only auras applied by the player."] = "Uniquement les auras appliquées par le joueur."
+L["Important"] = "Importantes"
+L["Only auras Blizzard flags as important."] = "Uniquement les auras que Blizzard marque comme importantes."
+L["Applicable by me"] = "Applicable par moi"
+L["Helpful auras your character can apply (Blizzard RAID token)."] = "Auras bénéfiques que votre personnage peut appliquer (jeton RAID de Blizzard)."
+L["Raid combat"] = "Raid en combat"
+L["Blizzard's in-combat raid Buff filter."] = "Filtre de raid en combat de Blizzard pour les buffs."
+L["Also include nameplate-only"] = "Inclure aussi barres d'unité uniquement"
+L["Broadens the selected filter to also admit Buffs Blizzard marks nameplate-only; it is not a standalone only-filter."] = "Élargit le filtre choisi aux buffs que Blizzard réserve aux barres d'unité ; ce n'est pas un filtre exclusif autonome."
+L["Dispellable / stealable by group"] = "Dissipable / volable par le groupe"
+L["Helpful enemy auras someone in your group can dispel, purge, or steal."] = "Auras bénéfiques ennemies que quelqu'un de votre groupe peut dissiper, purger ou voler."
+L["Any dispel / steal type"] = "Tout type de dissipation / vol"
+L["Helpful enemy auras with any dispel type, even when your group cannot remove them."] = "Auras bénéfiques ennemies avec n'importe quel type de dissipation, même si votre groupe ne peut pas les retirer."
+L["External defensive"] = "Défensive externe"
+L["External defensive Buffs."] = "Buffs défensifs externes."
+L["Big defensive"] = "Grande défensive"
+L["MSUF's curated major-defensive Spell-ID list on friendly frames; Blizzard's safe native classification is used where exact identity filtering is restricted."] = "Liste d'ID de sorts de grandes défensives sélectionnée par MSUF sur les cadres alliés ; la classification native sûre de Blizzard sert là où le filtrage exact par identité est restreint."
+L["Cancelable"] = "Annulable"
+L["Only cancelable Buffs."] = "Uniquement les buffs annulables."
+L["Not cancelable"] = "Non annulable"
+L["Only non-cancelable Buffs."] = "Uniquement les buffs non annulables."
+L["Only Debuffs applied by the player."] = "Uniquement les débuffs appliqués par le joueur."
+L["Only Debuffs Blizzard flags as important."] = "Uniquement les débuffs que Blizzard marque comme importants."
+L["Harmful auras your character can dispel (Blizzard RAID token)."] = "Auras néfastes que votre personnage peut dissiper (jeton RAID de Blizzard)."
+L["Blizzard's in-combat raid Debuff filter."] = "Filtre de raid en combat de Blizzard pour les débuffs."
+L["Broadens the selected filter to also admit Debuffs Blizzard marks nameplate-only; it is not a standalone only-filter."] = "Élargit le filtre choisi aux débuffs que Blizzard réserve aux barres d'unité ; ce n'est pas un filtre exclusif autonome."
+L["Debuffs someone in your group can dispel."] = "Débuffs que quelqu'un de votre groupe peut dissiper."
+L["Debuffs with a dispel type, even when your group cannot remove them."] = "Débuffs ayant un type de dissipation, même si votre groupe ne peut pas les retirer."
+L["Crowd-control Debuffs."] = "Débuffs de contrôle de foule."
+L["Only Debuffs not caused by any player or player pet."] = "Uniquement les débuffs qui ne proviennent d'aucun joueur ni d'aucun familier de joueur."
+L["MSUF Highlights"] = "Sélection MSUF"
+L["Cast by Me"] = "Lancé par moi"
+L["Big Defensive by Me"] = "Grande défensive (de moi)"
+L["External Defensive by Me"] = "Défensive externe (de moi)"
+L["Applicable and Cast by Me"] = "Applicable et lancé par moi"
+L["Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible."] = "Exclut les auras sans durée. Sélection MSUF utilise volontairement sa liste exacte pour que la présence temporaire sous Voile de dissimulation reste visible."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)

@@ -58,6 +58,7 @@ Check("MT3-A1",function()
  local plate={UnitFrame={},GetHeight=function()return 100 end,IsShown=function()return true end}
  local queries=0;local active=plate;local zoom=15;local parent={}
  local env={crosshairFrame=frame,UIParent=parent,GetCVar=function(k)return k=="cameraDistanceMaxZoomFactor" and "1" or "0" end,GetCVarBool=function()return false end,GetCameraZoom=function()return zoom end,math_min=math.min}
+ env.MSUF={Util={IsSecret=function()return false end}} -- plain heights; rc1_b_smoke covers a secret one
  env._G={C_NamePlate={GetNamePlateForUnit=function(unit)assert(unit=="player");queries=queries+1;return active end}}
  local apply=Compile(Slice("Features/Gameplay/MSUF_Feature_GameplayRuntime.lua",first,"local UpdateCrosshairRangeColor").."return AnchorCombatCrosshair",env)()
  apply();assert(frame.anchor==plate.UnitFrame and frame.parent==parent,"personal nameplate not used or adopted")

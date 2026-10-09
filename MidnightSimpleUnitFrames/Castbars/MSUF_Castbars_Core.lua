@@ -529,6 +529,8 @@ local function UpdateCastbarTextures()
             end
         end
     end
+    local refreshRoundedGlow = MSUF.Castbars and MSUF.Castbars.RefreshRoundedGlow
+    if refreshRoundedGlow then refreshRoundedGlow() end
 end
 ExportPublic("MSUF_UpdateCastbarTextures", UpdateCastbarTextures)
 ExportPublic("MSUF_UpdateCastbarTextures_Immediate", UpdateCastbarTextures)

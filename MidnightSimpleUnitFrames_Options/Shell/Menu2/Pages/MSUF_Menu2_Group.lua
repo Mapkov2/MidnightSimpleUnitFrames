@@ -631,9 +631,12 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
         dstConf.slantedBarDirection = srcConf.slantedBarDirection
     end
     if scopes.health then
+        -- Texture ownership as GF.ResolveBarTexture reads it: an explicit flag travels as is,
+        -- a texture the source shows through Custom settings becomes explicit, and no flag
+        -- stays no flag, so the destination's Bars page switch keeps governing its textures.
         local override = srcConf.barTextureOverride
-        if override == nil then override = srcConf.hlOverride == true end
-        dstConf.barTextureOverride = override == true
+        if override == nil and srcConf.hlOverride == true then override = true end
+        dstConf.barTextureOverride = override
         -- Copy the effective texture choice without enabling unrelated highlight overrides.
         dstConf.barTexture = override and DeepCopy(srcConf.barTexture) or nil
         dstConf.barBackgroundTexture = override and DeepCopy(srcConf.barBackgroundTexture) or nil

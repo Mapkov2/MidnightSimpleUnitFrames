@@ -34,6 +34,7 @@ L["Blizzard has no native Pet Target frame."] = "暴雪没有原生的宠物目�
 L["%d relevant color"] = "%d 种相关颜色"
 L["%d relevant colors"] = "%d 种相关颜色"
 L["Fixed slots and missing-aura reminders are unavailable on Classic. Saved settings are kept; active auras still work."] = "Classic 不支持固定栏位和缺失光环提醒。已保存的设置会保留；活动光环仍可正常使用。"
+L["Show when missing is unavailable on this client. Saved settings are kept; the slot shows when present."] = "“缺失时显示”在此客户端不可用。已保存的设置会保留；光环存在时该槽位仍会显示。"
 L["Reminder clicks are unavailable on Classic"] = "Classic 不支持点击提醒"
 L["Custom enchant reminders are unavailable on Classic. The normal player buff lane still shows weapon enchants."] = "Classic 不支持自定义附魔提醒。普通玩家增益栏仍会显示武器附魔。"
 L["PART 3 - Shape Class Resources with its interactive preview and independent Edit Mode placement."] = "第 3 部分 - 使用交互预览和编辑模式的独立定位来定制职业资源。"
@@ -2012,7 +2013,7 @@ local MSUF2_HELPER_zhCN = {
     ["Raid marker"] = "团队标记",
     ["Re-anchor Blizzard TotemFrame"] = "重新锚定 Blizzard TotemFrame",
     ["Reaction color"] = "反应颜色",
-    ["Ready Check"] = "准备检查",
+    ["Ready Check"] = "就位确认",
     ["Regular"] = "常规",
     ["remove realm names"] = "移除服务器名称",
     ["Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile."] = "将所有团队框体设置重置为默认值？\n\n这将重置当前配置文件的小队、团队和史诗团队框体。",
@@ -7007,6 +7008,66 @@ L["Resets all scoped slanted directions to Shared and turns off custom bar setti
 L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "Suite 颜色位于下方各个部分。\n打开小地图预览以调整其元素的位置。"
 
 L["Arena Preview"] = "竞技场预览"
+
+-- Aura filter switch labels.
+L["Non-Player Auras"] = "非玩家光环"
+L["Non-player auras"] = "非玩家光环"
+L["Only mine"] = "仅自己的"
+L["Hide permanent"] = "隐藏永久光环"
+L["Crowd control"] = "控制类效果"
+
+-- Whole-phrase counts for Priority Frames and the Layer overview.
+L["%s visible"] = "可见 %s"
+L["%s pinned"] = "已固定 %s"
+L["%s slots"] = "%s 个栏位"
+L["%s saved"] = "已保存 %s"
+L["%d saved players"] = "已保存 %d 名玩家"
+L["Search results - MSUF Layers 0-30 (%d) | %s"] = "搜索结果 - MSUF 层 0-30 (%d) | %s"
+L["%s - MSUF Layers 0-30 (%d) | %s"] = "%s - MSUF 层 0-30 (%d) | %s"
+L["All other MSUF Layers 0-30 (%d) | %s"] = "所有其他 MSUF 层 0-30 (%d) | %s"
+L["More (%d)"] = "更多 (%d)"
+L["Less (%d)"] = "收起 (%d)"
+
+-- Aura filter labels and tooltips of the Unit and Group filter blocks.
+L["Turns aura classification filters on or off for this exact lane. Big Defensive uses MSUF's curated list on friendly frames."] = "仅为此栏位开启或关闭光环分类过滤。强力防御在友方框体上使用 MSUF 精选列表。"
+L["Maximum duration"] = "最长持续时间"
+L["Off shows auras of any duration. Otherwise, auras whose total duration exceeds this number of seconds are hidden."] = "关闭时显示任意持续时间的光环。否则隐藏总持续时间超过此秒数的光环。"
+L["Only auras applied by the player."] = "仅玩家施加的光环。"
+L["Important"] = "重要"
+L["Only auras Blizzard flags as important."] = "仅暴雪标记为重要的光环。"
+L["Applicable by me"] = "我可施加"
+L["Helpful auras your character can apply (Blizzard RAID token)."] = "你的角色可以施加的有益光环（暴雪 RAID 标记）。"
+L["Raid combat"] = "团队战斗中"
+L["Blizzard's in-combat raid Buff filter."] = "暴雪的团队战斗中增益过滤。"
+L["Also include nameplate-only"] = "同时包含仅姓名板"
+L["Broadens the selected filter to also admit Buffs Blizzard marks nameplate-only; it is not a standalone only-filter."] = "扩展所选过滤，同时纳入暴雪标记为仅姓名板的增益；它不是独立的过滤。"
+L["Dispellable / stealable by group"] = "小队可驱散 / 偷取"
+L["Helpful enemy auras someone in your group can dispel, purge, or steal."] = "你的小队中有人可以驱散、净化或偷取的敌方有益光环。"
+L["Any dispel / steal type"] = "任意驱散 / 偷取类型"
+L["Helpful enemy auras with any dispel type, even when your group cannot remove them."] = "具有任意驱散类型的敌方有益光环，即使你的小队无法移除。"
+L["External defensive"] = "外部防御"
+L["External defensive Buffs."] = "外部防御增益。"
+L["Big defensive"] = "强力防御"
+L["MSUF's curated major-defensive Spell-ID list on friendly frames; Blizzard's safe native classification is used where exact identity filtering is restricted."] = "MSUF 在友方框体上精选的强力防御法术 ID 列表；在精确身份过滤受限时使用暴雪安全的原生分类。"
+L["Cancelable"] = "可取消"
+L["Only cancelable Buffs."] = "仅可取消的增益。"
+L["Not cancelable"] = "不可取消"
+L["Only non-cancelable Buffs."] = "仅不可取消的增益。"
+L["Only Debuffs applied by the player."] = "仅玩家施加的减益。"
+L["Only Debuffs Blizzard flags as important."] = "仅暴雪标记为重要的减益。"
+L["Harmful auras your character can dispel (Blizzard RAID token)."] = "你的角色可以驱散的有害光环（暴雪 RAID 标记）。"
+L["Blizzard's in-combat raid Debuff filter."] = "暴雪的团队战斗中减益过滤。"
+L["Broadens the selected filter to also admit Debuffs Blizzard marks nameplate-only; it is not a standalone only-filter."] = "扩展所选过滤，同时纳入暴雪标记为仅姓名板的减益；它不是独立的过滤。"
+L["Debuffs someone in your group can dispel."] = "你的小队中有人可以驱散的减益。"
+L["Debuffs with a dispel type, even when your group cannot remove them."] = "具有驱散类型的减益，即使你的小队无法移除。"
+L["Crowd-control Debuffs."] = "控制类减益。"
+L["Only Debuffs not caused by any player or player pet."] = "仅非任何玩家或玩家宠物造成的减益。"
+L["MSUF Highlights"] = "MSUF 精选"
+L["Cast by Me"] = "由我施放"
+L["Big Defensive by Me"] = "强力防御（我施放）"
+L["External Defensive by Me"] = "外部防御（我施放）"
+L["Applicable and Cast by Me"] = "我可施加且由我施放"
+L["Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible."] = "排除无持续时间的光环。MSUF 精选有意使用其精确列表，以便潜行者临时的团队潜行保持可见。"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)

@@ -6,7 +6,9 @@
 --- (general.tooltipShowAuraSpellIDs, default off). The login pass only ever
 --- writes "1" while the MSUF toggle is on: with the toggle off, MSUF never
 --- touches the CVar, so another addon or a manual /console setting keeps
---- ownership. Only an explicit user action on the toggle writes "0".
+--- ownership. Only an explicit user action on the toggle writes "0". A
+--- profile switch (Apply without a value) writes "1" for a profile with the
+--- toggle on and "0" only when MSUF itself turned the option on this session.
 ---
 --- Cost profile: one PLAYER_LOGIN handler that drops both its event and its
 --- script after the first dispatch, at most two SetCVar calls per login. Nothing
@@ -22,6 +24,10 @@ local CVAR_NAME = "tooltipShowAuraSpellIDs"
 
 local ExportPublic = MSUF.ExportPublic
 
+--- True while the current CVar value "1" was written by MSUF this session (the
+--- client resets the option at login). Session state, never a CVar.
+local spellIDsOwned, casterNamesOwned = false, false
+
 local function IsEnabled()
     local db = _G.MSUF_DB
     local general = type(db) == "table" and db.general
@@ -35,13 +41,18 @@ local function WriteCVar(enabled)
     local getCVar = (_G.C_CVar and _G.C_CVar.GetCVar) or _G.GetCVar
     if type(getCVar) == "function" and getCVar(CVAR_NAME) == nil then return false end
     setCVar(CVAR_NAME, enabled and "1" or "0")
+    spellIDsOwned = enabled == true
     return true
 end
 
---- Explicit user action (menu toggle): writes the CVar in both
---- directions. `value` falls back to the saved setting when omitted.
+--- Explicit user action (menu toggle): writes the CVar in both directions.
+--- Without a value (profile switch) it follows the active profile's toggle:
+--- "1" when on, "0" only when MSUF itself turned the option on.
 local function ApplySetting(value)
-    if value == nil then value = IsEnabled() end
+    if value == nil then
+        if IsEnabled() then return WriteCVar(true) end
+        return spellIDsOwned and WriteCVar(false)
+    end
     return WriteCVar(value == true)
 end
 
@@ -83,11 +94,15 @@ local function WriteCasterCVar(enabled)
     local getCVar = (_G.C_CVar and _G.C_CVar.GetCVar) or _G.GetCVar
     if type(getCVar) == "function" and getCVar(CASTER_CVAR_NAME) == nil then return false end
     setCVar(CASTER_CVAR_NAME, enabled and "1" or "0")
+    casterNamesOwned = enabled == true
     return true
 end
 
 local function ApplyCasterNamesSetting(value)
-    if value == nil then value = IsCasterNamesEnabled() end
+    if value == nil then
+        if IsCasterNamesEnabled() then return WriteCasterCVar(true) end
+        return casterNamesOwned and WriteCasterCVar(false)
+    end
     return WriteCasterCVar(value == true)
 end
 

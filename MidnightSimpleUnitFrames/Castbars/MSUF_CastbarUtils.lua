@@ -731,6 +731,24 @@ local function ResetCastbarGlowFade(frame)
 end
 ExportPublic("MSUF_ResetCastbarGlowFade", ResetCastbarGlowFade)
 
+-- One white overlay per castbar while the glow is on. Rounded and slanted
+-- castbars build it on their cold apply and mask it with the bar's surface
+-- (Castbars/MSUF_CastbarRounded.lua), so it never spills past the shape.
+-- enabled: the caller's fresh read of the setting (the texture pass can run
+-- before the cast-time revision that refreshes IsCastbarGlowEnabled is bumped).
+local function EnsureCastbarGlowOverlay(statusBar, enabled)
+    local overlay = statusBar._msufGlowOverlay
+    if enabled == nil then enabled = IsCastbarGlowEnabled() end
+    if overlay or not enabled then return overlay end
+    overlay = PixelLayoutRegion(statusBar:CreateTexture(nil, "ARTWORK", nil, 1))
+    overlay:SetColorTexture(1, 1, 1, 1)
+    overlay:SetBlendMode("BLEND")
+    overlay:Hide()
+    statusBar._msufGlowOverlay = overlay
+    return overlay
+end
+MSUF.Castbars.EnsureGlowOverlay = EnsureCastbarGlowOverlay
+
 local function ApplyCastbarGlowFade(frame, remainingSeconds, totalSeconds)
     if not frame or not frame.statusBar then return end
     if (frame._msufIsPreview or frame.MSUF_testMode) and not _G.MSUF_UnitEditModeActive then return end
@@ -768,10 +786,9 @@ local function ApplyCastbarGlowFade(frame, remainingSeconds, totalSeconds)
     if not texture then return end
     local overlay = statusBar._msufGlowOverlay
     if not overlay then
-        overlay = PixelLayoutRegion(statusBar:CreateTexture(nil, "ARTWORK", nil, 1))
-        overlay:SetColorTexture(1, 1, 1, 1)
-        overlay:SetBlendMode("BLEND")
-        statusBar._msufGlowOverlay = overlay
+        overlay = EnsureCastbarGlowOverlay(statusBar)
+        local maskGlow = MSUF.Castbars.MaskGlowOverlay
+        if maskGlow then maskGlow(frame) end
     end
     if statusBar._msufGlowTexture ~= texture then
         overlay:ClearAllPoints()

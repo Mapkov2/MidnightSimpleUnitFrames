@@ -851,6 +851,9 @@ local function SetNameTextCached(frame, value)
   if frame._msufNameInlineClip ~= nil and RefreshNameCenterClipFit then
     RefreshNameCenterClipFit(frame)
   end
+  -- Aura Name Overlay effects copy this text (MSUF_Auras3_SpellIndicators_Effects.lua).
+  local mirror = frame._msufNameTextMirror
+  if mirror then mirror(frame) end
 end
 
 -- Start of the UTF-8 character after the one at pos. File scope: a closure
@@ -2212,16 +2215,16 @@ FlushDirtyText = function()
             local cachedPower = bar._msufPowerValue
             if rt.powerNeedsCurrent == true
               and bar._msufPowerValueUnit == unit
-              and cachedPower ~= nil
-              and issecretvalue(cachedPower) ~= true then
+              and issecretvalue(cachedPower) ~= true
+              and cachedPower ~= nil then
               power = cachedPower
             end
             local cachedMax = bar._msufPowerMax
             if rt.powerNeedsMax == true
               and bar._msufPowerMaxReady == true
               and bar._msufPowerMaxUnit == unit
-              and cachedMax ~= nil
-              and issecretvalue(cachedMax) ~= true then
+              and issecretvalue(cachedMax) ~= true
+              and cachedMax ~= nil then
               powerMax = cachedMax
             end
           end

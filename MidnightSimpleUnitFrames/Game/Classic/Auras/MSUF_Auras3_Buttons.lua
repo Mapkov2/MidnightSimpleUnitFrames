@@ -864,6 +864,21 @@ local function BuildButtonUpdater(cfg)
     return core
 end
 
+--- A corner slot's Show when missing indicator (Lanes.RenderLane): the lane's
+--- own look with no aura behind it, so it has no tooltip, timer or count.
+--- NO_AURA is a read-only stand-in for the visual pass (a Number shows 0, as
+--- Retail's missing placeholder does), so a render allocates nothing.
+local NO_AURA = { applications = 0 }
+local function ShowMissingIndicator(lane, button, unit)
+    button.auraInstanceID = nil
+    button._msufA3WeaponEnchantSlot = nil
+    SetIcon(button, lane.config.icon)
+    if button.Cooldown then HideCooldown(button, button.Cooldown) end
+    SetCount(button, "")
+    UpdateButtonVisual(lane, button, unit, NO_AURA)
+    ShowButton(button)
+end
+
 local function HideTrailingButtons(lane, visibleByID, visible)
     local oldVisible = lane.visible or 0
     if visible >= oldVisible then
@@ -896,3 +911,4 @@ Buttons.HideButton = HideButton
 Buttons.HideTrailingButtons = HideTrailingButtons
 Buttons.UpdateButton = UpdateButton
 Buttons.BuildButtonUpdater = BuildButtonUpdater
+Buttons.ShowMissingIndicator = ShowMissingIndicator

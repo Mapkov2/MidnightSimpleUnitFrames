@@ -45,6 +45,29 @@ local SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge = GP.SetSection
 local OptionText, ControlMeta, RegisterControl = GP.OptionText, GP.ControlMeta, GP.RegisterControl
 OnOffBadge = OnOffBadge or M.OnOffBadge
 OptionText = OptionText or M.OptionText
+-- A corner Custom Spell slot's "When: Show when missing" needs the Classic scan
+-- backend (Game/Classic/Auras), the same fact the custom container reminders key
+-- on. A Retail or WoW Forever AuraContainer slot never tells MSUF that its aura
+-- is absent, so there the choice is offered disabled with its reason. A stored
+-- "missing" stays as it is; the runtime shows such a slot while the aura is up.
+local CORNER_MISSING_AVAILABLE = MSUF.Client and MSUF.Client.IsClassic == true or false
+local CORNER_MISSING_NOTICE = "Show when missing is unavailable on this client. Saved settings are kept; the slot shows when present."
+local CORNER_MISSING_NOTE_GAP = CORNER_MISSING_AVAILABLE and 0 or 32
+local cornerModeSource, cornerModeValues
+local function CornerModeValues()
+    local values = CIModeValues()
+    if CORNER_MISSING_AVAILABLE then return values end
+    if cornerModeSource ~= values then
+        cornerModeSource, cornerModeValues = values, {}
+        for i = 1, #values do
+            local copy = {}
+            for key, value in pairs(values[i]) do copy[key] = value end
+            if copy.value == "missing" then copy.disabled = true end
+            cornerModeValues[i] = copy
+        end
+    end
+    return cornerModeValues
+end
 local function ResolvePlacedSpellIndicatorControlVisibility(placed)
     local placedType = type(placed) == "table" and tostring(placed.type or "none"):lower() or "none"
     local iconSelected = placedType == "icon"
@@ -2387,7 +2410,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
     do
         W.ControlCardBackdrop(corners, leftX - 14, -38, leftW + 28, 224)
         W.ControlCardBackdrop(corners, leftX - 14, -272, leftW + 28, 334)
-        cornerEditorCard = W.ControlCardBackdrop(corners, rightX - 14, -38, rightW + 28, 526)
+        cornerEditorCard = W.ControlCardBackdrop(corners, rightX - 14, -38, rightW + 28, 526 + CORNER_MISSING_NOTE_GAP)
         cornerEditorCard._msuf2ControlCardTitle = "Custom Spell Editor"
     end
     W.LabelAt(corners, "Global", leftX, -42, leftW, "GameFontNormalSmall", T.colors.accent)
@@ -2479,6 +2502,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
                 return cfg and cfg[key] or defaultValue
             end,
             function(value)
+                if key == "mode" and value == "missing" and not CORNER_MISSING_AVAILABLE then return end
                 local cfg = CICustomConfig(CurrentScope(), CurrentCISlot(), true)
                 if cfg then cfg[key] = value or defaultValue end
                 QueueGF(CurrentScope(), "visual")
@@ -2487,8 +2511,13 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
         W.MoveWidget(control, corners, rightX, y, rightW, "LEFT")
         return control
     end
-    local customMode = BindCICustomDropdown("When", CIModeValues, "mode", "present", -350)
-    local customFilter = BindCICustomDropdown("Filter", CIFilterValues, "filter", "HELPFUL|PLAYER", -404)
+    local customMode = BindCICustomDropdown("When", CornerModeValues, "mode", "present", -350)
+    if not CORNER_MISSING_AVAILABLE then
+        local missingNote = W.Text(corners, "", rightX, -398, rightW, T.colors.muted)
+        if missingNote.SetWordWrap then missingNote:SetWordWrap(true) end
+        missingNote:SetText(CORNER_MISSING_NOTICE)
+    end
+    local customFilter = BindCICustomDropdown("Filter", CIFilterValues, "filter", "HELPFUL|PLAYER", -404 - CORNER_MISSING_NOTE_GAP)
     local customColor = W.Color(corners, "Custom Color")
     customColor._msuf2ColorLabel = "Custom spell color"
     customColor._msuf2ContextColorCardOverride = cornerEditorCard
@@ -2503,7 +2532,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
             QueueGF(CurrentScope(), "visual")
         end,
         ControlMeta(ctx, "corner.editor.color"))
-    W.MoveWidget(customColor, corners, rightX, -458, rightW)
+    W.MoveWidget(customColor, corners, rightX, -458 - CORNER_MISSING_NOTE_GAP, rightW)
     local cornerColorShortcut
     if W.AttachContextColorShortcut then
         cornerColorShortcut = W.AttachContextColorShortcut(cornerEditorCard, {
@@ -2521,7 +2550,7 @@ local function BuildCornerIndicatorsSection(ctx, b, RefreshPage)
             historySource = "menu:group-corner-indicator-color",
         })
     end
-    local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX, -506, rightW, T.colors.dim)
+    local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX, -506 - CORNER_MISSING_NOTE_GAP, rightW, T.colors.dim)
     if customHelp.SetWordWrap then customHelp:SetWordWrap(true) end
     local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha, ciLayer }, { slotDrop, categoryDrop }, { customSpells, customMode, customFilter, customColor }
     local function RefreshCornerIndicatorState()

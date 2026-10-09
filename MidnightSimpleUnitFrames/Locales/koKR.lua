@@ -31,6 +31,7 @@ L["Blizzard has no native Pet Target frame."] = "블리자드는 소환수의 �
 L["%d relevant color"] = "관련 색상 %d개"
 L["%d relevant colors"] = "관련 색상 %d개"
 L["Fixed slots and missing-aura reminders are unavailable on Classic. Saved settings are kept; active auras still work."] = "Classic에서는 고정 칸과 누락된 오라 알림을 사용할 수 없습니다. 저장된 설정은 유지되며 활성 오라는 계속 작동합니다."
+L["Show when missing is unavailable on this client. Saved settings are kept; the slot shows when present."] = "'누락 시 표시'는 이 클라이언트에서 사용할 수 없습니다. 저장된 설정은 유지되며 슬롯은 오라가 있을 때 표시됩니다."
 L["Reminder clicks are unavailable on Classic"] = "Classic에서는 알림 클릭을 사용할 수 없습니다"
 L["Custom enchant reminders are unavailable on Classic. The normal player buff lane still shows weapon enchants."] = "Classic에서는 사용자 지정 마법부여 알림을 사용할 수 없습니다. 일반 플레이어 강화 효과 줄에는 무기 마법부여가 계속 표시됩니다."
 L["PART 3 - Shape Class Resources with its interactive preview and independent Edit Mode placement."] = "3부 - 대화형 미리보기와 편집 모드의 독립 배치를 사용하여 직업 자원을 꾸며보세요."
@@ -1334,7 +1335,7 @@ local MSUF2_HELPER_koKR = {
     ["Raid marker"] = "공격대 마커",
     ["Re-anchor Blizzard TotemFrame"] = "Blizzard TotemFrame 다시 고정",
     ["Reaction color"] = "반응 색상",
-    ["Ready Check"] = "준비 확인",
+    ["Ready Check"] = "전투 준비",
     ["Regular"] = "레귤러",
     ["remove realm names"] = "영역 이름 제거",
     ["Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile."] = "모든 그룹 프레임 설정을 기본값으로 재설정하시겠습니까?\n\n이렇게 하면 활성 프로필에 대한 파티, Raid 및 Mythic Raid 그룹 프레임이 재설정됩니다.",
@@ -6844,6 +6845,66 @@ L["Resets all scoped slanted directions to Shared and turns off custom bar setti
 L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "Suite 색상은 아래 항목에서 설정할 수 있습니다.\n요소의 위치를 조정하려면 미니맵 미리보기를 여세요."
 
 L["Arena Preview"] = "투기장 미리보기"
+
+-- Aura filter switch labels.
+L["Non-Player Auras"] = "비플레이어 오라"
+L["Non-player auras"] = "비플레이어 오라"
+L["Only mine"] = "내 것만"
+L["Hide permanent"] = "영구 오라 숨기기"
+L["Crowd control"] = "군중 제어"
+
+-- Whole-phrase counts for Priority Frames and the Layer overview.
+L["%s visible"] = "표시 %s"
+L["%s pinned"] = "고정 %s"
+L["%s slots"] = "%s칸"
+L["%s saved"] = "저장 %s"
+L["%d saved players"] = "저장된 플레이어 %d명"
+L["Search results - MSUF Layers 0-30 (%d) | %s"] = "검색 결과 - MSUF 레이어 0-30 (%d) | %s"
+L["%s - MSUF Layers 0-30 (%d) | %s"] = "%s - MSUF 레이어 0-30 (%d) | %s"
+L["All other MSUF Layers 0-30 (%d) | %s"] = "다른 모든 MSUF 레이어 0-30 (%d) | %s"
+L["More (%d)"] = "더 보기 (%d)"
+L["Less (%d)"] = "접기 (%d)"
+
+-- Aura filter labels and tooltips of the Unit and Group filter blocks.
+L["Turns aura classification filters on or off for this exact lane. Big Defensive uses MSUF's curated list on friendly frames."] = "이 라인의 오라 분류 필터만 켜거나 끕니다. 대형 방어 효과는 아군 프레임에서 MSUF가 선별한 목록을 사용합니다."
+L["Maximum duration"] = "최대 지속시간"
+L["Off shows auras of any duration. Otherwise, auras whose total duration exceeds this number of seconds are hidden."] = "끄기는 모든 지속시간의 오라를 표시합니다. 그 외에는 전체 지속시간이 이 초를 넘는 오라를 숨깁니다."
+L["Only auras applied by the player."] = "플레이어가 건 오라만."
+L["Important"] = "중요"
+L["Only auras Blizzard flags as important."] = "블리자드가 중요로 표시한 오라만."
+L["Applicable by me"] = "내가 적용 가능"
+L["Helpful auras your character can apply (Blizzard RAID token)."] = "내 캐릭터가 걸 수 있는 이로운 오라 (블리자드 RAID 토큰)."
+L["Raid combat"] = "전투 중 공격대"
+L["Blizzard's in-combat raid Buff filter."] = "블리자드의 전투 중 공격대 버프 필터."
+L["Also include nameplate-only"] = "이름표 전용도 포함"
+L["Broadens the selected filter to also admit Buffs Blizzard marks nameplate-only; it is not a standalone only-filter."] = "선택한 필터에 블리자드가 이름표 전용으로 표시한 버프도 포함합니다. 단독 필터가 아닙니다."
+L["Dispellable / stealable by group"] = "파티가 해제 / 훔치기 가능"
+L["Helpful enemy auras someone in your group can dispel, purge, or steal."] = "파티원 누군가가 해제, 정화하거나 훔칠 수 있는 적의 이로운 오라."
+L["Any dispel / steal type"] = "모든 해제 / 훔치기 유형"
+L["Helpful enemy auras with any dispel type, even when your group cannot remove them."] = "파티가 제거할 수 없더라도 해제 유형이 있는 적의 이로운 오라."
+L["External defensive"] = "외부 방어 효과"
+L["External defensive Buffs."] = "외부 방어 버프."
+L["Big defensive"] = "대형 방어 효과"
+L["MSUF's curated major-defensive Spell-ID list on friendly frames; Blizzard's safe native classification is used where exact identity filtering is restricted."] = "아군 프레임에서 MSUF가 선별한 주요 방어 주문 ID 목록입니다. 정확한 식별 필터링이 제한되는 곳에서는 블리자드의 안전한 기본 분류를 사용합니다."
+L["Cancelable"] = "취소 가능"
+L["Only cancelable Buffs."] = "취소 가능한 버프만."
+L["Not cancelable"] = "취소 불가"
+L["Only non-cancelable Buffs."] = "취소할 수 없는 버프만."
+L["Only Debuffs applied by the player."] = "플레이어가 건 디버프만."
+L["Only Debuffs Blizzard flags as important."] = "블리자드가 중요로 표시한 디버프만."
+L["Harmful auras your character can dispel (Blizzard RAID token)."] = "내 캐릭터가 해제할 수 있는 해로운 오라 (블리자드 RAID 토큰)."
+L["Blizzard's in-combat raid Debuff filter."] = "블리자드의 전투 중 공격대 디버프 필터."
+L["Broadens the selected filter to also admit Debuffs Blizzard marks nameplate-only; it is not a standalone only-filter."] = "선택한 필터에 블리자드가 이름표 전용으로 표시한 디버프도 포함합니다. 단독 필터가 아닙니다."
+L["Debuffs someone in your group can dispel."] = "파티원 누군가가 해제할 수 있는 디버프."
+L["Debuffs with a dispel type, even when your group cannot remove them."] = "파티가 제거할 수 없더라도 해제 유형이 있는 디버프."
+L["Crowd-control Debuffs."] = "군중 제어 디버프."
+L["Only Debuffs not caused by any player or player pet."] = "플레이어나 플레이어 소환수가 걸지 않은 디버프만."
+L["MSUF Highlights"] = "MSUF 선별"
+L["Cast by Me"] = "내가 시전함"
+L["Big Defensive by Me"] = "대형 방어 효과 (내 것)"
+L["External Defensive by Me"] = "외부 방어 효과 (내 것)"
+L["Applicable and Cast by Me"] = "내가 적용 가능하고 시전함"
+L["Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible."] = "지속시간이 없는 오라를 제외합니다. MSUF 선별은 일시적인 도적 파티 은신이 계속 보이도록 정확한 선별 목록을 의도적으로 사용합니다."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

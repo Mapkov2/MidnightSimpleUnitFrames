@@ -487,13 +487,21 @@ local function AssignLayoutField(frame, key, value)
     frame[key] = value
 end
 
+--- Width and height are the Damage Meter settings MSUF applies live; the
+--- fallbacks are the live and forever EditModeDamageMeterSetting values.
+local function DamageMeterSizeIds()
+    local setting = _G.Enum.EditModeDamageMeterSetting or {}
+    return setting.FrameWidth or 3, setting.FrameHeight or 4
+end
+
 --- SaveLayouts persists the layout but applies nothing on its own, and
 --- SetActiveLayout on the unchanged index is a no-op (both field-verified).
 --- Settings therefore apply visually right here, through the same plain
 --- frame methods Blizzard's own system mixins run — Minimap, Chat, Micro
 --- Menu and the tooltip container are non-protected HUD frames, so this
---- stays taint-safe. The saved layout remains the clean source of truth for
---- the next login or layout switch.
+--- stays taint-safe. The Damage Meter applies only its size here (see
+--- DamageMeterNeedsReload). The saved layout remains the clean source of
+--- truth for the next login or layout switch.
 local function ApplyVisual(systemId, entry)
     local frame = SystemFrame(systemId)
     if not frame then return end
@@ -572,46 +580,51 @@ local function ApplyVisual(systemId, entry)
         if padding ~= nil then AssignLayoutField(frame, "bagPadding", math.min(math.max(padding, 2), 10)) end
         if type(frame.Layout) == "function" then frame:Layout() end
     elseif systemId == systemEnum.DamageMeter then
-        --- Every damage meter setting applies through a plain method on the
-        --- (non-secure) DamageMeter frame — the same calls Blizzard's own
-        --- system mixin runs (EditModeSystemTemplates, system 23).
-        local setting = _G.Enum.EditModeDamageMeterSetting or {}
-        local width = map[setting.FrameWidth or 3]
-        local height = map[setting.FrameHeight or 4]
+        --- SetSize is the frame's widget method and stores no field; Blizzard's
+        --- UpdateSystemSettingFrameWidth/Height size the meter the same way.
+        local widthId, heightId = DamageMeterSizeIds()
+        local width, height = map[widthId], map[heightId]
         if (width ~= nil or height ~= nil) and type(frame.SetSize) == "function" then
             frame:SetSize(
                 width and (width + 200) or (frame.GetWidth and frame:GetWidth()) or 300,
                 height and (height + 120) or (frame.GetHeight and frame:GetHeight()) or 200)
         end
-        local barHeight = map[setting.BarHeight or 10]
-        if barHeight ~= nil and type(frame.SetBarHeight) == "function" then
-            frame:SetBarHeight(barHeight + 15)
-        end
-        local padding = map[setting.Padding or 5]
-        if padding ~= nil and type(frame.SetBarSpacing) == "function" then
-            frame:SetBarSpacing(padding + 2)
-        end
-        local transparency = map[setting.Transparency or 6]
-        if transparency ~= nil and type(frame.SetWindowTransparency) == "function" then
-            frame:SetWindowTransparency(transparency + 50)
-        end
-        local backgroundTransparency = map[setting.BackgroundTransparency or 12]
-        if backgroundTransparency ~= nil and type(frame.SetBackgroundTransparency) == "function" then
-            frame:SetBackgroundTransparency(backgroundTransparency)
-        end
-        local textSize = map[setting.TextSize or 11]
-        if textSize ~= nil and type(frame.SetTextSize) == "function" then
-            frame:SetTextSize(textSize * 10 + 50)
-        end
-        local specIcon = map[setting.ShowSpecIcon or 8]
-        if specIcon ~= nil and type(frame.SetShowBarIcons) == "function" then
-            frame:SetShowBarIcons(specIcon == 1)
-        end
-        local classColor = map[setting.ShowClassColor or 9]
-        if classColor ~= nil and type(frame.SetUseClassColor) == "function" then
-            frame:SetUseClassColor(classColor == 1)
+    end
+end
+
+--- Every other Damage Meter setting (bar height, padding, opacity, background,
+--- text size, spec icons, class colors) is a plain field the meter's mixin
+--- setters store and its session windows read while they paint secret combat
+--- data (Blizzard_DamageMeter/DamageMeter.lua, DamageMeterMixin:SetBarHeight
+--- and the setters after it, ptr2 and forever). Set from MSUF code those
+--- fields stay tainted, so MSUF only saves these settings: Blizzard's own
+--- system mixin applies the saved layout at the next load
+--- (EditModeDamageMeterSystemMixin:UpdateSystemSetting). True when a change
+--- saves such a setting with a new value the meter does not show: the meter
+--- shows what Blizzard applied at load, so the layout as it was before MSUF's
+--- first save this session is the baseline, and an undo back to it needs no
+--- reload.
+local damageMeterApplied
+local function DamageMeterNeedsReload(systemId, entry, changes)
+    if systemId ~= systemEnum.DamageMeter or type(changes) ~= "table" then return false end
+    local widthId, heightId = DamageMeterSizeIds()
+    local saved = EntrySettings(entry)
+    if not damageMeterApplied then damageMeterApplied = saved end
+    for settingId, raw in pairs(changes) do
+        local value = tonumber(raw)
+        if settingId ~= widthId and settingId ~= heightId
+            and saved[settingId] ~= value and damageMeterApplied[settingId] ~= value then
+            return true
         end
     end
+    return false
+end
+
+--- Said where the user made the change; a profile import already offers a
+--- reload of its own.
+local function NoteReloadPending()
+    local translate = MSUF.Translate or tostring
+    MSUF.Require("MSUF_EM2_SetHUDStatus", CALLER)(translate("Requires a UI reload."), "info", 4)
 end
 
 local SNAPSHOT_KEYS = {
@@ -667,6 +680,7 @@ local function MutateSettings(systemId, changes)
     if not entry then return false end
     local api = Blizzard()
     if not api then return false end
+    local reload = DamageMeterNeedsReload(systemId, entry, changes)
     ApplySettingsTo(entry, changes)
     SaveLayouts(api, info)
     ApplyVisual(systemId, entry)
@@ -680,6 +694,7 @@ local function MutateSettings(systemId, changes)
             tonumber(anchor.offsetX) or 0, tonumber(anchor.offsetY) or 0)
     end
     StoreSnapshot(systemId, entry)
+    if reload then NoteReloadPending() end
     return true
 end
 
@@ -744,11 +759,13 @@ local function Restore(systemId, state)
     if type(state.relativeTo) == "string" then anchor.relativeTo = state.relativeTo end
     if type(state.relativePoint) == "string" then anchor.relativePoint = state.relativePoint end
     anchor.offsetX, anchor.offsetY = x, y
+    local reload = DamageMeterNeedsReload(systemId, entry, state.settings)
     if type(state.settings) == "table" then ApplySettingsTo(entry, state.settings) end
     SaveLayouts(api, info)
     ApplyAnchorVisual(systemId, anchor.point, anchor.relativeTo, anchor.relativePoint, x, y)
     if type(state.settings) == "table" then ApplyVisual(systemId, entry) end
     StoreSnapshot(systemId, entry)
+    if reload then NoteReloadPending() end
     return true
 end
 

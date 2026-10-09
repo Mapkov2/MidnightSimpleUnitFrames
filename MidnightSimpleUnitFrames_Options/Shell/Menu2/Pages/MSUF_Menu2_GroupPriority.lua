@@ -387,8 +387,8 @@ local function BuildPriorityPage(ctx)
         end
         SetSectionBadgesAndStatus(overview, {
             OnOffBadge(enabled, "Enabled", "Disabled"),
-            { text = BadgeNumber(active) .. " " .. Tr("visible"), kind = active > 0 and "accent" or "muted" },
-            { text = BadgeNumber(pins) .. " " .. Tr("pinned"), kind = pins > 0 and "info" or "muted" },
+            { text = M.Format("%s visible", BadgeNumber(active)), kind = active > 0 and "accent" or "muted" },
+            { text = M.Format("%s pinned", BadgeNumber(pins)), kind = pins > 0 and "info" or "muted" },
             { text = Tr(inParty and "In party" or (state.inRaid == true and "In raid" or "Not grouped")),
               kind = inGroup and "ok" or "muted" },
         })
@@ -480,7 +480,7 @@ local function BuildPriorityPage(ctx)
         local pages = max(1, math.ceil(count / PIN_ROWS_PER_PAGE))
         if pinPage > pages then pinPage = pages; M.gfPriorityPinPage = pinPage end
         local first = (pinPage - 1) * PIN_ROWS_PER_PAGE + 1
-        T.SetTranslatedText(pinsStatus, count == 1 and Tr("1 saved player") or (tostring(count) .. " " .. Tr("saved players")))
+        T.SetTranslatedText(pinsStatus, count == 1 and Tr("1 saved player") or M.Format("%d saved players", count))
         pageText:SetText(tostring(pinPage) .. " / " .. tostring(pages))
         prevPage:SetShown(pages > 1)
         nextPage:SetShown(pages > 1)
@@ -532,8 +532,8 @@ local function BuildPriorityPage(ctx)
         end
         SetSectionBadgesAndStatus(who, {
             OnOffBadge(stateScratch.autoTanks == true, "Auto tanks", "Manual only"),
-            { text = BadgeNumber(stateScratch.maxFrames or 5) .. " " .. Tr("slots"), kind = "info" },
-            { text = BadgeNumber(count) .. " " .. Tr("saved"), kind = count > 0 and "accent" or "muted" },
+            { text = M.Format("%s slots", BadgeNumber(stateScratch.maxFrames or 5)), kind = "info" },
+            { text = M.Format("%s saved", BadgeNumber(count)), kind = count > 0 and "accent" or "muted" },
         })
     end
     for i = 1, PIN_ROWS_PER_PAGE do

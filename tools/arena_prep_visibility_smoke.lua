@@ -27,6 +27,15 @@ local MSUF = {
 _G.MSUF_NS = MSUF
 _G.InCombatLockdown = function() return false end
 _G.UnitAffectingCombat = function() return false end
+-- The real event-edge combat state (Kernel/MSUF_Util.lua, loaded before the
+-- feature in every TOC), in its own namespace so the stubs here stay in place.
+do
+    local utilityNS = { ExportPublic = function(_, value) return value end }
+    local previousMSUF = _G.MSUF
+    assert(loadfile("MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpleUnitFrames", utilityNS)
+    _G.MSUF = previousMSUF
+    MSUF.Util = utilityNS.Util
+end
 _G.IsInInstance = function() return false end
 _G.SecureCmdOptionParse = function() return "hide" end
 _G.UnitWatchRegistered = function(frame) return frame._unitWatched == true end

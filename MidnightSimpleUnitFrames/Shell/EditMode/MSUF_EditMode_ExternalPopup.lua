@@ -246,9 +246,16 @@ function Popup.Sync()
 end
 
 function Popup.Open(key)
-    if Blocked() or not External.GetRecord(key) then return false end
+    if Blocked() then return false end
+    local record = External.GetRecord(key)
+    if not record then return false end
     Build()._key = key
+    frame._msufEM2CenterOnShow = record.centerPopup == true
     if not Popup.Sync() then return false end
+    if frame._msufEM2CenterOnShow then
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    end
     frame:Show()
     return true
 end

@@ -264,7 +264,7 @@ if g.arenaCastbarHeight == nil then
         g.castbarGlobalWidth = 200   --- Standardbreite
     end
     if g.castbarGlobalHeight == nil then
-        g.castbarGlobalHeight = 18   --- StandardhÃƒÂ¶he
+        g.castbarGlobalHeight = 18   --- Standardhöhe
     end
     --- Per-castbar default sizes (match Edit Mode preview defaults)
     if g.castbarPlayerBarWidth == nil then g.castbarPlayerBarWidth = 271 end

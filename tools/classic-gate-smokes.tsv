@@ -572,3 +572,13 @@ clients+Forever	lua	tools/tests/slanted_scope_review_smoke.lua	{root} {flavor}	S
 clients+Forever	lua	tools/tests/slanted_all_surfaces_smoke.lua	{root} {flavor}	All Slanted unit castbar and resource scopes: {flavor}
 clients+Forever	lua	tools/tests/search_human_intent_smoke.lua	{root} {flavor}	Natural search tasks and specific detail guards: {flavor}
 -	lua	tools/tests/locale_render_paths_smoke.lua	{root}	Native preview labels or translated help routes stay English
+clients+Forever	lua	tools/tests/rc1_b_smoke.lua	{root} {flavor}	rc1 package B secrets, combat edges and profile apply: {flavor}
+-	lua	tools/tests/rc1_c_smoke.lua	{root}	rc1 C: interrupt overrides, castbar glow mask, aura Name Overlay unit switch
+clients+Forever	lua	tools/tests/rc1_d_smoke.lua	{root} {flavor} textures	Party/Raid Bars page texture, Copy To and runtime disagree on texture ownership: {flavor}
+clients+Forever	lua	tools/tests/rc1_d_smoke.lua	{root} {flavor} owner	A Selected unitframes string carried or replaced the shared Cast Target Name Color: {flavor}
+clients+Forever	lua	tools/tests/rc1_d_smoke.lua	{root} {flavor} basics	Unit Basics Reset section left the hidden per-unit frame bar shape: {flavor}
+clients+Forever	lua	tools/tests/rc1_d_smoke.lua	{root} {flavor} anchor	Combat Timer anchor offers a frame the client does not have: {flavor}
+classics	lua	tools/tests/rc1_f_smoke.lua	{root} {flavor}	Corner Custom Spell Show when missing ignored on Classic (rc1 F, C15-A7): {flavor}
+clients+Forever	lua	tools/tests/rc1_f_smoke.lua	{root} {flavor} menu	Corner Show when missing offered where it cannot work (rc1 F, C15-A7 menu): {flavor}
+-	lua	tools/tests/rc1_a_smoke.lua	{root}	rc1 package A: MSUF leaves no taint in Blizzard-owned castbar, Damage Meter, buff frame and popup state
+-	lua	tools/tests/rc1_e_smoke.lua	{root}	rc1 E: re-encoded UTF-8, untranslated menu text or a glued translation regressed

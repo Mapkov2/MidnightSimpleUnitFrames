@@ -30,6 +30,8 @@ local watcher
 local blizzardAuraHiddenParent
 local buffAuraOriginalParent
 local buffAuraSuppressedByMSUF = false
+local buffAuraWasShown = true
+local buffAuraShownHooked = false
 local debuffAuraSuppressedByMSUF = false
 
 local CASTBAR_KEYS = {
@@ -365,6 +367,46 @@ local function CanMutateBlizzardAuraFrame(frame)
     return true
 end
 
+--- WoW Forever's Gamepad UI offers the buff frame while it reports shown
+--- (Blizzard_BuffFrame/BuffFrame.lua BaseAuraFrameMixin:SetGamepadFocus, the
+--- radial "Buffs" segment in Blizzard_Gamepad/UI/Radials/GamepadRadial.lua,
+--- the face-top button in Blizzard_GamepadActionBars/TargetActionBars/
+--- ShortcutsActionBar.lua). Under the hidden parent it still reports shown,
+--- so the pad took focus into an invisible buff list. On Forever the
+--- suppressed frame is therefore also hidden, after the reparent: it is no
+--- longer visible then, so Hide fires no OnHide and no Edit Mode or
+--- SmartNavigation hook runs in MSUF's taint. Blizzard shows it again through
+--- AuraFrameEditModeMixin:UpdateShownState (SetShown on PLAYER_IN_COMBAT_CHANGED
+--- and in Edit Mode); this secure post-hook hides it again while MSUF owns it
+--- and it sits below the hidden parent. DebuffFrame keeps its container-only
+--- suppression: hiding the frame itself would also hide its private aura
+--- anchors and fire OnHide on a visible frame.
+local function KeepSuppressedBuffFrameHidden(frame, shown)
+    if shown and buffAuraSuppressedByMSUF and frame:GetParent() == blizzardAuraHiddenParent then
+        frame:Hide()
+    end
+end
+
+local function HidePadBuffFrame(frame, owned)
+    if not IS_FOREVER then return end
+    if not owned then buffAuraWasShown = frame:IsShown() == true end
+    if not buffAuraShownHooked then
+        hooksecurefunc(frame, "SetShown", KeepSuppressedBuffFrameHidden)
+        buffAuraShownHooked = true
+    end
+    if frame:IsShown() then frame:Hide() end
+end
+
+--- Shown again below the hidden parent (no OnShow there) when Blizzard's own
+--- visibility rule wants it; ShouldBeShown only reads (BuffFrame.lua
+--- AuraFrameEditModeMixin:ShouldBeShown).
+local function ReleasePadBuffFrame(frame)
+    if not IS_FOREVER then return end
+    local wanted = buffAuraWasShown
+    if frame.ShouldBeShown then wanted = frame:ShouldBeShown() == true end
+    if wanted and not frame:IsShown() then frame:Show() end
+end
+
 local function SetPassiveBlizzardBuffSuppression(frame, suppress, originalParent, owned)
     if not CanMutateBlizzardAuraFrame(frame) then
         return originalParent, owned, nil
@@ -378,11 +420,15 @@ local function SetPassiveBlizzardBuffSuppression(frame, suppress, originalParent
             originalParent = frame:GetParent()
         end
         if frame:GetParent() ~= hidden then frame:SetParent(hidden) end
+        HidePadBuffFrame(frame, owned)
         return originalParent, true, "hidden"
     end
 
     if owned then
-        if frame:GetParent() == hidden then frame:SetParent(originalParent or UIParent) end
+        if frame:GetParent() == hidden then
+            ReleasePadBuffFrame(frame)
+            frame:SetParent(originalParent or UIParent)
+        end
         return nil, false, "restored"
     end
     return originalParent, owned, nil

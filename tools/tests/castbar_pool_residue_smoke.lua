@@ -303,6 +303,9 @@ end
 -- re-recorded 2026-10-05: the Core cold pass calls the public spark entry, so
 -- Classic no longer runs Retail's spark pass first (one GetHeight less per
 -- live pool bar; the rest of each trace is unchanged).
+-- The rounded-on sections were re-recorded 2026-10-09 (rc1 DR1-2): the rounded
+-- pass builds each bar's castbar glow overlay (one statusBar CreateTexture per
+-- pool bar and preview while the glow is on) so it can mask it.
 local EXPECTED = {
     { "3 slots: effective size boss", "12541:1457924746" },
     { "3 slots: effective size arena", "7574:1991236288" },
@@ -310,7 +313,7 @@ local EXPECTED = {
     { "3 slots: width source arena", "8159:1682611460" },
     { "3 slots: width source resize", "1791:30200776" },
     { "3 slots: cast target colours", "1060:1272740194" },
-    { "3 slots: rounded on", "2662:803476627" },
+    { "3 slots: rounded on", "3190:502957426" },
     { "3 slots: rounded off", "5258:566203803" },
     { "3 slots: classic spark boss", "14960:1330975890" },
     { "3 slots: classic spark arena", "8520:380609528" },
@@ -321,7 +324,7 @@ local EXPECTED = {
     { "5 slots: width source arena", "13599:862559" },
     { "5 slots: width source resize", "2011:1006890774" },
     { "5 slots: cast target colours", "1328:949083875" },
-    { "5 slots: rounded on", "3336:1957103341" },
+    { "5 slots: rounded on", "3996:462049590" },
     { "5 slots: rounded off", "6584:207953388" },
     { "5 slots: classic spark boss", "14960:1330975890" },
     { "5 slots: classic spark arena", "14194:559599094" },
@@ -332,7 +335,7 @@ local EXPECTED = {
     { "0 slots: width source arena", "0:0" },
     { "0 slots: width source resize", "1314:1828393128" },
     { "0 slots: cast target colours", "658:295835695" },
-    { "0 slots: rounded on", "1651:205973700" },
+    { "0 slots: rounded on", "1981:828854707" },
     { "0 slots: rounded off", "3269:646221331" },
     { "0 slots: classic spark boss", "14960:1330975890" },
     { "0 slots: classic spark arena", "0:0" },

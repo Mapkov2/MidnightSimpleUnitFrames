@@ -1683,13 +1683,16 @@ local UnitSelection = {
         showBoss = "boss", showArena = "arena" },
     barKeys = { showPlayerPowerBar = "player", showTargetPowerBar = "target",
         showFocusPowerBar = "focus", showBossPowerBar = "boss", showArenaPowerBar = "arena" },
+    -- The Colors page's Cast Target Name Color reads like a Target key but tints
+    -- every castbar: it stays local, and older strings that carry it still import.
+    sharedGeneral = { castbarTargetNameR = true, castbarTargetNameG = true, castbarTargetNameB = true },
 }
 function UnitSelection.Supported(unit)
     return UnitSelection.units[unit] == true
         and (not MSUF.Client or not MSUF.Client.SupportsUnit or MSUF.Client.SupportsUnit(unit))
 end
 function UnitSelection.GeneralOwner(key)
-    if type(key) ~= "string" then return nil end
+    if type(key) ~= "string" or UnitSelection.sharedGeneral[key] then return nil end
     for _, unit in ipairs({ "player", "target", "focus", "boss", "arena" }) do
         local title = unit:sub(1, 1):upper() .. unit:sub(2)
         if key:sub(1, #unit + 7) == "castbar" .. title
@@ -1770,7 +1773,7 @@ function UnitSelection.Validate(payload)
         { "bars", function(key) return UnitSelection.barKeys[key] end } }) do
         for key in pairs(payload[spec[1]] or {}) do
             local owner = spec[2](key)
-            if not owner or not selected[owner] then
+            if (not owner or not selected[owner]) and not UnitSelection.sharedGeneral[key] then
                 return UnitSelection.Reject("setting outside selected unitframes: %s", key)
             end
         end

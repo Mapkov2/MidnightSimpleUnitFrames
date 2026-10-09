@@ -8,6 +8,7 @@ MSUF.MSUF2 = M
 M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua", {
     "MSUF_UFCore_NotifyConfigChanged",
     "MSUF_ShowReloadRecommendedPopup",
+    "MSUF_ApplyRoundedUnitframes",
 })
 local EnsureDB = M.EnsureDB
 local C_Timer = M.MenuTimer or _G.C_Timer
@@ -582,7 +583,9 @@ end
 local function AttachUnitSectionUX(ctx, unit)
     local fields = UP.SectionFields or {}
     local sections = {
-        frame_basics = { fields = "smoothFill chunkedFill reverseFillBars verticalFillBars healthColorMode", summary = function(c)
+        -- frameBarShape has no Basics control any more, but the rounded surface still
+        -- honours a stored ROUNDED/SQUARE; Reset section is the way to clear it.
+        frame_basics = { fields = "smoothFill chunkedFill reverseFillBars verticalFillBars healthColorMode frameBarShape", summary = function(c)
             return SectionNumber(c.width, 220) .. " x " .. SectionNumber(c.height, 40) .. " px"
         end },
         portrait = { fields = fields.portrait, copy = "portrait" },
@@ -630,6 +633,8 @@ local function AttachUnitSectionUX(ctx, unit)
         apply = function(scope, id)
             if id == "load_conditions" then UpdateLoadActive(scope) end
             M.RequestUnitApply(scope, "MSUF2_SECTION_RESET", { preview = true, text = true, fonts = true, power = true, alpha = true })
+            -- The frame bar shape decides whether the rounded runtime runs at all.
+            if id == "frame_basics" then _G.MSUF_ApplyRoundedUnitframes() end
         end,
     })
 end
