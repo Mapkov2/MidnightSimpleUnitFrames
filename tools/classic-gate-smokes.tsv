@@ -57,6 +57,7 @@ clients+Forever	lua	tools/tests/group_preview_aura_config_share_smoke.lua	{root}
 -	lua	tools/tests/forever_raid_manager_gamepad_smoke.lua	{root}	Forever Raid Manager gamepad smoke failed
 -	python	.github/scripts/menu2_search_index_hash_smoke.py		Menu2 search index source-hash contract failed
 -	lua	tools/tests/changelog_dual_source_smoke.lua	{root}	MSUF and Suite changelog source switch failed
+clients+Forever	lua	tools/tests/changelog_release_links_smoke.lua	{root} {flavor}	Current release changelog links reach their menu controls: {flavor}
 -	python	tools/tests/unresolved_global_reads_smoke.py		Unresolved global read contract failed
 -	lua	tools/tests/optional_globals_smoke.lua	{root}	Optional MSUF globals ledger failed
 -	lua	tools/tests/nil_global_fix_contracts_smoke.lua	{root}	Nil-global fix contracts smoke failed
