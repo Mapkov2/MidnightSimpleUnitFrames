@@ -15,8 +15,8 @@ local floor = math.floor
 local SECTION_ID = "pvp_trinket"
 -- Control identities; search shows the segment as the breadcrumb "Unit > Trinket".
 local CONTROL_PATH = "trinket."
-local SECTION_HEIGHT = 270
-local CARD_HEIGHT = 216
+local SECTION_HEIGHT = 282
+local CARD_HEIGHT = 228
 local APPLY_REASON = "MSUF2_ARENA_TRINKET"
 local SIDE_CHOICES = {
     { value = "RIGHT", text = "Right" },
@@ -67,15 +67,15 @@ local function BuildArenaTrinket(ctx, builder, unit)
     M.AddTooltip(shown, "Show PvP trinket",
         "Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too.",
         { hook = true, owner = "ANCHOR_RIGHT" })
-    local size = NumberRow(iconCard, "Size", "trinketSize", limits.sizeMin, limits.sizeMax, defaults.size, -96, "size")
-    local layer = NumberRow(iconCard, "Layer", "trinketLayer", 0, 30, defaults.layer, -150, "layer")
+    local size = NumberRow(iconCard, "Size", "trinketSize", limits.sizeMin, limits.sizeMax, defaults.size, -100, "size")
+    local layer = NumberRow(iconCard, "Layer", "trinketLayer", 0, 30, defaults.layer, -154, "layer")
 
     local side = M.BindDropdownAt(ctx, placeCard, "Anchor", 16, -54, SIDE_CHOICES, controlW,
         function() return GetConf(unit).trinketAnchor or defaults.anchor end,
         function(value) SetString(unit, "trinketAnchor", value, APPLY_REASON, opts) end,
         SettingMeta(ctx, CONTROL_PATH .. "anchor", unit, "trinketAnchor"))
-    local offsetX = NumberRow(placeCard, "X offset", "trinketOffsetX", -limits.offset, limits.offset, defaults.x, -108, "offset_x")
-    local offsetY = NumberRow(placeCard, "Y offset", "trinketOffsetY", -limits.offset, limits.offset, defaults.y, -162, "offset_y")
+    local offsetX = NumberRow(placeCard, "X offset", "trinketOffsetX", -limits.offset, limits.offset, defaults.x, -112, "offset_x")
+    local offsetY = NumberRow(placeCard, "Y offset", "trinketOffsetY", -limits.offset, limits.offset, defaults.y, -166, "offset_y")
 
     RefreshGate(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
         { on = function(conf) return conf.showTrinket ~= false end, controls = { size, layer, side, offsetX, offsetY } },
@@ -94,7 +94,7 @@ UP.RegisterSection({
 })
 
 --- The arena unit preview's trinket: the mock icon follows the runtime layout,
---- scaled with the mock, and a static half swipe stands in for the cooldown.
+--- scaled with the mock, and a static dark band stands in for the cooldown swipe.
 local TrinketPreview = {}
 M.ArenaTrinketPreview = TrinketPreview
 
