@@ -178,6 +178,9 @@ for ($lineIndex = $currentReleaseStart + 1; $lineIndex -lt $changelogLines.Count
     if (-not $inHighlights -or $line -notmatch '^\s*-\s+(.+?)\s*$') { continue }
     $bulletText = $Matches[1]
     $nextLine = if (($lineIndex + 1) -lt $changelogLines.Count) { $changelogLines[$lineIndex + 1] } else { "" }
+    if ($nextLine -match '^\s*<!--\s*msuf-menu-link:\s*none\s*-->\s*$') {
+        continue
+    }
     if ($nextLine -notmatch '^\s*<!--\s*msuf-menu-link:\s*(\{.+\})\s*-->\s*$') {
         throw "Current Highlights bullet has no explicit msuf-menu-link route policy: $bulletText"
     }
