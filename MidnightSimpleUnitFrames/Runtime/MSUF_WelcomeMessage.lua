@@ -40,7 +40,7 @@ local Tr = MSUF.Translate
 --- version shows no summary until it records its own totals here.
 local RELEASE_SUMMARY = {
     version = "6.50",
-    features = 102,
+    features = 104,
     fixes = 103,
     performance = 20,
     minInterface = 120105,

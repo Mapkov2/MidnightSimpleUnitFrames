@@ -38,6 +38,7 @@ local ABSENT = {
     -- Arena Frames: Midnight (arena1-3), TBC and Mists (arena1-5).
     ["uf_arena menu2.uf_arena.unit.basics.enabled"] = { Vanilla = true, Forever = true },
     ["uf_arena menu2.uf_arena.unit.castbar.feature.msuf2_castbar_icon"] = { Vanilla = true, Forever = true },
+    ["uf_arena menu2.uf_arena.unit.trinket.show"] = { Vanilla = true, Forever = true },
     -- Threat % and Pet Happiness: MSUF.Client.SupportsThreatText / SupportsPetHappiness
     -- (Classic Era, TBC and WoW Forever).
     ["uf_target menu2.uf_target.unit.status.selected.enabled statusThreat"] = { Mainline = true, Mists = true },

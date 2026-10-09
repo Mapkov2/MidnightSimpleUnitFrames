@@ -4,7 +4,7 @@
 
 ### Highlights
 
-- **MSUF 6.50 completes the 6.5 line.** It brings 102 new features and changes, 103 bug fixes and 20 performance improvements, including Arena Frames, Pet Target, Slanted Frames and Cosmetic Texture Layers. On WoW 12.1.5 the login greeting sums this up; turn it off under Global > Misc > Show welcome message.
+- **MSUF 6.50 completes the 6.5 line.** It brings 104 new features and changes, 103 bug fixes and 20 performance improvements, including Arena Frames, Pet Target, Slanted Frames and Cosmetic Texture Layers. On WoW 12.1.5 the login greeting sums this up; turn it off under Global > Misc > Show welcome message.
 <!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_startup","controlId":"menu2.opt.misc.global.setting.show.welcome.message","settingKey":"general.showWelcomeMessage","prepareKind":"","prepareValue":"","query":"show welcome message","label":"Show welcome message"} -->
 - **Arena Frames:** dedicated opponent frames with their own castbars, auras, settings and Edit Mode movers, including preparation, stealth and trinket states. Midnight supports three opponents; TBC and Mists support five.
 <!-- msuf-menu-link: {"pageKey":"uf_arena","sectionId":"frame_basics","controlId":"menu2.uf_arena.unit.basics.enabled","settingKey":"arena.enabled","prepareKind":"","prepareValue":"","query":"arena frames enable","label":"Arena Frames"} -->
@@ -153,6 +153,8 @@
 <!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_behavior","controlId":"menu2.opt.castbar.global.behavior.castbar.show.channel.ticks","settingKey":"general.castbarShowChannelTicks","prepareKind":"","prepareValue":"","query":"channel tick markers","label":"Spell-specific channel tick markers"} -->
 - **Arena castbar configuration:** icon, spell-name and cast-time options apply to supported opponent frames, including all five TBC and Mists slots.
 <!-- msuf-menu-link: {"pageKey":"uf_arena","sectionId":"castbar","controlId":"menu2.uf_arena.unit.castbar.feature.msuf2_castbar_icon","settingKey":"general.showArenaCastIcon","prepareKind":"","prepareValue":"","query":"arena castbar icon","label":"Arena castbar icon"} -->
+- **Arena PvP trinket:** the enemy PvP trinket has its own Arena page section with show, size, side, offset and layer settings. It appears in the Arena page preview and MSUF Edit Mode, and the arena frame's Edit Mode popup adjusts it directly.
+<!-- msuf-menu-link: {"pageKey":"uf_arena","sectionId":"pvp_trinket","controlId":"menu2.uf_arena.unit.trinket.show","settingKey":"arena.showTrinket","prepareKind":"","prepareValue":"","query":"show pvp trinket","label":"Show PvP trinket"} -->
 - **Focus Kick:** the unified line includes the option to retain the Focus castbar beside the compact interrupt icon.
 <!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_focus_kick","controlId":"menu2.opt.castbar.global.focus.kick.focus.kick.show.castbar","settingKey":"general.focusKickShowCastbar","prepareKind":"","prepareValue":"","query":"show castbar with focus kick icon","label":"Show castbar with Focus Kick icon"} -->
 - **Interrupt readiness:** tracks only interrupts the character has learned, including Demonology's Axe Toss through Command Demon. Spells of another specialization and missing pets no longer count as a ready interrupt.
@@ -207,6 +209,8 @@
 - Search follows client capabilities and preserves field edits.
 <!-- msuf-menu-link: none -->
 - **Conversational search:** natural task phrasing in English and German, such as "make my target health numbers bigger", routes to the matching page or setting.
+<!-- msuf-menu-link: none -->
+- **Search greeting:** the Dashboard search card greets you by name for the time of day: morning, midday, afternoon, evening or night.
 <!-- msuf-menu-link: none -->
 - Updated menu and Edit Mode labels, prompts, tooltips, status text, history, chat messages and placeholders across all twelve supported locales.
 <!-- msuf-menu-link: {"pageKey":"opt_misc","sectionId":"misc_language","controlId":"menu2.opt.misc.global.language.selection","settingKey":"general.menuLocale","prepareKind":"","prepareValue":"","query":"menu language","label":"Menu language"} -->

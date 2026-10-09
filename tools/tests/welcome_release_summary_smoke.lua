@@ -39,9 +39,9 @@ local welcome = Load(120105, "6.50")
 local line = Summary(welcome.GetLines(false))
 Check(line ~= nil, "12.1.5 with 6.50: the greeting has no release summary")
 if line then
-    Check(line:find("MSUF 6.50", 1, true) and line:find("New features & changes: 102", 1, true)
+    Check(line:find("MSUF 6.50", 1, true) and line:find("New features & changes: 104", 1, true)
         and line:find("Bug fixes: 103", 1, true) and line:find("Performance improvements: 20", 1, true),
-        "12.1.5 with 6.50: the summary does not name 6.50 with 102 / 103 / 20: " .. line)
+        "12.1.5 with 6.50: the summary does not name 6.50 with 104 / 103 / 20: " .. line)
 end
 Check(#welcome.GetLines(false) == 4, "12.1.5 with 6.50: expected title, patch, summary and /msuf lines")
 Check(Summary(welcome.GetLines(true)) == nil, "the warning-only greeting printed the release summary")

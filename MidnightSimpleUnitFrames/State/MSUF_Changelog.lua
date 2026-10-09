@@ -8,7 +8,7 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "72FD742EC42A157F239B288C55685035100939C67D0B53DBFB9F49C727A22FBB",
+    sourceSha256 = "E31573BD88A506983F51D4A8560B26958425A983E87BACD28AD19B010CB66DFA",
     currentVersion = "6.50",
     historyFromVersion = "6.15",
     previousVersion = "6.15",
@@ -22,7 +22,7 @@ local data = {
                     title = "Highlights",
                     bullets = {
                         {
-                            text = "MSUF 6.50 completes the 6.5 line. It brings 102 new features and changes, 103 bug fixes and 20 performance improvements, including Arena Frames, Pet Target, Slanted Frames and Cosmetic Texture Layers. On WoW 12.1.5 the login greeting sums this up; turn it off under Global > Misc > Show welcome message.",
+                            text = "MSUF 6.50 completes the 6.5 line. It brings 104 new features and changes, 103 bug fixes and 20 performance improvements, including Arena Frames, Pet Target, Slanted Frames and Cosmetic Texture Layers. On WoW 12.1.5 the login greeting sums this up; turn it off under Global > Misc > Show welcome message.",
                             link = {
                                 pageKey = "opt_misc",
                                 query = "show welcome message",
@@ -785,6 +785,17 @@ local data = {
                             },
                         },
                         {
+                            text = "Arena PvP trinket: the enemy PvP trinket has its own Arena page section with show, size, side, offset and layer settings. It appears in the Arena page preview and MSUF Edit Mode, and the arena frame's Edit Mode popup adjusts it directly.",
+                            link = {
+                                pageKey = "uf_arena",
+                                query = "show pvp trinket",
+                                label = "Show PvP trinket",
+                                sectionId = "pvp_trinket",
+                                controlId = "menu2.uf_arena.unit.trinket.show",
+                                settingKey = "arena.showTrinket",
+                            },
+                        },
+                        {
                             text = "Focus Kick: the unified line includes the option to retain the Focus castbar beside the compact interrupt icon.",
                             link = {
                                 pageKey = "opt_castbar",
@@ -960,6 +971,10 @@ local data = {
                         },
                         {
                             text = "Conversational search: natural task phrasing in English and German, such as \"make my target health numbers bigger\", routes to the matching page or setting.",
+                            linkless = true,
+                        },
+                        {
+                            text = "Search greeting: the Dashboard search card greets you by name for the time of day: morning, midday, afternoon, evening or night.",
                             linkless = true,
                         },
                         {
