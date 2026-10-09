@@ -12,6 +12,10 @@
 --   4. Escape and leaving the page empty the field and close its palette.
 --   5. MSUF_Menu2_SearchPalette.lua: a standalone palette leaves the window's
 --      navigation palette hook (M.HideNavSearchPalette) alone.
+--   6. The card greets by the local time of day (morning, midday, afternoon,
+--      evening, night) with the character name, refreshes with the page, falls
+--      back to its plain title without a clock or a name, and every locale pack
+--      translates the five greetings with exactly one %s.
 local root = assert(arg and arg[1], "repository root argument missing"):gsub("\\", "/"):gsub("/$", "")
 local MENU = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 
@@ -148,10 +152,12 @@ assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua"))(
 assert(loadfile(MENU .. "MSUF_Menu2_Dashboard.lua"))("MidnightSimpleUnitFrames_Options", dashboardNamespace)
 local buildHome = Check(M.pages.home and M.pages.home.build, "the Dashboard must register the home page")
 
+local lastCtx
 local function Build(width)
     fonts, buttons, editBoxes, registered, calls = {}, {}, {}, {}, {}
     palette.shown, palette.openResult, paletteArgs, scheduledBox = false, false, nil, nil
     local ctx = { wrapper = Fake("wrapper"), width = width or 760, entry = {}, refreshers = {} }
+    lastCtx = ctx
     function ctx:SetContentHeight(height) self.height = height end
     function ctx:AddRefresher(fn) self.refreshers[#self.refreshers + 1] = fn end
     buildHome(ctx)
@@ -269,5 +275,52 @@ Check(P.CreateNavSearchPalette({}, {}, true), "a standalone palette must build")
 Check(P.HideNavSearchPalette == navHide, "a standalone palette must leave the navigation hook alone")
 navHide()
 Check(#nav.visibleResults == 0, "the navigation hook must still close the navigation palette")
+
+---------------------------------------------------------------------------
+-- 6. Time-of-day greeting
+---------------------------------------------------------------------------
+local clock = "07"
+_G.date = function(pattern)
+    Check(pattern == "%H", "the greeting must read only the local hour")
+    return clock
+end
+M.PlayerDisplayName = function() return "Mapko" end
+local expected = {
+    [0] = "Up late, Mapko?", [4] = "Up late, Mapko?", [5] = "Good morning, Mapko", [11] = "Good morning, Mapko",
+    [12] = "Good day, Mapko", [13] = "Good day, Mapko", [14] = "Good afternoon, Mapko", [17] = "Good afternoon, Mapko",
+    [18] = "Good evening, Mapko", [21] = "Good evening, Mapko", [22] = "Up late, Mapko?", [23] = "Up late, Mapko?",
+}
+for hour, text in pairs(expected) do
+    clock = string.format("%02d", hour)
+    Build()
+    Check(FindFont(text), ("hour %02d must greet with %q"):format(hour, text))
+end
+clock = "09"
+Build()
+local greetingTitle = Check(FindFont("Good morning, Mapko"), "the morning greeting must title the search card")
+clock = "19"
+for _, refresh in ipairs(lastCtx.refreshers) do refresh() end
+Check(greetingTitle._text == "Good evening, Mapko", "a page refresh must move the greeting to the current time of day")
+_G.date = nil
+Build()
+Check(FindFont("Find settings and help"), "without a clock the card must keep its plain title")
+M.PlayerDisplayName = nil
+
+local GREETINGS = { "Good morning, %s", "Good day, %s", "Good afternoon, %s", "Good evening, %s", "Up late, %s?" }
+for _, locale in ipairs({ "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }) do
+    local handle = assert(io.open(root .. "/MidnightSimpleUnitFrames/Locales/" .. locale .. ".lua", "rb"))
+    local text = handle:read("*a")
+    handle:close()
+    for _, key in ipairs(GREETINGS) do
+        local escaped = key:gsub("[%%%.%-%+%*%?%[%]%^%$%(%)]", "%%%0")
+        local value = text:match('L%["' .. escaped .. '"%]%s*=%s*"([^"\r\n]*)"')
+        Check(value, locale .. " lacks the search greeting " .. key)
+        local _, count = value:gsub("%%s", "")
+        Check(count == 1 and not value:find("%%[^s]"), locale .. " " .. key .. " needs exactly one %s: " .. value)
+        if locale ~= "enUS" and locale ~= "enGB" then
+            Check(value ~= key, locale .. " leaves the search greeting " .. key .. " untranslated")
+        end
+    end
+end
 
 print("dashboard_search_field_smoke: ok")
