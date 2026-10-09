@@ -17,6 +17,10 @@
 --     (.github/scripts/assert-classic-changelog-links.ps1) against the search
 --     index this client loads: the row exists, the section matches, the setting
 --     key matches the row or one of its published prepare contracts.
+--   * both renderers draw every linked bullet as a link, not only Highlights:
+--     See New Features shows one link button per linked bullet of the release,
+--     the dashboard card one per linked bullet of its compact entries, and
+--     clicking a linked change bullet on the page opens its control.
 -- Plain Lua 5.1, repo root as arg 1, flavor as arg 2.
 
 local root = assert(arg and arg[1], "repository root required"):gsub("\\", "/"):gsub("/$", "")
@@ -121,10 +125,28 @@ local function StaticProblem(link)
     end
 end
 
+--- Link buttons (T.StyleFeatureLink marks them) the page builds, in build order.
+local function LinkButtons(pageKey, open)
+    local first = #mw.world.widgets.frames + 1
+    open()
+    mw:RunTimers()
+    local wrapper = M.cache[pageKey] and M.cache[pageKey].wrapper
+    local out = {}
+    if not Check(wrapper ~= nil and M.activeKey == pageKey, "the " .. pageKey .. " page did not open") then return out end
+    local frames = mw.world.widgets.frames
+    for i = first, #frames do
+        local frame, node = frames[i], frames[i]
+        while node and node ~= wrapper do node = node.GetParent and node:GetParent() or nil end
+        if node and frame._msuf2ChangelogLinkOutline then out[#out + 1] = frame end
+    end
+    return out
+end
+
 local data = env.MSUF_FullChangelog
 local entry = type(data) == "table" and type(data.entries) == "table" and data.entries[1]
 if Check(type(entry) == "table" and type(entry.sections) == "table", "MSUF_FullChangelog has no current release entry") then
     local linked, linkless, opened, absent = 0, 0, 0, 0
+    local order = {}
     for _, section in ipairs(entry.sections) do
         local title = tostring(section.title or "")
         local exempt = title:find("^Bug Fixes") or title:find("^Fixes") or title == "Performance"
@@ -136,6 +158,7 @@ if Check(type(entry) == "table" and type(entry.sections) == "table", "MSUF_FullC
                 local key = link.pageKey .. " " .. link.controlId
                 local clients = ABSENT[key .. " " .. tostring(link.prepareValue or "")] or ABSENT[key]
                 local missing = clients and clients[flavor]
+                order[#order + 1] = { link = link, title = title, missing = missing }
                 local ok = M.OpenChangelogMenuLink(link) == true
                 mw:RunTimers()
                 if missing then
@@ -155,9 +178,47 @@ if Check(type(entry) == "table" and type(entry.sections) == "table", "MSUF_FullC
         end
     end
     Check(linked > 0, "the current release has no linked bullet; the check would prove nothing")
+
+    -- See New Features: one link button per linked bullet, in bullet order.
+    local pageButtons = LinkButtons("changelog", function() return M.OpenSeeNewFeatures() end)
+    Check(#pageButtons == linked, ("See New Features draws %d link buttons for %d linked bullets of %s")
+        :format(#pageButtons, linked, tostring(entry.version)))
+    if #pageButtons == linked then
+        -- Click the last linked change bullet this client builds.
+        for i = #order, 1, -1 do
+            local item = order[i]
+            if item.title ~= "Highlights" and not item.missing then
+                local onClick = pageButtons[i]:GetScript("OnClick")
+                if Check(onClick ~= nil, "the link button of a change bullet has no click handler") then
+                    onClick(pageButtons[i], "LeftButton")
+                    mw:RunTimers()
+                    Check(M.activeKey == item.link.pageKey, ("clicking the %s link landed on %s, not %s")
+                        :format(item.title, tostring(M.activeKey), item.link.pageKey))
+                end
+                break
+            end
+        end
+    end
+
+    -- Dashboard card: one link button per linked bullet of its compact entries.
+    local compact, expected = env.MSUF_Changelog, 0
+    for e = 1, math.min(4, #(compact and compact.entries or {})) do
+        for _, section in ipairs(compact.entries[e].sections or {}) do
+            for _, bullet in ipairs(section.bullets or {}) do
+                if type(bullet) == "table" and type(bullet.link) == "table" then expected = expected + 1 end
+            end
+        end
+    end
+    mw.core.FirstLoad6:Complete("fixture")
+    M.dashboardChangelogOpen = true
+    M.InvalidatePage("home")
+    local homeButtons = LinkButtons("home", function() return M.SelectPage("home") end)
+    Check(expected >= linked and #homeButtons == expected, ("the dashboard card draws %d link buttons for %d linked bullets")
+        :format(#homeButtons, expected))
     if #failures == 0 then
-        print(("changelog_release_links_smoke: ok (%s, %s: %d links, %d opened, %d absent on this client, %d without a menu control)")
-            :format(flavor, tostring(entry.version), linked, opened, absent, linkless))
+        print(("changelog_release_links_smoke: ok (%s, %s: %d links, %d opened, %d absent on this client, %d without a menu control;"
+            .. " %d page and %d dashboard link buttons)")
+            :format(flavor, tostring(entry.version), linked, opened, absent, linkless, #pageButtons, #homeButtons))
     end
 end
 

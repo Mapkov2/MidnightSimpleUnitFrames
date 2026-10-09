@@ -266,7 +266,7 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         dot:SetSize(5, 5)
         dot:SetPoint("TOPLEFT", child, "TOPLEFT", 9, y - 6)
         dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.95)
-        if isHighlight and link then
+        if link then
             local button = PixelLayoutRegion(CreateFrame("Button", nil, child))
             button:SetPoint("TOPLEFT", child, "TOPLEFT", 22, y)
             local linkWidth = max(40, scrollW - 32)

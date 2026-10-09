@@ -218,7 +218,7 @@ local function BuildFullChangelog(ctx)
                             dot:SetPoint("TOPLEFT", root, "TOPLEFT", 44, y - 6)
                             local dotColor = isHighlights and T.colors.accent2 or T.colors.accent
                             dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.95)
-                            if isHighlights and link then
+                            if link then
                                 AddLinkedText(text, link, 58, contentWidth - 56, 7)
                             else
                                 AddText(text, "GameFontHighlightSmall", T.colors.text, 58, contentWidth - 56, 7, "body")
