@@ -18,6 +18,12 @@ _G.MSUF_UpdateCastbarEditInfo = function() end
 _G.MSUF_SyncCastbarPositionPopup = function() end
 _G.MSUF_IsPlayerInCombat = function() return false end
 _G.MSUF_DB = { general = { castbarTexture = "Late Media Bar", castbarBackgroundTexture = "Late Media Bar" } }
+-- Load the real shared predicates without replacing this fixture's visual providers.
+local utilityNS = { ExportPublic = function(_, value) return value end }
+local previousMSUF = _G.MSUF
+assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpleUnitFrames", utilityNS)
+_G.MSUF = previousMSUF
+ns.Util = utilityNS.Util
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Castbars/MSUF_Castbars_Core.lua"))("MidnightSimpleUnitFrames", ns)
 
 print("login (key not registered yet): fg=" .. _G.MSUF_GetCastbarTexture() .. "  bg=" .. _G.MSUF_GetCastbarBackgroundTexture())

@@ -2,6 +2,7 @@ local PixelLayoutRegion = _G.MSUF_PixelLayoutRegion or function(region, policy, 
 local _, MSUF = ...
 MSUF = MSUF or {}
 local ExportPublic = MSUF.ExportPublic
+local IsSecret = MSUF.Util.IsSecret
 local GameplayShared = MSUF.MSUF_GameplayShared or MSUF.Gameplay or {}
 
 -- Blizzard totem/statue preview controller.
@@ -192,6 +193,7 @@ do
             points = {},
         }
 
+        if IsSecret(info.strata) then info.strata = nil end
         for i = 1, frame:GetNumPoints() do
             local point, relativeTo, relativePoint, x, y = frame:GetPoint(i)
             info.points[#info.points + 1] = {
@@ -359,8 +361,11 @@ do
         if playerFrame then
             if frame.SetFrameStrata and playerFrame.GetFrameStrata then
                 local strata = playerFrame:GetFrameStrata()
-                if strata and frame:GetFrameStrata() ~= strata then
-                    frame:SetFrameStrata(strata)
+                if not IsSecret(strata) and strata then
+                    local currentStrata = frame:GetFrameStrata()
+                    if IsSecret(currentStrata) or currentStrata ~= strata then
+                        frame:SetFrameStrata(strata)
+                    end
                 end
             end
             if frame.SetFrameLevel and playerFrame.GetFrameLevel then

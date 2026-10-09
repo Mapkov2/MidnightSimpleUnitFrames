@@ -791,7 +791,9 @@ local function ApplyBarRuntime(opt, unitFramesApplied, castbarRefreshPending)
         if not groupOnly and unitFramesApplied ~= true then
             _G.MSUF_ApplyBarOutlineThickness_All(unitScope)
         end
-        if not groupOnly then _G.MSUF_ApplyRoundedUnitframes() end
+        -- Borders/Power callbacks repaint shaped unit edges; the group dirty
+        -- pass below owns shaped group edges. Reapplying Rounded here rebuilds
+        -- unrelated castbars, class resources and aura masks on every choice.
         needsGroupBorderRefresh = not (wantsTextureRuntime and globalScope)
         didOutlineRefresh = true
     end

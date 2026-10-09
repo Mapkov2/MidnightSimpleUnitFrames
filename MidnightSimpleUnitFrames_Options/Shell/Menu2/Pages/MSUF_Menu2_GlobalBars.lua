@@ -793,12 +793,12 @@ local function SetOutlineColorForScope(r, g, b)
     r, g, b = tonumber(r) or 0, tonumber(g) or 0, tonumber(b) or 0
     local scope, keys = CurrentBarsScope(), ScopeDBKeys(CurrentBarsScope())
     if scope == "shared" or not keys then return SetOutlineRGB(G(), r, g, b) end
-    ScopeSetOverride(scope, "hlOverride", true)
     local db, changed = DB(), false
     for i = 1, #keys do
         db[keys[i]] = db[keys[i]] or {}
-        changed = SetOutlineRGB(db[keys[i]], r, g, b) or changed
+        changed = SetOutlineRGB(db[keys[i]], r, g, b) or db[keys[i]].hlOverride ~= true or changed
     end
+    ScopeSetOverride(scope, "hlOverride", true)
     return changed
 end
 local function GeneralBarBackgroundTextureKey()

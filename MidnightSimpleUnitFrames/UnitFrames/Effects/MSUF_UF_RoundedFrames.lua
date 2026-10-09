@@ -804,7 +804,6 @@ end
 -- Rings for a True Outline or Texture outline style; the solid stack above
 -- stays the renderer for the plain outline color.
 local STYLED_BORDER_POOL_KEY = "_msufRoundedBorderStyledRings"
-local BORDER_HIGHLIGHT_SOURCES = { dispel = true, aggro = true, purge = true, bossTarget = true }
 
 local function SetModernBorderEdgesSuppressed(f, suppressed)
   if not f then return end
@@ -877,12 +876,10 @@ local function ApplyModernRoundedBorderVisual(f, shown, thickness, source, r, g,
   -- Borders.Apply copied the compiled outline style onto the frame. A style
   -- that cannot be drawn yet (combat, before its rings exist) keeps the solid
   -- stack, and failing that the square renderer, instead of going blank.
-  -- A highlight tints a Texture style with its own colour, as the square
-  -- renderer does; the normal outline keeps the texture's colours.
+  -- Every style uses the resolved outline or highlight colour.
   local styleMode = f._msufBorderRuntimeTextureMode
-  local tint = BORDER_HIGHLIGHT_SOURCES[source] == true
   if styleMode and ApplyStyledEdgeRings(f, parent, anchor, STYLED_BORDER_POOL_KEY, thickness, styleMode,
-      f._msufBorderRuntimeTexture, f._msufBorderRuntimeTextureKey, nil, layer, subLevel, r, g, b, a, tint) then
+      f._msufBorderRuntimeTexture, f._msufBorderRuntimeTextureKey, nil, layer, subLevel, r, g, b, a) then
     HideRoundedEdgeStack(f, edge, stackKey)
     SetModernBorderEdgesSuppressed(f, true)
     return true
@@ -921,11 +918,17 @@ end
 local function PrewarmAndApplyModernBorderVisual(f)
   if not (f and type(f.MSUFBorderEdges) == "table" and f._msufBorderShown ~= nil) then return false end
   if not IsCombatLocked() then
-    local normal = tonumber(f._msufBorderRuntimeNormalThickness) or 0
+    local normal = f._msufBorderRuntimeNormal == true and (tonumber(f._msufBorderRuntimeNormalThickness) or 0) or 0
     local highlight = tonumber(f._msufBorderRuntimeHighlightThickness) or 0
-    local maximum = normal > highlight and normal or highlight
-    if maximum > 0 then
-      ApplyModernRoundedBorderVisual(f, true, maximum, f._msufBorderVisualSource, CurrentFrameBorderColor(f))
+    local current = f._msufBorderShown == true and (tonumber(f._msufBorderVisualThickness) or 0) or 0
+    -- Blizzard art keeps distinct normal/highlight size sets. Warm whichever
+    -- set the current visual will not paint, including a style changed while
+    -- a highlight is active; its combat clear must already have normal art.
+    if normal > 0 and normal ~= current then
+      ApplyModernRoundedBorderVisual(f, true, normal, f._msufBorderVisualSource, CurrentFrameBorderColor(f))
+    end
+    if highlight > 0 and highlight ~= normal and highlight ~= current then
+      ApplyModernRoundedBorderVisual(f, true, highlight, f._msufBorderVisualSource, CurrentFrameBorderColor(f))
     end
   end
   return ApplyCurrentModernBorderVisual(f)
@@ -1659,7 +1662,8 @@ local function HookOnce()
   ExportPublic("MSUF_RoundedUF_OnUnitHighlightChanged", function(frame, hlKey, r, g, b, cfg)
     return HandleUnitHighlightChanged(frame, hlKey, r, g, b, cfg)
   end)
-  ExportPublic("MSUF_RoundedUF_OnBorderVisualChanged", function(frame, shown, source, thickness, r, g, b, a)
+  ExportPublic("MSUF_RoundedUF_OnBorderVisualChanged", function(frame, shown, source, thickness, r, g, b, a, prepare)
+    if prepare == true then return PrewarmAndApplyModernBorderVisual(frame) end
     return ApplyModernRoundedBorderVisual(frame, shown, thickness, source, r, g, b, a)
   end)
   ExportPublic("MSUF_RoundedUF_OnPowerBorderChanged", function(frame)

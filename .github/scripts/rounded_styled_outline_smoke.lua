@@ -366,16 +366,27 @@ for _, scenario in ipairs(scenarios) do
   local cfg = BorderConfig("texture", STATUSBAR, STATUSBAR)
   local f = NewFrame(unit, kind, cfg)
   module.Apply()
-  CheckBand(f, unit .. " texture", 1, 2, { 1, 1, 1, 0.9 }, edgePattern, TextureCoords)
+  CheckBand(f, unit .. " texture", 1, 2, { 0.2, 0.3, 0.4, 0.9 }, edgePattern, TextureCoords)
   Check(f[POOL][3] and f[POOL][4] and not f[POOL][3].shown,
     unit .. " texture: the highlight band was not prewarmed out of combat")
   CombatThreat(f, unit .. " texture aggro", 3, function()
-    -- A highlight tints the texture; the normal outline keeps its colours.
+    -- A highlight uses its own colour; clearing it restores the outline colour.
     CheckBand(f, unit .. " texture aggro", 1, 4, { 1, 0.55, 0, 1 }, edgePattern, TextureCoords)
   end)
   CombatThreat(f, unit .. " texture clear", 0, function()
-    CheckBand(f, unit .. " texture clear", 1, 2, { 1, 1, 1, 0.9 }, edgePattern, TextureCoords)
+    CheckBand(f, unit .. " texture clear", 1, 2, { 0.2, 0.3, 0.4, 0.9 }, edgePattern, TextureCoords)
   end)
+
+  local beforeCreated = created
+  local pool = f[POOL]
+  cfg.r, cfg.g, cfg.b = 0.8, 0.1, 0.6
+  UF.ApplySpec(f, f.MSUFSpec, nil, { Borders = true })
+  module.Apply()
+  CheckBand(f, unit .. " texture recolor", 1, 2, { 0.8, 0.1, 0.6, 0.9 }, edgePattern, TextureCoords)
+  Check(created == beforeCreated and f[POOL] == pool, unit .. ": recolor rebuilt the styled pool")
+  cfg.r, cfg.g, cfg.b = 0.2, 0.3, 0.4
+  UF.ApplySpec(f, f.MSUFSpec, nil, { Borders = true })
+  module.Apply()
 
   -- True Outline: the edgeFile band straddles the edge; GLOW is 3px per step.
   cfg.textureMode, cfg.texture, cfg.textureKey = "border", GLOW, "GLOW"
@@ -401,12 +412,12 @@ for _, scenario in ipairs(scenarios) do
   cfg.textureMode, cfg.texture, cfg.textureKey = "texture", STATUSBAR, STATUSBAR
   UF.ApplySpec(f, f.MSUFSpec, nil, { Borders = true })
   module.Apply()
-  CheckBand(f, unit .. " texture again", 1, 2, { 1, 1, 1, 0.9 }, edgePattern, TextureCoords)
+  CheckBand(f, unit .. " texture again", 1, 2, { 0.2, 0.3, 0.4, 0.9 }, edgePattern, TextureCoords)
   module.Disable()
   Check(ShownPads(f) == nil, unit .. ": styled rings survived disable")
   Check(not SquareHidden(f), unit .. ": square outline did not return after disable")
   module.Enable()
-  CheckBand(f, unit .. " re-enabled", 1, 2, { 1, 1, 1, 0.9 }, edgePattern, TextureCoords)
+  CheckBand(f, unit .. " re-enabled", 1, 2, { 0.2, 0.3, 0.4, 0.9 }, edgePattern, TextureCoords)
   tested = tested + 1
 end
 
@@ -496,7 +507,7 @@ _G.MSUF_DB.bars.slantedBarDirection = "LEFT_UP"
 module.Apply()
 for _, f in ipairs(units) do
   if f.unit == "focus" then
-    CheckBand(f, "focus left-up", 1, 2, { 1, 1, 1, 0.9 }, "slanted_bar_edge_left_up.png", TextureCoords)
+    CheckBand(f, "focus left-up", 1, 2, { 0.2, 0.3, 0.4, 0.9 }, "slanted_bar_edge_left_up.png", TextureCoords)
   end
 end
 _G.MSUF_DB.bars.slantedBarDirection = nil
@@ -690,3 +701,54 @@ print("PASS rounded styled outlines: " .. tested .. " rounded/slanted unit/group
   .. " without allocation or layout, solid fallback,"
   .. " disable/enable, slanted direction, short anchors, the unprewarmed square fallback, aggro, dispel,"
   .. " purge and boss target colours with the normal outline off, and secret dispel colours across cold repaints")
+
+
+-- Only Borders is loaded/applied here: a disabled Power element cannot supply
+-- a later Rounded unit refresh. The same cold owner covers GF.DIRTY_BORDER.
+_G.MSUF_DB.bars.roundedFramesEnabled = true
+_G.MSUF_DB.bars.roundedUnitFrames, _G.MSUF_DB.bars.roundedGroupFrames = true, true
+_G.MSUF_DB.bars.slantedBarsEnabled = true
+_G.MSUF_DB.bars.slantedUnitFrames, _G.MSUF_DB.bars.slantedGroupFrames = true, true
+local coldPrepared = 0
+for _, scenario in ipairs(scenarios) do
+  local unit, kind = scenario[1], scenario[2]
+  for _, normalEnabled in ipairs({ true, false }) do
+    for _, activeHighlight in ipairs({ false, true }) do
+      local cfg = BorderConfig("border", GLOW, "GLOW")
+      cfg.enabled = normalEnabled
+      local f = NewFrame(unit, kind, cfg, kind == "party" and "gf_party" or kind == "raid" and "gf_raid" or unit)
+      module.Apply()
+      if activeHighlight then
+        threatByUnit[f.unit] = 3
+        f:Fire("UNIT_THREAT_SITUATION_UPDATE", f.unit)
+      end
+      cfg.textureMode, cfg.texture, cfg.textureKey = "border", TOOLTIP, "BLIZZARD"
+      -- No module.Apply/Power refresh follows this real Borders-only pass.
+      UF.ApplySpec(f, f.MSUFSpec, "MSUF_BORDER_LAYOUT", { Borders = true })
+      local pool = f[POOL]
+      Check(pool ~= nil, unit .. ": cold border did not prepare the styled pool")
+      local normalSize = MSUF.BorderStyles.EdgeSize("BLIZZARD", cfg.thickness)
+      local highlightSize = MSUF.BorderStyles.EdgeSize("BLIZZARD", cfg.highlightThickness)
+      Check(pool._msufArt and pool._msufArt[highlightSize], unit .. ": cold border did not prepare highlight art")
+      if normalEnabled then
+        Check(pool._msufArt[normalSize], unit .. ": cold border did not prepare normal art")
+      else
+        Check(pool._msufArt[normalSize] == nil, unit .. ": disabled normal border prepared unused art")
+      end
+      CombatThreat(f, unit .. " cold style aggro", 3, function()
+        Check(f._msufRUFModernBorderSuppressed == true and pool._msufArtShown == pool._msufArt[highlightSize],
+          unit .. ": first combat highlight fell back after a texture change")
+      end)
+      CombatThreat(f, unit .. " cold style clear", 0, function()
+        if normalEnabled then
+          Check(f._msufRUFModernBorderSuppressed == true and pool._msufArtShown == pool._msufArt[normalSize],
+            unit .. ": combat clear lost the prepared normal art")
+        else
+          Check(f._msufBorderShown == false, unit .. ": combat clear enabled a disabled normal border")
+        end
+      end)
+      coldPrepared = coldPrepared + 1
+    end
+  end
+end
+print("PASS cold outline style preparation: " .. coldPrepared .. " unit/group shape and active/hidden transitions")

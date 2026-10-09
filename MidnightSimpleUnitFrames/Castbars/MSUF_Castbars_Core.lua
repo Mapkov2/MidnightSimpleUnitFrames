@@ -11,6 +11,7 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 
 local ExportPublic = MSUF.ExportPublic
+local IsSecret = MSUF.Util.IsSecret
 
 local type = type
 local tonumber = tonumber
@@ -760,13 +761,18 @@ end
 
 local function SyncCastbarFrameStrata(frame, anchor, unit)
     if not (frame and frame.SetFrameStrata) then return end
-    local anchorStrata = anchor and anchor.GetFrameStrata and anchor:GetFrameStrata() or nil
+    local anchorStrata
+    if anchor and anchor.GetFrameStrata then anchorStrata = anchor:GetFrameStrata() end
+    if IsSecret(anchorStrata) then anchorStrata = nil end
     -- The owning Unit Frame and castbar must share one strata. Otherwise WoW's
     -- strata ordering always wins and the 0-30 frame-level control cannot move
     -- the castbar behind or in front of Unit Frame content.
     local wanted = anchorStrata or ((unit == "boss" or unit == "arena") and "HIGH" or "MEDIUM")
-    local currentStrata = frame.GetFrameStrata and frame:GetFrameStrata() or nil
-    if wanted and wanted ~= "" and wanted ~= currentStrata then frame:SetFrameStrata(wanted) end
+    local currentStrata
+    if frame.GetFrameStrata then currentStrata = frame:GetFrameStrata() end
+    if wanted and wanted ~= "" and (IsSecret(currentStrata) or wanted ~= currentStrata) then
+        frame:SetFrameStrata(wanted)
+    end
 end
 
 local CASTBAR_ICON_LAYER_KEYS = {

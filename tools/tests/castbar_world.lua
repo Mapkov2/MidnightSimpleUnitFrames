@@ -225,6 +225,12 @@ function World.New(root, backend, options)
             SupportsEvent = function() return true end,
         },
     }
+    -- Load the real shared predicates without replacing this fixture's visual providers.
+    local utilityNS = { ExportPublic = function(_, value) return value end }
+    local previousMSUF = _G.MSUF
+    assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Util.lua"))("MidnightSimpleUnitFrames", utilityNS)
+    _G.MSUF = previousMSUF
+    ns.Util = utilityNS.Util
     world.ns = ns
     -- Castbars/MSUF_CastbarFrames.lua is not loaded: World:Driver and
     -- World:PoolCastbar supply the regions its builder makes.

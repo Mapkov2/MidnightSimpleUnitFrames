@@ -107,7 +107,9 @@ local function Region()
     for _, name in ipairs({ "SetColorTexture", "SetAllPoints", "SetSize", "SetWidth", "SetHeight", "SetPoint",
         "ClearAllPoints", "SetVertexColor", "SetJustifyH" }) do region[name] = Noop end
     function region.SetAtlas(self, atlas) atlases[atlas] = true; self.atlas = atlas end
-    function region.SetTexCoord(self, left) self.texLeft = left end
+    function region.SetTexCoord(self, ...) self.texCoords = { ... } end
+    function region.ClearAllPoints(self) self.points = {} end
+    function region.SetPoint(self, ...) self.points = self.points or {}; self.points[#self.points + 1] = { ... } end
     function region.SetText(self, text) self.text = text end
     function region.GetStringWidth(self) return #(self.text or "") * 6 end
     function region.Show(self) self.shown = true end
@@ -357,9 +359,18 @@ local function ShownRegion(test)
         if regions[index].shown and test(regions[index]) then return regions[index] end
     end
 end
-assert(ShownRegion(function(region) return region.atlas == "atlas-PAD1" and region.texLeft == 0.015 end)
-    and ShownRegion(function(region) return region.atlas == "atlas-PAD2" and region.texLeft == 0 end),
-    "a large prompt atlas must be laid out like Blizzard's InputIconTextureMixin")
+local largeIcon = assert(ShownRegion(function(region) return region.atlas == "atlas-PAD1" end))
+local regularIcon = assert(ShownRegion(function(region) return region.atlas == "atlas-PAD2" end))
+for _, icon in ipairs({ largeIcon, regularIcon }) do
+    assert(table.concat(icon.texCoords, ",") == "0,1,0,1",
+        "controller prompts must use the complete native atlas without cropping")
+    local top, bottom = icon.points[1], icon.points[2]
+    local expansion = icon == largeIcon and 5 or 0
+    assert(top[1] == "TOPLEFT" and bottom[1] == "BOTTOMRIGHT"
+        and bottom[4] - top[4] == bottom[5] * -2
+        and top[5] == -bottom[5] and top[5] == 12 + expansion,
+        "controller prompt bounds must match native +/-5px expansion only for large atlases")
+end
 assert(not atlases["atlas-PADRSTICK"] and ShownRegion(function(region) return region.text == "R3" end),
     "a button whose atlas the client lacks must show as text, not an empty gap")
 local hintBar, selectionRing

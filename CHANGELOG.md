@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta18 - 2026-10-09
+
+### Highlights
+
+- **Frame outlines keep their configured color across shapes and styles.** Texture and True Outline borders use the selected outline color on square, rounded and slanted frames, while active highlights retain their own colors. Set the shared color under Colors > Bar & Prediction Colors > Bar Outline Color.
+<!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_bar_colors","controlId":"menu2.opt.colors.advanced.bar.outline.color","settingKey":"general.barOutlineColor","prepareKind":"","prepareValue":"","query":"bar outline color","label":"Bar Outline Color"} -->
+
+### Changes
+
+- Improved control state, page navigation, exact-search routing and translated labels across the supported clients.
+- Menu and Edit Mode previews follow the current resource, aura and frame settings more consistently.
+
+### Fixes
+
+- Scoped outline colors enable their override even when the selected color matches the shared value. Shaped borders prepare the required normal and highlight artwork when their settings are applied.
+- Profile startup, switching and synchronization preserve the active profile state. Edit Mode selection and Undo/Redo remain consistent across profile transitions.
+- Corrected aura rendering and client capability guards, cast interruption feedback, interrupt readiness and resource updates.
+- Corrected unit and group frame state updates and affected menu preview lifecycles.
+- Castbars and the totem preview handle restricted frame-strata values through their supported fallback paths.
+- WoW Forever controller button prompts retain the full icon artwork and corrected sizing.
+
+### Performance
+
+- Changing the Frame Outline style refreshes the affected borders without rebuilding unrelated castbars, class resources or aura masks.
+- Border event updates reuse prepared artwork and retain the shared color rendering path.
+
 ## 6.5-beta17 - 2026-10-06
 
 ### Highlights

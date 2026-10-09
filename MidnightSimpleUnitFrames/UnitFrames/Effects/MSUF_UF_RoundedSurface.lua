@@ -764,7 +764,7 @@ local function LayoutStyledRing(ring, anchor, pad, edgePath)
   return true
 end
 
-local function PaintStyledRing(ring, mode, texture, u, r, g, b, a, tint)
+local function PaintStyledRing(ring, mode, texture, u, r, g, b, a)
   if ring._msufStyledTexture ~= texture then
     ring:SetTexture(texture)
     ring._msufStyledTexture = texture
@@ -775,20 +775,14 @@ local function PaintStyledRing(ring, mode, texture, u, r, g, b, a, tint)
       ring:SetTexCoord(u, u, EDGE_TILE_V, EDGE_TILE_V)
       ring._msufStyledU = u
     end
-    ring:SetVertexColor(r, g, b, a)
   else
     if ring._msufStyledU ~= false then
       ring:SetTexCoord(0, 1, 0, 1)
       ring._msufStyledU = false
     end
-    -- Statusbar media keeps its structure in RGB, so the normal outline
-    -- applies only the configured alpha; a highlight tints it with its colour.
-    if tint then
-      ring:SetVertexColor(r, g, b, a)
-    else
-      ring:SetVertexColor(1, 1, 1, a)
-    end
   end
+  -- Both media kinds use the resolved outline or highlight colour.
+  ring:SetVertexColor(r, g, b, a)
 end
 
 -- Blizzard's border art (BorderStyles.IsBlizzardArt) keeps its real eight
@@ -917,11 +911,10 @@ end
 --- along the shape around `anchor`: as rings clipped to the shape's edge
 --- media, or for Blizzard border art as its eight pieces. Returns false,
 --- leaving what was shown before, when a region is missing or would need
---- laying out during combat; the caller then keeps its solid stack. `tint`
---- colours a Texture style (an aggro or dispel highlight); True Outline styles
---- always take the colour.
+--- laying out during combat; the caller then keeps its solid stack.
+--- Both Texture and True Outline styles use the supplied colour.
 local function ApplyStyledEdgeRings(owner, parent, anchor, poolKey, thickness, mode, texture, textureKey,
-    edgePath, layer, subLevel, r, g, b, a, tint)
+    edgePath, layer, subLevel, r, g, b, a)
   if not (owner and parent and anchor) then return false end
   if mode ~= STYLED_MODE_BORDER and mode ~= STYLED_MODE_TEXTURE then return false end
   if type(texture) ~= "string" or texture == "" then return false end
@@ -960,7 +953,7 @@ local function ApplyStyledEdgeRings(owner, parent, anchor, poolKey, thickness, m
   local du = (EDGE_TILE_U_INNER - EDGE_TILE_U_OUTER) / edge
   for pad = lo, hi do
     local ring = pool[pad]
-    PaintStyledRing(ring, mode, texture, EDGE_TILE_U_OUTER + (outer - pad + 0.5) * du, r, g, b, a, tint)
+    PaintStyledRing(ring, mode, texture, EDGE_TILE_U_OUTER + (outer - pad + 0.5) * du, r, g, b, a)
     ring:Show()
   end
   for pad = pool._msufMinPad, pool._msufMaxPad do

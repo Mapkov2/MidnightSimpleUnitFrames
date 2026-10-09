@@ -542,3 +542,6 @@ clients+Forever	lua	tools/tests/bh3_texture_strata_smoke.lua	{root} {flavor}	BH3
 clients+Forever	lua	tools/tests/bh3_guided_page_reuse_smoke.lua	{root} {flavor}	BH3 bh3_guided_page_reuse_smoke failed: {flavor}
 -	lua	tools/tests/bh3_locale_completion_smoke.lua	{root}	BH3 locale completion failed
 clients+Forever	lua	tools/tests/bars_outline_override_smoke.lua	{root} {flavor}	Bars outline Override inheritance and repaint regression: {flavor}
+clients+Forever	lua	tools/tests/bars_outline_color_smoke.lua	{root} {flavor}	Frame Outline style color application regression: {flavor}
+clients+Forever	lua	tools/tests/bars_outline_texture_apply_smoke.lua	{root} {flavor}	Frame Outline texture selection scoped apply budget: {flavor}
+-	lua	tools/tests/frame_strata_secret_smoke.lua	{root}	Frame strata secret regression

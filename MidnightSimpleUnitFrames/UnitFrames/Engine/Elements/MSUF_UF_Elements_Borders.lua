@@ -127,7 +127,6 @@ end
 
 local EDGE_KEYS = { "top", "bottom", "left", "right" }
 local DEFAULT_HIGHLIGHT_PRIORITY = { "dispel", "aggro", "purge", "bossTarget" }
-local HIGHLIGHT_SOURCES = { dispel = true, aggro = true, purge = true, bossTarget = true }
 local BORDER_LEVEL_NORMAL = Layers.FRAME_BORDER_NORMAL_OFFSET or 35
 local BORDER_LEVEL_DEFAULT = Layers.FRAME_BORDER_DEFAULT_OFFSET or 40
 local BORDER_LEVEL_OVER_NATIVE_DISPEL = Layers.FRAME_BORDER_OVER_NATIVE_DISPEL_OFFSET or 50
@@ -562,11 +561,7 @@ local function SetBorder(frame, show, r, g, b, a)
       or frame._msufBorderTrueOutlineHeight ~= outlineHeight)
   local secretColor = IsSecretValue(r) or IsSecretValue(g) or IsSecretValue(b) or IsSecretValue(a)
   local showChanged = frame._msufBorderShown ~= show
-  -- ApplyResolvedBorder names the source before painting. A highlight tints a
-  -- statusbar texture with its own colour; the normal outline keeps the art.
-  local tintTexture = stretchedTexture and HIGHLIGHT_SOURCES[frame._msufBorderVisualSource] == true
   local colorChanged = secretColor == true or textureChanged or textureModeChanged
-    or frame._msufBorderTextureTint ~= tintTexture
   if not colorChanged then
     if frame._msufBorderSecretColor == true then
       colorChanged = true
@@ -584,7 +579,6 @@ local function SetBorder(frame, show, r, g, b, a)
   frame._msufBorderTexPath = texture
   frame._msufBorderTextureMode = textureMode
   frame._msufBorderTextureKey = textureKey
-  frame._msufBorderTextureTint = tintTexture
   if secretColor then
     frame._msufBorderSecretColor = true
     frame._msufBorderR, frame._msufBorderG, frame._msufBorderB, frame._msufBorderA = nil, nil, nil, nil
@@ -627,15 +621,9 @@ local function SetBorder(frame, show, r, g, b, a)
         if colorChanged then
           if texture and stretchedTexture then
             if textureChanged or textureModeChanged then edge:SetTexture(texture) end
-            -- Statusbar media commonly stores its visible structure in RGB,
-            -- so multiplying by a black outline color flattens it completely.
-            -- Preserve the source texture and only apply the configured alpha;
-            -- an aggro/dispel/purge/boss highlight still shows its colour.
-            if tintTexture then
-              edge:SetVertexColor(r, g, b, a)
-            else
-              edge:SetVertexColor(1, 1, 1, a)
-            end
+            -- Keep the selected media and tint it with the resolved outline
+            -- or highlight colour, matching the shaped renderer and preview.
+            edge:SetVertexColor(r, g, b, a)
           else
             edge:SetVertexColor(1, 1, 1, 1)
             edge:SetColorTexture(r, g, b, a)
@@ -671,9 +659,9 @@ local function RefreshSquareBorderVisual(frame)
 end
 ExportPublic("MSUF_RefreshSquareFrameBorderVisual", RefreshSquareBorderVisual)
 
-local function NotifyRoundedBorder(frame, shown, source, thickness, r, g, b, a)
+local function NotifyRoundedBorder(frame, shown, source, thickness, r, g, b, a, prepare)
   if roundedVisualCallback then
-    roundedVisualCallback(frame, shown, source, thickness, r, g, b, a)
+    roundedVisualCallback(frame, shown, source, thickness, r, g, b, a, prepare)
   end
 end
 
@@ -951,6 +939,14 @@ function Borders.Apply(frame, spec)
     Borders.Update(frame, "MSUF_BORDER_APPLY", frame.MSUFUnitKey)
   else
     ApplyNormalBorder(frame, cfg)
+  end
+  -- Prepare future shaped highlight/normal bands at the cold element boundary.
+  -- A border-only group refresh or a unit with Power disabled has no wider
+  -- Rounded apply to do this; event updates remain painter-only.
+  if roundedVisualCallback then
+    local r, g, b, a = CurrentBorderColor(frame)
+    NotifyRoundedBorder(frame, frame._msufBorderShown == true, frame._msufBorderVisualSource,
+      frame._msufBorderVisualThickness, r, g, b, a, true)
   end
 end
 

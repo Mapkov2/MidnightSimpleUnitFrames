@@ -104,14 +104,13 @@ local function PlaceKey(entry, slot, key, x, size)
     if layout then
         local half = size * 0.5
         icon:SetAtlas(atlas)
+        icon:SetTexCoord(0, 1, 0, 1)
         if layout == "large" then
             icon:SetPoint("TOPLEFT", bar, "LEFT", x - 5, half + 5)
-            icon:SetPoint("BOTTOMRIGHT", bar, "LEFT", x + size + 4, -half - 3)
-            icon:SetTexCoord(0.015, 0.96, 0.015, 0.94)
+            icon:SetPoint("BOTTOMRIGHT", bar, "LEFT", x + size + 5, -half - 5)
         else
             icon:SetPoint("TOPLEFT", bar, "LEFT", x, half)
             icon:SetPoint("BOTTOMRIGHT", bar, "LEFT", x + size, -half)
-            icon:SetTexCoord(0, 1, 0, 1)
         end
         icon:Show()
         text:Hide()
