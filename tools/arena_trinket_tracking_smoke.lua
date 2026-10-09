@@ -20,7 +20,8 @@ end
 local function NewFrame(name, parent)
     local frame = { name = name, parent = parent, scripts = {} }
     function frame:SetSize() end
-    function frame:SetFrameStrata() end
+    function frame:SetFrameStrata(strata) self.strata = strata end
+    function frame:SetFrameLevel(level) self.level = level end
     function frame:SetAllPoints() end
     function frame:SetDrawEdge() end
     function frame:ClearAllPoints() end
@@ -141,6 +142,9 @@ local function RunScenario(kind)
         end,
     }
     _G.MSUF_NS = MSUF
+    -- The shared 0-30 layer scale the holders place themselves on (Libs loads
+    -- it before Features in every core TOC).
+    assert(loadfile("MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", MSUF)
 
     if kind ~= "retail" then
         _G.C_PvP.GetArenaCrowdControlDuration = nil

@@ -76,6 +76,10 @@ assert(loadstring(ProfileSlice.Function(Read(profilesPath), "function MSUF_GetAl
 -- The Boss page shares its style and geometry owner with live unit frames.
 assert(loadfile(Join(CORE, "UnitFrames/Engine/Elements/MSUF_UF_BossTargetIndicator.lua")))(
     "MidnightSimpleUnitFrames", MSUF)
+-- The Arena page's PvP Trinket section and its preview read the live trinket
+-- resolver, which places the icon on the shared 0-30 layer scale.
+assert(loadfile(Join(CORE, "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua")))("MidnightSimpleUnitFrames", MSUF)
+assert(loadfile(Join(CORE, "Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua")))("MidnightSimpleUnitFrames", MSUF)
 _G.SlashCmdList = _G.SlashCmdList or {}
 _G.floor, _G.ceil = _G.floor or math.floor, _G.ceil or math.ceil
 _G.min, _G.max, _G.abs = _G.min or math.min, _G.max or math.max, _G.abs or math.abs

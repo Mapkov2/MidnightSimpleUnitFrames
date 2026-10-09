@@ -2032,6 +2032,10 @@ function Stage.MeasureLayerFootprint(st)
             minY, maxY = min(minY, cBottom - detailPadY), max(maxY, cBottom + castBarH + detailPadY)
         end
     end
+    local arenaTrinket = MenuState.ArenaTrinketPreview
+    if key == "arena" and arenaTrinket and PreviewLayerWanted(box, "status") then
+        minX, maxX, minY, maxY = arenaTrinket.Footprint(minX, maxX, minY, maxY, w, h, ExpandAnchoredRect)
+    end
     local auraPreviewState = Auras and Auras.BuildState
         and Auras.BuildState(key, w, h, runtimeSpec, box._msuf2ColorPainterForceAuras == true)
     local auraFootprintState = Auras and Auras.HasVisibleLayer
@@ -3822,6 +3826,16 @@ function Stage.RenderAurasAndStatus(st, Preview)
     st.statusLayerAvailable = statusLayerAvailable
 end
 
+--- The arena PvP trinket icon. Pages/MSUF_Menu2_UnitArenaTrinket.lua paints it
+--- from the runtime's own layout resolver; it belongs to the Status layer.
+function Stage.RenderArenaTrinket(st)
+    local painter = MenuState.ArenaTrinketPreview
+    if not painter then return end
+    if painter.Paint(st.mock, st.key, PreviewLayerWanted(st.box, "status"), st.S) then
+        st.statusLayerAvailable = true
+    end
+end
+
 --- Layer availability for the layer rail, text handles, text focus, layer
 --- visibility, transparency and handle selection visuals.
 function Stage.FinalizeLayersAndHandles(st)
@@ -4345,6 +4359,7 @@ function Preview.Refresh(box, reason)
         st.SetTex, st.PlaceHandle, RenderState, st.data, st.runtimeSpec and st.runtimeSpec.health)
     Stage.RenderCastbar(st)
     Stage.RenderAurasAndStatus(st, Preview)
+    Stage.RenderArenaTrinket(st)
     Stage.FinalizeLayersAndHandles(st)
     st.complete = true
 end

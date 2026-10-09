@@ -386,9 +386,9 @@ local function MSUF_Defaults_Stage_FillUnitFrameDefaults(profileDB)
     --- Range fade: castbar/aura follow-fade for arena opponents (off by default).
     if profileDB.arena.rangeFadeCastbar == nil then profileDB.arena.rangeFadeCastbar = false end
     if profileDB.arena.rangeFadeAuras   == nil then profileDB.arena.rangeFadeAuras   = false end
-    --- Trinket/CC readiness icon next to each arena frame (secret-safe swipe).
+    --- PvP trinket icon next to each arena frame (secret-safe swipe); its placement keeps the original look.
     if profileDB.arena.showTrinket == nil then profileDB.arena.showTrinket = true end
-
+    fill("arena", { trinketSize = 20, trinketAnchor = "RIGHT", trinketOffsetX = 4, trinketOffsetY = 0, trinketLayer = 10 })
 end
 
 local function MSUF_Defaults_Stage_MigrateBossLayoutAndRangeFade(profileDB)

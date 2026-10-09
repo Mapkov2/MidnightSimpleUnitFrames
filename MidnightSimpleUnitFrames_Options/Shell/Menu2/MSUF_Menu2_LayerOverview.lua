@@ -727,6 +727,24 @@ Overview.RegisterProvider("castbars", function(sink)
     end
 end)
 
+-- The arena PvP trinket icon (Arena page > PvP Trinket). Its value, factory
+-- layer and visibility come from the trinket runtime; clients without arena
+-- frames list no row.
+Overview.RegisterProvider("arena-trinket", function(sink)
+    local scopes = { { key = "arena", label = "Arena" } }
+    if M.FilterSupportedUnitValues then M.FilterSupportedUnitValues(scopes) end
+    if #scopes == 0 then return end
+    local runtime = MSUF.ArenaTrinkets
+    local arena = DB().arena
+    sink:Layer({
+        id = "unit.arena.trinketLayer",
+        area = "Unit Status", scope = scopes[1].label, label = "PvP Trinket",
+        value = type(arena) == "table" and arena.trinketLayer or nil, default = runtime.DEFAULTS.layer,
+        enabled = runtime.Shown(), settingKey = "arena.trinketLayer",
+        edit = { kind = "unit", scope = "arena", key = "trinketLayer" },
+    })
+end)
+
 Overview.RegisterProvider("class-resources", function(sink)
     local db = DB()
     local bars = type(db.bars) == "table" and db.bars or {}

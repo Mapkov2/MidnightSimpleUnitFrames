@@ -7071,6 +7071,11 @@ L["Big Defensive by Me"] = "强力防御（我施放）"
 L["External Defensive by Me"] = "外部防御（我施放）"
 L["Applicable and Cast by Me"] = "我可施加且由我施放"
 L["Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible."] = "排除无持续时间的光环。MSUF 精选有意使用其精确列表，以便潜行者临时的团队潜行保持可见。"
+-- Arena page: PvP Trinket section.
+L["PvP Trinket"] = "PvP 饰品"
+L["Trinket"] = "饰品"
+L["Show PvP trinket"] = "显示 PvP 饰品"
+L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "在竞技场框体旁显示每个对手的 PvP 饰品及其冷却。此页面的竞技场框体预览和编辑模式中也会显示。"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)

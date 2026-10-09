@@ -29,6 +29,7 @@
     <Script file="Pages\MSUF_Menu2_AdvancedClassPower.lua"/>
     <Script file="Pages\MSUF_Menu2_SwingTimersPreview.lua"/>
     <Script file="Pages\MSUF_Menu2_SwingTimers.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitArenaTrinket.lua"/>
     <Script file="Pages\MSUF_Menu2_ProfileSearch.lua"/>
     <Script file="Pages\MSUF_Menu2_ProfileVariants.lua"/>
     <Script file="Pages\MSUF_Menu2_ProfileSync.lua"/>

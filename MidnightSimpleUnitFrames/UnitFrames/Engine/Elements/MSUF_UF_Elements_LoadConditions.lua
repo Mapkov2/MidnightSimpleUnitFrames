@@ -1074,6 +1074,8 @@ local function ClearArenaPreviewFramesForCombat()
     -- Same as the boss preview: the handoff leaves mul = 1 until the range
     -- runtime evaluates the real opponents again.
     RequestBossRangeRefresh()
+    -- The trinket holders are insecure, so their preview hides in combat too.
+    MSUF.Require("MSUF_ArenaTrinkets_SyncPreview", "UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")()
   end
   return cleared
 end
@@ -1097,6 +1099,9 @@ local function ApplyArenaPreviewFrames(active)
   if cleared then
     RequestBossRangeRefresh()
   end
+  -- Every preview path (Arena page, Edit Mode, light reapply) runs through
+  -- here, so the PvP trinket holders follow the forced frames from one place.
+  MSUF.Require("MSUF_ArenaTrinkets_SyncPreview", "UnitFrames/Engine/Elements/MSUF_UF_Elements_LoadConditions.lua")()
 end
 
 local function ReapplyArenaPreviewAlpha(reason)

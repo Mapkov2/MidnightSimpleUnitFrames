@@ -63,6 +63,7 @@ local function NewWidget(name)
     local widget = { name = name, events = {}, scripts = {} }
     function widget:SetSize() end
     function widget:SetFrameStrata() end
+    function widget:SetFrameLevel() end
     function widget:SetAllPoints() end
     function widget:SetDrawEdge() end
     function widget:SetTexCoord() end
@@ -211,6 +212,9 @@ local function LoadTrinkets(options)
         SupportsUnit = function() return options.supportsArena ~= false end,
     })
     ns.UF = { GetFrame = function(unit) return arenaFrames[unit] end }
+    -- The shared 0-30 layer scale the holders place themselves on (Libs loads
+    -- it before Features in every core TOC).
+    assert(loadfile(CORE .. "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua"))("MidnightSimpleUnitFrames", ns)
     ns.Secrets = { UnitExistsPlain = Exists }
     _G.MSUF_NS = ns
     assert(loadfile(TRINKETS))("MidnightSimpleUnitFrames", ns)

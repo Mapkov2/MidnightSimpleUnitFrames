@@ -6908,6 +6908,11 @@ L["Big Defensive by Me"] = "대형 방어 효과 (내 것)"
 L["External Defensive by Me"] = "외부 방어 효과 (내 것)"
 L["Applicable and Cast by Me"] = "내가 적용 가능하고 시전함"
 L["Excludes auras without a duration. MSUF Highlights intentionally uses its exact curated list instead so temporary Shroud membership remains visible."] = "지속시간이 없는 오라를 제외합니다. MSUF 선별은 일시적인 도적 파티 은신이 계속 보이도록 정확한 선별 목록을 의도적으로 사용합니다."
+-- Arena page: PvP Trinket section.
+L["PvP Trinket"] = "PVP 장신구"
+L["Trinket"] = "장신구"
+L["Show PvP trinket"] = "PVP 장신구 표시"
+L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "각 상대의 PVP 장신구와 재사용 대기시간을 투기장 프레임 옆에 표시합니다. 이 페이지의 투기장 프레임 미리보기와 편집 모드에서도 표시됩니다."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

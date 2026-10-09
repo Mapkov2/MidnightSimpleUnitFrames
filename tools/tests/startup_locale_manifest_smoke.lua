@@ -50,7 +50,10 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 14,620,000 for about 54 KB of aura filter labels and tooltips in the
         -- twelve packs (largest selections Mainline 16,709,048, TBC 14,592,928);
         -- no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16770000 or 14620000),
+        -- 2026-10-10 (rc2 T): 14,620,000 -> 14,650,000 for the arena PvP trinket
+        -- placement (runtime layout and preview, four menu strings in the twelve
+        -- packs: TBC 14,607,705 -> 14,620,047); no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16770000 or 14650000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

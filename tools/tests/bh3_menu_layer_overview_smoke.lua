@@ -25,6 +25,11 @@ _G.MSUF_DB = {
 }
 NS.GF.SpellIndicators = { SpecInfo = { test = {} }, SpecDefaults = {}, TrackableAuras = {} }
 assert(loadfile(ROOT .. "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua"))("test", NS)
+-- The arena PvP trinket row reads the trinket runtime (core, loaded before Options);
+-- a client answer without arena units keeps its event wiring out of this probe.
+NS.Client = { SupportsUnit = function() return false end }
+assert(loadfile(ROOT .. "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua"))("test", NS)
+NS.Client = nil
 assert(loadfile(ROOT .. "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_LayerOverview.lua"))("test", NS)
 local compiled = NS.GF.CompileSpellIndicators(_G.MSUF_DB.gf_party, "party")
 local item = compiled.items[1]

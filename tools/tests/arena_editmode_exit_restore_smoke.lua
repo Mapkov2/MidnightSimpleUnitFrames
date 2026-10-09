@@ -52,6 +52,8 @@ local FILES = {
     editCompat = "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Compat.lua",
     arenaMatch = "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
     arenaTrinkets = "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
+    -- The shared 0-30 layer scale the trinket holders place themselves on.
+    layers = "MidnightSimpleUnitFrames/Libs/MSUFUnitFrames/MSUF_UF_Layers.lua",
     -- The arena preview is the arena descriptor of the pool preview module; it
     -- loads after the pool module and the arena pool, as in every TOC.
     castbarPools = "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua",
@@ -709,6 +711,7 @@ local function NewWorld(flavor, roster)
         em2.Movers.Hide = function() end
         em2.Movers.SyncAll = function() end
         Load(FILES.arenaMatch)
+        Load(FILES.layers)
         Load(FILES.arenaTrinkets)
         Load(FILES.castbarPools)
         Load(FILES.arenaCastbars)
@@ -854,6 +857,12 @@ local function EnterEditMode(W, context)
         if not W.liveUnits[unit] then
             Check(frame._msufArenaPreviewForced == true,
                 context .. ": " .. unit .. " did not receive the synthetic Edit Mode preview")
+            -- The PvP trinket preview is the live holder itself, on every previewed slot.
+            local trinket = rawget(_G, "MSUF_ArenaTrinket" .. index)
+            Check(trinket ~= nil and trinket:IsShown(),
+                context .. ": the PvP trinket of " .. unit .. " is hidden inside Edit Mode")
+            Check(trinket == nil or trinket._msufTrinketAnchor == frame,
+                context .. ": the PvP trinket preview of " .. unit .. " is not anchored to its frame")
         else
             Check(frame._msufArenaPreviewForced ~= true,
                 context .. ": live " .. unit .. " was overwritten by the Edit Mode preview")

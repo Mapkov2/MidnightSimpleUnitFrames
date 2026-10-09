@@ -98,8 +98,10 @@ local function Load(client)
     }
     -- The real MSUF.Require / MSUF.Optional (Kernel/MSUF_Require.lua), as in every core TOC.
     assert(loadfile(root .. "/MidnightSimpleUnitFrames/Kernel/MSUF_Require.lua"))("MidnightSimpleUnitFrames", namespace)
-    -- The castbar previews follow a unit preview; this harness has no castbars.
+    -- The castbar previews and the PvP trinket holders follow a unit preview;
+    -- this harness has neither castbars nor trinkets.
     _G.MSUF_UpdateArenaCastbarPreview = function() end
+    _G.MSUF_ArenaTrinkets_SyncPreview = function() end
     _G.MSUF_UpdateBossCastbarPreview = function() end
     assert(loadfile(FILE))("MidnightSimpleUnitFrames", namespace)
     Check(type(UF.ApplyArenaPreviewState) == "function" and type(UF.ClearArenaPreviewFramesForCombat) == "function",

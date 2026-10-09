@@ -600,6 +600,8 @@ local function AttachUnitSectionUX(ctx, unit)
         castbar = { copy = "castbar", canCopy = function(a, b) return UP.CASTBAR_FIELDS[a] and UP.CASTBAR_FIELDS[b] end },
         unit_dispel_overlay = { prefixes = "unitDispelOverlay" },
         unit_dispel_symbol = { prefixes = "unitDispelSymbol" },
+        -- Arena only (Pages/MSUF_Menu2_UnitArenaTrinket.lua): reset, no copy target.
+        pvp_trinket = { fields = UP.ARENA_TRINKET_FIELDS, noCopy = true },
         transparency = { fields = fields.transparency, copy = "transparency", summary = function(c) return SectionNumber((c.hpBarAlpha
             or 1) * 100) .. "%" end },
         load_conditions = { fields = fields.load_conditions, copy = "load", summary = function(c)
