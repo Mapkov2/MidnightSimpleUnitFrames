@@ -1,13 +1,13 @@
 # MSUF 6.5 Full Changelog Draft
 
-All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**, together with the foundational 6.5 additions. Client-specific features are available where supported.
+All documented 6.5 beta changes through **Beta 19, released on 9 October 2026**, together with the foundational 6.5 additions. Client-specific features are available where supported.
 
 ## Highlights
 
 - **Arena Frames:** dedicated opponent frames with their own castbars, auras, settings and Edit Mode movers, including preparation, stealth and trinket states. Midnight supports three opponents; TBC and Mists support five.
 - **Pet Target:** a separate frame for your pet's target, with independent styling, settings, preview and placement.
 - **Pet Auras:** configurable buff and debuff lanes directly on the Pet frame, plus client-supported Pet XP and Pet Happiness.
-- **Slanted Frames:** angular shapes for supported Unit and Group Frames, Power bars, castbars and Class Resources. True Outline and Texture borders now follow both Slanted and Rounded edges.
+- **Slanted Frames:** angular shapes for supported Unit and Group Frames, Power bars, castbars and Class Resources. True Outline and Texture borders now follow both Slanted and Rounded edges, keep the selected outline color, and each frame scope can use its own cut direction.
 - **Cosmetic Texture Layering:** decorate each Unit Frame with up to three independent texture layers. Choose textures or supported Blizzard artwork and adjust placement, size, opacity, colors, crop and mirroring, with matching previews.
 - **Unified client support:** one source for Midnight, Classic Era, TBC, Mists and WoW Forever, with client-appropriate settings and runtime behavior.
 
@@ -49,6 +49,9 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - **Rounded fallback:** turning off Slanted restores the active Rounded fallback without discarding saved frame styles, including imported profiles.
 - **Styled shaped borders:** True Outline and Texture borders follow rounded corners and slanted edges on Unit and Group Frames, with matching style, color and thickness in previews. Configure them under Bars > Frame Outline.
 - **Frame-shape controls:** configure shapes through Bars and Group Layout. The duplicate shape picker in each unit's Frame Basics section has been removed.
+- **Per-frame cut direction:** Slanted Unit, Group and castbar scopes can follow the shared cut direction or use their own. Bars, castbar and group previews show the chosen cut.
+- **Outline colors across shapes:** Texture and True Outline borders use the selected outline color on square, rounded and slanted frames, while active highlights keep their own colors. Set the shared color under Colors > Bar & Prediction Colors > Bar Outline Color.
+- **Texture Layer strata:** layers always draw at their Unit Frame's strata. The ineffective strata choice was replaced by an explanation in the layer settings.
 - **Cosmetic Texture Layers:** up to three decoration slots per Unit Frame, with independent textures, geometry, opacity and layering. Crop, mirror, class-color and health-gradient options support decorative accents, with optional target/combat conditions and matching previews.
 - **Portrait dragons:** Blizzard-style portraits offer elite, rare and boss decorations, with additional placement, size and layering choices.
 - **Portrait connector and rim:** add the bottom-right gold connector and suppress a duplicate standalone rim when complete Blizzard frame artwork already includes one.
@@ -85,6 +88,8 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - **Classic channel data:** Era and Forever use rank-specific channel information, with up to fifteen ticks where supported. TBC and Mists retain their existing tables.
 - **Arena castbar configuration:** icon, spell-name and cast-time options apply to supported opponent frames, including all five TBC and Mists slots.
 - **Focus Kick:** the unified line includes the option to retain the Focus castbar beside the compact interrupt icon.
+- **Interrupt readiness:** tracks only interrupts the character has learned, including Demonology's Axe Toss through Command Demon. Spells of another specialization and missing pets no longer count as a ready interrupt.
+- **Corner Show when missing:** corner indicators set to Show when missing light up while the aura is missing on Classic clients. Retail and WoW Forever explain why the choice is unavailable there and keep the saved setting.
 
 ### WoW Forever Swing Timers and buff coverage
 
@@ -113,9 +118,12 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - Disabled frame scopes dim their settings while keeping frame selection and previews usable.
 - Clearer navigation, section labels, help text and explanations for unavailable controls; menu clicks and hover use consistent accent styling.
 - Search follows client capabilities and preserves field edits.
+- **Conversational search:** natural task phrasing in English and German, such as "make my target health numbers bigger", routes to the matching page or setting.
 - Updated menu and Edit Mode labels, prompts, tooltips, status text, history, chat messages and placeholders across all twelve supported locales.
 - Typed HEX colors commit on Enter through the shared color-picker apply path.
 - Blizzard Micro Menu and Bags controls expose horizontal and vertical orientation where the client provides it.
+- Blizzard Damage Meter appearance settings changed in MSUF Edit Mode are saved and apply after a UI reload; width and height still apply at once.
+- Compatible MSUF Suite windows integrate with MSUF profiles, fonts, anchors, menu controls and controller navigation. External Edit Mode elements can open their settings popup centered.
 - Forever controller controls cover D-pad focus, confirm/cancel, dropdowns, anchors, search and switching MSUF windows.
 - The on-screen keyboard supports text and exact numeric entry. Controller actions include slider adjustment, preview and Edit Mode nudges, and supported Undo/Redo.
 - Localized button hints, focus highlights and haptic feedback accompany supported controller actions. Navigation releases input in combat and while Blizzard panels own it.
@@ -129,6 +137,7 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - Version reporting follows the running client. The Midnight beta manifests retain their Retail version; Classic and Forever use the 6.5 beta release version. `/msuf clientinfo` reports the detected client and addon version for bug reports.
 - Menus and search hide unavailable controls, including unsupported Arena Frames, Empowered Casts, pet information and Cooldown Manager anchors. Forever group choices are limited to Party and Raid.
 - Retail 12.1.5 uses the supported native aura, scheduling and pixel-rounding paths; older Mainline versions retain their compatible fallbacks.
+- Validated against Blizzard's 12.1.5 interface source (build 70077) and WoW Forever build 70291, including the reworked Forever combo point frame.
 - Mainline core and Options appear in the MSUF category in the AddOn list; version labels follow the current game type.
 - Added Forever game-version targeting and Wago publishing support to the release pipeline, with expanded startup, menu-index, locale and package validation.
 - The Forever menu title follows the detected client. Classic Glass, initially Forever-specific, is available alongside Midnight and Midnight Dark across supported clients.
@@ -147,6 +156,7 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - Fixed roster-slot aura rebinding, preserved subgroup geometry, configured columns, role sorting and world-entry refreshes in the unified client line.
 - Fixed disappearing Forever Party, Raid and Priority frames during secure group setup. Updated initialization follows Blizzard's repaired load order.
 - Saved negative-heal-absorb overrides remain consistent across group layouts and logins. Group sorting, previews and Edit Mode use the same layout settings.
+- Party and Raid bar and background textures chosen on the Bars page apply after Copy To. Turning Custom settings off or resetting the scope returns the frames to the shared texture.
 
 ### Auras and indicators
 
@@ -162,6 +172,12 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - Classic menus hide unsupported Pandemic-only options and show correct client-specific search entries.
 - Aura icons allow clicks through to their unit frame.
 - Rounded highlight borders retain their thickness and state; group highlight detection remains available when aura icons are disabled.
+- Classic Custom Priority containers sort by the dragged priority order, and turning off a group lane's cooldown text no longer removes its cooldown swipe.
+- Classic blacklist presets hide every rank of their spells, and the Purge border lights from real aura data.
+- Custom containers set to Only mine no longer hide other casters' copies from the regular buff and debuff lanes.
+- Custom Priority containers apply their filters and Max icons, and binding an item to a tracked Buff Reminder spell applies immediately.
+- The aura Name Overlay follows target, focus and roster changes; while auras are restricted it updates once the restriction ends.
+- Entering combat with the Boss or Arena page open removes the preview aura icons and restores the real boss and arena auras.
 
 ### Class Resources, power and status
 
@@ -178,6 +194,9 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - AFK timers resume after combat, and death state updates on direct health ticks.
 - Unit tooltips display available AFK/DND flags. Inline target-of-target text follows the visible edge of the name glyphs.
 - Native managed class-resource bars retain Blizzard lifecycle handling while their visuals are concealed. Totem takeover restores only the frame-position flag owned by MSUF.
+- Mists Balance Eclipse colors apply. Mists specialization profiles, per-spec crosshair spells, the Monk totem preview and specialization tooltips read the client's specialization.
+- Class Resources > Reset selected also resets Additional Resource settings whose sections were never opened.
+- The AFK Timer works without AFK Text. Power text with maximum values and frame transparency stay error-free when the client restricts those values.
 
 ### Castbars and Arena Frames
 
@@ -191,6 +210,10 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - Arena and Boss bars share consistent frame lifecycle handling, restore native text when needed and refresh outlines and cooldown state.
 - Native managed castbars retain Blizzard lifecycle handling while MSUF conceals their visuals.
 - Restricted cast, duration, swing, aura, health and power values follow supported native formatting and rendering paths.
+- Target and focus changes clear the previous cast's not-interruptible tint, and the castbar glow no longer repaints non-interruptible casts.
+- Interrupted player channels show their Interrupted feedback; the Focus interrupt tracker shows its kick confirmation and repaints with the Unavailable cast fill style.
+- Talented Disintegrate shows all channel ticks. Castbar glow stays inside rounded and slanted castbars, and castbars and the totem preview handle restricted frame strata.
+- Handing the player castbar back to Blizzard no longer leaves Blizzard's castbar tainted.
 
 ### Shapes, portraits and prediction
 
@@ -204,6 +227,8 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - Previews retain their layer choices, fit dropdown chips inside their panels and keep Class Resource geometry aligned with the live bar.
 - Fixed black Forever preview backgrounds, with scene fallbacks on other clients. Classic previews render power gradients and the Class Resource text layer; Mists Boss previews include the boss-target marker.
 - Font previews and the related default-setting inconsistencies are corrected.
+- Scoped outline colors enable their override even when the color matches the shared value. The Basics section reset also clears an older per-frame shape.
+- Unit previews place detached castbars correctly and translate their placeholder names.
 
 ### Profiles, imports and resets
 
@@ -219,6 +244,10 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - Profile names remain as typed. Scale history, dropdown alignment and page refreshes remain consistent across profile changes. Copy To preserves supported font, texture, gradient and status settings.
 - Page resets retain Undo. Edit Mode Cancel and Undo cannot write an earlier profile's edits into a newly selected profile; history remains bounded for large profiles.
 - New/reset Forever profiles follow the intended disabled global-scale default while preserving explicitly enabled settings, including changes made immediately after reset.
+- Profile switches re-apply gameplay overlays, unit tooltip visibility and highlights, and keep aura tooltip options that MSUF did not set.
+- Upgrades keep per-frame dispel overlay and symbol options that were turned off. Archived pre-6.0 profiles with the same name are kept under numbered names.
+- Unit Frame imports no longer replace Gameplay and Color settings, and Selected Unit Frame transfers no longer carry the shared Cast Target Name Color.
+- `/msuf default confirm` resets the profile named in its warning, and a color picker left open across a profile switch no longer writes into the new profile.
 
 ### Menu, search, Edit Mode and integrations
 
@@ -233,6 +262,11 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - Fixed repeated Forever welcome/tour prompts and analytics initialization writing to the wrong global.
 - Corrected malformed Classic AddOn-list title colors that displayed a stray letter. Pet Happiness is labeled correctly on every supported client.
 - Unknown clients no longer offer unsupported Arena Frames; the guarded Mainline diagnostic requests `/msuf clientinfo` where needed.
+- Edit Mode Cancel All restores setter-driven options such as the minimap icon and frame scale. Selecting another element closes the aura popup so nudges move the selected element.
+- Search results for out-of-combat fading open the matching tab. Classic Era no longer offers a Focus anchor for the Combat Timer or group layouts, and controls without Blizzard counterparts explain why.
+- The Combat Timer starts on the first second of combat. The combat crosshair follows the personal nameplate and keeps its centered anchor when the nameplate height is restricted.
+- Unit tooltips show the faction in the client's language. WoW Forever's Gamepad UI no longer opens a hidden buff bar, and changing Damage Meter settings no longer leaves Blizzard's meter tainted.
+- Guided Setup hints, aura filter labels, Ready Check, Crowd Control and Russian terms are translated in every supported language; counts in the Priority and Layer overviews use whole translated sentences.
 
 ## Performance
 
@@ -241,6 +275,8 @@ All documented 6.5 beta changes through **Beta 17, released on 6 October 2026**,
 - Aura sorting runs only when the selected sort mode and changed timing require it. Icon layout and shaped dispel geometry are reapplied only when their inputs change.
 - Aura containers are reused after retirement. Compatible group-aura previews share compiled configuration across rows.
 - Styled borders reuse textures and layout. Combat color updates avoid rebuilding border geometry.
+- Changing the Frame Outline style refreshes only the affected borders, and border event updates reuse prepared artwork.
+- Aura font changes reuse existing aura containers, and Classic Only mine lanes compact stale arrival entries.
 - Closed menu sections defer controls and decoration. Repeated header layout and owned-button skin work reuse existing state.
 - Cold search indexes build in short menu-task slices; exact searches retain synchronous results and prepare required lazy sections.
 - Options, aura workspaces and search reuse existing page state. Color previews avoid duplicate render requests and preserve staged construction.
