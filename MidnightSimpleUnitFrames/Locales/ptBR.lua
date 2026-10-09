@@ -372,7 +372,7 @@ local MSUF2_MENU_AUTO_ptBR = {
     ["Castbars"] = "Barras de lançamento",
     ["Checked categories are hidden. Only applies to declassified spells."] = "As categorias verificadas estão ocultas. Aplica-se apenas a feitiços desclassificados.",
     ["Choose an override bar color per class."] = "Escolha uma cor de barra de substituição por classe.",
-    ["Class Bar Colors"] = "Cores da barra de aula",
+    ["Class Bar Colors"] = "Cores da barra de classe",
     ["Class Color"] = "Cor da classe",
     ["Class Power Colors"] = "Cores poderosas de classe",
     ["Class portrait style"] = "Estilo de retrato de classe",
@@ -6179,12 +6179,12 @@ L["Threshold direction"] = "Direção do limite"
 L["Value mode"] = "Modo do valor"
 
 L["Open MSUF Edit Mode, select the frame, then drag it. Use the unit page > Anchor only for exact anchor/X/Y fine-tuning."] = "Abra o modo de edição MSUF e arraste o quadro. Para ajustar âncora e X/Y, use «Ponto de ancoragem» na página da unidade."
-L["Open that unit page and use Frame Basics for width, height, and scale. Text size is in Style > Fonts or the unit Text section."] = "Na página da unidade, «Frame Basics» ajusta largura, altura e escala. Tamanho do texto: «Estilo > Fontes» ou «Text»."
+L["Open that unit page and use Frame Basics for width, height, and scale. Text size is in Style > Fonts or the unit Text section."] = "Na página da unidade, «Básico do quadro» ajusta largura, altura e escala. O tamanho do texto fica em «Estilo > Fontes» ou na seção «Texto» da unidade."
 L["Use the unit page for per-unit castbar toggles and Frames > Cast Bars for shared textures, direction, text, and interrupt options."] = "As opções por unidade ficam na página correspondente. As opções compartilhadas ficam em «Quadros > Barras de lançamento»."
 L["Boss frames normally appear only during boss encounters. Enable Boss Frames and use Edit Mode or Boss Preview to test them outside combat."] = "Os quadros de chefe só aparecem durante encontros com chefes. Ative Quadros de chefe e use o modo de edição ou a Pré-visualização do chefe para testá-los fora de combate."
 L["Open Frames > Party/Raid Frames > Layout. Size & Scaling controls frame dimensions and scaling by group size. Group Layout controls growth, columns, and group visibility."] = "Abra «Quadros > Quadros de grupo/raide > Layout». «Tamanho e escala» controla as dimensões dos quadros e a escala conforme o tamanho do grupo. «Layout do grupo» controla a direção de expansão, as colunas e a visibilidade dos grupos."
 L["Open the unit page and use Text for name/health/power text patterns, anchors, offsets, font sizes, and layering."] = "Use «Texto» na página da unidade para padrões de nome, vida e recurso, âncoras, deslocamentos, fontes e camadas."
-L["Open Style > Colors. Bar Colors and Power Bar Colors control HP/power colors; Class Bar Colors controls class overrides."] = "Abra «Estilo > Cores». «Bar Colors» e «Power Bar Colors» controlam vida e poder; «Class Bar Colors» as cores de classe."
+L["Open Style > Colors. Bar Colors and Power Bar Colors control HP/power colors; Class Bar Colors controls class overrides."] = "Abra «Estilo > Cores». «Cores da barra» e «Cores da barra de energia» controlam as cores de vida e energia; «Cores da barra de classe» controla as substituições por classe."
 L["Style > Fonts controls shared font settings. Unit pages contain per-unit name, health, and power text position and pattern settings."] = "«Estilo > Fontes» contém opções compartilhadas. As páginas das unidades ajustam posição e formato do texto."
 L["Use Dashboard > Reset Positions for frame movers. Use Profiles only when you want to reset, copy, import, or replace profile data."] = "Use «Painel > Redefinir posições» para os movedores de quadros. Use Perfis só para redefinir, copiar, importar ou substituir dados de perfil."
 L["Open Profiles for active profile, spec auto-switching, 6.x import/export strings, and reset options."] = "Abra Profiles para perfil ativo, troca de especialização e opções de importar, exportar e redefinir."
@@ -6869,6 +6869,15 @@ L["Name: "] = "Nome: "
 L["Overrides: "] = "Substituições: "
 L["Power: "] = "Recurso: "
 L["Selected: "] = "Selecionado: "
+L["Choose the cut direction for the selected scope. Use shared style follows the shared direction."] = "Escolha a direção do corte para o escopo selecionado. Usar estilo compartilhado segue a direção compartilhada."
+
+L["This scope uses its own slanted cut direction. Other bar settings follow the custom-settings switch."] = "Este escopo usa sua própria direção de corte. As outras configurações das barras seguem o botão de configurações personalizadas."
+L["Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved."] = "Restaura a direção compartilhada de todos os escopos e desativa configurações personalizadas de barras para unidades e grupos. Os outros valores personalizados ficam salvos."
+
+L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "As cores da Suite estão nas seções abaixo.\nAbra a prévia do minimapa para posicionar seus elementos."
+
+L["Arena Preview"] = "Prévia de arena"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ptBR", LoadLocale)
 elseif MSUF.LOCALE == "ptBR" then LoadLocale() end

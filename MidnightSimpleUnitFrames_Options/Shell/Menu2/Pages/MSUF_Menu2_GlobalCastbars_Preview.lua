@@ -331,6 +331,34 @@ local function PreviewSetRowOffset(self, x)
 
         return 1.0, 0.494117647, 0.137254902
     end
+    local function PreviewStatusTexture(self)
+        return self._msufCastPreviewFill
+    end
+    local function ApplyRoundedPreview(frame, thickness, r, g, b, a)
+        local bars, bar = EnsureDB().bars, frame.bar
+        local slanted = bars.slantedBarsEnabled ~= false and bars.slantedCastbars == true
+        local rounded = bars.roundedFramesEnabled == true and bars.roundedCastbars == true
+        if not (slanted or rounded or bar._msufPreviewShaped) then return false end
+        bar.configKey = frame.layoutUnit
+        local surface = MSUF.RoundedSurface
+        local maskPath, edgePath
+        if slanted then
+            maskPath, edgePath = surface.ResolveSlantedMedia(frame.layoutUnit)
+        elseif rounded then
+            maskPath, edgePath = surface.ResolveMedia()
+        end
+        if ((slanted or rounded) and not bar._msufPreviewShaped)
+            or bar._msufPreviewMaskPath ~= maskPath or bar._msufPreviewEdgePath ~= edgePath
+            or bar._msufPreviewEdgeSize ~= thickness or bar._msufPreviewR ~= r or bar._msufPreviewG ~= g
+            or bar._msufPreviewB ~= b or bar._msufPreviewA ~= a then
+            local render = MSUF.Require("MSUF_RoundedCastbar_RenderPreview", "Menu2/GlobalCastbars_Preview")
+            bar._msufPreviewShaped = render(bar, thickness, r, g, b, a) == true
+            bar._msufPreviewMaskPath, bar._msufPreviewEdgePath = maskPath, edgePath
+            bar._msufPreviewEdgeSize = thickness
+            bar._msufPreviewR, bar._msufPreviewG, bar._msufPreviewB, bar._msufPreviewA = r, g, b, a
+        end
+        return bar._msufPreviewShaped
+    end
     local function LayoutOutline(frame, scale)
         local holder = frame and frame.outlineFrame
         if not (holder and holder.SetBackdrop) then return 0 end
@@ -338,6 +366,7 @@ local function PreviewSetRowOffset(self, x)
         if thickness < 0 then thickness = 0 end
         if thickness > 12 then thickness = 12 end
         if thickness <= 0 then
+            ApplyRoundedPreview(frame, 0, 0, 0, 0, 0)
             PixelLayoutRegion(holder, "SetBackdrop", nil)
             holder:Hide()
             frame._outlinePreviewT = 0
@@ -355,6 +384,14 @@ local function PreviewSetRowOffset(self, x)
         if kickKey and ReadGBool(kickKey, false) and ReadG("kickReadyStyle", "border") == "border" then
             r, gg, b = ReadColorTable(gdb.kickReadyColor, 0, 1, 0)
             a = 1
+        end
+        if ApplyRoundedPreview(frame, edgeSize, r, gg, b, a) then
+            if holder:IsShown() then
+                PixelLayoutRegion(holder, "SetBackdrop", nil)
+                holder:Hide()
+            end
+            frame._outlinePreviewT = nil
+            return edgeSize
         end
         if frame._outlinePreviewT ~= thickness or frame._outlinePreviewEdge ~= edgeSize then
             PixelLayoutRegion(holder, "SetBackdrop", {
@@ -838,6 +875,10 @@ local function BuildPreviewCastRow(box, preview, barW, mainX)
     fill:SetPoint("TOPLEFT", castbar, "TOPLEFT", 1, -1)
     fill:SetPoint("BOTTOMLEFT", castbar, "BOTTOMLEFT", 1, 1)
     preview.fill = fill
+    statusAnchor._msufCastPreviewFill = fill
+    statusAnchor.GetStatusBarTexture = PreviewStatusTexture
+    castbar.statusBar, castbar.backgroundBar = statusAnchor, barBg
+    castbar._msufIsPreview = true
     preview.empowerBands = {}
     for i = 1, 4 do
         local band = PreviewTexture(castbar, "BORDER", empowerColors[i][1], empowerColors[i][2], empowerColors[i][3], 0.24)
@@ -855,6 +896,10 @@ local function BuildPreviewCastRow(box, preview, barW, mainX)
     latency:SetPoint("BOTTOMRIGHT", castbar, "BOTTOMRIGHT", -1, 1)
     latency:SetWidth(max(8, (barW - 28) * 0.12))
     preview.latency = latency
+    castbar.latencyBar, castbar.empowerSegments = latency, {}
+    for i = 1, 4 do
+        castbar.empowerSegments[i], castbar.empowerSegments[i + 4] = preview.empowerBands[i], preview.empowerFills[i]
+    end
     local spark = PreviewTexture(castbar, "OVERLAY", 1, 1, 1, 1, 4417031)
     spark:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
     spark:SetDesaturated(true)

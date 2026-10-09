@@ -4937,6 +4937,15 @@ L["only the global %s icon shape, border and shadow settings, plus the shared Bl
 L["only the global %s icon shape, border and shadow settings; other Aura types and all Unit/Group lane settings stay unchanged"] = "only the global %s icon shape, border and shadow settings; other Aura types and all Unit/Group lane settings stay unchanged"
 L["preview element"] = "preview element"
 
+L["Choose the cut direction for the selected scope. Use shared style follows the shared direction."] = "Choose the cut direction for the selected scope. Use shared style follows the shared direction."
+
+L["This scope uses its own slanted cut direction. Other bar settings follow the custom-settings switch."] = "This scope uses its own slanted cut direction. Other bar settings follow the custom-settings switch."
+L["Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved."] = "Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved."
+
+L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."
+
+L["Arena Preview"] = "Arena Preview"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

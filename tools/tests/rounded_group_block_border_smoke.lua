@@ -52,6 +52,16 @@ local function Run(flavor)
         .. tostring(host._msufRUFForcedStyle))
     Check(state.r == 0.2 and state.size == 2, flavor .. ": the replay lost the border colour or size")
 
+    -- A slanted block keeps its group's cut direction on the bulk replay.
+    db.bars.slantedBarsEnabled, db.bars.slantedGroupFrames = true, true
+    env.MSUF_ApplyRoundedUnitframes()
+    conf.frameBarShape, conf.slantedBarDirection = "SLANTED", "LEFT_UP"
+    paint(host, conf, true)
+    local kit = world.core.RoundedSurfaceKit
+    Check(kit.SurfaceEdgePath(host) == kit.SLANTED_EDGE_PATHS.LEFT_UP, flavor .. ": scoped block direction lost")
+    env.MSUF_ApplyRoundedUnitframes()
+    Check(kit.SurfaceEdgePath(host) == kit.SLANTED_EDGE_PATHS.LEFT_UP, flavor .. ": replay lost scoped block direction")
+
     -- A scope that asks for SQUARE keeps the square border on the replay.
     conf.frameBarShape = "SQUARE"
     paint(host, conf, true)

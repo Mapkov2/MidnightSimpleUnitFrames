@@ -613,7 +613,7 @@ local function ApplyBossPreviewText(frame, hp, hpMax, power, powerMax)
     return
   end
   if frame.nameText then
-    frame.nameText:SetText("Boss Preview")
+    frame.nameText:SetText(MSUF.Translate("Boss Preview"))
     SetShown(frame.nameText, true)
   end
   if frame.levelText then
@@ -972,7 +972,7 @@ local function ApplyArenaPreviewText(frame, hp, hpMax, power, powerMax, classTok
   end
   if frame.nameText then
     local names = _G.LOCALIZED_CLASS_NAMES_MALE
-    local label = (type(names) == "table" and names[classToken]) or "Arena Preview"
+    local label = (type(names) == "table" and names[classToken]) or MSUF.Translate("Arena Preview")
     frame.nameText:SetText(label)
     SetShown(frame.nameText, true)
   end

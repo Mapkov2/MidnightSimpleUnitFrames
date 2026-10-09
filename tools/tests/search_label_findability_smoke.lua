@@ -88,7 +88,9 @@ if locale == "enUS" or locale == "enGB" then
     Expect("Player Enable", "uf_player", "Enable", 2)
     Expect("Target Fade in (seconds)", "uf_target", "Fade in (seconds)", 3)
     Expect("Target Size", "uf_target", "Size", PALETTE)
-    Expect("global cooldown", "classpower", "Warn during the last global cooldown", PALETTE)
+    if world.core.Client.IsRetail and not world.core.Client.IsForever then
+        Expect("global cooldown", "classpower", "Warn during the last global cooldown", PALETTE)
+    end
     Expect("Ko-fi", "home", "Ko-fi", PALETTE)
     Expect("Not now", "home", "Not now", PALETTE)
     if M.pages.gameplay then Expect("To", "gameplay", "To", PALETTE) end

@@ -1163,7 +1163,7 @@ function PainterBuild.Category(state)
         if key == "suite" and not state.suiteColorNote then
             local note = PixelLayoutRegion(state.host:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
             note:SetPoint("CENTER", state.host, "CENTER", 0, 0)
-            note:SetText("Suite colors are in the sections below.\nOpen the Minimap preview to position its elements.")
+            note:SetText(Tr("Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."))
             state.suiteColorNote = note
         end
         if state.suiteColorNote then state.suiteColorNote:SetShown(key == "suite") end

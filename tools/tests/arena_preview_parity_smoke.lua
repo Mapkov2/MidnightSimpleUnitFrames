@@ -90,6 +90,7 @@ local function Load(client)
     }
     local namespace = {
         UF = UF,
+        Translate = function(text) return text end,
         ExportPublic = function(name, value) _G[name] = value end,
         Secrets = { UnitExistsPlain = function() return false end },
         -- Auras3/MSUF_Auras3_Core.lua defines RequestScope on every client.

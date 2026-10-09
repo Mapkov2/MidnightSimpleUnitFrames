@@ -384,7 +384,7 @@ local function SetCombatStateClickThrough(active)
 end
 
 local function TextOrDefault(text, fallback)
-    if type(text) ~= "string" or text == "" then return fallback end
+    if type(text) ~= "string" or text == "" or text == fallback then return MSUF.Translate(fallback) end
     return text
 end
 

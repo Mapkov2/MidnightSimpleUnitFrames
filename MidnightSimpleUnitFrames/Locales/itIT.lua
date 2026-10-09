@@ -6232,16 +6232,16 @@ L["Threshold direction"] = "Direzione della soglia"
 L["Value mode"] = "Modalità del valore"
 
 L["Open MSUF Edit Mode, select the frame, then drag it. Use the unit page > Anchor only for exact anchor/X/Y fine-tuning."] = "Apri la modalità modifica MSUF e trascina il riquadro. Per ancoraggio e coordinate X/Y, usa «Punto di aggancio» nella pagina dell’unità."
-L["Open that unit page and use Frame Basics for width, height, and scale. Text size is in Style > Fonts or the unit Text section."] = "Nella pagina unità, «Frame Basics» regola larghezza, altezza e scala. Dimensione testo: «Stile > Font» o «Text»."
-L["Use the unit page for per-unit castbar toggles and Frames > Cast Bars for shared textures, direction, text, and interrupt options."] = "Le opzioni per unità sono nella pagina corrispondente. Le opzioni condivise sono in «Riquadri > Cast Bars»."
+L["Open that unit page and use Frame Basics for width, height, and scale. Text size is in Style > Fonts or the unit Text section."] = "Nella pagina dell’unità, «Base del riquadro» regola larghezza, altezza e scala. La dimensione del testo si trova in «Stile > Font» o nella sezione «Testo» dell’unità."
+L["Use the unit page for per-unit castbar toggles and Frames > Cast Bars for shared textures, direction, text, and interrupt options."] = "Le opzioni della barra di lancio per ogni unità si trovano nella pagina corrispondente. Texture, direzione, testo e opzioni di interruzione condivisi si trovano in «Riquadri > Castbar»."
 L["Boss frames normally appear only during boss encounters. Enable Boss Frames and use Edit Mode or Boss Preview to test them outside combat."] = "I riquadri boss appaiono solo durante gli incontri con i boss. Attiva Riquadri boss e usa la modalità modifica o l'anteprima boss per provarli fuori dal combattimento."
 L["Open Frames > Party/Raid Frames > Layout. Size & Scaling controls frame dimensions and scaling by group size. Group Layout controls growth, columns, and group visibility."] = "Apri «Riquadri > Frame gruppo/raid > Layout». «Dimensioni e scala» regola le dimensioni dei riquadri e la scala in base alla dimensione del gruppo. «Disposizione del gruppo» regola la direzione di crescita, le colonne e la visibilità dei gruppi."
 L["Open the unit page and use Text for name/health/power text patterns, anchors, offsets, font sizes, and layering."] = "Usa «Testo» nella pagina unità per schemi di nome, salute e risorsa, ancoraggi, scostamenti, caratteri e livelli."
-L["Open Style > Colors. Bar Colors and Power Bar Colors control HP/power colors; Class Bar Colors controls class overrides."] = "Apri «Stile > Colori». «Bar Colors» e «Power Bar Colors» controllano salute e potenza; «Class Bar Colors» i colori di classe."
+L["Open Style > Colors. Bar Colors and Power Bar Colors control HP/power colors; Class Bar Colors controls class overrides."] = "Apri «Stile > Colori». «Colori della barra» e «Colori della barra di potenza» controllano i colori di salute e potenza; «Colori della barra delle classi» controlla le personalizzazioni per classe."
 L["Style > Fonts controls shared font settings. Unit pages contain per-unit name, health, and power text position and pattern settings."] = "«Stile > Font» contiene impostazioni condivise. Le pagine unità regolano posizione e formato del testo."
 L["Use Dashboard > Reset Positions for frame movers. Use Profiles only when you want to reset, copy, import, or replace profile data."] = "Usa «Pannello > Ripristina posizioni» per i riposizionatori dei riquadri. Usa Profili solo per reimpostare, copiare, importare o sostituire i dati del profilo."
 L["Open Profiles for active profile, spec auto-switching, 6.x import/export strings, and reset options."] = "Apri Profiles per profilo attivo, cambio specializzazione, importazione, esportazione e ripristino."
-L["Open Frames > Bars. Textures & Gradient controls shared bar textures; Frame Outline and Highlight Borders control borders."] = "Apri «Riquadri > Barre». «Textures & Gradient» controlla texture; «Frame Outline» e «Highlight Borders» i bordi."
+L["Open Frames > Bars. Textures & Gradient controls shared bar textures; Frame Outline and Highlight Borders control borders."] = "Apri «Riquadri > Barre». «Texture e gradiente» controlla le texture condivise; «Contorno del riquadro» ed «Evidenzia bordi» controllano i bordi."
 L["Absorb styling and heal prediction are in Frames > Bars > Absorb Display. Use the Party or Raid scope there for group incoming heals."] = "Assorbimenti e cure in arrivo sono in «Riquadri > Barre > Scudi e assorbimenti». Scegli Gruppo o Raid per le cure di gruppo."
 L["Open the matching unit page and check Frame Basics > Enable, Load Conditions, alpha/transparency, and range fade."] = "Apri la pagina dell'unità e controlla «Base del riquadro > Abilita», condizioni di caricamento, trasparenza e dissolvenza per distanza."
 L["Open Frames > Party/Raid Frames > Layout. Check enable/show behavior, player/solo visibility, layout mode, frame scaling, and anchoring."] = "Apri «Riquadri > Frame gruppo/raid > Layout». Controlla attivazione, visibilità, disposizione, scala e ancoraggio."
@@ -6938,6 +6938,15 @@ L["Name: "] = "Nome: "
 L["Overrides: "] = "Sostituzioni: "
 L["Power: "] = "Risorsa: "
 L["Selected: "] = "Selezionato: "
+L["Choose the cut direction for the selected scope. Use shared style follows the shared direction."] = "Scegli la direzione del taglio per l’ambito selezionato. Usa stile condiviso segue la direzione condivisa."
+
+L["This scope uses its own slanted cut direction. Other bar settings follow the custom-settings switch."] = "Questo ambito usa la propria direzione di taglio. Le altre impostazioni delle barre seguono l’interruttore delle impostazioni personalizzate."
+L["Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved."] = "Ripristina la direzione condivisa per tutti gli ambiti e disattiva le impostazioni personalizzate delle barre per unità e gruppi. Gli altri valori personalizzati restano salvati."
+
+L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "I colori di Suite si trovano nelle sezioni qui sotto.\nApri l’anteprima della minimappa per posizionare i suoi elementi."
+
+L["Arena Preview"] = "Anteprima arena"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

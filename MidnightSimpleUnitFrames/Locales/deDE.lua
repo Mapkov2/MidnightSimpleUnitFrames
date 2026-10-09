@@ -946,7 +946,7 @@ local MSUF2_DE = {
     ["|cff6EB5FFBuffs|r"] = "|cff6EB5FFBuffs|r",
     ["|cff6EB5FFCooldown|r"] = "|cff6EB5FFAbklingzeit|r",
     ["|cff6EB5FFDebuffs|r"] = "|cff6EB5FFDebuffs|r",
-    ["|cff6EB5FFIcons|r"] = "|cff6EB5FFIcons|r",
+    ["|cff6EB5FFIcons|r"] = "|cff6EB5FFSymbole|r",
 }
 
 for k, v in pairs(MSUF2_DE) do
@@ -6422,7 +6422,7 @@ L["Value mode"] = "Wertmodus"
 
 L["Open MSUF Edit Mode, select the frame, then drag it. Use the unit page > Anchor only for exact anchor/X/Y fine-tuning."] = "Öffne den MSUF-Bearbeitungsmodus und ziehe den gewählten Rahmen. Genaue Anker- und X/Y-Werte findest du auf der Einheiten-Seite unter „Anheften“."
 L["Open that unit page and use Frame Basics for width, height, and scale. Text size is in Style > Fonts or the unit Text section."] = "Auf der Einheiten-Seite stellst du unter „Frame-Grundlagen“ Breite, Höhe und Skalierung ein. Textgröße: „Stil > Schriften“ oder „Text“."
-L["Use the unit page for per-unit castbar toggles and Frames > Cast Bars for shared textures, direction, text, and interrupt options."] = "Einheitenbezogene Zauberleisten stellst du auf der jeweiligen Seite ein. Gemeinsame Optionen findest du unter „Frames > Zauberleisten“."
+L["Use the unit page for per-unit castbar toggles and Frames > Cast Bars for shared textures, direction, text, and interrupt options."] = "Einheitenbezogene Zauberleisten stellst du auf der jeweiligen Seite ein. Gemeinsame Optionen findest du unter „Rahmen > Zauberleisten“."
 L["Boss frames normally appear only during boss encounters. Enable Boss Frames and use Edit Mode or Boss Preview to test them outside combat."] = "Boss-Rahmen erscheinen normalerweise nur in Bosskämpfen. Aktiviere die Bossfenster und teste mit Bearbeitungsmodus oder Boss-Vorschau."
 L["Open Frames > Party/Raid Frames > Layout. Size & Scaling controls frame dimensions and scaling by group size. Group Layout controls growth, columns, and group visibility."] = "Öffne „Frames > Gruppen-/Raidframes > Layout“. „Größe & Skalierung“ steuert die Rahmenmaße und die Skalierung nach Gruppengröße. „Gruppenlayout“ steuert Wachstumsrichtung, Spalten und Gruppensichtbarkeit."
 L["Open the unit page and use Text for name/health/power text patterns, anchors, offsets, font sizes, and layering."] = "Öffne auf der Einheiten-Seite „Text“ für Name, Leben, Ressource, Anker, Versatz, Schriftgröße und Ebenen."
@@ -6430,11 +6430,11 @@ L["Open Style > Colors. Bar Colors and Power Bar Colors control HP/power colors;
 L["Style > Fonts controls shared font settings. Unit pages contain per-unit name, health, and power text position and pattern settings."] = "„Stil > Schriften“ enthält gemeinsame Schriftoptionen. Einheiten-Seiten steuern Position und Muster der Texte."
 L["Use Dashboard > Reset Positions for frame movers. Use Profiles only when you want to reset, copy, import, or replace profile data."] = "Nutze „Übersicht > Positionen zurücksetzen“ für Rahmenpositionen. „Profile“ dient zum Zurücksetzen, Kopieren, Importieren oder Ersetzen von Profildaten."
 L["Open Profiles for active profile, spec auto-switching, 6.x import/export strings, and reset options."] = "Öffne „Profile“ für aktives Profil, Spezialisierungswechsel sowie Import, Export und Zurücksetzen."
-L["Open Frames > Bars. Textures & Gradient controls shared bar textures; Frame Outline and Highlight Borders control borders."] = "Öffne „Frames > Balken“. „Texturen & Gradient“ steuert Texturen; „Frame-Kontur“ und „Hervorhebungsrahmen“ die Umrandung."
-L["Absorb styling and heal prediction are in Frames > Bars > Absorb Display. Use the Party or Raid scope there for group incoming heals."] = "Absorbanzeige und Heilungsvorschau findest du unter „Frames > Balken > Schilde & Absorb“. Wähle Gruppe oder Raid für Gruppenheilung."
+L["Open Frames > Bars. Textures & Gradient controls shared bar textures; Frame Outline and Highlight Borders control borders."] = "Öffne „Rahmen > Balken“. „Texturen & Gradient“ steuert Texturen; „Frame-Kontur“ und „Hervorhebungsrahmen“ die Umrandung."
+L["Absorb styling and heal prediction are in Frames > Bars > Absorb Display. Use the Party or Raid scope there for group incoming heals."] = "Absorbanzeige und Heilungsvorschau findest du unter „Rahmen > Balken > Schilde & Absorb“. Wähle Gruppe oder Raid für Gruppenheilung."
 L["Open the matching unit page and check Frame Basics > Enable, Load Conditions, alpha/transparency, and range fade."] = "Prüfe auf der Einheiten-Seite „Frame-Grundlagen > Aktivieren“, Ladebedingungen, Transparenz und Reichweiten-Ausblendung."
-L["Open Frames > Party/Raid Frames > Layout. Check enable/show behavior, player/solo visibility, layout mode, frame scaling, and anchoring."] = "Öffne „Frames > Gruppen-/Raidframes > Layout“. Prüfe Aktivierung, Sichtbarkeit, Layout, Skalierung und Verankerung."
-L["Open Frames > Party/Raid Frames > Status & Indicators for status icons, role/leader/assist, ready check, focus glow, and other group-frame state indicators."] = "Öffne „Frames > Gruppen-/Raidframes > Status & Indikatoren“ für Statussymbole, Rolle, Anführer, Helfer, Bereitschaft und Fokus."
+L["Open Frames > Party/Raid Frames > Layout. Check enable/show behavior, player/solo visibility, layout mode, frame scaling, and anchoring."] = "Öffne „Rahmen > Gruppen-/Raidframes > Layout“. Prüfe Aktivierung, Sichtbarkeit, Layout, Skalierung und Verankerung."
+L["Open Frames > Party/Raid Frames > Status & Indicators for status icons, role/leader/assist, ready check, focus glow, and other group-frame state indicators."] = "Öffne „Rahmen > Gruppen-/Raidframes > Status & Indikatoren“ für Statussymbole, Rolle, Anführer, Helfer, Bereitschaft und Fokus."
 L["Find settings and help"] = "Einstellungen und Hilfe finden"
 L["Search enabled features in your own words."] = "Aktivierte Funktionen mit eigenen Worten durchsuchen."
 L["Search settings, then open a result to make your changes."] = "Suche nach Einstellungen und öffne ein Ergebnis, um Änderungen vorzunehmen."
@@ -7039,6 +7039,15 @@ L["Type a value"] = "Wert eingeben"
 L["Undo / redo"] = "Rückgängig / Wiederholen"
 L["Find a setting"] = "Einstellung suchen"
 L["A newer version (%s) is available! You have %s — please update."] = "Eine neuere Version (%s) ist verfügbar! Du hast %s – bitte aktualisieren."
+L["Choose the cut direction for the selected scope. Use shared style follows the shared direction."] = "Wähle die Schnittrichtung für den ausgewählten Bereich. Gemeinsamen Stil verwenden übernimmt die gemeinsame Richtung."
+
+L["This scope uses its own slanted cut direction. Other bar settings follow the custom-settings switch."] = "Dieser Bereich verwendet eine eigene Schnittrichtung. Andere Leisteneinstellungen folgen dem Schalter für eigene Einstellungen."
+L["Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved."] = "Setzt alle eigenen Schnittrichtungen auf Gemeinsam zurück und deaktiviert eigene Leisteneinstellungen für alle Unit- und Gruppenbereiche. Andere eigene Werte bleiben gespeichert."
+
+L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "Die Suite-Farben findest du in den Abschnitten unten.\nÖffne die Minikarten-Vorschau, um ihre Elemente zu positionieren."
+
+L["Arena Preview"] = "Arena-Vorschau"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

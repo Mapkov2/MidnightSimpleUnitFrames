@@ -140,6 +140,9 @@ do
     local _, clauses = M.Search._RoutingContext.BuildSearchQueryClauses("재사용 대기시간")
     Check(#clauses == 1 and HasTerm(clauses, "cooldown"),
         "koKR: the two-word alias key did not become one clause (" .. ClauseWords(clauses) .. ")")
+    local _, typo = M.Search._RoutingContext.BuildSearchQueryClauses("채력")
+    Check(#typo == 1 and HasTerm(typo, "체력") and HasTerm(typo, "기력") and HasTerm(typo, "채팅")
+        and #typo[1].terms <= 18, "koKR: an arbitrary typo alias displaced equally close native meanings")
 end
 
 -- zhCN: one CJK character is not a query --------------------------------------
@@ -148,12 +151,18 @@ do
     local api = M.Search._CoreAPI
     Check(#api.SearchPages("施") == 0, "zhCN: one CJK character already ran a search")
     Check(#api.SearchPages("施法条") > 0, "zhCN: the castbar query found nothing")
+    for query, count in pairs({ ["目标框体大小"] = 3, ["施法条颜色"] = 2 }) do
+        local _, clauses = M.Search._RoutingContext.BuildSearchQueryClauses(query)
+        Check(#clauses == count, "zhCN: compact independent concepts collapsed to OR: " .. query)
+    end
 end
 
 -- enUS: the page the search started from gets the current-page boost ----------
 do
     local _, M = Boot("enUS")
     local api = M.Search._CoreAPI
+    Check(Keys(api.SearchPages("DoT")) == Keys(api.SearchPages("dot")),
+        "enUS: a typed acronym was mistaken for a camelCase setting key")
     M.activeKey = "home"
     local neutral = api.SearchPages("texture")
     local rec

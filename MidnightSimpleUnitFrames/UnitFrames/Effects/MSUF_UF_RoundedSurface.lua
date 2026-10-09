@@ -188,7 +188,30 @@ local function SlantedScopeEnabled(group)
     or (not group and slantedUnitFramesEnabled))
 end
 
-ResolveFrameStyle = function(f)
+-- Resolve the same config for shape and cut direction, including group members
+-- and boss/arena unit tokens. No saved config means the shared value applies.
+local function FrameConfig(f)
+  local db = _G.MSUF_DB
+  if type(f) == "string" then return db and db[f] end
+  if not f then return end
+  f = f._msufRUFStyleOwner or f
+  if f._msufRUFDirectionConfig then return f._msufRUFDirectionConfig end
+  local group = FrameIsGroup(f)
+  local spec = f.MSUFSpec
+  local unitKey = spec and spec.key or f.configKey
+  if not group and not unitKey then
+    local UF = MSUF and MSUF.UF
+    local unit = f.MSUFUnitKey or f.unit
+    unitKey = (UF and UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(unit)) or unit
+  end
+  local groupKind = group and (f._msufGFKind or (spec and spec.groupKind)
+    or (MSUF.GF and MSUF.GF.frames and MSUF.GF.frames[f]))
+  local key = group and ("gf_" .. tostring(groupKind or "party"))
+    or unitKey
+  return db and key and db[key]
+end
+
+ResolveFrameStyle = function(f, conf)
   if not f then return "SQUARE" end
   local group = FrameIsGroup(f)
   if f._msufRUFForcedStyle then
@@ -201,18 +224,7 @@ ResolveFrameStyle = function(f)
     end
     return f._msufRUFForcedStyle, true
   end
-  local db = _G.MSUF_DB
-  local spec = f.MSUFSpec
-  local unitKey = spec and spec.key or f.configKey
-  if not group and not unitKey then
-    local UF = MSUF and MSUF.UF
-    unitKey = (UF and UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(f.MSUFUnitKey)) or f.MSUFUnitKey
-  end
-  local groupKind = group and (f._msufGFKind or (spec and spec.groupKind)
-    or (MSUF.GF and MSUF.GF.frames and MSUF.GF.frames[f]))
-  local key = group and ("gf_" .. tostring(groupKind or "party"))
-    or unitKey
-  local conf = db and key and db[key]
+  conf = conf or FrameConfig(f)
   local explicit = conf and conf.frameBarShape
   if explicit == "SLANTED" and SlantedScopeEnabled(group) then return "SLANTED", true end
   if explicit == "ROUNDED" or explicit == "SQUARE" then return explicit, true end
@@ -227,18 +239,23 @@ local function RoundedFrameEnabled(f)
   return forceDisabled ~= true and ResolveFrameStyle(f) ~= "SQUARE"
 end
 
-local function SlantedDirection()
+local function SlantedDirection(scope, conf)
+  conf = conf or FrameConfig(scope)
+  local direction = conf and conf.slantedBarDirection
+  if SLANTED_MASK_PATHS[direction] then return direction end
   local bars = _G.MSUF_DB and _G.MSUF_DB.bars
-  local direction = bars and bars.slantedBarDirection
+  direction = bars and bars.slantedBarDirection
   return SLANTED_MASK_PATHS[direction] and direction or "RIGHT_DOWN"
 end
 
 local function SurfaceMaskPath(f)
-  return f and ResolveFrameStyle(f) == "SLANTED" and SLANTED_MASK_PATHS[SlantedDirection()] or roundedMaskPath
+  local conf = FrameConfig(f)
+  return f and ResolveFrameStyle(f, conf) == "SLANTED" and SLANTED_MASK_PATHS[SlantedDirection(nil, conf)] or roundedMaskPath
 end
 
 local function SurfaceEdgePath(f)
-  return f and ResolveFrameStyle(f) == "SLANTED" and SLANTED_EDGE_PATHS[SlantedDirection()] or roundedEdgePath
+  local conf = FrameConfig(f)
+  return f and ResolveFrameStyle(f, conf) == "SLANTED" and SLANTED_EDGE_PATHS[SlantedDirection(nil, conf)] or roundedEdgePath
 end
 
 local function MouseoverHighlightEnabled()
@@ -334,8 +351,8 @@ RoundedSurface.ResolveMedia = function()
   UpdateRoundedMediaState()
   return roundedMaskPath, roundedEdgePath, roundedMediaStrength
 end
-RoundedSurface.ResolveSlantedMedia = function()
-  local direction = SlantedDirection()
+RoundedSurface.ResolveSlantedMedia = function(scope, conf)
+  local direction = SlantedDirection(scope, conf)
   return SLANTED_MASK_PATHS[direction], SLANTED_EDGE_PATHS[direction], 0
 end
 RoundedSurface.ApplyMediaSlice = ApplyRoundedMediaSlice
@@ -644,7 +661,11 @@ local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness,
   end
   stack[1] = baseEdge
   stack._msufCount = count
-  local edgePath = edgeOverride or SurfaceEdgePath(owner._msufRUFStyleOwner or owner)
+  -- Masks wait for combat end; border/highlight events retain the same cold cut.
+  local edgePath = edgeOverride
+  if not edgePath and IsCombatLocked() then edgePath = stack._msufEdgePath end
+  edgePath = edgePath or SurfaceEdgePath(owner._msufRUFStyleOwner or owner)
+  stack._msufEdgePath = edgePath
 
   -- Edge thickness is rendered as a tiny texture stack. Reuse existing textures
   -- whenever possible; only missing stack entries are gated by combat lockdown.

@@ -63,9 +63,9 @@ local function ApplyMediaSlice(region, path)
     if type(fn) == "function" then fn(region, path) end
 end
 
-local function ResolveMedia()
+local function ResolveMedia(frame)
     if SettingStyle() == "SLANTED" and type(RoundedSurface.ResolveSlantedMedia) == "function" then
-        return RoundedSurface.ResolveSlantedMedia()
+        return RoundedSurface.ResolveSlantedMedia(frame)
     end
     local fn = RoundedSurface.ResolveMedia
     if type(fn) == "function" then return fn() end
@@ -80,7 +80,7 @@ end
 local function ApplySurfaceMasks(frame)
     local statusBar = frame and frame.statusBar
     if not statusBar then return false end
-    local maskPath = ResolveMedia()
+    local maskPath = ResolveMedia(frame)
     BeginSurfaceMaskRefresh(frame, MASKED_KEY)
     local fill = statusBar.GetStatusBarTexture and statusBar:GetStatusBarTexture() or nil
     MaskSurfaceTexture(frame, fill, MASK_KEY, MASKED_KEY, statusBar, maskPath)
@@ -146,7 +146,7 @@ local function RenderRoundedOutline(frame, _, thickness, red, green, blue, alpha
         if squareHost.SetBackdrop then squareHost:SetBackdrop(nil) end
         squareHost:Hide()
     end
-    local _, edgePath = ResolveMedia()
+    local _, edgePath = ResolveMedia(frame)
     local stack = frame[OUTLINE_STACK_KEY]
     if not stack then
         stack = {}

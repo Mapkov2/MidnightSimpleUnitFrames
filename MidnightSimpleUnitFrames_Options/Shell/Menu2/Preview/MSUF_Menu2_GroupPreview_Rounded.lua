@@ -156,9 +156,9 @@ local GF_PREVIEW_POWER_ROUNDED_OPTS = {
         return BaseEdgeColor(mock)
     end,
 }
-local function UpdateRoundedMedia(mock, style)
+local function UpdateRoundedMedia(mock, style, conf)
     if type(PreviewHelpers.ResolveFrameBarMedia) == "function" then
-        GF_PREVIEW_ROUNDED_MASK, GF_PREVIEW_ROUNDED_EDGE, GF_PREVIEW_ROUNDED_STRENGTH = PreviewHelpers.ResolveFrameBarMedia(style)
+        GF_PREVIEW_ROUNDED_MASK, GF_PREVIEW_ROUNDED_EDGE, GF_PREVIEW_ROUNDED_STRENGTH = PreviewHelpers.ResolveFrameBarMedia(style, nil, conf)
     end
     mock._msufPreviewRoundedMediaStrength = GF_PREVIEW_ROUNDED_STRENGTH
     GF_PREVIEW_ROUNDED_OPTS.edgeTexture = GF_PREVIEW_ROUNDED_EDGE
@@ -218,7 +218,7 @@ local function ApplyRounded(mock, conf, powerOn, edgeSize, powerEmbed, powerDeta
     if not mock then return false end
     local style = FrameStyle(conf)
     local enabled = style ~= "SQUARE"
-    if enabled then UpdateRoundedMedia(mock, style) end
+    if enabled then UpdateRoundedMedia(mock, style, conf) end
     if not enabled or not EnsureRoundedVisuals(mock) then
         mock._msufGFRoundedPreviewActive = nil
         ClearRoundedMasks(mock)

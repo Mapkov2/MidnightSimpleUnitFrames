@@ -107,7 +107,7 @@ local BARS_SCOPE_KEYS = KSW [[
     purgeOutlineMode hlPrioEnabled hlPrioOrder enableGradient enablePowerGradient gradientStrength powerGradientStrength
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill powerChunkedFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
-    frameBarShape aggroMode tempMaxHealthEnabled tempMaxHealthTexture tempMaxHealthOpacity tempMaxHealthBackgroundOpacity
+    frameBarShape slantedBarDirection aggroMode tempMaxHealthEnabled tempMaxHealthTexture tempMaxHealthOpacity tempMaxHealthBackgroundOpacity
     tempMaxHealthColorR tempMaxHealthColorG tempMaxHealthColorB
 ]]
 local BARS_TABLE_KEYS = KSW [[

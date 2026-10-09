@@ -352,33 +352,54 @@ function W.Text(parent, text, x, y, width, color)
     fs:SetJustifyH("LEFT")
     return fs
 end
+-- Help uses its own button so opening instructions never commits an input.
+function W.HelpButton(parent, title, text)
+    local help = PixelLayoutRegion(CreateFrame("Button", nil, parent))
+    help:SetSize(24, 24)
+    help._msuf2SkipHistoryCheckpoint = true
+    local fill, edge = T.CreateSuperellipseLayers(help, "_msuf2Help", 2, "BACKGROUND", "BORDER")
+    local bg, accent = T.colors.panel2, T.colors.accent2 or T.colors.text
+    fill:SetVertexColor(bg[1], bg[2], bg[3], 0.96)
+    local glyph = T.Font(help, "GameFontHighlight", "?", accent, "body")
+    glyph:SetAllPoints(help)
+    glyph:SetJustifyH("CENTER")
+    glyph:SetJustifyV("MIDDLE")
+    help._msuf2HelpGlyph, help._msuf2HelpEdge = glyph, edge
+    local function Paint(hover) edge:SetVertexColor(accent[1], accent[2], accent[3], hover and 1 or 0.65) end
+    help:SetScript("OnEnter", function() Paint(true) end)
+    help:SetScript("OnLeave", function() Paint(false) end)
+    M.AddTooltip(help, title or "Help", text, { hook = true })
+    help:SetScript("OnClick", function(self) self:GetScript("OnEnter")(self) end)
+    Paint(false)
+    return help
+end
+
 -- Long supporting copy has a visible help button. Warnings and instructions
 -- keep their full text through W.Text.
 W.DescriptionDetails = true
 function W.Description(parent, text, x, y, width, title, details)
-    local fs = W.Text(parent, text, x, y, max(24, (width or 300) - 30))
+    local fs = W.Text(parent, text, x, y, max(1, (width or 300) - 32))
     fs:SetWordWrap(true)
     fs:SetMaxLines(2)
+    local help
     if M.AddTooltip and text and text ~= "" then
-        local help = PixelLayoutRegion(CreateFrame("Button", nil, parent))
-        help:SetSize(24, 24)
-        local glyph = T.Font(help, "GameFontHighlight", "?", T.colors.text, "body")
-        glyph:SetPoint("CENTER", help, "CENTER", 0, 0)
-        help:SetPoint("TOPLEFT", fs, "TOPRIGHT", 6, 4)
-        help._msuf2SkipHistoryCheckpoint = true
-        M.AddTooltip(help, title or "Help", details or text)
-        help:SetScript("OnClick", function(self)
-            local show = self:GetScript("OnEnter")
-            if show then show(self) end
-        end)
-        local function RefreshHelp()
-            help:SetShown(details ~= nil or not fs.IsTruncated or fs:IsTruncated())
-        end
-        parent:HookScript("OnShow", RefreshHelp)
-        parent:HookScript("OnSizeChanged", RefreshHelp)
-        RefreshHelp()
+        help = W.HelpButton(parent, title, details or text)
         fs._msuf2HelpTarget = help
     end
+    local function RefreshHelp()
+        local available = width or 300
+        local parentWidth = parent:GetWidth()
+        if parentWidth and parentWidth > 0 then available = min(available, max(1, parentWidth - (x or 0) - 16)) end
+        fs:SetWidth(max(1, available - 32))
+        if help then
+            help:ClearAllPoints()
+            help:SetPoint("TOPRIGHT", parent, "TOPLEFT", (x or 0) + available, y or 0)
+            help:SetShown(details ~= nil or not fs.IsTruncated or fs:IsTruncated())
+        end
+    end
+    parent:HookScript("OnShow", RefreshHelp)
+    parent:HookScript("OnSizeChanged", RefreshHelp)
+    RefreshHelp()
     return fs
 end
 

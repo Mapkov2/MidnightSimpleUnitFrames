@@ -443,6 +443,41 @@ end
     Methods.IsTruncated = old
 end)()
 
+-- Description help stays inside its panel and clear of the text on resize.
+;(function()
+    local form = env.CreateFrame("Frame", nil, env.UIParent)
+    form:SetSize(240, 160)
+    local description = W.Description(form, "Short summary", 16, -12, 600, "Help", "Complete instructions")
+    local help = description._msuf2HelpTarget
+    Check(help and help._msuf2HelpGlyph and help._msuf2HelpEdge, "help has no readable framed button")
+    Check(help:GetWidth() == 24 and help:GetHeight() == 24, "help changed its bounded target")
+    Check(help._msuf2HelpGlyph.justifyH == "CENTER" and help._msuf2HelpGlyph.justifyV == "MIDDLE",
+        "question mark is not centered")
+    Check(help._msuf2HelpGlyph._msuf2FontRole == "body", "help uses a tiny caption font")
+    Check(description:GetWidth() == 176, "description exceeds its panel or leaves no help gutter")
+    local point, relative, anchor, right, top = help:GetPoint(1)
+    Check(point == "TOPRIGHT" and relative == form and anchor == "TOPLEFT" and right == 224 and top == -12,
+        "help is positioned outside its panel or above the description")
+    form:SetWidth(180)
+    form:GetScript("OnSizeChanged")(form)
+    Check(description:GetWidth() == 116, "description does not adapt to a narrower panel")
+    local _, _, _, narrowRight = help:GetPoint(1)
+    Check(narrowRight == 164, "help does not remain inside the narrow panel")
+    form:SetWidth(720)
+    form:GetScript("OnShow")(form)
+    Check(description:GetWidth() == 568, "description does not recover its authored width")
+    Hover(help)
+    Check(help._msuf2HelpEdge.M.vertexColor[4] == 1, "help has no hover feedback")
+    tip:Hide()
+    help:GetScript("OnClick")(help)
+    Check(tip:IsShown() and Has(tip.lines, "Complete instructions"), "click does not reveal the full help")
+    help:GetScript("OnLeave")(help)
+    Check(not tip:IsShown(), "help tooltip stays after leaving")
+    Check(help._msuf2HelpEdge.M.vertexColor[4] < 1, "help hover frame stays active")
+    Check(not help._msuf2HistoryCheckpoint and help:GetScript("OnUpdate") == nil,
+        "help mutates history or starts idle work")
+end)()
+
 -- 10. Keyboard movement never commits a value; disabled choices are skipped.
 ;(function()
     for name, method in pairs({

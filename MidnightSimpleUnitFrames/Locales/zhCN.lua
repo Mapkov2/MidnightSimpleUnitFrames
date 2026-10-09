@@ -6999,6 +6999,15 @@ L["A newer version (%s) is available! You have %s — please update."] = "有更
 -- Label fragments.
 L["Current profile: "] = "当前配置文件: "
 L["MSUF Edit  "] = "MSUF 编辑  "
+L["Choose the cut direction for the selected scope. Use shared style follows the shared direction."] = "选择当前范围的切角方向。使用共享样式会沿用共享方向。"
+
+L["This scope uses its own slanted cut direction. Other bar settings follow the custom-settings switch."] = "此范围使用独立的切角方向。其他条设置由自定义设置开关控制。"
+L["Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved."] = "将所有范围的切角方向恢复为共享，并关闭所有单位和队伍的自定义条设置。其他自定义值仍会保留。"
+
+L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "Suite 颜色位于下方各个部分。\n打开小地图预览以调整其元素的位置。"
+
+L["Arena Preview"] = "竞技场预览"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhCN", LoadLocale)
 elseif MSUF.LOCALE == "zhCN" then LoadLocale() end

@@ -121,7 +121,7 @@ local function ApplyClassPowerRounded(CP, masterEnabled)
   local slanted = SlantedBarsEnabled() and ReadRoundedBool("slantedClassResources", false)
   local rounded = ReadRoundedBool("roundedClassResources", false)
   local active = master == true and (slanted or rounded) and shape == "BAR"
-  local direction = slanted and SlantedDirection()
+  local direction = slanted and SlantedDirection("player")
   local roundedMaskPath, roundedEdgePath = CurrentRoundedMedia()
   local maskPath = direction and SLANTED_MASK_PATHS[direction] or roundedMaskPath
   local edgePath = direction and SLANTED_EDGE_PATHS[direction] or roundedEdgePath
@@ -241,7 +241,7 @@ local function ApplyAltManaRounded(AM, masterEnabled)
 
   if not slanted then UpdateRoundedMediaState() end
   local roundedMaskPath, roundedEdgePath = CurrentRoundedMedia()
-  local direction = slanted and SlantedDirection()
+  local direction = slanted and SlantedDirection("player")
   local maskPath = direction and SLANTED_MASK_PATHS[direction] or roundedMaskPath
   local edgePath = direction and SLANTED_EDGE_PATHS[direction] or roundedEdgePath
   local bar = AM.bar

@@ -352,7 +352,7 @@ local COPY_STATUSICON_FIELDS = M.CopyFieldsFromSpecs(STATUS_CONTROLS, "level rac
 --- the source/destination units regardless of the Bars override. powerSmoothFill is
 --- owned by the Power Bar category, hpPowerTextOverride by Text.
 local COPY_FRAME_BASIC_FIELDS = WL [[
-    enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill chunkedFill healthColorMode frameBarShape
+    enabled showName showHP showPower reverseFillBars verticalFillBars smoothFill chunkedFill healthColorMode frameBarShape slantedBarDirection
     hlOverride barTexture barBackgroundTexture barBgTexture
     barOutlineThickness barOutlineLayer barOutlineStrata barOutlineTexture barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
     highlightBorderThickness hlAggroSize aggroOutlineMode dispelOutlineMode purgeOutlineMode dispelBorderTrigger dispelBorderShowOn

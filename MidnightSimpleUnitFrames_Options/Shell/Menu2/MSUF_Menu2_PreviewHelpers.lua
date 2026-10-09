@@ -28,22 +28,7 @@ end
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
 local ROUNDED_MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
-local SLANTED_MASK_PATHS = {
-    RIGHT_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask.png",
-    RIGHT_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_right_up.png",
-    LEFT_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_left_down.png",
-    LEFT_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_left_up.png",
-    BOTH_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_both_down.png",
-    BOTH_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_mask_both_up.png",
-}
-local SLANTED_EDGE_PATHS = {
-    RIGHT_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge.png",
-    RIGHT_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_right_up.png",
-    LEFT_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_left_down.png",
-    LEFT_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_left_up.png",
-    BOTH_DOWN = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_both_down.png",
-    BOTH_UP = ROUNDED_MEDIA_ROOT .. "slanted_bar_edge_both_up.png",
-}
+
 local ROUNDED_SLICE_MARGIN = 9.5
 local ROUNDED_MASK_PATHS, ROUNDED_EDGE_PATHS = {}, {}
 for i = 1, 5 do
@@ -71,12 +56,9 @@ function H.ResolveRoundedMedia()
     if strength < 1 then strength = 1 elseif strength > 5 then strength = 5 end
     return ROUNDED_MASK_PATHS[strength], ROUNDED_EDGE_PATHS[strength], strength
 end
-function H.ResolveFrameBarMedia(style)
+function H.ResolveFrameBarMedia(style, scope, conf)
     if style == "SLANTED" then
-        local bars = _G.MSUF_DB and _G.MSUF_DB.bars
-        local direction = bars and bars.slantedBarDirection
-        if not SLANTED_MASK_PATHS[direction] then direction = "RIGHT_DOWN" end
-        return SLANTED_MASK_PATHS[direction], SLANTED_EDGE_PATHS[direction], 0
+        return MSUF.RoundedSurface.ResolveSlantedMedia(scope, conf)
     end
     return H.ResolveRoundedMedia()
 end
@@ -3390,7 +3372,7 @@ function H.ApplyRoundedClassPowerSurface(frame, enabled, fills, backgrounds, cou
         return false
     end
 
-    local maskPath, edgePath, strength = H.ResolveFrameBarMedia(opts.style)
+    local maskPath, edgePath, strength = H.ResolveFrameBarMedia(opts.style, "player")
     outline = H.ClampEdgeSize(outline, 0, opts.maxEdgeSize or 8)
     local fillFirst = type(fills) == "table" and fills[1] or nil
     local fillLast = type(fills) == "table" and count > 1 and fills[count] or nil

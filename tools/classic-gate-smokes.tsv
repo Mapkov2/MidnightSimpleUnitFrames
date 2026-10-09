@@ -349,7 +349,29 @@ clients+Forever	lua	tools/tests/search_locale_queries_smoke.lua	{root} {flavor}	
 -	lua	tools/tests/menu_page_build_budget_smoke.lua	{root}	Menu page build, refresh and relayout budget failed
 -	lua	tools/tests/search_unicode_query_smoke.lua	{root}	Menu search Unicode query smoke failed
 -	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline enUS	Menu search finds options by their name: Mainline enUS
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline enGB	Menu search finds options by their name: Mainline enGB
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline deDE	Menu search finds options by their name: Mainline deDE
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline esES	Menu search finds options by their name: Mainline esES
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline esMX	Menu search finds options by their name: Mainline esMX
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline frFR	Menu search finds options by their name: Mainline frFR
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline itIT	Menu search finds options by their name: Mainline itIT
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline koKR	Menu search finds options by their name: Mainline koKR
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline ptBR	Menu search finds options by their name: Mainline ptBR
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline ruRU	Menu search finds options by their name: Mainline ruRU
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline zhCN	Menu search finds options by their name: Mainline zhCN
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Mainline zhTW	Menu search finds options by their name: Mainline zhTW
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla enUS	Menu search finds options by their name: Vanilla enUS
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla enGB	Menu search finds options by their name: Vanilla enGB
 -	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla deDE	Menu search finds options by their name: Vanilla deDE
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla esES	Menu search finds options by their name: Vanilla esES
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla esMX	Menu search finds options by their name: Vanilla esMX
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla frFR	Menu search finds options by their name: Vanilla frFR
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla itIT	Menu search finds options by their name: Vanilla itIT
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla koKR	Menu search finds options by their name: Vanilla koKR
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla ptBR	Menu search finds options by their name: Vanilla ptBR
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla ruRU	Menu search finds options by their name: Vanilla ruRU
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla zhCN	Menu search finds options by their name: Vanilla zhCN
+-	lua	tools/tests/search_label_findability_smoke.lua	{root} Vanilla zhTW	Menu search finds options by their name: Vanilla zhTW
 -	lua	tools/tests/unit_preview_pet_lifecycle_smoke.lua	{root}	Pet and Pet Target preview lifecycle failed
 -	lua	tools/tests/group_menu_additional_preview_smoke.lua	{root}	Group menu additional preview lifecycle failed
 -	lua	tools/tests/unit_preview_castbar_features_smoke.lua	{root}	Castbar feature preview lifecycle failed
@@ -545,3 +567,8 @@ clients+Forever	lua	tools/tests/bars_outline_override_smoke.lua	{root} {flavor}	
 clients+Forever	lua	tools/tests/bars_outline_color_smoke.lua	{root} {flavor}	Frame Outline style color application regression: {flavor}
 clients+Forever	lua	tools/tests/bars_outline_texture_apply_smoke.lua	{root} {flavor}	Frame Outline texture selection scoped apply budget: {flavor}
 -	lua	tools/tests/frame_strata_secret_smoke.lua	{root}	Frame strata secret regression
+clients+Forever	lua	tools/tests/slanted_direction_scope_smoke.lua	{root} {flavor}	Slanted cut direction scope and preview regression: {flavor}
+clients+Forever	lua	tools/tests/slanted_scope_review_smoke.lua	{root} {flavor}	Slanted scoped inheritance copy reset preview combat regression: {flavor}
+clients+Forever	lua	tools/tests/slanted_all_surfaces_smoke.lua	{root} {flavor}	All Slanted unit castbar and resource scopes: {flavor}
+clients+Forever	lua	tools/tests/search_human_intent_smoke.lua	{root} {flavor}	Natural search tasks and specific detail guards: {flavor}
+-	lua	tools/tests/locale_render_paths_smoke.lua	{root}	Native preview labels or translated help routes stay English

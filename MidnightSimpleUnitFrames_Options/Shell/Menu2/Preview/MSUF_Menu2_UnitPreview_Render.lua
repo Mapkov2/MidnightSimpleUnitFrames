@@ -3674,6 +3674,7 @@ function Stage.RenderCastbar(st)
         end
         ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, RenderState.CastbarShowIcon,
             RenderState.CastbarShowText, RenderState.ReadCastbarNum, RenderState.FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle, animState)
+        mock.cast.configKey = key
         ApplyCastbarPreviewRounded(mock.cast, g, castEdge, castBgR, castBgG, castBgB, castBgA)
         box.handleCastbar:SetSize(
             max(36, scw * (box._mockCastFrameScale or 1)),

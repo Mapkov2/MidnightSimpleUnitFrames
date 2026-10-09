@@ -6836,6 +6836,15 @@ L["Expiring: "] = "即將到期: "
 L["MSUF Edit  "] = "MSUF 編輯  "
 L["Missing: "] = "缺少: "
 L["Overrides: "] = "自訂設定: "
+L["Choose the cut direction for the selected scope. Use shared style follows the shared direction."] = "選擇目前範圍的切角方向。使用共用樣式會沿用共用方向。"
+
+L["This scope uses its own slanted cut direction. Other bar settings follow the custom-settings switch."] = "此範圍使用獨立的切角方向。其他條設定由自訂設定開關控制。"
+L["Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved."] = "將所有範圍的切角方向恢復為共用，並關閉所有單位和隊伍的自訂條設定。其他自訂值仍會保留。"
+
+L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "Suite 顏色位於下方各個區段。\n開啟小地圖預覽以調整其元素的位置。"
+
+L["Arena Preview"] = "競技場預覽"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

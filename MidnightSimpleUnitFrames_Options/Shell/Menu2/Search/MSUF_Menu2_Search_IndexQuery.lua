@@ -205,6 +205,13 @@ local function EnsureSearchLexicon()
         table.sort(bucket, function(a, b) return #a.words == #b.words and a.key < b.key or #a.words > #b.words end)
     end
     SEARCH_STATE.multiWordAliases = multiWord
+    local compounds = {}
+    for source, expanded in pairs(SearchData.QUERY_COMPOUNDS or EMPTY_SEARCH_RECORDS) do
+        source, expanded = NormalizeSearchText(source), NormalizeSearchText(expanded)
+        if source ~= "" and source ~= expanded then compounds[#compounds + 1] = { source, expanded } end
+    end
+    table.sort(compounds, function(a, b) return #a[1] == #b[1] and a[1] < b[1] or #a[1] > #b[1] end)
+    SEARCH_STATE.queryCompounds = compounds
     -- Everything derived from the lexicon follows a rebuild.
     compactQueryKeys = nil
     SEARCH_STATE.aliasTypoKeys, SEARCH_STATE.aliasTypoKeyLengths = nil, nil
@@ -359,6 +366,15 @@ local function CompactKeyAt(compact, word, index)
     return found
 end
 local function SearchRawWords(normalized, allowSoftStop)
+    for _, compound in ipairs(SEARCH_STATE.queryCompounds or EMPTY_SEARCH_RECORDS) do
+        local offset = 1
+        while true do
+            local first, last = normalized:find(compound[1], offset, true)
+            if not first then break end
+            normalized = normalized:sub(1, first - 1) .. compound[2] .. normalized:sub(last + 1)
+            offset = first + #compound[2]
+        end
+    end
     local raw = {}
     local function Add(word)
         local ignored
@@ -507,11 +523,11 @@ local function SearchAliasTypoKeys()
     return keys, lengths
 end
 
-local function SearchAliasKeyForTypo(word)
+local function SearchAliasKeysForTypo(word)
     local maxDistance = SearchTypoDistance(word)
     if not SearchEditDistanceWithin or not maxDistance then return nil end
     if SEARCH_STATE.aliasTypoCache[word] ~= nil then return SEARCH_STATE.aliasTypoCache[word] or nil end
-    local bestKey, bestDelta
+    local bestKeys, bestDistance, bestDelta, bestLength
     local keys, lengths = SearchAliasTypoKeys()
     local wordLength = SearchCharCount(word)
     for i = 1, #keys do
@@ -519,9 +535,12 @@ local function SearchAliasKeyForTypo(word)
         local lengthDelta = lengths[i] - wordLength
         if lengthDelta <= maxDistance and lengthDelta >= -maxDistance and SearchEditDistanceWithin(word, key, maxDistance) then
             local delta = math.abs(#key - #word)
-            if not bestKey or delta < bestDelta or (delta == bestDelta and #key < #bestKey) then
-                bestKey = key
-                bestDelta = delta
+            local distance = maxDistance == 1 and 1 or (SearchEditDistanceWithin(word, key, 1) and 1 or maxDistance)
+            if not bestKeys or distance < bestDistance or (distance == bestDistance
+                and (delta < bestDelta or (delta == bestDelta and #key < bestLength))) then
+                bestKeys, bestDistance, bestDelta, bestLength = { key }, distance, delta, #key
+            elseif distance == bestDistance and delta == bestDelta and #key == bestLength and #bestKeys < 4 then
+                bestKeys[#bestKeys + 1] = key
             end
         end
     end
@@ -530,8 +549,8 @@ local function SearchAliasKeyForTypo(word)
         SEARCH_STATE.aliasTypoCache = {}
         SEARCH_STATE.aliasTypoCount = 1
     end
-    SEARCH_STATE.aliasTypoCache[word] = bestKey or false
-    return bestKey
+    SEARCH_STATE.aliasTypoCache[word] = bestKeys or false
+    return bestKeys
 end
 
 local SEARCH_CANONICAL_PAIRS = {}
@@ -621,10 +640,14 @@ local function BuildSearchQueryClauses(query)
             if phrases and phrases[i] then AddSearchTermUnique(terms, seen, phrases[i], allowSoftStop) end
             local aliases = SEARCH_QUERY_ALIASES[word]
             if not aliases then
-                local aliasKey = SearchAliasKeyForTypo(word)
-                if aliasKey then
-                    AddSearchTermUnique(terms, seen, aliasKey, allowSoftStop)
-                    aliases = SEARCH_QUERY_ALIASES[aliasKey]
+                local typoKeys = SearchAliasKeysForTypo(word)
+                if typoKeys then
+                    -- Keep a bounded set of equally close native spellings.
+                    -- A new synonym must not displace the typed word's meaning.
+                    for _, key in ipairs(typoKeys) do AddSearchTermUnique(terms, seen, key, allowSoftStop) end
+                    for _, key in ipairs(typoKeys) do
+                        for _, term in ipairs(SEARCH_QUERY_ALIASES[key]) do AddSearchTermUnique(terms, seen, term, allowSoftStop) end
+                    end
                 end
             end
             if aliases then
@@ -2067,6 +2090,9 @@ function SearchProviders.Append(records, cache)
                 SEARCH_CONTROL_HAYSTACK_MAX_LEN)
             merged.tokens = nil
             merged.providerRow = rec.providerRow
+            if rec.providerRow and rec.providerRow.inactive then
+                merged.hint, merged.hintNorm = rec.hint, rec.hintNorm
+            end
             merged.answer = merged.answer or rec.answer
             records[index] = merged
         else
@@ -2235,18 +2261,27 @@ end
 function SearchNaming.Label(rec, normalized)
     local label = rec.labelNorm
     if label == "" or label == normalized then return false end
-    local first, last = normalized:find(label, 1, true)
-    if not first or (first > 1 and byte(normalized, first - 1) ~= 32)
-        or (last < #normalized and byte(normalized, last + 1) ~= 32) then return false end
-    local contextWords = 0
-    for word in (normalized:sub(1, first - 1) .. " " .. normalized:sub(last + 1)):gmatch("%S+") do
-        if not SearchIgnoreQueryWord(word) then
-            if not (rec.titleNorm:find(word, 1, true) or (rec.hintNorm or ""):find(word, 1, true)
-                or rec.groupNorm:find(word, 1, true)) then return false end
-            contextWords = contextWords + 1
+    local offset = 1
+    while true do
+        local first, last = normalized:find(label, offset, true)
+        if not first then return false end
+        offset = first + 1
+        if (first == 1 or byte(normalized, first - 1) == 32)
+            and (last == #normalized or byte(normalized, last + 1) == 32) then
+            local contextWords, valid = 0, true
+            for word in (normalized:sub(1, first - 1) .. " " .. normalized:sub(last + 1)):gmatch("%S+") do
+                if not SearchIgnoreQueryWord(word) then
+                    if not (rec.titleNorm:find(word, 1, true) or (rec.hintNorm or ""):find(word, 1, true)
+                        or rec.groupNorm:find(word, 1, true)) then
+                        valid = false
+                        break
+                    end
+                    contextWords = contextWords + 1
+                end
+            end
+            if valid and contextWords > 0 then return true end
         end
     end
-    return contextWords > 0
 end
 
 function SearchIndexBuild.New()
@@ -2542,11 +2577,12 @@ local function ExactQueryTarget(normalized)
             exactQueryTargets[NormalizeSearchText(phrase)] = target
         end
     end
-    return exactQueryTargets[normalized]
+    return exactQueryTargets[normalized] or SearchData.NaturalQueryTarget(normalized)
 end
 local function MatchesExactQueryTarget(rec, target)
     if not target then return false end
-    if target.pageKey then return rec.key == target.pageKey and rec.kind == "page" end
+    if target.pageKey and rec.key ~= target.pageKey then return false end
+    if target.pageKey and not target.controlSuffix then return rec.kind == "page" end
     local exact = rec.exactTarget
     if not exact then return false end
     if target.settingKey then return exact.settingKey == target.settingKey end
@@ -2555,7 +2591,7 @@ local function MatchesExactQueryTarget(rec, target)
         return key:sub(-#target.settingSuffix) == target.settingSuffix
     end
     local id = tostring(exact.controlId or "")
-    return rec.key == "profiles" and target.controlSuffix and id:find(target.controlSuffix, 1, true) ~= nil
+    return (target.pageKey or rec.key == "profiles") and target.controlSuffix and id:find(target.controlSuffix, 1, true) ~= nil
 end
 
 function SearchPages(query)
@@ -2570,7 +2606,7 @@ function SearchPages(query)
     -- so its tokens ("party") never appear in a page haystack. Drop the prefix
     -- and split the remaining camelCase into words. Only single-token queries
     -- shaped like a key are touched; typed text never is.
-    if not query:find("%s") and (query:find("%l%u") or query:find("%.")) then
+    if not query:find("%s") and ((query:find("^[a-z]") and query:find("%l%u")) or query:find("%.")) then
         local stripped = query:gsub("^[%w_]+%.", "")
         if stripped ~= "" then query = stripped end
         query = query:gsub("(%l)(%u)", "%1 %2")

@@ -629,6 +629,8 @@ end
 
 local function ApplyGroupBlockRoundedBorder(host, conf, enabled)
   if not host then return false end
+  host._msufCoreScope = "group"
+  host._msufRUFDirectionConfig = conf
   local requested = conf and conf.frameBarShape
   host._msufRUFForcedStyle = requested == "SLANTED" and (Kit.SlantedScopeEnabled(true) and "SLANTED"
     or ReadRoundedBool("roundedFramesEnabled", false) and ReadRoundedBool("roundedGroupFrames", true) and "ROUNDED" or "SQUARE")
@@ -657,6 +659,7 @@ local function ApplyGroupBlockRoundedBorder(host, conf, enabled)
   -- scope's shape with it, or the replay resolves a ROUNDED or SLANTED scope
   -- under global Rounded off to SQUARE and removes the border it just drew.
   state.frameBarShape = requested
+  state.slantedBarDirection = conf and conf.slantedBarDirection
   state.size = ClampEdgeSize(conf.groupBorderSize or conf.size, 1, 16)
   state.pad = tonumber(conf.groupBorderPadding or conf.pad) or 2
   state.r, state.g, state.b, state.a = conf.groupBorderR or conf.r or 0.38,

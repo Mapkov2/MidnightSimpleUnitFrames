@@ -54,6 +54,10 @@ local SLANTED_DIRECTION_VALUES = VT(
     "RIGHT_DOWN", "Right edge: lower corner", "RIGHT_UP", "Right edge: upper corner",
     "LEFT_DOWN", "Left edge: lower corner", "LEFT_UP", "Left edge: upper corner",
     "BOTH_DOWN", "Both edges: lower corners", "BOTH_UP", "Both edges: upper corners")
+local SLANTED_SCOPED_DIRECTION_VALUES = VT("DEFAULT", "Use shared style")
+for i = 1, #SLANTED_DIRECTION_VALUES do
+    SLANTED_SCOPED_DIRECTION_VALUES[#SLANTED_SCOPED_DIRECTION_VALUES + 1] = SLANTED_DIRECTION_VALUES[i]
+end
 local ROUNDED_PREVIEW_CARD_HEIGHT = 92
 local GRADIENT_DIR_KEYS, PRIORITY_LABELS = GP.GRADIENT_DIR_KEYS or {}, GP.PRIORITY_LABELS or {}
 local DISPEL_TRIGGERS = VT("BY_ME", "Dispellable by me", "BY_RAID", "Dispellable by group",
@@ -99,6 +103,10 @@ local BAR_ACTION_BY_PATH = {
     ["scope.overrides.reset"] = "reset_all_scoped_global_bars_overrides",
 }
 local BAR_DYNAMIC_SETTING_KEYS_BY_PATH = {
+    ["slanted.direction"] = { "bars.slantedBarDirection", "player.slantedBarDirection", "target.slantedBarDirection",
+        "targettarget.slantedBarDirection", "focus.slantedBarDirection", "focustarget.slantedBarDirection",
+        "pet.slantedBarDirection", "pettarget.slantedBarDirection", "boss.slantedBarDirection", "arena.slantedBarDirection",
+        "gf_party.slantedBarDirection", "gf_raid.slantedBarDirection", "gf_mythicraid.slantedBarDirection" },
     ["textures.foreground"] = { "general.barTexture" },
     ["textures.background"] = { "general.barBackgroundTexture" },
     ["gradient.enableGradient"] = { "general.enableGradient" },
@@ -245,6 +253,9 @@ local function Meta(path, classification, exact)
     end
     resolved.settingKey = resolved.settingKey or BAR_SETTING_BY_PATH[path]
     resolved.actionKey = resolved.actionKey or BAR_ACTION_BY_PATH[path]
+    if path == "slanted.direction" then
+        resolved.searchSettingKeys = BAR_DYNAMIC_SETTING_KEYS_BY_PATH[path]
+    end
     local kind = classification or "setting"
     if (kind == "setting" or kind == "action") and not resolved.settingKey and not resolved.actionKey
         and IsDynamicBarPath(path)
@@ -854,6 +865,13 @@ local function SetBarBackgroundTextureForScope(value)
     return changed
 end
 local function BuildScopeSection(ctx, b)
+    local function HasScopedSlantedDirection(scope)
+        -- Selector values are already canonical; keep its badge refresh allocation-free.
+        local conf = DB()[scope]
+        local value = conf and conf.slantedBarDirection
+        return value == "RIGHT_DOWN" or value == "RIGHT_UP" or value == "LEFT_DOWN"
+            or value == "LEFT_UP" or value == "BOTH_DOWN" or value == "BOTH_UP"
+    end
     local scopeValues = GP.SCOPE_VALUES
     local function RefreshBarsPage(reason)
         M.RequestRefresh(ctx, reason)
@@ -871,7 +889,7 @@ local function BuildScopeSection(ctx, b)
             RefreshBarsPage("bars-scope-change")
         end,
         hasOverride = function(value)
-            return value ~= "shared" and ScopeHasOverride(value, "hlOverride")
+            return value ~= "shared" and (ScopeHasOverride(value, "hlOverride") or HasScopedSlantedDirection(value))
         end,
         getOverride = function()
             local key = CurrentBarsScope()
@@ -890,12 +908,23 @@ local function BuildScopeSection(ctx, b)
             RefreshBarsPage("bars-scope-override")
         end,
         reset = function()
+            local resetDirections = false
             for i = 1, #scopeValues do
                 local key = scopeValues[i].value
-                if key ~= "shared" then ScopeSetOverride(key, "hlOverride", false) end
+                if key ~= "shared" then
+                    ScopeSetOverride(key, "hlOverride", false)
+                    local keys, db = ScopeDBKeys(key), DB()
+                    for j = 1, #(keys or {}) do
+                        local entry = db[keys[j]]
+                        if entry and entry.slantedBarDirection ~= nil then
+                            entry.slantedBarDirection = nil
+                            resetDirections = true
+                        end
+                    end
+                end
             end
             M.RequestGeneralApply("MSUF2_BARS_RESET_OVERRIDES", {
-                preview = true, applyAll = false, bars = true, barOutline = true, barsScope = "shared",
+                preview = true, applyAll = false, bars = true, barOutline = true, roundedBars = resetDirections, barsScope = "shared",
             })
             RefreshBarsPage("bars-reset-overrides")
         end,
@@ -903,6 +932,8 @@ local function BuildScopeSection(ctx, b)
         updateHint = function(hint, current, active, shared)
             if shared then
                 hint:SetText("Textures are shared except Party/Raid group-frame overrides. Gradients can be customized per unit or group scope.")
+            elseif HasScopedSlantedDirection(current) then
+                hint:SetText("This scope uses its own slanted cut direction. Other bar settings follow the custom-settings switch.")
             elseif IsGFScope(current) and ScopeHasOverride(current, "hlOverride") then
                 hint:SetText("This group scope can use custom textures and gradients. Raid also applies to Mythic Raid.")
             elseif ScopeHasOverride(current, "hlOverride") then
@@ -917,7 +948,7 @@ local function BuildScopeSection(ctx, b)
             "Gives this unit or group its own gradient, absorb, outline and highlight settings instead of following Shared. Turning it off keeps your custom values.",
             { hook = true, labelHit = true })
         M.AddTooltip(scopeUI.reset, "Reset",
-            "Turns off custom settings on every unit and group scope at once, so all frames follow Shared again. Their custom values stay saved.", { hook = true })
+            "Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved.", { hook = true })
     end
 end
 
@@ -1807,7 +1838,7 @@ local function CreateSlantedBarPreview(section, width)
         local powerOn = ReadB("slantedPowerBars", true) ~= false
         local resolve = helpers.ResolveFrameBarMedia
         if type(resolve) ~= "function" then return end
-        local maskPath, edgePath = resolve("SLANTED")
+        local maskPath, edgePath = resolve("SLANTED", CurrentBarsScope())
         for i = 1, #masked do
             local entry = masked[i]
             if powerOn or (entry.key ~= "power" and entry.key ~= "powerBg") then
@@ -1827,6 +1858,44 @@ local function CreateSlantedBarPreview(section, width)
     return card
 end
 
+local function SlantedDirectionForScope()
+    local keys = ScopeDBKeys(CurrentBarsScope())
+    local value = keys and DB()[keys[1]] and DB()[keys[1]].slantedBarDirection
+        or (not keys and Bars().slantedBarDirection)
+    for i = 1, #SLANTED_DIRECTION_VALUES do
+        if SLANTED_DIRECTION_VALUES[i].value == value then return value end
+    end
+    return keys and "DEFAULT" or "RIGHT_DOWN"
+end
+local function SetSlantedDirectionForScope(value)
+    local keys = ScopeDBKeys(CurrentBarsScope())
+    local allowed = keys and value == "DEFAULT"
+    for i = 1, #SLANTED_DIRECTION_VALUES do
+        if SLANTED_DIRECTION_VALUES[i].value == value then
+            allowed = true
+            break
+        end
+    end
+    if not allowed then return false end
+    if value == "DEFAULT" then value = nil end
+    if not keys then
+        if Bars().slantedBarDirection == value then return false end
+        Bars().slantedBarDirection = value
+        return true
+    end
+    local db, changed = DB(), false
+    for i = 1, #keys do
+        local entry = db[keys[i]]
+        if not entry and value ~= nil then
+            entry = {}
+            db[keys[i]] = entry
+        end
+        if entry and entry.slantedBarDirection ~= value then
+            entry.slantedBarDirection, changed = value, true
+        end
+    end
+    return changed
+end
 local function BuildSlantedSection(ctx, b)
     local section = b:CollapsibleSection("bars_slanted", "Slanted Bars", 480, true)
     local width = (section and section._msuf2Width) or b.width or 720
@@ -1912,21 +1981,15 @@ local function BuildSlantedSection(ctx, b)
         end
         dependent[#dependent + 1] = control
     end
-    local direction = W.Dropdown(section, "Cut direction", SLANTED_DIRECTION_VALUES, min(340, width - 60))
+    local direction = W.Dropdown(section, "Cut direction", function()
+        return CurrentBarsScope() == "shared" and SLANTED_DIRECTION_VALUES or SLANTED_SCOPED_DIRECTION_VALUES
+    end, min(340, width - 60))
     M.BindDropdownWidget(ctx, direction,
-        function() return Bars().slantedBarDirection or "RIGHT_DOWN" end,
+        SlantedDirectionForScope,
         function(value)
-            local allowed = false
-            for i = 1, #SLANTED_DIRECTION_VALUES do
-                if SLANTED_DIRECTION_VALUES[i].value == value then
-                    allowed = true
-                    break
-                end
-            end
-            if not allowed or Bars().slantedBarDirection == value then return end
-            Bars().slantedBarDirection = value
+            if not SetSlantedDirectionForScope(value) then return end
             if preview and preview.RefreshSlantedPreview then preview:RefreshSlantedPreview() end
-            _G.MSUF_ApplyRoundedUnitframes()
+            ApplyRoundedRuntime()
             if M.RequestRefresh then M.RequestRefresh(ctx, "slanted-bar-direction") end
         end,
         Meta("slanted.direction"))
@@ -1935,7 +1998,7 @@ local function BuildSlantedSection(ctx, b)
         M.RegisterSearchWidget(direction, {
             label = "Cut direction", kind = "dropdown",
             keywords = { "slanted", "diagonal", "left", "right", "both", "schraege", "richtung" },
-            help = "Selects which side and corner of slanted Health and Power bars is cut.",
+            help = "Choose the cut direction for the selected scope. Use shared style follows the shared direction.",
         })
     end
     local preset = W.Button(section, "Apply slanted bars to all frames", 280)

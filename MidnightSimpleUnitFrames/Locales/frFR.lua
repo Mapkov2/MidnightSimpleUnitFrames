@@ -6934,6 +6934,15 @@ L["Type a value"] = "Saisir une valeur"
 L["Undo / redo"] = "Annuler / Rétablir"
 L["Find a setting"] = "Chercher un réglage"
 L["A newer version (%s) is available! You have %s — please update."] = "Une version plus récente (%s) est disponible ! Vous avez %s — veuillez mettre à jour."
+L["Choose the cut direction for the selected scope. Use shared style follows the shared direction."] = "Choisissez la direction de coupe pour la portée sélectionnée. Utiliser le style partagé reprend la direction partagée."
+
+L["This scope uses its own slanted cut direction. Other bar settings follow the custom-settings switch."] = "Cette portée utilise sa propre direction de coupe. Les autres réglages des barres suivent le bouton des réglages personnalisés."
+L["Resets all scoped slanted directions to Shared and turns off custom bar settings for every unit and group. Other custom values stay saved."] = "Rétablit la direction de coupe partagée pour toutes les portées et désactive les réglages personnalisés des barres. Les autres valeurs personnalisées restent enregistrées."
+
+L["Suite colors are in the sections below.\nOpen the Minimap preview to position its elements."] = "Les couleurs de Suite se trouvent dans les sections ci-dessous.\nOuvrez l’aperçu de la minicarte pour positionner ses éléments."
+
+L["Arena Preview"] = "Aperçu d’arène"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

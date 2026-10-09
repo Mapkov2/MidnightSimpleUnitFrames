@@ -318,6 +318,7 @@ for _, scope in ipairs({ "player", "target", "targettarget", "focus", "focustarg
     "arena", "gf_party", "gf_raid", "gf_mythicraid" }) do
     local paths = PAGE_OWNED[3][2]
     paths[#paths + 1] = scope .. ".frameBarShape"
+    paths[#paths + 1] = scope .. ".slantedBarDirection"
 end
 local covered = 0
 for _, row in ipairs(PAGE_OWNED) do

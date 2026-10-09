@@ -294,6 +294,7 @@ local function PaintGroupBlockBorder(mock, conf, previewScale, ScaleValue)
     local a = tonumber(conf.groupBorderA) or 0.95
     local roundedConf = mock._msufGroupBlockRoundedConf or {}
     mock._msufGroupBlockRoundedConf = roundedConf
+    roundedConf.frameBarShape, roundedConf.slantedBarDirection = conf.frameBarShape, conf.slantedBarDirection
     roundedConf.groupBorderSize, roundedConf.groupBorderPadding = size, pad
     roundedConf.groupBorderR, roundedConf.groupBorderG = r, g
     roundedConf.groupBorderB, roundedConf.groupBorderA = b, a

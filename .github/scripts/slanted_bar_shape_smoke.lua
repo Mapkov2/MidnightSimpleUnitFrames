@@ -9,6 +9,7 @@ local declarations = {
     "local function RoundedPowerBarsEnabled",
     "local function FrameIsGroup",
     "local function SlantedScopeEnabled",
+    "local function FrameConfig",
     "ResolveFrameStyle = function",
     "local function RoundedFrameEnabled",
     "local function SlantedDirection",
@@ -144,6 +145,7 @@ local helpersPath = "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Pre
 local helpersSource = Slice.Read(helpersPath)
 local mediaFunction = Slice.Function(helpersSource, "function H.ResolveFrameBarMedia", helpersPath)
 local mediaHarness = [[
+local MSUF = ...
 local H = { ResolveRoundedMedia = function() return "rounded-mask", "rounded-edge", 3 end }
 local SLANTED_MASK_PATHS = {
     RIGHT_DOWN = "slanted-mask", RIGHT_UP = "slanted-mask-right-up",
@@ -156,7 +158,12 @@ local SLANTED_EDGE_PATHS = {
     BOTH_DOWN = "slanted-edge-both-down", BOTH_UP = "slanted-edge-both-up",
 }
 ]] .. mediaFunction .. "\nreturn H.ResolveFrameBarMedia"
-local previewMedia = assert(compile(mediaHarness))()
+local previewMedia = assert(compile(mediaHarness))({ RoundedSurface = {
+    ResolveSlantedMedia = function(scope, conf)
+        local f = { configKey = scope, _msufRUFDirectionConfig = conf, _msufRUFForcedStyle = "SLANTED" }
+        return mask(f), edge(f), 0
+    end,
+} })
 for _, direction in ipairs({ "RIGHT_DOWN", "RIGHT_UP", "LEFT_DOWN", "LEFT_UP", "BOTH_DOWN", "BOTH_UP" }) do
     _G.MSUF_DB.bars.slantedBarDirection = direction
     assert(previewMedia("SLANTED") == mask(player), "preview/runtime mask mismatch: " .. direction)
@@ -269,6 +276,8 @@ local switchOn = Slice.Function(menuSource, "local function SlantedSwitchOn", me
 local applyCount = 0
 local oldApply = _G.MSUF_ApplyRoundedUnitframes
 _G.MSUF_ApplyRoundedUnitframes = function() applyCount = applyCount + 1 end
+local directionGet = Slice.Function(menuSource, "local function SlantedDirectionForScope", menuPath)
+local directionSet = Slice.Function(menuSource, "local function SetSlantedDirectionForScope", menuPath)
 local presetHarness = [[
 local db = { player = { healthColorMode = "class" }, gf_party = { portraitMode = "LEFT" } }
 local presetButton, historySource, refreshCount, directionSetter, previewCount, switchGet, switchSet
@@ -319,6 +328,9 @@ local W = {
     MoveWidget = function() end,
 }
 local T = { colors = { muted = {} } }
+local function CurrentBarsScope() return "shared" end
+local function ScopeDBKeys() end
+local function ApplyRoundedRuntime() _G.MSUF_ApplyRoundedUnitframes() end
 local function DB() return db end
 local function Bars() db.bars = db.bars or {}; return db.bars end
 local function ReadB(key, fallback)
@@ -330,7 +342,7 @@ local function CreateSlantedBarPreview() return { RefreshSlantedPreview = functi
 local function min(a, b) return math.min(a, b) end
 local function Meta(path) return { path = path } end
 local function RegisterControl() end
-]] .. selectedStyles .. "\n" .. switchOn .. "\n" .. buildPreset .. [[
+]] .. selectedStyles .. "\n" .. switchOn .. "\n" .. directionGet .. "\n" .. directionSet .. "\n" .. buildPreset .. [[
 return BuildSlantedSection, function()
     return presetButton, historySource, refreshCount, directionSetter, previewCount, switchGet, switchSet, scopeControls
 end, db
