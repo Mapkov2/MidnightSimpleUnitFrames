@@ -8,12 +8,66 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "C6A0A337CC1538661A620401D06B7189FDCBACB835F8F5206ACE58848269C3CE",
-    currentVersion = "6.5-beta18",
-    historyFromVersion = "6.5-beta15",
-    previousVersion = "6.5-beta17",
-    rangeLabel = "6.5-beta17 -> 6.5-beta18",
+    sourceSha256 = "F446171AAD9806773ED97BAB1C997507F9C8B9C95725E332794FF834F60B803C",
+    currentVersion = "6.5-beta19",
+    historyFromVersion = "6.5-beta16",
+    previousVersion = "6.5-beta18",
+    rangeLabel = "6.5-beta18 -> 6.5-beta19",
     entries = {
+        {
+            version = "6.5-beta19",
+            date = "2026-10-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Slanted bars take a cut direction per frame. Each unit, group and castbar scope can follow the shared direction or use its own, and the menu previews show the chosen cut. Set it under Bars > Slanted > Cut direction.",
+                            link = {
+                                pageKey = "opt_bars",
+                                query = "cut direction",
+                                label = "Cut direction",
+                                sectionId = "bars_slanted",
+                                controlId = "menu2.opt.bars.global.slanted.direction",
+                                settingKey = "bars.slantedBarDirection",
+                            },
+                        },
+                        {
+                            text = "Interrupt readiness tracks Demonology's Axe Toss again. Spells of another specialization no longer count as a ready interrupt.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "show on target castbar",
+                                label = "Show on Target castbar",
+                                sectionId = "castbar_interrupt_ready",
+                                controlId = "menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target",
+                                settingKey = "general.kickReadyShowTarget",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Menu search understands natural task phrasing in English and German, such as \"make my target health numbers bigger\".",
+                        "Corner indicators set to Show when missing work on Classic clients; Retail and WoW Forever show why the choice is unavailable there.",
+                        "Blizzard Damage Meter appearance changes made in MSUF Edit Mode apply after a UI reload; width and height still apply at once.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Handing the player castbar back to Blizzard and changing Damage Meter settings no longer leave Blizzard frames tainted.",
+                        "Entering combat with the Boss or Arena page open restores the real boss and arena auras.",
+                        "Power text with maximum values and frame transparency stay error-free when the client hides those values.",
+                        "The Combat Timer starts on the first second of combat, and profile switches keep aura tooltip options that MSUF did not set.",
+                        "Castbar glow stays inside rounded and slanted castbars; the aura Name Overlay follows unit changes.",
+                        "Party and Raid bar textures follow the Bars page after Copy To, and the Basics reset also clears an old frame shape.",
+                        "WoW Forever's Gamepad UI no longer opens a hidden buff bar; Classic Era no longer offers a Focus anchor for the Combat Timer.",
+                        "Guided Setup hints, aura filter labels and several terms are translated correctly in every language.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta18",
             date = "2026-10-09",
@@ -139,47 +193,6 @@ local data = {
                         "Group layouts retain space and role ordering for members joining during combat. Housing visibility, extra-block names and dead/offline backgrounds refresh consistently.",
                         "Resource marks use the range of their displayed resource. Profile names remain as typed, and Copy To retains supported font, texture, gradient and status settings.",
                         "Corrected exact-search targets, preview lifecycle behavior, menu spacing and translations across all supported locales.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.5-beta15",
-            date = "2026-10-03",
-            sections = {
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Aura icons no longer show the border baked into Blizzard's icon artwork (#159). Runtime icons, reminders and menu/Edit Mode previews share the same minimum crop while retaining stronger configured zoom.",
-                        "Classic aura lanes honor all nine anchors, the menu's layer range and Player-first sorting. Combat-only filters refresh at the combat transition, AUTO dispel symbols follow the frame's strata, and Pet overrides apply to Pet settings.",
-                        "Custom auras compile on supported Classic arena frames. Edit Mode keeps click forwarding on Classic aura lanes and avoids rewiring sealed native aura buttons.",
-                        "Group frames defer layout changes at combat entry and return previewed groups to their live headers. Newly created group and pet buttons retain their click handling and pixel alignment in combat.",
-                        "Healer mana rows and allied boss frames repaint when a unit token changes hands. Group filters, class-priority identity reads and saved negative-heal-absorb overrides remain consistent across layouts and logins.",
-                        "The Raid Manager retains its expanded state when settings are reapplied; Hidden mode leaves its toggles click-through.",
-                        "Arena castbars honor Show icon, Spell name and Cast time settings and use the corrected time-text offset in runtime and previews. Castbar movers follow the bar after it moves, and font refreshes retain cast-target class colors.",
-                        "Interrupt feedback follows the displayed cast, including late interrupt events. Restricted cast, duration, swing, aura, health and power values follow the supported native formatting and rendering paths without Lua comparisons.",
-                        "Class Resource settings apply after saved profiles load and stay synchronized with profile variants and page resets. Growing resource maxima trigger the required layout refresh; relayouts, Stagger colors, Ironfur and aura-count visibility repaint correctly.",
-                        "Mists Burning Embers use the unmodified resource maximum, and Affliction shards use the supported spell gate. Eclipse respects its text mode and drops auras that end early. On Midnight, Affliction/Demonology shard prediction receives cast events.",
-                        "Alternative Mana returns after Edit Mode, Player Power regains its color after Eclipse, and disabling the secondary Player HP module hides its bar. AFK timers resume after combat; death state also updates on direct health ticks.",
-                        "Rounded borders and masks retain their selected shape. Inline target-of-target text follows the name's visible glyph edge, and protected prediction values retain their over-absorb glow.",
-                        "/msuf reset restores factory frame sizes, positions, layout and text visibility, and /msuf profile <name> saves the current settings. Profile imports preserve dispel-migration stamps, variants retain removed resource-extra keys, and oversized compressed imports are rejected before inflation.",
-                        "New and reset Forever profiles leave global UI scaling disabled, matching the other clients. Explicitly enabled scaling in existing profiles is retained, including settings made immediately after a reset.",
-                        "Native managed cast and class-resource bars keep Blizzard's lifecycle handling while MSUF conceals their visuals. Totem takeover restores only the frame-position flag owned by MSUF.",
-                        "Options, aura workspaces and search results reuse their existing page state instead of repeatedly creating page trees. Configuration and focus-preview keyboard input stop at combat entry; Edit Mode history commits defer safely through that transition.",
-                    },
-                },
-                {
-                    title = "Changes",
-                    bullets = {
-                        "Aura containers are reused after retirement. Class Resource thresholds share one resource read, Mists rune types refresh on their native event, and affected aura-resource and cast-expiry paths avoid per-event closures.",
-                        "Updated translations for menu and Edit Mode labels, history, prompts, status text, tooltips and chat messages across all twelve supported locales.",
-                        "This package contains the core and Options addons. The retired in-game Assistant is no longer shipped; when updating manually, remove any old MidnightSimpleUnitFrames_Assistant folder from Interface/AddOns.",
-                    },
-                },
-                {
-                    title = "Compatibility",
-                    bullets = {
-                        "Recognizes the marker-qualified Forever client in build 70170, including its dedicated project identifier. Unknown clients continue to use the guarded fallback.",
                     },
                 },
             },

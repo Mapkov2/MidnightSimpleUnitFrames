@@ -1,5 +1,31 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.5-beta19 - 2026-10-09
+
+### Highlights
+
+- **Slanted bars take a cut direction per frame.** Each unit, group and castbar scope can follow the shared direction or use its own, and the menu previews show the chosen cut. Set it under Bars > Slanted > Cut direction.
+<!-- msuf-menu-link: {"pageKey":"opt_bars","sectionId":"bars_slanted","controlId":"menu2.opt.bars.global.slanted.direction","settingKey":"bars.slantedBarDirection","prepareKind":"","prepareValue":"","query":"cut direction","label":"Cut direction"} -->
+- **Interrupt readiness tracks Demonology's Axe Toss again.** Spells of another specialization no longer count as a ready interrupt.
+<!-- msuf-menu-link: {"pageKey":"opt_castbar","sectionId":"castbar_interrupt_ready","controlId":"menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target","settingKey":"general.kickReadyShowTarget","prepareKind":"","prepareValue":"","query":"show on target castbar","label":"Show on Target castbar"} -->
+
+### Changes
+
+- Menu search understands natural task phrasing in English and German, such as "make my target health numbers bigger".
+- Corner indicators set to Show when missing work on Classic clients; Retail and WoW Forever show why the choice is unavailable there.
+- Blizzard Damage Meter appearance changes made in MSUF Edit Mode apply after a UI reload; width and height still apply at once.
+
+### Fixes
+
+- Handing the player castbar back to Blizzard and changing Damage Meter settings no longer leave Blizzard frames tainted.
+- Entering combat with the Boss or Arena page open restores the real boss and arena auras.
+- Power text with maximum values and frame transparency stay error-free when the client hides those values.
+- The Combat Timer starts on the first second of combat, and profile switches keep aura tooltip options that MSUF did not set.
+- Castbar glow stays inside rounded and slanted castbars; the aura Name Overlay follows unit changes.
+- Party and Raid bar textures follow the Bars page after Copy To, and the Basics reset also clears an old frame shape.
+- WoW Forever's Gamepad UI no longer opens a hidden buff bar; Classic Era no longer offers a Focus anchor for the Combat Timer.
+- Guided Setup hints, aura filter labels and several terms are translated correctly in every language.
+
 ## 6.5-beta18 - 2026-10-09
 
 ### Highlights

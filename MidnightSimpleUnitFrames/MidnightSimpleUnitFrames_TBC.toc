@@ -3,7 +3,7 @@
 ## Notes: TBC Classic client support.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.5-beta18
+## Version: 6.5-beta19
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: LibSharedMedia-3.0, Clique, WagoAnalytics, MapkoSkin

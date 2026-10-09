@@ -8,12 +8,66 @@ local ExportPublic = ns.ExportPublic or function(name, value)
 end
 
 local data = {
-    sourceSha256 = "C6A0A337CC1538661A620401D06B7189FDCBACB835F8F5206ACE58848269C3CE",
-    currentVersion = "6.5-beta18",
+    sourceSha256 = "F446171AAD9806773ED97BAB1C997507F9C8B9C95725E332794FF834F60B803C",
+    currentVersion = "6.5-beta19",
     historyFromVersion = "6.02",
-    previousVersion = "6.5-beta17",
-    rangeLabel = "6.5-beta17 -> 6.5-beta18",
+    previousVersion = "6.5-beta18",
+    rangeLabel = "6.5-beta18 -> 6.5-beta19",
     entries = {
+        {
+            version = "6.5-beta19",
+            date = "2026-10-09",
+            sections = {
+                {
+                    title = "Highlights",
+                    bullets = {
+                        {
+                            text = "Slanted bars take a cut direction per frame. Each unit, group and castbar scope can follow the shared direction or use its own, and the menu previews show the chosen cut. Set it under Bars > Slanted > Cut direction.",
+                            link = {
+                                pageKey = "opt_bars",
+                                query = "cut direction",
+                                label = "Cut direction",
+                                sectionId = "bars_slanted",
+                                controlId = "menu2.opt.bars.global.slanted.direction",
+                                settingKey = "bars.slantedBarDirection",
+                            },
+                        },
+                        {
+                            text = "Interrupt readiness tracks Demonology's Axe Toss again. Spells of another specialization no longer count as a ready interrupt.",
+                            link = {
+                                pageKey = "opt_castbar",
+                                query = "show on target castbar",
+                                label = "Show on Target castbar",
+                                sectionId = "castbar_interrupt_ready",
+                                controlId = "menu2.opt.castbar.global.interrupt.ready.kick.ready.show.target",
+                                settingKey = "general.kickReadyShowTarget",
+                            },
+                        },
+                    },
+                },
+                {
+                    title = "Changes",
+                    bullets = {
+                        "Menu search understands natural task phrasing in English and German, such as \"make my target health numbers bigger\".",
+                        "Corner indicators set to Show when missing work on Classic clients; Retail and WoW Forever show why the choice is unavailable there.",
+                        "Blizzard Damage Meter appearance changes made in MSUF Edit Mode apply after a UI reload; width and height still apply at once.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Handing the player castbar back to Blizzard and changing Damage Meter settings no longer leave Blizzard frames tainted.",
+                        "Entering combat with the Boss or Arena page open restores the real boss and arena auras.",
+                        "Power text with maximum values and frame transparency stay error-free when the client hides those values.",
+                        "The Combat Timer starts on the first second of combat, and profile switches keep aura tooltip options that MSUF did not set.",
+                        "Castbar glow stays inside rounded and slanted castbars; the aura Name Overlay follows unit changes.",
+                        "Party and Raid bar textures follow the Bars page after Copy To, and the Basics reset also clears an old frame shape.",
+                        "WoW Forever's Gamepad UI no longer opens a hidden buff bar; Classic Era no longer offers a Focus anchor for the Combat Timer.",
+                        "Guided Setup hints, aura filter labels and several terms are translated correctly in every language.",
+                    },
+                },
+            },
+        },
         {
             version = "6.5-beta18",
             date = "2026-10-09",
