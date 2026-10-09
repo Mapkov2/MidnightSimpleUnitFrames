@@ -412,6 +412,19 @@
    "evidence": "MidnightSimpleUnitFrames/Kernel/MSUF_BlizzardFrames.lua: DisableBlizzardFrames has native player/pet/target/targettarget/focus/focustarget/boss/arena owners and no Pet Target owner. MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitSections.lua keeps the Pet Target switch disabled with the no-native-frame explanation and blocks its setter; MSUF_OptionsLOD_Bootstrap.lua: SupportsSearchTarget excludes only pettarget.useBlizzardFrame.",
    "reason": "Hide the search setting and row for the unavailable native Blizzard Pet Target frame. The MSUF Pet Target page, frame and portable saved field remain unchanged.",
    "date": "2026-10-08"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: classpower | Extras > Marks | Add resource mark | button | no key | advanced.resource.extras.marks.add",
+    "classic: classpower | Extras > Marks | Remove resource mark | button | no key | advanced.resource.extras.marks.remove",
+    "main: classpower | Extras > Marks | Add resource mark | button | no key | advanced.resource.extras.marks.add",
+    "main: classpower | Extras > Marks | Remove resource mark | button | no key | advanced.resource.extras.marks.remove"
+   ],
+   "basis": "moved",
+   "evidence": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtras.lua Button(): Meta(path, \"resourceMarks\", \"action\"); the same rows are now listed with key bars.resourceMarks",
+   "reason": "Re-keyed, not removed: the Add and Remove resource mark buttons now publish bars.resourceMarks, the list they write, so release notes can link them; page, section, label, control id and behavior are unchanged.",
+   "date": "2026-10-10"
   }
  ]
 }
