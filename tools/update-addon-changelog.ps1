@@ -380,7 +380,11 @@ if ($versionKey -ne "") {
 
 $selected = @()
 for ($i = $startIndex; $i -lt $releases.Count -and $selected.Count -lt $ReleaseCount; $i++) {
-    $selected += $releases[$i]
+    # Keep the requested release, including a current beta, while older history
+    # contains stable releases only. Archived prerelease notes stay in Markdown.
+    if ($i -eq $startIndex -or (Normalize-VersionKey $releases[$i].version) -match '^\d+(?:x\d+)*$') {
+        $selected += $releases[$i]
+    }
 }
 
 if ($RequireCurrentHighlightLinks) {
@@ -541,7 +545,11 @@ if (-not [string]::IsNullOrWhiteSpace($effectiveFullOutputPath)) {
         }
     }
     $allSelected = @()
-    for ($i = $startIndex; $i -le $fullEndIndex; $i++) { $allSelected += $releases[$i] }
+    for ($i = $startIndex; $i -le $fullEndIndex; $i++) {
+        if ($i -eq $startIndex -or (Normalize-VersionKey $releases[$i].version) -match '^\d+(?:x\d+)*$') {
+            $allSelected += $releases[$i]
+        }
+    }
     Write-ChangelogLua -Entries $allSelected -DestinationPath $fullOutput -PublicName "MSUF_FullChangelog" `
         -PreviousVersionOverride $PreviousVersion
 }

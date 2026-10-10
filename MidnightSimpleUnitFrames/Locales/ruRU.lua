@@ -6030,7 +6030,6 @@ L["Dragon vertical shift"] = "Сдвиг дракона по вертикали"
 L["Dragon draw order"] = "Порядок отрисовки дракона"
 L["Dragon level above portrait"] = "Уровень дракона над портретом"
 L["Flip dragon left to right"] = "Отразить дракона слева направо"
-L["Color dragon by unit class"] = "Окрашивать дракона в цвет класса юнита"
 L["Keep enemy dragons in instances"] = "Оставлять вражеских драконов в подземельях"
 L["Darkens the inner edges of square portraits."] = "Затемняет внутренние края квадратных портретов."
 L["Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring."] = "Помещает дракона перед изображением или за изображением на общей с ним рамке: на уровне 0 это изображение портрета, на уровне 1 — золотое кольцо. Начиная с уровня 2 у дракона своя рамка над кольцом."
@@ -6945,6 +6944,9 @@ L["PvP Trinket"] = "PvP-аксессуар"
 L["Trinket"] = "Аксессуар"
 L["Show PvP trinket"] = "Показывать PvP-аксессуар"
 L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "Показывает PvP-аксессуар каждого противника и его восстановление рядом с фреймом арены. Предпросмотр фреймов арены на этой странице и режим редактирования тоже его показывают."
+
+L["Always show dragon artwork"] = "Всегда показывать декоративного дракона"
+L["Always displays the gold dragon as decoration, independent of the unit's classification."] = "Всегда показывает золотого дракона как украшение независимо от классификации существа."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)

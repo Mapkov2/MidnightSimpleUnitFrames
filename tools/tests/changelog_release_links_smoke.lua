@@ -61,6 +61,9 @@ local ABSENT = {
         { Forever = true, Vanilla = true, TBC = true, Mists = true },
     ["classpower menu2.classpower.advanced.resource.extras.arcane.window.text"] =
         { Forever = true, Vanilla = true, TBC = true, Mists = true },
+    ["classpower menu2.classpower.advanced.behavior.sweeping"] =
+        { Forever = true, Vanilla = true, TBC = true, Mists = true },
+    ["uf_boss menu2.uf_boss.unit.boss_target_highlight.style"] = { Vanilla = true, TBC = true },
     -- Aura tooltip caster names: the native Mainline tooltip option.
     ["opt_misc menu2.opt.misc.global.setting.tooltip.show.aura.caster.names"] = { Vanilla = true, TBC = true, Mists = true },
     -- GCD bar: WoW Forever arms it only while its spell data has the GCD spell
@@ -91,10 +94,38 @@ end
 local mw = MenuWorld.Open(root, flavor, { locale = "enUS", beforeCore = function(world)
     local spell = world.env.C_Spell
     world.env.C_Spell = setmetatable({ GetSpellCooldownDuration = function() return nil end }, { __index = spell })
+    -- Native visibility includes hidden ancestors. The shared widget fixture
+    -- checks only the widget itself, masking warm Colors category navigation.
+    world.widgets.Methods.IsVisible = function(frame)
+        while frame do
+            if frame.IsShown and not frame:IsShown() then return false end
+            frame = frame.GetParent and frame:GetParent()
+        end
+        return true
+    end
 end })
 local M, env = mw.M, mw.env
 env.InCombatLockdown = function() return false end
 env.UnitAffectingCombat = function() return false end
+
+-- Both bundled views show stable release history, including the last Retail
+-- releases before Classic 6.50. Keep the current release visible on beta builds.
+for _, data in ipairs({ env.MSUF_Changelog, env.MSUF_FullChangelog }) do
+    local versions = {}
+    for i, release in ipairs(data.entries) do
+        Check(not versions[release.version], "duplicate historical release " .. release.version)
+        versions[release.version] = i
+        Check(i == 1 or release.version:match("^%d[%d%.]*$"), "prerelease in visible history: " .. release.version)
+        if release.version == "6.20" then Check(release.date == "2026-09-11", "6.20 release date changed") end
+        if release.version == "6.21" then Check(release.date == "2026-09-22", "6.21 release date changed") end
+    end
+    if data == env.MSUF_FullChangelog then
+        Check(versions["6.20"] and versions["6.21"] and versions["6.21"] < versions["6.20"],
+            "stable 6.21 and 6.20 patch notes missing or out of order")
+    end
+end
+local fullEntries = env.MSUF_FullChangelog.entries
+Check(fullEntries[#fullEntries].version == "6.02", "full history floor changed")
 
 -- The search index this client loads, parsed like the release packager does.
 local INDEX = {}
@@ -129,9 +160,106 @@ local function StaticProblem(link)
     if kind ~= "" then
         if not ("," .. row.kinds .. ","):find("," .. kind .. ",", 1, true) then return "prepare kind " .. kind .. " not published" end
         local contract = kind .. "=" .. tostring(link.prepareValue) .. "=" .. link.settingKey
-        if not ("|" .. row.contracts .. "|"):find("|" .. contract .. "|", 1, true) then return "contract " .. contract .. " not published" end
+        local contracts = "|" .. row.contracts .. "|"
+        local wildcard = "|" .. kind .. "=" .. tostring(link.prepareValue) .. "=*|"
+        if not contracts:find("|" .. contract .. "|", 1, true)
+            and not (row.setting == link.settingKey and contracts:find(wildcard, 1, true)) then
+            return "contract " .. contract .. " not published"
+        end
     end
 end
+
+-- Resource links must select their owning workspace, even when another resource
+-- was selected. A successful exact-control lookup alone also accepts hidden views.
+local RESOURCE_VIEWS = {
+    classpower_display = "class", classpower_behavior = "class", classpower_visuals = "class", classpower_visibility = "class",
+    classpower_detached_power = "power", classpower_resource_marks = "extras",
+    classpower_resource_extras = "extras", classpower_resource_pain = "extras", classpower_resource_arcane = "extras",
+}
+local RESOURCE_EFFECTS = { classpower_resource_marks = "marks", classpower_resource_extras = "cost",
+    classpower_resource_pain = "pain", classpower_resource_arcane = "arcane" }
+local resourceLinks, resourceOpens = 0, 0
+for _, release in ipairs(env.MSUF_FullChangelog.entries) do
+    for _, section in ipairs(release.sections or {}) do
+        for _, bullet in ipairs(section.bullets or {}) do
+            local link = type(bullet) == "table" and bullet.link
+            if link and link.pageKey == "classpower" then
+                resourceLinks = resourceLinks + 1
+                local expected = RESOURCE_VIEWS[link.sectionId]
+                Check(expected ~= nil, "resource section needs a workspace expectation: " .. link.sectionId)
+                Check(link.prepareKind == "classPowerWorkspace" and link.prepareValue == expected,
+                    "resource link omits its workspace contract: " .. link.controlId)
+                local clients = ABSENT[link.pageKey .. " " .. link.controlId]
+                if expected and not (clients and clients[flavor]) then
+                    for _, source in ipairs({ "cold", "class", "power", "hp", "mana", "extras" }) do
+                        if source == "cold" then M.InvalidatePage("classpower") end
+                        M.ClassPowerWorkspace.Select(source == "cold" and "hp" or source)
+                        M.ResourceExtrasPreview.Select("marks")
+                        local ok = M.OpenChangelogMenuLink(link)
+                        mw:RunTimers()
+                        resourceOpens = resourceOpens + 1
+                        local ui = M.ClassPowerWorkspace.current
+                        local prefix = release.version .. " " .. link.controlId .. " from " .. source .. ": "
+                        Check(ok, prefix .. "link did not open")
+                        Check(ui and ui.selected == expected and ui.selector:GetValue() == expected,
+                            prefix .. "wrong resource selected")
+                        local body = M.cache.classpower and M.cache.classpower.sections[link.sectionId]
+                        local accordion = body and body._msuf2CollapsibleEntry
+                        Check(accordion and accordion.open and accordion.outer:IsShown(), prefix .. "target section hidden/collapsed")
+                        if ui then
+                            for kind, entries in pairs(ui.entries) do
+                                for _, item in ipairs(entries) do
+                                    Check(item.outer:IsShown() == (kind == expected), prefix .. "wrong workspace visibility")
+                                end
+                            end
+                            for _, button in ipairs(ui.selector.buttons) do
+                                Check(button._msuf2Active == (button._msuf2Value == expected), prefix .. "wrong selector highlight")
+                            end
+                        end
+                        local effect = RESOURCE_EFFECTS[link.sectionId]
+                        if effect then Check(M.ResourceExtrasPreview.Selection() == effect, prefix .. "wrong helper preview") end
+                        local problem = StaticProblem(link)
+                        Check(problem == nil, prefix .. tostring(problem))
+                    end
+                end
+            elseif link and link.sectionId == "colors_resource_extras" then
+                for _, source in ipairs({ "unit", "group", "cast", "auras" }) do
+                    M.SelectPage("opt_colors")
+                    M.ColorsSetPainterCategory(source)
+                    Check(M.OpenChangelogMenuLink(link), "resource color link did not open from " .. source)
+                    mw:RunTimers()
+                    Check(M.colorsPainterCategory == "resources", "resource color link kept category " .. source)
+                end
+            end
+        end
+    end
+end
+Check(resourceLinks > 0 and resourceOpens > 0, "resource link regression exercised no controls")
+
+local restoredLinks = 0
+for _, release in ipairs(fullEntries) do
+    if release.version == "6.20" or release.version == "6.21" then
+        for _, section in ipairs(release.sections) do
+            for _, bullet in ipairs(section.bullets) do
+                local link = type(bullet) == "table" and bullet.link
+                if link then
+                    restoredLinks = restoredLinks + 1
+                    local key = link.pageKey .. " " .. link.controlId
+                    local clients = ABSENT[key .. " " .. tostring(link.prepareValue or "")] or ABSENT[key]
+                    local missing = clients and clients[flavor]
+                    local opened = M.OpenChangelogMenuLink(link)
+                    mw:RunTimers()
+                    Check(opened == not missing, "restored " .. release.version .. " link availability: " .. key)
+                    if not missing then
+                        local problem = StaticProblem(link)
+                        Check(problem == nil, "restored " .. release.version .. " exact contract: " .. key .. " " .. tostring(problem))
+                    end
+                end
+            end
+        end
+    end
+end
+Check(restoredLinks == 7, "restored 6.20/6.21 link coverage changed")
 
 --- Link buttons (T.StyleFeatureLink marks them) the page builds, in build order.
 local function LinkButtons(pageKey, open)
@@ -175,7 +303,7 @@ if Check(type(entry) == "table" and type(entry.sections) == "table", "MSUF_FullC
                 elseif Check(ok, title .. ": the link did not open its control: " .. key .. " (" .. text:sub(1, 60) .. ")") then
                     opened = opened + 1
                     local problem = StaticProblem(link)
-                    Check(problem == nil, title .. ": " .. key .. " breaks the packager's static contract: " .. tostring(problem))
+                    Check(problem == nil, title .. ": " .. key .. " breaks its exact static contract: " .. tostring(problem))
                 end
             elseif type(bullet) == "table" and bullet.linkless == true then
                 linkless = linkless + 1
@@ -252,8 +380,9 @@ if Check(type(entry) == "table" and type(entry.sections) == "table", "MSUF_FullC
         :format(#homeButtons, expected))
     if #failures == 0 then
         print(("changelog_release_links_smoke: ok (%s, %s: %d links, %d opened, %d absent on this client, %d without a menu control;"
-            .. " %d from another view; %d page and %d dashboard link buttons)")
-            :format(flavor, tostring(entry.version), linked, opened, absent, linkless, switched, #pageButtons, #homeButtons))
+            .. " %d from another view; %d page and %d dashboard link buttons; %d historical resource links/%d resource opens)")
+            :format(flavor, tostring(entry.version), linked, opened, absent, linkless, switched, #pageButtons, #homeButtons,
+                resourceLinks, resourceOpens))
     end
 end
 

@@ -1,6 +1,8 @@
 # Midnight Simple Unit Frames Changelog
 
-## 6.50 - 2026-10-09
+## 6.5-beta20 - 2026-10-10
+
+Release candidate for MSUF 6.50, including the latest menu, preview, portrait and group-control fixes.
 
 ### Highlights
 
@@ -109,27 +111,27 @@
 ### Class Resources and Additional Resources
 
 - **Independent Edit Mode movers:** move Class Resources and detached Player Power together or separately. Inactive resources, including Druid Combo Points outside Cat Form, retain an editable mover.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_display","controlId":"menu2.classpower.advanced.layout.x","settingKey":"bars.classPowerOffsetX","prepareKind":"","prepareValue":"","query":"class resource x offset","label":"Class Resource X offset"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_display","controlId":"menu2.classpower.advanced.layout.x","settingKey":"bars.classPowerOffsetX","prepareKind":"classPowerWorkspace","prepareValue":"class","query":"class resource x offset","label":"Class Resource X offset"} -->
 - **Detached Power geometry:** independent width, height and position controls; Energy bars anchored to Combo Points continue to follow them.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.width","settingKey":"player.detachedPowerBarWidth","prepareKind":"","prepareValue":"","query":"detached power width","label":"Power width"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.width","settingKey":"player.detachedPowerBarWidth","prepareKind":"classPowerWorkspace","prepareValue":"power","query":"detached power width","label":"Power width"} -->
 - **Full Player-frame width:** Class Resources using Player frame width span the full frame.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_display","controlId":"menu2.classpower.advanced.layout.width.mode","settingKey":"bars.classPowerWidthMode","prepareKind":"","prepareValue":"","query":"class resource width mode","label":"Width mode"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_display","controlId":"menu2.classpower.advanced.layout.width.mode","settingKey":"bars.classPowerWidthMode","prepareKind":"classPowerWorkspace","prepareValue":"class","query":"class resource width mode","label":"Width mode"} -->
 - **Resource workspace:** direct resource selection, scoped controls, Copy To, Quick Setup and reset actions in one shared workspace.
 <!-- msuf-menu-link: none -->
 - **Dedicated helper controls:** Additional Resources have their own sections, color shortcuts and runtime-rendered previews.
 <!-- msuf-menu-link: none -->
 - **Marks and thresholds:** place absolute or percentage marks on Player Power, Class Resource or Alternative Mana; restrict by power type, choose width and color, and change color above or below a threshold.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_marks","controlId":"menu2.classpower.advanced.resource.extras.marks.add","settingKey":"bars.resourceMarks","prepareKind":"","prepareValue":"","query":"add resource mark","label":"Add resource mark"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_marks","controlId":"menu2.classpower.advanced.resource.extras.marks.add","settingKey":"bars.resourceMarks","prepareKind":"classPowerWorkspace","prepareValue":"extras","query":"add resource mark","label":"Add resource mark"} -->
 - **Mana spend preview:** show upcoming mana costs. Supported clients also provide regeneration-pause and mana-return helpers.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_extras","controlId":"menu2.classpower.advanced.resource.extras.mana.upcoming.cost","settingKey":"bars.manaUpcomingCost","prepareKind":"","prepareValue":"","query":"mana spend preview","label":"Mana spend preview"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_extras","controlId":"menu2.classpower.advanced.resource.extras.mana.upcoming.cost","settingKey":"bars.manaUpcomingCost","prepareKind":"classPowerWorkspace","prepareValue":"extras","query":"mana spend preview","label":"Mana spend preview"} -->
 - **Midnight resource helpers:** Ignore Pain duration and Arcane window timing, with shared geometry and separate colors.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_pain","controlId":"menu2.classpower.advanced.resource.extras.show.ignore.pain","settingKey":"bars.showIgnorePain","prepareKind":"","prepareValue":"","query":"ignore pain duration","label":"Ignore Pain duration"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_pain","controlId":"menu2.classpower.advanced.resource.extras.show.ignore.pain","settingKey":"bars.showIgnorePain","prepareKind":"classPowerWorkspace","prepareValue":"extras","query":"ignore pain duration","label":"Ignore Pain duration"} -->
 - **Arcane timing modes:** seconds, global cooldowns or both, with adjustable countdown visibility, warning timing and phase colors.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_arcane","controlId":"menu2.classpower.advanced.resource.extras.arcane.window.text","settingKey":"bars.arcaneWindowText","prepareKind":"","prepareValue":"","query":"arcane window text","label":"Arcane window text"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_resource_arcane","controlId":"menu2.classpower.advanced.resource.extras.arcane.window.text","settingKey":"bars.arcaneWindowText","prepareKind":"classPowerWorkspace","prepareValue":"extras","query":"arcane window text","label":"Arcane window text"} -->
 - **Out-of-combat hiding:** optionally hide Player Power together with Class Resource when Hide out of combat is enabled. Edit Mode keeps both visible for placement.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visibility","controlId":"menu2.classpower.advanced.visibility.sync.player.power.ooc","settingKey":"bars.classPowerSyncPlayerPowerOOC","prepareKind":"","prepareValue":"","query":"hide player power with class resource","label":"Hide player power with Class Resource"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visibility","controlId":"menu2.classpower.advanced.visibility.sync.player.power.ooc","settingKey":"bars.classPowerSyncPlayerPowerOOC","prepareKind":"classPowerWorkspace","prepareValue":"class","query":"hide player power with class resource","label":"Hide player power with Class Resource"} -->
 - **Explicit Mana and Alternative Mana:** client-specific resource selection, placement and text settings remain available alongside the main class resource.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.resource.source","settingKey":"player.playerPowerSource","prepareKind":"","prepareValue":"","query":"mana automatic displayed resource","label":"Displayed resource"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.resource.source","settingKey":"player.playerPowerSource","prepareKind":"classPowerWorkspace","prepareValue":"power","query":"mana automatic displayed resource","label":"Displayed resource"} -->
 - **Additional resource colors:** helper colors are available under Colors > Additional resource colors.
 <!-- msuf-menu-link: {"pageKey":"opt_colors","sectionId":"colors_resource_extras","controlId":"menu2.colors.advanced.resource.extras.mana.cost.color","settingKey":"bars.manaCostColor","prepareKind":"","prepareValue":"","query":"additional resource colors","label":"Mana spend preview"} -->
 
@@ -401,6 +403,82 @@
 - Shared target-based Combo Point handling covers Classic and Forever; client defaults, Class Resources and previews use consolidated owners.
 - Preview animation, factory-profile decoding and search avoid repeated work.
 
+## 6.21 - 2026-09-22
+
+### Highlights
+
+- **Level text is colored by difficulty, the same way Blizzard colors a target's level.** Far above you and "??" are red, higher levels are orange, your level stays white, lower levels are green, and trivial levels are gray. Retail grades through the content-difficulty API, so scaled and Timewalking creatures stay correct. Color by level difficulty starts on for Unit Frames unless that frame already has its own level text color. The five colors are shared under Colors > Status Text Colors. Party and Raid frames gain a Level Text indicator, off until you turn it on, with the same coloring.
+<!-- msuf-menu-link: {"pageKey":"uf_target","sectionId":"status_icons","controlId":"menu2.uf_target.unit.status.selected.enabled","settingKey":"target.showLevelIndicator","prepareKind":"unitStatus","prepareValue":"level","query":"level text","label":"Level Text"} -->
+- **Blizzard-style portraits can show elite, rare, and boss dragons.** With the Blizzard portrait shape, Elite and rare dragon draws gold for elite, silver for rare and rare elite, and the winged gold dragon for a boss, using the unit's real classification. It stays off until you enable it. Runtime Preview shows a chosen dragon on that unit's live portrait until the card closes or combat starts, without saving the choice.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitblizzardelite","settingKey":"player.portraitBlizzardElite","prepareKind":"unitPortraitTab","prepareValue":"border","query":"elite and rare dragon","label":"Elite and rare dragon"} -->
+- **First login and profile reset now receive the current factory profile.** A fresh profile and a full reset use the shipped baseline. Profiles you already have stay as they are. The factory fills castbars from left to right, sets the cleanse border to what your group can dispel, and keeps target buffs and debuffs on one line.
+<!-- msuf-menu-link: none -->
+
+### Changes
+
+- The Blizzard portrait shape uses its own ring and mask, so the gold rim sits on the portrait. Zoom, pan, and portrait opacity apply to that shape again. While it is selected, the usual border style and color stay inactive because the stock ring replaces them.
+- Level difficulty colors update on level, faction, and your own level-up. Editing a band repaints the last resolved color without reading the unit again.
+- Startup loads the aura-name catalog for the client locale only.
+
+### Fixes & Performance
+
+- **Hide out of combat** on Class Resources shows the bar as soon as combat starts. The check used to run before the client reported combat lockdown, so a bar with no later power event, such as Warrior Whirlwind, stayed hidden for the whole fight.
+- Missing-health backgrounds on bars that fill in reverse no longer paint across the full bar at 100% health. A reversed bar reports its leading edge on the far side, so the clip mask covered everything. Those bars use the value-driven background instead.
+- Opening the menu no longer stops on a menu-font readback error. A hidden label reports no text width until the window is shown, and that was treated as a rejected font. The menu font is accepted from the file, size, and style that stuck. A font the client rejects falls back to the previous face, and building the window continues.
+- A font the client rejects, and a factory profile that cannot be decoded, no longer abort addon startup.
+- The Class Resources preview uses the same anchor as the live bar. It had been drawn one bar height, plus the 6 px gap, above the live bar.
+- The Ellesmere Edit Mode setting stays available when EllesmereUI is not installed. The bridge does nothing until that addon is present.
+- Login reads one locale of aura names instead of all twelve.
+
+## 6.20 - 2026-09-11
+
+### Highlights
+
+- **Every settings section now carries its on/off switch, a one-line summary and a "..." menu on its header.** Turn a feature on or off without expanding it, read its current values at a glance, and reset or copy a single section to another frame.
+<!-- msuf-menu-link: none -->
+- **Name, health and power text can each appear only on mouseover**, with independent fade-in and fade-out durations.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"text","controlId":"menu2.uf_player.unit.text.name.mouseover","settingKey":"player.nameTextMouseover","prepareKind":"","prepareValue":"","query":"only show on mouseover","label":"Only show on mouseover"} -->
+- **Unit Frames can appear only while their unit is injured.** Show only below 100% health keeps a frame transparent at full health while your other hide rules still apply.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"load_conditions","controlId":"menu2.uf_player.unit.load_condition.loadcondshowwheninjured","settingKey":"player.loadCondShowWhenInjured","prepareKind":"","prepareValue":"","query":"show only below 100 health","label":"Show only below 100% health"} -->
+- **Boss target highlights support arrows, paired markers, diamonds, crosses and borders.** Position markers directly in the preview and optionally require several boss frames.
+<!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"boss_target_highlight","controlId":"menu2.uf_boss.unit.boss_target_highlight.style","settingKey":"general.bossTargetHighlightStyle","prepareKind":"","prepareValue":"","query":"boss target highlight","label":"Highlight style"} -->
+- **Portraits can be clickable**, enabled separately for each Unit Frame.
+<!-- msuf-menu-link: {"pageKey":"uf_player","sectionId":"portrait","controlId":"menu2.uf_player.unit.portrait.portraitclickable","settingKey":"player.portraitClickable","prepareKind":"unitPortraitTab","prepareValue":"general","query":"clickable portrait","label":"Clickable Portrait"} -->
+- **Class Resources track Sweeping Strikes natively.**
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_behavior","controlId":"menu2.classpower.advanced.behavior.sweeping","settingKey":"bars.showSweepingStrikes","prepareKind":"classPowerWorkspace","prepareValue":"class","query":"sweeping strikes","label":"Sweeping Strikes Tracker"} -->
+- **Roughly 3-5% more FPS from lower addon CPU time.** The combat update paths for health, prediction, text and auras were reworked to stop repeating work every tick.
+<!-- msuf-menu-link: none -->
+- **Every menu string is now translated in all twelve locales.** German, both Spanish variants, French, Italian, Korean, Brazilian Portuguese, Russian and both Chinese variants no longer fall back to English.
+<!-- msuf-menu-link: none -->
+
+### Changes
+
+- Options menus read brighter: taller section headers with an accent border when open or hovered, the same accent outline on every clickable surface you hover — unit tabs, pills, buttons, dropdowns and the section "..." menus — a higher floor for the smallest fonts, and a clearly visible active page in the navigation.
+- Switching a frame or a group scope off now dims only its setting sections. The frame picker, the unit selector and the preview stay usable, and Frame Basics is labelled as disabled.
+- Unit and Party/Raid pages open with a title naming the frame or scope they edit and an Enable switch for it.
+- Previews open on the neutral Studio background instead of the Silvermoon scene, and the Guides layer starts hidden.
+- Class-colored power bars were added to the contextual color controls.
+- The Auras3 backend was rebuilt into explicit native runtime, Menu, Edit Mode and Spell Indicator modules, with no change to how your auras behave or to Blizzard-owned aura tracking.
+- Custom Aura spell names now use prebuilt locale-specific alias catalogs instead of a live aura-name resolver, including current localized and hotfixed spell groups.
+- Assistant command coverage, scoped requests, follow-up handling and exact setting navigation were expanded, and the Assistant control catalog and menu search index were rebuilt for the new settings.
+- The interrupt-ready indicator counts every interrupt you have, not just your main kick. Paladins with Avenger's Shield and Warriors with Disrupting Shout read as ready as soon as either one is off cooldown.
+- Demon Hunter Devourer Soul Fragment bars are divided into their fragments again, and Separator and Pip gap shape that division across their whole range.
+- The Arcane Surge / Arcane Soul countdown row and its Class Resources toggle were removed. Whirlwind and Sweeping Strikes tracking are unchanged.
+
+### Fixes & Performance
+
+- Health gradients, backgrounds and prediction do less repeated work during combat: fresh health samples are reused, client-specific update paths are chosen once instead of on every health event, and current, maximum and percentage text use specialized writers that still honour live number-format changes.
+- Absorb-only prediction uses specialized update paths for static and follow-health anchors, including glow and full-health stripe options, while keeping identity, disable and recovery handling.
+- Group text updates reuse health values already sampled for the bars, and zoning into a new area rebuilds raid headers once instead of twice, so group frames stop stalling right after a loading screen.
+- With the Castbar border indicator style the ready colour no longer reverts to the normal border colour when the border is rebuilt or recoloured, and Balance Druid, Survival Hunter and Demonology Warlock track their own interrupt again instead of a spell they cannot cast.
+- Target Range Fade forwards protected in-range results through Blizzard's native boolean-alpha path and keeps its spell-range fallback, and missing-health background masking during Range Fade was corrected so the configured background stays visible.
+- A Guides layer that was switched off no longer comes back lit every time a preview is rebuilt, and the Class Resources and docked unit previews render the Devourer resource the way it appears in game.
+- Aura icon style controls re-apply their master-toggle gates on every Appearance page, so Debuffs, Player Defensives and Dots no longer keep a stale enabled state.
+- Pixel snapping no longer rounds a one-pixel divider below a pixel, which could remove the fragment division entirely at some interface scales.
+- Injured-only visibility uses a secret-safe native health curve and stable visual parents, so bars, predictions, borders, textures, portraits, cast indicators and Class Resources hide together without changing the clickable secure frame.
+- Aura identity checks and castbar colour ownership avoid redundant temporary allocations, and scheduler callback errors keep the original callback stack while still isolating failures.
+- Fixed clipping in Aura cooldown and Texture Layer options, and improved Unit Status previews in the menu.
+
 ## 6.16-beta1 - 2026-09-06
 
 ### Highlights
@@ -670,9 +748,9 @@
 - **Boss Range Fade can now update up to 20 times per second.** The new Boss update-rate slider keeps the adaptive standard cadence at zero or continuously checks visible Boss Frames from 1 through 20 updates per second.
 <!-- msuf-menu-link: {"pageKey":"uf_boss","sectionId":"range_fade","controlId":"menu2.uf_boss.unit.range_fade.update_rate","settingKey":"boss.rangeFadeUpdateRate","prepareKind":"","prepareValue":"","query":"boss range update rate","label":"Updates per second"} -->
 - **Class Resources can now keep Player Power Automatic or explicitly display Mana.** The new Displayed resource dropdown preserves the existing class/spec behavior in Automatic mode, while Mana keeps the Player power surface on its Mana pool whenever the character has one.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.resource.source","settingKey":"player.playerPowerSource","prepareKind":"","prepareValue":"","query":"mana automatic displayed resource","label":"Displayed resource"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_detached_power","controlId":"menu2.classpower.advanced.detached.power.layout.resource.source","settingKey":"player.playerPowerSource","prepareKind":"classPowerWorkspace","prepareValue":"power","query":"mana automatic displayed resource","label":"Displayed resource"} -->
 - **Class Resource text can now show Current, Maximum, or Current / Maximum.** The new Resource text selector keeps Automatic as the untouched resource-specific default, while explicit modes change only the central resource value.
-<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visuals","controlId":"menu2.classpower.advanced.style.text.mode","settingKey":"bars.classPowerTextMode","prepareKind":"","prepareValue":"","query":"class resource text mode","label":"Resource text"} -->
+<!-- msuf-menu-link: {"pageKey":"classpower","sectionId":"classpower_visuals","controlId":"menu2.classpower.advanced.style.text.mode","settingKey":"bars.classPowerTextMode","prepareKind":"classPowerWorkspace","prepareValue":"class","query":"class resource text mode","label":"Resource text"} -->
 - **MiniAuras and MiniCC now work with MSUF Party and Raid Frames again.** The event-driven frame provider refreshes only when the authoritative Group Frame registry changes, without polling the roster or frame list.
 <!-- msuf-menu-link: none -->
 

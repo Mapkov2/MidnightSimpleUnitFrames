@@ -117,7 +117,8 @@ local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
 local ENABLED_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
 local TINTED_ENABLED_HEADER_BG = { 0, 0, 0, 0.48 }
 local function EnabledHeaderColor()
-    if T.MenuAccentSurfacesTinted and T.MenuAccentSurfacesTinted() then
+    if T.classicAtlas or T.menuAppearancePreset == "midnightDark"
+        or (T.MenuAccentSurfacesTinted and T.MenuAccentSurfacesTinted()) then
         local color = T.colors and T.colors.coreSurface
         if color then
             TINTED_ENABLED_HEADER_BG[1] = color[1]

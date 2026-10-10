@@ -4,15 +4,10 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
--- Core functions this page calls by their global names: required here at
--- load, called through _G so a hook installed on one later still applies.
-M.RequireGlobals("Shell/Menu2/Pages/MSUF_Menu2_GroupLayout.lua", {
-    "MSUF_ApplyRoundedUnitframes",
-})
+local Shared = M.UnitSectionsShared
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
-local Shared = M.UnitSectionsShared
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -21,12 +16,6 @@ local SCOPE_VALUES, GROWTH_VALUES, SORT_MODES, GF_ANCHOR_TO = GP.SCOPE_VALUES or
 local GF_ANCHOR_POINTS = GP.GF_ANCHOR_POINTS or {}
 local GROUP_FRAME_PROVIDER_VALUES = GP.GROUP_FRAME_PROVIDER_VALUES or {}
 local GROUP_RAID_MANAGER_VALUES = GP.GROUP_RAID_MANAGER_VALUES or {}
-local FRAME_BAR_SHAPE_OPTIONS = {
-    { value = "DEFAULT", text = "Use shared style" },
-    { value = "SQUARE", text = "Straight" },
-    { value = "ROUNDED", text = "Rounded" },
-    { value = "SLANTED", text = "Slanted" },
-}
 local Conf, Val, QueueGF, Set, Bool, Num, ScopeSection = GP.Conf, GP.Val, GP.QueueGF, GP.Set, GP.Bool, GP.Num, GP.ScopeSection
 local CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider = GP.CurrentScope, GP.BindScopeToggle, GP.ScopeDropdown, GP.ScopeSlider
 local BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled = GP.BuildGrowthDirectionTiles, GP.BuildRoleOrderRows, GP.SetOptionEnabled
@@ -254,24 +243,8 @@ local function BuildGFGeneralSection(ctx, b)
     end
     local raidManagerHelp = W.Text(general,
         "Shared by Party, Raid, and Mythic Raid. Automatic keeps the tab hidden while MSUF provides the group frames.",
-        generalLeftX, -278, generalLeftW, T.colors.muted)
+        generalLeftX, -278, generalW - generalLeftX - 32, T.colors.muted)
     if raidManagerHelp and raidManagerHelp.SetWordWrap then raidManagerHelp:SetWordWrap(true) end
-    local barShape = AttachGroupFocus(W.Dropdown(general, "Frame bar shape", FRAME_BAR_SHAPE_OPTIONS, min(300, generalRightW)), "bars")
-    W.MoveWidget(barShape, general, generalRightX, -278, min(300, generalRightW), "LEFT")
-    M.BindDropdownWidget(ctx, barShape,
-        function() return Val(CurrentScope(), "frameBarShape", "DEFAULT") end,
-        function(value)
-            if value ~= "SQUARE" and value ~= "ROUNDED" and value ~= "SLANTED" then value = "DEFAULT" end
-            Set(CurrentScope(), "frameBarShape", value, "visual")
-            _G.MSUF_ApplyRoundedUnitframes()
-            RefreshContext(ctx)
-        end,
-        ControlMeta(ctx, "basics.frame_bar_shape"))
-    msufControls[#msufControls + 1] = M.GroupFrameAdditionalSections.ExactScope(barShape, "frameBarShape")
-    if M.AddTooltip then
-        M.AddTooltip(barShape, "Frame bar shape", M.Format("Choose the Health and Power shape for this frame. Use shared style follows %s.",
-            M.NavPath("opt_bars")), { hook = true, owner = "ANCHOR_RIGHT" })
-    end
     W.DividerAt(general, -326, generalLeftX, 32)
     W.LabelAt(general, "Offline Members", generalLeftX, -344, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -370, generalLeftW), "layout"),

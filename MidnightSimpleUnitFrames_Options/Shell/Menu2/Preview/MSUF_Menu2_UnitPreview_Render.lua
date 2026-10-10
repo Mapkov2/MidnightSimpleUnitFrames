@@ -3547,6 +3547,8 @@ function Stage.RenderPortrait(st)
             mock.portrait._msufPreviewBlizzardSpec = blizzardSpec
             blizzardSpec.blizzardDirection = PortraitStyleGet(key, "portraitBlizzardDirection", "AUTO")
             blizzardSpec.flip = PortraitStyleGet(key, "portraitFlip", false) == true
+            blizzardSpec.enabled = true
+            blizzardSpec.dragonArtwork = PortraitStyleGet(key, "portraitDragonArtwork", false) == true
         end
         RenderState.ApplyPreviewPortraitShapeMask(mock.portrait, previewShape, edgeSoftnessLevel, blizzardSpec)
         RenderState.LayoutPreviewBlizzardPortrait(mock.portrait, previewShape == "BLIZZARD",
@@ -3557,10 +3559,10 @@ function Stage.RenderPortrait(st)
         if portraitElement and portraitElement.PaintClassification then
             portraitElement.PaintClassification(mock.portrait,
                 previewShape == "BLIZZARD" and PortraitStyleGet(key, "portraitBlizzardElite", false) == true
-                    and MSUF.PortraitDetails.DragonAllowed(runtimeSpec and runtimeSpec.portrait, data.liveUnit),
+                    and MSUF.PortraitDetails.DragonAllowed(blizzardSpec, data.liveUnit),
                 data.classification,
                 mock.portrait._msufPreviewLayoutWidth or S(box._runtimePortraitW),
-                mock.portrait._msufPreviewLayoutHeight or S(box._runtimePortraitH), mock.portrait, runtimeSpec and runtimeSpec.portrait, data.liveUnit)
+                mock.portrait._msufPreviewLayoutHeight or S(box._runtimePortraitH), mock.portrait, blizzardSpec, data.liveUnit)
         end
         if runtimeSpec and runtimeSpec.portrait then
             MSUF.PortraitDetails.ApplyShadow(mock.portrait, runtimeSpec.portrait)

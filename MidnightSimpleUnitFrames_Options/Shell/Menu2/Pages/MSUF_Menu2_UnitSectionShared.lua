@@ -341,7 +341,8 @@ function Shared.SetSectionHeaderStatus(sec, opts)
         end
     end
     if entry.label and entry.label.SetTextColor and T and T.colors and T.colors.text then
-        local c = T.colors.text
+        local c = entry._msuf2HeaderDisabled and T.colors.disabled
+            or (T.fontRoleColors and T.fontRoleColors.accordion or T.colors.text)
         entry.label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
     end
     if opts.labelColor and entry.label and entry.label.SetTextColor then

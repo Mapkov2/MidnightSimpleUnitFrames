@@ -6001,7 +6001,6 @@ L["Dragon vertical shift"] = "용 세로 이동"
 L["Dragon draw order"] = "용 그리기 순서"
 L["Dragon level above portrait"] = "초상화 위 용 레벨"
 L["Flip dragon left to right"] = "용 좌우 뒤집기"
-L["Color dragon by unit class"] = "유닛 직업 색상으로 용 색칠"
 L["Keep enemy dragons in instances"] = "인스턴스에서 적 용 유지"
 L["Darkens the inner edges of square portraits."] = "정사각형 초상화의 안쪽 가장자리를 어둡게 합니다."
 L["Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring."] = "용을 함께 쓰는 프레임의 그림 앞이나 뒤에 놓습니다. 레벨 0에서는 초상화 이미지, 레벨 1에서는 금색 고리가 기준입니다. 레벨 2부터는 용이 고리 위의 별도 프레임에 표시됩니다."
@@ -6918,6 +6917,9 @@ L["PvP Trinket"] = "PVP 장신구"
 L["Trinket"] = "장신구"
 L["Show PvP trinket"] = "PVP 장신구 표시"
 L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "각 상대의 PVP 장신구와 재사용 대기시간을 투기장 프레임 옆에 표시합니다. 이 페이지의 투기장 프레임 미리보기와 편집 모드에서도 표시됩니다."
+
+L["Always show dragon artwork"] = "장식용 용 항상 표시"
+L["Always displays the gold dragon as decoration, independent of the unit's classification."] = "유닛 분류와 관계없이 금색 용을 장식으로 항상 표시합니다."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)

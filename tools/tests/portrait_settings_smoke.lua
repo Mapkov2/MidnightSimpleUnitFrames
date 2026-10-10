@@ -317,7 +317,14 @@ function Methods:GetValue() return self.value or 0 end
 local M=core.MSUF2
 M.unitPortraitTabSelection={player="border"}
 local ctx={key="uf_player",width=720,refreshers={}}
-local binding, gateRefresh
+local binding, gateRefresh, artworkBinding
+local originalBool = M.BindBoolWidget
+M.BindBoolWidget = function(c, widget, get, set, meta)
+    if meta and meta.settingKey == "player.portraitDragonArtwork" then
+        artworkBinding = { widget = widget, get = get, set = set, meta = meta }
+    end
+    return originalBool(c, widget, get, set, meta)
+end
 local previewBindings = {}
 local originalBind=M.BindDropdownWidget
 M.BindDropdownWidget=function(c,widget,get,set,meta)
@@ -343,6 +350,7 @@ function builder:CollapsibleSection(_,_,height)
 end
 sectionSpec.build(ctx,builder,"player")
 M.BindDropdownWidget=originalBind
+M.BindBoolWidget=originalBool
 M.TrackCollapsibleRefresh=originalTrack
 assert(binding and binding.meta.classification=="ephemeral" and not binding.meta.settingKey,
     "runtime preview must not write a profile setting")
@@ -360,6 +368,32 @@ conf.portraitBlizzardElite=true; apply(); gateRefresh()
 binding.set("rare")
 conf.portraitShape="CIRCLE"; apply(); gateRefresh()
 assert(binding.get()=="OFF" and not dragon:IsShown(),"changing shape clears runtime session")
+-- The saved artwork toggle works independently of shape/native dragons and paints the real preview.
+assert(artworkBinding and not artworkBinding.get(), "actual saved artwork toggle defaults off")
+assert(artworkBinding.widget._msuf2ExactTargetContracts.unitPortraitTab.dragon == "player.portraitDragonArtwork", "artwork search opens the dragon tab")
+artworkBinding.set(true)
+assert(conf.portraitDragonArtwork == true and artworkBinding.get(), "menu writes saved artwork setting")
+conf.portraitBlizzardElite = false
+classification = "normal"
+for _, shape in ipairs({ "BLIZZARD", "CIRCLE", "SQUARE", "ROUNDED", "DIAMOND" }) do
+    conf.portraitShape = shape
+    assert(apply().dragonArtwork, "saved artwork compiles")
+    gateRefresh()
+    Preview.Refresh(box, "PORTRAIT_FIXED_ARTWORK")
+    assert(dragon:IsShown() and dragon.atlas == gold, "player gets gold art on " .. shape)
+    assert(box.mock.portrait.blizzElite:IsShown() and box.mock.portrait.blizzElite.atlas == gold,
+        "actual menu preview matches fixed artwork on " .. shape)
+    for _, preview in ipairs(previewBindings) do
+        assert(not preview.widget:IsEnabled(), "temporary classification preview disabled during fixed artwork")
+        preview.widget:GetScript("OnHide")(preview.widget)
+    end
+    assert(dragon:IsShown() and conf.portraitDragonArtwork, "session cleanup retains saved artwork")
+end
+artworkBinding.set(false)
+apply(); Preview.Refresh(box, "PORTRAIT_FIXED_ARTWORK_OFF")
+assert(not dragon:IsShown() and not box.mock.portrait.blizzElite:IsShown(), "artwork off clears both renderers")
+conf.portraitBlizzardElite = true
+classification = "rareelite"
 UF.frameList=priorFrameList
 -- Direction changes dress the frame, never rotate the unit image. Auto
 -- repairs old portraitFlip profiles, while explicit corners stay independent.

@@ -58,7 +58,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 2026-10-10 (6.50 arena PvP trinket): 16,860,000 -> 16,880,000 and
         -- 14,710,000 -> 14,730,000 for the trinket placement runtime, its preview and
         -- four menu strings in the twelve packs (about 12 KB); no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16880000 or 14730000),
+        -- 2026-10-10 (fixed portrait dragon artwork): Classic 14,730,000 ->
+        -- 14,734,000 for 3,637 LF bytes of two labels/help keys across twelve packs
+        -- and the fixed-art runtime flag/branch. TBC measured 14,727,732 before,
+        -- 14,731,369 after; startup file counts are unchanged; no catalog added.
+        assert(bytes < (suffix == "Mainline" and 16880000 or 14734000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

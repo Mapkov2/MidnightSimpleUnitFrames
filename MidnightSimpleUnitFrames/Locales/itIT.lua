@@ -6076,7 +6076,6 @@ L["Dragon vertical shift"] = "Spostamento verticale del drago"
 L["Dragon draw order"] = "Ordine di disegno del drago"
 L["Dragon level above portrait"] = "Livello del drago sopra il ritratto"
 L["Flip dragon left to right"] = "Capovolgi drago da sinistra a destra"
-L["Color dragon by unit class"] = "Colora il drago in base alla classe dell’unità"
 L["Keep enemy dragons in instances"] = "Mantieni i draghi nemici nelle istanze"
 L["Darkens the inner edges of square portraits."] = "Scurisce i bordi interni dei ritratti quadrati."
 L["Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring."] = "Mette il drago davanti o dietro alla grafica del riquadro che condivide: l’immagine del ritratto al livello 0, l’anello dorato al livello 1. Dal livello 2 il drago ha un riquadro proprio, sopra l’anello."
@@ -7020,6 +7019,9 @@ L["PvP Trinket"] = "Monile PvP"
 L["Trinket"] = "Monile"
 L["Show PvP trinket"] = "Mostra monile PvP"
 L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "Mostra il monile PvP di ogni avversario e il suo tempo di recupero accanto al riquadro arena. Lo mostrano anche l'anteprima dei riquadri arena di questa pagina e la modalità modifica."
+
+L["Always show dragon artwork"] = "Mostra sempre il drago decorativo"
+L["Always displays the gold dragon as decoration, independent of the unit's classification."] = "Mostra sempre il drago dorato come decorazione, indipendentemente dalla classificazione dell’unità."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)

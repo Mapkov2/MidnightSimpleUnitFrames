@@ -511,6 +511,9 @@ local function BuildPortrait(ctx, builder, unit)
     BindExactPortraitTabTarget(dragonPreviewExtra, "dragon")
     dragonPreview:HookScript("OnHide", StopDragonPreview)
     dragonPreviewExtra:HookScript("OnHide", StopDragonPreview)
+    local dragonArtwork = BindPortraitToggle(dragonCard, "Always show dragon artwork", 16, -428, leftW - 32,
+        "portraitDragonArtwork", false, "MSUF2_DRAGON_ARTWORK", RefreshPortraitControls)
+    BindExactPortraitTabTarget(dragonArtwork, "dragon", tostring(unit) .. ".portraitDragonArtwork")
     local dragonControls = {
         BindPortraitSlider(dragonCard, "Dragon size", 16, -112, leftW - 58, 25, 300, 1, "portraitDragonScale", 100, "MSUF2_DRAGON_SCALE"),
         BindPortraitSlider(dragonCard, "Dragon horizontal shift", 16, -166, leftW - 58, -200, 200, 1, "portraitDragonX", 0, "MSUF2_DRAGON_X"),
@@ -518,10 +521,9 @@ local function BuildPortrait(ctx, builder, unit)
         BindPortraitDropdown(dragonCard, "Dragon draw order", PORTRAIT_PLACEMENT.dragonLayer, 16, -274, min(220, leftW - 32), "portraitDragonLayer", "OVERLAY", "MSUF2_DRAGON_LAYER"),
         BindPortraitSlider(dragonCard, "Dragon level above portrait", 16, -328, leftW - 58, 0, 30, 1, "portraitDragonLevel", 1, "MSUF2_DRAGON_LEVEL"),
         BindPortraitToggle(dragonCard, "Flip dragon left to right", 16, -382, leftW - 32, "portraitDragonFlip", false, "MSUF2_DRAGON_FLIP"),
-        BindPortraitToggle(dragonCard, "Color dragon by unit class", 16, -428, leftW - 32, "portraitDragonClassColor", false, "MSUF2_DRAGON_COLOR"),
         BindPortraitToggle(dragonCard, "Keep enemy dragons in instances", 16, -474, leftW - 32, "portraitDragonInInstances", true, "MSUF2_DRAGON_INSTANCES"),
     }
-    local dragonKeys = { "portraitDragonScale", "portraitDragonX", "portraitDragonY", "portraitDragonLayer", "portraitDragonLevel", "portraitDragonFlip", "portraitDragonClassColor", "portraitDragonInInstances" }
+    local dragonKeys = { "portraitDragonScale", "portraitDragonX", "portraitDragonY", "portraitDragonLayer", "portraitDragonLevel", "portraitDragonFlip", "portraitDragonInInstances" }
     for i, control in ipairs(dragonControls) do
         BindExactPortraitTabTarget(control, "dragon", tostring(unit) .. "." .. dragonKeys[i])
     end
@@ -529,6 +531,8 @@ local function BuildPortrait(ctx, builder, unit)
     BindExactPortraitTabTarget(shadow, "advanced", tostring(unit) .. ".portraitInnerShadow")
     if M.AddTooltip then
         M.AddTooltip(shadow, "Inset shadow strength", "Darkens the inner edges of square portraits.", { hook = true })
+        M.AddTooltip(dragonArtwork, "Always show dragon artwork",
+            "Always displays the gold dragon as decoration, independent of the unit's classification.", { hook = true })
         M.AddTooltip(dragonControls[4], "Dragon draw order", "Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring.", { hook = true })
     end
     local portraitActiveControls = {
@@ -581,10 +585,19 @@ local function BuildPortrait(ctx, builder, unit)
         { controls = zoom, on = function(conf) return PortraitActive() and conf.portraitRender ~= "CLASS" end },
         { controls = flip, on = PortraitActive },
         { controls = shadow, on = function(conf) return PortraitActive() and (conf.portraitShape or "SQUARE") == "SQUARE" end },
-        { controls = dragonControls, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true end },
+        { controls = dragonArtwork, on = PortraitActive },
+        { controls = dragonControls, on = function(conf)
+            return PortraitActive() and (conf.portraitDragonArtwork == true
+                or (PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true))
+        end },
+        { controls = dragonControls[7], on = function(conf)
+            return PortraitActive() and PortraitShapeIsBlizzard(conf)
+                and conf.portraitBlizzardElite == true and conf.portraitDragonArtwork ~= true
+        end },
         { controls = { eliteDragon, blizzardCorner, blizzardDirection }, on = function(conf) return PortraitActive() and PortraitShapeIsBlizzard(conf) end },
         { controls = { dragonPreview, dragonPreviewExtra }, on = function(conf)
-            local enabled = PortraitActive() and PortraitShapeIsBlizzard(conf) and conf.portraitBlizzardElite == true
+            local enabled = PortraitActive() and PortraitShapeIsBlizzard(conf)
+                and conf.portraitBlizzardElite == true and conf.portraitDragonArtwork ~= true
             if not enabled then StopDragonPreview() end
             return enabled
         end },

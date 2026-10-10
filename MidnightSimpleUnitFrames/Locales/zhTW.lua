@@ -5992,7 +5992,6 @@ L["Dragon vertical shift"] = "龍形裝飾垂直位移"
 L["Dragon draw order"] = "龍形裝飾繪製順序"
 L["Dragon level above portrait"] = "龍形裝飾在頭像之上的層級"
 L["Flip dragon left to right"] = "左右翻轉龍形裝飾"
-L["Color dragon by unit class"] = "依單位職業為龍形裝飾著色"
 L["Keep enemy dragons in instances"] = "在副本中保留敵對單位龍形裝飾"
 L["Darkens the inner edges of square portraits."] = "加深方形頭像的內側邊緣。"
 L["Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring."] = "把龍形裝飾放在所在框架其他圖案的前方或後方：層級0時是頭像圖片，層級1時是金色圓環。從層級2起，龍形裝飾擁有自己的框架，位於圓環之上。"
@@ -6918,6 +6917,9 @@ L["PvP Trinket"] = "PvP 飾品"
 L["Trinket"] = "飾品"
 L["Show PvP trinket"] = "顯示 PvP 飾品"
 L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "在競技場框架旁顯示每個對手的 PvP 飾品及其冷卻。此頁面的競技場框架預覽和編輯模式中也會顯示。"
+
+L["Always show dragon artwork"] = "永遠顯示裝飾巨龍"
+L["Always displays the gold dragon as decoration, independent of the unit's classification."] = "永遠顯示金色巨龍作為裝飾，不受單位分類影響。"
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)

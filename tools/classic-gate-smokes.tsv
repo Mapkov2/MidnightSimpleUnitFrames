@@ -585,3 +585,7 @@ clients+Forever	lua	tools/tests/rc1_f_smoke.lua	{root} {flavor} menu	Corner Show
 -	lua	tools/tests/rc1_a_smoke.lua	{root}	rc1 package A: MSUF leaves no taint in Blizzard-owned castbar, Damage Meter, buff frame and popup state
 -	lua	tools/tests/rc1_e_smoke.lua	{root}	rc1 E: re-encoded UTF-8, untranslated menu text or a glued translation regressed
 -	lua	tools/tests/welcome_release_summary_smoke.lua	{root}	Welcome 6.50 release summary on WoW 12.1.5 and newer
+clients+Forever	lua	tools/tests/castbar_preview_toolbar_layout_smoke.lua	{root} {flavor}	Castbar preview toolbar clips or overlaps: {flavor}
+clients+Forever	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} {flavor} classicGlass	Accordion preset palette survives lazy build: {flavor}
+-	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} Forever midnightDark	Dark accordion preset palette survives lazy build
+-	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} Forever midnight	Midnight accordion status colors remain supported

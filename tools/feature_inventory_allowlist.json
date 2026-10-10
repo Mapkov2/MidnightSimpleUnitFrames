@@ -416,6 +416,17 @@
   {
    "category": "rows",
    "items": [
+    "classic: gf_layout | Layout > Basics | Frame bar shape | dropdown | no key | group.basics.frame_bar_shape",
+    "main: gf_layout | Layout > Basics | Frame bar shape | dropdown | no key | group.basics.frame_bar_shape"
+   ],
+   "basis": "owner",
+   "evidence": "Owner request 2026-10-10: remove Frame bar shape from Group Frame options because shape is controlled through Bars.",
+   "reason": "Remove the duplicate Group Layout dropdown and its search routes; Bars controls, saved profile values and existing reset and copy behavior remain available.",
+   "date": "2026-10-10"
+  },
+  {
+   "category": "rows",
+   "items": [
     "classic: classpower | Extras > Marks | Add resource mark | button | no key | advanced.resource.extras.marks.add",
     "classic: classpower | Extras > Marks | Remove resource mark | button | no key | advanced.resource.extras.marks.remove",
     "main: classpower | Extras > Marks | Add resource mark | button | no key | advanced.resource.extras.marks.add",
@@ -424,6 +435,70 @@
    "basis": "moved",
    "evidence": "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtras.lua Button(): Meta(path, \"resourceMarks\", \"action\"); the same rows are now listed with key bars.resourceMarks",
    "reason": "Re-keyed, not removed: the Add and Remove resource mark buttons now publish bars.resourceMarks, the list they write, so release notes can link them; page, section, label, control id and behavior are unchanged.",
+   "date": "2026-10-10"
+  },
+  {
+   "category": "locale",
+   "items": [
+    "Color dragon by unit class"
+   ],
+   "basis": "owner",
+   "evidence": "Owner request 2026-10-10: remove Color dragon by unit class from the Classic repository.",
+   "reason": "Remove the unsupported portrait dragon class tint control, runtime option and translations; legacy profile values are ignored.",
+   "date": "2026-10-10"
+  },
+  {
+   "category": "settings",
+   "items": [
+    "classic: arena.portraitDragonClassColor",
+    "classic: boss.portraitDragonClassColor",
+    "classic: focus.portraitDragonClassColor",
+    "classic: focustarget.portraitDragonClassColor",
+    "classic: pet.portraitDragonClassColor",
+    "classic: pettarget.portraitDragonClassColor",
+    "classic: player.portraitDragonClassColor",
+    "classic: target.portraitDragonClassColor",
+    "classic: targettarget.portraitDragonClassColor",
+    "main: arena.portraitDragonClassColor",
+    "main: boss.portraitDragonClassColor",
+    "main: focus.portraitDragonClassColor",
+    "main: focustarget.portraitDragonClassColor",
+    "main: pet.portraitDragonClassColor",
+    "main: pettarget.portraitDragonClassColor",
+    "main: player.portraitDragonClassColor",
+    "main: target.portraitDragonClassColor",
+    "main: targettarget.portraitDragonClassColor"
+   ],
+   "basis": "owner",
+   "evidence": "Owner request 2026-10-10: remove Color dragon by unit class from the Classic repository.",
+   "reason": "Remove the unsupported portrait dragon class tint control, runtime option and translations; legacy profile values are ignored.",
+   "date": "2026-10-10"
+  },
+  {
+   "category": "rows",
+   "items": [
+    "classic: uf_arena | Unit > Portrait | Color dragon by unit class | toggle | arena.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "classic: uf_boss | Unit > Portrait | Color dragon by unit class | toggle | boss.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "classic: uf_focus | Unit > Portrait | Color dragon by unit class | toggle | focus.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "classic: uf_focustarget | Unit > Portrait | Color dragon by unit class | toggle | focustarget.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "classic: uf_pet | Unit > Portrait | Color dragon by unit class | toggle | pet.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "classic: uf_pettarget | Unit > Portrait | Color dragon by unit class | toggle | pettarget.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "classic: uf_player | Unit > Portrait | Color dragon by unit class | toggle | player.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "classic: uf_target | Unit > Portrait | Color dragon by unit class | toggle | target.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "classic: uf_targettarget | Unit > Portrait | Color dragon by unit class | toggle | targettarget.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "main: uf_arena | Unit > Portrait | Color dragon by unit class | toggle | arena.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "main: uf_boss | Unit > Portrait | Color dragon by unit class | toggle | boss.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "main: uf_focus | Unit > Portrait | Color dragon by unit class | toggle | focus.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "main: uf_focustarget | Unit > Portrait | Color dragon by unit class | toggle | focustarget.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "main: uf_pet | Unit > Portrait | Color dragon by unit class | toggle | pet.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "main: uf_pettarget | Unit > Portrait | Color dragon by unit class | toggle | pettarget.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "main: uf_player | Unit > Portrait | Color dragon by unit class | toggle | player.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "main: uf_target | Unit > Portrait | Color dragon by unit class | toggle | target.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor",
+    "main: uf_targettarget | Unit > Portrait | Color dragon by unit class | toggle | targettarget.portraitDragonClassColor | unit.portrait.portraitdragonclasscolor"
+   ],
+   "basis": "owner",
+   "evidence": "Owner request 2026-10-10: remove Color dragon by unit class from the Classic repository.",
+   "reason": "Remove the unsupported portrait dragon class tint control, runtime option and translations; legacy profile values are ignored.",
    "date": "2026-10-10"
   }
  ]

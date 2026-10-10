@@ -1509,6 +1509,9 @@ local CLASSIFICATION_REFRESH_EVENTS = {
 function Portrait.PaintClassification(holder, enabled, classification, width, height, renderParent, p, unit)
   if not holder then return end
   local dragon = holder.blizzElite
+  if p and p.dragonArtwork == true then
+    enabled, classification = p.enabled == true, "elite"
+  end
   -- Classification may be restricted on Retail; never index a secret value.
   if issecretvalue and issecretvalue(classification) then classification = nil end
   local style = enabled and classification and CLASSIFICATION_DRAGONS[classification]
@@ -1573,10 +1576,12 @@ end
 local function UpdatePortraitClassification(frame, p)
   p = p or (frame.MSUFSpec and frame.MSUFSpec.portrait)
   local classification
-  local enabled = p and p.enabled == true and p.shape == "BLIZZARD" and p.blizzardElite == true
+  local enabled = p and p.enabled == true
   local unit = frame.MSUFUnitKey
-  enabled = enabled and Details.DragonAllowed(p, unit)
-  if enabled and unit then
+  if enabled and p.dragonArtwork ~= true then
+    enabled = p.shape == "BLIZZARD" and p.blizzardElite == true and Details.DragonAllowed(p, unit)
+  end
+  if enabled and p.dragonArtwork ~= true and unit then
     classification = Portrait.GetClassificationPreview(frame.MSUFSpec and frame.MSUFSpec.key or unit)
     if not classification and BossPreviewActive(unit, frame) then classification = "worldboss" end
     if not classification and _G.UnitClassification then classification = _G.UnitClassification(unit) end
@@ -1627,7 +1632,7 @@ function Portrait.GetEvents(frame, spec)
     else
       events = castSpellIcon and PORTRAIT_2D_CAST_EVENTS or PORTRAIT_2D_EVENTS
     end
-    if p.shape == "BLIZZARD" and p.blizzardElite == true then
+    if p.dragonArtwork ~= true and p.shape == "BLIZZARD" and p.blizzardElite == true then
       return WithPortraitClassificationEvent(events)
     end
     if p.border and p.border.style == "REACTION" then return WithPortraitReactionEvent(events) end
@@ -1849,7 +1854,7 @@ function Portrait.Update(frame, event, unit)
     return
   end
 
-  if p.blizzardElite == true and CLASSIFICATION_REFRESH_EVENTS[event] then
+  if (p.dragonArtwork == true or p.blizzardElite == true) and CLASSIFICATION_REFRESH_EVENTS[event] then
     UpdatePortraitClassification(frame, p)
   end
   if event == "UNIT_CLASSIFICATION_CHANGED" then return end

@@ -4359,7 +4359,6 @@ L["Dragon vertical shift"] = "Dragon vertical shift"
 L["Dragon draw order"] = "Dragon draw order"
 L["Dragon level above portrait"] = "Dragon level above portrait"
 L["Flip dragon left to right"] = "Flip dragon left to right"
-L["Color dragon by unit class"] = "Color dragon by unit class"
 L["Keep enemy dragons in instances"] = "Keep enemy dragons in instances"
 L["Darkens the inner edges of square portraits."] = "Darkens the inner edges of square portraits."
 L["Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring."] = "Places the dragon in front of or behind the art on the frame it shares: the portrait image at level 0, the gold ring at level 1. From level 2 on the dragon has a frame of its own above the ring."
@@ -5019,6 +5018,9 @@ L["PvP Trinket"] = "PvP Trinket"
 L["Trinket"] = "Trinket"
 L["Show PvP trinket"] = "Show PvP trinket"
 L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."] = "Shows each opponent's PvP trinket and its cooldown next to the arena frame. The arena frame preview of this page and Edit Mode shows it too."
+
+L["Always show dragon artwork"] = "Always show dragon artwork"
+L["Always displays the gold dragon as decoration, independent of the unit's classification."] = "Always displays the gold dragon as decoration, independent of the unit's classification."
 
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)

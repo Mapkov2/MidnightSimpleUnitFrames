@@ -77,6 +77,9 @@ for _, testWidth in ipairs({ 520, 760, 1100 }) do
         local body, cards = Build(mode), {}
         local label = flavor .. " " .. width .. "px " .. mode
         for _, frame in ipairs(mw.world.widgets.frames) do
+            if Descendant(frame, body) and frame._msuf2Label then
+                Check(frame._msuf2Label:GetText() ~= "Color dragon by unit class", "retired dragon tint is still offered")
+            end
             if frame._msuf2ControlCard and Descendant(frame, body) then
                 cards[frame._msuf2ControlCardTitle] = frame
             end

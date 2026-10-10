@@ -120,5 +120,15 @@ end
 table.sort(missing)
 Check(#missing == 0, "Copy To left texture layer settings of Target behind: " .. table.concat(missing, ", "))
 
+-- Fixed portrait artwork is a saved portrait setting in both copy directions.
+for _, enabled in ipairs({ true, false }) do
+    player.portraitDragonArtwork = enabled
+    target.portraitDragonArtwork = not enabled
+    Check(copyUnit("player", "target", { portrait = true }), "portrait Copy To did not run")
+    Check(target.portraitDragonArtwork == enabled, "portrait Copy To left fixed artwork behind")
+    core.UF.Config.Refresh()
+    Check(core.UF.Config.GetSpec("target").portrait.dragonArtwork == enabled, "copied artwork did not compile")
+end
+
 print("copy_to_section_completeness_smoke " .. flavor .. ": OK (group font override, "
     .. #suffixes .. " texture layer keys x3)")

@@ -176,23 +176,24 @@ end
         if r then tex:SetVertexColor(r, g, b, a or 1) end
         return tex
     end
-    local function PreviewButtonGroup(parent, point, relPoint, x, y, specs, buttonW, gap, onClick, semanticPath)
+    local function PreviewButtonGroup(parent, specs, buttonW, gap, onClick, semanticPath)
         local buttons = {}
         local holder = PixelLayoutRegion(CreateFrame("Frame", nil, parent))
-        holder:SetSize((#specs * buttonW) + ((#specs - 1) * gap), 24)
-        local anchorX = x + (point:find("LEFT", 1, true) and 8 or -4)
-        holder:SetPoint(point, parent, relPoint, anchorX, y - 5)
+        local width = 0
         for i = 1, #specs do
             local spec = specs[i]
             local btn = T.CenterButtonLabel(T.Button(holder, spec.text, buttonW, 24))
+            T.FitButtonWidth(btn, buttonW)
             local value = spec.key
             btn._msuf2AllowCombatClick = true
             btn._msuf2SkipHistoryCheckpoint = true
-            btn:SetPoint("LEFT", holder, "LEFT", (i - 1) * (buttonW + gap), 0)
+            btn:SetPoint("LEFT", holder, "LEFT", width, 0)
+            width = width + btn:GetWidth() + gap
             btn:SetScript("OnClick", function() onClick(value) end)
             RegisterControl(btn, Meta(semanticPath .. ".option." .. tostring(value), "ephemeral"), spec.text, "button")
             buttons[value] = btn
         end
+        holder:SetSize(max(1, width - gap), 24)
         return buttons, holder
     end
     local function MakeTrack(parent, width, height, x, y, fillColor)
@@ -940,13 +941,11 @@ local function BuildPreviewCastRow(box, preview, barW, mainX)
     preview.kick = kick
 end
 local function BuildCastbarPagePreview(ctx, b)
-    local availableW = b.width or ctx.width or 720
-    local compactControls = availableW < 694
     -- Leave enough vertical canvas for below-bar text, thick outlines, and
     -- scoped icon Y offsets. The former 62px body could cut those regions
     -- at the fixed-preview boundary even though the castbar itself fit.
-    local previewHeight = ctx and ctx.hiddenBuild and 72 or (compactControls and 180 or 164)
-    local section, _, fixedPreview = W.FixedPreviewSection(ctx, b, {
+    local previewHeight = ctx and ctx.hiddenBuild and 72 or 180
+    local section, toolbar, fixedPreview = W.FixedPreviewSection(ctx, b, {
         title = "Preview",
         height = previewHeight,
     })
@@ -955,7 +954,7 @@ local function BuildCastbarPagePreview(ctx, b)
         return nil, section, fixedPreview
     end
     local sectionW = section._msuf2Width or b.width or ctx.width or 720
-    local innerW = max(360, sectionW - 28)
+    local innerW = max(1, sectionW - 28)
     local preview = {
         castType = NormalizeCastbarPreviewType(M._msuf2CastbarPreviewType or "normal"),
         layoutUnit = NormalizeCastbarPreviewUnit(M._msuf2CastbarPreviewUnit or "player"),
@@ -970,7 +969,7 @@ local function BuildCastbarPagePreview(ctx, b)
     subtitle:SetPoint("TOPLEFT", section.title or section, "BOTTOMLEFT", 0, -4)
     subtitle:SetJustifyH("LEFT")
     subtitle:Hide()
-        local unitButtons = PreviewButtonGroup(section, "TOPLEFT", "TOPLEFT", 82, -12, (M.FilterSupportedUnitValues or function(values) return values end)({
+    local unitButtons, unitHolder = PreviewButtonGroup(toolbar, (M.FilterSupportedUnitValues or function(values) return values end)({
         { key = "player", text = "Player" },
         { key = "target", text = "Target" },
         { key = "focus", text = "Focus" },
@@ -978,20 +977,27 @@ local function BuildCastbarPagePreview(ctx, b)
             { key = "arena", text = "Arena" },
         }), 52, 4, M.SetCastbarPreviewUnit, "preview.unit")
     local buttonGap, interruptW = 6, 90
-    local buttonW = compactControls
-        and max(68, min(82, floor((sectionW - 132 - (buttonGap * 2)) / 3)))
-        or 82
     local typeValues = { { key = "normal", text = "Normal" }, { key = "channel", text = "Channel" } }
     if CASTBAR_PREVIEW_EMPOWERED then typeValues[3] = { key = "empowered", text = "Empowered" } end
-    local typeButtons = PreviewButtonGroup(section,
-        compactControls and "TOPLEFT" or "TOPRIGHT",
-        compactControls and "TOPLEFT" or "TOPRIGHT",
-        compactControls and 8 or -(14 + interruptW + 10),
-        compactControls and -42 or -12, typeValues, buttonW, buttonGap, M.SetCastbarPreviewType, "preview.cast_type")
-    local interrupt = T.CenterButtonLabel(T.SkinDangerButton(T.Button(section, "Interrupt", interruptW, 24)))
+    local typeButtons, typeHolder = PreviewButtonGroup(toolbar, typeValues, 82, buttonGap,
+        M.SetCastbarPreviewType, "preview.cast_type")
+    local interrupt = T.CenterButtonLabel(T.SkinDangerButton(T.Button(toolbar, "Interrupt", interruptW, 24)))
     interrupt._msuf2AllowCombatClick = true
     interrupt._msuf2SkipHistoryCheckpoint = true
-    interrupt:SetPoint("TOPRIGHT", section, "TOPRIGHT", -16, compactControls and -46 or -16)
+    T.FitButtonWidth(interrupt, interruptW)
+    -- Use the shared 32px toolbar, like the other fixed previews. Decide whether
+    -- to wrap from the translated controls' actual widths, including the title.
+    local unitX = 16 + section.title:GetStringWidth() + 12
+    local controlsW = typeHolder:GetWidth() + 10 + interrupt:GetWidth()
+    local compactControls = unitX + unitHolder:GetWidth() + 16 + controlsW + 16 > sectionW
+    unitHolder:SetPoint("LEFT", toolbar, "LEFT", unitX, 0)
+    if compactControls then
+        typeHolder:SetPoint("TOPLEFT", toolbar, "BOTTOMLEFT", 16, -10)
+        interrupt:SetPoint("TOPRIGHT", toolbar, "BOTTOMRIGHT", -16, -10)
+    else
+        typeHolder:SetPoint("RIGHT", toolbar, "RIGHT", -(16 + interrupt:GetWidth() + 10), 0)
+        interrupt:SetPoint("RIGHT", toolbar, "RIGHT", -16, 0)
+    end
     interrupt:SetScript("OnClick", function()
         M.PlayCastbarPreviewInterrupt()
     end)
@@ -999,7 +1005,7 @@ local function BuildCastbarPagePreview(ctx, b)
     preview.unitButtons = unitButtons
     preview.typeButtons = typeButtons
     local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
-    box:SetPoint("TOPLEFT", section, "TOPLEFT", 16, compactControls and -82 or -52)
+    box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, compactControls and -82 or -52)
     box:SetSize(innerW, 78)
     local portrait = T.Panel(box, nil, { 0.040, 0.060, 0.120, 0.96 }, { 0.16, 0.22, 0.42, 0.75 })
     portrait:SetSize(52, 52)

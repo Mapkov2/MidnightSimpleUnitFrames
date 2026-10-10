@@ -55,6 +55,14 @@ local function PrepareAdditionalSwitch(ctx, section, key, label, mode)
     toggle:SetChecked(Enabled())
     return toggle
 end
+-- Register after the body builds so the lazy refresh reaches every new control.
+-- The header master stays outside the body and other disable gates still apply.
+local function BindAdditionalGate(ctx, section, key)
+    local gateKey = "group-feature:" .. key
+    M.TrackCollapsibleRefresh(ctx, section, function()
+        M.ControlGates.Apply(section, gateKey, MSUF.GF.GetConf(GP.CurrentScope())[key])
+    end)
+end
 local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
     local height = prefix == "healerMana" and 520 or prefix == "friendlyBoss" and 536 or prefix == "pets" and 546 or 456
     local section = b:CollapsibleSection(id, title, height, false)
@@ -84,6 +92,7 @@ local function BuildAdditionalSection(ctx, b, id, title, prefix, extra)
             historySource = "menu:group-healer-mana-text-color", maxTargets = 1,
         })
     end
+    BindAdditionalGate(ctx, section, prefix .. "Enabled")
 end
 local function BuildTargets(ctx, b)
     BuildAdditionalSection(ctx, b, "party_targets", "Member targets", "targets", function(section, width)
@@ -122,6 +131,7 @@ local function BuildNameBar(ctx, b)
     Slider("Strip height", "nameBarHeight", 4, 60, 1, 14, 32, -128)
     PercentSlider(ctx, section, "Strip opacity", "nameBarAlpha", .95, width, width + 64, -128)
     ScopeColor(ctx, section, "Strip color", width, "nameBarR", "nameBarG", "nameBarB", {.05, .05, .05}, "rebuild", 32, -218, width, "LEFT")
+    BindAdditionalGate(ctx, section, "nameBarEnabled")
 end
 -- Buff coverage (WoW Forever). A toggle shows the client's own name for the
 -- buff's first spell when it can read one, so every language sees the name it
@@ -166,6 +176,7 @@ local function BuildBuffCoverage(ctx, b)
     ScopeSlider(ctx, section, "Vertical offset", -200, 200, 1, width, "buffCoverageY", 2, "visual", width + 64, -406, width, "LEFT")
     ScopeSlider(ctx, section, "Layer", 0, 30, 1, width, "buffCoverageLayer", 6, "visual", 32, -496, width, "LEFT")
     W.Text(section, "Each icon marks a buff that a class in your group can cast but this member lacks. Thorns is checked on members with the Tank role (on everyone with Thorns only on tanks off), Arcane Intellect and Divine Spirit on mana users. Combat, encounters and PvP matches hide aura data, so the icons keep their last known state until it ends.", 32, -566, width * 2 + 32, T.colors.muted)
+    BindAdditionalGate(ctx, section, "buffCoverageEnabled")
 end
 local TIER_GROWTH = { {value="INHERIT",text="Same as the base layout"}, {value="DOWN",text="Down"}, {value="UP",text="Up"}, {value="LEFT",text="Left"},
     {value="RIGHT",text="Right"} }

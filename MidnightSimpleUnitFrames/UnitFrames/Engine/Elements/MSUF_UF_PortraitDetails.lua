@@ -6,7 +6,6 @@ MSUF.PortraitDetails = D
 -- Client functions read once: every portrait refresh passes through here.
 local CreateFrame = _G.CreateFrame
 local issecretvalue = _G.issecretvalue
-local UnitClass = _G.UnitClass
 local UnitCanAttack = _G.UnitCanAttack
 local IsInInstance = _G.IsInInstance
 
@@ -66,11 +65,11 @@ function D.Compile(p, conf)
     p.flip = conf.portraitFlip == true
     p.blizzardDirection = D.NormalizeBlizzardDirection(conf.portraitBlizzardDirection)
     p.innerShadow = Number(conf.portraitInnerShadow, 0, 0, 100) / 100
+    p.dragonArtwork = conf.portraitDragonArtwork == true
     p.dragonScale = Number(conf.portraitDragonScale, 100, 25, 300) / 100
     p.dragonX = Number(conf.portraitDragonX, 0, -200, 200)
     p.dragonY = Number(conf.portraitDragonY, 0, -200, 200)
     p.dragonFlip = conf.portraitDragonFlip == true
-    p.dragonClassColor = conf.portraitDragonClassColor == true
     p.dragonInInstances = conf.portraitDragonInInstances ~= false
     p.dragonLevel = Number(conf.portraitDragonLevel, 1, 0, 30)
     local layer = conf.portraitDragonLayer
@@ -84,6 +83,7 @@ local ZONE_CHANGES = { "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }
 local unions = {}
 
 function D.UnitlessEvents(base, p)
+    if p.dragonArtwork == true then return base end
     if not (p.shape == "BLIZZARD" and p.blizzardElite == true and p.dragonInInstances == false) then return base end
     local union = unions[base]
     if not union then
@@ -115,7 +115,7 @@ function D.ApplyShadow(holder, p)
 end
 
 function D.DragonAllowed(p, unit)
-    if not p or p.dragonInInstances ~= false or not unit then return true end
+    if not p or p.dragonArtwork == true or p.dragonInInstances ~= false or not unit then return true end
     local inside = IsInInstance()
     if not inside then return true end
     local hostile = UnitCanAttack("player", unit)
@@ -161,14 +161,6 @@ function D.StyleDragon(dragon, p, unit)
         dragon._msufDragonFlip = flip
     end
     local r, g, b = 1, 1, 1
-    if p and p.dragonClassColor and unit then
-        local _, class = UnitClass(unit)
-        if not (issecretvalue and issecretvalue(class)) then
-            local colors = _G.RAID_CLASS_COLORS
-            local color = class and colors and colors[class]
-            if color then r, g, b = color.r, color.g, color.b end
-        end
-    end
     if dragon._msufDragonR ~= r or dragon._msufDragonG ~= g or dragon._msufDragonB ~= b then
         dragon:SetVertexColor(r, g, b, 1)
         dragon._msufDragonR, dragon._msufDragonG, dragon._msufDragonB = r, g, b

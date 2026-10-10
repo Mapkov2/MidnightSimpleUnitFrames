@@ -240,4 +240,120 @@ for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
 
 end
 
+-- Exercise real cold headers and first-open construction with all features off.
+-- Existing probes above covered the master binding, but not its body controls.
+local MenuWorld = assert(loadfile(root .. "/tools/tests/menu_core_world.lua"))()
+for _, flavor in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
+    local mw = MenuWorld.Open(root, flavor, {
+        page = "home", clientScriptBindings = true,
+        beforeOptions = function(world)
+            world.env.MSUF_EnsureDB()
+            for _, scope in ipairs({ "gf_party", "gf_raid", "gf_mythicraid" }) do
+                local conf = world.env.MSUF_DB[scope]
+                conf.enabled = true
+                for _, key in ipairs({ "nameBarEnabled", "targetsEnabled", "petsEnabled",
+                    "friendlyBossEnabled", "healerManaEnabled", "buffCoverageEnabled" }) do
+                    conf[key] = false
+                end
+            end
+        end,
+    })
+    local M, W, T = mw.M, mw.M.Widgets, mw.M.Theme
+    mw.env.MSUF_UFCore_NotifyConfigChanged = function() return true end
+    mw.env.GameTooltip.SetOwner = function() end
+    mw.env.GameTooltip.AddLine = function() end
+    local masters = {
+        name_bar = "nameBarEnabled", party_targets = "targetsEnabled", group_pets = "petsEnabled",
+        friendly_bosses = "friendlyBossEnabled", healer_mana = "healerManaEnabled", buff_coverage = "buffCoverageEnabled",
+    }
+    local state = M.GetPersistentMenuStateTable("accordionState")
+    for id in pairs(masters) do state["gf_layout:" .. id] = false end
+    mw:Select("gf_layout")
+    local function BodyState(section, enabled, phase, masterEnabled)
+        local count = 0
+        M.ControlGates.ForEachControl(section, nil, function(control)
+            count = count + 1
+            assert((control:IsEnabled() and true or false) == enabled,
+                flavor .. "/" .. M.gfScope .. "/" .. section._msuf2SectionId .. ": " .. phase .. " input state")
+            local color = enabled and T.colors.text or T.colors.disabled
+            for _, label in ipairs({ control._msuf2Title or false, control._msuf2Label or false }) do
+                if label then
+                    local r, g, b = label:GetTextColor()
+                    assert(r == color[1] and g == color[2] and b == color[3], phase .. ": label did not grey/restore")
+                end
+            end
+            local edit = control.editBox or control.__MSUF_valueBox
+            if edit then assert((edit:IsEnabled() and true or false) == enabled, phase .. ": value input still editable") end
+            for _, step in ipairs(control._msuf2StepButtons or {}) do
+                assert((step:IsEnabled() and true or false) == enabled, phase .. ": step button still editable")
+            end
+        end)
+        assert(count >= 3, phase .. ": additional body did not build its controls")
+        if masterEnabled == nil then masterEnabled = true end
+        assert((section._msuf2CollapsibleEntry.featureSwitch:IsEnabled() and true or false) == masterEnabled,
+            phase .. ": feature master state")
+    end
+    for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
+        if M.SupportsFrameScope(scope) then
+            local selector
+            for _, frame in ipairs(mw.world.widgets.frames) do
+                if frame._msuf2GuidedSelectScope then selector = frame end
+            end
+            assert(selector, "group scope selector missing")._msuf2GuidedSelectScope(scope)
+            mw:RunTimers()
+            assert(M.gfScope == scope, "group scope selector failed")
+            local sections = assert(M.cache.gf_layout.sections)
+            for id, key in pairs(masters) do
+                local section = sections[id]
+                if section then
+                    local entry = section._msuf2CollapsibleEntry
+                    local toggle = assert(entry.featureSwitch)
+                    if entry.open then entry.header:Click("LeftButton") end
+                    assert(not toggle:GetChecked(), id .. ": fixture feature already enabled")
+                    entry.header:Click("LeftButton")
+                    mw:RunTimers()
+                    BodyState(section, false, id .. " first open while off")
+                    toggle:Click("LeftButton")
+                    mw:RunTimers()
+                    assert(mw.core.GF.GetConf(scope)[key] == true, id .. ": master did not save")
+                    BodyState(section, true, id .. " enable while open")
+                    -- Another master must not unlock this feature's disabled body.
+                    for otherId in pairs(masters) do
+                        local other = sections[otherId]
+                        if other and other ~= section and other._msuf2CollapsibleEntry.open then
+                            BodyState(other, false, otherId .. " independent gate")
+                        end
+                    end
+                    entry.header:Click("LeftButton")
+                    toggle:Click("LeftButton")
+                    mw:RunTimers()
+                    entry.header:Click("LeftButton")
+                    mw:RunTimers()
+                    BodyState(section, false, id .. " reopen after disable")
+                    M.GroupPage.RefreshContext({ entry = M.cache.gf_layout, key = "gf_layout" })
+                    mw:RunTimers()
+                    BodyState(section, false, id .. " page refresh")
+                end
+            end
+            -- A feature's own on-state must never clear the parent frame gate.
+            local nameBar = assert(sections.name_bar)
+            local nameToggle = nameBar._msuf2CollapsibleEntry.featureSwitch
+            nameToggle:Click("LeftButton")
+            mw:RunTimers()
+            local frameToggle = assert(sections.general._msuf2CollapsibleEntry.featureSwitch)
+            frameToggle:Click("LeftButton")
+            mw:RunTimers()
+            M.GroupPage.RefreshContext({ entry = M.cache.gf_layout, key = "gf_layout" })
+            mw:RunTimers()
+            BodyState(nameBar, false, "parent frame disabled", false)
+            frameToggle:Click("LeftButton")
+            mw:RunTimers()
+            BodyState(nameBar, true, "parent frame restored")
+            nameToggle:Click("LeftButton")
+            mw:RunTimers()
+            BodyState(nameBar, false, "feature remains independently disabled")
+        end
+    end
+end
+
 print("group_menu_additional_page_smoke: PASS")

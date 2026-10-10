@@ -97,6 +97,8 @@ conf.portraitEdgeSoftness = 0
 conf.portraitRender, conf.portraitShape = "2D", "BLIZZARD"
 conf.portraitBlizzardElite = true
 conf.portraitDragonScale, conf.portraitDragonX, conf.portraitDragonY = 180, 17, -9
+-- Retired class tint in old/imported profiles must leave the native art unchanged.
+assert(conf.portraitDragonClassColor == nil, "retired dragon tint is not a default")
 conf.portraitDragonFlip, conf.portraitDragonClassColor = true, true
 conf.portraitDragonLayer, conf.portraitDragonLevel = "ARTWORK", 5
 p = apply()
@@ -106,7 +108,11 @@ near(holder.dragonFrame:GetFrameLevel(), holder:GetFrameLevel()+5)
 local anchor, _, relative, x, y = dragon:GetPoint(1)
 assert(anchor == "TOPLEFT" and relative == "TOPLEFT", "mirrored anchor")
 near(x, -15*holder:GetWidth()/58*1.8+17); near(y, 11*holder:GetHeight()/58*1.8-9)
-near(dragon.vertexColor[1], .2); near(dragon.vertexColor[2], .5)
+assert(p.dragonClassColor == nil, "retired dragon tint is not compiled")
+local function NativeDragonColor(texture)
+    for component = 1, 4 do near(texture.vertexColor[component], 1) end
+end
+NativeDragonColor(dragon)
 -- SetAtlas owns the sheet crop; local UVs must cover the whole dragon.
 local function FullDragon(tex, flip)
     near(tex.texCoord[1], flip and 1 or 0); near(tex.texCoord[2], flip and 0 or 1)
@@ -119,11 +125,13 @@ for _, classification in ipairs({ "elite", "rare", "rareelite", "worldboss" }) d
         conf.portraitDragonFlip = flip; p = apply()
         assert(dragon:IsShown(), classification .. " dragon missing")
         FullDragon(dragon, flip)
+        NativeDragonColor(dragon)
         local previewHolder = env.CreateFrame("Frame", nil, env.UIParent)
         previewHolder:SetSize(60, 60)
         portrait.PaintClassification(previewHolder, true, classification, 60, 60, previewHolder, p, "player")
         assert(previewHolder.blizzElite:IsShown(), classification .. " preview dragon missing")
         FullDragon(previewHolder.blizzElite, flip)
+        NativeDragonColor(previewHolder.blizzElite)
     end
 end
 env.UnitClassification = function() return "elite" end
@@ -200,8 +208,47 @@ assert(Names(TargetEvents()) == TARGET_BASE, "a saved 3D target adds no combat e
 tconf.portraitRender, tconf.portraitShape, tconf.portraitBlizzardElite = "CLASS", "BLIZZARD", true
 assert(Names(TargetEvents()) == "PORTRAITS_UPDATED,PLAYER_ENTERING_WORLD,ZONE_CHANGED_NEW_AREA",
     "a class portrait with the instance rule adds only the zone events")
-conf.portraitRender, conf.portraitShape = "2D", "BLIZZARD"
+-- Fixed artwork must not sample unit identity or subscribe to classification/zone changes.
+assert(conf.portraitDragonArtwork == false, "fixed artwork is opt-in")
+conf.portraitDragonArtwork, conf.portraitDragonInInstances = true, false
+inside, hostile = true, true
+local queries = 0
+local oldClassification, oldInstance, oldAttack = env.UnitClassification, env.IsInInstance, env.UnitCanAttack
+local function NoIdentity() queries = queries + 1; return "normal" end
+env.UnitClassification, env.IsInInstance, env.UnitCanAttack = NoIdentity, NoIdentity, NoIdentity
+for _, shape in ipairs({ "BLIZZARD", "CIRCLE", "SQUARE", "ROUNDED", "DIAMOND" }) do
+    conf.portraitRender, conf.portraitShape = "2D", shape
+    for _, native in ipairs({ false, true }) do
+        conf.portraitBlizzardElite = native
+        p = apply()
+        assert(p.dragonArtwork == true and dragon:IsShown(), "player artwork on " .. shape)
+        assert(dragon.atlas == "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold", "fixed gold artwork")
+        for _, event in ipairs(portrait.GetEvents(frame, frame.MSUFSpec)) do
+            assert(event ~= "UNIT_CLASSIFICATION_CHANGED", "artwork adds no classification subscription")
+        end
+        local events = Names(portrait.GetUnitlessEvents(frame, frame.MSUFSpec))
+        assert(not events:find("ZONE_CHANGED", 1, true), "artwork adds no zone subscription")
+        portrait.Update(frame, "MSUF_FORCE_UPDATE", "player")
+        assert(dragon:IsShown(), "ordinary portrait update retains artwork")
+        local preview = env.CreateFrame("Frame", nil, env.UIParent)
+        portrait.PaintClassification(preview, false, "normal", 60, 60, preview, p, "player")
+        assert(preview.blizzElite:IsShown() and preview.blizzElite.atlas == dragon.atlas, "shared fixed-art painter")
+        NativeDragonColor(preview.blizzElite)
+    end
+end
+assert(queries == 0, "fixed artwork must not query classification, instance or hostility")
+env.UnitClassification, env.IsInInstance, env.UnitCanAttack = oldClassification, oldInstance, oldAttack
+conf.portraitDragonArtwork, conf.portraitDragonInInstances = false, true
+conf.portraitRender, conf.portraitShape, conf.portraitBlizzardElite = "2D", "BLIZZARD", true
+env.UnitClassification = function() return "rare" end
 apply()
+assert(dragon.atlas == "ui-hud-unitframe-target-portraiton-boss-rare-silver", "off restores native classification")
+env.UnitClassification = function() return "normal" end
+portrait.Update(frame, "UNIT_CLASSIFICATION_CHANGED", "player")
+assert(not dragon:IsShown(), "normal unit has no native dragon when artwork is off")
+conf.portraitDragonArtwork, conf.portraitMode = true, "OFF"
+apply()
+assert(not holder:IsShown(), "artwork follows portrait visibility")
 portrait.Disable(frame)
 assert(not holder:IsShown(), "disable cleanup")
 assert(models == 0, "portraits must never build a native PlayerModel")

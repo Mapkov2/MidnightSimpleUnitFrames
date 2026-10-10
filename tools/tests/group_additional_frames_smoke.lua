@@ -228,6 +228,14 @@ function gp.ScopeColor(_,section,_,_,_,_,_,_,_,_,y) section.colorY=y end
 function widgets.AttachContextColorReferences(section, references) section.colorReferences=references end
 local menuNS={Client={SupportsGroupKind=function() return true end},GF={GetConf=function() return {} end},
  MSUF2={Widgets=widgets,Theme={colors={muted={}}},GroupPage=gp,BindBoolWidget=function() end}}
+-- The geometry-only menu fixture uses the real refresh and gate providers.
+local supportFile=assert(io.open(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Support.lua","rb"))
+local supportText=supportFile:read("*a"):gsub("\r\n","\n");supportFile:close()
+local refreshBody=assert(supportText:match("\n(function M%.TrackRefresh%(.-)\nfunction M%.TrackMethodRefresh"))
+local refreshChunk=assert(loadstring(refreshBody,"Menu2 refresh providers"))
+setfenv(refreshChunk,setmetatable({M=menuNS.MSUF2},{__index=_G}))
+refreshChunk()
+assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ControlGates.lua"))("MSUF",menuNS)
 assert(loadfile(root.."/MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayoutAdditional.lua"))("MSUF",menuNS)
 local sections={}
 local builder={width=720}

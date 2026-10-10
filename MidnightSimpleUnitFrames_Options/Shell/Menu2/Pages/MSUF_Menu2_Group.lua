@@ -72,6 +72,8 @@ local SCOPE_SHORT_LABELS = { mythicraid = "Mythic" }
 local GROUP_SECTION_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
 local GROUP_SECTION_HEADER_TINTED_BG = { 0, 0, 0, 0.48 }
 local function GroupSectionHeaderColor()
+    -- Preset headers keep the builder's palette and opacity after lazy build.
+    if T.classicAtlas or T.menuAppearancePreset == "midnightDark" then return nil end
     if T.MenuAccentSurfacesTinted and T.MenuAccentSurfacesTinted() then
         local color = T.colors and T.colors.coreSurface
         if color then
