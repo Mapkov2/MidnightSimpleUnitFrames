@@ -487,6 +487,310 @@ else
     arena.showTrinket = true
 end
 
+--------------------------------------------------------------------------------
+-- 7. The menu unit preview as the player uses it. The flavor's whole core and
+-- Options graph boots in a second client_world sandbox; the real unit preview
+-- is built and refreshed from MSUF_DB. The trinket is a preview element like
+-- every other: click selects it, a drag and the arrow keys move it (clamped to
+-- the runtime range, one history entry per drag, the arena scope applied), Tab
+-- reaches it, the selection bar names it and edits, resets and opens it, and
+-- the Trinket legend entry shows or hides it.
+--------------------------------------------------------------------------------
+-- Widget calls the menu preview and the Edit Mode popups make that the shared
+-- stubs do not model; added after the boot, as mainline_unit_preview_boss_target_smoke does.
+local function AddWidgetMethods(full)
+    local Methods = full.widgets.Methods
+    for name, method in pairs({
+        SetStartPoint = function(self, ...) self.startPoint = { ... } end,
+        SetEndPoint = function(self, ...) self.endPoint = { ... } end,
+        SetThickness = function(self, value) self.thickness = value end,
+        SetAutoFocus = function(self, value) self.autoFocus = value end,
+        SetMaxLetters = function(self, value) self.maxLetters = value end,
+        EnableKeyboard = function(self, value) self.keyboardEnabled = value end,
+        ClearFocus = function(self) self.focused = nil end,
+    }) do
+        if Methods[name] == nil then Methods[name] = method end
+    end
+end
+
+local function PreviewInteraction()
+    local full = World.New(root, flavor)
+    full:Boot()
+    local failure = full:FirstFailure()
+    if not Check(failure == nil, "boot failed in " .. tostring(failure and failure.file) .. ": "
+        .. tostring(failure and failure.message)) then
+        return
+    end
+    AddWidgetMethods(full)
+    local fenv, core = full.env, full.core
+    local cursorX, cursorY, shift, ctrl = 500, 300, false, false
+    fenv.GetCursorPosition = function() return cursorX, cursorY end
+    fenv.IsMouseButtonDown = function() return true end
+    fenv.IsShiftKeyDown = function() return shift end
+    fenv.IsControlKeyDown = function() return ctrl end
+    fenv.GetCurrentKeyBoardFocus = function() return nil end
+    fenv.C_Texture = { GetAtlasInfo = function() return nil end }
+    fenv.MSUF_EnsureDB(true)
+    local menu, Preview = fenv.MSUF2, core.UFPreview
+    local parent = fenv.CreateFrame("Frame", nil, fenv.UIParent)
+    parent:SetSize(900, 400)
+    local panel = fenv.CreateFrame("Frame", nil, fenv.UIParent)
+    local previewKey = "arena"
+    panel._msufGetCurrentKey = function() return previewKey end
+    local box = Preview._BuildPreview(parent, panel, 900, 400)
+    box:Show()
+    box.canvas:SetSize(400, 200)
+    local function Refresh(key)
+        previewKey = key
+        core.UF.Config.Refresh()
+        Preview.Refresh(box, "ARENA_TRINKET_PREVIEW_SMOKE")
+    end
+    local function Chip()
+        for _, button in ipairs(box.layerButtons or {}) do
+            if button.key == "trinket" then return button end
+        end
+    end
+    local handle, chip = box.handleArenaTrinket, Chip()
+    if slots == 0 then
+        Check(handle == nil, "a client without arena frames builds a trinket preview element")
+        Refresh("player")
+        Check(chip == nil or not chip:IsShown(), "a client without arena frames shows the Trinket legend entry")
+        return
+    end
+    if not Check(handle ~= nil and chip ~= nil, "the unit preview has no trinket element or no Trinket legend entry") then
+        return
+    end
+    local listed = 0
+    for _, entry in ipairs(box.handles) do
+        if entry._key == "arenaTrinket" then listed = listed + 1 end
+    end
+    Check(listed == 1, "the trinket handle is listed " .. listed .. " times")
+    local arenaDB = fenv.MSUF_DB.arena
+    arenaDB.showTrinket, arenaDB.trinketOffsetX, arenaDB.trinketOffsetY = true, 4, 0
+
+    Refresh("player")
+    Check(not handle:IsShown() and not chip:IsShown(), "the Player preview offers the trinket")
+    Refresh("arena")
+    local icon = box.mock._msufArenaTrinketPreview
+    local _, handleOn = handle:GetPoint(1)
+    Check(icon and icon:IsShown() and handle:IsShown() and handleOn == icon, "the trinket handle does not sit on the preview icon")
+    Check(chip:IsShown() and box.layerAvailable.trinket == true, "the Arena preview does not offer the Trinket legend entry")
+
+    -- Click selects; with guides on, the selection border shows like any element.
+    box.layerVisibility.guides = true
+    handle:GetScript("OnClick")(handle, "LeftButton")
+    Check(box._selectedHandle == handle and handle._selBorder:IsShown(), "a click does not select the trinket")
+    local bar = box._msuf2SelectionBar
+    Check(bar and bar.label:GetText() == "PvP Trinket", "the selection bar does not name the PvP Trinket")
+
+    -- Drag: one history entry, the stored offset follows the cursor, the arena
+    -- scope applies (in game Factory.Apply then re-places the live holders,
+    -- section 2), and the runtime range clamps it. This sandbox has no unit
+    -- frames to apply, so the unit-frame apply entry point is recorded.
+    local applied = {}
+    fenv.MSUF_UFCore_NotifyConfigChanged = function(key)
+        applied[#applied + 1] = key
+        return true
+    end
+    -- The menu starts a history session when it shows; so does this test.
+    menu.StartHistorySession("menu")
+    local history = menu.GetHistoryState()
+    local undoBefore = history and history.undoCount or 0
+    local scale = box._mockEffectiveScale or 1
+    handle:GetScript("OnMouseDown")(handle, "LeftButton")
+    cursorX, cursorY = cursorX + 12 * scale, cursorY - 7 * scale
+    box._onDragUpdate(box.dragFrame)
+    cursorX = cursorX + 3 * scale
+    box._onDragUpdate(box.dragFrame)
+    handle:GetScript("OnMouseUp")(handle, "LeftButton")
+    Check(arenaDB.trinketOffsetX == 19 and arenaDB.trinketOffsetY == -7, "a drag stored "
+        .. tostring(arenaDB.trinketOffsetX) .. "," .. tostring(arenaDB.trinketOffsetY) .. " instead of 19,-7")
+    history = menu.GetHistoryState()
+    Check(history and history.undoCount == undoBefore + 1, "a drag did not leave exactly one history entry ("
+        .. tostring(undoBefore) .. " -> " .. tostring(history and history.undoCount) .. ")")
+    local arenaApplied = false
+    for _, key in ipairs(applied) do
+        if key == "arena" then arenaApplied = true end
+    end
+    Check(arenaApplied, "a drag did not apply the arena scope to the live trinkets")
+    handle:GetScript("OnMouseDown")(handle, "LeftButton")
+    cursorX = cursorX + 900 * scale
+    box._onDragUpdate(box.dragFrame)
+    handle:GetScript("OnMouseUp")(handle, "LeftButton")
+    Check(arenaDB.trinketOffsetX == 200, "a drag past the edge stored " .. tostring(arenaDB.trinketOffsetX)
+        .. ", not the runtime limit 200")
+
+    -- Arrow keys with their modifier steps (1, Shift 5, Ctrl 10).
+    arenaDB.trinketOffsetX, arenaDB.trinketOffsetY = 4, 0
+    Refresh("arena")
+    local keyDown = handle:GetScript("OnKeyDown")
+    local function Key(name)
+        full.widgets:AdvanceTime(1)
+        keyDown(handle, name)
+    end
+    Key("RIGHT")
+    Key("UP")
+    shift = true
+    Key("RIGHT")
+    shift, ctrl = false, true
+    Key("DOWN")
+    ctrl = false
+    Check(arenaDB.trinketOffsetX == 10 and arenaDB.trinketOffsetY == -9, "arrow nudges stored "
+        .. tostring(arenaDB.trinketOffsetX) .. "," .. tostring(arenaDB.trinketOffsetY) .. " instead of 10,-9")
+
+    -- Tab reaches the trinket from the element before it and leaves it again.
+    local SelectionBar = menu.PreviewSelectionBar
+    local placed = {}
+    for _, entry in ipairs(box.handles) do
+        if entry._msufPlaced ~= false and entry:IsShown() then placed[#placed + 1] = entry end
+    end
+    local at
+    for index, entry in ipairs(placed) do
+        if entry == handle then at = index end
+    end
+    if Check(at ~= nil and #placed > 1, "the trinket is not among the placed preview elements") then
+        local before = placed[at == 1 and #placed or at - 1]
+        before:GetScript("OnClick")(before, "LeftButton")
+        SelectionBar.CycleHandle(box, false)
+        Check(box._selectedHandle == handle, "Tab does not reach the trinket")
+        SelectionBar.CycleHandle(box, false)
+        SelectionBar.CycleHandle(box, true)
+        Check(box._selectedHandle == handle, "Shift-Tab does not return to the trinket")
+    end
+
+    -- The selection bar: exact X, Reset to the factory offset, Open settings.
+    handle:GetScript("OnClick")(handle, "LeftButton")
+    SelectionBar.Refresh(box)
+    local shownX, storedX = tonumber(bar.editX:GetText()), arenaDB.trinketOffsetX
+    if Check(shownX ~= nil, "the selection bar shows no X for the trinket") then
+        bar.editX:SetText(tostring(shownX + 6))
+        bar.editX:GetScript("OnEnterPressed")(bar.editX)
+        Check(arenaDB.trinketOffsetX == storedX + 6, "the selection bar X stored " .. tostring(arenaDB.trinketOffsetX)
+            .. " instead of " .. tostring(storedX + 6))
+    end
+    bar.resetButton:GetScript("OnClick")(bar.resetButton)
+    Check(arenaDB.trinketOffsetX == 4 and arenaDB.trinketOffsetY == 0, "Reset did not restore the factory offset 4,0")
+    local opened
+    menu.SelectPage = function(pageKey)
+        opened = pageKey
+        return true
+    end
+    bar.openButton:GetScript("OnClick")(bar.openButton)
+    local request = fenv.MSUF_EM2_MenuFocusRequest
+    Check(opened == "uf_arena" and request and request.sectionId == "pvp_trinket",
+        "Open settings does not jump to the PvP Trinket section")
+
+    -- The legend entry hides and shows the icon and its handle; the switch
+    -- turns the entry into the route to its settings.
+    chip:GetScript("OnClick")(chip)
+    Check(box.layerVisibility.trinket == false and not icon:IsShown() and not handle:IsShown(),
+        "the Trinket legend entry does not hide the trinket")
+    chip:GetScript("OnClick")(chip)
+    Refresh("arena")
+    Check(icon:IsShown() and handle:IsShown(), "the Trinket legend entry does not show the trinket again")
+    arenaDB.showTrinket = false
+    Refresh("arena")
+    Check(box.layerAvailable.trinket == false and not icon:IsShown() and not handle:IsShown(),
+        "the show switch does not hide the preview trinket or keep its legend entry offered")
+    arenaDB.showTrinket = true
+end
+PreviewInteraction()
+
+--------------------------------------------------------------------------------
+-- 8. MSUF Edit Mode: the trinket is a mover like the detached power bar, a
+-- sub-element whose X/Y offset from its anchor side drags and nudges in place.
+-- Arena 1's icon carries the mover, the other slots add mouse regions, the
+-- saved offset stays in the runtime range, a nudge goes through Edit Mode's
+-- arrow route with its undo entry, and a click opens the arena frame popup on
+-- its PvP Trinket card. Clients without arena frames register no mover.
+--------------------------------------------------------------------------------
+local function EditModeMover()
+    local full = World.New(root, flavor)
+    full:Boot()
+    local failure = full:FirstFailure()
+    if not Check(failure == nil, "Edit Mode boot failed in " .. tostring(failure and failure.file)) then return end
+    AddWidgetMethods(full)
+    local fenv, core = full.env, full.core
+    fenv.MSUF_EnsureDB(true)
+    local EM2 = fenv.MSUF_EM2
+    local cfg = EM2 and EM2.Registry and EM2.Registry.Get("arena_trinket")
+    if slots == 0 then
+        Check(cfg == nil, "a client without arena frames registers an Edit Mode trinket mover")
+        return
+    end
+    if not Check(cfg ~= nil and cfg.popupType == "resource" and cfg.canNudge == true
+        and cfg.subframeOffsetXKey == "trinketOffsetX" and cfg.subframeOffsetYKey == "trinketOffsetY"
+        and cfg.historyCategory == "unit" and cfg.historyKey == "arena",
+        "Edit Mode has no trinket mover built like the detached power bar's") then
+        return
+    end
+    local stubHolders = {}
+    for index = 1, slots do
+        local holder = fenv.CreateFrame("Frame", nil, fenv.UIParent)
+        holder:SetSize(12, 12)
+        holder.left, holder.bottom = 600, 700 - index * 60
+        holder:Show()
+        stubHolders[index] = holder
+    end
+    local trinkets = core.ArenaTrinkets
+    local realHolder = trinkets.Holder
+    trinkets.Holder = function(index) return stubHolders[index] end
+    Check(cfg.getFrame() == stubHolders[1], "the trinket mover does not ride arena 1's icon")
+    local l, r, t, b = cfg.getMoverBounds()
+    Check(l ~= nil and r - l >= 18 and t - b >= 18, "a small trinket icon gets no 18 px grab area")
+    Check(#cfg.getSupplementalMoverBounds() == slots - 1, "the other arena slots add no trinket mouse regions")
+    stubHolders[1]:Hide()
+    Check(cfg.getFrame() == nil, "a hidden trinket keeps its Edit Mode mover")
+    stubHolders[1]:Show()
+
+    -- The sandbox's unit apply re-resolves the active profile, so the arena
+    -- table is read again after every write instead of being held.
+    local function Arena() return fenv.MSUF_DB.arena end
+    local ufApplied = {}
+    local realApply = core.UF.Apply
+    core.UF.Apply = function(key)
+        ufApplied[#ufApplied + 1] = key
+        return true
+    end
+    Arena().trinketOffsetX, Arena().trinketOffsetY = 260, -300
+    Check(cfg.commitSubframePosition() == true and Arena().trinketOffsetX == 200 and Arena().trinketOffsetY == -200
+        and ufApplied[#ufApplied] == "arena", "a drag commit does not keep the offset in range and apply the arena scope")
+
+    -- Entering Edit Mode starts its history session (MSUF_EditMode_State.lua);
+    -- the selected element is the trinket mover.
+    local state, menu = EM2.State, fenv.MSUF2
+    local isActive, getUnitKey = state.IsActive, state.GetUnitKey
+    state.IsActive = function() return true end
+    state.GetUnitKey = function() return "arena_trinket" end
+    menu.StartHistorySession("edit_mode")
+    Arena().trinketOffsetX, Arena().trinketOffsetY = 4, 0
+    local undoBefore = menu.GetHistoryState().undoCount
+    EM2.Nudge.By(1, -2)
+    Check(Arena().trinketOffsetX == 5 and Arena().trinketOffsetY == -2, "an Edit Mode nudge stored "
+        .. tostring(Arena().trinketOffsetX) .. "," .. tostring(Arena().trinketOffsetY) .. " instead of 5,-2")
+    -- Edit Mode nudges fold into one debounced history entry; let it settle.
+    full.widgets:AdvanceTime(2)
+    full.widgets:RunTimers()
+    Check(menu.GetHistoryState().undoCount == undoBefore + 1, "an Edit Mode nudge left no undo entry")
+    Arena().trinketOffsetX = 200
+    EM2.Nudge.By(1, 0)
+    Check(Arena().trinketOffsetX == 200, "an Edit Mode nudge pushed the trinket past the runtime range")
+    state.IsActive, state.GetUnitKey = isActive, getUnitKey
+
+    -- The arena popup and its card are pinned in section 6; here the click route.
+    local unitPopup = EM2.UnitPopup
+    local realOpen, openedUnit = unitPopup.Open, nil
+    unitPopup.Open = function(unit)
+        openedUnit = unit
+        return true
+    end
+    EM2.Popups.Open("arena_trinket", nil)
+    Check(openedUnit == "arena", "a click on the trinket mover does not open the arena frame popup with its PvP Trinket card")
+    unitPopup.Open = realOpen
+    trinkets.Holder, core.UF.Apply = realHolder, realApply
+end
+EditModeMover()
+
 -- The Arena page loads the section on every client, and the unit sections
 -- offer Reset section for it.
 Check(Read("MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_AfterGroupPreview.xml")

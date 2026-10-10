@@ -160,7 +160,8 @@ local function ApplyMenuSelection(key, component, slot, opts)
         local cfg = EM2.Registry and EM2.Registry.Get(key)
         if component == nil or component == "frame" then
             if cfg and cfg.castbarUnit then component = "castbar"
-            elseif cfg and cfg.resourceKind == "power" then component = "powerbar" end
+            elseif cfg and cfg.resourceKind == "power" then component = "powerbar"
+            elseif cfg and cfg.resourceKind == "trinket" then component = "trinket" end
         end
         sectionId = UnitSectionForComponent(component)
     else

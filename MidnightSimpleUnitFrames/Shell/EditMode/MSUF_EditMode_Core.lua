@@ -314,6 +314,7 @@ function Util.UnitSectionForComponent(component)
     if component == "portrait" then return "portrait" end
     if component == "alpha" or component == "transparency" then return "transparency" end
     if component == "status" or component == "status_icons" then return "status_icons" end
+    if component == "trinket" then return "pvp_trinket" end
     return "frame_basics"
 end
 

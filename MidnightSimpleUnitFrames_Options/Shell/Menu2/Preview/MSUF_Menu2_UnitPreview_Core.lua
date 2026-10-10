@@ -643,6 +643,10 @@ function Core.ApplyLayerVisibility(box)
         Core.SetShownSafe(mock.raidGroupNameText, false)
         for _, handle in pairs(box.statusHandles or {}) do Core.SetShownSafe(handle, false) end
     end
+    if not LayerOn("trinket") then
+        Core.SetShownSafe(mock._msufArenaTrinketPreview, false)
+        Core.SetShownSafe(box.handleArenaTrinket, false)
+    end
     if not LayerOn("texLayer") then
         for i = 1, #(mock.texLayers or {}) do Core.SetShownSafe(mock.texLayers[i], false) end
         for i = 1, #(box.texLayerHandles or {}) do Core.SetShownSafe(box.texLayerHandles[i], false) end

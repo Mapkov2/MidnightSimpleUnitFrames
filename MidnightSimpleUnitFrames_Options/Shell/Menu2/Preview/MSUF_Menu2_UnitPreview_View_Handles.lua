@@ -104,7 +104,9 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
     Register(box.animateCombatButton, "combat_animation", "Unit Preview Animation", "button", "ephemeral")
     for i = 1, #(box.layerButtons or {}) do
         local button = box.layerButtons[i]
-        if button and (button.key ~= "classPower" or previewUnitKey == "player") then
+        -- Class power belongs to the Player preview, the PvP trinket to Arena.
+        if button and (button.key ~= "classPower" or previewUnitKey == "player")
+            and (button.key ~= "trinket" or previewUnitKey == "arena") then
             Register(button, "layer." .. tostring(button.key),
                 M2.Format("%s preview layer", tostring((button.fs and button.fs.GetText and button.fs:GetText()) or button.key or "Preview layer")),
                 "button", "ephemeral")
@@ -115,6 +117,7 @@ local function RegisterUnitPreviewRuntimeControls(box, pageKey)
         local key = handle and handle._key
         local fields = handle and handle._fields or {}
         local exposeHandle = handle and not (fields.classPower == true and previewUnitKey ~= "player")
+            and not (key == "arenaTrinket" and previewUnitKey ~= "arena")
         if exposeHandle and handle._msuf2CommandAction then handle._msuf2CommandAction.previewUnitKey = previewUnitKey end
         -- Drag handles are direct-manipulation surfaces, not deterministic
         -- one-shot actions. Their underlying offsets remain Search-visible
@@ -318,6 +321,7 @@ local UNIT_SECTION_IDS = {
     dispel_overlay = "unit_dispel_overlay",
     dispel_symbol = "unit_dispel_symbol",
     texture_layer = "texture_layer",
+    pvp_trinket = "pvp_trinket",
 }
 function Preview.PrepareUnitHandleSubmenu(menu, unit, handle)
     if not (menu and handle) then return end
@@ -475,6 +479,7 @@ Preview.DisabledLayerRoutes = Preview.DisabledLayerRoutes or {
     dispelOverlay = { key = "dispelOverlay", section = "dispel_overlay" },
     dispelSymbol = { key = "dispelSymbol", section = "dispel_symbol" },
     status = { key = "status", section = "status" },
+    trinket = { key = "arenaTrinket", section = "pvp_trinket" },
 }
 function Preview.OpenUnavailableLayerSettings(box, layerKey)
     local route = Preview.DisabledLayerRoutes[layerKey]

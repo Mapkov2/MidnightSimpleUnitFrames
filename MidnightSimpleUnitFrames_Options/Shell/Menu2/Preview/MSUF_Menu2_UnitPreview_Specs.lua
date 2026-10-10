@@ -93,5 +93,6 @@ auras|Custom|0.42,0.72,1.00
 dispelOverlay|Dispel Overlay|0.25,0.72,1.00|Configured cleanse-color wash over the health bar.
 dispelSymbol|Dispel Symbol|0.34,0.84,1.00|Configured dispel-type symbols and placement.
 status|Status|0.85,0.70,0.25
+trinket|Trinket|1.00,0.45,0.30
 bounds|Bounds|0.25,0.75,0.88
 ]]

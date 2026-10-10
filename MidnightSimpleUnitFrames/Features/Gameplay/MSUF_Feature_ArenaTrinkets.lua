@@ -623,10 +623,12 @@ ExportPublic("MSUF_ArenaTrinkets_SyncPreview", SyncTrinketPreview)
 ExportPublic("MSUF_ArenaTrinkets_RefreshLayout", RefreshTrinketLayout)
 
 --- Read-only surface for the menu (unit preview, PvP Trinket section, Layer
---- Overview): the resolver and the factory values the runtime itself uses.
+--- Overview) and the Edit Mode mover: the resolver, the factory values the
+--- runtime itself uses and the holder of an arena slot.
 MSUF.ArenaTrinkets = {
     Layout = TrinketLayout,
     Shown = function() return ArenaEnabled() and ShowTrinketEnabled() end,
+    Holder = function(index) return holders[index] end,
     DEFAULTS = TRINKET_DEFAULTS,
     LIMITS = TRINKET_LIMITS,
     FallbackTexture = FALLBACK_TEXTURE,

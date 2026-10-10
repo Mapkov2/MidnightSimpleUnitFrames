@@ -11,7 +11,7 @@ local EM2 = _G.MSUF_EM2
 if not EM2 then return end
 if not EM2.Registry then return end
 
-local max = math.max
+local max, min = math.max, math.min
 local U = EM2.Util or {}
 local ApplySettingsForKeySafe = U.ApplySettingsForKeySafe
 local FrameRectToUI = _G.MSUF_UF_FrameRectToUI
@@ -252,6 +252,64 @@ local function RegisterResourceMovers()
     end
 end
 
+--- The arena PvP trinket follows its arena frame the way a detached power bar
+--- follows its unit frame: a sub-element whose X/Y offset from its anchor side
+--- drags and nudges in place (popupType "resource"). Arena 1's icon carries the
+--- mover, the other slots add mouse regions, and its card lives in the arena
+--- frame popup. Clients without arena frames have no holders, so no mover.
+local function GetTrinketHolder(index)
+    local holder = MSUF.ArenaTrinkets.Holder(index)
+    if holder and holder:IsShown() then return holder end
+end
+
+local function TrinketMoverBounds(holder)
+    if not holder then return nil end
+    local l, r, t, b = FrameRectToUI(holder)
+    if not l then return nil end
+    -- A 10 px icon still gets an 18 px grab area.
+    local padX, padY = max(0, (18 - (r - l)) * 0.5), max(0, (18 - (t - b)) * 0.5)
+    return l - padX, r + padX, t + padY, b - padY
+end
+
+local function GetTrinketSupplementalMoverBounds()
+    local bounds = {}
+    -- The runtime builds holders for the client's arena slots only.
+    for i = 2, 5 do
+        local l, r, t, b = TrinketMoverBounds(GetTrinketHolder(i))
+        if l then bounds[#bounds + 1] = { l = l, r = r, t = t, b = b } end
+    end
+    return bounds
+end
+
+--- Keeps the saved offset inside the runtime's range (what the icon can show),
+--- then applies the arena scope, which re-places every trinket holder. A nudge
+--- past the edge therefore reads back changed and is rolled back.
+local function CommitTrinketPosition()
+    local conf = GetConf("arena")
+    if type(conf) ~= "table" then return false end
+    local trinkets = MSUF.ArenaTrinkets
+    local limit, defaults = trinkets.LIMITS.offset, trinkets.DEFAULTS
+    conf.trinketOffsetX = max(-limit, min(limit, tonumber(conf.trinketOffsetX) or defaults.x))
+    conf.trinketOffsetY = max(-limit, min(limit, tonumber(conf.trinketOffsetY) or defaults.y))
+    local applied = ApplySettingsForKeySafe("arena") and true or false
+    if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
+    return applied
+end
+
+local function RegisterTrinketMover()
+    Reg.Register({
+        key = "arena_trinket", label = "PvP Trinket", order = 63,
+        popupType = "resource", resourceKind = "trinket", resourceUnit = "arena",
+        canNudge = true, historyCategory = "unit", historyKey = "arena",
+        subframeOffsetXKey = "trinketOffsetX", subframeOffsetYKey = "trinketOffsetY",
+        getFrame = function() return GetTrinketHolder(1) end,
+        getMoverBounds = function() return TrinketMoverBounds(GetTrinketHolder(1)) end,
+        getSupplementalMoverBounds = GetTrinketSupplementalMoverBounds,
+        getConf = function() return GetConf("arena") end,
+        commitSubframePosition = CommitTrinketPosition,
+    })
+end
+
 local function RegisterCastbarMover(unit, label, order)
     Reg.Register({
         key         = "castbar_" .. unit,
@@ -336,6 +394,9 @@ local function RegisterAll()
     RegisterCastbarMover("arena", "Arena Castbar", 114)
 
     RegisterResourceMovers()
+    -- Same gate as the trinket runtime: Classic Era and WoW Forever have no arena.
+    local client = MSUF.Client
+    if not (client and client.SupportsUnit and client.SupportsUnit("arena1") == false) then RegisterTrinketMover() end
 
     --- Future Phase 2 registrations:
     --- Auras3 groups (per-unit)

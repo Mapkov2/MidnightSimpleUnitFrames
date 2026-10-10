@@ -1424,6 +1424,9 @@ function BoxBuild.Handles(box, s)
             defaultX = -28, defaultY = 0, section = "boss_target",
         }, "Boss target highlight", { 1, .82, 0 })
     end
+    -- Arena's PvP trinket: Pages/MSUF_Menu2_UnitArenaTrinket.lua builds it with
+    -- this MakeHandle, so it selects, drags and nudges like every element here.
+    if M2.ArenaTrinketPreview then M2.ArenaTrinketPreview.CreateHandle(box, MakeHandle) end
     for i = 1, #STATUS_PREVIEW do
         local spec = STATUS_PREVIEW[i]
         box.statusHandles[spec.id] = MakeHandle(box, spec.id, { x = spec.x, y = spec.y, defaultX = spec.defaultX or 0, defaultY = spec.defaultY or 0,

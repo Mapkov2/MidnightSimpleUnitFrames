@@ -88,6 +88,10 @@ function Popups.Open(key, anchorFrame)
             external.Select(key, "mover", anchorFrame)
         end
         if EM2.ExternalPopup then EM2.ExternalPopup.Open(key, anchorFrame) end
+    elseif pType == "resource" and cfg.resourceKind == "trinket" then
+        -- The arena PvP trinket edits in its arena frame popup's PvP Trinket card.
+        local uf = MSUF.UF
+        if EM2.UnitPopup then EM2.UnitPopup.Open("arena", (uf and uf.GetFrame("arena1")) or anchorFrame) end
     elseif pType == "resource" then
         if EM2.ResourcePopup then EM2.ResourcePopup.Open(key) end
     elseif pType == "unit" then

@@ -2033,7 +2033,7 @@ function Stage.MeasureLayerFootprint(st)
         end
     end
     local arenaTrinket = MenuState.ArenaTrinketPreview
-    if key == "arena" and arenaTrinket and PreviewLayerWanted(box, "status") then
+    if key == "arena" and arenaTrinket and PreviewLayerWanted(box, "trinket") then
         minX, maxX, minY, maxY = arenaTrinket.Footprint(minX, maxX, minY, maxY, w, h, ExpandAnchoredRect)
     end
     local auraPreviewState = Auras and Auras.BuildState
@@ -3826,13 +3826,22 @@ function Stage.RenderAurasAndStatus(st, Preview)
     st.statusLayerAvailable = statusLayerAvailable
 end
 
---- The arena PvP trinket icon. Pages/MSUF_Menu2_UnitArenaTrinket.lua paints it
---- from the runtime's own layout resolver; it belongs to the Status layer.
+--- The arena PvP trinket icon and its drag handle. Pages/MSUF_Menu2_UnitArenaTrinket.lua
+--- paints the icon from the runtime's own layout resolver; it has its own
+--- Trinket layer, and its handle sits on the icon like the boss target marker's.
 function Stage.RenderArenaTrinket(st)
-    local painter = MenuState.ArenaTrinketPreview
+    local painter, box = MenuState.ArenaTrinketPreview, st.box
+    st.trinketAvailable = false
     if not painter then return end
-    if painter.Paint(st.mock, st.key, PreviewLayerWanted(st.box, "status"), st.S) then
-        st.statusLayerAvailable = true
+    local available, icon = painter.Paint(st.mock, st.key, PreviewLayerWanted(box, "trinket"), st.S)
+    st.trinketAvailable = available == true
+    local handle = box.handleArenaTrinket
+    if not handle then return end
+    if icon then
+        handle:SetSize(st.max(18, icon:GetWidth() + 8), st.max(18, icon:GetHeight() + 8))
+        st.PlaceHandle(handle, icon)
+    else
+        handle:Hide()
     end
 end
 
@@ -3861,11 +3870,13 @@ function Stage.FinalizeLayersAndHandles(st)
     available.dispelOverlay = box._previewDispelOverlayAvailable == true
     available.dispelSymbol = box._previewDispelSymbolAvailable == true
     available.status = statusLayerAvailable
+    available.trinket = st.trinketAvailable == true
     available.texLayer = PreviewTextureLayerConfigured(conf)
     available.bounds = true
     for i = 1, #(box.layerButtons or {}) do
         local button = box.layerButtons[i]
         if button.key == "classPower" and button.SetShown then button:SetShown(key == "player") end
+        if button.key == "trinket" and button.SetShown then button:SetShown(key == "arena") end
         if button.refresh then button:refresh() end
     end
     if box.LayoutLayerRail then box:LayoutLayerRail((box.GetWidth and box:GetWidth() or 0) - 24) end

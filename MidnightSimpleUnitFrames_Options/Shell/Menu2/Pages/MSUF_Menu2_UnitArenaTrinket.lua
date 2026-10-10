@@ -95,8 +95,41 @@ UP.RegisterSection({
 
 --- The arena unit preview's trinket: the mock icon follows the runtime layout,
 --- scaled with the mock, and a static dark band stands in for the cooldown swipe.
+--- It is a preview element like the others: its handle selects, drags, nudges
+--- and Tab-cycles through the shared unit preview machinery, the selection bar
+--- edits and resets its offset, and the Trinket legend entry shows or hides it.
 local TrinketPreview = {}
 M.ArenaTrinketPreview = TrinketPreview
+TrinketPreview.LAYER = "trinket"
+local HANDLE_COLOR = { 1.00, 0.45, 0.30 }
+
+--- The preview writes offset = stored offset + delta. Keep the result inside
+--- the runtime's offset range, so the stored value always equals what the icon
+--- shows and a drag past the edge never leaves a dead zone behind.
+local function ClampedOffsetDelta(handle, dx, dy)
+    local limits, defaults = MSUF.ArenaTrinkets.LIMITS, MSUF.ArenaTrinkets.DEFAULTS
+    local conf = UP.GetConf("arena")
+    local baseX = handle._dragging and tonumber(handle._startX) or tonumber(conf.trinketOffsetX) or defaults.x
+    local baseY = handle._dragging and tonumber(handle._startY) or tonumber(conf.trinketOffsetY) or defaults.y
+    local limit = limits.offset
+    local x = math.max(-limit, math.min(limit, baseX + (tonumber(dx) or 0)))
+    local y = math.max(-limit, math.min(limit, baseY + (tonumber(dy) or 0)))
+    return x - baseX, y - baseY
+end
+
+--- The unit preview builds this handle with its own MakeHandle (View), so the
+--- trinket shares selection, drag, nudge, history, the selection bar and the
+--- element list with every other preview element. Clients without arena
+--- frames build none.
+function TrinketPreview.CreateHandle(box, makeHandle)
+    if not (M.SupportsFrameScope and M.SupportsFrameScope("arena")) then return nil end
+    local defaults = MSUF.ArenaTrinkets.DEFAULTS
+    box.handleArenaTrinket = makeHandle(box, "arenaTrinket", {
+        x = "trinketOffsetX", y = "trinketOffsetY", defaultX = defaults.x, defaultY = defaults.y,
+        section = SECTION_ID, previewLayer = TrinketPreview.LAYER, resolveOffsetDelta = ClampedOffsetDelta,
+    }, "PvP Trinket", HANDLE_COLOR)
+    return box.handleArenaTrinket
+end
 
 --- Grows the preview footprint (frame units) by the trinket rectangle, so the
 --- fit zoom keeps an icon placed far from the frame on the canvas.
@@ -124,15 +157,15 @@ local function EnsurePreviewIcon(mock)
 end
 
 --- Paints the icon on the arena mock. Returns whether the trinket exists on
---- this preview (the arena page with the switch on), so the Status layer stays
---- offered while its layer toggle hides the icon.
+--- this preview (the arena page with the switch on), so its legend entry stays
+--- offered while the entry hides the icon, and the shown icon for the handle.
 function TrinketPreview.Paint(mock, key, wanted, scale)
     local runtime = MSUF.ArenaTrinkets
     local available = key == "arena" and runtime.Shown()
     local icon = mock._msufArenaTrinketPreview
     if not (available and wanted) then
         if icon then icon:Hide() end
-        return available
+        return available, nil
     end
     icon = icon or EnsurePreviewIcon(mock)
     local iconSize, point, relativePoint, x, y, layer = runtime.Layout()
@@ -143,5 +176,5 @@ function TrinketPreview.Paint(mock, key, wanted, scale)
     icon:SetFrameLevel(MSUF.UF.Layers.ElementLevel(layer, runtime.DEFAULTS.layer, 0))
     icon.dim:SetWidth(math.max(1, floor(side * SAMPLE_SWIPE_SHARE + 0.5)))
     icon:Show()
-    return true
+    return true, icon
 end
