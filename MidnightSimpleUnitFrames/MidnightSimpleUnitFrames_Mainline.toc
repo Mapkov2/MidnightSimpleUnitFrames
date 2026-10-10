@@ -121,6 +121,7 @@ Game\Forever\PadNavigation.lua [AllowLoadGameType camelot]
 Game\Forever\PadKeyboard.lua [AllowLoadGameType camelot]
 Game\Forever\PadPrompts.lua [AllowLoadGameType camelot]
 Game\Forever\PadEditMode.lua [AllowLoadGameType camelot]
+Game\Forever\PadUnitMenu.lua [AllowLoadGameType camelot]
 Libs\MSUFUnitFrames\MSUFUnitFrames.xml
 UnitFrames\Engine\MSUF_UF_Shared.lua
 UnitFrames\Engine\MSUF_UF_Config_Status.lua

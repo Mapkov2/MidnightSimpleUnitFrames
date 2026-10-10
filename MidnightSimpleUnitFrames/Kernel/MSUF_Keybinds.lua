@@ -12,6 +12,37 @@ local ExportPublic = MSUF.ExportPublic
 
 local type, select = type, select
 local CreateFrame = CreateFrame
+local InCombatLockdown, UIParent, RegisterAttributeDriver = InCombatLockdown, UIParent, RegisterAttributeDriver
+local PixelLayoutRegion = MSUF_PixelLayoutRegion or function(region) return region end
+
+-- A hardware CLICK binding must reach a secure action directly. Calling Click
+-- or UnitPopup_OpenMenu from a Lua binding loses that secure input path; using
+-- the live unit frame can also run a click-casting provider's replacement.
+local UnitMenus = {
+    TargetBinding = "CLICK MSUF_UnitMenuTarget:LeftButton",
+    PlayerBinding = "CLICK MSUF_UnitMenuPlayer:LeftButton",
+}
+MSUF.UnitMenus = UnitMenus
+
+function UnitMenus.Initialize()
+    if UnitMenus.Target or InCombatLockdown() then return end
+    local function Button(name, unit)
+        -- Create without a parent to avoid Forever's SmartNavigation rescan.
+        local button = PixelLayoutRegion(CreateFrame("Button", name, nil, "SecureActionButtonTemplate"))
+        button:SetParent(UIParent)
+        button:SetSize(1, 1)
+        button:SetPoint("CENTER", UIParent, "CENTER")
+        button:EnableMouse(false)
+        button:SetAttribute("type", "togglemenu")
+        button:SetAttribute("unit", unit)
+        button:SetAttribute("useOnKeyDown", false)
+        button:RegisterForClicks("AnyDown", "AnyUp")
+        return button
+    end
+    UnitMenus.Target = Button("MSUF_UnitMenuTarget", "target")
+    UnitMenus.Player = Button("MSUF_UnitMenuPlayer", "player")
+    RegisterAttributeDriver(UnitMenus.Target, "unit", "[@target,exists] target; player")
+end
 
 --- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC).
 --- The menu language is known only once the saved locale is read at
@@ -24,6 +55,8 @@ local function ApplyBindingLabels()
     local variantLabel = translate("Toggle profile variant %d")
     for slot = 1, 8 do _G["BINDING_NAME_MSUF_VARIANT_" .. slot] = variantLabel:format(slot) end
     BINDING_NAME_MSUF_PRIORITY_TOGGLE = translate("Pin or unpin hovered group member")
+    _G["BINDING_NAME_" .. UnitMenus.TargetBinding] = translate("Open target menu (self without a target)")
+    _G["BINDING_NAME_" .. UnitMenus.PlayerBinding] = translate("Open player menu")
 end
 ApplyBindingLabels()
 if type(MSUF.RegisterLocaleCallback) == "function" then
@@ -264,7 +297,11 @@ do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:RegisterEvent("UPDATE_BINDINGS")
+    f:RegisterEvent("PLAYER_REGEN_ENABLED")
     f:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_LOGIN" or event == "PLAYER_REGEN_ENABLED" then
+            UnitMenus.Initialize()
+        end
         if event == "PLAYER_LOGIN" or event == "UPDATE_BINDINGS" then
             -- WoW owns the active account/character binding set. Keep the
             -- SavedVariables copy observational only: replaying account-wide

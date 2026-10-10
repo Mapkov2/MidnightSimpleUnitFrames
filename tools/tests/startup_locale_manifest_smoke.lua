@@ -62,7 +62,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 14,734,000 for 3,637 LF bytes of two labels/help keys across twelve packs
         -- and the fixed-art runtime flag/branch. TBC measured 14,727,732 before,
         -- 14,731,369 after; startup file counts are unchanged; no catalog added.
-        assert(bytes < (suffix == "Mainline" and 16880000 or 14734000),
+        -- 2026-10-10 (Forever cursor-free unit menus): Classic 14,734,000 ->
+        -- 14,740,000 for 5,076 LF bytes: the CLICK binding owner in
+        -- Kernel/MSUF_Keybinds.lua and three binding labels in the twelve packs;
+        -- the menu runtime itself is Forever-only; no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16880000 or 14740000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

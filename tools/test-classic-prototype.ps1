@@ -1191,6 +1191,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/Game/Forever/PadKeyboard.lua",
     "MidnightSimpleUnitFrames/Game/Forever/PadPrompts.lua",
     "MidnightSimpleUnitFrames/Game/Forever/PadEditMode.lua",
+    "MidnightSimpleUnitFrames/Game/Forever/PadUnitMenu.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileSearch.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileVariants.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileSync.lua",

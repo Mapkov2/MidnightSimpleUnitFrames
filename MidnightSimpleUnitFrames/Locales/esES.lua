@@ -6996,6 +6996,11 @@ L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. T
 L["Always show dragon artwork"] = "Mostrar siempre el dragón decorativo"
 L["Always displays the gold dragon as decoration, independent of the unit's classification."] = "Muestra siempre el dragón dorado como decoración, independientemente de la clasificación de la unidad."
 
+-- Cursor-free unit menu bindings.
+L["Open target menu (self without a target)"] = "Abrir menú del objetivo (propio si no hay objetivo)"
+L["Open player menu"] = "Abrir menú del jugador"
+L["Press right stick: Unit menu"] = "Pulsa el stick derecho: menú de unidad"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end

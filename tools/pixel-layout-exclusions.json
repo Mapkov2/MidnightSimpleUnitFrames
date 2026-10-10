@@ -576,6 +576,12 @@
     "reason": "Unparented combat event driver for the Forever pad navigation"
   },
   {
+    "path": "MidnightSimpleUnitFrames/Game/Forever/PadUnitMenu.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented event driver for the Forever gamepad unit-menu bindings"
+  },
+  {
     "path": "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_Elements_Portrait.lua",
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,

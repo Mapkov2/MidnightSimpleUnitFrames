@@ -69,6 +69,7 @@ MidnightSimpleUnitFrames/Game/Forever/PadEditMode.lua	*	WoW Forever Gamepad UI n
 MidnightSimpleUnitFrames/Game/Forever/PadKeyboard.lua	*	WoW Forever Gamepad UI navigation for MSUF and Suite windows; Classic flavors have no Gamepad UI
 MidnightSimpleUnitFrames/Game/Forever/PadNavigation.lua	*	WoW Forever Gamepad UI navigation for MSUF and Suite windows; Classic flavors have no Gamepad UI
 MidnightSimpleUnitFrames/Game/Forever/PadPrompts.lua	*	WoW Forever Gamepad UI navigation for MSUF and Suite windows; Classic flavors have no Gamepad UI
+MidnightSimpleUnitFrames/Game/Forever/PadUnitMenu.lua	*	WoW Forever Gamepad UI cursor-free unit menus; Classic flavors have no Gamepad UI
 MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua	*	WoW Forever independent Swing Timer module uses native PLAYER_SWING events; Classic flavors do not load the Forever runtime
 MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua	*	WoW Forever character names (first name, surname or both), inert unless MSUF.Client.HasCharacterSurnames; no Classic client has surnames, so no Classic manifest lists it
 MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua	Mists	Hunter pet happiness was removed in Cataclysm 4.1; Mists has no happiness API or event, so its manifest never lists the indicator

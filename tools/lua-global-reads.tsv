@@ -115,6 +115,7 @@ PowerBarColor	constant	Blizzard UI constant, enum or shared string
 RAID_CLASS_COLORS	constant	Blizzard UI constant, enum or shared string
 RELOAD	constant	Blizzard UI constant, enum or shared string
 RELOADUI	constant	Blizzard UI constant, enum or shared string
+RegisterAttributeDriver	api	Blizzard client API
 RegisterStateDriver	api	Blizzard client API
 RegisterUnitWatch	api	Blizzard client API
 ReloadUI	api	Blizzard client API

@@ -1,4 +1,6 @@
 <Bindings>
+    <Binding name="CLICK MSUF_UnitMenuTarget:LeftButton" category="Midnight Simple Unitframes (MSUF)"></Binding>
+    <Binding name="CLICK MSUF_UnitMenuPlayer:LeftButton" category="Midnight Simple Unitframes (MSUF)"></Binding>
     <Binding name="MSUF_TOGGLE_OPTIONS"
              category="Midnight Simple Unitframes (MSUF)"
              >

@@ -6921,6 +6921,11 @@ L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. T
 L["Always show dragon artwork"] = "永遠顯示裝飾巨龍"
 L["Always displays the gold dragon as decoration, independent of the unit's classification."] = "永遠顯示金色巨龍作為裝飾，不受單位分類影響。"
 
+-- Cursor-free unit menu bindings.
+L["Open target menu (self without a target)"] = "開啟目標選單（無目標時開啟自己的選單）"
+L["Open player menu"] = "開啟玩家選單"
+L["Press right stick: Unit menu"] = "按下右搖桿：單位選單"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

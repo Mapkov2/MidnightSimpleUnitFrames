@@ -6921,6 +6921,11 @@ L["Shows each opponent's PvP trinket and its cooldown next to the arena frame. T
 L["Always show dragon artwork"] = "장식용 용 항상 표시"
 L["Always displays the gold dragon as decoration, independent of the unit's classification."] = "유닛 분류와 관계없이 금색 용을 장식으로 항상 표시합니다."
 
+-- Cursor-free unit menu bindings.
+L["Open target menu (self without a target)"] = "대상 메뉴 열기 (대상이 없으면 내 메뉴)"
+L["Open player menu"] = "플레이어 메뉴 열기"
+L["Press right stick: Unit menu"] = "오른쪽 스틱 누르기: 유닛 메뉴"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

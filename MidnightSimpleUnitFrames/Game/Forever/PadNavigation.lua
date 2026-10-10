@@ -1073,6 +1073,8 @@ function UpdateCapture()
     if capturing then Validate(scope) end
     local keyboard = PadNav.Keyboard
     if keyboard then keyboard.Check() end
+    local menus = MSUF.UnitMenus
+    if menus and menus.UpdateGamepad then menus.UpdateGamepad() end
 end
 
 -- Button hints for the window on top, built here and drawn by PadPrompts.lua:
@@ -1320,12 +1322,17 @@ PadNav.Kit = {
 local function Poll()
     if not PadUIEnabled() then
         if capturing then UpdateCapture() end
+        local menus = MSUF.UnitMenus
+        if menus and menus.UpdateGamepad then menus.UpdateGamepad() end
         return
     end
     CheckWatches()
     if #scopes > 0 or capturing then
         UpdateCapture()
         RefreshPrompts()
+    else
+        local menus = MSUF.UnitMenus
+        if menus and menus.UpdateGamepad then menus.UpdateGamepad() end
     end
 end
 

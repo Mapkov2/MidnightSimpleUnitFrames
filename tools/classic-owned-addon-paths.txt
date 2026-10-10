@@ -50,6 +50,7 @@ MidnightSimpleUnitFrames/Game/Forever/PadEditMode.lua
 MidnightSimpleUnitFrames/Game/Forever/PadKeyboard.lua
 MidnightSimpleUnitFrames/Game/Forever/PadNavigation.lua
 MidnightSimpleUnitFrames/Game/Forever/PadPrompts.lua
+MidnightSimpleUnitFrames/Game/Forever/PadUnitMenu.lua
 MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua
 MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua
 MidnightSimpleUnitFrames/Game/Mists/Auras.xml
