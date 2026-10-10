@@ -6926,6 +6926,8 @@ L["Open target menu (self without a target)"] = "대상 메뉴 열기 (대상이
 L["Open player menu"] = "플레이어 메뉴 열기"
 L["Press right stick: Unit menu"] = "오른쪽 스틱 누르기: 유닛 메뉴"
 
+L["Preview Layers"] = "미리보기 레이어"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

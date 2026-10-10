@@ -6953,6 +6953,8 @@ L["Open target menu (self without a target)"] = "Открыть меню цел�
 L["Open player menu"] = "Открыть меню игрока"
 L["Press right stick: Unit menu"] = "Нажмите правый стик: меню персонажа"
 
+L["Preview Layers"] = "Слои предпросмотра"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

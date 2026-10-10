@@ -2494,8 +2494,8 @@ function H.RefreshLayerButton(btn, owner, opts)
         btn.fs:SetTextColor(0.96, 0.98, 1.00, 1.00)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], on and 0 or 0.78) end
     elseif on and quiet then
-        btn.bg:SetColorTexture(quietBase[1], quietBase[2], quietBase[3], 0.34)
-        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.76)
+        btn.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.54)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.94)
         btn.fs:SetTextColor(textOn[1], textOn[2], textOn[3], textOn[4] or 0.96)
         if btn.off then btn.off:SetTextColor(textOff[1], textOff[2], textOff[3], 0.0) end
     elseif quiet then
@@ -2695,7 +2695,9 @@ function H.LayoutCompactLayersButton(box, compact, Tr)
     local layersBtn = box._msuf2LayersButton
     if compact and header then
         if layersBtn then
-            if layersBtn.SetText then layersBtn:SetText(Tr("Layers") .. " v", true) end
+            if layersBtn.SetText then layersBtn:SetText(Tr("Preview Layers") .. " v", true) end
+            local layerLabel = layersBtn._msuf2Label
+            if layerLabel then layersBtn:SetWidth(math.max(108, layerLabel:GetStringWidth() + 24)) end
             layersBtn:SetParent(header)
             layersBtn:ClearAllPoints()
             if expandBtn then layersBtn:SetPoint("RIGHT", expandBtn, "LEFT", -8, 0)
@@ -2707,7 +2709,7 @@ function H.LayoutCompactLayersButton(box, compact, Tr)
         return
     end
     if layersBtn then
-        if layersBtn.SetText then layersBtn:SetText("Layers") end
+        if layersBtn.SetText then layersBtn:SetText("Preview Layers") end
         layersBtn:SetParent(box)
         layersBtn:ClearAllPoints()
         layersBtn:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -5)
@@ -2776,8 +2778,9 @@ function H.LayoutLayerRail(box, rail, buttons, railWidth)
         headerWidth = ((header.GetStringWidth and header:GetStringWidth()) or 44) + 18
     end
     return H.FlowLayerChips(rail, buttons, {
-        width = railWidth - headerWidth,
+        width = railWidth,
         padX = 10 + headerWidth,
+        padXRight = 10,
         rowHeight = 20,
     })
 end
@@ -2827,7 +2830,7 @@ function H.FlowLayerChips(rail, buttons, opts)
     local padX, padY = opts.padX or 8, opts.padY or 5
     local gapX, gapY = opts.gapX or 5, opts.gapY or 4
     local rowH = opts.rowHeight or 20
-    local available = (tonumber(opts.width) or (rail.GetWidth and rail:GetWidth()) or 0) - padX * 2
+    local available = (tonumber(opts.width) or (rail.GetWidth and rail:GetWidth()) or 0) - padX - (tonumber(opts.padXRight) or padX)
     if available <= 0 then available = 480 end
     local x, rows, widest = 0, 1, 0
     for i = 1, #buttons do

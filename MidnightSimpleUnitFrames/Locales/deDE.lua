@@ -7129,6 +7129,8 @@ L["Open target menu (self without a target)"] = "Zielmenü öffnen (ohne Ziel ei
 L["Open player menu"] = "Eigenes Spielermenü öffnen"
 L["Press right stick: Unit menu"] = "Rechten Stick drücken: Einheitenmenü"
 
+L["Preview Layers"] = "Vorschau-Ebenen"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("deDE", LoadLocale)
 elseif MSUF.LOCALE == "deDE" then LoadLocale() end

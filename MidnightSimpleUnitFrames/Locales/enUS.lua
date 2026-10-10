@@ -5027,6 +5027,8 @@ L["Open target menu (self without a target)"] = "Open target menu (self without 
 L["Open player menu"] = "Open player menu"
 L["Press right stick: Unit menu"] = "Press right stick: Unit menu"
 
+L["Preview Layers"] = "Preview Layers"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enUS", LoadLocale)
 elseif MSUF.LOCALE == "enUS" then LoadLocale() end

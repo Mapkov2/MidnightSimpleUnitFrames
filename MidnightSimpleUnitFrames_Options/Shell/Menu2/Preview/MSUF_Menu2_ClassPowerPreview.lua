@@ -520,6 +520,7 @@ local ReadHandle = Interaction.Read
 local OpenClassPowerHandleSettings = Interaction.OpenSettings
 local function RefreshHandleVisuals(preview)
     if not (preview and preview.handles) then return end
+    Helpers.RefreshSelectedLayerButtons(preview, preview.selectedHandle)
     local guidesOn = GuidesOn(preview)
     for i = 1, #preview.handles do
         local h = preview.handles[i]
@@ -590,6 +591,7 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h._defaultX, h._defaultY = defaultX, defaultY
     h._label, h._color, h._applyKind = label, color, applyKind
     h._layerKey = layerKey or key
+    h._previewLayerKey = h._layerKey
     h:SetScript("OnEnter", function(self)
         self._hovering = true
         RefreshHandleVisuals(preview)
@@ -2120,7 +2122,7 @@ local function LayerAvailable(preview, key)
     local available = preview and preview.layerAvailable
     return not (available and available[key] == false)
 end
-local CP_LAYER_BUTTON_OPTS = {
+local CP_LAYER_BUTTON_OPTS = Helpers.LayerChipButtonOpts(TR, T.colors, Helpers.PreviewChromePalette(T), {
     Tr = TR,
     IsAvailable = LayerAvailable,
     IsOn = LayerOn,
@@ -2137,17 +2139,21 @@ local CP_LAYER_BUTTON_OPTS = {
             RefreshLayerButtons(preview)
         end
     end,
-}
+})
 local function CreateLayerSidebar(box, sideW)
     local sidebar = T.Panel(box, nil, { 0.025, 0.028, 0.04, 0.82 }, T.colors.borderSoft)
     if Helpers.ApplyPreviewChrome then Helpers.ApplyPreviewChrome(sidebar, "sidebar", T) end
-    sidebar:SetPoint("TOPLEFT", box.canvas, "TOPRIGHT", 8, 0)
+    sidebar:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 12, 12)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     if sidebar.SetClipsChildren then sidebar:SetClipsChildren(true) end
     box.sidebar = sidebar
     local chrome = Helpers.PreviewChromePalette and Helpers.PreviewChromePalette(T) or {}
-    local hdr = T.Font(sidebar, "GameFontDisableSmall", "LAYERS", chrome.layerHeader or T.colors.muted)
-    hdr:SetPoint("TOP", sidebar, "TOP", 0, -5)
+    local hdr = T.Font(sidebar, "GameFontDisableSmall", "Preview Layers", chrome.layerHeader or T.colors.muted)
+    hdr:SetPoint("LEFT", sidebar, "LEFT", 10, 0)
+    box._msuf2LayerRailHeader = hdr
+    box.LayoutLayerRail = function(self, width)
+        return Helpers.LayoutLayerRail(self, self.sidebar, self.layerButtons, width)
+    end
     box.layerVisibility = {}
     box.layerButtons = {}
     for i = 1, #CP_PREVIEW_LAYERS do
@@ -2275,13 +2281,13 @@ local function CreateAnimateButton(preview)
 end
 local function EnsureClassPowerLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
-    local btn = T.Button(box, "", 76, 20)
-    btn:SetText(TR("Layers") .. " v", true)
+    local btn = T.Button(box, "", 132, 20)
+    btn:SetText(TR("Preview Layers") .. " v", true)
     if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
     btn:SetScript("OnClick", function()
         if box.sidebar then box.sidebar:SetShown(not box.sidebar:IsShown()) end
     end)
-    M.AddTooltip(btn, "Layers", "Toggle the preview layer list.", { hook = true })
+    M.AddTooltip(btn, "Preview Layers", "Toggle the preview layer list.", { hook = true })
     RegisterPreviewControl(box._catalogCtx, btn, "layer.popover", "Class Resources Preview Layers", "button", "ephemeral")
     box._msuf2LayersButton = btn
     return btn
@@ -2296,7 +2302,6 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     box._msuf2CompactPreview = compact
     if box._msuf2PinnedFloating == true then compact = false end
     local boxWidth = max(1, tonumber(box.GetWidth and box:GetWidth()) or 1)
-    local resolvedSideW = min(104, max(72, boxWidth - 252))
     local canvas, sidebar = box.canvas, box.sidebar
     if compact then
         if box.title then box.title:Hide() end
@@ -2312,11 +2317,12 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
         end
         local layersBtn = EnsureClassPowerLayersButton(box)
         if sidebar and canvas then
-            local rows = #(box.layerButtons or {})
             sidebar:ClearAllPoints()
             if box._msuf2CompactHeader then sidebar:SetPoint("TOPRIGHT", layersBtn, "BOTTOMRIGHT", 0, -6)
             else sidebar:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -28) end
-            sidebar:SetSize(resolvedSideW + 8, 32 + rows * 18 + 10)
+            box._msuf2LayerPopoverWidth = min(268, max(160, boxWidth - 24))
+            if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Hide() end
+            box:LayoutLayerRail(box._msuf2LayerPopoverWidth)
             if sidebar.SetFrameLevel and canvas.GetFrameLevel then sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 90) end
             sidebar:Hide()
         end
@@ -2328,22 +2334,20 @@ local function ApplyClassPowerCompactPresentation(box, compact, sideW)
     if box.hint then box.hint:Show() end
     SetClassPowerPreviewToolsShown(box, true, box and box.animateButton)
     LayoutClassPowerHeaderControls(box, false)
+    box._msuf2LayerPopoverWidth = nil
+    if box._msuf2LayerRailHeader then box._msuf2LayerRailHeader:Show() end
     if canvas then
-        box.canvasW = max(1, boxWidth - resolvedSideW - 32)
-        box.canvasH = max(1, (tonumber(box.GetHeight and box:GetHeight()) or 330) - 42)
-        box._msuf2ExpandedCanvasW, box._msuf2ExpandedCanvasH = box.canvasW, box.canvasH
-        box.playerW = min(275, max(190, box.canvasW - 160))
         canvas:ClearAllPoints()
         canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
-        canvas:SetSize(box.canvasW, box.canvasH)
+        Helpers.ApplyDockedPreviewLayout(box, sidebar, canvas, 12, true)
+        canvas:ClearAllPoints()
+        canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+        canvas:SetPoint("BOTTOMRIGHT", sidebar, "TOPRIGHT", 0, 6)
+        box.canvasW = max(1, boxWidth - 24)
+        box.canvasH = max(1, (tonumber(box.GetHeight and box:GetHeight()) or 330) - 48 - sidebar:GetHeight())
+        box._msuf2ExpandedCanvasW, box._msuf2ExpandedCanvasH = box.canvasW, box.canvasH
+        box.playerW = min(275, max(190, box.canvasW - 160))
         if box.stage then box.stage:SetSize(box.canvasW, box.canvasH) end
-    end
-    if sidebar and canvas then
-        sidebar:ClearAllPoints()
-        sidebar:SetPoint("TOPLEFT", canvas, "TOPRIGHT", 8, 0)
-        sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
-        if sidebar.SetFrameLevel and canvas.GetFrameLevel then sidebar:SetFrameLevel((canvas:GetFrameLevel() or 1) + 1) end
-        sidebar:Show()
     end
     if box._msuf2LayersButton then box._msuf2LayersButton:Hide() end
 end

@@ -450,13 +450,13 @@ local function ApplyGroupPinnedPresentation(box, pinned, opts, sideW)
 end
 local function EnsureGroupLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
-    local btn = T.Button(box, "", 76, 20)
-    btn:SetText(((M.Tr and M.Tr("Layers")) or "Layers") .. " v", true)
+    local btn = T.Button(box, "", 132, 20)
+    btn:SetText(((M.Tr and M.Tr("Preview Layers")) or "Preview Layers") .. " v", true)
     if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
     btn:SetScript("OnClick", function()
         if box._layers then box._layers:SetShown(not box._layers:IsShown()) end
     end)
-    if M.AddTooltip then M.AddTooltip(btn, "Layers", "Toggle the preview layer list.", { hook = true }) end
+    if M.AddTooltip then M.AddTooltip(btn, "Preview Layers", "Toggle the preview layer list.", { hook = true }) end
     local registerControl = box._msuf2RegisterGroupPreviewControl or RegisterGroupPreviewControl
     registerControl(btn, "layers.popover", "Group Preview Layers", "button", "ephemeral")
     box._msuf2LayersButton = btn
@@ -482,7 +482,7 @@ local function SetGroupPreviewToolsShown(box, shown)
     if box._previewRoleButton then box._previewRoleButton:Show() end
     if controlsHint and box._msuf2CompactControlsHintWasShown then controlsHint:Show() end
 end
--- The Theme button translates "Layers" itself; the compact label is
+-- The Theme button translates "Preview Layers" itself; the compact label is
 -- composed, so it is translated first and set as translated.
 local function LayoutGroupPreviewHeaderControls(box, compact)
     PreviewHelpers.LayoutCompactLayersButton(box, compact, M.Tr)
@@ -510,7 +510,7 @@ local function ApplyGroupCompactPresentation(box, compact, sideW)
             if box._msuf2CompactHeader then layers:SetPoint("TOPRIGHT", layersBtn, "BOTTOMRIGHT", 0, -6)
             else layers:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -28) end
             -- The chips keep their flow inside the popover, sized to a readable
-            -- column; the caption is redundant behind a "Layers" button.
+            -- column; the caption is redundant behind a "Preview Layers" button.
             local popoverWidth = 268
             box._msuf2LayerPopoverWidth = popoverWidth
             layers:SetWidth(popoverWidth)
@@ -1518,7 +1518,7 @@ function NativeBuild.LayerRail(state)
     layers:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     layers:SetHeight(30)
     box._layers = layers
-    local layersTitle = Deps.LayerFont(layers, "LAYERS", chrome.layerHeader or (T.colors and T.colors.muted) or Deps.LayerHeaderColor)
+    local layersTitle = Deps.LayerFont(layers, "Preview Layers", chrome.layerHeader or (T.colors and T.colors.muted) or Deps.LayerHeaderColor)
     layersTitle:SetPoint("LEFT", layers, "LEFT", 10, 0)
     box._msuf2LayerRailHeader = layersTitle
     local layerDefaults = {

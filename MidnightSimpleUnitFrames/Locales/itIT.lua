@@ -7028,6 +7028,8 @@ L["Open target menu (self without a target)"] = "Apri il menu del bersaglio (il 
 L["Open player menu"] = "Apri il menu del giocatore"
 L["Press right stick: Unit menu"] = "Premi la levetta destra: menu dell’unità"
 
+L["Preview Layers"] = "Livelli di anteprima"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("itIT", LoadLocale)
 elseif MSUF.LOCALE == "itIT" then LoadLocale() end

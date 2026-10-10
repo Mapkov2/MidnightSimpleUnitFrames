@@ -978,7 +978,7 @@ function BoxBuild.Chrome(box, s)
     box.sidebar = sidebar
     local sHdr = PixelLayoutRegion(sidebar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall"))
     sHdr:SetPoint("LEFT", sidebar, "LEFT", 10, 0)
-    sHdr:SetText(TR("LAYERS"))
+    sHdr:SetText(TR("Preview Layers"))
     local layerHeaderColor = chrome.layerHeader or colors.muted or { 0.62, 0.70, 0.82, 0.82 }
     sHdr:SetTextColor(layerHeaderColor[1], layerHeaderColor[2], layerHeaderColor[3], layerHeaderColor[4] or 0.82)
     if T and T.StyleFontString then T.StyleFontString(sHdr, layerHeaderColor, 0) end

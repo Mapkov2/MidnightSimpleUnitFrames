@@ -6926,6 +6926,8 @@ L["Open target menu (self without a target)"] = "開啟目標選單（無目標�
 L["Open player menu"] = "開啟玩家選單"
 L["Press right stick: Unit menu"] = "按下右搖桿：單位選單"
 
+L["Preview Layers"] = "預覽圖層"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

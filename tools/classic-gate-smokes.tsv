@@ -589,3 +589,4 @@ clients+Forever	lua	tools/tests/castbar_preview_toolbar_layout_smoke.lua	{root} 
 clients+Forever	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} {flavor} classicGlass	Accordion preset palette survives lazy build: {flavor}
 -	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} Forever midnightDark	Dark accordion preset palette survives lazy build
 -	lua	tools/tests/menu_accordion_palette_smoke.lua	{root} Forever midnight	Midnight accordion status colors remain supported
+clients+Forever	lua	tools/tests/preview_layer_rail_smoke.lua	{root} {flavor}	Preview layer rail layout failed: {flavor}

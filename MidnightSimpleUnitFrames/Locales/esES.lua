@@ -7001,6 +7001,8 @@ L["Open target menu (self without a target)"] = "Abrir menú del objetivo (propi
 L["Open player menu"] = "Abrir menú del jugador"
 L["Press right stick: Unit menu"] = "Pulsa el stick derecho: menú de unidad"
 
+L["Preview Layers"] = "Capas de vista previa"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esES", LoadLocale)
 elseif MSUF.LOCALE == "esES" then LoadLocale() end

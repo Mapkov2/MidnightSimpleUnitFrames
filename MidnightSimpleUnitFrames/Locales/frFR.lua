@@ -7024,6 +7024,8 @@ L["Open target menu (self without a target)"] = "Ouvrir le menu de la cible (le 
 L["Open player menu"] = "Ouvrir le menu du joueur"
 L["Press right stick: Unit menu"] = "Appuyer sur le stick droit : menu de l’unité"
 
+L["Preview Layers"] = "Calques de l’aperçu"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("frFR", LoadLocale)
 elseif MSUF.LOCALE == "frFR" then LoadLocale() end

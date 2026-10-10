@@ -381,14 +381,14 @@ local function ApplyUnitPinnedPresentation(box, pinned, opts, sideW)
 end
 --- Compact inline presentation: the preview shrinks to a reference strip, the
 --- canvas takes the full box width, and the docked layer sidebar becomes a
---- popover behind a "Layers" button. The docked sidebar has a fixed content
+--- popover behind a "Preview Layers" button. The docked sidebar has a fixed content
 --- height, so simply shrinking the box would spill its rows past the section.
 local function EnsureUnitLayersButton(box)
     if box._msuf2LayersButton then return box._msuf2LayersButton end
     local T = MenuTheme()
     local btn
     if T and T.Button then
-        btn = T.Button(box, "Layers", 76, 20)
+        btn = T.Button(box, "Preview Layers", 132, 20)
     else
         btn = PixelLayoutRegion(CreateFrame("Button", nil, box, "BackdropTemplate"))
         btn:SetSize(76, 20)
@@ -399,7 +399,7 @@ local function EnsureUnitLayersButton(box)
         if sidebar then sidebar:SetShown(not sidebar:IsShown()) end
     end)
     if M2 and M2.AddTooltip then
-        M2.AddTooltip(btn, "Layers", "Toggle the preview layer list.", { hook = true })
+        M2.AddTooltip(btn, "Preview Layers", "Toggle the preview layer list.", { hook = true })
     end
     box._msuf2LayersButton = btn
     return btn
@@ -436,7 +436,7 @@ local function ApplyUnitCompactPresentation(box, compact, sideW)
             end
             -- The chips keep their flow inside the popover; it is sized to a
             -- readable column rather than the full box width, and the rail
-            -- caption is redundant behind a button already labelled "Layers".
+            -- caption is redundant behind a button already labelled "Preview Layers".
             local popoverWidth = 268
             box._msuf2LayerPopoverWidth = popoverWidth
             sidebar:SetWidth(popoverWidth)
