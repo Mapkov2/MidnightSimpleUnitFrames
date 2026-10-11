@@ -348,11 +348,18 @@ end
 
 local function IsActive() return active end
 
+-- Combat visibility changes even when the cached Ironfur count does not.
+-- The controller calls this only on its existing combat lifecycle events.
+local function RefreshVisibility()
+    if CP_CheckAutoHide then CP_CheckAutoHide(tickCount > 0 and 1 or 0, 1) end
+end
+
 local API = {
     Update = Update,
     SetActive = SetActive,
     InvalidateLayout = InvalidateLayout,
     RefreshVisual = RefreshVisual,
+    RefreshVisibility = RefreshVisibility,
     IsActive = IsActive,
 }
 

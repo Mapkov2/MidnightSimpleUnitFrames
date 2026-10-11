@@ -1556,6 +1556,7 @@ local function ClassPowerOnRareEvent(event, arg1)
         if _autoHideActive and CP.visible and CP.container then
             --- Re-run the current mode's update to trigger CP_CheckAutoHide
             CP_RunActiveUpdate(CP.powerType, CP.currentMax)
+            if CP.renderMode == CPK.MODE.IRONFUR then CP.ironfur.RefreshVisibility() end
         end
         return
     end

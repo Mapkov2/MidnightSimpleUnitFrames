@@ -12,6 +12,7 @@ local Stubs = assert(loadfile(repo .. "/.github/scripts/msuf_test_stubs.lua"))()
 
 local PT_COMBO_POINTS = 4
 local PT_ENERGY = 3
+local PT_RAGE = 1
 local MODE_SEGMENTED = 1
 
 local CLEARED_GLOBALS = {
@@ -82,7 +83,7 @@ local function Start(spec)
     env:InstallGlobals({ secretValue = true, time = true })
     for i = 1, #CLEARED_GLOBALS do _G[CLEARED_GLOBALS[i]] = nil end
 
-    local S = { combo = spec.combo or 1, affecting = false }
+    local S = { combo = spec.combo or 1, affecting = spec.startInCombat == true }
     local t = { env = env, S = S }
 
     env.Methods.RegisterUnitEvent = function(self, event)
@@ -127,8 +128,11 @@ local function Start(spec)
     player.MSUFPowerTextLayer = env:CreateFrame("Frame", nil, player)
     t.bar, t.background, t.trail = bar, background, trail
 
-    function UnitClass() return "Rogue", "ROGUE" end
-    function UnitPowerType() return PT_ENERGY end
+    function UnitClass()
+        if spec.guardian then return "Druid", "DRUID" end
+        return "Rogue", "ROGUE"
+    end
+    function UnitPowerType() return spec.guardian and PT_RAGE or PT_ENERGY end
     function UnitPower(_, powerType)
         if powerType == PT_COMBO_POINTS then return S.combo end
         return 0
@@ -139,7 +143,7 @@ local function Start(spec)
     end
     function UnitPowerDisplayMod() return 1 end
     function UnitHasVehicleUI() return false end
-    function GetSpecialization() return 1 end
+    function GetSpecialization() return spec.guardian and 3 or 1 end
     function UnitAffectingCombat(unit)
         assert(unit == "player", "combat state must be read for the player")
         return S.affecting
@@ -163,14 +167,17 @@ local function Start(spec)
     end
     MSUF_ResolveFontShadowMetrics = function() return 1, 1, -1 end
     MSUF_DB = {
-        general = {},
+        general = { perfLiteClassPowerEvents = spec.lite ~= false },
         bars = {
             showClassPower = true,
+            showGuardianIronfur = spec.guardian == true,
+            guardianIronfurShowHashLines = false,
             showAltMana = false,
             playerHPBarEnabled = false,
             classPowerHideOOC = spec.hideOOC == true,
             classPowerSyncPlayerPowerOOC = spec.syncPower == true,
             classPowerHideWhenEmpty = spec.hideWhenEmpty == true,
+            classPowerHideWhenFull = spec.hideWhenFull == true,
         },
     }
 
@@ -190,8 +197,14 @@ local function Start(spec)
     t.eventFrame = Upvalue(assert(t.CP.SyncControllerEvents, "SyncControllerEvents missing"), "eventFrame")
     t.onEvent = assert(t.eventFrame.scripts.OnEvent, "controller OnEvent script missing")
     module.Enable()
-    assert(t.CP.visible == true and t.CP.renderMode == MODE_SEGMENTED and t.CP.powerType == PT_COMBO_POINTS,
-        "rogue combo points did not route to the segmented class power bar")
+    if spec.guardian then
+        assert(t.CP.visible and t.CP.powerType == "IRONFUR", "Guardian/Bear did not route to Ironfur")
+        t.trackerFrame = Upvalue(t.CP.ironfur.SetActive, "eventFrame")
+        t.motionFrame = Upvalue(t.CP.ironfur.Update, "motionFrame")
+    else
+        assert(t.CP.visible == true and t.CP.renderMode == MODE_SEGMENTED and t.CP.powerType == PT_COMBO_POINTS,
+            "rogue combo points did not route to the segmented class power bar")
+    end
     t.container = assert(t.CP.container, "class power container missing")
     return t
 end
@@ -406,6 +419,117 @@ Case("setting off with another rule active keeps the bar shown", function()
     t.S.affecting = false
     Fire(t, "PLAYER_REGEN_ENABLED")
     assert(t.container.alpha == 1, "OOC auto-hide off: bar hidden after combat, alpha " .. tostring(t.container.alpha))
+    return t
+end)
+
+-- Guardian keeps its render cache across combat transitions. Visibility must
+-- still update before its first cast, after expiration and on repeated cycles.
+local function GuardianCast(t)
+    assert(t.trackerFrame.events.UNIT_SPELLCAST_SUCCEEDED, "Ironfur cast event missing")
+    t.trackerFrame.scripts.OnEvent(t.trackerFrame, "UNIT_SPELLCAST_SUCCEEDED", "player", "Ironfur-162", 192081)
+end
+
+local function GuardianExpire(t)
+    t.env:AdvanceTime(20)
+    t.motionFrame.scripts.OnUpdate(t.motionFrame, 20)
+end
+
+Case("Guardian combat entry restores both bars before the first Ironfur cast", function()
+    local t = Start({ guardian = true, hideOOC = true, syncPower = true })
+    assert(not Shown(t) and PowerHidden(t), "Guardian must start hidden OOC")
+    for cycle = 1, 3 do
+        t.S.affecting = true
+        Fire(t, "PLAYER_REGEN_DISABLED")
+        assert(Shown(t) and t.bar.alpha == 1 and t.player.MSUFPowerTextLayer.alpha == 1,
+            "Guardian combat entry left Ironfur or Rage hidden on cycle " .. cycle)
+        t.S.affecting = false
+        Fire(t, "PLAYER_REGEN_ENABLED")
+        assert(not Shown(t) and PowerHidden(t), "Guardian combat exit did not hide both bars on cycle " .. cycle)
+    end
+    return t
+end)
+
+Case("Guardian Ironfur expiration does not postpone combat-exit visibility", function()
+    local t = Start({ guardian = true, hideOOC = true, syncPower = true })
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    GuardianCast(t)
+    GuardianExpire(t)
+    assert(Shown(t) and t.bar.alpha == 1, "empty Ironfur must stay visible in combat without Empty rule")
+    assert(t.motionFrame.shown == false, "expired Ironfur must stop its motion frame")
+    t.S.affecting = false
+    Fire(t, "PLAYER_REGEN_ENABLED")
+    assert(not Shown(t) and PowerHidden(t), "unchanged empty count skipped combat-exit visibility")
+    return t
+end)
+
+Case("Guardian combat exit also hides an active Ironfur tracker", function()
+    local t = Start({ guardian = true, hideOOC = true, syncPower = true })
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    GuardianCast(t)
+    t.S.affecting = false
+    Fire(t, "PLAYER_REGEN_ENABLED")
+    assert(not Shown(t) and PowerHidden(t), "active Ironfur skipped combat-exit visibility")
+    return t
+end)
+
+Case("Guardian Empty rule hides only Ironfur during combat", function()
+    local t = Start({ guardian = true, hideOOC = true, syncPower = true, hideWhenEmpty = true })
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    assert(not Shown(t) and t.bar.alpha == 1, "empty Ironfur must not keep Rage hidden in combat")
+    GuardianCast(t)
+    assert(Shown(t), "active Ironfur must show with Empty rule")
+    GuardianExpire(t)
+    assert(not Shown(t) and t.bar.alpha == 1, "expired Ironfur must hide while Rage stays available")
+    t.S.affecting = false
+    Fire(t, "PLAYER_REGEN_ENABLED")
+    assert(PowerHidden(t), "combined Empty/OOC rules did not hide Rage on exit")
+    return t
+end)
+
+Case("Guardian Full rule still hides active Ironfur without hiding Rage", function()
+    local t = Start({ guardian = true, hideOOC = true, syncPower = true, hideWhenFull = true })
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    GuardianCast(t)
+    assert(not Shown(t) and t.bar.alpha == 1, "Full rule changed or hid Rage")
+    GuardianExpire(t)
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    assert(Shown(t) and t.bar.alpha == 1, "expired Ironfur must show when only Full rule is active in combat")
+    return t
+end)
+
+Case("Guardian sync disabled keeps Rage visible through OOC transitions", function()
+    local t = Start({ guardian = true, hideOOC = true })
+    assert(not Shown(t) and t.bar.alpha == 1, "unlinked Rage must stay visible OOC")
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    assert(Shown(t) and t.bar.alpha == 1, "unlinked Guardian combat entry failed")
+    return t
+end)
+
+Case("Guardian activation in combat hides correctly on the first exit", function()
+    local t = Start({ guardian = true, hideOOC = true, syncPower = true, startInCombat = true })
+    assert(Shown(t) and t.bar.alpha == 1, "activation in combat must show both bars")
+    t.S.affecting = false
+    Fire(t, "PLAYER_REGEN_ENABLED")
+    assert(not Shown(t) and PowerHidden(t), "activation in combat skipped first combat exit")
+    return t
+end)
+
+Case("Guardian broad bindings restore both bars before Ironfur", function()
+    local t = Start({ guardian = true, hideOOC = true, syncPower = true, lite = false })
+    t.S.affecting = true
+    Fire(t, "PLAYER_REGEN_DISABLED")
+    assert(Shown(t) and t.bar.alpha == 1, "broad bindings left Guardian hidden")
+    return t
+end)
+
+Case("Guardian OOC rule disabled keeps both bars visible", function()
+    local t = Start({ guardian = true, hideOOC = false, syncPower = true })
+    assert(Shown(t) and t.bar.alpha == 1, "disabled OOC rule hid Guardian or Rage")
     return t
 end)
 
