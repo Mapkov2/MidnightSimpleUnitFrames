@@ -55,6 +55,7 @@ clients+Forever	lua	tools/tests/group_preview_aura_config_share_smoke.lua	{root}
 -	lua	tools/tests/uf_dispatch_budget_smoke.lua	{root} Vanilla	Unit-frame dispatch budget smoke failed: Vanilla
 -	lua	tools/tests/health_tick_native_budget_smoke.lua	{root} Mainline	Health tick native-call budget smoke failed: Mainline
 -	lua	tools/tests/health_tick_native_budget_smoke.lua	{root} Vanilla	Health tick native-call budget smoke failed: Vanilla
+-	lua	tools/tests/prediction_queued_glow_tick_smoke.lua	{root} Mainline	Queued prediction glow tick smoke failed: Mainline
 -	lua	tools/tests/group_gone_state_smoke.lua	{root} Mainline	Group dead background gone-state smoke failed: Mainline
 -	lua	tools/tests/group_gone_state_smoke.lua	{root} Vanilla	Group dead background gone-state smoke failed: Vanilla
 -	lua	tools/tests/forever_raid_manager_gamepad_smoke.lua	{root}	Forever Raid Manager gamepad smoke failed

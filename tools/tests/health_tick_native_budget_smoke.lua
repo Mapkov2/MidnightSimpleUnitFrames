@@ -21,6 +21,8 @@
 --     on a secret local in the owned files;
 --   * plain, no absorb: the common raid member;
 --   * plain, overflowing absorb: the glow is shown.
+--   * protected, queued: an absorb event queues the frame, the health
+--     tick follows, the prediction queue drains (one rendered frame).
 -- Vanilla runs the plain scenarios (Classic clients return no secrets).
 --
 -- Counted per tick: UnitHealthPercent, UnitHealth, UnitHealthMax,
@@ -73,6 +75,18 @@ local BUDGETS = {
         ["unit protected"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
             ["calc:GetDamageAbsorbs"] = 1, SetAlphaFromBoolean = 1,
             SetValue = 2, SetVertexColor = 1 }, predicates = 4, k = 322 },
+        -- Raid trace 2026-10-07: a frame whose absorb event is queued
+        -- leaves its health tick's glow to the queue drain. Per queued frame
+        -- (absorb event, health tick, drain) the glow renders once: before
+        -- group 19 natives (2 calculator reads, 2 flag writes, 6
+        -- UnitHealthPercent) and 783 instructions, unit 18 and 707. The
+        -- unqueued protected tick pays 2 instructions for the queue test.
+        ["group protected queued"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
+            ["calc:GetDamageAbsorbs"] = 1, SetAlphaFromBoolean = 1, UnitGetTotalAbsorbs = 1,
+            SetValue = 4, SetVertexColor = 1, UnitIsDeadOrGhost = 1 }, predicates = 13, k = 744 },
+        ["unit protected queued"] = { natives = { UnitHealthPercent = 5, UnitGetDetailedHealPrediction = 1,
+            ["calc:GetDamageAbsorbs"] = 1, SetAlphaFromBoolean = 1, UnitGetTotalAbsorbs = 1,
+            SetValue = 4, SetVertexColor = 1 }, predicates = 9, k = 666 },
     },
     Vanilla = {},
 }
@@ -100,7 +114,8 @@ Check(group._msufUpdateGroupVisualsGoneState ~= nil, "raid1: the dead background
 local TICKS = 10
 local ADDON_SOURCE = "@" .. root .. "/MidnightSimpleUnitFrames/"
 local step = 0
-local function Ticks(frame, unit, count)
+local Ticks
+local function HealthTicks(frame, unit, count)
     for _ = 1, count do
         -- Every tick carries a new value, so no plain dedupe hides a write.
         step = step + 1
@@ -108,11 +123,38 @@ local function Ticks(frame, unit, count)
         w:Fire(frame, unit, "UNIT_HEALTH")
     end
 end
+Ticks = HealthTicks
+
+-- A queued frame (raid trace 2026-10-07): an absorb event queues the
+-- frame, its health tick follows, and the prediction queue drains at OnUpdate.
+-- The drain is the frame whose OnUpdate script is the Prediction file's.
+local PREDICTION_SOURCE = "UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua"
+local function Drain()
+    local frames = w.h.widgets.frames
+    for index = 1, #frames do
+        local driver = frames[index]
+        local script = driver.scripts and driver.scripts.OnUpdate
+        if script and debug.getinfo(script, "S").source:find(PREDICTION_SOURCE, 1, true) then
+            if driver:IsShown() then script(driver, 1 / 60) end
+            return
+        end
+    end
+end
+local function QueuedFrames(frame, unit, count)
+    for _ = 1, count do
+        step = step + 1
+        S.pct = 0.61 + (step % 20) / 100
+        w:Fire(frame, unit, "UNIT_ABSORB_AMOUNT_CHANGED")
+        w:Fire(frame, unit, "UNIT_HEALTH")
+        Drain()
+    end
+end
 
 local results = {}
-local function Measure(label, frame, unit, secret, absorb)
+local function Measure(label, frame, unit, secret, absorb, queued)
     S.secret, S.absorb, S.incoming, S.dead = secret, absorb, 0, false
     w:Prime(frame, unit)
+    if queued then Ticks = function(f, u, n) return QueuedFrames(f, u, n) end end
     Ticks(frame, unit, 3)
     if secret then
         -- No owned line compares or truth-tests a secret local.
@@ -153,11 +195,14 @@ local function Measure(label, frame, unit, secret, absorb)
         collectgarbage("restart")
     end
     results[#results + 1] = result
+    Ticks = HealthTicks
 end
 
 if protectedClient then
     Measure("group protected", group, "raid1", true, 0.6)
     Measure("unit protected", single, "target", true, 0.6)
+    Measure("group protected queued", group, "raid1", true, 0.6, true)
+    Measure("unit protected queued", single, "target", true, 0.6, true)
 end
 Measure("group plain", group, "raid1", false, 0)
 Measure("group plain overflow", group, "raid1", false, 0.6)

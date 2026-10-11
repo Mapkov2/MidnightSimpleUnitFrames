@@ -1968,6 +1968,8 @@ CancelQueuedPrediction = function(frame)
   end
   frame._msufPredictionQueued = nil
   frame._msufPredictionDirtyMask = nil
+  -- Every caller hides or re-renders the glow (Apply, Suspend, offline).
+  frame._msufPredictionGlowDeferred = nil
   if predictionWriteCount == 0 and predictionDriverArmed == true then
     if predictionDriverPersistent == true then
       predictionDriver:Hide()
@@ -2099,6 +2101,12 @@ FlushPredictionQueue = function()
         else
           UpdateFull(frame, PREDICTION_DIRTY_PLAN_KEYS[mask], frame.MSUFUnitKey, nil, nil, true)
         end
+      end
+      -- A health tick left its glow to this drain (UpdateGlowHealthFast). A
+      -- drain that drew the glow consumed it; otherwise repeat the tick now.
+      if frame._msufPredictionGlowDeferred == true then
+        frame._msufPredictionGlowDeferred = nil
+        UpdateGlowHealthFast(frame, "UNIT_HEALTH", frame.MSUFUnitKey)
       end
     end
   end
@@ -2268,6 +2276,16 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
       and holder._msufOverAbsorbReverse == (frame._msufPredictionHpReverse == true)
       and holder._msufOverAbsorbAnchor == (frame.hpBar or frame.Health) then
       frame._msufPredictionFullHealthAlphaDirty = true
+      -- A queued data event drains at OnUpdate, after this tick and before the
+      -- frame draws, and renders the glow again from the same unit state (these
+      -- events are synchronous). Leave the render to the drain; it repeats this
+      -- tick itself when its plan draws no glow. Raid trace 2026-10-07: 11,772
+      -- renders = 9,483 ticks + 2,289 drains; in its frame dump every drain ran
+      -- after all events and 121 of 377 ticks fell into a queued frame.
+      if frame._msufPredictionQueued == true then
+        frame._msufPredictionGlowDeferred = true
+        return
+      end
       if not ShowProtectedOverAbsorb(frame, holder, unit, false) then HideOverAbsorbGlow(frame) end
       return
     end
@@ -2466,6 +2484,8 @@ local function ApplyPredictionValues(frame, cfg, unit, cacheUnit, event, hp, max
     ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb, forceMax)
     if frame._msufPredictionOverAbsorbOverlay == true
       or frame._msufPredictionFullHealthStripe == true then
+      -- This settles the glow from fresh inputs: a deferred health tick is done.
+      frame._msufPredictionGlowDeferred = nil
       local glowAbsorb = frame._msufPredictionAbsorb
       if refreshAbsorb == true and frame._msufPredictionMixedFollowClamp == true then
         glowAbsorb = ReadDamageAbsorbs(frame, unit)
@@ -2737,6 +2757,7 @@ local function CreateAbsorbDataWriter(followAbsorb, withGlow, fullStripe)
     if bar._msufMaxReady ~= true then maxHP = ReadHealthMax(frame, unit, false) end
     ShowValue(bar, maxHP, absorb, false)
     if withGlow then
+      frame._msufPredictionGlowDeferred = nil
       local holder = frame.overAbsorbGlowBar
       local knownInactive = not fullStripe and not absorbSecret
         and (type(absorb) ~= "number" or absorb <= 0)
