@@ -208,6 +208,9 @@ local function Ensure(key, row)
         pending = true
         return
     end
+    if MSUF.ResourceVisibility then
+        MSUF.ResourceVisibility.BindExtra(state.host, E.GetPlayerFrame(), E.db.bars)
+    end
     if state.button then Initialize(state, state.button) end
     local A3 = SensorAPI()
     if not state.sensor and A3 then

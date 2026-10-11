@@ -1200,6 +1200,7 @@ foreach ($extraPath in @(
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ExtraAuras.lua",
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ManaExtras.lua",
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceMarks.lua",
+    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Visibility.lua",
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceExtras.lua",
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller_Auras.lua",
     "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller_Ticker.lua",

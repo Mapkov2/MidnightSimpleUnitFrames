@@ -7004,6 +7004,11 @@ L["Press right stick: Unit menu"] = "Presiona el stick derecho: menú de unidad"
 
 L["Preview Layers"] = "Capas de vista previa"
 
+-- Resource visibility.
+L["Independent of Player Frame visibility"] = "Independiente de la visibilidad del marco del jugador"
+L["Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached."] = "Esta fuente de recursos permanece visible cuando las reglas de visibilidad ocultan el marco del jugador. Sus propias reglas de ocultación automática siguen activas. El poder del jugador requiere una barra separada."
+L["Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."] = "Los indicadores de recursos independientes pueden permanecer visibles cuando el jugador está oculto. Las marcas y las superposiciones de maná siguen usando su barra de recursos como referencia de posición."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("esMX", LoadLocale)
 elseif MSUF.LOCALE == "esMX" then LoadLocale() end

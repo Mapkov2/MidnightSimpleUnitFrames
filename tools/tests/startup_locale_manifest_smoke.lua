@@ -66,7 +66,11 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- 14,740,000 for 5,076 LF bytes: the CLICK binding owner in
         -- Kernel/MSUF_Keybinds.lua and three binding labels in the twelve packs;
         -- the menu runtime itself is Forever-only; no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16880000 or 14740000),
+        -- 2026-10-11 (resource visibility): Classic 14,740,000 -> 14,765,000
+        -- for the event-driven resource visibility owner, its profile sync keys
+        -- and three translated labels/tooltips in twelve packs (about 23 KB).
+        -- No Options code or catalog was added to startup.
+        assert(bytes < (suffix == "Mainline" and 16880000 or 14765000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],

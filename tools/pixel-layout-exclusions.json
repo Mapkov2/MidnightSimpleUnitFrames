@@ -586,5 +586,11 @@
     "call": "CreateFrame ( \"Frame\" )",
     "count": 1,
     "reason": "Unparented event-only driver replays protected portrait click setup after combat; no visual geometry"
+  },
+  {
+    "path": "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Visibility.lua",
+    "call": "CreateFrame ( \"Frame\" )",
+    "count": 1,
+    "reason": "Unparented event driver for opt-in resource alpha rules and deferred parent restoration; owns no geometry"
   }
 ]

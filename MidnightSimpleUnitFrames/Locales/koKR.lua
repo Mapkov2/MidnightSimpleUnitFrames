@@ -6928,6 +6928,11 @@ L["Press right stick: Unit menu"] = "오른쪽 스틱 누르기: 유닛 메뉴"
 
 L["Preview Layers"] = "미리보기 레이어"
 
+-- Resource visibility.
+L["Independent of Player Frame visibility"] = "플레이어 프레임 표시와 독립"
+L["Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached."] = "표시 규칙으로 플레이어 프레임이 숨겨져도 이 자원은 계속 표시됩니다. 자체 자동 숨김 규칙은 계속 적용됩니다. 플레이어 자원은 분리된 자원 바가 필요합니다."
+L["Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."] = "플레이어가 숨겨져도 독립적인 자원 보조 표시를 유지할 수 있습니다. 표시선과 마나 오버레이는 여전히 자원 바를 위치 기준으로 사용합니다."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("koKR", LoadLocale)
 elseif MSUF.LOCALE == "koKR" then LoadLocale() end

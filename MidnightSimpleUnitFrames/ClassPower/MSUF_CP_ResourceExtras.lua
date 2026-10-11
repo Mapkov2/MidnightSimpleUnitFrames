@@ -41,6 +41,7 @@ function MSUF.CPBuilders.ResourceExtras(E)
         end
         local b = E.db.bars or {}
         events:UnregisterAllEvents()
+        if MSUF.ResourceVisibility then MSUF.ResourceVisibility.ClearExtras() end
         RefreshHelper("ExtraAuras", b.showIgnorePain == true or b.showArcaneWindow == true)
         RefreshHelper("ManaExtras", b.manaUpcomingCost == true or b.manaRegenPause == true or b.manaGainPulse == true)
         RefreshHelper("ResourceMarks", type(b.resourceMarks) == "table" and #b.resourceMarks > 0)
@@ -58,6 +59,7 @@ function MSUF.CPBuilders.ResourceExtras(E)
     end
     Disable = function()
         disabled = true
+        if MSUF.ResourceVisibility then MSUF.ResourceVisibility.ClearExtras() end
         events:UnregisterAllEvents()
         for _, helper in pairs(helpers) do helper.Disable() end
         -- An aura sensor cannot be parked in combat; finish at combat end.

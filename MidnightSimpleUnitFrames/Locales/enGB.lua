@@ -4971,6 +4971,11 @@ L["Press right stick: Unit menu"] = "Press right stick: Unit menu"
 
 L["Preview Layers"] = "Preview Layers"
 
+-- Resource visibility.
+L["Independent of Player Frame visibility"] = "Independent of Player Frame visibility"
+L["Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached."] = "Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached."
+L["Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."] = "Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("enGB", LoadLocale)
 elseif MSUF.LOCALE == "enGB" then LoadLocale() end

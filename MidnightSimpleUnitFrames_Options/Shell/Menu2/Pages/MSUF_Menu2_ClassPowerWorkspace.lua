@@ -7,7 +7,10 @@ M.ClassPowerWorkspace = Workspace
 local LABELS = { class = "Class Resource", power = "Player Power", hp = "Extra Health Bar",
     mana = "Alternative Mana", extras = "Additional resources" }
 local ORDER = { "class", "power", "hp", "mana", "extras" }
-local SECTIONS = { classpower_detached_power = "power", classpower_detached_power_textures = "power",
+local SECTIONS = {
+    classpower_detached_power_visibility = "power", classpower_player_hp_visibility = "hp",
+    classpower_alt_mana_visibility = "mana", classpower_resource_visibility = "extras",
+    classpower_detached_power = "power", classpower_detached_power_textures = "power",
     classpower_detached_power_text = "power", classpower_player_hp = "hp", classpower_player_hp_textures = "hp",
     classpower_player_hp_text = "hp", classpower_alt_mana = "mana", classpower_alt_mana_behavior = "mana",
     classpower_resource_extras = "extras", classpower_resource_marks = "extras",

@@ -750,6 +750,10 @@ local function EnsureTextOverlay(frame, field, layer, fallback)
     end
     frame[field] = overlay
   end
+  if field == "MSUFPowerTextLayer" and frame._msufPowerVisibilityParent
+    and overlay:GetParent() ~= frame._msufPowerVisibilityParent then
+    overlay:SetParent(frame._msufPowerVisibilityParent)
+  end
   if frame.GetFrameLevel and overlay.SetFrameLevel then
     local level = (Layers.TextLevel and Layers.TextLevel(frame, layer, fallback)) or (GetLayerBaseLevel(frame) + 10 + ClampFrameLayer(layer, fallback))
     if overlay._msufFrameLevel ~= level then

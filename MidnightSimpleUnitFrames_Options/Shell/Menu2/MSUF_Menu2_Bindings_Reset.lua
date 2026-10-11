@@ -266,6 +266,7 @@ local CLASSPOWER_EXTRA_BARS_KEYS = KSW [[
 local function IsClassPowerBarsKey(key)
     if type(key) ~= "string" then return false end
     return StartsWith(key, "classPower")
+        or StartsWith(key, "playerPower")
         or StartsWith(key, "detachedPowerBar")
         or StartsWith(key, "altMana")
         or StartsWith(key, "playerHPBar")

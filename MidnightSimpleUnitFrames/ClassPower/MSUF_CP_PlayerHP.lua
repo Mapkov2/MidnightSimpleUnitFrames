@@ -812,6 +812,10 @@ end
 --- the player frame. The edge stamp is cleared so the next layout that shows the
 --- bar shows its outline again.
 local function Hide()
+    if MSUF.ResourceVisibility then
+        MSUF.ResourceVisibility.Unbind(PHP.frame)
+        MSUF.ResourceVisibility.Unbind(PHP.borderHost)
+    end
     if PHP.frame then PHP.frame:Hide() end
     HideBarEdges()
     HideShapeEdge()
@@ -1145,6 +1149,12 @@ local function Refresh(playerFrame)
         PHP._maxHP = nil
         PHP._textMaxHP = nil
         Update("FULL_REFRESH")
+        if MSUF.ResourceVisibility then
+            local owner = playerFrame or GetPlayerFrame()
+            owner = owner._msufHealthVisualRoot or owner
+            MSUF.ResourceVisibility.Bind(PHP.frame, owner, _cpDB.bars, "playerHPBar", "health")
+            MSUF.ResourceVisibility.Bind(PHP.borderHost, owner, _cpDB.bars, "playerHPBar", "health")
+        end
     end
 end
 

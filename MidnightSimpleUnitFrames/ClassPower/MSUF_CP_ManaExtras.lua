@@ -514,6 +514,12 @@ Refresh = function()
         events:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED","player")
     end
     Samples(host)
+    if MSUF.ResourceVisibility then
+        MSUF.ResourceVisibility.BindExtra(state.five, host, b)
+        MSUF.ResourceVisibility.BindExtra(state.tick, host, b)
+        MSUF.ResourceVisibility.BindExtra(state.prediction, host, b)
+        for _, bar in pairs(state.samples or {}) do MSUF.ResourceVisibility.BindExtra(bar, host, b) end
+    end
     if not Editing() then
         state.last=nil
         ObserveMana()

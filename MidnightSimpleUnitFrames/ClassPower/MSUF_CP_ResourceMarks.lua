@@ -220,6 +220,7 @@ local function Overlay(host)
             end)
         end
     end
+    if MSUF.ResourceVisibility then MSUF.ResourceVisibility.BindExtra(overlay, host, E.db.bars) end
     overlay:SetFrameLevel(host:GetFrameLevel() + OVERLAY_LEVEL)
     return overlay
 end

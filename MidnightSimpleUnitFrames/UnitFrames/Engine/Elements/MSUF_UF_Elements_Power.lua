@@ -754,6 +754,7 @@ function Power.GetEvents(frame, spec)
 end
 
 function Power.Disable(frame)
+  if MSUF.ResourceVisibility then MSUF.ResourceVisibility.Unbind(frame and frame._msufPowerVisibilityHost) end
   SetShown(frame, false)
   HidePowerBorder(frame and frame.targetPowerBar)
   if HideBarGradient and frame then HideBarGradient(frame.powerGradients) end
@@ -809,7 +810,6 @@ function Power.Apply(frame, spec)
   frame.Power = bar
   frame.powerBar = bar
   frame.power = bar
-
   local power = spec and spec.power or {}
   -- Augmentation Evoker renders Ebon Might here instead of a power value. That
   -- is a value/event/text decision only: geometry, media, border and layer stay
@@ -986,6 +986,7 @@ function Power.Apply(frame, spec)
   -- after the elements; a spec applies only once the core has loaded.
   MSUF.Require("MSUF_ApplyBossPhysicalBarGeometry", "UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua")(frame)
   NotifyRoundedPowerBorder(frame, enabled)
+  if MSUF.ResourceVisibility then MSUF.ResourceVisibility.ConfigurePower(frame) end
   if spec and spec.key == "player" then
     Power.SetClassResourceOocHidden(frame, frame._msufClassPowerOocHidden == true)
   end

@@ -6955,6 +6955,11 @@ L["Press right stick: Unit menu"] = "Нажмите правый стик: ме�
 
 L["Preview Layers"] = "Слои предпросмотра"
 
+-- Resource visibility.
+L["Independent of Player Frame visibility"] = "Независимо от видимости рамки игрока"
+L["Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached."] = "Этот ресурс остаётся видимым, когда правила видимости скрывают рамку игрока. Его собственные правила автоматического скрытия продолжают действовать. Для ресурса игрока нужна отдельная полоса."
+L["Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."] = "Отдельные индикаторы ресурсов могут оставаться видимыми, когда рамка игрока скрыта. Метки и наложения маны по-прежнему используют свою полосу ресурсов как источник положения."
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("ruRU", LoadLocale)
 elseif MSUF.LOCALE == "ruRU" then LoadLocale() end

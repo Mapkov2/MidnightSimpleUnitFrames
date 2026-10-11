@@ -10,6 +10,7 @@ MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ExtraAuras.lua
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ManaExtras.lua
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceExtras.lua
 MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceMarks.lua
+MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Visibility.lua
 MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua
 MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua
 MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Buttons.lua

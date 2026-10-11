@@ -237,6 +237,7 @@ ClassPower\MSUF_CP_Controller_Events.lua
 ClassPower\MSUF_CP_ExtraAuras.lua
 ClassPower\MSUF_CP_ManaExtras.lua
 ClassPower\MSUF_CP_ResourceMarks.lua
+ClassPower\MSUF_CP_Visibility.lua
 ClassPower\MSUF_CP_ResourceExtras.lua
 ClassPower\MSUF_CP_Controller.lua
 

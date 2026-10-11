@@ -1141,6 +1141,10 @@ function Refresh.ShowClassPower(playerFrame, b, cpHeight, powerType, renderMode,
     --- feature toggle) would otherwise skip its own auto-hide evaluation and
     --- leave the bar at the alpha 1 reset below until the next runtime event.
     CP.visible = true
+    if MSUF.ResourceVisibility then
+        MSUF.ResourceVisibility.Bind(CP.container, playerFrame._msufHealthVisualRoot or playerFrame,
+            b, "classPower", "class")
+    end
 
     --- Reset container alpha before update (auto-hide in updateFn may override)
     CP.container:SetAlpha(1)
@@ -1181,6 +1185,7 @@ end
 --- The Aug exit (state -> sensor -> Power) has already run in ApplyAugLifecycle,
 --- so the sensor teardown here is unconditional.
 function Refresh.HideClassPower(playerFrame, cpHeight)
+    if MSUF.ResourceVisibility then MSUF.ResourceVisibility.Unbind(CP.container) end
     if CP._playerPowerOocHidden then CP_SyncPlayerPowerOOC(false) end
     CP.SetEbonSensorActive(false)
     if CP.ironfur and CP.ironfur.SetActive then CP.ironfur.SetActive(false) end
@@ -1226,9 +1231,14 @@ function Refresh.ApplyAltMana(playerFrame, amEnabled, inEditMode)
         AM_UpdateValue()
         AM.container:Show()
         AM.visible = true
+        if MSUF.ResourceVisibility then
+            MSUF.ResourceVisibility.Bind(AM.container, playerFrame._msufHealthVisualRoot or playerFrame,
+                _cpDB.bars, "altMana", "mana")
+        end
     else
         if AM.container then AM.container:Hide() end
         AM.visible = false
+        if MSUF.ResourceVisibility then MSUF.ResourceVisibility.Unbind(AM.container) end
     end
 end
 

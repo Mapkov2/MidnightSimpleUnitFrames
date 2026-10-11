@@ -6928,6 +6928,11 @@ L["Press right stick: Unit menu"] = "按下右搖桿：單位選單"
 
 L["Preview Layers"] = "預覽圖層"
 
+-- Resource visibility.
+L["Independent of Player Frame visibility"] = "獨立於玩家框架的可見性"
+L["Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached."] = "當可見性規則隱藏玩家框架時，此資源仍保持可見。自身的自動隱藏規則仍然生效。玩家能量需要使用獨立的能量條。"
+L["Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."] = "玩家框架隱藏時，獨立的資源輔助顯示仍可保持可見。標記和法力疊加層仍以其資源條作為位置參考。"
+
 end
 if type(MSUF.RegisterLocaleLoader) == "function" then MSUF.RegisterLocaleLoader("zhTW", LoadLocale)
 elseif MSUF.LOCALE == "zhTW" then LoadLocale() end

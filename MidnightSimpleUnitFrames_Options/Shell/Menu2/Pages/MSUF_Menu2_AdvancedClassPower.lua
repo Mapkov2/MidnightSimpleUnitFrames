@@ -30,6 +30,21 @@ SwitchAt = function(ctx, parent, label, x, y, width, source, key, default, apply
     return control
 end
 local CLASSPOWER_SETTING_KEY_BY_PATH = {
+    ["visibility.independent"] = "bars.classPowerIndependentVisibility",
+    ["detached_power.visibility.independent"] = "bars.playerPowerIndependentVisibility",
+    ["detached_power.visibility.out_of_combat"] = "bars.playerPowerHideOOC",
+    ["detached_power.visibility.when_full"] = "bars.playerPowerHideWhenFull",
+    ["detached_power.visibility.when_empty"] = "bars.playerPowerHideWhenEmpty",
+    ["player_hp.visibility.independent"] = "bars.playerHPBarIndependentVisibility",
+    ["player_hp.visibility.out_of_combat"] = "bars.playerHPBarHideOOC",
+    ["player_hp.visibility.when_full"] = "bars.playerHPBarHideWhenFull",
+    ["player_hp.visibility.when_empty"] = "bars.playerHPBarHideWhenEmpty",
+    ["alternative_mana.visibility.independent"] = "bars.altManaIndependentVisibility",
+    ["alternative_mana.visibility.out_of_combat"] = "bars.altManaHideOOC",
+    ["alternative_mana.visibility.when_full"] = "bars.altManaHideWhenFull",
+    ["alternative_mana.visibility.when_empty"] = "bars.altManaHideWhenEmpty",
+    ["resource_extras.visibility.independent"] = "bars.resourceExtraIndependentVisibility",
+    ["resource_extras.visibility.out_of_combat"] = "bars.resourceExtraHideOOC",
     ["alternative_mana.enabled"] = "bars.showAltMana",
     ["alternative_mana.layout.height"] = "bars.altManaHeight",
     ["alternative_mana.layout.widthMode"] = "bars.altManaWidthMode",
@@ -1189,9 +1204,9 @@ function Page:BuildClassStyle()
 end
 
 function Page:BuildClassVisibility()
-    local section = self.b:CollapsibleSection("classpower_visibility", "Auto-Hide", 248, false)
+    local section = self.b:CollapsibleSection("classpower_visibility", "Auto-Hide", 280, false)
     local width = min(560, (section._msuf2Width or self.width) - 28)
-    W.ControlCard(section, "Auto-Hide Rules", nil, 14, -54, width, 174)
+    W.ControlCard(section, "Auto-Hide Rules", nil, 14, -54, width, 206)
     local applyRefresh = self:WithRefresh(ApplyClassPower)
     for i, spec in ipairs({
         { "Hide out of combat", "classPowerHideOOC", "out_of_combat" },
@@ -1208,6 +1223,33 @@ function Page:BuildClassVisibility()
         "When Hide out of combat is enabled, hide the Player Power bar and its text with Class Resource. Player Power returns in combat. Edit Mode keeps them visible.")
     SetControlEnabled(self.cp.syncPlayerPowerOOC,
         BoolValue(Bars(), "showClassPower", true) and BoolValue(Bars(), "classPowerHideOOC", false))
+    self:Add("cp", SwitchAt(self.ctx, section, "Independent of Player Frame visibility",
+        32, -214, width - 48, Bars, "classPowerIndependentVisibility", false,
+        applyRefresh, Meta("visibility.independent")))
+end
+
+function Page:BuildResourceVisibility(id, path, prefix, group, apply, combatOnly)
+    local section = self.b:CollapsibleSection(id, "Auto-Hide", combatOnly and 184 or 248, false)
+    local width = min(560, (section._msuf2Width or self.width) - 28)
+    W.ControlCard(section, "Auto-Hide Rules", nil, 14, -54, width, combatOnly and 110 or 174)
+    local specs = {
+        { "Independent of Player Frame visibility", "IndependentVisibility", "independent" },
+        { "Hide out of combat", "HideOOC", "out_of_combat" },
+    }
+    if not combatOnly then
+        specs[#specs + 1] = { "Hide when full", "HideWhenFull", "when_full" }
+        specs[#specs + 1] = { "Hide when empty", "HideWhenEmpty", "when_empty" }
+    end
+    for i, spec in ipairs(specs) do
+        local control = SwitchAt(self.ctx, section, spec[1], 32, -54 - i * 32, width - 48,
+            Bars, prefix .. spec[2], false, self:WithRefresh(apply), Meta(path .. "." .. spec[3]))
+        if group then self:Add(group, control) end
+        if i == 1 then
+            AddTooltip(control, "Independent of Player Frame visibility",
+                combatOnly and "Resource helpers stay visible when Player is hidden. Marks and mana overlays keep their resource bar as the position source."
+                    or "Uses this resource's Auto-Hide rules when Player Frame visibility hides Player. Player Power must be detached.")
+        end
+    end
 end
 
 local function DetachedPowerSectionHeight(width)
@@ -1736,7 +1778,7 @@ function Page:Build()
     self:BuildClassLayout()
     self:LazySection("classpower_behavior", "Behavior", 282, Page.BuildClassBehavior)
     self:LazySection("classpower_visuals", "Appearance", 482, Page.BuildClassStyle)
-    self:LazySection("classpower_visibility", "Auto-Hide", 248, Page.BuildClassVisibility)
+    self:LazySection("classpower_visibility", "Auto-Hide", 280, Page.BuildClassVisibility)
     self:LazySection("classpower_detached_power", "Layout", function() return self.width < 680 and 932 or 600 end, Page.BuildDetachedPower)
     self:LazySection("classpower_detached_power_textures", "Appearance", 240, Page.BuildDetachedPowerTextures)
     self:LazySection("classpower_detached_power_text", "Text", function() return self.width < 680 and 1020 or 700 end, Page.BuildDetachedPowerText)
@@ -1745,6 +1787,22 @@ function Page:Build()
     self:LazySection("classpower_player_hp_text", "Text", function() return self.width < 680 and 800 or 620 end, Page.BuildPlayerHPText)
     self:LazySection("classpower_alt_mana", "Layout", 402, Page.BuildAlternativeMana)
     self:LazySection("classpower_alt_mana_behavior", "Behavior", 96, Page.BuildAlternativeManaBehavior)
+    self:LazySection("classpower_detached_power_visibility", "Auto-Hide", 248, function(page)
+        page:BuildResourceVisibility("classpower_detached_power_visibility", "detached_power.visibility",
+            "playerPower", "detachedPlayer", ApplyDetachedPowerBar)
+    end)
+    self:LazySection("classpower_player_hp_visibility", "Auto-Hide", 248, function(page)
+        page:BuildResourceVisibility("classpower_player_hp_visibility", "player_hp.visibility",
+            "playerHPBar", "hp", ApplyPlayerHPBar)
+    end)
+    self:LazySection("classpower_alt_mana_visibility", "Auto-Hide", 248, function(page)
+        page:BuildResourceVisibility("classpower_alt_mana_visibility", "alternative_mana.visibility",
+            "altMana", "altMana", ApplyClassPower)
+    end)
+    self:LazySection("classpower_resource_visibility", "Auto-Hide", 184, function(page)
+        page:BuildResourceVisibility("classpower_resource_visibility", "resource_extras.visibility",
+            "resourceExtra", nil, ApplyClassPower, true)
+    end)
     if M.ResourceExtrasPage then
         M.ResourceExtrasPage.BuildSections(self, Bars, ApplyClassPower)
         self:LazySection("classpower_resource_marks", "Resource marks and thresholds", function() return M.ResourceExtrasPage.MarksHeight(self) end,
@@ -1760,4 +1818,4 @@ function Page:Build()
 end
 
 local function BuildClassPower(ctx) Page.New(ctx):Build() end
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 22 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 23 })
