@@ -1,4 +1,7 @@
 -- Run with Lua 5.1: unit_tooltip_ownership_smoke.lua <repository root>
+-- Owner decision 2026-10-06: MSUF never hooks GameTooltip:SetOwner (the hook
+-- broke Blizzard callers in game twice). Ownership is released on OnHide only,
+-- so the takeover cases below hide the tooltip before another UI claims it.
 local root = assert(arg[1], "repository root required")
 local combat, ctrl, watcher = false, false
 UIParent = {}
@@ -31,7 +34,9 @@ function tooltip:Hide()
     if self.scripts.OnHide then self.scripts.OnHide(self) end
 end
 GameTooltip_SetDefaultAnchor = function(tip, owner) tip:SetOwner(owner, "ANCHOR_NONE") end
+local tooltipHooks = {}
 hooksecurefunc = function(object, key, callback)
+    if object == tooltip then tooltipHooks[key] = true end
     local original = object[key]
     object[key] = function(self, ...)
         original(self, ...)
@@ -44,11 +49,17 @@ local ns = {
     Require = function(key) assert(key == "MSUF_EnsureDB"); return function() end end,
 }
 assert(loadfile(root .. "/MidnightSimpleUnitFrames/Runtime/MSUF_UnitTooltips.lua"))("MSUF", ns)
+assert(not tooltipHooks.SetOwner, "MSUF hooked GameTooltip:SetOwner (owner decision 2026-10-06: no SetOwner hook)")
 local unitOwner = { IsMouseOver = function() return true end }
 local groupOwner, foreignOwner = {}, {}
 local function ShowForeign()
     tooltip:SetOwner(foreignOwner, "ANCHOR_RIGHT")
     tooltip:Show()
+end
+-- Another UI taking over a shown tooltip: it hides first, which fires OnHide.
+local function TakeOver()
+    tooltip:Hide()
+    ShowForeign()
 end
 ShowForeign()
 ns.Tooltips.HideUnit(unitOwner)
@@ -65,8 +76,7 @@ for _, anchor in ipairs({ "FIXED", "CURSOR", "EXTERNAL" }) do
     ns.Tooltips.HideUnit(unitOwner)
     assert(tooltip.shown and tooltip._msufUnitTooltipOwner == groupOwner,
         "old unitframe OnLeave hid the group frame tooltip")
-    -- Another UI can take GameTooltip without a preceding OnHide.
-    ShowForeign()
+    TakeOver()
     assert(tooltip._msufUnitTooltipOwner == nil and tooltip._msufUnitTooltipUnit == nil
         and tooltip._msufUnitTooltipAnchor == nil, "tooltip takeover retained stale MSUF ownership")
     ns.Tooltips.HideUnit(groupOwner)
@@ -83,7 +93,7 @@ assert(watcher.events.MODIFIER_STATE_CHANGED, "modifier hover did not register i
 ctrl = true
 watcher.scripts.OnEvent(watcher, "MODIFIER_STATE_CHANGED")
 assert(tooltip.shown and tooltip._msufUnitTooltipOwner == unitOwner, "Ctrl did not show the unit tooltip")
-ShowForeign()
+TakeOver()
 ctrl = false
 watcher.scripts.OnEvent(watcher, "MODIFIER_STATE_CHANGED")
 assert(tooltip.shown, "modifier release hid a foreign tooltip")
@@ -98,7 +108,7 @@ assert(not tooltip.shown, "MSUF OOC mode did not hide its own tooltip on combat 
 combat = false
 watcher.scripts.OnEvent(watcher, "PLAYER_REGEN_ENABLED")
 ns.Tooltips.ShowUnit(unitOwner, "player")
-ShowForeign()
+TakeOver()
 combat = true
 watcher.scripts.OnEvent(watcher, "PLAYER_REGEN_DISABLED")
 assert(tooltip.shown, "combat entry hid a tooltip that MSUF no longer owns")

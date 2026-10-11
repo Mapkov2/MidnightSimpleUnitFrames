@@ -287,10 +287,9 @@ end
 if _G.GameTooltip and (not _G.GameTooltip._msufTooltipTrackingHooked) then
     _G.GameTooltip._msufTooltipTrackingHooked = true
     _G.GameTooltip:HookScript("OnHide", MSUF_ClearGameTooltipTracking)
-    -- Another UI may reuse the shared tooltip without hiding it first. Drop
-    -- ownership on takeover; ShowUnit claims it after setting its anchor.
-    -- Suite's visibility rules use the same marker to leave MSUF in control.
-    hooksecurefunc(_G.GameTooltip, "SetOwner", MSUF_ClearGameTooltipTracking)
+    -- No hook on GameTooltip:SetOwner (owner decision, 2026-10-06): hooking
+    -- the shared tooltip broke Blizzard callers in game twice. A UI that
+    -- reuses the tooltip without hiding it keeps MSUF's marker until it hides.
 end
 
 local function MSUF_PositionPlayerInfoFrame(frame)
