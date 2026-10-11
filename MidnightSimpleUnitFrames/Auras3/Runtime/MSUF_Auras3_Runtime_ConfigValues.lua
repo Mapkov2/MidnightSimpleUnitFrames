@@ -21,8 +21,7 @@ local BOSS_FILTER_SCOPE_OWNER = dependencies.Schema.BOSS_FILTER_SCOPE_OWNER
 local Clamp01 = dependencies.Platform.Clamp01
 local ClampNumber = dependencies.Platform.ClampNumber
 local DEFAULT_SHARED = dependencies.Schema.DEFAULT_SHARED
-local LaneLayoutSignature = dependencies.Signatures.LaneLayoutSignature
-local LaneStructuralSignature = dependencies.Signatures.LaneStructuralSignature
+local LaneShapeSignatures = dependencies.Signatures.LaneShapeSignatures
 local LaneTrackingSignature = dependencies.Signatures.LaneTrackingSignature
 local MANAGED_UNITS = dependencies.Schema.MANAGED_UNITS
 local MAX_CONFIGURABLE_DEBUFF_DURATION = dependencies.Platform.MAX_CONFIGURABLE_DEBUFF_DURATION
@@ -631,8 +630,7 @@ local function FinalizeLane(lane, appearanceKind)
         lane.auraTooltipAnchor = (general and general.unitTooltipAnchor == "CURSOR")
             and "ANCHOR_CURSOR" or "ANCHOR_BOTTOMRIGHT"
         lane._msufA3TrackingSignature = LaneTrackingSignature(lane)
-        lane._msufA3StructuralSignature = LaneStructuralSignature(lane)
-        lane._msufA3LayoutSignature = LaneLayoutSignature(lane)
+        lane._msufA3StructuralSignature, lane._msufA3LayoutSignature = LaneShapeSignatures(lane)
     end
     return lane
 end
