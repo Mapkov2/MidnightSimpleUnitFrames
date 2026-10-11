@@ -197,6 +197,90 @@ do
     Check(Reads(drain) == 1 and Flags(drain) == 1, "target absorb-only: the drain rendered "
         .. Reads(drain) .. " times, want once")
     GlowSettled("target absorb-only", frame)
+    spec.prediction.heal, spec.prediction.healAbsorb = true, true
+    w.UF.ApplySpec(frame, spec, "MSUF_APPLY", true)
+end
+
+-- 7-10. Every other exit of a queued frame drops a deferred tick with it, and
+--    the drain then renders nothing (2026-10-11 raid trace re-validation:
+--    1,743 of 10,053 health-driven protected renders followed queued work in
+--    the same frame). Each case first queues an absorb event and defers a tick.
+local function Deferred(label, frame, unit)
+    S.secret, S.absorb, S.incoming, S.dead, S.connected = true, 0.6, 0, false, true
+    w:Prime(frame, unit)
+    Health(frame, unit)
+    Track(frame)
+    w:Fire(frame, unit, "UNIT_ABSORB_AMOUNT_CHANGED")
+    Health(frame, unit)
+    Check(frame._msufPredictionQueued == true and frame._msufPredictionGlowDeferred == true,
+        label .. ": the queued tick was not deferred")
+end
+local function DrainRendersNothing(label, frame)
+    w:StartCounting()
+    Drain()
+    local drain = w:StopCounting()
+    Check(Reads(drain) == 0 and Flags(drain) == 0, label .. ": the drain rendered the glow after the queue was left")
+    Check(frame._msufPredictionGlowDeferred == nil and frame._msufPredictionQueued == nil,
+        label .. ": the drain left queue state behind")
+end
+
+-- 7. Suspension (the unit went missing; Prediction.ClearPreview is the same
+--    SuspendPrediction(frame, true)): the glow hides, nothing stays deferred.
+do
+    local frame = w.single
+    Deferred("target suspend", frame, "target")
+    w.UF.ClearPredictionPreview(frame)
+    Check(frame._msufPredictionQueued == nil and frame._msufPredictionGlowDeferred == nil,
+        "target suspend: the suspension left the frame queued or deferred")
+    Check(frame.overAbsorbGlowBar._msufOverAbsorbShown == false, "target suspend: the glow stayed up")
+    DrainRendersNothing("target suspend", frame)
+end
+
+-- 8. Disable (the spec turns prediction off).
+do
+    local frame = w.single
+    local spec = w.UF.Config.GetSpec("target")
+    Deferred("target disable", frame, "target")
+    spec.prediction.enabled = false
+    w.UF.ApplySpec(frame, spec, "MSUF_APPLY", true)
+    Check(frame._msufPredictionQueued == nil and frame._msufPredictionGlowDeferred == nil,
+        "target disable: disabling prediction left the frame queued or deferred")
+    Check(frame.overAbsorbGlowBar._msufOverAbsorbShown == false, "target disable: the glow stayed up")
+    DrainRendersNothing("target disable", frame)
+    spec.prediction.enabled = true
+    w.UF.ApplySpec(frame, spec, "MSUF_APPLY", true)
+end
+
+-- 9. The member goes offline (UNIT_CONNECTION hides every prediction visual).
+do
+    local frame = w.group
+    Deferred("raid1 offline", frame, "raid1")
+    S.connected = false
+    w:Fire(frame, "raid1", "UNIT_CONNECTION")
+    Check(frame._msufPredictionQueued == nil and frame._msufPredictionGlowDeferred == nil,
+        "raid1 offline: going offline left the frame queued or deferred")
+    Check(frame.overAbsorbGlowBar._msufOverAbsorbShown == false, "raid1 offline: the glow stayed up")
+    DrainRendersNothing("raid1 offline", frame)
+    S.connected = true
+    w:Fire(frame, "raid1", "UNIT_CONNECTION")
+end
+
+-- 10. A unit rebind (the header hands the button another member): the identity
+--     refresh renders the glow for the new member from its full plan and
+--     settles the deferral, so the drain renders it no second time.
+do
+    local frame = w.group
+    Deferred("raid1 rebind", frame, "raid1")
+    w:StartCounting()
+    w.UF.OnUnitChanged(frame, "raid1", "raid1")
+    local rebind = Window()
+    Check(Reads(rebind) == 1 and Flags(rebind) == 1, "raid1 rebind: the identity refresh rendered the glow "
+        .. Reads(rebind) .. " times, want once")
+    Check(frame._msufPredictionGlowDeferred == nil, "raid1 rebind: the rebind left a deferred tick behind")
+    Drain()
+    local drain = w:StopCounting()
+    Check(Reads(drain) == 0 and Flags(drain) == 0, "raid1 rebind: the drain rendered the glow again")
+    GlowSettled("raid1 rebind", frame)
 end
 
 print("prediction_queued_glow_tick_smoke: ok (" .. flavor .. ")")

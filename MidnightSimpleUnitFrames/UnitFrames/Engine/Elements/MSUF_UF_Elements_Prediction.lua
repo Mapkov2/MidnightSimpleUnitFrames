@@ -2276,12 +2276,9 @@ UpdateGlowHealthFast = function(frame, event, unit, seedHP, seedMaxHP)
       and holder._msufOverAbsorbReverse == (frame._msufPredictionHpReverse == true)
       and holder._msufOverAbsorbAnchor == (frame.hpBar or frame.Health) then
       frame._msufPredictionFullHealthAlphaDirty = true
-      -- A queued data event drains at OnUpdate, after this tick and before the
-      -- frame draws, and renders the glow again from the same unit state (these
-      -- events are synchronous). Leave the render to the drain; it repeats this
-      -- tick itself when its plan draws no glow. Raid trace 2026-10-07: 11,772
-      -- renders = 9,483 ticks + 2,289 drains; in its frame dump every drain ran
-      -- after all events and 121 of 377 ticks fell into a queued frame.
+      -- A queued data event drains before this frame draws and renders the
+      -- glow from the same (synchronous-event) unit state: leave it to the
+      -- drain, which repeats this tick when its plan draws no glow.
       if frame._msufPredictionQueued == true then
         frame._msufPredictionGlowDeferred = true
         return
