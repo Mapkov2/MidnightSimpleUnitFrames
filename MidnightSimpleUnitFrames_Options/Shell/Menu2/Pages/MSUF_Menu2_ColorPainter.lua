@@ -681,6 +681,11 @@ function PainterBuild.PreviewBoxes(state)
     local targetBoxPending = false
     local unitBoxesBuilt = false
     local function AddTargetBox()
+        -- Keep the pending marker for a later visible activation; delayed
+        -- construction must not run after leaving this page/category.
+        if state.wantsUnitBoxes == false
+            or (ctx and ctx.wrapper and ctx.wrapper.IsVisible and not ctx.wrapper:IsVisible())
+            or (ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key) then return end
         targetBoxPending = false
         local targetBox = MakeUnitPreview(host, ctx, unitPreviewW, "target", "Target")
         if not targetBox then return end
@@ -1134,8 +1139,11 @@ function PainterBuild.Category(state)
     local valid, categories, unitBoxes, categoryBar = state.valid, state.categories, state.unitBoxes, state.categoryBar
     local EnsureCastBox, EnsureGroupBox, EnsureResourcesStrip = state.EnsureCastBox, state.EnsureGroupBox, state.EnsureResourcesStrip
     local tabDescription, RebuildClickTargets, RaiseZoomBars = state.tabDescription, state.RebuildClickTargets, state.RaiseZoomBars
-    local function ShowCategory(key)
+    local lastKey
+    local function ShowCategory(key, reassertOnly)
         if not valid[key] then key = categories[1].key end
+        reassertOnly = reassertOnly and lastKey == key
+        local previousBoxes = #unitBoxes
         if M.SetMenuStateValue then M.SetMenuStateValue("colorsPainterCategory", key) else M.colorsPainterCategory = key end
         local category
         for i = 1, #categories do
@@ -1144,7 +1152,6 @@ function PainterBuild.Category(state)
                 break
             end
         end
-        if key ~= "suite" then state.EnsureUnitBoxes() end
         if key == "suite" and not state.suiteColorNote then
             local note = state.host:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             note:SetPoint("CENTER", state.host, "CENTER", 0, 0)
@@ -1156,11 +1163,15 @@ function PainterBuild.Category(state)
         local strip = key == "resources" and EnsureResourcesStrip(category) or nil
         if key == "group" then EnsureGroupBox() end
         local castBox, resourcesStrip, groupBox = state.castBox, state.resourcesStrip, state.groupBox
-        for i = 1, #unitBoxes do unitBoxes[i]:SetShown(key ~= "group" and key ~= "suite" and not castPanel and not strip) end
+        local useUnitBoxes = key ~= "group" and key ~= "suite" and not castPanel and not strip
+        state.wantsUnitBoxes = useUnitBoxes
+        if useUnitBoxes then state.EnsureUnitBoxes() end
+        reassertOnly = reassertOnly and previousBoxes == #unitBoxes
+        for i = 1, #unitBoxes do unitBoxes[i]:SetShown(useUnitBoxes) end
         if castBox then castBox:SetShown(castPanel and true or false) end
         if resourcesStrip and resourcesStrip ~= false then resourcesStrip:SetShown(strip and true or false) end
         if groupBox then groupBox:SetShown(key == "group") end
-        if key ~= "group" and key ~= "suite" and not strip then
+        if not reassertOnly and key ~= "group" and key ~= "suite" and not strip then
             local boxes = castPanel and { castPanel } or unitBoxes
             for i = 1, #boxes do
                 local unitBox = boxes[i]
@@ -1169,13 +1180,13 @@ function PainterBuild.Category(state)
                 FocusUnitPreview(unitBox, key)
             end
         end
-        if groupBox and key == "group" then
+        if not reassertOnly and groupBox and key == "group" then
             HidePreviewEditorChrome(groupBox, groupBox._stage, groupBox._layers, groupBox._zoomBar, groupBox._previewAnimationButton)
             RequestPreview(groupBox, "MSUF2_COLOR_PAINTER_GROUP")
             HideGroupPreviewIcons(groupBox)
         end
         if categoryBar and categoryBar.Refresh then categoryBar:Refresh() end
-        if category then
+        if category and not reassertOnly then
             tabDescription:SetText(Tr(category.subtitle or ""))
             if strip then
                 ReleaseClickTargets(state.clickTargets)
@@ -1188,6 +1199,7 @@ function PainterBuild.Category(state)
                 RebuildClickTargets(category, castPanel)
             end
         end
+        lastKey = key
         RaiseZoomBars()
         -- One taxonomy: the same tab drives which section category the page
         -- shows below the preview.
@@ -1215,17 +1227,16 @@ function PainterBuild.Lifecycle(state)
     local initialRefreshSerial = 0
     local function RefreshVisiblePreview(reason, skipRender)
         if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return end
-        if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return end
-        if section.IsShown and not section:IsShown() then return end
+        if ctx and ctx.wrapper and ctx.wrapper.IsVisible and not ctx.wrapper:IsVisible() then return end
+        if section.IsVisible and not section:IsVisible() then return end
         -- Page changes release pinned previews and explicitly Hide() their box,
         -- while Menu2 keeps the Colors page itself cached. Reassert both the
         -- host's local shown state and its pin record before touching children.
         -- Showing only Player/Target here cannot make them visible below a
         -- released (hidden) host.
         if host.Show then host:Show() end
-        state.EnsureUnitBoxes()
         EnsurePreviewAttachment()
-        ShowCategory(Current())
+        ShowCategory(Current(), skipRender)
         if not skipRender then RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE") end
         return true
     end
