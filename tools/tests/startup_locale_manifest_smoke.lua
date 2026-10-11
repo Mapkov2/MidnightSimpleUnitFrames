@@ -70,7 +70,12 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- for the event-driven resource visibility owner, its profile sync keys
         -- and three translated labels/tooltips in twelve packs (about 23 KB).
         -- No Options code or catalog was added to startup.
-        assert(bytes < (suffix == "Mainline" and 16880000 or 14765000),
+        -- 2026-10-11 (raid-trace perf round): Mainline 16,880,000 -> 16,890,000
+        -- for 3,717 LF bytes of runtime code: the combat-end raid-group label
+        -- replay, the once-per-lane aura signature builder and the PvP-only arena
+        -- cooldown subscription (largest selection koKR 16,877,115 before,
+        -- 16,880,832 after); no catalog or Options code was added.
+        assert(bytes < (suffix == "Mainline" and 16890000 or 14765000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
