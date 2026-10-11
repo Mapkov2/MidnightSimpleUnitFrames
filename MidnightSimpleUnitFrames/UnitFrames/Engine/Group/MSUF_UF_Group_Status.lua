@@ -120,22 +120,17 @@ end
 --- share the event and do need it live, so when either is on the event keeps
 --- firing and this runner short-circuits on a cached boolean instead of an
 --- InCombatLockdown call.
+---
+--- A deferred label is only marked stale here. The regen edge repaints just the
+--- subgroup labels (ReplayDeferredRaidGroups); a DIRTY_VISUAL group refresh used
+--- to stand in for that and re-applied every element of every raid frame,
+--- auras included (raid trace 2026-10-11: 30.9 ms of a 36 ms regen root).
 local combatActive = false
 local raidGroupDeferred = false
 
-local function DeferRaidGroupForCombat()
-  if raidGroupDeferred then return end
-  raidGroupDeferred = true
-  if type(GF.DeferGroupRuntime) == "function" then
-    GF.DeferGroupRuntime("refresh", nil, GF.DIRTY_VISUAL)
-  else
-    GF._pendingGroupRuntime = GF._pendingGroupRuntime or "refresh"
-  end
-end
-
 local function UpdateRaidGroupColdPath(frame, status)
   if combatActive then
-    DeferRaidGroupForCombat()
+    raidGroupDeferred = true
     return
   end
   raidGroupDeferred = false
@@ -358,6 +353,24 @@ local function ResumeRosterAfterCombat()
   if BroadcastUnitlessStatus then BroadcastUnitlessStatus(ROSTER_EVENT) end
 end
 
+--- Regen catch-up for labels a combat roster change left stale: the same live,
+--- registered frames the roster broadcast walks, through the compiled status,
+--- and only its subgroup label. Leader/assist stayed live during the fight.
+local function ReplayDeferredRaidGroups()
+  local list = unitlessFramesByEvent[ROSTER_EVENT]
+  if not list then return end
+  local live = GF.frames
+  for i = 1, #list do
+    local frame = list[i]
+    local active = frame and (not live or live[frame] == true) and frame._msufActiveElements
+    local status = active and active.GroupStatusRuntime == true
+      and (frame._msufGFStatusRuntimeStatus or (frame.MSUFSpec and frame.MSUFSpec.status))
+    if status and status.runtimeRaidGroup == true then
+      UpdateRaidGroup(frame, status)
+    end
+  end
+end
+
 local function EnsureUnitlessDriver()
   if unitlessDriver or not CreateFrame then
     return unitlessDriver
@@ -375,10 +388,16 @@ local function EnsureUnitlessDriver()
       return
     elseif event == "PLAYER_REGEN_ENABLED" then
       combatActive = false
-      -- The deferred pass repaints through RunStatusApply, which never clears
-      -- the flag; left set, the next fight's roster change deferred nothing.
+      -- Cleared on every regen so each fight defers afresh. A resumed roster
+      -- event broadcasts the whole roster dispatch, labels included, so the
+      -- label replay runs only when the event stayed live through the fight.
+      local replayRaidGroups = raidGroupDeferred
       raidGroupDeferred = false
-      ResumeRosterAfterCombat()
+      if rosterSuspended then
+        ResumeRosterAfterCombat()
+      elseif replayRaidGroups then
+        ReplayDeferredRaidGroups()
+      end
       return
     end
     local list = unitlessFramesByEvent[event]
