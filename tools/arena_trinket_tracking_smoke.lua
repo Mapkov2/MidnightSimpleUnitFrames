@@ -1,7 +1,10 @@
 -- Runtime smoke for the shared Retail/Classic arena trinket provider.
 -- Covers Retail DurationObject/native texture relay, Classic C_PvP timing,
 -- the event-driven Mists combat-log fallback, and the 5-slot TBC/Mists
--- arena slot count (Mainline stays at three).
+-- arena slot count (Mainline stays at three). ARENA_COOLDOWNS_UPDATE is
+-- subscribed only inside arena and battleground instances (the
+-- 2026-10-11 raid trace delivered 188 of them to a no-op sync), also
+-- when the player logs in inside a raid and enters the arena later.
 
 local function Check(ok, message)
     if not ok then error(message, 2) end
@@ -54,7 +57,8 @@ end
 
 local baseTonumber = tonumber
 
-local function RunScenario(kind)
+local function RunScenario(kind, startZone)
+    local zone = startZone or "arena"
     local framesByName = {}
     local allFrames = {}
     local callbacks = {}
@@ -79,7 +83,7 @@ local function RunScenario(kind)
         return frame
     end
     _G.UnitExists = function(unit) return liveUnits[unit] == true end
-    _G.IsInInstance = function() return true, "arena" end
+    _G.IsInInstance = function() return true, zone end
     _G.GetTime = function() return now end
     _G.UnitGUID = function(unit) return unit == slotUnit and "enemy-guid-1" or nil end
     _G.GetSpellTexture = function(spellID) return spellID + 1000, spellID + 2000 end
@@ -94,6 +98,7 @@ local function RunScenario(kind)
     _G.Enum = { PvPMatchState = { Engaged = 3 } }
     _G.MSUF_DB = { arena = { enabled = true, showTrinket = true } }
     _G.MSUF_EventBus_Register = function(event, _, callback) callbacks[event] = callback end
+    _G.MSUF_EventBus_Unregister = function(event) callbacks[event] = nil end
     _G.hooksecurefunc = function(receiver, method, callback)
         local original = receiver[method]
         receiver[method] = function(self, ...)
@@ -113,7 +118,7 @@ local function RunScenario(kind)
 
     local durationObject = { retailDuration = true }
     _G.C_PvP = {
-        IsMatchConsideredArena = function() return true end,
+        IsMatchConsideredArena = function() return zone == "arena" end,
         IsMatchActive = function() return false end,
         IsMatchComplete = function() return false end,
         GetActiveMatchState = function() return _G.Enum.PvPMatchState.Engaged end,
@@ -167,6 +172,13 @@ local function RunScenario(kind)
     callbacks.PLAYER_LOGIN("PLAYER_LOGIN")
     local holder = framesByName["MSUF_ArenaTrinket" .. slot]
     Check(holder and holder.createdTexture, kind .. " did not create the trinket holder")
+    if zone ~= "arena" then
+        Check(callbacks.ARENA_COOLDOWNS_UPDATE == nil, kind .. " subscribed ARENA_COOLDOWNS_UPDATE in a " .. zone)
+        Check(holder.shown == false, kind .. " showed a trinket outside the arena")
+        zone = "arena"
+        callbacks.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+    end
+    Check(callbacks.ARENA_COOLDOWNS_UPDATE ~= nil, kind .. " did not subscribe ARENA_COOLDOWNS_UPDATE in the arena")
     Check(holder.shown == true, kind .. " did not show the live arena slot")
 
     _G.MSUF_ArenaMatch_SyncTrinketIcons()
@@ -246,6 +258,33 @@ local function RunScenario(kind)
         Check(requests == 1, "Mists response event re-requested crowd-control data")
     end
 
+    -- Leaving for a raid drops the cooldown subscription and the holders, and
+    -- so do a dungeon and the open world; a battleground keeps it; the next
+    -- arena works again.
+    zone = "raid"
+    callbacks.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+    Check(callbacks.ARENA_COOLDOWNS_UPDATE == nil, kind .. " kept ARENA_COOLDOWNS_UPDATE subscribed in a raid")
+    Check(holder.shown == false, kind .. " kept a trinket shown in a raid")
+    for _, other in ipairs({ "party", "none" }) do
+        zone = other
+        callbacks.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+        Check(callbacks.ARENA_COOLDOWNS_UPDATE == nil, kind .. " subscribed ARENA_COOLDOWNS_UPDATE in " .. other)
+        Check(holder.shown == false, kind .. " showed a trinket in " .. other)
+    end
+    zone = "pvp"
+    callbacks.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+    Check(callbacks.ARENA_COOLDOWNS_UPDATE ~= nil, kind .. " dropped ARENA_COOLDOWNS_UPDATE in a battleground")
+    zone = "arena"
+    callbacks.PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD")
+    Check(callbacks.ARENA_COOLDOWNS_UPDATE ~= nil and holder.shown == true,
+        kind .. " did not resume the trinket after returning to the arena")
+    if kind == "retail" then
+        holder.cooldown:Clear()
+        callbacks.ARENA_COOLDOWNS_UPDATE("ARENA_COOLDOWNS_UPDATE")
+        Check(holder.cooldown.durationObject == durationObject,
+            "Retail cooldown event did not refresh after returning to the arena")
+    end
+
     for index = 1, #allFrames do
         Check(allFrames[index].scripts.OnUpdate == nil,
             kind .. " installed an OnUpdate polling path")
@@ -256,6 +295,9 @@ RunScenario("retail")
 RunScenario("classic")
 RunScenario("mists")
 RunScenario("tbc5")
+RunScenario("retail", "raid")
+RunScenario("classic", "raid")
+RunScenario("mists", "raid")
 
 local moduleHandle = assert(io.open(modulePath, "rb"))
 local moduleSource = moduleHandle:read("*a")

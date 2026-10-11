@@ -2,7 +2,8 @@
 -- Each block runs the real module against client stubs and fails when its fix
 -- is reverted:
 --   1. Mists trinkets subscribe COMBAT_LOG_EVENT_UNFILTERED only inside an arena
---      instance; TBC and Midnight never subscribe it.
+--      instance; TBC and Midnight never subscribe it. Every client subscribes
+--      ARENA_COOLDOWNS_UPDATE only inside arena and battleground instances.
 --   2. Arena castbars (MSUF_CastbarPools.lua) skip the anchor pass on cast start until the castbar visual
 --      revision moves, and every geometry owner re-validates the stamp.
 --   3. Arena castbars fall back to a private frame when the EventBus refuses a
@@ -295,17 +296,20 @@ Contract("Mists combat log without the EventBus", function()
     local frames = W.EventFrames()
     assert(#frames == 1, "expected one private event frame, found " .. #frames)
     local events = frames[1].events
-    -- PLAYER_LOGIN runs the first sync once the SavedVariables exist.
-    assert(CountKeys(events) == 5 and events.ARENA_OPPONENT_UPDATE and events.ARENA_CROWD_CONTROL_SPELL_UPDATE
-        and events.ARENA_COOLDOWNS_UPDATE and events.PLAYER_ENTERING_WORLD and events.PLAYER_LOGIN,
-        "the private frame must start with the four arena events, PLAYER_LOGIN and no combat log")
+    -- PLAYER_LOGIN runs the first sync once the SavedVariables exist. The
+    -- cooldown response event follows the instance like the combat log.
+    assert(CountKeys(events) == 4 and events.ARENA_OPPONENT_UPDATE and events.ARENA_CROWD_CONTROL_SPELL_UPDATE
+        and events.PLAYER_ENTERING_WORLD and events.PLAYER_LOGIN,
+        "the private frame must start with three arena events, PLAYER_LOGIN and no combat log")
     assert(W.Burst(50) == 0, "the private frame handled combat-log events in the open world")
     W.Enter("arena")
     assert(events[LOG_EVENT] == true and W.Burst(50) == 50 and W.logInfoCalls == 50,
         "the private frame did not take the combat log inside an arena")
+    assert(events.ARENA_COOLDOWNS_UPDATE == true, "the private frame did not take ARENA_COOLDOWNS_UPDATE inside an arena")
     W.Enter("none")
     assert(events[LOG_EVENT] == nil and W.Burst(50) == 0 and W.logInfoCalls == 50,
         "the private frame kept the combat log after leaving the arena")
+    assert(events.ARENA_COOLDOWNS_UPDATE == nil, "the private frame kept ARENA_COOLDOWNS_UPDATE after leaving the arena")
     assert(#W.EventFrames() == 1, "a second event frame was created")
 end)
 
@@ -318,12 +322,17 @@ Contract("TBC and Midnight trinket events are unchanged", function()
         W.Enter("arena")
         W.Fire("ARENA_OPPONENT_UPDATE", "arena2", "seen")
         local insideArena = W.Burst(20)
+        -- ARENA_COOLDOWNS_UPDATE is subscribed in arena and battleground
+        -- instances only (raid trace 2026-10-11).
+        local cooldownsInArena = W.bus.ARENA_COOLDOWNS_UPDATE ~= nil
         W.Enter("none")
         assert(W.registerCalls[LOG_EVENT] == nil and W.unregisterCalls[LOG_EVENT] == nil
             and insideArena == 0 and W.Burst(20) == 0,
             case.flavor .. " touched the Mists combat-log subscription")
-        assert(CountKeys(W.bus) == (case.extra and 6 or 5) and W.bus.ARENA_OPPONENT_UPDATE
-            and W.bus.ARENA_CROWD_CONTROL_SPELL_UPDATE and W.bus.ARENA_COOLDOWNS_UPDATE and W.bus.PLAYER_ENTERING_WORLD
+        assert(cooldownsInArena and W.bus.ARENA_COOLDOWNS_UPDATE == nil,
+            case.flavor .. " did not follow the instance with ARENA_COOLDOWNS_UPDATE")
+        assert(CountKeys(W.bus) == (case.extra and 5 or 4) and W.bus.ARENA_OPPONENT_UPDATE
+            and W.bus.ARENA_CROWD_CONTROL_SPELL_UPDATE and W.bus.PLAYER_ENTERING_WORLD
             and W.bus.PLAYER_LOGIN and (case.extra == nil or W.bus[case.extra] ~= nil),
             case.flavor .. " changed its arena trinket event set")
 

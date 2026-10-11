@@ -65,6 +65,7 @@ local relaySources = {}
 local mistsFallback = {}
 local RefreshCooldown
 local SyncMistsCombatLog
+local SyncCooldownSubscription
 -- Bumped by every settings apply; a holder re-applies its layout when its
 -- stamp differs, so the per-event position pass stays a comparison.
 local layoutSerial = 1
@@ -134,6 +135,14 @@ local function LiveUnitExists(unit)
     return type(exists) == "function" and exists(unit) == true
 end
 
+--- The client's instance type, nil when the client has no IsInInstance.
+local function InstanceType()
+    local isInInstance = _G.IsInInstance
+    if type(isInInstance) ~= "function" then return nil end
+    local _, instanceType = isInInstance()
+    return instanceType
+end
+
 local function InArenaMatch()
     if IS_RETAIL then
         local pvp = _G.C_PvP
@@ -149,10 +158,7 @@ local function InArenaMatch()
             or (engaged ~= nil and type(getState) == "function" and getState() == engaged)
     end
 
-    local isInInstance = _G.IsInInstance
-    if type(isInInstance) ~= "function" then return false end
-    local _, instanceType = isInInstance()
-    return instanceType == "arena"
+    return InstanceType() == "arena"
 end
 
 local function EnsureHolder(index)
@@ -518,6 +524,7 @@ local function HandleEvent(event, arg1, arg2, arg3)
         -- The first sync reads the arena switches, so it waits for the
         -- SavedVariables; it attaches the Retail texture relays before the
         -- first arena response. World/opponent events retry later.
+        SyncCooldownSubscription()
         SyncTrinketIcons(false)
         return
     end
@@ -541,6 +548,7 @@ local function HandleEvent(event, arg1, arg2, arg3)
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
+        SyncCooldownSubscription()
         for index = 1, MAX_ARENA do ResetSlot(index) end
         SyncTrinketIcons(true)
         return
@@ -553,6 +561,30 @@ end
 local eventFrame
 local mistsLogWired = false
 local mistsLogLive = false
+local cooldownEventLive = false
+local COOLDOWN_EVENT = "ARENA_COOLDOWNS_UPDATE"
+local COOLDOWN_KEY = "MSUF_ARENA_TRINKET_COOLDOWN"
+
+--- Subscribes or releases one event on the private frame or the EventBus.
+--- Answers false when neither route exists; the caller then keeps its flag.
+local function SetSubscribed(event, key, wanted)
+    if eventFrame then
+        if wanted then
+            eventFrame:RegisterEvent(event)
+        else
+            eventFrame:UnregisterEvent(event)
+        end
+        return true
+    end
+    local busCall = wanted and _G.MSUF_EventBus_Register or _G.MSUF_EventBus_Unregister
+    if type(busCall) ~= "function" then return false end
+    if wanted then
+        busCall(event, key, HandleEvent)
+    else
+        busCall(event, key)
+    end
+    return true
+end
 
 --- Mists only. The combat-log fallback is subscribed while the player is inside
 --- an arena instance and released when the player leaves, so raids and the open
@@ -561,29 +593,32 @@ local mistsLogLive = false
 --- those repeat calls comparison-only.
 SyncMistsCombatLog = function(wanted)
     if not mistsLogWired or wanted == mistsLogLive then return end
-    if eventFrame then
-        if wanted then
-            eventFrame:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-        else
-            eventFrame:UnregisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-        end
-    elseif wanted then
-        local register = _G.MSUF_EventBus_Register
-        if type(register) ~= "function" then return end
-        register("COMBAT_LOG_EVENT_UNFILTERED", "MSUF_ARENA_TRINKET_MISTS_LOG", HandleEvent)
-    else
-        local unregister = _G.MSUF_EventBus_Unregister
-        if type(unregister) ~= "function" then return end
-        unregister("COMBAT_LOG_EVENT_UNFILTERED", "MSUF_ARENA_TRINKET_MISTS_LOG")
-    end
+    if not SetSubscribed("COMBAT_LOG_EVENT_UNFILTERED", "MSUF_ARENA_TRINKET_MISTS_LOG", wanted) then return end
     mistsLogLive = wanted
 end
 
+--- ARENA_COOLDOWNS_UPDATE refreshes only live holders, shown only in an arena
+--- match, but raids fire it too (2026-10-11 trace: 188 no-op syncs, 3.55 ms).
+--- Like Blizzard's CcRemover, listen only in arena and battleground instances,
+--- re-checked at PLAYER_LOGIN and every PLAYER_ENTERING_WORLD; previews never
+--- used it. A disabled display (no instance read) or a client without
+--- IsInInstance keeps it, as before.
+SyncCooldownSubscription = function()
+    local wanted = true
+    if ArenaEnabled() and ShowTrinketEnabled() then
+        local instanceType = InstanceType()
+        wanted = instanceType == nil or instanceType == "arena" or instanceType == "pvp"
+    end
+    if wanted == cooldownEventLive then return end
+    if not SetSubscribed(COOLDOWN_EVENT, COOLDOWN_KEY, wanted) then return end
+    cooldownEventLive = wanted
+end
+
 local function WireEvents()
+    -- ARENA_COOLDOWNS_UPDATE is absent: SyncCooldownSubscription owns it.
     local events = {
         { "ARENA_OPPONENT_UPDATE", "MSUF_ARENA_TRINKET_OPPONENT" },
         { "ARENA_CROWD_CONTROL_SPELL_UPDATE", "MSUF_ARENA_TRINKET_SPELL" },
-        { "ARENA_COOLDOWNS_UPDATE", "MSUF_ARENA_TRINKET_COOLDOWN" },
         { "PLAYER_ENTERING_WORLD", "MSUF_ARENA_TRINKET_WORLD" },
         { "PLAYER_LOGIN", "MSUF_ARENA_TRINKET_LOGIN" },
     }

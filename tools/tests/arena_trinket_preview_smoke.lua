@@ -88,12 +88,14 @@ local arena = profile.arena
 -- state and the recorded EventBus.
 local live = {}
 local inArena = false
+-- The instance outside an arena match ("raid" in the preview case below).
+local zone = "none"
 local now = 500
 local bus = {}
 env.GetTime = function() return now end
 env.issecretvalue = function() return false end
 env.UnitExists = function(unit) return live[unit] == true end
-env.IsInInstance = function() return inArena, inArena and "arena" or "none" end
+env.IsInInstance = function() return inArena or zone ~= "none", inArena and "arena" or zone end
 env.C_PvP = {
     IsMatchConsideredArena = function() return inArena end,
     IsMatchActive = function() return inArena end,
@@ -279,9 +281,15 @@ else
         "the unit preview fit ignores the trinket footprint")
 
     ---------------------------------------------------------------- 4. arena frame preview (menu page and Edit Mode)
-    inArena, live.arena1 = false, nil
+    -- In a raid the runtime drops ARENA_COOLDOWNS_UPDATE (raid
+    -- trace 2026-10-11); the previews never needed it.
+    Check(bus.ARENA_COOLDOWNS_UPDATE and bus.ARENA_COOLDOWNS_UPDATE.MSUF_ARENA_TRINKET_COOLDOWN,
+        "the trinket runtime did not subscribe ARENA_COOLDOWNS_UPDATE in the arena")
+    inArena, live.arena1, zone = false, nil, "raid"
     Fire("PLAYER_ENTERING_WORLD")
     Check(not holder:IsShown(), "the trinket stayed shown after leaving the arena")
+    Check(not (bus.ARENA_COOLDOWNS_UPDATE and bus.ARENA_COOLDOWNS_UPDATE.MSUF_ARENA_TRINKET_COOLDOWN),
+        "the trinket runtime kept ARENA_COOLDOWNS_UPDATE subscribed in a raid")
     for index = 1, slots do frames["arena" .. index]._msufArenaPreviewForced = true end
     env.MSUF_ArenaTrinkets_SyncPreview()
     for index = 1, slots do
