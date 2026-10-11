@@ -432,7 +432,9 @@ $expectedVersion = (Get-Content -LiteralPath (Join-Path $root "VERSION") -Raw).T
 # the tracked generator's check mode proves their whole content, so a hand
 # edit or a stale regeneration fails here instead of at release time.
 Assert-TrackedFile -RelativePath "tools/update-addon-changelog.ps1" -Label "Changelog payload generator"
-& (Join-Path $root "tools/update-addon-changelog.ps1") -Version $expectedVersion -Check
+$changelogVersion = & (Join-Path $root ".github/scripts/resolve-classic-changelog-version.ps1") `
+    -RepositoryRoot $root -ReleaseVersion $expectedVersion
+& (Join-Path $root "tools/update-addon-changelog.ps1") -Version $changelogVersion -Check
 
 # Writing addon-owned fallbacks into Blizzard's C_* namespace taints the table
 # and can surface later as ADDON_ACTION_FORBIDDEN at UseAction(). Compatibility

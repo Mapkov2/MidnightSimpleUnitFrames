@@ -1,4 +1,5 @@
 Matrix	Runner	Smoke	Arguments	Label
+-	python	tools/tests/classic_changelog_reuse_smoke.py	{root}	Explicit Classic beta changelog reuse
 clients+Forever	lua	tools/tests/portrait_settings_smoke.lua	{root} {flavor}	Portrait settings regression: {flavor}
 clients+Forever	lua	tools/tests/arena_trinket_preview_smoke.lua	{root/} {flavor}	Arena PvP trinket placement and previews: {flavor}
 clients+Forever	lua	tools/tests/menu_appearance_presets_smoke.lua	{root} {flavor}	Appearance preset dropdown regression: {flavor}

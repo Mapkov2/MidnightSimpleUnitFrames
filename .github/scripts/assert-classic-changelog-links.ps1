@@ -8,7 +8,8 @@ $repoRoot = [IO.Path]::GetFullPath($RepositoryRoot)
 $stagePath = $repoRoot
 $optionsAddonName = "MidnightSimpleUnitFrames_Options"
 $changelogHistoryFloor = "6.02"
-$release = $ReleaseVersion
+$release = & (Join-Path $PSScriptRoot "resolve-classic-changelog-version.ps1") `
+    -RepositoryRoot $repoRoot -ReleaseVersion $ReleaseVersion
 function Normalize-ReleaseVersion {
     param([AllowNull()][string]$Value)
 

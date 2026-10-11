@@ -387,7 +387,9 @@ foreach ($flavor in $classicFlavors) {
     }
 }
 
-$changelogSection = Get-ChangelogSection -Path (Join-Path $repoRoot 'CHANGELOG.md') -Version $release
+$changelogVersion = & (Join-Path $PSScriptRoot "resolve-classic-changelog-version.ps1") `
+    -RepositoryRoot $repoRoot -ReleaseVersion $release
+$changelogSection = Get-ChangelogSection -Path (Join-Path $repoRoot 'CHANGELOG.md') -Version $changelogVersion
 $releaseNotesMarkdown = (($changelogSection -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine)
 $releaseNotesHtml = Convert-ChangelogSectionToHtml -Lines $changelogSection
 if ([string]::IsNullOrWhiteSpace($releaseNotesHtml)) {

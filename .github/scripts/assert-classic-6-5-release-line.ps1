@@ -101,9 +101,11 @@ foreach ($arenaEntry in @(
 }
 
 $changelogPath = Join-Path $RepositoryRoot "CHANGELOG.md"
+$changelogVersion = & (Join-Path $PSScriptRoot "resolve-classic-changelog-version.ps1") `
+    -RepositoryRoot $RepositoryRoot -ReleaseVersion $normalizedVersion
 $sourceText = [IO.File]::ReadAllText($changelogPath).Replace("`r`n", "`n").Replace("`r", "`n")
-if ($sourceText -notmatch "(?m)^## $([regex]::Escape($normalizedVersion))\s+-\s+") {
-    throw "CHANGELOG.md has no current Classic release section for $normalizedVersion."
+if ($sourceText -notmatch "(?m)^## $([regex]::Escape($changelogVersion))\s+-\s+") {
+    throw "CHANGELOG.md has no selected Classic release section for $changelogVersion."
 }
 $sha = [Security.Cryptography.SHA256]::Create()
 try {
@@ -118,7 +120,7 @@ foreach ($relativePath in @(
     "MidnightSimpleUnitFrames_Options/State/MSUF_ChangelogFull.lua"
 )) {
     $payload = [IO.File]::ReadAllText((Join-Path $RepositoryRoot $relativePath))
-    if ($payload -notmatch "currentVersion = `"$([regex]::Escape($normalizedVersion))`"") {
+    if ($payload -notmatch "currentVersion = `"$([regex]::Escape($changelogVersion))`"") {
         throw "Generated Classic changelog has a stale currentVersion: $relativePath"
     }
     if ($payload -notmatch "sourceSha256 = `"$sourceSha256`"") {
@@ -126,4 +128,4 @@ foreach ($relativePath in @(
     }
 }
 
-Write-Host "Classic 6.5 release-line contract: PASS ($normalizedVersion)"
+Write-Host "Classic 6.5 release-line contract: PASS ($normalizedVersion; changelog $changelogVersion)"
