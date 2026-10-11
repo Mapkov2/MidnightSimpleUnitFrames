@@ -249,6 +249,88 @@ do
     Check(M.RepaintPageAfterDataChange("home", "smoke") and M.cache.home == view,
         "a Dashboard repaint rebuilt the view")
 end
+
+-- 4b. Real disclosure clicks must preserve every cached Dashboard view.
+do
+    core.FirstLoad6:Complete("fixture")
+    M.InvalidatePage("home")
+    M.SetMenuStateValue("dashboardChangelogOpen", false)
+    M.SetMenuStateValue("dashboardScalingOpen", false)
+    M.SetMenuStateValue("dashboardRecoveryOpen", false)
+    Select("home")
+    local function Header(entry, path)
+        local identity = "menu2.home.dashboard." .. M.NormalizeControlPath(path)
+        for _, frame in ipairs(widgets.frames) do
+            if frame._msuf2RuntimeControlId == identity then
+                local parent = frame
+                while parent and parent ~= entry.wrapper do parent = parent.parent end
+                if parent then return frame end
+            end
+        end
+        error("missing Dashboard disclosure " .. identity)
+    end
+    local function CheckChangelog(entry, open)
+        local head = Header(entry, "changelog.disclosure")
+        local card = head.parent
+        Check(card:GetHeight() == (open and 420 or 42), "cached Changelog card height changed")
+        local hint, arrow, scroll
+        for _, region in ipairs(head.regions or {}) do
+            if region:GetObjectType() == "FontString" and (region.text == "Hide" or region.text == "View") then hint = region end
+            if region:GetObjectType() == "Texture" and region.texture == M.Theme.media.collapseArrow then arrow = region end
+        end
+        for _, child in ipairs(card.children or {}) do
+            if child:GetObjectType() == "ScrollFrame" then scroll = child end
+        end
+        Check(hint and hint.text == (open and "Hide" or "View"), "cached Changelog hint disagrees with its card height")
+        Check(arrow and arrow.rotation == (open and math.pi * 0.5 or 0), "cached Changelog arrow disagrees with its card height")
+        Check(scroll and scroll:IsShown() == open, "cached Changelog content disagrees with its card height")
+        Check(scroll:GetScrollChild() and scroll:GetScrollChild():GetHeight() > 1, "bundled release notes are missing")
+        head:GetScript("OnEnter")(head)
+        head:GetScript("OnLeave")(head)
+        Check(hint.text == (open and "Hide" or "View"), "hover changed the cached Changelog disclosure state")
+    end
+    local views, count = {}, 0
+    local function Remember()
+        local entry = M.cache.home
+        if not views[entry] then
+            views[entry] = { open = M.dashboardChangelogOpen == true }
+            count = count + 1
+        end
+        Check(entry.wrapper.shown == true, "the clicked Dashboard view is hidden")
+        for cached, state in pairs(views) do CheckChangelog(cached, state.open) end
+    end
+    local paths = { "changelog.disclosure", "scaling.disclosure", "changelog.disclosure", "display_recovery.disclosure",
+        "changelog.disclosure", "scaling.disclosure", "changelog.disclosure", "display_recovery.disclosure" }
+    local function Cycle()
+        for _, path in ipairs(paths) do
+            Click(Header(M.cache.home, path))
+            Remember()
+        end
+    end
+    Remember()
+    Cycle()
+    Check(count == 8, "real disclosure clicks did not visit all eight Dashboard views")
+    local first = WidgetCount()
+    for _ = 1, 20 do
+        Click(Header(M.cache.home, "changelog.disclosure"))
+        Check(M.dashboardChangelogOpen == true, "Changelog did not open on repeated click")
+        Remember()
+        Click(Header(M.cache.home, "changelog.disclosure"))
+        Check(M.dashboardChangelogOpen == false, "Changelog did not close on repeated click")
+        Remember()
+    end
+    Check(WidgetCount() == first, "repeated Changelog open/close allocated widgets")
+    for _ = 1, CYCLES do
+        Cycle()
+        local entry = M.cache.home
+        Select("opt_misc")
+        Check(Select("home") == entry, "returning to the Dashboard discarded its view")
+        Remember()
+    end
+    Check(WidgetCount() == first, "warm Dashboard clicks allocated new frames or regions")
+    Note("home real clicks, all 8 views x" .. CYCLES, "consistent disclosures; 0 widgets")
+end
+
 do
     local data = core.MSUF_Changelog
     local entries = type(data) == "table" and data.entries or nil

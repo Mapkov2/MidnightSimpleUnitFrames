@@ -360,9 +360,8 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         end
     end
     header:SetScript("OnClick", function()
-        open = not open
-        RefreshOpenState()
-        if type(opts.onToggle) == "function" then opts.onToggle(open) end
+        M.SetMenuStateValue("dashboardChangelogOpen", not open)
+        if type(opts.onToggle) == "function" then opts.onToggle(not open) end
     end)
     header:SetScript("OnEnter", function()
         PaintHeaderTone(open, true)
