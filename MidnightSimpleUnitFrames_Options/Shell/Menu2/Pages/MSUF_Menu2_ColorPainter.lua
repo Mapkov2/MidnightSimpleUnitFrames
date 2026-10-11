@@ -688,6 +688,10 @@ function PainterBuild.PreviewBoxes(state)
     -- and requests the render of both boxes itself, so its own pass is not
     -- repeated here.
     local function AddTargetBox(inCategoryPass)
+        -- Keep the pending marker until this page and its unit surface return.
+        if state.wantsUnitBoxes == false
+            or (ctx and ctx.wrapper and ctx.wrapper.IsVisible and not ctx.wrapper:IsVisible())
+            or (ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key) then return end
         targetBoxPending = false
         local targetBox = MakeUnitPreview(host, ctx, unitPreviewW, "target", "Target")
         if not targetBox then return end
@@ -1159,7 +1163,6 @@ function PainterBuild.Category(state)
                 break
             end
         end
-        if key ~= "suite" then state.EnsureUnitBoxes(true) end
         if key == "suite" and not state.suiteColorNote then
             local note = PixelLayoutRegion(state.host:CreateFontString(nil, "OVERLAY", "GameFontHighlight"))
             note:SetPoint("CENTER", state.host, "CENTER", 0, 0)
@@ -1171,8 +1174,11 @@ function PainterBuild.Category(state)
         local strip = key == "resources" and EnsureResourcesStrip(category) or nil
         if key == "group" then EnsureGroupBox() end
         local castBox, resourcesStrip, groupBox = state.castBox, state.resourcesStrip, state.groupBox
+        local useUnitBoxes = key ~= "group" and key ~= "suite" and not castPanel and not strip
+        state.wantsUnitBoxes = useUnitBoxes
+        if useUnitBoxes then state.EnsureUnitBoxes(true) end
         local noRender = reassertOnly and BoxCount() == boxes
-        for i = 1, #unitBoxes do unitBoxes[i]:SetShown(key ~= "group" and key ~= "suite" and not castPanel and not strip) end
+        for i = 1, #unitBoxes do unitBoxes[i]:SetShown(useUnitBoxes) end
         if castBox then castBox:SetShown(castPanel and true or false) end
         if resourcesStrip and resourcesStrip ~= false then resourcesStrip:SetShown(strip and true or false) end
         if groupBox then groupBox:SetShown(key == "group") end
@@ -1231,18 +1237,16 @@ function PainterBuild.Lifecycle(state)
     local initialRefreshSerial = 0
     local function RefreshVisiblePreview(reason, skipRender)
         if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return end
-        if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return end
-        if section.IsShown and not section:IsShown() then return end
+        if ctx and ctx.wrapper and ctx.wrapper.IsVisible and not ctx.wrapper:IsVisible() then return end
+        if section.IsVisible and not section:IsVisible() then return end
         -- Page changes release pinned previews and explicitly Hide() their box,
         -- while Menu2 keeps the Colors page itself cached. Reassert both the
         -- host's local shown state and its pin record before touching children.
         -- Showing only Player/Target here cannot make them visible below a
         -- released (hidden) host.
         if host.Show then host:Show() end
-        local boxes = state.BoxCount()
-        state.EnsureUnitBoxes()
         EnsurePreviewAttachment()
-        ShowCategory(Current(), skipRender and state.BoxCount() == boxes)
+        ShowCategory(Current(), skipRender)
         if not skipRender then RefreshPreviews(reason or "MSUF2_COLOR_PAINTER_VISIBLE") end
         return true
     end
