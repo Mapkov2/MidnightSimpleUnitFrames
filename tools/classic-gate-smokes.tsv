@@ -39,7 +39,6 @@ clients+Forever	lua	tools/tests/group_raid_combat_join_smoke.lua	{root} {flavor}
 -	lua	tools/tests/group_db_split_smoke.lua	{root}	Group DB split load-order and export smoke failed
 -	lua	tools/tests/group_heal_absorb_migration_smoke.lua	{root}	Group heal-absorb scope migration smoke failed
 -	lua	tools/tests/group_status_raid_group_defer_smoke.lua	{root}	Group raid-group label combat deferral smoke failed
--	lua	tools/tests/group_regen_status_replay_smoke.lua	{root}	Group regen status-only label replay smoke failed
 clients	lua	tools/tests/group_filter_predicate_smoke.lua	{root} {flavor}	Group subgroup filter predicate smoke failed: {flavor}
 clients	lua	tools/tests/group_headers_secret_identity_smoke.lua	{root} {flavor}	Group header secret name/role smoke failed: {flavor}
 -	lua	tools/tests/group_text_secret_percent_smoke.lua	{root}	Group text secret percent smoke failed
