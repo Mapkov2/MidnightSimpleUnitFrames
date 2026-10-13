@@ -1,15 +1,12 @@
--- Compare native writes and consumer handoffs against an optional immutable
--- pre-refactor source root. The strict opaque value rejects Lua inspection.
--- The Classic gate passes the Retail reference root here, or "-" when a
--- self-contained run has none; "parity-only" then asks for equivalence without
--- the pre-refactor improvement assertions.
+-- Compare native writes and consumer handoffs against the behavior of the frozen
+-- Retail source, recorded in .github/scripts/golden/health_runtime_equivalence_smoke.golden
+-- (see golden_baseline.lua). The strict opaque value rejects Lua inspection.
+--   <repo>                                  compare with the golden file
+--   <repo> <reference root>                 compare with a live reference source instead
+--   <repo> <reference root> record "<label>"  rewrite the golden file from that source
 local root = arg and arg[1] or "."
-local baselineRoot = arg and arg[2]
-if baselineRoot == "-" or baselineRoot == "" then baselineRoot = nil end
-local parityOnly = false
-for i = 2, (arg and #arg or 0) do
-  if arg[i] == "parity-only" then parityOnly = true end
-end
+local Golden = assert(loadfile(root .. "/.github/scripts/golden_baseline.lua"))()
+local baselineRoot, recording, label = Golden.Mode(arg)
 local function Forbidden() error("opaque health inspected") end
 local SECRET = setmetatable({}, { __eq=Forbidden, __lt=Forbidden, __le=Forbidden,
   __add=Forbidden, __sub=Forbidden, __mul=Forbidden, __div=Forbidden,
@@ -133,35 +130,45 @@ local function Run(sourceRoot, nativePercent)
   return table.concat(log,"\n"),calls,instructions,cases
 end
 
+local SMOKE = "health_runtime_equivalence_smoke"
+local function Summarize(sourceRoot)
+  local entries = {}
+  local log, calls, instructions, cases = Run(sourceRoot, true)
+  Golden.AddLog(entries, "native.log", log)
+  entries[#entries + 1] = { "native.calls", tostring(calls) }
+  entries[#entries + 1] = { "native.cases", tostring(cases) }
+  entries[#entries + 1] = { "native.instructions", tostring(instructions) }
+  local legacy, legacyCalls = Run(sourceRoot, false)
+  Golden.AddLog(entries, "legacy.log", legacy)
+  entries[#entries + 1] = { "legacy.calls", tostring(legacyCalls) }
+  return entries
+end
+
 local current,calls,instructions,cases=Run(root,true)
-if baselineRoot then
-  local previous,oldCalls,oldInstructions,oldCases=Run(baselineRoot,true)
-  if current~=previous then
-    local a,b={},{}
-    for line in current:gmatch("[^\n]+") do a[#a+1]=line end
-    for line in previous:gmatch("[^\n]+") do b[#b+1]=line end
-    for i=1,math.max(#a,#b) do
-      if a[i]~=b[i] then error("observable difference at "..i..":\nold "..tostring(b[i]).."\nnew "..tostring(a[i])) end
-    end
-  end
-  assert(calls==oldCalls and cases==oldCases,"Health query count or scenario coverage changed")
-  -- This fixture replaces the background painter with a stub. Cross-owner
-  -- optimizations use the complete pipeline test for work counts; parity-only
-  -- still checks every native call, handoff and legacy behavior below.
-  if not parityOnly then
-    assert(instructions<oldInstructions,"dominant opaque Health path did not remove Lua work")
-  end
-  print(string.format("Health equivalence: %d updates, native writes/handoffs identical; Health-only opaque instructions %d -> %d (%+.1f%%)",
-    cases,oldInstructions,instructions,100*(instructions/oldInstructions-1)))
-else
-  print("health_runtime_equivalence_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
-  print(string.format("Health lifecycle/opaque forwarding: %d updates, %d native percent queries",cases,calls))
-end
 local legacy,legacyCalls,_,legacyCases=Run(root,false)
-if baselineRoot then
-  local oldLegacy,oldLegacyCalls=Run(baselineRoot,false)
-  assert(legacy==oldLegacy and legacyCalls==oldLegacyCalls,"legacy absolute-health behavior changed")
-else
-  print("health_runtime_equivalence_smoke: SKIPPED legacy baseline comparison (no baseline source root in arg[2])")
+if recording then
+  local entries = Summarize(baselineRoot)
+  Golden.Write(Golden.Path(root, SMOKE), Golden.Header(SMOKE, label), entries)
+  print("health_runtime_equivalence_smoke: recorded " .. #entries .. " entries from " .. baselineRoot)
+  return
 end
+local expected = {}
+if baselineRoot then
+  for _, entry in ipairs(Summarize(baselineRoot)) do expected[entry[1]] = entry[2] end
+else
+  expected = Golden.Read(Golden.Path(root, SMOKE))
+end
+local difference = Golden.LogDiff(expected, "native.log", current)
+if difference then error("observable difference: " .. difference) end
+assert(calls == tonumber(expected["native.calls"]) and cases == tonumber(expected["native.cases"]),
+  "Health query count or scenario coverage changed")
+local oldInstructions = tonumber(expected["native.instructions"])
+-- This fixture replaces the background painter with a stub. Cross-owner optimizations use the
+-- complete pipeline test for work counts; this smoke checks every native call, handoff and
+-- legacy behavior, and reports the Health-only work of the dominant opaque path.
+print(string.format("Health equivalence: %d updates, native writes/handoffs identical; Health-only opaque instructions %d -> %d (%+.1f%%)",
+  cases,oldInstructions,instructions,100*(instructions/oldInstructions-1)))
+difference = Golden.LogDiff(expected, "legacy.log", legacy)
+assert(not difference and legacyCalls == tonumber(expected["legacy.calls"]),
+  "legacy absolute-health behavior changed" .. (difference and (": " .. difference) or ""))
 print(string.format("Legacy native-percent absence: %d additional updates, equivalent absolute-health behavior",legacyCases))

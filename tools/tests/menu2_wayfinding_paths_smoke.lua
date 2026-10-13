@@ -4,14 +4,13 @@
 --            "Group > Page[ > Tab][ > sub]" from the rail data, translating
 --            every part on its own; an unreachable page falls back to its
 --            label; GetMenuBreadcrumb keeps its untranslated form.
---   Keys:    every M.NavPath("<key>") call in an owned or override Options
---            file names a page the rail can reach.
---   Groups:  no string literal in an owned or override core/Options Lua file
---            (the FAQ catalogs included) names a rail group this menu does not
---            have ("Appearance >", "Features >" followed by a page label, as
---            Retail's rail had). Comments, locale packs and the generated
---            search index are not scanned. Plain Retail copies are counted and
---            listed in a report-only line, never failed.
+--   Keys:    every M.NavPath("<key>") call in an Options file names a page
+--            the rail can reach.
+--   Groups:  no string literal in a core/Options Lua file (the FAQ catalogs
+--            included) names a rail group this menu does not have
+--            ("Appearance >", "Features >" followed by a page label, as the
+--            retired Retail rail had). Comments, locale packs and the
+--            generated search index are not scanned.
 --   Names:   the unit tabs and the Bars/Fonts scope strip use the canonical
 --            "Target of Target" key (enUS decides its English wording).
 -- Run with plain Lua 5.1 and the repo root as arg 1.
@@ -213,19 +212,8 @@ do
     Check(count == 4, "the retired-path detector is broken: expected 4 hits, got " .. count)
 end
 
-local reviewed = {}
-for line in Read("tools/classic-owned-addon-paths.txt"):gmatch("[^\n]+") do
-    local path = line:match("^%s*(.-)%s*$")
-    if path ~= "" then reviewed[path] = "owned" end
-end
-for line in Read("tools/classic-retail-overrides.tsv"):gmatch("[^\n]+") do
-    local path = line:match("^([^\t]+)\t")
-    if path then reviewed[path] = "override" end
-end
-
--- The files that carried Retail's paths until they were fixed here. They are
--- override rows now; they must stay in the hard-checked scan, so a filter or
--- manifest change cannot quietly drop them.
+-- The files that carried the retired Retail paths until they were fixed. They must
+-- stay in the scan, so a filter or manifest change cannot quietly drop them.
 local MUST_SCAN = {
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_FAQ_Catalog_01.lua",
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Search/MSUF_Menu2_Search_FAQ_Catalog_02.lua",
@@ -236,33 +224,15 @@ local MUST_SCAN = {
     "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupBars.lua",
 }
 
--- Classic-owned and override files are hard-checked. Byte-identical Retail
--- copies are Retail's to change until the single-repo cutover: their hits are
--- printed in a report-only line and never fail, so a Retail sync never breaks
--- here. Fixing one means adding its override row, which makes it hard-checked.
 local command = 'git -C "' .. root .. '" ls-files -- MidnightSimpleUnitFrames MidnightSimpleUnitFrames_Options'
 local pipe = assert(io.popen(command, "r"), "cannot enumerate tracked addon files")
 local scanned, failures, seen, scannedPaths = 0, {}, {}, {}
 local navPathCalls = 0
-local copyHits, copyFiles = 0, {}
 for path in pipe:lines() do
     if path:match("%.lua$") and not path:find("/Locales/", 1, true) and not path:find("StaticIndex_Data", 1, true)
-        and not path:find("/Libs/", 1, true) and reviewed[path] == nil then
-        local source = Read(path)
-        local found = 0
-        if source:find("Appearance", 1, true) or source:find("Features", 1, true) then
-            local literals = StringLiterals(source)
-            for i = 1, #literals do found = found + #PhantomPaths(literals[i]) end
-        end
-        if found > 0 then
-            copyHits = copyHits + found
-            copyFiles[#copyFiles + 1] = path .. " (" .. found .. ")"
-        end
-    elseif path:match("%.lua$") and not path:find("/Locales/", 1, true) and not path:find("StaticIndex_Data", 1, true)
         and not path:find("/Libs/", 1, true) then
         scanned = scanned + 1
         scannedPaths[path] = true
-        local kind = reviewed[path]
         local source = Read(path)
         local mayHit = false
         for g = 1, #RETIRED_GROUPS do
@@ -281,8 +251,8 @@ for path in pipe:lines() do
                 local expected = allowed and allowed[1] or 0
                 if #hits ~= expected then
                     failures[#failures + 1] = string.format(
-                        "%s (%s) names a menu group this rail does not have %d times (allowed %d): %s. Build the path with M.NavPath(pageKey [, subLabel]) or write the Classic path.",
-                        path, kind, #hits, expected, table.concat(hits, " | "))
+                        "%s names a menu group this rail does not have %d times (allowed %d): %s. Build the path with M.NavPath(pageKey [, subLabel]) or write the Classic path.",
+                        path, #hits, expected, table.concat(hits, " | "))
                 end
             end
         end
@@ -308,21 +278,14 @@ for path in pipe:lines() do
 end
 local pipeOk, pipeReason, pipeCode = pipe:close()
 assert(pipeOk or pipeCode == 0, "git ls-files failed: " .. tostring(pipeReason or pipeCode))
-Check(scanned >= 250, "only " .. scanned .. " owned or override Lua files were scanned; git ls-files likely failed")
+Check(scanned >= 400, "only " .. scanned .. " Lua files were scanned; git ls-files likely failed")
 Check(navPathCalls >= 11, "only " .. navPathCalls .. " M.NavPath calls found; the help texts lost their single path source")
 for i = 1, #MUST_SCAN do
-    Check(scannedPaths[MUST_SCAN[i]], "the hard-checked wayfinding scan skipped " .. MUST_SCAN[i]
-        .. " (it must stay Classic-owned or an override row)")
+    Check(scannedPaths[MUST_SCAN[i]], "the wayfinding scan skipped " .. MUST_SCAN[i] .. " (it must stay in the scan)")
 end
 for path in pairs(ALLOWED) do
-    Check(reviewed[path], "ALLOWED names a file that is neither owned nor overridden: " .. path)
     Check(seen[path], "ALLOWED names a file without a retired-group path any more: " .. path .. " (drop the row)")
 end
 Check(#failures == 0, table.concat(failures, "\n"))
-print(string.format("menu2 wayfinding paths smoke: ok (%d owned/override Lua files, %d NavPath calls, %d changelog allowance(s); report-only: %d retired-group paths in %d plain Retail copies)",
-    scanned, navPathCalls, (function() local n = 0 for _ in pairs(ALLOWED) do n = n + 1 end return n end)(),
-    copyHits, #copyFiles))
-if #copyFiles > 0 then
-    table.sort(copyFiles)
-    print("  report-only Retail copies: " .. table.concat(copyFiles, ", "))
-end
+print(string.format("menu2 wayfinding paths smoke: ok (%d Lua files, %d NavPath calls, %d changelog allowance(s))",
+    scanned, navPathCalls, (function() local n = 0 for _ in pairs(ALLOWED) do n = n + 1 end return n end)()))

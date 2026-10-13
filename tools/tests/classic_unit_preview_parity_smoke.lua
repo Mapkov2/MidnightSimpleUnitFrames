@@ -251,9 +251,9 @@ else
 end
 
 -- 4. Status preview ---------------------------------------------------------
--- The flavor loads the Retail-named ..._Status.lua, an override row, so a
--- Retail rebase lands in it: its Pet Happiness hunk and the Level Text
--- difficulty colour are pinned by what the preview draws.
+-- The flavor loads the shared ..._Status.lua, which carries the Classic hunks:
+-- its Pet Happiness hunk and the Level Text difficulty colour are pinned by
+-- what the preview draws.
 local UnitPage = world.options.MSUF2 and world.options.MSUF2.UnitPage
 Check(type(UnitPage) == "table" and type(UnitPage.ReadStatusBool) == "function", "the Unit page publishes no status reader")
 local function StatusControl(value)
@@ -280,10 +280,10 @@ end
 pet.showPetHappinessIndicator = nil
 
 -- The preview reads the settings, not the compile, so it cannot see the live
--- side. The Pet page control, the unit compile of the Retail-named
--- UnitFrames/Engine/MSUF_UF_Config.lua (an override row every Retail sync
--- rebases) and the runtime element, which reads only spec.status.petHappiness,
--- must agree: a rebase that drops the entry on Classic would keep the control
+-- side. The Pet page control, the unit compile of
+-- UnitFrames/Engine/MSUF_UF_Config.lua and the runtime element, which reads
+-- only spec.status.petHappiness, must agree: an edit that drops the entry on
+-- Classic would keep the control
 -- and the preview and leave the live pet frame blank.
 local happinessControl = StatusControl("statusPetHappiness")
 local happinessModule = loaded["MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua"] == true

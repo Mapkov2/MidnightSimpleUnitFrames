@@ -4,8 +4,8 @@
 -- and owns Blizzard's group frames through
 -- UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua. Classic Era, TBC and Mists
 -- used to load whole-file Classic copies of both; their Classic behaviour now
--- lives in a few hunks of the Retail-named files, gated on MSUF.Client.Family and
--- read once at load. A Retail sync rebases those hunks, so this smoke boots the
+-- lives in a few hunks of the shared files, gated on MSUF.Client.Family and
+-- read once at load. An edit can drop those hunks, so this smoke boots the
 -- flavor's real load graph and pins both sides of every gate:
 --
 --   PvP context   Classic has no War Mode: the context follows the player's PvP

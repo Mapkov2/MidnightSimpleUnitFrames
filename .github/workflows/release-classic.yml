@@ -12,8 +12,8 @@ permissions:
 jobs:
   # The cheap checks first: a stale or malformed tag, a missing CurseForge
   # secret or a red self-contained gate all fail here in about a minute,
-  # before the full gate spends a runner on cloning Retail and the Blizzard
-  # UI source mirror.
+  # before the full gate spends a runner on cloning the Blizzard UI source
+  # mirror.
   preflight:
     if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames'
     runs-on: ubuntu-latest
@@ -105,11 +105,11 @@ jobs:
           lua -v
           luac -v
 
-      # The fast pre-check: -SelfContained runs every check that needs
-      # neither a Retail checkout nor the Blizzard UI source mirror, in about
-      # 40 s. It is deliberately blind to Retail-mirror drift, so it gates
-      # only the cheap failures; the classic-full-gate job below covers the
-      # rest before anything is published.
+      # The fast pre-check: -SelfContained runs every check that does not need
+      # the Blizzard UI source mirror. It is deliberately blind to drift of
+      # Blizzard's source, so it gates only the cheap failures; the
+      # classic-full-gate job below covers the rest before anything is
+      # published.
       - name: Run the self-contained Classic gate
         shell: pwsh
         run: |
@@ -118,14 +118,11 @@ jobs:
             throw "Classic self-contained gate failed."
           }
 
-  # A release runs the same full gate as a push to main: Retail parity,
-  # override bases, owned-shadow drift and the Blizzard UI source audit,
-  # against a clean checkout of the Retail commit this tree mirrors. The
-  # self-contained subset above cannot see a mirrored Retail file that was
-  # edited without an override row, so it must never be the only gate on a
-  # published build. The steps are the reusable workflow's, not a copy, and
-  # every one of them fails closed - including an unresolvable Retail
-  # reference, which aborts the release instead of gating against a guess.
+  # A release runs the same full gate as a push to main: the self-contained
+  # checks plus the Blizzard UI source audit. The self-contained subset above
+  # cannot see drift of Blizzard's source, so it must never be the only gate
+  # on a published build. The steps are the reusable workflow's, not a copy,
+  # and every one of them fails closed.
   classic-full-gate:
     needs: preflight
     uses: ./.github/workflows/classic-full-gate.yml

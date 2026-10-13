@@ -68,10 +68,10 @@ clients+Forever	lua	tools/tests/changelog_release_links_smoke.lua	{root} {flavor
 clients+Forever	lua	tools/tests/public_globals_smoke.lua	{root/} {flavor}	Public globals ledger smoke failed: {flavor}
 -	python	tools/tests/public_globals_ledger_smoke.py		Public globals ledger check or scanner failed (tools/public_globals_ledger.py)
 -	lua	tools/tests/nil_global_fix_contracts_smoke.lua	{root}	Nil-global fix contracts smoke failed
--	python	tools/tests/rebase_classic_overrides_smoke.py		Override rebase tool self-test failed
--	python	tools/tests/resolve_classic_retail_source_smoke.py	{root}	Retail source resolver smoke failed
 -	python	tools/tests/staged_load_graph_smoke.py	{root}	Packager staged load-graph proof failed
 -	python	tools/tests/unloaded_addon_lua_smoke.py	{root}	Unloaded addon Lua rule failed
+-	python	tools/tests/load_graph_lock_smoke.py	{root}	Load-graph lock smoke failed
+-	python	tools/tests/gate_manifest_rules_smoke.py	{root}	Gate manifest rules smoke failed
 -	lua	tools/tests/forever_pet_happiness_smoke.lua	{root}	Forever pet happiness smoke failed
 -	lua	tools/tests/tap_denied_gray_smoke.lua	{root}	Tagged-mob graying smoke failed
 -	lua	tools/tests/threat_text_smoke.lua	{root}	Threat text smoke failed
@@ -149,10 +149,10 @@ classics	lua	tools/tests/classic_castbar_spark_sync_smoke.lua	{root} {flavor}	Cl
 -	lua+driver	.github/scripts/tests/elite_indicator_classification_smoke.lua	{root/}	Elite indicator classification smoke failed
 -	lua+driver	tools/addon_interop_guard_smoke.lua	{root/}	Retail-shared runtime smoke failed: tools/addon_interop_guard_smoke.lua
 -	lua+driver	tools/slash_command_registry_smoke.lua	{root/}	Retail-shared runtime smoke failed: tools/slash_command_registry_smoke.lua
--	lua+driver	.github/scripts/health_background_sample_parity_smoke.lua	{root/} {retailRoot/} parity-only	Retail-shared runtime smoke failed: .github/scripts/health_background_sample_parity_smoke.lua
--	lua+driver	.github/scripts/health_runtime_equivalence_smoke.lua	{root/} {retailRoot/} parity-only	Retail-shared runtime smoke failed: .github/scripts/health_runtime_equivalence_smoke.lua
--	lua+driver	.github/scripts/text_runtime_value_parity_smoke.lua	{root/} {retailRoot/} parity-only	Retail-shared runtime smoke failed: .github/scripts/text_runtime_value_parity_smoke.lua
--	lua+driver	.github/scripts/castbar_tint_parity_smoke.lua	{root/} {retailRoot/} parity-only	Retail-shared runtime smoke failed: .github/scripts/castbar_tint_parity_smoke.lua
+-	lua+driver	.github/scripts/health_background_sample_parity_smoke.lua	{root/}	Golden parity smoke failed: .github/scripts/health_background_sample_parity_smoke.lua
+-	lua+driver	.github/scripts/health_runtime_equivalence_smoke.lua	{root/}	Golden parity smoke failed: .github/scripts/health_runtime_equivalence_smoke.lua
+-	lua+driver	.github/scripts/text_runtime_value_parity_smoke.lua	{root/}	Golden parity smoke failed: .github/scripts/text_runtime_value_parity_smoke.lua
+-	lua+driver	.github/scripts/castbar_tint_parity_smoke.lua	{root/}	Golden parity smoke failed: .github/scripts/castbar_tint_parity_smoke.lua
 -	lua+driver	tools/aura_big_defensive_filter_smoke.lua		v6.04 parity smoke failed: tools/aura_big_defensive_filter_smoke.lua
 -	lua+driver	tools/aura_group_slot_layer_smoke.lua		v6.04 parity smoke failed: tools/aura_group_slot_layer_smoke.lua
 -	lua+driver	tools/tests/classic_suite_owned_layer_smoke.lua		Suite-owned layer contract failed: classic_suite_owned_layer_smoke.lua

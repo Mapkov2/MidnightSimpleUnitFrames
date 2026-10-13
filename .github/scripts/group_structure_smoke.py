@@ -9,6 +9,14 @@ import shutil
 import subprocess
 
 
+# The layout limits (no line over 160 columns, no statement separator) hold for every group file
+# except the ones named here, which predate the rule. tools/quality_ratchet_baseline.json pins each
+# at its current count and refuses growth; an entry that no longer violates must be removed.
+LAYOUT_EXEMPT = {
+    "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_SpellRegistry.lua": "one `; break` at line 197",
+}
+
+
 def source_files(root):
     for folder in ("GroupFrames", "UnitFrames/Engine/Group"):
         for path in sorted((root / "MidnightSimpleUnitFrames" / folder).glob("*.lua")):
@@ -74,15 +82,16 @@ def main():
         args.json.write_text(json.dumps(dict(files=results, clones=duplicates, clone_lines=clone_lines), indent=2) + "\n")
     if args.report:
         return
-    owned = set((args.root / "tools/classic-owned-addon-paths.txt").read_text().splitlines())
-    overrides = {line.split("\t")[0] for line in
-                 (args.root / "tools/classic-retail-overrides.tsv").read_text().splitlines()}
     for item in results:
         assert item["locals"] <= 150, f"{item['file']}: main chunk needs headroom below 160"
         assert item["upvalues"] <= 45, f"{item['file']}: upvalue limit"
         assert item["longest"] <= 150, f"{item['file']}: split long function by responsibility"
-        if not args.limits_only and item["file"] in owned | overrides:
-            assert item["wide"] == 0 and item["semicolons"] == 0, f"{item['file']}: layout limits"
+        if not args.limits_only:
+            layout_clean = item["wide"] == 0 and item["semicolons"] == 0
+            if item["file"] in LAYOUT_EXEMPT:
+                assert not layout_clean, f"{item['file']}: no longer violates the layout limits; drop it from LAYOUT_EXEMPT"
+            else:
+                assert layout_clean, f"{item['file']}: layout limits"
     em2 = (args.root / "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua").read_text()
     assert not re.search(r'type\(gf\.[A-Za-z_]+\)', em2), "stable group module exports must not be optional"
     config = (args.root / "MidnightSimpleUnitFrames/UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua").read_text()

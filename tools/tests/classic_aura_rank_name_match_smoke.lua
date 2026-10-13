@@ -32,7 +32,6 @@ local function count(set)
 end
 
 local Manifest = assert(loadfile(root .. "/tools/tests/client_manifest.lua"))()
-local ownership = readFile("tools/classic-owned-addon-paths.txt")
 
 -- 1. Manifests: no catalog, no catalog resolver, nothing left to regenerate.
 for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
@@ -51,8 +50,6 @@ for _, flavor in ipairs({ "Vanilla", "TBC", "Mists" }) do
         flavor .. " TOC still names alias data")
     assert(not exists("MidnightSimpleUnitFrames/Game/" .. flavor .. "/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua"),
         flavor .. " still ships a generated alias catalog")
-    assert(not ownership:find("Game/" .. flavor .. "/Auras/AliasData/", 1, true),
-        flavor .. " alias data is still declared Classic-owned")
     assert(not exists(".github/auras3-alias-catalog-" .. flavor:lower() .. ".json"),
         flavor .. " alias catalog manifest is still present")
 end

@@ -1,11 +1,10 @@
 """The gate's dead-Lua rule, on fixtures: Assert-MsufUnloadedAddonLua.
 
 The gate fails on any versioned addon Lua file that no shipped TOC loads,
-unless tools/classic-unloaded-addon-lua.tsv lists it: an unchanged Retail
-mirror Retail never loads ('mirror'), or a Classic-owned file the owner keeps
-unloaded on purpose ('retained', whose reason must cite the owner decision).
-An unlisted owned or overridden unloaded file must fail, an overridden file can
-never be listed, and a row whose file a TOC loads is stale. Every case runs the
+unless tools/classic-unloaded-addon-lua.tsv lists it: a developer diagnostic no
+TOC loads ('diagnostic'), or a file the owner keeps unloaded on purpose
+('retained', whose reason must cite the owner decision). An unlisted unloaded
+file must fail, and a row whose file a TOC loads is stale. Every case runs the
 real module function in one PowerShell process and must give its verdict.
 
 Usage: python tools/tests/unloaded_addon_lua_smoke.py <repository root>
@@ -24,10 +23,10 @@ from pathlib import Path
 root = Path(sys.argv[1]).resolve()
 MODULE = root / ".github" / "scripts" / "ClassicGate.Common.psm1"
 HEADER = "Path\tKind\tReason\n"
-OWNED = "MidnightSimpleUnitFrames/Runtime/Theme.lua"
-MIRROR = "MidnightSimpleUnitFrames/Features/Debug.lua"
-OVERRIDE = "MidnightSimpleUnitFrames/Kernel/Patched.lua"
+RETAINED = "MidnightSimpleUnitFrames/Runtime/Theme.lua"
+DIAGNOSTIC = "MidnightSimpleUnitFrames/Features/Debug.lua"
 LOADED = "MidnightSimpleUnitFrames/Core.lua"
+UNTRACKED = "MidnightSimpleUnitFrames/Runtime/Scratch.lua"
 DECISION = "kept on purpose by owner decision"
 
 failures = []
@@ -39,44 +38,37 @@ def check(condition, message):
         failures.append(message)
 
 
-def case(name, rows, versionable, expected, fragment="", owned=(OWNED,), overrides=(OVERRIDE,)):
+def case(name, rows, versionable, expected, fragment=""):
     return {
         "name": name,
         "manifest": HEADER + "".join("\t".join(row) + "\n" for row in rows),
         "versionable": list(versionable),
         "loaded": [LOADED],
-        "owned": list(owned),
-        "overrides": list(overrides),
-        "tracked": sorted({OWNED, MIRROR, OVERRIDE, LOADED}),
+        "tracked": sorted({RETAINED, DIAGNOSTIC, LOADED}),
         "expected": expected,
         "fragment": fragment,
     }
 
 
-ALL = (LOADED, OWNED, MIRROR, OVERRIDE)
 CASES = [
-    case("retained owned file listed with the decision", [(OWNED, "retained", DECISION)], (LOADED, OWNED), "PASS 0 1"),
-    case("mirror listed", [(MIRROR, "mirror", "Retail never loads it")], (LOADED, MIRROR), "PASS 1 0"),
-    case("both kinds together", [(MIRROR, "mirror", "Retail never loads it"), (OWNED, "retained", DECISION)],
-         (LOADED, OWNED, MIRROR), "PASS 1 1"),
-    case("unlisted owned file", [], (LOADED, OWNED), "FAIL", "dead payload"),
-    case("unlisted overridden file", [], (LOADED, OVERRIDE), "FAIL", "dead payload"),
-    case("unlisted mirror", [], (LOADED, MIRROR), "FAIL", "dead payload"),
-    case("retained without the decision", [(OWNED, "retained", "still useful")], (LOADED, OWNED), "FAIL",
+    case("retained file listed with the decision", [(RETAINED, "retained", DECISION)], (LOADED, RETAINED), "PASS 0 1"),
+    case("diagnostic listed", [(DIAGNOSTIC, "diagnostic", "no TOC loads it")], (LOADED, DIAGNOSTIC), "PASS 1 0"),
+    case("both kinds together", [(DIAGNOSTIC, "diagnostic", "no TOC loads it"), (RETAINED, "retained", DECISION)],
+         (LOADED, RETAINED, DIAGNOSTIC), "PASS 1 1"),
+    case("unlisted retained-looking file", [], (LOADED, RETAINED), "FAIL", "dead payload"),
+    case("unlisted diagnostic-looking file", [], (LOADED, DIAGNOSTIC), "FAIL", "dead payload"),
+    case("retained without the decision", [(RETAINED, "retained", "still useful")], (LOADED, RETAINED), "FAIL",
          "without citing the owner decision"),
-    case("retained file that is not owned", [(MIRROR, "retained", DECISION)], (LOADED, MIRROR), "FAIL",
-         "not Classic-owned"),
-    case("owned file listed as a mirror", [(OWNED, "mirror", "Retail never loads it")], (LOADED, OWNED), "FAIL",
-         "as a Retail mirror"),
-    case("overridden file listed as retained", [(OVERRIDE, "retained", DECISION)], (LOADED, OVERRIDE), "FAIL",
-         "dead Classic edit"),
-    case("overridden file listed as a mirror", [(OVERRIDE, "mirror", "Retail never loads it")], (LOADED, OVERRIDE),
-         "FAIL", "dead Classic edit"),
-    case("row for a loaded file", [(LOADED, "mirror", "Retail never loads it")], (LOADED,), "FAIL", "Stale"),
-    case("unknown kind", [(MIRROR, "kept", "Retail never loads it")], (LOADED, MIRROR), "FAIL", "unknown kind"),
-    case("empty reason", [(MIRROR, "mirror", "")], (LOADED, MIRROR), "FAIL", "without empty or padded fields"),
-    case("unsorted rows", [(OWNED, "retained", DECISION), (MIRROR, "mirror", "Retail never loads it")],
-         (LOADED, OWNED, MIRROR), "FAIL", "ordinal"),
+    case("row for a loaded file", [(LOADED, "diagnostic", "no TOC loads it")], (LOADED,), "FAIL", "Stale"),
+    case("the retired mirror kind", [(DIAGNOSTIC, "mirror", "no TOC loads it")], (LOADED, DIAGNOSTIC), "FAIL",
+         "unknown kind"),
+    case("unknown kind", [(DIAGNOSTIC, "kept", "no TOC loads it")], (LOADED, DIAGNOSTIC), "FAIL", "unknown kind"),
+    case("empty reason", [(DIAGNOSTIC, "diagnostic", "")], (LOADED, DIAGNOSTIC), "FAIL",
+         "without empty or padded fields"),
+    case("untracked file listed", [(UNTRACKED, "diagnostic", "no TOC loads it")], (LOADED,), "FAIL",
+         "must name tracked addon Lua files"),
+    case("unsorted rows", [(RETAINED, "retained", DECISION), (DIAGNOSTIC, "diagnostic", "no TOC loads it")],
+         (LOADED, RETAINED, DIAGNOSTIC), "FAIL", "ordinal"),
 ]
 
 RUNNER = r"""
@@ -93,9 +85,8 @@ foreach ($case in $cases) {
         $result = Assert-MsufUnloadedAddonLua -Root $CaseRoot -ManifestPath $manifest `
             -VersionableLua ([string[]]@($case.versionable)) `
             -LoadedPaths ([string[]]@($case.loaded | ForEach-Object { Join-Path $CaseRoot $_ })) `
-            -OwnedPaths ([string[]]@($case.owned)) -OverridePaths ([string[]]@($case.overrides)) `
             -TrackedPaths ([string[]]@($case.tracked))
-        [Console]::Out.WriteLine("CASE`t$index`tPASS $($result.Mirrors) $($result.Retained)")
+        [Console]::Out.WriteLine("CASE`t$index`tPASS $($result.Diagnostics) $($result.Retained)")
     } catch {
         [Console]::Out.WriteLine("CASE`t$index`tFAIL`t" + ($_.Exception.Message -replace '\s+', ' '))
     }

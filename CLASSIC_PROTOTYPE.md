@@ -4,8 +4,9 @@ Since the 2026-10-13 cutover, this codebase is authoritative for Retail,
 WoW Forever and the supported Classic clients. Development and release
 freshness checks use `main`; the former Retail line is retired at
 `84a1241710c26d0970436a02beb4e32f3a626f39` under the unpublished backup label `6.22`.
-The historical Retail parity gate resolves its base within that frozen
-history. The `classic-v<version>` release tag format remains in use.
+No gate compares against it any more: this repository is the only source of
+truth, and the load graph of every client is pinned by `tools/load-graph.lock`
+(see "Load graph lock"). The `classic-v<version>` release tag format remains in use.
 
 This local branch was created from Retail `main` commit `7cf4e711`. Every
 Retail sync commit records the Retail commit it ported in a `Retail-Source:`
@@ -212,12 +213,10 @@ calculator would be less correct and more expensive.
 
 ## Client boundaries
 
-- Mainline preserves every Core and Options Retail Lua path in its original
-  order; the only Retail paths it may drop are the ones
-  `tools/classic-addon-tombstones.txt` retires. Its only additional Lua loads
-  are exactly the Classic-owned files listed in `$mainlineOwnedLuaExtras` in
-  `tools/test-classic-prototype.ps1`, each loaded once. That list is the
-  authority; among others it holds `Game/Shared/Initialize.lua`,
+- Mainline's load graph is pinned by `tools/load-graph.lock`, and
+  `tools/classic-addon-tombstones.txt` names the files this tree retired. Among
+  the Mainline additions that Classic clients also use or that only the Forever
+  and Arena builds need are `Game/Shared/Initialize.lua`,
   `Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua` (hunter pet happiness,
   which applies only when `MSUF.Client.SupportsPetHappiness` is true, so on
   WoW Forever), `Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua` (the threat
@@ -241,9 +240,9 @@ calculator would be less correct and more expensive.
   pool and preview modules (`Castbars/MSUF_CastbarPools.lua`,
   `Castbars/MSUF_CastbarPoolPreviews.lua`) and the ClassPower controller modules
   (`ClassPower/MSUF_CP_Controller_Auras.lua`, `_Ticker.lua`, `_Events.lua`;
-  the full list is `$mainlineOwnedLuaExtras` in the gate). No other owned file may
-  enter Mainline, and it never parses `Game/Classic`, `Game/Vanilla`,
-  `Game/Mists`, or `Game/TBC`. A module that Classic clients and Mainline both
+  the lock lists every load). Mainline and WoW Forever never parse
+  `Game/Classic`, `Game/Vanilla`, `Game/Mists`, `Game/TBC` or a `*_Classic.lua`
+  file; the load-graph check fails the gate otherwise. A module that Classic clients and Mainline both
   need therefore lives in `Game/Shared`, as the pet happiness module does:
   Vanilla and TBC load it from their own manifests, Mainline from
   `MSUF_UFCore_Elements.xml`, and
@@ -414,8 +413,8 @@ because it survives a new client. `Client.Family == "Classic"` and
 so neither is rewritten into the other.
 
 Two checks keep the model honest. `tools/tests/classic_project_id_reads_smoke.lua`
-limits raw `WOW_PROJECT_ID` reads in Classic-owned and override files of both
-shipped addons (core and Options) to a reviewed allowlist; that
+limits raw `WOW_PROJECT_ID` reads in every tracked Lua file of both
+shipped addons (core and Options; vendored libraries aside) to a reviewed allowlist; that
 allowlist has been empty since 2026-09-19 (`ALLOWED = {}` at line 99), so
 outside `Game/Shared/Initialize.lua` no raw project-ID read is left.
 `tools/audit-classic-ui-source.ps1` pins every TOC
@@ -445,62 +444,80 @@ the matrix, recursive XML load graphs, Lua 5.1 syntax, client bootstrap,
 Blizzard resource ownership,
 ClassPower providers, legacy cast/channel tuples, native prediction events,
 Classic aura compilation/rendering/filter plans, group indicator datasets,
-forbidden Blizzard namespace writes, and the zero-overhead Retail load graph.
-The parity gate requires the current Retail Git checkout whenever reviewed
-overrides exist. It divides the addon inventory into three disjoint classes:
+forbidden Blizzard namespace writes, and the load graph of every client
+(`tools/load-graph.lock`, below). This repository is an independent codebase:
+no file is a mirror of another repository, so editing any addon file needs no
+manifest row. This document records no counts: every gate run prints the live
+numbers on its `Load-graph lock:`, `Load graph:`, `Unloaded addon Lua:`,
+`Classic flavor load coverage:` and `Smoke inventory:` lines. When the local UI
+mirror is present it also runs `tools/audit-classic-ui-source.ps1` against the
+relevant Blizzard client branches.
 
-- Normal mapped Retail paths (`R minus P`) remain byte-identical to the current
-  Retail Git blobs.
-- `tools/classic-retail-overrides.tsv` is `P`: each sorted, unique
-  `path<TAB>Retail-base-blob` row permits Classic to differ at that existing
-  Retail path only while the recorded base blob still equals current Retail.
-- `tools/classic-owned-addon-paths.txt` is `O`: sorted, unique additive files
-  owned entirely by Classic. `O` cannot collide with `R` or `P`.
+The TOCs are held to one set of identity fields. Per addon, every client's TOC
+carries the same metadata lines except `Interface`, `Title`, `Notes`,
+`Category`, `Version`, `X-MSUF-Version-Forever`, `OptionalDeps` and
+`X-MSUF-Client`. Agreement between the clients cannot notice a line that
+disappears from all of them, so `tools/classic-toc-identity.tsv`
+(`Addon<TAB>Rule<TAB>Line`) pins them: every client TOC of the core addon
+declares exactly the `SavedVariables` line (renaming a saved variable orphans
+every profile), the Curse and Wago IDs, the `X-MSUF-UnitFrames*` fields
+`Libs/MSUFUnitFrames/init.lua` reads and the `AddonCompartmentFunc*` names; every
+Options TOC declares `LoadOnDemand: 1`, its `Dependencies` and `X-MSUF-Options`
+and has no `SavedVariables`. Changing one of these values is a deliberate edit of
+that file. The core TOCs also keep the `OptionalDeps` they name today (every
+client the four shared names, Mainline also `Blizzard_AuraContainer`,
+`Blizzard_PingUI`, `EllesmereUI`, `Grid2` and `Details`); adding a dependency is
+free, dropping one fails the gate. The same block of the gate rejects a
+malformed addon file path and two paths that differ only by case, and
+`tools/tests/gate_manifest_rules_smoke.py` pins both rules on fixtures and
+removes every pinned line from the real TOCs.
 
-The complete addon inventory must equal `R union O`;
-`P` is a strict subset of `R`, not another source of files. Mainline preserves
-the Retail Lua path sequence, accepts hash differences only at `P`, and accepts
-additional Lua only for the declared shared/Arena additions in `O`. This
-document records no counts: every gate run prints the live numbers on its
-`Retail exact paths:`, `Retail override paths:`, `Classic-owned paths:`,
-`Classic-owned shadows:`, `Classic flavor load coverage:`, and `Smoke inventory:`
-lines. When the local UI mirror is present it also runs
-`tools/audit-classic-ui-source.ps1` against the relevant Blizzard client branches.
+### Load graph lock
 
-Both manifests and every referenced Classic file must be tracked, normalized,
-ordinal-sorted, unique without case collisions, and mutually disjoint. Missing
-or malformed manifests, a stale `P` base blob, an undeclared path, ownership
-collision, mirrored-byte drift, Mainline order/load leakage, or final inventory
-drift fails closed before an automated commit or push. The sync also protects
-owned and overridden bytes across copying and the complete existing full gate.
+`tools/load-graph.lock` lists, for each client and each shipped addon, the Lua
+files that client loads, in load order. The clients are the rows of
+`tools/classic-client-matrix.tsv` plus WoW Forever, which reads the Mainline
+TOCs and differs only by the `camelot` game type (Midnight is `standard`); every
+text locale is listed. `tools/load-graph.lua` generates it with the same
+TOC/XML reader the client smokes use (`tools/tests/client_manifest.lua`):
 
-When Retail changes a path in `P`, do not merely replace its recorded blob.
-Review the old-to-new Retail delta, manually rebase that delta into the Classic
-override without losing its intentional behavior, run the ownership suite and
-the complete Classic gate, and only then update the TSV blob. If the divergence
-is no longer required, remove the `P` row and restore normal byte-identical
-mirroring. A new Retail path colliding with `O` likewise requires an explicit
-ownership decision and reviewed rebase; it is never resolved automatically.
+```powershell
+lua tools/load-graph.lua --write    # after adding, removing or moving a TOC or XML manifest entry
+lua tools/load-graph.lua --check    # what the gate runs
+```
+
+Adding a Lua file to a manifest without regenerating the lock turns the gate
+red with the clients and the file named; regenerate and review the diff of the
+lock. The gate also walks the same TOCs with `Get-MsufLoadGraph` and requires
+the lock to match, so the two readers cannot drift apart. Editing a Lua file
+that is already loaded changes nothing in the lock.
+
+`--check` and `--write` hold three invariants (`--write` refuses to bless a
+violation): Mainline and Forever never load a Classic-only tree
+(`Game/Classic`, `Game/Vanilla`, `Game/TBC`, `Game/Mists`) or a `*_Classic.lua` /
+`*_Classic.xml` file, Lua or XML, under any game type a Mainline TOC line names
+(the check walks every conditional line, so `[AllowLoadGameType plunderstorm]` is
+covered); no Classic client loads the Retail Auras3 runtime
+(`Auras3/MSUF_Auras3_DotData.lua`, `_DefensiveData.lua`, `_AuraNameResolver.lua`,
+`_SpellIndicators.lua`, `_UnitFrames.lua`); and no client loads one Lua file
+twice across the core and the Options addon. `tools/tests/load_graph_lock_smoke.py`
+pins the generator and these rules on fixtures.
 
 ### Retired addons and files
 
 `tools/classic-addon-tombstones.txt` records what this tree retired on purpose.
-A line with one field names a retired Retail addon folder (today
+A line with one field names a retired addon folder (today
 `MidnightSimpleUnitFrames_Assistant`); a line `<addon><TAB><path>` names a
-Retail file of a shipped addon that retired with it (today the Options bridge
+file of a shipped addon that retired with it (today the Options bridge
 `Shell/Menu2/MSUF_AssistantBridge.lua` and `Locales/MSUF_PriorityFrames_FAQ.lua`,
-whose only consumer went with the Assistant). Retail parity,
-`.github/scripts/resolve_classic_retail_source.py` and
-`tools/rebase-classic-overrides.py` skip those paths instead of reporting them
-missing. The gate decides presence through git: it fails when git tracks a file
+whose only consumer went with the Assistant). The gate decides presence through git: it fails when git tracks a file
 below a retired folder, when a retired folder still holds a TOC, or when a
 retired path is tracked or loaded by any TOC or XML manifest. An empty retired
 folder that `git rm` leaves on a Windows checkout is fine. The PowerShell reader
 (`Import-MsufAddonTombstones` in `.github/scripts/ClassicGate.Common.psm1`) and
 the Python reader (`.github/scripts/classic_tombstones.py`) follow the same rules,
 and `tools/tests/classic_no_assistant_contract_smoke.py` checks every fixture
-with both. Retail's `Sync-ClassicRetail.ps1` does not read the manifest yet;
-until it does, port Retail changes with `tools/rebase-classic-overrides.py`.
+with both.
 
 ### Global name resolution
 
@@ -558,38 +575,9 @@ present after login with the recorded kind (a stubbed client, not the game);
 outside-reader scan can fail. A refactor that renames or moves a ledgered name or field must update the
 ledger in the same change.
 
-### Owned shadows
+### Unloaded and retained files
 
-A shadow is an `O` file that is a whole-file Classic copy of a Retail file; a
-Retail sync never touches it, so Retail fixes silently stop reaching Classic.
-Do not add one. A Classic difference in a Retail file belongs in that file as
-a reviewed `P` override whose Classic hunks branch on `MSUF.Client` facts read
-once when the file loads (for example `IS_CLASSIC_FAMILY` in
-`UnitFrames/Engine/MSUF_UF_Config.lua`): every Retail sync then rebases them,
-and Mainline never enters them. Classic-only code without a Retail
-counterpart stays an ordinary owned file (for example
-`Game/Classic/ClassPower/MSUF_CP_ClassicRouting.lua`). Every shadow has been
-collapsed this way: the last one, `Game/Classic/State/MSUF_Defaults.lua` for
-`State/MSUF_Defaults.lua`, went on 2026-09-20, so every client now loads one
-Defaults file and a Retail defaults fix can no longer miss Classic.
-`tools/classic-owned-shadows.tsv` is therefore empty, and the rules below stay
-in force for a shadow that is ever added again: each one is a sorted
-`owned-path<TAB>Retail-path<TAB>Retail-base-blob` row. Every owned path must be
-declared in `O`, its Retail counterpart must not be, and a malformed manifest
-fails the gate. Drift is reported by the gate, not enforced: a run with a
-Retail reference lists every shadow whose Retail counterpart changed or no
-longer exists under its `Classic-owned shadows:` line, and still passes. The
-recorded Retail blobs were taken on 2026-09-14 from Retail-Source `ace807b7`.
-They mark where drift tracking starts and do not certify that earlier Retail
-changes had been ported into the shadows.
-
-Rebase rule: when a shadow's Retail counterpart changes, review the old-to-new
-Retail delta, port it into the shadow or consciously reject it, run the
-complete Classic gate, and only then update the recorded blob. When the
-counterpart is removed, decide whether the shadow is still needed and update or
-remove its row. Never refresh a recorded blob without that review.
-
-The manifest deliberately retains the 48 `Media/Shapes` files plus
+The tree deliberately retains the 48 `Media/Shapes` files plus
 `Runtime/MSUF_UIThemeBridge.lua` and `Shell/Menu2/MSUF_Menu2_ThemeSkin.lua` from the old
 MidnightSkin experiment. Their former canonical loader/consumer wiring no
 longer exists, so they are preserved historical source/assets, not claimed as
@@ -601,35 +589,32 @@ gate's dead-Lua check below.
 Every versioned addon Lua file must be loaded by a shipped TOC: the gate fails
 on one that no TOC or XML manifest of any client reaches, because it would ship
 as dead payload. The exceptions are rows of `tools/classic-unloaded-addon-lua.tsv`
-(`Path<TAB>Kind<TAB>Reason`): `mirror` for an unchanged Retail mirror that Retail
-itself never loads (today `Features/Diagnostics/MSUF_Feature_DebugPosition.lua`),
-and `retained` for a Classic-owned file the owner keeps unloaded on purpose
+(`Path<TAB>Kind<TAB>Reason`): `diagnostic` for a developer diagnostic that no TOC
+loads (today `Features/Diagnostics/MSUF_Feature_DebugPosition.lua`),
+and `retained` for a file the owner keeps unloaded on purpose
 (today the two theme-bridge files), whose reason must cite the owner decision.
-An unlisted owned, overridden or mirrored file that no TOC loads fails, an
-overridden file can never be listed, and a row whose file a TOC loads is stale.
+An unlisted file that no TOC loads fails, and a row whose file a TOC loads is stale.
 The pixel layout coverage smoke skips the listed files, and
 `tools/tests/unloaded_addon_lua_smoke.py` pins the rules on fixtures.
 
 ### Flavor load coverage
 
-Classic flavors load hand-kept copies of several Retail manifests, so a Lua
-file Retail adds to one of them could otherwise never load on Classic while
+Classic flavors load hand-kept copies of several Mainline manifests, so a Lua
+file added to one of them could otherwise never load on Classic while
 every other check stays green. The gate resolves the Mainline core and Options
 TOC load graphs and, for each Classic flavor in the client matrix, puts every
-Mainline Lua path into one of three classes:
+Mainline Lua path into one of two classes:
 
 - loaded: that flavor's core or Options TOC loads the same path;
-- replaced: that flavor loads an owned shadow whose Retail counterpart in
-  `tools/classic-owned-shadows.tsv` is the path;
 - excluded: `tools/classic-flavor-load-exclusions.tsv` lists the path for that
   flavor with a reason.
 
 Any other path fails the gate with the flavor and the path. The exclusions
-file is tracked, starts with the header `RetailPath<TAB>Flavors<TAB>Reason`,
-and holds one ordinal-sorted row per Retail path. `Flavors` is `*` for every
+file is tracked, starts with the header `MainlinePath<TAB>Flavors<TAB>Reason`,
+and holds one ordinal-sorted row per Mainline path. `Flavors` is `*` for every
 Classic flavor, including one added later, or a comma list of matrix suffixes.
 Every row must stay needed: it fails as stale when Mainline no longer loads its
-path or when a listed flavor loads or replaces it. Each reason says why Classic
+path or when a listed flavor loads it. Each reason says why Classic
 does without the file and names the Classic file that takes its place, if any.
 Full and `-SelfContained` runs both print the totals on the
 `Classic flavor load coverage:` line.
@@ -644,48 +629,29 @@ matrix has actually passed.
 
 ## Running the gate and single smokes
 
-Run the full gate from the repository root before a tag or a sync commit,
-naming the Git root of a clean Retail checkout at the Retail commit being
-mirrored:
+Run the gate from the repository root before a tag. `tools/run-classic-gate.ps1`
+is the wrapper that finds Lua 5.1, `luac` and Python first (the old
+`-RetailReferenceRoot` parameter is still accepted but ignored, and prints a
+`DEPRECATED` line):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-classic-prototype.ps1 -RetailReferenceRoot <clean Retail checkout>
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-classic-gate.ps1
 ```
 
-No tracked file records that Retail commit: the `Retail-Source:` trailer goes
-stale as soon as a later rebase commit moves an override.
-`.github/scripts/resolve_classic_retail_source.py` derives it. It walks a Retail
-revision's history newest first and prints the newest commit whose addon tree
-matches this tree under the gate's rules: an override matches on its recorded
-base blob, every other mapped path on its blob, each shipped addon's Retail TOC
-through the `_Mainline.toc` mapping, retired paths
-(`tools/classic-addon-tombstones.txt`) are skipped, and the addon inventory must
-equal mapped Retail plus the owned paths. No Retail path may collide with an
-owned path, compared without case and folder by folder, and the Retail tree of
-the two shipped addons may hold only their two TOCs and regular, non-executable
-files. When nothing matches it exits 2 and names the nearest commit with its
-mismatching paths:
-
-```powershell
-python .github/scripts/resolve_classic_retail_source.py --retail <Retail clone> --retail-rev <Retail main>
-```
-
-`-SelfContained` is the subset that needs neither a Retail checkout nor the
-mirror: syntax, load order, error paths, ownership manifests, flavor load
-coverage and the smokes, without Retail parity, override-base or shadow-drift
-checks and without the Blizzard UI source audit. It never replaces the full
-gate. `-AllowMissingTools` lets a
+The full gate adds the Blizzard UI source audit when the local mirror exists.
+`-SelfContained` is the CI subset: everything except that audit (syntax, the
+load-graph lock, error paths, the TOC invariants, flavor load coverage and the
+smokes). It never replaces the full gate. `-AllowMissingTools` lets a
 structure-only run continue without `luac`, `lua` or the UI source mirror; each
 step it skips is printed as a `SKIPPED:` line, so a partial run never reads as
 a full pass. `-RequireNoSkippedSteps` turns those lines into a failure, which is
 how CI proves a full run really ran everything.
 
 CI runs both. `.github/workflows/classic-gate.yml` has two jobs for every push
-and pull request to `classic` that touches the addon folders, `tools/` or
+and pull request to `main` that touches the addon folders, `tools/` or
 `.github/` (a push that changes only `VERSION` or a document runs neither):
 `classic-gate` runs `-SelfContained`, and
-`classic-full-gate` makes a blob-less clone of Retail `main` of this repository,
-checks out the commit the resolver names, clones `Gethe/wow-ui-source` (depth
+`classic-full-gate` clones `Gethe/wow-ui-source` (depth
 1, every branch, no working tree) into `_local_workflows/references/wow-ui-source`
 and runs the full gate with the source audit. The audit reads Blizzard's live
 branches, so the full job can turn red without any change here; the
@@ -697,12 +663,11 @@ Both full-gate runs are the same steps: they live in the reusable workflow
 `classic-v*` tag: `preflight` (tag freshness, CurseForge secret and the
 self-contained gate, about a minute), then `classic-full-gate` on the tag, then
 `publish-classic`, which packages and uploads only when both are green. The
-self-contained subset cannot see a mirrored Retail file that was edited without
-an override row, so it is a pre-check, never the only gate on a published
-build. The full-gate job passes `-RequireNoSkippedSteps`, which makes the gate
-refuse to pass when any of its own steps was skipped: on a runner a missing
-Blizzard mirror is otherwise a skip, not a failure, and an unresolvable Retail
-reference aborts the release instead of gating against a guess.
+self-contained subset cannot see drift of Blizzard's source, so it is a
+pre-check, never the only gate on a published build. The full-gate job passes
+`-RequireNoSkippedSteps`, which makes the gate refuse to pass when any of its
+own steps was skipped: on a runner a missing Blizzard mirror is otherwise a
+skip, not a failure.
 
 Requirements:
 
@@ -747,11 +712,8 @@ root, except:
 These run without the driver:
 
 - `.github/scripts/classic_refactor_load_order_smoke.py`: `python`, no argument.
-- `tools/tests/rebase_classic_overrides_smoke.py`, the self-test of
-  `tools/rebase-classic-overrides.py`: `python`, no argument.
-- `tools/tests/resolve_classic_retail_source_smoke.py`: `python`, the root.
-  Both build throwaway git repositories in the system temp directory; they need
-  `git` on `PATH`, no Retail checkout and no network.
+- `tools/tests/load_graph_lock_smoke.py`: `python`, the root. It runs
+  `tools/load-graph.lua` on a scratch layout and needs Lua 5.1 on `PATH`.
 - `tools/tests/classic_client_detection_smoke.lua`: the root. Never run it
   through the driver: the driver stubs `issecretvalue`, which hides the missing
   secret-value API case this smoke pins.
@@ -772,17 +734,22 @@ These run without the driver:
   optionally `tinted` or `midnight` (the gate runs both for `Forever`). Every
   shipped client must keep the stock menu; only `Forever` gets Classic Glass.
 
-The four Retail-shared runtime smokes (`health_background_sample_parity_smoke`,
+The four golden parity smokes (`health_background_sample_parity_smoke`,
 `health_runtime_equivalence_smoke`, `text_runtime_value_parity_smoke` and
-`castbar_tint_parity_smoke`) replay a Classic override and its Retail base side
-by side. Their rows pass `{root/} {retailRoot/} parity-only`: `{retailRoot/}` is
-the Retail reference root, or `-` when there is none, and `parity-only` keeps
-every equality assertion (native arguments, order, displayed values, call and
-allocation counts) while dropping the strict improvement assertions, which only
-fit the one-off refactor review the smokes were written for. A full run
-therefore really compares; a self-contained run prints a `SKIPPED baseline
-comparison` line per smoke and the gate reports the whole comparison as a
-`SKIPPED:` step.
+`castbar_tint_parity_smoke`) were written to replay a Classic override and its
+Retail base side by side. The Retail base is frozen, so its behavior is
+recorded in `.github/scripts/golden/<smoke>.golden` (recorded from the retired
+Retail commit `84a1241710c26d0970436a02beb4e32f3a626f39`) and the smokes
+compare the current source with it: native arguments, order, displayed values,
+call and allocation counts must stay equal, and Lua instruction and secret-probe
+counts may not exceed the recorded ones. Logs are stored as chunk digests
+(`.github/scripts/golden_baseline.lua`), so a failure names the first differing
+chunk and shows its current lines. Their rows pass only `{root/}`. A change that
+is meant to alter observable behavior re-records the file: pass a reference
+source root and `record "<label>"` (`lua .github/scripts/auras3_test_driver.lua
+.github/scripts/<smoke>.lua <repo> <source root> record "<label>"`). With a
+source root and no `record` the smoke compares against that live tree instead of
+the fixture.
 
 Every tracked smoke either has a row in `tools/classic-gate-smokes.tsv` or is
 listed with a recorded reason in `$retiredSmokes` in
@@ -837,8 +804,9 @@ so the two index files are also the reference for what each menu builds.
 
 A file this repository writes may only claim a generator it tracks:
 `tools/tests/classic_no_assistant_contract_smoke.py` reads the first lines of
-every tracked file that is not an unchanged Retail mirror and fails on a
-"generated by" claim naming an untracked file. The changelog payloads
+every tracked file and fails on a "generated by" claim naming an untracked
+file (the Mainline alias catalogs that name the Retail-only generator are the one
+recorded exception). The changelog payloads
 (`State/MSUF_Changelog.lua`, `Options/State/MSUF_ChangelogFull.lua`) are
 generated from `CHANGELOG.md` by the tracked `tools/update-addon-changelog.ps1`;
 after editing `CHANGELOG.md` run it with `-Version <VERSION>`, and the gate runs
@@ -873,11 +841,12 @@ unreleased client. Checklist:
    `_local_workflows/references/wow-ui-source`; the source audit reads it.
 7. Confirm that the matrix CurseForge game version names exist for the project
    the TOCs declare in `X-Curse-Project-ID`.
-8. Declare every new addon file in `tools/classic-owned-addon-paths.txt`, track
-   it with `git add -f`, and run the full gate.
+8. Add the new flavor's files to its manifests, regenerate
+   `tools/load-graph.lock` (`lua tools/load-graph.lua --write`), track new
+   files with `git add -f`, and run the full gate.
 9. Review `tools/classic-flavor-load-exclusions.tsv`: its `*` rows now cover the
    new flavor as well, and the flavor load coverage check names every Mainline
-   Lua path the new flavor neither loads nor replaces.
+   Lua path the new flavor does not load.
 
 ElvUI reference inspected locally at commit
 `6c164caaa3d34f5c8ca29d2948ce7d9abde828a6`: its `ElvUI_Mists.toc` and
@@ -902,13 +871,12 @@ fails if Blizzard renames the placeholder name "Camelot". Once a build exists:
    rules and the Blizzard addon states.
 2. If the client loads `MidnightSimpleUnitFrames_Mainline.toc`, add its interface
    number to the Mainline row of `tools/classic-client-matrix.tsv` and to the
-   two `_Mainline.toc` files. The gate already allows the Mainline
-   `## Interface` line to differ from Retail.
+   two `_Mainline.toc` files.
 3. If the client needs its own TOC suffix instead, add a matrix row and the two
    suffixed TOCs. The gate currently accepts exactly one non-Classic client, so
    `tools/test-classic-prototype.ps1` first needs a second Mainline-family client
-   in its single-Mainline check, the Retail TOC name mapping, the Mainline load
-   graph and the Retail parity targets.
+   in its single-Mainline check and the Mainline load graph, and
+   `tools/load-graph.lua` needs a second Mainline-family view.
 4. Identify the client in `Game/Shared/Initialize.lua`. A new `Enum.GameMode`
    key goes into the recognized game modes. A client that reports an existing
    mode (WoW Forever reports Standard) needs a marker instead: a global that

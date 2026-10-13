@@ -1,9 +1,8 @@
 -- Raw WOW_PROJECT_* reads belong in Game/Shared/Initialize.lua, which turns them
--- into MSUF.Client facts. Classic-owned and reviewed override files may keep only
--- the reads listed in ALLOWED, each with the reason it is still raw. Byte-identical
--- Retail copies are Retail's to change until the single-repo cutover, so they are
--- not checked here and a Retail sync never fails on them. Plain Lua 5.1; arg[1]
--- is the repo root.
+-- into MSUF.Client facts. Every tracked addon Lua file may keep only the reads
+-- listed in ALLOWED, each with the reason it is still raw. Vendored libraries
+-- (Libs/ other than Libs/MSUFUnitFrames) are not ours and are not scanned.
+-- Plain Lua 5.1; arg[1] is the repo root.
 local repo = assert(arg[1], "repo root required")
 
 local function ReadText(relative)
@@ -82,19 +81,13 @@ local both = _G.WOW_PROJECT_ID == _G.WOW_PROJECT_MAINLINE -- WOW_PROJECT_CLASSIC
     assert(CountProjectReads("-- WOW_PROJECT_ID\n") == 0, "a commented project global was counted as a read")
 end
 
-local reviewed = {}
-for line in ReadText("tools/classic-owned-addon-paths.txt"):gmatch("[^\n]+") do
-    local path = line:match("^%s*(.-)%s*$")
-    if path ~= "" then reviewed[path] = "owned" end
-end
-for line in ReadText("tools/classic-retail-overrides.tsv"):gmatch("[^\n]+") do
-    local path = line:match("^([^\t]+)\t")
-    if path then reviewed[path] = "override" end
+local function Vendored(path)
+    return path:find("/Libs/", 1, true) and not path:find("/Libs/MSUFUnitFrames/", 1, true)
 end
 
 local SOURCE_OF_TRUTH = "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua"
--- path = { reads, reason }. Empty on purpose since 2026-09-19: every owned and
--- overridden file now branches on MSUF.Client. A new entry needs a reason that
+-- path = { reads, reason }. Empty on purpose since 2026-09-19: every addon file
+-- now branches on MSUF.Client. A new entry needs a reason that
 -- says why the model cannot answer, not just that the code predates it.
 local ALLOWED = {}
 
@@ -103,7 +96,7 @@ local command = 'git -C "' .. repo .. '" ls-files -- MidnightSimpleUnitFrames Mi
 local pipe = assert(io.popen(command, "r"), "cannot enumerate tracked addon files")
 local scanned, failures, seen = 0, {}, {}
 for path in pipe:lines() do
-    if path:match("%.lua$") and reviewed[path] and path ~= SOURCE_OF_TRUTH then
+    if path:match("%.lua$") and not Vendored(path) and path ~= SOURCE_OF_TRUTH then
         scanned = scanned + 1
         local reads = CountProjectReads(ReadText(path))
         local allowed = ALLOWED[path]
@@ -112,21 +105,20 @@ for path in pipe:lines() do
             local expected = allowed and allowed[1] or 0
             if reads ~= expected then
                 failures[#failures + 1] = string.format(
-                    "%s (%s) reads a WOW_PROJECT_* global %d times, allowed %d. Route client checks through MSUF.Client (%s), or update ALLOWED with the reason.",
-                    path, reviewed[path], reads, expected, SOURCE_OF_TRUTH)
+                    "%s reads a WOW_PROJECT_* global %d times, allowed %d. Route client checks through MSUF.Client (%s), or update ALLOWED with the reason.",
+                    path, reads, expected, SOURCE_OF_TRUTH)
             end
         end
     end
 end
 local pipeOk, pipeReason, pipeCode = pipe:close()
 assert(pipeOk or pipeCode == 0, "git ls-files failed: " .. tostring(pipeReason or pipeCode))
-assert(scanned >= 100, "only " .. scanned .. " owned or override Lua files were scanned; git ls-files likely failed")
+assert(scanned >= 400, "only " .. scanned .. " addon Lua files were scanned; git ls-files likely failed")
 -- The source of truth must keep reading them: it is the only file that may.
 assert(CountProjectReads(ReadText(SOURCE_OF_TRUTH)) > 0,
     SOURCE_OF_TRUTH .. " no longer reads any project global; client detection cannot work")
 for path in pairs(ALLOWED) do
-    assert(reviewed[path], "ALLOWED names a file that is neither owned nor overridden: " .. path)
-    assert(seen[path], "ALLOWED names a file that git does not track: " .. path)
+    assert(seen[path], "ALLOWED names a file that git does not track or that reads no project global: " .. path)
 end
 assert(#failures == 0, table.concat(failures, "\n"))
-print("classic project ID reads smoke passed: " .. scanned .. " owned or override Lua files")
+print("classic project ID reads smoke passed: " .. scanned .. " addon Lua files")

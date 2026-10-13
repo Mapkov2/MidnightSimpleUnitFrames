@@ -66,8 +66,8 @@ end
 ---------------------------------------------------------------------------
 -- 3. No type(...) == "function" guard on an MSUF_ global in the menu pages
 --    or Edit Mode (wave 4 took them from 89 and 94 sites to 1 and 0; the one
---    left is MSUF_Menu2_AuraSettings.lua, a byte-identical Retail mirror whose
---    dead MSUF_IsConfigCombatLocked fallback goes with a Retail port)
+--    left is MSUF_Menu2_AuraSettings.lua, whose dead MSUF_IsConfigCombatLocked
+--    fallback is still to be removed)
 ---------------------------------------------------------------------------
 local GUARD_AREAS = {
     { dir = "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/", ceiling = 1 },

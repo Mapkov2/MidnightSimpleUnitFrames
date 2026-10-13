@@ -9,7 +9,7 @@
 -- live as hunks gated on IS_CLASSIC_FAMILY and ARENA_AURA_SLOTS, both read once
 -- at load from MSUF.Client and the published arena slot count.
 --
--- This smoke is the durable pin: a Retail sync that drops a gated hunk, or
+-- This smoke is the durable pin: an edit that drops a gated hunk, or
 -- widens one to Mainline, fails here. Every difference is checked twice, once
 -- in the source (the guard survives) and once in the result (the guard still
 -- decides what a profile carries on this client).

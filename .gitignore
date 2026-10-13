@@ -19,9 +19,10 @@ AGENTS.md
 tools/
 !/tools/
 /tools/*
-!/tools/classic-owned-addon-paths.txt
-!/tools/classic-retail-overrides.tsv
 !/tools/classic-addon-tombstones.txt
+!/tools/load-graph.lock
+!/tools/load-graph.lua
+!/tools/classic-toc-identity.tsv
 !/tools/MenuTest/
 !/tools/search_catalog_harness.lua
 # Smokes: the whole folder is versioned, so a new smoke is added without -f.

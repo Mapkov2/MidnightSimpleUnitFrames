@@ -423,23 +423,19 @@ function Assert-MsufUnloadedAddonLua {
         .DESCRIPTION
         The manifest starts with the header Path<TAB>Kind<TAB>Reason and lists
         one row per file in ordinal path order. Kinds:
-          mirror    an unchanged Retail mirror that Retail itself never loads;
-                    it may be neither Classic-owned nor overridden
-          retained  a Classic-owned file the owner keeps unloaded on purpose;
-                    it must be Classic-owned, never an override, and its reason
-                    must cite the owner decision
-        Any other unloaded file fails (an owned or overridden file nobody listed
-        is dead weight), and so does a row whose file a shipped TOC now loads.
-        -VersionableLua and -OwnedPaths/-OverridePaths/-TrackedPaths are
-        repository-relative forward-slash paths; -LoadedPaths are full paths.
+          diagnostic  a developer diagnostic that no TOC loads, kept for manual use
+          retained    a file the owner keeps unloaded on purpose; its reason
+                      must cite the owner decision
+        Any other unloaded file fails (a file nobody listed is dead weight), and
+        so does a row whose file a shipped TOC now loads.
+        -VersionableLua and -TrackedPaths are repository-relative forward-slash
+        paths; -LoadedPaths are full paths.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$Root,
         [Parameter(Mandatory = $true)][string]$ManifestPath,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$VersionableLua,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$LoadedPaths,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$OwnedPaths,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$OverridePaths,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$TrackedPaths
     )
     $label = [IO.Path]::GetFileName($ManifestPath)
@@ -448,8 +444,6 @@ function Assert-MsufUnloadedAddonLua {
     if ($lines.Count -eq 0 -or $lines[0] -cne "Path`tKind`tReason") {
         throw "$label must start with the header Path<TAB>Kind<TAB>Reason"
     }
-    $owned = [Collections.Generic.HashSet[string]]::new([string[]]$OwnedPaths, [StringComparer]::Ordinal)
-    $overridden = [Collections.Generic.HashSet[string]]::new([string[]]$OverridePaths, [StringComparer]::Ordinal)
     $tracked = [Collections.Generic.HashSet[string]]::new([string[]]$TrackedPaths, [StringComparer]::Ordinal)
     $loaded = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($loadedPath in $LoadedPaths) { [void]$loaded.Add([IO.Path]::GetFullPath($loadedPath)) }
@@ -469,24 +463,14 @@ function Assert-MsufUnloadedAddonLua {
             throw "$label must use ordinal path sorting: $path"
         }
         $previous = $path
-        if ($overridden.Contains($path)) {
-            throw "An overridden file that no TOC loads is a dead Classic edit and cannot be listed in ${label}; restore the Retail bytes and drop its override row, or load it: $path"
-        }
         switch -CaseSensitive ($kind) {
-            "mirror" {
-                if ($owned.Contains($path)) {
-                    throw "$label lists the Classic-owned $path as a Retail mirror; a deliberately kept owned file is a 'retained' row"
-                }
-            }
+            "diagnostic" { }
             "retained" {
-                if (-not $owned.Contains($path)) {
-                    throw "$label retains $path, which is not Classic-owned; only a Classic-owned file can be retained"
-                }
                 if ($reason -notmatch '(?i)\bowner decision\b') {
                     throw "$label retains $path without citing the owner decision in its reason"
                 }
             }
-            default { throw "$label row has an unknown kind '$kind' (mirror or retained): $path" }
+            default { throw "$label row has an unknown kind '$kind' (diagnostic or retained): $path" }
         }
         if ($loaded.Contains([IO.Path]::GetFullPath((Join-Path $Root $path)))) {
             throw "Stale $label row: a shipped TOC loads $path; remove the row"
@@ -497,11 +481,133 @@ function Assert-MsufUnloadedAddonLua {
         -not $listed.ContainsKey($_) -and -not $loaded.Contains([IO.Path]::GetFullPath((Join-Path $Root $_)))
     })
     if ($unreached.Count -gt 0) {
-        throw "Addon Lua that no shipped TOC loads would ship as dead payload: $($unreached -join ', '). Load it from a TOC or XML manifest, delete it, or list it in $label (an unchanged Retail mirror Retail never loads as 'mirror', a Classic-owned file the owner keeps on purpose as 'retained')"
+        throw "Addon Lua that no shipped TOC loads would ship as dead payload: $($unreached -join ', '). Load it from a TOC or XML manifest, delete it, or list it in $label (a developer diagnostic as 'diagnostic', a file the owner keeps on purpose as 'retained')"
     }
     return [pscustomobject]@{
-        Mirrors = @($listed.Values | Where-Object { $_ -ceq "mirror" }).Count
+        Diagnostics = @($listed.Values | Where-Object { $_ -ceq "diagnostic" }).Count
         Retained = @($listed.Values | Where-Object { $_ -ceq "retained" }).Count
+    }
+}
+
+function Import-MsufTocIdentity {
+    <#
+        .SYNOPSIS
+        Reads tools/classic-toc-identity.tsv: the TOC metadata lines each shipped addon must keep.
+        .DESCRIPTION
+        The manifest starts with the header Addon<TAB>Rule<TAB>Line. Rules:
+          line    every client TOC of the addon declares exactly this line
+          absent  no TOC line of the addon starts with this text
+        Addon is the TOC base name (the addon folder). A line is a full '## Field: value' line, so a
+        value that identifies the release or the saved data (SavedVariables, Wago and Curse IDs), a
+        field the code reads back at runtime (X-MSUF-UnitFrames*, AddonCompartmentFunc*) or one
+        that makes the Options addon load on demand cannot disappear from every client at once.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string[]]$Addons
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "TOC identity manifest is missing: $Path" }
+    $label = [IO.Path]::GetFileName($Path)
+    $lines = [string[]][IO.File]::ReadAllLines($Path)
+    if ($lines.Count -eq 0 -or $lines[0] -cne "Addon`tRule`tLine") {
+        throw "$label must start with the header Addon<TAB>Rule<TAB>Line"
+    }
+    $rows = [Collections.Generic.List[object]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    for ($index = 1; $index -lt $lines.Count; $index++) {
+        $fields = $lines[$index].Split([char]9)
+        if ($fields.Count -ne 3 -or @($fields | Where-Object { $_.Length -eq 0 -or $_ -cne $_.Trim() }).Count -gt 0) {
+            throw "$label rows must be Addon<TAB>Rule<TAB>Line without empty or padded fields: $($lines[$index])"
+        }
+        $addon, $rule, $line = $fields
+        if ($Addons -cnotcontains $addon) { throw "$label names an addon that is not shipped: $addon" }
+        if ($rule -cne "line" -and $rule -cne "absent") { throw "$label row has an unknown rule '$rule' (line or absent): $($lines[$index])" }
+        if (-not $line.StartsWith("## ", [StringComparison]::Ordinal)) { throw "$label lines must be TOC metadata lines starting with '## ': $line" }
+        if (-not $seen.Add("$addon`t$rule`t$line")) { throw "$label repeats a row: $($lines[$index])" }
+        $rows.Add([pscustomobject]@{ Addon = $addon; Rule = $rule; Line = $line })
+    }
+    foreach ($addon in $Addons) {
+        if (@($rows | Where-Object { $_.Addon -ceq $addon }).Count -eq 0) { throw "$label pins nothing for $addon" }
+    }
+    return [object[]]$rows.ToArray()
+}
+
+function Assert-MsufTocIdentity {
+    <#
+        .SYNOPSIS
+        One TOC keeps every metadata line that tools/classic-toc-identity.tsv pins for its addon.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$TocName,
+        [Parameter(Mandatory = $true)][string]$Addon,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][AllowEmptyString()][string[]]$Content,
+        [Parameter(Mandatory = $true)][object[]]$Rows
+    )
+    $trimmed = @($Content | ForEach-Object { $_.TrimEnd() })
+    foreach ($row in @($Rows | Where-Object { $_.Addon -ceq $Addon })) {
+        if ($row.Rule -ceq "line") {
+            $count = @($trimmed | Where-Object { $_ -ceq $row.Line }).Count
+            if ($count -ne 1) {
+                throw "$TocName must declare exactly one '$($row.Line)' line (found $count); tools/classic-toc-identity.tsv pins it"
+            }
+        } else {
+            $hits = @($trimmed | Where-Object { $_.StartsWith($row.Line, [StringComparison]::Ordinal) })
+            if ($hits.Count -gt 0) {
+                throw "$TocName must not declare '$($row.Line)'; tools/classic-toc-identity.tsv forbids it: $($hits -join ' | ')"
+            }
+        }
+    }
+}
+
+function Test-MsufNormalizedAddonPath {
+    <#
+        .SYNOPSIS
+        True for a repository-relative forward-slash file path below one of the addon folders that
+        is trimmed, has no empty, '.' or '..' segment, no backslash and no control character.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string[]]$AddonFolders
+    )
+    if ([string]::IsNullOrWhiteSpace($RelativePath) -or
+        $RelativePath -cne $RelativePath.Trim() -or
+        $RelativePath.Contains([char]92) -or
+        $RelativePath.StartsWith('/') -or
+        $RelativePath.EndsWith('/') -or
+        $RelativePath.Contains('//') -or
+        $RelativePath.IndexOfAny([char[]](0..31)) -ge 0 -or
+        $RelativePath -match '(^|/)[.][.]?(?:/|$)') {
+        return $false
+    }
+    foreach ($folder in $AddonFolders) {
+        if ($RelativePath.StartsWith($folder + '/', [StringComparison]::Ordinal)) { return $true }
+    }
+    return $false
+}
+
+function Assert-MsufAddonPaths {
+    <#
+        .SYNOPSIS
+        Every file path below the addon folders is normalized and no two paths differ only by case.
+        .DESCRIPTION
+        Windows and macOS clients cannot hold two paths that differ by case, and WoW resolves file
+        names without case, so a pair like Foo.lua and foo.lua loads one file twice or the wrong one.
+        The paths come from git's index plus the working tree, so a collision shows on any platform.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Paths,
+        [Parameter(Mandatory = $true)][string[]]$AddonFolders
+    )
+    $byFolded = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in $Paths) {
+        if (-not (Test-MsufNormalizedAddonPath -RelativePath $path -AddonFolders $AddonFolders)) {
+            throw "Addon file path is not a normalized path below an addon root: $path"
+        }
+        if ($byFolded.ContainsKey($path)) {
+            if ($byFolded[$path] -cne $path) { throw "Case-colliding addon file paths: $($byFolded[$path]) versus $path" }
+            continue
+        }
+        $byFolded.Add($path, $path)
     }
 }
 
@@ -554,4 +660,5 @@ function Assert-MsufStagedLoadGraph {
 Export-ModuleMember -Function Import-MsufClientMatrix, Assert-MsufClientMatrix, ConvertTo-MsufInterfaceSet,
     Get-MsufInterfaceSetKey, Get-MsufTocField, Get-MsufTocEntries, Get-MsufLoadGraph, Invoke-MsufGit,
     Get-MsufVersionableFiles, Import-MsufAddonTombstones, Assert-MsufAddonTombstones, Test-MsufToolingLeaf,
-    Assert-MsufStagedLoadGraph, Assert-MsufUnloadedAddonLua
+    Assert-MsufStagedLoadGraph, Assert-MsufUnloadedAddonLua, Import-MsufTocIdentity, Assert-MsufTocIdentity,
+    Test-MsufNormalizedAddonPath, Assert-MsufAddonPaths

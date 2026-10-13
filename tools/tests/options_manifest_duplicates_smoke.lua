@@ -1,11 +1,11 @@
 -- options_manifest_duplicates_smoke.lua <repoRoot>
 --
--- The Classic Options TOCs once named exact copies of four Retail-named menu
+-- The Classic Options TOCs once named exact copies of four shared menu
 -- manifests (MSUF_Menu2_AfterSearch, Preview/MSUF_Menu2_UnitPreview,
 -- MSUF_Menu2_AfterUnitPreview and MSUF_Menu2_AfterGroupPreview with a
--- _Classic suffix). Nothing kept a copy equal to its twin, so a Retail sync
--- adding a Script to the Retail-named file silently never loaded on Classic
--- Era, TBC or Mists. The Classic TOCs now name the Retail-named manifests.
+-- _Classic suffix). Nothing kept a copy equal to its twin, so a Script added
+-- to the shared file silently never loaded on Classic Era, TBC or Mists.
+-- The Classic TOCs now name the shared manifests.
 --
 -- This smoke fails when
 --   * a *_Classic.xml manifest under the Options addon is byte-identical

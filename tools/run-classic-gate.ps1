@@ -19,6 +19,10 @@ param(
 # tools/test-classic-prototype.ps1.
 #
 # Parameters win over MSUF_LUA / MSUF_LUAC / MSUF_PYTHON, which win over PATH.
+#
+# -RetailReferenceRoot is deprecated and ignored: 7.0 is an independent repository, so the
+# gate compares against no Retail checkout. The parameter is still accepted (the gate prints a
+# DEPRECATED line) so existing callers keep working.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"

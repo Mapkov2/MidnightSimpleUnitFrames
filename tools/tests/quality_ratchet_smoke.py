@@ -262,15 +262,13 @@ class Check(Tree):
                        self.rel):
             self.assertIn(needle, text)
 
-    @unittest.skipUnless(PROFILE == "classic", "the owned-file list is a Classic contract")
-    def test_new_file_limits_apply_to_owned_files_only(self):
-        write(self.root, "tools/classic-owned-addon-paths.txt", ADDON + "/Owned.lua\n")
-        write(self.root, ADDON + "/Owned.lua", "local a = 1; local b = 2\n")
-        write(self.root, ADDON + "/Mirror.lua", "local a = 1; local b = 2\n")
+    def test_new_file_limits_apply_to_every_new_file(self):
+        write(self.root, ADDON + "/First.lua", "local a = 1; local b = 2\n")
+        write(self.root, ADDON + "/Second.lua", "local a = 1; local b = 2\n")
         code, text = run_tool(self.root, "--check")
         self.assertEqual(code, 1, text)
-        self.assertIn("Owned.lua: new file has semicolon_lines", text)
-        self.assertNotIn("Mirror.lua: new file", text)
+        self.assertIn("First.lua: new file has semicolon_lines", text)
+        self.assertIn("Second.lua: new file has semicolon_lines", text)
 
     def test_copying_code_names_the_partner_file(self):
         shared = "\n".join("local value%d = Compute(%d)" % (i, i) for i in range(8)) + "\n"

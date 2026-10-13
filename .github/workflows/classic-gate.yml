@@ -59,10 +59,10 @@ jobs:
           lua -v
           luac -v
 
-      # -SelfContained runs every check that needs neither a Retail checkout
-      # nor the Blizzard UI source mirror: syntax, load order, error paths,
-      # ownership manifests and the smokes. It reads nothing but this commit,
-      # so the classic-full-gate job below covers the rest.
+      # -SelfContained runs every check that does not need the Blizzard UI
+      # source mirror: syntax, the load-graph lock, error paths, the TOC
+      # invariants and the smokes. It reads nothing but this commit, so the
+      # classic-full-gate job below covers the rest.
       - name: Run the self-contained Classic gate
         shell: pwsh
         run: |
@@ -71,10 +71,8 @@ jobs:
             throw "Classic self-contained gate failed."
           }
 
-  # The full gate: everything above, plus Retail parity, override bases and
-  # owned-shadow drift against a clean checkout of the Retail commit this tree
-  # mirrors, plus the Blizzard UI source audit. It stays a separate job on
-  # purpose. The audit reads the live branch tips of Gethe/wow-ui-source, so
+  # The full gate: everything above, plus the Blizzard UI source audit. It
+  # stays a separate job on purpose. The audit reads the live branch tips of Gethe/wow-ui-source, so
   # this job can turn red on an unchanged commit when Blizzard ships a change
   # the audit pins; catching that is its purpose. The self-contained job reads
   # nothing but the commit, so its result always belongs to the commit alone.

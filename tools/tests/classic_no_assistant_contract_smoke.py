@@ -247,23 +247,21 @@ check(listed.returncode == 0 and not adverts,
 # ---------------------------------------------------------------- 3. honest generator claims
 # Moved here from the Assistant control schema smoke, which the removal deleted
 # with the schema it guarded. A file this repository writes may only claim a
-# generator this repository tracks, or nobody can reproduce or check it. Byte-
-# identical Retail mirrors are exempt: their header describes Retail's tooling
-# and their bytes must stay Retail's. Owned and overridden addon files and
-# everything outside the addon folders are this repository's own.
+# generator this repository tracks, or nobody can reproduce or check it. One
+# exception is recorded: the Mainline SpellName alias catalogs name a generator
+# that only the retired Retail repository carried, so they are maintained here
+# as data until that generator is brought over.
 print("generator claims")
 CLAIM = re.compile(r"(?i)\bgenerated\b(?:\s+from\s+\S+)?\s+by\s+([^\s,;]+)")
 tracked = [name for name in subprocess.run(["git", "-C", str(root), "ls-files", "-z"], stdout=subprocess.PIPE)
            .stdout.decode("utf-8").split("\0") if name]
 tracked_set = set(tracked)
-owned = {line.strip() for line in (root / "tools/classic-owned-addon-paths.txt").read_text(encoding="utf-8").splitlines()
-         if line.strip()}
-overridden = {line.split("\t", 1)[0] for line in
-              (root / "tools/classic-retail-overrides.tsv").read_text(encoding="utf-8").splitlines() if line}
-claims, scanned, unbacked = 0, 0, []
+RETAIL_ONLY_GENERATOR = ".github/scripts/generate_aura_alias_catalog.py"
+RETAIL_ONLY_CATALOGS = CORE + "/Auras3/AliasData/"
+check(RETAIL_ONLY_GENERATOR not in tracked_set,
+      "the Retail-only alias generator is still untracked (a tracked one makes the exception below stale)")
+claims, scanned, unbacked, retail_only = 0, 0, [], 0
 for relative in tracked:
-    if relative.startswith((CORE + "/", OPTIONS + "/")) and relative not in owned and relative not in overridden:
-        continue
     if not relative.endswith((".lua", ".py", ".ps1", ".psm1", ".tsv", ".txt")) or not (root / relative).is_file():
         continue
     scanned += 1
@@ -273,11 +271,14 @@ for relative in tracked:
         continue
     claims += 1
     generator = claim.group(1).replace("\\", "/").rstrip(".")
-    if generator not in tracked_set:
+    if generator == RETAIL_ONLY_GENERATOR and relative.startswith(RETAIL_ONLY_CATALOGS):
+        retail_only += 1
+    elif generator not in tracked_set:
         unbacked.append("%s claims %s" % (relative, generator))
-check(claims > 0 and not unbacked,
-      "%d of %d files this repository writes claim a generator, and each claimed generator is tracked%s" % (
-          claims, scanned, "" if not unbacked else ": " + "; ".join(unbacked[:5])))
+check(claims > 0 and not unbacked and retail_only > 0,
+      "%d of %d files this repository writes claim a generator, and each claimed generator is tracked "
+      "(%d Mainline alias catalogs name the Retail-only generator)%s" % (
+          claims, scanned, retail_only, "" if not unbacked else ": " + "; ".join(unbacked[:5])))
 
 print()
 if failures:

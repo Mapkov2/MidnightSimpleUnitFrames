@@ -49,7 +49,7 @@ end
 -- for search, so a page cannot show composed text there (a navigation path,
 -- a format with a translated argument) until the core widgets take a
 -- pre-translated flag. Each entry names the page line that composes the text;
--- it matches any page frame on the stack. GroupPreview.lua is a Retail mirror.
+-- it matches any page frame on the stack.
 local WIDGET_GAPS = {
     { file = "Pages/MSUF_Menu2_AdvancedColors.lua", source = "ColorValueAt(ctx, texLayer, colorLabel, 12, rowY," },
     { file = "Pages/MSUF_Menu2_AdvancedColors.lua", source = "ColorValueAt(ctx, texLayer, gradientLabel, 12, rowY - 36," },

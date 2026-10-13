@@ -34,7 +34,7 @@ pays one upvalue test at most and Mainline never enters the Classic branch.
 The former whole-file Classic copies of Retail files (owned shadows) were
 collapsed that way, thirteen of fourteen on 2026-09-19 and the last one,
 `Classic/State/MSUF_Defaults.lua`, on 2026-09-20, so
-`tools/classic-owned-shadows.tsv` is empty. Do not add a shadow. Vanilla, TBC, and Mists include implementations from `Classic`, but
+no whole-file copy of a Mainline file is left. Do not add one. Vanilla, TBC, and Mists include implementations from `Classic`, but
 they keep separate loader manifests so their contracts can diverge without
 copying the backend.
 

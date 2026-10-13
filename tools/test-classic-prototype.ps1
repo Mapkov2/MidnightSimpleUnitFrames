@@ -12,10 +12,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 Import-Module (Join-Path $PSScriptRoot "../.github/scripts/ClassicGate.Common.psm1") -Force
-# -SelfContained is the CI subset: everything that needs neither a Retail
-# checkout nor the Blizzard UI source mirror. It never replaces the full gate.
-if ($SelfContained -and -not [string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
-    throw "-SelfContained validates without a Retail reference; do not combine it with -RetailReferenceRoot"
+# -SelfContained is the CI subset: everything except the Blizzard UI source audit, which
+# needs the local mirror. It never replaces the full gate.
+if (-not [string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
+    # 7.0 is an independent repository: nothing compares against a Retail checkout any more.
+    Write-Host "DEPRECATED: -RetailReferenceRoot is ignored; the gate needs no Retail reference."
 }
 $auraTestDriver = Join-Path $PSScriptRoot "../.github/scripts/auras3_test_driver.lua"
 $root = (git rev-parse --show-toplevel).Trim()
@@ -42,16 +43,16 @@ function Invoke-GateGit {
     return [pscustomobject]@{ ExitCode = $exitCode; Lines = [string[]]@($output) }
 }
 
-function Invoke-GateGitWithInput {
+function Invoke-GateNative {
     param(
-        [Parameter(Mandatory = $true)][string[]]$Arguments,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InputLines
+        [Parameter(Mandatory = $true)][string]$Command,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
     )
     $previous = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     $exitCode = 0
     try {
-        $output = @($InputLines | & git @Arguments 2>&1 | ForEach-Object { [string]$_ })
+        $output = @(& $Command @Arguments 2>&1 | ForEach-Object { [string]$_ })
         $exitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previous
@@ -181,7 +182,6 @@ $clientMatrix = @(Import-MsufClientMatrix -Path $clientMatrixPath -Label $client
 Assert-MsufClientMatrix -Matrix $clientMatrix -Label "Client matrix"
 $clientSuffixes = @($clientMatrix | ForEach-Object { $_.Suffix })
 $classicSuffixes = @($clientMatrix | Where-Object { $_.IsClassic -ceq "true" } | ForEach-Object { $_.Suffix })
-$classicDirectoryPattern = '(' + ((@("Classic") + $classicSuffixes | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')'
 
 # Tool preflight runs before any expensive step. A missing tool fails the gate
 # unless -AllowMissingTools is passed; every step that is then skipped is
@@ -214,7 +214,7 @@ if ($SelfContained) {
     # The mirror is a local reference checkout; a self-contained run never needs it.
     $skippedSteps.Add("Blizzard UI source audit (self-contained run)")
 } elseif (-not $uiMirrorPresent) {
-    # Retail's sync workflow runs this gate in CI, where the mirror never exists.
+    # Without the local mirror (a plain CI runner) the audit cannot run.
     if ($AllowMissingTools -or $env:GITHUB_ACTIONS -eq "true") {
         $skippedSteps.Add("Blizzard UI source audit (no mirror at _local_workflows/references/wow-ui-source)")
     } else {
@@ -222,48 +222,12 @@ if ($SelfContained) {
     }
 }
 
-# The Retail reference is named, never guessed. A sibling auto-detect used to
-# pick up whatever Retail working tree happened to sit next to this clone, so a
-# full run could silently certify against the owner's live, dirty checkout.
-# It is resolved here, ahead of the smoke manifest, because the Retail-shared
-# runtime smokes take it as their baseline through the {retailRoot/} token.
-$retailReferenceRootFull = $null
-if ($SelfContained) {
-    # The combination with -RetailReferenceRoot was already rejected above.
-} elseif ([string]::IsNullOrWhiteSpace($RetailReferenceRoot)) {
-    throw @"
-A full Classic gate run needs -RetailReferenceRoot <path to a clean Retail clone>.
-Make one and point the gate at it:
-    git clone --no-hardlinks <Retail remote or local repository> C:\tmp\msuf-classic-ref
-    git -C C:\tmp\msuf-classic-ref checkout <the Retail commit this release syncs from>
-    tools\test-classic-prototype.ps1 -RetailReferenceRoot C:\tmp\msuf-classic-ref
-The checkout must be clean and must be the Git repository root. Use -SelfContained
-for the CI subset, which needs no Retail reference at all.
-"@
-} else {
-    $retailReferenceRootFull = [IO.Path]::GetFullPath($RetailReferenceRoot).TrimEnd('\', '/')
-    $referenceToc = Join-Path $retailReferenceRootFull "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
-    if (-not (Test-Path -LiteralPath $referenceToc -PathType Leaf)) {
-        throw "Retail reference checkout is missing its core TOC: $referenceToc"
-    }
-}
-$retailReferenceLabel = if ($retailReferenceRootFull) {
-    "working tree at $retailReferenceRootFull"
-} else {
-    "no Retail reference (self-contained run)"
-}
-# {retailRoot/} resolves to "-" without a Retail reference. The Retail-shared
-# runtime smokes read that sentinel as "no baseline" and say so on stdout, so a
-# self-contained run never reads as if the comparison had happened.
-$retailReferenceRootForward = if ($retailReferenceRootFull) { $retailReferenceRootFull -replace '\\', '/' } else { "-" }
-
 # tools/classic-gate-smokes.tsv is the smoke list: one row per smoke, expanded
 # over the client matrix by the Matrix column. Consecutive rows that name the
 # same matrix run as one loop, which is how two smokes stay interleaved per
 # flavor. Tokens: {root} the repository root as git prints it, {root/} the same
-# with forward slashes, {retailRoot/} the Retail reference root with forward
-# slashes (or "-" when there is none), {flavor} and {clientToken} the matrix
-# row, {codec} the codec axis, {p/:<repo path>} an absolute forward-slash path.
+# with forward slashes, {flavor} and {clientToken} the matrix row, {codec} the
+# codec axis, {p/:<repo path>} an absolute forward-slash path.
 $smokeManifestRelative = "tools/classic-gate-smokes.tsv"
 $smokeManifestPath = Join-Path $root $smokeManifestRelative
 if (-not (Test-Path -LiteralPath $smokeManifestPath -PathType Leaf)) {
@@ -311,8 +275,7 @@ function Expand-GateSmokeToken {
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text,
         [Parameter(Mandatory = $true)][hashtable]$Context
     )
-    $expanded = $Text.Replace("{retailRoot/}", $retailReferenceRootForward)
-    $expanded = $expanded.Replace("{root/}", ($root -replace '\\', '/')).Replace("{root}", $root)
+    $expanded = $Text.Replace("{root/}", ($root -replace '\\', '/')).Replace("{root}", $root)
     foreach ($key in @($Context.Keys)) { $expanded = $expanded.Replace("{$key}", [string]$Context[$key]) }
     $expanded = [regex]::Replace($expanded, '\{p/:([^}]+)\}', { param($match) (Join-Path $root $match.Groups[1].Value) -replace '\\', '/' })
     if ($expanded -match '\{[A-Za-z][^}]*\}') {
@@ -380,14 +343,6 @@ while ($smokeRowIndex -lt $smokeRows.Count) {
     }
 }
 $smokePlanTotal = $smokePlan.Count
-# The Retail-shared runtime smokes replay the Classic override and its Retail
-# base side by side. Without a Retail reference they still run every
-# self-contained assertion, but the comparison half cannot happen, so it is
-# reported as a skipped step rather than left to a line of smoke output.
-$retailBaselineRows = @($smokeRows | Where-Object { $_.Arguments -clike "*{retailRoot/}*" })
-if ($retailBaselineRows.Count -gt 0 -and -not $retailReferenceRootFull) {
-    $skippedSteps.Add("Retail baseline comparison in $($retailBaselineRows.Count) Retail-shared runtime smokes (no Retail reference)")
-}
 if (-not [string]::IsNullOrWhiteSpace($Only)) {
     # A narrowed run must never read as a pass, so the inventory check below is
     # recorded as skipped instead of silently accepting the smokes that sat out.
@@ -397,9 +352,9 @@ if (-not [string]::IsNullOrWhiteSpace($Only)) {
 }
 
 # Python smokes need no Lua. With lua present they run in the smoke phase
-# below, in one pool with the Lua smokes, so the slow git-driven ones (the
-# override-rebase and Retail source resolver smokes) overlap with it instead of
-# adding a wait of their own. Without lua that phase never runs, so they run here.
+# below, in one pool with the Lua smokes, so the slow git-driven ones overlap
+# with it instead of adding a wait of their own. Without lua that phase never
+# runs, so they run here.
 if (-not $lua) {
     Invoke-GateSmoke -Plan @($smokePlan | Where-Object { $_.Runner -ceq "python" })
 }
@@ -410,16 +365,13 @@ $targets = @(
     @{ Folder = "MidnightSimpleUnitFrames"; Base = "MidnightSimpleUnitFrames" },
     @{ Folder = "MidnightSimpleUnitFrames_Options"; Base = "MidnightSimpleUnitFrames_Options" }
 )
-# tools/classic-addon-tombstones.txt names the Retail addons this tree retired
-# and the Retail files of the shipped addons that retired with them. Those
-# paths, and only those, may be missing from the mirror below; the manifest is
-# proven against git and the load graph once every TOC has been walked.
+# tools/classic-addon-tombstones.txt names the addons this tree retired and the
+# files of the shipped addons that retired with them. The manifest is proven
+# against git and the load graph once every TOC has been walked.
 $addonTombstoneRelative = "tools/classic-addon-tombstones.txt"
 Assert-TrackedFile -RelativePath $addonTombstoneRelative -Label "Classic addon tombstone manifest"
 $addonTombstones = Import-MsufAddonTombstones -Path (Join-Path $root $addonTombstoneRelative) `
     -ShippedAddons ([string[]]@($targets | ForEach-Object { $_.Folder }))
-$tombstonedRetailPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-foreach ($tombstonedPath in $addonTombstones.Paths) { [void]$tombstonedRetailPaths.Add($tombstonedPath) }
 # Scans read the files git versions, never a folder walk, so ignored local
 # files (luac.out, local scripts) cannot make a local run differ from CI.
 $versionableAddonLua = [string[]]@(Get-MsufVersionableFiles -Root $root `
@@ -452,6 +404,14 @@ foreach ($luaRelative in $versionableAddonLua) {
 # several clients include is parsed once and counted once.
 $seenXml = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 
+# tools/classic-toc-identity.tsv pins the TOC metadata lines that carry profile and release identity
+# or that code reads back at runtime. The comparison between the clients below only proves they
+# agree; the pin proves a field cannot disappear from every client at once.
+$tocIdentityRelative = "tools/classic-toc-identity.tsv"
+Assert-TrackedFile -RelativePath $tocIdentityRelative -Label "TOC identity manifest"
+$tocIdentityRows = Import-MsufTocIdentity -Path (Join-Path $root $tocIdentityRelative) `
+    -Addons ([string[]]@($targets | ForEach-Object { $_.Base }))
+
 foreach ($target in $targets) {
     $folder = Join-Path $root $target.Folder
     $unsuffixed = Join-Path $folder ($target.Base + ".toc")
@@ -460,6 +420,8 @@ foreach ($target in $targets) {
     }
 
     $versions = @{}
+    $referenceMetadata = $null
+    $referenceMetadataToc = $null
     foreach ($client in $clients) {
         $tocName = "{0}_{1}.toc" -f $target.Base, $client.Suffix
         $tocPath = Join-Path $folder $tocName
@@ -492,7 +454,7 @@ foreach ($target in $targets) {
             $standardLines = @($versionLines | Where-Object { $_ -match '^## Version:\s*(\S+)\s+\[AllowLoadGameType standard\]\s*$' })
             $otherLines = @($versionLines | Where-Object { $_ -match '^## Version:\s*(\S+)\s+\[ExcludeLoadGameType standard\]\s*$' })
             if ($versionLines.Count -ne 2 -or $standardLines.Count -ne 1 -or $otherLines.Count -ne 1) {
-                throw "$tocName needs exactly '## Version: <Retail> [AllowLoadGameType standard]' and '## Version: <release> [ExcludeLoadGameType standard]'"
+                throw "$tocName needs exactly '## Version: <release> [AllowLoadGameType standard]' and '## Version: <release> [ExcludeLoadGameType standard]'"
             }
             $versionLine = $standardLines[0] -replace '\s+\[AllowLoadGameType standard\]\s*$', ''
             $otherVersion = ($otherLines[0] -replace '^## Version:\s*', '' -replace '\s+\[ExcludeLoadGameType standard\]\s*$', '').Trim()
@@ -506,9 +468,6 @@ foreach ($target in $targets) {
             $versionLine = $versionLines[0]
         }
         $versions[$client.Suffix] = ($versionLine -replace '^## Version:\s*', '').Trim()
-        if ($client.Suffix -eq "Mainline" -and $retailReferenceRootFull) {
-            $referenceToc = Join-Path $retailReferenceRootFull ($target.Folder + "/" + $target.Base + ".toc")
-        }
         # Owner decision 2026-10-09: every client, Midnight included, runs this
         # release's version, so the standard-game-type line follows VERSION too.
         if ($versions[$client.Suffix] -ne $expectedVersion) {
@@ -526,33 +485,33 @@ foreach ($target in $targets) {
         } elseif ($foreverVersionLines.Count -ne 0) {
             throw "$tocName must not declare X-MSUF-Version-Forever; only the core Mainline TOC does"
         }
-        if ($client.Suffix -eq "Mainline" -and $retailReferenceRootFull) {
-            $referenceMetadata = @(Get-Content -LiteralPath $referenceToc |
-                Where-Object { $_ -match '^## ' -and $_ -notmatch '^## Version:' } |
-                ForEach-Object {
-                    if ($_ -match '^## Interface:') { $interfaceLine } else { $_ }
-                })
-            # X-MSUF-Version-Forever and both Version lines are this repo's own:
-            # Retail has no Forever client, and every client runs VERSION (checked
-            # above), so only the remaining metadata must match the Retail source.
-            $currentMetadata = @($content | Where-Object {
-                $_ -match '^## ' -and $_ -notmatch '^## X-MSUF-Version-Forever:' -and
-                $_ -notmatch '^## Version:'
-            })
-            # These two reviewed TOC overrides group the Classic-built Mainline
-            # core and Options under MSUF while the Retail 6.x source still uses
-            # Combat. Normalize only that exact field; every other metadata line
-            # must continue to match the recorded Retail source.
-            if ($target.Base -cin @('MidnightSimpleUnitFrames', 'MidnightSimpleUnitFrames_Options') -and
-                $referenceMetadata -ccontains '## Category: Combat' -and
-                $currentMetadata -ccontains '## Category: MSUF') {
-                $currentMetadata = @($currentMetadata | ForEach-Object {
-                    if ($_ -ceq '## Category: MSUF') { '## Category: Combat' } else { $_ }
-                })
+        # TOC metadata that carries profile and release identity, or that code reads back at
+        # runtime, must be the same on every client of an addon. Only the fields that name the
+        # client or its packaging differ.
+        $sharedMetadata = @($content | Where-Object {
+            $_ -match '^## ' -and $_ -notmatch '^## (?:Interface|Title|Notes|Category|Version|X-MSUF-Version-Forever|OptionalDeps|X-MSUF-Client):'
+        })
+        if ($null -eq $referenceMetadata) {
+            $referenceMetadata = $sharedMetadata
+            $referenceMetadataToc = $tocName
+        } elseif (@(Compare-Object -CaseSensitive $referenceMetadata $sharedMetadata).Count -ne 0) {
+            throw "$tocName metadata differs from $referenceMetadataToc beyond the per-client fields (Interface, Title, Notes, Category, Version, OptionalDeps, X-MSUF-Client)"
+        }
+        Assert-MsufTocIdentity -TocName $tocName -Addon $target.Base -Content ([string[]]@($content)) -Rows $tocIdentityRows
+        if ($target.Base -ceq "MidnightSimpleUnitFrames") {
+            # Dropping an optional dependency changes the load order against that addon.
+            $optionalDepsLines = @($content | Where-Object { $_ -match '^## OptionalDeps:' })
+            $optionalDeps = @()
+            if ($optionalDepsLines.Count -eq 1) {
+                $optionalDeps = @(($optionalDepsLines[0] -replace '^## OptionalDeps:\s*', '').Split(',') | ForEach-Object { $_.Trim() })
             }
-            if ($referenceMetadata.Count -ne $currentMetadata.Count -or
-                @(Compare-Object $referenceMetadata $currentMetadata).Count -ne 0) {
-                throw "$tocName metadata differs from Retail"
+            $requiredDeps = @('LibSharedMedia-3.0', 'Clique', 'WagoAnalytics', 'MapkoSkin')
+            if ($client.Suffix -ceq "Mainline") {
+                $requiredDeps += @('Blizzard_AuraContainer', 'Blizzard_PingUI', 'EllesmereUI', 'Grid2', 'Details')
+            }
+            $missingDeps = @($requiredDeps | Where-Object { $optionalDeps -cnotcontains $_ })
+            if ($optionalDepsLines.Count -ne 1 -or $missingDeps.Count -gt 0) {
+                throw "$tocName must keep a single OptionalDeps line that still names: $($missingDeps -join ', ')"
             }
         }
 
@@ -581,7 +540,7 @@ foreach ($target in $targets) {
     }
 }
 Assert-MsufAddonTombstones -Root $root -Tombstones $addonTombstones -LoadedPaths ([string[]]@($shippedLoadedPaths))
-Write-Host "Addon tombstones: $($addonTombstones.Addons.Count) retired addons untracked and without a TOC; $($addonTombstones.Paths.Count) retired Retail paths untracked and unloaded"
+Write-Host "Addon tombstones: $($addonTombstones.Addons.Count) retired addons untracked and without a TOC; $($addonTombstones.Paths.Count) retired paths untracked and unloaded"
 
 # Source contracts below pin one condition per call, so a failure names the
 # condition that broke and the file it broke in instead of the group it sits in.
@@ -599,7 +558,7 @@ function Assert-GateSourceContract {
 }
 
 # Player castbar event handling is client-neutral. Classic flavors must load
-# the synchronized Retail runtime directly so STOP/INTERRUPTED ordering fixes
+# the shared Castbars runtime directly so STOP/INTERRUPTED ordering fixes
 # cannot drift in an unreviewed duplicate again.
 foreach ($flavor in $classicSuffixes) {
     $coreFlavorTocRelative = "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_$flavor.toc"
@@ -618,7 +577,7 @@ if (Test-Path -LiteralPath (Join-Path $root "MidnightSimpleUnitFrames/Game/Class
 # Client initialization publishes MSUF.Client, so it loads before the Kernel
 # bootstrap in every TOC family, not only in the one that was asserted first.
 # Mainline has no Classic initializer at all: loading one would already cost
-# Retail startup time.
+# Midnight start-up time.
 foreach ($client in $clientMatrix) {
     $coreTocRelative = "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_$($client.Suffix).toc"
     $coreEntries = @(Get-Content -LiteralPath (Join-Path $root $coreTocRelative))
@@ -671,32 +630,25 @@ Assert-GateSourceContract -Source $groupOwnershipSource -RelativePath $groupOwne
 $elementsRoot = Join-Path $root "MidnightSimpleUnitFrames/UnitFrames/Embeds/MSUF_UFCore"
 $gameRoot = Join-Path $root "MidnightSimpleUnitFrames/Game"
 $classicSharedElementsPath = Join-Path $gameRoot "Classic/UnitFrames/MSUF_UFCore_Elements.xml"
-$retailSharedElementsPath = Join-Path $elementsRoot "MSUF_UFCore_Elements.xml"
+$mainlineSharedElementsPath = Join-Path $elementsRoot "MSUF_UFCore_Elements.xml"
 $auraCorePath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua"))
-$retailSharedLoadOrder = @((Get-MsufLoadGraph -Path $retailSharedElementsPath -Duplicates Repeat).LuaPaths)
-$auraCoreIndex = [Array]::IndexOf($retailSharedLoadOrder, $auraCorePath)
+$mainlineSharedLoadOrder = @((Get-MsufLoadGraph -Path $mainlineSharedElementsPath -Duplicates Repeat).LuaPaths)
+$auraCoreIndex = [Array]::IndexOf($mainlineSharedLoadOrder, $auraCorePath)
 if ($auraCoreIndex -lt 0) {
-    throw "Retail element manifest no longer loads the shared Auras3 icon definitions"
+    throw "Mainline element manifest no longer loads the shared Auras3 icon definitions"
 }
 $classicSharedLoadOrder = @((Get-MsufLoadGraph -Path $classicSharedElementsPath -Duplicates Repeat).LuaPaths)
 if ($classicSharedLoadOrder.Count -ne ($auraCoreIndex + 1)) {
-    throw "Classic shared element manifest must match the Retail prefix through shared Auras3 icon definitions"
+    throw "Classic shared element manifest must match the Mainline prefix through shared Auras3 icon definitions"
 }
 for ($index = 0; $index -le $auraCoreIndex; $index++) {
-    if ($classicSharedLoadOrder[$index] -ne $retailSharedLoadOrder[$index]) {
-        throw "Classic shared element load order differs from Retail before Auras3 backend selection at index $index"
+    if ($classicSharedLoadOrder[$index] -ne $mainlineSharedLoadOrder[$index]) {
+        throw "Classic shared element load order differs from Mainline before Auras3 backend selection at index $index"
     }
 }
 
 $classicAuraBackendPath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_UnitFrames.lua"))
 $classicAuraCompilePath = [IO.Path]::GetFullPath((Join-Path $root "MidnightSimpleUnitFrames/Game/Classic/Auras/MSUF_Auras3_Compile.lua"))
-$forbiddenRetailAuraPaths = @(
-    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DotData.lua",
-    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_DefensiveData.lua",
-    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_AuraNameResolver.lua",
-    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_SpellIndicators.lua",
-    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_UnitFrames.lua"
-) | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $root $_)) }
 $classicAuraManifestContracts = @(
     @{ Pattern = '\.\.\\Classic\\Auras\\MSUF_Auras3_Features\.lua'; Requirement = "select the Classic aura feature compiler ..\Classic\Auras\MSUF_Auras3_Features.lua" },
     @{ Pattern = '\.\.\\Classic\\Auras\\MSUF_Auras3_Visuals\.lua'; Requirement = "select the Classic aura visuals ..\Classic\Auras\MSUF_Auras3_Visuals.lua" },
@@ -721,11 +673,6 @@ foreach ($flavor in $classicSuffixes) {
     # Walk the TOC so prefix, locale catalogs and aura continuation are checked together.
     $classicTocPath = Join-Path $root "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_$flavor.toc"
     $classicLoadOrder = @((Get-MsufLoadGraph -Path $classicTocPath -Duplicates Repeat).LuaPaths)
-    foreach ($forbiddenPath in $forbiddenRetailAuraPaths) {
-        if ([Array]::IndexOf($classicLoadOrder, $forbiddenPath) -ge 0) {
-            throw "$classicManifestRelative transitively loads Retail aura runtime: $forbiddenPath"
-        }
-    }
     $classicAuraBackendIndex = [Array]::IndexOf($classicLoadOrder, $classicAuraBackendPath)
     $classicAuraCoreIndex = [Array]::IndexOf($classicLoadOrder, $auraCorePath)
     if ($classicAuraBackendIndex -lt 0) {
@@ -757,38 +704,19 @@ foreach ($flavor in $classicSuffixes) {
         -Pattern 'Mainline\\UnitFrames\\Group' -Requirement "load anything from the Mainline group tree"
 }
 
-function Test-AddonRelativePath {
-    param([Parameter(Mandatory = $true)][string]$RelativePath)
-    foreach ($target in $targets) {
-        if ($RelativePath.StartsWith($target.Folder + '/', [StringComparison]::Ordinal)) {
-            return $true
-        }
-    }
-    return $false
-}
-
 function Assert-NormalizedAddonPath {
     param(
         [Parameter(Mandatory = $true)][string]$RelativePath,
         [Parameter(Mandatory = $true)][string]$Label
     )
-    if ([string]::IsNullOrWhiteSpace($RelativePath) -or
-        $RelativePath -cne $RelativePath.Trim() -or
-        $RelativePath.Contains([char]92) -or
-        $RelativePath.StartsWith('/') -or
-        $RelativePath.EndsWith('/') -or
-        $RelativePath.Contains('//') -or
-        $RelativePath.IndexOfAny([char[]](0..31)) -ge 0 -or
-        $RelativePath -match '(^|/)[.][.]?(?:/|$)' -or
-        -not (Test-AddonRelativePath -RelativePath $RelativePath)) {
+    if (-not (Test-MsufNormalizedAddonPath -RelativePath $RelativePath -AddonFolders ([string[]]@($targets | ForEach-Object { $_.Folder })))) {
         throw "$Label is not a normalized path below an addon root: $RelativePath"
     }
 }
 
 function Assert-OrdinalPathOrder {
     param(
-        # Empty is allowed: a manifest may legitimately hold no rows, as the
-        # owned-shadow manifest does since the last shadow was collapsed.
+        # Empty is allowed: a manifest may legitimately hold no rows.
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Paths,
         [Parameter(Mandatory = $true)][string]$Label
     )
@@ -801,19 +729,9 @@ function Assert-OrdinalPathOrder {
     }
 }
 
-function Convert-RetailPath {
-    param([Parameter(Mandatory = $true)][string]$RelativePath)
-    foreach ($target in $targets) {
-        if ($RelativePath -ceq ($target.Folder + "/" + $target.Base + ".toc")) {
-            return $target.Folder + "/" + $target.Base + "_Mainline.toc"
-        }
-    }
-    return $RelativePath
-}
-
 $addonFolders = @($targets | ForEach-Object { $_.Folder })
 $trackedAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-$trackedAddonPathResult = Invoke-GateGit -Arguments (@("-C", $root, "ls-files", "--") + $addonFolders)
+$trackedAddonPathResult = Invoke-GateGit -Arguments (@("-C", $root, "-c", "core.quotepath=off", "ls-files", "--") + $addonFolders)
 if ($trackedAddonPathResult.ExitCode -ne 0) {
     throw "Unable to enumerate tracked Classic addon files: $($trackedAddonPathResult.Lines -join ', ')"
 }
@@ -822,469 +740,9 @@ foreach ($trackedPath in $trackedAddonPathLines) {
     [void]$trackedAddonPaths.Add($trackedPath.Replace([char]92, [char]47))
 }
 
-$ownershipManifestRelative = "tools/classic-owned-addon-paths.txt"
-$ownershipManifestPath = Join-Path $root $ownershipManifestRelative
-if (-not (Test-Path -LiteralPath $ownershipManifestPath -PathType Leaf)) {
-    throw "Classic ownership manifest is missing: $ownershipManifestRelative"
-}
-Assert-TrackedFile -RelativePath $ownershipManifestRelative -Label "Classic ownership manifest"
-$ownedAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-$ownedAddonPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
-$ownershipLines = [string[]][IO.File]::ReadAllLines($ownershipManifestPath)
-if ($ownershipLines.Count -eq 0) { throw "Classic ownership manifest is empty" }
-foreach ($ownedPath in $ownershipLines) {
-    Assert-NormalizedAddonPath -RelativePath $ownedPath -Label "Classic ownership entry"
-    if ($ownedAddonPathCase.ContainsKey($ownedPath)) {
-        throw "Duplicate or case-colliding Classic ownership path: $($ownedAddonPathCase[$ownedPath]) versus $ownedPath"
-    }
-    if (-not $trackedAddonPaths.Contains($ownedPath)) {
-        throw "Classic ownership entry must name a tracked addon file: $ownedPath"
-    }
-    $ownedFullPath = [IO.Path]::GetFullPath((Join-Path $root $ownedPath))
-    if (-not (Test-Path -LiteralPath $ownedFullPath -PathType Leaf)) {
-        throw "Classic-owned addon file is missing: $ownedPath"
-    }
-    $ownedAddonPathCase.Add($ownedPath, $ownedPath)
-    [void]$ownedAddonPaths.Add($ownedPath)
-}
-Assert-OrdinalPathOrder -Paths $ownershipLines -Label "Classic ownership manifest"
-
-$overrideManifestRelative = "tools/classic-retail-overrides.tsv"
-$overrideManifestPath = Join-Path $root $overrideManifestRelative
-if (-not (Test-Path -LiteralPath $overrideManifestPath -PathType Leaf)) {
-    throw "Classic Retail override manifest is missing: $overrideManifestRelative"
-}
-Assert-TrackedFile -RelativePath $overrideManifestRelative -Label "Classic Retail override manifest"
-$overrideBaseBlobs = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
-$overridePathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
-$overrideLines = [string[]][IO.File]::ReadAllLines($overrideManifestPath)
-if ($overrideLines.Count -eq 0) { throw "Classic Retail override manifest is empty" }
-$overridePathsInOrder = [Collections.Generic.List[string]]::new()
-foreach ($overrideLine in $overrideLines) {
-    $fields = $overrideLine.Split([char]9)
-    if ($fields.Count -ne 2) {
-        throw "Classic Retail override entry must be path<TAB>Retail-base-blob: $overrideLine"
-    }
-    $overridePath = $fields[0]
-    $baseBlob = $fields[1]
-    Assert-NormalizedAddonPath -RelativePath $overridePath -Label "Classic Retail override entry"
-    if ($baseBlob -cnotmatch '^[0-9a-f]{40}$') {
-        throw "Classic Retail override base must be a lowercase SHA-1 Git blob: $overrideLine"
-    }
-    if ($overridePathCase.ContainsKey($overridePath)) {
-        throw "Duplicate or case-colliding Classic Retail override path: $($overridePathCase[$overridePath]) versus $overridePath"
-    }
-    if ($ownedAddonPathCase.ContainsKey($overridePath)) {
-        throw "Classic ownership and Retail override manifests must be disjoint: $overridePath"
-    }
-    if (-not $trackedAddonPaths.Contains($overridePath)) {
-        throw "Classic Retail override entry must name a tracked addon file: $overridePath"
-    }
-    $overrideFullPath = [IO.Path]::GetFullPath((Join-Path $root $overridePath))
-    if (-not (Test-Path -LiteralPath $overrideFullPath -PathType Leaf)) {
-        throw "Classic Retail override file is missing: $overridePath"
-    }
-    $overridePathCase.Add($overridePath, $overridePath)
-    $overrideBaseBlobs.Add($overridePath, $baseBlob)
-    $overridePathsInOrder.Add($overridePath)
-}
-Assert-OrdinalPathOrder -Paths $overridePathsInOrder.ToArray() -Label "Classic Retail override manifest"
-
-# Every versioned addon Lua file is loaded by a shipped TOC, so no dead payload
-# ships and no Classic edit lands in a file that never runs. The exceptions are
-# listed with a kind and a reason in tools/classic-unloaded-addon-lua.tsv: an
-# unchanged Retail mirror Retail never loads ('mirror'), or a Classic-owned file
-# the owner keeps on purpose ('retained', citing the decision). The pixel layout
-# coverage smoke skips the same files. Rules: Assert-MsufUnloadedAddonLua.
-$unloadedLuaRelative = "tools/classic-unloaded-addon-lua.tsv"
-Assert-TrackedFile -RelativePath $unloadedLuaRelative -Label "Classic unloaded addon Lua manifest"
-$unloadedLua = Assert-MsufUnloadedAddonLua -Root $root -ManifestPath (Join-Path $root $unloadedLuaRelative) `
-    -VersionableLua $versionableAddonLua -LoadedPaths ([string[]]@($shippedLoadedPaths)) `
-    -OwnedPaths ([string[]]@($ownedAddonPaths)) -OverridePaths ([string[]]@($overrideBaseBlobs.Keys)) `
-    -TrackedPaths ([string[]]@($trackedAddonPaths))
-Write-Host "Unloaded addon Lua: every versioned addon Lua file is loaded by a shipped TOC except $($unloadedLua.Mirrors) listed Retail mirror(s) and $($unloadedLua.Retained) retained owned file(s)"
-
-# O files that are whole-file shadows of a Retail file record that Retail
-# counterpart and the Retail blob the shadow was last reconciled with. A
-# malformed manifest fails here; drift against current Retail is reported in
-# the reference block below.
-$shadowManifestRelative = "tools/classic-owned-shadows.tsv"
-$shadowManifestPath = Join-Path $root $shadowManifestRelative
-if (-not (Test-Path -LiteralPath $shadowManifestPath -PathType Leaf)) {
-    throw "Classic owned-shadow manifest is missing: $shadowManifestRelative"
-}
-Assert-TrackedFile -RelativePath $shadowManifestRelative -Label "Classic owned-shadow manifest"
-$shadowBaseBlobs = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
-$shadowRetailPaths = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
-$shadowPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
-# An empty manifest is the target state: the last shadow, the Classic Defaults
-# file, was collapsed into State/MSUF_Defaults.lua on 2026-09-20. The rules
-# below still run, so a shadow added later is validated the same way.
-$shadowLines = [string[]][IO.File]::ReadAllLines($shadowManifestPath)
-$shadowPathsInOrder = [Collections.Generic.List[string]]::new()
-foreach ($shadowLine in $shadowLines) {
-    $fields = $shadowLine.Split([char]9)
-    if ($fields.Count -ne 3) {
-        throw "Classic owned-shadow entry must be owned-path<TAB>Retail-path<TAB>Retail-base-blob: $shadowLine"
-    }
-    $shadowPath = $fields[0]
-    $shadowRetailPath = $fields[1]
-    $shadowBlob = $fields[2]
-    Assert-NormalizedAddonPath -RelativePath $shadowPath -Label "Classic owned-shadow entry"
-    Assert-NormalizedAddonPath -RelativePath $shadowRetailPath -Label "Classic owned-shadow Retail counterpart"
-    if (-not $ownedAddonPaths.Contains($shadowPath)) {
-        throw "Classic owned-shadow entry must be a declared Classic-owned path: $shadowPath"
-    }
-    if ($ownedAddonPathCase.ContainsKey($shadowRetailPath)) {
-        throw "Classic owned-shadow Retail counterpart cannot itself be Classic-owned: $shadowRetailPath"
-    }
-    if ($shadowBlob -cnotmatch '^[0-9a-f]{40}$') {
-        throw "Classic owned-shadow base must be a lowercase SHA-1 Git blob: $shadowLine"
-    }
-    if ($shadowPathCase.ContainsKey($shadowPath)) {
-        throw "Duplicate or case-colliding Classic owned-shadow path: $($shadowPathCase[$shadowPath]) versus $shadowPath"
-    }
-    $shadowPathCase.Add($shadowPath, $shadowPath)
-    $shadowBaseBlobs.Add($shadowPath, $shadowBlob)
-    $shadowRetailPaths.Add($shadowPath, $shadowRetailPath)
-    $shadowPathsInOrder.Add($shadowPath)
-}
-Assert-OrdinalPathOrder -Paths $shadowPathsInOrder.ToArray() -Label "Classic owned-shadow manifest"
-
-if ($overrideBaseBlobs.Count -gt 0 -and -not $retailReferenceRootFull -and -not $SelfContained) {
-    throw "Retail overrides require -RetailReferenceRoot so their recorded base blobs can be checked against current Retail Git HEAD"
-}
-if ($SelfContained) {
-    $skippedSteps.Add("Retail parity, override base and owned-shadow drift checks (self-contained run)")
-}
-
-if ($retailReferenceRootFull) {
-    $retailMappedPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $retailMappedSources = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
-    $retailMappedBlobs = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
-    $retailMappedPathOrder = [Collections.Generic.List[string]]::new()
-    $retailExactCount = 0
-    $retailOverrideCount = 0
-    $retailOverrideDifferenceCount = 0
-    $retailExactTocCount = 0
-    $retailOverrideTocCount = 0
-
-    $referenceGitRootResult = Invoke-GateGit -Arguments @("-C", $retailReferenceRootFull, "rev-parse", "--show-toplevel")
-    if ($referenceGitRootResult.ExitCode -ne 0) { throw "Retail reference is not a Git checkout: $retailReferenceRootFull" }
-    $referenceGitRootFull = [IO.Path]::GetFullPath(($referenceGitRootResult.Lines -join "").Trim()).TrimEnd([char]92, [char]47)
-    $pathComparison = if ([IO.Path]::DirectorySeparatorChar -eq [char]92) {
-        [StringComparison]::OrdinalIgnoreCase
-    } else {
-        [StringComparison]::Ordinal
-    }
-    if (-not $referenceGitRootFull.Equals($retailReferenceRootFull, $pathComparison)) {
-        throw "RetailReferenceRoot must be the Git repository root: $retailReferenceRootFull"
-    }
-    $retailStatusResult = Invoke-GateGit -Arguments @("-C", $retailReferenceRootFull, "status", "--porcelain", "--untracked-files=all")
-    if ($retailStatusResult.ExitCode -ne 0) { throw "Unable to inspect Retail reference status" }
-    if ($retailStatusResult.Lines.Count -ne 0) {
-        throw "Retail reference checkout must be clean so its load graph and Git HEAD describe the same source; git status reports: $($retailStatusResult.Lines -join ', ')"
-    }
-
-    $retailTreeResult = Invoke-GateGit -Arguments (@("-C", $retailReferenceRootFull, "ls-tree", "-r", "HEAD", "--") + $addonFolders)
-    if ($retailTreeResult.ExitCode -ne 0) {
-        throw "Unable to enumerate tracked Retail addon files: $($retailTreeResult.Lines -join ', ')"
-    }
-    $retailTreeLines = $retailTreeResult.Lines
-    $retailMappedPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
-    $retailTocSources = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($treeLine in $retailTreeLines) {
-        if ($treeLine -notmatch '^(\d+)\s+blob\s+([0-9a-f]+)\t(.+)$') {
-            throw "Unexpected Retail Git tree entry: $treeLine"
-        }
-        if ($Matches[1] -cne '100644') {
-            throw "Retail addon tree may contain only regular non-executable files: $treeLine"
-        }
-        $retailBlob = $Matches[2].ToLowerInvariant()
-        $relativePath = $Matches[3].Replace([char]92, [char]47)
-        Assert-NormalizedAddonPath -RelativePath $relativePath -Label "Retail Git tree entry"
-        $candidateRelativePath = Convert-RetailPath -RelativePath $relativePath
-        $candidatePath = Join-Path $root $candidateRelativePath
-        if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
-            if ($tombstonedRetailPaths.Contains($candidateRelativePath)) {
-                continue
-            }
-            throw "Mapped Retail file is missing from Classic repository: $candidateRelativePath"
-        }
-        if ($retailMappedPathCase.ContainsKey($candidateRelativePath)) {
-            throw "Retail mapping collision: $($retailMappedPathCase[$candidateRelativePath]) versus $relativePath at $candidateRelativePath"
-        }
-        $retailMappedPathCase.Add($candidateRelativePath, $relativePath)
-        [void]$retailMappedPaths.Add($candidateRelativePath)
-        $retailMappedSources.Add($candidateRelativePath, $relativePath)
-        $retailMappedBlobs.Add($candidateRelativePath, $retailBlob)
-        $retailMappedPathOrder.Add($candidateRelativePath)
-        if ($relativePath.EndsWith('.toc', [StringComparison]::OrdinalIgnoreCase)) {
-            [void]$retailTocSources.Add($relativePath)
-        }
-    }
-
-    $expectedRetailTocs = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($target in $targets) {
-        [void]$expectedRetailTocs.Add($target.Folder + "/" + $target.Base + ".toc")
-    }
-    if (-not $retailTocSources.SetEquals($expectedRetailTocs)) {
-        throw "Retail tree must contain exactly one unsuffixed TOC per shipped addon ($(@($expectedRetailTocs) -join ', ')); found: $($retailTocSources -join ', ')"
-    }
-
-    foreach ($overridePath in $overrideBaseBlobs.Keys) {
-        if (-not $retailMappedPaths.Contains($overridePath)) {
-            throw "Classic Retail override path is not a mapped current Retail path: $overridePath"
-        }
-        $currentRetailBlob = $retailMappedBlobs[$overridePath]
-        if ($currentRetailBlob -cne $overrideBaseBlobs[$overridePath]) {
-            throw "Retail base changed for Classic override $overridePath`: recorded=$($overrideBaseBlobs[$overridePath]) current=$currentRetailBlob; manually rebase and review the override before updating the manifest"
-        }
-    }
-
-    # Owned-shadow drift is report-only: Retail's sync workflow runs this gate,
-    # and a hard failure would block every sync that touches a shadowed file.
-    # The recorded blobs were taken on 2026-09-14 from Retail-Source ace807b7.
-    # They mark where drift tracking starts; they do not certify that Retail
-    # changes made before that commit were already ported into the shadows.
-    $shadowDriftLines = [Collections.Generic.List[string]]::new()
-    foreach ($shadowPath in $shadowPathsInOrder) {
-        $shadowRetailPath = $shadowRetailPaths[$shadowPath]
-        if (-not $retailMappedBlobs.ContainsKey($shadowRetailPath)) {
-            $shadowDriftLines.Add("$shadowPath`: Retail counterpart $shadowRetailPath no longer exists; review the removal and update $shadowManifestRelative")
-        } elseif ($retailMappedBlobs[$shadowRetailPath] -cne $shadowBaseBlobs[$shadowPath]) {
-            $shadowDriftLines.Add("$shadowPath`: Retail counterpart $shadowRetailPath changed (recorded=$($shadowBaseBlobs[$shadowPath]) current=$($retailMappedBlobs[$shadowRetailPath])); port or consciously reject the delta, then update the recorded blob")
-        }
-    }
-
-    $candidateBlobResult = Invoke-GateGitWithInput -Arguments @("-C", $root, "hash-object", "--stdin-paths") `
-        -InputLines $retailMappedPathOrder.ToArray()
-    $candidateBlobLines = $candidateBlobResult.Lines
-    if ($candidateBlobResult.ExitCode -ne 0 -or $candidateBlobLines.Count -ne $retailMappedPathOrder.Count) {
-        throw "Unable to hash every mapped Classic candidate: expected=$($retailMappedPathOrder.Count) actual=$($candidateBlobLines.Count); git said: $($candidateBlobLines -join ', ')"
-    }
-    for ($index = 0; $index -lt $retailMappedPathOrder.Count; $index++) {
-        $candidateRelativePath = $retailMappedPathOrder[$index]
-        $candidateBlob = $candidateBlobLines[$index].Trim().ToLowerInvariant()
-        $retailBlob = $retailMappedBlobs[$candidateRelativePath]
-        $isToc = $retailMappedSources[$candidateRelativePath].EndsWith('.toc', [StringComparison]::OrdinalIgnoreCase)
-        if ($overrideBaseBlobs.ContainsKey($candidateRelativePath)) {
-            $retailOverrideCount++
-            if ($isToc) { $retailOverrideTocCount++ }
-            if ($candidateBlob -cne $retailBlob) { $retailOverrideDifferenceCount++ }
-        } else {
-            if ($candidateBlob -cne $retailBlob) {
-                throw "Mapped Retail path differs without an explicit Classic override: $candidateRelativePath"
-            }
-            $retailExactCount++
-            if ($isToc) { $retailExactTocCount++ }
-        }
-    }
-    foreach ($ownedPath in $ownedAddonPaths) {
-        foreach ($retailPath in $retailMappedPaths) {
-            if ($ownedPath.Equals($retailPath, [StringComparison]::OrdinalIgnoreCase) -or
-                $ownedPath.StartsWith($retailPath + '/', [StringComparison]::OrdinalIgnoreCase) -or
-                $retailPath.StartsWith($ownedPath + '/', [StringComparison]::OrdinalIgnoreCase)) {
-                throw "Retail path collides with Classic ownership: $retailPath versus $ownedPath"
-            }
-        }
-    }
-    $expectedAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($path in $retailMappedPaths) { [void]$expectedAddonPaths.Add($path) }
-    foreach ($path in $ownedAddonPaths) { [void]$expectedAddonPaths.Add($path) }
-    $actualAddonPaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $actualAddonPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
-    $versionableResult = Invoke-GateGit -Arguments (@("-C", $root, "ls-files", "--cached", "--others", "--exclude-standard", "--") + $addonFolders)
-    if ($versionableResult.ExitCode -ne 0) {
-        throw "Unable to enumerate versionable Classic addon files: $($versionableResult.Lines -join ', ')"
-    }
-    $versionableAddonPaths = $versionableResult.Lines
-    foreach ($relative in $versionableAddonPaths) {
-        $relative = $relative.Replace([char]92, [char]47)
-        Assert-NormalizedAddonPath -RelativePath $relative -Label "Classic addon inventory entry"
-        if ($actualAddonPathCase.ContainsKey($relative)) {
-            throw "Case-colliding Classic addon inventory paths: $($actualAddonPathCase[$relative]) versus $relative"
-        }
-        $fullPath = [IO.Path]::GetFullPath((Join-Path $root $relative))
-        if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
-            $actualAddonPathCase.Add($relative, $relative)
-            [void]$actualAddonPaths.Add($relative)
-        }
-    }
-    if (-not $actualAddonPaths.SetEquals($expectedAddonPaths)) {
-        $missing = [string[]]@($expectedAddonPaths | Where-Object { -not $actualAddonPaths.Contains($_) })
-        $unexpected = [string[]]@($actualAddonPaths | Where-Object { -not $expectedAddonPaths.Contains($_) })
-        [Array]::Sort($missing, [StringComparer]::Ordinal)
-        [Array]::Sort($unexpected, [StringComparer]::Ordinal)
-        throw "Classic addon inventory must equal mapped Retail union explicit Classic ownership. Missing=[$($missing -join ', ')] Unexpected=[$($unexpected -join ', ')]"
-    }
-    Write-Host "Retail exact paths: $retailExactCount mapped paths ($retailExactTocCount Mainline TOCs) match current Retail Git blobs byte-for-byte"
-    Write-Host "Retail override paths: $retailOverrideCount mapped paths ($retailOverrideTocCount Mainline TOCs) are pinned to current Retail base blobs; $retailOverrideDifferenceCount currently differ"
-    Write-Host "Classic-owned paths: $($ownedAddonPaths.Count) additive tracked files are declared"
-    Write-Host "Classic-owned shadows: $($shadowBaseBlobs.Count) tracked; $($shadowDriftLines.Count) Retail counterparts changed since the recorded base"
-    foreach ($shadowDriftLine in $shadowDriftLines) {
-        Write-Host "    $shadowDriftLine"
-    }
-    Write-Host "Classic addon inventory: $($actualAddonPaths.Count) paths equal mapped Retail $($retailMappedPaths.Count) union owned $($ownedAddonPaths.Count)"
-}
-
-# Retail's load graph must never enter a Classic/Vanilla/Mists/TBC implementation
-# directory. This is the mechanical 0.0-overhead gate: a Classic adapter that
-# is merely guarded at runtime still fails because loading/parsing it on
-# Mainline would already consume startup CPU and memory.
-$mainlineTocPath = Join-Path $root "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc"
-$mainlineLoaded = @((Get-MsufLoadGraph -Path $mainlineTocPath -Duplicates Skip).AllPaths)
-foreach ($path in $mainlineLoaded) {
-    if ($path -match ('[\\/]Game[\\/]' + $classicDirectoryPattern + '[\\/]')) {
-        throw "Retail zero-overhead violation: Mainline transitively loads $path"
-    }
-}
-
-# Strong Mainline gate: preserve every Retail Lua path in order, permit content
-# differences only for reviewed P entries, and permit additional Lua loads only
-# for the declared shared/Arena additions in O. Client compatibility trees remain
-# unreachable from Mainline.
 function Get-CurrentLuaLoadPaths {
     param([Parameter(Mandatory = $true)][string]$TocPath)
     return [string[]]@((Get-MsufLoadGraph -Path $TocPath -Duplicates Skip).LuaPaths)
-}
-
-# One git process hashes every Lua file of a load graph. Per-file hash-object
-# calls cost about 36 s of process start-up on a full run.
-function Get-GitBlobHashes {
-    param(
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Paths,
-        [Parameter(Mandatory = $true)][string]$Label
-    )
-    if ($Paths.Count -eq 0) { return [string[]]@() }
-    $hashed = Invoke-GateGitWithInput -Arguments @("-C", $root, "hash-object", "--stdin-paths") -InputLines $Paths
-    if ($hashed.ExitCode -ne 0 -or $hashed.Lines.Count -ne $Paths.Count) {
-        throw "Unable to hash the $Label load graph: expected=$($Paths.Count) actual=$($hashed.Lines.Count); git said: $($hashed.Lines -join ', ')"
-    }
-    return [string[]]@($hashed.Lines | ForEach-Object { $_.Trim() })
-}
-
-$retailParityTargets = @(
-    @{
-        Label = "Core"
-        Reference = "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
-        Current = "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames_Mainline.toc"
-    },
-    @{
-        Label = "Options"
-        Reference = "MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options.toc"
-        Current = "MidnightSimpleUnitFrames_Options/MidnightSimpleUnitFrames_Options_Mainline.toc"
-    }
-)
-$mainlineOwnedLuaExtras = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-foreach ($extraPath in @(
-    "MidnightSimpleUnitFrames/Runtime/MSUF_HostAPI.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_PageResetProviders.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_HostProtocol.lua",
-    "MidnightSimpleUnitFrames/Kernel/MSUF_SuiteLink.lua",
-    "MidnightSimpleUnitFrames/Game/Shared/Initialize.lua",
-    "MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_PetHappiness.lua",
-    "MidnightSimpleUnitFrames/Game/Shared/UnitFrames/MSUF_UF_ThreatText.lua",
-    "MidnightSimpleUnitFrames/Game/Shared/ClassPower/MSUF_CP_TargetCombo.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/UnitFrames/MSUF_UF_CharacterNames.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/ClassPower.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/SwingTimer.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/PadNavigation.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/PadKeyboard.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/PadPrompts.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/PadEditMode.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/PadUnitMenu.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileSearch.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileVariants.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileSync.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ProfileCleanup.lua",
-    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ExtraAuras.lua",
-    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ManaExtras.lua",
-    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceMarks.lua",
-    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Visibility.lua",
-    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_ResourceExtras.lua",
-    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller_Auras.lua",
-    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller_Ticker.lua",
-    "MidnightSimpleUnitFrames/ClassPower/MSUF_CP_Controller_Events.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtras.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ResourceExtrasPreview.lua",
-    "MidnightSimpleUnitFrames/State/MSUF_ProfileFields.lua",
-    "MidnightSimpleUnitFrames/State/MSUF_ProfileNormalize.lua",
-    "MidnightSimpleUnitFrames/State/MSUF_ProfileExternal.lua",
-    "MidnightSimpleUnitFrames/State/MSUF_ProfileVariants.lua",
-    "MidnightSimpleUnitFrames/State/MSUF_ProfileSync.lua",
-    "MidnightSimpleUnitFrames/State/MSUF_ProfileVariantEditor.lua",
-    "MidnightSimpleUnitFrames/State/MSUF_ProfileVariantsRuntime.lua",
-    "MidnightSimpleUnitFrames/State/MSUF_RetiredData.lua",
-    "MidnightSimpleUnitFrames/State/MSUF_AuraDefaults.lua",
-    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Shell.lua",
-    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_ForeverFactory.lua",
-    "MidnightSimpleUnitFrames_Options/State/MSUF_Defaults_ModernDark.lua",
-    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Bars.lua",
-    "MidnightSimpleUnitFrames/State/Defaults/MSUF_Defaults_Units.lua",
-    "MidnightSimpleUnitFrames/Auras3/MSUF_Auras3_IconShape.lua",
-    "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_Additional.lua",
-    "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Geometry.lua",
-    "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Text.lua",
-    "MidnightSimpleUnitFrames/GroupFrames/MSUF_GroupFrames_DB_Textures.lua",
-    "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/MSUF_UF_PortraitDetails.lua",
-    "MidnightSimpleUnitFrames/UnitFrames/Engine/MSUF_UF_Config_Status.lua",
-    "MidnightSimpleUnitFrames/UnitFrames/Range/MSUF_UF_RangeFade_Driver.lua",
-    "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedSurface.lua",
-    "MidnightSimpleUnitFrames/UnitFrames/Effects/MSUF_UF_RoundedResources.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_GroupLayoutAdditional.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/GroupFrames/MSUF_GroupFrames_BuffCoverage.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimers.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_ClassPowerWorkspace.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_SwingTimersPreview.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/Pages/MSUF_Menu2_UnitArenaTrinket.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_ColorPicker.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Theme_Forever.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Buttons.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_ContextColors.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Controls.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_Gates.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_PageBuilder.lua",
-    "MidnightSimpleUnitFrames_Options/Shell/Menu2/MSUF_Menu2_Widgets_PreviewDock.lua",
-    "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars.lua",
-    "MidnightSimpleUnitFrames/Castbars/MSUF_ArenaCastbars_Preview.lua",
-    "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPools.lua",
-    "MidnightSimpleUnitFrames/Castbars/MSUF_CastbarPoolPreviews.lua",
-    "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaMatch.lua",
-    "MidnightSimpleUnitFrames/Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Elements.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Compat.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Registry.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_State.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Undo.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Kit.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Selection.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Dock.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_HUD_Picker.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Layout_Grid.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Layout_Snap.lua",
-    "MidnightSimpleUnitFrames/Shell/EditMode/MSUF_EditMode_Layout_Nudge.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_Common.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_deDE.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_enUS.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_esES.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_esMX.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_frFR.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_itIT.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_koKR.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_ptBR.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_ruRU.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_zhCN.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/AliasData/MSUF_Auras3_AliasData_zhTW.lua",
-    "MidnightSimpleUnitFrames/Game/Forever/Auras/MSUF_Auras3_ForeverData.lua"
-)) {
-    if (-not $ownedAddonPaths.Contains($extraPath)) {
-        throw "Mainline shared/Arena addition must be declared in Classic ownership: $extraPath"
-    }
-    if ($overrideBaseBlobs.ContainsKey($extraPath)) {
-        throw "Mainline shared/Arena addition cannot also be a Retail override: $extraPath"
-    }
-    [void]$mainlineOwnedLuaExtras.Add($extraPath)
 }
 
 function Get-RepositoryRelativePath {
@@ -1306,94 +764,96 @@ function Get-RepositoryRelativePath {
     return $resolved.Substring($prefix.Length).Replace([char]92, [char]47)
 }
 
-$currentRetailHashCount = 0
-$mainlineExactLuaCount = 0
-$mainlineOverrideLuaCount = 0
-$actualMainlineOwnedLuaExtras = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-foreach ($parityTarget in $retailParityTargets) {
-    $currentPaths = Get-CurrentLuaLoadPaths (Join-Path $root $parityTarget.Current)
-    $currentRelativePaths = [Collections.Generic.List[string]]::new()
-    foreach ($currentPath in $currentPaths) {
-        $currentRelative = Get-RepositoryRelativePath -RepositoryFull $rootFull -FullPath $currentPath -Label "$($parityTarget.Label) Mainline path"
-        if ($currentRelative -match ('(^|/)Game/' + $classicDirectoryPattern + '/') -or $currentRelative -match '_Classic[.]lua$') {
-            throw "$($parityTarget.Label) Mainline loads a Classic-only blob: $currentRelative"
-        }
-        $currentRelativePaths.Add($currentRelative)
-    }
-    # Without a Retail reference there is nothing to compare the Mainline load
-    # order against; the Classic-only blob check above still ran.
-    if ($SelfContained) { continue }
-
-    # A full run always has a named Retail reference: -RetailReferenceRoot is
-    # required, so there is no HEAD fallback to compare against any more.
-    # One walk produced the paths; one git process hashes them in the same
-    # order and fails when it returns fewer blobs than the graph has files.
-    $currentHashes = Get-GitBlobHashes -Paths $currentPaths -Label "$($parityTarget.Label) Mainline"
-    $referencePaths = Get-CurrentLuaLoadPaths (Join-Path $retailReferenceRootFull $parityTarget.Reference)
-    $referenceRelativePaths = [Collections.Generic.List[string]]::new()
-    foreach ($referencePath in $referencePaths) {
-        $referenceRelative = Get-RepositoryRelativePath -RepositoryFull $retailReferenceRootFull -FullPath $referencePath -Label "$($parityTarget.Label) Retail reference path"
-        if (-not $retailMappedBlobs.ContainsKey($referenceRelative)) {
-            if ($tombstonedRetailPaths.Contains($referenceRelative)) {
-                continue
-            }
-            throw "$($parityTarget.Label) Retail load path is outside the mapped Retail inventory: $referenceRelative"
-        }
-        $referenceRelativePaths.Add($referenceRelative)
-    }
-
-    $currentIndex = 0
-    for ($referenceIndex = 0; $referenceIndex -lt $referenceRelativePaths.Count; $referenceIndex++) {
-        $referenceRelative = $referenceRelativePaths[$referenceIndex]
-        while ($currentIndex -lt $currentRelativePaths.Count -and
-            $currentRelativePaths[$currentIndex] -cne $referenceRelative) {
-            $extraPath = $currentRelativePaths[$currentIndex]
-            if (-not $mainlineOwnedLuaExtras.Contains($extraPath)) {
-                throw "$($parityTarget.Label) Mainline inserted or reordered an undeclared Lua path before Retail index $referenceIndex`: $extraPath"
-            }
-            if (-not $actualMainlineOwnedLuaExtras.Add($extraPath)) {
-                throw "Mainline shared/Arena addition is loaded more than once across addon TOCs: $extraPath"
-            }
-            $currentIndex++
-        }
-        if ($currentIndex -ge $currentRelativePaths.Count) {
-            throw "$($parityTarget.Label) Mainline omitted Retail Lua path at index $referenceIndex`: $referenceRelative"
-        }
-        $currentBlob = $currentHashes[$currentIndex].Trim().ToLowerInvariant()
-        $referenceBlob = $retailMappedBlobs[$referenceRelative]
-        if ($currentBlob -cne $referenceBlob -and -not $overrideBaseBlobs.ContainsKey($referenceRelative)) {
-            throw "$($parityTarget.Label) Mainline Lua blob differs without a P override at Retail index $referenceIndex`: $referenceRelative"
-        }
-        if ($overrideBaseBlobs.ContainsKey($referenceRelative)) {
-            $mainlineOverrideLuaCount++
-        } else {
-            $mainlineExactLuaCount++
-        }
-        $currentIndex++
-    }
-    while ($currentIndex -lt $currentRelativePaths.Count) {
-        $extraPath = $currentRelativePaths[$currentIndex]
-        if (-not $mainlineOwnedLuaExtras.Contains($extraPath)) {
-            throw "$($parityTarget.Label) Mainline appends an undeclared Lua path: $extraPath"
-        }
-        if (-not $actualMainlineOwnedLuaExtras.Add($extraPath)) {
-            throw "Mainline shared/Arena addition is loaded more than once across addon TOCs: $extraPath"
-        }
-        $currentIndex++
-    }
-    $currentRetailHashCount += $referenceRelativePaths.Count
+# tools/load-graph.lock lists the ordered Lua files each client loads. tools/load-graph.lua
+# regenerates it, and its --check mode proves the lock current and holds the load-graph
+# invariants: Mainline and Forever load no Classic-only code, Classic loads no Retail aura
+# runtime, no client loads a file twice. The generator reads the manifests with
+# tools/tests/client_manifest.lua; this gate reads them with Get-MsufLoadGraph, so the two
+# readers are held to the same answer here.
+$loadGraphLockRelative = "tools/load-graph.lock"
+$loadGraphToolRelative = "tools/load-graph.lua"
+Assert-TrackedFile -RelativePath $loadGraphLockRelative -Label "Load-graph lock"
+Assert-TrackedFile -RelativePath $loadGraphToolRelative -Label "Load-graph lock generator"
+if ($lua) {
+    $loadGraphCheck = Invoke-GateNative -Command $lua.Source -Arguments @($loadGraphToolRelative, "--check")
+    if ($loadGraphCheck.ExitCode -ne 0) { throw ($loadGraphCheck.Lines -join "`n") }
+    Write-Host ($loadGraphCheck.Lines -join "`n")
 }
-if (-not $SelfContained -and -not $actualMainlineOwnedLuaExtras.SetEquals($mainlineOwnedLuaExtras)) {
-    $missingMainlineOwned = [string[]]@($mainlineOwnedLuaExtras | Where-Object { -not $actualMainlineOwnedLuaExtras.Contains($_) })
-    [Array]::Sort($missingMainlineOwned, [StringComparer]::Ordinal)
-    throw "Mainline must load exactly the declared shared/Arena additions; missing=[$($missingMainlineOwned -join ', ')]"
+$loadGraphViews = [Collections.Generic.List[hashtable]]::new()
+foreach ($loadGraphClient in $clientMatrix) {
+    $loadGraphGameType = if ($loadGraphClient.IsClassic -ceq "true") { "" } else { "standard" }
+    $loadGraphViews.Add(@{ View = $loadGraphClient.Suffix; Flavor = $loadGraphClient.Suffix; GameType = $loadGraphGameType })
+    if ($loadGraphClient.IsClassic -cne "true") {
+        # WoW Forever reads the Mainline TOCs; only the game type tells it apart.
+        $loadGraphViews.Add(@{ View = "Forever"; Flavor = $loadGraphClient.Suffix; GameType = "camelot" })
+    }
 }
+$lockSections = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+$lockSection = $null
+foreach ($lockLine in ([IO.File]::ReadAllText((Join-Path $root $loadGraphLockRelative)) -split "`r?`n")) {
+    if ($lockLine -match '^@ (\S+) (\S+) \(\d+ files\)$') {
+        $lockSection = [Collections.Generic.List[string]]::new()
+        $lockSections.Add("$($Matches[1]) $($Matches[2])", $lockSection)
+    } elseif ($lockLine.Length -gt 0 -and -not $lockLine.StartsWith('#')) {
+        if ($null -eq $lockSection) { throw "$loadGraphLockRelative has a path before its first section header: $lockLine" }
+        $lockSection.Add($lockLine)
+    }
+}
+if ($lockSections.Count -ne $loadGraphViews.Count * $targets.Count) {
+    throw "$loadGraphLockRelative has $($lockSections.Count) sections, expected $($loadGraphViews.Count * $targets.Count); regenerate it: lua tools/load-graph.lua --write"
+}
+foreach ($loadGraphView in $loadGraphViews) {
+    foreach ($target in $targets) {
+        $sectionName = "$($loadGraphView.View) $($target.Folder)"
+        if (-not $lockSections.ContainsKey($sectionName)) { throw "$loadGraphLockRelative has no section '$sectionName'; regenerate it: lua tools/load-graph.lua --write" }
+        $graphToc = Join-Path (Join-Path $root $target.Folder) ("{0}_{1}.toc" -f $target.Base, $loadGraphView.Flavor)
+        $graphPaths = @((Get-MsufLoadGraph -Path $graphToc -Duplicates Repeat -GameType $loadGraphView.GameType).LuaPaths |
+            ForEach-Object { Get-RepositoryRelativePath -RepositoryFull $rootFull -FullPath $_ -Label "$sectionName load path" })
+        $lockedPaths = $lockSections[$sectionName]
+        for ($index = 0; $index -lt [Math]::Max($graphPaths.Count, $lockedPaths.Count); $index++) {
+            $graphPath = if ($index -lt $graphPaths.Count) { $graphPaths[$index] } else { "<end>" }
+            $lockedPath = if ($index -lt $lockedPaths.Count) { $lockedPaths[$index] } else { "<end>" }
+            if ($graphPath -cne $lockedPath) {
+                throw "$loadGraphLockRelative disagrees with the gate's TOC walk for '$sectionName' at position $($index + 1): lock '$lockedPath', walk '$graphPath'; regenerate it: lua tools/load-graph.lua --write"
+            }
+        }
+    }
+}
+if (-not $lua) { $skippedSteps.Add("Load-graph lock invariants (lua not found)") }
+Write-Host "Load graph: $($lockSections.Count) lock sections ($($loadGraphViews.Count) clients x $($targets.Count) addons) match the gate's TOC walk"
+
+# The packager ships the addon folders as they are, so a scratch script, log or
+# backup left below them would ship. Every file git versions there (or would
+# version) is one of the shippable types, has a normalized path, and shares its
+# name with no other file once case is ignored (WoW resolves file names without case).
+$versionableAddonFiles = @(Get-MsufVersionableFiles -Root $root -Folders $addonFolders)
+Assert-MsufAddonPaths -AddonFolders $addonFolders `
+    -Paths ([string[]]@(@($trackedAddonPathLines) + $versionableAddonFiles | Sort-Object -Unique -CaseSensitive))
+$shippableExtensions = @(".lua", ".xml", ".toc", ".tga", ".png", ".blp", ".ttf", ".otf", ".md")
+$strayAddonFiles = @($versionableAddonFiles | Where-Object {
+    [IO.Path]::GetFileName($_) -cne ".gitignore" -and $shippableExtensions -cnotcontains [IO.Path]::GetExtension($_).ToLowerInvariant()
+})
+if ($strayAddonFiles.Count -gt 0) {
+    throw "Addon folders hold files that are not a shippable type ($($shippableExtensions -join ' ')); move them out of the addon folders or extend `$shippableExtensions in tools/test-classic-prototype.ps1: $($strayAddonFiles -join ', ')"
+}
+
+# Every versioned addon Lua file is loaded by a shipped TOC, so no dead payload
+# ships and no edit lands in a file that never runs. The exceptions are listed
+# with a kind and a reason in tools/classic-unloaded-addon-lua.tsv: a developer
+# diagnostic no TOC loads ('diagnostic'), or a file the owner keeps unloaded on
+# purpose ('retained', citing the decision). The pixel layout coverage smoke
+# skips the same files. Rules: Assert-MsufUnloadedAddonLua.
+$unloadedLuaRelative = "tools/classic-unloaded-addon-lua.tsv"
+Assert-TrackedFile -RelativePath $unloadedLuaRelative -Label "Classic unloaded addon Lua manifest"
+$unloadedLua = Assert-MsufUnloadedAddonLua -Root $root -ManifestPath (Join-Path $root $unloadedLuaRelative) `
+    -VersionableLua $versionableAddonLua -LoadedPaths ([string[]]@($shippedLoadedPaths)) `
+    -TrackedPaths ([string[]]@($trackedAddonPaths))
+Write-Host "Unloaded addon Lua: every versioned addon Lua file is loaded by a shipped TOC except $($unloadedLua.Diagnostics) listed diagnostic(s) and $($unloadedLua.Retained) retained file(s)"
 
 # Flavor load coverage. Every Lua file the Mainline core and Options TOCs load
-# must, on each Classic flavor in the client matrix, be loaded, be replaced by a
-# loaded owned shadow (tools/classic-owned-shadows.tsv), or be excluded with a
-# reason in tools/classic-flavor-load-exclusions.tsv. A Lua file Retail adds to
-# a manifest Classic copies therefore cannot go missing on Classic unnoticed.
+# must, on each Classic flavor in the client matrix, be loaded or be excluded with
+# a reason in tools/classic-flavor-load-exclusions.tsv. A Lua file added to a
+# manifest Classic copies therefore cannot go missing on Classic unnoticed.
 # Every exclusion row must still be needed.
 $flavorExclusionRelative = "tools/classic-flavor-load-exclusions.tsv"
 $flavorExclusionPath = Join-Path $root $flavorExclusionRelative
@@ -1416,18 +876,10 @@ function Get-FlavorLuaLoadPaths {
 $mainlineCoveragePaths = @(Get-FlavorLuaLoadPaths -Suffix "Mainline")
 $mainlineCoverageSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 foreach ($coveragePath in $mainlineCoveragePaths) { [void]$mainlineCoverageSet.Add($coveragePath) }
-$shadowsByRetailPath = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
-foreach ($shadowPath in $shadowPathsInOrder) {
-    $shadowRetailPath = $shadowRetailPaths[$shadowPath]
-    if (-not $shadowsByRetailPath.ContainsKey($shadowRetailPath)) {
-        $shadowsByRetailPath.Add($shadowRetailPath, [Collections.Generic.List[string]]::new())
-    }
-    $shadowsByRetailPath[$shadowRetailPath].Add($shadowPath)
-}
 
 $flavorExclusionLines = [string[]][IO.File]::ReadAllLines($flavorExclusionPath)
-if ($flavorExclusionLines.Count -eq 0 -or $flavorExclusionLines[0] -cne "RetailPath`tFlavors`tReason") {
-    throw "Classic flavor load exclusion manifest must start with the header RetailPath<TAB>Flavors<TAB>Reason"
+if ($flavorExclusionLines.Count -eq 0 -or $flavorExclusionLines[0] -cne "MainlinePath`tFlavors`tReason") {
+    throw "Classic flavor load exclusion manifest must start with the header MainlinePath<TAB>Flavors<TAB>Reason"
 }
 $flavorExclusions = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
 $flavorExclusionPathCase = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -1436,7 +888,7 @@ for ($lineIndex = 1; $lineIndex -lt $flavorExclusionLines.Count; $lineIndex++) {
     $exclusionLine = $flavorExclusionLines[$lineIndex]
     $fields = $exclusionLine.Split([char]9)
     if ($fields.Count -ne 3) {
-        throw "Classic flavor load exclusion must be RetailPath<TAB>Flavors<TAB>Reason: $exclusionLine"
+        throw "Classic flavor load exclusion must be MainlinePath<TAB>Flavors<TAB>Reason: $exclusionLine"
     }
     $exclusionPath = $fields[0]
     Assert-NormalizedAddonPath -RelativePath $exclusionPath -Label "Classic flavor load exclusion"
@@ -1471,36 +923,26 @@ if ($flavorExclusionPathsInOrder.Count -gt 0) {
 }
 
 $coverageLoadedCount = 0
-$coverageReplacedCount = 0
 $coverageExcludedCount = 0
 foreach ($classicSuffix in $classicSuffixes) {
     $flavorLoaded = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($coveragePath in @(Get-FlavorLuaLoadPaths -Suffix $classicSuffix)) { [void]$flavorLoaded.Add($coveragePath) }
     foreach ($coveragePath in $mainlineCoveragePaths) {
         $isLoaded = $flavorLoaded.Contains($coveragePath)
-        $isReplaced = $false
-        if ($shadowsByRetailPath.ContainsKey($coveragePath)) {
-            foreach ($shadowPath in $shadowsByRetailPath[$coveragePath]) {
-                if ($flavorLoaded.Contains($shadowPath)) { $isReplaced = $true }
-            }
-        }
         $isExcluded = $flavorExclusions.ContainsKey($coveragePath) -and $flavorExclusions[$coveragePath].Contains($classicSuffix)
-        if (($isLoaded -or $isReplaced) -and $isExcluded) {
-            $coverageState = if ($isLoaded) { 'loads' } else { 'replaces' }
-            throw "Stale Classic flavor load exclusion: $classicSuffix $coverageState $coveragePath; drop $classicSuffix from its row in $flavorExclusionRelative"
+        if ($isLoaded -and $isExcluded) {
+            throw "Stale Classic flavor load exclusion: $classicSuffix loads $coveragePath; drop $classicSuffix from its row in $flavorExclusionRelative"
         }
         if ($isLoaded) {
             $coverageLoadedCount++
-        } elseif ($isReplaced) {
-            $coverageReplacedCount++
         } elseif ($isExcluded) {
             $coverageExcludedCount++
         } else {
-            throw "Classic flavor load coverage: $classicSuffix neither loads nor replaces Mainline Lua $coveragePath; load it from the $classicSuffix manifests, declare its owned shadow in $shadowManifestRelative, or add a row with a reason to $flavorExclusionRelative"
+            throw "Classic flavor load coverage: $classicSuffix does not load Mainline Lua $coveragePath; load it from the $classicSuffix manifests or add a row with a reason to $flavorExclusionRelative"
         }
     }
 }
-Write-Host "Classic flavor load coverage: $($mainlineCoveragePaths.Count) Mainline Lua paths x $($classicSuffixes.Count) flavors; $coverageLoadedCount loaded, $coverageReplacedCount replaced, $coverageExcludedCount excluded with reason"
+Write-Host "Classic flavor load coverage: $($mainlineCoveragePaths.Count) Mainline Lua paths x $($classicSuffixes.Count) flavors; $coverageLoadedCount loaded, $coverageExcludedCount excluded with reason"
 
 # The unit-frame aura backend is split by cohesion; its contracts hold for the set.
 $classicAuraSource = (@("Buttons", "Filters", "FrameVisuals", "Lanes", "UnitFrames", "Requests") | ForEach-Object {
@@ -1645,12 +1087,6 @@ if (-not $SelfContained -and $uiMirrorPresent) {
 
 Write-Host "Client TOCs: $($targets.Count * $clientMatrix.Count) manifests passed ($($clientSuffixes -join ', '))"
 Write-Host "XML load graph: $($seenXml.Count) manifests resolved"
-Write-Host "Mainline exact Lua: $mainlineExactLuaCount Retail paths retain order and Git blobs"
-Write-Host "Mainline override Lua: $mainlineOverrideLuaCount Retail paths retain order with reviewed P blobs"
-if (-not $SelfContained) {
-    Write-Host "Mainline owned Lua: $($actualMainlineOwnedLuaExtras.Count) of $($mainlineOwnedLuaExtras.Count) declared O shared/Arena additions loaded; no Game/Classic load"
-}
-Write-Host "Retail zero-overhead load graph: $($mainlineLoaded.Count) core files, $currentRetailHashCount Retail Lua paths across Core/Options validated against $retailReferenceLabel"
 foreach ($skippedStep in $skippedSteps) {
     Write-Host "SKIPPED: $skippedStep"
 }
@@ -1667,11 +1103,10 @@ if ($gateSmokeFailures.Count -gt 0) {
     Pop-Location
     throw "Classic gate smokes failed: $($gateSmokeFailures.Count) of $($smokePlan.Count) invocations"
 }
-# A full run in CI has nothing to skip: the Retail reference and the Blizzard
-# mirror are both cloned by the job. -RequireNoSkippedSteps makes that explicit,
-# so a clone that lands in the wrong place cannot leave a green gate that quietly
-# dropped the source audit or the Retail parity comparison. It runs after the
-# smoke report so a broken smoke is still named first.
+# A full run in CI has nothing to skip: the job clones the Blizzard mirror.
+# -RequireNoSkippedSteps makes that explicit, so a clone that lands in the wrong
+# place cannot leave a green gate that quietly dropped the source audit. It runs
+# after the smoke report so a broken smoke is still named first.
 if ($RequireNoSkippedSteps -and $skippedSteps.Count -gt 0) {
     Pop-Location
     throw "The Classic gate skipped $($skippedSteps.Count) step(s) while -RequireNoSkippedSteps was set: $($skippedSteps -join '; ')"

@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(sys.argv[1]).resolve()
 POLICY = ROOT / "tools/pixel-layout-exclusions.json"
-# Files no TOC loads (listed Retail mirrors and retained owned files) create no UI;
+# Files no TOC loads (listed diagnostics and retained files) create no UI;
 # the gate proves they stay unloaded.
 UNLOADED = {line.split("\t", 1)[0] for line in
             (ROOT / "tools/classic-unloaded-addon-lua.tsv").read_text(encoding="utf-8").splitlines()[1:] if line}

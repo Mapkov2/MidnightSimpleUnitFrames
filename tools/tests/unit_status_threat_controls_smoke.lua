@@ -1,9 +1,9 @@
 -- unit_status_threat_controls_smoke.lua <repoRoot> <flavor>
 --
--- Every client loads the Retail-named Pages/MSUF_Menu2_UnitStatusSection.lua.
+-- Every client loads Pages/MSUF_Menu2_UnitStatusSection.lua.
 -- Its Threat % controls (Color by threat, Background) and their part of Reset
--- selected are hunks of this repo that Retail does not have, in a file that
--- also carries IS_CLASSIC_FAMILY hunks and is rebased at every Retail sync.
+-- selected are hunks gated on a client fact, in a file that
+-- also carries IS_CLASSIC_FAMILY hunks.
 -- They exist only where MSUF.Client.SupportsThreatText is true (Classic Era,
 -- TBC and WoW Forever); Mists and Midnight must not build them.
 --

@@ -1,0 +1,32 @@
+# Golden baseline of .github/scripts/health_background_sample_parity_smoke.lua.
+# Source: Retail 6.22 retirement commit 84a1241710c26d0970436a02beb4e32f3a626f39 (_repo_backups/6.22).
+# Record: lua .github/scripts/auras3_test_driver.lua .github/scripts/health_background_sample_parity_smoke.lua <repo> <baseline source root> record "<source label>"
+# The smoke compares the current source with these values; it never rewrites them.
+log.lines 5294
+log.chunk.0001 070ea22900c86944
+log.chunk.0002 cb77501cb1865de2
+log.chunk.0003 7514dbc66efe704c
+cases 1152
+reads 13348
+writes 9310
+allocations 24
+singlePublic.work 18700
+singlePublic.probes 200
+singlePublic.reads 100
+singlePublic.writes 0
+singlePublic.allocated 0
+singleOpaque.work 19700
+singleOpaque.probes 200
+singleOpaque.reads 400
+singleOpaque.writes 300
+singleOpaque.allocated 0.0537109375
+groupPublic.work 19200
+groupPublic.probes 200
+groupPublic.reads 100
+groupPublic.writes 0
+groupPublic.allocated 0
+groupOpaque.work 20000
+groupOpaque.probes 200
+groupOpaque.reads 400
+groupOpaque.writes 300
+groupOpaque.allocated 0.0537109375

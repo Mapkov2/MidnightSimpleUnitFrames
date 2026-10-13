@@ -1,4 +1,4 @@
-RetailPath	Flavors	Reason
+MainlinePath	Flavors	Reason
 MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_Common.lua	*	Retail 12.1.0 SpellName alias catalog (Common); Classic flavors match ranked and cast-versus-aura IDs by aura name at runtime and ship no catalog
 MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_deDE.lua	*	Retail 12.1.0 SpellName alias catalog (deDE); Classic flavors match ranked and cast-versus-aura IDs by aura name at runtime and ship no catalog
 MidnightSimpleUnitFrames/Auras3/AliasData/MSUF_Auras3_AliasData_enUS.lua	*	Retail 12.1.0 SpellName alias catalog (enUS); Classic flavors match ranked and cast-versus-aura IDs by aura name at runtime and ship no catalog

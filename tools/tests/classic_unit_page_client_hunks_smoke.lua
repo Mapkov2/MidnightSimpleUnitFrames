@@ -3,7 +3,7 @@
 -- Classic behaviour lives in small hunks gated on MSUF.Client facts read once at
 -- load. This smoke loads both files under the real client model of every client
 -- and pins each hunk where it applies and its absence on Midnight and WoW
--- Forever, so an override rebase that drops or widens one fails here.
+-- Forever, so an edit that drops or widens one fails here.
 local root = assert(arg[1], "repo root missing")
 local MENU = root .. "/MidnightSimpleUnitFrames_Options/Shell/Menu2/"
 

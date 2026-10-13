@@ -1,16 +1,16 @@
 """tools/classic-addon-tombstones.txt for the Python tools.
 
-The manifest names the Retail addons this tree retired and the Retail files of
-the shipped addons that retired with them:
+The manifest names the addons this tree retired and the files of the shipped
+addons that retired with them:
 
-    <retired addon>                  a Retail addon folder this tree omits
+    <retired addon>                  an addon folder this tree omits
     <retired addon><TAB><path>       a file below a shipped addon folder that
                                      retired with that addon
 
 Blank lines and lines that start with '#' are comments. These are the rules of
 Import-MsufAddonTombstones in .github/scripts/ClassicGate.Common.psm1, which the
-gate and the packagers use; keep the two in step. Readers here: the Retail
-source resolver, the override rebase tool and the retirement smoke.
+gate and the packagers use; keep the two in step. Reader here: the retirement
+smoke.
 """
 from __future__ import annotations
 

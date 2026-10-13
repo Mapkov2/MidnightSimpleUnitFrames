@@ -3,14 +3,13 @@ name: MSUF 7.0 full gate
 # The full Classic gate as a reusable workflow, so the push/PR gate and the
 # release both run the same steps instead of two copies that can drift.
 # It checks out the commit the caller was triggered for (a branch head for the
-# gate workflow, the release tag for the release workflow), resolves and checks
-# out the Retail commit this tree mirrors, clones the Blizzard UI source mirror
-# and runs the gate with the Retail reference.
+# gate workflow, the release tag for the release workflow), clones the Blizzard
+# UI source mirror and runs the gate with the source audit.
 #
 # Every step fails closed. -RequireNoSkippedSteps makes the gate itself refuse
 # to pass when any of its own steps was skipped, so a clone that lands in the
 # wrong place cannot produce a green run that quietly dropped the Blizzard
-# source audit or the Retail parity comparison.
+# source audit.
 
 on:
   workflow_call:
@@ -53,53 +52,6 @@ jobs:
           lua -v
           luac -v
 
-      # The former Retail main is frozen at the 6.22 retirement commit.
-      # The cutover merge preserves that history in main, so the clone
-      # contains it without depending on an additional published ref.
-      # Checkout authenticates access to this private repository. Fetch the
-      # complete blobs so later git-only resolver reads need no credentials.
-      # Resolve the exact historical mirror base within this frozen history;
-      # new multi-client commits must never become the Retail reference.
-      - name: Check out the frozen Retail reference history
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          repository: ${{ github.repository }}
-          ref: main
-          fetch-depth: 0
-          path: _local_workflows/references/retail-6.22
-          persist-credentials: false
-
-      - name: Check out the Retail commit this tree mirrors
-        shell: pwsh
-        env:
-          MSUF_RETAIL_REFERENCE: ${{ github.workspace }}/_local_workflows/references/retail-6.22
-          MSUF_RETIRED_RETAIL_COMMIT: "84a1241710c26d0970436a02beb4e32f3a626f39"
-        run: |
-          if (-not (Test-Path -LiteralPath "$env:MSUF_RETAIL_REFERENCE/.git" -PathType Container)) {
-            throw "The authenticated Retail reference checkout is missing."
-          }
-          $resolved = & python ./.github/scripts/resolve_classic_retail_source.py --retail $env:MSUF_RETAIL_REFERENCE --retail-rev $env:MSUF_RETIRED_RETAIL_COMMIT
-          if ($LASTEXITCODE -ne 0) {
-            throw "No commit of the retired Retail history matches this Classic tree; the resolver output above names the nearest one and its mismatching paths."
-          }
-          # The resolver prints its report on stderr and exactly one commit id
-          # on stdout. Anything else means the Retail reference is unresolved,
-          # and a release must fail closed rather than gate against a guess.
-          $commits = @(@($resolved) | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -cmatch '^[0-9a-f]{40}$' })
-          if ($commits.Count -ne 1) {
-            throw "The Retail source resolver printed $($commits.Count) commit ids instead of one; the Retail reference cannot be resolved."
-          }
-          $commit = $commits[0]
-          git -C $env:MSUF_RETAIL_REFERENCE -c advice.detachedHead=false checkout --detach $commit
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not check out Retail $commit."
-          }
-          $head = (git -C $env:MSUF_RETAIL_REFERENCE rev-parse HEAD)
-          if ($LASTEXITCODE -ne 0 -or ([string]$head).Trim() -cne $commit) {
-            throw "Retail reference HEAD is '$head', not the resolved $commit."
-          }
-          "Full multi-client gate against retired Retail base $commit" >> $env:GITHUB_STEP_SUMMARY
-
       # The audit reads Blizzard's branch tips through git only (show, grep,
       # rev-parse), so a depth-1 clone of every branch needs no working tree.
       # The tips are listed so a red audit names the branch that moved.
@@ -123,10 +75,8 @@ jobs:
 
       - name: Run the full Classic gate
         shell: pwsh
-        env:
-          MSUF_RETAIL_REFERENCE: ${{ github.workspace }}/_local_workflows/references/retail-6.22
         run: |
-          & ./tools/run-classic-gate.ps1 -RetailReferenceRoot $env:MSUF_RETAIL_REFERENCE -RequireNoSkippedSteps
+          & ./tools/run-classic-gate.ps1 -RequireNoSkippedSteps
           if ($LASTEXITCODE -ne 0) {
             throw "Classic full gate failed."
           }

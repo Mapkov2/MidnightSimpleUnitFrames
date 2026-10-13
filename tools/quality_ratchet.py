@@ -36,7 +36,7 @@ This tool is the only place that holds the Lua 5.1 compiler limits (the gate has
   limit may grow up to it, a file already over its limit may not grow past its baseline. A size
   metric without a profile limit (Suite max_upvalues, max_locals and max_slots, Classic lines) is
   report-only: measured, printed and baselined, never a failure. The limits apply to every
-  measured file (Classic: owned or not). --report prints the headroom to the hard Lua limits.
+  measured file. --report prints the headroom to the hard Lua limits.
 
 Factory wrappers. Many modules are one function that the loader calls once:
   MSUF.Auras3RuntimeFactories.Identity = function(addonName, MSUF, A3, UF, ExportPublic, dependencies)
@@ -74,7 +74,7 @@ size metric is above max(baseline, limit) (see above), unless
 tools/quality_ratchet_allowlist.json has an "allowed" entry for that file
 and metric whose "max" covers the new value, with a "reason" and a "date". A file
 the baseline does not know is measured against the limits of the repo profile
-(Suite: 810 lines, 72-line functions, 150 locals; Classic owned files: 160 locals,
+(Suite: 810 lines, 72-line functions, 150 locals; Classic: 160 locals,
 45 upvalues, 150-line functions; both: no `;` statements, no line over 160
 characters, no fallback lambda, no client guard, clone share at most 1 percent).
 An entry covers a new file the same way.
@@ -85,7 +85,7 @@ rebaseline; --update accepts it.
 
 Update. Recomputes every metric and rewrites the baseline. It refuses while a
 regression has no valid allowlist entry or a file left measurement (--accept-regressions
-overrides that: the lead's explicit call after a merge or a Retail sync) and always refuses
+overrides that: the lead's explicit call after a merge) and always refuses
 while an allowlist entry is malformed. It prunes the allowlist entries the new baseline
 already covers. Run it after each merge, then commit both files.
 
@@ -137,7 +137,6 @@ PROFILES = {
         "function_limit": 72,
         "limits": {"lines": 810, "max_function": 72, "main_locals": 150, "semicolon_lines": 0,
                    "long_lines": 0, "long_functions": 0, "fallback_lambdas": 0, "client_guards": 0},
-        "owned_list": None,
         "own_libs": (),
     },
     "classic": {
@@ -147,8 +146,6 @@ PROFILES = {
         "limits": {"main_locals": 160, "max_locals": 160, "max_upvalues": 45, "max_slots": 230,
                    "max_function": 150, "semicolon_lines": 0, "long_lines": 0, "long_functions": 0,
                    "fallback_lambdas": 0, "client_guards": 0},
-        "owned_list": "tools/classic-owned-addon-paths.txt",
-        "override_list": "tools/classic-retail-overrides.tsv",
         "own_libs": ("MSUFUnitFrames",),
     },
 }
@@ -743,22 +740,12 @@ def vanished_files(root, baseline, results, excluded):
             for rel in sorted(baseline) if rel not in results and (root / rel).is_file()]
 
 
-def owned_paths(root, profile):
-    if not profile["owned_list"]:
-        return None
-    path = root / profile["owned_list"]
-    if not path.is_file():
-        return None
-    return {line.strip().replace("\\", "/") for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip() and not line.startswith("#")}
-
-
 def size_limit(profile, metric):
     """The profile limit of a size metric, or None when the metric is report-only (or a defect metric)."""
     return profile["limits"].get(metric) if metric in SIZE_METRICS else None
 
 
-def evaluate(results, window_counts, baseline, allowlist, profile, owned, locations=None, where=None,
+def evaluate(results, window_counts, baseline, allowlist, profile, locations=None, where=None,
              data_limits=None):
     """(failures, improved files, new files, stale entries) of one check. `where(rel, metric)` names the
     lines of a located defect metric; it is only called for a failure. A data file has no baseline: it
@@ -788,17 +775,15 @@ def evaluate(results, window_counts, baseline, allowlist, profile, owned, locati
         before = baseline.get(rel)
         if before is None:
             new.append(rel)
-            enforce = owned is None or rel in owned
-            if enforce:
-                for metric, limit in profile["limits"].items():
-                    if values[metric] > limit and not covered(rel, metric, values[metric]):
-                        failures.append("%s: new file has %s %d (limit %d)%s%s"
-                                        % (rel, metric, values[metric], limit, lines_of(rel, metric), remedy(metric)))
-                share = values["clone_windows"] - int(window_counts[rel] * CLONE_SHARE_NEW_FILE)
-                if share > 0 and not covered(rel, "clone_windows", values["clone_windows"]):
-                    failures.append("%s: new file has %d clone windows of %d (limit %d percent)%s%s"
-                                    % (rel, values["clone_windows"], window_counts[rel],
-                                       int(CLONE_SHARE_NEW_FILE * 100), partners(rel), remedy("clone_windows")))
+            for metric, limit in profile["limits"].items():
+                if values[metric] > limit and not covered(rel, metric, values[metric]):
+                    failures.append("%s: new file has %s %d (limit %d)%s%s"
+                                    % (rel, metric, values[metric], limit, lines_of(rel, metric), remedy(metric)))
+            share = values["clone_windows"] - int(window_counts[rel] * CLONE_SHARE_NEW_FILE)
+            if share > 0 and not covered(rel, "clone_windows", values["clone_windows"]):
+                failures.append("%s: new file has %d clone windows of %d (limit %d percent)%s%s"
+                                % (rel, values["clone_windows"], window_counts[rel],
+                                   int(CLONE_SHARE_NEW_FILE * 100), partners(rel), remedy("clone_windows")))
             continue
         better = False
         for metric in METRICS:
@@ -857,18 +842,6 @@ def area_of(rel):
     return parts[0]
 
 
-def ownership_tags(root, profile, results):
-    """Classic only: O owned, P override of a Retail file, M exact Retail mirror."""
-    owned = owned_paths(root, profile)
-    if owned is None or not profile.get("override_list"):
-        return {}
-    path = root / profile["override_list"]
-    overrides = set()
-    if path.is_file():
-        overrides = {line.split("\t")[0].strip().replace("\\", "/") for line in path.read_text(encoding="utf-8").splitlines()}
-    return {rel: "O" if rel in owned else "P" if rel in overrides else "M" for rel in results}
-
-
 def print_headroom(results, data_limits=None):
     print("headroom to the hard Lua 5.1 limits (hard limit minus the value; the profile limit keeps a margin;"
           " %d data files included):" % len(data_limits or {}))
@@ -895,12 +868,11 @@ def print_areas(results, details, function_limit):
                  area["max"][1].rsplit("/", 1)[-1] if area["max"][0] else ""))
 
 
-def print_report(results, excluded, top, profile, tags, details=None, data_limits=None):
+def print_report(results, excluded, top, profile, details=None, data_limits=None):
     print("files measured: %d (excluded as data or generated: %d)" % (len(results), len(excluded)))
     summed = totals(results)
     print("totals: " + ", ".join("%s=%d" % (metric, summed[metric]) for metric in METRICS
                                  if metric not in SIZE_METRICS or metric == "lines"))
-    mark = (lambda rel: " [%s]" % tags[rel] if rel in tags else "")
     report_only = [metric for metric in SIZE_METRICS if metric not in profile["limits"]]
     print("report-only size metrics (measured and baselined, never a failure): %s" % (", ".join(report_only) or "none"))
     if details is not None:
@@ -913,24 +885,22 @@ def print_report(results, excluded, top, profile, tags, details=None, data_limit
         heavy = [(rel, wrapper[5]) for rel, wrapper in wrappers if wrapper[5] > profile["function_limit"]]
         print("wrappers whose own body is above the function limit: %d%s"
               % (len(heavy), "".join("\n  %5d  %s" % (own, rel) for rel, own in sorted(heavy, key=lambda i: -i[1]))))
-    print("files above the limits%s:" % (" (O owned, P override, M Retail mirror)" if tags else ""))
+    print("files above the limits:")
     for metric, limit in profile["limits"].items():
         over = sorted(rel for rel, values in results.items() if values[metric] > limit)
-        owned_over = [rel for rel in over if tags.get(rel) == "O"] if tags else over
-        print("  %-16s > %-4d %3d files%s" % (metric, limit, len(over),
-                                              " (%d owned)" % len(owned_over) if tags else ""))
+        print("  %-16s > %-4d %3d files" % (metric, limit, len(over)))
     print_headroom(results, data_limits)
     if details is not None:
         longest = sorted(((span, rel, start, end) for rel in details for span, start, end in details[rel]["longest"]),
                          reverse=True)[:top]
         print("longest functions:")
         for span, rel, start, end in longest:
-            print("  %6d  %s:%d-%d%s" % (span, rel, start, end, mark(rel)))
+            print("  %6d  %s:%d-%d" % (span, rel, start, end))
         print_areas(results, details, profile["function_limit"])
     for metric in METRICS:
         print("worst %s:" % metric)
         for rel, value in worst(results, metric, top):
-            print("  %6d  %s%s" % (value, rel, mark(rel)))
+            print("  %6d  %s" % (value, rel))
 
 
 # ------------------------------------------------------------------ main
@@ -966,13 +936,11 @@ def main(argv=None):
         root, profile_name, allowlist, find_luac(args.luac))
 
     if args.report:
-        print_report(results, excluded, args.top, profile, ownership_tags(root, profile, results), details,
-                     data_limits)
+        print_report(results, excluded, args.top, profile, details, data_limits)
         return 0
 
     baseline, missing_columns = read_baseline(baseline_path)
     valid, malformed, orphans = allowlist_state(allowlist, set(results) | set(data_limits))
-    owned = owned_paths(root, profile)
     entries = len(allowlist.get("allowed", []))
     if baseline is None:
         if not args.update:
@@ -984,7 +952,7 @@ def main(argv=None):
               "Rebaseline deliberately with --update" % ", ".join(missing_columns))
         return 1
 
-    failures, improved, new, stale = evaluate(results, window_counts, baseline, {"allowed": valid}, profile, owned,
+    failures, improved, new, stale = evaluate(results, window_counts, baseline, {"allowed": valid}, profile,
                                               locations, make_locator(root), data_limits)
     failures = failures + vanished_files(root, baseline, results, excluded)
     if args.update:

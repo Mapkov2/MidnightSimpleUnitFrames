@@ -1,14 +1,12 @@
--- Compare the complete tint sink/cache contract with an immutable source root.
--- Native stubs resolve opaque booleans; addon Lua may only forward them.
--- The Classic gate passes the Retail reference root as the baseline, or "-"
--- when a self-contained run has none; "parity-only" then asks for equivalence
--- without the pre-refactor improvement assertions.
-local root, baseline = arg[1] or ".", arg[2]
-if baseline == "-" or baseline == "" then baseline = nil end
-local parityOnly = false
-for i = 2, #arg do
-  if arg[i] == "parity-only" then parityOnly = true end
-end
+-- Compare the complete tint sink/cache contract with the behavior of the frozen Retail
+-- source, recorded in .github/scripts/golden/castbar_tint_parity_smoke.golden
+-- (see golden_baseline.lua). Native stubs resolve opaque booleans; addon Lua may only forward them.
+--   <repo>                                  compare with the golden file
+--   <repo> <reference root>                 compare with a live reference source instead
+--   <repo> <reference root> record "<label>"  rewrite the golden file from that source
+local root = arg[1] or "."
+local Golden = assert(loadfile(root .. "/.github/scripts/golden_baseline.lua"))()
+local baseline, recording, label = Golden.Mode(arg)
 local function Forbidden() error("restricted tint value inspected by Lua") end
 local meta = { __eq=Forbidden, __lt=Forbidden, __index=Forbidden, __tostring=Forbidden }
 local YES, NO = setmetatable({}, meta), setmetatable({}, meta)
@@ -105,11 +103,6 @@ local function Run(source)
   return table.concat(outputs,"\n"),cases
 end
 
-local before,oldCases
-if baseline then before,oldCases=Run(baseline) end
-local after,cases=Run(root)
-assert(not baseline or (before==after and cases==oldCases),"cast tint, glow/cache state or capability behavior changed")
-
 local function Work(source, ready)
   local runtime=Load(source,true,true,true)
   local frame=runtime.frame(true)
@@ -126,27 +119,52 @@ local function Work(source, ready)
   return {work=instructions,allocations=allocated-initialAlloc,selections=selected-initialSelections,
     probes=probed-initialProbes}
 end
-for _,scenario in ipairs({{"ready",true},{"unavailable",false},{"opaqueReady",YES},{"opaqueUnavailable",NO}}) do
+local SMOKE="castbar_tint_parity_smoke"
+local scenarios={{"ready",true},{"unavailable",false},{"opaqueReady",YES},{"opaqueUnavailable",NO}}
+local function Summarize(source)
+  local entries={}
+  local log,count=Run(source)
+  Golden.AddLog(entries,"log",log)
+  entries[#entries+1]={"cases",tostring(count)}
+  for _,scenario in ipairs(scenarios) do
+    local result=Work(source,scenario[2])
+    entries[#entries+1]={scenario[1]..".work",tostring(result.work)}
+    entries[#entries+1]={scenario[1]..".allocations",tostring(result.allocations)}
+    entries[#entries+1]={scenario[1]..".selections",tostring(result.selections)}
+    entries[#entries+1]={scenario[1]..".probes",tostring(result.probes)}
+  end
+  return entries
+end
+
+if recording then
+  local entries=Summarize(baseline)
+  Golden.Write(Golden.Path(root,SMOKE),Golden.Header(SMOKE,label),entries)
+  print("castbar_tint_parity_smoke: recorded "..#entries.." entries from "..baseline)
+  return
+end
+local expected={}
+if baseline then
+  for _,entry in ipairs(Summarize(baseline)) do expected[entry[1]]=entry[2] end
+else
+  expected=Golden.Read(Golden.Path(root,SMOKE))
+end
+local after,cases=Run(root)
+local difference=Golden.LogDiff(expected,"log",after)
+assert(not difference and cases==tonumber(expected.cases),
+  "cast tint, glow/cache state or capability behavior changed"..(difference and (": "..difference) or ""))
+
+for _,scenario in ipairs(scenarios) do
   local current=Work(root,scenario[2])
   assert(current.allocations==(Secret(scenario[2]) and 100 or 0),"avoidable result ColorObject allocation")
-  if baseline then
-    local old=Work(baseline,scenario[2])
-    -- parity-only compares two shipped trees rather than a refactor: equal work
-    -- and an equal selector count are the expected result there.
-    assert((parityOnly and current.work<=old.work or current.work<old.work)
-      and current.probes<=old.probes,"tint path gained Lua work or secret probes")
-    if parityOnly then
-      assert(current.selections==old.selections,"native selector use diverged from the Retail base")
-    elseif Secret(scenario[2]) then
-      assert(current.selections==old.selections,"restricted native selector was bypassed")
-    else
-      assert(current.selections==0 and old.selections==100,"public selector was not removed")
-    end
-    print(string.format("Tint %s /100: Lua instructions %d -> %d; result allocations %d -> %d; secret probes %d -> %d",
-      scenario[1],old.work,current.work,old.allocations,current.allocations,old.probes,current.probes))
-  end
-end
-if not baseline then
-  print("castbar_tint_parity_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
+  local old={work=tonumber(expected[scenario[1]..".work"]),allocations=tonumber(expected[scenario[1]..".allocations"]),
+    selections=tonumber(expected[scenario[1]..".selections"]),probes=tonumber(expected[scenario[1]..".probes"])}
+  assert(old.work and old.allocations and old.selections and old.probes,
+    "the golden baseline has no record of "..scenario[1])
+  -- Two shipped trees are compared, not a refactor: equal work and an equal selector count
+  -- are the expected result, so only a regression may fail.
+  assert(current.work<=old.work and current.probes<=old.probes,"tint path gained Lua work or secret probes")
+  assert(current.selections==old.selections,"native selector use diverged from the Retail base")
+  print(string.format("Tint %s /100: Lua instructions %d -> %d; result allocations %d -> %d; secret probes %d -> %d",
+    scenario[1],old.work,current.work,old.allocations,current.allocations,old.probes,current.probes))
 end
 print("castbar_tint_parity_smoke: ok ("..cases.." sink/cache/capability cases)")

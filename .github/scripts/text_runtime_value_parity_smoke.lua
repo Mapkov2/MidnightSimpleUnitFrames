@@ -1,18 +1,14 @@
--- Compare the complete text value pipeline against a supplied source snapshot.
+-- Compare the complete text value pipeline against the behavior of the frozen Retail source,
+-- recorded in .github/scripts/golden/text_runtime_value_parity_smoke.golden (see golden_baseline.lua).
 -- Opaque inputs reject Lua arithmetic/comparisons; native reads, formatter
 -- arguments, sink writes and scalar cache state must all retain their order.
--- The Classic gate passes the Retail reference root as the baseline, or "-"
--- when a self-contained run has none; "parity-only" then asks for equivalence
--- without the pre-refactor improvement assertions. arg[3] stays the optional
--- measurement TSV unless it names a mode.
+--   <repo>                                  compare with the golden file
+--   <repo> <reference root> [measurement TSV]  compare with a live reference source instead
+--   <repo> <reference root> record "<label>"  rewrite the golden file from that source
 local root = arg and arg[1] or "."
-local baseline = arg and arg[2]
-if baseline == "-" or baseline == "" then baseline = nil end
-local parityOnly = false
-for i = 2, (arg and #arg or 0) do
-  if arg[i] == "parity-only" then parityOnly = true end
-end
-local output = arg and arg[3] and arg[3] ~= "parity-only" and assert(io.open(arg[3], "wb"))
+local Golden = assert(loadfile(root .. "/.github/scripts/golden_baseline.lua"))()
+local baseline, recording, label = Golden.Mode(arg)
+local output = baseline and arg[3] and arg[3] ~= "parity-only" and arg[3] ~= "record" and assert(io.open(arg[3], "wb"))
 local relative = "MidnightSimpleUnitFrames/UnitFrames/Engine/Elements/"
 local function Forbidden() error("opaque value inspected by Lua") end
 local opaque = setmetatable({}, { __eq = Forbidden, __lt = Forbidden, __le = Forbidden,
@@ -159,59 +155,103 @@ local function NewRuntime(source, legacy, percentAPI, formatters)
   end
 end
 
-local checks, workBefore, workAfter, probesBefore, probesAfter = 0, 0, 0, 0, 0
+local SMOKE = "text_runtime_value_parity_smoke"
 -- Independent environments retain their native capabilities as module upvalues.
 -- Run each environment in full before loading the other, since globals such as
 -- issecretvalue are deliberately runtime-visible to native mock consumers.
-for _, capabilities in ipairs({ {false,true,true}, {false,false,true}, {false,true,false}, {true,true,true} }) do
-  local cases = {}
-  for _, mode in ipairs(modes) do
-    for index, sample in ipairs(values) do
-      if not capabilities[1] or index <= 6 then
-        for _, feed in ipairs({ "payload", "current", "cache", "percent", "read" }) do
-          for _, unit in ipairs({ "player", "target", "party1" }) do
-            for _, color in ipairs({ false, true }) do
-              cases[#cases + 1] = { mode, sample, feed, unit, color, index % 2 == 0,
-                baseline ~= nil and mode == "CURPERCENT" and feed == "payload" and unit == "target" }
+local environments = { {false,true,true}, {false,false,true}, {false,true,false}, {true,true,true} }
+
+-- Every case of every environment against one source tree. The results and native read counts of
+-- the cases that share an environment, mode and feed fold into one digest ("env1.CURRENT.payload");
+-- the scenario whose instruction count is budgeted is listed per case as "work probes".
+local function Collect(source)
+  local entries, cases = {}, 0
+  for environment, capabilities in ipairs(environments) do
+    local list = {}
+    for _, mode in ipairs(modes) do
+      for index, sample in ipairs(values) do
+        if not capabilities[1] or index <= 6 then
+          for _, feed in ipairs({ "payload", "current", "cache", "percent", "read" }) do
+            for _, unit in ipairs({ "player", "target", "party1" }) do
+              for _, color in ipairs({ false, true }) do
+                list[#list + 1] = { mode, sample, feed, unit, color, index % 2 == 0,
+                  mode == "CURPERCENT" and feed == "payload" and unit == "target" }
+              end
             end
           end
         end
       end
     end
-  end
-  local reference = {}
-  if baseline then
-    local run = NewRuntime(baseline, unpack(capabilities))
-    for i, case in ipairs(cases) do reference[i] = { run(unpack(case)) } end
-  end
-  local run = NewRuntime(root, unpack(capabilities))
-  for i, case in ipairs(cases) do
-    local result, work, probes, reads = run(unpack(case))
-    if baseline then
-      local before = reference[i]
-      assert(result == before[1], "value pipeline drift: " .. case[1] .. "/" .. case[3] .. "/" .. case[4] .. "/case " .. i)
-      assert(reads == before[4], "native read count changed")
-      if case[7] then
-        assert(work <= before[2], "measured pipeline scenario gained Lua instructions")
-        workBefore, workAfter = workBefore + before[2], workAfter + work
-        probesBefore, probesAfter = probesBefore + before[3], probesAfter + probes
-        if output then output:write(table.concat({ tostring(capabilities[1]), tostring(capabilities[2]), tostring(capabilities[3]), i, before[2], work, before[3], probes }, "\t"), "\n") end
+    local run = NewRuntime(source, unpack(capabilities))
+    local digests, order = {}, {}
+    for i, case in ipairs(list) do
+      local result, work, probes, reads = run(unpack(case))
+      local key = string.format("env%d.%s.%s", environment, case[1], case[3])
+      local digest = digests[key]
+      if not digest then
+        digest = Golden.Digest()
+        digests[key] = digest
+        order[#order + 1] = key
       end
+      digest:Add(result)
+      digest:Add(tostring(reads))
+      if case[7] then
+        entries[#entries + 1] = { string.format("measure.%d.%d", environment, i), work .. " " .. probes }
+      end
+      cases = cases + 1
     end
-    checks = checks + 4
+    for _, key in ipairs(order) do entries[#entries + 1] = { key, digests[key]:Value() } end
+  end
+  entries[#entries + 1] = { "cases", tostring(cases) }
+  return entries
+end
+
+if recording then
+  local entries = Collect(baseline)
+  Golden.Write(Golden.Path(root, SMOKE), Golden.Header(SMOKE, label), entries)
+  print("text_runtime_value_parity_smoke: recorded " .. #entries .. " entries from " .. baseline)
+  return
+end
+
+local expected, expectedCount = {}, 0
+if baseline then
+  for _, entry in ipairs(Collect(baseline)) do expected[entry[1]] = entry[2]; expectedCount = expectedCount + 1 end
+else
+  expected = Golden.Read(Golden.Path(root, SMOKE))
+  for _ in pairs(expected) do expectedCount = expectedCount + 1 end
+end
+local current = Collect(root)
+assert(#current == expectedCount, "the pipeline covers " .. #current .. " scenarios, the baseline " .. expectedCount)
+local checks, workBefore, workAfter, probesBefore, probesAfter = 0, 0, 0, 0, 0
+for _, entry in ipairs(current) do
+  local key, value = entry[1], entry[2]
+  local recorded = expected[key]
+  assert(recorded, "the baseline has no record of " .. key)
+  local environment, caseIndex = key:match("^measure%.(%d+)%.(%d+)$")
+  if environment then
+    local work, probes = value:match("^(%d+) (%d+)$")
+    local beforeWork, beforeProbes = recorded:match("^(%d+) (%d+)$")
+    work, probes, beforeWork, beforeProbes = tonumber(work), tonumber(probes), tonumber(beforeWork), tonumber(beforeProbes)
+    assert(work <= beforeWork, "measured pipeline scenario gained Lua instructions: " .. key)
+    workBefore, workAfter = workBefore + beforeWork, workAfter + work
+    probesBefore, probesAfter = probesBefore + beforeProbes, probesAfter + probes
+    if output then
+      local capabilities = environments[tonumber(environment)]
+      output:write(table.concat({ tostring(capabilities[1]), tostring(capabilities[2]), tostring(capabilities[3]),
+        caseIndex, beforeWork, work, beforeProbes, probes }, "\t"), "\n")
+    end
+  else
+    assert(value == recorded, "value pipeline drift or native read count changed in " .. key
+      .. "; compare with a reference source root to locate the case")
   end
 end
-if baseline then
-  -- parity-only compares two shipped trees rather than a refactor: an equal
-  -- instruction sum is the expected result, so only a regression may fail.
-  assert(parityOnly and workAfter <= workBefore or workAfter < workBefore,
-    "pipeline instruction sum did not improve")
-  -- Specializing fixed formats can remove Lua work while retaining all native
-  -- secrecy checks. Additional probes remain a regression.
-  assert(probesAfter <= probesBefore, "pipeline secret queries increased")
-else
-  print("text_runtime_value_parity_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
-end
+checks = tonumber(expected.cases) * 4
+-- Two shipped trees are compared, not a refactor: an equal instruction sum is the
+-- expected result, so only a regression may fail.
+assert(workAfter <= workBefore, "pipeline instruction sum increased")
+-- Specializing fixed formats can remove Lua work while retaining all native
+-- secrecy checks. Additional probes remain a regression.
+assert(probesAfter <= probesBefore, "pipeline secret queries increased")
 if output then output:close() end
 print(string.format("text_runtime_value_parity_smoke: ok (%d paired health/power updates; Lua instructions %d -> %d; secret queries %d -> %d)",
   checks, workBefore, workAfter, probesBefore, probesAfter))

@@ -1,15 +1,16 @@
 -- Real Health -> background -> gradient pipeline, including API/sink order.
--- Optional baseline is an immutable source root; counts are not native timings.
--- The Classic gate passes the Retail reference root as the baseline, or "-"
--- when a self-contained run has none; "parity-only" then asks for equivalence
--- without the pre-refactor improvement assertions.
+-- The frozen Retail source's behavior is recorded in
+-- .github/scripts/golden/health_background_sample_parity_smoke.golden (see golden_baseline.lua)
+-- and the gate compares the current source with it; counts are not native timings.
+--   <repo>                                  compare with the golden file
+--   <repo> <reference root>                 compare with a live reference source instead
+--   <repo> <reference root> record "<label>"  rewrite the golden file from that source
 local root=arg and arg[1] or "."
-local baseline=arg and arg[2]
-if baseline=="-" or baseline=="" then baseline=nil end
-local compiled,parityOnly=false,false
+local Golden=assert(loadfile(root.."/.github/scripts/golden_baseline.lua"))()
+local baseline,recording,label=Golden.Mode(arg)
+local compiled=false
 for i=2,(arg and #arg or 0) do
   if arg[i]=="compiled" then compiled=true end
-  if arg[i]=="parity-only" then parityOnly=true end
 end
 local function Forbidden() error("restricted value inspected") end
 local SECRET=setmetatable({}, {__eq=Forbidden,__lt=Forbidden,__le=Forbidden,
@@ -259,33 +260,63 @@ local function Run(sourceRoot)
   end
   return table.concat(log,"\n"),cases,reads,writes,allocations,work
 end
+local SMOKE="health_background_sample_parity_smoke"
+local kinds={"singlePublic","singleOpaque","groupPublic","groupOpaque"}
+if compiled then kinds[#kinds+1]="absolutePublic";kinds[#kinds+1]="absoluteOpaque" end
+-- Allocation sizes depend on the Lua build's pointer width, so only a path that allocates nothing
+-- is pinned to zero; every path also stays under the absolute 1 KiB ceiling asserted right after
+-- the current source's run (before any comparison with the golden file).
+local function Summarize(output,cases,reads,writes,allocations,work)
+  local entries={}
+  Golden.AddLog(entries,"log",output)
+  entries[#entries+1]={"cases",tostring(cases)}
+  entries[#entries+1]={"reads",tostring(reads)}
+  entries[#entries+1]={"writes",tostring(writes)}
+  entries[#entries+1]={"allocations",tostring(allocations)}
+  for _,kind in ipairs(kinds) do
+    local result=work[kind]
+    entries[#entries+1]={kind..".work",tostring(result.work)}
+    entries[#entries+1]={kind..".probes",tostring(result.probes)}
+    entries[#entries+1]={kind..".reads",tostring(result.reads)}
+    entries[#entries+1]={kind..".writes",tostring(result.writes)}
+    entries[#entries+1]={kind..".allocated",Golden.Number(result.allocated)}
+  end
+  return entries
+end
+local function Map(entries)
+  local map={}
+  for _,entry in ipairs(entries) do map[entry[1]]=entry[2] end
+  return map
+end
 local output,cases,reads,writes,allocations,work=Run(root)
 -- The absolute hot-allocation ceiling holds with or without a baseline.
 for kind,result in pairs(work) do assert(result.allocated<1,"hot allocation: "..kind) end
-if baseline then
-  local oldOutput,oldCases,oldReads,oldWrites,oldAllocations,oldWork=Run(baseline)
-  assert(output==oldOutput,"native arguments, order or displayed values changed")
-  assert(cases==oldCases and reads==oldReads and writes==oldWrites and allocations==oldAllocations,
-    "native work/allocation contract changed")
-  local kinds={"singlePublic","singleOpaque","groupPublic","groupOpaque"}
-  if compiled then kinds[#kinds+1]="absolutePublic";kinds[#kinds+1]="absoluteOpaque" end
-  for _,kind in ipairs(kinds) do
-    local before,after=oldWork[kind],work[kind]
-    -- Absolute-value updates retain the general color provenance contract.
-    -- The dedicated percent-value lane must improve all four native cases;
-    -- unchanged absolute cases are valid, but none may become more expensive.
-    -- parity-only compares two shipped trees rather than a refactor: equal work
-    -- is the expected result there, so only a regression may fail the smoke.
-    local absolute=parityOnly or (compiled and (kind=="absolutePublic" or kind=="absoluteOpaque"))
-    assert((absolute and after.work<=before.work or after.work<before.work)
-      and ((parityOnly or compiled) and after.probes<=before.probes or after.probes<before.probes),
-      "Lua work not reduced: "..kind)
-    assert(after.reads==before.reads and after.writes==before.writes and after.allocated<=before.allocated,
-      "native work or allocations increased: "..kind)
-    print(string.format("Health/background %s (100 updates): Lua %d -> %d; probes %d -> %d; native reads %d, writes %d unchanged; transient KiB/1000 %.3f -> %.3f",
-      kind,before.work,after.work,before.probes,after.probes,after.reads,after.writes,before.allocated,after.allocated))
-  end
-else
-  print("health_background_sample_parity_smoke: SKIPPED baseline comparison (no baseline source root in arg[2])")
+if recording then
+  local entries=Summarize(Run(baseline))
+  Golden.Write(Golden.Path(root,SMOKE),Golden.Header(SMOKE,label),entries)
+  print("health_background_sample_parity_smoke: recorded "..#entries.." entries from "..baseline)
+  return
+end
+local expected
+if baseline then expected=Map(Summarize(Run(baseline))) else expected=Golden.Read(Golden.Path(root,SMOKE)) end
+local difference=Golden.LogDiff(expected,"log",output)
+assert(not difference,"native arguments, order or displayed values changed: "..tostring(difference))
+for key,value in pairs({cases=cases,reads=reads,writes=writes,allocations=allocations}) do
+  assert(tonumber(expected[key])==value,"native work/allocation contract changed: "..key)
+end
+for _,kind in ipairs(kinds) do
+  local after=work[kind]
+  local before={work=tonumber(expected[kind..".work"]),probes=tonumber(expected[kind..".probes"]),
+    reads=tonumber(expected[kind..".reads"]),writes=tonumber(expected[kind..".writes"]),
+    allocated=tonumber(expected[kind..".allocated"])}
+  assert(before.work and before.probes and before.reads and before.writes and before.allocated,
+    "the golden baseline has no record of "..kind)
+  -- Two shipped trees are compared, not a refactor: equal work is the expected result,
+  -- so only a regression may fail.
+  assert(after.work<=before.work and after.probes<=before.probes,"Lua work not reduced: "..kind)
+  assert(after.reads==before.reads and after.writes==before.writes
+    and (before.allocated>0 or after.allocated==0),"native work or allocations increased: "..kind)
+  print(string.format("Health/background %s (100 updates): Lua %d -> %d; probes %d -> %d; native reads %d, writes %d unchanged; transient KiB/1000 %.3f",
+    kind,before.work,after.work,before.probes,after.probes,after.reads,after.writes,after.allocated))
 end
 print(string.format("Health/background sample parity: %d updates, native call/sink order, colors, alpha, missing fill and smoothing passed",cases))
