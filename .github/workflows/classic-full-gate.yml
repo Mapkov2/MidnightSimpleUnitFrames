@@ -1,4 +1,4 @@
-name: MSUF Classic full gate
+name: MSUF 7.0 full gate
 
 # The full Classic gate as a reusable workflow, so the push/PR gate and the
 # release both run the same steps instead of two copies that can drift.
@@ -56,18 +56,27 @@ jobs:
       # The former Retail main is frozen at the 6.22 retirement commit.
       # The cutover merge preserves that history in main, so the clone
       # contains it without depending on an additional published ref.
+      # Checkout authenticates access to this private repository. Fetch the
+      # complete blobs so later git-only resolver reads need no credentials.
       # Resolve the exact historical mirror base within this frozen history;
       # new multi-client commits must never become the Retail reference.
+      - name: Check out the frozen Retail reference history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: ${{ github.repository }}
+          ref: main
+          fetch-depth: 0
+          path: _local_workflows/references/retail-6.22
+          persist-credentials: false
+
       - name: Check out the Retail commit this tree mirrors
         shell: pwsh
         env:
-          MSUF_RETAIL_REFERENCE: ${{ runner.temp }}/msuf-classic-retail-ref
-          MSUF_RETAIL_REMOTE: ${{ github.server_url }}/${{ github.repository }}.git
+          MSUF_RETAIL_REFERENCE: ${{ github.workspace }}/_local_workflows/references/retail-6.22
           MSUF_RETIRED_RETAIL_COMMIT: "84a1241710c26d0970436a02beb4e32f3a626f39"
         run: |
-          git clone --filter=blob:none --no-checkout --single-branch --branch main $env:MSUF_RETAIL_REMOTE $env:MSUF_RETAIL_REFERENCE
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not clone Retail main from $env:MSUF_RETAIL_REMOTE."
+          if (-not (Test-Path -LiteralPath "$env:MSUF_RETAIL_REFERENCE/.git" -PathType Container)) {
+            throw "The authenticated Retail reference checkout is missing."
           }
           $resolved = & python ./.github/scripts/resolve_classic_retail_source.py --retail $env:MSUF_RETAIL_REFERENCE --retail-rev $env:MSUF_RETIRED_RETAIL_COMMIT
           if ($LASTEXITCODE -ne 0) {
@@ -115,7 +124,7 @@ jobs:
       - name: Run the full Classic gate
         shell: pwsh
         env:
-          MSUF_RETAIL_REFERENCE: ${{ runner.temp }}/msuf-classic-retail-ref
+          MSUF_RETAIL_REFERENCE: ${{ github.workspace }}/_local_workflows/references/retail-6.22
         run: |
           & ./tools/run-classic-gate.ps1 -RetailReferenceRoot $env:MSUF_RETAIL_REFERENCE -RequireNoSkippedSteps
           if ($LASTEXITCODE -ne 0) {

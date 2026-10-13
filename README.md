@@ -1,3 +1,12 @@
+> [!IMPORTANT]
+> **MSUF 7.0 development repository.** This separate codebase starts from the
+> validated MSUF 6.50 baseline. `main` is the starting branch for the next
+> development step; the addon version remains 6.50 until 7.0 development is
+> versioned. Production 6.x remains in
+> [MidnightSimpleUnitFrames](https://github.com/Mapkov2/MidnightSimpleUnitFrames).
+> Changes run both the self-contained and full multi-client gates. Existing
+> addon publishing workflows remain restricted to the production repository.
+
 <div align="center">
   <img src="MidnightSimpleUnitFrames/Media/MSUF_EditModeIcon.png" width="150" alt="Midnight Simple Unit Frames logo">
 
