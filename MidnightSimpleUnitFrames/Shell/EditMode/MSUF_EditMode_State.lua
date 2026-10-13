@@ -456,6 +456,9 @@ function State.Exit(source)
     unitKey = nil
     provider = nil
     externalPreviewSuspended = false
+    --- Only Cancel All of an active session reads the profile copy taken at
+    --- Enter; a saved session would otherwise hold it until the next Enter.
+    _snapshot, _snapshotProfile = nil, nil
     PublishCompat("MSUF_BossTestMode", false)
     PublishCompat("MSUF_ArenaTestMode", false)
     PublishCompat("MSUF_PreviewTestMode", false)
