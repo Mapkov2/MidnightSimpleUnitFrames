@@ -79,6 +79,11 @@ assert(loadfile(Join(CORE, "UnitFrames/Engine/Elements/MSUF_UF_BossTargetIndicat
 -- The Arena page's PvP Trinket section and its preview read the live trinket
 -- resolver, which places the icon on the shared 0-30 layer scale.
 assert(loadfile(Join(CORE, "Libs/MSUFUnitFrames/MSUF_UF_Layers.lua")))("MidnightSimpleUnitFrames", MSUF)
+-- The trinket module subscribes through the shipped event bus (no fallback since the
+-- kernel cleanup), so load the real bus first.
+if not _G.MSUF_EventBus_Register then
+    assert(loadfile(Join(CORE, "Kernel/MSUF_EventBus.lua")))("MidnightSimpleUnitFrames", MSUF)
+end
 assert(loadfile(Join(CORE, "Features/Gameplay/MSUF_Feature_ArenaTrinkets.lua")))("MidnightSimpleUnitFrames", MSUF)
 _G.SlashCmdList = _G.SlashCmdList or {}
 _G.floor, _G.ceil = _G.floor or math.floor, _G.ceil or math.ceil
