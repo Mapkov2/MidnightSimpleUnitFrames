@@ -19,6 +19,4 @@
     </Frames>
     <Scripts><OnLoad function="MSUF_GroupAdditionalUnitOnLoad"/></Scripts>
   </Button>
-  <Script file="..\UnitFrames\Engine\Group\MSUF_UF_Group_HeaderController.lua"/>
-  <Script file="..\UnitFrames\Engine\Group\MSUF_UF_Group_FrameOverlay.lua"/>
 </Ui>

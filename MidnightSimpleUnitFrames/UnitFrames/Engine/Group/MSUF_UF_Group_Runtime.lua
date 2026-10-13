@@ -13,7 +13,6 @@ local CreateFrame = CreateFrame
 local C_Timer = C_Timer
 local InCombatLockdown = InCombatLockdown
 local IsInRaid = IsInRaid
-local floor = math.floor
 local pairs = pairs
 local tonumber = tonumber
 local tostring = tostring

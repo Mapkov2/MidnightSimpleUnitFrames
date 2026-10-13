@@ -9,7 +9,9 @@
   <Script file="..\..\Engine\Group\MSUF_UF_Group_SpellRegistry.lua"/>
   <Script file="..\..\..\GroupFrames\MSUF_GroupFrames_DB_SpellIndicators.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Config_Indicators.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_FrameOverlay.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Config.lua"/>
+  <Script file="..\..\Engine\Group\MSUF_UF_Group_HeaderController.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Headers.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Adapter.lua"/>
   <Script file="..\..\Engine\Group\MSUF_UF_Group_Priority.lua"/>
