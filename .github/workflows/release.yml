@@ -1,12 +1,7 @@
-name: MSUF
+name: MSUF Legacy Retail Release (manual)
 run-name: Publish ${{ inputs.tag_name || github.ref_name }}
 
 on:
-  push:
-    tags:
-      - "[0-9]*"
-      - "v[0-9]*"
-      - "MSUF_[0-9]*"
   workflow_dispatch:
     inputs:
       tag_name:
@@ -62,7 +57,7 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path -LiteralPath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc")) {
-            throw "Tag '$env:RELEASE_VERSION' resolves to the Classic tree (no unsuffixed MidnightSimpleUnitFrames.toc). Retail releases are tagged on main. Classic releases use a 'classic-v<version>-alpha<number>' or 'classic-v<version>-beta<number>' tag and .github/workflows/release-classic.yml."
+            throw "Tag '$env:RELEASE_VERSION' resolves to the Classic tree (no unsuffixed MidnightSimpleUnitFrames.toc). Retail releases are tagged on main. Full multi-client Main releases use a 'v<version>' tag and .github/workflows/release-msuf.yml."
           }
 
       # A bulk `git push --tags` can surface forgotten local beta tags months

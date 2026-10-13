@@ -5,7 +5,8 @@ WoW Forever and the supported Classic clients. Development and release
 freshness checks use `main`; the former Retail line is retired at
 `84a1241710c26d0970436a02beb4e32f3a626f39` under the unpublished backup label `6.22`.
 The historical Retail parity gate resolves its base within that frozen
-history. The `classic-v<version>` release tag format remains in use.
+history. Full Main releases use `v<version>` (stable `v6.50`); historical
+`classic-v<version>` tags remain supported for the earlier release line.
 
 This local branch was created from Retail `main` commit `7cf4e711`. Every
 Retail sync commit records the Retail commit it ported in a `Retail-Source:`
@@ -654,8 +655,8 @@ self-contained job reads nothing but the commit.
 
 Both full-gate runs are the same steps: they live in the reusable workflow
 `.github/workflows/classic-full-gate.yml`, which `classic-gate.yml` and
-`release-classic.yml` both call. `release-classic.yml` runs three jobs for a
-`classic-v*` tag: `preflight` (tag freshness, CurseForge secret and the
+`release-msuf.yml` both call. `release-msuf.yml` runs three jobs for a
+`v<version>` tag (also accepting historical `classic-v*` tags): `preflight` (tag freshness, CurseForge secret and the
 self-contained gate, about a minute), then `classic-full-gate` on the tag, then
 `publish-classic`, which packages and uploads only when both are green. The
 self-contained subset cannot see a mirrored Retail file that was edited without

@@ -1,9 +1,10 @@
-name: MSUF Classic CurseForge
-run-name: Publish ${{ github.ref_name }} to CurseForge
+name: MSUF Full Main Release
+run-name: Publish ${{ github.ref_name }} to CurseForge and Wago
 
 on:
   push:
     tags:
+      - "v[0-9]*"
       - "classic-v*"
 
 permissions:
@@ -26,13 +27,13 @@ jobs:
       publish_wago: ${{ steps.release.outputs.publish_wago }}
 
     steps:
-      - name: Check out Classic release tag
+      - name: Check out MSUF release tag
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
 
-      - name: Validate Classic tag and branch freshness
+      - name: Validate MSUF tag and branch freshness
         id: release
         shell: pwsh
         run: |
@@ -147,13 +148,13 @@ jobs:
       WAGO_UPLOAD_ENABLED: ${{ needs.preflight.outputs.publish_wago == 'true' && secrets.WAGO_API_TOKEN != '' }}
 
     steps:
-      - name: Check out Classic release tag
+      - name: Check out MSUF release tag
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
 
-      - name: Build and validate Classic multi-client package
+      - name: Build and validate full MSUF multi-client package
         shell: pwsh
         run: |
           & "./.github/scripts/build_classic_release_package.ps1" `
@@ -163,7 +164,7 @@ jobs:
             throw "Classic release package build failed."
           }
 
-      - name: Upload Classic release to CurseForge
+      - name: Upload MSUF release to CurseForge
         id: curseforge
         shell: pwsh
         env:
@@ -280,7 +281,7 @@ jobs:
       # Wago takes the same zip. Each game version goes to the Wago flavor whose
       # public patch list names it, so WoW Forever, Midnight and the Classic
       # clients are all set by the upload. Skipped without the WAGO_API_TOKEN secret.
-      - name: Upload Classic release to Wago
+      - name: Upload MSUF release to Wago
         id: wago
         if: env.WAGO_UPLOAD_ENABLED == 'true'
         shell: pwsh
@@ -352,7 +353,7 @@ jobs:
       # and the assigned patches. They reach the script through env, never
       # through ${{ }} inside the here-string, so a response can only ever be
       # summary text and never PowerShell.
-      - name: Write Classic release summary
+      - name: Write MSUF release summary
         shell: pwsh
         env:
           CF_FILE_ID: ${{ steps.curseforge.outputs.file_id }}
@@ -362,7 +363,7 @@ jobs:
           $wagoPatches = $env:WAGO_PATCHES
           if ([string]::IsNullOrWhiteSpace($wagoPatches)) { $wagoPatches = "not uploaded" }
           @"
-          ## MSUF Classic CurseForge $($env:CLASSIC_RELEASE_TYPE)
+          ## MSUF full multi-client release $($env:CLASSIC_RELEASE_TYPE)
 
           - Tag: ``$env:CLASSIC_RELEASE_TAG``
           - Version: ``$env:CLASSIC_RELEASE_VERSION``

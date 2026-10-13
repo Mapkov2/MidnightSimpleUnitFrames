@@ -1,4 +1,4 @@
-name: MSUF Classic gate
+name: MSUF gate
 
 # Runs the Classic gate for every change to the addon folders, the tooling or
 # the workflows on main and the historical classic branch, as two jobs:

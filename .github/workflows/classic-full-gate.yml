@@ -1,4 +1,4 @@
-name: MSUF Classic full gate
+name: MSUF full gate
 
 # The full Classic gate as a reusable workflow, so the push/PR gate and the
 # release both run the same steps instead of two copies that can drift.
