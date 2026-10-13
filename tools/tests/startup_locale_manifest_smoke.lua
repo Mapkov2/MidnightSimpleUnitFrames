@@ -82,7 +82,13 @@ for _, client in ipairs({ "Mainline", "Forever", "Vanilla", "TBC", "Mists" }) do
         -- packs plus MSUF_DeleteProfiles (16,626 LF bytes; largest selection koKR
         -- 16,883,294 -> 16,899,920, TBC/enUS 14,766,022 -> 14,782,648). The list
         -- itself is Options code; no catalog was added.
-        assert(bytes < (suffix == "Mainline" and 16905000 or 14785000),
+        -- 2026-10-13 (7.0 wave-1 bug fixes): Mainline 16,905,000 -> 16,925,000 and
+        -- Classic 14,785,000 -> 14,805,000, one bounded allowance for the wave-1 fixes
+        -- (combat-deferred spawn, secret role reads, empower interrupts, spec refresh
+        -- coalescing measured TBC 14,785,456 and Mainline 16,902,728; the remaining
+        -- wave-1 packages draw on the rest). Wave 2 removes dead code and must bring
+        -- both selections back under the 6.50 values above; no catalog was added.
+        assert(bytes < (suffix == "Mainline" and 16925000 or 14805000),
             client .. ": startup source budget regressed")
         local perCatalog = locale == "xxXX" and 1 or 2
         assert(#aliases == perCatalog * CATALOGS[client],
